@@ -112,7 +112,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr &ev, const TActorContext &ctx) {
-            YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Handle(TEvNodeDisconnected): msg# %s", ev->Get()->ToString().data()));
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Handle(TEvNodeDisconnected): msg# %s", ev->Get()->ToString().data()));
 
             TSjOutcome outcome = Task->Terminate(TSyncStatusVal::DroppedConnection);
             Handle(std::move(outcome), ctx);
@@ -125,7 +125,7 @@ namespace NKikimr {
                 return;
             }
 
-            YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Handle(TEvUndelivered): msg# %s", ev->Get()->ToString().data()));
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Handle(TEvUndelivered): msg# %s", ev->Get()->ToString().data()));
 
             TSjOutcome outcome = Task->Terminate(TSyncStatusVal::DroppedConnection);
             Handle(std::move(outcome), ctx);
@@ -152,7 +152,7 @@ namespace NKikimr {
         }
 
         void HandleWakeup(const TActorContext &ctx) {
-            YDB_LOG_CTX_COMP_DEBUG(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob: job timed out"));
+            YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob: job timed out"));
 
             TSjOutcome outcome = Task->Terminate(TSyncStatusVal::Timeout);
             Handle(std::move(outcome), ctx);
@@ -178,16 +178,16 @@ namespace NKikimr {
         void HeavyDump(const TActorContext &ctx, const TString &data) const {
             // record handlers
             auto blobHandler = [&] (const NSyncLog::TLogoBlobRec *rec) {
-                YDB_LOG_CTX_COMP_ERROR(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Sync: JobId# %" PRIu64 " FullRecover# %u" " id# %s ignress# %s", JobId, unsigned(Task->IsFullRecoveryTask()), rec->LogoBlobID().ToString().data(), rec->Ingress.ToString(SyncerCtx->VCtx->Top.get(), SyncerCtx->VCtx->ShortSelfVDisk, rec->LogoBlobID()).data()));
+                YDB_LOG_ERROR_CTX_COMP(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Sync: JobId# %" PRIu64 " FullRecover# %u" " id# %s ignress# %s", JobId, unsigned(Task->IsFullRecoveryTask()), rec->LogoBlobID().ToString().data(), rec->Ingress.ToString(SyncerCtx->VCtx->Top.get(), SyncerCtx->VCtx->ShortSelfVDisk, rec->LogoBlobID()).data()));
             };
             auto blockHandler = [&] (const NSyncLog::TBlockRec *rec) {
-                YDB_LOG_CTX_ERROR(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Sync: JobId# %" PRIu64 " FullRecover# %u rec# %s", JobId, unsigned(Task->IsFullRecoveryTask()), rec->ToString().data()));
+                YDB_LOG_ERROR_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Sync: JobId# %" PRIu64 " FullRecover# %u rec# %s", JobId, unsigned(Task->IsFullRecoveryTask()), rec->ToString().data()));
             };
             auto barrierHandler = [&] (const NSyncLog::TBarrierRec *rec) {
-                YDB_LOG_CTX_COMP_ERROR(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Sync: JobId# %" PRIu64 " FullRecover# %u rec# %s", JobId, unsigned(Task->IsFullRecoveryTask()), rec->ToString().data()));
+                YDB_LOG_ERROR_CTX_COMP(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Sync: JobId# %" PRIu64 " FullRecover# %u rec# %s", JobId, unsigned(Task->IsFullRecoveryTask()), rec->ToString().data()));
             };
             auto blockHandlerV2 = [&](const NSyncLog::TBlockRecV2 *rec) {
-                YDB_LOG_CTX_COMP_ERROR(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Sync: JobId# %" PRIu64 " FullRecover# %u rec# %s", JobId, unsigned(Task->IsFullRecoveryTask()), rec->ToString().data()));
+                YDB_LOG_ERROR_CTX_COMP(ctx, BS_SYNCER, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerJob::Sync: JobId# %" PRIu64 " FullRecover# %u rec# %s", JobId, unsigned(Task->IsFullRecoveryTask()), rec->ToString().data()));
             };
 
             NSyncLog::TFragmentReader fragment(data);

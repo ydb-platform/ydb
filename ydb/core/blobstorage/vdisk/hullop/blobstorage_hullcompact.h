@@ -97,7 +97,7 @@ namespace NKikimr {
         void Bootstrap(const TActorContext &ctx) {
             Worker.Statistics.StartTime = TAppData::TimeProvider->Now();
 
-            YDB_LOG_CTX_COMP_INFO(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "%s: Compaction job (%" PRIu64 ") started: fresh# %s freedHugeBlobs# %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionID, (FreshSegment ? "true" : "false"), Worker.GetFreedHugeBlobs().ToString().data()));
+            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "%s: Compaction job (%" PRIu64 ") started: fresh# %s freedHugeBlobs# %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionID, (FreshSegment ? "true" : "false"), Worker.GetFreedHugeBlobs().ToString().data()));
 
             // bool debug output of brs
             int brsDebugLevel = 0;
@@ -237,7 +237,7 @@ namespace NKikimr {
                 return;
             }
 
-            YDB_LOG_CTX_COMP_INFO(ctx, NKikimrServices::BS_SKELETON, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "comp reserve ChunkIds# %s", FormatList(ev->Get()->ChunkIds).data()));
+            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::BS_SKELETON, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "comp reserve ChunkIds# %s", FormatList(ev->Get()->ChunkIds).data()));
 
             Worker.Apply(ev->Get());
             MainCycle(ctx);
@@ -280,14 +280,14 @@ namespace NKikimr {
 
             YDB_LOG_CTX_COMP(IsAborting ? NLog::PRI_ERROR : NLog::PRI_INFO, ctx, NKikimrServices::BS_HULLCOMP, "Compaction job finished",
                 {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
-                {"Signature", PDiskSignatureForHullDbKey<TKey>().ToString()},
-                {"CompactionID", CompactionID},
-                {"FreshSegment", (FreshSegment ? "true" : "false")},
-                {"FreedHugeBlobs", Worker.GetFreedHugeBlobs().Size()},
-                {"AllocatedHugeBlobs", Worker.GetAllocatedHugeBlobs().Size()},
-                {"CommitChunks", FormatList(Worker.GetCommitChunks())},
-                {"Stats", Worker.Statistics.ToString()},
-                {"IsAborting", (IsAborting ? "true" : "false")});
+                {"signature", PDiskSignatureForHullDbKey<TKey>()},
+                {"compactionID", CompactionID},
+                {"freshSegment", (FreshSegment ? "true" : "false")},
+                {"freedHugeBlobs", Worker.GetFreedHugeBlobs().Size()},
+                {"allocatedHugeBlobs", Worker.GetAllocatedHugeBlobs().Size()},
+                {"commitChunks", FormatList(Worker.GetCommitChunks())},
+                {"stats", Worker.Statistics},
+                {"isAborting", (IsAborting ? "true" : "false")});
 
             msg->FreedHugeBlobs = IsAborting ? TDiskPartVec() : Worker.GetFreedHugeBlobs();
             msg->AllocatedHugeBlobs = IsAborting ? TDiskPartVec() : Worker.GetAllocatedHugeBlobs();

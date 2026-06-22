@@ -237,9 +237,9 @@ namespace NKikimr {
 
 #ifdef HULL_COMPACT_APPLY
         debugOutput << " RESULT\n" << res->ToString("  ");
-        YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(vctx, "%s", ~debugOutput.Str()));
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(vctx, "%s", ~debugOutput.Str()));
 #else
-        YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(vctx, "Changes to Hull applied"));
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(vctx, "Changes to Hull applied"));
 #endif
 
         TSliceSstIterator resIt(res.Get(), res->Level0CurSstsNum());

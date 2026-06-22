@@ -6,6 +6,7 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT BS_PHANTOM_FLAG_STORAGE
 
+
 namespace NKikimr {
 
 namespace NSyncLog {
@@ -39,9 +40,9 @@ void TPhantomFlagStorageState::InitializePersistent(TPhantomFlagStorageData&& da
 void TPhantomFlagStorageState::StartBuilding() {
     if (GType.BlobSubgroupSize() > MaxExpectedDisksInGroup) {
         YDB_LOG_ERROR(VDISKP(SlCtx->VCtx, "Attempted to start phantom flag storage building on unsupported configuration"),
-            {"Marker", "BSPFS01"},
-            {"MaxExpectedDisksInGroup", MaxExpectedDisksInGroup},
-            {"GroupSize", GType.BlobSubgroupSize()});
+            {"marker", "BSPFS01"},
+            {"maxExpectedDisksInGroup", MaxExpectedDisksInGroup},
+            {"groupSize", GType.BlobSubgroupSize()});
         // PhantomFlagStorage doesn't work with weird group configurations to minimize memory consumption
         return;
     }
@@ -49,8 +50,10 @@ void TPhantomFlagStorageState::StartBuilding() {
     Building = true;
 }
 
-void TPhantomFlagStorageState::ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec, ui64 sizeLimit) {
+void TPhantomFlagStorageState::ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec, ui64 sizeLimit,
+        ui64 blobSizeLimit) {
     Y_DEBUG_ABORT_UNLESS(!Persistent);
+    BlobSizeLimit = blobSizeLimit;
     AdjustSize(sizeLimit);
     if (!Active) {
         return;
@@ -58,12 +61,12 @@ void TPhantomFlagStorageState::ProcessBlobRecordFromSyncLog(const TLogoBlobRec* 
 
     if (blobRec->Ingress.IsDoNotKeep(GType) &&
             (Building || Thresholds.IsBehindThresholdOnUnsynced(blobRec->LogoBlobID(), SyncedMask))) {
-        YDB_LOG_COMP_DEBUG(BS_PHANTOM_FLAG_STORAGE, VDISKP(SlCtx->VCtx, "Try to add DoNotKeepFlag flag to PhantomFlagStorage"),
-            {"Marker", "BSPFS09"},
-            {"BlobId", blobRec->LogoBlobID().ToString()},
-            {"Building", Building},
-            {"SyncedMask", SyncedMask.to_ullong()},
-            {"Thresholds", Thresholds.ToString()});
+        YDB_LOG_DEBUG_COMP(BS_PHANTOM_FLAG_STORAGE, VDISKP(SlCtx->VCtx, "Try to add DoNotKeepFlag flag to PhantomFlagStorage"),
+            {"marker", "BSPFS09"},
+            {"blobId", blobRec->LogoBlobID()},
+            {"building", Building},
+            {"syncedMask", SyncedMask.to_ullong()},
+            {"thresholds", Thresholds});
         AddFlag(*blobRec);
     }
 }
@@ -82,11 +85,13 @@ void TPhantomFlagStorageState::ProcessBarrierRecordFromNeighbour(ui32 orderNumbe
 }
 
 void TPhantomFlagStorageState::FinishInitialBuilding(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds,
-        ui64 sizeLimit) {
+        ui64 sizeLimit, ui64 blobSizeLimit) {
     if (!Active) {
         // PhantomFlagStorage was deactivated while building, do nothing
         return;
     }
+
+    BlobSizeLimit = blobSizeLimit;
 
     if (Persistent) {
         std::vector<TPhantomFlagStorageItem> items;
@@ -116,25 +121,28 @@ void TPhantomFlagStorageState::FinishInitialBuilding(TPhantomFlags&& flags, TPha
         Thresholds.Merge(std::move(thresholds));
 
         YDB_LOG_DEBUG(VDISKP(SlCtx->VCtx, "Finish building"),
-            {"Marker", "BSPFS06"},
-            {"FlagsAdded", flagsAdded},
-            {"FlagsReceived", flags.size()});
+            {"marker", "BSPFS06"},
+            {"flagsAdded", flagsAdded},
+            {"flagsReceived", flags.size()});
     }
 
     Building = false;
 }
 
-void TPhantomFlagStorageState::Recover(TPhantomFlagStorageSnapshot&& snapshot) {
+void TPhantomFlagStorageState::Recover(TPhantomFlagThresholds&& thresholdsBatch, bool eof) {
     YDB_LOG_DEBUG(VDISKP(SlCtx->VCtx, "Recovering PhantomFlagStorage"),
-        {"Marker", "BSPFS10"});
-    Building = false;
-    Thresholds.Merge(std::move(snapshot.Thresholds));
+        {"marker", "BSPFS10"},
+        {"eof", eof});
+    Thresholds.Merge(std::move(thresholdsBatch));
+    if (eof) {
+        Building = false;
+    }
 }
 
 void TPhantomFlagStorageState::Deactivate() {
     YDB_LOG_NOTICE(VDISKP(SlCtx->VCtx, "Deactivating PhantomFlagStorage"),
-        {"Marker", "BSPFS07"},
-        {"FlagsDropped", StoredFlags.size()});
+        {"marker", "BSPFS07"},
+        {"flagsDropped", StoredFlags.size()});
     Thresholds.Clear();
     Active = false;
     Building = false;
@@ -150,9 +158,13 @@ void TPhantomFlagStorageState::RequestSnapshot(TEvPhantomFlagStorageGetSnapshot:
         TActivationContext::Send(ev->Forward(ProcessorId));
     } else {
         YDB_LOG_DEBUG(VDISKP(SlCtx->VCtx, "Acquiring snapshot"),
-            {"Marker", "BSPFS05"},
-            {"FlagsCount", StoredFlags.size()});
-        auto res = std::make_unique<TEvPhantomFlagStorageGetSnapshotResult>(TPhantomFlagStorageSnapshot(StoredFlags, Thresholds));
+            {"marker", "BSPFS05"},
+            {"flagsCount", StoredFlags.size()});
+        auto res = std::make_unique<TEvPhantomFlagStorageGetSnapshotResult>(
+                TPhantomFlags(StoredFlags),
+                TPhantomFlagThresholds(Thresholds),
+                std::unordered_set<ui32>{},
+                /*eof=*/true);
         TActivationContext::Send(new IEventHandle(ev->Sender, ev->Recipient, res.release()));
     }
 }
@@ -210,10 +222,10 @@ void TPhantomFlagStorageState::AdjustSize(ui64 sizeLimit) {
     if (newCapacity > MaxFlagsStoredCount) {
         StoredFlags.reserve(newCapacity);
         YDB_LOG_DEBUG(VDISKP(SlCtx->VCtx, "Reserving additional space for PhantomFlagStorage"),
-            {"Marker", "BSPFS03"},
-            {"OldCapacity", MaxFlagsStoredCount},
-            {"NewCapacity", newCapacity},
-            {"ActualCapacity", StoredFlags.capacity()});
+            {"marker", "BSPFS03"},
+            {"oldCapacity", MaxFlagsStoredCount},
+            {"newCapacity", newCapacity},
+            {"actualCapacity", StoredFlags.capacity()});
     } else if (newCapacity < MaxFlagsStoredCount) {
         ui32 flagsDropped = 0;
         if (newCapacity < StoredFlags.size()) {
@@ -223,25 +235,28 @@ void TPhantomFlagStorageState::AdjustSize(ui64 sizeLimit) {
         StoredFlags.shrink_to_fit();
         StoredFlags.reserve(newCapacity);
         YDB_LOG_DEBUG(VDISKP(SlCtx->VCtx, "Shrinking PhantomFlagStorage"),
-            {"Marker", "BSPFS04"},
-            {"OldCapacity", MaxFlagsStoredCount},
-            {"NewCapacity", newCapacity},
-            {"ActualCapacity", StoredFlags.capacity()},
-            {"FlagsDropped", flagsDropped});
+            {"marker", "BSPFS04"},
+            {"oldCapacity", MaxFlagsStoredCount},
+            {"newCapacity", newCapacity},
+            {"actualCapacity", StoredFlags.capacity()},
+            {"flagsDropped", flagsDropped});
     }
     MaxFlagsStoredCount = newCapacity;
 }
 
 bool TPhantomFlagStorageState::AddFlag(const TLogoBlobRec& blobRec) {
+    if (BlobSizeLimit && blobRec.LogoBlobID().BlobSize() < BlobSizeLimit) {
+        return true;
+    }
     if (StoredFlags.size() < StoredFlags.capacity()) {
         StoredFlags.emplace_back(blobRec);
         return true;
     } else {
         YDB_LOG_INFO(VDISKP(SlCtx->VCtx, "Cannot add flag to PhantomFlagStorage, memory limit reached"),
-            {"Marker", "BSPFS02"},
-            {"Capacity", StoredFlags.capacity()},
-            {"Size", StoredFlags.size()},
-            {"BlobId", blobRec.LogoBlobID().ToString()});
+            {"marker", "BSPFS02"},
+            {"capacity", StoredFlags.capacity()},
+            {"size", StoredFlags.size()},
+            {"blobId", blobRec.LogoBlobID()});
         return false;
     }
 }

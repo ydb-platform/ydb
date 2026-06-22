@@ -12,6 +12,8 @@
 
 #include <yt/yt/library/profiling/testing.h>
 
+#include <util/generic/strbuf.h>
+
 #include <random>
 
 namespace NYT {
@@ -1374,6 +1376,53 @@ INSTANTIATE_TEST_SUITE_P(Stress, TAsyncSlruCacheStressTest, ::testing::Values(
         .ThreadCount = 16,
     }
 ));
+
+////////////////////////////////////////////////////////////////////////////////
+
+DECLARE_REFCOUNTED_STRUCT(TStringCachedValue)
+
+struct TStringCachedValue
+    : public TAsyncCacheValueBase<std::string, TStringCachedValue>
+{
+    TStringCachedValue(std::string key, int value)
+        : TAsyncCacheValueBase(std::move(key))
+        , Value(value)
+    { }
+
+    int Value;
+};
+
+DEFINE_REFCOUNTED_TYPE(TStringCachedValue)
+
+DECLARE_REFCOUNTED_CLASS(TStringSlruCache)
+
+class TStringSlruCache
+    : public TAsyncSlruCacheBase<std::string, TStringCachedValue>
+{
+public:
+    explicit TStringSlruCache(TSlruCacheConfigPtr config)
+        : TAsyncSlruCacheBase(std::move(config))
+    { }
+};
+
+DEFINE_REFCOUNTED_TYPE(TStringSlruCache)
+
+TEST(TAsyncSlruCacheTest, HeterogeneousLookup)
+{
+    auto config = CreateCacheConfig(/*cacheSize*/ 10);
+    auto cache = New<TStringSlruCache>(config);
+
+    auto cookie = cache->BeginInsert(std::string("alpha"));
+    ASSERT_TRUE(cookie.IsActive());
+    cookie.EndInsert(New<TStringCachedValue>("alpha", 1));
+
+    // Lookup via TStringBuf must not materialize a std::string key.
+    auto value = cache->Find(TStringBuf("alpha"));
+    ASSERT_TRUE(value);
+    EXPECT_EQ(value->Value, 1);
+    EXPECT_FALSE(cache->Find(TStringBuf("beta")).operator bool());
+    EXPECT_EQ(WaitForFast(cache->Lookup(TStringBuf("alpha"))).ValueOrThrow()->Value, 1);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

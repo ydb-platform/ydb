@@ -12,16 +12,16 @@ namespace NKikimr {
         THeapIterator<TKeyLogoBlob, TMemRecLogoBlob, false> heapIt(&iter);
         if (State->HasBlobId()) {
             const TLogoBlobID& id = LogoBlobIDFromLogoBlobID(State->GetBlobId());
-            YDB_LOG_CTX_INFO(GetActorContext(), VDISKP(LogPrefix, "resuming huge blob scrubbing"),
-                {"Marker", "VDS19"},
-                {"Id", id});
+            YDB_LOG_INFO_CTX(GetActorContext(), VDISKP(LogPrefix, "resuming huge blob scrubbing"),
+                {"marker", "VDS19"},
+                {"id", id});
             heapIt.Seek(id);
             if (heapIt.Valid() && heapIt.GetCurKey() == id) {
                 heapIt.Prev(); // skip already processed blob
             }
         } else {
-            YDB_LOG_CTX_INFO(GetActorContext(), VDISKP(LogPrefix, "starting huge blob scrubbing"),
-                {"Marker", "VDS20"});
+            YDB_LOG_INFO_CTX(GetActorContext(), VDISKP(LogPrefix, "starting huge blob scrubbing"),
+                {"marker", "VDS20"});
             heapIt.SeekToLast();
         }
 

@@ -88,7 +88,7 @@ namespace NKikimr {
 
     bool TVDiskContext::CheckPDiskResponseReadable(const TActorContext &actorSystemOrCtx, const NPDisk::TEvChunkReadResult &ev, const TString &message) {
         if (!ev.Data.IsReadable()) {
-            YDB_LOG_CTX_COMP_ERROR(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER, VDISKP(VDiskLogPrefix, "CheckPDiskResponseReadable: not readable chunk from PDisk: %s", FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
+            YDB_LOG_ERROR_CTX_COMP(actorSystemOrCtx, NKikimrServices::BS_VDISK_OTHER, VDISKP(VDiskLogPrefix, "CheckPDiskResponseReadable: not readable chunk from PDisk: %s", FormatMessage(ev.Status, ev.ErrorReason, ev.StatusFlags, message).data()));
             return false;
         }
         return true;

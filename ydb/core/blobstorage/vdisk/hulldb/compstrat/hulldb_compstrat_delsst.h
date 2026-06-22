@@ -62,10 +62,10 @@ namespace NKikimr {
                     if (p.Level > 0 && ratio && ratio->CanDeleteSst()) {
                         action = ActDeleteSsts;
                         if (HullCtx->VCtx->ActorSystem) {
-                            YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyDelSst going to delete because of",
+                            YDB_LOG_INFO_CTX_COMP(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyDelSst going to delete because of",
                                 {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
-                                {"SST", p.ToString()},
-                                {"Ration", ratio->ToString()});
+                                {"SST", p},
+                                {"ration", ratio->ToString()});
                         }
                         Task->DeleteSsts.DeleteSst(p.Level, p.SstPtr);
                         SstToDelete++;

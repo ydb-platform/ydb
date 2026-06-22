@@ -333,6 +333,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
                        const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
                        const NKikimrPQ::TPQTabletConfig& tabletConfig, const std::shared_ptr<TTabletCountersBase>& counters, bool subDomainOutOfSpace, ui32 numChannels,
                        const TActorId& writeQuoterActorId,
+                       const TActorId& batchProcessorActorId,
                        TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl,
                        bool newPartition)
     : TBaseTabletActor(tabletId, tablet, NKikimrServices::PERSQUEUE)
@@ -362,6 +363,7 @@ TPartition::TPartition(ui64 tabletId, const TPartitionId& partition, const TActo
     , SubDomainOutOfSpace(subDomainOutOfSpace)
     , HasDataReqNum(0)
     , WriteQuotaTrackerActor(writeQuoterActorId)
+    , BatchProcessorActor(batchProcessorActorId)
     , AvgWriteBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
     , AvgReadBytes(TDuration::Minutes(1), 1000)
     , AvgQuotaBytes{{TDuration::Seconds(1), 1000}, {TDuration::Minutes(1), 1000}, {TDuration::Hours(1), 2000}, {TDuration::Days(1), 2000}}
@@ -3550,6 +3552,9 @@ void TPartition::OnProcessTxsAndUserActsWriteComplete(const TActorContext& ctx) 
             }
 
             Send(ReadQuotaTrackerActor, new TEvPQ::TEvConsumerRemoved(user));
+            if (BatchProcessorActor) {
+                Send(BatchProcessorActor, new TEvPQ::TEvConsumerRemoved(user));
+            }
         }
     }
 
@@ -4756,12 +4761,12 @@ void TPartition::Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr&) {
 IActor* CreatePartitionActor(ui64 tabletId, const TPartitionId& partition, const TActorId& tablet, ui32 tabletGeneration,
     const TActorId& blobCache, const NPersQueue::TTopicConverterPtr& topicConverter, TString dcId, bool isServerless,
     const NKikimrPQ::TPQTabletConfig& config, const std::shared_ptr<TTabletCountersBase>& counters, bool SubDomainOutOfSpace,
-    ui32 numChannels, const TActorId& writeQuoterActorId,
+    ui32 numChannels, const TActorId& writeQuoterActorId, const TActorId& batchProcessorActorId,
     TIntrusivePtr<NJaegerTracing::TSamplingThrottlingControl> samplingControl, bool newPartition
 ) {
 
     return new TPartition(tabletId, partition, tablet, tabletGeneration, blobCache, topicConverter, dcId, isServerless,
-        config, counters, SubDomainOutOfSpace, numChannels, writeQuoterActorId, samplingControl,
+        config, counters, SubDomainOutOfSpace, numChannels, writeQuoterActorId, batchProcessorActorId, samplingControl,
         newPartition);
 }
 

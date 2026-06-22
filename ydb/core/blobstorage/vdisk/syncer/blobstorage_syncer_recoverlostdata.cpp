@@ -135,7 +135,7 @@ namespace NKikimr {
         // RUN FULL SYNC
         ////////////////////////////////////////////////////////////////////////
         void RunFullSync(const TActorContext &ctx) {
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: START"));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: START"));
 
             // run full sync proxy for every VDisk in the group
             auto runProxyForVDisk = [this, &ctx] (TVDiskInfo<TPeerState>& x) {
@@ -153,7 +153,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvSyncerFullSyncedWithPeer::TPtr &ev, const TActorContext &ctx) {
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: TEvSyncerFullSyncedWithPeer"));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: TEvSyncerFullSyncedWithPeer"));
             auto *msg = ev->Get();
             State.FullSyncedWithPeer(msg->VDiskId);
             if (State.GotQuorum()) {
@@ -172,7 +172,7 @@ namespace NKikimr {
         // CALL OSIRIS
         ////////////////////////////////////////////////////////////////////////
         void CallOsiris(const TActorContext &ctx) {
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: CallOsiris"));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: CallOsiris"));
             // We must fix DbBirthLsn here, because at this moment we have written some
             // data into Hull Db, but we don't want this data to sync back to other VDisks.
             // This is done by skeleton, because it have access to all Lsn positions (CurrentLsn,
@@ -182,7 +182,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvOsirisDone::TPtr &ev, const TActorContext &ctx) {
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: TEvOsirisDone"));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: TEvOsirisDone"));
             DbBirthLsn = ev->Get()->DbBirthLsn;
             WriteFinalLocally(ctx);
         }
@@ -198,14 +198,14 @@ namespace NKikimr {
         // WRITE FINAL GUID LOCALLY
         ////////////////////////////////////////////////////////////////////////
         void WriteFinalLocally(const TActorContext &ctx) {
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: WriteFinalLocally"));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: WriteFinalLocally"));
             auto msg = TEvSyncerCommit::LocalFinal(Guid, DbBirthLsn);
             ctx.Send(CommitterId, msg.release());
             Become(&TThis::WriteFinalLocallyStateFunc);
         }
 
         void HandleFinalLocally(TEvSyncerCommitDone::TPtr &ev, const TActorContext &ctx) {
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: TEvSyncerCommitDone"));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: TEvSyncerCommitDone"));
             Y_UNUSED(ev);
             Finish(ctx);
         }
@@ -221,7 +221,7 @@ namespace NKikimr {
         // WRITE FINAL GUID LOCALLY
         ////////////////////////////////////////////////////////////////////////
         void Finish(const TActorContext &ctx) {
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: FINISH"));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRecoverLostDataActor: FINISH"));
 
             TLocalSyncerState lss(TLocalVal::Final, Guid, DbBirthLsn);
             ctx.Send(NotifyId, new TEvSyncerLostDataRecovered(lss));

@@ -108,7 +108,7 @@ namespace NKikimr {
             // ensure that the new blob would not fall under GC
             TString explanation;
             if (!BarrierCache.Keep(id, issueKeepFlag, &explanation)) {
-                YDB_LOG_CTX_CRIT(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# LogoBlobs; putting blob beyond the barrier id# %s barrier# %s", id.ToString().data(), explanation.data()));
+                YDB_LOG_CRIT_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# LogoBlobs; putting blob beyond the barrier id# %s barrier# %s", id.ToString().data(), explanation.data()));
                 *writtenBeyondBarrier = true;
             }
         }
@@ -230,7 +230,7 @@ namespace NKikimr {
         ReplayAddHugeLogoBlobCmd(ctx, id, ingress, diskAddr, lsn, THullDbRecovery::NORMAL);
 
         // run compaction if required
-        YDB_LOG_CTX_DEBUG(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddHugeLogoBlob"));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddHugeLogoBlob"));
         CompactFreshLogoBlobsIfRequired(ctx);
     }
 
@@ -244,7 +244,7 @@ namespace NKikimr {
         ReplayAddLogoBlobCmd(ctx, id, ingress, seg.Point(), THullDbRecovery::NORMAL);
 
         // run compaction if required
-        YDB_LOG_CTX_DEBUG(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddLogoBlob with seg"));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddLogoBlob with seg"));
         CompactFreshLogoBlobsIfRequired(ctx);
     }
 
@@ -290,7 +290,7 @@ namespace NKikimr {
         Fields->DelayedResponses.ConfirmLsn(lsn, replySender);
 
         // run compaction if required
-        YDB_LOG_CTX_DEBUG(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Blocks in AddBlockCmd"));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Blocks in AddBlockCmd"));
         CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, nullptr, 0, Fields->BlocksRunTimeCtx, ctx, false,
             Fields->AllowGarbageCollection);
     }
@@ -340,7 +340,7 @@ namespace NKikimr {
             if (memRec.CollectGen != collectGeneration || memRec.CollectStep != collectStep) {
                 // we have received GC command with the same key as the existing one, but with different barrier
                 // value -- this is not tolerable
-                YDB_LOG_CTX_CRIT(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# Barriers ValidateGCCmd: incorrect collect cmd: tabletID# %" PRIu64 " key# %s existing barrier# %" PRIu32 ":%" PRIu32 " new barrier# %" PRIu32 ":%" PRIu32, tabletID, newKey.ToString().data(), memRec.CollectGen, memRec.CollectStep, collectGeneration, collectStep));
+                YDB_LOG_CRIT_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# Barriers ValidateGCCmd: incorrect collect cmd: tabletID# %" PRIu64 " key# %s existing barrier# %" PRIu32 ":%" PRIu32 " new barrier# %" PRIu32 ":%" PRIu32, tabletID, newKey.ToString().data(), memRec.CollectGen, memRec.CollectStep, collectGeneration, collectStep));
                 return NKikimrProto::ERROR;
             }
 
@@ -364,7 +364,7 @@ namespace NKikimr {
 
             // we have the key from the same Tablet/Channel, but which is greater than the new one; this
             // means that keys came out-of-order, this key is from the past -- error condition
-            YDB_LOG_CTX_ERROR(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# Barriers ValidateGCCmd: out-of-order requests:" " existing key# %s new key# %s new barrier# %" PRIu32 ":%" PRIu32, key.ToString().data(), newKey.ToString().data(), collectGeneration, collectStep));
+            YDB_LOG_ERROR_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# Barriers ValidateGCCmd: out-of-order requests:" " existing key# %s new key# %s new barrier# %" PRIu32 ":%" PRIu32, key.ToString().data(), newKey.ToString().data(), collectGeneration, collectStep));
             return NKikimrProto::ERROR;
         }
 
@@ -387,7 +387,7 @@ namespace NKikimr {
 
             if (newGenStep < existingGenStep) {
                 // we have a command with greater key than the existing one, but the value has decreased
-                YDB_LOG_CTX_CRIT(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# Barriers ValidateGCCmd: decreasing barrier:" " existing key# %s barrier# %" PRIu32 ":%" PRIu32 " new key# %s barrier# %" PRIu32 ":%" PRIu32, key.ToString().data(), memRec.CollectGen, memRec.CollectStep, newKey.ToString().data(), collectGeneration, collectStep));
+                YDB_LOG_CRIT_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# Barriers ValidateGCCmd: decreasing barrier:" " existing key# %s barrier# %" PRIu32 ":%" PRIu32 " new key# %s barrier# %" PRIu32 ":%" PRIu32, key.ToString().data(), memRec.CollectGen, memRec.CollectStep, newKey.ToString().data(), collectGeneration, collectStep));
                 return NKikimrProto::ERROR;
             }
         }
@@ -413,9 +413,9 @@ namespace NKikimr {
             return {NKikimrProto::ERROR, "", false}; // record has duplicates
 
         if (!collect && !record.KeepSize() && !record.DoNotKeepSize()) {
-            YDB_LOG_CTX_ERROR(ctx, "Barriers ValidateGCCmd: empty garbage collection command",
+            YDB_LOG_ERROR_CTX(ctx, "Barriers ValidateGCCmd: empty garbage collection command",
                 {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
-                {"TabletId", tabletID});
+                {"tabletId", tabletID});
             return {NKikimrProto::ERROR, "empty garbage collection command"};
         }
 
@@ -475,9 +475,9 @@ namespace NKikimr {
         ReplayAddGCCmd(ctx, record, ingress, seg.Last);
 
         // run compaction if required
-        YDB_LOG_CTX_DEBUG(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddGCCmd"));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddGCCmd"));
         CompactFreshLogoBlobsIfRequired(ctx);
-        YDB_LOG_CTX_DEBUG(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Barriers in AddGCCmd"));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Barriers in AddGCCmd"));
         CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, nullptr, 0, Fields->BarriersRunTimeCtx, ctx,
             false, Fields->AllowGarbageCollection);
     }
@@ -617,12 +617,12 @@ namespace NKikimr {
         Y_DEBUG_ABORT_UNLESS(curLsn == seg.Last + 1);
 
         // run compaction if required
-        YDB_LOG_CTX_DEBUG(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddSyncDataCmd"));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of LogoBlobs in AddSyncDataCmd"));
         CompactFreshLogoBlobsIfRequired(ctx);
-        YDB_LOG_CTX_DEBUG(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Blocks in AddSyncDataCmd"));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Blocks in AddSyncDataCmd"));
         CompactFreshSegmentIfRequired<TKeyBlock, TMemRecBlock>(HullDs, nullptr, 0, Fields->BlocksRunTimeCtx, ctx, false,
             Fields->AllowGarbageCollection);
-        YDB_LOG_CTX_DEBUG(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Barriers in AddSyncDataCmd"));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Try to schedule fresh compaction of Barriers in AddSyncDataCmd"));
         CompactFreshSegmentIfRequired<TKeyBarrier, TMemRecBarrier>(HullDs, nullptr, 0, Fields->BarriersRunTimeCtx, ctx,
             false, Fields->AllowGarbageCollection);
     }
@@ -693,6 +693,18 @@ namespace NKikimr {
                 Fields->BarriersRunTimeCtx, *HullDs->Barriers, Fields->AllowGarbageCollection);
         }
         Y_VERIFY_S(curLsn == seg.Last + 1, HullDs->HullCtx->VCtx->VDiskLogPrefix);
+    }
+
+    void THull::AddLocalSyncDataInFlight(ui64 logoBlobsSize, ui64 blocksSize, ui64 barriersSize) {
+        LogoBlobSyncDataSizeInFlight += logoBlobsSize;
+        BlockSyncDataSizeInFlight += blocksSize;
+        BarrierSyncDataSizeInFlight += barriersSize;
+    }
+
+    void THull::RemoveLocalSyncDataInFlight(ui64 logoBlobsSize, ui64 blocksSize, ui64 barriersSize) {
+        LogoBlobSyncDataSizeInFlight -= logoBlobsSize;
+        BlockSyncDataSizeInFlight -= blocksSize;
+        BarrierSyncDataSizeInFlight -= barriersSize;
     }
 
     ///////////////// GET SNAPSHOT //////////////////////////////////////////////

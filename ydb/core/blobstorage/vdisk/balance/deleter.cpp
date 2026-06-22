@@ -145,9 +145,9 @@ namespace {
             ingress.DeleteHandoff(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, key);
 
             YDB_LOG_DEBUG(VDISKP(Ctx->VCtx, "Deleting local"),
-                {"Marker", "BSVB20"},
-                {"LogoBlobID", key.ToString()},
-                {"Ingress", ingress.ToString(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, keyWithoutPartId)});
+                {"marker", "BSVB20"},
+                {"logoBlobID", key},
+                {"ingress", ingress.ToString(&GInfo->GetTopology(), Ctx->VCtx->ShortSelfVDisk, keyWithoutPartId)});
 
             TlsActivationContext->Send(
                 new IEventHandle(Ctx->SkeletonId, selfId, new TEvDelLogoBlobDataSyncLog(keyWithoutPartId, ingress, OrderId++)));
@@ -162,8 +162,8 @@ namespace {
             ++Ctx->MonGroup.MarkedReadyToDeleteResponse();
             Ctx->MonGroup.MarkedReadyToDeleteWithResponseBytes() += GInfo->GetTopology().GType.PartSize(ev->Get()->Id);
             YDB_LOG_INFO(VDISKP(Ctx->VCtx, "Deleted local"),
-                {"Marker", "BSVB21"},
-                {"LogoBlobID", ev->Get()->Id});
+                {"marker", "BSVB21"},
+                {"logoBlobID", ev->Get()->Id});
         }
 
         bool IsDone() const {
@@ -187,12 +187,12 @@ namespace {
             Become(&TThis::RequestState);
 
             YDB_LOG_INFO(VDISKP(Ctx->VCtx, "SendRequestsToCheckPartsOnMain"),
-                {"Marker", "BSVB22"},
-                {"Parts", PartsRequester.GetPartsSize()});
+                {"marker", "BSVB22"},
+                {"parts", PartsRequester.GetPartsSize()});
 
             if (PartsRequester.GetPartsSize() == 0) {
                 YDB_LOG_DEBUG(VDISKP(Ctx->VCtx, "Nothing to request. PassAway"),
-                    {"Marker", "BSVB23"});
+                    {"marker", "BSVB23"});
                 PassAway();
                 return;
             }
@@ -214,7 +214,7 @@ namespace {
                 return;
             }
             YDB_LOG_DEBUG(VDISKP(Ctx->VCtx, "CandidatesToDeleteAskFromMainBatchTimeout"),
-                {"Marker", "BSVB24"});
+                {"marker", "BSVB24"});
             Ctx->MonGroup.CandidatesToDeleteAskFromMainBatchTimeout()++;
             DeleteLocalParts();
         }
@@ -242,15 +242,15 @@ namespace {
 
             if (!partsNotOnMain.empty()) {
                 YDB_LOG_INFO(VDISKP(Ctx->VCtx, "Send TEvBalancingSendPartsOnMain"),
-                    {"Marker", "BSVB29"});
+                    {"marker", "BSVB29"});
                 Send(NotifyId, new TEvBalancingSendPartsOnMain(std::move(partsNotOnMain)));
             }
 
             ui32 partsOnMain = PartsRequester.GetResult().size() - partsNotOnMain.size();
             YDB_LOG_INFO(VDISKP(Ctx->VCtx, "DeleteLocalParts"),
-                {"Marker", "BSVB30"},
-                {"Parts", PartsRequester.GetResult().size()},
-                {"PartsOnMain", partsOnMain});
+                {"marker", "BSVB30"},
+                {"parts", PartsRequester.GetResult().size()},
+                {"partsOnMain", partsOnMain});
 
             return partsOnMain;
         }
@@ -260,7 +260,7 @@ namespace {
 
             if (CheckPartsOnMain() == 0) {
                 YDB_LOG_DEBUG(VDISKP(Ctx->VCtx, "Nothing to delete. PassAway"),
-                    {"Marker", "BSVB25"});
+                    {"marker", "BSVB25"});
                 PassAway();
                 return;
             }
@@ -274,7 +274,7 @@ namespace {
             PartsDeleter.Handle(ev);
             if (PartsDeleter.IsDone()) {
                 YDB_LOG_INFO(VDISKP(Ctx->VCtx, "DeleteLocalParts done"),
-                    {"Marker", "BSVB27"});
+                    {"marker", "BSVB27"});
                 PassAway();
             }
         }
@@ -284,7 +284,7 @@ namespace {
                 return;
             }
             YDB_LOG_INFO(VDISKP(Ctx->VCtx, "MarkReadyBatchTimeout"),
-                {"Marker", "BSVB31"});
+                {"marker", "BSVB31"});
             Ctx->MonGroup.MarkReadyBatchTimeout()++;
             PassAway();
         }
@@ -292,7 +292,7 @@ namespace {
         void PassAway() override {
             Send(NotifyId, new NActors::TEvents::TEvCompleted());
             YDB_LOG_INFO(VDISKP(Ctx->VCtx, "TDeleter::PassAway"),
-                {"Marker", "BSVB32"});
+                {"marker", "BSVB32"});
             TActorBootstrapped::PassAway();
         }
 

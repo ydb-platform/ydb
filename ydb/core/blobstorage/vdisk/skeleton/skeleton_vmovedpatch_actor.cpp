@@ -93,19 +93,21 @@ namespace NKikimr {
                 vMovedPatchResult->Orbit = std::move(Orbit);
 
                 if (status == NKikimrProto::ERROR) {
-                    YDB_LOG_CTX_ERROR(ctx, "Marker# BSVSP01",
+                    YDB_LOG_ERROR_CTX(ctx, "TEvVMovedPatch",
                         {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                        {"TEvVMovedPatch", errorSubMsg},
-                        {"OriginalBlobId", OriginalId},
-                        {"PatchedBlobId", PatchedId},
-                        {"ErrorReason", ErrorReason});
+                        {"error", errorSubMsg},
+                        {"originalBlobId", OriginalId},
+                        {"patchedBlobId", PatchedId},
+                        {"errorReason", ErrorReason},
+                        {"marker", "BSVSP01"});
                 }
-                YDB_LOG_CTX_DEBUG(ctx, "Send result Marker# BSVSP00",
+                YDB_LOG_DEBUG_CTX(ctx, "Send result",
                     {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                     {"TEvVMovedPatch", errorSubMsg},
-                    {"OriginalBlobId", OriginalId},
-                    {"PatchedBlobId", PatchedId},
-                    {"ErrorReason", ErrorReason});
+                    {"originalBlobId", OriginalId},
+                    {"patchedBlobId", PatchedId},
+                    {"errorReason", ErrorReason},
+                    {"marker", "BSVSP00"});
                 SendVDiskResponse(ctx, Event->Sender, vMovedPatchResult.release(), Event->Cookie, VCtx, {});
                 PassAway();
             }
@@ -118,10 +120,10 @@ namespace NKikimr {
             }
 
             void Handle(TEvBlobStorage::TEvGetResult::TPtr &ev, const TActorContext &ctx) {
-                YDB_LOG_CTX_DEBUG(ctx, "Receive Get ub TEvVMovedPatch",
+                YDB_LOG_DEBUG_CTX(ctx, "Receive Get ub TEvVMovedPatch",
                     {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                    {"OriginalBlobId", OriginalId},
-                    {"PatchedBlobId", PatchedId});
+                    {"originalBlobId", OriginalId},
+                    {"patchedBlobId", PatchedId});
                 TEvBlobStorage::TEvGetResult *result = ev->Get();
                 Orbit = std::move(result->Orbit);
 
@@ -156,14 +158,21 @@ namespace NKikimr {
                 // We have chosen UserData as PutHandleClass on purpose.
                 // If VMovedPatch and Put were AsyncWrite, it would become a deadlock
                 // because the put subrequest may not send and the moved patch request will end by timeout.
-                std::unique_ptr<TEvBlobStorage::TEvPut> put = std::make_unique<TEvBlobStorage::TEvPut>(PatchedId, Buffer, Deadline,
-                        NKikimrBlobStorage::UserData, TEvBlobStorage::TEvPut::TacticDefault);
+                std::unique_ptr<TEvBlobStorage::TEvPut> put = std::make_unique<TEvBlobStorage::TEvPut>(
+                        TEvBlobStorage::TEvPut::TParameters{
+                            .BlobId = PatchedId,
+                            .Buffer = TRope(Buffer),
+                            .Deadline = Deadline,
+                            .HandleClass = NKikimrBlobStorage::UserData,
+                            .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
+                            .WriteSource = TWriteSource::SkeletonVMovedPatch,
+                        });
                 put->Orbit = std::move(Orbit);
 
-                YDB_LOG_CTX_DEBUG(ctx, "Send Put ub TEvVMovedPatch",
+                YDB_LOG_DEBUG_CTX(ctx, "Send Put ub TEvVMovedPatch",
                     {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                    {"OriginalBlobId", OriginalId},
-                    {"PatchedBlobId", PatchedId});
+                    {"originalBlobId", OriginalId},
+                    {"patchedBlobId", PatchedId});
                 SendToBSProxy(SelfId(), PatchedGroupId, put.release(), OriginalId.Hash());
             }
 
@@ -173,10 +182,10 @@ namespace NKikimr {
 
                 ui32 originalIdHash = OriginalId.Hash();
 
-                YDB_LOG_CTX_DEBUG(ctx, "Receive Put ub TEvVMovedPatch",
+                YDB_LOG_DEBUG_CTX(ctx, "Receive Put ub TEvVMovedPatch",
                     {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                    {"OriginalBlobId", OriginalId},
-                    {"PatchedBlobId", PatchedId});
+                    {"originalBlobId", OriginalId},
+                    {"patchedBlobId", PatchedId});
 
                 constexpr auto errorSubMsg = "failed on VPut";
                 if (ev->Cookie != originalIdHash) {
@@ -204,10 +213,10 @@ namespace NKikimr {
                         OriginalId.BlobSize(), Deadline, NKikimrBlobStorage::AsyncRead);
                 get->Orbit = std::move(Event->Get()->Orbit);
 
-                YDB_LOG_CTX_DEBUG(TActivationContext::AsActorContext(), "Send Get ub TEvVMovedPatch",
+                YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Send Get ub TEvVMovedPatch",
                     {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                    {"OriginalBlobId", OriginalId},
-                    {"PatchedBlobId", PatchedId});
+                    {"originalBlobId", OriginalId},
+                    {"patchedBlobId", PatchedId});
 
                 SendToBSProxy(SelfId(), OriginalGroupId, get.release(), PatchedId.Hash());
                 Become(&TThis::StateWait);

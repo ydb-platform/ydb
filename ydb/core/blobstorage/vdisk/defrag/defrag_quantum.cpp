@@ -47,20 +47,20 @@ namespace NKikimr {
         }
 
         void Run() override {
-            YDB_LOG_DEBUG("defrag quantum start",
-                {"Marker", "BSVDD00"},
+            YDB_LOG_DEBUG("Defrag quantum start",
+                {"marker", "BSVDD00"},
                 {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
-                {"ActorId", SelfActorId});
+                {"actorId", SelfActorId});
 
             try {
                 RunImpl();
             } catch (const TExPoison&) {
             }
 
-            YDB_LOG_DEBUG("defrag quantum end",
-                {"Marker", "BSVDD06"},
+            YDB_LOG_DEBUG("Defrag quantum end",
+                {"marker", "BSVDD06"},
                 {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
-                {"ActorId", SelfActorId});
+                {"actorId", SelfActorId});
         }
 
         void RunImpl() {
@@ -68,20 +68,20 @@ namespace NKikimr {
             ui32 maxChunksToDefrag = DCtx->VCfg->MaxChunksToDefragInflight;
 
             if (!ChunksToDefrag) {
-                YDB_LOG_DEBUG("going to find chunks to defrag",
-                    {"Marker", "BSVDD07"},
+                YDB_LOG_DEBUG("Going to find chunks to defrag",
+                    {"marker", "BSVDD07"},
                     {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
-                    {"ActorId", SelfActorId});
+                    {"actorId", SelfActorId});
 
                 TDefragQuantumFindChunks findChunks(GetSnapshot(), DCtx->HugeBlobCtx);
                 const ui64 endTime = GetCycleCountFast() + DurationToCycles(NDefrag::MaxSnapshotHoldDuration);
                 while (findChunks.Scan(NDefrag::WorkQuantum)) {
                     if (GetCycleCountFast() >= endTime) {
-                        YDB_LOG_DEBUG("timed out while finding chunks to defrag",
-                            {"Marker", "BSVDD08"},
+                        YDB_LOG_DEBUG("Timed out while finding chunks to defrag",
+                            {"marker", "BSVDD08"},
                             {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
-                            {"ActorId", SelfActorId},
-                            {"Stat", stat});
+                            {"actorId", SelfActorId},
+                            {"stat", stat});
                         return (void)Send(ParentActorId, new TEvDefragQuantumResult(std::move(stat)));
                     }
                     Yield();
@@ -94,11 +94,11 @@ namespace NKikimr {
                 TDefragChunks lockedChunks;
 
                 if (!isShred) {
-                    YDB_LOG_DEBUG("commencing defragmentation",
-                        {"Marker", "BSVDD09"},
+                    YDB_LOG_DEBUG("Commencing defragmentation",
+                        {"marker", "BSVDD09"},
                         {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
-                        {"ActorId", SelfActorId},
-                        {"ChunksToDefrag", *ChunksToDefrag});
+                        {"actorId", SelfActorId},
+                        {"chunksToDefrag", *ChunksToDefrag});
 
                     stat.FoundChunksToDefrag = ChunksToDefrag->FoundChunksToDefrag;
                     stat.Eof = stat.FoundChunksToDefrag < maxChunksToDefrag;
@@ -106,27 +106,27 @@ namespace NKikimr {
 
                     lockedChunks = LockChunks(*ChunksToDefrag);
 
-                    YDB_LOG_DEBUG("locked chunks",
-                        {"Marker", "BSVDD11"},
+                    YDB_LOG_DEBUG("Locked chunks",
+                        {"marker", "BSVDD11"},
                         {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
-                        {"ActorId", SelfActorId},
-                        {"LockedChunks", lockedChunks});
+                        {"actorId", SelfActorId},
+                        {"lockedChunks", lockedChunks});
 
                     if (lockedChunks.empty()) {
-                        YDB_LOG_COMP_NOTICE(BS_VDISK_DEFRAG, "could not lock chunks, going to run full compaction instead",
-                            {"Marker", "BSVDD17"},
+                        YDB_LOG_NOTICE_COMP(BS_VDISK_DEFRAG, "Could not lock chunks, going to run full compaction instead",
+                            {"marker", "BSVDD17"},
                             {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
-                            {"ChunksToDefrag", *ChunksToDefrag});
+                            {"chunksToDefrag", *ChunksToDefrag});
                     }
                 } else {
                     auto forbiddenChunks = GetForbiddenChunks();
 
-                    YDB_LOG_DEBUG("commencing shredding",
-                        {"Marker", "BSVDD14"},
+                    YDB_LOG_DEBUG("Commencing shredding",
+                        {"marker", "BSVDD14"},
                         {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
-                        {"ActorId", SelfActorId},
-                        {"ChunksToShred", ChunksToDefrag->ChunksToShred},
-                        {"ForbiddenChunks", forbiddenChunks});
+                        {"actorId", SelfActorId},
+                        {"chunksToShred", ChunksToDefrag->ChunksToShred},
+                        {"forbiddenChunks", forbiddenChunks});
 
                     // filter chunks to shred via forbidden chunks
                     auto& chunksToShred = ChunksToDefrag->ChunksToShred;
@@ -138,11 +138,11 @@ namespace NKikimr {
 
                     // check if we have something remaining to process
                     if (chunksToShred.empty()) {
-                        YDB_LOG_DEBUG("nothing to do",
-                            {"Marker", "BSVDD15"},
+                        YDB_LOG_DEBUG("Nothing to do",
+                            {"marker", "BSVDD15"},
                             {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
-                            {"ActorId", SelfActorId},
-                            {"Stat", stat});
+                            {"actorId", SelfActorId},
+                            {"stat", stat});
                         Send(ParentActorId, new TEvDefragQuantumResult(std::move(stat)));
                         return;
                     }
@@ -187,13 +187,13 @@ namespace NKikimr {
                         return temp;
                     };
 
-                    YDB_LOG_DEBUG("rewriting records",
-                        {"Marker", "BSVDD12"},
+                    YDB_LOG_DEBUG("Rewriting records",
+                        {"marker", "BSVDD12"},
                         {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
-                        {"ActorId", SelfActorId},
-                        {"NumRecordsToRewrite", records.size()},
-                        {"NumRecordsTotal", numRecordsTotal},
-                        {"Chunks", getSortedChunks()});
+                        {"actorId", SelfActorId},
+                        {"numRecordsToRewrite", records.size()},
+                        {"numRecordsTotal", numRecordsTotal},
+                        {"chunks", getSortedChunks()});
 
                     const TActorId rewriterActorId = Register(CreateDefragRewriter(DCtx, SelfVDiskId, SelfActorId,
                         std::move(records)));
@@ -216,32 +216,32 @@ namespace NKikimr {
                     for (findRecords.StartFindingTablesToCompact(); findRecords.Scan(NDefrag::WorkQuantum, GetSnapshot()); Yield()) {}
                     if (auto records = findRecords.GetRecordsToRewrite(); !records.empty()) {
                         for (const auto& item : records) {
-                            YDB_LOG_WARN("blob found again after rewriting",
-                                {"Marker", "BSVDD16"},
+                            YDB_LOG_WARN("Blob found again after rewriting",
+                                {"marker", "BSVDD16"},
                                 {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
-                                {"ActorId", SelfActorId},
-                                {"Id", item.LogoBlobId},
-                                {"Location", item.OldDiskPart});
+                                {"actorId", SelfActorId},
+                                {"id", item.LogoBlobId},
+                                {"location", item.OldDiskPart});
                         }
                     }
 
                     auto tablesToCompact = findRecords.GetTablesToCompact();
                     const bool needsFreshCompaction = findRecords.GetNeedsFreshCompaction();
-                    YDB_LOG_DEBUG("compacting",
-                        {"Marker", "BSVDD13"},
+                    YDB_LOG_DEBUG("Compacting",
+                        {"marker", "BSVDD13"},
                         {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
-                        {"ActorId", SelfActorId},
-                        {"TablesToCompact", tablesToCompact},
-                        {"NeedsFreshCompaction", needsFreshCompaction});
+                        {"actorId", SelfActorId},
+                        {"tablesToCompact", tablesToCompact},
+                        {"needsFreshCompaction", needsFreshCompaction});
                     Compact(std::move(tablesToCompact), needsFreshCompaction);
                 }
             }
 
-            YDB_LOG_DEBUG("quantum finished",
-                {"Marker", "BSVDD15"},
+            YDB_LOG_DEBUG("Quantum finished",
+                {"marker", "BSVDD15"},
                 {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
-                {"ActorId", SelfActorId},
-                {"Stat", stat});
+                {"actorId", SelfActorId},
+                {"stat", stat});
 
             Send(ParentActorId, new TEvDefragQuantumResult(std::move(stat)));
         }

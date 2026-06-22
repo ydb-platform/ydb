@@ -401,14 +401,14 @@ namespace NKikimr {
                 const NHuge::TAllocChunkRecoveryLogRec &rec)
         {
             if (lsn > LogPos.ChunkAllocationLsn) {
-                YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "AllocChunk apply: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "AllocChunk apply: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 Heap->RecoveryModeAddChunk(rec.ChunkId);
                 LogPos.ChunkAllocationLsn = lsn;
                 PersistentLsn = Min(PersistentLsn, lsn);
                 return TRlas(true, false);
             } else {
                 // skip
-                YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "AllocChunk skip: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "AllocChunk skip: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 return TRlas(true, true);
             }
         }
@@ -421,14 +421,14 @@ namespace NKikimr {
         {
             if (lsn > LogPos.ChunkFreeingLsn) {
                 // apply
-                YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "FreeChunk apply(remove): %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "FreeChunk apply(remove): %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 Heap->RecoveryModeRemoveChunks(rec.ChunkIds);
                 LogPos.ChunkFreeingLsn = lsn;
                 PersistentLsn = Min(PersistentLsn, lsn);
                 return TRlas(true, false);
             } else {
                 // skip
-                YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "FreeChunk skip: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "FreeChunk skip: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 return TRlas(true, true);
             }
         }
@@ -457,7 +457,7 @@ namespace NKikimr {
             }
             if (lsn > *logPosDelLsn) {
                 // apply
-                YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "RmHugeBlobs apply: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "RmHugeBlobs apply: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 for (const auto &x : rec) {
                     Heap->RecoveryModeFree(x);
                 }
@@ -470,7 +470,7 @@ namespace NKikimr {
                 return TRlas(true, false);
             } else {
                 // skip
-                YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "RmHugeBlobs skip: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "RmHugeBlobs skip: %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data()));
                 return TRlas(true, true);
             }
         }
@@ -495,9 +495,9 @@ namespace NKikimr {
             if (lsn > LogPos.HugeBlobLoggedLsn) {
                 // apply
                 if (DeleteSlotInFlight(hugeSlot)) {
-                    YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "HugeBlob apply(1): rec# %s hugeSlot# %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
+                    YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "HugeBlob apply(1): rec# %s hugeSlot# %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
                 } else {
-                    YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "HugeBlob apply(2): rec# %s hugeSlot# %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
+                    YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "HugeBlob apply(2): rec# %s hugeSlot# %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
                     Heap->RecoveryModeAllocate(rec.DiskAddr);
                 }
                 LogPos.HugeBlobLoggedLsn = lsn;
@@ -505,7 +505,7 @@ namespace NKikimr {
                 return TRlas(true, false);
             } else {
                 // skip
-                YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "HugeBlob skip: rec# %s hugeSlot# %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "HugeBlob skip: rec# %s hugeSlot# %s", Guid, lsn, LogPos.EntryPointLsn, rec.ToString().data(), hugeSlot.ToString().data()));
                 return TRlas(true, true);
             }
         }
@@ -536,7 +536,7 @@ namespace NKikimr {
 
             Y_VERIFY_S(logPos.EntryPointLsn == lsn, VCtx->VDiskLogPrefix);
 
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "EntryPoint: logPos# %s", Guid, lsn, LogPos.EntryPointLsn, logPos.ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 " lsn# %" PRIu64 " entryLsn# %" PRIu64 "): " "EntryPoint: logPos# %s", Guid, lsn, LogPos.EntryPointLsn, logPos.ToString().data()));
 
             return TRlas(true, false);
         }
@@ -549,7 +549,7 @@ namespace NKikimr {
             SlotsInFlight.clear();
 
             Recovered = true;
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 ") finished", Guid));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "Recovery(guid# %" PRIu64 ") finished", Guid));
         }
 
         void THullHugeKeeperPersState::GetOwnedChunks(TSet<TChunkIdx>& chunks) const {
@@ -577,10 +577,10 @@ namespace NKikimr {
             Y_VERIFY_DEBUG_S(size == hugeSlot.GetSize(), VCtx->VDiskLogPrefix << "HugeSlot# " << hugeSlot.ToString()
                 << " Expected# " << size);
             if (size != hugeSlot.GetSize() && TlsActivationContext) {
-                YDB_LOG_CRIT("size is not as",
+                YDB_LOG_CRIT("Size is not as",
                     {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                    {"HugeSlot", hugeSlot.ToString()},
-                    {"Expected", size});
+                    {"hugeSlot", hugeSlot},
+                    {"expected", size});
             }
             ++refcount;
         }
@@ -592,10 +592,10 @@ namespace NKikimr {
             Y_VERIFY_DEBUG_S(size == hugeSlot.GetSize(), VCtx->VDiskLogPrefix << "HugeSlot# " << hugeSlot.ToString()
                 << " Expected# " << size);
             if (size != hugeSlot.GetSize() && TlsActivationContext) {
-                YDB_LOG_CRIT("size is not as",
+                YDB_LOG_CRIT("Size is not as",
                     {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                    {"HugeSlot", hugeSlot.ToString()},
-                    {"Expected", size});
+                    {"hugeSlot", hugeSlot},
+                    {"expected", size});
             }
             if (!--refcount) {
                 ChunkToSlotSize.erase(jt);

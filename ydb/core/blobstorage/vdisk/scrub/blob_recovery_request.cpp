@@ -8,12 +8,12 @@ namespace NKikimr {
         auto *msg = ev->Get();
         const ui64 requestId = NextRequestId++;
         YDB_LOG_DEBUG(VDISKP(LogPrefix, "received TEvRecoverBlob"),
-            {"Marker", "VDS31"},
-            {"SelfId", SelfId()},
-            {"Msg", ev->Get()->ToString()},
-            {"IsConnected", IsConnected},
-            {"WakeupScheduled", WakeupScheduled},
-            {"RequestId", requestId});
+            {"marker", "VDS31"},
+            {"selfId", SelfId()},
+            {"msg", ev->Get()->ToString()},
+            {"isConnected", IsConnected},
+            {"wakeupScheduled", WakeupScheduled},
+            {"requestId", requestId});
 
         // create in flight context for this request and place it into in flight map
         auto context = std::make_shared<TInFlightContext>(requestId, *ev);

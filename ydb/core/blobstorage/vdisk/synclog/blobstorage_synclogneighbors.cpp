@@ -65,7 +65,7 @@ namespace NKikimr {
         // SYNC LOG NEIGHBORS AND POSITIONS
         ////////////////////////////////////////////////////////////////////////////
         void TSyncLogNeighbors::Lock(const TVDiskID &vdisk, ui64 lsn) {
-            YDB_LOG_CTX_DEBUG(*ActorSystem, VDISKP(LogPrefix, "Lock: vdisk# %s lsn# %" PRIu64, vdisk.ToString().data(), lsn));
+            YDB_LOG_DEBUG_CTX(*ActorSystem, VDISKP(LogPrefix, "Lock: vdisk# %s lsn# %" PRIu64, vdisk.ToString().data(), lsn));
 
             TNeighbors::TValue &ref = Neighbors[vdisk];
             Y_VERIFY_S(ref.Get().LockedLsn == (ui64)-1, LogPrefix);
@@ -74,7 +74,7 @@ namespace NKikimr {
         }
 
         void TSyncLogNeighbors::Unlock(const TVDiskID &vdisk) {
-            YDB_LOG_CTX_DEBUG(*ActorSystem, VDISKP(LogPrefix, "Unlock: vdisk# %s", vdisk.ToString().data()));
+            YDB_LOG_DEBUG_CTX(*ActorSystem, VDISKP(LogPrefix, "Unlock: vdisk# %s", vdisk.ToString().data()));
 
             TNeighbors::TValue &ref = Neighbors[vdisk];
             Y_VERIFY_S(ref.Get().LockedLsn != (ui64)-1, LogPrefix);
@@ -86,7 +86,7 @@ namespace NKikimr {
             TNeighbors::TValue &ref = Neighbors[vdisk];
             const bool isLocked = ref.Get().LockedLsn != (ui64)-1;
 
-            YDB_LOG_CTX_DEBUG(*ActorSystem, VDISKP(LogPrefix, "IsLocked: vdisk# %s res# %s", vdisk.ToString().data(), (isLocked ? "true" : "false")));
+            YDB_LOG_DEBUG_CTX(*ActorSystem, VDISKP(LogPrefix, "IsLocked: vdisk# %s res# %s", vdisk.ToString().data(), (isLocked ? "true" : "false")));
 
             return isLocked;
         }

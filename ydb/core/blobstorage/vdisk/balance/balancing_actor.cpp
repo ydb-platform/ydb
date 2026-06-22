@@ -55,8 +55,8 @@ namespace NBalancing {
                 IsDeleteCompleted = true;
             } else {
                 YDB_LOG_WARN("Unexpected actor id",
-                    {"Marker", "BSVB05"},
-                    {"Id", ev->Sender});
+                    {"marker", "BSVB05"},
+                    {"id", ev->Sender});
             }
         }
 
@@ -112,11 +112,11 @@ namespace NBalancing {
 
             if (status != NKikimrProto::EReplyStatus::OK || !replicated || isReadOnly) {
                 YDB_LOG_INFO(VDISKP(Ctx->VCtx, "VDisk is not ready. Stop balancing"),
-                    {"Marker", "BSVB02"},
+                    {"marker", "BSVB02"},
                     {"VDiskId", vdiskId},
-                    {"Status", NKikimrProto::EReplyStatus_Name(status)},
-                    {"Replicated", replicated},
-                    {"ReadOnly", isReadOnly});
+                    {"status", NKikimrProto::EReplyStatus_Name(status)},
+                    {"replicated", replicated},
+                    {"readOnly", isReadOnly});
                 Stop(TDuration::Seconds(10));
                 return;
             }
@@ -132,10 +132,10 @@ namespace NBalancing {
             if (!ReadyToBalance()) {
                 // not all vdisks are connected
                 YDB_LOG_INFO(VDISKP(Ctx->VCtx, "Not all vdisks are connected, balancing should work only for full groups"),
-                    {"Marker", "BSVB11"},
-                    {"ConnectedVDisks", ConnectedVDisks.size()},
-                    {"GoodStatusVDisks", GoodStatusVDisks.size()},
-                    {"TotalVDisksInGroup", GInfo->GetTotalVDisksNum()});
+                    {"marker", "BSVB11"},
+                    {"connectedVDisks", ConnectedVDisks.size()},
+                    {"goodStatusVDisks", GoodStatusVDisks.size()},
+                    {"totalVDisksInGroup", GInfo->GetTotalVDisksNum()});
                 Stop(TDuration::Seconds(10));
                 return;
             }
@@ -148,9 +148,9 @@ namespace NBalancing {
                 if (cnt % 128 == 127 && TDuration::Seconds(timer.Passed()) > Ctx->Cfg.JobGranularity) {
                     // actor should not block the thread for a long time, so we should yield
                     YDB_LOG_DEBUG(VDISKP(Ctx->VCtx, "Collect keys"),
-                        {"Marker", "BSVB04"},
-                        {"Collected", cnt},
-                        {"Passed", timer.Passed()});
+                        {"marker", "BSVB04"},
+                        {"collected", cnt},
+                        {"passed", timer.Passed()});
                     Send(SelfId(), new NActors::TEvents::TEvWakeup());
                     return;
                 }
@@ -190,8 +190,8 @@ namespace NBalancing {
                         for (ui8 partIdx = partsToDelete.FirstPosition(); partIdx < partsToDelete.GetSize(); partIdx = partsToDelete.NextPosition(partIdx)) {
                             TryDeleteParts.Data.emplace_back(TLogoBlobID(key, partIdx + 1));
                             YDB_LOG_DEBUG(VDISKP(Ctx->VCtx, "Delete"),
-                                {"Marker", "BSVB10"},
-                                {"LogoBlobId", TryDeleteParts.Data.back().ToString()});
+                                {"marker", "BSVB10"},
+                                {"logoBlobId", TryDeleteParts.Data.back()});
                         }
 
                         for (const auto& [parts, data, isHugeBlob] : merger.Parts) {
@@ -214,9 +214,9 @@ namespace NBalancing {
             }
 
             YDB_LOG_DEBUG(VDISKP(Ctx->VCtx, "Keys collected"),
-                {"Marker", "BSVB08"},
-                {"SendOnMainParts", SendOnMainParts.Data.size()},
-                {"TryDeleteParts", TryDeleteParts.Data.size()});
+                {"marker", "BSVB08"},
+                {"sendOnMainParts", SendOnMainParts.Data.size()},
+                {"tryDeleteParts", TryDeleteParts.Data.size()});
 
             // start balancing
             ContinueBalancing();
@@ -233,7 +233,7 @@ namespace NBalancing {
             if (SendOnMainParts.Empty() && TryDeleteParts.Empty()) {
                 // no more parts to send or delete
                 YDB_LOG_INFO(VDISKP(Ctx->VCtx, "Balancing completed"),
-                    {"Marker", "BSVB03"});
+                    {"marker", "BSVB03"});
                 bool hasSomeWorkForNextEpoch = SendOnMainParts.Size() >= Ctx->Cfg.MaxToSendPerEpoch || TryDeleteParts.Size() >= Ctx->Cfg.MaxToDeletePerEpoch;
                 Stop(hasSomeWorkForNextEpoch ? TDuration::Seconds(0) : Ctx->Cfg.TimeToSleepIfNothingToDo);
                 return;
@@ -241,8 +241,8 @@ namespace NBalancing {
 
             // ask for repl token to continue balancing
             YDB_LOG_INFO(VDISKP(Ctx->VCtx, "Ask repl token to continue balancing"),
-                {"Marker", "BSVB01"},
-                {"SelfId", SelfId()},
+                {"marker", "BSVB01"},
+                {"selfId", SelfId()},
                 {"PDiskId", Ctx->VDiskCfg->BaseInfo.PDiskId});
             Send(MakeBlobStorageReplBrokerID(), new TEvQueryReplToken(Ctx->VDiskCfg->BaseInfo.PDiskId), NActors::IEventHandle::FlagTrackDelivery);
         }
@@ -254,11 +254,11 @@ namespace NBalancing {
 
             // once repl token received, start balancing - waking up sender and deleter
             YDB_LOG_INFO(VDISKP(Ctx->VCtx, "Schedule job quant"),
-                {"Marker", "BSVB02"},
-                {"SendPartsLeft", SendOnMainParts.Size()},
-                {"DeletePartsLeft", TryDeleteParts.Size()},
-                {"ConnectedVDisks", ConnectedVDisks.size()},
-                {"TotalVDisks", GInfo->GetTotalVDisksNum()});
+                {"marker", "BSVB02"},
+                {"sendPartsLeft", SendOnMainParts.Size()},
+                {"deletePartsLeft", TryDeleteParts.Size()},
+                {"connectedVDisks", ConnectedVDisks.size()},
+                {"totalVDisks", GInfo->GetTotalVDisksNum()});
 
             // register sender and deleter actors
             IActor* sender = CreateSenderActor(SelfId(), SendOnMainParts.GetNextBatch(), QueueActorMapPtr, Ctx);
@@ -272,14 +272,14 @@ namespace NBalancing {
 
         void Handle(NActors::TEvents::TEvCompleted::TPtr ev) {
             YDB_LOG_INFO(VDISKP(Ctx->VCtx, "TEvCompleted"),
-                {"Marker", "BSVB04"},
-                {"Type", ev->Type});
+                {"marker", "BSVB04"},
+                {"type", ev->Type});
             BatchManager.Handle(ev);
 
             if (StartTime + Ctx->Cfg.EpochTimeout < TlsActivationContext->Now()) {
                 Ctx->MonGroup.EpochTimeouts()++;
                 YDB_LOG_INFO(VDISKP(Ctx->VCtx, "Epoch timeout"),
-                    {"Marker", "BSVB04"});
+                    {"marker", "BSVB04"});
                 Stop(TDuration::Seconds(0));
                 return;
             }
@@ -296,8 +296,8 @@ namespace NBalancing {
         void Handle(TEvBalancingSendPartsOnMain::TPtr ev) {
             Ctx->MonGroup.OnMainByIngressButNotRealy() += ev->Get()->Ids.size();
             YDB_LOG_INFO(VDISKP(Ctx->VCtx, "Received from deleter TEvBalancingSendPartsOnMain"),
-                {"Marker", "BSVB05"},
-                {"Parts", ev->Get()->Ids.size()});
+                {"marker", "BSVB05"},
+                {"parts", ev->Get()->Ids.size()});
             for (const auto& id: ev->Get()->Ids) {
                 if (auto it = TryDeletePartsFullData.find(TLogoBlobID(id, 0)); it != TryDeletePartsFullData.end()) {
                     for (const auto& part: it->second) {
@@ -332,8 +332,8 @@ namespace NBalancing {
         void Handle(NActors::TEvents::TEvUndelivered::TPtr ev) {
             if (ev.Get()->Type == TEvReplToken::EventType) {
                 YDB_LOG_ERROR(VDISKP(Ctx->VCtx, "Ask repl token msg not delivered"),
-                    {"Marker", "BSVB06"},
-                    {"SelfId", SelfId()},
+                    {"marker", "BSVB06"},
+                    {"selfId", SelfId()},
                     {"PDiskId", Ctx->VDiskCfg->BaseInfo.PDiskId});
                 ContinueBalancing();
             }
@@ -343,13 +343,13 @@ namespace NBalancing {
             const TVDiskID& vdiskId = ev->Get()->VDiskId;
             if (ev->Get()->IsConnected) {
                 YDB_LOG_DEBUG(VDISKP(Ctx->VCtx, "VDisk connected"),
-                    {"Marker", "BSVB07"},
-                    {"VDiskId", vdiskId.ToString()});
+                    {"marker", "BSVB07"},
+                    {"VDiskId", vdiskId});
                 ConnectedVDisks.insert(vdiskId);
             } else {
                 YDB_LOG_DEBUG(VDISKP(Ctx->VCtx, "VDisk disconnected"),
-                    {"Marker", "BSVB09"},
-                    {"VDiskId", vdiskId.ToString()});
+                    {"marker", "BSVB09"},
+                    {"VDiskId", vdiskId});
                 ConnectedVDisks.erase(vdiskId);
             }
         }
@@ -368,10 +368,10 @@ namespace NBalancing {
 
         void Stop(TDuration timeoutBeforeNextLaunch) {
             YDB_LOG_INFO(VDISKP(Ctx->VCtx, "Stop balancing"),
-                {"Marker", "BSVB12"},
-                {"SendOnMainParts", SendOnMainParts.Data.size()},
-                {"TryDeleteParts", TryDeleteParts.Data.size()},
-                {"SecondsBeforeNextLaunch", timeoutBeforeNextLaunch.Seconds()});
+                {"marker", "BSVB12"},
+                {"sendOnMainParts", SendOnMainParts.Data.size()},
+                {"tryDeleteParts", TryDeleteParts.Data.size()},
+                {"secondsBeforeNextLaunch", timeoutBeforeNextLaunch.Seconds()});
 
             if (AquiredReplToken) {
                 Send(MakeBlobStorageReplBrokerID(), new TEvReleaseReplToken);

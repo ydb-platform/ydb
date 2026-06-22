@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "bind.h"
 #endif
-#undef BIND_INL_H_
 
 #include <yt/yt/core/actions/invoker.h>
 #include <yt/yt/core/concurrency/propagating_storage.h>

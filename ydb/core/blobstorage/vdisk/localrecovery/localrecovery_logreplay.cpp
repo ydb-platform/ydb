@@ -80,7 +80,7 @@ namespace NKikimr {
         NKikimrVDiskData::TPhantomLogoBlobs PhantomLogoBlobs;
 
         void Bootstrap(const TActorContext &ctx) {
-            YDB_LOG_CTX_COMP_NOTICE(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "TRecoveryLogReplayer: START"));
+            YDB_LOG_NOTICE_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "TRecoveryLogReplayer: START"));
 
             Become(&TThis::StateFunc);
             SendReadLogRequest(ctx, NPDisk::TLogPosition {0, 0});
@@ -162,10 +162,10 @@ namespace NKikimr {
             // skip records that already in index
             if (LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs->SkipRecord(lsn)) {
                 LocRecCtx->RecovInfo->FreshSkipLogoBlob();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (LOGOBLOB) SKIPPED: lsn# %" PRIu64 " id# %s", lsn, id.ToString().data()));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (LOGOBLOB) SKIPPED: lsn# %" PRIu64 " id# %s", lsn, id.ToString().data()));
             } else {
                 LocRecCtx->RecovInfo->FreshApplyLogoBlob();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (LOGOBLOB) ADDED: lsn# %" PRIu64 " id# %s", lsn, id.ToString().data()));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (LOGOBLOB) ADDED: lsn# %" PRIu64 " id# %s", lsn, id.ToString().data()));
                 TLogoBlobID genId(id, 0);
                 if (fromVPutCommand)
                     LocRecCtx->HullDbRecovery->ReplayAddLogoBlobCmd(ctx, genId, id.PartId(), ingress, TRope(buf),
@@ -187,10 +187,10 @@ namespace NKikimr {
             // skip records that already in synclog
             if (lsn <= SyncLogMaxLsnStored) {
                 LocRecCtx->RecovInfo->SyncLogSkipLogoBlob();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG LOGOBLOB) SKIPPED: lsn# %" PRIu64 " id# %s", lsn, id.ToString().data()));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG LOGOBLOB) SKIPPED: lsn# %" PRIu64 " id# %s", lsn, id.ToString().data()));
             } else {
                 LocRecCtx->RecovInfo->SyncLogApplyLogoBlob();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG LOGOBLOB) ADDED: lsn# %" PRIu64 " id# %s", lsn, id.ToString().data()));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG LOGOBLOB) ADDED: lsn# %" PRIu64 " id# %s", lsn, id.ToString().data()));
                 LocRecCtx->SyncLogRecovery->PutLogoBlob(LocRecCtx->VCtx->Top->GType, lsn, TLogoBlobID(id, 0), ingress);
             }
         }
@@ -203,10 +203,10 @@ namespace NKikimr {
             // skip records that already in index
             if (LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs->SkipRecord(lsn)) {
                 LocRecCtx->RecovInfo->FreshSkipHugeLogoBlob();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGELOGOBLOB) SKIPPED: lsn# %" PRIu64 " id# %s", lsn, id.ToString().data()));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGELOGOBLOB) SKIPPED: lsn# %" PRIu64 " id# %s", lsn, id.ToString().data()));
             } else {
                 LocRecCtx->RecovInfo->FreshApplyHugeLogoBlob();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGELOGOBLOB) ADDED: lsn# %" PRIu64 " id# %s", lsn, id.ToString().data()));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGELOGOBLOB) ADDED: lsn# %" PRIu64 " id# %s", lsn, id.ToString().data()));
                 TLogoBlobID genId(id, 0);
                 LocRecCtx->HullDbRecovery->ReplayAddHugeLogoBlobCmd(ctx, genId, ingress, diskAddr, lsn,
                         THullDbRecovery::RECOVERY);
@@ -218,10 +218,10 @@ namespace NKikimr {
             // skip records that already in synclog
             if (lsn <= SyncLogMaxLsnStored) {
                 LocRecCtx->RecovInfo->SyncLogSkipHugeLogoBlob();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG HUGELOGOBLOB) SKIPPED: lsn# %" PRIu64 " id# %s", lsn, id.ToString().data()));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG HUGELOGOBLOB) SKIPPED: lsn# %" PRIu64 " id# %s", lsn, id.ToString().data()));
             } else {
                 LocRecCtx->RecovInfo->SyncLogApplyHugeLogoBlob();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG HUGELOGOBLOB) ADDED: lsn# %" PRIu64 " id# %s", lsn, id.ToString().data()));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG HUGELOGOBLOB) ADDED: lsn# %" PRIu64 " id# %s", lsn, id.ToString().data()));
                 LocRecCtx->SyncLogRecovery->PutLogoBlob(LocRecCtx->VCtx->Top->GType, lsn, TLogoBlobID(id, 0), ingress);
             }
         }
@@ -230,10 +230,10 @@ namespace NKikimr {
             // skip records that already in index
             if (LocRecCtx->HullDbRecovery->GetHullDs()->Blocks->SkipRecord(lsn)) {
                 LocRecCtx->RecovInfo->FreshSkipBlock();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (BLOCK) SKIPPED: lsn# %" PRIu64 " tabletId# %" PRIu64 " gen# %" PRIu32, lsn, tabletId, gen));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (BLOCK) SKIPPED: lsn# %" PRIu64 " tabletId# %" PRIu64 " gen# %" PRIu32, lsn, tabletId, gen));
             } else {
                 LocRecCtx->RecovInfo->FreshApplyBlock();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (BLOCK) ADDED: lsn# %" PRIu64 " tabletId# %" PRIu64 " gen# %" PRIu32, lsn, tabletId, gen));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (BLOCK) ADDED: lsn# %" PRIu64 " tabletId# %" PRIu64 " gen# %" PRIu32, lsn, tabletId, gen));
                 LocRecCtx->HullDbRecovery->ReplayAddBlockCmd(ctx, tabletId, gen, issuerGuid, lsn, THullDbRecovery::RECOVERY);
             }
         }
@@ -245,10 +245,10 @@ namespace NKikimr {
             // skip records that already in synclog
             if (lsn <= SyncLogMaxLsnStored) {
                 LocRecCtx->RecovInfo->SyncLogSkipBlock();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG BLOCK) SKIPPED: lsn# %" PRIu64 " tabletId# %" PRIu64 " gen# %" PRIu32, lsn, tabletId, gen));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG BLOCK) SKIPPED: lsn# %" PRIu64 " tabletId# %" PRIu64 " gen# %" PRIu32, lsn, tabletId, gen));
             } else {
                 LocRecCtx->RecovInfo->SyncLogApplyBlock();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG BLOCK) ADDED: lsn# %" PRIu64 " tabletId# %" PRIu64 " gen# %" PRIu32, lsn, tabletId, gen));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG BLOCK) ADDED: lsn# %" PRIu64 " tabletId# %" PRIu64 " gen# %" PRIu32, lsn, tabletId, gen));
                 LocRecCtx->SyncLogRecovery->PutBlock(lsn, tabletId, gen);
             }
         }
@@ -261,10 +261,10 @@ namespace NKikimr {
             // skip records that already in index
             if (LocRecCtx->HullDbRecovery->GetHullDs()->Barriers->SkipRecord(lsn)) {
                 LocRecCtx->RecovInfo->FreshSkipGCBarrier();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (GC BARRIER) SKIPPED: lsn# %" PRIu64, lsn));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (GC BARRIER) SKIPPED: lsn# %" PRIu64, lsn));
             } else {
                 LocRecCtx->RecovInfo->FreshApplyGCBarrier();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (GC BARRIER) ADDED: lsn# %" PRIu64, lsn));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (GC BARRIER) ADDED: lsn# %" PRIu64, lsn));
                 LocRecCtx->HullDbRecovery->ReplayAddGCCmd_BarrierSubcommand(ctx, gcmsg, ingress, lsn,
                         THullDbRecovery::RECOVERY);
             }
@@ -273,10 +273,10 @@ namespace NKikimr {
             // skip records that already in index
             if (LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs->SkipRecord(lsn)) {
                 LocRecCtx->RecovInfo->FreshSkipGCLogoBlob();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (GC LOGOBLOB) SKIPPED: lsn# %" PRIu64, lsn));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (GC LOGOBLOB) SKIPPED: lsn# %" PRIu64, lsn));
             } else {
                 LocRecCtx->RecovInfo->FreshApplyGCLogoBlob();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (GC LOGOBLOB) ADDED: lsn# %" PRIu64, lsn));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (GC LOGOBLOB) ADDED: lsn# %" PRIu64, lsn));
                 LocRecCtx->HullDbRecovery->ReplayAddGCCmd_LogoBlobsSubcommand(ctx, gcmsg, lsn,
                         THullDbRecovery::RECOVERY);
             }
@@ -285,10 +285,10 @@ namespace NKikimr {
             // skip records that already in synclog
             if (lsn <= SyncLogMaxLsnStored) {
                 LocRecCtx->RecovInfo->SyncLogSkipGC();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG BARRIER) SKIPPED: lsn# %" PRIu64, lsn));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG BARRIER) SKIPPED: lsn# %" PRIu64, lsn));
             } else {
                 LocRecCtx->RecovInfo->SyncLogApplyGC();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG BARRIER) ADDED: lsn# %" PRIu64, lsn));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG BARRIER) ADDED: lsn# %" PRIu64, lsn));
                 LocRecCtx->SyncLogRecovery->PutGC(LocRecCtx->VCtx->Top->GType, lsn, gcmsg, ingress);
             }
         }
@@ -306,10 +306,10 @@ namespace NKikimr {
             // skip records that already in index
             if (LocRecCtx->HullDbRecovery->GetHullDs()->Barriers->SkipRecord(lsn)) {
                 LocRecCtx->RecovInfo->FreshSkipBarrier();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (BARRIER) SKIPPED: lsn# %" PRIu64 " tabletId# %" PRIu64 " channel# %" PRIu32 " gen# %" PRIu32 " genCounter# %" PRIu32 " collectGen# %" PRIu32 " collectStep# %" PRIu32 " hard# %s", lsn, tabletId, channel, gen, genCounter, collectGen, collectStep, hard ? "true" : "false"));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (BARRIER) SKIPPED: lsn# %" PRIu64 " tabletId# %" PRIu64 " channel# %" PRIu32 " gen# %" PRIu32 " genCounter# %" PRIu32 " collectGen# %" PRIu32 " collectStep# %" PRIu32 " hard# %s", lsn, tabletId, channel, gen, genCounter, collectGen, collectStep, hard ? "true" : "false"));
             } else {
                 LocRecCtx->RecovInfo->FreshApplyBarrier();
-                YDB_LOG_CTX_DEBUG(ctx, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (BARRIER) ADDED: lsn# %" PRIu64 " tabletId# %" PRIu64 " channel# %" PRIu32 " gen# %" PRIu32 " genCounter# %" PRIu32 " collectGen# %" PRIu32 " collectStep# %" PRIu32 " hard# %s", lsn, tabletId, channel, gen, genCounter, collectGen, collectStep, hard ? "true" : "false"));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (BARRIER) ADDED: lsn# %" PRIu64 " tabletId# %" PRIu64 " channel# %" PRIu32 " gen# %" PRIu32 " genCounter# %" PRIu32 " collectGen# %" PRIu32 " collectStep# %" PRIu32 " hard# %s", lsn, tabletId, channel, gen, genCounter, collectGen, collectStep, hard ? "true" : "false"));
                 LocRecCtx->HullDbRecovery->ReplayAddBarrierCmd(ctx, tabletId, channel,
                         gen, genCounter, collectGen, collectStep, hard, ingress, lsn, THullDbRecovery::RECOVERY);
             }
@@ -401,14 +401,14 @@ namespace NKikimr {
             // skip records that already in index
             if (LocRecCtx->HullDbRecovery->GetHullDs()->LogoBlobs->SkipRecord(seg.Last)) {
                 LocRecCtx->RecovInfo->FreshSkipLogoBlobsBatch();
-                YDB_LOG_CTX_DEBUG(ctx, "RECORD (LOGOBLOBS_BATCH) SKIPPED",
+                YDB_LOG_DEBUG_CTX(ctx, "RECORD (LOGOBLOBS_BATCH) SKIPPED",
                     {"VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
-                    {"Lsn", seg});
+                    {"lsn", seg});
             } else {
                 LocRecCtx->RecovInfo->FreshApplyLogoBlobsBatch();
-                YDB_LOG_CTX_DEBUG(ctx, "RECORD (LOGOBLOBS_BATCH) ADDED",
+                YDB_LOG_DEBUG_CTX(ctx, "RECORD (LOGOBLOBS_BATCH) ADDED",
                     {"VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
-                    {"Lsn", seg});
+                    {"lsn", seg});
 
                 LocRecCtx->HullDbRecovery->ReplaySyncDataCmd_LogoBlobsBatch(ctx, std::move(logoBlobs),
                         seg, THullDbRecovery::RECOVERY);
@@ -423,14 +423,14 @@ namespace NKikimr {
             // skip records that already in index
             if (LocRecCtx->HullDbRecovery->GetHullDs()->Blocks->SkipRecord(seg.Last)) {
                 LocRecCtx->RecovInfo->FreshSkipBlocksBatch();
-                YDB_LOG_CTX_DEBUG(ctx, "RECORD (BLOCKS_BATCH) SKIPPED",
+                YDB_LOG_DEBUG_CTX(ctx, "RECORD (BLOCKS_BATCH) SKIPPED",
                     {"VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
-                    {"Lsn", seg});
+                    {"lsn", seg});
             } else {
                 LocRecCtx->RecovInfo->FreshApplyBlocksBatch();
-                YDB_LOG_CTX_DEBUG(ctx, "RECORD (BLOCKS_BATCH) ADDED",
+                YDB_LOG_DEBUG_CTX(ctx, "RECORD (BLOCKS_BATCH) ADDED",
                     {"VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
-                    {"Lsn", seg});
+                    {"lsn", seg});
 
                 LocRecCtx->HullDbRecovery->ReplaySyncDataCmd_BlocksBatch(ctx, std::move(blocks),
                         seg, THullDbRecovery::RECOVERY);
@@ -445,14 +445,14 @@ namespace NKikimr {
             // skip records that already in index
             if (LocRecCtx->HullDbRecovery->GetHullDs()->Barriers->SkipRecord(seg.Last)) {
                 LocRecCtx->RecovInfo->FreshSkipBarriersBatch();
-                YDB_LOG_CTX_DEBUG(ctx, "RECORD (BARRIERS_BATCH) SKIPPED",
+                YDB_LOG_DEBUG_CTX(ctx, "RECORD (BARRIERS_BATCH) SKIPPED",
                     {"VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
-                    {"Lsn", seg});
+                    {"lsn", seg});
             } else {
                 LocRecCtx->RecovInfo->FreshApplyBarriersBatch();
-                YDB_LOG_CTX_DEBUG(ctx, "RECORD (BARRIERS_BATCH) ADDED",
+                YDB_LOG_DEBUG_CTX(ctx, "RECORD (BARRIERS_BATCH) ADDED",
                     {"VDiskLogPrefix", LocRecCtx->VCtx->VDiskLogPrefix},
-                    {"Lsn", seg});
+                    {"lsn", seg});
                 LocRecCtx->HullDbRecovery->ReplaySyncDataCmd_BarriersBatch(ctx, std::move(barriers),
                         seg, THullDbRecovery::RECOVERY);
             }
@@ -500,6 +500,7 @@ namespace NKikimr {
                 LocRecCtx->SyncerData->PutFromRecoveryLog(LocalSyncDataMsg.VDiskID, LocalSyncDataMsg.SyncState);
             }
 
+            LocRecCtx->RecovInfo->SetRecoveredLocalSyncDataLsn(record.Lsn);
             return EDispatchStatus::Success;
         }
 
@@ -517,10 +518,10 @@ namespace NKikimr {
             // skip records that already in synclog
             if (lsn <= SyncLogMaxLsnStored) {
                 LocRecCtx->RecovInfo->FreshSkipHandoffDel();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG HNDOFF) SKIPPED: lsn# %" PRIu64, lsn));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG HNDOFF) SKIPPED: lsn# %" PRIu64, lsn));
             } else {
                 LocRecCtx->RecovInfo->FreshApplyHandoffDel();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG HNDOFF) ADDED: lsn# %" PRIu64, lsn));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (SYNCLOG HNDOFF) ADDED: lsn# %" PRIu64, lsn));
                 LocRecCtx->SyncLogRecovery->PutLogoBlob(LocRecCtx->VCtx->Top->GType, lsn, TLogoBlobID(id, 0), ingress);
             }
 
@@ -539,10 +540,10 @@ namespace NKikimr {
 
             if (res.Skip) {
                 LocRecCtx->RecovInfo->SkipHugeBlobAllocChunk();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGE BLOB ALLOC CHUNK) SKIPPED: lsn# %" PRIu64, lsn));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGE BLOB ALLOC CHUNK) SKIPPED: lsn# %" PRIu64, lsn));
             } else {
                 LocRecCtx->RecovInfo->ApplyHugeBlobAllocChunk();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGE BLOB ALLOC CHUNK) ADDED: lsn# %" PRIu64, lsn));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGE BLOB ALLOC CHUNK) ADDED: lsn# %" PRIu64, lsn));
 
             }
             return EDispatchStatus::Success;
@@ -560,10 +561,10 @@ namespace NKikimr {
 
             if (res.Skip) {
                 LocRecCtx->RecovInfo->SkipHugeBlobFreeChunk();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGE BLOB FREE CHUNK) SKIPPED: lsn# %" PRIu64, lsn));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGE BLOB FREE CHUNK) SKIPPED: lsn# %" PRIu64, lsn));
             } else {
                 LocRecCtx->RecovInfo->ApplyHugeBlobFreeChunk();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGE BLOB FREE CHUNK) ADDED: lsn# %" PRIu64, lsn));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGE BLOB FREE CHUNK) ADDED: lsn# %" PRIu64, lsn));
             }
             return EDispatchStatus::Success;
         }
@@ -590,10 +591,10 @@ namespace NKikimr {
 
             if (res.Skip) {
                 LocRecCtx->RecovInfo->SkipHugeLogoBlobToHeap();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGE BLOB LOG) SKIPPED: lsn# %" PRIu64, lsn));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGE BLOB LOG) SKIPPED: lsn# %" PRIu64, lsn));
             } else {
                 LocRecCtx->RecovInfo->ApplyHugeLogoBlobToHeap();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGE BLOB LOG) ADDED: lsn# %" PRIu64, lsn));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGE BLOB LOG) ADDED: lsn# %" PRIu64, lsn));
             }
 
             PutHugeLogoBlobToHullAndSyncLog(ctx, record.Lsn,
@@ -619,10 +620,10 @@ namespace NKikimr {
 
             if (res.Skip) {
                 LocRecCtx->RecovInfo->SkipHugeSlotsDelGeneric();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGE BLOB FREE SLOT for %s) SKIPPED: lsn# %" PRIu64, THullHugeKeeperPersState::SlotDelDbTypeToStr(dbType), lsn));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGE BLOB FREE SLOT for %s) SKIPPED: lsn# %" PRIu64, THullHugeKeeperPersState::SlotDelDbTypeToStr(dbType), lsn));
             } else {
                 LocRecCtx->RecovInfo->ApplyHugeSlotsDelGeneric();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGE BLOB FREE SLOT for %s) ADDED: lsn# %" PRIu64, THullHugeKeeperPersState::SlotDelDbTypeToStr(dbType), lsn));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "RECORD (HUGE BLOB FREE SLOT for %s) ADDED: lsn# %" PRIu64, THullHugeKeeperPersState::SlotDelDbTypeToStr(dbType), lsn));
             }
             return EDispatchStatus::Success;
         }
@@ -717,7 +718,7 @@ namespace NKikimr {
         }
 
         EDispatchStatus DispatchLogRecord(const TActorContext &ctx, const NPDisk::TLogRecord &record) {
-            YDB_LOG_CTX_COMP_DEBUG(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "DISPATCH RECORD: %s", record.ToString().data()));
+            YDB_LOG_DEBUG_CTX_COMP(ctx, BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "DISPATCH RECORD: %s", record.ToString().data()));
 
             // Remember last seen lsn
             Y_VERIFY_S(RecoveredLsn < record.Lsn, LocRecCtx->VCtx->VDiskLogPrefix
@@ -830,7 +831,7 @@ namespace NKikimr {
                 }
                 msg << "]";
 
-                YDB_LOG_CTX_COMP_CRIT(ctx, NKikimrServices::BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "%s", msg.Str().data()));
+                YDB_LOG_CRIT_CTX_COMP(ctx, NKikimrServices::BS_LOCALRECOVERY, VDISKP(LocRecCtx->VCtx->VDiskLogPrefix, "%s", msg.Str().data()));
             }
         }
 

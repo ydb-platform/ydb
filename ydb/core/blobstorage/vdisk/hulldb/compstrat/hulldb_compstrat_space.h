@@ -115,9 +115,9 @@ namespace NKikimr {
 
                 if (FreeSpaceThreshold <= 0) {
                     if (HullCtx->VCtx->ActorSystem) {
-                        YDB_LOG_CTX_COMP_DEBUG(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyFreeSpace is disabled because HullCompFreeSpaceThreshold is",
+                        YDB_LOG_DEBUG_CTX_COMP(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyFreeSpace is disabled because HullCompFreeSpaceThreshold is",
                             {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
-                            {"FreeSpaceThreshold", FreeSpaceThreshold});
+                            {"freeSpaceThreshold", FreeSpaceThreshold});
                     }
                     return ActNothing;
                 }
@@ -138,10 +138,10 @@ namespace NKikimr {
 
                 if (Candidate.CompactSstToFreeSpace()) {
                     // free space by compacting this Sst
-                    YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyFreeSpace decided to compact Ssts because of high garbage/data ratio",
+                    YDB_LOG_INFO_CTX_COMP(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyFreeSpace decided to compact Ssts because of high garbage/data ratio",
                         {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
-                        {"CompactSsts", Task->CompactSsts.ToString()},
-                        {"Candidate", Candidate.ToString()});
+                        {"compactSsts", Task->CompactSsts},
+                        {"candidate", Candidate});
                     action = ActCompactSsts;
                     TUtils::SqueezeOneSst(LevelSnap.SliceSnap, Candidate.LevelSstPtr, Task->CompactSsts);
                 }

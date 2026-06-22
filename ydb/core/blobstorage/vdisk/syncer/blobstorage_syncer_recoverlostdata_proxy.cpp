@@ -49,7 +49,7 @@ namespace NKikimr {
         TActorId TargetActorId;
 
         void Bootstrap(const TActorContext &ctx) {
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): START", TargetVDiskId.ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): START", TargetVDiskId.ToString().data()));
             CreateAndRunTask(ctx);
         }
 
@@ -70,7 +70,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvSyncerJobDone::TPtr &ev, const TActorContext &ctx) {
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): TEvSyncerJobDone; Task# %s", TargetVDiskId.ToString().data(), ev->Get()->Task->ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): TEvSyncerJobDone; Task# %s", TargetVDiskId.ToString().data(), ev->Get()->Task->ToString().data()));
             ActiveActors.Erase(ev->Sender);
             auto* msg = ev->Get();
             std::unique_ptr<TSyncerJobTask> task = std::move(msg->Task);
@@ -92,7 +92,7 @@ namespace NKikimr {
         // WAIT FOR TIMEOUT
         ////////////////////////////////////////////////////////////////////////
         void RerunTaskAfterTimeout(const TActorContext &ctx) {
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): RerunTaskAfterTimeout", TargetVDiskId.ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): RerunTaskAfterTimeout", TargetVDiskId.ToString().data()));
             auto timeout = SyncerCtx->Config->SyncerRLDRetryTimeout;
             ctx.Schedule(timeout, new TEvSyncerRLDWakeup(nullptr));
             // state func
@@ -115,7 +115,7 @@ namespace NKikimr {
         // COMMIT
         ////////////////////////////////////////////////////////////////////////
         void Commit(const TActorContext &ctx, std::unique_ptr<TSyncerJobTask> task) {
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): Commit", TargetVDiskId.ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): Commit", TargetVDiskId.ToString().data()));
             auto msg = TEvSyncerCommit::Remote(task->VDiskId, task->GetCurrent());
             ctx.Send(CommitterId, msg.release());
             Become(&TThis::WaitForCommitStateFunc);
@@ -123,7 +123,7 @@ namespace NKikimr {
 
         void Handle(TEvSyncerCommitDone::TPtr &ev, const TActorContext &ctx) {
             Y_UNUSED(ev);
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): FINISH", TargetVDiskId.ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): FINISH", TargetVDiskId.ToString().data()));
             ctx.Send(NotifyId, new TEvSyncerFullSyncedWithPeer(TargetVDiskId));
             Die(ctx);
         }
@@ -138,7 +138,7 @@ namespace NKikimr {
         // HandlePoison
         ////////////////////////////////////////////////////////////////////////
         void HandlePoison(TEvents::TEvPoisonPill::TPtr &ev, const TActorContext &ctx) {
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): PoisonPill", TargetVDiskId.ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(SyncerCtx->VCtx->VDiskLogPrefix, "TSyncerRLDFullSyncProxyActor(%s): PoisonPill", TargetVDiskId.ToString().data()));
             Y_UNUSED(ev);
             ActiveActors.KillAndClear(ctx);
             Die(ctx);

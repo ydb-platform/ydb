@@ -478,7 +478,7 @@ void ToUnversionedValue(
 }
 
 void UnversionedValueToMapImpl(
-    std::function<google::protobuf::Message*(TString)> appender,
+    std::function<google::protobuf::Message*(std::string)> appender,
     const NYson::TProtobufMessageType* type,
     TUnversionedValue unversionedValue);
 
@@ -499,7 +499,7 @@ void FromUnversionedValue(
 }
 
 void UnversionedValueToMapImpl(
-    std::function<void(TString, TUnversionedValue)> appender,
+    std::function<void(std::string, TUnversionedValue)> appender,
     TUnversionedValue unversionedValue);
 
 template <class TKey, class TValue>
@@ -510,7 +510,7 @@ void FromUnversionedValue(
 {
     map->clear();
     UnversionedValueToMapImpl(
-        [&] (TString key, TUnversionedValue itemValue) {
+        [&] (std::string key, TUnversionedValue itemValue) {
             auto [it, inserted] = map->emplace(FromString<TKey>(std::move(key)), TValue());
             Y_UNUSED(inserted);
             FromUnversionedValue(&it->second, itemValue);

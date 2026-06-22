@@ -558,6 +558,455 @@ LIMIT 1"""
 
         kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
 
+    # --- Issue #40506: Missing key in non-empty dictionary ---
+    def test_ua_missing_key_in_nonempty_dict(self, kikimr, entity_name):
+        """DictLookup for a key that is NOT in the metadata must return NULL (Optional<String>)."""
+        inp, endpoint = self.get_input_name(
+            kikimr, "ua_miss_key", True, entity_name, partitions_count=1,
+        )
+
+        sql = f"""SELECT
+    field1,
+    DictLookup(SystemMetadata("user_attributes"), "missing_key") AS missing_val,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "present_key")) AS present_val
+FROM {inp}
+WITH (
+    STREAMING = "TRUE",
+    FORMAT = "json_each_row",
+    SCHEMA = (field1 String NOT NULL)
+)
+LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        rows = [('{"field1": "v1"}', {"present_key": "hello"})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["field1"] == b"v1"
+        assert row["missing_val"] is None
+        assert row["present_val"] == b"hello"
+
+    # --- Issue #40507: When no user attribute provided returns empty dict ---
+    def test_ua_no_attributes_returns_empty_dict(self, kikimr, entity_name):
+        """When a message has no metadata_items, SystemMetadata("user_attributes") must be an empty Dict."""
+        inp, endpoint = self.get_input_name(
+            kikimr, "ua_empty", True, entity_name, partitions_count=1,
+        )
+
+        sql = f"""SELECT
+    field1,
+    DictLength(SystemMetadata("user_attributes")) AS dict_len
+FROM {inp}
+WITH (
+    STREAMING = "TRUE",
+    FORMAT = "json_each_row",
+    SCHEMA = (field1 String NOT NULL)
+)
+LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        data = ['{"field1": "v1"}']
+        self.write_stream(data, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["field1"] == b"v1"
+        assert row["dict_len"] == 0
+
+    # --- Issue #40508: Empty dictionary metadata_items equivalent to empty dict ---
+    def test_ua_empty_metadata_items_is_empty_dict(self, kikimr, entity_name):
+        """Explicitly empty metadata_items should produce the same empty dict as no metadata at all."""
+        inp, endpoint = self.get_input_name(
+            kikimr, "ua_empty_meta", True, entity_name, partitions_count=1,
+        )
+
+        sql = f"""SELECT
+    field1,
+    DictLength(SystemMetadata("user_attributes")) AS dict_len,
+    DictLookup(SystemMetadata("user_attributes"), "any_key") AS any_val
+FROM {inp}
+WITH (
+    STREAMING = "TRUE",
+    FORMAT = "json_each_row",
+    SCHEMA = (field1 String NOT NULL)
+)
+LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        # Write with explicitly empty metadata
+        rows = [('{"field1": "v1"}', {})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["field1"] == b"v1"
+        assert row["dict_len"] == 0
+        assert row["any_val"] is None
+
+    # --- Issue #40509: Multiple keys in metadata ---
+    def test_ua_multiple_keys(self, kikimr, entity_name):
+        """All pairs from metadata_items are in the dictionary; multiple keys can be extracted independently."""
+        inp, endpoint = self.get_input_name(
+            kikimr, "ua_multi_keys", True, entity_name, partitions_count=1,
+        )
+
+        sql = f"""SELECT
+    field1,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "key1")) AS val1,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "key2")) AS val2,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "key3")) AS val3,
+    DictLength(SystemMetadata("user_attributes")) AS dict_len
+FROM {inp}
+WITH (
+    STREAMING = "TRUE",
+    FORMAT = "json_each_row",
+    SCHEMA = (field1 String NOT NULL)
+)
+LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        rows = [('{"field1": "v1"}', {"key1": "aaa", "key2": "bbb", "key3": "ccc"})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["field1"] == b"v1"
+        assert row["val1"] == b"aaa"
+        assert row["val2"] == b"bbb"
+        assert row["val3"] == b"ccc"
+        assert row["dict_len"] == 3
+
+    # --- Issue #40510: All user attributes must be accessible as dictionary ---
+    def test_ua_all_attributes_accessible(self, kikimr, entity_name):
+        """The full dictionary returned by SystemMetadata("user_attributes") must contain all written pairs."""
+        inp, endpoint = self.get_input_name(
+            kikimr, "ua_all_access", True, entity_name, partitions_count=1,
+        )
+
+        sql = f"""SELECT
+    field1,
+    DictKeys(SystemMetadata("user_attributes")) AS keys,
+    DictLength(SystemMetadata("user_attributes")) AS dict_len
+FROM {inp}
+WITH (
+    STREAMING = "TRUE",
+    FORMAT = "json_each_row",
+    SCHEMA = (field1 String NOT NULL)
+)
+LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        meta = {"alpha": "1", "beta": "2", "gamma": "3"}
+        rows = [('{"field1": "v1"}', meta)]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["field1"] == b"v1"
+        assert row["dict_len"] == 3
+        returned_keys = set(k.decode("utf-8") if isinstance(k, bytes) else k for k in row["keys"])
+        assert returned_keys == {"alpha", "beta", "gamma"}
+
+    # --- Issue #40511: Special characters and UTF-8 ---
+    def test_ua_special_characters_and_utf8(self, kikimr, entity_name):
+        """Keys and values with special characters and UTF-8 must be preserved."""
+        inp, endpoint = self.get_input_name(
+            kikimr, "ua_utf8", True, entity_name, partitions_count=1,
+        )
+
+        sql = f"""SELECT
+    field1,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "ключ")) AS val_ru,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "key with spaces")) AS val_spaces,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "emoji🔑")) AS val_emoji
+FROM {inp}
+WITH (
+    STREAMING = "TRUE",
+    FORMAT = "json_each_row",
+    SCHEMA = (field1 String NOT NULL)
+)
+LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        meta = {
+            "ключ": "значение",
+            "key with spaces": "value with spaces",
+            "emoji🔑": "emoji🎉value",
+        }
+        rows = [('{"field1": "v1"}', meta)]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["field1"] == b"v1"
+        assert row["val_ru"] == "значение".encode("utf-8")
+        assert row["val_spaces"] == b"value with spaces"
+        assert row["val_emoji"] == "emoji🎉value".encode("utf-8")
+
+    # --- Issue #40512: Multiple messages in a row ---
+    def test_ua_multiple_messages(self, kikimr, entity_name):
+        """Each message carries its own metadata; streaming query does not mix attributes across messages."""
+        inp, out, endpoint = self.get_io_names(
+            kikimr, "ua_multi_msg", True, entity_name, partitions_count=1,
+        )
+        query_name = "ua_multi_msg"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow())))
+                FROM (
+                    SELECT
+                        field1,
+                        Unwrap(DictLookup(SystemMetadata("user_attributes"), "msg_id")) AS msg_id
+                    FROM {inp}
+                    WITH (
+                        FORMAT="json_each_row",
+                        SCHEMA=(field1 String NOT NULL)
+                    )
+                );
+            END DO;'''
+
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
+
+        rows = [
+            ('{"field1": "msg1"}', {"msg_id": "id-1"}),
+            ('{"field1": "msg2"}', {"msg_id": "id-2"}),
+            ('{"field1": "msg3"}', {"msg_id": "id-3"}),
+        ]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        raw_results = self.read_stream(3, topic_path=self.output_topic, endpoint=endpoint)
+        results = [json.loads(raw) for raw in raw_results]
+
+        # Each message must have its own msg_id, not mixed
+        msg_ids = {r["msg_id"] for r in results}
+        assert msg_ids == {"id-1", "id-2", "id-3"}
+        for r in results:
+            expected_field1 = "msg" + r["msg_id"][-1]
+            assert r["field1"] == expected_field1
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
+    # --- Issue #40513: Restart after checkpoint ---
+    def test_ua_restart_after_checkpoint(self, kikimr, entity_name):
+        """After streaming query restart, metadata processing still works."""
+        inp, out, endpoint = self.get_io_names(
+            kikimr, "ua_restart", True, entity_name, partitions_count=1,
+        )
+        query_name = "ua_restart"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow())))
+                FROM (
+                    SELECT
+                        field1,
+                        Unwrap(DictLookup(SystemMetadata("user_attributes"), "trace_id")) AS trace_id
+                    FROM {inp}
+                    WITH (
+                        FORMAT="json_each_row",
+                        SCHEMA=(field1 String NOT NULL)
+                    )
+                );
+            END DO;'''
+
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
+
+        # Write and read before restart
+        rows = [('{"field1": "before"}', {"trace_id": "tid-before"})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+        result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
+        assert json.loads(result) == {"field1": "before", "trace_id": "tid-before"}
+
+        self.wait_completed_checkpoints(kikimr, path)
+
+        # Stop and restart the streaming query
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);")
+        time.sleep(0.5)
+        kikimr.ydb_client.query(f"ALTER STREAMING QUERY `{query_name}` SET (RUN = TRUE);")
+        self.wait_completed_checkpoints(kikimr, path)
+
+        # Write and read after restart
+        rows = [('{"field1": "after"}', {"trace_id": "tid-after"})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+        result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
+        assert json.loads(result) == {"field1": "after", "trace_id": "tid-after"}
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
+    # --- Issue #40514: WHERE predicate works on metadata ---
+    def test_ua_where_predicate(self, kikimr, entity_name):
+        """WHERE clause can filter on user_attributes values."""
+        inp, out, endpoint = self.get_io_names(
+            kikimr, "ua_where", True, entity_name, partitions_count=1,
+        )
+        query_name = "ua_where"
+        sql = R'''
+            CREATE STREAMING QUERY `{query_name}` AS
+            DO BEGIN
+                INSERT INTO {out} SELECT UNWRAP(Yson::SerializeJson(Yson::From(TableRow())))
+                FROM (
+                    SELECT
+                        field1,
+                        Unwrap(DictLookup(SystemMetadata("user_attributes"), "priority")) AS priority
+                    FROM {inp}
+                    WITH (
+                        FORMAT="json_each_row",
+                        SCHEMA=(field1 String NOT NULL)
+                    )
+                    WHERE Unwrap(DictLookup(SystemMetadata("user_attributes"), "priority")) = "high"
+                );
+            END DO;'''
+
+        kikimr.ydb_client.query(sql.format(query_name=query_name, inp=inp, out=out))
+        path = f"/Root/{query_name}"
+        self.wait_completed_checkpoints(kikimr, path)
+
+        rows = [
+            ('{"field1": "low_msg"}', {"priority": "low"}),
+            ('{"field1": "high_msg"}', {"priority": "high"}),
+            ('{"field1": "medium_msg"}', {"priority": "medium"}),
+        ]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result = self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0]
+        parsed = json.loads(result)
+        assert parsed["field1"] == "high_msg"
+        assert parsed["priority"] == "high"
+
+        kikimr.ydb_client.query(f"DROP STREAMING QUERY `{query_name}`;")
+
+    # --- Issue #40515: Reading user_attributes and system attributes in one query ---
+    def test_ua_with_system_attributes(self, kikimr, entity_name):
+        """user_attributes and other system metadata (e.g. _message_group_id) can be read in one query."""
+        inp, endpoint = self.get_input_name(
+            kikimr, "ua_sys_attr", True, entity_name, partitions_count=1,
+        )
+
+        sql = f"""SELECT
+    field1,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "trace_id")) AS trace_id,
+    SystemMetadata("message_group_id") AS producer_id
+FROM {inp}
+WITH (
+    STREAMING = "TRUE",
+    FORMAT = "json_each_row",
+    SCHEMA = (field1 String NOT NULL)
+)
+LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        rows = [('{"field1": "v1"}', {"trace_id": "tid-sys"})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["field1"] == b"v1"
+        assert row["trace_id"] == b"tid-sys"
+        # producer_id should be non-empty (set by the writer)
+        assert row["producer_id"] is not None and len(row["producer_id"]) > 0
+
+    # --- Issue #40516: json_each_row + SCHEMA + user_attributes ---
+    def test_ua_json_each_row_with_schema(self, kikimr, entity_name):
+        """user_attributes works with json_each_row format and explicit SCHEMA for payload."""
+        inp, endpoint = self.get_input_name(
+            kikimr, "ua_json_schema", True, entity_name, partitions_count=1,
+        )
+
+        sql = f"""SELECT
+    name,
+    age,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "source")) AS source
+FROM {inp}
+WITH (
+    STREAMING = "TRUE",
+    FORMAT = "json_each_row",
+    SCHEMA = (name String NOT NULL, age Int32 NOT NULL)
+)
+LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        rows = [('{"name": "Alice", "age": 30}', {"source": "test-system"})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["name"] == b"Alice"
+        assert row["age"] == 30
+        assert row["source"] == b"test-system"
+
+    # --- Issue #40517: user_attributes in remote topics ---
+    def test_ua_remote_topics(self, kikimr, entity_name):
+        """user_attributes works when reading from a topic via an external data source (remote topic)."""
+        inp, endpoint = self.get_input_name(
+            kikimr, "ua_remote", False, entity_name, partitions_count=1,
+        )
+
+        sql = f"""SELECT
+    field1,
+    Unwrap(DictLookup(SystemMetadata("user_attributes"), "trace_id")) AS trace_id
+FROM {inp}
+WITH (
+    STREAMING = "TRUE",
+    FORMAT = "json_each_row",
+    SCHEMA = (field1 String NOT NULL)
+)
+LIMIT 1"""
+
+        future = kikimr.ydb_client.query_async(sql)
+        time.sleep(1)
+
+        rows = [('{"field1": "remote_v1"}', {"trace_id": "tid-remote"})]
+        self.write_stream_with_message_metadata(kikimr, rows, endpoint=endpoint)
+
+        result_sets = future.result()
+        row = result_sets[0].rows[0]
+        assert row["field1"] == b"remote_v1"
+        assert row["trace_id"] == b"tid-remote"
+
+    # --- Issue #40518: NEG Reading SystemMetadata("user_attributes") FROM some_table fails ---
+    def test_ua_neg_from_table_fails(self, kikimr, entity_name):
+        """SystemMetadata("user_attributes") must fail when used on a regular table (not a topic)."""
+        table_name = entity_name("ua_neg_table")
+        kikimr.ydb_client.query(f"""
+            CREATE TABLE `{table_name}` (
+                id Int32 NOT NULL,
+                value String,
+                PRIMARY KEY (id)
+            );
+        """)
+
+        sql = f"""SELECT
+    id,
+    SystemMetadata("user_attributes") AS ua
+FROM `{table_name}`"""
+
+        with pytest.raises(ydb.issues.GenericError):
+            kikimr.ydb_client.query(sql)
+
+        kikimr.ydb_client.query(f"DROP TABLE `{table_name}`;")
+
     @pytest.mark.parametrize("use_partition_balancing", [True, False], ids=["partition_balancing", "no_partition_balancing"])
     @pytest.mark.parametrize("local_topics", [True, False])
     @pytest.mark.parametrize("enable_watermarks_advanced", [True, False])

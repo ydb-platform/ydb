@@ -33,12 +33,7 @@
   - [Публикация конфигурации](config-publication.md)
   - [Выбор лидера](leader-election.md)
 
-- [Диагностика проблем](debug.md)
-
-  - [Включить логирование](debug-logs.md)
-  - [Экспорт логов в OpenTelemetry](debug-logs-otel.md)
-  - [Подключить метрики в Prometheus](debug-prometheus.md)
-  - [Трассировка с OpenTelemetry](debug-otel.md)
+Подключение средств диагностики {{ ydb-short-name }} SDK — логирования, метрик и распределённой трассировки — описано в разделе [{#T}](../../reference/ydb-sdk/observability/index.md).
 
 Смотрите также:
 

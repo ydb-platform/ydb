@@ -645,7 +645,7 @@ namespace NKikimr {
             // Ask Guid from other VDisks
             ////////////////////////////////////////////////////////////////////////
             void Bootstrap(const TActorContext &ctx) {
-                YDB_LOG_CTX_INFO(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: START"));
+                YDB_LOG_INFO_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: START"));
                 SUBLOGLINE(NotifyId, ctx, { stream << "GuidRecovery: START"; });
 
                 // run Obtain VDisk Guid proxy for every VDisk in the group
@@ -777,7 +777,7 @@ namespace NKikimr {
             void FirstRunPhase(const TActorContext &ctx, EFirstRunStep f) {
                 if (ReadOnly) {
                     const TString explanation = "unable to establish new GUID while in read-only";
-                    YDB_LOG_CTX_WARN(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: %s", explanation.data()));
+                    YDB_LOG_WARN_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: %s", explanation.data()));
                     *Decision = TDecision::Inconsistency(explanation);
                     Finish(ctx, *Decision);
                     return;

@@ -9,11 +9,11 @@ namespace NKikimr {
     void TBlobRecoveryActor::AddBlobQuery(const TLogoBlobID& id, NMatrix::TVectorType needed,
             const std::shared_ptr<TInFlightContext>& context, TEvRecoverBlobResult::TItem *item) {
         YDB_LOG_DEBUG(VDISKP(LogPrefix, "AddBlobQuery"),
-            {"Marker", "VDS32"},
-            {"SelfId", SelfId()},
-            {"Id", id},
-            {"Needed", needed},
-            {"RequestId", context->RequestId});
+            {"marker", "VDS32"},
+            {"selfId", SelfId()},
+            {"id", id},
+            {"needed", needed},
+            {"requestId", context->RequestId});
         const TInstant deadline = context->Iterator->first;
         TBlobStorageGroupInfo::TOrderNums nums;
         Info->GetTopology().PickSubgroup(id.Hash(), nums);
@@ -57,12 +57,12 @@ namespace NKikimr {
         }
 
         YDB_LOG_DEBUG(VDISKP(LogPrefix, "AddExtremeQuery"),
-            {"Marker", "VDS33"},
-            {"SelfId", SelfId()},
+            {"marker", "VDS33"},
+            {"selfId", SelfId()},
             {"VDiskId", vdiskId},
-            {"Id", id},
-            {"WorstReplySize", worstReplySize},
-            {"AlreadyInFlight", !inserted});
+            {"id", id},
+            {"worstReplySize", worstReplySize},
+            {"alreadyInFlight", !inserted});
         if (!inserted) { // the request is already in flight
             return;
         }
@@ -92,9 +92,9 @@ namespace NKikimr {
             Y_VERIFY_S(queueIt != Queues.end(), LogPrefix);
             for (auto& vget : query.Pending) {
                 YDB_LOG_DEBUG(VDISKP(LogPrefix, "sending TEvVGet"),
-                    {"Marker", "VDS34"},
-                    {"SelfId", SelfId()},
-                    {"Msg", vget->ToString()});
+                    {"marker", "VDS34"},
+                    {"selfId", SelfId()},
+                    {"msg", vget->ToString()});
                 Send(queueIt->second.QueueActorId, vget.release());
             }
         }
@@ -102,9 +102,9 @@ namespace NKikimr {
 
     void TBlobRecoveryActor::Handle(TEvBlobStorage::TEvVGetResult::TPtr ev) {
         YDB_LOG_DEBUG(VDISKP(LogPrefix, "received TEvVGetResult"),
-            {"Marker", "VDS35"},
-            {"SelfId", SelfId()},
-            {"Msg", ev->Get()->ToString()});
+            {"marker", "VDS35"},
+            {"selfId", SelfId()},
+            {"msg", ev->Get()->ToString()});
 
         const TInstant now = TActivationContext::Now();
         const auto& record = ev->Get()->Record;
@@ -139,15 +139,15 @@ namespace NKikimr {
                                 item.Status = NKikimrProto::NODATA;
                             }
                             YDB_LOG_DEBUG(VDISKP(LogPrefix, "processing item"),
-                                {"Marker", "VDS36"},
-                                {"SelfId", SelfId()},
-                                {"RequestId", context->RequestId},
-                                {"Id", id},
-                                {"Status", res.GetStatus()},
-                                {"Last", term},
-                                {"DataUpdated", update},
-                                {"EntryStatus", prevStatus},
-                                {"ExitStatus", item.Status});
+                                {"marker", "VDS36"},
+                                {"selfId", SelfId()},
+                                {"requestId", context->RequestId},
+                                {"id", id},
+                                {"status", res.GetStatus()},
+                                {"last", term},
+                                {"dataUpdated", update},
+                                {"entryStatus", prevStatus},
+                                {"exitStatus", item.Status});
                         }
                         if (item.Status != NKikimrProto::UNKNOWN && !--context->NumUnrespondedBlobs) { // request fully completed
                             context->SendResult(SelfId());

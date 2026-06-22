@@ -163,7 +163,7 @@ namespace NKikimr {
             MergeIteratorWithWholeDb<TIterator, TLevelIt, TIndexRecordMerger>(
                     HullCtx->VCtx->Top->GType, subsIt, levelIt, newItem, doMerge, crash);
             Stat.Finish();
-            YDB_LOG_CTX_COMP_INFO(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "TGcMap: map build: %s", Stat.ToString().data()));
+            YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "TGcMap: map build: %s", Stat.ToString().data()));
         }
 
         const TStat &GetStat() const {

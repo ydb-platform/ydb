@@ -163,10 +163,10 @@ void LogOOSStatus(ui32 flags, const TLogoBlobID& blobId, const TString& vDiskLog
 
     YDB_LOG_NOTICE("Disk space status changed to on blob",
         {"VDiskLogPrefix", vDiskLogPrefix},
-        {"SpaceColor", TPDiskSpaceColor_Name(StatusFlagToSpaceColor(flags))},
-        {"BlobId", blobId.ToString()},
-        {"OldFlags", prevFlags},
-        {"NewFlags", flags});
+        {"spaceColor", TPDiskSpaceColor_Name(StatusFlagToSpaceColor(flags))},
+        {"blobId", blobId},
+        {"oldFlags", prevFlags},
+        {"newFlags", flags});
 }
 
 void UpdateMonOOSStatus(ui32 flags, const std::shared_ptr<NMonGroup::TOutOfSpaceGroup>& monGroup) {

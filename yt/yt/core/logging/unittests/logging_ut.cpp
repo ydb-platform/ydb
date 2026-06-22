@@ -65,7 +65,7 @@ using namespace NCoreDump;
 
 YT_DEFINE_GLOBAL(NLogging::TLogger, Logger, "Test");
 
-TString GenerateLogFileName()
+std::string GenerateLogFileName()
 {
     return GenerateRandomFileName("log");
 }
@@ -129,6 +129,7 @@ protected:
         std::optional<ECompressionMethod> compressionMethod = {})
     {
         auto splitLines = [&] (IInputStream *input) {
+            // TODO(babenko): migrate to std::string
             TString line;
             std::vector<std::string> lines;
             while (input->ReadLine(line)) {
@@ -169,7 +170,7 @@ protected:
         return false;
     }
 
-    void Configure(const TString& configYson)
+    void Configure(const std::string& configYson)
     {
         auto configNode = ConvertToNode(TYsonString(configYson));
         auto config = ConvertTo<TLogManagerConfigPtr>(configNode);
@@ -252,7 +253,7 @@ TEST_F(TLoggingTest, ReloadOnSighup)
     })", logFile.Name()));
 
     WaitForPredicate([&] {
-        TString message("Message1");
+        std::string message("Message1");
         YT_LOG_INFO(message);
         return CheckPlainTextLogFileContains(logFile.Name(), message);
     });
@@ -268,7 +269,7 @@ TEST_F(TLoggingTest, ReloadOnSighup)
     Cerr << "Waiting for message 2" << Endl;
 
     WaitForPredicate([&] {
-        TString message("Message2");
+        std::string message("Message2");
         YT_LOG_INFO(message);
         return CheckPlainTextLogFileContains(logFile.Name(), message);
     });
@@ -302,7 +303,7 @@ TEST_F(TLoggingTest, ReloadOnRename)
     Cerr << "Waiting for message 1" << Endl;
 
     WaitForPredicate([&] {
-        TString message("Message1");
+        std::string message("Message1");
         YT_LOG_INFO(message);
         return CheckPlainTextLogFileContains(logFile.Name(), message);
     });
@@ -314,7 +315,7 @@ TEST_F(TLoggingTest, ReloadOnRename)
     Cerr << "Waiting for message 2" << Endl;
 
     WaitForPredicate([&] {
-        TString message("Message2");
+        std::string message("Message2");
         YT_LOG_INFO(message);
         return CheckPlainTextLogFileContains(logFile.Name(), message);
     });
@@ -548,7 +549,7 @@ TEST_F(TLoggingTest, PlainTextLoggingStructuredFormatter)
             writerConfig->FileName = logFile.Name();
 
             auto writer = CreateFileLogWriter(
-                std::make_unique<TStructuredLogFormatter>(format, THashMap<TString, INodePtr>{}, enableSourceLocation),
+                std::make_unique<TStructuredLogFormatter>(format, THashMap<std::string, INodePtr>{}, enableSourceLocation),
                 CreateDefaultSystemLogEventProvider(writerConfig),
                 "test_writer",
                 writerConfig,
@@ -598,7 +599,7 @@ TEST_F(TLoggingTest, StructuredLogging)
         writerConfig->FileName = logFile.Name();
 
         auto writer = CreateFileLogWriter(
-            std::make_unique<TStructuredLogFormatter>(format, THashMap<TString, INodePtr>{}),
+            std::make_unique<TStructuredLogFormatter>(format, THashMap<std::string, INodePtr>{}),
             CreateDefaultSystemLogEventProvider(writerConfig),
             "test_writer",
             writerConfig,
@@ -710,7 +711,7 @@ TEST_F(TLoggingTest, UnstructuredLogging)
         writerConfig->FileName = logFile.Name();
 
         auto writer = CreateFileLogWriter(
-            std::make_unique<TStructuredLogFormatter>(format, THashMap<TString, INodePtr>{}),
+            std::make_unique<TStructuredLogFormatter>(format, THashMap<std::string, INodePtr>{}),
             CreateDefaultSystemLogEventProvider(writerConfig),
             "test_writer",
             writerConfig,
@@ -731,8 +732,8 @@ TEST_F(TLoggingTest, UnstructuredLogging)
 
 TEST_F(TLoggingTest, StructuredLoggingJsonFormat)
 {
-    TString longString(1000, 'a');
-    TString longStringPrefix(100, 'a');
+    std::string longString(1000, 'a');
+    std::string longStringPrefix(100, 'a');
 
     TLogEvent event;
     event.Family = ELogFamily::Structured;
@@ -757,7 +758,7 @@ TEST_F(TLoggingTest, StructuredLoggingJsonFormat)
 
     auto formatter = std::make_unique<TStructuredLogFormatter>(
         ELogFormat::Json,
-        /*commonFields*/ THashMap<TString, INodePtr>{},
+        /*commonFields*/ THashMap<std::string, INodePtr>{},
         /*enableSourceLocation*/ false,
         /*enableSystemFields*/ true,
         /*enableHostField*/ false,
@@ -921,7 +922,7 @@ TEST_F(TLoggingTest, StructuredLoggingDisableSystemFields)
 
     auto formatter = std::make_unique<TStructuredLogFormatter>(
         ELogFormat::Yson,
-        /*commonFields*/ THashMap<TString, INodePtr>{},
+        /*commonFields*/ THashMap<std::string, INodePtr>{},
         /*enableControlMessages*/ true,
         /*enableSourceLocation*/ false,
         /*enableSystemFields*/ false);
@@ -1056,7 +1057,7 @@ TEST_P(TBuiltinRotationTest, All)
          << ", RotationDepth: " << RotationDepth
          << ", Prefix: " << logFileNamePrefix << ")" << Endl;
 
-    std::vector<TString> messages;
+    std::vector<std::string> messages;
     for (int index = 0; index < RotationDepth + 3; ++index) {
         auto message = Format("Message%v", index);
         messages.push_back(message);
@@ -1075,7 +1076,7 @@ TEST_P(TBuiltinRotationTest, All)
             auto files = ListLogFiles(logFileNamePrefix, useTimestampSuffix, useLogrotateCompatibleTimestampSuffix);
             Cerr << "[RotationTest] Message in file observed (Iter: " << index
                  << ", FileCount: " << files.size()
-                 << ", Head: " << (files.empty() ? TString("<none>") : TString(files.front())) << ")" << Endl;
+                 << ", Head: " << (files.empty() ? std::string("<none>") : std::string(files.front())) << ")" << Endl;
         }
 
         Cerr << "[RotationTest] Waiting for rotation (Iter: " << index << ")" << Endl;
@@ -1148,7 +1149,7 @@ protected:
             options);
     }
 
-    void WriteTestFile(const TString& filename, i64 addBytes, const TAppendableCompressedFileOptions& options)
+    void WriteTestFile(const std::string& filename, i64 addBytes, const TAppendableCompressedFileOptions& options)
     {
         {
             TFile rawFile(filename, OpenAlways|RdWr|CloseOnExec);
@@ -1340,6 +1341,7 @@ TEST_F(TLoggingTest, LogFatalIsSafe)
     {
         bool SafeCoreDumped = false;
 
+        // TODO(babenko): migrate to std::string
         TCoreDump WriteCoreDump(const std::vector<TString>& /*notes*/, const TString& /*reason*/) override
         {
             SafeCoreDumped = true;
@@ -1361,7 +1363,7 @@ TEST_F(TLoggingTest, LogFatalIsSafe)
         /*coreNotes*/ {}
     );
 
-    std::optional<TString> exceptionExpression;
+    std::optional<std::string> exceptionExpression;
 
     try {
         YT_LOG_FATAL("Fatal message");
@@ -1414,7 +1416,7 @@ TEST_F(TLoggingTest, SupressedRequests)
 
     auto lines = ReadPlainTextEvents(logFile.Name());
     EXPECT_EQ(1, std::ssize(lines));
-    EXPECT_TRUE(lines[0].find("Info message") != TString::npos);
+    EXPECT_TRUE(lines[0].find("Info message") != std::string::npos);
 }
 #endif
 
@@ -1446,7 +1448,7 @@ TEST_F(TLoggingTest, SuppressedMessages)
 
     auto lines = ReadPlainTextEvents(logFile.Name());
     EXPECT_EQ(1, std::ssize(lines));
-    EXPECT_TRUE(lines[0].find("Good message") != TString::npos);
+    EXPECT_TRUE(lines[0].find("Good message") != std::string::npos);
 }
 
 TEST_F(TLoggingTest, MessageLevelOverride)
@@ -1480,15 +1482,15 @@ TEST_F(TLoggingTest, MessageLevelOverride)
     auto lines = ReadPlainTextEvents(logFile.Name());
     for (auto l : lines) Cerr << l << Endl;
     EXPECT_EQ(3, std::ssize(lines));
-    EXPECT_TRUE(lines[0].find("Overridden message 1") != TString::npos);
-    EXPECT_TRUE(lines[1].find("Overridden message 2") != TString::npos);
-    EXPECT_TRUE(lines[2].find("Good message") != TString::npos);
+    EXPECT_TRUE(lines[0].find("Overridden message 1") != std::string::npos);
+    EXPECT_TRUE(lines[1].find("Overridden message 2") != std::string::npos);
+    EXPECT_TRUE(lines[2].find("Good message") != std::string::npos);
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
 class TLoggingTagsTest
-    : public ::testing::TestWithParam<std::tuple<bool, bool, bool, bool, TString>>
+    : public ::testing::TestWithParam<std::tuple<bool, bool, bool, bool, std::string>>
 { };
 
 TEST_P(TLoggingTagsTest, All)
@@ -1557,7 +1559,7 @@ class TLongMessagesTest
 {
 protected:
     static constexpr int N = 500;
-    std::vector<TString> Chunks_;
+    std::vector<std::string> Chunks_;
 
     TLongMessagesTest()
     {
@@ -1566,7 +1568,7 @@ protected:
         }
     }
 
-    void ConfigureForLongMessages(const TString& fileName)
+    void ConfigureForLongMessages(const std::string& fileName)
     {
         Configure(Format(R"({
             rules = [
@@ -1592,7 +1594,7 @@ protected:
         }
     }
 
-    void CheckLongMessages(const TString& fileName)
+    void CheckLongMessages(const std::string& fileName)
     {
         TLogManager::Get()->Synchronize();
 
@@ -1601,7 +1603,7 @@ protected:
         for (int i = 0; i < N; ++i) {
             auto expected = Format("%v", TRange(Chunks_.data(), Chunks_.data() + i));
             auto actual = lines[i];
-            EXPECT_NE(TString::npos, actual.find(expected));
+            EXPECT_NE(std::string::npos, actual.find(expected));
         }
     }
 };
@@ -1668,7 +1670,7 @@ public:
     void Write(const TLogEvent& event) override
     {
         if (event.Category == Logger().GetCategory()) {
-            Messages_.push_back(TString(Config_->Padding, ' ') + event.MessageRef.ToStringBuf());
+            Messages_.push_back(std::string(Config_->Padding, ' ') + std::string(event.MessageRef.ToStringBuf()));
         }
     }
 
@@ -1681,10 +1683,10 @@ public:
     void SetRateLimit(std::optional<i64> /*limit*/) override
     { }
 
-    void SetCategoryRateLimits(const THashMap<TString, i64>& /*categoryRateLimits*/) override
+    void SetCategoryRateLimits(const THashMap<std::string, i64>& /*categoryRateLimits*/) override
     { }
 
-    const std::vector<TString>& GetMessages() const
+    const std::vector<std::string>& GetMessages() const
     {
         return Messages_;
     }
@@ -1692,7 +1694,7 @@ public:
 private:
     const TTestWriterConfigPtr Config_;
 
-    std::vector<TString> Messages_;
+    std::vector<std::string> Messages_;
 };
 
 DEFINE_REFCOUNTED_TYPE(TTestWriter)
@@ -1710,7 +1712,7 @@ public:
 
     ILogWriterPtr CreateWriter(
         std::unique_ptr<ILogFormatter> /*formatter*/,
-        TString /*name*/,
+        std::string /*name*/,
         const IMapNodePtr& configNode,
         ILogWriterHost* /*host*/) noexcept override
     {
@@ -1740,7 +1742,7 @@ class TCustomWriterTest
     : public TLoggingTest
 {
 protected:
-    static inline const TString CustomWriterType = "custom";
+    static inline const std::string CustomWriterType = "custom";
     const TTestWriterFactoryPtr WriterFactory_ = New<TTestWriterFactory>();
 
     void SetUp() override

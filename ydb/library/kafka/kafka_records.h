@@ -2,6 +2,9 @@
 
 #include "kafka.h"
 
+#include <optional>
+#include <utility>
+
 namespace NKafka {
 
 enum ETimestampType {
@@ -442,6 +445,60 @@ public:
     void Decompress(TKafkaVersion version = MessageMeta::PresentVersions.Max);
 };
 
+
+struct TKafkaBatchHeader: public TMessage {
+    using MessageMeta = TKafkaRecordBatch::MessageMeta;
+    using BaseOffsetMeta = TKafkaRecordBatch::BaseOffsetMeta;
+    using BatchLengthMeta = TKafkaRecordBatch::BatchLengthMeta;
+    using PartitionLeaderEpochMeta = TKafkaRecordBatch::PartitionLeaderEpochMeta;
+    using MagicMeta = TKafkaRecordBatch::MagicMeta;
+    using CrcMeta = TKafkaRecordBatch::CrcMeta;
+    using AttributesMeta = TKafkaRecordBatch::AttributesMeta;
+    using LastOffsetDeltaMeta = TKafkaRecordBatch::LastOffsetDeltaMeta;
+    using BaseTimestampMeta = TKafkaRecordBatch::BaseTimestampMeta;
+    using MaxTimestampMeta = TKafkaRecordBatch::MaxTimestampMeta;
+    using ProducerIdMeta = TKafkaRecordBatch::ProducerIdMeta;
+    using ProducerEpochMeta = TKafkaRecordBatch::ProducerEpochMeta;
+    using BaseSequenceMeta = TKafkaRecordBatch::BaseSequenceMeta;
+
+    struct RecordsCountMeta {
+        using Type = TKafkaInt32;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
+
+        static constexpr const char* Name = "recordsCount";
+        static constexpr const char* About = "";
+        static constexpr Type Default = 0;
+
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = VersionsNever;
+    };
+
+    TKafkaBatchHeader();
+    ~TKafkaBatchHeader() = default;
+
+    BaseOffsetMeta::Type BaseOffset;
+    BatchLengthMeta::Type BatchLength;
+    PartitionLeaderEpochMeta::Type PartitionLeaderEpoch;
+    MagicMeta::Type Magic;
+    CrcMeta::Type Crc;
+    AttributesMeta::Type Attributes;
+    LastOffsetDeltaMeta::Type LastOffsetDelta;
+    BaseTimestampMeta::Type BaseTimestamp;
+    MaxTimestampMeta::Type MaxTimestamp;
+    ProducerIdMeta::Type ProducerId;
+    ProducerEpochMeta::Type ProducerEpoch;
+    BaseSequenceMeta::Type BaseSequence;
+    RecordsCountMeta::Type RecordsCount;
+
+    i32 Size(TKafkaVersion version) const override;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
+
+    bool operator==(const TKafkaBatchHeader& other) const = default;
+};
+
 class TKafkaRecordV0: public TMessage {
 public:
     struct MessageMeta {
@@ -611,9 +668,23 @@ public:
     bool operator==(const TKafkaRecordBatchV0& other) const = default;
 };
 
+std::optional<TKafkaBatchHeader> ReadKafkaBatchHeader(
+    TStringBuf data,
+    TKafkaVersion version = 2);
+
+TKafkaBatchHeader ReadLegacyRecordBatchHeader(
+    TKafkaReadable& readable,
+    TKafkaVersion magic,
+    size_t length);
+
 TKafkaRecordBatch ReadKafkaRecordBatch(
     TStringBuf data,
     TKafkaVersion version = 2);
+TKafkaRecordBatch ReadRecordBatch(TStringBuf data);
 TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version = 2);
+
+std::pair<EKafkaErrors, ui64> GetBatchBaseSeqNo(const TKafkaBatchHeader& header);
+std::pair<EKafkaErrors, ui64> GetBatchMaxSeqNo(const TKafkaBatchHeader& header, ui64 baseSeqNo);
+ui64 GetRecordSeqNo(const TKafkaRecordBatch& batch, size_t recordIndex, const TKafkaRecord& record);
 
 } // namespace NKafka

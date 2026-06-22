@@ -126,9 +126,17 @@ std::shared_ptr<TTopicWorkloadKeyedWriterProducer> TTopicWorkloadKeyedWriterWork
 
     NYdb::NTopic::TProducerSettings settings;
     settings.Codec((NYdb::NTopic::ECodec)Params.Codec);
+    if (Params.BatchInnerCodec.Defined()) {
+        settings.BatchInnerCodec((NYdb::NTopic::ECodec)*Params.BatchInnerCodec);
+    }
     settings.Path(Params.TopicName);
     settings.ProducerIdPrefix(producerId);
     settings.MaxBlockTimeout(TDuration::Max());
+    settings.BatchFlushInterval(Params.BatchFlushInterval);
+    if (Params.BatchFlushSizeBytes.has_value()) {
+        settings.BatchFlushSizeBytes(Params.BatchFlushSizeBytes.value());
+    }
+    settings.BatchFlushMessageCount(Params.BatchFlushMessageCount);
     settings.PartitionChooserStrategy(
         isAutoPartitioningEnabled ?
         NYdb::NTopic::TProducerSettings::EPartitionChooserStrategy::Bound :

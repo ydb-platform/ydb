@@ -185,7 +185,7 @@ namespace NKikimr {
                 }
 
                 YDB_LOG_WARN("GrantAllWaitingOnce, granted waiting",
-                    {"LogString", BuildLogString()},
+                    {"logString", BuildLogString()},
                     {"VDisks", numGranted});
                 return numGranted;
             }
@@ -229,15 +229,15 @@ namespace NKikimr {
                     Y_ABORT_UNLESS(it->second.PDiskId == pdiskId);
                     if (it->second.OwnerActorId != actorId) {
                         YDB_LOG_WARN("TEvAcquireVDiskOperationToken, stale active owner actor, new owner actor, action: update active owner",
-                            {"LogString", BuildLogString(vdiskServiceId, pdiskId)},
-                            {"Id", it->second.OwnerActorId},
-                            {"NewId", actorId});
+                            {"logString", BuildLogString(vdiskServiceId, pdiskId)},
+                            {"id", it->second.OwnerActorId},
+                            {"newId", actorId});
                         it->second.OwnerActorId = actorId;
                     }
                     SendToken(it->second);
 
                     YDB_LOG_DEBUG("TEvAcquireVDiskOperationToken, token sent",
-                        {"LogString", BuildLogString(vdiskServiceId, pdiskId, actorId)});
+                        {"logString", BuildLogString(vdiskServiceId, pdiskId, actorId)});
                     return;
                 }
 
@@ -245,9 +245,9 @@ namespace NKikimr {
                     Y_ABORT_UNLESS(it->PDiskId == pdiskId);
                     if (it->OwnerActorId != actorId) {
                         YDB_LOG_WARN("TEvAcquireVDiskOperationToken, stale waiting owner actor, new owner actor, action: update waiting owner",
-                            {"LogString", BuildLogString(vdiskServiceId, pdiskId)},
-                            {"Id", it->OwnerActorId},
-                            {"NewId", actorId});
+                            {"logString", BuildLogString(vdiskServiceId, pdiskId)},
+                            {"id", it->OwnerActorId},
+                            {"newId", actorId});
                         it->OwnerActorId = actorId;
                     }
 
@@ -256,12 +256,12 @@ namespace NKikimr {
                         Activate(std::move(entry));
 
                         YDB_LOG_DEBUG("TEvAcquireVDiskOperationToken, queued request activated",
-                            {"LogString", BuildLogString(vdiskServiceId, pdiskId, actorId)});
+                            {"logString", BuildLogString(vdiskServiceId, pdiskId, actorId)});
                         return;
                     }
 
                     YDB_LOG_DEBUG("TEvAcquireVDiskOperationToken, queued request still waiting",
-                        {"LogString", BuildLogString(vdiskServiceId, pdiskId, actorId)});
+                        {"logString", BuildLogString(vdiskServiceId, pdiskId, actorId)});
                     ScheduleProcessQueueWakeup();
                     return;
                 }
@@ -271,14 +271,14 @@ namespace NKikimr {
                     Activate(std::move(entry));
 
                     YDB_LOG_DEBUG("TEvAcquireVDiskOperationToken, token sent",
-                        {"LogString", BuildLogString(vdiskServiceId, pdiskId, actorId)});
+                        {"logString", BuildLogString(vdiskServiceId, pdiskId, actorId)});
                     return;
                 }
 
                 EnqueueWaiting(TEntry{vdiskServiceId, pdiskId, actorId});
 
                 YDB_LOG_DEBUG("TEvAcquireVDiskOperationToken, enqueued",
-                    {"LogString", BuildLogString(vdiskServiceId, pdiskId, actorId)});
+                    {"logString", BuildLogString(vdiskServiceId, pdiskId, actorId)});
                 ScheduleProcessQueueWakeup();
             }
 
@@ -291,9 +291,9 @@ namespace NKikimr {
                     Y_ABORT_UNLESS(it->second.PDiskId == pdiskId);
                     if (it->second.OwnerActorId != actorId) {
                         YDB_LOG_WARN("TEvReleaseVDiskOperationToken, stale active owner actor, current owner actor, action: ignore stale release",
-                            {"LogString", BuildLogString(vdiskServiceId, pdiskId)},
-                            {"Id", actorId},
-                            {"OwnerId", it->second.OwnerActorId});
+                            {"logString", BuildLogString(vdiskServiceId, pdiskId)},
+                            {"id", actorId},
+                            {"ownerId", it->second.OwnerActorId});
                         return;
                     }
                     Deactivate(it);
@@ -301,7 +301,7 @@ namespace NKikimr {
                     ScheduleProcessQueueWakeup();
 
                     YDB_LOG_DEBUG("TEvReleaseVDiskOperationToken, token released",
-                        {"LogString", BuildLogString(vdiskServiceId, pdiskId, actorId)});
+                        {"logString", BuildLogString(vdiskServiceId, pdiskId, actorId)});
                     return;
                 }
 
@@ -309,20 +309,20 @@ namespace NKikimr {
                     Y_ABORT_UNLESS(it->PDiskId == pdiskId);
                     if (it->OwnerActorId != actorId) {
                         YDB_LOG_WARN("TEvReleaseVDiskOperationToken, stale waiting owner actor, current queued owner actor, action: ignore stale release",
-                            {"LogString", BuildLogString(vdiskServiceId, pdiskId)},
-                            {"Id", actorId},
-                            {"OwnerId", it->OwnerActorId});
+                            {"logString", BuildLogString(vdiskServiceId, pdiskId)},
+                            {"id", actorId},
+                            {"ownerId", it->OwnerActorId});
                         return;
                     }
                     EraseWaiting(it);
 
                     YDB_LOG_DEBUG("TEvReleaseVDiskOperationToken, removed from queue",
-                        {"LogString", BuildLogString(vdiskServiceId, pdiskId, actorId)});
+                        {"logString", BuildLogString(vdiskServiceId, pdiskId, actorId)});
                     return;
                 }
 
                 YDB_LOG_WARN("TEvReleaseVDiskOperationToken, action: ignore release for unknown VDisk",
-                    {"LogString", BuildLogString(vdiskServiceId, pdiskId, actorId)});
+                    {"logString", BuildLogString(vdiskServiceId, pdiskId, actorId)});
             }
 
             void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -334,10 +334,10 @@ namespace NKikimr {
                 for (auto it = Active.begin(); it != Active.end(); ++it) {
                     if (it->second.OwnerActorId == actorId) {
                         YDB_LOG_WARN("TEvUndelivered, owner actor, source, action: drop active token owner and process queue",
-                            {"LogString", BuildLogString(it->second.VDiskServiceId, it->second.PDiskId)},
-                            {"Id", actorId},
-                            {"Type", ev->Get()->SourceType},
-                            {"Reason", ev->Get()->Reason});
+                            {"logString", BuildLogString(it->second.VDiskServiceId, it->second.PDiskId)},
+                            {"id", actorId},
+                            {"type", ev->Get()->SourceType},
+                            {"reason", ev->Get()->Reason});
                         Deactivate(it);
                         ProcessQueue();
                         ScheduleProcessQueueWakeup();

@@ -21,7 +21,7 @@ namespace NKikimr {
                         std::move(item.AllocatedHugeBlobs), item.RecordLsn, item.Signature, item.WId));
                 }
                 if (item.ChunksToForget) {
-                    YDB_LOG_CTX_DEBUG(ctx, VDISKP(vctx->VDiskLogPrefix, "FORGET: PDiskId# %s ChunksToForget# %s", pdiskCtx->PDiskIdString.data(), FormatList(item.ChunksToForget).data()));
+                    YDB_LOG_DEBUG_CTX(ctx, VDISKP(vctx->VDiskLogPrefix, "FORGET: PDiskId# %s ChunksToForget# %s", pdiskCtx->PDiskIdString.data(), FormatList(item.ChunksToForget).data()));
                     ctx.Send(skeletonId, new TEvNotifyChunksDeleted(item.RecordLsn, item.ChunksToForget));
                     TActivationContext::Send(new IEventHandle(pdiskCtx->PDiskId, skeletonId, new NPDisk::TEvChunkForget(
                         pdiskCtx->Dsk->Owner, pdiskCtx->Dsk->OwnerRound, std::move(item.ChunksToForget))));

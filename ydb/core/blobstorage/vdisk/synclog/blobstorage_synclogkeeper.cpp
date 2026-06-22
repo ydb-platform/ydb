@@ -74,6 +74,8 @@ namespace NKikimr {
             // PERFORM ACTIONS
             ////////////////////////////////////////////////////////////////////////
             void PerformActions(const TActorContext &ctx) {
+                KeepState.UpdateAtomics(TActivationContext::Now());
+
                 if (auto v = KeepState.GetChunksToForget(); !v.empty()) {
                     Send(SlCtx->PDiskCtx->PDiskId, new NPDisk::TEvChunkForget(SlCtx->PDiskCtx->Dsk->Owner,
                         SlCtx->PDiskCtx->Dsk->OwnerRound, std::move(v)));
@@ -98,7 +100,7 @@ namespace NKikimr {
                     // create and run committer
                     TSyncLogKeeperCommitData commitData = KeepState.PrepareCommitData(recoveryLogConfirmedLsn);
 
-                    YDB_LOG_CTX_COMP_DEBUG(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: start committer; commitData# %s", commitData.ToString().data()));
+                    YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: start committer; commitData# %s", commitData.ToString().data()));
 
                     CommitterId = ctx.Register(CreateSyncLogCommitter(SlCtx, ctx.SelfID, std::move(commitData)));
                 }
@@ -119,14 +121,14 @@ namespace NKikimr {
             // HELPERS
             ////////////////////////////////////////////////////////////////////////
             void FixateFirstLsnToKeep(const TActorContext &ctx, ui64 firstLsnToKeep) {
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: FixateFirstLsnToKeep: firstLsnToKeep# %" PRIu64 " decomposed# %s", firstLsnToKeep, KeepState.CalculateFirstLsnToKeepDecomposed().data()));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: FixateFirstLsnToKeep: firstLsnToKeep# %" PRIu64 " decomposed# %s", firstLsnToKeep, KeepState.CalculateFirstLsnToKeepDecomposed().data()));
 
                 if (LastReportedFirstLsnToKeep.Empty() || firstLsnToKeep > *LastReportedFirstLsnToKeep) {
                     SlCtx->SyncLogFirstLsnToKeep->Set(firstLsnToKeep);
                     ctx.Send(SlCtx->LogCutterID, new TEvVDiskCutLog(TEvVDiskCutLog::SyncLog, firstLsnToKeep));
                     LastReportedFirstLsnToKeep = firstLsnToKeep;
 
-                    YDB_LOG_CTX_COMP_DEBUG(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: FixateFirstLsnToKeep: CutLog: firstLsnToKeep# %" PRIu64 " decomposed# %s", firstLsnToKeep, KeepState.CalculateFirstLsnToKeepDecomposed().data()));
+                    YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: FixateFirstLsnToKeep: CutLog: firstLsnToKeep# %" PRIu64 " decomposed# %s", firstLsnToKeep, KeepState.CalculateFirstLsnToKeepDecomposed().data()));
                 }
             }
 
@@ -170,9 +172,9 @@ namespace NKikimr {
 
             void Handle(TEvSyncLogCommitDone::TPtr &ev, const TActorContext &ctx) {
                 auto *msg = ev->Get();
-                YDB_LOG_CTX_COMP_DEBUG(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: TEvSyncLogCommitDone: ev# %s", msg->ToString().data()));
+                YDB_LOG_DEBUG_CTX_COMP(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: TEvSyncLogCommitDone: ev# %s", msg->ToString().data()));
 
-                YDB_LOG_CTX_DEBUG(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: TEvSyncLogCommitDone: ev# %s", msg->ToString().data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: TEvSyncLogCommitDone: ev# %s", msg->ToString().data()));
 
                 // log commit to Sublog
                 Sublog.Log() << ToStringLocalTimeUpToSeconds(ctx.Now())
@@ -205,7 +207,7 @@ namespace NKikimr {
 
             void Handle(TEvSyncLogDiskOutOfSpace::TPtr &ev, const TActorContext &ctx) {
                 auto *msg = ev->Get();
-                YDB_LOG_CTX_COMP_NOTICE(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: TEvSyncLogDiskOutOfSpace: disposing disk sync log;" " allocatedChunks# %s", FormatList(msg->AllocatedChunks).data()));
+                YDB_LOG_NOTICE_CTX_COMP(ctx, BS_SYNCLOG, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "KEEPER: TEvSyncLogDiskOutOfSpace: disposing disk sync log;" " allocatedChunks# %s", FormatList(msg->AllocatedChunks).data()));
 
                 Sublog.Log() << ToStringLocalTimeUpToSeconds(ctx.Now())
                     << " Disk sync log disposed due to OUT_OF_SPACE\n";
@@ -271,7 +273,13 @@ namespace NKikimr {
             void Handle(const TEvPhantomFlagStorageGetSnapshotResult::TPtr& ev) {
                 // This actor only requests PhantomFlagStorage snapshot on restart
                 // to rebuild ThresholdsStructure
-                KeepState.RecoverPhantomFlagStorage(std::move(ev->Get()->Snapshot));
+                auto* msg = ev->Get();
+                KeepState.RecoverPhantomFlagStorage(std::move(msg->Thresholds), msg->Eof);
+                if (!msg->Eof) {
+                    auto next = std::make_unique<TEvPhantomFlagStorageGetSnapshot>();
+                    next->ProcessedChunks = std::move(msg->ProcessedChunks);
+                    KeepState.ContinuePhantomFlagStorageSnapshot(std::move(next));
+                }
             }
 
             void Handle(const TEvLocalSyncData::TPtr& ev) {

@@ -86,10 +86,10 @@ namespace NKikimr::NHullComp {
 
             if (levelOfInterest) {
                 if (HullCtx->VCtx->ActorSystem) {
-                    YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyExplicit decided to compact level",
+                    YDB_LOG_INFO_CTX_COMP(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyExplicit decided to compact level",
                         {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
-                        {"LevelOfInterest", *levelOfInterest},
-                        {"Task", (Task ? Task->ToString() : "nullptr")});
+                        {"levelOfInterest", *levelOfInterest},
+                        {"task", (Task ? Task->ToString() : "nullptr")});
                 }
                 return ActCompactSsts;
             } else {

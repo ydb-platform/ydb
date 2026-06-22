@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/formats/arrow/accessor/dictionary
     ydb/core/formats/arrow/accessor/plain
     ydb/core/formats/arrow/accessor/sub_columns
+    ydb/core/formats/arrow/filter
     ydb/core/tx/columnshard/engines/reader/tracing
     ydb/core/tx/columnshard/engines/scheme
     ydb/core/tx/columnshard/engines/storage/indexes/skip_index

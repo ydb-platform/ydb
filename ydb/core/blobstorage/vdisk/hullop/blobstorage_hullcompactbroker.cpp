@@ -324,7 +324,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvCompactionTokenRequest::TPtr& ev, const TActorContext &ctx) {
-            YDB_LOG_CTX_TRACE(ctx, "Handle",
+            YDB_LOG_TRACE_CTX(ctx, "Handle",
                 {"TEvCompactionTokenRequest", ev->Get()->ToString()});
 
             Mon->CompBrokerTokenRequests->Inc();
@@ -333,7 +333,7 @@ namespace NKikimr {
         }
 
         void Handle(TEvReleaseCompactionToken::TPtr& ev, const TActorContext &ctx) {
-            YDB_LOG_CTX_TRACE(ctx, "Handle",
+            YDB_LOG_TRACE_CTX(ctx, "Handle",
                 {"TEvReleaseCompactionToken", ev->Get()->ToString()});
 
             Mon->CompBrokerTokenReleases->Inc();
@@ -346,20 +346,20 @@ namespace NKikimr {
         }
 
         void HandleWakeup(const TActorContext& ctx) {
-            YDB_LOG_CTX_TRACE(ctx, "Handle TEvWakeup");
+            YDB_LOG_TRACE_CTX(ctx, "Handle TEvWakeup");
 
             TryToStartNewCompactions(ctx);
             ctx.Schedule(TDuration::Seconds(15), new TEvents::TEvWakeup);
         }
 
         void TryToStartNewCompactions(const TActorContext &ctx) {
-            YDB_LOG_CTX_DEBUG(ctx, "Compactions queue",
-                {"State", CompactionsPerPDisk.ToString()});
+            YDB_LOG_DEBUG_CTX(ctx, "Compactions queue",
+                {"state", CompactionsPerPDisk});
 
             auto maxCompactions = MaxActiveCompactionsPerPDisk.Update(ctx.Now());
             while (auto compactionInfo = CompactionsPerPDisk.StartNewCompaction(maxCompactions, Token)) {
-                YDB_LOG_CTX_DEBUG(ctx, "Start new",
-                    {"Compaction", compactionInfo->ToString()});
+                YDB_LOG_DEBUG_CTX(ctx, "Start new",
+                    {"compaction", compactionInfo->ToString()});
                 Mon->CompBrokerTokenGrants->Inc();
                 Send(compactionInfo->ActorId, new TEvCompactionTokenResult(compactionInfo->Token, compactionInfo->GroupId, compactionInfo->VDiskId));
                 Token++;
@@ -406,15 +406,15 @@ namespace NKikimr {
             }
 
             if (!longWaitingCompactions.empty()) {
-                YDB_LOG_CTX_WARN(ctx, "Long waiting compactions detected:",
-                    {"Count", longWaitingCompactions.size()},
-                    {"LongWaitingCompactions", JoinSeq(", ", longWaitingCompactions)});
+                YDB_LOG_WARN_CTX(ctx, "Long waiting compactions detected",
+                    {"count", longWaitingCompactions.size()},
+                    {"longWaitingCompactions", JoinSeq(", ", longWaitingCompactions)});
             }
 
             if (!longWorkingCompactions.empty()) {
-                YDB_LOG_CTX_WARN(ctx, "Long working compactions detected",
-                    {"Count", longWorkingCompactions.size()},
-                    {"LongWaitingCompactions", JoinSeq(", ", longWorkingCompactions)});
+                YDB_LOG_WARN_CTX(ctx, "Long working compactions detected",
+                    {"count", longWorkingCompactions.size()},
+                    {"longWaitingCompactions", JoinSeq(", ", longWorkingCompactions)});
             }
         }
 

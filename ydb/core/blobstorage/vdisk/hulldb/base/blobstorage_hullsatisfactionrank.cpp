@@ -75,7 +75,7 @@ namespace NKikimr {
         if (msg) {
             ctx.Send(PDiskCtx->PDiskId, msg.release());
 
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "TDynamicPDiskWeightsManager: " "update pdisk scheduler weights: msg# %s freshWeightStatus# %s", msg->ToString().data(), status.ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TDynamicPDiskWeightsManager: " "update pdisk scheduler weights: msg# %s freshWeightStatus# %s", msg->ToString().data(), status.ToString().data()));
         }
         // calculate new value
         const bool newVal = StopPuts();

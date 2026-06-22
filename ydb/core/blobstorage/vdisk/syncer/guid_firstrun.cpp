@@ -283,7 +283,7 @@ namespace NKikimr {
         void Bootstrap(const TActorContext &ctx) {
             // depending on our progress
             auto startStep = FirstRunState.GetStep();
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: START; step# %s", EFirstRunStepToStr(startStep)));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: START; step# %s", EFirstRunStepToStr(startStep)));
             SUBLOGLINE(NotifyId, ctx, { stream << "FirstRun: START; step# " << startStep; });
 
             switch (startStep) {
@@ -312,7 +312,7 @@ namespace NKikimr {
         void GenerateGuid(const TActorContext &ctx) {
             FirstRunState.GenerateGuid();
 
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: GenerateGuid; guid# %s", FirstRunState.GetGuid().ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: GenerateGuid; guid# %s", FirstRunState.GetGuid().ToString().data()));
             SUBLOGLINE(NotifyId, ctx, {
                 stream << "FirstRun: GenerateGuid; guid# " << FirstRunState.GetGuid();
             });
@@ -324,7 +324,7 @@ namespace NKikimr {
         // WRITE GUID IN PROGRESS TO QUORUM
         ////////////////////////////////////////////////////////////////////////
         void WriteGuidInProgressToQuorum(const TActorContext &ctx) {
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: WriteGuidInProgressToQuorum"));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: WriteGuidInProgressToQuorum"));
             SUBLOGLINE(NotifyId, ctx, { stream << "FirstRun: WriteGuidInProgressToQuorum"; });
 
             // run proxy for every VDisk in the group
@@ -345,7 +345,7 @@ namespace NKikimr {
         }
 
         void HandleInProgressWritten(TEvVDiskGuidWritten::TPtr &ev, const TActorContext &ctx) {
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: HandleInProgressWritten: msg# %s", ev->Get()->ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: HandleInProgressWritten: msg# %s", ev->Get()->ToString().data()));
             SUBLOGLINE(NotifyId, ctx, {
                 stream << "FirstRun: InProgressGuidWritten; msg# " << ev->Get()->ToString();
             });
@@ -374,7 +374,7 @@ namespace NKikimr {
         // WRITE SELECTED GUID LOCALLY
         ////////////////////////////////////////////////////////////////////////
         void WriteSelectedLocally(const TActorContext &ctx) {
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: WriteSelectedLocally"));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: WriteSelectedLocally"));
             SUBLOGLINE(NotifyId, ctx, { stream << "FirstRun: WriteSelectedLocally"; });
 
             FirstRunState.RunWriteSelectedLocally();
@@ -404,7 +404,7 @@ namespace NKikimr {
         // WRITE FINAL GUID TO QUORUM
         ////////////////////////////////////////////////////////////////////////
         void WriteFinalGuidToQuorum(const TActorContext &ctx) {
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: WriteFinalGuidToQuorum"));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: WriteFinalGuidToQuorum"));
             SUBLOGLINE(NotifyId, ctx, { stream << "FirstRun: WriteFinalGuidToQuorum"; });
 
             // run proxy for every VDisk in the group
@@ -425,7 +425,7 @@ namespace NKikimr {
         }
 
         void HandleFinalWritten(TEvVDiskGuidWritten::TPtr &ev, const TActorContext &ctx) {
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: HandleFinalWritten: msg# %s", ev->Get()->ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: HandleFinalWritten: msg# %s", ev->Get()->ToString().data()));
             SUBLOGLINE(NotifyId, ctx, {
                 stream << "FirstRun: FinalGuidWritten; msg# " << ev->Get()->ToString();
             });
@@ -454,7 +454,7 @@ namespace NKikimr {
         // WRITE FINAL GUID LOCALLY
         ////////////////////////////////////////////////////////////////////////
         void WriteFinalLocally(const TActorContext &ctx) {
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: WriteFinalLocally"));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: WriteFinalLocally"));
             SUBLOGLINE(NotifyId, ctx, { stream << "FirstRun: WriteFinalLocally"; });
 
             FirstRunState.RunWriteFinalLocally();
@@ -489,7 +489,7 @@ namespace NKikimr {
             auto guid = FirstRunState.GetGuid();
             Y_VERIFY_S(guid, VCtx->VDiskLogPrefix);
             ctx.Send(NotifyId, new TEvSyncerGuidFirstRunDone(guid));
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: FINISH"));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidFirstRunActor: FINISH"));
             SUBLOGLINE(NotifyId, ctx, { stream << "FirstRun: FINISH"; });
             Die(ctx);
         }

@@ -97,14 +97,14 @@ namespace NKikimr {
                 const TVDiskContextPtr& vctx) {
             Y_ABORT_UNLESS(recordLsn > LastDeletionLsn);
             LastDeletionLsn = recordLsn;
-            YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, "TDelayedCompactionDeleter: Update",
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "TDelayedCompactionDeleter: Update",
                 {"VDiskLogPrefix", vctx->VDiskLogPrefix},
-                {"RecordLsn", recordLsn},
-                {"removedHugeBlobs.size", removedHugeBlobs.Size()},
-                {"allocatedHugeBlobs.size", allocatedHugeBlobs.Size()},
-                {"CurrentSnapshots.size", CurrentSnapshots.size()},
-                {"CurrentSnapshots.front", (CurrentSnapshots.empty() ? 0 : CurrentSnapshots.begin()->first)},
-                {"CurrentSnapshots.back", (CurrentSnapshots.empty() ? 0 : (--CurrentSnapshots.end())->first)});
+                {"recordLsn", recordLsn},
+                {"removedHugeBlobsSize", removedHugeBlobs.Size()},
+                {"allocatedHugeBlobsSize", allocatedHugeBlobs.Size()},
+                {"currentSnapshotsSize", CurrentSnapshots.size()},
+                {"currentSnapshotsFront", (CurrentSnapshots.empty() ? 0 : CurrentSnapshots.begin()->first)},
+                {"currentSnapshotsBack", (CurrentSnapshots.empty() ? 0 : (--CurrentSnapshots.end())->first)});
             ReleaseQueue.emplace_back(recordLsn, std::move(removedHugeBlobs), std::move(allocatedHugeBlobs),
                 std::move(chunksToForget), signature, wId);
             ProcessReleaseQueue(ctx, hugeKeeperId, skeletonId, pdiskCtx, vctx);

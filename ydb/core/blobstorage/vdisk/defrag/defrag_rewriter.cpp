@@ -108,9 +108,9 @@ namespace NKikimr {
             const TDefragRecord &rec = Recs[RecToReadIdx++];
 
             if (msg->Status == NKikimrProto::CORRUPTED || (msg->Status == NKikimrProto::OK && !msg->Data.IsReadable())) {
-                YDB_LOG_CTX_WARN(ctx, "Defrag skipping corrupted blob on",
-                    {"LogoBlobId", rec.LogoBlobId},
-                    {"rec.OldDiskPart", rec.OldDiskPart.ToString()});
+                YDB_LOG_WARN_CTX(ctx, "Defrag skipping corrupted blob",
+                    {"logoBlobId", rec.LogoBlobId},
+                    {"oldDiskPart", rec.OldDiskPart});
                 const TBlobStorageGroupType gtype = DCtx->VCtx->Top->GType;
                 Send(DCtx->SkeletonId,
                      new TEvRestoreCorruptedBlob(
@@ -166,15 +166,15 @@ namespace NKikimr {
             }
             Y_VERIFY_S(rope.size() == gtype.PartSize(rec.LogoBlobId), DCtx->VCtx->VDiskLogPrefix);
 
-            YDB_LOG_CTX_DEBUG(ctx, "rewriting",
+            YDB_LOG_DEBUG_CTX(ctx, "Rewriting",
                 {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
-                {"BlobId", rec.LogoBlobId},
-                {"FromLocation", rec.OldDiskPart});
+                {"blobId", rec.LogoBlobId},
+                {"fromLocation", rec.OldDiskPart});
 
             auto msgSize = rope.size();
             auto writeEvent = std::make_unique<TEvBlobStorage::TEvVPut>(rec.LogoBlobId, std::move(rope),
                 SelfVDiskId, true, nullptr, TInstant::Max(), NKikimrBlobStorage::EPutHandleClass::AsyncBlob,
-                DCtx->VCfg->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER);
+                DCtx->VCfg->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER, TWriteSource::DefragRewrite);
             writeEvent->RewriteBlob = true;
             TEventsQuoter::QuoteMessage(DCtx->Throttler, std::make_unique<IEventHandle>(DCtx->SkeletonId, SelfId(), writeEvent.release()),
                 msgSize, DCtx->VCfg->DefragThrottlerBytesRate);
@@ -185,15 +185,15 @@ namespace NKikimr {
             // FIXME: Handle NotOK, in case of RACE just cancel the job
 
             if (auto& record = ev->Get()->Record; record.GetStatus() != NKikimrProto::OK) {
-                YDB_LOG_CTX_WARN(ctx, "rewrite failed",
+                YDB_LOG_WARN_CTX(ctx, "Rewrite failed",
                     {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
-                    {"BlobId", LogoBlobIDFromLogoBlobID(record.GetBlobID())},
-                    {"Record", SingleLineProto(record)});
+                    {"blobId", LogoBlobIDFromLogoBlobID(record.GetBlobID())},
+                    {"record", SingleLineProto(record)});
             } else {
-                YDB_LOG_CTX_DEBUG(ctx, "rewritten",
+                YDB_LOG_DEBUG_CTX(ctx, "Rewritten",
                     {"VDiskLogPrefix", DCtx->VCtx->VDiskLogPrefix},
-                    {"BlobId", LogoBlobIDFromLogoBlobID(record.GetBlobID())},
-                    {"ToLocation", ev->Get()->WrittenLocation});
+                    {"blobId", LogoBlobIDFromLogoBlobID(record.GetBlobID())},
+                    {"toLocation", ev->Get()->WrittenLocation});
 
                 ++RewrittenRecsCounter;
             }

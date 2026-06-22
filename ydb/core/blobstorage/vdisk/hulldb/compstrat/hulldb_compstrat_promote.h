@@ -75,10 +75,10 @@ namespace NKikimr {
                             action = ActMoveSsts;
                             Task->MoveSsts.MoveSst(level, level + 1, sst);
                             if (HullCtx->VCtx->ActorSystem) {
-                                YDB_LOG_CTX_COMP_INFO(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyPromoteSsts: move to level",
+                                YDB_LOG_INFO_CTX_COMP(*HullCtx->VCtx->ActorSystem, NKikimrServices::BS_HULLCOMP, "TStrategyPromoteSsts: move to level",
                                     {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
-                                    {"Sst", p.ToString()},
-                                    {"ToLevel", level + 1});
+                                    {"sst", p},
+                                    {"toLevel", level + 1});
                             }
                             break;
                         }

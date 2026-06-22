@@ -284,9 +284,9 @@ namespace NKikimr {
 
         void StartReplication() {
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "REPL START"),
-                {"Marker", "BSVR14"});
+                {"marker", "BSVR14"});
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "QUANTUM START"),
-                {"Marker", "BSVR15"});
+                {"marker", "BSVR15"});
 
             LastReplStart = TAppData::TimeProvider->Now();
             ReplCtx->MonGroup.ReplUnreplicatedVDisks() = 1;
@@ -318,8 +318,8 @@ namespace NKikimr {
                     State = AwaitToken;
                     Y_VERIFY_S(!RequestedReplicationToken, ReplCtx->VCtx->VDiskLogPrefix);
                     if (RequestedReplicationToken) {
-                        YDB_LOG_CRIT("excessive replication token requested",
-                            {"Marker", "BSVR38"},
+                        YDB_LOG_CRIT("Excessive replication token requested",
+                            {"marker", "BSVR38"},
                             {"VDiskLogPrefix", ReplCtx->VCtx->VDiskLogPrefix});
                         break;
                     }
@@ -397,8 +397,8 @@ namespace NKikimr {
             TEvReplFinished::TInfoPtr info = msg->Info;
             TInstant now = TAppData::TimeProvider->Now();
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "QUANTUM COMPLETED"),
-                {"Marker", "BSVR16"},
-                {"Info", *info});
+                {"marker", "BSVR16"},
+                {"info", *info});
             LastReplQuantumEnd = now;
 
             UnrecoveredNonphantomBlobs |= info->UnrecoveredNonphantomBlobs;
@@ -480,8 +480,8 @@ namespace NKikimr {
 
             if (finished) {
                 YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "REPL COMPLETED"),
-                    {"Marker", "BSVR17"},
-                    {"BlobsToReplicate", BlobsToReplicatePtr->GetNumItems()});
+                    {"marker", "BSVR17"},
+                    {"blobsToReplicate", BlobsToReplicatePtr->GetNumItems()});
                 LastReplEnd = now;
 
                 if (State == WaitQueues || State == Replication) {
@@ -520,7 +520,7 @@ namespace NKikimr {
                 }
             } else {
                 YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "QUANTUM START"),
-                    {"Marker", "BSVR18"});
+                    {"marker", "BSVR18"});
                 RunRepl(info->KeyPos);
                 timeRemaining = EstimateTimeOfArrival();
             }
@@ -544,9 +544,9 @@ namespace NKikimr {
 
             const auto& donor = DonorQueue.front();
             YDB_LOG_DEBUG(VDISKP(ReplCtx->VCtx->VDiskLogPrefix, "TReplScheduler::RunRepl"),
-                {"Marker", "BSVR32"},
-                {"From", from},
-                {"Donor", donor ? TString(TStringBuilder() << "{VDiskId# " << donor->VDiskId << " VSlotId# " <<                 donor->NodeId << ":" << donor->PDiskId << ":" << donor->VSlotId << "}") : "generic"});
+                {"marker", "BSVR32"},
+                {"from", from},
+                {"donor", donor ? TString(TStringBuilder() << "{VDiskId# " << donor->VDiskId << " VSlotId# " <<                 donor->NodeId << ":" << donor->PDiskId << ":" << donor->VSlotId << "}") : "generic"});
             ReplJobActorId = Register(CreateReplJobActor(ReplCtx, SelfId(), from, QueueActorMapPtr,
                 BlobsToReplicatePtr, UnreplicatedBlobsPtr, donor ? std::make_optional(std::make_pair(
                 donor->VDiskId, donor->QueueActors.AsyncReadQueueActorId)) : std::nullopt, std::move(UnreplicatedBlobRecords),
@@ -740,8 +740,8 @@ namespace NKikimr {
             } else {
                 Y_DEBUG_ABORT_UNLESS(!RequestedReplicationToken && !HoldingReplicationToken);
                 if (RequestedReplicationToken || HoldingReplicationToken) {
-                    YDB_LOG_CRIT("stuck replication token",
-                        {"Marker", "BSVR37"},
+                    YDB_LOG_CRIT("Stuck replication token",
+                        {"marker", "BSVR37"},
                         {"VDiskLogPrefix", ReplCtx->VCtx->VDiskLogPrefix});
                 }
             }

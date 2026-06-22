@@ -141,7 +141,7 @@ namespace NKikimr {
             TAnubisCandidatesFinder finder(HullCtx, Pos, std::move(LogoBlobsSnap), std::move(BarriersSnap));
             TAnubisCandidates res = finder.FindCandidates();
 
-            YDB_LOG_CTX_INFO(ctx, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "TAnubisCandidatesFinderActor actor: %s", res.ToString().data()));
+            YDB_LOG_INFO_CTX(ctx, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "TAnubisCandidatesFinderActor actor: %s", res.ToString().data()));
 
             ctx.Send(ParentId, new TEvAnubisCandidates(std::move(res)));
             TThis::Die(ctx);

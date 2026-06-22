@@ -165,7 +165,7 @@ namespace NKikimr {
                         NKikimrProto::EReplyStatus status,
                         ui64 lsn,
                         bool finished) {
-                YDB_LOG_CTX_DEBUG(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "SYNCLOG REPLY: SourceVDisk# %s guid# %" PRIu64 " lsn# %" PRIu64, SourceVDisk.ToString().data(), static_cast<ui64>(VDiskIncarnationGuid), lsn));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "SYNCLOG REPLY: SourceVDisk# %s guid# %" PRIu64 " lsn# %" PRIu64, SourceVDisk.ToString().data(), static_cast<ui64>(VDiskIncarnationGuid), lsn));
 
                 auto result = std::make_unique<TEvBlobStorage::TEvVSyncResult>(status, SelfVDiskId,
                     TSyncState(VDiskIncarnationGuid, lsn), finished, SlCtx->VCtx->GetOutOfSpaceState().GetLocalStatusFlags(),
@@ -210,7 +210,7 @@ namespace NKikimr {
                     TStringStream str;
                     str << "SYNCLOG LOGIC ERROR: " << wno.Explanation
                         << " " << InternalsToString(Ev->Get(), SnapPtr.Get(), DbBirthLsn);
-                    YDB_LOG_CTX_ERROR(ctx, str.Str());
+                    YDB_LOG_ERROR_CTX(ctx, str.Str());
                     // Y_ABORT("%s", str.Str().data()); // TODO(alexvru): fix logic
                 }
                 Finish(ctx, NKikimrProto::ERROR, 0, true);
@@ -218,7 +218,7 @@ namespace NKikimr {
 
             void ProcessFullSyncOutcome(const TActorContext &ctx, const TWhatsNextOutcome &wno) {
                 Y_UNUSED(wno);
-                YDB_LOG_CTX_WARN(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "Handle(TEvSyncLogRead): FULL_RECOVER(no data); %s", InternalsToString(Ev->Get(), SnapPtr.Get(), DbBirthLsn).data()));
+                YDB_LOG_WARN_CTX(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "Handle(TEvSyncLogRead): FULL_RECOVER(no data); %s", InternalsToString(Ev->Get(), SnapPtr.Get(), DbBirthLsn).data()));
                 ++SlCtx->CountersMonGroup.FullRecovery();
                 Finish(ctx, NKikimrProto::NODATA, DbBirthLsn, true);
             }
@@ -227,7 +227,7 @@ namespace NKikimr {
                                     const TWhatsNextOutcome &wno,
                                     ui64 syncedLsn) {
                 ++SlCtx->CountersMonGroup.NormalSync();
-                YDB_LOG_CTX_DEBUG(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "Handle(TEvSyncLogRead): OK; whatsNext# %s %s", Name2Str(wno.WhatsNext), InternalsToString(Ev->Get(), SnapPtr.Get(), DbBirthLsn).data()));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(SlCtx->VCtx->VDiskLogPrefix, "Handle(TEvSyncLogRead): OK; whatsNext# %s %s", Name2Str(wno.WhatsNext), InternalsToString(Ev->Get(), SnapPtr.Get(), DbBirthLsn).data()));
 
                 switch (wno.WhatsNext) {
                     case EWnDiskSynced:

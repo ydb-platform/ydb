@@ -9,10 +9,10 @@ namespace NKikimr {
     void TScrubCoroImpl::DropGarbageBlob(const TLogoBlobID& fullId) {
         Y_VERIFY_S(!fullId.PartId(), LogPrefix);
         if (const auto it = UnreadableBlobs.find(fullId); it != UnreadableBlobs.end()) {
-            YDB_LOG_CTX_NOTICE(GetActorContext(), VDISKP(LogPrefix, "dropped garbage unreadable blob"),
-                {"Marker", "VDS39"},
-                {"BlobId", it->first},
-                {"UnreadableParts", it->second.UnreadableParts});
+            YDB_LOG_NOTICE_CTX(GetActorContext(), VDISKP(LogPrefix, "dropped garbage unreadable blob"),
+                {"marker", "VDS39"},
+                {"blobId", it->first},
+                {"unreadableParts", it->second.UnreadableParts});
             MonGroup.UnreadableBlobsFound() -= it->second.UnreadableParts.CountBits();
             UnreadableBlobs.erase(it);
         }
@@ -38,13 +38,13 @@ namespace NKikimr {
             const NMatrix::TVectorType becameCorrupted = corrupted & ~prevCorrupted;
 
             YDB_LOG_CTX(becameCorrupted.Empty() ? PRI_NOTICE : PRI_ERROR, GetActorContext(), VDISKP(LogPrefix, "huge blob corrupted state updated"),
-                {"Marker", "VDS41"},
-                {"BlobId", fullId},
-                {"UnreadablePartsBefore", prevCorrupted},
-                {"UnreadablePartsAfter", corrupted},
-                {"BecameOk", becameOk},
-                {"BecameCorrupted", becameCorrupted},
-                {"CorruptedPart", corruptedPart});
+                {"marker", "VDS41"},
+                {"blobId", fullId},
+                {"unreadablePartsBefore", prevCorrupted},
+                {"unreadablePartsAfter", corrupted},
+                {"becameOk", becameOk},
+                {"becameCorrupted", becameCorrupted},
+                {"corruptedPart", corruptedPart});
 
             if (corrupted.Empty()) {
                 UnreadableBlobs.erase(it);
@@ -66,11 +66,11 @@ namespace NKikimr {
     void TScrubCoroImpl::UpdateReadableParts(const TLogoBlobID& fullId, NMatrix::TVectorType readable) {
         Y_VERIFY_S(!fullId.PartId(), LogPrefix);
         if (const auto it = UnreadableBlobs.find(fullId); it != UnreadableBlobs.end()) {
-            YDB_LOG_CTX_NOTICE(GetActorContext(), VDISKP(LogPrefix, "read parts of previously unreadable blob"),
-                {"Marker", "VDS42"},
-                {"BlobId", it->first},
-                {"UnreadablePartsBefore", it->second.UnreadableParts},
-                {"ReadableParts", readable});
+            YDB_LOG_NOTICE_CTX(GetActorContext(), VDISKP(LogPrefix, "read parts of previously unreadable blob"),
+                {"marker", "VDS42"},
+                {"blobId", it->first},
+                {"unreadablePartsBefore", it->second.UnreadableParts},
+                {"readableParts", readable});
             MonGroup.UnreadableBlobsFound() -= (it->second.UnreadableParts & readable).CountBits();
             if ((it->second.UnreadableParts &= ~readable).Empty()) {
                 UnreadableBlobs.erase(it);
@@ -90,11 +90,11 @@ namespace NKikimr {
                 const auto& p = data;
                 const auto& q = blobId;
                 YDB_LOG_INFO(VDISKP(LogPrefix, "going to restore unreadable blob"),
-                    {"Marker", "VDS22"},
-                    {"Cookie", p.RecoveryInFlightCookie},
-                    {"BlobId", q},
-                    {"UnreadableParts", p.UnreadableParts},
-                    {"CorruptedPart", p.CorruptedPart});
+                    {"marker", "VDS22"},
+                    {"cookie", p.RecoveryInFlightCookie},
+                    {"blobId", q},
+                    {"unreadableParts", p.UnreadableParts},
+                    {"corruptedPart", p.CorruptedPart});
             }
         }
 
@@ -123,10 +123,10 @@ namespace NKikimr {
 
                 if (item.Status == NKikimrProto::OK) {
                     YDB_LOG_NOTICE(VDISKP(LogPrefix, "recovered parts of previously unreadable blob"),
-                        {"Marker", "VDS40"},
-                        {"BlobId", it->first},
-                        {"UnreadablePartsBefore", data.UnreadableParts},
-                        {"RecoveredParts", item.Needed});
+                        {"marker", "VDS40"},
+                        {"blobId", it->first},
+                        {"unreadablePartsBefore", data.UnreadableParts},
+                        {"recoveredParts", item.Needed});
 
                     MonGroup.UnreadableBlobsFound() -= (data.UnreadableParts & item.Needed).CountBits();
                     if ((data.UnreadableParts &= ~item.Needed).Empty()) {
@@ -136,9 +136,9 @@ namespace NKikimr {
 
                 } else {
                     YDB_LOG_WARN(VDISKP(LogPrefix, "failed to restore corrupted blob"),
-                        {"Marker", "VDS07"},
-                        {"BlobId", item.BlobId},
-                        {"Status", item.Status});
+                        {"marker", "VDS07"},
+                        {"blobId", item.BlobId},
+                        {"status", item.Status});
                 }
             }
         }

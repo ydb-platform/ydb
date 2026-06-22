@@ -217,16 +217,18 @@ namespace NKikimr {
             {
                 TEvAnubisOsirisPut *msg = ev->Get();
                 if (msg->IsAnubis()) {
-                    YDB_LOG_CTX_ERROR(ctx, "OUT OF SPACE while removing LogoBlob we got from Anubis; Marker# BSVSOOSL01",
+                    YDB_LOG_ERROR_CTX(ctx, "OUT OF SPACE while removing LogoBlob we got from Anubis;",
                         {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                        {"LogoBlobId", msg->LogoBlobId});
+                        {"logoBlobId", msg->LogoBlobId},
+                        {"marker", "BSVSOOSL01"});
                     return stat.NotAllow();
                 } else {
                     // We MUST allow Osiris writes. W/o Osiris we can't work.
                     // There should not be too much of them.
-                    YDB_LOG_CTX_ERROR(ctx, "OUT OF SPACE while adding resurrected by Osiris LogoBlob; FORCING addition: Marker# BSVSOOSL02",
+                    YDB_LOG_ERROR_CTX(ctx, "OUT OF SPACE while adding resurrected by Osiris LogoBlob; FORCING addition",
                         {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                        {"LogoBlobId", msg->LogoBlobId});
+                        {"logoBlobId", msg->LogoBlobId},
+                        {"marker", "BSVSOOSL02"});
                     return stat.Allow();
                 }
             }

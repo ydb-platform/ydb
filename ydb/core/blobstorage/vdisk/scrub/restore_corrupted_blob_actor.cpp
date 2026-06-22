@@ -130,8 +130,8 @@ namespace NKikimr {
 
         void Bootstrap() {
             YDB_LOG_DEBUG(VDISKP(LogPrefix, "bootstrapping TRestoreCorruptedBlobActor"),
-                {"Marker", "VDS09"},
-                {"SelfId", SelfId()});
+                {"marker", "VDS09"},
+                {"selfId", SelfId()});
             Send(SkeletonId, new TEvTakeHullSnapshot(false));
             Become(&TThis::StateFunc, Deadline, new TEvents::TEvWakeup);
         }
@@ -166,11 +166,11 @@ namespace NKikimr {
             } else { // some data to read, generate reads
                 for (auto& cmd : ReadQ) {
                     YDB_LOG_DEBUG(VDISKP(LogPrefix, "sending read to PDisk"),
-                        {"Marker", "VDS18"},
-                        {"SelfId", SelfId()},
-                        {"Location", cmd.Location},
-                        {"BlobId", cmd.Item->BlobId},
-                        {"Parts", cmd.Parts});
+                        {"marker", "VDS18"},
+                        {"selfId", SelfId()},
+                        {"location", cmd.Location},
+                        {"blobId", cmd.Item->BlobId},
+                        {"parts", cmd.Parts});
                     auto msg = std::make_unique<NPDisk::TEvChunkRead>(PDiskCtx->Dsk->Owner, PDiskCtx->Dsk->OwnerRound,
                         cmd.Location.ChunkIdx, cmd.Location.Offset, cmd.Location.Size, NPriRead::HullLow, &cmd);
                     msg->BlobId = cmd.HugeBlobId;
@@ -201,12 +201,12 @@ namespace NKikimr {
                 }
             } else {
                 YDB_LOG_WARN(VDISKP(LogPrefix, "failed to read data from PDisk"),
-                    {"Marker", "VDS26"},
-                    {"SelfId", SelfId()},
-                    {"Location", cmd->Location},
-                    {"BlobId", cmd->Item->BlobId},
-                    {"Parts", cmd->Parts},
-                    {"Status", msg->Status});
+                    {"marker", "VDS26"},
+                    {"selfId", SelfId()},
+                    {"location", cmd->Location},
+                    {"blobId", cmd->Item->BlobId},
+                    {"parts", cmd->Parts},
+                    {"status", msg->Status});
             }
 
             if (!ReadsPending) {
@@ -217,8 +217,8 @@ namespace NKikimr {
 
         void IssueQuery() {
             YDB_LOG_DEBUG(VDISKP(LogPrefix, "IssueQuery"),
-                {"Marker", "VDS00"},
-                {"SelfId", SelfId()});
+                {"marker", "VDS00"},
+                {"selfId", SelfId()});
 
             std::unique_ptr<TEvRecoverBlob> ev;
             for (size_t i = 0; i < Items.size(); ++i) {
@@ -230,11 +230,11 @@ namespace NKikimr {
                     }
                     ev->Items.emplace_back(item.BlobId, TStackVec<TRope, 8>(item.Parts), item.PartsMask, item.Needed, TDiskPart(), i);
                     YDB_LOG_DEBUG(VDISKP(LogPrefix, "IssueQuery item"),
-                        {"Marker", "VDS17"},
-                        {"SelfId", SelfId()},
-                        {"BlobId", item.BlobId},
-                        {"PartsMask", item.PartsMask},
-                        {"Needed", item.Needed});
+                        {"marker", "VDS17"},
+                        {"selfId", SelfId()},
+                        {"blobId", item.BlobId},
+                        {"partsMask", item.PartsMask},
+                        {"needed", item.Needed});
                 }
             }
             if (ev) {
@@ -253,8 +253,8 @@ namespace NKikimr {
 
         void Handle(TEvRecoverBlobResult::TPtr ev) {
             YDB_LOG_DEBUG(VDISKP(LogPrefix, "Handle(TEvRecoverBlobResult)"),
-                {"Marker", "VDS24"},
-                {"SelfId", SelfId()});
+                {"marker", "VDS24"},
+                {"selfId", SelfId()});
 
             for (auto& item : ev->Get()->Items) {
                 auto& myItem = Items[item.Cookie];
@@ -268,11 +268,11 @@ namespace NKikimr {
                     }
                 }
                 YDB_LOG_DEBUG(VDISKP(LogPrefix, "Handle(TEvRecoverBlobResult) item"),
-                    {"Marker", "VDS43"},
-                    {"SelfId", SelfId()},
-                    {"BlobId", item.BlobId},
-                    {"Status", item.Status},
-                    {"PartsMask", item.PartsMask});
+                    {"marker", "VDS43"},
+                    {"selfId", SelfId()},
+                    {"blobId", item.BlobId},
+                    {"status", item.Status},
+                    {"partsMask", item.PartsMask});
             }
             for (const auto& item : Items) {
                 if (item.Status == NKikimrProto::UNKNOWN) {
@@ -290,7 +290,7 @@ namespace NKikimr {
                 Y_VERIFY_S(buffer.size() == Info->Type.PartSize(blobId), VCtx->VDiskLogPrefix);
                 Y_VERIFY_S(WriteRestoredParts, VCtx->VDiskLogPrefix);
                 auto ev = std::make_unique<TEvBlobStorage::TEvVPut>(blobId, buffer, vdiskId, true, &index, Deadline,
-                    NKikimrBlobStorage::EPutHandleClass::AsyncBlob, VCfg->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER);
+                    NKikimrBlobStorage::EPutHandleClass::AsyncBlob, VCfg->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER, TWriteSource::RestoredCorruptedBlob);
                 ev->RewriteBlob = true;
                 Send(SkeletonId, ev.release());
                 ++WritesPending;
@@ -299,9 +299,9 @@ namespace NKikimr {
 
         void Handle(TEvBlobStorage::TEvVPutResult::TPtr ev) {
             YDB_LOG_DEBUG(VDISKP(LogPrefix, "received TEvVPutResult"),
-                {"Marker", "VDS37"},
-                {"SelfId", SelfId()},
-                {"Msg", ev->Get()->ToString()});
+                {"marker", "VDS37"},
+                {"selfId", SelfId()},
+                {"msg", ev->Get()->ToString()});
             Y_VERIFY_S(WritesPending, VCtx->VDiskLogPrefix);
             --WritesPending;
             const auto& record = ev->Get()->Record;
@@ -312,9 +312,9 @@ namespace NKikimr {
                 case NKikimrProto::OUT_OF_SPACE:
                 case NKikimrProto::VDISK_ERROR_STATE:
                     YDB_LOG_ERROR(VDISKP(LogPrefix, "failed to restore blob"),
-                        {"Marker", "VDS10"},
-                        {"SelfId", SelfId()},
-                        {"Msg", ev->Get()->ToString()});
+                        {"marker", "VDS10"},
+                        {"selfId", SelfId()},
+                        {"msg", ev->Get()->ToString()});
                     if (item.Status == NKikimrProto::OK) {
                         item.Status = NKikimrProto::ERROR;
                     }
@@ -335,8 +335,8 @@ namespace NKikimr {
 
         void PassAway() override {
             YDB_LOG_DEBUG(VDISKP(LogPrefix, "TRestoreCorruptedBlobActor terminating"),
-                {"Marker", "VDS15"},
-                {"SelfId", SelfId()});
+                {"marker", "VDS15"},
+                {"selfId", SelfId()});
             ReduceStatus(NKikimrProto::ERROR);
 
             if (ReportNonrestoredParts) {

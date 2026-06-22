@@ -60,9 +60,10 @@ namespace NKikimr {
                     break;
             }
 
-            YDB_LOG_CTX(priority, ctx, "ZONE Marker# BSVSOOST01",
+            YDB_LOG_CTX(priority, ctx, "ZONE",
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                {"TDskSpaceTrackerActor", zone});
+                {"TDskSpaceTrackerActor", zone},
+                {"marker", "BSVSOOST01"});
             // send message to PDisk
             Become(&TThis::AskFunc);
             ctx.Send(PDiskCtx->PDiskId,
@@ -79,9 +80,10 @@ namespace NKikimr {
 
         void Handle(NPDisk::TEvCheckSpaceResult::TPtr &ev, const TActorContext &ctx) {
             const auto *msg = ev->Get();
-            YDB_LOG_CTX_DEBUG(ctx, "TDskSpaceTrackerActor:handle TEvCheckSpaceResult; Marker# BSVSOOST02",
+            YDB_LOG_DEBUG_CTX(ctx, "TDskSpaceTrackerActor:handle TEvCheckSpaceResult;",
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                {"Msg", msg->ToString()});
+                {"msg", msg->ToString()},
+                {"marker", "BSVSOOST02"});
 
             CHECK_PDISK_RESPONSE(VCtx, ev, ctx);
 

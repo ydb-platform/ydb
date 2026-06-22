@@ -1,6 +1,8 @@
 #include "blob_depot_tablet.h"
 #include "recommissioner.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
+
 namespace NKikimr::NBlobDepot {
 
     using TRecommissioner = TBlobDepot::TGroupRecommissioner;
@@ -28,7 +30,10 @@ namespace NKikimr::NBlobDepot {
 
             default:
                 Y_DEBUG_ABORT("unexpected event Type# %08" PRIx32, type);
-                STLOG(PRI_CRIT, BLOB_DEPOT, BDT00, "unexpected event", (Id, Self->GetLogId()), (Type, type));
+                YDB_LOG_CRIT("Unexpected event",
+                    {"marker", "BDT00"},
+                    {"id", Self->GetLogId()},
+                    {"type", type});
                 break;
         }
     }

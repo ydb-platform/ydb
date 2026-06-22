@@ -8,6 +8,7 @@
 #include <ydb/core/base/ticket_parser.h>
 #include <ydb/core/mon/mon.h>
 #include <ydb/core/security/certificate_check/cert_check.h>
+#include <ydb/core/security/external_idp/external_idp_provider.h>
 #include <ydb/core/security/ldap_auth_provider/ldap_auth_provider.h>
 #include <ydb/core/security/token_manager/token_manager.h>
 #include <ydb/core/security/util/counters.h>
@@ -26,6 +27,7 @@
 #include <ydb/library/ycloud/impl/user_account_service.h>
 
 #include <library/cpp/digest/md5/md5.h>
+#include <library/cpp/html/pcdata/pcdata.h>
 
 #include <util/generic/queue.h>
 #include <util/generic/strbuf.h>
@@ -129,6 +131,7 @@ protected:
         static constexpr const char* NebiusAccessServiceAuthType = "NebiusAccessService";
         static constexpr const char* ApiKeyAuthType = "ApiKey";
         static constexpr const char* CertificateAuthType = "Certificate";
+        static constexpr const char* ExternalIdpAuthType = "ExternalIdp";
 
         TString Ticket;
         typename TDerived::ETokenType TokenType = TDerived::ETokenType::Unknown;
@@ -226,6 +229,8 @@ protected:
                     return ApiKeyAuthType;
                 case TDerived::ETokenType::Certificate:
                     return CertificateAuthType;
+                case TDerived::ETokenType::ExternalIdp:
+                    return ExternalIdpAuthType;
             }
         }
 
@@ -235,6 +240,7 @@ protected:
                 case TDerived::ETokenType::Certificate:
                     return false;
                 case TDerived::ETokenType::Login:
+                case TDerived::ETokenType::ExternalIdp:
                     return true;
                 default:
                     return Signature.AccessKeyId.empty();
@@ -282,6 +288,9 @@ protected:
             if (TokenType == TDerived::ETokenType::Login) {
                 return NLogin::TLoginProvider::SanitizeJwtToken(Ticket);
             }
+            if (TokenType == TDerived::ETokenType::ExternalIdp) {
+                return NLogin::TLoginProvider::SanitizeJwtToken(Ticket);
+            }
             return MaskTicket(Ticket);
         }
     };
@@ -300,7 +309,7 @@ protected:
         if ((record.TokenType == TDerived::ETokenType::AccessService || record.TokenType == TDerived::ETokenType::NebiusAccessService || record.TokenType == TDerived::ETokenType::ApiKey) && record.Signature.AccessKeyId) {
             return GetAsSignatureExpireTime(now);
         }
-        if (record.TokenType == TDerived::ETokenType::Login) {
+        if (record.TokenType == TDerived::ETokenType::Login || record.TokenType == TDerived::ETokenType::ExternalIdp) {
             return record.ExpireTime;
         }
         return now + ExpireTime;
@@ -308,6 +317,10 @@ protected:
 
     bool AccessServiceEnabled() const {
         return (AccessServiceValidatorV1 && AccessServiceValidatorV2) || NebiusAccessServiceValidator;
+    }
+
+    bool ExternalIdpEnabled() const {
+        return static_cast<bool>(ExternalIdpProvider);
     }
 
     bool ApiKeyEnabled() const {
@@ -329,6 +342,7 @@ private:
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCertificate;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsLogin;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsAS;
+    ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsExternalIdp;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheHit;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterTicketsCacheMiss;
     ::NMonitoring::TDynamicCounters::TCounterPtr CounterWrongPeernameFormat;
@@ -347,6 +361,7 @@ private:
     TActorId UserAccountService;
     TActorId ServiceAccountService;
     TActorId NebiusAccessServiceValidator;
+    TActorId ExternalIdpProvider;
     TString UserAccountDomain;
     TString AccessServiceDomain;
     TString ServiceDomain;
@@ -785,6 +800,24 @@ private:
     }
 
     template <typename TTokenRecord>
+    bool CanInitTokenFromExternalIdp(const TString& key, TTokenRecord& record) {
+        if (record.TokenType != TDerived::ETokenType::ExternalIdp) {
+            return false;
+        }
+        if (!ExternalIdpProvider) {
+            SetError(key, record, {.Message = "ExternalIdpProvider is not initialized", .Retryable = false});
+            return false;
+        }
+
+        CounterTicketsExternalIdp->Inc();
+
+        BLOG_TRACE("CanInitTokenFromExternalIdp, ticket " << MaskTicket(record.Ticket) << " forwarded to ExternalIdpProvider");
+        ++record.ResponsesLeft;
+        Send(ExternalIdpProvider, new TEvExternalIdpProvider::TEvAuthenticateRequest(key, record.Ticket));
+        return true;
+    }
+
+    template <typename TTokenRecord>
     const TVector<TString> GetLookupDatabases(const TTokenRecord& record) {
         TVector<TString> result;
         result.push_back(DomainName);
@@ -1168,6 +1201,48 @@ private:
 
     void Handle(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
         HandleIamAuthenticateResponse<TEvAccessServiceAuthenticateRequest, NCloud::TEvAccessService::TEvAuthenticateResponse>(ev);
+    }
+
+    void Handle(TEvExternalIdpProvider::TEvAuthenticateResponse::TPtr& ev) {
+        TEvExternalIdpProvider::TEvAuthenticateResponse* response = ev->Get();
+        BLOG_D("Received TEvAuthenticateResponse from ExternalIdp for ticket "
+            << MaskTicket(response->Key) << " with status " << response->Status);
+        auto& userTokens = GetDerived()->GetUserTokens();
+        auto it = userTokens.find(response->Key);
+        if (it == userTokens.end()) {
+            BLOG_ERROR("Ticket " << MaskTicket(response->Key) << " has expired during build");
+            return;
+        }
+
+        const auto& key = it->first;
+        auto& record = it->second;
+        --record.ResponsesLeft;
+        if (response->Status == TEvExternalIdpProvider::EStatus::SUCCESS) {
+            const TString domain {"@" + Config.GetExternalIdpAuthenticationDomain()};
+            TVector<NACLib::TSID> groups(::NDetail::TReserveTag(response->Groups.size()));
+            for (const auto& group : response->Groups) {
+                groups.emplace_back(group + domain);
+            }
+            record.ExpireTime = response->ExpiresAt;
+            BLOG_D("Ticket " << record.GetMaskedTicket() << " authenticated by ExternalIdp"
+                << " as " << response->User << domain
+                << " with " << groups.size() << " group(s)");
+            SetToken(key, record, new NACLib::TUserToken({
+                .OriginalUserToken = record.Ticket,
+                .UserSID = response->User + domain,
+                .GroupSIDs = groups,
+                .AuthType = record.GetAuthType()
+            }));
+        } else {
+            BLOG_ERROR("Ticket " << record.GetMaskedTicket() << " failed ExternalIdp authentication"
+                << " with status " << response->Status
+                << " retryable=" << response->Error.Retryable
+                << " message '" << response->Error.Message << "'");
+            SetError(key, record, response->Error);
+        }
+        if (record.ResponsesLeft == 0) {
+            Respond(record);
+        }
     }
 
     void Handle(NCloud::TEvUserAccountService::TEvGetUserAccountResponse::TPtr& ev) {
@@ -1653,7 +1728,7 @@ private:
                     html << "<div>";
                     html << "<table class='ticket-parser-proplist'>";
                     html << "<tr><td>Ticket</td><td>" << record.GetMaskedTicket() << "</td></tr>";
-                    if (record.TokenType == TDerived::ETokenType::Login) {
+                    if (record.TokenType == TDerived::ETokenType::Login || record.TokenType == TDerived::ETokenType::ExternalIdp) {
                         TVector<TString> tokenData;
                         Split(record.Ticket, ".", tokenData);
                         if (tokenData.size() > 1) {
@@ -1671,8 +1746,8 @@ private:
                             catch (const std::exception&) {
                                 payload = tokenData[1];
                             }
-                            html << "<tr><td>Header</td><td>" << header << "</td></tr>";
-                            html << "<tr><td>Payload</td><td>" << payload << "</td></tr>";
+                            html << "<tr><td>Header</td><td>" << EncodeHtmlPcdata(header) << "</td></tr>";
+                            html << "<tr><td>Payload</td><td>" << EncodeHtmlPcdata(payload) << "</td></tr>";
                         }
                     }
                     TDerived::WriteTokenRecordInfo(html, record);
@@ -1767,6 +1842,11 @@ protected:
         if (tokenType == "Bearer" || tokenType == "IAM") {
             if (AccessServiceEnabled()) {
                 return NebiusAccessServiceValidator ? TDerived::ETokenType::NebiusAccessService : TDerived::ETokenType::AccessService;
+            } else if (tokenType == "Bearer" && ExternalIdpEnabled()) {
+                // Access Service has a higher priority and will intercept all requests with the Bearer token.
+                // Simultaneous use of access service and external idp does not make sense
+                // and should not happen in practice.
+                return TDerived::ETokenType::ExternalIdp;
             } else {
                 return TDerived::ETokenType::Unsupported;
             }
@@ -1881,7 +1961,8 @@ protected:
 
         if (CanInitBuiltinToken(key, record) ||
             CanInitLoginToken(key, record) ||
-            CanInitTokenFromCertificate(key, record)) {
+            CanInitTokenFromCertificate(key, record) ||
+            CanInitTokenFromExternalIdp(key, record)) {
             return;
         }
 
@@ -2030,6 +2111,19 @@ protected:
     }
 
     template <typename TTokenRecord>
+    bool CanRefreshExternalIdpTicket(const TTokenRecord& record) {
+        return record.TokenType == TDerived::ETokenType::ExternalIdp && record.Error.Retryable;
+    }
+
+    template <typename TTokenRecord>
+    bool RefreshExternalIdpTicket(const TString& key, TTokenRecord& record) {
+        GetDerived()->ResetTokenRecord(record);
+        ++record.ResponsesLeft;
+        Send(ExternalIdpProvider, new TEvExternalIdpProvider::TEvAuthenticateRequest(key, record.Ticket));
+        return true;
+    }
+
+    template <typename TTokenRecord>
     bool RefreshTicketViaExternalAuthProvider(const TString& key, TTokenRecord& record) {
         const TExternalAuthInfo& externalAuthInfo = record.ExternalAuthInfo;
         if (externalAuthInfo.Type == Config.GetLdapAuthenticationDomain()) {
@@ -2088,6 +2182,9 @@ protected:
     bool CanRefreshTicket(const TString& key, TTokenRecord& record) {
         if (CanRefreshLoginTicket(record)) {
             return RefreshLoginTicket(key, record);
+        }
+        if (CanRefreshExternalIdpTicket(record)) {
+            return RefreshExternalIdpTicket(key, record);
         }
         if (CanRefreshAccessServiceTicket(record)) {
             GetDerived()->ResetTokenRecord(record);
@@ -2149,6 +2246,11 @@ protected:
         html << "<tr><td>User Account Service</td><td>" << HtmlBool((bool)UserAccountService) << "</td></tr>";
         html << "<tr><td>Service Account Service</td><td>" << HtmlBool((bool)ServiceAccountService) << "</td></tr>";
         html << "<tr><td>Nebius Access Service</td><td>" << HtmlBool((bool)NebiusAccessServiceValidator) << "</td></tr>";
+        if (ExternalIdpProvider) {
+            html << "<tr><td><a href='external_idp_provider'>External IdP</a></td><td>" << HtmlBool(true) << "</td></tr>";
+        } else {
+            html << "<tr><td>External IdP</td><td>" << HtmlBool(false) << "</td></tr>";
+        }
     }
 
     template <typename TTokenRecord>
@@ -2178,6 +2280,7 @@ protected:
         CounterTicketsCertificate = counters->GetCounter("TicketsCertificate", true);
         CounterTicketsLogin = counters->GetCounter("TicketsLogin", true);
         CounterTicketsAS = counters->GetCounter("TicketsAS", true);
+        CounterTicketsExternalIdp = counters->GetCounter("TicketsExternalIdp", true);
         CounterTicketsCacheHit = counters->GetCounter("TicketsCacheHit", true);
         CounterTicketsCacheMiss = counters->GetCounter("TicketsCacheMiss", true);
         CounterWrongPeernameFormat = counters->GetCounter("WrongPeernameFormat", true);
@@ -2270,6 +2373,13 @@ protected:
         if (Config.GetUseLoginProvider()) {
             UseLoginProvider = true;
         }
+
+        if (Config.HasExternalIdpConfig()) {
+            BLOG_D("External IdP authentication is enabled");
+            ExternalIdpProvider = Register(
+                CreateExternalIdpProvider(Config.GetExternalIdpConfig(), {}),
+                TMailboxType::HTSwap, AppData()->UserPoolId);
+        }
     }
 
     void InitTime() {
@@ -2297,6 +2407,9 @@ protected:
         }
         if (NebiusAccessServiceValidator) {
             Send(NebiusAccessServiceValidator, new TEvents::TEvPoisonPill);
+        }
+        if (ExternalIdpProvider) {
+            Send(ExternalIdpProvider, new TEvents::TEvPoisonPill);
         }
         TBase::PassAway();
     }
@@ -2337,6 +2450,7 @@ public:
             hFunc(TEvTicketParser::TEvUpdateLoginSecurityState, Handle);
             hFunc(TEvTokenManager::TEvUpdateToken, Handle);
             hFunc(TEvLdapAuthProvider::TEvEnrichGroupsResponse, Handle);
+            hFunc(TEvExternalIdpProvider::TEvAuthenticateResponse, Handle);
             hFunc(NCloud::TEvAccessService::TEvAuthenticateResponse, Handle);
             hFunc(NCloud::TEvAccessService::TEvAuthorizeResponse, Handle);
             hFunc(NCloud::TEvAccessService::TEvBulkAuthorizeResponse, Handle);

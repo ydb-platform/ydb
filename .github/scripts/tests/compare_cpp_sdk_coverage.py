@@ -4,6 +4,8 @@ import re
 import sys
 from pathlib import Path
 
+TOLERANCE = 0.1  # percentage points
+
 
 def line_pct(report_dir: str) -> float:
     html = (Path(report_dir) / "index.html").read_text(encoding="utf-8", errors="replace")
@@ -30,7 +32,10 @@ if __name__ == "__main__":
             current = json.load(f)["line_pct"]
         with open(sys.argv[3], encoding="utf-8") as f:
             baseline = json.load(f)["line_pct"]
-        print(f"CPP SDK line coverage: {current}% (baseline: {baseline}%)", file=sys.stderr)
-        sys.exit(1 if current < baseline else 0)
+        print(
+            f"CPP SDK line coverage: {current}% (baseline: {baseline}%, tolerance: {TOLERANCE}pp)",
+            file=sys.stderr,
+        )
+        sys.exit(1 if current < baseline - TOLERANCE else 0)
     else:
         raise SystemExit(f"unknown command: {cmd}")

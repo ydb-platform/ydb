@@ -32,7 +32,7 @@ namespace NKikimr {
 
         void Finish(const TActorContext &ctx) {
             // send response
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "TEvVGetBarrierResult: %s", Result->ToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "TEvVGetBarrierResult: %s", Result->ToString().data()));
             SendVDiskResponse(ctx, Ev->Sender, Result.release(), Ev->Cookie, HullCtx->VCtx, {});
             ctx.Send(ParentId, new TEvents::TEvGone);
             Die(ctx);

@@ -26,7 +26,7 @@ namespace NKikimr {
             Y_UNUSED(ev);
 
             const ui64 lsn = HullDs->GetFirstLsnToKeep();
-            YDB_LOG_CTX_DEBUG(ctx, VDISKP(VCtx->VDiskLogPrefix, "THullLogCutterNotifier: lsn# %" PRIu64 " PreviousCutLsn# %s", lsn, PreviousCutLsnToString().data()));
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(VCtx->VDiskLogPrefix, "THullLogCutterNotifier: lsn# %" PRIu64 " PreviousCutLsn# %s", lsn, PreviousCutLsnToString().data()));
 
             if (lsn != ui64(-1)) {
                 Y_VERIFY_S(!PreviousCutLsn || *PreviousCutLsn <= lsn, VCtx->VDiskLogPrefix);

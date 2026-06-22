@@ -30,10 +30,10 @@ namespace NKikimr {
             Job.Work();
             auto endTime = TAppData::TimeProvider->Now();
 
-            YDB_LOG_CTX_INFO(ctx, "FreshAppendix Compaction Job finished",
+            YDB_LOG_INFO_CTX(ctx, "FreshAppendix Compaction Job finished",
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
-                {"Data", PDiskSignatureForHullDbKey<TKey>().ToString().data()},
-                {"Duration", (endTime - startTime)});
+                {"data", PDiskSignatureForHullDbKey<TKey>()},
+                {"duration", (endTime - startTime)});
 
             ctx.Send(Recipient, new TFreshAppendixCompactionDone(std::move(Job)));
             TThis::Die(ctx);

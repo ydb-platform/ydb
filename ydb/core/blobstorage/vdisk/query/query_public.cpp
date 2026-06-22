@@ -68,7 +68,7 @@ namespace NKikimr {
                 const bool keep = ingress.KeepUnconditionally(TIngress::IngressMode(hullCtx->VCtx->Top->GType));
                 TString explanation;
                 if (!suppressBarrierCheck && !keepChecker(full, keep, &explanation)) {
-                    YDB_LOG_CTX_COMP_INFO(ctx, NKikimrServices::BS_HULLRECS, VDISKP(hullCtx->VCtx->VDiskLogPrefix, "Db# LogoBlobs getting blob beyond the barrier id# %s ingress# %s barrier# %s", id.ToString().data(), ingress.ToString(hullCtx->VCtx->Top.get(), hullCtx->VCtx->ShortSelfVDisk, id).data(), explanation.data()));
+                    YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::BS_HULLRECS, VDISKP(hullCtx->VCtx->VDiskLogPrefix, "Db# LogoBlobs getting blob beyond the barrier id# %s ingress# %s barrier# %s", id.ToString().data(), ingress.ToString(hullCtx->VCtx->Top.get(), hullCtx->VCtx->ShortSelfVDisk, id).data(), explanation.data()));
                 }
             }
         }
@@ -160,7 +160,7 @@ namespace NKikimr {
             std::unique_ptr<TEvBlobStorage::TEvVDbStatResult> result)
     {
         result->SetError();
-        YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_VDISK_OTHER, VDISKP(vctx->VDiskLogPrefix, "TEvVDbStatResult: %s", result->ToString().data()));
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_VDISK_OTHER, VDISKP(vctx->VDiskLogPrefix, "TEvVDbStatResult: %s", result->ToString().data()));
         SendVDiskResponse(ctx, ev->Sender, result.release(), ev->Cookie, vctx, {});
     }
 

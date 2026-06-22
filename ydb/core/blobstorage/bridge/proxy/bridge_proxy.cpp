@@ -448,8 +448,16 @@ namespace NKikimr {
                     Y_ABORT_UNLESS(item.Id);
                     Y_ABORT_UNLESS(item.Buffer.size() == item.Id.BlobSize());
                     self.SendQuery(shared_from_this(), bridgePileId, std::make_unique<TEvBlobStorage::TEvPut>(
-                        item.Id, TRcBuf(item.Buffer), TInstant::Max(), handleClass, TEvBlobStorage::TEvPut::TacticDefault,
-                        item.IssueKeepFlag, true), {.Index = index});
+                        TEvBlobStorage::TEvPut::TParameters{
+                            .BlobId = item.Id,
+                            .Buffer = TRope(TRcBuf(item.Buffer)),
+                            .Deadline = TInstant::Max(),
+                            .HandleClass = handleClass,
+                            .Tactic = TEvBlobStorage::TEvPut::TacticDefault,
+                            .WriteSource = TWriteSource::BridgeProxyRestorePut,
+                            .IssueKeepFlag = item.IssueKeepFlag,
+                            .IgnoreBlock = true,
+                        }), {.Index = index});
                 }
 
                 IsRestoring = true;
@@ -761,7 +769,7 @@ namespace NKikimr {
                         // allow only keep flags to be sent
                         res = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(ev.TabletId, ev.RecordGeneration,
                             ev.PerGenerationCounter, ev.Channel, false, 0, 0, new TVector<TLogoBlobID>(*ev.Keep),
-                            nullptr, ev.Deadline, true, false, false);
+                            nullptr, ev.Deadline, true, ev.WriteSource, false, false);
                     }
                     [[fallthrough]];
                 case NKikimrBridge::TGroupState::WRITE_KEEP_BARRIER_DONOTKEEP:

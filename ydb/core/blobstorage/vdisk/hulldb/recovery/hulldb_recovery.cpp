@@ -30,7 +30,7 @@ namespace NKikimr {
             EOpMode mode)
     {
         Y_VERIFY_S(!id.PartId(), HullDs->HullCtx->VCtx->VDiskLogPrefix);
-        YDB_LOG_CTX_DEBUG(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# LogoBlobs action# add_data mode# %s id# %s lsn# %" PRIu64 " bufSize# %" PRIu32, OpMode2Str(mode), id.ToString().data(), lsn, ui32(buffer.GetSize())));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# LogoBlobs action# add_data mode# %s id# %s lsn# %" PRIu64 " bufSize# %" PRIu32, OpMode2Str(mode), id.ToString().data(), lsn, ui32(buffer.GetSize())));
 
         if (buffer) {
             HullDs->LogoBlobs->PutToFresh(lsn, TKeyLogoBlob(id), partId, ingress, std::move(buffer), checksum);
@@ -49,7 +49,7 @@ namespace NKikimr {
             EOpMode mode)
     {
         Y_VERIFY_S(!id.PartId(), HullDs->HullCtx->VCtx->VDiskLogPrefix);
-        YDB_LOG_CTX_DEBUG(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# LogoBlobs action# add_idx mode# %s id# %s lsn# %" PRIu64, OpMode2Str(mode), id.ToString().data(), lsn));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# LogoBlobs action# add_idx mode# %s id# %s lsn# %" PRIu64, OpMode2Str(mode), id.ToString().data(), lsn));
 
         HullDs->LogoBlobs->PutToFresh(lsn, TKeyLogoBlob(id), TMemRecLogoBlob(ingress));
     }
@@ -63,7 +63,7 @@ namespace NKikimr {
             EOpMode mode)
     {
         Y_VERIFY_S(!id.PartId(), HullDs->HullCtx->VCtx->VDiskLogPrefix);
-        YDB_LOG_CTX_DEBUG(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# LogoBlobs action# add_data_huge mode# %s id# %s lsn# %" PRIu64, OpMode2Str(mode), id.ToString().data(), lsn));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# LogoBlobs action# add_data_huge mode# %s id# %s lsn# %" PRIu64, OpMode2Str(mode), id.ToString().data(), lsn));
 
         TMemRecLogoBlob memRecLogoBlob(ingress);
         memRecLogoBlob.SetHugeBlob(diskAddr);
@@ -76,7 +76,7 @@ namespace NKikimr {
             const TLsnSeg &seg,
             EOpMode mode)
     {
-        YDB_LOG_CTX_DEBUG(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# LogoBlobs Db# Blocks Db# Barriers action# bulk_sst mode# %s lsn# %" PRIu64 " essence# %s", OpMode2Str(mode), seg.Point(), essence.ToString().data()));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# LogoBlobs Db# Blocks Db# Barriers action# bulk_sst mode# %s lsn# %" PRIu64 " essence# %s", OpMode2Str(mode), seg.Point(), essence.ToString().data()));
 
         // FIXME: implement
         //HullDs->LogoBlobs->ApplyUncommittedReplSegment(std::move(sst), HullDs->HullCtx);
@@ -102,7 +102,7 @@ namespace NKikimr {
             ui64 lsn,
             EOpMode mode)
     {
-        YDB_LOG_CTX_DEBUG(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# Blocks action# add mode# %s tabletId# %" PRIu64 " gen# %" PRIu32 " lsn# %" PRIu64, OpMode2Str(mode), tabletId, gen, lsn));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# Blocks action# add mode# %s tabletId# %" PRIu64 " gen# %" PRIu32 " lsn# %" PRIu64, OpMode2Str(mode), tabletId, gen, lsn));
 
         UpdateBlocksCache(tabletId, gen, issuerGuid, lsn, mode);
         HullDs->Blocks->PutToFresh(lsn, TKeyBlock(tabletId), TMemRecBlock(gen));
@@ -154,7 +154,7 @@ namespace NKikimr {
             ui64 lsn,
             EOpMode mode)
     {
-        YDB_LOG_CTX_DEBUG(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# Barriers action# add mode# %s tabletID# %" PRIu64 " channel# %" PRIu32 " gen# %" PRIu32 " genCounter# %" PRIu32 " collectGen# %" PRIu32 " collectStep# %" PRIu32 " hard# %s lsn# %" PRIu64, OpMode2Str(mode), tabletID, channel, gen, genCounter, collectGen, collectStep, hard ? "true" : "false", lsn));
+        YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# Barriers action# add mode# %s tabletID# %" PRIu64 " channel# %" PRIu32 " gen# %" PRIu32 " genCounter# %" PRIu32 " collectGen# %" PRIu32 " collectStep# %" PRIu32 " hard# %s lsn# %" PRIu64, OpMode2Str(mode), tabletID, channel, gen, genCounter, collectGen, collectStep, hard ? "true" : "false", lsn));
 
         TKeyBarrier keyBarrier(tabletID, channel, gen, genCounter, hard);
         TMemRecBarrier memRecBarrier(collectGen, collectStep, ingress);
@@ -226,7 +226,7 @@ namespace NKikimr {
         TLogoBlobID id(vec[0]);
         for (ui32 i = 1; i < vec.size(); ++i) {
             if (id == vec[i]) {
-                YDB_LOG_CTX_CRIT(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Duplicates blob: %s in TEvVCollectGarbage: %s", ToString(id).data(), ShortUtf8DebugString(record).data()));
+                YDB_LOG_CRIT_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Duplicates blob: %s in TEvVCollectGarbage: %s", ToString(id).data(), ShortUtf8DebugString(record).data()));
                 return false;
             }
 
@@ -315,7 +315,7 @@ namespace NKikimr {
                 TKeyLogoBlob key(id);
                 TMemRecLogoBlob memRec(ingressKeep);
                 HullDs->LogoBlobs->PutToFresh(lsn, key, memRec);
-                YDB_LOG_CTX_DEBUG(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# LogoBlobs action# set_keep mode# %s id# %s lsn# %" PRIu64, OpMode2Str(mode), id.ToString().data(), lsn));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# LogoBlobs action# set_keep mode# %s id# %s lsn# %" PRIu64, OpMode2Str(mode), id.ToString().data(), lsn));
             }
         }
 
@@ -329,7 +329,7 @@ namespace NKikimr {
                 TKeyLogoBlob key(id);
                 TMemRecLogoBlob memRec(ingressDontKeep);
                 HullDs->LogoBlobs->PutToFresh(lsn, key, memRec);
-                YDB_LOG_CTX_DEBUG(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# LogoBlobs action# set_dont_keep mode# %s id# %s lsn# %" PRIu64, OpMode2Str(mode), id.ToString().data(), lsn));
+                YDB_LOG_DEBUG_CTX(ctx, VDISKP(HullDs->HullCtx->VCtx->VDiskLogPrefix, "Db# LogoBlobs action# set_dont_keep mode# %s id# %s lsn# %" PRIu64, OpMode2Str(mode), id.ToString().data(), lsn));
             }
         }
     }
@@ -340,10 +340,10 @@ namespace NKikimr {
             TLsnSeg seg,
             EOpMode mode)
     {
-        YDB_LOG_CTX_DEBUG(ctx, "LogoBlobs sync_data_batch",
+        YDB_LOG_DEBUG_CTX(ctx, "LogoBlobs sync_data_batch",
             {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
-            {"Mode", OpMode2Str(mode)},
-            {"Lsn", seg});
+            {"mode", OpMode2Str(mode)},
+            {"lsn", seg});
 
         Y_VERIFY_S(logoBlobs && (seg.Last - seg.First + 1 == logoBlobs->GetSize()),
                 HullDs->HullCtx->VCtx->VDiskLogPrefix);
@@ -356,10 +356,10 @@ namespace NKikimr {
             TLsnSeg seg,
             EOpMode mode)
     {
-        YDB_LOG_CTX_DEBUG(ctx, "Blocks sync_data_batch",
+        YDB_LOG_DEBUG_CTX(ctx, "Blocks sync_data_batch",
             {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
-            {"Mode", OpMode2Str(mode)},
-            {"Lsn", seg});
+            {"mode", OpMode2Str(mode)},
+            {"lsn", seg});
 
         Y_VERIFY_S(blocks && (seg.Last - seg.First + 1 == blocks->GetSize()),
                 HullDs->HullCtx->VCtx->VDiskLogPrefix);
@@ -373,10 +373,10 @@ namespace NKikimr {
             TLsnSeg seg,
             EOpMode mode)
     {
-        YDB_LOG_CTX_DEBUG(ctx, "Barriers sync_data_batch",
+        YDB_LOG_DEBUG_CTX(ctx, "Barriers sync_data_batch",
             {"VDiskLogPrefix", HullDs->HullCtx->VCtx->VDiskLogPrefix},
-            {"Mode", OpMode2Str(mode)},
-            {"Lsn", seg});
+            {"mode", OpMode2Str(mode)},
+            {"lsn", seg});
 
         Y_VERIFY_S(barriers && (seg.Last - seg.First + 1 == barriers->GetSize()),
                 HullDs->HullCtx->VCtx->VDiskLogPrefix);

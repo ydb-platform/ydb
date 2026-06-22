@@ -77,6 +77,14 @@ namespace NKikimr {
                     TEvBlobStorage::EvCompactionFinished>
     {};
 
+    //////////////////////////////////////////////////////////////////////////
+    // TEvFreshCompactionStarted
+    //////////////////////////////////////////////////////////////////////////
+    class TEvFreshCompactionStarted : public TEventLocal<
+                    TEvFreshCompactionStarted,
+                    TEvBlobStorage::EvFreshCompactionStarted>
+    {};
+
     ////////////////////////////////////////////////////////////////////////////
     // FRESH compaction
     ////////////////////////////////////////////////////////////////////////////
@@ -101,11 +109,11 @@ namespace NKikimr {
     {
         ui64 yardFreeUpToLsn = rtCtx->GetFreeUpToLsn();
         bool compact = hullDs->HullCtx->FreshCompaction && rtCtx->LevelIndex->NeedsFreshCompaction(yardFreeUpToLsn, force);
-        YDB_LOG_CTX_COMP_DEBUG(ctx, NKikimrServices::BS_HULLCOMP, "CompactFreshSegmentIfRequired",
-            {"Required", compact},
-            {"YardFreeUpToLsn", yardFreeUpToLsn},
-            {"Force", force},
-            {"AllowGarbageCollection", allowGarbageCollection});
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::BS_HULLCOMP, "CompactFreshSegmentIfRequired",
+            {"required", compact},
+            {"yardFreeUpToLsn", yardFreeUpToLsn},
+            {"force", force},
+            {"allowGarbageCollection", allowGarbageCollection});
         if (compact) {
             CompactFreshSegment<TKey, TMemRec>(hullDs, std::move(hugeBlobCtx), minHugeBlobInBytes, rtCtx, ctx,
                 allowGarbageCollection);

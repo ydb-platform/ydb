@@ -15,7 +15,7 @@ The interactive mode runs in one of two submodes:
 * **YQL** — entering and running YQL queries (used by default on the first launch);
 * **AI** — a dialog with the AI assistant.
 
-Start the interactive mode by running the `{{ ydb-cli }}` command without a subcommand and with the required [connection parameters](connect.md):
+Start the [interactive mode](interactive-cli.md) by running the `{{ ydb-cli }}` command without a subcommand and with the required [connection parameters](connect.md):
 
 ```bash
 {{ ydb-cli }} [global options...]
@@ -31,7 +31,7 @@ Parameter | Description
 --- | ---
 **API endpoint** | The URL of the language model API. It must start with `http://` or `https://` (for example, `https://api.openai.com/v1/`). The {{ ydb-short-name }} CLI verifies the connection to the specified address.
 **API type** | The API type: <ul><li>**OpenAI-compatible** — for models with an OpenAI-compatible API;</li><li>**Anthropic** — for the Anthropic API.</li></ul>
-**API token** | The API access token. It is stored in the [configuration file](#config-file) in plain text. You can leave the field empty and pass the token via the [`YDB_CLI_AI_TOKEN`](#env) environment variable.
+**API token** | The API access token. It is stored in the [configuration file](#config-file). You can leave the field empty and pass the token via the [`YDB_CLI_AI_TOKEN`](#env) environment variable.
 **Model name** | The model name. If the API allows it, the {{ ydb-short-name }} CLI requests the list of available models; the name can also be entered manually. An empty value means the model name is not passed in requests.
 **Profile display name** | The display name under which the profile is saved and shown during selection.
 
@@ -76,9 +76,9 @@ Command | Description
 
 AI profiles and AI mode settings are stored in a YAML file. By default it is `~/.config/ydb/ai_profiles.yaml`; the path can be overridden with the [`YDB_CLI_AI_PROFILE_FILE`](#env) environment variable. The file contains the list of profiles, the ID of the active profile, and the current interactive submode. You usually do not need to edit it manually — manage profiles via the [`/model`](#commands) and [`/config`](#commands) commands.
 
-{% note warning %}
+{% note info %}
 
-If a token was entered directly during profile setup, it is stored in this file in plain text. To avoid storing the token on disk, leave the token field empty and pass it via the [`YDB_CLI_AI_TOKEN`](#env) environment variable.
+A token entered directly during profile setup is stored in the configuration file. The {{ ydb-short-name }} CLI restricts the file's permissions so that only the owner — the user who runs the CLI — can read and modify it (on Unix systems, mode `0600`). If you prefer not to store the token on disk, leave the token field empty and pass it via the [`YDB_CLI_AI_TOKEN`](#env) environment variable.
 
 {% endnote %}
 

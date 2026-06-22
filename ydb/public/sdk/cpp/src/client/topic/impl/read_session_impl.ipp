@@ -16,7 +16,13 @@
 
 #include <google/protobuf/util/time_util.h>
 
+#include <util/system/platform.h>
+
+// Kafka batch reading pulls in ydb/library/kafka -> crc32c -> crcutil, which does not build with
+// clang-cl on Windows. Kafka batch support is compiled out on Windows.
+#ifndef _win_
 #include <ydb/library/kafka/kafka_records.h>
+#endif
 
 #include <library/cpp/containers/disjoint_interval_tree/disjoint_interval_tree.h>
 
@@ -35,9 +41,8 @@ namespace NYdb::inline Dev::NTopic {
 
 namespace {
 
-using NKafka::ReadKafkaBatchHeader;
-
 size_t GetReadMessageCount(const Ydb::Topic::StreamReadMessage_ReadResponse_MessageData& messageData, int32_t codec) {
+#ifndef _win_
     const auto& dataBytes = messageData.data();
 
     switch (codec) {
@@ -49,6 +54,11 @@ size_t GetReadMessageCount(const Ydb::Topic::StreamReadMessage_ReadResponse_Mess
         default:
             return 1;
     }
+#else
+    // Kafka batch codec is not supported on Windows, so every message is a single logical message.
+    Y_UNUSED(messageData, codec);
+    return 1;
+#endif
 }
 
 } // namespace

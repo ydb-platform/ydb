@@ -1,13 +1,18 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
-#include <ydb/library/kafka/kafka_messages_int.h>
-#include <ydb/library/kafka/kafka_records.h>
-#include <ydb/public/api/protos/ydb_topic.pb.h>
-
 #include <library/cpp/streams/zstd/zstd.h>
 
 #include <util/stream/buffer.h>
 #include <util/stream/zlib.h>
+#include <util/system/platform.h>
+
+// Kafka batch codec pulls in ydb/library/kafka -> crc32c -> crcutil, which does not build with
+// clang-cl on Windows. The whole codec is compiled out on Windows.
+#ifndef _win_
+#include <ydb/library/kafka/kafka_messages_int.h>
+#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
+#endif
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -53,12 +58,14 @@ std::string DecompressZstdData(const std::string& data) {
     return result;
 }
 
+#ifndef _win_
 std::string KafkaBytesToString(const NKafka::TKafkaBytes& bytes) {
     if (!bytes) {
         return {};
     }
     return std::string(bytes->data(), bytes->size());
 }
+#endif
 
 TDecompressionResult MakeSingleMessageResult(std::string data) {
     TDecompressionResult result;
@@ -111,6 +118,8 @@ void ICodec::CompressWriteBlock(TWriteBlockCompression& ctx) const {
     ctx.Compressed = true;
     ctx.CodecID = static_cast<ui32>(ctx.Codec);
 }
+
+#ifndef _win_
 
 std::string TKafkaBatchCodec::Decompress(const std::string& data) const {
     return TakeFirstDecompressedMessage(DecompressData(data));
@@ -208,12 +217,16 @@ void TKafkaBatchCodec::CompressWriteBlock(TWriteBlockCompression& ctx) const {
     ctx.Compressed = true;
 }
 
+#endif // _win_
+
 class TCommonCodecsProvider {
 public:
     TCommonCodecsProvider() {
         TCodecMap::GetTheCodecMap().Set((uint32_t)ECodec::GZIP, std::make_unique<TGzipCodec>());
         TCodecMap::GetTheCodecMap().Set((uint32_t)ECodec::ZSTD, std::make_unique<TZstdCodec>());
+#ifndef _win_
         TCodecMap::GetTheCodecMap().Set((uint32_t)ECodec::KAFKA_BATCH, std::make_unique<TKafkaBatchCodec>());
+#endif
     }
 };
 

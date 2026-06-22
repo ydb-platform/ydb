@@ -9,6 +9,7 @@
 #include <util/generic/buffer.h>
 #include <util/datetime/base.h>
 #include <util/system/types.h>
+#include <util/system/platform.h>
 
 #include <optional>
 #include <string_view>
@@ -99,6 +100,9 @@ class TUnsupportedCodec final : public ICodec {
     std::unique_ptr<IOutputStream> CreateCoder(TBuffer&, int) const override;
 };
 
+// Kafka batch codec is implemented on top of ydb/library/kafka, which transitively depends on
+// contrib/libs/crcutil and does not build with clang-cl on Windows. The codec is unavailable there.
+#ifndef _win_
 class TKafkaBatchCodec final : public ICodec {
 public:
     std::string Decompress(const std::string& data) const override;
@@ -109,6 +113,7 @@ public:
 
     void CompressWriteBlock(TWriteBlockCompression& ctx) const override;
 };
+#endif
 
 class TCodecMap {
 public:

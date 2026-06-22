@@ -8,6 +8,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
 
 #include <util/generic/hash.h>
+#include <util/system/platform.h>
 
 using namespace NYdb::NConsoleClient;
 
@@ -16,7 +17,10 @@ TVector<NYdb::NTopic::ECodec> TCommandWorkloadTopicParams::GetWriteAllowedCodecs
         NYdb::NTopic::ECodec::RAW,
         NYdb::NTopic::ECodec::GZIP,
         NYdb::NTopic::ECodec::ZSTD,
+        // Kafka batch codec is not available on Windows (no ydb/library/kafka dependency there).
+#ifndef _win_
         NYdb::NTopic::ECodec::KAFKA_BATCH,
+#endif
     };
 }
 
@@ -32,7 +36,10 @@ ui32 TCommandWorkloadTopicParams::StrToCodec(const TString& str) {
         {"raw", NYdb::NTopic::ECodec::RAW},
         {"gzip", NYdb::NTopic::ECodec::GZIP},
         {"zstd", NYdb::NTopic::ECodec::ZSTD},
+        // Kafka batch codec is not available on Windows (no ydb/library/kafka dependency there).
+#ifndef _win_
         {"kafka-batch", NYdb::NTopic::ECodec::KAFKA_BATCH},
+#endif
     };
     TString loweredStr(str);
     loweredStr.to_lower();

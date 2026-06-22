@@ -27,7 +27,6 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/library/kafka
     ydb/public/sdk/cpp/src/library/grpc/client
     library/cpp/monlib/dynamic_counters
     library/cpp/threading/future/subscription
@@ -45,5 +44,14 @@ PEERDIR(
     ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic
     ydb/public/sdk/cpp/src/client/proto
 )
+
+# Kafka batch reading depends on ydb/library/kafka -> library/cpp/digest/crc32c -> contrib/libs/crcutil,
+# which does not compile with clang-cl on Windows. Kafka batch support is disabled on Windows
+# (see read_session_impl.ipp).
+IF (NOT OS_WINDOWS)
+PEERDIR(
+    ydb/library/kafka
+)
+ENDIF()
 
 END()

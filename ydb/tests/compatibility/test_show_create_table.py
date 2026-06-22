@@ -10,9 +10,7 @@ class TestShowCreateTable(RestartToAnotherVersionFixture):
         if min(self.versions) < (25, 3, 1):
             pytest.skip("compatibility for show create table is not supported in < 25.3.1")
         self.table_name = "test_show_create_table"
-        yield from self.setup_cluster(
-            extra_feature_flags=["enable_show_create"]
-        )
+        yield from self.setup_cluster()
 
     def create_table(self):
         with ydb.QuerySessionPool(self.driver) as session_pool:

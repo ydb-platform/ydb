@@ -173,18 +173,50 @@ void TDDiskActor::TDirectIoOpBase::PrepareWrite(TRope&& data, ui64 offset, TChun
     Y_ABORT_UNLESS(data.size() <= MaxRwCount);
     const size_t dataSize = data.size();
     Data.reset();
-
-    // Zero-copy path: if the payload is contiguous and page-aligned, reuse the buffer directly.
-    auto iter = data.Begin();
-    if (iter.ContiguousSize() == data.size() &&
-        (reinterpret_cast<uintptr_t>(iter.ContiguousData()) & (MinBlockSize - 1)) == 0) {
-        AlignedDataHolder = iter.GetChunk(); // zero-copy: ref-count bump
-    } else {
-        AlignedDataHolder = TRcBuf::UninitializedPageAligned(dataSize);
-        data.Begin().ExtractPlainDataAndAdvance(AlignedDataHolder.GetDataMut(), dataSize);
-    }
+    AlignedDataHolder = {};
 
     SetOperationType(EWRITE);
+
+#if defined(__linux__)
+    // Zero-copy scatter-gather path: taken when all rope chunks are page-aligned
+    // (base address) and sector-aligned (length), and fit within MAX_IOVS. The
+    // rope is moved into Data so its chunk backends (reference-counted heap
+    // buffers) outlive the I/O; each chunk becomes one iovec - no memcpy.
+    {
+        size_t chunkCount = 0;
+        bool allAligned = true;
+        for (auto it = data.Begin(); it.Valid(); it.AdvanceToNextContiguousBlock()) {
+            const uintptr_t base = reinterpret_cast<uintptr_t>(it.ContiguousData());
+            if ((base & (MinBlockSize - 1)) != 0 || (it.ContiguousSize() & (MinBlockSize - 1)) != 0) {
+                allAligned = false;
+                break;
+            }
+            ++chunkCount;
+            if (chunkCount > NPDisk::TUringOperationBase::MAX_IOVS) {
+                allAligned = false;
+                break;
+            }
+        }
+
+        if (allAligned && chunkCount > 0) {
+            Data = std::move(data);
+
+            PrepareScatterGather(chunkCount, offset);
+            for (auto it = Data->Begin(); it.Valid(); it.AdvanceToNextContiguousBlock()) {
+                // writev only reads from the buffer, so const_cast is safe here.
+                AddIov(const_cast<char*>(it.ContiguousData()), it.ContiguousSize());
+            }
+
+            ChunkIdx = chunkIdx;
+            ChunkOffsetInBytes = chunkOffset;
+            return;
+        }
+    }
+#endif
+
+    // Copy path: unaligned chunks, too many chunks, or non-Linux.
+    AlignedDataHolder = TRcBuf::UninitializedPageAligned(dataSize);
+    data.Begin().ExtractPlainDataAndAdvance(AlignedDataHolder.GetDataMut(), dataSize);
 
     // UnsafeGetDataMut: writev only reads from the buffer, so we avoid COW
     // that TRcBuf::GetDataMut() would trigger on shared page-aligned buffers.

@@ -1,0 +1,25 @@
+/* FIXME(YQL-20631): recursive reference must not appear within an outer join */
+PRAGMA YqlSelect = 'force';
+
+WITH RECURSIVE outer_join AS (
+    SELECT
+        1 AS n
+    UNION ALL
+    SELECT
+        dummy.val + 1 AS n
+    FROM (
+        SELECT
+            2 AS val
+    ) AS dummy
+    LEFT JOIN
+        outer_join AS b
+    ON
+        dummy.val == b.n
+    WHERE
+        b.n < 5
+)
+SELECT
+    *
+FROM
+    outer_join
+;

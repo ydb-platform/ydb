@@ -1,8 +1,8 @@
 #pragma once
 
-#include "params.h"
 #include "types.h"
 
+#include <ydb/core/http_proxy/sqs_xml/params.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/sqs.pb.h>
 
@@ -111,7 +111,7 @@ private:
     TAsyncHttpServer* const Parent_;
     TIntrusivePtr<THttpUserCounters> UserCounters_;
 
-    TParameters QueryParams_;
+    NHttpProxy::NSQS::TParameters QueryParams_;
     EAction Action_ = EAction::Unknown;
     TString UserName_;
     TString AccountName_;

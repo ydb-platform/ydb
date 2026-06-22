@@ -7,18 +7,19 @@ namespace NYT::NAuth {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TTvmId TTvmServiceConfig::GetClientSelfId() const
+std::optional<TTvmId> TTvmServiceConfig::GetClientSelfId() const
 {
     if (ClientSelfId.has_value()) {
         return *ClientSelfId;
     } else if (ClientSelfIdEnv.has_value()) {
         try {
-            return FromString<TTvmId>(GetEnv(TString(*ClientSelfIdEnv)));
+            return TTvmId(FromString<TTvmId::TUnderlying>(GetEnv(TString(*ClientSelfIdEnv))));
         } catch (const std::exception& ex) {
-            THROW_ERROR_EXCEPTION("Can not parse client self id from env %Qv", *ClientSelfIdEnv) << TError(ex);
+            THROW_ERROR_EXCEPTION("Can not parse client self id from env %Qv", *ClientSelfIdEnv)
+                << ex;
         }
     } else {
-        return 0;
+        return std::nullopt;
     }
 }
 

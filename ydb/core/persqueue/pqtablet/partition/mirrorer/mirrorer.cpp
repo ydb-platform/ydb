@@ -5,6 +5,7 @@
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
+#include <ydb/library/kafka/kafka_records.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/public/lib/base/msgbus.h>
 
@@ -23,6 +24,44 @@ constexpr NKikimrServices::TActivity::EType TMirrorer::ActorActivityType() {
 
 static constexpr TDuration DEFAULT_REWIND_COMMIT_OFFSET_DELAY = TDuration::Minutes(15);
 static constexpr TDuration REWIND_COMMIT_INTERVAL = TDuration::Minutes(4);
+
+namespace {
+
+struct TBatchInfo {
+    ui32 MessageCount = 1;
+    std::optional<ui64> MaxSeqNo;
+};
+
+TBatchInfo GetBatchInfo(const TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage& message) {
+    if (message.GetCodec() != NYdb::NTopic::ECodec::KAFKA_BATCH) {
+        return {};
+    }
+
+    auto header = NKafka::ReadKafkaBatchHeader(message.GetData());
+    if (!header || header->RecordsCount <= 1) {
+        return {};
+    }
+
+    const ui32 messageCount = static_cast<ui32>(header->RecordsCount);
+    const auto [error, maxSeqNo] = NKafka::GetBatchMaxSeqNo(*header, message.GetSeqNo());
+    if (error != NKafka::EKafkaErrors::NONE_ERROR) {
+        return {};
+    }
+    return {
+        .MessageCount = messageCount,
+        .MaxSeqNo = maxSeqNo,
+    };
+}
+
+ui64 GetWriteRequestEndOffset(const NKikimrClient::TPersQueuePartitionRequest& request) {
+    ui64 offset = request.GetCmdWriteOffset();
+    for (const auto& cmd : request.GetCmdWrite()) {
+        offset += cmd.GetMessageCount();
+    }
+    return offset;
+}
+
+} // namespace
 
 TMirrorer::TMirrorer(
     ui64 tabletId,
@@ -106,7 +145,7 @@ bool TMirrorer::AddToWriteRequest(
         }
         request.SetCmdWriteOffset(message.GetOffset());
     }
-    if (request.GetCmdWriteOffset() + request.CmdWriteSize() != message.GetOffset()) {
+    if (GetWriteRequestEndOffset(request) != message.GetOffset()) {
         return false;
     }
 
@@ -127,6 +166,12 @@ bool TMirrorer::AddToWriteRequest(
     }
     write->SetDisableDeduplication(true);
     write->SetUncompressedSize(message.GetUncompressedSize());
+
+    const auto batchInfo = GetBatchInfo(message);
+    if (batchInfo.MessageCount > 1) {
+        write->SetMessageCount(batchInfo.MessageCount);
+        write->SetMaxSeqNo(*batchInfo.MaxSeqNo);
+    }
     return true;
 }
 
@@ -196,10 +241,11 @@ void TMirrorer::ProcessWriteResponse(
         ui64 offset = writtenMessageInfo.GetOffset();
         PQ_ENSURE((ui64)result.GetOffset() == offset);
         PQ_ENSURE(EndOffset <= offset)("EndOffset", EndOffset)("offset", offset);
-        EndOffset = offset + 1;
+        const ui64 messageCount = GetBatchInfo(writtenMessageInfo).MessageCount;
+        EndOffset = offset + messageCount;
         BytesInFlight -= writtenMessageInfo.GetData().size();
 
-        deferredCommit.Add(writtenMessageInfo.GetPartitionSession(), offset);
+        deferredCommit.Add(writtenMessageInfo.GetPartitionSession(), offset, offset + messageCount);
         WriteInFlight.pop_front();
     }
 

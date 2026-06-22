@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     contrib/libs/apache/arrow
+    ydb/core/formats/arrow/container
     ydb/core/formats/arrow/switch
     ydb/library/actors/core
     ydb/library/conclusion
@@ -10,7 +11,6 @@ PEERDIR(
 )
 
 SRCS(
-    container.cpp
     adapter.cpp
 )
 

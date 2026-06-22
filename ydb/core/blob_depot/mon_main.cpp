@@ -564,14 +564,16 @@ namespace NKikimr::NBlobDepot {
                 return true;
             }
         } else {
-            RenderMainPage(s);
+            TString nonce = NActors::NMon::GenerateCspNonce();
+            RenderMainPage(s, nonce);
+            auto* res = new NMon::TEvRemoteHttpInfoRes(s.Str());
+            res->Nonce = nonce;
+            Send(ev->Sender, res, 0, ev->Cookie);
+            return true;
         }
-
-        Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(s.Str()), 0, ev->Cookie);
-        return true;
     }
 
-    void TBlobDepot::RenderMainPage(IOutputStream& s) {
+    void TBlobDepot::RenderMainPage(IOutputStream& s, const TString& nonce) {
         HTML(s) {
             if (S3Manager) {
                 s << "<a href='app?TabletID=" << TabletID() << "&page=s3config'>S3 config</a><br>";
@@ -579,7 +581,8 @@ namespace NKikimr::NBlobDepot {
 
             s << "<a href='app?TabletID=" << TabletID() << "&page=data'>Contained data</a><br>";
 
-            s << R"(<script>
+            s << "<script nonce='" << nonce << "'>";
+            s << R"(
 function ready() {
     doFetch();
 }

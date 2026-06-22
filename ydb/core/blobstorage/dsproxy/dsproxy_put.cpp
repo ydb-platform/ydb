@@ -573,6 +573,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                     .Deadline = item.Deadline,
                     .HandleClass = HandleClass,
                     .Tactic = Tactic,
+                    .WriteSource = item.WriteSource,
                     .IssueKeepFlag = item.IssueKeepFlag,
                     .IgnoreBlock = item.IgnoreBlock,
                     .AlreadyEncrypted = item.AlreadyEncrypted,

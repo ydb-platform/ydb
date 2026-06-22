@@ -1,4 +1,11 @@
 # syntax=docker/dockerfile:1
+#
+# IMPORTANT — paired with ydb/tests/local_ydb_smoke/test_local_ydb_smoke.py.
+# The env vars, exposed ports and the local_ydb invocation in
+# .github/docker/files/initialize_local_ydb must stay in sync with what
+# test_local_ydb_smoke.py uses to spin up local_ydb. If you change one side
+# (add/remove a port, rename an env var, change a flag), change the other.
+#
 FROM ubuntu:22.04 AS builder
 
 ARG DEBIAN_FRONTEND=noninteractive

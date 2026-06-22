@@ -147,9 +147,18 @@ public:
             }
 
             if (tableIndexCreation.GetState() == NKikimrSchemeOp::EIndexState::EIndexStateReady) {
-                checks
-                    .IsUnderCreating(NKikimrScheme::StatusNameConflict)
-                    .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of creating base table
+                if (internal && TTableIndexInfo::IsLocalIndex(tableIndexCreation.GetType())) {
+                    // Local indexes have no impl table. The parent may be under this same
+                    // operation (CREATE/ALTER) or steady (migration), so only reject
+                    // foreign concurrent operations.
+                    if (parentPath.IsUnderOperation()) {
+                        checks.IsUnderTheSameOperation(OperationId.GetTxId());
+                    }
+                } else {
+                    checks
+                        .IsUnderCreating(NKikimrScheme::StatusNameConflict)
+                        .IsUnderTheSameOperation(OperationId.GetTxId()); //allow only as part of creating base table
+                }
             } else {
                 checks.NotBackupTable(); // allow to create backup table with index, but not to build index on a backup table
             }

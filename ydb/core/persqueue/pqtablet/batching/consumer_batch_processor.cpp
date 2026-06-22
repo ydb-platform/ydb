@@ -2,6 +2,9 @@
 
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/persqueue/counter_time_keeper/counter_time_keeper.h>
+
+#include <utility>
 
 namespace NKikimr::NPQ::NBatching {
 
@@ -24,74 +27,83 @@ void TConsumerBatchProcessor::Bootstrap(const NActors::TActorContext&) {
 void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::TActorContext& ctx) {
     auto& context = ev->Get()->Context;
 
-    auto* event = context.Event.Get();
-    AFL_ENSURE(event)("description", "Unexpected empty event in TConsumerBatchProcessor");
-    AFL_ENSURE(event->Type() == TEvPQ::EvProxyResponse)
-        ("description", "Unexpected event type in TConsumerBatchProcessor")
-        ("eventType", event->Type());
+    {
+        NPersQueue::TCounterTimeKeeper<ui64> keeper(CPUUsageMetric);
 
-    auto* nativeEvent = static_cast<TEvPQ::TEvProxyResponse*>(event);
-    AFL_ENSURE(nativeEvent->Response->HasPartitionResponse())
-        ("description", "Unexpected TEvProxyResponse without PartitionResponse in TConsumerBatchProcessor");
-    AFL_ENSURE(nativeEvent->Response->GetPartitionResponse().HasCmdReadResult())
-        ("description", "Unexpected TEvProxyResponse without CmdReadResult in TConsumerBatchProcessor");
+        auto* event = context.Event.Get();
+        AFL_ENSURE(event)("description", "Unexpected empty event in TConsumerBatchProcessor");
+        AFL_ENSURE(event->Type() == TEvPQ::EvProxyResponse)
+            ("description", "Unexpected event type in TConsumerBatchProcessor")
+            ("eventType", event->Type());
 
-    auto* readResult = nativeEvent->Response->MutablePartitionResponse()->MutableCmdReadResult();
-    auto* results = readResult->MutableResult();
+        auto* nativeEvent = static_cast<TEvPQ::TEvProxyResponse*>(event);
+        AFL_ENSURE(nativeEvent->Response->HasPartitionResponse())
+            ("description", "Unexpected TEvProxyResponse without PartitionResponse in TConsumerBatchProcessor");
+        AFL_ENSURE(nativeEvent->Response->GetPartitionResponse().HasCmdReadResult())
+            ("description", "Unexpected TEvProxyResponse without CmdReadResult in TConsumerBatchProcessor");
 
-    TVector<TReadResult> originalResults;
-    originalResults.reserve(results->size());
-    for (const auto& result : *results) {
-        originalResults.push_back(result);
+        auto* readResult = nativeEvent->Response->MutablePartitionResponse()->MutableCmdReadResult();
+        auto* results = readResult->MutableResult();
+
+        TVector<TReadResult> originalResults;
+        originalResults.reserve(results->size());
+        for (const auto& result : *results) {
+            originalResults.push_back(result);
+        }
+        results->Clear();
+
+        ui32 resultsCount = 0;
+        auto addResult = [&](TReadResult& result) {
+            if (result.GetOffset() < context.Offset) {
+                return false;
+            }
+            if (context.LastOffset != 0 && result.GetOffset() >= context.LastOffset) {
+                return false;
+            }
+            if (resultsCount >= context.Count) {
+                return true;
+            }
+
+            resultsCount += result.GetMessageCount();
+            readResult->AddResult()->Swap(&result);
+            return resultsCount >= context.Count;
+        };
+
+        for (auto& originalResult : originalResults) {
+            auto dataChunk = NKikimr::GetDeserializedData(originalResult.GetData());
+
+            if (!originalResult.GetIsBatch()) {
+                if (addResult(originalResult)) {
+                    break;
+                }
+                continue;
+            }
+
+            auto it = BatchCutters.find(dataChunk.GetCodec());
+            if (it == BatchCutters.end()) {
+                if (addResult(originalResult)) {
+                    break;
+                }
+                continue;
+            }
+
+            TBatchCutterData data(originalResult, std::move(dataChunk));
+
+            auto cutResults = it->second->Cut(data, context.Offset);
+            for (auto& cutResult : cutResults) {
+                if (addResult(cutResult)) {
+                    break;
+                }
+            }
+            if (resultsCount >= context.Count) {
+                break;
+            }
+        }
     }
-    results->Clear();
 
-    ui32 resultsCount = 0;
-    auto addResult = [&](TReadResult& result) {
-        if (result.GetOffset() < context.Offset) {
-            return false;
-        }
-        if (context.LastOffset != 0 && result.GetOffset() >= context.LastOffset) {
-            return false;
-        }
-        if (resultsCount >= context.Count) {
-            return true;
-        }
-
-        resultsCount += result.GetMessageCount();
-        readResult->AddResult()->Swap(&result);
-        return resultsCount >= context.Count;
-    };
-
-    for (auto& originalResult : originalResults) {
-        auto dataChunk = NKikimr::GetDeserializedData(originalResult.GetData());
-
-        if (!originalResult.GetIsBatch()) {
-            if (addResult(originalResult)) {
-                break;
-            }
-            continue;
-        }
-
-        auto it = BatchCutters.find(dataChunk.GetCodec());
-        if (it == BatchCutters.end()) {
-            if (addResult(originalResult)) {
-                break;
-            }
-            continue;
-        }
-
-        TBatchCutterData data(originalResult, std::move(dataChunk));
-
-        auto cutResults = it->second->Cut(data, context.Offset);
-        for (auto& cutResult : cutResults) {
-            if (addResult(cutResult)) {
-                break;
-            }
-        }
-        if (resultsCount >= context.Count) {
-            break;
-        }
+    const ui64 cpuUsage = std::exchange(CPUUsageMetric, 0);
+    if (cpuUsage) {
+        ctx.Send(TabletActorId, new TEvPQ::TEvConsumerBatchProcessorMetrics(context.PartitionId, User, cpuUsage));
     }
 
     ctx.Send(context.ResponseActor, new TEvProcessBatchResult(std::move(context)));

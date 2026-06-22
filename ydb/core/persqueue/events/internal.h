@@ -240,6 +240,7 @@ struct TEvPQ {
         EvMLPGetRuntimeAttributesRequest,
         EvMLPGetRuntimeAttributesResponse,
         EvRewindCommitResult,
+        EvConsumerBatchProcessorMetrics,
         EvProcessBatchRead,
         EvProcessBatchReadResult,
         EvEnd,
@@ -777,6 +778,23 @@ struct TEvPQ {
 
         TString ClientId;
         TDuration InFlightLimitReachedDuration;
+    };
+
+    struct TEvConsumerBatchProcessorMetrics : TEventLocal<TEvConsumerBatchProcessorMetrics, EvConsumerBatchProcessorMetrics> {
+        TEvConsumerBatchProcessorMetrics(ui32 partitionId, const TString& user, ui64 cpuUsage)
+            : PartitionId(partitionId)
+            , User(user)
+            , CPUUsage(cpuUsage)
+        {
+        }
+
+        ui32 GetPartitionId() const {
+            return PartitionId;
+        }
+
+        ui32 PartitionId;
+        TString User;
+        ui64 CPUUsage;
     };
 
     struct TEvUpdateAvailableSize : TEventLocal<TEvUpdateAvailableSize, EvUpdateAvailableSize> {

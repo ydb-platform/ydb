@@ -25,6 +25,7 @@ private:
 
     // codec -> batch cutter
     THashMap<int, THolder<IBatchCutter>> BatchCutters;
+    ui64 CPUUsageMetric = 0;
 };
 
 NActors::IActor* CreateConsumerBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId, TString user);

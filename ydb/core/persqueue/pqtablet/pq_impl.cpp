@@ -1125,6 +1125,11 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorConte
     SetTxCounters();
 }
 
+void TPersQueue::Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const TActorContext&)
+{
+    ForwardToPartition(ev->Get()->GetPartitionId(), ev);
+}
+
 
 void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const TActorContext& ctx)
 {
@@ -5614,6 +5619,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvKeyValue::TEvResponse, Handle);
         HFuncTraced(TEvPQ::TEvInitComplete, Handle);
         HFuncTraced(TEvPQ::TEvPartitionCounters, Handle);
+        HFuncTraced(TEvPQ::TEvConsumerBatchProcessorMetrics, Handle);
         HFuncTraced(TEvPQ::TEvMetering, Handle);
         HFuncTraced(TEvPQ::TEvPartitionLabeledCounters, Handle);
         HFuncTraced(TEvPQ::TEvPartitionLabeledCountersDrop, Handle);

@@ -257,14 +257,7 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
                         break;
                     }
                 }
-                if (columnDesc->GetType() == NKikimr::NScheme::TypeName(NKikimr::NScheme::NTypeIds::String) ||
-                    columnDesc->GetType() == NKikimr::NScheme::TypeName(NKikimr::NScheme::NTypeIds::Utf8) ) {
-                    olapIndex->SetInheritPortionStorage(true);
-                    olapIndex->SetStorageId("__DEFAULT");        
-                } else {
-                    olapIndex->SetInheritPortionStorage(false);
-                    olapIndex->SetStorageId("__LOCAL_METADATA");
-                }
+                NKikimr::NOlap::NIndexes::NMinMax::SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(*olapIndex, columnDesc->GetType());
                 break;
             }
 
@@ -1612,14 +1605,7 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 upsert->SetClassName(NOlap::NIndexes::NMinMax::kMinMaxClassName);
                 upsert->MutableMinMaxIndex()->SetColumnName(index.index_columns(0));
                 auto it = alteredTable->Columns.find(index.index_columns(0));
-                if (it->second.TypeInfo.GetTypeId() == NScheme::NTypeIds::String || it->second.TypeInfo.GetTypeId() == NScheme::NTypeIds::Utf8) {
-                    upsert->SetInheritPortionStorage(true);
-                    upsert->SetStorageId("__DEFAULT");        
-                } else {
-                    upsert->SetInheritPortionStorage(false);
-                    upsert->SetStorageId("__LOCAL_METADATA");
-                }
-                
+                NKikimr::NOlap::NIndexes::NMinMax::SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(*upsert, TypeName(it->second.TypeInfo.GetTypeId()));
                 return true;
             }
             default:

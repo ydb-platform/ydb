@@ -23,9 +23,10 @@ TString IncorrectIndexColumnsErrorMessage(const auto& indexColumns) {
 
 inline const TString DisabledForRowTablesErrorMessage = "Local min_max index is supported only for column tables";
 
-inline TString UnknownIndexColumnNameErrorMessage(TStringBuf columnName, const auto& indexColumns) {
-    return TStringBuilder() << "Tried to apply min_max index to unknown column '" << columnName << "'. Table has these " << indexColumns.size()
-                            << " columns: [" << JoinStrings(indexColumns.begin(), indexColumns.end(), ", ") << "]";
+inline TString UnknownIndexColumnNameErrorMessage(TStringBuf columnName, const auto& alteredTableColumns) {
+    return TStringBuilder() << "Tried to apply min_max index to unknown column '" << columnName << "'. Table has these "
+                            << alteredTableColumns.size() << " columns: ["
+                            << JoinStrings(alteredTableColumns.begin(), alteredTableColumns.end(), ", ") << "]";
 }
 
 inline const TString FeatureFlagDisabledErrorMessage = "Local min_max index is disabled with EnableLocalMinMaxIndex feature flag";
@@ -34,5 +35,7 @@ inline const TString SchemeObjectFeatureFlagDisabledErrorMessage =
     "Local min_max index is not treated as scheme object because feature flag EnableLocalIndexAsSchemeObject is disabled";
 
 inline const TString ProtoDescrptionLacksColumnIdErrorMessage = "Local min_max index description lacks required ColumnId field";
+
+void SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(google::protobuf::Message& index, std::string_view typeName);
 
 }   // namespace NKikimr::NOlap::NIndexes::NMinMax

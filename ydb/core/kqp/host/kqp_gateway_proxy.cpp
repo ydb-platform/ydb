@@ -665,15 +665,7 @@ static bool FillCreateLocalIndexDesc(NKikimrSchemeOp::TColumnTableDescription& t
                 upsert->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
                 auto* minmax = upsert->MutableMinMaxIndex();
                 minmax->SetColumnId(columnIdIt->second);
-                if (columnDesc->GetType() == NKikimr::NScheme::TypeName(NKikimr::NScheme::NTypeIds::String) ||
-                    columnDesc->GetType() == NKikimr::NScheme::TypeName(NKikimr::NScheme::NTypeIds::Utf8) ) {
-                    upsert->SetInheritPortionStorage(true);
-                    upsert->SetStorageId("__DEFAULT");        
-                } else {
-                    upsert->SetInheritPortionStorage(false);
-                    upsert->SetStorageId("__LOCAL_METADATA");
-                }
-
+                NKikimr::NOlap::NIndexes::NMinMax::SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(*upsert, columnDesc->GetType());
                 break;
             }
             default:
@@ -2455,7 +2447,6 @@ public:
         CHECK_PREPARED_DDL(AlterColumnTable);
 
         try {
-
             if (cluster != SessionCtx->GetCluster()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
             }

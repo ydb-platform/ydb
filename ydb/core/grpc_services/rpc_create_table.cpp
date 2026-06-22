@@ -322,14 +322,7 @@ private:
 
                     auto it = colNameToId.find(index.index_columns(0));
                     min_max->SetColumnId(it->second);
-                    if (columnDesc->GetType() == NKikimr::NScheme::TypeName(NKikimr::NScheme::NTypeIds::String) ||
-                        columnDesc->GetType() == NKikimr::NScheme::TypeName(NKikimr::NScheme::NTypeIds::Utf8) ) {
-                        olapIndex->SetInheritPortionStorage(true);
-                        olapIndex->SetStorageId("__DEFAULT");        
-                    } else {
-                        olapIndex->SetInheritPortionStorage(false);
-                        olapIndex->SetStorageId("__LOCAL_METADATA");
-                    }
+                    NKikimr::NOlap::NIndexes::NMinMax::SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(*olapIndex, columnDesc->GetType());
                     break;
                 }                
                 case Ydb::Table::TableIndex::TYPE_NOT_SET:

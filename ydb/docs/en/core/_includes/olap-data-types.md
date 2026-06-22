@@ -17,8 +17,9 @@
 | `Json` | ✓ | ☓ |
 | `JsonDocument` | ✓ | ☓ |
 | `Yson` | ✓ | ☓ |
-| `Uuid` | ☓ | ☓ |
+| `Uuid` | ✓ | ✓ |
 | `Date` | ✓ | ✓ |
 | `Datetime` | ✓ | ✓ |
 | `Timestamp` | ✓ | ✓ |
-| `Interval` | ☓ | ☓ |
+| `Interval` | ✓ | ✓ |
+| `DyNumber` | ✓ | ✓ |

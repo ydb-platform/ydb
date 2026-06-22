@@ -60,7 +60,7 @@ Floating-point number with fixed precision, 16 bytes in size. Precision is the m
 || `DyNumber` |
 Binary representation of a floating-point number with up to 38 digits of precision.
 Valid values: positive from 1×10<sup>-130</sup> to 1×10<sup>126</sup>–1, negative from -1×10<sup>126</sup>–1 to -1×10<sup>-130</sup> and 0.
-Compatible with the `Number` type of AWS DynamoDB. Not recommended for use in {{ backend_name_lower }}-native applications. | Not supported in columnar tables
+Compatible with the `Number` type of AWS DynamoDB. Not recommended for use in {{ backend_name_lower }}-native applications. |
     ||
 {% endif %}
 |#
@@ -95,7 +95,7 @@ Does not support comparison{% if feature_map_tables %}, cannot be used in the pr
 Does not support comparison{% if feature_map_tables %}, cannot be used in the primary key and in the columns that form the secondary index key{% endif %}
     ||
 || `Uuid` |
-Universal identifier [UUID](https://tools.ietf.org/html/rfc4122) | Not supported in columnar tables
+Universal identifier [UUID](https://tools.ietf.org/html/rfc4122) |
     ||
 |#
 {% note info "Size limitations" %}
@@ -199,7 +199,7 @@ from -136 years to +136 years
 |
 8
 |
-Not supported in columnar tables
+—
 ||
 
 ||

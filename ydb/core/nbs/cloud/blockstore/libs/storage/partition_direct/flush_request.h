@@ -1,7 +1,9 @@
 #pragma once
 
 #include "direct_block_group.h"
+#include "request_executor.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
@@ -12,7 +14,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TFlushRequestExecutor
-    : public std::enable_shared_from_this<TFlushRequestExecutor>
+    : public IRequestExecutor
+    , public std::enable_shared_from_this<TFlushRequestExecutor>
 {
 public:
     struct TResponse
@@ -24,15 +27,18 @@ public:
 
     TFlushRequestExecutor(
         NActors::TActorSystem* actorSystem,
+        const TLogTitle& logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         THostRoute route,
         TFlushHint hint,
         NWilson::TSpan span);
 
-    ~TFlushRequestExecutor();
+    ~TFlushRequestExecutor() override;
 
-    void Run();
+    // Implementation of IRequestExecutor
+    void Run() override;
+    TString Print() override;
 
     NThreading::TFuture<TResponse> GetFuture() const;
 
@@ -42,6 +48,7 @@ private:
     void Reply(TVector<ui64> flushOk, TVector<ui64> flushFailed);
 
     NActors::TActorSystem const* ActorSystem;
+    const TChildLogTitle LogTitle;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const NWilson::TSpan Span;

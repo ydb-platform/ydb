@@ -4,7 +4,6 @@
 
 #include <ydb/core/formats/arrow/accessor/sub_columns/accessor.h>
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
-#include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>
@@ -108,11 +107,12 @@ void IDataSource::Finalize(const std::optional<ui64> memoryLimit) {
         StageResult->SetPages(accessor->BuildReadPages(*memoryLimit, GetContext()->GetProgramInputColumns()->GetColumnIds()));
     } else {
         StageResult = std::make_unique<TFetchedResult>(ExtractStageData(), *GetContext()->GetCommonContext()->GetResolver());
-        StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, GetRecordsCount(), 0) });
-    }
-    if (StageResult->IsEmpty()) {
-        StageResult = TFetchedResult::BuildEmpty();
-        StageResult->SetPages({});
+        if (StageResult->IsEmpty()) {
+            StageResult = TFetchedResult::BuildEmpty();
+            StageResult->SetPages({});
+        } else {
+            StageResult->SetPages({ TPortionDataAccessor::TReadPage(0, StageResult->GetBatch()->num_rows(), 0) });
+        }
     }
     ClearStageData();
 }
@@ -358,13 +358,16 @@ TConclusion<std::shared_ptr<NArrow::NSSA::IFetchLogic>> TPortionDataSource::DoSt
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_SCAN)("source_idx", GetSourceIdx());
     auto source = context.GetDataSourceVerifiedAs<NCommon::IDataSource>();
 
-    const std::shared_ptr<NArrow::TColumnFilter>& appliedFilter =
-        GetStageData().HasTable() ? GetStageData().GetAppliedFilter() : context.GetResources().GetAppliedFilter();
+    const NArrow::TColumnFilter& columnFilter =
+        GetStageData().HasTable() ? GetStageData().GetTable().GetFilter() : context.GetResources().GetFilter();
+    const auto portionState = GetContext()->GetPortionStateAtScanStart(*Portion);
+    const auto readContext = std::static_pointer_cast<TSpecialReadContext>(GetContext());
     const bool canUseDictionaryOnly = addr.GetUseDictionaryOnly() && GetPortionAccessor().GetColumnChunksPointers(addr.GetColumnId()).size() &&
                                       GetSourceSchema()->GetColumnLoaderVerified(addr.GetColumnId())->GetAccessorConstructor()->GetType() ==
                                           NArrow::NAccessor::IChunkedArray::EType::Dictionary &&
-                                      UsageClass == TPKRangeFilter::EUsageClass::FullUsage &&
-                                      (!appliedFilter || appliedFilter->IsTotalAllowFilter());
+                                      UsageClass == TPKRangeFilter::EUsageClass::FullUsage && !portionState.Conflicting &&
+                                      readContext->GetDuplicateFilterPortionCount() <= 1 &&
+                                      NCommon::IsDictionaryOnlyFetchCompatible(columnFilter);
     if (canUseDictionaryOnly) {
         GetContext()->GetCommonContext()->GetCounters().OnDictionaryOnlyOptimization();
         return std::make_shared<NCommon::TDictionaryFetchLogic>(addr.GetColumnId(), source);

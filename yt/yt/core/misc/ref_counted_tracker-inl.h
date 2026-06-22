@@ -118,21 +118,51 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
-YT_DECLARE_THREAD_LOCAL(TRefCountedTracker::TLocalSlot*, RefCountedTrackerLocalSlotsBegin);
-YT_DECLARE_THREAD_LOCAL(int, RefCountedTrackerLocalSlotsSize);
+// The per-thread tracker state. These three fields used to live in three separate
+// thread-locals; merging them into one struct lets the hot path (see
+// INCREMENT_COUNTER) reach the bound and the slots pointer from a single TLS base.
+struct TRefCountedTrackerLocalState
+{
+    // nullptr if not initialized or already destroyed
+    TRefCountedTracker::TLocalSlots* Slots = nullptr;
+    // nullptr if not initialized or already destroyed
+    TRefCountedTracker::TLocalSlot* SlotsBegin = nullptr;
+    //  0 if not initialized
+    // -1 if already destroyed
+    int SlotsSize = 0;
+};
+
+// The hot counters live in this constinit thread_local. It is read directly --
+// not through the Y_NO_INLINE accessor that YT_DEFINE_THREAD_LOCAL would generate --
+// so the local-exec TLS load (mov %fs:0x0 + offset) becomes a couple of inline
+// instructions instead of a call. Fiber safety comes from the functions that
+// perform the read -- TRefCountedTracker::{Allocate,Free}* below -- being marked
+// YT_PREVENT_TLS_CACHING, so the thread pointer is re-read on every call rather than
+// cached across a fiber migration. constinit guarantees static initialization,
+// avoiding a per-access TLS-init guard for this cross-translation-unit thread_local.
+extern constinit thread_local TRefCountedTrackerLocalState RefCountedTrackerLocalStateData;
 
 Y_FORCE_INLINE TRefCountedTracker* TRefCountedTracker::Get()
 {
     return LeakySingleton<TRefCountedTracker>();
 }
 
+// Inline implementations of the (private) hot counter functions: each reads the
+// per-thread slots straight off the TLS base and bumps a counter. They are inlined
+// into the TRefCountedTrackerFacade forwarders -- their only, friended caller -- which
+// are pinned YT_PREVENT_TLS_CACHING (see ref_tracked.cpp). That out-of-line facade
+// boundary is what makes inlining the local-exec TLS read here fiber-safe: the thread
+// pointer is re-read on every call rather than cached across a fiber migration. Because
+// these are private and friended only to the facade, no other context can inline the
+// read and reintroduce that hazard.
 #define INCREMENT_COUNTER(fallback, name, delta) \
+    auto& state = RefCountedTrackerLocalStateData; \
     auto index = cookie.Underlying(); \
     YT_ASSERT(index >= 0); \
-    if (index >= RefCountedTrackerLocalSlotsSize()) [[unlikely]] { \
+    if (index >= state.SlotsSize) [[unlikely]] { \
         Get()->fallback; \
     } else { \
-        RefCountedTrackerLocalSlotsBegin()[index].name += delta; \
+        state.SlotsBegin[index].name += delta; \
     }
 
 Y_FORCE_INLINE void TRefCountedTracker::AllocateInstance(TRefCountedTypeCookie cookie)

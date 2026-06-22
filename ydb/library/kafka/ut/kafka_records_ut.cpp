@@ -76,6 +76,7 @@ TKafkaRecordBatch MakeRecordBatch(ECompressionType compressionType) {
     batch.BaseOffset = 42;
     batch.Magic = 2;
     batch.Attributes = static_cast<TKafkaRecordBatch::AttributesMeta::Type>(compressionType);
+    batch.BaseSequence = 17;
     batch.LastOffsetDelta = 1;
     batch.BaseTimestamp = 1000;
     batch.MaxTimestamp = 1010;
@@ -388,6 +389,23 @@ void AssertKafkaLegacyProducerBatchSerialized(TKafkaVersion magic, ECompressionT
     UNIT_ASSERT_VALUES_EQUAL(WriteKafkaLegacyRecordBatchWrappers(records, magic), serialized);
 }
 
+void AssertReadBatchHeaderForProducerBatch(ECompressionType compressionType) {
+    const TString bytes = KafkaProducerBatchBytes(compressionType);
+    const auto header = ReadKafkaBatchHeader(bytes);
+    UNIT_ASSERT(header);
+    UNIT_ASSERT_VALUES_EQUAL(header->RecordsCount, ReadKafkaRecordBatch(bytes).Records.size());
+    UNIT_ASSERT_VALUES_EQUAL(header->BaseSequence, -1);
+}
+
+void AssertReadBatchHeaderForLegacyProducerBatch(TKafkaVersion magic, ECompressionType compressionType) {
+    const TString bytes = KafkaLegacyProducerBatchBytes(magic, compressionType);
+    const auto header = ReadKafkaBatchHeader(bytes);
+    UNIT_ASSERT(header);
+    UNIT_ASSERT_VALUES_EQUAL(header->Magic, magic);
+    UNIT_ASSERT_VALUES_EQUAL(header->RecordsCount, 2);
+    UNIT_ASSERT_VALUES_EQUAL(ReadKafkaLegacyProducerBatch(bytes, magic).Records.size(), 2u);
+}
+
 Y_UNIT_TEST_SUITE(KafkaRecords) {
     Y_UNIT_TEST(UnsignedVarint32) {
         CheckUnsignedVarint<ui32>({0, 1, 127, 128, 32191, Max<i32>(), Max<ui32>()});
@@ -436,6 +454,42 @@ Y_UNIT_TEST_SUITE(KafkaRecords) {
 
     Y_UNIT_TEST(RecordBatchZstdRoundTrip) {
         AssertRecordBatchRoundTrip(ECompressionType::ZSTD);
+    }
+
+    Y_UNIT_TEST(ReadKafkaBatchHeader) {
+        UNIT_ASSERT(!ReadKafkaBatchHeader(TStringBuf()));
+
+        const TKafkaRecordBatch batch = MakeRecordBatch(ECompressionType::NONE);
+        const TString batchBytes = WriteKafkaRecordBatch(batch);
+        const auto header = ReadKafkaBatchHeader(batchBytes);
+        UNIT_ASSERT(header);
+        UNIT_ASSERT_VALUES_EQUAL(header->RecordsCount, batch.Records.size());
+        UNIT_ASSERT_VALUES_EQUAL(header->BaseSequence, batch.BaseSequence);
+
+        const TKafkaRecordBatch gzipBatch = MakeRecordBatch(ECompressionType::GZIP);
+        const TString gzipBatchBytes = WriteKafkaRecordBatch(gzipBatch);
+        const auto gzipHeader = ReadKafkaBatchHeader(gzipBatchBytes);
+        UNIT_ASSERT(gzipHeader);
+        UNIT_ASSERT_VALUES_EQUAL(gzipHeader->RecordsCount, gzipBatch.Records.size());
+        UNIT_ASSERT_VALUES_EQUAL(gzipHeader->BaseSequence, gzipBatch.BaseSequence);
+
+        const TKafkaRecordBatch zstdBatch = MakeRecordBatch(ECompressionType::ZSTD);
+        const TString zstdBatchBytes = WriteKafkaRecordBatch(zstdBatch);
+        const auto zstdHeader = ReadKafkaBatchHeader(zstdBatchBytes);
+        UNIT_ASSERT(zstdHeader);
+        UNIT_ASSERT_VALUES_EQUAL(zstdHeader->RecordsCount, zstdBatch.Records.size());
+        UNIT_ASSERT_VALUES_EQUAL(zstdHeader->BaseSequence, zstdBatch.BaseSequence);
+    }
+
+    Y_UNIT_TEST(ReadKafkaBatchHeaderGoldenBytes) {
+        AssertReadBatchHeaderForProducerBatch(ECompressionType::NONE);
+        AssertReadBatchHeaderForProducerBatch(ECompressionType::GZIP);
+        AssertReadBatchHeaderForProducerBatch(ECompressionType::ZSTD);
+
+        AssertReadBatchHeaderForLegacyProducerBatch(0, ECompressionType::NONE);
+        AssertReadBatchHeaderForLegacyProducerBatch(0, ECompressionType::GZIP);
+        AssertReadBatchHeaderForLegacyProducerBatch(1, ECompressionType::NONE);
+        AssertReadBatchHeaderForLegacyProducerBatch(1, ECompressionType::GZIP);
     }
 
     Y_UNIT_TEST(KafkaProducerRecordBatchDeserialize) {

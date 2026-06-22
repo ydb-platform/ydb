@@ -1,7 +1,9 @@
 #include "mkql_computation_node_ut.h"
+#include "mkql_program_builder_test_utils.h"
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
@@ -11,15 +13,15 @@ Y_UNIT_TEST_LLVM(TestNanvl) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto type = pb.NewOptionalType(pb.NewDecimalType(13, 5));
-    const auto data0 = pb.NewOptional(pb.NewDecimalLiteral(0, 13, 5));
-    const auto data1 = pb.NewOptional(pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 13, 5));
-    const auto data2 = pb.NewOptional(pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 13, 5));
-    const auto data3 = pb.NewOptional(pb.NewDecimalLiteral(-NYql::NDecimal::Inf(), 13, 5));
-    const auto data4 = pb.NewEmptyOptional(type);
-    const auto data = pb.NewDecimalLiteral(314159, 13, 5);
-
-    const auto list = pb.NewList(type, {data0, data1, data2, data3, data4});
+    const auto data = NTest::ConvertValueToLiteralNode(pb, NTest::TDecimalLiteral<13, 5>{314159});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<TMaybe<NTest::TDecimalLiteral<13, 5>>>{
+                                                           {NTest::TDecimalLiteral<13, 5>{0}},
+                                                           {NTest::TDecimalLiteral<13, 5>{NYql::NDecimal::Nan()}},
+                                                           {NTest::TDecimalLiteral<13, 5>{+NYql::NDecimal::Inf()}},
+                                                           {NTest::TDecimalLiteral<13, 5>{-NYql::NDecimal::Inf()}},
+                                                           {},
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -27,47 +29,39 @@ Y_UNIT_TEST_LLVM(TestNanvl) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 0);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 314159);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == +NYql::NDecimal::Inf());
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TMaybe<NYql::NDecimal::TInt128>>{
+                                                          TMaybe<NYql::NDecimal::TInt128>{NYql::NDecimal::TInt128(0)},
+                                                          TMaybe<NYql::NDecimal::TInt128>{NYql::NDecimal::TInt128(314159)},
+                                                          TMaybe<NYql::NDecimal::TInt128>{+NYql::NDecimal::Inf()},
+                                                          TMaybe<NYql::NDecimal::TInt128>{-NYql::NDecimal::Inf()},
+                                                          TMaybe<NYql::NDecimal::TInt128>{}});
 }
 
 Y_UNIT_TEST_LLVM(TestToIntegral) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto type = pb.NewDecimalType(13, 1);
-    const auto data0 = pb.NewDecimalLiteral(0, 13, 1);
-    const auto data1 = pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 13, 1);
-    const auto data2 = pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 13, 1);
-    const auto data3 = pb.NewDecimalLiteral(-NYql::NDecimal::Inf(), 13, 1);
-    const auto data4 = pb.NewDecimalLiteral(1270, 13, 1);
-    const auto data5 = pb.NewDecimalLiteral(-1280, 13, 1);
-    const auto data6 = pb.NewDecimalLiteral(2550, 13, 1);
-    const auto data7 = pb.NewDecimalLiteral(-2560, 13, 1);
-    const auto data8 = pb.NewDecimalLiteral(2560, 13, 1);
-    const auto data9 = pb.NewDecimalLiteral(-2570, 13, 1);
-    const auto dataA = pb.NewDecimalLiteral(327670, 13, 1);
-    const auto dataB = pb.NewDecimalLiteral(-327680, 13, 1);
-    const auto dataC = pb.NewDecimalLiteral(655350, 13, 1);
-    const auto dataD = pb.NewDecimalLiteral(-655360, 13, 1);
-    const auto dataE = pb.NewDecimalLiteral(21474836470, 13, 1);
-    const auto dataF = pb.NewDecimalLiteral(-21474836480, 13, 1);
-    const auto dataG = pb.NewDecimalLiteral(21474836480, 13, 1);
-    const auto dataH = pb.NewDecimalLiteral(-21474836490, 13, 1);
-
-    const auto list = pb.NewList(type, {data0, data1, data2, data3, data4, data5, data6, data7, data8, data9, dataA, dataB, dataC, dataD, dataE, dataF, dataG, dataH});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<NTest::TDecimalLiteral<13, 1>>{
+                                                           {0},
+                                                           {NYql::NDecimal::Nan()},
+                                                           {+NYql::NDecimal::Inf()},
+                                                           {-NYql::NDecimal::Inf()},
+                                                           {1270},
+                                                           {-1280},
+                                                           {2550},
+                                                           {-2560},
+                                                           {2560},
+                                                           {-2570},
+                                                           {327670},
+                                                           {-327680},
+                                                           {655350},
+                                                           {-655360},
+                                                           {21474836470},
+                                                           {-21474836480},
+                                                           {21474836480},
+                                                           {-21474836490},
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -82,207 +76,45 @@ Y_UNIT_TEST_LLVM(TestToIntegral) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[0].Get<i8>(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[1].Get<ui8>(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[2].Get<i16>(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[3].Get<ui16>(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[4].Get<i32>(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[5].Get<ui32>(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[6].Get<i64>(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[7].Get<ui64>(), 0);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElements()[0]);
-    UNIT_ASSERT(!item.GetElements()[1]);
-    UNIT_ASSERT(!item.GetElements()[2]);
-    UNIT_ASSERT(!item.GetElements()[3]);
-    UNIT_ASSERT(!item.GetElements()[4]);
-    UNIT_ASSERT(!item.GetElements()[5]);
-    UNIT_ASSERT(!item.GetElements()[6]);
-    UNIT_ASSERT(!item.GetElements()[7]);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElements()[0]);
-    UNIT_ASSERT(!item.GetElements()[1]);
-    UNIT_ASSERT(!item.GetElements()[2]);
-    UNIT_ASSERT(!item.GetElements()[3]);
-    UNIT_ASSERT(!item.GetElements()[4]);
-    UNIT_ASSERT(!item.GetElements()[5]);
-    UNIT_ASSERT(!item.GetElements()[6]);
-    UNIT_ASSERT(!item.GetElements()[7]);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElements()[0]);
-    UNIT_ASSERT(!item.GetElements()[1]);
-    UNIT_ASSERT(!item.GetElements()[2]);
-    UNIT_ASSERT(!item.GetElements()[3]);
-    UNIT_ASSERT(!item.GetElements()[4]);
-    UNIT_ASSERT(!item.GetElements()[5]);
-    UNIT_ASSERT(!item.GetElements()[6]);
-    UNIT_ASSERT(!item.GetElements()[7]);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[0].Get<i8>(), 127);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[1].Get<ui8>(), 127);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[2].Get<i16>(), 127);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[3].Get<ui16>(), 127);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[4].Get<i32>(), 127);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[5].Get<ui32>(), 127);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[6].Get<i64>(), 127);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[7].Get<ui64>(), 127);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[0].Get<i8>(), -128);
-    UNIT_ASSERT(!item.GetElements()[1]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[2].Get<i16>(), -128);
-    UNIT_ASSERT(!item.GetElements()[3]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[4].Get<i32>(), -128);
-    UNIT_ASSERT(!item.GetElements()[5]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[6].Get<i64>(), -128);
-    UNIT_ASSERT(!item.GetElements()[7]);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElements()[0]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[1].Get<ui8>(), 255);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[2].Get<i16>(), 255);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[3].Get<ui16>(), 255);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[4].Get<i32>(), 255);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[5].Get<ui32>(), 255);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[6].Get<i64>(), 255);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[7].Get<ui64>(), 255);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElements()[0]);
-    UNIT_ASSERT(!item.GetElements()[1]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[2].Get<i16>(), -256);
-    UNIT_ASSERT(!item.GetElements()[3]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[4].Get<i32>(), -256);
-    UNIT_ASSERT(!item.GetElements()[5]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[6].Get<i64>(), -256);
-    UNIT_ASSERT(!item.GetElements()[7]);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElements()[0]);
-    UNIT_ASSERT(!item.GetElements()[1]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[2].Get<i16>(), 256);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[3].Get<ui16>(), 256);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[4].Get<i32>(), 256);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[5].Get<ui32>(), 256);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[6].Get<i64>(), 256);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[7].Get<ui64>(), 256);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElements()[0]);
-    UNIT_ASSERT(!item.GetElements()[1]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[2].Get<i16>(), -257);
-    UNIT_ASSERT(!item.GetElements()[3]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[4].Get<i32>(), -257);
-    UNIT_ASSERT(!item.GetElements()[5]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[6].Get<i64>(), -257);
-    UNIT_ASSERT(!item.GetElements()[7]);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElements()[0]);
-    UNIT_ASSERT(!item.GetElements()[1]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[2].Get<i16>(), 32767);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[3].Get<ui16>(), 32767);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[4].Get<i32>(), 32767);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[5].Get<ui32>(), 32767);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[6].Get<i64>(), 32767);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[7].Get<ui64>(), 32767);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElements()[0]);
-    UNIT_ASSERT(!item.GetElements()[1]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[2].Get<i16>(), -32768);
-    UNIT_ASSERT(!item.GetElements()[3]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[4].Get<i32>(), -32768);
-    UNIT_ASSERT(!item.GetElements()[5]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[6].Get<i64>(), -32768);
-    UNIT_ASSERT(!item.GetElements()[7]);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElements()[0]);
-    UNIT_ASSERT(!item.GetElements()[1]);
-    UNIT_ASSERT(!item.GetElements()[2]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[3].Get<ui16>(), 65535);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[4].Get<i32>(), 65535);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[5].Get<ui32>(), 65535);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[6].Get<i64>(), 65535);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[7].Get<ui64>(), 65535);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElements()[0]);
-    UNIT_ASSERT(!item.GetElements()[1]);
-    UNIT_ASSERT(!item.GetElements()[2]);
-    UNIT_ASSERT(!item.GetElements()[3]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[4].Get<i32>(), -65536);
-    UNIT_ASSERT(!item.GetElements()[5]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[6].Get<i64>(), -65536);
-    UNIT_ASSERT(!item.GetElements()[7]);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElements()[0]);
-    UNIT_ASSERT(!item.GetElements()[1]);
-    UNIT_ASSERT(!item.GetElements()[2]);
-    UNIT_ASSERT(!item.GetElements()[3]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[4].Get<i32>(), 2147483647LL);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[5].Get<ui32>(), 2147483647LL);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[6].Get<i64>(), 2147483647LL);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[7].Get<ui64>(), 2147483647LL);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElements()[0]);
-    UNIT_ASSERT(!item.GetElements()[1]);
-    UNIT_ASSERT(!item.GetElements()[2]);
-    UNIT_ASSERT(!item.GetElements()[3]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[4].Get<i32>(), -2147483648LL);
-    UNIT_ASSERT(!item.GetElements()[5]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[6].Get<i64>(), -2147483648LL);
-    UNIT_ASSERT(!item.GetElements()[7]);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElements()[0]);
-    UNIT_ASSERT(!item.GetElements()[1]);
-    UNIT_ASSERT(!item.GetElements()[2]);
-    UNIT_ASSERT(!item.GetElements()[3]);
-    UNIT_ASSERT(!item.GetElements()[4]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[5].Get<ui32>(), 2147483648LL);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[6].Get<i64>(), 2147483648LL);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[7].Get<ui64>(), 2147483648LL);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElements()[0]);
-    UNIT_ASSERT(!item.GetElements()[1]);
-    UNIT_ASSERT(!item.GetElements()[2]);
-    UNIT_ASSERT(!item.GetElements()[3]);
-    UNIT_ASSERT(!item.GetElements()[4]);
-    UNIT_ASSERT(!item.GetElements()[5]);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElements()[6].Get<i64>(), -2147483649LL);
-    UNIT_ASSERT(!item.GetElements()[7]);
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    using TRow = std::tuple<TMaybe<i8>, TMaybe<ui8>, TMaybe<i16>, TMaybe<ui16>, TMaybe<i32>, TMaybe<ui32>, TMaybe<i64>, TMaybe<ui64>>;
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
+                                                          {i8(0), ui8(0), i16(0), ui16(0), i32(0), ui32(0), i64(0), ui64(0)},
+                                                          {{}, {}, {}, {}, {}, {}, {}, {}},
+                                                          {{}, {}, {}, {}, {}, {}, {}, {}},
+                                                          {{}, {}, {}, {}, {}, {}, {}, {}},
+                                                          {i8(127), ui8(127), i16(127), ui16(127), i32(127), ui32(127), i64(127), ui64(127)},
+                                                          {i8(-128), {}, i16(-128), {}, i32(-128), {}, i64(-128), {}},
+                                                          {{}, ui8(255), i16(255), ui16(255), i32(255), ui32(255), i64(255), ui64(255)},
+                                                          {{}, {}, i16(-256), {}, i32(-256), {}, i64(-256), {}},
+                                                          {{}, {}, i16(256), ui16(256), i32(256), ui32(256), i64(256), ui64(256)},
+                                                          {{}, {}, i16(-257), {}, i32(-257), {}, i64(-257), {}},
+                                                          {{}, {}, i16(32767), ui16(32767), i32(32767), ui32(32767), i64(32767), ui64(32767)},
+                                                          {{}, {}, i16(-32768), {}, i32(-32768), {}, i64(-32768), {}},
+                                                          {{}, {}, {}, ui16(65535), i32(65535), ui32(65535), i64(65535), ui64(65535)},
+                                                          {{}, {}, {}, {}, i32(-65536), {}, i64(-65536), {}},
+                                                          {{}, {}, {}, {}, i32(2147483647), ui32(2147483647), i64(2147483647), ui64(2147483647)},
+                                                          {{}, {}, {}, {}, i32(-2147483648), {}, i64(-2147483648), {}},
+                                                          {{}, {}, {}, {}, {}, ui32(2147483648U), i64(2147483648), ui64(2147483648)},
+                                                          {{}, {}, {}, {}, {}, {}, i64(-2147483649LL), {}},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TestToFloat) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDecimalType(10, 3);
-    const auto data0 = pb.NewDecimalLiteral(2123, 10, 3);
-    const auto data1 = pb.NewDecimalLiteral(233, 10, 3);
-    const auto data2 = pb.NewDecimalLiteral(0, 10, 3);
-    const auto data3 = pb.NewDecimalLiteral(-3277823, 10, 3);
-    const auto data4 = pb.NewDecimalLiteral(-1, 10, 3);
-    const auto data5 = pb.NewDecimalLiteral(7128, 10, 3);
-    const auto data6 = pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 10, 3);
-    const auto data7 = pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 10, 3);
-    const auto data8 = pb.NewDecimalLiteral(-NYql::NDecimal::Inf(), 10, 3);
-    const auto list = pb.NewList(dataType, {data0, data1, data2, data3, data4, data5, data6, data7, data8});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<NTest::TDecimalLiteral<10, 3>>{
+                                                           {2123},
+                                                           {233},
+                                                           {0},
+                                                           {-3277823},
+                                                           {-1},
+                                                           {7128},
+                                                           {NYql::NDecimal::Nan()},
+                                                           {+NYql::NDecimal::Inf()},
+                                                           {-NYql::NDecimal::Inf()},
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -293,17 +125,17 @@ Y_UNIT_TEST_LLVM(TestToFloat) {
     const auto iterator = graph->GetValue().GetListIterator();
     NUdf::TUnboxedValue item;
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), 2.123f);
+    AssertUnboxedValueElementEqual(item, 2.123f);
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), 0.233f);
+    AssertUnboxedValueElementEqual(item, 0.233f);
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), 0.0f);
+    AssertUnboxedValueElementEqual(item, 0.0f);
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), -3277.823f);
+    AssertUnboxedValueElementEqual(item, -3277.823f);
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), -0.001f);
+    AssertUnboxedValueElementEqual(item, -0.001f);
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<float>(), 7.128f);
+    AssertUnboxedValueElementEqual(item, 7.128f);
     UNIT_ASSERT(iterator.Next(item));
     UNIT_ASSERT(std::isnan(item.template Get<float>()));
     UNIT_ASSERT(iterator.Next(item));
@@ -318,17 +150,18 @@ Y_UNIT_TEST_LLVM(TestToDouble) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDecimalType(10, 5);
-    const auto data0 = pb.NewDecimalLiteral(2123, 10, 5);
-    const auto data1 = pb.NewDecimalLiteral(233, 10, 5);
-    const auto data2 = pb.NewDecimalLiteral(0, 10, 5);
-    const auto data3 = pb.NewDecimalLiteral(-3277823, 10, 5);
-    const auto data4 = pb.NewDecimalLiteral(-1, 10, 5);
-    const auto data5 = pb.NewDecimalLiteral(7128, 10, 5);
-    const auto data6 = pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 10, 5);
-    const auto data7 = pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 10, 5);
-    const auto data8 = pb.NewDecimalLiteral(-NYql::NDecimal::Inf(), 10, 5);
-    const auto list = pb.NewList(dataType, {data0, data1, data2, data3, data4, data5, data6, data7, data8});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<NTest::TDecimalLiteral<10, 5>>{
+                                                           {2123},
+                                                           {233},
+                                                           {0},
+                                                           {-3277823},
+                                                           {-1},
+                                                           {7128},
+                                                           {NYql::NDecimal::Nan()},
+                                                           {+NYql::NDecimal::Inf()},
+                                                           {-NYql::NDecimal::Inf()},
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -339,17 +172,17 @@ Y_UNIT_TEST_LLVM(TestToDouble) {
     const auto iterator = graph->GetValue().GetListIterator();
     NUdf::TUnboxedValue item;
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), 0.02123);
+    AssertUnboxedValueElementEqual(item, 0.02123);
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), 0.00233);
+    AssertUnboxedValueElementEqual(item, 0.00233);
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), 0.0);
+    AssertUnboxedValueElementEqual(item, 0.0);
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), -32.77823);
+    AssertUnboxedValueElementEqual(item, -32.77823);
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), -0.00001);
+    AssertUnboxedValueElementEqual(item, -0.00001);
     UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.template Get<double>(), 0.07128);
+    AssertUnboxedValueElementEqual(item, 0.07128);
     UNIT_ASSERT(iterator.Next(item));
     UNIT_ASSERT(std::isnan(item.template Get<double>()));
     UNIT_ASSERT(iterator.Next(item));
@@ -364,17 +197,19 @@ Y_UNIT_TEST_LLVM(TestDiv) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDecimalType(10, 0);
-    const auto data0 = pb.NewDecimalLiteral(2, 10, 0);
-    const auto data1 = pb.NewDecimalLiteral(23, 10, 0);
-    const auto data2 = pb.NewDecimalLiteral(-23, 10, 0);
-    const auto data3 = pb.NewDecimalLiteral(25, 10, 0);
-    const auto data4 = pb.NewDecimalLiteral(-25, 10, 0);
-    const auto data5 = pb.NewDecimalLiteral(1, 10, 0);
-    const auto data6 = pb.NewDecimalLiteral(-1, 10, 0);
-    const auto data7 = pb.NewDecimalLiteral(3, 10, 0);
-    const auto data8 = pb.NewDecimalLiteral(-3, 10, 0);
-    const auto list = pb.NewList(dataType, {data0, data1, data2, data3, data4, data5, data6, data7, data8});
+    const auto data0 = NTest::ConvertValueToLiteralNode(pb, NTest::TDecimalLiteral<10, 0>{2});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<NTest::TDecimalLiteral<10, 0>>{
+                                                           {2},
+                                                           {23},
+                                                           {-23},
+                                                           {25},
+                                                           {-25},
+                                                           {1},
+                                                           {-1},
+                                                           {3},
+                                                           {-3},
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -382,46 +217,16 @@ Y_UNIT_TEST_LLVM(TestDiv) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 1);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 12);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -12);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 12);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -12);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 0);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 0);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -2);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<NYql::NDecimal::TInt128>{1, 12, -12, 12, -12, 0, 0, 2, -2});
 }
 
 Y_UNIT_TEST_LLVM(TestDivInt) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDataType(NUdf::TDataType<i8>::Id);
-    const auto data0 = pb.NewDecimalLiteral(-238973, 9, 3);
-    const auto data1 = pb.NewDataLiteral<i8>(0);
-    const auto data2 = pb.NewDataLiteral<i8>(-1);
-    const auto data3 = pb.NewDataLiteral<i8>(-128);
-    const auto data4 = pb.NewDataLiteral<i8>(3);
-    const auto data5 = pb.NewDataLiteral<i8>(5);
-    const auto data6 = pb.NewDataLiteral<i8>(-7);
-    const auto data7 = pb.NewDataLiteral<i8>(13);
-    const auto data8 = pb.NewDataLiteral<i8>(-19);
-    const auto data9 = pb.NewDataLiteral<i8>(42);
-    const auto list = pb.NewList(dataType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
+    const auto data0 = NTest::ConvertValueToLiteralNode(pb, NTest::TDecimalLiteral<9, 3>{-238973});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<i8>{i8(0), i8(-1), i8(-128), i8(3), i8(5), i8(-7), i8(13), i8(-19), i8(42)});
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -429,46 +234,28 @@ Y_UNIT_TEST_LLVM(TestDivInt) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 238973);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 1866);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -79658);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -47795);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 34139);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -18383);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 12577);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -5690);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<NYql::NDecimal::TInt128>{
+                                                          -NYql::NDecimal::Inf(), 238973, 1866, -79658, -47795, 34139, -18383, 12577, -5690});
 }
 
 Y_UNIT_TEST_LLVM(TestMod) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDecimalType(5, 2);
-    const auto data0 = pb.NewDecimalLiteral(-12323, 5, 2);
-    const auto data1 = pb.NewDecimalLiteral(0, 5, 2);
-    const auto data2 = pb.NewDecimalLiteral(NYql::NDecimal::Inf(), 5, 2);
-    const auto data3 = pb.NewDecimalLiteral(-1, 5, 2);
-    const auto data4 = pb.NewDecimalLiteral(2, 5, 2);
-    const auto data5 = pb.NewDecimalLiteral(-3, 5, 2);
-    const auto data6 = pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 5, 2);
-    const auto data7 = pb.NewDecimalLiteral(7, 5, 2);
-    const auto data8 = pb.NewDecimalLiteral(-10000, 5, 2);
-    const auto data9 = pb.NewDecimalLiteral(12329, 5, 2);
-    const auto list = pb.NewList(dataType, {data0, data1, data2, data3, data4, data5, data6, data7, data8, data9});
+    const auto data0 = NTest::ConvertValueToLiteralNode(pb, NTest::TDecimalLiteral<5, 2>{-12323});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<NTest::TDecimalLiteral<5, 2>>{
+                                                           {-12323},
+                                                           {0},
+                                                           {NYql::NDecimal::Inf()},
+                                                           {-1},
+                                                           {2},
+                                                           {-3},
+                                                           {NYql::NDecimal::Nan()},
+                                                           {7},
+                                                           {-10000},
+                                                           {12329},
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -476,48 +263,17 @@ Y_UNIT_TEST_LLVM(TestMod) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 0);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 0);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -1);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -3);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -2323);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -12323);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<NYql::NDecimal::TInt128>{
+                                                          0, NYql::NDecimal::Nan(), NYql::NDecimal::Nan(), 0, -1, -2, NYql::NDecimal::Nan(), -3, -2323, -12323});
 }
 
 Y_UNIT_TEST_LLVM(TestModInt) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDataType(NUdf::TDataType<i16>::Id);
-    const auto data0 = pb.NewDecimalLiteral(-743, 3, 2);
-    const auto data1 = pb.NewDataLiteral<i16>(0);
-    const auto data2 = pb.NewDataLiteral<i16>(1);
-    const auto data3 = pb.NewDataLiteral<i16>(-2);
-    const auto data4 = pb.NewDataLiteral<i16>(3);
-    const auto data5 = pb.NewDataLiteral<i16>(4);
-    const auto data6 = pb.NewDataLiteral<i16>(-5);
-    const auto data7 = pb.NewDataLiteral<i16>(8);
-    const auto data8 = pb.NewDataLiteral<i16>(10);
-    const auto data9 = pb.NewDataLiteral<i16>(-10);
-    const auto list = pb.NewList(dataType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
+    const auto data0 = NTest::ConvertValueToLiteralNode(pb, NTest::TDecimalLiteral<3, 2>{-743});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<i16>{i16(0), i16(1), i16(-2), i16(3), i16(4), i16(-5), i16(8), i16(10), i16(-10)});
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -525,46 +281,28 @@ Y_UNIT_TEST_LLVM(TestModInt) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -43);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -143);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -143);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -343);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -243);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -743);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -743);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -743);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<NYql::NDecimal::TInt128>{
+                                                          NYql::NDecimal::Nan(), -43, -143, -143, -343, -243, -743, -743, -743});
 }
 
 Y_UNIT_TEST_LLVM(TestMul) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDecimalType(10, 2);
-    const auto data0 = pb.NewDecimalLiteral(333, 10, 2);
-    const auto data1 = pb.NewDecimalLiteral(-100, 10, 2);
-    const auto data2 = pb.NewDecimalLiteral(-120, 10, 2);
-    const auto data3 = pb.NewDecimalLiteral(3, 10, 2);
-    const auto data4 = pb.NewDecimalLiteral(77, 10, 2);
-    const auto data5 = pb.NewDecimalLiteral(122, 10, 2);
-    const auto data6 = pb.NewDecimalLiteral(1223, 10, 2);
-    const auto data7 = pb.NewDecimalLiteral(-999, 10, 2);
-    const auto data8 = pb.NewDecimalLiteral(0, 10, 2);
-    const auto data9 = pb.NewDecimalLiteral(-3003003003LL, 10, 2);
-    const auto list = pb.NewList(dataType, {data0, data1, data2, data3, data4, data5, data6, data7, data8, data9});
+    const auto data0 = NTest::ConvertValueToLiteralNode(pb, NTest::TDecimalLiteral<10, 2>{333});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<NTest::TDecimalLiteral<10, 2>>{
+                                                           {333},
+                                                           {-100},
+                                                           {-120},
+                                                           {3},
+                                                           {77},
+                                                           {122},
+                                                           {1223},
+                                                           {-999},
+                                                           {0},
+                                                           {-3003003003LL},
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -572,48 +310,17 @@ Y_UNIT_TEST_LLVM(TestMul) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 1109);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -333);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -400);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 10);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 256);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 406);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 4073);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -3327);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 0);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<NYql::NDecimal::TInt128>{
+                                                          1109, -333, -400, 10, 256, 406, 4073, -3327, 0, -NYql::NDecimal::Inf()});
 }
 
 Y_UNIT_TEST_LLVM(TestMulUInt) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDataType(NUdf::TDataType<ui16>::Id);
-    const auto data0 = pb.NewDecimalLiteral(-333, 7, 2);
-    const auto data1 = pb.NewDataLiteral<ui16>(0);
-    const auto data2 = pb.NewDataLiteral<ui16>(1);
-    const auto data3 = pb.NewDataLiteral<ui16>(2);
-    const auto data4 = pb.NewDataLiteral<ui16>(3);
-    const auto data5 = pb.NewDataLiteral<ui16>(10);
-    const auto data6 = pb.NewDataLiteral<ui16>(100);
-    const auto data7 = pb.NewDataLiteral<ui16>(1000);
-    const auto data8 = pb.NewDataLiteral<ui16>(10000);
-    const auto data9 = pb.NewDataLiteral<ui16>(65535);
-    const auto list = pb.NewList(dataType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
+    const auto data0 = NTest::ConvertValueToLiteralNode(pb, NTest::TDecimalLiteral<7, 2>{-333});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<ui16>{ui16(0), ui16(1), ui16(2), ui16(3), ui16(10), ui16(100), ui16(1000), ui16(10000), ui16(65535)});
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -621,46 +328,17 @@ Y_UNIT_TEST_LLVM(TestMulUInt) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 0);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -333);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -666);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -999);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -3330);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -33300);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -333000);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -3330000);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<NYql::NDecimal::TInt128>{
+                                                          0, -333, -666, -999, -3330, -33300, -333000, -3330000, -NYql::NDecimal::Inf()});
 }
 
 Y_UNIT_TEST_LLVM(TestMulTinyInt) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDataType(NUdf::TDataType<i8>::Id);
-    const auto data0 = pb.NewDecimalLiteral(3631400, 32, 4);
-    const auto data1 = pb.NewDataLiteral<i8>(0);
-    const auto data2 = pb.NewDataLiteral<i8>(1);
-    const auto data3 = pb.NewDataLiteral<i8>(-1);
-    const auto data4 = pb.NewDataLiteral<i8>(3);
-    const auto data5 = pb.NewDataLiteral<i8>(-3);
-    const auto data6 = pb.NewDataLiteral<i8>(100);
-    const auto data7 = pb.NewDataLiteral<i8>(-100);
-    const auto data8 = pb.NewDataLiteral<i8>(127);
-    const auto data9 = pb.NewDataLiteral<i8>(-128);
-    const auto list = pb.NewList(dataType, {data1, data2, data3, data4, data5, data6, data7, data8, data9});
+    const auto data0 = NTest::ConvertValueToLiteralNode(pb, NTest::TDecimalLiteral<32, 4>{3631400});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<i8>{i8(0), i8(1), i8(-1), i8(3), i8(-3), i8(100), i8(-100), i8(127), i8(-128)});
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -668,39 +346,20 @@ Y_UNIT_TEST_LLVM(TestMulTinyInt) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 0);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 3631400);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -3631400);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 10894200);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -10894200);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 363140000);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -363140000);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 461187800);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -464819200);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<NYql::NDecimal::TInt128>{
+                                                          0, 3631400, -3631400, 10894200, -10894200, 363140000, -363140000, 461187800, -464819200});
 }
 
 Y_UNIT_TEST_LLVM(TestCastAndMulTinyInt) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDecimalType(32, 4);
-    const auto data0 = pb.NewDataLiteral<i8>(1);
-    const auto data1 = pb.NewDecimalLiteral(3145926, 32, 4);
-    const auto data2 = pb.NewDecimalLiteral(-3145926, 32, 4);
-    const auto list = pb.NewList(dataType, {data1, data2});
+    const auto data0 = NTest::ConvertValueToLiteralNode(pb, i8(1));
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<NTest::TDecimalLiteral<32, 4>>{
+                                                           {3145926},
+                                                           {-3145926},
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -708,33 +367,30 @@ Y_UNIT_TEST_LLVM(TestCastAndMulTinyInt) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == 3145926);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 3145926);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -3145926);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -3145926);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    using TRow = std::tuple<NYql::NDecimal::TInt128, NYql::NDecimal::TInt128>;
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
+                                                          TRow{3145926, 3145926},
+                                                          TRow{-3145926, -3145926},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TestLongintMul) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDecimalType(10, 0);
-    const auto data0 = pb.NewDecimalLiteral(333, 10, 0);
-    const auto data1 = pb.NewDecimalLiteral(-100, 10, 0);
-    const auto data2 = pb.NewDecimalLiteral(-120, 10, 0);
-    const auto data3 = pb.NewDecimalLiteral(3, 10, 0);
-    const auto data4 = pb.NewDecimalLiteral(77, 10, 0);
-    const auto data5 = pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 10, 0);
-    const auto data6 = pb.NewDecimalLiteral(30030031, 10, 0);
-    const auto data7 = pb.NewDecimalLiteral(-30030031, 10, 0);
-    const auto data8 = pb.NewDecimalLiteral(0, 10, 0);
-    const auto list = pb.NewList(dataType, {data0, data1, data2, data3, data4, data5, data6, data7, data8});
+    const auto data0 = NTest::ConvertValueToLiteralNode(pb, NTest::TDecimalLiteral<10, 0>{333});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<NTest::TDecimalLiteral<10, 0>>{
+                                                           {333},
+                                                           {-100},
+                                                           {-120},
+                                                           {3},
+                                                           {77},
+                                                           {NYql::NDecimal::Nan()},
+                                                           {30030031},
+                                                           {-30030031},
+                                                           {0},
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -742,45 +398,26 @@ Y_UNIT_TEST_LLVM(TestLongintMul) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 110889);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -33300);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -39960);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 999);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 25641);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == NYql::NDecimal::Inf());
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 0);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<NYql::NDecimal::TInt128>{
+                                                          110889, -33300, -39960, 999, 25641, NYql::NDecimal::Nan(), NYql::NDecimal::Inf(), -NYql::NDecimal::Inf(), 0});
 }
 
 Y_UNIT_TEST_LLVM(TestScaleUp) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDecimalType(10, 2);
-    const auto data0 = pb.NewDecimalLiteral(333, 10, 2);
-    const auto data1 = pb.NewDecimalLiteral(-100, 10, 2);
-    const auto data2 = pb.NewDecimalLiteral(-120, 10, 2);
-    const auto data3 = pb.NewDecimalLiteral(3, 10, 2);
-    const auto data4 = pb.NewDecimalLiteral(77, 10, 2);
-    const auto data5 = pb.NewDecimalLiteral(122, 10, 2);
-    const auto data6 = pb.NewDecimalLiteral(1223, 10, 2);
-    const auto data7 = pb.NewDecimalLiteral(-999, 10, 2);
-    const auto data8 = pb.NewDecimalLiteral(0, 10, 2);
-    const auto list = pb.NewList(dataType, {data0, data1, data2, data3, data4, data5, data6, data7, data8});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<NTest::TDecimalLiteral<10, 2>>{
+                                                           {333},
+                                                           {-100},
+                                                           {-120},
+                                                           {3},
+                                                           {77},
+                                                           {122},
+                                                           {1223},
+                                                           {-999},
+                                                           {0},
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -788,46 +425,27 @@ Y_UNIT_TEST_LLVM(TestScaleUp) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 33300);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -10000);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -12000);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 300);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 7700);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 12200);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 122300);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -99900);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 0);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<NYql::NDecimal::TInt128>{
+                                                          33300, -10000, -12000, 300, 7700, 12200, 122300, -99900, 0});
 }
 
 Y_UNIT_TEST_LLVM(TestScaleDown) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewDecimalType(10, 2);
-    const auto data0 = pb.NewDecimalLiteral(-251, 10, 2);
-    const auto data1 = pb.NewDecimalLiteral(-250, 10, 2);
-    const auto data2 = pb.NewDecimalLiteral(-150, 10, 2);
-    const auto data3 = pb.NewDecimalLiteral(-51, 10, 2);
-    const auto data4 = pb.NewDecimalLiteral(50, 10, 2);
-    const auto data5 = pb.NewDecimalLiteral(50, 10, 2);
-    const auto data6 = pb.NewDecimalLiteral(51, 10, 2);
-    const auto data7 = pb.NewDecimalLiteral(150, 10, 2);
-    const auto data8 = pb.NewDecimalLiteral(250, 10, 2);
-    const auto data9 = pb.NewDecimalLiteral(251, 10, 2);
-    const auto list = pb.NewList(dataType, {data0, data1, data2, data3, data4, data5, data6, data7, data8, data9});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<NTest::TDecimalLiteral<10, 2>>{
+                                                           {-251},
+                                                           {-250},
+                                                           {-150},
+                                                           {-51},
+                                                           {50},
+                                                           {50},
+                                                           {51},
+                                                           {150},
+                                                           {250},
+                                                           {251},
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -835,43 +453,22 @@ Y_UNIT_TEST_LLVM(TestScaleDown) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -3);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -1);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 0);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 0);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 1);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 3);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<NYql::NDecimal::TInt128>{
+                                                          -3, -2, -2, -1, 0, 0, 1, 2, 2, 3});
 }
 
 Y_UNIT_TEST_LLVM(TestMinMax) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto data1 = pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 13, 2);
-    const auto data2 = pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 13, 2);
-    const auto data3 = pb.NewDecimalLiteral(314, 13, 2);
-    const auto data4 = pb.NewDecimalLiteral(-213, 13, 2);
-    const auto data5 = pb.NewDecimalLiteral(-NYql::NDecimal::Inf(), 13, 2);
-    const auto dataType = pb.NewDecimalType(13, 2);
-    const auto list = pb.NewList(dataType, {data1, data2, data3, data4, data5});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<NTest::TDecimalLiteral<13, 2>>{
+                                                           {NYql::NDecimal::Nan()},
+                                                           {+NYql::NDecimal::Inf()},
+                                                           {314},
+                                                           {-213},
+                                                           {-NYql::NDecimal::Inf()},
+                                                       });
     const auto pgmReturn = pb.FlatMap(list,
                                       [&](TRuntimeNode left) {
                                           return pb.Map(list,
@@ -881,124 +478,48 @@ Y_UNIT_TEST_LLVM(TestMinMax) {
                                       });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == +NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == +NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == 314);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 314);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -213);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -213);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == 314);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == +NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -213);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == +NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == +NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == 314);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 314);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == 314);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == +NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == 314);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 314);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -213);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 314);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 314);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -213);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -213);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -213);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == +NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -213);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 314);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -213);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -213);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -213);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == +NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 314);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -213);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    using TRow = std::tuple<NYql::NDecimal::TInt128, NYql::NDecimal::TInt128>;
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
+                                                          TRow{NYql::NDecimal::Nan(), NYql::NDecimal::Nan()},
+                                                          TRow{+NYql::NDecimal::Inf(), +NYql::NDecimal::Inf()},
+                                                          TRow{314, 314},
+                                                          TRow{-213, -213},
+                                                          TRow{-NYql::NDecimal::Inf(), -NYql::NDecimal::Inf()},
+                                                          TRow{NYql::NDecimal::Inf(), NYql::NDecimal::Inf()},
+                                                          TRow{NYql::NDecimal::Inf(), NYql::NDecimal::Inf()},
+                                                          TRow{314, +NYql::NDecimal::Inf()},
+                                                          TRow{-213, +NYql::NDecimal::Inf()},
+                                                          TRow{-NYql::NDecimal::Inf(), +NYql::NDecimal::Inf()},
+                                                          TRow{314, 314},
+                                                          TRow{314, +NYql::NDecimal::Inf()},
+                                                          TRow{314, 314},
+                                                          TRow{-213, 314},
+                                                          TRow{-NYql::NDecimal::Inf(), 314},
+                                                          TRow{-213, -213},
+                                                          TRow{-213, +NYql::NDecimal::Inf()},
+                                                          TRow{-213, 314},
+                                                          TRow{-213, -213},
+                                                          TRow{-NYql::NDecimal::Inf(), -213},
+                                                          TRow{-NYql::NDecimal::Inf(), -NYql::NDecimal::Inf()},
+                                                          TRow{-NYql::NDecimal::Inf(), +NYql::NDecimal::Inf()},
+                                                          TRow{-NYql::NDecimal::Inf(), 314},
+                                                          TRow{-NYql::NDecimal::Inf(), -213},
+                                                          TRow{-NYql::NDecimal::Inf(), -NYql::NDecimal::Inf()},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TestAggrMinMax) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto data1 = pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 13, 2);
-    const auto data2 = pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 13, 2);
-    const auto data3 = pb.NewDecimalLiteral(314, 13, 2);
-    const auto data4 = pb.NewDecimalLiteral(-213, 13, 2);
-    const auto data5 = pb.NewDecimalLiteral(-NYql::NDecimal::Inf(), 13, 2);
-    const auto dataType = pb.NewDecimalType(13, 2);
-    const auto list = pb.NewList(dataType, {data1, data2, data3, data4, data5});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<NTest::TDecimalLiteral<13, 2>>{
+                                                           {NYql::NDecimal::Nan()},
+                                                           {+NYql::NDecimal::Inf()},
+                                                           {314},
+                                                           {-213},
+                                                           {-NYql::NDecimal::Inf()},
+                                                       });
     const auto pgmReturn = pb.FlatMap(list,
                                       [&](TRuntimeNode left) {
                                           return pb.Map(list,
@@ -1008,125 +529,48 @@ Y_UNIT_TEST_LLVM(TestAggrMinMax) {
                                       });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == +NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == 314);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -213);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == 314);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == +NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -213);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == +NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == +NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == 314);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == 314);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == +NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == 314);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 314);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -213);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 314);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 314);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -213);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -213);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == +NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -213);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 314);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -213);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -213);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -213);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == +NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 314);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -213);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    using TRow = std::tuple<NYql::NDecimal::TInt128, NYql::NDecimal::TInt128>;
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
+                                                          TRow{NYql::NDecimal::Nan(), NYql::NDecimal::Nan()},
+                                                          TRow{+NYql::NDecimal::Inf(), NYql::NDecimal::Nan()},
+                                                          TRow{314, NYql::NDecimal::Nan()},
+                                                          TRow{-213, NYql::NDecimal::Nan()},
+                                                          TRow{-NYql::NDecimal::Inf(), NYql::NDecimal::Nan()},
+                                                          TRow{NYql::NDecimal::Inf(), NYql::NDecimal::Nan()},
+                                                          TRow{NYql::NDecimal::Inf(), NYql::NDecimal::Inf()},
+                                                          TRow{314, +NYql::NDecimal::Inf()},
+                                                          TRow{-213, +NYql::NDecimal::Inf()},
+                                                          TRow{-NYql::NDecimal::Inf(), +NYql::NDecimal::Inf()},
+                                                          TRow{314, NYql::NDecimal::Nan()},
+                                                          TRow{314, +NYql::NDecimal::Inf()},
+                                                          TRow{314, 314},
+                                                          TRow{-213, 314},
+                                                          TRow{-NYql::NDecimal::Inf(), 314},
+                                                          TRow{-213, NYql::NDecimal::Nan()},
+                                                          TRow{-213, +NYql::NDecimal::Inf()},
+                                                          TRow{-213, 314},
+                                                          TRow{-213, -213},
+                                                          TRow{-NYql::NDecimal::Inf(), -213},
+                                                          TRow{-NYql::NDecimal::Inf(), NYql::NDecimal::Nan()},
+                                                          TRow{-NYql::NDecimal::Inf(), +NYql::NDecimal::Inf()},
+                                                          TRow{-NYql::NDecimal::Inf(), 314},
+                                                          TRow{-NYql::NDecimal::Inf(), -213},
+                                                          TRow{-NYql::NDecimal::Inf(), -NYql::NDecimal::Inf()},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TestAddSub) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto data1 = pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 13, 2);
-    const auto data2 = pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 13, 2);
-    const auto data3 = pb.NewDecimalLiteral(314, 13, 2);
-    const auto data4 = pb.NewDecimalLiteral(-213, 13, 2);
-    const auto data5 = pb.NewDecimalLiteral(-NYql::NDecimal::Inf(), 13, 2);
-
-    const auto dataType = pb.NewDecimalType(13, 2);
-    const auto list = pb.NewList(dataType, {data1, data2, data3, data4, data5});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<NTest::TDecimalLiteral<13, 2>>{
+                                                           {NYql::NDecimal::Nan()},
+                                                           {+NYql::NDecimal::Inf()},
+                                                           {314},
+                                                           {-213},
+                                                           {-NYql::NDecimal::Inf()},
+                                                       });
     const auto pgmReturn = pb.FlatMap(list,
                                       [&](TRuntimeNode left) {
                                           return pb.Map(list,
@@ -1136,161 +580,72 @@ Y_UNIT_TEST_LLVM(TestAddSub) {
                                       });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == +NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == 628);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 0);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == 101);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 527);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == +NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == +NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == 101);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -527);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -426);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 0);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == +NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    using TRow = std::tuple<NYql::NDecimal::TInt128, NYql::NDecimal::TInt128>;
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
+                                                          TRow{NYql::NDecimal::Nan(), NYql::NDecimal::Nan()},
+                                                          TRow{NYql::NDecimal::Nan(), NYql::NDecimal::Nan()},
+                                                          TRow{NYql::NDecimal::Nan(), NYql::NDecimal::Nan()},
+                                                          TRow{NYql::NDecimal::Nan(), NYql::NDecimal::Nan()},
+                                                          TRow{NYql::NDecimal::Nan(), NYql::NDecimal::Nan()},
+                                                          TRow{NYql::NDecimal::Nan(), NYql::NDecimal::Nan()},
+                                                          TRow{NYql::NDecimal::Inf(), NYql::NDecimal::Nan()},
+                                                          TRow{NYql::NDecimal::Inf(), NYql::NDecimal::Inf()},
+                                                          TRow{NYql::NDecimal::Inf(), NYql::NDecimal::Inf()},
+                                                          TRow{NYql::NDecimal::Nan(), NYql::NDecimal::Inf()},
+                                                          TRow{NYql::NDecimal::Nan(), NYql::NDecimal::Nan()},
+                                                          TRow{+NYql::NDecimal::Inf(), -NYql::NDecimal::Inf()},
+                                                          TRow{628, 0},
+                                                          TRow{101, 527},
+                                                          TRow{-NYql::NDecimal::Inf(), +NYql::NDecimal::Inf()},
+                                                          TRow{NYql::NDecimal::Nan(), NYql::NDecimal::Nan()},
+                                                          TRow{+NYql::NDecimal::Inf(), -NYql::NDecimal::Inf()},
+                                                          TRow{101, -527},
+                                                          TRow{-426, 0},
+                                                          TRow{-NYql::NDecimal::Inf(), +NYql::NDecimal::Inf()},
+                                                          TRow{NYql::NDecimal::Nan(), NYql::NDecimal::Nan()},
+                                                          TRow{NYql::NDecimal::Nan(), -NYql::NDecimal::Inf()},
+                                                          TRow{-NYql::NDecimal::Inf(), -NYql::NDecimal::Inf()},
+                                                          TRow{-NYql::NDecimal::Inf(), -NYql::NDecimal::Inf()},
+                                                          TRow{-NYql::NDecimal::Inf(), NYql::NDecimal::Nan()},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TestCompares) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto data1l = pb.NewDecimalLiteral(-7, 10, 0);
-    const auto data2l = pb.NewDecimalLiteral(3, 10, 0);
-    const auto data3l = pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 10, 0);
-    const auto data4l = pb.NewDecimalLiteral(-NYql::NDecimal::Inf(), 10, 0);
-    const auto data5l = pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 10, 0);
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<std::tuple<NTest::TDecimalLiteral<10, 0>, NTest::TDecimalLiteral<7, 2>>>{
+                                                           {{-7}, {-700}},
+                                                           {{-7}, {300}},
+                                                           {{-7}, {NYql::NDecimal::Nan()}},
+                                                           {{-7}, {-NYql::NDecimal::Inf()}},
+                                                           {{-7}, {+NYql::NDecimal::Inf()}},
 
-    const auto data1r = pb.NewDecimalLiteral(-700, 7, 2);
-    const auto data2r = pb.NewDecimalLiteral(300, 7, 2);
-    const auto data3r = pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 7, 2);
-    const auto data4r = pb.NewDecimalLiteral(-NYql::NDecimal::Inf(), 7, 2);
-    const auto data5r = pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 7, 2);
+                                                           {{3}, {-700}},
+                                                           {{3}, {300}},
+                                                           {{3}, {NYql::NDecimal::Nan()}},
+                                                           {{3}, {-NYql::NDecimal::Inf()}},
+                                                           {{3}, {+NYql::NDecimal::Inf()}},
 
-    auto pairType = pb.NewTupleType({pb.NewDecimalType(10, 0), pb.NewDecimalType(7, 2)});
-    const auto list = pb.NewList(pairType, {
-                                               pb.NewTuple({data1l, data1r}),
-                                               pb.NewTuple({data1l, data2r}),
-                                               pb.NewTuple({data1l, data3r}),
-                                               pb.NewTuple({data1l, data4r}),
-                                               pb.NewTuple({data1l, data5r}),
+                                                           {{NYql::NDecimal::Nan()}, {-700}},
+                                                           {{NYql::NDecimal::Nan()}, {300}},
+                                                           {{NYql::NDecimal::Nan()}, {NYql::NDecimal::Nan()}},
+                                                           {{NYql::NDecimal::Nan()}, {-NYql::NDecimal::Inf()}},
+                                                           {{NYql::NDecimal::Nan()}, {+NYql::NDecimal::Inf()}},
 
-                                               pb.NewTuple({data2l, data1r}),
-                                               pb.NewTuple({data2l, data2r}),
-                                               pb.NewTuple({data2l, data3r}),
-                                               pb.NewTuple({data2l, data4r}),
-                                               pb.NewTuple({data2l, data5r}),
+                                                           {{-NYql::NDecimal::Inf()}, {-700}},
+                                                           {{-NYql::NDecimal::Inf()}, {300}},
+                                                           {{-NYql::NDecimal::Inf()}, {NYql::NDecimal::Nan()}},
+                                                           {{-NYql::NDecimal::Inf()}, {-NYql::NDecimal::Inf()}},
+                                                           {{-NYql::NDecimal::Inf()}, {+NYql::NDecimal::Inf()}},
 
-                                               pb.NewTuple({data3l, data1r}),
-                                               pb.NewTuple({data3l, data2r}),
-                                               pb.NewTuple({data3l, data3r}),
-                                               pb.NewTuple({data3l, data4r}),
-                                               pb.NewTuple({data3l, data5r}),
-
-                                               pb.NewTuple({data4l, data1r}),
-                                               pb.NewTuple({data4l, data2r}),
-                                               pb.NewTuple({data4l, data3r}),
-                                               pb.NewTuple({data4l, data4r}),
-                                               pb.NewTuple({data4l, data5r}),
-
-                                               pb.NewTuple({data5l, data1r}),
-                                               pb.NewTuple({data5l, data2r}),
-                                               pb.NewTuple({data5l, data3r}),
-                                               pb.NewTuple({data5l, data4r}),
-                                               pb.NewTuple({data5l, data5r}),
-                                           });
+                                                           {{+NYql::NDecimal::Inf()}, {-700}},
+                                                           {{+NYql::NDecimal::Inf()}, {300}},
+                                                           {{+NYql::NDecimal::Inf()}, {NYql::NDecimal::Nan()}},
+                                                           {{+NYql::NDecimal::Inf()}, {-NYql::NDecimal::Inf()}},
+                                                           {{+NYql::NDecimal::Inf()}, {+NYql::NDecimal::Inf()}},
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -1303,263 +658,72 @@ Y_UNIT_TEST_LLVM(TestCompares) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    using TRow = std::tuple<bool, bool, bool, bool, bool, bool>;
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
+                                                          TRow{true, false, false, true, false, true},
+                                                          TRow{false, true, true, true, false, false},
+                                                          TRow{false, true, false, false, false, false},
+                                                          TRow{false, true, false, false, true, true},
+                                                          TRow{false, true, true, true, false, false},
+                                                          TRow{false, true, false, false, true, true},
+                                                          TRow{true, false, false, true, false, true},
+                                                          TRow{false, true, false, false, false, false},
+                                                          TRow{false, true, false, false, true, true},
+                                                          TRow{false, true, true, true, false, false},
+                                                          TRow{false, true, false, false, false, false},
+                                                          TRow{false, true, false, false, false, false},
+                                                          TRow{false, true, false, false, false, false},
+                                                          TRow{false, true, false, false, false, false},
+                                                          TRow{false, true, false, false, false, false},
+                                                          TRow{false, true, true, true, false, false},
+                                                          TRow{false, true, true, true, false, false},
+                                                          TRow{false, true, false, false, false, false},
+                                                          TRow{true, false, false, true, false, true},
+                                                          TRow{false, true, true, true, false, false},
+                                                          TRow{false, true, false, false, true, true},
+                                                          TRow{false, true, false, false, true, true},
+                                                          TRow{false, true, false, false, false, false},
+                                                          TRow{false, true, false, false, true, true},
+                                                          TRow{true, false, false, true, false, true},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TestComparesWithIntegral) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto optType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i64>::Id));
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<std::tuple<TMaybe<i64>, NTest::TDecimalLiteral<20, 18>>>{
+                                                           {{-7LL}, {-7000000000000000000LL}},
+                                                           {{-7LL}, {3000000000000000000LL}},
+                                                           {{-7LL}, {NYql::NDecimal::Nan()}},
+                                                           {{-7LL}, {-NYql::NDecimal::Inf()}},
+                                                           {{-7LL}, {+NYql::NDecimal::Inf()}},
 
-    const auto data1l = pb.NewOptional(pb.NewDataLiteral<i64>(-7LL));
-    const auto data2l = pb.NewOptional(pb.NewDataLiteral<i64>(3LL));
-    const auto data3l = pb.NewEmptyOptional(optType);
-    const auto data4l = pb.NewOptional(pb.NewDataLiteral<i64>(std::numeric_limits<i64>::min()));
-    const auto data5l = pb.NewOptional(pb.NewDataLiteral<i64>(std::numeric_limits<i64>::max()));
+                                                           {{3LL}, {-7000000000000000000LL}},
+                                                           {{3LL}, {3000000000000000000LL}},
+                                                           {{3LL}, {NYql::NDecimal::Nan()}},
+                                                           {{3LL}, {-NYql::NDecimal::Inf()}},
+                                                           {{3LL}, {+NYql::NDecimal::Inf()}},
 
-    const auto data1r = pb.NewDecimalLiteral(-7000000000000000000LL, 20, 18);
-    const auto data2r = pb.NewDecimalLiteral(3000000000000000000LL, 20, 18);
-    const auto data3r = pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 20, 18);
-    const auto data4r = pb.NewDecimalLiteral(-NYql::NDecimal::Inf(), 20, 18);
-    const auto data5r = pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 20, 18);
+                                                           {TMaybe<i64>{}, {-7000000000000000000LL}},
+                                                           {TMaybe<i64>{}, {3000000000000000000LL}},
+                                                           {TMaybe<i64>{}, {NYql::NDecimal::Nan()}},
+                                                           {TMaybe<i64>{}, {-NYql::NDecimal::Inf()}},
+                                                           {TMaybe<i64>{}, {+NYql::NDecimal::Inf()}},
 
-    auto pairType = pb.NewTupleType({optType, pb.NewDecimalType(20, 18)});
-    const auto list = pb.NewList(pairType, {
-                                               pb.NewTuple({data1l, data1r}),
-                                               pb.NewTuple({data1l, data2r}),
-                                               pb.NewTuple({data1l, data3r}),
-                                               pb.NewTuple({data1l, data4r}),
-                                               pb.NewTuple({data1l, data5r}),
+                                                           {{Min<i64>()}, {-7000000000000000000LL}},
+                                                           {{Min<i64>()}, {3000000000000000000LL}},
+                                                           {{Min<i64>()}, {NYql::NDecimal::Nan()}},
+                                                           {{Min<i64>()}, {-NYql::NDecimal::Inf()}},
+                                                           {{Min<i64>()}, {+NYql::NDecimal::Inf()}},
 
-                                               pb.NewTuple({data2l, data1r}),
-                                               pb.NewTuple({data2l, data2r}),
-                                               pb.NewTuple({data2l, data3r}),
-                                               pb.NewTuple({data2l, data4r}),
-                                               pb.NewTuple({data2l, data5r}),
-
-                                               pb.NewTuple({data3l, data1r}),
-                                               pb.NewTuple({data3l, data2r}),
-                                               pb.NewTuple({data3l, data3r}),
-                                               pb.NewTuple({data3l, data4r}),
-                                               pb.NewTuple({data3l, data5r}),
-
-                                               pb.NewTuple({data4l, data1r}),
-                                               pb.NewTuple({data4l, data2r}),
-                                               pb.NewTuple({data4l, data3r}),
-                                               pb.NewTuple({data4l, data4r}),
-                                               pb.NewTuple({data4l, data5r}),
-
-                                               pb.NewTuple({data5l, data1r}),
-                                               pb.NewTuple({data5l, data2r}),
-                                               pb.NewTuple({data5l, data3r}),
-                                               pb.NewTuple({data5l, data4r}),
-                                               pb.NewTuple({data5l, data5r}),
-                                           });
+                                                           {{Max<i64>()}, {-7000000000000000000LL}},
+                                                           {{Max<i64>()}, {3000000000000000000LL}},
+                                                           {{Max<i64>()}, {NYql::NDecimal::Nan()}},
+                                                           {{Max<i64>()}, {-NYql::NDecimal::Inf()}},
+                                                           {{Max<i64>()}, {+NYql::NDecimal::Inf()}},
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -1572,255 +736,72 @@ Y_UNIT_TEST_LLVM(TestComparesWithIntegral) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0)); // ==
-    UNIT_ASSERT(!item.GetElement(1)); // !=
-    UNIT_ASSERT(!item.GetElement(2)); // <
-    UNIT_ASSERT(!item.GetElement(3)); // <=
-    UNIT_ASSERT(!item.GetElement(4)); // >
-    UNIT_ASSERT(!item.GetElement(5)); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0)); // ==
-    UNIT_ASSERT(!item.GetElement(1)); // !=
-    UNIT_ASSERT(!item.GetElement(2)); // <
-    UNIT_ASSERT(!item.GetElement(3)); // <=
-    UNIT_ASSERT(!item.GetElement(4)); // >
-    UNIT_ASSERT(!item.GetElement(5)); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0)); // ==
-    UNIT_ASSERT(!item.GetElement(1)); // !=
-    UNIT_ASSERT(!item.GetElement(2)); // <
-    UNIT_ASSERT(!item.GetElement(3)); // <=
-    UNIT_ASSERT(!item.GetElement(4)); // >
-    UNIT_ASSERT(!item.GetElement(5)); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0)); // ==
-    UNIT_ASSERT(!item.GetElement(1)); // !=
-    UNIT_ASSERT(!item.GetElement(2)); // <
-    UNIT_ASSERT(!item.GetElement(3)); // <=
-    UNIT_ASSERT(!item.GetElement(4)); // >
-    UNIT_ASSERT(!item.GetElement(5)); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0)); // ==
-    UNIT_ASSERT(!item.GetElement(1)); // !=
-    UNIT_ASSERT(!item.GetElement(2)); // <
-    UNIT_ASSERT(!item.GetElement(3)); // <=
-    UNIT_ASSERT(!item.GetElement(4)); // >
-    UNIT_ASSERT(!item.GetElement(5)); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    using TRow = std::tuple<TMaybe<bool>, TMaybe<bool>, TMaybe<bool>, TMaybe<bool>, TMaybe<bool>, TMaybe<bool>>;
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
+                                                          {true, false, false, true, false, true},
+                                                          {false, true, true, true, false, false},
+                                                          {false, true, false, false, false, false},
+                                                          {false, true, false, false, true, true},
+                                                          {false, true, true, true, false, false},
+                                                          {false, true, false, false, true, true},
+                                                          {true, false, false, true, false, true},
+                                                          {false, true, false, false, false, false},
+                                                          {false, true, false, false, true, true},
+                                                          {false, true, true, true, false, false},
+                                                          {{}, {}, {}, {}, {}, {}},
+                                                          {{}, {}, {}, {}, {}, {}},
+                                                          {{}, {}, {}, {}, {}, {}},
+                                                          {{}, {}, {}, {}, {}, {}},
+                                                          {{}, {}, {}, {}, {}, {}},
+                                                          {false, true, true, true, false, false},
+                                                          {false, true, true, true, false, false},
+                                                          {false, true, false, false, false, false},
+                                                          {true, false, false, true, false, true},
+                                                          {false, true, true, true, false, false},
+                                                          {false, true, false, false, true, true},
+                                                          {false, true, false, false, true, true},
+                                                          {false, true, false, false, false, false},
+                                                          {false, true, false, false, true, true},
+                                                          {true, false, false, true, false, true},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TestAggrCompares) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto data1 = pb.NewDecimalLiteral(-7, 10, 0);
-    const auto data2 = pb.NewDecimalLiteral(3, 10, 0);
-    const auto data3 = pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 10, 0);
-    const auto data4 = pb.NewDecimalLiteral(-NYql::NDecimal::Inf(), 10, 0);
-    const auto data5 = pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 10, 0);
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<std::tuple<NTest::TDecimalLiteral<10, 0>, NTest::TDecimalLiteral<10, 0>>>{
+                                                           {{-7}, {-7}},
+                                                           {{-7}, {3}},
+                                                           {{-7}, {NYql::NDecimal::Nan()}},
+                                                           {{-7}, {-NYql::NDecimal::Inf()}},
+                                                           {{-7}, {+NYql::NDecimal::Inf()}},
 
-    auto pairType = pb.NewTupleType({pb.NewDecimalType(10, 0), pb.NewDecimalType(10, 0)});
-    const auto list = pb.NewList(pairType, {
-                                               pb.NewTuple({data1, data1}),
-                                               pb.NewTuple({data1, data2}),
-                                               pb.NewTuple({data1, data3}),
-                                               pb.NewTuple({data1, data4}),
-                                               pb.NewTuple({data1, data5}),
+                                                           {{3}, {-7}},
+                                                           {{3}, {3}},
+                                                           {{3}, {NYql::NDecimal::Nan()}},
+                                                           {{3}, {-NYql::NDecimal::Inf()}},
+                                                           {{3}, {+NYql::NDecimal::Inf()}},
 
-                                               pb.NewTuple({data2, data1}),
-                                               pb.NewTuple({data2, data2}),
-                                               pb.NewTuple({data2, data3}),
-                                               pb.NewTuple({data2, data4}),
-                                               pb.NewTuple({data2, data5}),
+                                                           {{NYql::NDecimal::Nan()}, {-7}},
+                                                           {{NYql::NDecimal::Nan()}, {3}},
+                                                           {{NYql::NDecimal::Nan()}, {NYql::NDecimal::Nan()}},
+                                                           {{NYql::NDecimal::Nan()}, {-NYql::NDecimal::Inf()}},
+                                                           {{NYql::NDecimal::Nan()}, {+NYql::NDecimal::Inf()}},
 
-                                               pb.NewTuple({data3, data1}),
-                                               pb.NewTuple({data3, data2}),
-                                               pb.NewTuple({data3, data3}),
-                                               pb.NewTuple({data3, data4}),
-                                               pb.NewTuple({data3, data5}),
+                                                           {{-NYql::NDecimal::Inf()}, {-7}},
+                                                           {{-NYql::NDecimal::Inf()}, {3}},
+                                                           {{-NYql::NDecimal::Inf()}, {NYql::NDecimal::Nan()}},
+                                                           {{-NYql::NDecimal::Inf()}, {-NYql::NDecimal::Inf()}},
+                                                           {{-NYql::NDecimal::Inf()}, {+NYql::NDecimal::Inf()}},
 
-                                               pb.NewTuple({data4, data1}),
-                                               pb.NewTuple({data4, data2}),
-                                               pb.NewTuple({data4, data3}),
-                                               pb.NewTuple({data4, data4}),
-                                               pb.NewTuple({data4, data5}),
-
-                                               pb.NewTuple({data5, data1}),
-                                               pb.NewTuple({data5, data2}),
-                                               pb.NewTuple({data5, data3}),
-                                               pb.NewTuple({data5, data4}),
-                                               pb.NewTuple({data5, data5}),
-                                           });
+                                                           {{+NYql::NDecimal::Inf()}, {-7}},
+                                                           {{+NYql::NDecimal::Inf()}, {3}},
+                                                           {{+NYql::NDecimal::Inf()}, {NYql::NDecimal::Nan()}},
+                                                           {{+NYql::NDecimal::Inf()}, {-NYql::NDecimal::Inf()}},
+                                                           {{+NYql::NDecimal::Inf()}, {+NYql::NDecimal::Inf()}},
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -1833,227 +814,51 @@ Y_UNIT_TEST_LLVM(TestAggrCompares) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(item.GetElement(2).template Get<bool>());  // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(!item.GetElement(5).template Get<bool>()); // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0).template Get<bool>()); // ==
-    UNIT_ASSERT(item.GetElement(1).template Get<bool>());  // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(!item.GetElement(3).template Get<bool>()); // <=
-    UNIT_ASSERT(item.GetElement(4).template Get<bool>());  // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).template Get<bool>());  // ==
-    UNIT_ASSERT(!item.GetElement(1).template Get<bool>()); // !=
-    UNIT_ASSERT(!item.GetElement(2).template Get<bool>()); // <
-    UNIT_ASSERT(item.GetElement(3).template Get<bool>());  // <=
-    UNIT_ASSERT(!item.GetElement(4).template Get<bool>()); // >
-    UNIT_ASSERT(item.GetElement(5).template Get<bool>());  // >=
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    using TRow = std::tuple<bool, bool, bool, bool, bool, bool>;
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
+                                                          TRow{true, false, false, true, false, true},
+                                                          TRow{false, true, true, true, false, false},
+                                                          TRow{false, true, true, true, false, false},
+                                                          TRow{false, true, false, false, true, true},
+                                                          TRow{false, true, true, true, false, false},
+                                                          TRow{false, true, false, false, true, true},
+                                                          TRow{true, false, false, true, false, true},
+                                                          TRow{false, true, true, true, false, false},
+                                                          TRow{false, true, false, false, true, true},
+                                                          TRow{false, true, true, true, false, false},
+                                                          TRow{false, true, false, false, true, true},
+                                                          TRow{false, true, false, false, true, true},
+                                                          TRow{true, false, false, true, false, true},
+                                                          TRow{false, true, false, false, true, true},
+                                                          TRow{false, true, false, false, true, true},
+                                                          TRow{false, true, true, true, false, false},
+                                                          TRow{false, true, true, true, false, false},
+                                                          TRow{false, true, true, true, false, false},
+                                                          TRow{true, false, false, true, false, true},
+                                                          TRow{false, true, true, true, false, false},
+                                                          TRow{false, true, false, false, true, true},
+                                                          TRow{false, true, false, false, true, true},
+                                                          TRow{false, true, true, true, false, false},
+                                                          TRow{false, true, false, false, true, true},
+                                                          TRow{true, false, false, true, false, true},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TestIncDec) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto data1 = pb.NewDecimalLiteral(-NYql::NDecimal::Inf(), 4, 1);
-    const auto data2 = pb.NewDecimalLiteral(-9999, 4, 1);
-    const auto data3 = pb.NewDecimalLiteral(-7, 4, 1);
-    const auto data4 = pb.NewDecimalLiteral(0, 4, 1);
-    const auto data5 = pb.NewDecimalLiteral(13, 4, 1);
-    const auto data6 = pb.NewDecimalLiteral(9999, 4, 1);
-    const auto data7 = pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 4, 1);
-    const auto data8 = pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 4, 1);
-
-    const auto list = pb.NewList(pb.NewDecimalType(4, 1), {data1, data2, data3, data4, data5, data6, data7, data8});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<NTest::TDecimalLiteral<4, 1>>{
+                                                           {-NYql::NDecimal::Inf()},
+                                                           {-9999},
+                                                           {-7},
+                                                           {0},
+                                                           {13},
+                                                           {9999},
+                                                           {+NYql::NDecimal::Inf()},
+                                                           {NYql::NDecimal::Nan()},
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -2061,57 +866,31 @@ Y_UNIT_TEST_LLVM(TestIncDec) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -9998);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -6);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -8);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == +1);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == -1);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == 14);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 12);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == +NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 9998);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == +NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == +NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    using TRow = std::tuple<NYql::NDecimal::TInt128, NYql::NDecimal::TInt128>;
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
+                                                          TRow{-NYql::NDecimal::Inf(), -NYql::NDecimal::Inf()},
+                                                          TRow{NYql::NDecimal::TInt128(-9998), -NYql::NDecimal::Inf()},
+                                                          TRow{NYql::NDecimal::TInt128(-6), NYql::NDecimal::TInt128(-8)},
+                                                          TRow{NYql::NDecimal::TInt128(1), NYql::NDecimal::TInt128(-1)},
+                                                          TRow{NYql::NDecimal::TInt128(14), NYql::NDecimal::TInt128(12)},
+                                                          TRow{+NYql::NDecimal::Inf(), NYql::NDecimal::TInt128(9998)},
+                                                          TRow{+NYql::NDecimal::Inf(), +NYql::NDecimal::Inf()},
+                                                          TRow{NYql::NDecimal::Nan(), NYql::NDecimal::Nan()},
+                                                      });
 }
-
 Y_UNIT_TEST_LLVM(TestMinusAbs) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto data1 = pb.NewDecimalLiteral(-NYql::NDecimal::Inf(), 10, 1);
-    const auto data3 = pb.NewDecimalLiteral(-7, 10, 1);
-    const auto data4 = pb.NewDecimalLiteral(0, 10, 1);
-    const auto data5 = pb.NewDecimalLiteral(13, 10, 1);
-    const auto data7 = pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 10, 1);
-    const auto data8 = pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 10, 1);
-
-    const auto list = pb.NewList(pb.NewDecimalType(10, 1), {data1, data3, data4, data5, data7, data8});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<NTest::TDecimalLiteral<10, 1>>{
+                                                           {-NYql::NDecimal::Inf()},
+                                                           {-7},
+                                                           {0},
+                                                           {13},
+                                                           {+NYql::NDecimal::Inf()},
+                                                           {NYql::NDecimal::Nan()},
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -2119,52 +898,24 @@ Y_UNIT_TEST_LLVM(TestMinusAbs) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == 7);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 7);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == 0);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == 0);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -13);
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == +13);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == +NYql::NDecimal::Inf());
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetElement(0).GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(item.GetElement(1).GetInt128() == NYql::NDecimal::Nan());
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    using TRow = std::tuple<NYql::NDecimal::TInt128, NYql::NDecimal::TInt128>;
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
+                                                          TRow{+NYql::NDecimal::Inf(), +NYql::NDecimal::Inf()},
+                                                          TRow{NYql::NDecimal::TInt128(7), NYql::NDecimal::TInt128(7)},
+                                                          TRow{NYql::NDecimal::TInt128(0), NYql::NDecimal::TInt128(0)},
+                                                          TRow{NYql::NDecimal::TInt128(-13), NYql::NDecimal::TInt128(13)},
+                                                          TRow{-NYql::NDecimal::Inf(), +NYql::NDecimal::Inf()},
+                                                          TRow{NYql::NDecimal::Nan(), NYql::NDecimal::Nan()},
+                                                      });
 }
-
 Y_UNIT_TEST_LLVM(TestFromString) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto data0 = pb.NewDataLiteral<NUdf::EDataSlot::String>("0.0");
-    const auto data1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("NAN");
-    const auto data2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("1.0");
-    const auto data3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("-.1");
-    const auto data4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("3.1415926");
-    const auto data5 = pb.NewDataLiteral<NUdf::EDataSlot::String>("+inf");
-    const auto data6 = pb.NewDataLiteral<NUdf::EDataSlot::String>("-INF");
-    const auto data7 = pb.NewDataLiteral<NUdf::EDataSlot::String>(".123E+2");
-    const auto data8 = pb.NewDataLiteral<NUdf::EDataSlot::String>("56.78e-3");
-    const auto type = pb.NewDataType(NUdf::TDataType<char*>::Id);
-    const auto list = pb.NewList(type, {data0, data1, data2, data3, data4, data5, data6, data7, data8});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<TStringBuf>{
+                                                           "0.0", "NAN", "1.0", "-.1", "3.1415926", "+inf", "-INF", ".123E+2", "56.78e-3",
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -2172,43 +923,32 @@ Y_UNIT_TEST_LLVM(TestFromString) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 0);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == NYql::NDecimal::Nan());
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 10000000);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -1000000);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 31415926);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == +NYql::NDecimal::Inf());
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == -NYql::NDecimal::Inf());
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 123000000);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(item.GetInt128() == 567800);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<NYql::NDecimal::TInt128>{
+                                                          NYql::NDecimal::TInt128(0),
+                                                          NYql::NDecimal::Nan(),
+                                                          NYql::NDecimal::TInt128(10000000),
+                                                          NYql::NDecimal::TInt128(-1000000),
+                                                          NYql::NDecimal::TInt128(31415926),
+                                                          +NYql::NDecimal::Inf(),
+                                                          -NYql::NDecimal::Inf(),
+                                                          NYql::NDecimal::TInt128(123000000),
+                                                          NYql::NDecimal::TInt128(567800),
+                                                      });
 }
-
 Y_UNIT_TEST_LLVM(TestToString) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto data0 = pb.NewDecimalLiteral(0, 10, 7);
-    const auto data1 = pb.NewDecimalLiteral(NYql::NDecimal::Nan(), 10, 7);
-    const auto data2 = pb.NewDecimalLiteral(10000000, 10, 7);
-    const auto data3 = pb.NewDecimalLiteral(-1000000, 10, 7);
-    const auto data4 = pb.NewDecimalLiteral(31415926, 10, 7);
-    const auto data5 = pb.NewDecimalLiteral(+NYql::NDecimal::Inf(), 10, 7);
-    const auto data6 = pb.NewDecimalLiteral(-NYql::NDecimal::Inf(), 10, 7);
-    const auto type = pb.NewDecimalType(10, 7);
-    const auto list = pb.NewList(type, {data0, data1, data2, data3, data4, data5, data6});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<NTest::TDecimalLiteral<10, 7>>{
+                                                           {0},
+                                                           {NYql::NDecimal::Nan()},
+                                                           {10000000},
+                                                           {-1000000},
+                                                           {31415926},
+                                                           {+NYql::NDecimal::Inf()},
+                                                           {-NYql::NDecimal::Inf()},
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -2216,38 +956,18 @@ Y_UNIT_TEST_LLVM(TestToString) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "0");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "nan");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "1");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "-0.1");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "3.1415926");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "inf");
-    UNIT_ASSERT(iterator.Next(item));
-    UNBOXED_VALUE_STR_EQUAL(item, "-inf");
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TStringBuf>{
+                                                          "0", "nan", "1", "-0.1", "3.1415926", "inf", "-inf",
+                                                      });
 }
-
 Y_UNIT_TEST_LLVM(TestFromStringToDouble) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto type = pb.NewDataType(NUdf::TDataType<char*>::Id);
-    const auto data0 = pb.NewDataLiteral<NUdf::EDataSlot::String>("0");
-    const auto data1 = pb.NewDataLiteral<NUdf::EDataSlot::String>("+3.332873");
-    const auto data2 = pb.NewDataLiteral<NUdf::EDataSlot::String>("-3.332873");
-    const auto data3 = pb.NewDataLiteral<NUdf::EDataSlot::String>("+3.1415926");
-    const auto data4 = pb.NewDataLiteral<NUdf::EDataSlot::String>("-3.1415926");
-
-    const auto list = pb.NewList(type, {data0, data1, data2, data3, data4});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<TStringBuf>{
+                                                           "0", "+3.332873", "-3.332873", "+3.1415926", "-3.1415926",
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -2255,35 +975,22 @@ Y_UNIT_TEST_LLVM(TestFromStringToDouble) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<double>(), 0.);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<double>(), +3.332873);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<double>(), -3.332873);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<double>(), +3.1415926);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<double>(), -3.1415926);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<double>{
+                                                          0., +3.332873, -3.332873, +3.1415926, -3.1415926,
+                                                      });
 }
-
 Y_UNIT_TEST_LLVM(TestFromUtf8ToFloat) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto type = pb.NewDataType(NUdf::TDataType<NUdf::TUtf8>::Id);
-    const auto data0 = pb.NewDataLiteral<NUdf::EDataSlot::Utf8>("0");
-    const auto data1 = pb.NewDataLiteral<NUdf::EDataSlot::Utf8>("+24.75");
-    const auto data2 = pb.NewDataLiteral<NUdf::EDataSlot::Utf8>("-24.75");
-    const auto data3 = pb.NewDataLiteral<NUdf::EDataSlot::Utf8>("+42.42");
-    const auto data4 = pb.NewDataLiteral<NUdf::EDataSlot::Utf8>("-42.42");
-
-    const auto list = pb.NewList(type, {data0, data1, data2, data3, data4});
+    const auto list = NTest::ConvertValueToLiteralNode(pb,
+                                                       TVector<NTest::TUtf8>{
+                                                           {TStringBuf("0")},
+                                                           {TStringBuf("+24.75")},
+                                                           {TStringBuf("-24.75")},
+                                                           {TStringBuf("+42.42")},
+                                                           {TStringBuf("-42.42")},
+                                                       });
 
     const auto pgmReturn = pb.Map(list,
                                   [&](TRuntimeNode item) {
@@ -2291,21 +998,9 @@ Y_UNIT_TEST_LLVM(TestFromUtf8ToFloat) {
                                   });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<float>(), 0.f);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<float>(), +24.75f);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<float>(), -24.75f);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<float>(), +42.42f);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<float>(), -42.42f);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<float>{
+                                                          0.f, +24.75f, -24.75f, +42.42f, -42.42f,
+                                                      });
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLDecimalTest)
 

@@ -439,10 +439,13 @@ class TConstantFoldingStage : public IRBOStage {
  */
 class TPruneDeadMapElementsRule : public IRule {
   public:
-    TPruneDeadMapElementsRule()
-        : IRule("Prune dead map elements", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
+    TPruneDeadMapElementsRule(bool pruneKeyColumns = true)
+        : IRule("Prune dead map elements", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints | (pruneKeyColumns ? 0x00 : ERuleProperties::RequireMetadata)),
+        PruneKeyColumns(pruneKeyColumns) 
+    {}
 
     virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+    bool PruneKeyColumns = true;
 };
 
 /**
@@ -450,10 +453,13 @@ class TPruneDeadMapElementsRule : public IRule {
  */
 class TPruneDeadReadColumnsRule : public IRule {
   public:
-    TPruneDeadReadColumnsRule()
-        : IRule("Prune dead read columns", ERuleProperties::RequireLiveness) {}
+    TPruneDeadReadColumnsRule(bool pruneKeyColumns = true)
+        : IRule("Prune dead read columns", ERuleProperties::RequireLiveness | (pruneKeyColumns ? 0x00 : ERuleProperties::RequireMetadata)),
+        PruneKeyColumns(pruneKeyColumns) 
+    {}
 
     virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+    bool PruneKeyColumns = true;
 };
 
 /**

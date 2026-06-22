@@ -9,7 +9,7 @@ namespace NYT::NLogging {
 IFileLogWriterPtr CreateFileLogWriter(
     std::unique_ptr<ILogFormatter> formatter,
     std::unique_ptr<ISystemLogEventProvider> systemEventProvider,
-    TString name,
+    std::string name,
     TFileLogWriterConfigPtr config,
     ILogWriterHost* host);
 

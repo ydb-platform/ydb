@@ -15,6 +15,7 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(kafka.h)
 
 PEERDIR(
+    library/cpp/digest/crc32c
     ydb/core/protos
     library/cpp/streams/zstd
     ydb/library/actors/core
@@ -27,4 +28,3 @@ END()
 RECURSE_FOR_TESTS(
     ut
 )
-

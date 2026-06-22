@@ -10,6 +10,9 @@
 #include <library/cpp/json/writer/json_value.h>
 
 #include <util/generic/ptr.h>
+#include <util/generic/string.h>
+
+#include <optional>
 
 namespace NYql {
 
@@ -46,6 +49,8 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     NKikimr::NKqp::TShufflingOrderingsByJoinLabels ShufflingOrderingsByJoinLabels;
     NKikimr::NKqp::TKqpStatsStore KqpStats;
     NKikimr::NKqp::TCBOOptimizerStats CBOStats;
+    std::optional<TString> RboTraceAstBeforeRewriteSelect;
+    std::optional<TString> RboTraceAstAfterRewriteSelect;
 
     std::shared_ptr<NJson::TJsonValue> GetOverrideStatistics();
 

@@ -433,7 +433,8 @@ namespace NUnifiedAgent::NPrivate {
                     return;
                 }
                 MakeGrpcCall();
-            }, &AsyncJoiner));
+            }, &AsyncJoiner),
+            AsyncJoiner);
         ForceCloseTimer = MakeHolder<TGrpcTimer>(Client->GetCompletionQueue(),
             MakeIOCallback([this](EIOStatus status) {
                 if (status == EIOStatus::Error) {
@@ -441,21 +442,24 @@ namespace NUnifiedAgent::NPrivate {
                 }
                 YLOG_INFO("ForceCloseTimer");
                 BeginClose(TInstant::Zero());
-            }, &AsyncJoiner));
+            }, &AsyncJoiner),
+            AsyncJoiner);
         PollTimer = MakeHolder<TGrpcTimer>(Client->GetCompletionQueue(),
             MakeIOCallback([this](EIOStatus status) {
                 if (status == EIOStatus::Error) {
                     return;
                 }
                 Poll();
-            }, &AsyncJoiner));
+            }, &AsyncJoiner),
+            AsyncJoiner);
         GrpcCallWatchdogTimer = MakeHolder<TGrpcTimer>(Client->GetCompletionQueue(),
             MakeIOCallback([this](EIOStatus status) {
                 if (status == EIOStatus::Error) {
                     return;
                 }
                 CheckGrpcCallInactivity();
-            }, &AsyncJoiner));
+            }, &AsyncJoiner),
+            AsyncJoiner);
         EventNotification = MakeHolder<TGrpcNotification>(Client->GetCompletionQueue(),
             MakeIOCallback([this](EIOStatus status) {
                 Y_ABORT_UNLESS(status == EIOStatus::Ok);

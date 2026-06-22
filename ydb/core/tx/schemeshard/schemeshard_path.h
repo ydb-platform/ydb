@@ -72,6 +72,7 @@ public:
         const TChecker& IsInsideCdcStreamPath(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsTable(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& NotBackupTable(EStatus status = EStatus::StatusSchemeError) const;
+        const TChecker& NotReadOnlyColumnTable(EStatus status = EStatus::StatusSchemeError) const;
         const TChecker& NotAsyncReplicaTable(EStatus status = EStatus::StatusSchemeError) const;
         const TChecker& IsBlockStoreVolume(EStatus status = EStatus::StatusNameConflict) const;
         const TChecker& IsFileStore(EStatus status = EStatus::StatusNameConflict) const;
@@ -186,6 +187,7 @@ public:
         const TMaybe<NKikimrSchemeOp::EIndexType>& type = {},
         bool failOnUnresolved = true) const;
     bool IsBackupTable() const;
+    bool IsReadOnlyColumnTable() const;
     bool IsAsyncReplicaTable() const;
     bool IsCdcStream() const;
     bool IsSequence() const;

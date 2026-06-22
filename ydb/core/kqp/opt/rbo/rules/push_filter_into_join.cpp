@@ -38,7 +38,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
         return input;
     }
 
-    if (join->JoinKind != "Inner" && join->JoinKind != "Cross" && join->JoinKind != "Left") {
+    if (join->JoinKind != "Inner" && join->JoinKind != "Cross" && join->JoinKind != "Left" && join->JoinKind != "LeftSemi" && join->JoinKind != "LeftOnly") {
         YQL_CLOG(TRACE, CoreDq) << "Wrong join type " << join->JoinKind << Endl;
         return input;
     }
@@ -58,22 +58,27 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
     TVector<TExpression> pushRight;
     TVector<std::pair<TInfoUnit, TInfoUnit>> joinConditions;
 
+    bool canPushRight = join->JoinKind != "LeftSemi" && join->JoinKind != "LeftOnly";
+
     for (const auto& conj : conjuncts) {
         if (conj.MaybeEquiJoinCondition()) {
             TEquiJoinCondition cond(conj);
 
-            if (IUSetDiff({cond.GetLeftIU()}, leftIUs).empty() && IUSetDiff({cond.GetRightIU()}, rightIUs).empty()) {
-                joinConditions.push_back(std::make_pair(cond.GetLeftIU(), cond.GetRightIU()));
-                continue;
-            } else if (IUSetDiff({cond.GetLeftIU()}, rightIUs).empty() && IUSetDiff({cond.GetRightIU()}, leftIUs).empty()) {
-                joinConditions.push_back(std::make_pair(cond.GetRightIU(), cond.GetLeftIU()));
-                continue;
+            // We cannot push filter into join conditions of a LeftOnly join - will break semantics
+            if(join->JoinKind != "LeftOnly") {
+                if (IUSetDiff({cond.GetLeftIU()}, leftIUs).empty() && IUSetDiff({cond.GetRightIU()}, rightIUs).empty()) {
+                    joinConditions.push_back(std::make_pair(cond.GetLeftIU(), cond.GetRightIU()));
+                    continue;
+                } else if (IUSetDiff({cond.GetLeftIU()}, rightIUs).empty() && IUSetDiff({cond.GetRightIU()}, leftIUs).empty()) {
+                    joinConditions.push_back(std::make_pair(cond.GetRightIU(), cond.GetLeftIU()));
+                    continue;
+                }
             }
         }
 
-        if (IUSetDiff(conj.GetInputIUs(true, true), leftIUs).empty()) {
+        if (IUSetDiff(conj.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true), leftIUs).empty()) {
             pushLeft.push_back(conj);
-        } else if (IUSetDiff(conj.GetInputIUs(true, true), rightIUs).empty()) {
+        } else if (IUSetDiff(conj.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true), rightIUs).empty() && canPushRight) {
             pushRight.push_back(conj);
         } else {
             topLevelPreds.push_back(conj);
@@ -86,7 +91,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
         return input;
     }
 
-    if (!joinConditions.empty()) {
+    if ((join->JoinKind == "Cross" || join->JoinKind == "Left" ) && !joinConditions.empty()) {
         join->JoinKind = "Inner";
     }
 

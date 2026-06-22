@@ -14,10 +14,10 @@ namespace NYT::NSkiffExt {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-extern const TString SparseColumnsName;
-extern const TString OtherColumnsName;
-extern const TString KeySwitchColumnName;
-extern const TString RemainingRowBytesColumnName;
+extern const std::string SparseColumnsName;
+extern const std::string OtherColumnsName;
+extern const std::string KeySwitchColumnName;
+extern const std::string RemainingRowBytesColumnName;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -29,11 +29,11 @@ DEFINE_ENUM(ERowRangeIndexMode,
 class TFieldDescription
 {
 public:
-    DEFINE_BYREF_RO_PROPERTY(TString, Name);
+    DEFINE_BYREF_RO_PROPERTY(std::string, Name);
     DEFINE_BYREF_RO_PROPERTY(std::shared_ptr<NSkiff::TSkiffSchema>, Schema);
 
 public:
-    TFieldDescription(TString name, std::shared_ptr<NSkiff::TSkiffSchema> schema);
+    TFieldDescription(std::string name, std::shared_ptr<NSkiff::TSkiffSchema> schema);
 
     bool IsRequired() const;
     bool IsNullable() const;

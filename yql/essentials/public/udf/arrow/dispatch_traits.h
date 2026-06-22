@@ -3,7 +3,7 @@
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_value_builder.h>
-#include <yql/essentials/public/uuid/yql_uuid.h>
+#include <util/generic/guid.h>
 
 #include <arrow/type.h>
 
@@ -209,8 +209,8 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
                 }
             }
             case NUdf::EDataSlot::Uuid: {
-                if constexpr (CanInstantiateArrowTraits<TTraits, NYql::NUuid::TUuid>) {
-                    return MakeFixedSizeArrowTraitsImpl<TTraits, NYql::NUuid::TUuid>(isOptional, type, std::forward<TArgs>(args)...);
+                if constexpr (CanInstantiateArrowTraits<TTraits, TGUID>) {
+                    return MakeFixedSizeArrowTraitsImpl<TTraits, TGUID>(isOptional, type, std::forward<TArgs>(args)...);
                 } else {
                     Y_ENSURE(false, "Unsupported data slot");
                 }

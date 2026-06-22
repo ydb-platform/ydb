@@ -11,7 +11,7 @@
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/arrow/mkql_bit_utils.h>
 #include <yql/essentials/public/udf/arrow/util.h>
-#include <yql/essentials/public/uuid/yql_uuid.h>
+#include <util/generic/guid.h>
 
 namespace NKikimr::NMiniKQL {
 
@@ -204,8 +204,8 @@ struct TPrimitiveDataType<NYql::NDecimal::TInt128> {
 };
 
 template <>
-struct TPrimitiveDataType<NYql::NUuid::TUuid> {
-    using TLayout = NYql::NUuid::TUuid;
+struct TPrimitiveDataType<TGUID> {
+    using TLayout = TGUID;
 
     class TResult: public arrow::FixedSizeBinaryType {
     public:
@@ -263,7 +263,7 @@ struct TypeTraits<typename NKikimr::NMiniKQL::TPrimitiveDataType<NYql::NDecimal:
 };
 
 template <>
-struct TypeTraits<typename NKikimr::NMiniKQL::TPrimitiveDataType<NYql::NUuid::TUuid>::TResult> {
+struct TypeTraits<typename NKikimr::NMiniKQL::TPrimitiveDataType<TGUID>::TResult> {
     static inline std::shared_ptr<DataType> type_singleton() { // NOLINT(readability-identifier-naming)
         return arrow::fixed_size_binary(16);
     }

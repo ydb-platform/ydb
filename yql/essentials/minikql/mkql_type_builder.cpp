@@ -2652,7 +2652,7 @@ size_t CalcMaxBlockItemSize(const TType* type) {
             case NUdf::EDataSlot::TzTimestamp64:
                 return sizeof(typename NUdf::TDataType<NUdf::TTzTimestamp64>::TLayout) + sizeof(NYql::NUdf::TTimezoneId);
             case NUdf::EDataSlot::Uuid: {
-                return sizeof(NYql::NUuid::TUuid);
+                return sizeof(TGUID);
             }
             case NUdf::EDataSlot::Decimal: {
                 return sizeof(NYql::NDecimal::TInt128);

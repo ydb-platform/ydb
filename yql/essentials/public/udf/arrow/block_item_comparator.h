@@ -5,7 +5,7 @@
 #include <yql/essentials/public/udf/udf_ptr.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_type_size_check.h>
-#include <yql/essentials/public/uuid/yql_uuid.h>
+#include <util/generic/guid.h>
 
 namespace NYql::NUdf {
 
@@ -146,7 +146,7 @@ public:
 };
 
 template <bool Nullable>
-class TFixedSizeBlockItemComparator<NYql::NUuid::TUuid, Nullable>: public TBlockItemComparatorBase<TFixedSizeBlockItemComparator<NYql::NUuid::TUuid, Nullable>, Nullable> {
+class TFixedSizeBlockItemComparator<TGUID, Nullable>: public TBlockItemComparatorBase<TFixedSizeBlockItemComparator<TGUID, Nullable>, Nullable> {
 public:
     i64 DoCompare(TBlockItem lhs, TBlockItem rhs) const {
         return lhs.AsStringRef().Compare(rhs.AsStringRef());

@@ -181,11 +181,11 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
                 return arrow::Datum(std::make_shared<TPrimitiveDataType<NYql::NDecimal::TInt128>::TScalarResult>(buffer));
             }
             case NUdf::EDataSlot::Uuid: {
-                std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(sizeof(NYql::NUuid::TUuid), &pool)));
+                std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(sizeof(TGUID), &pool)));
                 const auto ref = value.AsStringRef();
-                MKQL_ENSURE(ref.Size() == sizeof(NYql::NUuid::TUuid), "Wrong Uuid size: " << ref.Size());
+                MKQL_ENSURE(ref.Size() == sizeof(TGUID), "Wrong Uuid size: " << ref.Size());
                 std::memcpy(buffer->mutable_data(), ref.Data(), ref.Size());
-                return arrow::Datum(std::make_shared<TPrimitiveDataType<NYql::NUuid::TUuid>::TScalarResult>(buffer));
+                return arrow::Datum(std::make_shared<TPrimitiveDataType<TGUID>::TScalarResult>(buffer));
             }
             default:
                 MKQL_ENSURE(false, "Unsupported data slot " << slot);

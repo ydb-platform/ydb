@@ -9,5 +9,4 @@ RECURSE(
     types
     udf
     udf_meta
-    uuid
 )

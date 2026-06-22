@@ -6,7 +6,7 @@
 
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_value_utils.h>
-#include <yql/essentials/public/uuid/yql_uuid.h>
+#include <util/generic/guid.h>
 
 #include <arrow/array/array_binary.h>
 #include <arrow/chunked_array.h>
@@ -43,7 +43,7 @@ public:
 };
 
 template <bool Nullable>
-class TFixedSizeBlockItemConverter<NYql::NUuid::TUuid, Nullable>: public IBlockItemConverter {
+class TFixedSizeBlockItemConverter<TGUID, Nullable>: public IBlockItemConverter {
 public:
     NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
         Y_UNUSED(holderFactory);

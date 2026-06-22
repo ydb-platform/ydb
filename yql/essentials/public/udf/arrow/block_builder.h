@@ -589,9 +589,9 @@ public:
 };
 
 template <bool Nullable>
-class TFixedSizeArrayBuilder<NYql::NUuid::TUuid, Nullable> final: public TFixedSizeArrayBuilderBase<NYql::NUuid::TUuid, Nullable, TFixedSizeArrayBuilder<NYql::NUuid::TUuid, Nullable>> {
-    using TSelf = TFixedSizeArrayBuilder<NYql::NUuid::TUuid, Nullable>;
-    using TBase = TFixedSizeArrayBuilderBase<NYql::NUuid::TUuid, Nullable, TSelf>;
+class TFixedSizeArrayBuilder<TGUID, Nullable> final: public TFixedSizeArrayBuilderBase<TGUID, Nullable, TFixedSizeArrayBuilder<TGUID, Nullable>> {
+    using TSelf = TFixedSizeArrayBuilder<TGUID, Nullable>;
+    using TBase = TFixedSizeArrayBuilderBase<TGUID, Nullable, TSelf>;
     using TParams = TArrayBuilderBase::TParams;
 
 public:
@@ -607,26 +607,26 @@ public:
 
     void DoAddNotNull(TUnboxedValuePod value) {
         const auto ref = value.AsStringRef();
-        NYql::NUuid::TUuid uuid;
-        std::memcpy(uuid.Data, ref.Data(), sizeof(uuid.Data));
+        TGUID uuid;
+        std::memcpy(&uuid, ref.Data(), sizeof(uuid));
         this->PlaceItem(std::move(uuid));
     }
 
     void DoAddNotNull(TBlockItem value) {
         const auto ref = value.AsStringRef();
-        NYql::NUuid::TUuid uuid;
-        std::memcpy(uuid.Data, ref.Data(), sizeof(uuid.Data));
+        TGUID uuid;
+        std::memcpy(&uuid, ref.Data(), sizeof(uuid));
         this->PlaceItem(std::move(uuid));
     }
 
     void DoAddNotNull(TInputBuffer& input) {
-        this->PlaceItem(input.PopNumber<NYql::NUuid::TUuid>());
+        this->PlaceItem(input.PopNumber<TGUID>());
     }
 
     void DoAddNotNull(TBlockItem value, size_t count) {
         const auto ref = value.AsStringRef();
-        NYql::NUuid::TUuid uuid;
-        std::memcpy(uuid.Data, ref.Data(), sizeof(uuid.Data));
+        TGUID uuid;
+        std::memcpy(&uuid, ref.Data(), sizeof(uuid));
         std::fill(this->DataPtr_ + this->GetCurrLen(), this->DataPtr_ + this->GetCurrLen() + count, uuid);
     }
 };

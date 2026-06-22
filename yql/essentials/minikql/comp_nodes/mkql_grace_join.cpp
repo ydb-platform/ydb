@@ -476,7 +476,7 @@ void TGraceJoinPacker::UnPack() {
                 break;
             }
             case NUdf::EDataSlot::Uuid: {
-                MKQL_ENSURE(TupleStrSizes[offset] == sizeof(NYql::NUuid::TUuid), "Bad packed data: invalid uuid size.");
+                MKQL_ENSURE(TupleStrSizes[offset] == sizeof(TGUID), "Bad packed data: invalid uuid size.");
                 value = MakeString(NUdf::TStringRef(TupleStrings[offset], TupleStrSizes[offset]));
                 break;
             }

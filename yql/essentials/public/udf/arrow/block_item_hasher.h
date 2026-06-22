@@ -6,7 +6,7 @@
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_type_ops.h>
 #include <yql/essentials/public/udf/udf_type_size_check.h>
-#include <yql/essentials/public/uuid/yql_uuid.h>
+#include <util/generic/guid.h>
 
 namespace NYql::NUdf {
 
@@ -59,7 +59,7 @@ public:
 };
 
 template <bool Nullable>
-class TFixedSizeBlockItemHasher<NYql::NUuid::TUuid, Nullable>: public TBlockItemHasherBase<TFixedSizeBlockItemHasher<NYql::NUuid::TUuid, Nullable>, Nullable> {
+class TFixedSizeBlockItemHasher<TGUID, Nullable>: public TBlockItemHasherBase<TFixedSizeBlockItemHasher<TGUID, Nullable>, Nullable> {
 public:
     ui64 DoHash(TBlockItem value) const {
         const auto ref = value.AsStringRef();

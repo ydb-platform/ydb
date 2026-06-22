@@ -9,7 +9,7 @@
 
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/udf_value_utils.h>
-#include <yql/essentials/public/uuid/yql_uuid.h>
+#include <util/generic/guid.h>
 
 namespace NYql::NUdf {
 
@@ -64,7 +64,7 @@ public:
                 return {};
             }
         }
-        if constexpr (std::is_same_v<T, NYql::NUuid::TUuid>) {
+        if constexpr (std::is_same_v<T, TGUID>) {
             const auto* ptr = reinterpret_cast<const char*>(&data.GetValues<T>(1)[index]);
             return TBlockItem(TStringRef(ptr, sizeof(T)));
         } else {
@@ -81,7 +81,7 @@ public:
             }
         }
 
-        if constexpr (std::is_same_v<T, NYql::NUuid::TUuid>) {
+        if constexpr (std::is_same_v<T, TGUID>) {
             auto& fixedScalar = checked_cast<const arrow::FixedSizeBinaryScalar&>(scalar);
             return TBlockItem(TStringRef(
                 reinterpret_cast<const char*>(fixedScalar.value->data()),
@@ -137,7 +137,7 @@ public:
             out.PushChar(1);
         }
 
-        if constexpr (std::is_same_v<T, NYql::NDecimal::TInt128> || std::is_same_v<T, NYql::NUuid::TUuid>) {
+        if constexpr (std::is_same_v<T, NYql::NDecimal::TInt128> || std::is_same_v<T, TGUID>) {
             auto& fixedScalar = arrow::internal::checked_cast<const arrow::FixedSizeBinaryScalar&>(scalar);
             T value;
             memcpy((void*)&value, fixedScalar.value->data(), sizeof(T));

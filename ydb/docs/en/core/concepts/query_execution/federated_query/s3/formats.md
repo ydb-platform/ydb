@@ -243,7 +243,11 @@ Query result:
 
 This format allows reading the contents of files as is, in raw form. The data read in this way can be processed using [YQL](../../../yql/reference/udf/list/string) tools, splitting into rows and columns.
 
-This format should be used if the built-in parsing capabilities in {{ ydb-full-name }} are insufficient.
+{% note info %}
+
+The size of each of the files read in `raw` format cannot exceed the overall memory consumption limit for a single query in {{ ydb-short-name }}.
+
+{% endnote %}
 
 {% cut "Example query" %}
 

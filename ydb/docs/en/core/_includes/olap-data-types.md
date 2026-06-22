@@ -1,8 +1,8 @@
 | Data type | Can be used in<br/>column-oriented tables | Can be used<br/>as primary key |
 ---|---|---
 | `Bool` | ✓ | ✓ |
-| `Int8` | ✓ | ☓ |
-| `Int16` | ✓ | ☓ |
+| `Int8` | ✓ | ✓ |
+| `Int16` | ✓ | ✓ |
 | `Int32` | ✓ | ✓ |
 | `Int64` | ✓ | ✓ |
 | `Uint8` | ✓ | ✓ |
@@ -11,7 +11,7 @@
 | `Uint64` | ✓ | ✓ |
 | `Float` | ✓ | ☓ |
 | `Double` | ✓ | ☓ |
-| `Decimal` | ✓ | ☓ |
+| `Decimal` | ✓ | ✓ |
 | `String` | ✓ | ✓ |
 | `Utf8` | ✓ | ✓ |
 | `Json` | ✓ | ☓ |

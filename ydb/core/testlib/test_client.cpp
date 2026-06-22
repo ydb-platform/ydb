@@ -1865,38 +1865,50 @@ namespace Tests {
     }
 
     TServer::~TServer() {
+        Cerr << "Shutdown GRpc" << Endl;
         ShutdownGRpc();
 
         if (YqSharedResources) {
+            Cerr << "Stop YqSharedResources" << Endl;
             YqSharedResources->Stop();
         }
 
         if (Settings->FederatedQuerySetupFactory) {
+            Cerr << "Stop FederatedQuerySetupFactory" << Endl;
             Settings->FederatedQuerySetupFactory->Cleanup();
         }
 
         if (Runtime) {
+            Cerr << "Shutdown Runtime" << Endl;
             WaitFinalization();
             SysViewsRosterUpdateObserver.Remove();
-            Runtime.Destroy();
         }
 
         if (FederatedQuerySetupDriver_) {
+            Cerr << "Stop FederatedQuerySetupDriver" << Endl;
             // Stop is inside a destruction proccess
             // see MakeSharedYdbDriverWithStop
             FederatedQuerySetupDriver_.reset();
         }
 
-        if (Bus) {
-            Bus->Stop();
-            Bus.Drop();
-        }
-
         if (Driver) {
+            Cerr << "Stop FederatedQuerySetupDriver" << Endl;
             // Stop requests and wait for their completion
             Driver->Stop(true);
             Driver.Reset();
         }
+
+        if (Runtime) {
+            Cerr << "Destroy Runtime" << Endl;
+            Runtime.Destroy();
+        }
+
+        if (Bus) {
+            Cerr << "Stop Bus" << Endl;
+            Bus->Stop();
+            Bus.Drop();
+        }
+        Cerr << "~TServer complete" << Endl;
     }
 
 

@@ -9363,13 +9363,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
 
         ui64 version = 1;
-        auto makeRequest = [&](ui64 newSize, NKikimrProto::EReplyStatus expectedStatus) {
+        auto makeRequest = [&](ui64 newSize, NKikimrProto::EReplyStatus expectedStatus, ui64 version) {
             auto request = std::make_unique<TEvHive::TEvShrinkStoragePool>();
             request->Record.MutableSubDomain()->SetSchemeShard(TTestTxConfig::SchemeShard);
             request->Record.MutableSubDomain()->SetPathId(1);
             request->Record.SetStoragePool("def1");
             request->Record.SetNewSize(newSize);
-            request->Record.SetVersion(++version);
+            request->Record.SetVersion(version);
             runtime.SendToPipe(hiveTablet, senderA, request.release(), 0, GetPipeConfigWithRetries());
             TAutoPtr<IEventHandle> handle;
             auto response = runtime.GrabEdgeEventRethrow<TEvHive::TEvShrinkStoragePoolReply>(handle);
@@ -9378,11 +9378,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             return response->Record.GetGroupsToRemove();
         };
 
-        auto groupsToRemove = makeRequest(3, NKikimrProto::OK);
+        auto groupsToRemove = makeRequest(3, NKikimrProto::OK, version);
         UNIT_ASSERT(std::ranges::none_of(groupsToRemove, [&](auto groupId) { return usedGroups.contains(groupId); }));
-        makeRequest(10, NKikimrProto::ERROR);
-        makeRequest(0, NKikimrProto::ERROR);
-        makeRequest(5, NKikimrProto::OK);
+        auto groupsToRemove1 = makeRequest(3, NKikimrProto::OK, version); // idempotency
+        UNIT_ASSERT(std::ranges::equal(groupsToRemove, groupsToRemove1));
+        makeRequest(10, NKikimrProto::ERROR, ++version);
+        makeRequest(0, NKikimrProto::ERROR, ++version);
+        makeRequest(5, NKikimrProto::OK, ++version);
     }
 
     void TestShrinkStoragePool(TTestBasicRuntime& runtime, bool& activeZone) {

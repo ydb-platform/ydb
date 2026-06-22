@@ -16,7 +16,7 @@
 
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 #include <ydb/core/persqueue/ut/common/sdk_ut_common.h>
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/library/kafka/ut/ut_common.h>
 
 #include <random>
 
@@ -35,17 +35,6 @@ static constexpr const char NON_CHARGEABLE_USER_Y[] = "superuser_y@builtin";
 
 static constexpr const char DEFAULT_CLOUD_ID[] = "somecloud";
 static constexpr const char DEFAULT_FOLDER_ID[] = "somefolder";
-
-void AssertKafkaBatchPayload(TStringBuf payload, size_t expectedRecordsCount, char expectedFill, size_t expectedDataSize) {
-    const auto batch = NKafka::ReadKafkaRecordBatch(payload);
-    UNIT_ASSERT_VALUES_EQUAL(batch.Records.size(), expectedRecordsCount);
-
-    for (const auto& record : batch.Records) {
-        UNIT_ASSERT_C(record.Value.has_value(), "Kafka batch record has no value");
-        UNIT_ASSERT_VALUES_EQUAL(record.Value->size(), expectedDataSize);
-        UNIT_ASSERT_VALUES_EQUAL(TStringBuf(record.Value->data(), record.Value->size()), TString(expectedDataSize, expectedFill));
-    }
-}
 
 template<class TKikimr, bool secure>
 class TDatastreamsTestServer {
@@ -2519,7 +2508,7 @@ waitForNavCache:
                 UNIT_ASSERT_C(readIndex < expectedFills.size(), LabeledOutput(readIndex));
                 UNIT_ASSERT_VALUES_EQUAL(record.sequence_number(), expectedSequenceNumbers[readIndex]);
                 UNIT_ASSERT_VALUES_EQUAL(record.codec(), static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH));
-                AssertKafkaBatchPayload(record.data(), 3, expectedFills[readIndex], dataSize);
+                NKafka::NTest::AssertKafkaBatchPayload(record.data(), 3, expectedFills[readIndex], dataSize);
                 ++readIndex;
             }
 

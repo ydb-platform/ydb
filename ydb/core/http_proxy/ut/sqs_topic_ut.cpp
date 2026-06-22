@@ -5,7 +5,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/ymq/actor/metering.h>
 #include <ydb/core/ymq/base/limits.h>
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/library/kafka/ut/ut_common.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
@@ -28,17 +28,6 @@ using TFixture = THttpProxyTestMockForSQSTopic;
 
 
 namespace {
-    void AssertKafkaBatchPayload(TStringBuf payload, size_t expectedRecordsCount, char expectedFill, size_t expectedDataSize) {
-        const auto batch = NKafka::ReadKafkaRecordBatch(payload);
-        UNIT_ASSERT_VALUES_EQUAL(batch.Records.size(), expectedRecordsCount);
-
-        for (const auto& record : batch.Records) {
-            UNIT_ASSERT_C(record.Value.has_value(), "Kafka batch record has no value");
-            UNIT_ASSERT_VALUES_EQUAL(record.Value->size(), expectedDataSize);
-            UNIT_ASSERT_VALUES_EQUAL(TStringBuf(record.Value->data(), record.Value->size()), TString(expectedDataSize, expectedFill));
-        }
-    }
-
     class TNoAuthFixture: public THttpProxyTestMockForSQSTopic {
     public:
         void SetUp(NUnitTest::TTestContext& ctx) override {
@@ -699,7 +688,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                     UNIT_ASSERT_VALUES_EQUAL(
                         message["Attributes"]["BodyEncoding"].GetString(),
                         ToString(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH)));
-                    AssertKafkaBatchPayload(Base64Decode(message["Body"].GetString()), 3, expectedFills[receivedCount], dataSize);
+                    NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(message["Body"].GetString()), 3, expectedFills[receivedCount], dataSize);
                     ++receivedCount;
                 }
             }

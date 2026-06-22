@@ -4785,7 +4785,8 @@ void AddHeadKeyWithBatch(
     const TPartitionId& partitionId,
     ui64 offset,
     char fill,
-    ui64 seqNo)
+    ui64 seqNo,
+    ui32 levelIndex = 0)
 {
     std::deque<TClientBlob> dq;
     dq.push_back(MakeSinglePartBodyReadBlob(seqNo, fill));
@@ -4795,10 +4796,12 @@ void AddHeadKeyWithBatch(
 
     const TKey key = TKey::ForHead(TKeyPrefix::TypeData, partitionId, offset, 0, 1, 0);
 
-    if (encoder.DataKeysHead.empty()) {
-        encoder.DataKeysHead.emplace_back(levelBorder);
+    if (encoder.DataKeysHead.size() <= levelIndex) {
+        while (encoder.DataKeysHead.size() <= levelIndex) {
+            encoder.DataKeysHead.emplace_back(levelBorder);
+        }
     }
-    encoder.DataKeysHead[0].AddKey(key, blobSize);
+    encoder.DataKeysHead[levelIndex].AddKey(key, blobSize);
     encoder.HeadKeys.push_back(TDataKey{key, blobSize, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()});
     encoder.Head.AddBatch(batch);
 }
@@ -4807,8 +4810,8 @@ Y_UNIT_TEST(PopFrontHeadKeySyncsHeadWithRemainingHeadKeys) {
     const TPartitionId partitionId(1);
     TPartitionBlobEncoder encoder(partitionId, false);
 
-    AddHeadKeyWithBatch(encoder, 8_MB, partitionId, 10, 'a', 1);
-    AddHeadKeyWithBatch(encoder, 8_MB, partitionId, 11, 'b', 2);
+    AddHeadKeyWithBatch(encoder, 8_MB, partitionId, 10, 'a', 1, 0);
+    AddHeadKeyWithBatch(encoder, 8_MB, partitionId, 11, 'b', 2, 0);
 
     encoder.Head.Offset = 10;
     encoder.Head.PartNo = 0;

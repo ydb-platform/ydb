@@ -4176,6 +4176,54 @@ Y_UNIT_TEST(TestRetentionDeletesLastBlobInCzh) {
     WaitRetentionCleanup(tc, 202, 202, retentionSeconds);
 }
 
+Y_UNIT_TEST(TestRetentionDropsBodyBeforeYoungerHeadKeys) {
+    // After CZB data ages out, StartOffset moves to 200 and younger CZH head keys stay.
+    // Old bug: FinalizeEmptyBlobEncoder wiped all HeadKeys → (202, 202).
+    TTestContext tc;
+    TFinalizer finalizer(tc);
+    tc.Prepare();
+    SetEnableTopicRetentionDeleteLastBlob(tc);
+    tc.Runtime->SetScheduledLimit(5000);
+    tc.Runtime->GetAppData(0).PQConfig.MutableCompactionConfig()->SetBlobsCount(0);
+
+    constexpr ui32 retentionSeconds = 5;
+
+    // Long retention during setup so wakeups do not drop data between writes.
+    PQTabletPrepare({.deleteTime = 10'000, .partitions = 1, .writeSpeed = 50_MB, .AddDefaultConsumer = false}, {}, tc);
+    PQGetPartInfo(0, 0, tc);
+
+    TVector<std::pair<ui64, TString>> data;
+    data.emplace_back(1, TString(7_MB, 'x'));
+    CmdWrite(0, "sourceid_czb", data, tc, false, {}, true, "", -1, 100);
+    CmdRunCompaction(0, tc);
+
+    data[0].second = TString(1_KB, 'y');
+    ++data[0].first;
+    CmdWrite(0, "sourceid_czh_old", data, tc, false, {}, true, "", -1, 200);
+
+    tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(10));
+
+    ++data[0].first;
+    CmdWrite(0, "sourceid_czh_young", data, tc, false, {}, true, "", -1, 201);
+
+    CmdRunCompaction(0, tc);
+    PQTabletRestart(tc);
+    PQGetPartInfo(100, 202, tc);
+
+    PQTabletPrepare({.deleteTime = retentionSeconds, .partitions = 1, .writeSpeed = 50_MB, .AddDefaultConsumer = false}, {}, tc);
+    tc.Runtime->AdvanceCurrentTime(TDuration::Seconds(4));
+    for (ui32 i = 0; i < 10; ++i) {
+        DispatchUntilWakeup(tc);
+        if (TryPQGetPartInfo(200, 202, tc)) {
+            break;
+        }
+        UNIT_ASSERT(!TryPQGetPartInfo(202, 202, tc));
+    }
+    PQGetPartInfo(200, 202, tc);
+
+    CmdRead(0, 200, 2, Max<i32>(), 2, false, tc, {200, 201});
+}
+
 Y_UNIT_TEST(TestPartitionMetaOffsetsSurviveRestartWithoutRetentionFlag) {
     // AddMetaKey / meta load are not gated by EnableTopicRetentionDeleteLastBlob.
     TTestContext tc;

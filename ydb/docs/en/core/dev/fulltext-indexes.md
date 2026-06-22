@@ -160,16 +160,16 @@ When you create a fulltext index on a table whose primary key is not a single in
 
 * adds the `__ydb_row_id` column to the table — existing rows are backfilled while the index is being built;
 * generates a `__ydb_row_id` value for every row where the column is omitted from `INSERT` / `UPSERT`;
-* creates a unique [secondary index](../concepts/glossary.md#secondary-index) named `uniq__ydb_row_id` over `__ydb_row_id`. At query time this index maps a matched `__ydb_row_id` back to the table's primary key before the row is read from the main table.
+* creates a unique [secondary index](../concepts/glossary.md#secondary-index) named `__ydb_unique_row_id` over `__ydb_row_id`. At query time this index maps a matched `__ydb_row_id` back to the table's primary key before the row is read from the main table.
 
-If the table already has more than one fulltext index, they all **reuse** the same `__ydb_row_id` column and `uniq__ydb_row_id` index — these structures are created only once per table.
+If the table already has more than one fulltext index, they all **reuse** the same `__ydb_row_id` column and `__ydb_unique_row_id` index — these structures are created only once per table.
 
 {% note warning %}
 
-The `__ydb_row_id` column and the `uniq__ydb_row_id` index are managed by {{ ydb-short-name }}:
+The `__ydb_row_id` column and the `__ydb_unique_row_id` index are managed by {{ ydb-short-name }}:
 
-* Let {{ ydb-short-name }} populate `__ydb_row_id` — omit it from `INSERT` / `UPSERT` and it is filled in automatically. If you supply a value explicitly, it is stored as given, and you become responsible for keeping it unique (the `uniq__ydb_row_id` index rejects duplicates). `BulkUpsert` does not support `__ydb_row_id` and rejects requests that set it.
-* The `uniq__ydb_row_id` index cannot be dropped while any fulltext index depends on it. Drop the dependent fulltext index(es) first.
+* Let {{ ydb-short-name }} populate `__ydb_row_id` — omit it from `INSERT` / `UPSERT` and it is filled in automatically. If you supply a value explicitly, it is stored as given, and you become responsible for keeping it unique (the `__ydb_unique_row_id` index rejects duplicates). `BulkUpsert` does not support `__ydb_row_id` and rejects requests that set it.
+* The `__ydb_unique_row_id` index cannot be dropped while any fulltext index depends on it. Drop the dependent fulltext index(es) first.
 
 {% endnote %}
 
@@ -217,7 +217,7 @@ ALTER TABLE articles DROP INDEX ft_index;
 
 ## Limitations {#limitations}
 
-* Tables with a non-integer or composite primary key get an auto-managed `__ydb_row_id` column and `uniq__ydb_row_id` unique index (see [Primary key types](#primary-key)).
+* Tables with a non-integer or composite primary key get an auto-managed `__ydb_row_id` column and `__ydb_unique_row_id` unique index (see [Primary key types](#primary-key)).
 * `BulkUpsert` isn't supported for tables with fulltext indexes.
 * Fulltext index access must be specified explicitly using `VIEW IndexName`.
 * Only one text column can be indexed (per fulltext index). Use `COVER` for additional columns.

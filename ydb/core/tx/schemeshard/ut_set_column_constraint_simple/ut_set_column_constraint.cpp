@@ -1,5 +1,4 @@
 #include <ydb/core/testlib/tablet_helpers.h>
-#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/library/testlib/helpers.h>
@@ -10,79 +9,6 @@ using namespace NSchemeShard;
 using namespace NSchemeShardUT_Private;
 
 Y_UNIT_TEST_SUITE(SetNotNullTest) {
-    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(
-        TTestActorRuntime& runtime,
-        ui64 txId,
-        ui64 schemeShard,
-        const TString& dbName,
-        const TString& tablePath,
-        const TVector<TString>& notNullColumns)
-    {
-        // We can't do `GetRequest`, because it is not implemented at the time of writing the test
-        NKikimrSetColumnConstraint::TSetColumnConstraintSettings settings;
-        settings.SetTablePath(tablePath);
-        for (const auto& col : notNullColumns) {
-            settings.AddNotNullColumns(col);
-        }
-
-        auto sender = runtime.AllocateEdgeActor();
-        auto request = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>(txId, dbName, std::move(settings));
-        ForwardToTablet(runtime, schemeShard, sender, request.Release());
-
-        TAutoPtr<IEventHandle> handle;
-        auto* event = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvCreateResponse>(handle);
-        UNIT_ASSERT(event);
-        return event->Record;
-    }
-
-    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraintWithoutSettings(
-        TTestActorRuntime& runtime,
-        ui64 txId,
-        ui64 schemeShard,
-        const TString& dbName)
-    {
-        auto sender = runtime.AllocateEdgeActor();
-        auto request = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>();
-        request->Record.SetTxId(txId);
-        request->Record.SetDatabaseName(dbName);
-        ForwardToTablet(runtime, schemeShard, sender, request.Release());
-
-        TAutoPtr<IEventHandle> handle;
-        auto* event = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvCreateResponse>(handle);
-        UNIT_ASSERT(event);
-        return event->Record;
-    }
-
-    void CheckColumnsNotNull(
-        TTestActorRuntime& runtime,
-        const TString& tablePath,
-        const std::map<TString, bool>& expectedColumnNotNullStates)
-    {
-        const auto describeResult = DescribePath(runtime, tablePath);
-        const auto& columns = describeResult.GetPathDescription().GetTable().GetColumns();
-
-        std::map<TString, bool> currentNotNull;
-
-        for (const auto& column : columns) {
-            currentNotNull[column.GetName()] = column.GetNotNull();
-        }
-
-        for (const auto& [columnName, expectedNotNullValue] : expectedColumnNotNullStates) {
-            auto it = currentNotNull.find(columnName);
-            UNIT_ASSERT_C(
-                it != currentNotNull.end(),
-                TStringBuilder()
-                    << "[CheckColumnsNotNull] Column `" << columnName << "` not found. "
-                    << describeResult.ShortDebugString());
-            UNIT_ASSERT_VALUES_EQUAL_C(
-                it->second,
-                expectedNotNullValue,
-                TStringBuilder()
-                    << "[CheckColumnsNotNull] Column `" << columnName << "` not null state mismatch. "
-                    << describeResult.ShortDebugString());
-        }
-    }
-
     Y_UNIT_TEST(BasicRequest) {
         TTestBasicRuntime runtime;
         runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
@@ -122,7 +48,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
-        CheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
 
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, tablePath), 0u);
 
@@ -188,7 +114,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
-        CheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
 
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, tablePath), 0u);
 
@@ -266,7 +192,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
-        CheckColumnsNotNull(runtime, tablePath, {{"value", false}});
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", false}});
 
         UNIT_ASSERT_VALUES_EQUAL(CountRows(runtime, tablePath), 3u);
 
@@ -405,7 +331,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             "Failed item check: Column 'non_existent_column' does not exist",
             response.ShortDebugString());
 
-        CheckColumnsNotNull(runtime, tablePath, {{"value", false}});
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", false}});
     }
 
     Y_UNIT_TEST(EmptyColumns) {
@@ -447,7 +373,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             "Failed item check: There are no columns that need to be updated",
             response.ShortDebugString());
 
-        CheckColumnsNotNull(runtime, tablePath, {{"value", false}});
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", false}});
     }
 
     Y_UNIT_TEST(DuplicateColumns) {
@@ -489,7 +415,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             "Duplicate column name `value` in not null columns.",
             response.ShortDebugString());
 
-        CheckColumnsNotNull(runtime, tablePath, {{"value", false}});
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", false}});
     }
 
     Y_UNIT_TEST(IndexPathRejected) {
@@ -542,7 +468,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             "path is not a table",
             response.ShortDebugString());
 
-        CheckColumnsNotNull(runtime, tablePath, {{"value", false}});
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", false}});
     }
 
     Y_UNIT_TEST(NullDataValidationFails) {
@@ -592,7 +518,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
-        CheckColumnsNotNull(runtime, tablePath, {{"value", false}});
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", false}});
 
         {
             TVector<TCell> cells = {
@@ -675,7 +601,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
-        CheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
     }
 
     Y_UNIT_TEST(AlreadyNotNull) {
@@ -735,7 +661,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
-        CheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
 
         {
             TVector<TCell> cells = {
@@ -817,7 +743,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
-        CheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
     }
 
     Y_UNIT_TEST(NullDataValidationFailsPreservesOtherColumns) {
@@ -841,7 +767,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        CheckColumnsNotNull(runtime, tablePath, {
+        TestCheckColumnsNotNull(runtime, tablePath, {
             {"notnull_col",  true},
             {"nullable_col", false},
         });
@@ -876,7 +802,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
-        CheckColumnsNotNull(runtime, tablePath, {
+        TestCheckColumnsNotNull(runtime, tablePath, {
             {"notnull_col",  true},
             {"nullable_col", false},
         });
@@ -994,7 +920,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
-        CheckColumnsNotNull(runtime, tablePath, {{"value", true}});
+        TestCheckColumnsNotNull(runtime, tablePath, {{"value", true}});
         tryToUpsert();
     }
 

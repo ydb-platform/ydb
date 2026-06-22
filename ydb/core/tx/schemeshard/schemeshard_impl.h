@@ -2008,7 +2008,8 @@ public:
     void PersistSetColumnConstraintUnlockTxId(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
     void PersistSetColumnConstraintUnlockTxStatus(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
     void PersistSetColumnConstraintUnlockTxDone(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
-    void PersistSetColumnConstraintValidationShardStatus(NIceDb::TNiceDb& db, TIndexBuildId operationId, TShardIdx shardIdx, const TSetColumnConstraintOperationInfo& operationInfo);
+    void PersistSetColumnConstraintValidationFailedValue(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo);
+    void PersistSetColumnConstraintShardDone(NIceDb::TNiceDb& db, TIndexBuildId operationId, TShardIdx shardIdx, const TSetColumnConstraintOperationInfo& operationInfo);
 
     void AddSetColumnConstraintOperation(const std::shared_ptr<TSetColumnConstraintOperationInfo>& indexInfo);
 

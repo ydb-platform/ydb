@@ -2619,7 +2619,7 @@ struct Schema : NIceDb::Schema {
         struct ValidationFailed :       Column<5, NScheme::NTypeIds::Bool>    { static constexpr bool Default = false; };
         struct OperationState :         Column<6, NScheme::NTypeIds::Uint32>  {};
 
-        // We dont want keep LockingNullWritesTxId/FinishingTxId/UnlockingTxId separately
+        // We dont want keep LockingNullWritesTxId/FinishingTxId/UnlockingTxId separately (look at struct IndexBuild : Table<69> for an explanation)
         struct SubStateTxId :           Column<7, NScheme::NTypeIds::Uint64>  { using Type = TTxId; };
         struct SubStateTxStatus :       Column<8, NScheme::NTypeIds::Uint32>  { using Type = NKikimrScheme::EStatus; };
         struct SubStateTxDone :         Column<9, NScheme::NTypeIds::Bool>    {};

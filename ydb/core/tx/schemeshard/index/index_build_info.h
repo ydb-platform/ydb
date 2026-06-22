@@ -992,11 +992,12 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     NKikimrScheme::EStatus UnlockNullWritesTxStatus = NKikimrScheme::StatusSuccess;
     bool UnlockNullWritesTxDone = false;
 
+    bool NeedToCalculateValidationShards = true;
     THashMap<TShardIdx, TValidateColumnConstraintShardStatus> ValidationShards;
 
     TDeque<TShardIdx> ToValidateShards;
     THashSet<TShardIdx> InProgressValidationShards;
-    TVector<TShardIdx> DoneValidationShards;
+    THashSet<TShardIdx> DoneValidationShards;
 
     constexpr static ui32 MaxInProgressValidationShards = 10;
 

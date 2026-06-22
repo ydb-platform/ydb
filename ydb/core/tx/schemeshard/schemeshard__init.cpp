@@ -5362,7 +5362,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
                     switch (operationInfo->OperationState) {
                         case TSetColumnConstraintOperationInfo::EOperationState::Locking:
-                            operationInfo->LockTxId = subStateTxId; // still in Locking: SubState is LockTxId
+                            // We set the operationInfo->LockTxId value above in the code
                             operationInfo->LockTxStatus = subStateTxStatus;
                             operationInfo->LockTxDone = subStateTxDone;
                             if (subStateTxId && !subStateTxDone) {
@@ -5441,14 +5441,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     shardStatus.DebugMessage = issue;
 
                     operationInfo.ValidationShards.emplace(shardIdx, std::move(shardStatus));
-
-                    if (validateStatus == NKikimrSetColumnConstraint::EValidateStatus::DONE ||
-                        validateStatus == NKikimrSetColumnConstraint::EValidateStatus::BAD_REQUEST)
-                    {
-                        operationInfo.DoneValidationShards.emplace_back(shardIdx);
-                    } else {
-                        operationInfo.ToValidateShards.emplace_back(shardIdx);
-                    }
+                    operationInfo.DoneValidationShards.insert(shardIdx);
 
                     if (!rowset.Next()) {
                         return false;

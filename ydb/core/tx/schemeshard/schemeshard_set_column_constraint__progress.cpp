@@ -378,6 +378,8 @@ public:
             return true;
         }
 
+        auto oldValidationFailedValue = operationInfo.ValidationFailed;
+
         auto& shardStatus = operationInfo.ValidationShards.at(shardIdx);
         shardStatus.ValidateStatus = record.GetStatus();
 
@@ -399,7 +401,7 @@ public:
             }
 
             operationInfo.InProgressValidationShards.erase(shardIdx);
-            operationInfo.DoneValidationShards.emplace_back(shardIdx);
+            operationInfo.DoneValidationShards.insert(shardIdx);
 
             Progress(BuildId);
 
@@ -410,7 +412,7 @@ public:
             operationInfo.ValidationFailed = true;
 
             operationInfo.InProgressValidationShards.erase(shardIdx);
-            operationInfo.DoneValidationShards.emplace_back(shardIdx);
+            operationInfo.DoneValidationShards.insert(shardIdx);
 
             Progress(BuildId);
 
@@ -421,7 +423,11 @@ public:
 
         {
             NIceDb::TNiceDb db(txc.DB);
-            Self->PersistSetColumnConstraintValidationShardStatus(db, BuildId, shardIdx, operationInfo);
+            if (oldValidationFailedValue != operationInfo.ValidationFailed) {
+                Self->PersistSetColumnConstraintValidationFailedValue(db, operationInfo);
+            }
+
+            Self->PersistSetColumnConstraintShardDone(db, BuildId, shardIdx, operationInfo);
         }
 
         return true;
@@ -514,7 +520,7 @@ struct TSchemeShard::TIndexBuilder::TTxProgressSetColumnConstraint
 private:
     TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
 
-    bool InitiateValidationShards(NIceDb::TNiceDb& db, TSetColumnConstraintOperationInfo& operationInfo) {
+    bool InitiateValidationShards(TSetColumnConstraintOperationInfo& operationInfo) {
         LOG_D("InitiateValidationShards, id# " << BuildId);
 
         Y_ENSURE(operationInfo.ValidationShards.empty());
@@ -532,6 +538,11 @@ private:
         TTableInfo::TPtr table = Self->Tables.at(path->PathId);
 
         for (const auto* partition : table->GetPartitions()) {
+            // We can initate shards after schemeshard's reboot.
+            if (operationInfo.DoneValidationShards.contains(partition->ShardIdx)) {
+                continue;
+            }
+
             Y_ENSURE(Self->ShardInfos.contains(partition->ShardIdx));
 
             // For validation, we scan the entire shard, so use empty range and lastKeyAck
@@ -543,9 +554,6 @@ private:
 
             operationInfo.ToValidateShards.emplace_back(partition->ShardIdx);
             LOG_D("InitiateValidationShards: added shard " << partition->ShardIdx);
-
-
-            Self->PersistSetColumnConstraintValidationShardStatus(db, BuildId, partition->ShardIdx, operationInfo);
         }
 
         return true;
@@ -589,12 +597,12 @@ private:
         return operationInfo.InProgressValidationShards.empty() && operationInfo.ToValidateShards.empty();
     }
 
-    bool DriveToSendMessageToPartOfShards(TTransactionContext& txc, TSetColumnConstraintOperationInfo& operationInfo) {
+    bool DriveToSendMessageToPartOfShards(TSetColumnConstraintOperationInfo& operationInfo) {
         LOG_D("DriveToSendMessageToPartOfShards Start, id# " << BuildId);
 
-        if (operationInfo.ValidationShards.empty()) {
-            NIceDb::TNiceDb db(txc.DB);
-            if (!InitiateValidationShards(db, operationInfo)) {
+        if (operationInfo.NeedToCalculateValidationShards) {
+            operationInfo.NeedToCalculateValidationShards = false;
+            if (!InitiateValidationShards(operationInfo)) {
                 return false;
             }
         }
@@ -615,7 +623,7 @@ public:
         : TTxBase(self, operationId, TXTYPE_CREATE_SET_COLUMN_CONSTRAINT)
     {}
 
-    bool DoExecute(TTransactionContext& txc, const TActorContext& /*ctx*/) override {
+    bool DoExecute(TTransactionContext&, const TActorContext& /*ctx*/) override {
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         Y_ENSURE(operationInfoPtr);
         auto& operationInfo = *operationInfoPtr->get();
@@ -656,7 +664,7 @@ public:
                 break;
             }
             case TSetColumnConstraintOperationInfo::EOperationState::Validating: {
-                if (DriveToSendMessageToPartOfShards(txc, operationInfo)) {
+                if (DriveToSendMessageToPartOfShards(operationInfo)) {
                     ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Finishing);
                     Progress(BuildId);
                 }

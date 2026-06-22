@@ -10,6 +10,10 @@ TString SerializeSetColumnConstraintColumnNames(const std::vector<std::string>& 
 }
 
 std::vector<std::string> DeserializeSetColumnConstraintColumnNames(const TString& serialized) {
+    if (serialized.size() == 0) {
+        return {};
+    }
+
     std::vector<std::string> parts = {""};
 
     for (size_t i = 0; i < serialized.size(); ++i) {
@@ -121,7 +125,16 @@ void TSchemeShard::PersistSetColumnConstraintUnlockTxDone(NIceDb::TNiceDb& db, c
     );
 }
 
-void TSchemeShard::PersistSetColumnConstraintValidationShardStatus(
+void TSchemeShard::PersistSetColumnConstraintValidationFailedValue(
+    NIceDb::TNiceDb& db,
+    const TSetColumnConstraintOperationInfo& operationInfo)
+{
+    db.Table<Schema::SetColumnConstraint>().Key(ui64(operationInfo.Id)).Update(
+        NIceDb::TUpdate<Schema::SetColumnConstraint::ValidationFailed>(operationInfo.ValidationFailed)
+    );
+}
+
+void TSchemeShard::PersistSetColumnConstraintShardDone(
     NIceDb::TNiceDb& db,
     TIndexBuildId operationId,
     TShardIdx shardIdx,

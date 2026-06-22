@@ -114,8 +114,10 @@ Y_UNIT_TEST_SUITE(TAccessServiceTest) {
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());
     }
+}
 
-    Y_UNIT_TEST(AuthenticateV2) {
+Y_UNIT_TEST_SUITE(TAccessServiceTestV2) {
+    Y_UNIT_TEST(Authenticate) {
         TTestSetup setup(true);
 
         TAutoPtr<IEventHandle> handle;
@@ -137,24 +139,7 @@ Y_UNIT_TEST_SUITE(TAccessServiceTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Response.subject().user_account().id(), "1234");
     }
 
-    Y_UNIT_TEST(PassRequestIdV2) {
-        TTestSetup setup(true);
-
-        TAutoPtr<IEventHandle> handle;
-        auto& req = setup.AccessServiceMockV2.AuthenticateData["token"];
-        req.Response.mutable_subject()->mutable_user_account()->set_id("1234");
-        req.RequireRequestId = true;
-
-        auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequestV2>();
-        request->Request.set_iam_token("token");
-        request->RequestId = "trololo";
-        setup.GetRuntime()->Send(new IEventHandle(setup.AccessServiceActor->SelfId(), setup.EdgeActor, request.Release()));
-        auto result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvAccessService::TEvAuthenticateResponseV2>(handle);
-        UNIT_ASSERT(result);
-        UNIT_ASSERT(result->Status.Ok());
-    }
-
-    Y_UNIT_TEST(AuthorizeV2) {
+    Y_UNIT_TEST(Authorize) {
         TTestSetup setup(true);
 
         TAutoPtr<IEventHandle> handle;
@@ -171,13 +156,13 @@ Y_UNIT_TEST_SUITE(TAccessServiceTest) {
         UNIT_ASSERT_VALUES_EQUAL(result->Response.subject().user_account().id(), "user1");
     }
 
-    Y_UNIT_TEST(BulkAuthorizeV2) {
+    Y_UNIT_TEST(BulkAuthorize) {
         TTestSetup setup(true);
 
         TAutoPtr<IEventHandle> handle;
         setup.AccessServiceMockV2.BulkAuthorizeData["user1-something.read-test_folder_1-something.write-test_folder_2"].Response.mutable_subject()->mutable_user_account()->set_id("user1");
 
-        auto request = MakeHolder<NCloud::TEvAccessService::TEvBulkAuthorizeRequest>();
+        auto request = MakeHolder<NCloud::TEvAccessService::TEvBulkAuthorizeRequestV2>();
         request->Request.set_iam_token("user1");
         auto* action1 = request->Request.mutable_actions()->add_items();
         action1->add_resource_path()->set_id("test_folder_1");
@@ -187,9 +172,26 @@ Y_UNIT_TEST_SUITE(TAccessServiceTest) {
         action2->set_permission("something.write");
         request->Request.set_result_filter(yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest::ALL_FAILED);
         setup.GetRuntime()->Send(new IEventHandle(setup.AccessServiceActor->SelfId(), setup.EdgeActor, request.Release()));
-        auto result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvAccessService::TEvBulkAuthorizeResponse>(handle);
+        auto result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvAccessService::TEvBulkAuthorizeResponseV2>(handle);
         UNIT_ASSERT(result);
         UNIT_ASSERT(result->Status.Ok());
         UNIT_ASSERT_VALUES_EQUAL(result->Response.subject().user_account().id(), "user1");
+    }
+
+    Y_UNIT_TEST(PassRequestId) {
+        TTestSetup setup(true);
+
+        TAutoPtr<IEventHandle> handle;
+        auto& req = setup.AccessServiceMockV2.AuthenticateData["token"];
+        req.Response.mutable_subject()->mutable_user_account()->set_id("1234");
+        req.RequireRequestId = true;
+
+        auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequestV2>();
+        request->Request.set_iam_token("token");
+        request->RequestId = "trololo";
+        setup.GetRuntime()->Send(new IEventHandle(setup.AccessServiceActor->SelfId(), setup.EdgeActor, request.Release()));
+        auto result = setup.GetRuntime()->GrabEdgeEvent<NCloud::TEvAccessService::TEvAuthenticateResponseV2>(handle);
+        UNIT_ASSERT(result);
+        UNIT_ASSERT(result->Status.Ok());
     }
 }

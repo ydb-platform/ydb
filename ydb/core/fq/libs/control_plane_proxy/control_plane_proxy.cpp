@@ -49,8 +49,6 @@
 #include <util/string/join.h>
 #include <util/string/strip.h>
 
-#include <variant>
-
 namespace NFq {
 
 namespace {
@@ -139,10 +137,8 @@ class TResolveSubjectTypeActor : public NActors::TActorBootstrapped<TResolveSubj
     using TBase::PassAway;
     using TBase::Become;
     using TBase::Register;
-    using TAuthenticateResponsePtr = std::variant<
-        NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr,
-        NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr>;
-    using IRetryPolicy = IRetryPolicy<const TAuthenticateResponsePtr&>;
+    using TAuthenticateResponsePtr = const NCloud::TEvAccessService::IAuthenticateResponse*;
+    using IRetryPolicy = IRetryPolicy<TAuthenticateResponsePtr>;
 
     const ::NFq::TControlPlaneProxyConfig Config;
     const TActorId Sender;
@@ -217,13 +213,11 @@ public:
         PassAway();
     }
 
-    template <typename TEvResponse>
-    void HandleResponse(typename TEvResponse::TPtr& ev) {
-        const auto& response = ev->Get()->Response;
-        const auto& status = ev->Get()->Status;
-        if (!status.Ok() || !response.has_subject()) {
+    void HandleResponse(const NCloud::TEvAccessService::IAuthenticateResponse& response) {
+        const auto& status = response.GetStatus();
+        if (!status.Ok() || !response.HasSubject()) {
             TString errorMessage = "Msg: " + status.Msg + " Details: " + status.Details + " Code: " + ToString(status.GRpcStatusCode) + " InternalError: " + ToString(status.InternalError);
-            auto delay = RetryState->GetNextRetryDelay(TAuthenticateResponsePtr(ev));
+            auto delay = RetryState->GetNextRetryDelay(&response);
             if (delay) {
                 Counters->Retry->Inc();
                 CPP_LOG_E("Resolve subject type error. Retry with delay " << *delay << ", " << errorMessage);
@@ -247,7 +241,7 @@ public:
         Counters->InFly->Dec();
         Counters->LatencyMs->Collect((TInstant::Now() - StartTime).MilliSeconds());
         Counters->Ok->Inc();
-        TString subjectType = GetSubjectType(response.subject());
+        TString subjectType = response.GetSubjectType();
         Event->Get()->SubjectType = subjectType;
         CPP_LOG_T("Subject Type: " << subjectType << " Token: " << MaskTicket(Token));
 
@@ -256,36 +250,17 @@ public:
     }
 
     void Handle(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
-        HandleResponse<NCloud::TEvAccessService::TEvAuthenticateResponse>(ev);
+        HandleResponse(*ev->Get());
     }
 
     void Handle(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev) {
-        HandleResponse<NCloud::TEvAccessService::TEvAuthenticateResponseV2>(ev);
+        HandleResponse(*ev->Get());
     }
 
 private:
-    template <typename TSubject>
-    static TString GetSubjectType(const TSubject& subject) {
-        switch (subject.type_case()) {
-            case TSubject::TYPE_NOT_SET:
-            case TSubject::kAnonymousAccount:
-                return "unknown";
-            case TSubject::kUserAccount:
-                return subject.user_account().federation_id() ? "federated_account" : "user_account";
-            case TSubject::kServiceAccount:
-                return "service_account";
-            default:
-                return "unknown";
-        }
-    }
-
     static const IRetryPolicy::TPtr& GetRetryPolicy() {
-        static IRetryPolicy::TPtr policy = IRetryPolicy::GetExponentialBackoffPolicy([](const TAuthenticateResponsePtr& ev) {
-            return std::visit([](const auto& responseEv) {
-                const auto& response = responseEv->Get()->Response;
-                const auto& status = responseEv->Get()->Status;
-                return !status.Ok() || !response.has_subject() ? ERetryErrorClass::ShortRetry : ERetryErrorClass::NoRetry;
-            }, ev);
+        static IRetryPolicy::TPtr policy = IRetryPolicy::GetExponentialBackoffPolicy([](TAuthenticateResponsePtr ev) {
+            return !ev->GetStatus().Ok() || !ev->HasSubject() ? ERetryErrorClass::ShortRetry : ERetryErrorClass::NoRetry;
         }, TDuration::MilliSeconds(10), TDuration::MilliSeconds(200), TDuration::Seconds(30), 5);
         return policy;
     }
@@ -580,7 +555,7 @@ public:
             }
             AccessService = Register(NCloud::CreateAccessServiceWithCache(asSettings, EnableAccessServiceV2Interface));
         } else {
-            AccessService = Register(NCloud::CreateMockAccessServiceWithCache());
+            AccessService = Register(NCloud::CreateMockAccessServiceWithCache(EnableAccessServiceV2Interface));
         }
 
         Become(&TControlPlaneProxyActor::StateFunc);

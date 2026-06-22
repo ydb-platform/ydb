@@ -100,9 +100,9 @@ private:
 
     using TEvAccessServiceAuthenticateRequest = TEvRequestWithKey<NCloud::TEvAccessService::TEvAuthenticateRequest>;
     using TEvAccessServiceAuthorizeRequest = TEvRequestWithKey<NCloud::TEvAccessService::TEvAuthorizeRequest>;
-    using TEvAccessServiceBulkAuthorizeRequest = TEvRequestWithKey<NCloud::TEvAccessService::TEvBulkAuthorizeRequest>;
     using TEvAccessServiceAuthenticateRequestV2 = TEvRequestWithKey<NCloud::TEvAccessService::TEvAuthenticateRequestV2>;
     using TEvAccessServiceAuthorizeRequestV2 = TEvRequestWithKey<NCloud::TEvAccessService::TEvAuthorizeRequestV2>;
+    using TEvAccessServiceBulkAuthorizeRequestV2 = TEvRequestWithKey<NCloud::TEvAccessService::TEvBulkAuthorizeRequestV2>;
     using TEvAccessServiceGetUserAccountRequest = TEvRequestWithKey<NCloud::TEvUserAccountService::TEvGetUserAccountRequest>;
     using TEvAccessServiceGetServiceAccountRequest = TEvRequestWithKey<NCloud::TEvServiceAccountService::TEvGetServiceAccountRequest>;
     using TEvNebiusAccessServiceAuthorizeRequest = TEvRequestWithKey<NNebiusCloud::TEvAccessService::TEvAuthorizeRequest>;
@@ -512,16 +512,18 @@ private:
 
     template <typename TTokenRecord>
     void AccessServiceAuthorize(const TString& key, TTokenRecord& record) const {
+        const bool useV2 = AppData()->FeatureFlags.GetEnableAccessServiceV2Interface();
+
         const auto setupAccessServiceRequest = [&](auto& request, const TString& permissionName) {
             request->Request.set_permission(permissionName);
             AddResourcePaths(record, permissionName, &request->Request);
         };
 
         for (const auto& [permissionName, permissionRecord] : record.Permissions) {
-            BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthorization(" << permissionName << ")");
+            BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthorization" << (useV2 ? "V2" : "V1") << "(" << permissionName << ")");
             record.ResponsesLeft++;
 
-            if (AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()) {
+            if (useV2) {
                 auto request = CreateAccessServiceRequest<TEvAccessServiceAuthorizeRequestV2>(key, record);
                 setupAccessServiceRequest(request, permissionName);
                 Send(AccessServiceValidatorV2, request.Release());
@@ -535,12 +537,12 @@ private:
 
     template <typename TTokenRecord>
     void AccessServiceBulkAuthorize(const TString& key, TTokenRecord& record) const {
-        auto request = CreateAccessServiceRequest<TEvAccessServiceBulkAuthorizeRequest>(key, record);
+        auto request = CreateAccessServiceRequest<TEvAccessServiceBulkAuthorizeRequestV2>(key, record);
         if (Config.HasAccessServiceTokenName() && Config.GetTokenManager().GetEnable()) {
             auto it = ServiceTokens.find(Config.GetAccessServiceTokenName());
             if (it != ServiceTokens.end()) {
                 request->Token = it->second;
-                BLOG_TRACE("Create BulkAuthorize request with token: " << MaskTicket(request->Token));
+                BLOG_TRACE("Create BulkAuthorizeV2 request with token: " << MaskTicket(request->Token));
             }
         }
         TStringBuilder requestForPermissions;
@@ -551,7 +553,7 @@ private:
             requestForPermissions << " " << permissionName;
         }
         request->Request.set_result_filter(yandex::cloud::priv::accessservice::v2::BulkAuthorizeRequest::ALL_FAILED);
-        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceBulkAuthorization(" << requestForPermissions << ")");
+        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceBulkAuthorizationV2(" << requestForPermissions << ")");
         record.ResponsesLeft++;
         Send(AccessServiceValidatorV2, request.Release());
     }
@@ -572,7 +574,7 @@ private:
             requestForPermissions << " " << permissionName;
             ++i;
         }
-        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthorization(" << requestForPermissions << ")");
+        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthorizationV1(" << requestForPermissions << ")");
         record.ResponsesLeft++;
         Send(NebiusAccessServiceValidator, request.Release());
     }
@@ -590,7 +592,10 @@ private:
 
     template <typename TTokenRecord>
     void AccessServiceAuthenticate(const TString& key, TTokenRecord& record) const {
-        if (AppData()->FeatureFlags.GetEnableAccessServiceV2Interface()) {
+        const bool useV2 = AppData()->FeatureFlags.GetEnableAccessServiceV2Interface();
+        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthentication" << (useV2 ? "V2" : "V1") << ")");
+
+        if (useV2) {
             auto request = CreateAccessServiceRequest<TEvAccessServiceAuthenticateRequestV2>(key, record);
             Send(AccessServiceValidatorV2, request.Release());
         } else {
@@ -611,10 +616,13 @@ private:
 
     template <typename TTokenRecord>
     void RequestAccessServiceAuthentication(const TString& key, TTokenRecord& record) const {
-        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthentication");
+        const bool useNebius = static_cast<bool>(NebiusAccessServiceValidator);
+        const bool useV2 = !useNebius && AppData()->FeatureFlags.GetEnableAccessServiceV2Interface();
+
+        BLOG_TRACE("Ticket " << record.GetMaskedTicket() << " asking for AccessServiceAuthentication" << (useNebius ? "V1(Nebius)" : (useV2 ? "V2" : "V1")) << ")");
         record.ResponsesLeft++;
 
-        if (NebiusAccessServiceValidator) {
+        if (useNebius) {
             NebiusAccessServiceAuthenticate(key, record);
         } else {
             AccessServiceAuthenticate(key, record);
@@ -1495,9 +1503,9 @@ private:
         }
     }
 
-    void Handle(NCloud::TEvAccessService::TEvBulkAuthorizeResponse::TPtr& ev) {
-        NCloud::TEvAccessService::TEvBulkAuthorizeResponse* response = ev->Get();
-        TEvAccessServiceBulkAuthorizeRequest* request = response->Request->Get<TEvAccessServiceBulkAuthorizeRequest>();
+    void Handle(NCloud::TEvAccessService::TEvBulkAuthorizeResponseV2::TPtr& ev) {
+        NCloud::TEvAccessService::TEvBulkAuthorizeResponseV2* response = ev->Get();
+        TEvAccessServiceBulkAuthorizeRequestV2* request = response->Request->Get<TEvAccessServiceBulkAuthorizeRequestV2>();
         const TString& key(request->Key);
         auto& userTokens = GetDerived()->GetUserTokens();
         auto itToken = userTokens.find(key);
@@ -2514,9 +2522,9 @@ public:
             hFunc(TEvExternalIdpProvider::TEvAuthenticateResponse, Handle);
             hFunc(NCloud::TEvAccessService::TEvAuthenticateResponse, Handle);
             hFunc(NCloud::TEvAccessService::TEvAuthorizeResponse, Handle);
-            hFunc(NCloud::TEvAccessService::TEvBulkAuthorizeResponse, Handle);
             hFunc(NCloud::TEvAccessService::TEvAuthenticateResponseV2, Handle);
             hFunc(NCloud::TEvAccessService::TEvAuthorizeResponseV2, Handle);
+            hFunc(NCloud::TEvAccessService::TEvBulkAuthorizeResponseV2, Handle);
             hFunc(NCloud::TEvUserAccountService::TEvGetUserAccountResponse, Handle);
             hFunc(NCloud::TEvServiceAccountService::TEvGetServiceAccountResponse, Handle);
             hFunc(NNebiusCloud::TEvAccessService::TEvAuthenticateResponse, Handle);

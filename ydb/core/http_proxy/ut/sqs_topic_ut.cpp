@@ -5,6 +5,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/ymq/actor/metering.h>
 #include <ydb/core/ymq/base/limits.h>
+#include <ydb/library/kafka/kafka_records.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
@@ -27,6 +28,17 @@ using TFixture = THttpProxyTestMockForSQSTopic;
 
 
 namespace {
+    void AssertKafkaBatchPayload(TStringBuf payload, size_t expectedRecordsCount, char expectedFill, size_t expectedDataSize) {
+        const auto batch = NKafka::ReadKafkaRecordBatch(payload);
+        UNIT_ASSERT_VALUES_EQUAL(batch.Records.size(), expectedRecordsCount);
+
+        for (const auto& record : batch.Records) {
+            UNIT_ASSERT_C(record.Value.has_value(), "Kafka batch record has no value");
+            UNIT_ASSERT_VALUES_EQUAL(record.Value->size(), expectedDataSize);
+            UNIT_ASSERT_VALUES_EQUAL(TStringBuf(record.Value->data(), record.Value->size()), TString(expectedDataSize, expectedFill));
+        }
+    }
+
     class TNoAuthFixture: public THttpProxyTestMockForSQSTopic {
     public:
         void SetUp(NUnitTest::TTestContext& ctx) override {
@@ -671,6 +683,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                     {7, 3, 'c'},
                 });
 
+            const TVector<char> expectedFills = {'a', 'b', 'c'};
             size_t receivedCount = 0;
             while (receivedCount < 3) {
                 auto jsonReceived = ReceiveMessage({
@@ -682,7 +695,11 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 UNIT_ASSERT_C(!messages.empty(), "received " << receivedCount << " messages");
 
                 for (const auto& message : messages) {
-                    UNIT_ASSERT_C(!message["Body"].GetString().empty(), LabeledOutput(receivedCount));
+                    UNIT_ASSERT_C(receivedCount < expectedFills.size(), LabeledOutput(receivedCount));
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        message["Attributes"]["BodyEncoding"].GetString(),
+                        ToString(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH)));
+                    AssertKafkaBatchPayload(Base64Decode(message["Body"].GetString()), 3, expectedFills[receivedCount], dataSize);
                     ++receivedCount;
                 }
             }

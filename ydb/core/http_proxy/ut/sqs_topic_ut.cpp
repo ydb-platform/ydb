@@ -1,6 +1,7 @@
 #include <ydb/core/http_proxy/ut/datastreams_fixture/datastreams_fixture.h>
 #include <ydb/core/http_proxy/http_req.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/ut/common/sdk_ut_common.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/ymq/actor/metering.h>
 #include <ydb/core/ymq/base/limits.h>
@@ -50,6 +51,16 @@ namespace {
         void SetUp(NUnitTest::TTestContext& ctx) override {
             TWithEnforceUserTokenRequirementFixture::SetUp(ctx);
             DisableAuthorization();
+        }
+    };
+
+    class TWithTopicBatchingFixture: public THttpProxyTestMock {
+    public:
+        void SetUp(NUnitTest::TTestContext&) override {
+            InitAll(TInitParameters{
+                .EnableSqsTopic = true,
+                .EnableTopicMessagesBatching = true,
+            });
         }
     };
 
@@ -637,6 +648,46 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             CompareCommonSendAndReceivedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
             // Second call during visibility timeout
             jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}});
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArray().size(), 0);
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageKafkaBatches, TWithTopicBatchingFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+            bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+            UNIT_ASSERT(a);
+
+            NYdb::NTopic::TTopicClient topicClient(driver);
+            constexpr size_t dataSize = 16;
+            NKikimr::NPQ::NTest::WriteKafkaBatchMessages(
+                topicClient,
+                path.TopicPath,
+                "sqs-batch-producer",
+                dataSize,
+                3,
+                {
+                    {1, 3, 'a'},
+                    {4, 3, 'b'},
+                    {7, 3, 'c'},
+                });
+
+            size_t receivedCount = 0;
+            while (receivedCount < 3) {
+                auto jsonReceived = ReceiveMessage({
+                    {"QueueUrl", path.QueueUrl},
+                    {"WaitTimeSeconds", 20},
+                    {"MaxNumberOfMessages", 10},
+                });
+                const auto& messages = jsonReceived["Messages"].GetArraySafe();
+                UNIT_ASSERT_C(!messages.empty(), "received " << receivedCount << " messages");
+
+                for (const auto& message : messages) {
+                    UNIT_ASSERT_C(!message["Body"].GetString().empty(), LabeledOutput(receivedCount));
+                    ++receivedCount;
+                }
+            }
+
+            auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}});
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArray().size(), 0);
         }
 

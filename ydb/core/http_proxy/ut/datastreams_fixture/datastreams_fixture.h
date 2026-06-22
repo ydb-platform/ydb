@@ -75,6 +75,7 @@ public:
         bool EnforceUserTokenRequirement : 1 = false;
         bool EnableTopicPartitionSplitBasedOnKllSketch : 1 = false;
         bool EnableTopicPartitionSplitBasedOnMessages : 1 = false;
+        bool EnableTopicMessagesBatching : 1 = false;
     };
 
     void InitAll(const TInitParameters initParameters);

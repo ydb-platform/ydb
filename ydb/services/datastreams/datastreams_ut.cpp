@@ -15,6 +15,7 @@
 #include <util/system/tempfile.h>
 
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
+#include <ydb/core/persqueue/ut/common/sdk_ut_common.h>
 
 #include <random>
 
@@ -42,6 +43,8 @@ public:
 
         appConfig.MutablePQConfig()->SetTopicsAreFirstClassCitizen(true);
         appConfig.MutablePQConfig()->SetEnabled(true);
+        appConfig.MutableFeatureFlags()->SetEnableTopicMessagesBatching(true);
+        appConfig.MutableFeatureFlags()->SetEnableTopicWriteOffsetDeltaInKeys(true);
         // NOTE(shmel1k@): KIKIMR-14221
         appConfig.MutablePQConfig()->SetCheckACL(false);
         appConfig.MutablePQConfig()->SetRequireCredentialsInNewProtocol(false);
@@ -2455,6 +2458,65 @@ waitForNavCache:
                 UNIT_ASSERT_VALUES_EQUAL(std::stoi(result.GetResult().records().begin()->sequence_number()), i);
             }
         }
+    }
+
+    Y_UNIT_TEST(TestGetRecordsKafkaBatches) {
+        TInsecureDatastreamsTestServer testServer;
+        const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        NYdb::NTopic::TTopicClient topicClient(*testServer.Driver);
+        constexpr size_t dataSize = 8;
+        NKikimr::NPQ::NTest::WriteKafkaBatchMessages(
+            topicClient,
+            "/Root/" + streamName,
+            "datastreams-batch-producer",
+            dataSize,
+            3,
+            {
+                {1, 3, 'a'},
+                {4, 3, 'b'},
+                {7, 3, 'c'},
+            });
+
+        TString shardIterator;
+        {
+            auto result = testServer.DataStreamsClient->GetShardIterator(streamName, "shard-000000",
+                YDS_V1::ShardIteratorType::TRIM_HORIZON).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            shardIterator = result.GetResult().shard_iterator();
+        }
+
+        const TVector<TString> expectedSequenceNumbers = {"0", "3", "6"};
+        size_t readIndex = 0;
+        while (readIndex < expectedSequenceNumbers.size()) {
+            auto result = testServer.DataStreamsClient->GetRecords(shardIterator,
+                NYDS_V1::TGetRecordsSettings().Limit(2)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_UNEQUAL(result.GetResult().records().size(), 0);
+
+            for (const auto& record : result.GetResult().records()) {
+                UNIT_ASSERT_VALUES_EQUAL(record.sequence_number(), expectedSequenceNumbers[readIndex]);
+                UNIT_ASSERT_VALUES_EQUAL(record.codec(), static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH));
+                UNIT_ASSERT_C(!record.data().empty(), LabeledOutput(readIndex));
+                ++readIndex;
+            }
+
+            shardIterator = result.GetResult().next_shard_iterator();
+        }
+
+        auto result = testServer.DataStreamsClient->GetRecords(shardIterator,
+            NYDS_V1::TGetRecordsSettings().Limit(2)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), 0);
     }
 
     Y_UNIT_TEST(TestGetRecordsStreamWithMultipleShards) {

@@ -30,12 +30,33 @@ def _pick(config: dict[str, Any], build_preset: str, profile: str) -> dict[str, 
     return profile_cfg
 
 
+def _resolve_test_threads(
+    profile: str,
+    preset: dict[str, Any],
+    *,
+    override_threads: str = "",
+    test_threads_base: str = "",
+) -> str:
+    if profile == "run_tests":
+        base = test_threads_base.strip()
+        if base:
+            ratio = float(preset.get("test_threads_base_ratio", 1.0))
+            threads = max(1, int(float(base) * ratio + 0.5))
+            return str(threads)
+        return str(preset["test_threads"])
+
+    if override_threads.strip():
+        return override_threads.strip()
+    return str(preset["test_threads"])
+
+
 def resolve(
     config_path: Path,
     profile: str,
     build_preset: str,
     *,
     override_threads: str = "",
+    test_threads_base: str = "",
     override_size: str = "",
     override_type: str = "",
     override_link: str = "",
@@ -47,7 +68,12 @@ def resolve(
     preset = _pick(config, build_preset, profile)
 
     return {
-        "test_threads": override_threads.strip() or str(preset["test_threads"]),
+        "test_threads": _resolve_test_threads(
+            profile,
+            preset,
+            override_threads=override_threads,
+            test_threads_base=test_threads_base,
+        ),
         "test_size": override_size.strip() or str(preset["test_size"]),
         "test_type": override_type.strip() or str(preset["test_type"]),
         "link_threads": override_link.strip() or str(preset["link_threads"]),
@@ -64,6 +90,7 @@ def main() -> None:
         os.environ["PROFILE"],
         os.environ["BUILD_PRESET"],
         override_threads=os.environ.get("OVERRIDE_THREADS", ""),
+        test_threads_base=os.environ.get("TEST_THREADS_BASE", ""),
         override_size=os.environ.get("OVERRIDE_SIZE", ""),
         override_type=os.environ.get("OVERRIDE_TYPE", ""),
         override_link=os.environ.get("OVERRIDE_LINK", ""),

@@ -226,6 +226,7 @@ jobs:
         build_preset: ${{ fromJSON(env.BUILD_TYPES_JSON).pr_check }}
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
     name: Build and test ${{ matrix.build_preset }}
+    timeout-minutes: 660
     steps:
       - uses: ./.github/actions/ya_ci_core_build_test
         with:

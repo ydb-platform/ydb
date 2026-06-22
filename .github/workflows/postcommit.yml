@@ -1,6 +1,6 @@
 # Mainline checks when main, stable-*, or stream-nb-* advance (e.g. after merge).
 # Build presets: repo variable TEST_BUILD_TYPES JSON key postmerge (same schema as PR-check).
-# Kill switch: CHECKS_SWITCH.postmerge (falls back to postcommit_relwithdebinfo for compatibility).
+# Kill switch: CHECKS_SWITCH.postmerge, or legacy postcommit_<preset> keys per matrix entry.
 name: Postmerge
 
 on:
@@ -17,12 +17,20 @@ env:
 
 jobs:
   build_and_test:
-    if: ${{ vars.CHECKS_SWITCH != '' && (fromJSON(vars.CHECKS_SWITCH).postmerge == true || fromJSON(vars.CHECKS_SWITCH).postcommit_relwithdebinfo == true || fromJSON(vars.CHECKS_SWITCH).postcommit_asan == true) }}
     strategy:
       fail-fast: false
       matrix:
         build_preset: ${{ fromJSON(env.BUILD_TYPES_JSON).postmerge }}
+    if: >-
+      ${{
+        vars.CHECKS_SWITCH != '' && (
+          fromJSON(vars.CHECKS_SWITCH).postmerge == true
+          || (matrix.build_preset == 'relwithdebinfo' && fromJSON(vars.CHECKS_SWITCH).postcommit_relwithdebinfo == true)
+          || (matrix.build_preset == 'release-asan' && fromJSON(vars.CHECKS_SWITCH).postcommit_asan == true)
+        )
+      }}
     name: Build and test ${{ matrix.build_preset }}
+    timeout-minutes: 660
     runs-on:
       - self-hosted
       - auto-provisioned

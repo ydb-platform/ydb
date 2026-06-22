@@ -10,6 +10,7 @@
     },
     "run_tests": {
       "test_threads": 52,
+      "test_threads_base_ratio": 1.0,
       "test_size": "small,medium,large",
       "link_threads": 12,
       "test_type": "",
@@ -26,6 +27,7 @@
     },
     "run_tests": {
       "test_threads": 20,
+      "test_threads_base_ratio": 0.38,
       "test_size": "small,medium,large",
       "link_threads": 12,
       "test_type": "",
@@ -42,6 +44,7 @@
     },
     "run_tests": {
       "test_threads": 18,
+      "test_threads_base_ratio": 0.35,
       "test_size": "small,medium,large",
       "link_threads": 12,
       "test_type": "",
@@ -58,6 +61,7 @@
     },
     "run_tests": {
       "test_threads": 5,
+      "test_threads_base_ratio": 0.1,
       "test_size": "small,medium,large",
       "link_threads": 12,
       "test_type": "",

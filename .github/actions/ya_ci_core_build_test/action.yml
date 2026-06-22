@@ -1,7 +1,8 @@
 name: Ya CI core (build and test)
 description: >
   Shared checkout, preset resolution, optional blacklist, credentials, and build_and_test_ya.
-  Presets: .github/config/ci_presets.json (profile ci | run_tests). Job timeout-minutes stays on the workflow job.
+  Presets: .github/config/ci_presets.json (profile ci | run_tests). Step timeout from config;
+  workflow jobs should set timeout-minutes as an outer safety net.
 
 inputs:
   profile:
@@ -19,7 +20,9 @@ inputs:
   test_threads:
     required: false
     default: ''
-    description: Optional override; empty = use ci_presets.json for profile + build_preset.
+    description: >
+      ci profile — optional direct override. run_tests profile — optional base count scaled
+      per preset via test_threads_base_ratio in ci_presets.json; empty = preset defaults.
   test_size:
     required: false
     default: ''
@@ -82,7 +85,8 @@ runs:
         REPO_ROOT: ${{ github.workspace }}
         PROFILE: ${{ inputs.profile }}
         BUILD_PRESET: ${{ inputs.build_preset }}
-        OVERRIDE_THREADS: ${{ inputs.test_threads }}
+        OVERRIDE_THREADS: ${{ inputs.profile == 'ci' && inputs.test_threads || '' }}
+        TEST_THREADS_BASE: ${{ inputs.profile == 'run_tests' && inputs.test_threads || '' }}
         OVERRIDE_SIZE: ${{ inputs.test_size }}
         OVERRIDE_TYPE: ${{ inputs.test_type }}
         OVERRIDE_LINK: ${{ inputs.link_threads }}

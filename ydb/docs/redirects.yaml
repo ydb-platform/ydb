@@ -543,6 +543,8 @@ ru:
     to: /reference/ydb-sdk/observability/tracing/jaeger.md
   - from: /recipes/ydb-sdk/debug-otel-tracing.md
     to: /reference/ydb-sdk/observability/tracing/opentelemetry.md
+  - from: /integrations/sql-dialect-converter.md
+    to: /integrations/sql-translation/sql-dialect-converter.md
 
 en:
   - from: /reference/ydb-sdk/recipes/debug-jaeger.md

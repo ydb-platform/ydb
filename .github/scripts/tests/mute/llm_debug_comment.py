@@ -41,6 +41,8 @@ _JOB_NAMES = (
     'Regression-run_Small_and_Medium',
     'Regression-run_compatibility',
     'Regression-whitelist-run',
+    'Postmerge',
+    'Postcommit',
     'Postcommit_relwithdebinfo',
     'Postcommit_asan',
 )

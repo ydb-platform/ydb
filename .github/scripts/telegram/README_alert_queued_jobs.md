@@ -24,7 +24,7 @@ Workflow also uses: `--chat-id 3017506311`, `--send-when-all-good`, `--notify-on
 
 **WORKFLOW_THRESHOLDS:** list of `(pattern, display_name, threshold_spec)`. `threshold_spec` = fixed hours (e.g. `6`) or time-based `[(start_utc, end_utc, hours), ...]` (overnight when `start > end`).
 
-**Defaults:** PR-check — 1 h (08:00–20:00 UTC), 3 h (20:00–08:00 UTC); Postcommit — 6 h fixed. Other constants: API URL, timeouts, max jobs per message, dashboard link.
+**Defaults:** PR-check — 1 h (08:00–20:00 UTC), 3 h (20:00–08:00 UTC); Postmerge / Postcommit — 6 h fixed. Other constants: API URL, timeouts, max jobs per message, dashboard link.
 
 ---
 

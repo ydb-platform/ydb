@@ -1,0 +1,67 @@
+{
+  "_comment": "build_preset -> profile (ci = PR-check/Postmerge, run_tests = Run-tests workflow)",
+  "relwithdebinfo": {
+    "ci": {
+      "test_threads": 52,
+      "test_size": "small,medium",
+      "link_threads": 12,
+      "test_type": "",
+      "timeout_minutes": 600
+    },
+    "run_tests": {
+      "test_threads": 52,
+      "test_size": "small,medium,large",
+      "link_threads": 12,
+      "test_type": "",
+      "timeout_minutes": 1200
+    }
+  },
+  "release-asan": {
+    "ci": {
+      "test_threads": 52,
+      "test_size": "small,medium",
+      "link_threads": 12,
+      "test_type": "",
+      "timeout_minutes": 600
+    },
+    "run_tests": {
+      "test_threads": 20,
+      "test_size": "small,medium,large",
+      "link_threads": 12,
+      "test_type": "",
+      "timeout_minutes": 1200
+    }
+  },
+  "release-tsan": {
+    "ci": {
+      "test_threads": 52,
+      "test_size": "small,medium",
+      "link_threads": 12,
+      "test_type": "",
+      "timeout_minutes": 600
+    },
+    "run_tests": {
+      "test_threads": 18,
+      "test_size": "small,medium,large",
+      "link_threads": 12,
+      "test_type": "",
+      "timeout_minutes": 1200
+    }
+  },
+  "release-msan": {
+    "ci": {
+      "test_threads": 52,
+      "test_size": "small,medium",
+      "link_threads": 12,
+      "test_type": "",
+      "timeout_minutes": 600
+    },
+    "run_tests": {
+      "test_threads": 5,
+      "test_size": "small,medium,large",
+      "link_threads": 12,
+      "test_type": "",
+      "timeout_minutes": 1200
+    }
+  }
+}

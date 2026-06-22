@@ -29,6 +29,7 @@ The interactive query execution mode in {{ ydb-short-name }} CLI offers the foll
 * [Query history](#query-history)
 * [Auto completion](#auto-completion)
 * [Special commands](#spec-commands)
+* [AI assistant mode](#ai-assistant)
 
 ## Syntax highlighting {#syntax-highlighting}
 
@@ -169,3 +170,9 @@ ResultSet
          TotalDurationMs: 0
          TotalOutputRows: 1
 ```
+
+## AI assistant mode {#ai-assistant}
+
+The interactive mode includes an AI assistant mode — a conversational agent powered by a large language model that helps you explore the database structure, write and run YQL queries, search the documentation, and invoke {{ ydb-short-name }} CLI commands. To switch between YQL and AI modes, press `Ctrl + T` or use the `/switch` command.
+
+For more details, see [AI assistant mode](interactive-cli-ai.md).

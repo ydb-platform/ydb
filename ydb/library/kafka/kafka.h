@@ -382,6 +382,31 @@ U AsUnsigned(S value) {
     return (value << 1) ^ (value >> Shift);
 }
 
+namespace NPrivate {
+
+// Size-side counterpart of TKafkaWritable::writeVarint/writeUnsignedVarint: the number of bytes a
+// value occupies when serialized as a (zigzag) varint. Kept here, next to AsUnsigned and the varint
+// write logic, so size calculations are available without pulling the heavier kafka_messages_int.h.
+template<class T, typename U = std::make_unsigned_t<T>>
+size_t SizeOfUnsignedVarint(T v) {
+    static constexpr U Mask = Max<U>() - 0x7F;
+
+    U value = v;
+    size_t bytes = 1;
+    while ((value & Mask) != 0L) {
+        bytes += 1;
+        value >>= 7;
+    }
+    return bytes;
+}
+
+template<class T>
+size_t SizeOfVarint(T value) {
+    return SizeOfUnsignedVarint(AsUnsigned<T>(value));
+}
+
+} // namespace NPrivate
+
 class TKafkaWritable {
 public:
     TKafkaWritable(TKafkaWriteBuffer& buffer)

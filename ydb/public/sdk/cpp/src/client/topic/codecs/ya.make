@@ -10,11 +10,9 @@ PEERDIR(
 
 # Kafka batch codec depends on ydb/library/kafka -> library/cpp/digest/crc32c -> contrib/libs/crcutil,
 # which does not compile with clang-cl on Windows. The codec is disabled on Windows (see codecs.cpp).
-# ydb/library/services is an induced PEERDIR: kafka_messages_int.h pulls in services.pb.h via kafka_log.h.
 IF (NOT OS_WINDOWS)
 PEERDIR(
     ydb/library/kafka
-    ydb/library/services
 )
 ENDIF()
 

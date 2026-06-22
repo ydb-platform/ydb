@@ -8,8 +8,9 @@
 
 // Kafka batch codec pulls in ydb/library/kafka -> crc32c -> crcutil, which does not build with
 // clang-cl on Windows. The whole codec is compiled out on Windows.
+// Only kafka_records.h is used here on purpose: kafka_messages_int.h would transitively include
+// kafka_log.h -> services.pb.h (server-side logging) and leak it into the public SDK.
 #ifndef _win_
-#include <ydb/library/kafka/kafka_messages_int.h>
 #include <ydb/library/kafka/kafka_records.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #endif
@@ -202,6 +203,9 @@ void TKafkaBatchCodec::CompressWriteBlock(TWriteBlockCompression& ctx) const {
         record.TimestampDelta = ctx.CreatedAt[i].MilliSeconds() - baseTimestamp;
         kafkaBatch.MaxTimestamp = Max<i64>(kafkaBatch.MaxTimestamp, static_cast<i64>(ctx.CreatedAt[i].MilliSeconds()));
         record.Value = TKafkaRawBytes(ctx.Payloads[i].data(), ctx.Payloads[i].size());
+        // Kafka record "length" is the record size excluding the length field itself (a varint).
+        // SizeOfVarint comes from the lightweight kafka.h (via kafka_records.h), so this does not
+        // pull kafka_log.h -> services.pb.h into the public SDK (see the include note above).
         record.Length = record.Size(2) - NKafka::NPrivate::SizeOfVarint<TKafkaRecord::LengthMeta::Type>(0);
         kafkaBatch.Records.push_back(std::move(record));
     }

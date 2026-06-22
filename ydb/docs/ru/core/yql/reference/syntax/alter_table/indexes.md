@@ -174,7 +174,7 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
 );
 ```
 
-Для локальных Блум-индексов можно изменять типовые параметры индекса, например:
+Для локальных блум-индексов можно также менять специфичные для них параметры, например:
 
 ```yql
 ALTER TABLE `/Root/Table` ALTER INDEX idx_ngram SET (

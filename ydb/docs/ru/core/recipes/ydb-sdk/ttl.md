@@ -56,6 +56,7 @@
 
   session.alterTable("mytable", settings).join().expectSuccess();
   ```
+
 {% endlist %}
 
 Следующий пример демонстрирует использование колонки `modified_at` с числовым типом (`Uint32`) в качестве TTL-колонки. Значение колонки интерпретируется как секунды от Unix-эпохи:
@@ -114,6 +115,7 @@
 
   session.alterTable("mytable", settings).join().expectSuccess();
   ```
+
 {% endlist %}
 
 ## Включение вытеснения во внешнее S3-совместимое хранилище {#enable-tiering-on-existing-tables}

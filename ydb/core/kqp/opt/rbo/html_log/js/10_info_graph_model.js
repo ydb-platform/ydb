@@ -226,42 +226,6 @@ var InfoGraphModel = (function() {
         return path;
     }
 
-    function clipPointToNodeBoundary(node, toward) {
-        if (!node || !toward || !Number.isFinite(node.x) || !Number.isFinite(node.y)) return null;
-        var dx = toward.x - node.x;
-        var dy = toward.y - node.y;
-        if (!Number.isFinite(dx) || !Number.isFinite(dy) || (dx === 0 && dy === 0)) return null;
-
-        var halfWidth = Math.max(1, Number(node.width) || 1) / 2;
-        var halfHeight = Math.max(1, Number(node.height) || 1) / 2;
-        var sx = dx === 0 ? Infinity : halfWidth / Math.abs(dx);
-        var sy = dy === 0 ? Infinity : halfHeight / Math.abs(dy);
-        var scale = Math.min(sx, sy);
-        if (!Number.isFinite(scale)) return null;
-
-        return {
-            x: node.x + dx * scale,
-            y: node.y + dy * scale
-        };
-    }
-
-    function clippedEdgePoints(edgeObj, layoutEdge, graph) {
-        var points = layoutEdge && Array.isArray(layoutEdge.points)
-            ? layoutEdge.points.slice()
-            : [];
-        if (points.length < 2 || !edgeObj || !graph || !graph.node) return points;
-
-        var source = graph.node(edgeObj.v);
-        var target = graph.node(edgeObj.w);
-        var sourceToward = points[1] || target;
-        var targetToward = points[points.length - 2] || source;
-        var sourcePoint = clipPointToNodeBoundary(source, sourceToward);
-        var targetPoint = clipPointToNodeBoundary(target, targetToward);
-        if (sourcePoint) points[0] = sourcePoint;
-        if (targetPoint) points[points.length - 1] = targetPoint;
-        return points;
-    }
-
     function renderNode(nodeId, layoutNode, context, helpers) {
         var node = layoutNode.model || {};
         var x = layoutNode.x - layoutNode.width / 2;
@@ -287,9 +251,9 @@ var InfoGraphModel = (function() {
         return html;
     }
 
-    function renderEdge(edgeObj, layoutEdge, graph, context, helpers, markerId) {
+    function renderEdge(edgeObj, layoutEdge, context, helpers, markerId) {
         var edge = layoutEdge.model || {};
-        var path = edgePath(clippedEdgePoints(edgeObj, layoutEdge, graph));
+        var path = edgePath(layoutEdge.points);
         if (!path) return '';
         var attrs = dataAttrsForTargets(edge, 'edge', context, helpers) +
             traceRefAttr(edge, context) +
@@ -342,7 +306,7 @@ var InfoGraphModel = (function() {
 
         var edges = graph.edges();
         for (var i = 0; i < edges.length; i++) {
-            html += renderEdge(edges[i], graph.edge(edges[i]), graph, context, helpers, markerId);
+            html += renderEdge(edges[i], graph.edge(edges[i]), context, helpers, markerId);
         }
         var nodes = graph.nodes();
         for (var j = 0; j < nodes.length; j++) {

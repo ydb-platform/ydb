@@ -1033,6 +1033,15 @@ void Trace::definePinnedFieldPresets(
     pinnedFieldPresets_ = presets;
 }
 
+void Trace::addDiffFieldPreset(const std::string& label, const std::vector<std::string>& keys) {
+    diffFieldPresets_.push_back({label, keys});
+}
+
+void Trace::defineDiffFieldPresets(
+    const std::vector<std::pair<std::string, std::vector<std::string>>>& presets) {
+    diffFieldPresets_ = presets;
+}
+
 Trace::Stage& Trace::stage(const std::string& name) {
     stages_.emplace_back(name);
     return stages_.back();
@@ -1064,7 +1073,8 @@ public:
     std::string traceMetadataSignature(const Trace& trace) const {
         return fieldDefinitionsJson(trace) + "|" +
             pinnedFieldsJson(trace) + "|" +
-            nodeColumnPresetsJson(trace);
+            pinnedFieldPresetsJson(trace) + "|" +
+            diffFieldPresetsJson(trace);
     }
 
     std::size_t nodeCount(const Node& node) const {
@@ -1175,8 +1185,10 @@ public:
             emitFieldDefinitionsData(out, trace);
             out.WriteKey("pinnedFields");
             emitPinnedFieldsData(out, trace);
-            out.WriteKey("nodeColumnPresets");
-            emitNodeColumnPresetsData(out, trace);
+            out.WriteKey("pinnedFieldPresets");
+            emitPinnedFieldPresetsData(out, trace);
+            out.WriteKey("diffFieldPresets");
+            emitDiffFieldPresetsData(out, trace);
             out.EndObject();
         }
         if (context.emitStage) {
@@ -1339,9 +1351,11 @@ private:
         });
     }
 
-    void emitNodeColumnPresetsData(NJsonWriter::TBuf& out, const Trace& trace) const {
+    void emitFieldPresetsData(
+        NJsonWriter::TBuf& out,
+        const std::vector<std::pair<std::string, std::vector<std::string>>>& presets) const {
         out.BeginList();
-        for (const auto& preset : trace.pinnedFieldPresets_) {
+        for (const auto& preset : presets) {
             out.BeginObject();
             writeKeyString(out, "label", preset.first);
             out.WriteKey("keys").BeginList();
@@ -1354,9 +1368,23 @@ private:
         out.EndList();
     }
 
-    std::string nodeColumnPresetsJson(const Trace& trace) const {
+    void emitPinnedFieldPresetsData(NJsonWriter::TBuf& out, const Trace& trace) const {
+        emitFieldPresetsData(out, trace.pinnedFieldPresets_);
+    }
+
+    void emitDiffFieldPresetsData(NJsonWriter::TBuf& out, const Trace& trace) const {
+        emitFieldPresetsData(out, trace.diffFieldPresets_);
+    }
+
+    std::string pinnedFieldPresetsJson(const Trace& trace) const {
         return buildJson([&](NJsonWriter::TBuf& out) {
-            emitNodeColumnPresetsData(out, trace);
+            emitPinnedFieldPresetsData(out, trace);
+        });
+    }
+
+    std::string diffFieldPresetsJson(const Trace& trace) const {
+        return buildJson([&](NJsonWriter::TBuf& out) {
+            emitDiffFieldPresetsData(out, trace);
         });
     }
 

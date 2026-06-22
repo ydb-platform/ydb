@@ -344,6 +344,8 @@ public:
     void pinFields(const std::vector<std::string>& keys);
     void addPinnedFieldPreset(const std::string& label, const std::vector<std::string>& keys);
     void definePinnedFieldPresets(const std::vector<std::pair<std::string, std::vector<std::string>>>& presets);
+    void addDiffFieldPreset(const std::string& label, const std::vector<std::string>& keys);
+    void defineDiffFieldPresets(const std::vector<std::pair<std::string, std::vector<std::string>>>& presets);
     Stage& stage(const std::string& name);
 
 private:
@@ -356,6 +358,7 @@ private:
     std::vector<std::pair<std::string, std::string>> fieldDefinitions_;
     std::vector<std::string> pinnedFields_;
     std::vector<std::pair<std::string, std::vector<std::string>>> pinnedFieldPresets_;
+    std::vector<std::pair<std::string, std::vector<std::string>>> diffFieldPresets_;
 };
 
 class ITracePageSink {

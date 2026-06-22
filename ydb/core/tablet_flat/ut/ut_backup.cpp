@@ -3130,8 +3130,8 @@ Y_UNIT_TEST_SUITE(Backup) {
 
         env.RestoreBackupExpectFail(backup);
 
-        env.RestoreBackup(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
-        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 2);
+        env.RestoreBackupExpectWarning(backup, TestTabletFlags, /*skipChecksumValidation=*/ true);
+        UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
     }
 
     Y_UNIT_TEST(CorruptedChangelogNullKey) {

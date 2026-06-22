@@ -1,4 +1,4 @@
-name: Regression-compare_performance
+name: compare_index_performance
 
 on:
   schedule:
@@ -28,7 +28,7 @@ on:
       iterations:
         description: 'Number of iterations per workload (median reported)'
         required: false
-        default: '3'
+        default: '20'
       warmup:
         description: 'Warmup duration in seconds before each measured run'
         required: false

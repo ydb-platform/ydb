@@ -143,7 +143,7 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
     * [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_min_partitions_count)
     * [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_max_partitions_count)
     * [READ_REPLICAS_SETTINGS]({{ concept_table }}#read_only_replicas)
-  * для локальных блум-индексов:
+  * для локальных блум-индексов (см. [Параметры локальных блум-индексов](#local-bloom)):
     * `FALSE_POSITIVE_PROBABILITY`
     * `NGRAM_SIZE` и `CASE_SENSITIVE` (только для `bloom_ngram_filter`)
 

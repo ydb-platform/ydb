@@ -11,7 +11,7 @@
 #include <yql/essentials/parser/pg_wrapper/interface/pack.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/public/udf/arrow/util.h>
-#include <yql/essentials/public/uuid/yql_uuid.h>
+#include <util/generic/guid.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_scalar.h>
@@ -68,11 +68,8 @@ TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, const NSc
         }
         case NTypeIds::Uuid:
         {
-            if (value.IsEmbedded()) {
-                return { sizeof(NUdf::TUnboxedValue), sizeof(NYql::NUuid::TUuid) };
-            }
             const auto size = value.AsStringRef().Size();
-            Y_VERIFY_DEBUG_S(size == sizeof(NYql::NUuid::TUuid), "Wrong Uuid size: " << size);
+            Y_VERIFY_DEBUG_S(size == sizeof(TGUID), "Wrong Uuid size: " << size);
             return { sizeof(NUdf::TUnboxedValue) + size, size };
         }
         case NTypeIds::String:
@@ -286,18 +283,18 @@ public:
 };
 
 template <>
-class TElementAccessor<arrow::FixedSizeBinaryArray, NYql::NUuid::TUuid> {
+class TElementAccessor<arrow::FixedSizeBinaryArray, TGUID> {
 public:
     using TArrayType = arrow::FixedSizeBinaryArray;
     static void Validate(const arrow::FixedSizeBinaryArray& array) {
         YQL_ENSURE(
-            array.byte_width() == static_cast<i32>(sizeof(NYql::NUuid::TUuid)),
+            array.byte_width() == static_cast<i32>(sizeof(TGUID)),
             "Wrong Uuid byte width in FixedSizeBinaryArray: " << array.byte_width());
     }
 
     static NYql::NUdf::TUnboxedValue ExtractValue(const arrow::FixedSizeBinaryArray& array, const ui32 rowIndex) {
         auto data = array.GetView(rowIndex);
-        YQL_ENSURE(data.size() == sizeof(NYql::NUuid::TUuid), "Wrong data size");
+        YQL_ENSURE(data.size() == sizeof(TGUID), "Wrong data size");
         return MakeString(NUdf::TStringRef(data.data(), data.size()));
     }
     static TFixedWidthStatAccumulator BuildStatAccumulator(const NScheme::TTypeInfo& typeInfo) {
@@ -491,7 +488,7 @@ TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
         }
         case NTypeIds::Uuid:
         {
-            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::FixedSizeBinaryArray, NYql::NUuid::TUuid>>(editAccessor, batch, columnIndex, columnPtr, columnType);
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::FixedSizeBinaryArray, TGUID>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::PairUi64Ui64:
         case NTypeIds::ActorId:

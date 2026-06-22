@@ -1,7 +1,7 @@
 #include "kqp_scan_data.h"
 
 #include <yql/essentials/public/udf/udf_ut_helpers.h>
-#include <yql/essentials/public/uuid/yql_uuid.h>
+#include <util/generic/guid.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -83,7 +83,7 @@ struct TDataRow {
     i64 PgInt8;
     float PgFloat4;
     double PgFloat8;
-    NYql::NUuid::TUuid Uuid;
+    TGUID Uuid;
     TString DyNumber;
 
     static std::shared_ptr<arrow::Schema> MakeArrowSchema() {
@@ -227,7 +227,7 @@ std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TData
                 auto result = batchBuilder->GetFieldAs<arrow::DoubleBuilder>(colIndex++)->Append(row.PgFloat8);
                 UNIT_ASSERT(result.ok());
             } else if (colName == "uuid") {
-                auto result = batchBuilder->GetFieldAs<arrow::FixedSizeBinaryBuilder>(colIndex++)->Append(row.Uuid.Data);
+                auto result = batchBuilder->GetFieldAs<arrow::FixedSizeBinaryBuilder>(colIndex++)->Append(reinterpret_cast<const char*>(&row.Uuid));
                 UNIT_ASSERT(result.ok());
             } else if (colName == "dynumber") {
                 auto result = batchBuilder->GetFieldAs<arrow::BinaryBuilder>(colIndex++)->Append(row.DyNumber.data(), row.DyNumber.size());
@@ -241,9 +241,9 @@ std::shared_ptr<arrow::RecordBatch> VectorToBatch(const std::vector<struct TData
     return batch;
 }
 
-NYql::NUuid::TUuid MakeTestUuid(ui8 byte) {
-    NYql::NUuid::TUuid uuid;
-    std::memset(uuid.Data, byte, sizeof(uuid.Data));
+TGUID MakeTestUuid(ui8 byte) {
+    TGUID uuid;
+    std::memset(&uuid, byte, sizeof(uuid));
     return uuid;
 }
 
@@ -275,7 +275,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         std::memcpy(str.Data(), pattern.data(), pattern.size());
         NUdf::TUnboxedValue containsLongString(NUdf::TUnboxedValuePod(std::move(str)));
         auto uuidAsString = MakeTestUuid(0xCD);
-        NUdf::TUnboxedValue uuidStringValue(MakeString(NUdf::TStringRef(uuidAsString.Data, sizeof(NYql::NUuid::TUuid))));
+        NUdf::TUnboxedValue uuidStringValue(MakeString(NUdf::TStringRef(reinterpret_cast<const char*>(&uuidAsString), sizeof(TGUID))));
         NYql::NDecimal::TInt128 decimalVal = 123456789012;
         NYql::NDecimal::TInt128 decimal35Val = 987654321012;
         TVector<TTestCase> cases = {
@@ -340,7 +340,7 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Uuid        , {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::DyNumber    , {16, 8 } },
             {uuidStringValue, NTypeIds::Uuid, {32, 16} },
-            {MakeString(NUdf::TStringRef(MakeTestUuid(0xAB).Data, sizeof(NYql::NUuid::TUuid))), NTypeIds::Uuid, {32, 16} },
+            {[&]{ auto u = MakeTestUuid(0xAB); return MakeString(NUdf::TStringRef(reinterpret_cast<const char*>(&u), sizeof(TGUID))); }(), NTypeIds::Uuid, {32, 16} },
             {NUdf::TUnboxedValuePod::Embedded("dynval"), NTypeIds::DyNumber, {16, 8 } },
         };
 
@@ -405,8 +405,8 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             UNIT_ASSERT_EQUAL(container[29].Get<double>(), row.PgFloat8 );
             auto tmpUuid = container[30];
             const auto uuidRef = tmpUuid.AsStringRef();
-            UNIT_ASSERT(uuidRef.Size() == sizeof(row.Uuid.Data));
-            UNIT_ASSERT(std::memcmp(uuidRef.Data(), row.Uuid.Data, sizeof(row.Uuid.Data)) == 0);
+            UNIT_ASSERT(uuidRef.Size() == sizeof(TGUID));
+            UNIT_ASSERT(std::memcmp(uuidRef.Data(), &row.Uuid, sizeof(TGUID)) == 0);
             auto tmpDyNumber = container[31];
             UNIT_ASSERT_EQUAL(TString(tmpDyNumber.AsStringRef()), row.DyNumber);
         }

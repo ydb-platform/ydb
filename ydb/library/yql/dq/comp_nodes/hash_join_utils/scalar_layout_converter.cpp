@@ -5,7 +5,7 @@
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
-#include <yql/essentials/public/uuid/yql_uuid.h>
+#include <util/generic/guid.h>
 #include <yql/essentials/public/udf/arrow/defs.h>
 #include <yql/essentials/public/udf/arrow/dispatch_traits.h>
 #include <yql/essentials/public/udf/arrow/util.h>
@@ -58,7 +58,7 @@ public:
                 std::memset(dataStorage.data(), 0, sizeof(TLayout));
             } else {
                 bitmapStorage[0] = 1; // not null
-                if constexpr (std::is_same_v<TLayout, NYql::NUuid::TUuid>) {
+                if constexpr (std::is_same_v<TLayout, TGUID>) {
                     const auto ref = value.AsStringRef();
                     std::memcpy(dataStorage.data(), ref.Data(), sizeof(TLayout));
                 } else {
@@ -67,7 +67,7 @@ public:
             }
         } else {
             bitmapStorage[0] = 1;
-            if constexpr (std::is_same_v<TLayout, NYql::NUuid::TUuid>) {
+            if constexpr (std::is_same_v<TLayout, TGUID>) {
                 const auto ref = value.AsStringRef();
                 std::memcpy(dataStorage.data(), ref.Data(), sizeof(TLayout));
             } else {
@@ -96,7 +96,7 @@ public:
                     std::memset(&dataPtr[i], 0, sizeof(TLayout));
                 } else {
                     bitmapPtr[i] = 1; // not null
-                    if constexpr (std::is_same_v<TLayout, NYql::NUuid::TUuid>) {
+                    if constexpr (std::is_same_v<TLayout, TGUID>) {
                         const auto ref = values[i].AsStringRef();
                         std::memcpy(&dataPtr[i], ref.Data(), sizeof(TLayout));
                     } else {
@@ -109,7 +109,7 @@ public:
         } else {
             for (ui32 i = 0; i < count; ++i) {
                 bitmapPtr[i] = 1;
-                if constexpr (std::is_same_v<TLayout, NYql::NUuid::TUuid>) {
+                if constexpr (std::is_same_v<TLayout, TGUID>) {
                     const auto ref = values[i].AsStringRef();
                     std::memcpy(&dataPtr[i], ref.Data(), sizeof(TLayout));
                 } else {
@@ -135,8 +135,8 @@ public:
         }
 
         TLayout* data = reinterpret_cast<TLayout*>(columnsData[0]) + tupleIndex;
-        if constexpr (std::is_same_v<TLayout, NYql::NUuid::TUuid>) {
-            return MakeString(NYql::NUdf::TStringRef(data->Data, sizeof(TLayout)));
+        if constexpr (std::is_same_v<TLayout, TGUID>) {
+            return MakeString(NYql::NUdf::TStringRef(reinterpret_cast<const char*>(data), sizeof(TLayout)));
         } else {
             return NYql::NUdf::TUnboxedValuePod(*data);
         }

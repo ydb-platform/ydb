@@ -1826,7 +1826,8 @@ void TPDisk::ProcessReadLogResult(const NPDisk::TEvReadLogResult &evReadLogResul
             // Output the fully initialized state for each owner and each chunk.
             YDB_LOG_P_LOG(PRI_NOTICE, "PDisk have successfully started",
                 {"marker", "BPD01"});
-            YDB_LOG_P_LOG(PRI_INFO, StartupOwnerInfo());
+            YDB_LOG_P_LOG(PRI_INFO, "Dump startup owner info",
+                {"startupOwnerInfo", StartupOwnerInfo()});
 
             return;
         }

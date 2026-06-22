@@ -201,7 +201,7 @@ void TCompletionChunkReadPart::UnencryptData(TActorSystem *actorSystem) {
             endBadUserOffset = beginUserOffset + userSectorSize;
         } else {
             if (beginBadUserOffset != 0xffffffff) {
-                YDB_LOG_INFO_CTX_COMP(*actorSystem, NKikimrServices::BS_PDISK, "Can't read chunk for due to multiple sectors with incorrect hashes",
+                YDB_LOG_INFO_CTX_COMP(*actorSystem, NKikimrServices::BS_PDISK, "Can't read chunk due to multiple sectors with incorrect hashes",
                     {"PDiskId", PDisk->PCtx->PDiskId},
                     {"reqId", Read->ReqId},
                     {"chunkIdx", Read->ChunkIdx},
@@ -268,7 +268,7 @@ void TCompletionChunkReadPart::UnencryptData(TActorSystem *actorSystem) {
         ++sectorIdx;
     }
     if (beginBadUserOffset != 0xffffffff) {
-        YDB_LOG_INFO_CTX_COMP(*actorSystem, NKikimrServices::BS_PDISK, "Can't read chunk for due to multiple sectors with incorrect hashes/nonces",
+        YDB_LOG_INFO_CTX_COMP(*actorSystem, NKikimrServices::BS_PDISK, "Can't read chunk for to multiple sectors with incorrect hashes/nonces",
             {"PDiskId", PDisk->PCtx->PDiskId},
             {"reqId", Read->ReqId},
             {"chunkIdx", Read->ChunkIdx},

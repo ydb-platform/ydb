@@ -202,6 +202,7 @@ public:
 
     // make protected in the future
     virtual void ComputeOutputIUs() = 0;
+    virtual void ComputeOutputIUsSubtree();
 
     const EOperator Kind;
     TPositionHandle Pos;
@@ -209,11 +210,6 @@ public:
     const TTypeAnnotationNode* Type = nullptr;
     TVector<TIntrusivePtr<IOperator>> Children;
     TVector<std::pair<IOperator*, ui32>> Parents;
-
-protected:
-    void ComputeOutputIUsSubtree();
-
-    friend void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString stageName);
 };
 
 template <class K>
@@ -782,6 +778,7 @@ public:
 
     // make protected in the future
     virtual void ComputeOutputIUs() override;
+    virtual void ComputeOutputIUsSubtree() override;
 
     NJson::TJsonValue GetExecutionJson(ui64 & nodeCounter, THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags = 0x00);
     NJson::TJsonValue GetExplainJson(ui64 & nodeCounter, const THashMap<IOperator*, ui32>& operatorIds, ui32 explainFlags = 0x00);

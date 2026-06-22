@@ -1172,6 +1172,14 @@ void TOpRoot::ComputeOutputIUs() {
     Props.OutputIUs = GetInput()->GetOutputIUs();
 }
 
+// Need to override root recomputation of IUs, since it
+// needs to traverse all subplans as well
+void TOpRoot::ComputeOutputIUsSubtree() {
+    for (auto it : *this) {
+        it.Current->ComputeOutputIUs();
+    }
+}
+
 void TOpRoot::ComputeParentsRec(TIntrusivePtr<IOperator> op, TIntrusivePtr<IOperator> parent, ui32 parentChildIndex) const {
     if (parent) {
         const auto parentEntry = std::make_pair(parent.get(), parentChildIndex);

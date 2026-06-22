@@ -4293,6 +4293,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                            /*queriesWithoutCboCheck=*/{15, 31, 58, 64, 72, 78, 85});
     }
 
+    Y_UNIT_TEST(TPCH_YQL_22) {
+        RunTPC_YqlTest(EBenchType::TPCH, 22, true, true);
+    }
+
     Y_UNIT_TEST(TPCDS_YQL_4) {
         RunTPC_YqlTest(EBenchType::TPCDS, 4, true, true);
     }

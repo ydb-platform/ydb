@@ -85,6 +85,7 @@ class TStdJoinTable {
 
 class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
   public:
+    using TIterator = NKikimr::NMiniKQL::NPackedTuple::TNeumannHashTable<false, false>::TIterator;
 
     TNeumannJoinTable(const NPackedTuple::TTupleLayout* layout, bool trackUsed = false)
         : Table_(layout)
@@ -114,6 +115,10 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         return Table_.Empty();
     }
 
+    i64 NTuples() const {
+        return BuildData_.NTuples;
+    }
+
     ui64 RequiredMemoryForBuild(int nTuples) const {
         return Table_.RequiredMemoryForBuild(nTuples);
     }
@@ -123,13 +128,28 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
             return;
         }
         Table_.Apply(row.PackedData, row.OverflowBegin, [consume, this](const ui8* tuplePackedData) {
-            if (TrackUsed_) {
-                size_t index = (tuplePackedData - BuildData_.PackedTuples.data()) / RowWidth_;
-                MKQL_ENSURE(index < Used_.size(), "used-tracking index out of bounds");
-                Used_[index] = 1;
-            }
+            MarkUsed(tuplePackedData);
             consume(TSingleTuple{tuplePackedData, BuildData_.Overflow.data()});
         });
+    }
+
+    TIterator Find(TSingleTuple probeRow) {
+        if (Empty()) {
+            return TIterator{};
+        }
+        return Table_.Find(probeRow.PackedData, probeRow.OverflowBegin);
+    }
+
+    std::optional<TSingleTuple> NextMatch(TIterator& iter, TSingleTuple probeRow) {
+        if (Empty()) {
+            return std::nullopt;
+        }
+        const ui8* result = Table_.NextMatch(iter, probeRow.OverflowBegin);
+        if (!result) {
+            return std::nullopt;
+        }
+        MarkUsed(result);
+        return TSingleTuple{result, BuildData_.Overflow.data()};
     }
 
     void ForEachUnused(std::invocable<TSingleTuple> auto consume) const {
@@ -144,7 +164,31 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
         }
     }
 
+    i64 ForEachUnusedFrom(i64 startIndex, auto consume, auto isFull) {
+        MKQL_ENSURE(TrackUsed_, "ForEachUnusedFrom called but not tracking used tuples");
+        for (i64 i = startIndex; i < BuildData_.NTuples; ++i) {
+            if (!Used_[i]) {
+                consume(TSingleTuple{
+                    BuildData_.PackedTuples.data() + static_cast<size_t>(i) * RowWidth_,
+                    BuildData_.Overflow.data()
+                });
+                if (isFull()) {
+                    return i + 1;
+                }
+            }
+        }
+        return BuildData_.NTuples;
+    }
+
   private:
+    void MarkUsed(const ui8* tuplePackedData) {
+        if (TrackUsed_) {
+            size_t index = (tuplePackedData - BuildData_.PackedTuples.data()) / RowWidth_;
+            MKQL_ENSURE(index < Used_.size(), "used-tracking index out of bounds");
+            Used_[index] = 1;
+        }
+    }
+
     IBlockLayoutConverter::TPackResult BuildData_;
     NKikimr::NMiniKQL::NPackedTuple::TNeumannHashTable<false, false> Table_;
     size_t RowWidth_ = 0;

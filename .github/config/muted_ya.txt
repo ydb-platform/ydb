@@ -14,6 +14,7 @@ ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQuerie
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
+ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_6MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_6MB_Topic_offset+middle_WithRestart
 ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobs
 ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobsMultipleColumns

@@ -29,6 +29,7 @@ SRCS(
     ydb_ldap_login_ut.cpp
     ydb_login_ut.cpp
     ydb_object_storage_ut.cpp
+    ydb_whoami_ut.cpp
 )
 
 PEERDIR(
@@ -51,6 +52,7 @@ PEERDIR(
     ydb/public/lib/yson_value
     ydb/public/lib/ut_helpers
     ydb/public/lib/ydb_cli/commands
+    ydb/public/sdk/cpp/src/client/discovery
     ydb/public/sdk/cpp/src/client/draft
     ydb/public/sdk/cpp/src/client/coordination
     ydb/public/sdk/cpp/src/client/export

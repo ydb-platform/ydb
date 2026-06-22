@@ -2218,6 +2218,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         server->EnableLogs({ NKikimrServices::PERSQUEUE }, NLog::EPriority::PRI_DEBUG);
 
         const TString topicPath = "account/topic2";
+        const TString fullTopicPath = "/Root/LbAccount/account/topic2";
 
         auto Channel_ = grpc::CreateChannel("localhost:" + ToString(server->GrpcPort), grpc::InsecureChannelCredentials());
         auto TopicStubP_ = Ydb::Topic::V1::TopicService::NewStub(Channel_);
@@ -2225,8 +2226,8 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         {
             Ydb::Topic::CreateTopicRequest request;
             Ydb::Topic::CreateTopicResponse response;
-            // Physical (scheme) path under the LB user database root - no rt3-dc naming.
-            request.set_path("/Root/LbAccount/account/topic2");
+            request.set_path(fullTopicPath);
+            (*request.mutable_attributes())["_federation_account"] = "account";
 
             request.set_retention_storage_mb(1);
 
@@ -2244,7 +2245,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::SUCCESS);
 
             server->AnnoyingClient->WaitTopicInit(topicPath);
-            server->AnnoyingClient->AddTopic(topicPath);
+            server->AnnoyingClient->AddTopic(fullTopicPath, "dc1");
         }
 
         NYdb::TDriverConfig driverCfg;
@@ -2266,7 +2267,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             using namespace NYdb::NTopic;
             auto settings = TDescribeTopicSettings().IncludeStats(true);
             auto client = TTopicClient(driver);
-            auto desc = client.DescribeTopic(topicPath, settings)
+            auto desc = client.DescribeTopic(fullTopicPath, settings)
                             .ExtractValueSync()
                             .GetTopicDescription();
             Cerr << ">>>Describe result: partitions count is " << desc.GetTotalPartitionsCount() << Endl;
@@ -2283,7 +2284,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                 .EndAddConsumer()
                 .BeginAddConsumer("second-consumer").Important(true)
                 .EndAddConsumer();
-            auto res = client.AlterTopic(topicPath, alterSettings);
+            auto res = client.AlterTopic(fullTopicPath, alterSettings);
             res.Wait();
             Cerr << res.GetValue().IsSuccess() << " " << res.GetValue().GetIssues().ToString() << "\n";
             UNIT_ASSERT(res.GetValue().IsSuccess());

@@ -1,9 +1,8 @@
 #pragma once
 
-#include <ydb/core/protos/kqp.pb.h>
-#include <ydb/library/yql/dq/tasks/dq_tasks_graph.h>
+#include "kqp_tasks_graph.h"
 
-#include <util/system/types.h>
+#include <ydb/core/protos/kqp.pb.h>
 
 #include <list>
 #include <optional>

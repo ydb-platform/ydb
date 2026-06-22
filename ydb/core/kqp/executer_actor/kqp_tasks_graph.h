@@ -1,7 +1,8 @@
 #pragma once
 
-#include "max_tasks_graph.h"
 #include "shard_key_ranges.h"
+
+#include <memory>
 
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -19,6 +20,7 @@ namespace NKikimrKqp {
 
 namespace NKikimr::NKqp {
 
+class TMaxTasksGraph;
 struct TQueryExecutionStats;
 
 struct TColumnShardHashV1Params {
@@ -388,6 +390,7 @@ public:
         TIntrusiveConstPtr<NACLib::TUserToken> userToken,
         bool shrinkTasks
     );
+    ~TKqpTasksGraph();
 
     void ResolveShards(TGraphMeta::TShardToNodeMap&& shardsToNodes);
 
@@ -479,7 +482,7 @@ private:
     TKqpRequestCounters::TPtr Counters;
     TActorId BufferActorId; // TODO: not sure if it belongs here
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
-    TMaxTasksGraph MaxTasksGraph;
+    std::unique_ptr<TMaxTasksGraph> MaxTasksGraph;
     const bool ShrinkTasks;
 };
 

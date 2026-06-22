@@ -202,7 +202,7 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
         if (idIt == nameToId.end()) {
             if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
                 TVector<TString> tableColumnNames;
-                for(auto& col: nameToId) {
+                for (const auto& col: nameToId) {
                     tableColumnNames.push_back(col.first);
                 }
                 return fail(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(colName, tableColumnNames));
@@ -251,7 +251,7 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
                 olapIndex->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
                 olapIndex->MutableMinMaxIndex()->SetColumnId(columnId);
                 const NKikimrSchemeOp::TOlapColumnDescription* columnDesc = nullptr;
-                for(auto& column: tableDesc.GetSchema().GetColumns()) {
+                for (auto& column: tableDesc.GetSchema().GetColumns()) {
                     if (column.GetName() == colName) {
                         columnDesc = &column;
                         break;

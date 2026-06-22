@@ -302,7 +302,7 @@ private:
                     }
                     const NKikimrSchemeOp::TOlapColumnDescription* columnDesc = nullptr;
 
-                    for(auto& column: schema->GetColumns()) {
+                    for (auto& column: schema->GetColumns()) {
                         if (column.GetName() == index.index_columns(0)){
                             columnDesc = &column;
                             break;
@@ -311,7 +311,7 @@ private:
 
                     if (!columnDesc) {
                         TVector<TString> tableColumnNames;
-                        for(auto& col: schema->GetColumns()) {
+                        for (const auto& col: schema->GetColumns()) {
                             tableColumnNames.push_back(col.GetName());
                         }
                         LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames));

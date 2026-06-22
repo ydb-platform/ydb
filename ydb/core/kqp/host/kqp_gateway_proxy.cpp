@@ -642,7 +642,7 @@ static bool FillCreateLocalIndexDesc(NKikimrSchemeOp::TColumnTableDescription& t
                     return false;
                 }
                 const NKikimrSchemeOp::TOlapColumnDescription* columnDesc = nullptr;
-                for(auto& column: tableDesc.GetSchema().GetColumns()) {
+                for (auto& column: tableDesc.GetSchema().GetColumns()) {
                     if (column.GetName() == index.KeyColumns.front()) {
                         columnDesc = &column;
                         break;
@@ -651,7 +651,7 @@ static bool FillCreateLocalIndexDesc(NKikimrSchemeOp::TColumnTableDescription& t
                 if (!columnDesc) {
                     code = Ydb::StatusIds::BAD_REQUEST;
                     TVector<TString> tableColumnNames;
-                    for(auto& col: tableDesc.GetSchema().GetColumns()) {
+                    for (const auto& col: tableDesc.GetSchema().GetColumns()) {
                         tableColumnNames.push_back(col.GetName());
                     }
                     error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.KeyColumns.front(), tableColumnNames);

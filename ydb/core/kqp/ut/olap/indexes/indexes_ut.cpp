@@ -487,7 +487,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         auto runQuery = [&](TString text) -> TQueryResult {
             auto columns = runDMLQuery(text);
             TQueryResult res;
-            for(const auto& row: columns["TierName"]) {
+            for (const auto& row: columns["TierName"]) {
                 UNIT_ASSERT(row.GetProto().has_text_value());
                 res.push_back(row.GetProto().text_value());
             }
@@ -499,7 +499,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_str_mm";
             )");
             UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesStr.size(), 0, "portions are not min_max indexed with String column type");
-            for(auto& tierName: tierNamesStr) {
+            for (const auto& tierName: tierNamesStr) {
                 UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__DEFAULT", "min_max index must store its data is BS when building over String column");
             }            
         }
@@ -508,7 +508,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_utf_mm";
             )");
             UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesUtf8.size(), 0, "portions are not min_max indexed with Utf8 column type");
-            for(auto& tierName: tierNamesUtf8) {
+            for (const auto& tierName: tierNamesUtf8) {
                 UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__DEFAULT", "min_max index must store its data is BS when building over Utf8 column");
             }
 
@@ -527,7 +527,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                 SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_ts_mm";
             )");
             UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesTs.size(), 0, "portions are not min_max indexed with Timestamp column type");
-            for(auto& tierName: tierNamesTs) {
+            for (const auto& tierName: tierNamesTs) {
                 UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__LOCAL_METADATA", "min_max index must store its data is local database when building over Timestamp column");
             }
 

@@ -117,9 +117,9 @@ public:
 
 void TColumnShard::EnqueueProgressTx(const TActorContext& ctx, const ui64 continueTxId) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_TX)("event", "EnqueueProgressTx")("tablet_id", TabletID())("tx_id", continueTxId);
-    if (continueTxId) {
-        AFL_VERIFY(InProgressTxId == 0 || InProgressTxId == continueTxId)("current", InProgressTxId)("expected", continueTxId);
-    } else if (InProgressTxId != 0) {
+    // While a particular tx is in the distributed commit process, only its own nudge can advance it.
+    // So, skip everything else.
+    if (InProgressTxId != 0 && continueTxId != InProgressTxId) {
         return;
     }
     if (!ProgressTxScheduled) {

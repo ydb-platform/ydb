@@ -46,6 +46,9 @@ public:
     class THasToStringMethod {
         // check the signature if it exists
         template <typename X> static constexpr decltype(static_cast<TString (X::*)() const>(&X::ToString), std::true_type{}) check(int);
+        template <typename X> static constexpr decltype(static_cast<const TString& (X::*)() const>(&X::ToString), std::true_type{}) check(int);
+        template <typename X> static constexpr decltype(static_cast<std::string (X::*)() const>(&X::ToString), std::true_type{}) check(int);
+        template <typename X> static constexpr decltype(static_cast<const std::string& (X::*)() const>(&X::ToString), std::true_type{}) check(int);
         // in case when there is no such signature
         template <typename>   static constexpr std::false_type check(...);
     public:

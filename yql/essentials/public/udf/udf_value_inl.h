@@ -781,6 +781,11 @@ inline NYql::NDecimal::TInt128 TUnboxedValuePod::Get<NYql::NDecimal::TInt128>() 
 }
 
 template <>
+inline NYql::NUuid::TUuid TUnboxedValuePod::Get<NYql::NUuid::TUuid>() const {
+    return GetUuid();
+}
+
+template <>
 inline TUnboxedValuePod::TUnboxedValuePod(bool value)
 {
     Raw.Simple.ui8_ = value ? 1 : 0;

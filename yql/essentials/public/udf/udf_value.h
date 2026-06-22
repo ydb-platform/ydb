@@ -845,7 +845,7 @@ public:
     }
 
     // Data accessors
-    template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result || std::is_same_v<T, NYql::NDecimal::TInt128>>>
+    template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result || std::is_same_v<T, NYql::NDecimal::TInt128> || std::is_same_v<T, NYql::NUuid::TUuid>>>
     inline T Get() const;
     template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
     inline T GetOrDefault(T ifEmpty) const;

@@ -32,6 +32,9 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         std::optional<i64> Ival;  // Interval stored as i64 microseconds
     };
 
+    constexpr i64 MaxValidInterval = (i64)(86400000000ULL * 49673U - 1);
+    constexpr i64 MinValidInterval = -MaxValidInterval;
+
     void CreateDataShardTable(TTestHelper& helper, const TString& name) {
         auto& session = helper.GetSession();
         auto res = session
@@ -185,17 +188,18 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         PrepareBase(helper, Table, tableName, &col, &schema);
         LoadData(helper, Table, Load, tableName,
             { { 1, 10, (i64)1000000 }, { 2, 20, (i64)-500000 }, { 3, 30, std::nullopt }, { 4, 40, (i64)0 },
-              { 5, 50, (i64)9223372036854775807LL }, { 6, 60, (i64)-9223372036854775807LL } },
+              { 5, 50, MaxValidInterval }, { 6, 60, MinValidInterval } },
             &col, &schema);
 
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE id=1", "[[1;[10];[1000000]]]", Scan);
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE id=2", "[[2;[20];[-500000]]]", Scan);
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE id=3", "[[3;[30];#]]", Scan);
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE id=4", "[[4;[40];[0]]]", Scan);
-        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE id=5", "[[5;[50];[9223372036854775807]]]", Scan);
-        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE id=6", "[[6;[60];[-9223372036854775807]]]", Scan);
+        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE id=5", TStringBuilder() << "[[5;[50];[" << MaxValidInterval << "]]]", Scan);
+        CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE id=6", TStringBuilder() << "[[6;[60];[" << MinValidInterval << "]]]", Scan);
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` ORDER BY id",
-            "[[1;[10];[1000000]];[2;[20];[-500000]];[3;[30];#];[4;[40];[0]];[5;[50];[9223372036854775807]];[6;[60];[-9223372036854775807]]]", Scan);
+            TStringBuilder() << "[[1;[10];[1000000]];[2;[20];[-500000]];[3;[30];#];[4;[40];[0]];[5;[50];[" << MaxValidInterval
+                           << "]];[6;[60];[" << MinValidInterval << "]]]", Scan);
 
         // Select only the interval column
         CheckOrExec(helper, "SELECT ival FROM `/Root/Table1` WHERE id=1", "[[[1000000]]]", Scan);
@@ -381,11 +385,11 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
             &col, &schema);
 
         CheckOrExec(helper, "SELECT ival, count(*) AS cnt FROM `/Root/Table1` GROUP BY ival ORDER BY ival",
-            "[[-100;1u];[100;3u];[200;2u];[300;1u]]", Scan);
+            "[[[-100];1u];[[100];3u];[[200];2u];[[300];1u]]", Scan);
 
         // Group by with min of id
         CheckOrExec(helper, "SELECT ival, count(*) AS cnt, min(id) AS min_id FROM `/Root/Table1` GROUP BY ival ORDER BY ival",
-            "[[-100;1u;7];[100;3u;1];[200;2u;2];[300;1u;5]]", Scan);
+            "[[[-100];1u;7];[[100];3u;1];[[200];2u;2];[[300];1u;5]]", Scan);
     }
 
     Y_UNIT_TEST(TestAggregation, EQueryMode, ETableKind, ELoadKind) {
@@ -680,16 +684,16 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
 
         // GROUP BY with NULLs - NULLs should be grouped together
         CheckOrExec(helper, "SELECT ival, count(*) AS cnt FROM `/Root/Table1` GROUP BY ival ORDER BY ival",
-            "[[#;3u];[-100;1u];[100;2u];[200;2u]]", Scan);
+            "[[#;3u];[[-100];1u];[[100];2u];[[200];2u]]", Scan);
 
         // count(ival) in GROUP BY excludes NULLs from count
         CheckOrExec(helper, "SELECT ival, count(ival) AS cnt FROM `/Root/Table1` GROUP BY ival ORDER BY ival",
-            "[[#;0u];[-100;1u];[100;2u];[200;2u]]", Scan);
+            "[[#;0u];[[-100];1u];[[100];2u];[[200];2u]]", Scan);
 
         // Aggregate with WHERE filtering out NULLs
         CheckOrExec(helper,
             "SELECT ival, count(*) AS cnt FROM `/Root/Table1` WHERE ival IS NOT NULL GROUP BY ival ORDER BY ival",
-            "[[-100;1u];[100;2u];[200;2u]]", Scan);
+            "[[[-100];1u];[[100];2u];[[200];2u]]", Scan);
 
         // Aggregate only on NULL rows
         CheckOrExec(helper, "SELECT count(*) FROM `/Root/Table1` WHERE ival IS NULL",
@@ -905,14 +909,14 @@ Y_UNIT_TEST_SUITE(KqpIntervalColumnShard) {
         // CSV upsert with large values
         {
             TStringBuilder builder;
-            builder << "4,40,9223372036854775807" << Endl;
-            builder << "5,50,-9223372036854775807" << Endl;
+            builder << "4,40," << MaxValidInterval << Endl;
+            builder << "5,50," << MinValidInterval << Endl;
             auto result = helper.GetKikimr().GetTableClient().BulkUpsert("/Root/Table1", EDataFormat::CSV, builder).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         }
 
         CheckOrExec(helper, "SELECT * FROM `/Root/Table1` WHERE id >= 4 ORDER BY id",
-            "[[4;[40];[9223372036854775807]];[5;[50];[-9223372036854775807]]]", Scan);
+            TStringBuilder() << "[[4;[40];[" << MaxValidInterval << "]];[5;[50];[" << MinValidInterval << "]]]", Scan);
 
         // CSV upsert overwriting existing rows
         {

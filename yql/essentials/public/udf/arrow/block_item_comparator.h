@@ -148,21 +148,17 @@ template <bool Nullable>
 class TFixedSizeBlockItemComparator<NYql::NUuid::TUuid, Nullable>: public TBlockItemComparatorBase<TFixedSizeBlockItemComparator<NYql::NUuid::TUuid, Nullable>, Nullable> {
 public:
     i64 DoCompare(TBlockItem lhs, TBlockItem rhs) const {
-        auto l = lhs.GetUuid();
-        auto r = rhs.GetUuid();
-        return std::memcmp(l.Data, r.Data, sizeof(l.Data));
+        return lhs.AsStringRef().Compare(rhs.AsStringRef());
     }
 
     bool DoEquals(TBlockItem lhs, TBlockItem rhs) const {
-        auto l = lhs.GetUuid();
-        auto r = rhs.GetUuid();
+        auto l = lhs.AsStringRef();
+        auto r = rhs.AsStringRef();
         return l == r;
     }
 
     bool DoLess(TBlockItem lhs, TBlockItem rhs) const {
-        auto l = lhs.GetUuid();
-        auto r = rhs.GetUuid();
-        return std::memcmp(l.Data, r.Data, sizeof(l.Data)) < 0;
+        return lhs.AsStringRef().Compare(rhs.AsStringRef()) < 0;
     }
 };
 

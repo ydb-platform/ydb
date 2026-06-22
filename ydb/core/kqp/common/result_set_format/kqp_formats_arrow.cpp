@@ -371,8 +371,13 @@ void AppendDataValue<arrow::FixedSizeBinaryType>(arrow::ArrayBuilder* builder, N
 
     switch (dataSlot) {
         case NUdf::EDataSlot::Uuid: {
-            auto data = value.AsStringRef();
-            status = typedBuilder->Append(data.Data());
+            if (value.IsEmbedded()) {
+                const auto& uuid = value.GetUuid();
+                status = typedBuilder->Append(uuid.Data);
+            } else {
+                auto data = value.AsStringRef();
+                status = typedBuilder->Append(data.Data());
+            }
             break;
         }
 

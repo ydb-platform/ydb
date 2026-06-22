@@ -6,9 +6,12 @@
 
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_value_utils.h>
+#include <yql/essentials/public/uuid/yql_uuid.h>
 
 #include <arrow/array/array_binary.h>
 #include <arrow/chunked_array.h>
+
+#include <cstring>
 
 namespace NKikimr::NMiniKQL {
 
@@ -36,6 +39,32 @@ public:
         }
 
         return TBlockItem(value.Get<T>());
+    }
+};
+
+template <bool Nullable>
+class TFixedSizeBlockItemConverter<NYql::NUuid::TUuid, Nullable>: public IBlockItemConverter {
+public:
+    NUdf::TUnboxedValuePod MakeValue(TBlockItem item, const THolderFactory& holderFactory) const final {
+        Y_UNUSED(holderFactory);
+        if constexpr (Nullable) {
+            if (!item) {
+                return {};
+            }
+        }
+
+        const auto ref = item.AsStringRef();
+        return MakeString(NUdf::TStringRef(ref.Data(), ref.Size()));
+    }
+
+    TBlockItem MakeItem(const NUdf::TUnboxedValuePod& value) const final {
+        if constexpr (Nullable) {
+            if (!value) {
+                return {};
+            }
+        }
+
+        return TBlockItem(value.AsStringRef());
     }
 };
 

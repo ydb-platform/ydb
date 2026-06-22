@@ -340,6 +340,18 @@ void TGraceJoinPacker::Pack() {
                 NYql::NDecimal::Serialize(value.GetInt128(), buffPtr);
                 break;
             }
+            case NUdf::EDataSlot::Uuid: {
+                if (value.IsEmbedded()) {
+                    const auto uuid = value.GetUuid();
+                    TupleStringHolder[i].assign(uuid.Data, sizeof(uuid.Data));
+                } else {
+                    const auto ref = value.AsStringRef();
+                    TupleStringHolder[i].assign(ref.Data(), ref.Size());
+                }
+                TupleStrings[offset] = TupleStringHolder[i].data();
+                TupleStrSizes[offset] = TupleStringHolder[i].size();
+                break;
+            }
             default: {
                 auto str = TuplePtrs[pi.ColumnIdx]->AsStringRef();
                 TupleStrings[offset] = str.Data();
@@ -466,6 +478,11 @@ void TGraceJoinPacker::UnPack() {
                 const auto des = NYql::NDecimal::Deserialize(buffPtr, sizeof(NYql::NDecimal::TInt128));
                 MKQL_ENSURE(!NYql::NDecimal::IsError(des.first), "Bad packed data: invalid decimal.");
                 value = NUdf::TUnboxedValuePod(des.first);
+                break;
+            }
+            case NUdf::EDataSlot::Uuid: {
+                MKQL_ENSURE(TupleStrSizes[offset] == sizeof(NYql::NUuid::TUuid), "Bad packed data: invalid uuid size.");
+                value = MakeString(NUdf::TStringRef(TupleStrings[offset], TupleStrSizes[offset]));
                 break;
             }
             default: {

@@ -92,10 +92,10 @@ public:
     }
 
     // TODO: deprecate As<T>() in favor of Get<T>()
-    template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
+    template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result || std::is_same_v<T, NYql::NUuid::TUuid>>>
     inline T As() const;
 
-    template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result>>
+    template <typename T, typename = std::enable_if_t<TPrimitiveDataType<T>::Result || std::is_same_v<T, NYql::NUuid::TUuid>>>
     inline T Get() const;
 
     inline NYql::NDecimal::TInt128 GetInt128() const {

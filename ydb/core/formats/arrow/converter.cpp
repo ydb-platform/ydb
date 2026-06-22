@@ -24,6 +24,9 @@ static bool ConvertData(TCell& cell, const NScheme::TTypeInfo& colType, TMemoryP
                 cell = TCell();
                 break;
             }
+            if (NDyNumber::IsValidDyNumber(cell.AsBuf())) {
+                break;
+            }
             const auto dyNumber = NDyNumber::ParseDyNumberString(cell.AsBuf());
             if (!dyNumber.Defined()) {
                 errorMessage = "Invalid DyNumber string representation";
@@ -91,6 +94,13 @@ static arrow::Status ConvertColumn(
     switch (colType.GetTypeId()) {
         case NScheme::NTypeIds::DyNumber: {
             for (i32 i = 0; i < binaryArray.length(); ++i) {
+                if (binaryArray.IsNull(i)) {
+                    auto appendResult = builder.AppendNull();
+                    if (!appendResult.ok()) {
+                        return appendResult;
+                    }
+                    continue;
+                }
                 auto value = binaryArray.Value(i);
                 const auto dyNumber = NDyNumber::ParseDyNumberString(TStringBuf(value.data(), value.size()));
                 if (!dyNumber.Defined()) {

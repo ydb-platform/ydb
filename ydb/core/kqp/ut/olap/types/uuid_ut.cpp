@@ -128,7 +128,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         arrow::FixedSizeBinaryBuilder builder(type);
         for (const auto& u : uuidStrings) {
             if (u.has_value()) {
-                TUuidValue uv(std::string(*u));
+                TUuidValue uv{std::string(*u)};
                 Y_ABORT_UNLESS(builder.Append(reinterpret_cast<const uint8_t*>(uv.Buf_.Bytes)).ok());
             } else {
                 Y_ABORT_UNLESS(builder.AppendNull().ok());
@@ -319,7 +319,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
             "[[1;[10]];[2;[20]];[3;[30]]]", Scan);
         CheckOrExec(helper,
             "SELECT uid, id FROM `/Root/Table1` WHERE id=1",
-            R"([[[\"550e8400-e29b-41d4-a716-446655440000\"];1]])", Scan);
+            R"([[["550e8400-e29b-41d4-a716-446655440000"];1]])", Scan);
         CheckOrExec(helper,
             "SELECT uid, id FROM `/Root/Table1` WHERE id=3",
             R"([[#;3]])", Scan);
@@ -426,12 +426,12 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         // ASC order
         CheckOrExec(helper,
             "SELECT uid, id FROM `/Root/Table1` ORDER BY uid",
-            R"([[[\"11111111-1111-1111-1111-111111111111\"];2];[[\"22222222-2222-2222-2222-222222222222\"];3];[[\"33333333-3333-3333-3333-333333333333\"];1]])", Scan);
+            R"([[["11111111-1111-1111-1111-111111111111"];2];[["22222222-2222-2222-2222-222222222222"];3];[["33333333-3333-3333-3333-333333333333"];1]])", Scan);
 
         // DESC order
         CheckOrExec(helper,
             "SELECT uid, id FROM `/Root/Table1` ORDER BY uid DESC",
-            R"([[[\"33333333-3333-3333-3333-333333333333\"];1];[[\"22222222-2222-2222-2222-222222222222\"];3];[[\"11111111-1111-1111-1111-111111111111\"];2]])", Scan);
+            R"([[["33333333-3333-3333-3333-333333333333"];1];[["22222222-2222-2222-2222-222222222222"];3];[["11111111-1111-1111-1111-111111111111"];2]])", Scan);
     }
 
     Y_UNIT_TEST(TestGroupBy, EQueryMode, ETableKind, ELoadKind) {
@@ -451,7 +451,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
 
         CheckOrExec(helper,
             "SELECT uid, count(*) AS cnt FROM `/Root/Table1` GROUP BY uid ORDER BY uid",
-            R"([[[\"550e8400-e29b-41d4-a716-446655440000\"];1u];[[\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"];2u];[[\"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb\"];2u]])", Scan);
+            R"([[["550e8400-e29b-41d4-a716-446655440000"];1u];[["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"];2u];[["bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"];2u]])", Scan);
     }
 
     Y_UNIT_TEST(TestAggregation, EQueryMode, ETableKind, ELoadKind) {
@@ -471,10 +471,10 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
 
         CheckOrExec(helper,
             "SELECT min(uid) FROM `/Root/Table1`",
-            R"([[[\"11111111-1111-1111-1111-111111111111\"]]])", Scan);
+            R"([[["11111111-1111-1111-1111-111111111111"]]])", Scan);
         CheckOrExec(helper,
             "SELECT max(uid) FROM `/Root/Table1`",
-            R"([[[\"33333333-3333-3333-3333-333333333333\"]]])", Scan);
+            R"([[["33333333-3333-3333-3333-333333333333"]]])", Scan);
         CheckOrExec(helper,
             "SELECT count(uid) FROM `/Root/Table1`",
             "[[3u]]", Scan);
@@ -539,7 +539,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
 
         CheckOrExec(helper,
             R"(SELECT t1.id, t1.uid, t2.uid FROM `/Root/Table1` AS t1 JOIN `/Root/Table2` AS t2 ON t1.id = t2.table1_id ORDER BY t1.id, t2.id)",
-            R"([[1;[\"550e8400-e29b-41d4-a716-446655440000\"];[\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"]];[1;[\"550e8400-e29b-41d4-a716-446655440000\"];[\"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb\"]];[2;[\"660e8400-e29b-41d4-a716-446655440000\"];[\"11111111-1111-1111-1111-111111111111\"]]])", Scan);
+            R"([[1;["550e8400-e29b-41d4-a716-446655440000"];["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]];[1;["550e8400-e29b-41d4-a716-446655440000"];["bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"]];[2;["660e8400-e29b-41d4-a716-446655440000"];["11111111-1111-1111-1111-111111111111"]]])", Scan);
     }
 
     Y_UNIT_TEST(TestJoinByUuid, EQueryMode, ETableKind, ELoadKind) {
@@ -581,7 +581,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
 
         CheckOrExec(helper,
             R"(SELECT t1.id, t2.id, t1.uid FROM `/Root/Table1` AS t1 JOIN `/Root/Table2` AS t2 ON t1.uid = t2.uid ORDER BY t1.id, t2.id)",
-            R"([[1;2;[\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"]];[2;1;[\"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb\"]]])", Scan);
+            R"([[1;2;["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"]];[2;1;["bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"]]])", Scan);
     }
 
     Y_UNIT_TEST(TestOrderByWithLimit, EQueryMode, ETableKind, ELoadKind) {
@@ -602,17 +602,17 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         // ASC LIMIT 2
         CheckOrExec(helper,
             "SELECT uid, id FROM `/Root/Table1` ORDER BY uid LIMIT 2",
-            R"([[[\"11111111-1111-1111-1111-111111111111\"];2];[[\"22222222-2222-2222-2222-222222222222\"];3]])", Scan);
+            R"([[["11111111-1111-1111-1111-111111111111"];2];[["22222222-2222-2222-2222-222222222222"];3]])", Scan);
 
         // DESC LIMIT 1
         CheckOrExec(helper,
             "SELECT uid, id FROM `/Root/Table1` ORDER BY uid DESC LIMIT 1",
-            R"([[[\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"];4]])", Scan);
+            R"([[["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"];4]])", Scan);
 
         // ASC LIMIT 3
         CheckOrExec(helper,
             "SELECT uid, id FROM `/Root/Table1` ORDER BY uid LIMIT 3",
-            R"([[[\"11111111-1111-1111-1111-111111111111\"];2];[[\"22222222-2222-2222-2222-222222222222\"];3];[[\"33333333-3333-3333-3333-333333333333\"];1]])", Scan);
+            R"([[["11111111-1111-1111-1111-111111111111"];2];[["22222222-2222-2222-2222-222222222222"];3];[["33333333-3333-3333-3333-333333333333"];1]])", Scan);
     }
 
     Y_UNIT_TEST(TestGroupByWithNulls, EQueryMode, ETableKind, ELoadKind) {
@@ -632,7 +632,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
 
         CheckOrExec(helper,
             "SELECT uid, count(*) AS cnt FROM `/Root/Table1` GROUP BY uid ORDER BY uid",
-            R"([[#;2u];[[\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"];2u];[[\"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb\"];1u]])", Scan);
+            R"([[#;2u];[["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"];2u];[["bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"];1u]])", Scan);
     }
 
     Y_UNIT_TEST(TestUuidAsPrimaryKey, EQueryMode, ELoadKind) {
@@ -683,13 +683,13 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
 
         CheckOrExec(helper,
             R"(SELECT val FROM `/Root/ColumnTableTest` WHERE uid = CAST("22222222-2222-2222-2222-222222222222" AS Uuid))",
-            "[[2]]", Scan);
+            "[[[2]]]", Scan);
         CheckOrExec(helper,
             R"(SELECT val FROM `/Root/ColumnTableTest` WHERE uid = CAST("11111111-1111-1111-1111-111111111111" AS Uuid))",
-            "[[1]]", Scan);
+            "[[[1]]]", Scan);
         CheckOrExec(helper,
             R"(SELECT val FROM `/Root/ColumnTableTest` WHERE uid = CAST("33333333-3333-3333-3333-333333333333" AS Uuid))",
-            "[[3]]", Scan);
+            "[[[3]]]", Scan);
     }
 
     Y_UNIT_TEST(TestDmlParityAndCTAS, EQueryMode, ELoadKind) {
@@ -757,7 +757,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         }
 
         CheckOrExec(helper, "SELECT uid, id, val FROM `" + cs + "` ORDER BY id",
-            R"([[[\"550e8400-e29b-41d4-a716-446655440000\"];1;[10]];[[\"660e8400-e29b-41d4-a716-446655440000\"];2;[20]];[[\"770e8400-e29b-41d4-a716-446655440000\"];3;[30]]])", Scan);
+            R"([[["550e8400-e29b-41d4-a716-446655440000"];1;[10]];[["660e8400-e29b-41d4-a716-446655440000"];2;[20]];[["770e8400-e29b-41d4-a716-446655440000"];3;[30]]])", Scan);
 
         // UPDATE
         helper.ExecuteQuery(
@@ -765,7 +765,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
 
         CheckOrExec(helper,
             "SELECT uid, id FROM `" + cs + "` WHERE id = 2",
-            R"([[[\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"];2]])", Scan);
+            R"([[["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"];2]])", Scan);
 
         // DELETE
         helper.ExecuteQuery(
@@ -782,7 +782,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
 
         CheckOrExec(helper,
             "SELECT uid, id, val FROM `" + cs + "` ORDER BY id",
-            R"([[[\"550e8400-e29b-41d4-a716-446655440000\"];1;[10]];[[\"aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa\"];2;[20]];[[\"bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb\"];4;[40]]])", Scan);
+            R"([[["550e8400-e29b-41d4-a716-446655440000"];1;[10]];[["aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"];2;[20]];[["bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"];4;[40]]])", Scan);
     }
 
     Y_UNIT_TEST(TestCsv, EQueryMode, ETableKind) {
@@ -810,7 +810,7 @@ Y_UNIT_TEST_SUITE(KqpUuidColumnShard) {
         CheckOrExec(helper, "SELECT id FROM `" + tableName + "` ORDER BY id", "[[1];[2];[3]]", Scan);
         CheckOrExec(helper,
             "SELECT uid, id FROM `" + tableName + "` ORDER BY id",
-            R"([[[\"550e8400-e29b-41d4-a716-446655440000\"];1];[[\"660e8400-e29b-41d4-a716-446655440000\"];2];[[\"770e8400-e29b-41d4-a716-446655440000\"];3]])", Scan);
+            R"([[["550e8400-e29b-41d4-a716-446655440000"];1];[["660e8400-e29b-41d4-a716-446655440000"];2];[["770e8400-e29b-41d4-a716-446655440000"];3]])", Scan);
     }
 }
 

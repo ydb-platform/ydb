@@ -38,7 +38,11 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
     static TString MakeDyNumber(const TStringBuf& str) {
         auto result = NDyNumber::ParseDyNumberString(str);
         Y_ABORT_UNLESS(result.Defined(), "Failed to parse DyNumber: %s", TString(str).c_str());
-        return *result;
+        return TString(str);
+    }
+
+    static void AppendDyNumber(arrow::BinaryBuilder& builder, const TStringBuf& str) {
+        Y_ABORT_UNLESS(builder.Append(str.data(), str.size()).ok());
     }
 
     void CreateDataShardTable(TTestHelper& helper, const TString& name) {
@@ -81,9 +85,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         for (auto&& r : rows) {
             builder << r.Id << "," << r.IntVal << ",";
             if (r.Dyn.has_value()) {
-                auto strRepr = NDyNumber::DyNumberToString(*r.Dyn);
-                Y_ABORT_UNLESS(strRepr.Defined(), "Failed to convert DyNumber to string");
-                builder << *strRepr;
+                builder << *r.Dyn;
             }
             builder << '\n';
         }
@@ -225,7 +227,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         CheckOrExec(helper, "SELECT dyn FROM `" + tableName + "` WHERE id=1", "[[[\".314e1\"]]]", Scan);
         CheckOrExec(helper, "SELECT dyn FROM `" + tableName + "` WHERE id=2", "[[[\"-.1e3\"]]]", Scan);
         CheckOrExec(helper, "SELECT dyn FROM `" + tableName + "` WHERE id=3", "[[#]]", Scan);
-        CheckOrExec(helper, "SELECT dyn FROM `" + tableName + "` WHERE id=4", "[[[\".0\"]]]", Scan);
+        CheckOrExec(helper, "SELECT dyn FROM `" + tableName + "` WHERE id=4", "[[[\"0\"]]]", Scan);
         CheckOrExec(helper, "SELECT dyn FROM `" + tableName + "` WHERE id=5", "[[[\".1e1\"]]]", Scan);
         CheckOrExec(helper, "SELECT dyn FROM `" + tableName + "` WHERE id=6", "[[[\"-.5e1\"]]]", Scan);
     }
@@ -372,12 +374,12 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         // ORDER BY dyn ASC (default)
         CheckOrExec(helper,
             "SELECT id, dyn FROM `" + tableName + "` ORDER BY dyn",
-            "[[2;[\"-.5e2\"]];[5;[\"-.1e1\"]];[3;[\".0\"]];[4;[\".314e1\"]];[1;[\".1e3\"]]]", Scan);
+            "[[2;[\"-.5e2\"]];[5;[\"-.1e1\"]];[3;[\"0\"]];[4;[\".314e1\"]];[1;[\".1e3\"]]]", Scan);
 
         // ORDER BY dyn DESC
         CheckOrExec(helper,
             "SELECT id, dyn FROM `" + tableName + "` ORDER BY dyn DESC",
-            "[[1;[\".1e3\"]];[4;[\".314e1\"]];[3;[\".0\"]];[5;[\"-.1e1\"]];[2;[\"-.5e2\"]]]", Scan);
+            "[[1;[\".1e3\"]];[4;[\".314e1\"]];[3;[\"0\"]];[5;[\"-.1e1\"]];[2;[\"-.5e2\"]]]", Scan);
     }
 
     // ---- 6. GROUP BY dyn with count(*) ----
@@ -402,7 +404,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         }, &col, &schema);
 
         CheckOrExec(helper, "SELECT dyn, count(*) AS cnt FROM `" + tableName + "` GROUP BY dyn ORDER BY dyn",
-            "[[\".1e1\";2u];[\".2e1\";2u];[\".3e1\";1u]]", Scan);
+            "[[[\".1e1\"];2u];[[\".2e1\"];2u];[[\".3e1\"];1u]]", Scan);
     }
 
     // ---- 7. min(dyn), max(dyn), count(dyn), count(*) ----
@@ -501,9 +503,9 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
             if (Load == ELoadKind::ARROW) {
                 arrow::Int32Builder idB, t1idB;
                 arrow::BinaryBuilder dynB;
-                Y_ABORT_UNLESS(idB.Append(1).ok()); Y_ABORT_UNLESS(t1idB.Append(1).ok()); Y_ABORT_UNLESS(dynB.Append(MakeDyNumber("50")).ok());
-                Y_ABORT_UNLESS(idB.Append(2).ok()); Y_ABORT_UNLESS(t1idB.Append(1).ok()); Y_ABORT_UNLESS(dynB.Append(MakeDyNumber("60")).ok());
-                Y_ABORT_UNLESS(idB.Append(3).ok()); Y_ABORT_UNLESS(t1idB.Append(2).ok()); Y_ABORT_UNLESS(dynB.Append(MakeDyNumber("70")).ok());
+                Y_ABORT_UNLESS(idB.Append(1).ok()); Y_ABORT_UNLESS(t1idB.Append(1).ok()); AppendDyNumber(dynB, "50");
+                Y_ABORT_UNLESS(idB.Append(2).ok()); Y_ABORT_UNLESS(t1idB.Append(1).ok()); AppendDyNumber(dynB, "60");
+                Y_ABORT_UNLESS(idB.Append(3).ok()); Y_ABORT_UNLESS(t1idB.Append(2).ok()); AppendDyNumber(dynB, "70");
                 std::shared_ptr<arrow::Array> idArr, t1idArr, dynArr;
                 Y_ABORT_UNLESS(idB.Finish(&idArr).ok());
                 Y_ABORT_UNLESS(t1idB.Finish(&t1idArr).ok());
@@ -518,9 +520,9 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
             } else if (Load == ELoadKind::YDB_VALUE) {
                 TValueBuilder builder;
                 builder.BeginList();
-                builder.AddListItem().BeginStruct().AddMember("id").Int32(1).AddMember("table1_id").BeginOptional().Int32(1).EndOptional().AddMember("dyn").BeginOptional().DyNumber(MakeDyNumber("50")).EndOptional().EndStruct();
-                builder.AddListItem().BeginStruct().AddMember("id").Int32(2).AddMember("table1_id").BeginOptional().Int32(1).EndOptional().AddMember("dyn").BeginOptional().DyNumber(MakeDyNumber("60")).EndOptional().EndStruct();
-                builder.AddListItem().BeginStruct().AddMember("id").Int32(3).AddMember("table1_id").BeginOptional().Int32(2).EndOptional().AddMember("dyn").BeginOptional().DyNumber(MakeDyNumber("70")).EndOptional().EndStruct();
+                builder.AddListItem().BeginStruct().AddMember("id").Int32(1).AddMember("table1_id").BeginOptional().Int32(1).EndOptional().AddMember("dyn").BeginOptional().DyNumber("50").EndOptional().EndStruct();
+                builder.AddListItem().BeginStruct().AddMember("id").Int32(2).AddMember("table1_id").BeginOptional().Int32(1).EndOptional().AddMember("dyn").BeginOptional().DyNumber("60").EndOptional().EndStruct();
+                builder.AddListItem().BeginStruct().AddMember("id").Int32(3).AddMember("table1_id").BeginOptional().Int32(2).EndOptional().AddMember("dyn").BeginOptional().DyNumber("70").EndOptional().EndStruct();
                 builder.EndList();
                 auto res = helper.GetKikimr().GetTableClient().BulkUpsert(t2, builder.Build()).GetValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
@@ -534,9 +536,9 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
             if (Load == ELoadKind::ARROW) {
                 arrow::Int32Builder idB, t1idB;
                 arrow::BinaryBuilder dynB;
-                Y_ABORT_UNLESS(idB.Append(1).ok()); Y_ABORT_UNLESS(t1idB.Append(1).ok()); Y_ABORT_UNLESS(dynB.Append(MakeDyNumber("50")).ok());
-                Y_ABORT_UNLESS(idB.Append(2).ok()); Y_ABORT_UNLESS(t1idB.Append(1).ok()); Y_ABORT_UNLESS(dynB.Append(MakeDyNumber("60")).ok());
-                Y_ABORT_UNLESS(idB.Append(3).ok()); Y_ABORT_UNLESS(t1idB.Append(2).ok()); Y_ABORT_UNLESS(dynB.Append(MakeDyNumber("70")).ok());
+                Y_ABORT_UNLESS(idB.Append(1).ok()); Y_ABORT_UNLESS(t1idB.Append(1).ok()); AppendDyNumber(dynB, "50");
+                Y_ABORT_UNLESS(idB.Append(2).ok()); Y_ABORT_UNLESS(t1idB.Append(1).ok()); AppendDyNumber(dynB, "60");
+                Y_ABORT_UNLESS(idB.Append(3).ok()); Y_ABORT_UNLESS(t1idB.Append(2).ok()); AppendDyNumber(dynB, "70");
                 std::shared_ptr<arrow::Array> idArr, t1idArr, dynArr;
                 Y_ABORT_UNLESS(idB.Finish(&idArr).ok());
                 Y_ABORT_UNLESS(t1idB.Finish(&t1idArr).ok());
@@ -554,9 +556,9 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
             } else if (Load == ELoadKind::YDB_VALUE) {
                 TValueBuilder builder;
                 builder.BeginList();
-                builder.AddListItem().BeginStruct().AddMember("id").Int32(1).AddMember("table1_id").BeginOptional().Int32(1).EndOptional().AddMember("dyn").BeginOptional().DyNumber(MakeDyNumber("50")).EndOptional().EndStruct();
-                builder.AddListItem().BeginStruct().AddMember("id").Int32(2).AddMember("table1_id").BeginOptional().Int32(1).EndOptional().AddMember("dyn").BeginOptional().DyNumber(MakeDyNumber("60")).EndOptional().EndStruct();
-                builder.AddListItem().BeginStruct().AddMember("id").Int32(3).AddMember("table1_id").BeginOptional().Int32(2).EndOptional().AddMember("dyn").BeginOptional().DyNumber(MakeDyNumber("70")).EndOptional().EndStruct();
+                builder.AddListItem().BeginStruct().AddMember("id").Int32(1).AddMember("table1_id").BeginOptional().Int32(1).EndOptional().AddMember("dyn").BeginOptional().DyNumber("50").EndOptional().EndStruct();
+                builder.AddListItem().BeginStruct().AddMember("id").Int32(2).AddMember("table1_id").BeginOptional().Int32(1).EndOptional().AddMember("dyn").BeginOptional().DyNumber("60").EndOptional().EndStruct();
+                builder.AddListItem().BeginStruct().AddMember("id").Int32(3).AddMember("table1_id").BeginOptional().Int32(2).EndOptional().AddMember("dyn").BeginOptional().DyNumber("70").EndOptional().EndStruct();
                 builder.EndList();
                 auto res = helper.GetKikimr().GetTableClient().BulkUpsert(t2, builder.Build()).GetValueSync();
                 UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
@@ -656,7 +658,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         // Top 3 smallest
         CheckOrExec(helper,
             "SELECT id, dyn FROM `" + tableName + "` ORDER BY dyn LIMIT 3",
-            "[[1;[\"-.1e3\"]];[2;[\"-.1e1\"]];[3;[\".0\"]]]", Scan);
+            "[[1;[\"-.1e3\"]];[2;[\"-.1e1\"]];[3;[\"0\"]]]", Scan);
 
         // Top 2 largest
         CheckOrExec(helper,
@@ -666,7 +668,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         // LIMIT with OFFSET
         CheckOrExec(helper,
             "SELECT id, dyn FROM `" + tableName + "` ORDER BY dyn LIMIT 2 OFFSET 2",
-            "[[3;[\".0\"]];[4;[\".5e1\"]]]", Scan);
+            "[[3;[\"0\"]];[4;[\".5e1\"]]]", Scan);
     }
 
     // ---- 11. GROUP BY including NULL DyNumber values ----
@@ -694,7 +696,7 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         // GROUP BY dyn with NULLs -- NULLs should form their own group
         CheckOrExec(helper,
             "SELECT dyn, count(*) AS cnt FROM `" + tableName + "` GROUP BY dyn ORDER BY dyn",
-            "[[#;3u];[\".1e2\";2u];[\".2e2\";1u]]", Scan);
+            "[[#;3u];[[\".1e2\"];2u];[[\".2e2\"];1u]]", Scan);
 
         // Verify count(dyn) excludes nulls, count(*) includes them
         CheckOrExec(helper,
@@ -723,11 +725,11 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         if (Load == ELoadKind::ARROW) {
             arrow::BinaryBuilder dynB;
             arrow::Int64Builder valB;
-            Y_ABORT_UNLESS(dynB.Append(MakeDyNumber("-100")).ok()); Y_ABORT_UNLESS(valB.Append(1).ok());
-            Y_ABORT_UNLESS(dynB.Append(MakeDyNumber("0")).ok()); Y_ABORT_UNLESS(valB.Append(2).ok());
-            Y_ABORT_UNLESS(dynB.Append(MakeDyNumber("3.14")).ok()); Y_ABORT_UNLESS(valB.Append(3).ok());
-            Y_ABORT_UNLESS(dynB.Append(MakeDyNumber("100")).ok()); Y_ABORT_UNLESS(valB.Append(4).ok());
-            Y_ABORT_UNLESS(dynB.Append(MakeDyNumber("999")).ok()); Y_ABORT_UNLESS(valB.Append(5).ok());
+            AppendDyNumber(dynB, "-100"); Y_ABORT_UNLESS(valB.Append(1).ok());
+            AppendDyNumber(dynB, "0"); Y_ABORT_UNLESS(valB.Append(2).ok());
+            AppendDyNumber(dynB, "3.14"); Y_ABORT_UNLESS(valB.Append(3).ok());
+            AppendDyNumber(dynB, "100"); Y_ABORT_UNLESS(valB.Append(4).ok());
+            AppendDyNumber(dynB, "999"); Y_ABORT_UNLESS(valB.Append(5).ok());
             std::shared_ptr<arrow::Array> dynArr, valArr;
             Y_ABORT_UNLESS(dynB.Finish(&dynArr).ok());
             Y_ABORT_UNLESS(valB.Finish(&valArr).ok());
@@ -740,11 +742,11 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         } else if (Load == ELoadKind::YDB_VALUE) {
             TValueBuilder builder;
             builder.BeginList();
-            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber(MakeDyNumber("-100")).AddMember("val").BeginOptional().Int64(1).EndOptional().EndStruct();
-            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber(MakeDyNumber("0")).AddMember("val").BeginOptional().Int64(2).EndOptional().EndStruct();
-            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber(MakeDyNumber("3.14")).AddMember("val").BeginOptional().Int64(3).EndOptional().EndStruct();
-            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber(MakeDyNumber("100")).AddMember("val").BeginOptional().Int64(4).EndOptional().EndStruct();
-            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber(MakeDyNumber("999")).AddMember("val").BeginOptional().Int64(5).EndOptional().EndStruct();
+            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber("-100").AddMember("val").BeginOptional().Int64(1).EndOptional().EndStruct();
+            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber("0").AddMember("val").BeginOptional().Int64(2).EndOptional().EndStruct();
+            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber("3.14").AddMember("val").BeginOptional().Int64(3).EndOptional().EndStruct();
+            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber("100").AddMember("val").BeginOptional().Int64(4).EndOptional().EndStruct();
+            builder.AddListItem().BeginStruct().AddMember("dyn").DyNumber("999").AddMember("val").BeginOptional().Int64(5).EndOptional().EndStruct();
             builder.EndList();
             auto res = helper.GetKikimr().GetTableClient().BulkUpsert("/Root/ColumnTableTest", builder.Build()).GetValueSync();
             UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
@@ -756,9 +758,9 @@ Y_UNIT_TEST_SUITE(KqpDyNumberColumnShard) {
         }
 
         // Filter by DyNumber PK using normalized form in CAST
-        CheckOrExec(helper, "SELECT val FROM `/Root/ColumnTableTest` WHERE dyn = CAST(\".1e3\" AS DyNumber)", "[[4]]", Scan);
-        CheckOrExec(helper, "SELECT val FROM `/Root/ColumnTableTest` WHERE dyn = CAST(\"0\" AS DyNumber)", "[[2]]", Scan);
-        CheckOrExec(helper, "SELECT val FROM `/Root/ColumnTableTest` WHERE dyn = CAST(\"3.14\" AS DyNumber)", "[[3]]", Scan);
+        CheckOrExec(helper, "SELECT val FROM `/Root/ColumnTableTest` WHERE dyn = CAST(\".1e3\" AS DyNumber)", "[[[4]]]", Scan);
+        CheckOrExec(helper, "SELECT val FROM `/Root/ColumnTableTest` WHERE dyn = CAST(\"0\" AS DyNumber)", "[[[2]]]", Scan);
+        CheckOrExec(helper, "SELECT val FROM `/Root/ColumnTableTest` WHERE dyn = CAST(\"3.14\" AS DyNumber)", "[[[3]]]", Scan);
     }
 
     // ---- 13. DML parity between row/column tables ----

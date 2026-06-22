@@ -535,8 +535,13 @@ void AppendFixedSizeDataValue(arrow::ArrayBuilder* builder, NUdf::TUnboxedValue 
         status = typedBuilder->AppendNull();
     } else {
         if (dataSlot == NUdf::EDataSlot::Uuid) {
-            auto data = value.AsStringRef();
-            status = typedBuilder->Append(data.Data());
+            if (value.IsEmbedded()) {
+                const auto& uuid = value.GetUuid();
+                status = typedBuilder->Append(uuid.Data);
+            } else {
+                auto data = value.AsStringRef();
+                status = typedBuilder->Append(data.Data());
+            }
         } else if (dataSlot == NUdf::EDataSlot::Decimal) {
             auto intVal = value.GetInt128();
             status = typedBuilder->Append(reinterpret_cast<const char*>(&intVal));

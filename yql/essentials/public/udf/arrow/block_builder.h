@@ -606,19 +606,28 @@ public:
     }
 
     void DoAddNotNull(TUnboxedValuePod value) {
-        this->PlaceItem(value.GetUuid());
+        const auto ref = value.AsStringRef();
+        NYql::NUuid::TUuid uuid;
+        std::memcpy(uuid.Data, ref.Data(), sizeof(uuid.Data));
+        this->PlaceItem(std::move(uuid));
     }
 
     void DoAddNotNull(TBlockItem value) {
-        this->PlaceItem(value.GetUuid());
+        const auto ref = value.AsStringRef();
+        NYql::NUuid::TUuid uuid;
+        std::memcpy(uuid.Data, ref.Data(), sizeof(uuid.Data));
+        this->PlaceItem(std::move(uuid));
     }
 
     void DoAddNotNull(TInputBuffer& input) {
-        this->DoAdd(TBlockItem(input.PopNumber<NYql::NUuid::TUuid>()));
+        this->PlaceItem(input.PopNumber<NYql::NUuid::TUuid>());
     }
 
     void DoAddNotNull(TBlockItem value, size_t count) {
-        std::fill(this->DataPtr_ + this->GetCurrLen(), this->DataPtr_ + this->GetCurrLen() + count, value.GetUuid());
+        const auto ref = value.AsStringRef();
+        NYql::NUuid::TUuid uuid;
+        std::memcpy(uuid.Data, ref.Data(), sizeof(uuid.Data));
+        std::fill(this->DataPtr_ + this->GetCurrLen(), this->DataPtr_ + this->GetCurrLen() + count, uuid);
     }
 };
 

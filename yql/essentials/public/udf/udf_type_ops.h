@@ -3,12 +3,29 @@
 #include "udf_types.h"
 #include "udf_value.h"
 
+#include <yql/essentials/public/uuid/yql_uuid.h>
+#include <yql/essentials/types/uuid/uuid.h>
+
 #include <util/generic/hash.h>
 #include <util/digest/numeric.h>
+
+#include <cstring>
 
 namespace NYql::NUdf {
 
 using THashType = ui64;
+
+inline TStringBuf GetUuidBinaryView(const TUnboxedValuePod& value) {
+    return value.AsStringRef();
+}
+
+inline int CompareUuidValues(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
+    const auto lhsBuf = GetUuidBinaryView(lhs);
+    const auto rhsBuf = GetUuidBinaryView(rhs);
+    Y_ABORT_UNLESS(lhsBuf.Size() == sizeof(NYql::NUuid::TUuid));
+    Y_ABORT_UNLESS(rhsBuf.Size() == sizeof(NYql::NUuid::TUuid));
+    return std::memcmp(lhsBuf.Data(), rhsBuf.Data(), sizeof(NYql::NUuid::TUuid));
+}
 
 template <EDataSlot Type>
 inline THashType GetValueHash(const TUnboxedValuePod& value);
@@ -129,7 +146,8 @@ inline THashType GetValueHash<EDataSlot::Utf8>(const TUnboxedValuePod& value) {
 
 template <>
 inline THashType GetValueHash<EDataSlot::Uuid>(const TUnboxedValuePod& value) {
-    return GetStringHash(value);
+    const auto data = GetUuidBinaryView(value);
+    return CityHash64(data.Data(), data.Size());
 }
 
 template <>
@@ -356,7 +374,7 @@ inline int CompareValues<EDataSlot::Utf8>(const TUnboxedValuePod& lhs, const TUn
 
 template <>
 inline int CompareValues<EDataSlot::Uuid>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
-    return CompareStrings(lhs, rhs);
+    return CompareUuidValues(lhs, rhs);
 }
 
 template <>
@@ -561,7 +579,7 @@ inline bool EquateValues<EDataSlot::Utf8>(const TUnboxedValuePod& lhs, const TUn
 
 template <>
 inline bool EquateValues<EDataSlot::Uuid>(const TUnboxedValuePod& lhs, const TUnboxedValuePod& rhs) {
-    return EquateStrings(lhs, rhs);
+    return CompareUuidValues(lhs, rhs) == 0;
 }
 
 template <>

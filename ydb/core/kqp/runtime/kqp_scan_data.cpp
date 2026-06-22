@@ -68,8 +68,12 @@ TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, const NSc
         }
         case NTypeIds::Uuid:
         {
-            YQL_ENSURE(value.IsEmbedded(), "Passed wrong type: " << NScheme::TypeName(type.GetTypeId()));
-            return { sizeof(NUdf::TUnboxedValue), sizeof(NYql::NUuid::TUuid) };
+            if (value.IsEmbedded()) {
+                return { sizeof(NUdf::TUnboxedValue), sizeof(NYql::NUuid::TUuid) };
+            }
+            const auto size = value.AsStringRef().Size();
+            Y_VERIFY_DEBUG_S(size == sizeof(NYql::NUuid::TUuid), "Wrong Uuid size: " << size);
+            return { sizeof(NUdf::TUnboxedValue) + size, size };
         }
         case NTypeIds::String:
         case NTypeIds::Utf8:
@@ -294,9 +298,7 @@ public:
     static NYql::NUdf::TUnboxedValue ExtractValue(const arrow::FixedSizeBinaryArray& array, const ui32 rowIndex) {
         auto data = array.GetView(rowIndex);
         YQL_ENSURE(data.size() == sizeof(NYql::NUuid::TUuid), "Wrong data size");
-        NYql::NUuid::TUuid val;
-        std::memcpy(val.Data, data.data(), data.size());
-        return NUdf::TUnboxedValuePod(val);
+        return MakeString(NUdf::TStringRef(data.data(), data.size()));
     }
     static TFixedWidthStatAccumulator BuildStatAccumulator(const NScheme::TTypeInfo& typeInfo) {
         return TFixedWidthStatAccumulator(typeInfo);

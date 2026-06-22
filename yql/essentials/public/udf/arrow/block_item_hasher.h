@@ -62,7 +62,8 @@ template <bool Nullable>
 class TFixedSizeBlockItemHasher<NYql::NUuid::TUuid, Nullable>: public TBlockItemHasherBase<TFixedSizeBlockItemHasher<NYql::NUuid::TUuid, Nullable>, Nullable> {
 public:
     ui64 DoHash(TBlockItem value) const {
-        return GetValueHash<TDataType<NUdf::TUuid>::Slot>(NUdf::TUnboxedValuePod(value.GetUuid()));
+        const auto ref = value.AsStringRef();
+        return CityHash64(ref.Data(), ref.Size());
     }
 };
 

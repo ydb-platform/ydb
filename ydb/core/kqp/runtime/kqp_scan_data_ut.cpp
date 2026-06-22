@@ -2,8 +2,11 @@
 
 #include <yql/essentials/public/udf/udf_ut_helpers.h>
 #include <yql/essentials/public/uuid/yql_uuid.h>
+#include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_alloc.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <cstring>
 
 namespace NKikimr::NMiniKQL {
 
@@ -271,6 +274,8 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
         NUdf::TStringValue str(pattern.size());
         std::memcpy(str.Data(), pattern.data(), pattern.size());
         NUdf::TUnboxedValue containsLongString(NUdf::TUnboxedValuePod(std::move(str)));
+        auto uuidAsString = MakeTestUuid(0xCD);
+        NUdf::TUnboxedValue uuidStringValue(MakeString(NUdf::TStringRef(uuidAsString.Data, sizeof(NYql::NUuid::TUuid))));
         NYql::NDecimal::TInt128 decimalVal = 123456789012;
         NYql::NDecimal::TInt128 decimal35Val = 987654321012;
         TVector<TTestCase> cases = {
@@ -334,7 +339,8 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             {NUdf::TUnboxedValuePod((double) 3.4), TTypeInfo(NPg::TypeDescFromPgTypeName("pgfloat8")), {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::Uuid        , {16, 8 } },
             {NUdf::TUnboxedValuePod(            ), NTypeIds::DyNumber    , {16, 8 } },
-            {NUdf::TUnboxedValuePod(MakeTestUuid(0xAB)), NTypeIds::Uuid  , {16, 16} },
+            {uuidStringValue, NTypeIds::Uuid, {32, 16} },
+            {MakeString(NUdf::TStringRef(MakeTestUuid(0xAB).Data, sizeof(NYql::NUuid::TUuid))), NTypeIds::Uuid, {32, 16} },
             {NUdf::TUnboxedValuePod::Embedded("dynval"), NTypeIds::DyNumber, {16, 8 } },
         };
 
@@ -397,7 +403,10 @@ Y_UNIT_TEST_SUITE(TKqpScanData) {
             UNIT_ASSERT_EQUAL(container[27].Get<i64 >(), row.PgInt8     );
             UNIT_ASSERT_EQUAL(container[28].Get<float >(), row.PgFloat4 );
             UNIT_ASSERT_EQUAL(container[29].Get<double>(), row.PgFloat8 );
-            UNIT_ASSERT(container[30].GetUuid() == row.Uuid);
+            auto tmpUuid = container[30];
+            const auto uuidRef = tmpUuid.AsStringRef();
+            UNIT_ASSERT(uuidRef.Size() == sizeof(row.Uuid.Data));
+            UNIT_ASSERT(std::memcmp(uuidRef.Data(), row.Uuid.Data, sizeof(row.Uuid.Data)) == 0);
             auto tmpDyNumber = container[31];
             UNIT_ASSERT_EQUAL(TString(tmpDyNumber.AsStringRef()), row.DyNumber);
         }

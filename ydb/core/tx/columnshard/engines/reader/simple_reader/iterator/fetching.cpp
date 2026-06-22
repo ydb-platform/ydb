@@ -364,7 +364,8 @@ std::shared_ptr<arrow::Table> TBuildResultStep::BuildPageResultBatch(const std::
         contextTableConstruct.SetStartIndex(StartIndex).SetRecordsCount(RecordsCount);
     } else {
         AFL_VERIFY(StartIndex == 0);
-        AFL_VERIFY(RecordsCount == source->GetRecordsCount())("records_count", RecordsCount)("source", source->GetRecordsCount());
+        AFL_VERIFY(RecordsCount == source->GetStageResult().GetBatch()->num_rows())("records_count", RecordsCount)(
+                                     "batch", source->GetStageResult().GetBatch()->num_rows());
     }
     contextTableConstruct.SetFilter(source->GetStageResult().GetNotAppliedFilter());
     if (source->GetStageResult().IsEmpty()) {

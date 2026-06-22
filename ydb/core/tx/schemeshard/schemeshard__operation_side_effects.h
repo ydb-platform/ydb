@@ -141,7 +141,7 @@ public:
     void Barrier(TOperationId opId, TString barrierName);
 
 private:
-    bool CheckDecouplingProposes(TString& errExpl) const;
+    bool CheckDecouplingProposes(const TSchemeShard* ss, TString& errExpl) const;
     void ExpandCoordinatorProposes(TSchemeShard* ss, const TActorContext& ctx);
     void DoCoordinatorAck(TSchemeShard* ss, const TActorContext& ctx);
     void DoMediatorsAck(TSchemeShard* ss, const TActorContext& ctx);

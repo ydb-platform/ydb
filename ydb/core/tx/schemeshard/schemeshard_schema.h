@@ -1779,9 +1779,10 @@ struct Schema : NIceDb::Schema {
         struct Sharding : Column<4, NScheme::NTypeIds::String> {}; // TColumnTableSharding
         struct StandaloneSharding : Column<5, NScheme::NTypeIds::String> {}; // TColumnStoreSharding
         struct IsRestore : Column<6, NScheme::NTypeIds::Bool> {};
+        struct IsReadOnly : Column<7, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<PathId>;
-        using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, StandaloneSharding, IsRestore>;
+        using TColumns = TableColumns<PathId, AlterVersion, Description, Sharding, StandaloneSharding, IsRestore, IsReadOnly>;
     };
 
     struct ColumnTablesAlters : Table<91> {
@@ -2374,9 +2375,10 @@ struct Schema : NIceDb::Schema {
         struct ShardIdx : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalShardIdx; };
         struct OwnerPathId : Column<2, NScheme::NTypeIds::Uint64> { using Type = TOwnerId; };
         struct LocalPathId : Column<3, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct LastTxId : Column<4, NScheme::NTypeIds::Uint64> {};
 
         using TKey = TableKey<ShardIdx, OwnerPathId, LocalPathId>;
-        using TColumns = TableColumns<ShardIdx, OwnerPathId, LocalPathId>;
+        using TColumns = TableColumns<ShardIdx, OwnerPathId, LocalPathId, LastTxId>;
     };
 
     // Per-sub-op tracking for incremental restore. Each row is created when a

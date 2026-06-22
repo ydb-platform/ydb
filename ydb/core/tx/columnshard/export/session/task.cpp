@@ -1,6 +1,8 @@
 #include "control.h"
 #include "session.h"
 
+#include <ydb/core/scheme/scheme_types_proto.h>
+
 namespace NKikimr::NOlap::NExport {
 
 NKikimr::TConclusionStatus TExportTask::DoDeserializeFromProto(const NKikimrColumnShardExportProto::TExportTask& proto) {
@@ -9,8 +11,19 @@ NKikimr::TConclusionStatus TExportTask::DoDeserializeFromProto(const NKikimrColu
         return id;
     }
     Identifier = id.DetachResult();
-    if (proto.HasTxId()) {
-        TxId = proto.GetTxId();
+    if (!proto.HasTxId()) {
+        return TConclusionStatus::Fail("Can't find tx id");
+    }
+    if (!proto.HasBackupTask()) {
+        return TConclusionStatus::Fail("Can't find backup task");
+    }
+    TxId = proto.GetTxId();
+    BackupTask = proto.GetBackupTask();
+    Columns.clear();
+    for (const auto& columnProto : proto.GetColumns()) {
+        const NKikimrProto::TTypeInfo* typeInfoProto = columnProto.HasTypeInfo() ? &columnProto.GetTypeInfo() : nullptr;
+        auto typeInfoMod = NScheme::TypeInfoModFromProtoColumnType(columnProto.GetTypeId(), typeInfoProto);
+        Columns.emplace_back(columnProto.GetName(), typeInfoMod.TypeInfo);
     }
     return TConclusionStatus::Success();
 }
@@ -21,17 +34,27 @@ NKikimrColumnShardExportProto::TExportTask TExportTask::DoSerializeToProto() con
     if (TxId) {
         result.SetTxId(*TxId);
     }
+    *result.MutableBackupTask() = BackupTask;
+    for (const auto& column : Columns) {
+        auto* columnProto = result.AddColumns();
+        columnProto->SetName(column.first);
+        auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.second, "");
+        columnProto->SetTypeId(columnType.TypeId);
+        if (columnType.TypeInfo) {
+            *columnProto->MutableTypeInfo() = *columnType.TypeInfo;
+        }
+    }
     return result;
 }
 
 NBackground::TSessionControlContainer TExportTask::BuildConfirmControl() const {
     return NBackground::TSessionControlContainer(std::make_shared<NBackground::TFakeStatusChannel>(),
-        std::make_shared<TConfirmSessionControl>(GetClassName(), ::ToString(Identifier.GetPathId())));
+        std::make_shared<TConfirmSessionControl>(GetClassName(), ::ToString(Identifier.GetSchemeShardLocalPathId().GetRawValue())));
 }
 
 NBackground::TSessionControlContainer TExportTask::BuildAbortControl() const {
     return NBackground::TSessionControlContainer(std::make_shared<NBackground::TFakeStatusChannel>(),
-        std::make_shared<TAbortSessionControl>(GetClassName(), ::ToString(Identifier.GetPathId())));
+        std::make_shared<TAbortSessionControl>(GetClassName(), ::ToString(Identifier.GetSchemeShardLocalPathId().GetRawValue())));
 }
 
 TExportTask::TExportTask(const TIdentifier& id, const std::vector<TNameTypeInfo>& columns, const NKikimrSchemeOp::TBackupTask& backupTask,

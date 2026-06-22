@@ -48,6 +48,7 @@ private:
 void TTxInit::SetDefaults() {
     Self->CurrentSchemeShardId = 0;
     Self->LastSchemaSeqNo = {};
+    Self->LastSchemaSeqNoByPath.clear();
     Self->ProcessingParams.reset();
     Self->LastPlannedStep = 0;
     Self->LastPlannedTxId = 0;

@@ -529,13 +529,16 @@ private:
 
     ui64 CurrentSchemeShardId = 0;
     TMessageSeqNo LastSchemaSeqNo;
+    // Per-path SeqNo tracking for path-specific schema operations (DropTable, CopyTable). In-memory only (not persisted)
+    THashMap<ui64, TMessageSeqNo> LastSchemaSeqNoByPath;
     std::optional<NKikimrSubDomains::TProcessingParams> ProcessingParams;
     ui64 LastPlannedStep = 0;
     ui64 LastPlannedTxId = 0;
     NOlap::TSnapshot LastCleanupSnapshot = NOlap::TSnapshot::Zero();
     NOlap::TSnapshot LastCompletedTx = NOlap::TSnapshot::Zero();
     ui64 LastExportNo = 0;
-    NKikimrTxColumnShard::TCompletedBackupTransaction LastCompletedBackupTransaction;
+    THashMap<TSchemeShardLocalPathId, NKikimrTxColumnShard::TCompletedBackupTransaction> LastCompletedBackupTransactions;
+    THashMap<ui64, NKikimrTxColumnShard::TCompletedBackupTransaction> LastCompletedBackupTransactionsByTxId;   // TxId -> BackupTransaction
 
     ui64 StatsReportRound = 0;
     TString OwnerPath;

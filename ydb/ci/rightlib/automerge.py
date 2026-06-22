@@ -4,7 +4,6 @@ import shutil
 import datetime
 import logging
 import subprocess
-import time
 from typing import Optional
 from github import Github
 from github.GithubException import GithubException
@@ -16,9 +15,6 @@ pr_label_retry = "automerge-retry"
 check_name = "checks_integrated"
 failed_comment_mark = "<!--SyncFailed-->"
 retry_comment_mark = "<!--SyncRetry-->"
-max_push_retries_in_run = 5
-max_cross_run_push_retries = 5
-push_race_backoff_sec = (0, 5, 10, 15, 20)
 
 
 class PrAutomerger:
@@ -96,34 +92,12 @@ class PrAutomerger:
         except Exception:
             self.logger.warning("failed to remove %s label", pr_label_retry, exc_info=True)
 
-    def count_cross_run_push_retries(self, pr: PullRequest) -> int:
-        return sum(
-            1
-            for comment in pr.get_issue_comments()
-            if retry_comment_mark in comment.body
-        )
-
     def add_retry_comment(self, pr: PullRequest, text: str):
         if self.workflow_url:
             text += f" Sync workflow logs can be found [here]({self.workflow_url})."
         pr.create_issue_comment(f"{retry_comment_mark}\n{text}")
 
     def mark_push_retry(self, pr: PullRequest, base_ref: str):
-        cross_run_retries = self.count_cross_run_push_retries(pr)
-        if cross_run_retries + 1 >= max_cross_run_push_retries:
-            self.logger.warning(
-                "push to %s rejected after %s cross-run retries, blocking automerge",
-                base_ref,
-                cross_run_retries,
-            )
-            self.add_failed_comment(
-                pr,
-                f"Unable to push merged revision (failed {max_cross_run_push_retries} workflow runs due to push race).",
-            )
-            self.add_pr_failed_label(pr)
-            self.clear_retry_label(pr)
-            return
-
         text = (
             f"Unable to push merged revision to `{base_ref}` "
             "(probably a race with another push), will retry automatically."
@@ -139,15 +113,6 @@ class PrAutomerger:
                 pass
             self.add_failed_comment(pr, "Unable to push merged revision (failed to schedule retry).")
             self.add_pr_failed_label(pr)
-
-    @staticmethod
-    def is_push_race_error(output: str) -> bool:
-        lower = output.lower()
-        return (
-            "non-fast-forward" in lower
-            or "fetch first" in lower
-            or "failed to push some refs" in lower
-        )
 
     def refresh_base_and_merge(self, pr: PullRequest, commit_msg: str) -> bool:
         base_ref = pr.base.ref
@@ -177,50 +142,30 @@ class PrAutomerger:
             os.chdir("merge-repo")
 
             commit_msg = f"Merge pull request #{pr.number} from {pr.head.user.login}/{pr.head.ref}"
+            if not self.refresh_base_and_merge(pr, commit_msg):
+                self.add_failed_comment(pr, "Unable to merge PR.")
+                self.add_pr_failed_label(pr)
+                self.clear_retry_label(pr)
+                return False
 
-            for attempt in range(max_push_retries_in_run):
-                if attempt > 0:
-                    backoff = push_race_backoff_sec[min(attempt, len(push_race_backoff_sec) - 1)]
-                    self.logger.info(
-                        "push race retry %s/%s for %s, sleeping %ss",
-                        attempt + 1,
-                        max_push_retries_in_run,
-                        pr.base.ref,
-                        backoff,
-                    )
-                    time.sleep(backoff)
-
-                if not self.refresh_base_and_merge(pr, commit_msg):
-                    self.add_failed_comment(pr, "Unable to merge PR.")
+            try:
+                self.git_run("push")
+                return True
+            except subprocess.CalledProcessError:
+                pr_labels = [l.name for l in pr.labels]
+                if pr_label_retry in pr_labels:
+                    # Second push failure while the label is present (same run or
+                    # next run): likely persistent, not a one-off race.
+                    self.logger.warning("push to %s rejected again, blocking automerge", pr.base.ref)
+                    self.add_failed_comment(pr, "Unable to push merged revision (failed twice in a row).")
                     self.add_pr_failed_label(pr)
                     self.clear_retry_label(pr)
-                    return False
-
-                try:
-                    self.git_run("push")
-                    return True
-                except subprocess.CalledProcessError as e:
-                    output = (e.output or b"").decode()
-                    if not self.is_push_race_error(output):
-                        self.logger.warning("push to %s rejected with non-transient error", pr.base.ref)
-                        self.add_failed_comment(pr, "Unable to push merged revision.")
-                        self.add_pr_failed_label(pr)
-                        self.clear_retry_label(pr)
-                        return False
-                    self.logger.warning(
-                        "push to %s rejected (race), attempt %s/%s in this run",
-                        pr.base.ref,
-                        attempt + 1,
-                        max_push_retries_in_run,
-                    )
-
-            self.logger.warning(
-                "push to %s rejected after %s in-run retries, scheduling cross-run retry",
-                pr.base.ref,
-                max_push_retries_in_run,
-            )
-            self.mark_push_retry(pr, pr.base.ref)
-            return False
+                else:
+                    # Most likely a race: someone pushed to the base branch between
+                    # our clone and push. Not a PR problem, retry on next iteration.
+                    self.logger.warning("push to %s rejected, will retry on next iteration", pr.base.ref)
+                    self.mark_push_retry(pr, pr.base.ref)
+                return False
         finally:
             os.chdir(original_dir)
             shutil.rmtree("merge-repo", ignore_errors=True)

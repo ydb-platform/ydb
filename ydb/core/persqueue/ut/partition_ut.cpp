@@ -91,6 +91,17 @@ public:
         return partition.BlobEncoder;
     }
 
+    static void FinalizeEmptyBlobEncoder(TPartition& partition,
+                                         TPartitionBlobEncoder& encoder,
+                                         ui64 startOffset,
+                                         bool updateEndOffset) {
+        partition.FinalizeEmptyBlobEncoder(encoder, startOffset, updateEndOffset);
+    }
+
+    static bool CleanUpBlobs(TPartition& partition, const TActorContext& ctx) {
+        return partition.CleanUpBlobs(nullptr, ctx);
+    }
+
 private:
     TInitMetaStep* MetaStep;
 };
@@ -4905,6 +4916,75 @@ Y_UNIT_TEST_F(GetCompactionZoneEmptyStartOffsetPrefersCzhHead, TPartitionFixture
     TPartitionTestWrapper::BlobEncoder(*partition).EndOffset = 202;
 
     UNIT_ASSERT_VALUES_EQUAL(TPartitionTestWrapper::GetCompactionZoneEmptyStartOffset(*partition), 5u);
+}
+
+class TPartitionMethodTestActor : public TActorBootstrapped<TPartitionMethodTestActor> {
+public:
+    TPartitionMethodTestActor(TActorId edge, std::function<void(const TActorContext&)> body)
+        : Edge(edge)
+        , Body(std::move(body))
+    {}
+
+    void Bootstrap(const TActorContext& ctx) {
+        Body(ctx);
+        Send(Edge, new NActors::TEvents::TEvWakeup());
+        PassAway();
+    }
+
+private:
+    TActorId Edge;
+    std::function<void(const TActorContext&)> Body;
+};
+
+Y_UNIT_TEST_F(FinalizeEmptyBlobEncoderResetsHeadPartNo, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+
+    const TPartitionId partitionId(1);
+    auto& encoder = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    while (encoder.DataKeysHead.size() < 4) {
+        encoder.DataKeysHead.emplace_back(8_MB);
+    }
+    AddHeadKeyWithPartNo(encoder, 8_MB, partitionId, 4, 2, 'h', 1);
+    encoder.Head.PartNo = 2;
+
+    TPartitionTestWrapper::FinalizeEmptyBlobEncoder(*partition, encoder, 100, true);
+
+    UNIT_ASSERT(encoder.HeadKeys.empty());
+    UNIT_ASSERT(encoder.Head.GetBatches().empty());
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.PartNo, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.Head.Offset, 100u);
+}
+
+Y_UNIT_TEST_F(CleanUpBlobsResetsStaleCompactionZoneHeadPartNo, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+    Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableTopicRetentionDeleteLastBlob(true);
+
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+
+    auto& czEncoder = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    czEncoder.DataKeysBody.clear();
+    czEncoder.HeadKeys.clear();
+    czEncoder.Head.Clear();
+    czEncoder.Head.Offset = 200;
+    czEncoder.Head.PartNo = 2;
+
+    auto& fwzEncoder = TPartitionTestWrapper::BlobEncoder(*partition);
+    fwzEncoder.StartOffset = 200;
+    fwzEncoder.EndOffset = 202;
+
+    auto probe = [&](const TActorContext& ctx) {
+        TPartitionTestWrapper::CleanUpBlobs(*partition, ctx);
+        UNIT_ASSERT_VALUES_EQUAL(czEncoder.Head.PartNo, 0u);
+    };
+
+    Ctx->Runtime->Register(new TPartitionMethodTestActor(Ctx->Edge, std::move(probe)));
+
+    TDispatchOptions options;
+    options.FinalEvents.emplace_back([](IEventHandle& ev) {
+        return ev.GetTypeRewrite() == NActors::TEvents::TEvWakeup::EventType;
+    });
+    Ctx->Runtime->DispatchEvents(options);
 }
 
 Y_UNIT_TEST(PopFrontHeadKeySyncsHeadWithRemainingHeadKeys) {

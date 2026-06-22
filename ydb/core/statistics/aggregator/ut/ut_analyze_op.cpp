@@ -416,8 +416,12 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         }
 
         // (1) Forget on IN_PROGRESS -> PRECONDITION_FAILED, state unchanged.
-        TestForgetAnalyzeOp(runtime, saTabletId, "/Root/Database", activeOpId,
+        auto activeForgetResp = TestForgetAnalyzeOp(runtime, saTabletId, "/Root/Database", activeOpId,
             Ydb::StatusIds::PRECONDITION_FAILED);
+        // The error issue must carry S_ERROR severity (consistent with other handlers).
+        UNIT_ASSERT_VALUES_EQUAL(activeForgetResp.IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(activeForgetResp.GetIssues(0).severity(),
+            static_cast<ui32>(NYql::TSeverityIds::S_ERROR));
         UNIT_ASSERT_VALUES_EQUAL_C(
             TestGetAnalyzeOp(runtime, saTabletId, "/Root/Database", activeOpId)
                 .GetAnalyzeOperation().GetState(),
@@ -425,8 +429,11 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
             "rejected Forget must not change IN_PROGRESS state");
 
         // (2) Forget on ENQUEUED -> PRECONDITION_FAILED, state unchanged.
-        TestForgetAnalyzeOp(runtime, saTabletId, "/Root/Database", queuedOpId,
+        auto queuedForgetResp = TestForgetAnalyzeOp(runtime, saTabletId, "/Root/Database", queuedOpId,
             Ydb::StatusIds::PRECONDITION_FAILED);
+        UNIT_ASSERT_VALUES_EQUAL(queuedForgetResp.IssuesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(queuedForgetResp.GetIssues(0).severity(),
+            static_cast<ui32>(NYql::TSeverityIds::S_ERROR));
         UNIT_ASSERT_VALUES_EQUAL_C(
             TestGetAnalyzeOp(runtime, saTabletId, "/Root/Database", queuedOpId)
                 .GetAnalyzeOperation().GetState(),

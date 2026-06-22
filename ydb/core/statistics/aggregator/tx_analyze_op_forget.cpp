@@ -46,14 +46,20 @@ struct TStatisticsAggregator::TTxAnalyzeOpForget : public TTxBase {
         auto response = MakeHolder<TEvStatistics::TEvAnalyzeOpForgetResponse>();
         auto& rec = response->Record;
 
+        auto addError = [&rec](const TString& msg) {
+            auto& issue = *rec.AddIssues();
+            issue.set_severity(NYql::TSeverityIds::S_ERROR);
+            issue.set_message(msg);
+        };
+
         switch (Result) {
             case EResult::NotFound:
                 rec.SetStatus(Ydb::StatusIds::NOT_FOUND);
-                rec.AddIssues()->set_message("Operation not found");
+                addError("Operation not found");
                 break;
             case EResult::NonTerminal:
                 rec.SetStatus(Ydb::StatusIds::PRECONDITION_FAILED);
-                rec.AddIssues()->set_message("Cannot forget a non-terminal operation");
+                addError("Cannot forget a non-terminal operation");
                 break;
             case EResult::Deleted:
                 rec.SetStatus(Ydb::StatusIds::SUCCESS);

@@ -64,7 +64,7 @@ NJson::TJsonValue IOperator::ToJson(ui32 explainFlags)
 const TVector<TInfoUnit>& IOperator::GetOutputIUs() {
     if (!Props.OutputIUs.has_value()) {
         ComputeOutputIUsSubtree();
-        Y_ENSURE(Props.OutputIUs.has_value(), "Computation of output IUs failed");
+        Y_ENSURE(Props.OutputIUs.has_value(), "Computation of output IUs failed for " << GetExplainName());
     }
     return Props.OutputIUs.value();
 }
@@ -91,7 +91,7 @@ void IOperator::ComputeOutputIUsSubtree() {
 
 void TOpEmptySource::ComputeOutputIUs() {
     if (!Props.OutputIUs.has_value()) {
-        Props.OutputIUs = {};
+        Props.OutputIUs = TVector<TInfoUnit>{};
     }
 }
 
@@ -1206,6 +1206,15 @@ TOpRoot::TOpRoot(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVec
 // Recompute output ius for now
 void TOpRoot::ComputeOutputIUs() {
     Props.OutputIUs = GetInput()->GetOutputIUs();
+}
+
+// Need to override root recomputation of IUs, since it
+// needs to traverse all subplans as well.
+void TOpRoot::ComputeOutputIUsSubtree() {
+    for (auto it : *this) {
+        it.Current->ComputeOutputIUs();
+    }
+    ComputeOutputIUs();
 }
 
 void TOpRoot::ClearParentsRec(TIntrusivePtr<IOperator> op, std::unordered_set<IOperator*>& visited) const {

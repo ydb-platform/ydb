@@ -63,7 +63,7 @@ Y_UNIT_TEST_SUITE(TKllMedianTest) {
     }
 
     Y_UNIT_TEST(LevelsGrow) {
-        TKllSketch<int> sketch(4, 42);  // small k to trigger compaction
+        TKllSketch<int> sketch(4, 42); // small k to trigger compaction
         for (int i = 0; i < 100; ++i) {
             sketch.Add(i);
         }
@@ -190,6 +190,58 @@ Y_UNIT_TEST_SUITE(TDynamicKllSketchTest) {
             d2.Add(key, 1);
         }
         UNIT_ASSERT_VALUES_EQUAL(d1.Median(), d2.Median());
+    }
+
+    Y_UNIT_TEST(MergeWithEmptySketchDoesNothing) {
+        TDynamicKllSketch<TString> sketch(40, 42u);
+        TDynamicKllSketch<TString> empty(40, 777u);
+
+        for (int i = 0; i < 10; ++i) {
+            sketch.Add(TStringBuilder() << "k" << i, 1);
+        }
+
+        sketch.Merge(empty);
+
+        TString median = sketch.Median();
+        UNIT_ASSERT(median.StartsWith("k"));
+    }
+
+    Y_UNIT_TEST(MergeWithDifferentInitialWeightAlignsLevels) {
+        constexpr size_t k = 100;
+        constexpr int lowKeys = 7;
+        constexpr int highKeys = 11;
+
+        auto addKeys = [](auto& sketch, TStringBuf prefix, int count) {
+            for (int i = 0; i < count; ++i) {
+                sketch.Add(TStringBuilder() << prefix << (i < 10 ? "0" : "") << i, 4);
+            }
+        };
+
+        {
+            TDynamicKllSketch<TString> base(k, 42u, 1);
+            TDynamicKllSketch<TString> other(k, 777u, 4);
+
+            addKeys(base, "a", lowKeys);
+            addKeys(other, "z", highKeys);
+
+            UNIT_ASSERT_NO_EXCEPTION(base.Merge(other));
+            UNIT_ASSERT_VALUES_EQUAL(base.GetLevels().front().Weight, 4);
+            UNIT_ASSERT_VALUES_EQUAL(base.GetLevels().front().Items.size(), lowKeys + highKeys);
+            UNIT_ASSERT_VALUES_EQUAL(base.Median(), TString{"z01"});
+        }
+
+        {
+            TDynamicKllSketch<TString> base(k, 42u, 4);
+            TDynamicKllSketch<TString> other(k, 777u, 1);
+
+            addKeys(base, "a", lowKeys);
+            addKeys(other, "z", highKeys);
+
+            UNIT_ASSERT_NO_EXCEPTION(base.Merge(other));
+            UNIT_ASSERT_VALUES_EQUAL(base.GetLevels().front().Weight, 4);
+            UNIT_ASSERT_VALUES_EQUAL(base.GetLevels().front().Items.size(), lowKeys + highKeys);
+            UNIT_ASSERT_VALUES_EQUAL(base.Median(), TString{"z01"});
+        }
     }
 
     Y_UNIT_TEST(StreamingLexPaddedKeysApproxCentral) {

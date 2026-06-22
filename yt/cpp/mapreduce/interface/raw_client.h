@@ -405,6 +405,8 @@ public:
         const TVector<TRichYPath>& paths,
         const TGetTablePartitionsOptions& options = {}) = 0;
 
+    virtual void CheckClusterLiveness(const TCheckClusterLivenessOptions& options = {}) = 0;
+
     virtual ui64 GenerateTimestamp() = 0;
 
     // Batch

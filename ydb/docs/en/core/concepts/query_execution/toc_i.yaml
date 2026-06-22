@@ -11,9 +11,13 @@ items:
     href: vector_search.md
   - name: Fulltext search
     href: fulltext_search.md
+  - name: Hybrid search
+    href: hybrid_search.md
   - name: Federated query
     include:
       path: federated_query/toc_p.yaml
       mode: link
   - name: Spilling
     href: spilling.md
+  - name: Scan queries
+    href: scan_query.md

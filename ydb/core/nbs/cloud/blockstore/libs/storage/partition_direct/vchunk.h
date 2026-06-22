@@ -129,7 +129,15 @@ private:
         EHostState state) const;
     void ApplyConfig();
 
+    void OnCopierStopped(
+        THostIndex hostIndex,
+        TDDiskDataCopier::EResult result);
     void OnCopyComplete(THostIndex hostIndex, TDDiskDataCopier::EResult result);
+
+    // Checks DirtyMap's initial readiness and waits it if need.
+    void WaitForDirtyMapReady();
+
+    [[nodiscard]] TString PrintInflight() const;
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     IPartitionDirectService* const PartitionDirectService = nullptr;
@@ -144,12 +152,15 @@ private:
     TVChunkConfig VChunkConfig;
     TList<TPendingVChunkConfig> PendingVChunkConfigs;
     TBlocksDirtyMap BlocksDirtyMap;
-    bool DirtyMapRestored = false;
+    // One-shot signal of the INITIAL DirtyMap assembly at tablet start.
+    NThreading::TPromise<void> DirtyMapReady = NThreading::NewPromise();
     TMap<THostIndex, TDDiskDataCopierPtr> Copiers;
 
     size_t InflightWritesCount = 0;
     size_t InflightFlushesCount = 0;
     bool CleaningUpScheduled = false;
+
+    TVector<IRequestExecutorWeakPtr> Inflight;
 
     TVChunkCounters Counters;
 

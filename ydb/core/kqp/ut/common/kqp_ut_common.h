@@ -8,6 +8,7 @@
 #include <yql/essentials/core/issue/yql_issue.h>
 #include <ydb/public/lib/yson_value/ydb_yson_value.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/retry/retry.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/draft/ydb_scripting.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/scheme/scheme.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -490,6 +491,11 @@ void CheckOwner(NYdb::NTable::TSession& session, const TString& path, const TStr
 // Waits until the KQP proxy recognizes the subject's connect permission.
 // Useful after GrantConnect to avoid UNAUTHORIZED/UNAVAILABLE races.
 void WaitForProxy(const TKikimrRunner& kikimr, const TString& subject);
+
+inline NYdb::NQuery::TExecuteQuerySettings NoRetryExecuteQuerySettings() {
+    return NYdb::NQuery::TExecuteQuerySettings().RetrySettings(
+        NYdb::NRetry::TRetryOperationSettings().MaxRetries(0));
+}
 
 } // namespace NKqp
 } // namespace NKikimr

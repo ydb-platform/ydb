@@ -187,6 +187,7 @@ message GetDatabaseStatusResult {
         REMOVING = 3;
         PENDING_RESOURCES = 4;
         CONFIGURING = 5;
+        REMOVING_STORAGE_UNITS = 6;
     }
 
     // Full path to database's home dir.
@@ -245,6 +246,8 @@ message AlterDatabaseRequest {
     map<string, string> alter_attributes = 12;
     // Change scale recommender policies.
     ScaleRecommenderPolicies scale_recommender_policies = 13;
+    // Storage units to deallocate
+    repeated StorageUnits storage_units_to_remove = 14;
 }
 
 message AlterDatabaseResponse {

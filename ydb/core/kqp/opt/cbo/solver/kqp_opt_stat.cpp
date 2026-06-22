@@ -1333,6 +1333,9 @@ bool IsLiteralDataExpr(TExprBase node) {
  *   - If one of the child is a type expression, it also passes the check
  */
 bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs) {
+    if (!input->GetTypeAnn()) {
+        return false;
+    }
     if (input->GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg) {
         return IsConstantExprPg(input);
     }
@@ -1358,6 +1361,9 @@ bool IsConstantExpr(const TExprNode::TPtr& input, bool foldUdfs) {
 bool IsConstantExprWithParams(const TExprNode::TPtr& input) {
     if (input->IsCallable("Parameter")) {
         return true;
+    }
+    if (!input->GetTypeAnn()) {
+        return false;
     }
     if (input->GetTypeAnn()->GetKind() == NYql::ETypeAnnotationKind::Pg) {
         return IsConstantExprPg(input);

@@ -72,7 +72,7 @@ private:
 
     //////////////////////////////////////////////////////////////
     /* for waiting response with column statistics */
-    std::optional<TColumnStatisticsResponse> ColumnStatisticsResponse;
+    std::shared_ptr<TColumnStatisticsSharedState> SharedState;
     NThreading::TFuture<void> AsyncReadiness;
 
     //////////////////////////////////////////////////////////////

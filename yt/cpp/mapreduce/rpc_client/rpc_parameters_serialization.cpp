@@ -266,10 +266,10 @@ NJobTrackerClient::EJobState ToApiJobState(EJobState state)
     YT_ABORT();
 }
 
-THashSet<TString> ToApiJobAttributes(const THashSet<EJobAttribute>& attributes) {
-    THashSet<TString> result;
+THashSet<std::string> ToApiJobAttributes(const THashSet<EJobAttribute>& attributes) {
+    THashSet<std::string> result;
     for (const auto& attribute : attributes) {
-        result.insert(ToString(attribute));
+        result.insert(std::string(ToString(attribute)));
     }
     return result;
 }
@@ -651,9 +651,9 @@ NApi::TGetOperationOptions SerializeOptionsForGetOperation(const TGetOperationOp
         result.IncludeRuntime = true;
     }
     if (options.AttributeFilter_) {
-        result.Attributes = THashSet<TString>();
+        result.Attributes = THashSet<std::string>();
         for (const auto& attribute : options.AttributeFilter_->Attributes_) {
-            result.Attributes->emplace(ToString(attribute));
+            result.Attributes->emplace(std::string(ToString(attribute)));
         }
     }
     return result;
@@ -1237,6 +1237,18 @@ NApi::TPartitionTablesOptions SerializeOptionsForGetTablePartitions(
     result.AdjustDataWeightPerPartition = options.AdjustDataWeightPerPartition_;
     result.EnableCookies = options.EnableCookies_;
     result.FetchCookieNodeDescriptors = options.FetchCookieNodeDescriptors_;
+    return result;
+}
+
+NApi::TCheckClusterLivenessOptions SerializeOptionsForCheckClusterLiveness(
+    const TCheckClusterLivenessOptions& options)
+{
+    NApi::TCheckClusterLivenessOptions result;
+    result.CheckCypressRoot = options.CheckCypressRoot_;
+    result.CheckSecondaryMasterCells = options.CheckSecondaryMasterCells_;
+    if (options.CheckTabletCellBundle_) {
+        result.CheckTabletCellBundle = *options.CheckTabletCellBundle_;
+    }
     return result;
 }
 

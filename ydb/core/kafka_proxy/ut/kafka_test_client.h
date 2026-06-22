@@ -83,6 +83,8 @@ class TKafkaTestClient {
 
         TMessagePtr<TProduceResponseData> Produce(const TString& topicName, const std::vector<std::pair<ui32, TKafkaRecordBatch>>& msgs, const std::optional<TString>& transactionalId = {});
 
+        TMessagePtr<TProduceResponseData> Produce(const TString& topicName, ui32 partition, const TKafkaBytes& records);
+
         TMessagePtr<TProduceResponseData> Produce(const TTopicPartition& topicPartition,
                                                   const std::vector<std::pair<TString, TString>>& keyValueMessages,
                                                   ui32 baseSequence = 0,

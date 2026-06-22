@@ -103,9 +103,6 @@ TOpRead::TOpRead(const TString& alias, const TVector<TString>& columns, const TV
 }
 
 TVector<TInfoUnit> TOpRead::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
     return OutputIUs;
 }
 
@@ -326,10 +323,6 @@ bool TOpMap::IsExtractableAppend(const TMapElement& element) const {
 }
 
 TVector<TInfoUnit> TOpMap::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
-
     TVector<TInfoUnit> res = GetInput()->GetOutputIUs();
     const auto renameSources = GetRenameSources();
 
@@ -344,7 +337,7 @@ TVector<TInfoUnit> TOpMap::GetOutputIUs() {
         res = std::move(kept);
     }
 
-    for (const auto &mapElement : MapElements) {
+    for (const auto& mapElement : MapElements) {
         res.push_back(mapElement.GetElementName());
     }
 
@@ -414,29 +407,21 @@ TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenames() const {
 
 // Both a := b and a <- b let a inherit key, shuffle, and lineage properties from b.
 // a := b keeps b visible, while a <- b removes the old b binding from Map output.
-// Pg FromPg/ToPg wrappers over a column are treated the same for property propagation.
 TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetPropertyPreservingMappings(TPlanProps& props) const {
     Y_UNUSED(props);
-    auto result = GetRenames();
+    TVector<std::pair<TInfoUnit, TInfoUnit>> result;
 
-    for (const auto &mapElement : MapElements) {
-        if (!mapElement.IsRename()) {
-            if (mapElement.IsColumnAccess()) {
-                result.push_back(std::make_pair(mapElement.GetElementName(), mapElement.GetColumnAccess()));
-                continue;
-            }
+    for (const auto& mapElement : MapElements) {
+        if (mapElement.IsRename()) {
+            result.push_back(std::make_pair(mapElement.GetElementName(), mapElement.GetRename()));
+            continue;
+        }
 
-            auto expr = mapElement.GetExpression();
-            auto node = expr.Node;
-
-            if (node->IsCallable("ToPg") || node->IsCallable("FromPg")) {
-                if (node->ChildPtr(0)->IsCallable("Member")) {
-                    auto transformIUs = expr.GetInputIUs();
-                    if (transformIUs.size() == 1) {
-                        result.push_back(std::make_pair(mapElement.GetElementName(), transformIUs[0]));
-                    }
-                }
-            }
+        if (mapElement.IsColumnAccess()) {
+            Y_ENSURE(mapElement.GetElementName() != mapElement.GetColumnAccess(),
+                "Non-rename Map element must not preserve a column under the same name: " << mapElement.GetElementName().GetFullName());
+            result.push_back(std::make_pair(mapElement.GetElementName(), mapElement.GetColumnAccess()));
+            continue;
         }
     }
 
@@ -544,10 +529,6 @@ void TOpAddDependencies::SetDependencyPairs(const TVector<std::pair<TInfoUnit, c
 }
 
 TVector<TInfoUnit> TOpAddDependencies::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
-
     auto ius = GetInput()->GetOutputIUs();
     ius.insert(ius.end(), Dependencies.begin(), Dependencies.end());
     return ius;
@@ -583,9 +564,6 @@ TOpFilter::TOpFilter(TIntrusivePtr<IOperator> input, TPositionHandle pos, const 
 }
 
 TVector<TInfoUnit> TOpFilter::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
     return GetInput()->GetOutputIUs();
 }
 
@@ -660,10 +638,6 @@ TVector<TInfoUnit> TOpJoin::GetRHSKeys() const {
 }
 
 TVector<TInfoUnit> TOpJoin::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
-
     TVector<TInfoUnit> res;
 
     auto leftInputIUs = GetLeftInput()->GetOutputIUs();
@@ -804,32 +778,16 @@ NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags) {
  * OpUnionAll operator methods
  */
 
-TOpUnionAll::TOpUnionAll(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos, bool ordered)
-    : IBinaryOperator(EOperator::UnionAll, pos, leftInput, rightInput), Ordered(ordered) {}
+TOpUnionAll::TOpUnionAll(TIntrusivePtr<IOperator> leftInput, TIntrusivePtr<IOperator> rightInput, TPositionHandle pos,
+                         TVector<TInfoUnit> columns, bool ordered)
+    : IBinaryOperator(EOperator::UnionAll, pos, leftInput, rightInput)
+    , Columns(std::move(columns))
+    , Ordered(ordered) {
+    Y_ENSURE(!Columns.empty(), "UnionAll must have columns");
+}
 
 TVector<TInfoUnit> TOpUnionAll::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
-
-    const auto leftOutput = GetLeftInput()->GetOutputIUs();
-    const auto rightOutput = GetRightInput()->GetOutputIUs();
-    if (leftOutput.size() == rightOutput.size()) {
-        return leftOutput;
-    }
-
-    THashSet<TInfoUnit, TInfoUnit::THashFunction> rightOutputSet;
-    rightOutputSet.insert(rightOutput.begin(), rightOutput.end());
-
-    TVector<TInfoUnit> commonOutput;
-    commonOutput.reserve(std::min(leftOutput.size(), rightOutput.size()));
-    for (const auto& iu : leftOutput) {
-        if (rightOutputSet.contains(iu)) {
-            commonOutput.push_back(iu);
-        }
-    }
-
-    return commonOutput.empty() ? leftOutput : commonOutput;
+    return Columns;
 }
 
 TString TOpUnionAll::ToString(TExprContext& ctx) {
@@ -840,6 +798,16 @@ TString TOpUnionAll::ToString(TExprContext& ctx) {
 NJson::TJsonValue TOpUnionAll::ToJson(ui32 explainFlags) {
     auto res = IOperator::ToJson(explainFlags);
     res["Ordered"] = Ordered;
+    TStringBuilder columns;
+    columns << "{";
+    for (size_t i = 0; i < Columns.size(); ++i) {
+        if (i != 0) {
+            columns << ", ";
+        }
+        columns << Columns[i].GetFullName();
+    }
+    columns << "}";
+    res["Columns"] = columns;
     return res;
 }
 
@@ -875,9 +843,6 @@ TOpLimit::TOpLimit(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TP
 }
 
 TVector<TInfoUnit> TOpLimit::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
     return GetInput()->GetOutputIUs();
 }
 
@@ -927,9 +892,6 @@ TOpSort::TOpSort(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TPhy
 }
 
 TVector<TInfoUnit> TOpSort::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
     return GetInput()->GetOutputIUs();
 }
 
@@ -1007,10 +969,6 @@ TOpAggregate::TOpAggregate(TIntrusivePtr<IOperator> input, const TVector<TOpAggr
 }
 
 TVector<TInfoUnit> TOpAggregate::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
-
     // We assume that aggregation returns column is order [keys, states].
     // DistinctAll uses keys only as physical aggregation state and returns distinct states.
     TVector<TInfoUnit> outputIU;
@@ -1164,9 +1122,6 @@ TOpRoot::TOpRoot(TIntrusivePtr<IOperator> input, TPositionHandle pos, const TVec
 }
 
 TVector<TInfoUnit> TOpRoot::GetOutputIUs() {
-    if (const auto& outputIUs = GetOutputIUsOverride()) {
-        return *outputIUs;
-    }
     return GetInput()->GetOutputIUs();
 }
 

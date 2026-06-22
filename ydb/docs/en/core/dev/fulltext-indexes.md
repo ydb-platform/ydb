@@ -27,6 +27,8 @@ Additionally, a fulltext index can be **covering** (via `COVER`), meaning it inc
 * [fulltext_plain](#basic) — stores only the inverted index. Supports filtering via [FulltextMatch](../yql/reference/builtins/fulltext.md#fulltext-match), but does not support relevance ranking.
 * [fulltext_relevance](#relevance) — additionally stores term frequency statistics (TF-IDF / [BM25](https://en.wikipedia.org/wiki/Okapi_BM25)) required by [FulltextScore](../yql/reference/builtins/fulltext.md#fulltext-score).
 
+Indexes of either type can also be [filtered](#filtered) to scope search to a specific logical partition.
+
 ### Basic fulltext index (`fulltext_plain`) {#basic}
 
 Use `fulltext_plain` when you only need to check whether terms are present in the text, without relevance ranking. This index is more compact than `fulltext_relevance` and is suitable for most filtering tasks.
@@ -124,6 +126,29 @@ LIMIT 20;
 
 A `LIKE` / `ILIKE` query uses the same logic as `FulltextMatch(body, ..., "Wildcard" AS Mode)` and accesses the same n-gram index.
 
+### Filtered fulltext index {#filtered}
+
+A filtered fulltext index enables fulltext search within each logical partition defined by filter columns. To create such an index, specify one or more filter columns before the text column in the `ON` clause. The last column must be the text column; the others can be of any comparable type:
+
+```yql
+ALTER TABLE articles
+  ADD INDEX ft_index
+  GLOBAL USING fulltext_plain
+  ON (user_id, body)
+  WITH (tokenizer=standard, use_filter_lowercase=true);
+```
+
+Search queries using a filtered index must include an equality predicate on every filter column:
+
+```yql
+SELECT id, title
+FROM articles VIEW ft_index
+WHERE user_id = 42 AND FulltextMatch(body, "search terms")
+LIMIT 20;
+```
+
+Multiple filter columns are supported. The equality predicates may appear in any order in `WHERE`; {{ ydb-short-name }} reorders them internally to match the index column order.
+
 ## Primary key types {#primary-key}
 
 Inside the inverted index, every indexed document is identified by a numeric document id (`doc_id`). How {{ ydb-short-name }} derives the `doc_id` depends on the base table's [primary key](../concepts/glossary.md#primary-key):
@@ -199,3 +224,5 @@ ALTER TABLE articles DROP INDEX ft_index;
 * `FulltextMatch` / `FulltextScore` can't be used with `OR` or `NOT`. Combining them with other predicates via `AND` is supported.
 * A single read through `VIEW` supports only one fulltext predicate: multiple `FulltextScore` calls are not supported, and mixing `FulltextMatch` and `FulltextScore` in the same `WHERE` is not supported.
 * For relevance access, you must include `FulltextScore(...) > 0` in `WHERE` (otherwise the query fails).
+* [Filtered fulltext indexes](#filtered): every filter column needs an equality predicate in `WHERE`.
+* [Filtered fulltext indexes](#filtered): filter columns must not be primary key columns.

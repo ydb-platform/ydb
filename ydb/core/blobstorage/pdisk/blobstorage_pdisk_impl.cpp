@@ -123,10 +123,6 @@ TPDisk::TPDisk(std::shared_ptr<TPDiskCtx> pCtx, const TIntrusivePtr<TPDiskConfig
 }
 
 void TPDisk::NormalizeExpectedSlotSettings() {
-    if (Format.DiskSize && ExpectedSlotSize) {
-        ExpectedSlotCount = CalculateExpectedSlotCountFromExpectedSlotSize(Format.DiskSize, ExpectedSlotSize);
-    }
-
     Cfg->ExpectedSlotCount = ExpectedSlotCount;
     Cfg->ExpectedSlotSize = ExpectedSlotSize;
 }
@@ -2002,7 +1998,7 @@ bool TPDisk::YardInitForKnownVDisk(TYardInit &evYardInit, TOwner owner) {
     }
     ui64 writeBlockSize = ForsetiOpPieceSizeCached;
     ui64 readBlockSize = ForsetiOpPieceSizeCached;
-    ui32 ownerWeight = GetOwnerWeight(evYardInit.GroupSizeInUnits);
+    ui32 ownerWeight = Cfg->GetOwnerWeight(evYardInit.GroupSizeInUnits);
     bool isTinyDisk = (Format.DiskSize < NPDisk::TinyDiskSizeBoundary);
 
     THolder<NPDisk::TEvYardInitResult> result(new NPDisk::TEvYardInitResult(NKikimrProto::OK,

@@ -1710,7 +1710,7 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
         });
     }
 
-    Y_UNIT_TEST(ExpectedSlotSizeWithoutMetricsHasZeroSlotCountThenUsesCappedMetrics) {
+    Y_UNIT_TEST(ExpectedSlotSizeWithoutSlotCountMetricsKeepsZeroSlotCount) {
         NKikimrBlobStorage::TPDiskConfig config;
         config.SetExpectedSlotSize(1ull << 30);
 
@@ -1753,9 +1753,15 @@ Y_UNIT_TEST_SUITE(BsControllerConfig) {
 
         pdisk.Metrics.SetTotalSize(2400ull << 30);
         pdisk.ExtractInferredPDiskSettings(slotCount, slotSizeInUnits);
-        UNIT_ASSERT_VALUES_EQUAL(slotCount, MaxExpectedSlotCountFromExpectedSlotSize);
+        UNIT_ASSERT_VALUES_EQUAL(slotCount, 0);
         UNIT_ASSERT_VALUES_EQUAL(slotSizeInUnits, 0);
-        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetEffectiveExpectedSlotCount(), MaxExpectedSlotCountFromExpectedSlotSize);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetEffectiveExpectedSlotCount(), 0);
+
+        pdisk.Metrics.SetSlotCount(64);
+        pdisk.ExtractInferredPDiskSettings(slotCount, slotSizeInUnits);
+        UNIT_ASSERT_VALUES_EQUAL(slotCount, 64);
+        UNIT_ASSERT_VALUES_EQUAL(slotSizeInUnits, 0);
+        UNIT_ASSERT_VALUES_EQUAL(pdisk.GetEffectiveExpectedSlotCount(), 64);
     }
 
     Y_UNIT_TEST(ZeroExpectedSlotSizeDoesNotDisableDefaultSlotCount) {

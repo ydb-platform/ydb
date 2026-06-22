@@ -13,11 +13,23 @@ inline std::optional<TString> ValidateInferPDiskSlotCountSettingsForDriveType(
         const NKikimrBlobStorage::TInferPDiskSlotCountForDriveTypeSettings& settings,
         TStringBuf context) {
     const bool hasSlotSize = settings.HasSlotSize() && settings.GetSlotSize();
-    const bool hasLegacySettings = settings.HasUnitSize() || settings.HasMaxSlots()
-        || settings.HasPreferInferredSettingsOverExplicit();
-    if (hasSlotSize && hasLegacySettings) {
+    const bool hasUnitSize = settings.HasUnitSize() && settings.GetUnitSize();
+    const bool hasMaxSlots = settings.HasMaxSlots() && settings.GetMaxSlots();
+    if (hasSlotSize && hasUnitSize) {
         return TStringBuilder() << context
-            << " SlotSize is mutually exclusive with UnitSize, MaxSlots and PreferInferredSettingsOverExplicit"
+            << " SlotSize is mutually exclusive with UnitSize"
+            << " in InferPDiskSlotCountSettings";
+    }
+
+    if ((hasSlotSize || hasUnitSize) && !hasMaxSlots) {
+        return TStringBuilder() << context
+            << " MaxSlots is mandatory with SlotSize or UnitSize"
+            << " in InferPDiskSlotCountSettings";
+    }
+
+    if (hasMaxSlots && !hasSlotSize && !hasUnitSize) {
+        return TStringBuilder() << context
+            << " MaxSlots requires SlotSize or UnitSize"
             << " in InferPDiskSlotCountSettings";
     }
 

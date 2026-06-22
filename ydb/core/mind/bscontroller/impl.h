@@ -590,9 +590,6 @@ public:
             if (Metrics.HasSlotCount()) {
                 slotCount = Metrics.GetSlotCount();
                 slotSizeInUnits = Metrics.GetSlotSizeInUnits();
-            } else if (ExpectedSlotSize && Metrics.GetTotalSize()) {
-                slotCount = CalculateExpectedSlotCountFromExpectedSlotSize(Metrics.GetTotalSize(), ExpectedSlotSize);
-                slotSizeInUnits = SlotSizeInUnits;
             } else {
                 slotCount = ExpectedSlotCount;
                 slotSizeInUnits = SlotSizeInUnits;
@@ -2594,10 +2591,6 @@ public:
             if (PDiskMetrics && PDiskMetrics->HasSlotCount()) {
                 slotCount = PDiskMetrics->GetSlotCount();
                 slotSizeInUnits = PDiskMetrics->GetSlotSizeInUnits();
-            } else if (PDiskMetrics && ExpectedSlotSize && PDiskMetrics->GetTotalSize()) {
-                slotCount = CalculateExpectedSlotCountFromExpectedSlotSize(
-                    PDiskMetrics->GetTotalSize(), ExpectedSlotSize);
-                slotSizeInUnits = SlotSizeInUnits;
             } else {
                 slotCount = ExpectedSlotCount;
                 slotSizeInUnits = SlotSizeInUnits;

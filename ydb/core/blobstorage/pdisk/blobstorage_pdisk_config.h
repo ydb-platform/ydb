@@ -509,7 +509,7 @@ struct TInferPDiskSlotCountSettingsForDriveType {
     }
 
     explicit operator bool() const {
-        return SlotSize || (UnitSize && MaxSlots);
+        return (SlotSize || UnitSize) && MaxSlots;
     }
 };
 

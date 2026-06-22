@@ -280,9 +280,8 @@ namespace NKikimr::NStorage {
 
                     if (!ignoreVSlotQuotaCheck && pdiskInfo.Usable && pdisk.HasPDiskMetrics() && baseConfig->HasSettings()) {
                         const auto& m = pdisk.GetPDiskMetrics();
-                        if (pdiskInfo.ExpectedSlotSize && !pdiskInfo.ExpectedSlotCount && m.GetTotalSize()) {
-                            pdiskInfo.ExpectedSlotCount = CalculateExpectedSlotCountFromExpectedSlotSize(
-                                m.GetTotalSize(), pdiskInfo.ExpectedSlotSize);
+                        if (pdiskInfo.ExpectedSlotSize && m.HasSlotCount()) {
+                            pdiskInfo.ExpectedSlotCount = m.GetSlotCount();
                         }
                         if (m.HasSlotSizeInUnits()) {
                             pdiskInfo.SlotSizeInUnits = m.GetSlotSizeInUnits();
@@ -478,6 +477,7 @@ namespace NKikimr::NStorage {
             if (item.ExpectedSlotCount) {
                 maxSlots = item.ExpectedSlotCount;
             } else if (item.ExpectedSlotSize) {
+                // Slot count for byte-sized slots is calculated by NodeWarden/PDisk and arrives via metrics.
                 maxSlots = 0;
             }
             const ui32 slotSizeInUnits = item.SlotSizeInUnits;

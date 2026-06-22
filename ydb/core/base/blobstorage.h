@@ -36,17 +36,6 @@ namespace NKikimr {
 static constexpr ui32 MaxProtobufSize = 67108000;
 static constexpr ui32 MaxVDiskBlobSize = 10 << 20; // 10 megabytes
 static constexpr ui64 MaxCollectGarbageFlagsPerMessage = 10000;
-static constexpr ui32 MaxExpectedSlotCountFromExpectedSlotSize = 64;
-
-inline ui32 CalculateExpectedSlotCountFromExpectedSlotSize(ui64 diskSize, ui64 expectedSlotSize) {
-    if (!expectedSlotSize) {
-        return 0;
-    }
-    const ui64 slotCount = diskSize / expectedSlotSize;
-    return slotCount > MaxExpectedSlotCountFromExpectedSlotSize
-        ? MaxExpectedSlotCountFromExpectedSlotSize
-        : static_cast<ui32>(slotCount);
-}
 
 static constexpr TDuration VDiskCooldownTimeout = TDuration::Seconds(15);
 static constexpr TDuration VDiskCooldownTimeoutOnProxy = TDuration::Seconds(12);

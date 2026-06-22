@@ -5515,6 +5515,12 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         rowset.GetValue<Schema::SetColumnConstraint::OperationState>()
                     );
 
+                    operationInfo->StartTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::SetColumnConstraint::StartTime>(0));
+                    operationInfo->EndTime = TInstant::Seconds(rowset.GetValueOrDefault<Schema::SetColumnConstraint::EndTime>(0));
+                    if (rowset.HaveValue<Schema::SetColumnConstraint::UserSID>()) {
+                        operationInfo->UserSID = rowset.GetValue<Schema::SetColumnConstraint::UserSID>();
+                    }
+
                     TTxId subStateTxId = rowset.GetValueOrDefault<Schema::SetColumnConstraint::SubStateTxId>(TTxId());
                     NKikimrScheme::EStatus subStateTxStatus = rowset.GetValueOrDefault<Schema::SetColumnConstraint::SubStateTxStatus>(NKikimrScheme::StatusSuccess);
                     bool subStateTxDone = rowset.GetValueOrDefault<Schema::SetColumnConstraint::SubStateTxDone>(false);

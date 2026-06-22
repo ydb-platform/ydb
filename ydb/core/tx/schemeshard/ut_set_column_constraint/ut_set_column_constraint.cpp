@@ -1218,4 +1218,43 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         }
     }
 
+    Y_UNIT_TEST(GetRequestUserSidBeginEndTime) {
+        TTestBasicRuntime runtime;
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 setConstraintTxId = ++txId;
+
+        auto createResponse = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+        UNIT_ASSERT_VALUES_EQUAL(createResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        auto getResponse = DoGetRequest(setConstraintTxId, runtime, root);
+
+        // In tests TAppData::TimeProvider->Now() returns epoch (0), so StartTime/EndTime
+        // are TInstant::Zero() and FillSetColumnConstraint skips them. Just verify the
+        // proto fields are present and EndTime >= StartTime (both 0 in the test environment).
+        UNIT_ASSERT(getResponse.HasUserSID() && getResponse.GetUserSID() == "someuser@builtin");
+        UNIT_ASSERT(getResponse.HasStartTime());
+        UNIT_ASSERT(getResponse.HasEndTime());
+        UNIT_ASSERT(getResponse.GetEndTime().seconds() >= getResponse.GetStartTime().seconds());
+    }
 } // Y_UNIT_TEST_SUITE(SetNotNullTest)

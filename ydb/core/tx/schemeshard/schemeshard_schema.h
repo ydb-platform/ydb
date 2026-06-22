@@ -2629,6 +2629,10 @@ struct Schema : NIceDb::Schema {
         // has been overwritten by subsequent phases.
         struct LockTxId :               Column<10, NScheme::NTypeIds::Uint64> { using Type = TTxId; };
 
+        struct UserSID :                Column<11, NScheme::NTypeIds::Utf8>   {};
+        struct StartTime :              Column<12, NScheme::NTypeIds::Uint64> {};
+        struct EndTime :                Column<13, NScheme::NTypeIds::Uint64> {};
+
         using TKey = TableKey<OperationId>;
         using TColumns = TableColumns<
             OperationId,
@@ -2640,7 +2644,10 @@ struct Schema : NIceDb::Schema {
             SubStateTxId,
             SubStateTxStatus,
             SubStateTxDone,
-            LockTxId
+            LockTxId,
+            UserSID,
+            StartTime,
+            EndTime
         >;
     };
 

@@ -699,6 +699,78 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         }
     }
 
+<<<<<<< HEAD
+=======
+    Y_UNIT_TEST(CompileCacheQueriesOrderByDesc) {
+        // Test ORDER BY DESC for compile_cache_queries sys view
+        // Primary key: NodeId, QueryId
+        auto serverSettings = TKikimrSettings().SetKqpSettings({ NKikimrKqp::TKqpSetting() });
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompileCacheView(true);
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        // Execute some queries to populate compile cache
+        auto tableClient = kikimr.GetTableClient();
+        for (ui32 i = 0; i < 3; ++i) {
+            auto tableSession = tableClient.CreateSession().GetValueSync().GetSession();
+            auto paramsBuilder = TParamsBuilder();
+            paramsBuilder.AddParam("$k").Uint64(i).Build();
+            auto executedResult = tableSession.ExecuteDataQuery(
+                R"(DECLARE $k AS Uint64;
+                SELECT COUNT(*) FROM `/Root/EightShard` WHERE Key = $k;)",
+                TTxControl::BeginTx().CommitTx(),
+                paramsBuilder.Build()
+            ).GetValueSync();
+            UNIT_ASSERT_C(executedResult.IsSuccess(), executedResult.GetIssues().ToString());
+        }
+
+        // Wait a bit for compile cache to be updated
+        ::Sleep(TDuration::MilliSeconds(100));
+
+        auto result = session.ExecuteQuery(R"(--!syntax_v1
+            SELECT NodeId, QueryId, Query, CompilationDuration
+            FROM `/Root/.sys/compile_cache_queries`
+            ORDER BY NodeId DESC, QueryId DESC
+        )", NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        // Collect all results
+        struct TCompileCacheKey {
+            ui32 NodeId;
+            std::string QueryId;
+        };
+        TVector<TCompileCacheKey> compileCacheKeys;
+        auto resultSet = result.GetResultSet(0);
+        NYdb::TResultSetParser parser(resultSet);
+        while (parser.TryNextRow()) {
+            auto nodeId = parser.ColumnParser("NodeId").GetOptionalUint32().value();
+            auto queryId = parser.ColumnParser("QueryId").GetOptionalUtf8().value();
+            compileCacheKeys.push_back({nodeId, queryId});
+        }
+
+        // Verify we got some results
+        if (compileCacheKeys.size() > 0) {
+            // Verify results are in descending order by NodeId, then QueryId
+            for (size_t i = 1; i < compileCacheKeys.size(); ++i) {
+                const auto& prev = compileCacheKeys[i - 1];
+                const auto& curr = compileCacheKeys[i];
+
+                auto prevKey = std::tie(prev.NodeId, prev.QueryId);
+                auto currKey = std::tie(curr.NodeId, curr.QueryId);
+
+                UNIT_ASSERT_C(prevKey >= currKey,
+                    TStringBuilder() << "Results not in descending order: "
+                    << "compileCacheKeys[" << (i - 1) << "] = (" << prev.NodeId << ", \"" << prev.QueryId << "\")"
+                    << " < compileCacheKeys[" << i << "] = (" << curr.NodeId << ", \"" << curr.QueryId << "\")"
+                    << ". ORDER BY DESC is being ignored by sys view actors.");
+            }
+        }
+    }
+
+>>>>>>> 57fa13e1114 (don't remove DESC sorting from plan for sys view (#28937))
     Y_UNIT_TEST(TopQueriesOrderByDesc) {
         // Test ORDER BY DESC for top_queries sys views
         TKikimrRunner kikimr("", KikimrDefaultUtDomainRoot, 3);
@@ -1053,6 +1125,106 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
 
         Y_FAIL("Timeout waiting for from partition_stats");
     }
+<<<<<<< HEAD
+=======
+
+    Y_UNIT_TEST_TWIN(CompileCacheBasic, EnableCompileCacheView) {
+        auto serverSettings = TKikimrSettings().SetKqpSettings({ NKikimrKqp::TKqpSetting() });
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableImplicitQueryParameterTypes(true);
+        TKikimrRunner kikimr(serverSettings);
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompileCacheView(EnableCompileCacheView);
+        auto tableClient = kikimr.GetTableClient();
+        ui64 initial = SelectCompileCacheCount(tableClient);
+        UNIT_ASSERT_EQUAL_C(initial, 0, "Compile cache is not empty at the beginning");
+        {
+            auto query = R"(DECLARE $k AS Uint64;
+            SELECT COUNT(*) FROM `/Root/EightShard` WHERE Key = $k;
+            )";
+
+            for (ui32 i = 0; i < 3; ++i) {
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto paramsBuilder = TParamsBuilder();
+                paramsBuilder.AddParam("$k").Uint64(i).Build();
+                auto preparedResult = session.PrepareDataQuery(query).GetValueSync();
+                auto executedResult = session.ExecuteDataQuery(
+                    query,
+                    TTxControl::BeginTx().CommitTx(),
+                    paramsBuilder.Build()
+                ).GetValueSync();
+                UNIT_ASSERT_C(executedResult.IsSuccess(), executedResult.GetIssues().ToString());
+            }
+            ui64 afterQuery = SelectCompileCacheCount(tableClient);
+            UNIT_ASSERT_EQUAL_C(afterQuery, 2, "Got " << afterQuery << " instead"); // first for sys_view call, second for sum
+        }
+        TString query = R"(
+                SELECT * FROM `/Root/.sys/compile_cache_queries`;
+            )";
+        auto session = tableClient.CreateSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 3);
+
+        NYdb::TResultSetParser parser(resultSet);
+        while(parser.TryNextRow()) {
+            auto maybeDuration = parser.ColumnParser("CompilationDuration").GetOptionalUint64();
+            UNIT_ASSERT(maybeDuration);
+            auto duration = maybeDuration.value();
+            UNIT_ASSERT_C(duration > 0, "duration is " << duration);
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CompileCacheCheckWarnings, EnableCompileCacheView) {
+        TKikimrRunner kikimr;
+        kikimr.GetTestServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompileCacheView(EnableCompileCacheView);
+        auto client = kikimr.GetQueryClient();
+        auto db = kikimr.GetTableClient();
+        {
+            auto session = db.CreateSession().GetValueSync().GetSession();
+
+            auto createResult = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE TestTable (
+                    Key Int32?,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(createResult.GetStatus(), EStatus::SUCCESS, createResult.GetIssues());
+
+            auto insertResult = session.ExecuteDataQuery(R"(
+                INSERT INTO TestTable (Key, Value) VALUES
+                (42, "val"), (NULL, "val1");
+                )", TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(insertResult.IsSuccess(), insertResult.GetIssues().ToString());
+        }
+
+
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        TString query = R"(
+            SELECT * FROM TestTable WHERE Key in [42, NULL];
+        )";
+
+        auto compileResult = session.ExecuteDataQuery(query, TTxControl::BeginTx().CommitTx(), TExecDataQuerySettings().KeepInQueryCache(true)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(compileResult.GetStatus(), EStatus::SUCCESS);
+
+        TString sysViewQuery = R"(SELECT * FROM `/Root/.sys/compile_cache_queries`;)";
+        auto result = session.ExecuteDataQuery(sysViewQuery,TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+
+        auto resultSet = result.GetResultSet(0);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 10);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+
+        NYdb::TResultSetParser parser(resultSet);
+        UNIT_ASSERT(parser.TryNextRow());
+        auto value = parser.ColumnParser("Warnings").GetOptionalUtf8();
+        UNIT_ASSERT(value);
+        UNIT_ASSERT_VALUES_EQUAL_C(value, compileResult.GetIssues().ToOneLineString(), "one the one side we have: " << value << " on the other " << compileResult.GetIssues().ToOneLineString());
+
+    }
+>>>>>>> 57fa13e1114 (don't remove DESC sorting from plan for sys view (#28937))
 }
 
 } // namspace NKqp

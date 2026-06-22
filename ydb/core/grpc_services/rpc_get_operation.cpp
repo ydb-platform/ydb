@@ -21,7 +21,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
 #include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
-#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>
@@ -67,8 +66,6 @@ class TGetOperationRPC
             return "[GetBackupCollectionRestore]";
         case TOperationId::COMPACTION:
             return "[GetForcedCompaction]";
-        case TOperationId::SET_COLUMN_CONSTRAINT:
-            return "[GetSetColumnConstraint]";
         case TOperationId::FULL_BACKUP:
             return "[GetFullBackup]";
         case TOperationId::ANALYZE:
@@ -92,8 +89,6 @@ class TGetOperationRPC
             return new NSchemeShard::TEvBackup::TEvGetBackupCollectionRestoreRequest(GetDatabaseName(), RawOperationId_);
         case TOperationId::COMPACTION:
             return new NSchemeShard::TEvForcedCompaction::TEvGetRequest(GetDatabaseName(), RawOperationId_);
-        case TOperationId::SET_COLUMN_CONSTRAINT:
-            return new NSchemeShard::TEvSetColumnConstraint::TEvGetRequest(GetDatabaseName(), RawOperationId_);
         case TOperationId::FULL_BACKUP:
             return new NSchemeShard::TEvBackup::TEvGetFullBackupRequest(GetDatabaseName(), RawOperationId_);
         default:
@@ -218,7 +213,6 @@ public:
             case TOperationId::INCREMENTAL_BACKUP:
             case TOperationId::RESTORE:
             case TOperationId::COMPACTION:
-            case TOperationId::SET_COLUMN_CONSTRAINT:
             case TOperationId::FULL_BACKUP:
                 if (!TryGetId(OperationId_, RawOperationId_)) {
                     return ReplyWithStatus(StatusIds::BAD_REQUEST);
@@ -257,7 +251,6 @@ public:
             HFunc(NSchemeShard::TEvImport::TEvGetImportResponse, Handle);
             HFunc(NSchemeShard::TEvIndexBuilder::TEvGetResponse, Handle);
             HFunc(NSchemeShard::TEvForcedCompaction::TEvGetResponse, Handle);
-            HFunc(NSchemeShard::TEvSetColumnConstraint::TEvGetResponse, Handle);
             HFunc(NKqp::TEvGetScriptExecutionOperationResponse, Handle);
             HFunc(NSchemeShard::TEvBackup::TEvGetIncrementalBackupResponse, Handle);
             HFunc(NSchemeShard::TEvBackup::TEvGetBackupCollectionRestoreResponse, Handle);
@@ -397,22 +390,6 @@ private:
             TEvGetOperationRequest::TResponse resp;
 
             ::NKikimr::NGRpcService::ToOperation(record.GetForcedCompaction(), resp.mutable_operation());
-            Reply(resp, ctx);
-        }
-    }
-
-    void Handle(NSchemeShard::TEvSetColumnConstraint::TEvGetResponse::TPtr& ev, const TActorContext& ctx) {
-        const auto& record = ev->Get()->Record;
-
-        LOG_D("Handle TEvSetColumnConstraint::TEvGetResponse"
-            << ": record# " << record.ShortDebugString());
-
-        if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
-            ReplyGetOperationResponse(true, ctx, record.GetStatus());
-        } else {
-            TEvGetOperationRequest::TResponse resp;
-
-            ::NKikimr::NGRpcService::ToOperation(record.GetSetColumnConstraint(), resp.mutable_operation());
             Reply(resp, ctx);
         }
     }

@@ -1,7 +1,6 @@
 #include <ydb/core/kqp/ut/olap/helpers/typed_local.h>
 #include <ydb/core/tx/columnshard/hooks/testing/controller.h>
 
-#include <ydb/core/kqp/ut/olap/helpers/ttl_index_enum.h>
 
 namespace NKikimr::NKqp {
 
@@ -48,7 +47,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStatistics) {
     }
 
 
-    Y_UNIT_TEST(StatsUsageNotPK, EIndexForTTLColumn) {
+    Y_UNIT_TEST(StatsUsageNotPK) {
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
         {
             auto settings = TKikimrSettings().SetWithSampleTables(false);
@@ -64,11 +63,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStatistics) {
                 UNIT_ASSERT_VALUES_UNEQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
             }
             {
-                auto alterQuery = (Arg<0>() == EIndexForTTLColumn::MaxIndex) ? 
-                    "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=max_ts, TYPE=MAX, FEATURES=`{\"column_name\": \"ts\"}`);" 
-                    :
-                    "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=min_max_ts, TYPE=MIN_MAX, FEATURES=`{\"column_name\": \"ts\"}`);" 
-                    ;
+                auto alterQuery = "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=UPSERT_INDEX, NAME=min_max_ts, TYPE=MIN_MAX, FEATURES=`{\"column_name\": \"ts\"}`);";
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
                 auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
                 UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
@@ -80,11 +75,7 @@ Y_UNIT_TEST_SUITE(KqpOlapStatistics) {
                 UNIT_ASSERT_VALUES_EQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());
             }
             {
-                auto alterQuery = (Arg<0>() == EIndexForTTLColumn::MaxIndex) ? 
-                    "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=max_ts);"
-                    :
-                    "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=min_max_ts);"
-                    ;
+                auto alterQuery = "ALTER OBJECT `/Root/olapStore` (TYPE TABLESTORE) SET (ACTION=DROP_INDEX, NAME=min_max_ts);";
                 auto session = tableClient.CreateSession().GetValueSync().GetSession();
                 auto alterResult = session.ExecuteSchemeQuery(alterQuery).GetValueSync();
                 UNIT_ASSERT_VALUES_UNEQUAL_C(alterResult.GetStatus(), NYdb::EStatus::SUCCESS, alterResult.GetIssues().ToString());

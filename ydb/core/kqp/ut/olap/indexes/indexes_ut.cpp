@@ -241,6 +241,69 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMaxWithBSStorage)).Execute(settings);
     }
 
+    Y_UNIT_TEST(ManyIndexesOnSingleColumnIsAllowed, EUseQueryService, ELocalIndexAsSchemeObject) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableLocalMinMaxIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
+        TKikimrRunner kikimr(settings);
+
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapStandaloneTable();
+        helper.SetForcedCompaction();
+        auto tableClient = kikimr.GetTableClient();
+        auto queryServiceCLient = kikimr.GetQueryClient();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+
+        auto runDDLQuery = [&](TString query) {
+            if (UseQueryService) {
+                auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                return *static_cast<NYdb::TStatus*>(&result);
+            } else {
+                return tableClient.CreateSession().GetValueSync().GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            }
+        };
+
+        auto assertDDLQueryOk = [&](TString query) {
+            auto result = runDDLQuery(query);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+
+
+        assertDDLQueryOk(R"(
+            CREATE TABLE `/Root/test_cannot_have_two_indexes_on_one_column` (
+                `key` Int32 NOT NULL,
+                `value` String NOT NULL,
+                PRIMARY KEY (`key`)
+            )
+            PARTITION BY HASH (`key`)
+            WITH (
+                STORE = COLUMN
+            );
+            ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_mm` LOCAL USING min_max ON(`value`);            
+        )");
+        {
+            NYdb::TStatus status = runDDLQuery(R"(
+                ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `vvalue_mm` LOCAL USING min_max ON(`value`);            
+            )");
+            
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+        {
+            NYdb::TStatus status = runDDLQuery(R"(
+                ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `vvvalue_bloom_filter` LOCAL USING bloom_filter ON(`value`);            
+            )");
+            
+            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        }
+    }
+    
     Y_UNIT_TEST(AlterIndexOnNotExistingTableResultsInError, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool useQueryService = (Arg<0>() == EUseQueryService::QueryService);
         const bool localIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
@@ -1660,7 +1723,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(localIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
@@ -1677,23 +1740,23 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             .SetPriority(NActors::NLog::PRI_DEBUG)
             .Initialize();
 
-        ExecQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, useQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_ts, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ["timestamp"]}`);
                 )");
-        ExecQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, useQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_res_id, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['resource_id']}`);
                 )");
-        ExecQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, useQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_uid, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['uid']}`);
                 )");
-        ExecQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, useQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_level, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['level']}`);
                 )");
-        ExecQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, useQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_message, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['message']}`);
                 )");

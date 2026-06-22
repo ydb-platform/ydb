@@ -15,7 +15,6 @@
 #include <ydb/core/wrappers/abstract.h>
 #include <ydb/core/wrappers/fake_storage.h>
 #include <ydb/library/aws_init/aws.h>
-#include <ydb/core/kqp/ut/olap/helpers/ttl_index_enum.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/builder.h>
 
@@ -584,7 +583,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
     Y_UNIT_TEST(TieringForIndexes, ELocalIndexAsSchemeObject) {
         const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
-        TTieringTestHelper tieringHelper{LocalIndexAsSchemeObject};
+        TTieringTestHelper tieringHelper{localIndexAsSchemeObject};
         auto& csController = tieringHelper.GetCsController();
         auto& olapHelper = tieringHelper.GetOlapHelper();
         auto& testHelper = tieringHelper.GetTestHelper();
@@ -681,26 +680,17 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
     }
     
-    Y_UNIT_TEST(TieringViaIndex, EIndexForTTLColumn, ELocalIndexAsSchemeObject) {
-        const bool localIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
-        TTieringTestHelper tieringHelper{LocalIndexAsSchemeObject};
+    Y_UNIT_TEST(TieringViaIndex, ELocalIndexAsSchemeObject) {
+        const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        TTieringTestHelper tieringHelper{localIndexAsSchemeObject};
         auto& csController = tieringHelper.GetCsController();
         auto& testHelper = tieringHelper.GetTestHelper();
 
         // "inherit_portion_storage": false(defaults to true in alter object ddl) and 
         // "storage_id": "__LOCAL_METADATA"(defaults to "__LOCAL_METADATA" in alter object ddl) 
         // are mandatory because ttl only works with min_max index stored in local database, 
-        // and both of these options move data out of local db
-        TString createTableQuery = Arg<0>() == EIndexForTTLColumn::MaxIndex ? R"(
-        CREATE TABLE `/Root/ColumnWithTTLAndMaxIndex` (
-            id Int32 NOT NULL,
-            ts Timestamp NOT NULL,
-            PRIMARY KEY(id)
-        ) PARTITION BY HASH (`id`)
-        WITH ( STORE = COLUMN );
-        ALTER OBJECT `/Root/ColumnWithTTLAndMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=max_ts, TYPE=MAX, FEATURES=`{"inherit_portion_storage": false, "column_name": "ts"}`);
-        )" 
-            : R"(
+        // and both of these options move data out of local db            
+        auto createStatus = testHelper.GetSession().ExecuteSchemeQuery(R"(
         CREATE TABLE `/Root/ColumnWithTTLAndMinMaxIndex` (
             id Int32 NOT NULL,
             ts Timestamp NOT NULL,
@@ -708,27 +698,14 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         ) PARTITION BY HASH (`id`) 
         WITH ( STORE = COLUMN );
         ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=min_max_ts, TYPE=MIN_MAX, FEATURES=`{"inherit_portion_storage": false, "column_name": "ts"}`);
-        )";
-            
-        auto createStatus = testHelper.GetSession().ExecuteSchemeQuery(createTableQuery).GetValueSync();
+        )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(createStatus.GetStatus(), NYdb::EStatus::SUCCESS, createStatus.GetIssues().ToString());
 
         testHelper.CreateTier(DEFAULT_TIER_NAME);
-        TString tablePath = Arg<0>() == EIndexForTTLColumn::MaxIndex ? "/Root/ColumnWithTTLAndMaxIndex" : "/Root/ColumnWithTTLAndMinMaxIndex";
+        TString tablePath = "/Root/ColumnWithTTLAndMinMaxIndex";
         testHelper.SetTiering(tablePath, DEFAULT_TIER_PATH, "ts");
 
-        TString upsertQuery = Arg<0>() == EIndexForTTLColumn::MaxIndex ? R"(
-            $prev_year = Unwrap(DateTime::MakeTimestamp(
-                DateTime::ShiftYears(DateTime::Split(CurrentUtcTimestamp()), -1)
-            ));
-            $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
-            UPSERT INTO `/Root/ColumnWithTTLAndMaxIndex` (`id`, `ts`)
-            SELECT CAST(item AS Int32) AS `id`, $prev_year as `ts` FROM AS_TABLE($data1);
-            UPSERT INTO `/Root/ColumnWithTTLAndMaxIndex` (`id`, `ts`)
-            SELECT CAST(item+1 AS Int32) AS `id`, $prev_year as `ts` FROM AS_TABLE($data1);
-            )" 
-            :
-            R"(
+        testHelper.ExecuteQuery(R"(
             $prev_year = Unwrap(DateTime::MakeTimestamp(
                 DateTime::ShiftYears(DateTime::Split(CurrentUtcTimestamp()), -1)
             ));
@@ -737,10 +714,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             SELECT CAST(item AS Int32) AS `id`, $prev_year as `ts` FROM AS_TABLE($data1);
             UPSERT INTO `/Root/ColumnWithTTLAndMinMaxIndex` (`id`, `ts`)
             SELECT CAST(item+1 AS Int32) AS `id`, $prev_year as `ts` FROM AS_TABLE($data1);
-            )";
-
-
-        testHelper.ExecuteQuery(upsertQuery);
+            )");
         csController->WaitCompactions(TDuration::Seconds(10));
         csController->WaitActualization(TDuration::Seconds(10));
         tieringHelper.SetTablePath(tablePath);

@@ -139,14 +139,14 @@ ALTER TOPIC `my_topic` ADD CONSUMER my_consumer2 WITH (important = true);
 
 ```yql
 ALTER TOPIC `my_topic`
-    ADD CONSUMER my_consumer2 WITH (
+    ADD CONSUMER my_shared_consumer WITH (
         type = 'shared',
         keep_messages_order = false,
         default_processing_timeout = Interval('PT30S'),
         max_processing_attempts = 3,
         dead_letter_policy = 'move',
         dead_letter_queue = 'my_dlq_topic'
-    )
+    );
 ```
 
 ### Задать параметры читателя {#alter-consumer}

@@ -36,6 +36,13 @@ TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationCon
             res.IndexTableCount = 4;
             break;
         }
+        case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+        case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+        case NKikimrSchemeOp::EIndexTypeLocalMinMax: {
+            // Local indexes create only the index object itself: no impl table, no extra shards.
+            res.IndexTableCount = 0;
+            break;
+        }
         default:
             Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexDesc.GetType()));
             break;

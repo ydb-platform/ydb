@@ -38,7 +38,7 @@ struct TDriverConfig
 
     TSlruCacheConfigPtr ClientCache;
 
-    std::optional<TString> Token;
+    std::optional<std::string> Token;
 
     //! Target cluster for multiproxy mode.
     std::optional<std::string> MultiproxyTargetCluster;

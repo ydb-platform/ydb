@@ -363,7 +363,7 @@ private:
                     ConsumeCharacterOrThrow(',');
 
                     ConsumeIdentifier(/*allowQuotedIdentifier*/ true);
-                    auto tag = TString(Identifier_);
+                    auto tag = std::string(Identifier_);
 
                     ConsumeCharacterOrThrow('>');
 

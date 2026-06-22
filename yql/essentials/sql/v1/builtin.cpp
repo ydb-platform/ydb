@@ -1979,8 +1979,8 @@ public:
             Node_ = Y("block", Q(L(block, Y("return", "res"))));
         } else {
             Node_ = ctx.EnableSystemColumns
-                ? RemoveSystemColumns(AstNode(TString("row")), ctx.Settings.ExtraSystemColumnPrefixes)
-                : BuildAtom(Pos_, "row", 0);
+                        ? RemoveSystemColumns(AstNode(TString("row")), ctx.Settings.ExtraSystemColumnPrefixes)
+                        : BuildAtom(Pos_, "row", 0);
         }
         return true;
     }

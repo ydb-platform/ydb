@@ -444,6 +444,7 @@ TPartition* TPartitionFixture::CreatePartitionActor(const TPartitionId& id,
                                      false,
                                      1,
                                      quoterId,
+                                     TActorId{},
                                      std::move(samplingControl),
                                      newPartition);
     ActorId = Ctx->Runtime->Register(actor);
@@ -4226,6 +4227,7 @@ TReadInfo MakeReadInfoForAddBlobsFromBodyTest(
         partNo,
         messageCountLimit,
         byteSizeLimit,
+        true, // readToBlobEnd
         ui64{0},
         readTimestampMs,
         TDuration::Zero(),

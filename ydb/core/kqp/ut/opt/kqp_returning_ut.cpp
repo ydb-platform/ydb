@@ -1164,6 +1164,204 @@ Y_UNIT_TEST(ReturningWithInsertOnColumnShard) {
     }
 }
 
+Y_UNIT_TEST_TWIN(TwoReturningReplace, EnableStreamIndex) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableStreamIndex));
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, false);
+    }
+
+    {
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(
+            R"(
+                REPLACE INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 1, "Payload1") RETURNING Key, Fk, Value;
+                REPLACE INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 2, "Payload2") RETURNING Key, Fk, Value;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1];[1];["Payload1"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([
+            [[1];[2];["Payload2"]]
+        ])", FormatResultSetYson(result.GetResultSet(1)));
+    }
+
+    CompareYson(
+        R"([
+            [[1];[2];["Payload2"]]
+        ])",
+        ExecuteReturningQuery(kikimr, true, "SELECT Key, Fk, Value FROM `/Root/SecondaryKeys` ORDER BY Key, Fk;")
+    );
+}
+
+Y_UNIT_TEST_TWIN(ReturningBeforeReplace, EnableStreamIndex) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableStreamIndex));
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, false);
+    }
+
+    {
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(
+            R"(
+                REPLACE INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 1, "Payload1") RETURNING Key, Fk, Value;
+                REPLACE INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 2, "Payload2");
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1];[1];["Payload1"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    CompareYson(
+        R"([
+            [[1];[2];["Payload2"]]
+        ])",
+        ExecuteReturningQuery(kikimr, true, "SELECT Key, Fk, Value FROM `/Root/SecondaryKeys` ORDER BY Key, Fk;")
+    );
+}
+
+Y_UNIT_TEST_TWIN(ReturningAfterReplace, EnableStreamIndex) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableStreamIndex));
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, false);
+    }
+
+    {
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(
+            R"(
+                REPLACE INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 1, "Payload1");
+                REPLACE INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 2, "Payload2") RETURNING Key, Fk, Value;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1];[2];["Payload2"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    CompareYson(
+        R"([
+            [[1];[2];["Payload2"]]
+        ])",
+        ExecuteReturningQuery(kikimr, true, "SELECT Key, Fk, Value FROM `/Root/SecondaryKeys` ORDER BY Key, Fk;")
+    );
+}
+
+Y_UNIT_TEST_TWIN(TwoReturningUpsert, EnableStreamIndex) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableStreamIndex));
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, false);
+    }
+
+    {
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(
+            R"(
+                UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 1, "Payload1") RETURNING Key, Fk, Value;
+                UPSERT INTO `/Root/SecondaryKeys` (Key, Fk) VALUES (1, 2) RETURNING Key, Fk, Value;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1];[1];["Payload1"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([
+            [[1];[2];["Payload1"]]
+        ])", FormatResultSetYson(result.GetResultSet(1)));
+    }
+
+    CompareYson(
+        R"([
+            [[1];[2];["Payload1"]]
+        ])",
+        ExecuteReturningQuery(kikimr, true, "SELECT Key, Fk, Value FROM `/Root/SecondaryKeys` ORDER BY Key, Fk;")
+    );
+}
+
+Y_UNIT_TEST_TWIN(ReturningBeforeUpsert, EnableStreamIndex) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableStreamIndex));
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, false);
+    }
+
+    {
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(
+            R"(
+                UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 1, "Payload1") RETURNING Key, Fk, Value;
+                UPSERT INTO `/Root/SecondaryKeys` (Key, Fk) VALUES (1, 2);
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1];[1];["Payload1"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    CompareYson(
+        R"([
+            [[1];[2];["Payload1"]]
+        ])",
+        ExecuteReturningQuery(kikimr, true, "SELECT Key, Fk, Value FROM `/Root/SecondaryKeys` ORDER BY Key, Fk;")
+    );
+}
+
+Y_UNIT_TEST_TWIN(ReturningAfterUpsert, EnableStreamIndex) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableStreamIndex));
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, false);
+    }
+
+    {
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+        auto result = session.ExecuteQuery(
+            R"(
+                UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 1, "Payload1");
+                UPSERT INTO `/Root/SecondaryKeys` (Key, Fk) VALUES (1, 2) RETURNING Key, Fk, Value;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+
+        CompareYson(R"([
+            [[1];[2];["Payload1"]]
+        ])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    CompareYson(
+        R"([
+            [[1];[2];["Payload1"]]
+        ])",
+        ExecuteReturningQuery(kikimr, true, "SELECT Key, Fk, Value FROM `/Root/SecondaryKeys` ORDER BY Key, Fk;")
+    );
+}
+
 }
 
 } // namespace NKikimr::NKqp

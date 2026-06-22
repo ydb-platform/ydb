@@ -1,6 +1,10 @@
 #include "ut_utils.h"
 
+#include <ydb/core/testlib/test_client.h>
+#include <ydb/library/security/util.h>
+
 #include <library/cpp/http/misc/httpcodes.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 namespace NMonitoring::NTests {
 
@@ -13,6 +17,17 @@ const TString AUTHORIZATION_HEADER = "Authorization";
 const TString VALID_TOKEN = "Bearer token";
 const TString ROOT_TOKEN = "root@builtin";
 const TVector<TString> DEFAULT_TICKET_PARSER_GROUPS = {"group_name"};
+
+void GrantConnect(Tests::TClient& client) {
+    client.CreateUser("/Root", "username", "password");
+    client.GrantConnect("username");
+
+    const auto alterAttrsStatus = client.AlterUserAttributes("/", "Root", {
+        { "folder_id", "test_folder_id" },
+        { "database_id", "test_database_id" },
+    });
+    UNIT_ASSERT_EQUAL(alterAttrsStatus, NMsgBusProxy::MSTATUS_OK);
+}
 
 void TTestActorPage::Bootstrap() {
     Become(&TTestActorPage::StateWork);
@@ -134,6 +149,10 @@ void TFakeTicketParserActor::Success(TEvTicketParser::TEvAuthorizeTicket::TPtr& 
         args.GroupSIDs = GroupSIDs;
     }
     TIntrusivePtr<NACLib::TUserToken> userToken = MakeIntrusive<NACLib::TUserToken>(args);
+    userToken->SetSanitizedToken(NKikimr::SanitizeTicket(ev->Get()->Ticket));
+    if (ev->Get()->Ticket != ROOT_TOKEN) {
+        userToken->SetSubjectType(NACLibProto::SUBJECT_TYPE_USER);
+    }
     userToken->SaveSerializationInfo();
     LOG_INFO_S(*TlsActivationContext, NKikimrServices::TICKET_PARSER,
         "Send TEvAuthorizeTicketResult success");

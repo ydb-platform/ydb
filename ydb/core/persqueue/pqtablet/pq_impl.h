@@ -249,6 +249,7 @@ private:
     ui32 NextSupportivePartitionId = 100'000;
 
     TActorId CacheActor;
+    TActorId BatchProcessorActor;
     TActorId ReadBalancerActorId;
 
     TSet<TChangeNotification> ChangeConfigNotification;

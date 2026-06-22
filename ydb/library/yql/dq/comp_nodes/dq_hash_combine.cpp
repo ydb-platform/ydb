@@ -700,6 +700,7 @@ protected:
         const ui32 pageStride = Store->AllocSize;
 
         for (size_t i = 0; i < NumBuckets; ++i) {
+            size_t bucketEntries = 0;
             TWideUnboxedValuesSpillerAdapter& spiller = *currentSpilling.Spillage[i].SpilledState;
             TSegmentedArena::TPageEntry* page = Store->PagesByTag[i];
             while (page != nullptr) {
@@ -707,6 +708,7 @@ protected:
                 for (ui32 writtenFromPage = 0; writtenFromPage < page->Used; ++writtenFromPage, item += pageStride) {
                     TArrayRef<TUnboxedValuePod> pageItems(rehydrateIfNeeded(item));
                     ++totalWritten;
+                    ++bucketEntries;
                     auto pageFuture = spiller.WriteWideItem(pageItems);
                     for (auto& uv : pageItems) {
                         uv.UnRef();
@@ -731,6 +733,7 @@ protected:
                 }
                 spiller.AsyncWriteCompleted(finishFuture->ExtractValue());
             }
+            UDF_LOG(Logger, LogComponent, NUdf::ELogLevel::Debug, TStringBuilder() << "Spilled state bucket " << i << ": " << bucketEntries << " entries");
         }
 
         Map->Clear();
@@ -1163,7 +1166,8 @@ public:
     bool PassthroughKeys = false;
 
     TBaseAggregationState(
-        TMemoryUsageInfo* memInfo, TComputationContext& ctx, const TMemoryEstimationHelper& memoryHelper, size_t memoryLimit, size_t inputUnpackedWidth,
+        TMemoryUsageInfo* memInfo, TComputationContext& ctx, NYql::NUdf::TLoggerPtr logger, NYql::NUdf::TLogComponentId logComponent,
+        const TMemoryEstimationHelper& memoryHelper, size_t memoryLimit, size_t inputUnpackedWidth,
         const NDqHashOperatorCommon::TCombinerNodes& nodes, ui32 wideFieldsIndex, const TKeyTypes& keyTypes,
         const std::vector<TType*>& keyItemTypes,
         const std::vector<TType*>& stateItemTypes,
@@ -1175,6 +1179,8 @@ public:
     )
         : TBase(memInfo)
         , Ctx(ctx)
+        , Logger(logger)
+        , LogComponent(logComponent)
         , MemoryHelper(memoryHelper)
         , MemoryLimit(memoryLimit)
         , ForLLVM(forLLVM)
@@ -1473,6 +1479,8 @@ protected:
     }
 
     TComputationContext& Ctx;
+    NYql::NUdf::TLoggerPtr Logger;
+    NYql::NUdf::TLogComponentId LogComponent;
 
     const TMemoryEstimationHelper& MemoryHelper;
 
@@ -1537,6 +1545,8 @@ public:
     TWideAggregationState(
         TMemoryUsageInfo* memInfo,
         TComputationContext& ctx,
+        NYql::NUdf::TLoggerPtr logger,
+        NYql::NUdf::TLogComponentId logComponent,
         const TMemoryEstimationHelper& memoryHelper,
         NYql::NUdf::TCounter& outputRowCounter,
         size_t memoryLimit,
@@ -1554,7 +1564,7 @@ public:
         const TDqHashCombineTestParams& testParams
     )
         : TBaseAggregationState(
-            memInfo, ctx, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes,
+            memInfo, ctx, logger, logComponent, memoryHelper, memoryLimit, inputWidth, nodes, wideFieldsIndex, keyTypes,
             keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, true, testParams
         )
         , OutputRowCounter(outputRowCounter)
@@ -1711,6 +1721,8 @@ public:
     TBlockAggregationState(
         TMemoryUsageInfo* memInfo,
         TComputationContext& ctx,
+        NYql::NUdf::TLoggerPtr logger,
+        NYql::NUdf::TLogComponentId logComponent,
         const TMemoryEstimationHelper& memoryHelper,
         NYql::NUdf::TCounter& outputRowCounter,
         size_t memoryLimit,
@@ -1728,7 +1740,7 @@ public:
         const TDqHashCombineTestParams& testParams
     )
         : TBaseAggregationState(
-            memInfo, ctx, memoryHelper, memoryLimit, inputTypes.size() - 1, nodes, wideFieldsIndex,
+            memInfo, ctx, logger, logComponent, memoryHelper, memoryLimit, inputTypes.size() - 1, nodes, wideFieldsIndex,
             keyTypes, keyItemTypes, stateItemTypes, forLLVM, isAggregator, enableSpilling, true, testParams
         )
         , OutputRowCounter(outputRowCounter)
@@ -1811,15 +1823,17 @@ public:
         for (ui32 i = 0; i < OutputColumns; ++i) {
             auto& arr = BlockArrays[i];
             if (auto& array = arr.front(); ui64(array->length) == sliceSize) {
-                *output[i] = Ctx.HolderFactory.CreateArrowBlock(std::move(array));
+                // Pass NYql::EDatumValidationMode::None since we just chop blocks without changing their content.
+                *output[i] = Ctx.HolderFactory.CreateArrowBlock(std::move(array), NYql::EDatumValidationMode::None);
                 arr.pop_front();
             }
             else {
-                *output[i] = Ctx.HolderFactory.CreateArrowBlock(NYql::NUdf::Chop(arr.front(), sliceSize));
+                // Pass NYql::EDatumValidationMode::None since we just chop blocks without changing their content.
+                *output[i] = Ctx.HolderFactory.CreateArrowBlock(NYql::NUdf::Chop(arr.front(), sliceSize), NYql::EDatumValidationMode::None);
             }
         }
 
-        *output[OutputColumns] = Ctx.HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(sliceSize)));
+        *output[OutputColumns] = Ctx.HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(sliceSize)), Ctx.RuntimeSettings.DatumValidation.Get());
 
         OutputRowCounter.Add(sliceSize);
         OutputRows += sliceSize;
@@ -2528,11 +2542,11 @@ private:
 
         if (!BlockMode) {
             state = ctx.HolderFactory.Create<TWideAggregationState>(
-                ctx, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex,
+                ctx, logger, logComponent, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex,
                 KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, forLLVM, IsAggregator, EnableSpilling, TestParams);
         } else {
             state = ctx.HolderFactory.Create<TBlockAggregationState>(
-                ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, Nodes, WideFieldsIndex,
+                ctx, logger, logComponent, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, Nodes, WideFieldsIndex,
                 KeyTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, forLLVM, IsAggregator, EnableSpilling, TestParams);
         }
     }
@@ -2625,11 +2639,11 @@ private:
 
         if (!BlockMode) {
             state = ctx.HolderFactory.Create<TWideAggregationState>(
-                ctx, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex,
+                ctx, logger, logComponent, MemoryHelper, rowCounter, MemoryLimit, InputWidth, OutputTypes.size(), Nodes, WideFieldsIndex,
                 KeyTypes, InputTypes, KeyItemTypes, StateItemTypes, false, IsAggregator, EnableSpilling, TestParams);
         } else {
             state = ctx.HolderFactory.Create<TBlockAggregationState>(
-                ctx, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, Nodes, WideFieldsIndex,
+                ctx, logger, logComponent, MemoryHelper, rowCounter, MemoryLimit, InputTypes, OutputTypes, Nodes, WideFieldsIndex,
                 KeyTypes, KeyItemTypes, StateItemTypes, MaxOutputBlockLen, false, IsAggregator, EnableSpilling, TestParams);
         }
     }

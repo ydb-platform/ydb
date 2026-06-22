@@ -4,6 +4,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/core/kafka_proxy/kafka_constants.h>
+#include <ydb/library/kafka/kafka_records.h>
 #include <ydb/library/login/sasl/scram.h>
 
 #include <util/random/random.h>
@@ -172,14 +173,33 @@ TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topic
     request.TopicData.resize(1);
     request.TopicData[0].Name = topicName;
     request.TopicData[0].PartitionData.resize(msgs.size());
+    TVector<TString> serializedRecords;
+    serializedRecords.reserve(msgs.size());
     for(size_t i = 0 ; i < msgs.size(); ++i) {
         request.TopicData[0].PartitionData[i].Index = msgs[i].first;
-        request.TopicData[0].PartitionData[i].Records = msgs[i].second;
+        serializedRecords.push_back(WriteKafkaRecordBatch(msgs[i].second));
+        request.TopicData[0].PartitionData[i].Records = ToRawBytes(serializedRecords.back());
     }
 
     if (transactionalId) {
         request.TransactionalId = *transactionalId;
     }
+
+    return WriteAndRead<TProduceResponseData>(header, request);
+}
+
+TMessagePtr<TProduceResponseData> TKafkaTestClient::Produce(const TString& topicName, ui32 partition, const TKafkaBytes& records) {
+    Cerr << ">>>>> TProduceRequestData\n";
+
+    TRequestHeaderData header = Header(NKafka::EApiKey::PRODUCE, 9);
+
+    TProduceRequestData request;
+    request.Acks = -1;
+    request.TopicData.resize(1);
+    request.TopicData[0].Name = topicName;
+    request.TopicData[0].PartitionData.resize(1);
+    request.TopicData[0].PartitionData[0].Index = partition;
+    request.TopicData[0].PartitionData[0].Records = records;
 
     return WriteAndRead<TProduceResponseData>(header, request);
 }
@@ -216,9 +236,12 @@ void TKafkaTestClient::ProduceAsync(const TTopicPartition& topicPartition,
     request.TopicData.resize(1);
     request.TopicData[0].Name = topicName;
     request.TopicData[0].PartitionData.resize(msgs.size());
+    TVector<TString> serializedRecords;
+    serializedRecords.reserve(msgs.size());
     for(size_t i = 0 ; i < msgs.size(); ++i) {
         request.TopicData[0].PartitionData[i].Index = msgs[i].first;
-        request.TopicData[0].PartitionData[i].Records = msgs[i].second;
+        serializedRecords.push_back(WriteKafkaRecordBatch(msgs[i].second));
+        request.TopicData[0].PartitionData[i].Records = ToRawBytes(serializedRecords.back());
     }
 
     if (transactionalId) {
@@ -296,7 +319,7 @@ TMessagePtr<TJoinGroupResponseData> TKafkaTestClient::JoinGroup(std::vector<TStr
 
     TKafkaVersion version = 3;
 
-    TWritableBuf buf(nullptr, subscribtion.Size(version) + sizeof(version));
+    TKafkaWriteBuffer buf( subscribtion.Size(version) + sizeof(version));
     TKafkaWritable writable(buf);
     writable << version;
     subscribtion.Write(writable, version);
@@ -474,7 +497,7 @@ std::vector<NKafka::TSyncGroupRequestData::TSyncGroupRequestAssignment> TKafkaTe
         }
 
         {
-            TWritableBuf buf(nullptr, consumerAssignment.Size(ASSIGNMENT_VERSION) + sizeof(ASSIGNMENT_VERSION));
+            TKafkaWriteBuffer buf( consumerAssignment.Size(ASSIGNMENT_VERSION) + sizeof(ASSIGNMENT_VERSION));
             TKafkaWritable writable(buf);
 
             writable << ASSIGNMENT_VERSION;
@@ -990,7 +1013,7 @@ TMessagePtr<T> TKafkaTestClient::WriteAndRead(TRequestHeaderData& header, TApiMe
 }
 
 void TKafkaTestClient::Write(TSocketOutput& so, TApiMessage* request, TKafkaVersion version, bool silent) {
-    TWritableBuf sb(nullptr, request->Size(version) + 1000);
+    TKafkaWriteBuffer sb( request->Size(version) + 1000);
     TKafkaWritable writable(sb);
     request->Write(writable, version);
     so.Write(sb.GetFrontBuffer().data(), sb.GetFrontBuffer().size());
@@ -1031,6 +1054,7 @@ TMessagePtr<T> TKafkaTestClient::Read(TSocketInput& si, TRequestHeaderData* requ
     TKafkaVersion headerVersion = ResponseHeaderVersion(requestHeader->RequestApiKey, requestHeader->RequestApiVersion);
 
     TKafkaReadable readable(*buffer);
+    readable.SetAllowCompressed(true);
 
     TResponseHeaderData header;
     header.Read(readable, headerVersion);

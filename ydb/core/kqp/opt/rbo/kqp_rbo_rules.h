@@ -81,6 +81,17 @@ class TInlineJoinFiltersRule : public ISimplifiedRule {
 };
 
 /**
+ * Rewrite right join into left join
+ * Swap arguments and rearrange join conditions
+ */
+class TRewriteRightJoinRule : public ISimplifiedRule {
+  public:
+    TRewriteRightJoinRule() : ISimplifiedRule("Rewrite right join", ERuleProperties::RequireParents ) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
  * Remove a left join when the right side cannot change left-side row multiplicity
  * and no right-side output is used above the join.
  */
@@ -89,6 +100,18 @@ class TEliminateLeftJoinRule : public ISimplifiedRule {
     TEliminateLeftJoinRule() : ISimplifiedRule("Eliminate left join", ERuleProperties::RequireParents | ERuleProperties::RequireMetadata | ERuleProperties::RequireLiveness) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
+ * Expand distinct aggregation.
+ */
+class TExpandDistinctAggregationRule: public ISimplifiedRule {
+public:
+    TExpandDistinctAggregationRule()
+        : ISimplifiedRule("Expand distinct aggregation rule", ERuleProperties::RequireParents | ERuleProperties::RequireTypes) {
+    }
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };
 
 /***
@@ -416,10 +439,13 @@ class TConstantFoldingStage : public IRBOStage {
  */
 class TPruneDeadMapElementsRule : public IRule {
   public:
-    TPruneDeadMapElementsRule()
-        : IRule("Prune dead map elements", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
+    TPruneDeadMapElementsRule(bool pruneKeyColumns = true)
+        : IRule("Prune dead map elements", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints | (pruneKeyColumns ? 0x00 : ERuleProperties::RequireMetadata)),
+        PruneKeyColumns(pruneKeyColumns) 
+    {}
 
     virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+    bool PruneKeyColumns = true;
 };
 
 /**
@@ -427,10 +453,13 @@ class TPruneDeadMapElementsRule : public IRule {
  */
 class TPruneDeadReadColumnsRule : public IRule {
   public:
-    TPruneDeadReadColumnsRule()
-        : IRule("Prune dead read columns", ERuleProperties::RequireLiveness) {}
+    TPruneDeadReadColumnsRule(bool pruneKeyColumns = true)
+        : IRule("Prune dead read columns", ERuleProperties::RequireLiveness | (pruneKeyColumns ? 0x00 : ERuleProperties::RequireMetadata)),
+        PruneKeyColumns(pruneKeyColumns) 
+    {}
 
     virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
+    bool PruneKeyColumns = true;
 };
 
 /**

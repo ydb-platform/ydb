@@ -8,9 +8,9 @@ SELECT
     Count(*)
 FROM (
     SELECT DISTINCT
-        c_last_name,
-        c_first_name,
-        d_date
+       COALESCE(c_last_name,'') as c_last_name,
+       COALESCE(c_first_name,'') as c_first_name,
+       UNWRAP(COALESCE(cast(d_date as date), cast(0 as Date))) as d_date
     FROM
         `/Root/test/ds/store_sales` as store_sales
     ,
@@ -23,9 +23,9 @@ FROM (
         AND d_month_seq BETWEEN 1212 AND 1212 + 11
     INTERSECT
     SELECT DISTINCT
-        c_last_name,
-        c_first_name,
-        d_date
+       COALESCE(c_last_name,'') as c_last_name,
+       COALESCE(c_first_name,'') as c_first_name,
+       UNWRAP(COALESCE(cast(d_date as date), cast(0 as Date))) as d_date
     FROM
         `/Root/test/ds/catalog_sales` as catalog_sales
     ,
@@ -38,9 +38,9 @@ FROM (
         AND d_month_seq BETWEEN 1212 AND 1212 + 11
     INTERSECT
     SELECT DISTINCT
-        c_last_name,
-        c_first_name,
-        d_date
+       COALESCE(c_last_name,'') as c_last_name,
+       COALESCE(c_first_name,'') as c_first_name,
+       UNWRAP(COALESCE(cast(d_date as date), cast(0 as Date))) as d_date
     FROM
         `/Root/test/ds/web_sales` as web_sales
     ,

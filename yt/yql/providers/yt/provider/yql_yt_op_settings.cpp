@@ -976,12 +976,6 @@ bool ValidateSettings(const TExprNode& settingsNode, EYtSettingTypes accepted, T
             }
             break;
         }
-        case EYtSettingType::QLFilter: {
-            if (!EnsureTupleSize(*setting, 1, ctx)) {
-                return false;
-            }
-            break;
-        }
         case EYtSettingType::Actions:
         case EYtSettingType::Features: {
             ctx.AddError(TIssue(ctx.GetPosition(nameNode->Pos()), TStringBuilder()

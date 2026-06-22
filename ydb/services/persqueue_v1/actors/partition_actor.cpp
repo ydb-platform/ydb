@@ -28,7 +28,7 @@ TPartitionActor::TPartitionActor(
         const ui64 tabletID, const TTopicCounters& counters,
         const TString& clientDC, bool rangesMode, const NPersQueue::TTopicConverterPtr& topic, const TString& database,
         bool directRead, bool useMigrationProtocol, ui32 maxTimeLagMs, ui64 readTimestampMs, const TTopicHolder::TPtr& topicHolder,
-        const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes
+        const std::unordered_set<ui64>& notCommitedToFinishParents, ui64 partitionMaxInFlightBytes, bool canReadBatches
 )
     : ParentId(parentId)
     , ClientId(clientId)
@@ -72,6 +72,7 @@ TPartitionActor::TPartitionActor(
     , Topic(topic)
     , Database(database)
     , DirectRead(directRead)
+    , CanReadBatches(canReadBatches)
     , PartitionInFlightMemoryController(partitionMaxInFlightBytes)
     , UseMigrationProtocol(useMigrationProtocol)
     , FirstRead(true)
@@ -429,7 +430,9 @@ void TPartitionActor::ResendRecentRequests() {
         MakeCommit(ctx);
         if (WaitForData) { //resend wait-for-data requests
             WaitDataInfly.clear();
-            WaitDataInPartition(ctx);
+            if (IsNeedMorePartitionData()) {
+                WaitDataInPartition(ctx);
+            }
         }
     }
 }
@@ -510,8 +513,11 @@ bool FillBatchedData(
     for (ui32 i = 0; i < res.ResultSize(); ++i) {
         const auto& r = res.GetResult(i);
         WTime = r.GetWriteTimestampMS();
-        AFL_ENSURE(r.GetOffset() >= ReadOffset);
-        ReadOffset = r.GetOffset() + 1;
+        const ui64 messageCount = Max<ui64>(1, r.GetMessageCount());
+        // When reading from the middle of a batch, tablet returns the whole blob
+        // with base offset below ReadOffset; SDK skips already-committed records.
+        AFL_ENSURE(r.GetOffset() + static_cast<i64>(messageCount) > ReadOffset);
+        ReadOffset = r.GetOffset() + messageCount;
         hasOffset = true;
 
         auto proto(GetDeserializedData(r.GetData()));
@@ -637,6 +643,7 @@ void TPartitionActor::HandleInit(const NKikimrClient::TPersQueuePartitionRespons
     ClientHasAnyCommits = resp.GetClientHasAnyCommits();
 
     ClientCommitOffset = ReadOffset = CommittedOffset = resp.HasOffset() ? resp.GetOffset() : 0;
+    ClientMaxOffset.Clear();
     AFL_ENSURE(EndOffset >= CommittedOffset);
 
     if (resp.HasWriteTimestampMS())
@@ -778,9 +785,9 @@ void TPartitionActor::Handle(const NKikimrClient::TPersQueuePartitionResponse::T
 
     AFL_ENSURE(!RequestInfly);
 
-    if (EndOffset > ReadOffset && isInFlightMemoryOk) {
+    if (isInFlightMemoryOk && IsPartitionDataReady()) {
         SendPartitionReady(ctx);
-    } else if (EndOffset == ReadOffset) {
+    } else if (IsNeedMorePartitionData()) {
         WaitForData = true;
         if (PipeClient) //pipe will be recreated soon
             WaitDataInPartition(ctx);
@@ -800,10 +807,12 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
     bool hasData = false;
     if (UseMigrationProtocol) {
         typename MigrationStreamingReadServerMessage::DataBatch* data = migrationResponse.mutable_data_batch();
-        hasData = FillBatchedData<MigrationStreamingReadServerMessage::DataBatch>(data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
+        hasData = FillBatchedData<MigrationStreamingReadServerMessage::DataBatch>(
+            data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
     } else {
         StreamReadMessage::ReadResponse* data = response.mutable_read_response();
-        hasData = FillBatchedData<StreamReadMessage::ReadResponse>(data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
+        hasData = FillBatchedData<StreamReadMessage::ReadResponse>(
+            data, res, Partition, ReadIdToResponse, ReadOffset, WTime, EndOffset, Topic, ctx);
     }
 
     WriteTimestampEstimateMs = Max(WriteTimestampEstimateMs, WTime);
@@ -829,11 +838,11 @@ void TPartitionActor::Handle(const NKikimrClient::TCmdReadResult& res, const TAc
 
     auto isMemoryLimitReached = PartitionInFlightMemoryController.IsMemoryLimitReached();
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
-                        << " isMemoryLimitReached " << isMemoryLimitReached << " EndOffset " << EndOffset << " ReadOffset " << ReadOffset
+                        << " isMemoryLimitReached " << isMemoryLimitReached << " EndOffset " << EndOffset << " ReadOffset " << ReadOffset << " MaxOffset " << ClientMaxOffset
                         << " read result size " << res.ResultSize());
-    if (EndOffset > ReadOffset && !isMemoryLimitReached) {
+    if (!isMemoryLimitReached && IsPartitionDataReady()) {
         SendPartitionReady(ctx);
-    } else if (EndOffset == ReadOffset) {
+    } else if (IsNeedMorePartitionData()) {
         WaitForData = true;
         if (PipeClient) //pipe will be recreated soon
             WaitDataInPartition(ctx);
@@ -1000,10 +1009,10 @@ void TPartitionActor::CommitDone(ui64 cookie, const TActorContext& ctx) {
     }
 
     CommittedOffset = CommitsInfly.front().second.Offset;
-    
+
     bool wasMemoryLimitReached = PartitionInFlightMemoryController.IsMemoryLimitReached();
     bool isMemoryOkNow = PartitionInFlightMemoryController.Remove(CommittedOffset);
-    if (wasMemoryLimitReached && isMemoryOkNow && EndOffset > ReadOffset) {
+    if (wasMemoryLimitReached && isMemoryOkNow && IsPartitionDataReady()) {
         LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                         << " ready for read after commit with readOffset " << ReadOffset << " endOffset " << EndOffset);
         SendPartitionReady(ctx);
@@ -1079,6 +1088,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvLockPartition::TPtr& ev, const TActo
     ClientReadOffset = ev->Get()->ReadOffset;
     ClientCommitOffset = ev->Get()->CommitOffset;
     ClientVerifyReadOffset = ev->Get()->VerifyReadOffset;
+    ClientMaxOffset = ev->Get()->MaxOffset;
 
     if (StartReading) {
         AFL_ENSURE(ev->Get()->StartReading); //otherwise it is signal from actor, this could not be done
@@ -1096,7 +1106,8 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
     AFL_ENSURE(!WaitForData);
     LOG_INFO_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " Start reading " << Partition
                         << " EndOffset " << EndOffset << " readOffset " << ReadOffset << " committedOffset " << CommittedOffset
-                        << " clientCommitOffset " << ClientCommitOffset << " clientReadOffset " << ClientReadOffset);
+                        << " clientCommitOffset " << ClientCommitOffset
+                        << " clientReadOffset " << ClientReadOffset << " clientMaxOffset " << ClientMaxOffset);
 
     Counters.PartitionsToBeLocked.Dec();
     LockCounted = false;
@@ -1131,6 +1142,26 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
         }
     }
 
+    if (ClientMaxOffset.Defined()) {
+        if (*ClientMaxOffset < ReadOffset) {
+            ctx.Send(ParentId,
+                        new TEvPQProxy::TEvCloseSession(TStringBuilder()
+                                << "trying to read from position that is larger than provided to max: read " << ReadOffset
+                                << " max " << ClientMaxOffset,
+                            PersQueue::ErrorCode::BAD_REQUEST));
+            return;
+        }
+
+        if (*ClientMaxOffset < ClientCommitOffset.GetOrElse(0)) {
+            ctx.Send(ParentId,
+                        new TEvPQProxy::TEvCloseSession(TStringBuilder()
+                                << "trying to commit to position that is larger than provided to max: commit " << ClientCommitOffset
+                                << " max " << ClientMaxOffset,
+                            PersQueue::ErrorCode::BAD_REQUEST));
+            return;
+        }
+    }
+
     if (ClientCommitOffset.GetOrElse(0) > CommittedOffset) {
         if (ClientCommitOffset > ReadOffset) {
             ctx.Send(ParentId,
@@ -1157,9 +1188,9 @@ void TPartitionActor::InitStartReading(const TActorContext& ctx) {
         ClientCommitOffset = CommittedOffset;
     }
 
-    if (EndOffset > ReadOffset && !MaxTimeLagMs && !ReadTimestampMs) {
+    if (!MaxTimeLagMs && !ReadTimestampMs && IsPartitionDataReady()) {
         SendPartitionReady(ctx);
-    } else {
+    } else if (MaxTimeLagMs || ReadTimestampMs || IsNeedMorePartitionData()) {
         WaitForData = true;
         if (PipeClient) //pipe will be recreated soon
             WaitDataInPartition(ctx);
@@ -1333,7 +1364,7 @@ void TPartitionActor::WaitDataInPartition(const TActorContext& ctx) {
 
     AFL_ENSURE(InitDone);
     AFL_ENSURE(PipeClient);
-    AFL_ENSURE(ReadOffset >= EndOffset || MaxTimeLagMs || ReadTimestampMs);
+    AFL_ENSURE(MaxTimeLagMs || ReadTimestampMs || IsNeedMorePartitionData());
 
     TAutoPtr<TEvPersQueue::TEvHasDataInfo> event(new TEvPersQueue::TEvHasDataInfo());
     event->Record.SetPartition(Partition.Partition);
@@ -1381,24 +1412,24 @@ void TPartitionActor::Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, con
 
     AFL_ENSURE(record.HasEndOffset());
     AFL_ENSURE(EndOffset <= record.GetEndOffset()); //end offset could not be changed if no data arrived, but signal will be sended anyway after timeout
-    AFL_ENSURE(ReadOffset >= EndOffset || MaxTimeLagMs || ReadTimestampMs); //otherwise no WaitData were needed
+    AFL_ENSURE(MaxTimeLagMs || ReadTimestampMs || IsNeedMorePartitionData()); //otherwise no WaitData were needed
 
     LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, PQ_LOG_PREFIX << " " << Partition
                     << " wait for data done: " << " readOffset " << ReadOffset << " EndOffset " << EndOffset << " newEndOffset "
-                    << record.GetEndOffset() << " commitOffset " << CommittedOffset << " clientCommitOffset " << ClientCommitOffset
+                    << record.GetEndOffset() << " commitOffset " << CommittedOffset << " clientCommitOffset " << ClientCommitOffset << " clientMaxOffset " << ClientMaxOffset
                     << " cookie " << ev->Get()->Record.GetCookie() << " readingFinished " << record.GetReadingFinished() << " firstRead " << FirstRead);
 
     EndOffset = record.GetEndOffset();
     SizeLag = record.GetSizeLag();
 
     if (!record.GetReadingFinished()) {
-        if (ReadOffset < EndOffset) {
+        if (IsPartitionDataReady()) {
             WaitForData = false;
             WaitDataInfly.clear();
             if (!PartitionInFlightMemoryController.IsMemoryLimitReached()) {
                 SendPartitionReady(ctx);
             }
-        } else if (PipeClient) {
+        } else if (PipeClient && IsNeedMorePartitionData()) {
             WaitDataInPartition(ctx);
         }
     }
@@ -1451,6 +1482,8 @@ NKikimrClient::TPersQueueRequest TPartitionActor::MakeReadRequest(
     if (maxSize) {
         read->SetBytes(maxSize);
     }
+    read->SetReadToBlobEnd(true);
+    read->SetCanReadBatches(CanReadBatches);
     if (maxTimeLagMs) {
         read->SetMaxTimeLagMs(maxTimeLagMs);
     }
@@ -1471,7 +1504,8 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
                     << " maxCount " << ev->Get()->MaxCount << " maxSize " << ev->Get()->MaxSize << " maxTimeLagMs "
                     << ev->Get()->MaxTimeLagMs << " readTimestampMs " << ev->Get()->ReadTimestampMs
                     << " readOffset " << ReadOffset << " EndOffset " << EndOffset << " ClientCommitOffset "
-                    << ClientCommitOffset << " committedOffset " << CommittedOffset << " Guid " << ev->Get()->Guid);
+                    << ClientCommitOffset << " committedOffset " << CommittedOffset << " ClientMaxOffset " << ClientMaxOffset
+                    << " Guid " << ev->Get()->Guid);
 
     AFL_ENSURE(ReadGuid.empty());
     AFL_ENSURE(!RequestInfly);
@@ -1480,7 +1514,7 @@ void TPartitionActor::Handle(TEvPQProxy::TEvRead::TPtr& ev, const TActorContext&
 
     const auto req = ev->Get();
 
-    auto request = MakeReadRequest(ReadOffset, 0, req->MaxCount, req->MaxSize, req->MaxTimeLagMs, req->ReadTimestampMs, DirectReadId);
+    auto request = MakeReadRequest(ReadOffset, ClientMaxOffset.GetOrElse(0), req->MaxCount, req->MaxSize, req->MaxTimeLagMs, req->ReadTimestampMs, DirectReadId);
     RequestInfly = true;
     CurrentRequest = request;
 
@@ -1594,9 +1628,17 @@ void TPartitionActor::HandleWakeup(const TActorContext& ctx) {
 }
 
 void TPartitionActor::DoWakeup(const TActorContext& ctx) {
-    if (WaitForData && ReadOffset >= EndOffset && WaitDataInfly.size() <= 1 && PipeClient) { //send one more
+    if (PipeClient && WaitForData && WaitDataInfly.size() <= 1 && IsNeedMorePartitionData()) { //send one more
         WaitDataInPartition(ctx);
     }
+}
+
+bool TPartitionActor::IsPartitionDataReady() const {
+    return ReadOffset < EndOffset && (!ClientMaxOffset.Defined() || ReadOffset < *ClientMaxOffset);
+}
+
+bool TPartitionActor::IsNeedMorePartitionData() const {
+    return ReadOffset >= EndOffset && (!ClientMaxOffset.Defined() || ReadOffset < *ClientMaxOffset);
 }
 
 }

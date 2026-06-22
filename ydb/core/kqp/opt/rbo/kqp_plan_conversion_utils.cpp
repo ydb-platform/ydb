@@ -229,57 +229,21 @@ void RepairAggregateOutputIUs(const TIntrusivePtr<TOpAggregate>& aggregate, TExp
 }
 
 void RepairUnionAllOutputIUs(const TIntrusivePtr<TOpUnionAll>& unionAll, TExprContext& ctx, TPlanProps& props) {
+    Y_UNUSED(props);
     const auto leftOutput = unionAll->GetLeftInput()->GetOutputIUs();
     const auto rightOutput = unionAll->GetRightInput()->GetOutputIUs();
 
-    if (leftOutput == rightOutput) {
-        ValidateUniqueOutputIUs(unionAll, ctx);
-        return;
+    for (auto& column : unionAll->Columns) {
+        const auto leftColumn = ResolveVisibleIUByColumnName(leftOutput, column);
+        const auto rightColumn = ResolveVisibleIUByColumnName(rightOutput, column);
+        Y_ENSURE(leftColumn, "UnionAll left column " << column.GetFullName() << " is not visible");
+        Y_ENSURE(rightColumn, "UnionAll right column " << column.GetFullName() << " is not visible");
+        Y_ENSURE(*leftColumn == *rightColumn,
+            "UnionAll column " << column.GetFullName()
+            << " resolves to different left and right columns: "
+            << leftColumn->GetFullName() << " vs " << rightColumn->GetFullName());
+        column = *leftColumn;
     }
-
-    auto buildOutputMap = [&](const TIntrusivePtr<IOperator>& input, const TVector<TInfoUnit>& output) {
-        if (input->GetOutputIUs() == output) {
-            return input;
-        }
-
-        TVector<TMapElement> mapElements;
-        mapElements.reserve(output.size());
-        for (const auto& iu : output) {
-            mapElements.emplace_back(iu, iu, unionAll->Pos, &ctx, &props);
-        }
-        return CastOperator<IOperator>(MakeIntrusive<TOpMap>(input, unionAll->Pos, mapElements));
-    };
-
-    if (leftOutput.size() != rightOutput.size()) {
-        THashSet<TInfoUnit, TInfoUnit::THashFunction> rightOutputSet;
-        rightOutputSet.insert(rightOutput.begin(), rightOutput.end());
-        TVector<TInfoUnit> commonOutput;
-        commonOutput.reserve(std::min(leftOutput.size(), rightOutput.size()));
-        for (const auto& iu : leftOutput) {
-            if (rightOutputSet.contains(iu)) {
-                commonOutput.push_back(iu);
-            }
-        }
-
-        Y_ENSURE(!commonOutput.empty(),
-            "UnionAll inputs have different column counts and no common columns: " << leftOutput.size() << " vs " << rightOutput.size());
-
-        unionAll->GetLeftInput() = buildOutputMap(unionAll->GetLeftInput(), commonOutput);
-        unionAll->GetRightInput() = buildOutputMap(unionAll->GetRightInput(), commonOutput);
-        ValidateUniqueOutputIUs(unionAll, ctx);
-        return;
-    }
-
-    TVector<TMapElement> mapElements;
-    mapElements.reserve(leftOutput.size());
-    THashSet<TInfoUnit, TInfoUnit::THashFunction> rightOutputSet;
-    rightOutputSet.insert(rightOutput.begin(), rightOutput.end());
-    for (size_t i = 0; i < leftOutput.size(); ++i) {
-        const auto& source = rightOutputSet.contains(leftOutput[i]) ? leftOutput[i] : rightOutput[i];
-        mapElements.emplace_back(leftOutput[i], source, unionAll->Pos, &ctx, &props);
-    }
-
-    unionAll->GetRightInput() = MakeIntrusive<TOpMap>(unionAll->GetRightInput(), unionAll->Pos, mapElements);
     ValidateUniqueOutputIUs(unionAll, ctx);
 }
 
@@ -359,6 +323,23 @@ bool GetForceOptional(const TKqpOpMapElementLambda& mapElement) {
 bool GetOrdered(const TKqpOpMap& map) {
     auto maybeOrdered = map.Ordered();
     return maybeOrdered && maybeOrdered.Cast().StringValue() == "True";
+}
+
+bool GetDistinct(const TKqpOpAggregationTraits& aggTraits) {
+    auto maybeDistinct = aggTraits.Distinct();
+    return maybeDistinct && maybeDistinct.Cast().StringValue() == "distinct";
+}
+
+TVector<TInfoUnit> GetStructIUs(const TTypeAnnotationNode* type) {
+    Y_ENSURE(type);
+    const auto* structType = type->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+
+    TVector<TInfoUnit> result;
+    result.reserve(structType->GetItems().size());
+    for (const auto& item : structType->GetItems()) {
+        result.emplace_back(TString(item->GetName()));
+    }
+    return result;
 }
 
 } // anonymous namespace
@@ -519,8 +500,8 @@ TIntrusivePtr<IOperator> PlanConverter::ExprNodeToOperator(TExprNode::TPtr node)
         result = ConvertTKqpOpLimit(node);
     } else if (NYql::NNodes::TKqpOpProject::Match(node.Get())) {
         result = ConvertTKqpOpProject(node);
-    } else if (NYql::NNodes::TKqpOpUnionAll::Match(node.Get())) {
-        result = ConvertTKqpOpUnionAll(node);
+    } else if (NYql::NNodes::TKqpOpSetOp::Match(node.Get())) {
+        result = ConvertTKqpOpSetOp(node);
     } else if (NYql::NNodes::TKqpOpSort::Match(node.Get())) {
         result = ConvertTKqpOpSort(node);
     } else if (NYql::NNodes::TKqpOpAggregate::Match(node.Get())) {
@@ -662,7 +643,7 @@ TExprNode::TPtr MaybeForceColumnToOptional(const TTypeAnnotationNode* unionAllTy
         auto inputFieldType = inputStructType->FindItemType(fieldName);
         Y_ENSURE(inputFieldType, TStringBuilder() << "Cannot find type for item " << fieldName;);
         auto unionAllFieldType = unionAllStructType->FindItemType(fieldName);
-        Y_ENSURE(unionAllFieldType, TStringBuilder() << "Cannot find tyep for item " << fieldName;);
+        Y_ENSURE(unionAllFieldType, TStringBuilder() << "Cannot find type for item " << fieldName;);
         // In case union all field type is optional but the same field for input is not - force optional.
         if (unionAllFieldType->IsOptionalOrNull() && !inputFieldType->IsOptionalOrNull()) {
             mapElement->ChildRef(3) = Build<TCoAtom>(ctx, input->Pos()).Value("True").Done().Ptr();
@@ -672,11 +653,11 @@ TExprNode::TPtr MaybeForceColumnToOptional(const TTypeAnnotationNode* unionAllTy
     return input;
 }
 
-TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpUnionAll(TExprNode::TPtr node) {
-    auto opUnionAll = TKqpOpUnionAll(node);
+TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpSetOp(TExprNode::TPtr node) {
+    auto opSetOp = TKqpOpSetOp(node);
 
-    auto leftInputPtr = opUnionAll.LeftInput().Ptr();
-    auto rightInputPtr = opUnionAll.RightInput().Ptr();
+    auto leftInputPtr = opSetOp.LeftInput().Ptr();
+    auto rightInputPtr = opSetOp.RightInput().Ptr();
     if (TMaybeNode<TKqpOpMap>(leftInputPtr)) {
         leftInputPtr = MaybeForceColumnToOptional(node->GetTypeAnn(), leftInputPtr, Ctx);
     }
@@ -687,7 +668,75 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpUnionAll(TExprNode::TPtr no
     auto leftInput = ExprNodeToOperator(leftInputPtr);
     auto rightInput = ExprNodeToOperator(rightInputPtr);
 
-    return MakeIntrusive<TOpUnionAll>(leftInput, rightInput, node->Pos());
+    TString setOpKind = opSetOp.SetOp().StringValue();
+    TIntrusivePtr<IOperator> result;
+
+    if (setOpKind == "intersect_all" || setOpKind == "except_all") {
+        Y_ENSURE(false, TStringBuilder() << "Set operation " << setOpKind << " is not currently supported");
+    }
+
+    if (setOpKind == "union_all" || setOpKind == "union") {
+        const auto outputIUs = GetStructIUs(node->GetTypeAnn());
+
+        const auto lhsSourceIUs = GetStructIUs(leftInputPtr->GetTypeAnn());
+        const auto rhsSourceIUs = GetStructIUs(rightInputPtr->GetTypeAnn());
+        Y_ENSURE(outputIUs.size() == lhsSourceIUs.size(), "UnionAll output and left input column counts mismatch");
+        Y_ENSURE(outputIUs.size() == rhsSourceIUs.size(), "UnionAll output and right input column counts mismatch");
+
+        result = MakeIntrusive<TOpUnionAll>(leftInput, rightInput, node->Pos(), outputIUs);
+    } else if (setOpKind == "intersect" || setOpKind == "except" ) {
+
+        auto itemType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        TVector<TInfoUnit> setOpColumns;
+        for (const auto& t : itemType->GetItems()) {
+            if (t->GetItemType()->IsOptionalOrNull()) {
+                Y_ENSURE(false, TStringBuilder() << "Intersect/except key columns cannot be nullable: " << t->GetName());
+            }
+            setOpColumns.push_back(TInfoUnit(TString(t->GetName())));
+        }
+
+        TVector<std::pair<TInfoUnit, TInfoUnit>> joinKeys;
+        TVector<TExpression> joinFilters;
+
+        for (const auto& iu : setOpColumns) {
+            joinKeys.push_back(std::make_pair(iu, iu));
+        }
+
+        TString joinKind = "LeftSemi";
+        if (setOpKind == "except") {
+            joinKind = "LeftOnly";
+        }
+
+        result = MakeIntrusive<TOpJoin>(leftInput, rightInput, node->Pos(), joinKind, joinKeys, joinFilters);
+    } else {
+        Y_ENSURE(false, TStringBuilder() << "Unknow set operation: " << opSetOp.SetOp().StringValue());
+    }
+
+    if (setOpKind == "union" || setOpKind == "intersect" || setOpKind == "except") {
+        auto itemType = node->GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
+        TVector<TInfoUnit> setOpColumns;
+        for (const auto& t : itemType->GetItems()) {
+            setOpColumns.push_back(TInfoUnit(TString(t->GetName())));
+        }
+
+        TVector<TOpAggregationTraits> opAggTraitsList;
+        for (const auto& col : setOpColumns) {
+            const auto originalColName = TInfoUnit(col);
+            const auto aggFuncName = "distinct";
+            const auto resultColName = TInfoUnit(col);
+            TOpAggregationTraits opAggTraits(originalColName, aggFuncName, resultColName);
+            opAggTraitsList.push_back(opAggTraits);
+        }
+
+        TVector<TInfoUnit> keyColumns;
+        for (const auto& keyColumn : setOpColumns) {
+            keyColumns.push_back(TInfoUnit(keyColumn));
+        }
+
+        result = MakeIntrusive<TOpAggregate>(result, opAggTraitsList, keyColumns, EOpPhase::Undefined, true, node->Pos());
+
+    }
+    return result;
 }
 
 TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpLimit(TExprNode::TPtr node) {
@@ -745,7 +794,7 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpAggregate(TExprNode::TPtr n
         const auto originalColName = TInfoUnit(TString(traits.OriginalColName()));
         const auto aggFuncName = TString(traits.AggregationFunction());
         const auto resultColName = TInfoUnit(TString(traits.ResultColName()));
-        TOpAggregationTraits opAggTraits(originalColName, aggFuncName, resultColName);
+        TOpAggregationTraits opAggTraits(originalColName, aggFuncName, resultColName, GetDistinct(traits));
         opAggTraitsList.push_back(opAggTraits);
     }
 

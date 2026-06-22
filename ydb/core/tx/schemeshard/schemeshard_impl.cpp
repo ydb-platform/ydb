@@ -30,6 +30,7 @@
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
+#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
@@ -240,6 +241,97 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
             items.emplace_back(TLocalIndexMigrationItem{
                 .WorkingDir = workingDir,
                 .IndexConfig = std::move(indexConfig),
+            });
+        }
+    }
+
+    // Row tables: legacy prefix bloom filters live as nameless ByKeyFilterPrefixes in the
+    // partition config. Synthesize a named TTableIndex scheme object per prefix.
+    for (const auto& [tablePathId, tableInfo] : Tables) {
+        const auto& partitionConfig = tableInfo->PartitionConfig();
+        if (partitionConfig.ByKeyFilterPrefixesSize() == 0) {
+            continue;
+        }
+
+        const TPathElement::TPtr tablePath = PathsById.at(tablePathId);
+        if (tablePath->Dropped() || !tablePath->IsTable()) {
+            continue;
+        }
+        const TPath path = TPath::Init(tablePathId, this);
+        if (!path.IsCommonSensePath()) {
+            // Skip index impl tables and other non-user tables.
+            continue;
+        }
+
+        // Ordered primary-key column names.
+        TVector<TString> pkColumns;
+        pkColumns.reserve(tableInfo->KeyColumnIds.size());
+        for (ui32 colId : tableInfo->KeyColumnIds) {
+            auto colIt = tableInfo->Columns.find(colId);
+            if (colIt == tableInfo->Columns.end()) {
+                break;
+            }
+            pkColumns.push_back(colIt->second.Name);
+        }
+
+        const TString workingDir = path.PathString();
+
+        for (const auto& prefix : partitionConfig.GetByKeyFilterPrefixes()) {
+            const ui32 prefixLen = prefix.GetPrefixLength();
+            if (prefixLen == 0 || prefixLen > pkColumns.size()) {
+                continue;
+            }
+
+            // Idempotency: skip if a local bloom index over this prefix already exists.
+            bool alreadyExists = false;
+            for (const auto& [childName, childPathId] : tablePath->GetChildren()) {
+                const auto& child = PathsById.at(childPathId);
+                if (child->Dropped() || !child->IsTableIndex()) {
+                    continue;
+                }
+                auto indexIt = Indexes.find(childPathId);
+                if (indexIt == Indexes.end()
+                    || indexIt->second->Type != NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
+                    continue;
+                }
+                const auto& indexKeys = indexIt->second->IndexKeys;
+                if (indexKeys.size() == prefixLen
+                    && std::equal(indexKeys.begin(), indexKeys.end(), pkColumns.begin())) {
+                    alreadyExists = true;
+                    break;
+                }
+            }
+            if (alreadyExists) {
+                continue;
+            }
+
+            NKikimrSchemeOp::TIndexCreationConfig indexConfig;
+            for (ui32 i = 0; i < prefixLen; ++i) {
+                indexConfig.AddKeyColumnNames(pkColumns[i]);
+            }
+            // Legacy prefixes have no name. Use a deterministic convention
+            // "idx_bloom_<prefixLen>" to keep the name stable.
+            const TString name = TStringBuilder() << "idx_bloom_" << prefixLen;
+            if (tablePath->FindChild(name)) {
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "CollectLocalIndexMigrations: skipping row bloom prefix " << prefixLen
+                    << " for table " << workingDir << " (name '" << name << "' already taken)");
+                continue;
+            }
+            indexConfig.SetName(name);
+            indexConfig.SetType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+            indexConfig.SetState(NKikimrSchemeOp::EIndexStateReady);
+            indexConfig.MutableBloomFilterDescription()->SetFalsePositiveProbability(
+                prefix.HasFalsePositiveProbability()
+                    ? prefix.GetFalsePositiveProbability()
+                    : NTable::DefaultBloomFilterFpp);
+
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "CollectLocalIndexMigrations: adding row bloom index " << name << " from table " << workingDir);
+            items.emplace_back(TLocalIndexMigrationItem{
+                .WorkingDir = workingDir,
+                .IndexConfig = std::move(indexConfig),
+                .IsColumnTable = false,
             });
         }
     }
@@ -3349,7 +3441,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
                 NIceDb::TUpdate<Schema::Columns::DefaultKind>(cinfo.DefaultKind),
                 NIceDb::TUpdate<Schema::Columns::DefaultValue>(cinfo.DefaultValue),
                 NIceDb::TUpdate<Schema::Columns::NotNull>(cinfo.NotNull),
-                NIceDb::TUpdate<Schema::Columns::IsBuildInProgress>(cinfo.IsBuildInProgress));
+                NIceDb::TUpdate<Schema::Columns::IsBuildInProgress>(cinfo.IsBuildInProgress),
+                NIceDb::TUpdate<Schema::Columns::SetNotNullInProgress>(cinfo.SetNotNullInProgress));
 
             db.Table<Schema::ColumnAlters>().Key(pathId.LocalPathId, colId).Delete();
         } else {
@@ -3364,7 +3457,8 @@ void TSchemeShard::PersistTableAltered(NIceDb::TNiceDb& db, const TPathId pathId
                 NIceDb::TUpdate<Schema::MigratedColumns::DefaultKind>(cinfo.DefaultKind),
                 NIceDb::TUpdate<Schema::MigratedColumns::DefaultValue>(cinfo.DefaultValue),
                 NIceDb::TUpdate<Schema::MigratedColumns::NotNull>(cinfo.NotNull),
-                NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(cinfo.IsBuildInProgress));
+                NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(cinfo.IsBuildInProgress),
+                NIceDb::TUpdate<Schema::MigratedColumns::SetNotNullInProgress>(cinfo.SetNotNullInProgress));
         }
         db.Table<Schema::MigratedColumnAlters>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Delete();
     }
@@ -3409,7 +3503,8 @@ void TSchemeShard::PersistAddAlterTable(NIceDb::TNiceDb& db, TPathId pathId, con
                 NIceDb::TUpdate<Schema::ColumnAlters::DefaultKind>(cinfo.DefaultKind),
                 NIceDb::TUpdate<Schema::ColumnAlters::DefaultValue>(cinfo.DefaultValue),
                 NIceDb::TUpdate<Schema::ColumnAlters::NotNull>(cinfo.NotNull),
-                NIceDb::TUpdate<Schema::ColumnAlters::IsBuildInProgress>(cinfo.IsBuildInProgress));
+                NIceDb::TUpdate<Schema::ColumnAlters::IsBuildInProgress>(cinfo.IsBuildInProgress),
+                NIceDb::TUpdate<Schema::ColumnAlters::SetNotNullInProgress>(cinfo.SetNotNullInProgress));
         } else {
             db.Table<Schema::MigratedColumnAlters>().Key(pathId.OwnerId, pathId.LocalPathId, colId).Update(
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::ColName>(cinfo.Name),
@@ -3422,7 +3517,8 @@ void TSchemeShard::PersistAddAlterTable(NIceDb::TNiceDb& db, TPathId pathId, con
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::DefaultKind>(cinfo.DefaultKind),
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::DefaultValue>(cinfo.DefaultValue),
                 NIceDb::TUpdate<Schema::MigratedColumnAlters::NotNull>(cinfo.NotNull),
-                NIceDb::TUpdate<Schema::MigratedColumnAlters::IsBuildInProgress>(cinfo.IsBuildInProgress));
+                NIceDb::TUpdate<Schema::MigratedColumnAlters::IsBuildInProgress>(cinfo.IsBuildInProgress),
+                NIceDb::TUpdate<Schema::MigratedColumnAlters::SetNotNullInProgress>(cinfo.SetNotNullInProgress));
         }
     }
 }
@@ -3576,7 +3672,8 @@ void TSchemeShard::PersistExternalTable(NIceDb::TNiceDb &db, TPathId pathId, con
             NIceDb::TUpdate<Schema::MigratedColumns::DefaultKind>(cinfo.DefaultKind),
             NIceDb::TUpdate<Schema::MigratedColumns::DefaultValue>(cinfo.DefaultValue),
             NIceDb::TUpdate<Schema::MigratedColumns::NotNull>(cinfo.NotNull),
-            NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(cinfo.IsBuildInProgress));
+            NIceDb::TUpdate<Schema::MigratedColumns::IsBuildInProgress>(cinfo.IsBuildInProgress),
+            NIceDb::TUpdate<Schema::MigratedColumns::SetNotNullInProgress>(cinfo.SetNotNullInProgress));
     }
 }
 
@@ -4075,6 +4172,11 @@ void TSchemeShard::PersistRemoveSharedShard(NIceDb::TNiceDb& db, TShardIdx shard
     db.Table<Schema::SharedShards>().Key(shardIdx.GetLocalId(), pathId.OwnerId, pathId.LocalPathId).Delete();
 }
 
+void TSchemeShard::PersistSharedShardTx(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId, TTxId txId) {
+    db.Table<Schema::SharedShards>().Key(shardIdx.GetLocalId(), pathId.OwnerId, pathId.LocalPathId).Update(
+        NIceDb::TUpdate<Schema::SharedShards::LastTxId>(ui64(txId)));
+}
+
 void TSchemeShard::PersistDeleteAdopted(NIceDb::TNiceDb& db, TShardIdx shardIdx) {
     Y_ABORT_UNLESS(IsLocalId(shardIdx));
     db.Table<Schema::AdoptedShards>().Key(shardIdx.GetLocalId()).Delete();
@@ -4462,7 +4564,8 @@ void TSchemeShard::PersistColumnTable(NIceDb::TNiceDb& db, TPathId pathId, const
         db.Table<Schema::ColumnTables>().Key(pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::ColumnTables::AlterVersion>(tableInfo.AlterVersion),
             NIceDb::TUpdate<Schema::ColumnTables::Description>(serialized),
-            NIceDb::TUpdate<Schema::ColumnTables::Sharding>(serializedSharding));
+            NIceDb::TUpdate<Schema::ColumnTables::Sharding>(serializedSharding),
+            NIceDb::TUpdate<Schema::ColumnTables::IsReadOnly>(tableInfo.IsReadOnly));
         if (tableInfo.StandaloneSharding) {
             TString serializedOwnedShards;
             Y_ABORT_UNLESS(tableInfo.StandaloneSharding->SerializeToString(&serializedOwnedShards));
@@ -5533,6 +5636,7 @@ void TSchemeShard::OnActivateExecutor(const TActorContext &ctx) {
     EnableAddUniqueIndex = appData->FeatureFlags.GetEnableAddUniqueIndex();
     EnableOnlineAddUniqueIndex = appData->FeatureFlags.GetEnableOnlineAddUniqueIndex();
     EnableFulltextIndex = appData->FeatureFlags.GetEnableFulltextIndex();
+    EnableCompactFulltextIndex = appData->FeatureFlags.GetEnableCompactFulltextIndex();
     EnableJsonIndex = appData->FeatureFlags.GetEnableJsonIndex();
     EnableResourcePoolsOnServerless = appData->FeatureFlags.GetEnableResourcePoolsOnServerless();
     EnableExternalDataSourcesOnServerless = appData->FeatureFlags.GetEnableExternalDataSourcesOnServerless();
@@ -7923,6 +8027,7 @@ TString TSchemeShard::FillAlterTableTxBody(TPathId pathId, TShardIdx shardIdx, T
             }
             descr->SetFamily(colInfo.Family);
             descr->SetNotNull(colInfo.NotNull);
+            descr->SetSetNotNullInProgress(colInfo.SetNotNullInProgress);
         }
     }
 
@@ -8511,6 +8616,7 @@ void TSchemeShard::ApplyConsoleConfigs(const NKikimrConfig::TFeatureFlags& featu
     EnableInitialUniqueIndex = featureFlags.GetEnableUniqConstraint();
     EnableAddUniqueIndex = featureFlags.GetEnableAddUniqueIndex();
     EnableFulltextIndex = featureFlags.GetEnableFulltextIndex();
+    EnableCompactFulltextIndex = featureFlags.GetEnableCompactFulltextIndex();
     EnableJsonIndex = featureFlags.GetEnableJsonIndex();
     EnableExternalDataSourcesOnServerless = featureFlags.GetEnableExternalDataSourcesOnServerless();
     EnableShred = featureFlags.GetEnableDataErasure();

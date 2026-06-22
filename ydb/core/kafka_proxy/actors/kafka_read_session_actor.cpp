@@ -258,11 +258,11 @@ void TKafkaReadSessionActor::SendSyncGroupResponseOk(const TActorContext& ctx, u
 
     auto assignment = BuildAssignmentAndInformBalancerIfRelease(ctx);
 
-    TWritableBuf buf(nullptr, assignment.Size(ASSIGNMENT_VERSION) + sizeof(ASSIGNMENT_VERSION));
+    TKafkaWriteBuffer buf(Context->Config.GetPacketSize());
     TKafkaWritable writable(buf);
     writable << ASSIGNMENT_VERSION;
     assignment.Write(writable, ASSIGNMENT_VERSION);
-    response->AssignmentStr = TString(buf.GetFrontBuffer().data(), buf.GetFrontBuffer().size());
+    response->AssignmentStr = buf.AsString();
     response->Assignment = response->AssignmentStr;
 
     Send(Context->ConnectionId, new TEvKafka::TEvResponse(corellationId, response, EKafkaErrors::NONE_ERROR));

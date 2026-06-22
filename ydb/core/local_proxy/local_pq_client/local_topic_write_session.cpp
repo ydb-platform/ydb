@@ -39,6 +39,11 @@ class TLocalTopicWriteSessionActor final
         std::unordered_map<std::string, std::string> Meta;
     };
 
+    struct TInflightMessage {
+        ui64 SeqNo = 0;
+        i64 Size = 0;
+    };
+
 public:
     struct TSessionEvents final : public TBase::TSessionEvents {
         struct TEvWriteMessage : public TEventLocal<TEvWriteMessage, TEvWriteSession::EvWriteMessage> {
@@ -136,7 +141,7 @@ private:
         settings.ProducerId = sessionSettings.ProducerId_;
         settings.Meta = sessionSettings.Meta_.Fields;
 
-        if (sessionSettings.DeduplicationEnabled_ && !settings.ProducerId) {
+        if (sessionSettings.DeduplicationEnabled_.value_or(false) && !settings.ProducerId) {
             settings.ProducerId = CreateGuidAsString();
         }
 
@@ -163,7 +168,7 @@ private:
         LOG_T("Got write message event with seq no: " << seqNo << " and size: " << size);
 
         InflightMemory += size;
-        Y_VALIDATE(InflightMessages.emplace(seqNo, size).second, "Got duplicated message seq no: " << seqNo);
+        InflightMessages.push({seqNo, static_cast<i64>(size)});
         Counters->BytesInflightTotal->Add(size);
 
         ContinuationEventInflight = false;
@@ -240,16 +245,17 @@ private:
             ack.SeqNo = ackProto.seq_no();
             ack.Stat = writeStats;
 
-            const auto inflightIt = InflightMessages.find(ack.SeqNo);
-            if (inflightIt != InflightMessages.end()) {
-                const auto size = inflightIt->second;
-                InflightMemory -= size;
-                InflightMessages.erase(inflightIt);
+            Y_VALIDATE(!InflightMessages.empty(), "Got unexpected ack with seq no " << ack.SeqNo << ", no messages are waiting for ack");
+            const auto& inflight = InflightMessages.front();
+            Y_VALIDATE(inflight.SeqNo == ack.SeqNo, "Got out of order ack, expected seq no " << inflight.SeqNo << ", but got " << ack.SeqNo);
 
-                Counters->MessagesWritten->Inc();
-                Counters->BytesWritten->Add(size);
-                Counters->BytesInflightTotal->Sub(size);
-            }
+            const auto size = inflight.Size;
+            InflightMemory -= size;
+            InflightMessages.pop();
+
+            Counters->MessagesWritten->Inc();
+            Counters->BytesWritten->Add(size);
+            Counters->BytesInflightTotal->Sub(size);
 
             switch (ackProto.message_write_status_case()) {
                 case Ydb::Topic::StreamWriteMessage::WriteResponse::WriteAck::kWritten: {
@@ -313,7 +319,7 @@ private:
     const TWriteSettings WriteSettings;
     const ui64 MaxInflightCount = 0;
 
-    std::unordered_map<ui64, i64> InflightMessages;
+    std::queue<TInflightMessage> InflightMessages;
     ui64 MessageSeqNo = 0;
     bool ContinuationEventInflight = false;
 
@@ -333,7 +339,7 @@ public:
     TLocalTopicWriteSession(const TLocalTopicSessionSettings& localSettings, const TWriteSessionSettings& sessionSettings)
         : TBase(localSettings)
         , Counters(SetupCounters(sessionSettings))
-        , DeduplicationEnabled(sessionSettings.DeduplicationEnabled_.value_or(true))
+        , DeduplicationEnabled(sessionSettings.DeduplicationEnabled_.value_or(!sessionSettings.ProducerId_.empty()))
         , ValidateSeqNo(sessionSettings.ValidateSeqNo_)
     {
         ValidateSettings(sessionSettings);
@@ -473,7 +479,9 @@ private:
         TBase::ValidateSettings(settings);
 
         Y_VALIDATE(settings.Codec_ == ECodec::RAW, "Compression is not supported for local topic write session");
-        Y_VALIDATE(!settings.BatchFlushInterval_, "BatchFlushInterval is not supported for local topic write session");
+        Y_VALIDATE(
+            settings.BatchFlushInterval_ == TDuration::Seconds(1),
+            "Custom BatchFlushInterval is not supported for local topic write session");
         Y_VALIDATE(!settings.BatchFlushSizeBytes_, "BatchFlushSizeBytes is not supported for local topic write session");
 
         const auto& eventHandlers = settings.EventHandlers_;
@@ -498,6 +506,7 @@ private:
             .CredentialsProvider = CredentialsProvider,
             .Counters = Counters,
         }, sessionSettings), TMailboxType::HTSwap, ActorSystem->AppData<TAppData>()->UserPoolId);
+        WaitEvent(); // Request continuation token
     }
 
     void UseAutoSeqNo() {

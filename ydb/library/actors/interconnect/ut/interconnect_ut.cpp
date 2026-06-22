@@ -1,5 +1,8 @@
 #include <ydb/library/actors/interconnect/ut/lib/ic_test_cluster.h>
+#include <ydb/library/actors/interconnect/interconnect_counters.h>
+#include <ydb/library/actors/interconnect/interconnect_metrics_aggregator.h>
 #include <ydb/library/actors/interconnect/rdma/ut/utils/utils.h>
+#include <ydb/library/actors/testlib/test_runtime.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <library/cpp/logger/backend.h>
 #include <library/cpp/logger/record.h>
@@ -60,6 +63,47 @@ ui64 WaitForSessionCounter(TTestICCluster& cluster, ui32 me, ui32 peer, TStringB
     }
     UNIT_FAIL(TStringBuilder() << "failed to read session counter " << name << " from " << me << " to " << peer);
     return 0;
+}
+
+ui64 GetPeerCounterValue(
+        const NMonitoring::TDynamicCounterPtr& counters,
+        TStringBuf peerLabel,
+        TStringBuf name) {
+    auto peerCounters = counters->FindSubgroup("peer", TString(peerLabel));
+    UNIT_ASSERT_C(peerCounters, TStringBuilder() << "peer=" << peerLabel << " counters were not created");
+    auto counter = peerCounters->FindCounter(TString(name));
+    UNIT_ASSERT_C(counter, TStringBuilder() << name << " counter was not created for peer=" << peerLabel);
+    return counter->Val();
+}
+
+void RunScopeClassCounterRebindTest(TScopeId peerScopeId, TStringBuf expectedPeerLabel) {
+    auto common = MakeIntrusive<TInterconnectProxyCommon>();
+    common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+    common->LocalScopeId = TScopeId(1, 42);
+    common->Settings.MergePerScopeClassCounters = true;
+
+    auto counters = CreateInterconnectCounters(common);
+    counters->SetPeerInfo("peer-host:19001", "dc-1", "unknown");
+    counters->SetConnected(0);
+    counters->SetRdmaRetryWatchdogPending(0);
+
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "unknown", "Connected"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "unknown", "RdmaRetryWatchdogPendingSessions"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "unknown", "Disconnections"), 0);
+
+    counters->SetPeerScopeId(peerScopeId);
+    counters->SetConnected(1);
+    counters->SetRdmaRetryWatchdogPending(1);
+    counters->IncDisconnections();
+
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, expectedPeerLabel, "Connected"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, expectedPeerLabel, "RdmaRetryWatchdogPendingSessions"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, expectedPeerLabel, "Disconnections"), 1);
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "unknown", "Connected"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "unknown", "RdmaRetryWatchdogPendingSessions"), 0);
+    UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "unknown", "Disconnections"), 0);
+    UNIT_ASSERT_C(!common->MonCounters->FindSubgroup("peer", "peer-host:19001"),
+        "scope class aggregation must not publish counters under the original peer host label");
 }
 
 ui64 GetHistogramSamples(const NMonitoring::THistogramPtr& histogram) {
@@ -617,6 +661,65 @@ void RunKernelLivenessReconnectLocalFallbackNotApplied(bool withRdma) {
 } // namespace
 
 Y_UNIT_TEST_SUITE(Interconnect) {
+
+    Y_UNIT_TEST(ScopeClassCountersRebindPeerLabel) {
+        RunScopeClassCounterRebindTest(TScopeId(0, 1), "system");
+        RunScopeClassCounterRebindTest(TScopeId(1, 42), "same_tenant");
+        RunScopeClassCounterRebindTest(TScopeId(2, 42), "other_tenant");
+    }
+
+    Y_UNIT_TEST(RdmaRetryWatchdogPendingSessionsAggregated) {
+        TTestActorRuntimeBase runtime;
+        runtime.Initialize();
+
+        auto common = MakeIntrusive<TInterconnectProxyCommon>();
+        common->MonCounters = MakeIntrusive<NMonitoring::TDynamicCounters>();
+
+        const TActorId aggregator = runtime.Register(
+            NInterconnectMetricsAggregator::CreateInterconnectMetricsAggregatorActor(common));
+        const TActorId sender = runtime.AllocateEdgeActor();
+
+        auto getPendingSessions = [&]() -> ui64 {
+            const auto peerCounters = common->MonCounters->FindSubgroup("peer", "rack-a");
+            if (!peerCounters) {
+                return ui64(0);
+            }
+            const auto counter = peerCounters->FindCounter("RdmaRetryWatchdogPendingSessions");
+            return counter ? ui64(counter->Val()) : ui64(0);
+        };
+
+        auto send = [&](IEventBase* event) {
+            runtime.Send(new IEventHandle(aggregator, sender, event), 0, true);
+        };
+
+        auto waitForPendingSessions = [&](ui64 expected) {
+            TDispatchOptions options;
+            options.CustomFinalCondition = [&]() -> bool {
+                return getPendingSessions() == expected;
+            };
+            options.Quiet = true;
+            UNIT_ASSERT_C(runtime.DispatchEvents(options, TDuration::Seconds(1)),
+                "last RDMA retry watchdog pending sessions: " << getPendingSessions());
+        };
+
+        send(new NInterconnectMetricsAggregator::TEvRegisterPeer("rack-a", "peer-1"));
+        send(new NInterconnectMetricsAggregator::TEvUpdateRdmaRetryWatchdogPending("rack-a", "peer-1", 1));
+        waitForPendingSessions(1);
+        UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "rack-a", "RdmaRetryWatchdogPendingSessions"), 1);
+
+        send(new NInterconnectMetricsAggregator::TEvRegisterPeer("rack-a", "peer-2"));
+        send(new NInterconnectMetricsAggregator::TEvUpdateRdmaRetryWatchdogPending("rack-a", "peer-2", 1));
+        waitForPendingSessions(2);
+        UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "rack-a", "RdmaRetryWatchdogPendingSessions"), 2);
+
+        send(new NInterconnectMetricsAggregator::TEvUpdateRdmaRetryWatchdogPending("rack-a", "peer-1", 0));
+        waitForPendingSessions(1);
+        UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "rack-a", "RdmaRetryWatchdogPendingSessions"), 1);
+
+        send(new NInterconnectMetricsAggregator::TEvUnregisterPeer("rack-a", "peer-2"));
+        waitForPendingSessions(0);
+        UNIT_ASSERT_VALUES_EQUAL(GetPeerCounterValue(common->MonCounters, "rack-a", "RdmaRetryWatchdogPendingSessions"), 0);
+    }
 
     Y_UNIT_TEST(SessionContinuation) {
         TTestICCluster cluster(2);

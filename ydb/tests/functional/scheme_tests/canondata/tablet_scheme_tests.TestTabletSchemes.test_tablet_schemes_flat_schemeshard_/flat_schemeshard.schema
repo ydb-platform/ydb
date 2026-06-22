@@ -508,6 +508,11 @@
                 "ColumnId": 13,
                 "ColumnName": "IsBuildInProgress",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "SetNotNullInProgress",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -526,7 +531,8 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -1054,6 +1060,11 @@
                 "ColumnId": 13,
                 "ColumnName": "IsBuildInProgress",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 14,
+                "ColumnName": "SetNotNullInProgress",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -1072,7 +1083,8 @@
                     10,
                     11,
                     12,
-                    13
+                    13,
+                    14
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -4116,6 +4128,11 @@
                 "ColumnId": 14,
                 "ColumnName": "IsBuildInProgress",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "SetNotNullInProgress",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -4135,7 +4152,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -4639,6 +4657,11 @@
                 "ColumnId": 14,
                 "ColumnName": "IsBuildInProgress",
                 "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 15,
+                "ColumnName": "SetNotNullInProgress",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -4658,7 +4681,8 @@
                     11,
                     12,
                     13,
-                    14
+                    14,
+                    15
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -5333,6 +5357,51 @@
                 "ColumnId": 49,
                 "ColumnName": "SubState",
                 "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 50,
+                "ColumnName": "CreateBuildSequenceTxId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 51,
+                "ColumnName": "CreateBuildSequenceTxStatus",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 52,
+                "ColumnName": "CreateBuildSequenceTxDone",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 53,
+                "ColumnName": "FulltextNeedsRowIdColumn",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 54,
+                "ColumnName": "FulltextNeedsUniqueIndex",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 55,
+                "ColumnName": "AutoUniqueIndexName",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 56,
+                "ColumnName": "RowIdColumnBuildId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 57,
+                "ColumnName": "RowIdUniqueBuildId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 58,
+                "ColumnName": "ParentBuildId",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -5387,7 +5456,16 @@
                     46,
                     47,
                     48,
-                    49
+                    49,
+                    50,
+                    51,
+                    52,
+                    53,
+                    54,
+                    55,
+                    56,
+                    57,
+                    58
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -6809,6 +6887,11 @@
         ],
         "ColumnsAdded": [
             {
+                "ColumnId": 7,
+                "ColumnName": "IsReadOnly",
+                "ColumnType": "Bool"
+            },
+            {
                 "ColumnId": 1,
                 "ColumnName": "PathId",
                 "ColumnType": "Uint64"
@@ -6843,6 +6926,7 @@
         "ColumnFamilies": {
             "0": {
                 "Columns": [
+                    7,
                     1,
                     2,
                     3,
@@ -8172,6 +8256,16 @@
                 "ColumnId": 6,
                 "ColumnName": "FamilyName",
                 "ColumnType": "String"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "DefaultFromSequence",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "BitReverseSequenceValue",
+                "ColumnType": "Bool"
             }
         ],
         "ColumnsDropped": [],
@@ -8183,7 +8277,9 @@
                     3,
                     4,
                     5,
-                    6
+                    6,
+                    7,
+                    8
                 ],
                 "RoomID": 0,
                 "Codec": 0,
@@ -9617,6 +9713,11 @@
                 "ColumnId": 3,
                 "ColumnName": "LocalPathId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "LastTxId",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -9625,7 +9726,8 @@
                 "Columns": [
                     1,
                     2,
-                    3
+                    3,
+                    4
                 ],
                 "RoomID": 0,
                 "Codec": 0,

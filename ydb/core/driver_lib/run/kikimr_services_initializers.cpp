@@ -250,7 +250,7 @@
 #include <ydb/library/actors/helpers/selfping_actor.h>
 #include <ydb/library/actors/http/http_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect.h>
-#include <ydb/library/actors/interconnect/interconnect_host_metrics_aggregator.h>
+#include <ydb/library/actors/interconnect/interconnect_metrics_aggregator.h>
 #include <ydb/library/actors/interconnect/interconnect_mon.h>
 #include <ydb/library/actors/interconnect/interconnect_tcp_proxy.h>
 #include <ydb/library/actors/interconnect/interconnect_proxy_wrapper.h>
@@ -427,6 +427,9 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         case NKikimrConfig::TInterconnectConfig::PER_HOST:
             result.MergePerHostCounters = true;
             break;
+        case NKikimrConfig::TInterconnectConfig::PER_SCOPE_CLASS:
+            result.MergePerScopeClassCounters = true;
+            break;
         case NKikimrConfig::TInterconnectConfig::NO_MERGE:
             break;
     }
@@ -571,6 +574,12 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
 
     if (config.HasRdmaChecksum()) {
         result.RdmaChecksum = config.GetRdmaChecksum();
+    }
+    if (config.HasRdmaPayloadCopySizeThreshold()) {
+        result.RdmaPayloadCopySizeThreshold = config.GetRdmaPayloadCopySizeThreshold();
+    }
+    if (config.HasMaxRdmaRetryBackoffLevel()) {
+        result.MaxRdmaRetryBackoffLevel = config.GetMaxRdmaRetryBackoffLevel();
     }
 
     if (config.HasCollectSubscriptionStackTrace()) {
@@ -823,10 +832,10 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
                     NInterconnect::CreateInterconnectMonActor(icCommon), TMailboxType::ReadAsFilled, systemPoolId));
             }
 
-            if (settings.MergePerHostCounters) {
-                icCommon->HostMetricsAggregatorId = NActors::NInterconnectHostMetrics::MakeInterconnectHostMetricsAggregatorId(NodeId);
-                setup->LocalServices.emplace_back(icCommon->HostMetricsAggregatorId, TActorSetupCmd(
-                    NActors::NInterconnectHostMetrics::CreateInterconnectHostMetricsAggregatorActor(icCommon),
+            if (settings.MergePerHostCounters || settings.MergePerScopeClassCounters) {
+                icCommon->MetricsAggregatorId = NActors::NInterconnectMetricsAggregator::MakeInterconnectMetricsAggregatorId(NodeId);
+                setup->LocalServices.emplace_back(icCommon->MetricsAggregatorId, TActorSetupCmd(
+                    NActors::NInterconnectMetricsAggregator::CreateInterconnectMetricsAggregatorActor(icCommon),
                     TMailboxType::ReadAsFilled, interconnectPoolId));
             }
 

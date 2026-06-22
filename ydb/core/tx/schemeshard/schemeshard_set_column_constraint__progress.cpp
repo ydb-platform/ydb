@@ -6,6 +6,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/schemeshard/schemeshard_xxport__helpers.h>
 
+#include <ydb/core/protos/set_column_constraint.pb.h>
+
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 
@@ -24,10 +26,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableLockNullWrites
 
     auto modifyScheme = AlterMainTableTemplate(ss, operationInfo);
 
-    for (const auto& columnName : operationInfo.NotNullColumns) {
+    for (const auto& columnName : operationInfo.SetNotNullColumns) {
         auto col = modifyScheme.MutableAlterTable()->AddColumns();
         col->SetName(TString(columnName));
-        col->SetNotNull(true);
+        col->SetSetNotNullInProgress(true);
     }
 
     *propose->Record.AddTransaction() = modifyScheme;
@@ -45,10 +47,14 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTableUnlockNullWrit
 
     auto modifyScheme = AlterMainTableTemplate(ss, operationInfo);
 
-    for (const auto& columnName : operationInfo.NotNullColumns) {
+    for (const auto& columnName : operationInfo.SetNotNullColumns) {
         auto col = modifyScheme.MutableAlterTable()->AddColumns();
         col->SetName(TString(columnName));
-        col->SetNotNull(false);
+        col->SetSetNotNullInProgress(false);
+
+        if (!operationInfo.ValidationFailed) {
+            col->SetNotNull(true);
+        }
     }
 
     *propose->Record.AddTransaction() = modifyScheme;
@@ -373,10 +379,9 @@ public:
         }
 
         auto& shardStatus = operationInfo.ValidationShards.at(shardIdx);
+        shardStatus.ValidateStatus = record.GetStatus();
 
-        if (record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::DONE) {
-            shardStatus.Status = NKikimrIndexBuilder::EBuildStatus::DONE;
-
+        if (record.GetStatus() == NKikimrSetColumnConstraint::EValidateStatus::DONE) {
             if (!record.GetIsValid()) {
                 LOG_N("TTxReplyValidateRowCondition: validation failed on shard# " << shardIdx);
                 operationInfo.ValidationFailed = true;
@@ -395,12 +400,10 @@ public:
 
             Progress(BuildId);
 
-        } else if (record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BUILD_ERROR ||
-                   record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST) {
+        } else if (record.GetStatus() == NKikimrSetColumnConstraint::EValidateStatus::BAD_REQUEST) {
             LOG_E("TTxReplyValidateRowCondition: error on shard# " << shardIdx
                 << ", status# " << record.GetStatus());
 
-            shardStatus.Status = record.GetStatus();
             operationInfo.ValidationFailed = true;
 
             for (const auto& issue : record.GetIssues()) {
@@ -419,7 +422,6 @@ public:
         } else {
             LOG_D("TTxReplyValidateRowCondition: shard# " << shardIdx
                 << " still in progress, status# " << record.GetStatus());
-            shardStatus.Status = record.GetStatus();
             // todo: persist shard status
         }
 
@@ -469,7 +471,7 @@ public:
 
         auto& operationInfo = *operationInfoPtr->get();
 
-        if (operationInfo.OperationState != TSetColumnConstraintOperationInfo::EOperationState::Validate) {
+        if (operationInfo.OperationState != TSetColumnConstraintOperationInfo::EOperationState::Validating) {
             LOG_I("TTxReplyRetrySetColumnConstraint: superfluous event, id# " << BuildId
                 << ", state# " << ToString(operationInfo.OperationState));
             return true;
@@ -565,7 +567,7 @@ private:
         record.SetSeqNoGeneration(Self->Generation());
         record.SetSeqNoRound(++shardStatus.SeqNoRound);
 
-        for (const auto& columnName : operationInfo.NotNullColumns) {
+        for (const auto& columnName : operationInfo.SetNotNullColumns) {
             record.AddNotNullColumns(TString(columnName));
         }
 
@@ -655,11 +657,7 @@ public:
             }
             case TSetColumnConstraintOperationInfo::EOperationState::Validating: {
                 if (DriveToSendMessageToPartOfShards(txc, operationInfo)) {
-                    if (operationInfo.ValidationFailed) {
-                        ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Finishing);
-                    } else {
-                        ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Unlocking);
-                    }
+                    ChangeState(BuildId, TSetColumnConstraintOperationInfo::EOperationState::Finishing);
                     Progress(BuildId);
                 }
 

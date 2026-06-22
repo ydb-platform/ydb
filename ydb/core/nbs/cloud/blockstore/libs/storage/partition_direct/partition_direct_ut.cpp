@@ -45,7 +45,31 @@ struct TScopedNbsService: TDisableCopyMove
 
 ////////////////////////////////////////////////////////////////////////////////
 
-[[nodiscard]] TScopedNbsService SetupStorage(
+[[nodiscard]] NKikimrConfig::TNbsConfig CreateNbsConfig(
+    EWriteMode writeMode,
+    TDuration writeHedgingDelay = TDuration::Seconds(1),
+    ui64 pbufferCleanupLsnStep = 0,
+    ui32 syncRequestsBatchSize = 0)
+{
+    NKikimrConfig::TNbsConfig nbsConfig;
+    auto* storageConfig = nbsConfig.MutableNbsStorageConfig();
+    storageConfig->SetDDiskPoolName(DDiskPoolName);
+    storageConfig->SetPersistentBufferDDiskPoolName(
+        PersistentBufferDDiskPoolName);
+    storageConfig->SetWriteMode(GetProtoWriteMode(writeMode));
+    storageConfig->SetVChunkSize(DefaultVChunkSize);
+    storageConfig->SetWriteHedgingDelay(writeHedgingDelay.MicroSeconds());
+    storageConfig->SetPBufferCleanupLsnStep(pbufferCleanupLsnStep);
+    if (syncRequestsBatchSize) {
+        storageConfig->SetSyncRequestsBatchSize(syncRequestsBatchSize);
+    }
+
+    return nbsConfig;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+[[nodiscard]] std::unique_ptr<TScopedNbsService> SetupStorage(
     TEnvironmentSetup& env,
     EWriteMode writeMode,
     TDuration writeHedgingDelay = TDuration::Seconds(1),
@@ -76,20 +100,11 @@ struct TScopedNbsService: TDisableCopyMove
     }
 
     // Setup NBS service with storage config
-    NKikimrConfig::TNbsConfig nbsConfig;
-    auto* storageConfig = nbsConfig.MutableNbsStorageConfig();
-    storageConfig->SetDDiskPoolName(DDiskPoolName);
-    storageConfig->SetPersistentBufferDDiskPoolName(
-        PersistentBufferDDiskPoolName);
-    storageConfig->SetWriteMode(GetProtoWriteMode(writeMode));
-    storageConfig->SetVChunkSize(DefaultVChunkSize);
-    storageConfig->SetWriteHedgingDelay(writeHedgingDelay.MicroSeconds());
-    storageConfig->SetPBufferCleanupLsnStep(pbufferCleanupLsnStep);
-    if (syncRequestsBatchSize) {
-        storageConfig->SetSyncRequestsBatchSize(syncRequestsBatchSize);
-    }
-
-    return TScopedNbsService(nbsConfig);
+    return std::make_unique<TScopedNbsService>(CreateNbsConfig(
+        writeMode,
+        writeHedgingDelay,
+        pbufferCleanupLsnStep,
+        syncRequestsBatchSize));
 }
 
 NKikimrBlockStore::TVolumeConfig CreateVolumeConfig(ui64 blockCount)
@@ -288,9 +303,7 @@ void BasicWriteRead(EWriteMode writeMode)
     runtime->FilterFunction =
         [&](ui32 nodeId, std::unique_ptr<IEventHandle>& ev)
     {
-        if (ev->GetTypeRewrite() ==
-            NDDisk::TEvSyncWithPersistentBuffer::EventType)
-        {
+        if (ev->GetTypeRewrite() == NDDisk::TEvSync::EventType) {
             if (syncRequestsCount++ < 3) {
                 runtime->Schedule(
                     TDuration::Seconds(10),
@@ -987,8 +1000,13 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
         }
 
         {
+            scopedService.reset();
+
             env.RestartNode(env.Settings.ControllerNodeId);
             env.Sim(TDuration::Seconds(1));
+
+            scopedService = std::make_unique<TScopedNbsService>(
+                CreateNbsConfig(EWriteMode::PBufferReplication));
         }
 
         WaitForTabletBoot(env);

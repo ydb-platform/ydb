@@ -21,7 +21,6 @@ protected:
 private:
     THashMap<TString, TString> TablesMapping_;
     THashMap<TString, TString> TablesDirMapping_;
-    THashMap<TString, TString> SecureParams_;
     bool KeepTemp_ = false;
     TString TmpDir_;
 };

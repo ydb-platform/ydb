@@ -1081,6 +1081,7 @@ public:
             const ui32 sizeKib            = FromStringWithDefault<ui32>(params.Get("read_write_size_kib"), 4);
             const bool sequential         = params.Get("sequential") == "1";
             const ui32 numDbg             = FromStringWithDefault<ui32>(params.Get("num_dbg_to_use"), 0);
+            const ui32 maxInflightLsns    = FromStringWithDefault<ui32>(params.Get("max_inflight_lsns"), 4096);
             const bool disableReplication = params.Get("disable_replication") == "1";
 
             if (!tabletId) {
@@ -1110,6 +1111,7 @@ public:
             if (numDbg) {
                 wc->SetNumDirectBlockGroupsToUse(numDbg);
             }
+            wc->MutableTabletConfig()->SetMaxInflightLsns(maxInflightLsns);
             if (disableReplication) {
                 wc->MutableTabletConfig()->SetDisableReplication(true);
             }

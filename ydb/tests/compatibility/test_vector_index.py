@@ -32,7 +32,7 @@ class TestVectorIndex(RollingUpgradeAndDowngradeFixture):
             },
         }
 
-        yield from self.setup_cluster(extra_feature_flags={"enable_vector_index": True})
+        yield from self.setup_cluster(extra_feature_flags=["enable_vector_index"])
 
     def get_vector(self, data_type, numb):
         if data_type == "Float":

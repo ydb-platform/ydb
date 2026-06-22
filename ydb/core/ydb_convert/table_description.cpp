@@ -578,6 +578,12 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
             return false;
         }
 
+        for (auto& col : *desc->MutableColumns()) {
+            if (col.HasDefaultFromSequence() && !IsStartWithSlash(col.GetDefaultFromSequence())) {
+                col.SetDefaultFromSequence(JoinPath({workingDir, col.GetDefaultFromSequence()}));
+            }
+        }
+
         for (const auto &alter : req->alter_columns()) {
             auto column = desc->AddColumns();
             column->SetName(alter.name());
@@ -604,7 +610,9 @@ bool BuildAlterTableModifyScheme(const TString& path, const Ydb::Table::AlterTab
                 case Ydb::Table::ColumnMeta::kFromSequence: {
                     auto fromSequence = column->MutableDefaultFromSequence();
                     TString sequenceName = alter.from_sequence().name();
-                    if (!IsStartWithSlash(sequenceName)) {
+                    if (IsStartWithSlash(sequenceName)) {
+                        *fromSequence = sequenceName;
+                    } else {
                         *fromSequence = JoinPath({workingDir, sequenceName});
                     }
                     break;
@@ -1833,6 +1841,7 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
             break;
         }
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
             FillGlobalIndexSettings(
                 *index->mutable_global_fulltext_plain_index()->mutable_settings(),
                 tableIndex.GetIndexImplTableDescriptions(0)
@@ -1842,6 +1851,7 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
 
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
             FillGlobalIndexSettings(
                 *index->mutable_global_fulltext_relevance_index()->mutable_dict_table_settings(),
                 tableIndex.GetIndexImplTableDescriptions(NTableIndex::NFulltext::DictTablePosition)
@@ -1863,6 +1873,7 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
 
             break;
         case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact:
             FillGlobalIndexSettings(
                 *index->mutable_global_json_index()->mutable_settings(),
                 tableIndex.GetIndexImplTableDescriptions(0)

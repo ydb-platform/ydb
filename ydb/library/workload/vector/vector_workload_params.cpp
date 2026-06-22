@@ -86,7 +86,7 @@ void TVectorWorkloadParams::ConfigureCommonOpts(NLastGetopt::TOpts& opts) {
 void TVectorWorkloadParams::ConfigureIndexOpts(NLastGetopt::TOpts& opts) {
     NVector::ConfigureVectorOpts(opts, &VectorOpts);
     opts.AddLongOption("distance", "Distance/similarity function. "
-            "Possible values: 'inner_product', 'cosine_similarity', 'cosine_distance', 'cosine', 'euclidean', 'manhattan'")
+            "Possible values: 'inner_product', 'cosine', 'euclidean', 'manhattan'")
         .DefaultValue("inner_product").StoreResult(&Distance);
     opts.AddLongOption("kmeans-tree-levels", "Number of levels in the kmeans tree. Reference: https://ydb.tech/docs/dev/vector-indexes#kmeans-tree-type")
         .DefaultValue(KmeansTreeLevels).StoreResult(&KmeansTreeLevels);

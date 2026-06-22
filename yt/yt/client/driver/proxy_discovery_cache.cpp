@@ -142,7 +142,7 @@ private:
         return Client_->GetNode(path, options).Apply(BIND([=] (const TYsonString& yson) {
             TProxyDiscoveryResponse response;
 
-            for (const auto& [proxyAddress, proxyNode] : ConvertTo<THashMap<TString, IMapNodePtr>>(yson)) {
+            for (const auto& [proxyAddress, proxyNode] : ConvertTo<THashMap<std::string, IMapNodePtr>>(yson)) {
                 if (!proxyNode->FindChild(AliveNodeName)) {
                     continue;
                 }

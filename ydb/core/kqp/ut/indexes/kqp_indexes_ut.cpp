@@ -313,8 +313,11 @@ Y_UNIT_TEST_SUITE(KqpIndexMetadata) {
                     }
                     return true;
                 });
-            UNIT_ASSERT(indexUpdated);
-            UNIT_ASSERT(indexCleaned);
+            if (!server.GetSettings().AppConfig->GetTableServiceConfig().GetEnableIndexStreamWrite()) {
+                // No writes in AST for streaming index.
+                UNIT_ASSERT(indexUpdated);
+                UNIT_ASSERT(indexCleaned);
+            }
         }
 
         {

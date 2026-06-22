@@ -209,7 +209,7 @@ namespace NKikimr::NDDisk {
         cr.DeleteChunks = std::move(chunksToDelete);
 
         Send(BaseInfo.PDiskActorID, new NPDisk::TEvLog(PDiskParams->Owner, PDiskParams->OwnerRound, signature, cr,
-            TRcBuf(std::move(buffer)), {lsn, lsn}, nullptr));
+            TRcBuf(std::move(buffer)), {lsn, lsn}, nullptr, TWriteSource::DDiskBoot));
 
         LogCallbacks.emplace(lsn, std::move(callback));
     }

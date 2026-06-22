@@ -668,49 +668,50 @@ void FillResultFromErrorResponse(NCommon::TOperationResult& result, const NYT::T
     result.AddIssue(rootIssue);
 }
 
-void GetIntegerConstraints(EDataSlot dataSlot, bool& isSigned, ui64& minValueAbs, ui64& maxValueAbs) {
-    // looks like AllowIntegralConversion (may consider some refactoring)
-    if (dataSlot == EDataSlot::Uint8) {
-        isSigned = false;
-        minValueAbs = 0;
-        maxValueAbs = Max<ui8>();
-    }
-    else if (dataSlot == EDataSlot::Uint16) {
-        isSigned = false;
-        minValueAbs = 0;
-        maxValueAbs = Max<ui16>();
-    }
-    else if (dataSlot == EDataSlot::Uint32) {
-        isSigned = false;
-        minValueAbs = 0;
-        maxValueAbs = Max<ui32>();
-    }
-    else if (dataSlot == EDataSlot::Uint64) {
-        isSigned = false;
-        minValueAbs = 0;
-        maxValueAbs = Max<ui64>();
-    }
-    else if (dataSlot == EDataSlot::Int8) {
-        isSigned = true;
-        minValueAbs = (ui64)Max<i8>() + 1;
-        maxValueAbs = (ui64)Max<i8>();
-    }
-    else if (dataSlot == EDataSlot::Int16) {
-        isSigned = true;
-        minValueAbs = (ui64)Max<i16>() + 1;
-        maxValueAbs = (ui64)Max<i16>();
-    }
-    else if (dataSlot == EDataSlot::Int32) {
-        isSigned = true;
-        minValueAbs = (ui64)Max<i32>() + 1;
-        maxValueAbs = (ui64)Max<i32>();
-    }
-    else if (dataSlot == EDataSlot::Int64) {
-        isSigned = true;
-        minValueAbs = (ui64)Max<i64>() + 1;
-        maxValueAbs = (ui64)Max<i64>();
-    } else {
-        YQL_ENSURE(false, "unexpected integer node type");
+bool GetIntegerConstraints(const EDataSlot dataSlot, bool& isSigned, ui64& minValueAbs, ui64& maxValueAbs) {
+    switch (dataSlot) {
+        case EDataSlot::Uint8:
+            isSigned = false;
+            minValueAbs = 0;
+            maxValueAbs = Max<ui8>();
+            return true;
+        case EDataSlot::Uint16:
+            isSigned = false;
+            minValueAbs = 0;
+            maxValueAbs = Max<ui16>();
+            return true;
+        case EDataSlot::Uint32:
+            isSigned = false;
+            minValueAbs = 0;
+            maxValueAbs = Max<ui32>();
+            return true;
+        case EDataSlot::Uint64:
+            isSigned = false;
+            minValueAbs = 0;
+            maxValueAbs = Max<ui64>();
+            return true;
+        case EDataSlot::Int8:
+            isSigned = true;
+            minValueAbs = (ui64)Max<i8>() + 1;
+            maxValueAbs = (ui64)Max<i8>();
+            return true;
+        case EDataSlot::Int16:
+            isSigned = true;
+            minValueAbs = (ui64)Max<i16>() + 1;
+            maxValueAbs = (ui64)Max<i16>();
+            return true;
+        case EDataSlot::Int32:
+            isSigned = true;
+            minValueAbs = (ui64)Max<i32>() + 1;
+            maxValueAbs = (ui64)Max<i32>();
+            return true;
+        case EDataSlot::Int64:
+            isSigned = true;
+            minValueAbs = (ui64)Max<i64>() + 1;
+            maxValueAbs = (ui64)Max<i64>();
+            return true;
+        default:
+            return false;
     }
 }
 
@@ -761,19 +762,22 @@ TMaybe<TString> ConvertValueForQL(const TExprNode::TPtr& node) {
             return {value.Quote()};
         }
     }
-    YQL_ENSURE(false, "YtQLFilter: unexpected type of const value " << node->Dump());
+    YQL_CLOG(ERROR, ProviderYt) << "YtQLFilter: unexpected type of const value " << node->Dump();
+    return {};
 }
 
 TMaybe<bool> OptimizePossibleOutOfBounds(const TStringBuf& opName, EDataSlot columnDataSlot, const TExprNode::TPtr& intValue) {
+    bool columnsIsSigned;
+    ui64 minValueAbs;
+    ui64 maxValueAbs;
+    if (!GetIntegerConstraints(columnDataSlot, columnsIsSigned, minValueAbs, maxValueAbs)) {
+        return {};
+    }
+
     const TMaybeNode<TCoIntegralCtor> maybeIntValue(intValue);
     if (!maybeIntValue) {
         return {};
     }
-
-    bool columnsIsSigned;
-    ui64 minValueAbs;
-    ui64 maxValueAbs;
-    GetIntegerConstraints(columnDataSlot, columnsIsSigned, minValueAbs, maxValueAbs);
 
     bool hasSign;
     bool isSigned;

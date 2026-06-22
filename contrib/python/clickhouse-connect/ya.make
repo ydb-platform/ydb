@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(1.0.1)
+VERSION(1.1.1)
 
 LICENSE(Apache-2.0)
 
@@ -31,19 +31,27 @@ PY_SRCS(
     clickhouse_connect/__init__.py
     clickhouse_connect/_version.py
     clickhouse_connect/cc_sqlalchemy/__init__.py
+    clickhouse_connect/cc_sqlalchemy/alembic/__init__.py
+    clickhouse_connect/cc_sqlalchemy/alembic/adapter.py
+    clickhouse_connect/cc_sqlalchemy/alembic/impl.py
+    clickhouse_connect/cc_sqlalchemy/alembic/utils.py
     clickhouse_connect/cc_sqlalchemy/datatypes/__init__.py
     clickhouse_connect/cc_sqlalchemy/datatypes/base.py
     clickhouse_connect/cc_sqlalchemy/datatypes/sqltypes.py
     clickhouse_connect/cc_sqlalchemy/ddl/__init__.py
     clickhouse_connect/cc_sqlalchemy/ddl/custom.py
+    clickhouse_connect/cc_sqlalchemy/ddl/dictionary.py
     clickhouse_connect/cc_sqlalchemy/ddl/tableengine.py
     clickhouse_connect/cc_sqlalchemy/dialect.py
+    clickhouse_connect/cc_sqlalchemy/engines.py
     clickhouse_connect/cc_sqlalchemy/inspector.py
     clickhouse_connect/cc_sqlalchemy/sql/__init__.py
     clickhouse_connect/cc_sqlalchemy/sql/clauses.py
     clickhouse_connect/cc_sqlalchemy/sql/compiler.py
     clickhouse_connect/cc_sqlalchemy/sql/ddlcompiler.py
     clickhouse_connect/cc_sqlalchemy/sql/preparer.py
+    clickhouse_connect/cc_sqlalchemy/sql/sqlparse.py
+    clickhouse_connect/cc_sqlalchemy/types.py
     clickhouse_connect/common.py
     clickhouse_connect/datatypes/__init__.py
     clickhouse_connect/datatypes/base.py

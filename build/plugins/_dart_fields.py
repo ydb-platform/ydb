@@ -88,6 +88,15 @@ def get_values_list(unit, key):
     return [r.replace('${"$"}', '$') for r in res if r and r not in ['""', "''"]]
 
 
+def get_escaped_values_list(unit, key):
+    """Like get_values_list, but respects backslash-escaped spaces when splitting."""
+    raw = (unit.get_subst(key) or '').strip()
+    if not raw:
+        return []
+    res = [r.strip() for r in shlex.split(raw)]
+    return [r.replace('${"$"}', '$') for r in res if r and r not in ['""', "''"]]
+
+
 def _get_test_tags(unit, spec_args=None):
     if spec_args is None:
         spec_args = {}
@@ -716,7 +725,7 @@ class LintConfigs:
 class LintExtraParams:
     KEY = 'LINT-EXTRA-PARAMS'
 
-    _CUSTOM_CLANG_FORMAT_ALLOWED_PATHS = ('ads', 'bigrt', 'grut', 'yabs', 'maps', 'yt')
+    _CUSTOM_CLANG_FORMAT_ALLOWED_PATHS = ('ads', 'alice/agents/booking', 'bigrt', 'grut', 'yabs', 'maps', 'yt')
     # HACK: YA-3039 Due to the mass usage of PY_NAMESPACE / TOP_LEVEL in these projects
     # it makes it difficult to run ruff checks in build root - it complains
     # about unsorted imports a lot. Let them run in source root instead.
@@ -1327,7 +1336,7 @@ class TestFiles:
 
     @classmethod
     def ts_check_srcs(cls, unit, flat_args, spec_args):
-        test_files = get_values_list(unit, "_TS_GLOB_FILES")
+        test_files = get_escaped_values_list(unit, "_TS_GLOB_FILES")
         rel_to = "TS_TEST_FOR_PATH" if unit.get("TS_TEST_FOR") else "MODDIR"
         test_files = _resolve_module_files(unit, unit.get(rel_to), test_files)
         value = serialize_list(test_files)

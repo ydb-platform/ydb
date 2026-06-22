@@ -86,9 +86,9 @@ void TYamrDelimitedBaseParser::Finish()
     }
 }
 
-TString TYamrDelimitedBaseParser::GetContext() const
+std::string TYamrDelimitedBaseParser::GetContext() const
 {
-    TString result;
+    std::string result;
     const char* last = ContextBuffer + BufferPosition;
     if (Offset >= ContextBufferSize) {
         result.append(last, ContextBuffer + ContextBufferSize);
@@ -115,9 +115,9 @@ void TYamrDelimitedBaseParser::ProcessTableSwitch(TStringBuf tableIndex)
     try {
         value = FromString<i64>(tableIndex);
     } catch (const std::exception& ex) {
-        TString tableIndexString(tableIndex);
+        std::string tableIndexString(tableIndex);
         if (tableIndex.size() > ContextBufferSize) {
-            tableIndexString = TString(tableIndex.SubStr(0, ContextBufferSize)) + "...truncated...";
+            tableIndexString = std::string(tableIndex.SubStr(0, ContextBufferSize)) + "...truncated...";
         }
         THROW_ERROR_EXCEPTION("YAMR line %Qv cannot be parsed as a table switch; did you forget a record separator?",
             tableIndexString)
@@ -188,7 +188,7 @@ const char* TYamrDelimitedBaseParser::Consume(const char* begin, const char* end
 {
     if (ExpectingEscapedChar) {
         // Read and unescape.
-        CurrentToken.append(EscapeBackward[static_cast<ui8>(*begin)]);
+        CurrentToken.push_back(EscapeBackward[static_cast<ui8>(*begin)]);
         ExpectingEscapedChar = false;
         OnRangeConsumed(begin, begin + 1);
         return begin + 1;

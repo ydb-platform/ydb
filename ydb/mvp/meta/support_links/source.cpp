@@ -1,10 +1,11 @@
 #include "source.h"
 #include "grafana_dashboard_source.h"
 #include "grafana_dashboard_search_source.h"
+#include "grafana_logging_source.h"
 
 #include <util/generic/yexception.h>
 
-namespace NMVP {
+namespace NMVP::NSupportLinks {
 
 void ValidateSupportLinksConfig(const TSupportLinksConfig& supportLinks, const TMetaSettings& metaSettings) {
     for (int i = 0; i < supportLinks.GetCluster().size(); ++i) {
@@ -12,6 +13,12 @@ void ValidateSupportLinksConfig(const TSupportLinksConfig& supportLinks, const T
     }
     for (int i = 0; i < supportLinks.GetDatabase().size(); ++i) {
         ValidateLinkSourceConfig(supportLinks.GetDatabase(i), metaSettings);
+    }
+    for (int i = 0; i < supportLinks.GetNode().size(); ++i) {
+        ValidateLinkSourceConfig(supportLinks.GetNode(i), metaSettings);
+    }
+    for (int i = 0; i < supportLinks.GetHost().size(); ++i) {
+        ValidateLinkSourceConfig(supportLinks.GetHost(i), metaSettings);
     }
 }
 
@@ -28,6 +35,10 @@ void ValidateLinkSourceConfig(const TSupportLinkEntryConfig& config, const TMeta
         ValidateGrafanaDashboardSearchSourceConfig(config, metaSettings);
         return;
     }
+    if (config.GetSource() == "grafana/logging") {
+        ValidateGrafanaLoggingSourceConfig(config, metaSettings);
+        return;
+    }
 
     ythrow yexception() << "unsupported support_links source: " << config.GetSource();
 }
@@ -41,8 +52,11 @@ std::shared_ptr<ILinkSource> MakeLinkSource(TSupportLinkEntryConfig config, cons
     if (config.GetSource() == "grafana/dashboard/search") {
         return MakeGrafanaDashboardSearchSource(std::move(config), metaSettings);
     }
+    if (config.GetSource() == "grafana/logging") {
+        return MakeGrafanaLoggingSource(std::move(config), metaSettings);
+    }
 
     ythrow yexception() << "unsupported support_links source: " << config.GetSource();
 }
 
-} // namespace NMVP
+} // namespace NMVP::NSupportLinks

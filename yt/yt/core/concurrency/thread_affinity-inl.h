@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "thread_affinity.h"
 #endif
-#undef THREAD_AFFINITY_INL_H_
 
 namespace NYT::NConcurrency {
 

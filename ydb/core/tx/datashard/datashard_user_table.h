@@ -267,6 +267,7 @@ struct TUserTable : public TThrRefBase {
         bool IsKey;
         ui32 Family = 0;
         bool NotNull = false;
+        bool SetNotNullInProgress = false;
 
         TUserColumn(NScheme::TTypeInfo type, TString typeMod, TString name, bool isKey = false)
             : Type(type)
@@ -464,6 +465,7 @@ struct TUserTable : public TThrRefBase {
     TIncrementalBackupConfig IncrementalBackupConfig;
     bool IsBackup = false;
     ui32 UniqueIndexKeySize = 0;
+    NKikimrSchemeOp::EIndexType IndexImplType = NKikimrSchemeOp::EIndexType::EIndexTypeInvalid;
 
     TMap<TPathId, TTableIndex> Indexes;
 

@@ -191,7 +191,6 @@ void TGraphShard::ExecuteTxMonitoring(NMon::TEvRemoteHttpInfo::TPtr ev) {
     const auto& cgi = ev->Get()->Cgi();
     if (!IsTabletDevUiAccessAllowed(
             AppData(),
-            securePathMode,
             ev->Get()->PathInfo(),
             ev->Get()->GetUserToken(),
             IsPublicGraphShardDevUiRequest(cgi)))

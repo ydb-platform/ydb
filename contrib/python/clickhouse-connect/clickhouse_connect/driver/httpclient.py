@@ -2,6 +2,7 @@ import io
 import json
 import logging
 import re
+import time
 import uuid
 from base64 import b64encode
 from collections.abc import Callable, Generator, Sequence
@@ -36,7 +37,7 @@ from clickhouse_connect.driver.httputil import (
     get_response_data,
 )
 from clickhouse_connect.driver.insert import InsertContext
-from clickhouse_connect.driver.query import QueryContext, QueryResult, TzSource
+from clickhouse_connect.driver.query import QueryContext, QueryResult, TzSource, returns_empty_string_on_empty_body
 from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.driver.transform import NativeTransform
 
@@ -44,6 +45,8 @@ logger = logging.getLogger(__name__)
 columns_only_re = re.compile(r"LIMIT 0\s*$", re.IGNORECASE)
 ex_header = "X-ClickHouse-Exception-Code"
 ex_tag_header = "X-ClickHouse-Exception-Tag"
+
+_REMOTE_CLOSE_ERRORS = (ConnectionResetError, BrokenPipeError)
 
 
 class HttpClient(Client):
@@ -477,6 +480,8 @@ class HttpClient(Client):
                 return result
             except UnicodeDecodeError:
                 return str(response.data)
+        if returns_empty_string_on_empty_body(cmd):
+            return ""
         return QuerySummary(self._summary(response))
 
     def _error_handler(self, response: HTTPResponse, retried: bool = False) -> None:
@@ -568,19 +573,27 @@ class HttpClient(Client):
             try:
                 response = self.http.request(method, url, **kwargs)
             except HTTPError as ex:
-                if isinstance(ex.__context__, ConnectionResetError) and attempts == 1:
-                    # The server closed the connection, probably because the Keep Alive has expired
-                    # We should be safe to retry, as ClickHouse should not have processed anything on a connection
-                    # that it killed.  We also only retry this once, as multiple disconnects are unlikely to be
-                    # related to the Keep Alive settings
+                # Always allow at least one retry on a clean connection error so a single stale
+                # keep-alive socket doesn't surface to the caller, and additionally honor the
+                # retries budget when it is larger (e.g. query_retries for reads), so that
+                # bursts of stale pooled connections can be drained before giving up.
+                max_attempts = max(2, retries + 1)
+                remote_close = isinstance(ex.__context__, _REMOTE_CLOSE_ERRORS) or isinstance(ex.__cause__, _REMOTE_CLOSE_ERRORS)
+                if remote_close and attempts < max_attempts:
+                    # The server closed the connection, probably because the Keep Alive has expired.
+                    # We should be safe to retry, as ClickHouse should not have processed anything on
+                    # a connection that it killed.
                     body = kwargs.get("body")
                     if retry_body is not None:
                         kwargs["body"] = retry_body()
-                        logger.debug("Retrying remotely closed connection with rebuilt body")
+                        logger.debug("Retrying remotely closed connection with rebuilt body (attempt %s/%s)", attempts, max_attempts)
+                        time.sleep(0.1 * attempts)
                         continue
                     if body is None or isinstance(body, (bytes, bytearray, str)):
-                        logger.debug("Retrying remotely closed connection")
+                        logger.debug("Retrying remotely closed connection (attempt %s/%s)", attempts, max_attempts)
+                        time.sleep(0.1 * attempts)
                         continue
+                logger.debug("Non-retryable HTTP transport error type=%s", type(ex).__name__)
                 logger.warning("Unexpected Http Driver Exception")
                 err_url = f" ({self.url})" if self.show_clickhouse_errors else ""
                 raise OperationalError(f"Error {ex} executing HTTP request attempt {attempts}{err_url}") from ex
@@ -612,7 +625,7 @@ class HttpClient(Client):
         See BaseClient doc_string for this method
         """
         body, params, fields = self._prep_raw_query(query, parameters, settings, fmt, use_database, external_data)
-        return self._raw_request(body, params, fields=fields, headers=transport_settings).data
+        return self._raw_request(body, params, fields=fields, headers=transport_settings, retries=self.query_retries).data
 
     def raw_stream(
         self,
@@ -628,7 +641,15 @@ class HttpClient(Client):
         See BaseClient doc_string for this method
         """
         body, params, fields = self._prep_raw_query(query, parameters, settings, fmt, use_database, external_data)
-        return self._raw_request(body, params, fields=fields, stream=True, server_wait=False, headers=transport_settings)
+        return self._raw_request(
+            body,
+            params,
+            fields=fields,
+            stream=True,
+            server_wait=False,
+            headers=transport_settings,
+            retries=self.query_retries,
+        )
 
     def _prep_raw_query(
         self,

@@ -790,10 +790,13 @@ NYdb::NTable::EIndexType ConvertIndexTypeToAPI(NKikimrSchemeOp::EIndexType index
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             return NYdb::NTable::EIndexType::GlobalVectorKMeansTree;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
             return NYdb::NTable::EIndexType::GlobalFulltextPlain;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
             return NYdb::NTable::EIndexType::GlobalFulltextRelevance;
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
             return NYdb::NTable::EIndexType::GlobalJson;
         default:
             UNIT_FAIL("No conversion to API for this index type");
@@ -807,6 +810,7 @@ void TestRestoreTableWithIndex(
 ) {
     using namespace fmt::literals;
     TString query;
+    TString type;
     switch (indexType) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -845,28 +849,24 @@ void TestRestoreTableWithIndex(
             }
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
-            query = fmt::format(R"(CREATE TABLE `{table}` (
-                Key Uint64,
-                Group Uint32,
-                Value String,
-                PRIMARY KEY (Key),
-                INDEX {index} GLOBAL USING fulltext_plain
-                    ON (Value)
-                    WITH (tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_max=42)
-                ))", "table"_a = table, "index"_a = index);
-            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            type = type.empty() ? "fulltext_plain" : type;
+            [[fallthrough]];
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+            type = type.empty() ? "fulltext_relevance" : type;
             query = fmt::format(R"(CREATE TABLE `{table}` (
                 Key Uint64,
                 Group Uint32,
                 Value String,
                 PRIMARY KEY (Key),
-                INDEX {index} GLOBAL USING fulltext_relevance
+                INDEX {index} GLOBAL USING {type}
                     ON (Value)
                     WITH (tokenizer=standard, use_filter_lowercase=true, use_filter_length=true, filter_length_max=42)
-                ))", "table"_a = table, "index"_a = index);
+                ))", "table"_a = table, "index"_a = index, "type"_a = type);
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
             query = fmt::format(R"(CREATE TABLE `{table}` (
                 Key Uint64,
                 Group Uint32,
@@ -2693,7 +2693,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     Y_UNIT_TEST(RestoreViewToDifferentDatabase) {
         TBasicKikimrWithGrpcAndRootSchema<TTenantsTestSettings> server;
-        server.GetRuntime()->GetAppData().FeatureFlags.SetEnableShowCreate(true);
 
         constexpr const char* alice = "/Root/tenants/alice";
         constexpr const char* bob = "/Root/tenants/bob";
@@ -2883,6 +2882,11 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
         NKikimrConfig::TAppConfig appConfig;
+        if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact ||
+            indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance ||
+            indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact) {
+            appConfig.MutableFeatureFlags()->SetEnableCompactFulltextIndex(true);
+        }
         appConfig.MutableFeatureFlags()->SetEnableVectorIndex(true);
         appConfig.MutableFeatureFlags()->SetEnableAddUniqueIndex(true);
         appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
@@ -3281,7 +3285,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
     void TestSystemViewBackupRestore() {
         NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableShowCreate(true);
         TKikimrWithGrpcAndRootSchema server(config);
         auto driver = TDriver(TDriverConfig().SetEndpoint(Sprintf("localhost:%u", server.GetPort())).SetDatabase("/Root"));
         TSchemeClient schemeClient(driver);
@@ -3392,6 +3395,9 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
             case EIndexTypeGlobalFulltextPlain:
             case EIndexTypeGlobalFulltextRelevance:
             case EIndexTypeGlobalJson:
+            case EIndexTypeGlobalFulltextCompact:
+            case EIndexTypeGlobalFulltextCompactRelevance:
+            case EIndexTypeGlobalJsonCompact:
                 return TestTableWithIndexBackupRestore(Value);
             case EIndexTypeLocalBloomFilter:
             case EIndexTypeLocalBloomNgramFilter:
@@ -3412,7 +3418,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
 
 
         NKikimrConfig::TAppConfig config;
-        config.MutableFeatureFlags()->SetEnableShowCreate(true);
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
         TKikimrWithGrpcAndRootSchema server(config);
 
@@ -3522,7 +3527,6 @@ Y_UNIT_TEST_SUITE(BackupRestore) {
     Y_UNIT_TEST(TestReplaceRestoreOptionOnNonExistingSchemeObjects) {
         NKikimrConfig::TAppConfig config;
         config.MutableQueryServiceConfig()->AddAvailableExternalDataSources("ObjectStorage");
-        config.MutableFeatureFlags()->SetEnableShowCreate(true);
         TKikimrWithGrpcAndRootSchema server(config);
 
         server.GetRuntime()->GetAppData().FeatureFlags.SetEnableExternalDataSources(true);
@@ -3940,7 +3944,6 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
                     appConfig.MutableFeatureFlags()->SetEnableFulltextIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableJsonIndex(true);
                     appConfig.MutableFeatureFlags()->SetEnableCsDictionaryEncoding(true);
-                    appConfig.MutableFeatureFlags()->SetEnableShowCreate(true);
                     appConfig.MutableTableServiceConfig()->SetEnableOlapSink(true);
                     return appConfig;
                 }())
@@ -4403,6 +4406,11 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
 
     void TestTableWithIndexBackupRestore(NKikimrSchemeOp::EIndexType indexType = NKikimrSchemeOp::EIndexTypeGlobal, bool prefix = false) {
         TS3TestEnv testEnv;
+        if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact ||
+            indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance ||
+            indexType == NKikimrSchemeOp::EIndexTypeGlobalJsonCompact) {
+            testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableCompactFulltextIndex(true);
+        }
         constexpr const char* table = "/Root/table";
         constexpr const char* index = "value_idx";
 
@@ -4708,6 +4716,9 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
             case EIndexTypeGlobalFulltextPlain:
             case EIndexTypeGlobalFulltextRelevance:
             case EIndexTypeGlobalJson:
+            case EIndexTypeGlobalFulltextCompact:
+            case EIndexTypeGlobalFulltextCompactRelevance:
+            case EIndexTypeGlobalJsonCompact:
                 TestTableWithIndexBackupRestore(Value);
                 break;
             case EIndexTypeLocalBloomFilter:

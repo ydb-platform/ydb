@@ -803,7 +803,9 @@ private:
                 auto literal = TString(query.Cast<TCoDataCtor>().Literal());
                 YQL_ENSURE(indexDesc);
                 YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalFulltextPlain
-                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance);
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextRelevance
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompact
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompactRelevance);
 
                 auto& desc = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexDesc->SpecializedIndexDescription);
                 for(const auto& column: readColumns) {
@@ -844,7 +846,8 @@ private:
 
         std::vector<TString> tokens;
         if (settings.Tokens) {
-            YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalJson);
+            YQL_ENSURE(indexDesc->Type == TIndexDescription::EType::GlobalJson ||
+                indexDesc->Type == TIndexDescription::EType::GlobalJsonCompact);
 
             for (const auto& token : TExprBase(settings.Tokens).Cast<TExprList>()) {
                 auto pair = token.Cast<TExprList>();
@@ -1031,33 +1034,34 @@ private:
         AddOperator(stagePlanNode, "Source", op);
     }
 
-    void Visit(const TDqSink& sink, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
+    template<typename TSinkLike>
+    void VisitTableSink(const TSinkLike& sinkLike, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
         // Federated providers
         TOperator op;
-        TCoDataSink dataSink = sink.DataSink().Cast<TCoDataSink>();
+        TCoDataSink dataSink = sinkLike.DataSink().template Cast<TCoDataSink>();
         const TString dataSinkCategory = dataSink.Category().StringValue();
-        IDqIntegration* dqIntegration = nullptr;
-
-        {
-            auto providerIt = SerializerCtx.TypeCtx.DataSinkMap.find(dataSinkCategory);
-            if (providerIt != SerializerCtx.TypeCtx.DataSinkMap.end()) {
-                dqIntegration = providerIt->second->GetDqIntegration();
-            }
-        }
 
         // Common settings that can be overwritten by provider
         op.Properties["SinkType"] = dataSinkCategory;
         if (dataSinkCategory == NYql::KqpTableSinkName) {
-            auto settings = sink.Settings().Cast<TKqpTableSinkSettings>();
+            auto settings = sinkLike.Settings().template Cast<TKqpTableSinkSettings>();
 
             NKikimrKqp::TKqpTableSinkSettings tableSinkSettings;
             {
                 AFL_ENSURE(stagePlanNode.StageProto);
                 bool found = false;
                 for (const auto& protoSink : stagePlanNode.StageProto->GetSinks()) {
-                    if (FromString<ui32>(TStringBuf(sink.Index())) == protoSink.GetOutputIndex()
+                    if (FromString<ui32>(TStringBuf(sinkLike.Index())) == protoSink.GetOutputIndex()
                             && protoSink.HasInternalSink()
                             && protoSink.GetInternalSink().GetSettings().UnpackTo(&tableSinkSettings)) {
+                                found = true;
+                                break;
+                    }
+                }
+                for (const auto& protoTransform : stagePlanNode.StageProto->GetOutputTransforms()) {
+                    if (FromString<ui32>(TStringBuf(sinkLike.Index())) == protoTransform.GetOutputIndex()
+                            && protoTransform.HasInternalSink()
+                            && protoTransform.GetInternalSink().GetSettings().UnpackTo(&tableSinkSettings)) {
                                 found = true;
                                 break;
                     }
@@ -1207,11 +1211,37 @@ private:
             op.Properties["Name"] = "Write to external data source";
         }
 
-        if (dqIntegration) {
-            dqIntegration->FillSinkPlanProperties(sink, op.Properties);
+        AddOperator(planNode, "Sink", op);
+    }
+
+    void Visit(const TDqSink& sink, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
+        IDqIntegration* dqIntegration = nullptr;
+        auto dataSink = sink.DataSink().Cast<TCoDataSink>();
+        auto providerIt = SerializerCtx.TypeCtx.DataSinkMap.find(dataSink.Category().StringValue());
+        if (providerIt != SerializerCtx.TypeCtx.DataSinkMap.end()) {
+            dqIntegration = providerIt->second->GetDqIntegration();
         }
 
-        AddOperator(planNode, "Sink", op);
+        VisitTableSink(sink, stage, planNode, stagePlanNode);
+
+        if (dqIntegration) {
+            dqIntegration->FillSinkPlanProperties(sink, planNode.Operators.back().Properties);
+        }
+    }
+
+    void Visit(const TDqTransform& transform, const TDqStageBase& stage, TQueryPlanNode& planNode, TQueryPlanNode& stagePlanNode) {
+        IDqIntegration* dqIntegration = nullptr;
+        auto dataSink = transform.DataSink().Cast<TCoDataSink>();
+        auto providerIt = SerializerCtx.TypeCtx.DataSinkMap.find(dataSink.Category().StringValue());
+        if (providerIt != SerializerCtx.TypeCtx.DataSinkMap.end()) {
+            dqIntegration = providerIt->second->GetDqIntegration();
+        }
+
+        VisitTableSink(transform, stage, planNode, stagePlanNode);
+
+        if (dqIntegration) {
+            dqIntegration->FillSinkPlanProperties(transform, planNode.Operators.back().Properties);
+        }
     }
 
     void Visit(const TExprBase& expr, TQueryPlanNode& planNode) {
@@ -1285,6 +1315,8 @@ private:
                 for (auto output : outputs.Cast()) {
                     if (auto sink = output.Maybe<TDqSink>()) {
                         Visit(sink.Cast(), expr.Cast<TDqStageBase>(), planNode, stagePlanNode);
+                    } else if (auto transform = output.Maybe<TDqTransform>()) {
+                        Visit(transform.Cast(), expr.Cast<TDqStageBase>(), planNode, stagePlanNode);
                     }
                 }
             }

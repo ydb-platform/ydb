@@ -1720,18 +1720,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             EStatus::GENERIC_ERROR,
             "Reducing by keys of streaming input is not supported"
         );
-
-        //// Writing ////
-
-        // Upsert into test table returning id
-        ExecQuery(fmt::format(R"sql(
-                UPSERT INTO `{t}`
-                SELECT Data AS Name, LENGTH(Data) AS id FROM `{source}`.`{i}` WITH (STREAMING = "TRUE")
-                RETURNING id;
-            )sql", "source"_a = source, "i"_a = input1, "t"_a = table),
-            EStatus::GENERIC_ERROR,
-            "Streaming input is not supported for DqPrecompute"
-        );
     }
 
     Y_UNIT_TEST_F(StreamingJoinConstraintsValidation, TStreamingTestFixture) {

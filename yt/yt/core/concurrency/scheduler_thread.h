@@ -53,4 +53,4 @@ DEFINE_REFCOUNTED_TYPE(TSchedulerThread)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-} //namespace NYT::NConcurrency
+} // namespace NYT::NConcurrency

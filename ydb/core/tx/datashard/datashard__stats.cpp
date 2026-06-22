@@ -359,6 +359,25 @@ public:
             for (const auto& pi : Self->SysTablesPartOwners) {
                 Result->Record.AddSysTablesPartOwners(pi);
             }
+
+            if (tableInfo.IndexImplType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact ||
+                tableInfo.IndexImplType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance ||
+                tableInfo.IndexImplType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact) {
+                // For now, only allow to split compact fulltext index table by __ydb_token
+                auto pb = Result->Record.MutableTableStats();
+                if (pb->GetSplitBySizeSuggestedKey().size()) {
+                    TSerializedCellVec key(pb->GetSplitBySizeSuggestedKey());
+                    if (key.GetCells().size() > 1) {
+                        pb->SetSplitBySizeSuggestedKey(TSerializedCellVec::Serialize({key.GetCells()[0]}));
+                    }
+                }
+                if (pb->GetSplitByLoadSuggestedKey().size()) {
+                    TSerializedCellVec key(pb->GetSplitByLoadSuggestedKey());
+                    if (key.GetCells().size() > 1) {
+                        pb->SetSplitByLoadSuggestedKey(TSerializedCellVec::Serialize({key.GetCells()[0]}));
+                    }
+                }
+            }
         }
 
         // Also return back the CPU usage data

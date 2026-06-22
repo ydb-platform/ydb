@@ -117,7 +117,13 @@ namespace NKikimr {
             nullptr,
             false,
             TControlWrapper(0, 0, 1),
+<<<<<<< HEAD
             TControlWrapper(20'000'000, 1, 100'000'000'000));
+=======
+            false,
+            TControlWrapper(20'000'000, 1, 100'000'000'000),
+            TControlWrapper(1'000'000, 1, 10'000'000));
+>>>>>>> 0dfc3c930dd (Configure the size of blobs protected by PhantomFlagStorage (#43892))
 
         State = std::make_unique<TSyncLogKeeperState>(slCtx, std::move(repaired), syncLogMaxMemAmount, syncLogMaxDiskAmount,
                 syncLogMaxEntryPointSize);

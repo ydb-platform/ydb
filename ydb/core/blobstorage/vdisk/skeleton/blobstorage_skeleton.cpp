@@ -2041,7 +2041,13 @@ namespace NKikimr {
                     Db->SyncLogFirstLsnToKeep,
                     Config->BaseInfo.ReadOnly,
                     Config->EnablePhantomFlagStorage,
+<<<<<<< HEAD
                     Config->PhantomFlagStorageLimit);
+=======
+                    Config->EnablePersistentPhantomFlagStorage,
+                    Config->PhantomFlagStorageLimit,
+                    Config->VolatilePhantomFlagStorageBlobSizeLimit);
+>>>>>>> 0dfc3c930dd (Configure the size of blobs protected by PhantomFlagStorage (#43892))
             Db->SyncLogID.Set(ctx.Register(CreateSyncLogActor(slCtx, GInfo, SelfVDiskId, std::move(repairedSyncLog))));
             ActiveActors.Insert(Db->SyncLogID, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE); // keep forever
 

@@ -40,6 +40,7 @@ public:
             hFunc(NCloud::TEvAccessService::TEvAuthorizeRequest, Handle);
             hFunc(NCloud::TEvAccessService::TEvAuthenticateRequestV2, Handle);
             hFunc(NCloud::TEvAccessService::TEvAuthorizeRequestV2, Handle);
+            hFunc(NCloud::TEvAccessService::TEvBulkAuthorizeRequestV2, Handle);
             cFunc(TEvPoisonPill::EventType, PassAway);
         }
     }
@@ -124,6 +125,58 @@ public:
     void Handle(NCloud::TEvAccessService::TEvAuthorizeRequestV2::TPtr& ev) {
         auto result = MakeHolder<NCloud::TEvAccessService::TEvAuthorizeResponseV2>();
         HandleAuthorizeRequest(ev->Get()->Request, result->Status, result->Response);
+        Send(ev->Sender, result.Release());
+    }
+
+    void Handle(NCloud::TEvAccessService::TEvBulkAuthorizeRequestV2::TPtr& ev) {
+        auto result = MakeHolder<NCloud::TEvAccessService::TEvBulkAuthorizeResponseV2>();
+
+        if (++RequestNumber % 3 == 0) {
+            result->Status = NYdbGrpc::TGrpcStatus("Unavailable", grpc::StatusCode::DEADLINE_EXCEEDED, false);
+        } else {
+            const auto& request = ev->Get()->Request;
+
+            TString idStr;
+            if (request.has_iam_token()) {
+                idStr = request.iam_token();
+            } else {
+                idStr = request.signature().access_key_id();
+            }
+
+            TStringBuf id = idStr;
+            if (!id) {
+                result->Status = NYdbGrpc::TGrpcStatus("Empty access key id", grpc::StatusCode::INVALID_ARGUMENT, false);
+            } else if (id.SkipPrefix(USER_ACCOUNT_PREFIX)) {
+                if (id == "alkonavt") {
+                    result->Status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
+                } else {
+                    result->Response.mutable_subject()->mutable_user_account()->set_id(TString(id));
+                    result->Status = NYdbGrpc::TGrpcStatus("OK", grpc::StatusCode::OK, false);
+                }
+            } else if (id.SkipPrefix(SERVICE_ACCOUNT_PREFIX)) {
+                auto& serviceAccount = *result->Response.mutable_subject()->mutable_service_account();
+                serviceAccount.set_id(TString(id));
+                serviceAccount.set_folder_id(TString::Join("FOLDER_", id));
+                result->Status = NYdbGrpc::TGrpcStatus("OK", grpc::StatusCode::OK, false);
+            } else {
+                result->Status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
+            }
+
+            for (const auto& action : request.actions().items()) {
+                auto* actionResult = result->Response.mutable_results()->add_items();
+                actionResult->set_permission(action.permission());
+
+                for (const auto& resource : action.resource_path()) {
+                    auto* resourceCopy = actionResult->add_resource_path();
+                    *resourceCopy = resource;
+                }
+
+                if (result->Status.GRpcStatusCode != grpc::StatusCode::OK) {
+                    actionResult->mutable_permission_denied_error()->set_message(result->Status.Msg);
+                }
+            }
+        }
+
         Send(ev->Sender, result.Release());
     }
 };

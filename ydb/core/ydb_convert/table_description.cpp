@@ -384,6 +384,12 @@ bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Tabl
         if (asSchemeObject) {
             // Mirror the prefix bloom filter as a named TTableIndex scheme object. Two indexes
             // over the same PK prefix collapse to a single engine prefix, so reject duplicates.
+
+            if (index.name().empty()) {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = "Bloom filter index name must not be empty";
+                return false;
+            }
             if (bloomPrefixes.contains(prefixLen)) {
                 code = Ydb::StatusIds::BAD_REQUEST;
                 error = "Multiple LocalBloomFilter indexes over the same primary-key prefix are not allowed";
@@ -1781,7 +1787,11 @@ void FillLocalBloomFilterIndexSettings(Ydb::Table::LocalBloomFilterIndex& settin
 ) {
     if (tableIndex.HasBloomFilterDescription()) {
         const auto& desc = tableIndex.GetBloomFilterDescription();
-        if (desc.HasFalsePositiveProbability()) {
+        // The scheme object always stores a resolved FPP, but a default value is an implementation
+        // detail: suppress it so DescribeTable / SHOW CREATE only surface an explicitly chosen FPP
+        // (matching the synthesized "idx_bloom_<N>" path below).
+        if (desc.HasFalsePositiveProbability()
+            && desc.GetFalsePositiveProbability() != NTable::DefaultBloomFilterFpp) {
             settings.set_false_positive_probability(desc.GetFalsePositiveProbability());
         }
     }
@@ -1931,6 +1941,10 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
     // GetTableIndexes(); skip those prefix lengths here to avoid double-listing.
     if (in.HasPartitionConfig() && in.GetPartitionConfig().ByKeyFilterPrefixesSize() > 0) {
         const auto& pkCols = in.GetKeyColumnNames();
+        // Dedup by prefix length (column count), not column identity. This is exact only because a
+        // bloom filter's columns must be a left prefix of the PK, so a given length maps to exactly
+        // one valid column set. If that invariant is ever relaxed (arbitrary column subsets), this
+        // would need to key on the column set itself.
         THashSet<ui32> prefixesWithSchemeObject;
         for (const auto& tableIndex : in.GetTableIndexes()) {
             if (tableIndex.GetType() == NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {

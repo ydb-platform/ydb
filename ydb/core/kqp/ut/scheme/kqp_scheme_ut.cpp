@@ -1755,6 +1755,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
+        // idx_bloom1 carries an explicit FPP; idx_bloom2 leaves it default (unspecified).
         BloomSchemeOk(session, R"(
             --!syntax_v1
             CREATE TABLE `/Root/T` (
@@ -1762,7 +1763,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
                 Key2 Uint64,
                 Value String,
                 PRIMARY KEY (Key1, Key2),
-                INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1),
+                INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=0.03),
                 INDEX idx_bloom2 LOCAL USING bloom_filter ON (Key1, Key2)
             );
         )");
@@ -1776,21 +1777,29 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL(pathType("/Root/T/idx_bloom2"), NKikimrSchemeOp::EPathTypeTableIndex);
         UNIT_ASSERT_VALUES_EQUAL(BloomFilterPartitionConfig(kikimr).ByKeyFilterPrefixesSize(), 2);
 
-        // (2) DescribeTable lists each named bloom filter exactly once: the per-index engine prefix
-        // must NOT also synthesize an "idx_bloom_<N>" entry for a prefix backed by a scheme object.
+        // (2) DescribeTable lists each named bloom filter exactly once (the per-index engine prefix
+        // must NOT also synthesize an "idx_bloom_<N>" entry for a prefix backed by a scheme object).
+        // The explicit FPP is preserved; the unspecified one is left unset, NOT surfaced as a default.
         {
             auto describe = session.DescribeTable("/Root/T").GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
-            TMap<TString, EIndexType> byName;
-            for (const auto& index : describe.GetTableDescription().GetIndexDescriptions()) {
-                UNIT_ASSERT_C(byName.emplace(index.GetIndexName(), index.GetIndexType()).second,
+            const auto indexes = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexes.size(), 2u);
+
+            THashSet<TString> seen;
+            for (const auto& index : indexes) {
+                UNIT_ASSERT_C(seen.emplace(index.GetIndexName()).second,
                     "index listed more than once: " << index.GetIndexName());
+                UNIT_ASSERT_VALUES_EQUAL(index.GetIndexType(), EIndexType::LocalBloomFilter);
+                const auto& settings = std::get<TLocalBloomFilterSettings>(index.GetIndexSettings());
+                if (index.GetIndexName() == "idx_bloom1") {
+                    UNIT_ASSERT(settings.FalsePositiveProbability.has_value());
+                    UNIT_ASSERT_DOUBLES_EQUAL(*settings.FalsePositiveProbability, 0.03, 1e-9);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(index.GetIndexName(), "idx_bloom2");
+                    UNIT_ASSERT(!settings.FalsePositiveProbability.has_value());
+                }
             }
-            UNIT_ASSERT_VALUES_EQUAL(byName.size(), 2u);
-            UNIT_ASSERT(byName.contains("idx_bloom1"));
-            UNIT_ASSERT(byName.contains("idx_bloom2"));
-            UNIT_ASSERT_VALUES_EQUAL(byName.at("idx_bloom1"), EIndexType::LocalBloomFilter);
-            UNIT_ASSERT_VALUES_EQUAL(byName.at("idx_bloom2"), EIndexType::LocalBloomFilter);
         }
 
         // (3) SHOW CREATE TABLE renders each named bloom filter as a LOCAL index.

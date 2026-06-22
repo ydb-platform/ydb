@@ -199,7 +199,7 @@ private:
             {"result", (result ? result->Issues.ToOneLineString() : "nullptr")});
 
         if (ev->Cookie != InFlightCompilationId) {
-            YDB_LOG_DEBUG("Outdated compiler response ignored for id current compile id",
+            YDB_LOG_DEBUG("Outdated compiler response ignored for id, current compile id",
                 {"logPrefix", GetLogPrefix()},
                 {"cookie", ev->Cookie},
                 {"inFlightCompilationId", InFlightCompilationId});

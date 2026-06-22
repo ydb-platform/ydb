@@ -2698,7 +2698,7 @@ public:
 
             if (!settings.ColumnFamilies.empty()) {
                 IKqpGateway::TGenericResult errResult;
-                errResult.AddIssue(NYql::TIssue("TableStore does not support column families"));
+                errResult.AddIssue(NYql::TIssue("Column FAMILY is not supported for column tables"));
                 errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
                 return MakeFuture(std::move(errResult));
             }

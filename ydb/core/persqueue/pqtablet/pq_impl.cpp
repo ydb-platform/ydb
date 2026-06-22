@@ -2,13 +2,13 @@
 #include "pq_impl.h"
 #include "pq_impl_types.h"
 #include "fix_transaction_states.h"
-#include <ydb/core/persqueue/pqtablet/blob/message_format.h>
 
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/pqtablet/common/event_helpers.h>
 #include <ydb/core/persqueue/pqtablet/cache/read.h>
 #include <ydb/core/persqueue/pqtablet/readproxy/readproxy.h>
+#include <ydb/core/persqueue/pqtablet/batching/batch_processor.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/persqueue/pqtablet/common/tracing_support.h>
@@ -1874,7 +1874,7 @@ void TPersQueue::FillBatchInfo(
         msg.MaxSeqNo = static_cast<ui64>(cmd.GetMaxSeqNo());
     }
     msg.MessageCount = static_cast<ui32>(cmd.GetMessageCount());
-    msg.MessageFormat = FromProtoMessageFormat(cmd.GetMessageFormat());
+    msg.IsBatch = cmd.GetIsBatch();
     if (cmd.GetPartNo() > 0) {
         return;
     }
@@ -1971,8 +1971,6 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             errorStr = "MaxSeqNo must be >= 0";
         } else if (cmd.GetMessageCount() < 1 || cmd.GetMessageCount() > MAX_MESSAGE_COUNT) {
             errorStr = TStringBuilder() << "MessageCount must be >= 1 and <= " << MAX_MESSAGE_COUNT;
-        } else if (cmd.GetMessageFormat() < 0 || cmd.GetMessageFormat() >= (1 << MESSAGE_FORMAT_BITS)) {
-            errorStr = TStringBuilder() << "MessageFormat must be >= 0 and < " << (1 << MESSAGE_FORMAT_BITS);
         } else if (cmd.HasPartNo() && (cmd.GetPartNo() < 0 || cmd.GetPartNo() >= Max<ui16>())) {
             errorStr = "PartNo must be >= 0 and < 65535";
         } else if (cmd.HasPartNo() != cmd.HasTotalParts()) {
@@ -2758,7 +2756,8 @@ void TPersQueue::Handle(TEvPersQueue::TEvRequest::TPtr& ev, const TActorContext&
             directKey.SessionId = pipeIter->second.SessionId;
             directKey.PartitionSessionId = pipeIter->second.PartitionSessionId;
         }
-        TActorId rr = ctx.RegisterWithSameMailbox(CreateReadProxy(ev->Sender, TabletID(), ctx.SelfID, GetGeneration(), directKey, request));
+        TActorId rr = ctx.RegisterWithSameMailbox(CreateReadProxy(
+            ev->Sender, TabletID(), ctx.SelfID, GetGeneration(), directKey, request, BatchProcessorActor));
         ans = CreateResponseProxy(rr, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
     } else {
         ans = CreateResponseProxy(ev->Sender, ctx.SelfID, TopicName, p, m, s, c, ResourceMetrics, ctx);
@@ -3002,6 +3001,7 @@ void TPersQueue::HandleDie(const TActorContext& ctx)
         ctx.Send(p.second.Actor, new TEvents::TEvPoisonPill());
     }
     ctx.Send(CacheActor, new TEvents::TEvPoisonPill());
+    ctx.Send(BatchProcessorActor, new TEvents::TEvPoisonPill());
 
     for (auto& pipe : PipesInfo) {
         if (!pipe.second.SessionId.empty()) {
@@ -3066,6 +3066,7 @@ void TPersQueue::CreatedHook(const TActorContext& ctx)
 {
     IsServerless = AppData(ctx)->FeatureFlags.GetEnableDbCounters(); //TODO: find out it via describe
     CacheActor = ctx.RegisterWithSameMailbox(new TPQCacheProxy(ctx.SelfID, TabletID()));
+    BatchProcessorActor = ctx.Register(NBatching::CreateBatchProcessor(TabletID(), ctx.SelfID));
 
     SamplingControl = AppData(ctx)->TracingConfigurator->GetControl();
 
@@ -5010,6 +5011,7 @@ IActor* TPersQueue::CreatePartitionActor(const TPartitionId& partitionId,
                           SubDomainOutOfSpace,
                           (ui32)channels,
                           GetPartitionQuoter(partitionId),
+                          BatchProcessorActor,
                           SamplingControl,
                           newPartition);
 }

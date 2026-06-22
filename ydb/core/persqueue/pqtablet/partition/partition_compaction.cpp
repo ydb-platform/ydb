@@ -77,7 +77,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
     TClientBlob blob(std::move(p.Msg.SourceId), p.Msg.SeqNo, std::move(p.Msg.Data), partData, WriteTimestampEstimate,
                         TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
                         p.Msg.UncompressedSize, std::move(p.Msg.PartitionKey), std::move(p.Msg.ExplicitHashKey),
-                        p.Msg.MessageCount, p.Msg.MessageFormat); //remove curOffset when LB will report CTime
+                        p.Msg.MessageCount, p.Msg.IsBatch); //remove curOffset when LB will report CTime
 
     bool lastBlobPart = blob.IsLastPart();
 
@@ -358,7 +358,7 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
                 .IgnoreQuotaDeadline = true,
                 .HeartbeatVersion = std::nullopt,
                 .MessageCount = blob.MessageCount,
-                .MessageFormat = blob.MessageFormat,
+                .IsBatch = blob.IsBatch,
             }, std::nullopt};
             msg.Internal = true;
 

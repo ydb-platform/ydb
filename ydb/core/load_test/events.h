@@ -235,11 +235,33 @@ struct TEvLoad {
     struct TEvNbsWrite : public TEventPB<TEvNbsWrite,
         NKikimr::TEvLoadTestRequest::TNbsDbgLikeLoad::TNbsWrite, EvNbsWrite>
     {
+        using TBase = TEventPB<TEvNbsWrite,
+            NKikimr::TEvLoadTestRequest::TNbsDbgLikeLoad::TNbsWrite, EvNbsWrite>;
+
+        // Write data carried as a direct TRope on local (same-node) delivery.
+        // FillRecord() moves it into the protobuf payload before serialization.
+        TRope Payload;
+
         TEvNbsWrite() = default;
         TEvNbsWrite(ui64 address, ui32 sizeBytes) {
             Record.SetAddress(address);
             Record.SetSizeBytes(sizeBytes);
         }
+
+        ui32 CalculateSerializedSize() const override {
+            const_cast<TEvNbsWrite*>(this)->FillRecord();
+            return TBase::CalculateSerializedSize();
+        }
+
+        bool SerializeToArcadiaStream(NActors::TChunkSerializer* chunker) const override {
+            const_cast<TEvNbsWrite*>(this)->FillRecord();
+            return TBase::SerializeToArcadiaStream(chunker);
+        }
+
+        static TEvNbsWrite* Load(const NActors::TEventSerializedData* data);
+
+    private:
+        void FillRecord();
     };
 
     struct TEvNbsWriteResult : public TEventPB<TEvNbsWriteResult,

@@ -24,10 +24,10 @@ namespace NKikimr::NDDisk {
             EvWriteResult,
             EvRead,
             EvReadResult,
-            EvSyncWithPersistentBuffer,
-            EvSyncWithPersistentBufferResult,
-            EvSyncWithDDisk,
-            EvSyncWithDDiskResult,
+            EvSync,
+            EvSyncResult,
+            EvSyncReserved1,
+            EvSyncReserved2,
             EvWritePersistentBuffer,
             EvWritePersistentBufferResult,
             EvReadPersistentBuffer,
@@ -259,6 +259,8 @@ struct TPersistentBufferFormat {
     ui32 MaxBarriersLimit = 128;
     ui32 MaxPendingEventsQueueSize = 1024;
     bool EnableFastErases = true;
+    ui32 WritesBatchingPeriodMicroseconds = 40;
+    bool EnableWritesBatching = true;
 };
 
 #define DECLARE_DDISK_EVENT(NAME) \
@@ -272,10 +274,8 @@ struct TPersistentBufferFormat {
     struct TEvWriteResult;
     struct TEvRead;
     struct TEvReadResult;
-    struct TEvSyncWithPersistentBuffer;
-    struct TEvSyncWithPersistentBufferResult;
-    struct TEvSyncWithDDisk;
-    struct TEvSyncWithDDiskResult;
+    struct TEvSync;
+    struct TEvSyncResult;
     struct TEvWritePersistentBuffer;
     struct TEvWritePersistentBufferResult;
     struct TEvWritePersistentBuffers;
@@ -651,84 +651,86 @@ struct TPersistentBufferFormat {
         }
     };
 
-    DECLARE_DDISK_EVENT(SyncWithPersistentBuffer) {
-        using TResult = TEvSyncWithPersistentBufferResult;
+    DECLARE_DDISK_EVENT(Sync) {
+        using TResult = TEvSyncResult;
+        using TDDiskId = std::tuple<ui32, ui32, ui32>;
+        using TSource = NKikimrBlobStorage::NDDisk::TEvSync::TSource;
+        using TSegment = NKikimrBlobStorage::NDDisk::TEvSync::TSegment;
 
-        TEvSyncWithPersistentBuffer() = default;
+        TEvSync() = default;
 
-        TEvSyncWithPersistentBuffer(const TQueryCredentials& creds, std::optional<std::tuple<ui32, ui32, ui32>> ddiskId,
-                std::optional<ui64> ddiskInstanceGuid) {
+        explicit TEvSync(const TQueryCredentials& creds) {
             creds.Serialize(Record.MutableCredentials());
-            if (ddiskId) {
-                const auto& [nodeId, pdiskId, ddiskSlotId] = *ddiskId;
-                auto *m = Record.MutableDDiskId();
-                m->SetNodeId(nodeId);
-                m->SetPDiskId(pdiskId);
-                m->SetDDiskSlotId(ddiskSlotId);
-            }
-            if (ddiskInstanceGuid) {
-                Record.SetDDiskInstanceGuid(*ddiskInstanceGuid);
-            }
         }
 
-        void AddSegment(const TBlockSelector& selector, ui64 lsn, ui32 generation) {
-            auto *segment = Record.AddSegments();
+        static void SetSource(TSource *source, const TDDiskId& ddiskId, ui64 ddiskInstanceGuid) {
+            const auto& [nodeId, pdiskId, ddiskSlotId] = ddiskId;
+            auto *m = source->MutableDDiskId();
+            m->SetNodeId(nodeId);
+            m->SetPDiskId(pdiskId);
+            m->SetDDiskSlotId(ddiskSlotId);
+            source->SetDDiskInstanceGuid(ddiskInstanceGuid);
+        }
+
+        TSegment* AddSegmentFromDDisk(
+                const TDDiskId& ddiskId,
+                ui64 ddiskInstanceGuid,
+                const TBlockSelector& selector) {
+            auto *source = GetOrAddSource(ddiskId, ddiskInstanceGuid);
+            auto *segment = source->AddSegments();
             selector.Serialize(segment->MutableSelector());
-            segment->SetLsn(lsn);
-            segment->SetGeneration(generation);
-        }
-    };
-
-    DECLARE_DDISK_EVENT(SyncWithPersistentBufferResult) {
-        TEvSyncWithPersistentBufferResult() = default;
-
-        TEvSyncWithPersistentBufferResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
-                const std::optional<TString>& errorReason = std::nullopt) {
-            Record.SetStatus(status);
-            if (errorReason) {
-                Record.SetErrorReason(*errorReason);
-            }
+            segment->MutableDDiskSegment();
+            return segment;
         }
 
-        void AddSegmentResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status, TString errorReason) {
-            auto *result = Record.AddSegmentResults();
-            result->SetStatus(status);
-            if (errorReason) {
-                result->SetErrorReason(errorReason);
-            }
-        }
-    };
-
-    DECLARE_DDISK_EVENT(SyncWithDDisk) {
-        using TResult = TEvSyncWithDDiskResult;
-
-        TEvSyncWithDDisk() = default;
-
-        TEvSyncWithDDisk(const TQueryCredentials& creds, std::optional<std::tuple<ui32, ui32, ui32>> ddiskId,
-                std::optional<ui64> ddiskInstanceGuid) {
-            creds.Serialize(Record.MutableCredentials());
-            if (ddiskId) {
-                const auto& [nodeId, pdiskId, ddiskSlotId] = *ddiskId;
-                auto *m = Record.MutableDDiskId();
-                m->SetNodeId(nodeId);
-                m->SetPDiskId(pdiskId);
-                m->SetDDiskSlotId(ddiskSlotId);
-            }
-            if (ddiskInstanceGuid) {
-                Record.SetDDiskInstanceGuid(*ddiskInstanceGuid);
-            }
-        }
-
-        void AddSegment(const TBlockSelector& selector) {
-            auto *segment = Record.AddSegments();
+        TSegment* AddSegmentFromPB(
+                const TDDiskId& ddiskId,
+                ui64 ddiskInstanceGuid,
+                const TBlockSelector& selector,
+                ui64 lsn,
+                ui32 generation) {
+            auto *source = GetOrAddSource(ddiskId, ddiskInstanceGuid);
+            auto *segment = source->AddSegments();
             selector.Serialize(segment->MutableSelector());
+            auto *persistentBufferSegment =
+                segment->MutablePersistentBufferSegment();
+            persistentBufferSegment->SetLsn(lsn);
+            persistentBufferSegment->SetGeneration(generation);
+            return segment;
+        }
+
+    private:
+        static bool IsSameSource(const TSource& source, const TDDiskId& ddiskId, ui64 ddiskInstanceGuid) {
+            if (!source.HasDDiskId() || source.GetDDiskInstanceGuid() != ddiskInstanceGuid) {
+                return false;
+            }
+
+            const auto& [nodeId, pdiskId, ddiskSlotId] = ddiskId;
+            const auto& sourceDDiskId = source.GetDDiskId();
+            return sourceDDiskId.GetNodeId() == nodeId
+                && sourceDDiskId.GetPDiskId() == pdiskId
+                && sourceDDiskId.GetDDiskSlotId() == ddiskSlotId;
+        }
+
+        TSource* GetOrAddSource(const TDDiskId& ddiskId, ui64 ddiskInstanceGuid) {
+            // Coalesce only consecutive same-source segments to preserve request order.
+            if (Record.SourcesSize()) {
+                auto *source = Record.MutableSources(Record.SourcesSize() - 1);
+                if (IsSameSource(*source, ddiskId, ddiskInstanceGuid)) {
+                    return source;
+                }
+            }
+
+            auto *source = Record.AddSources();
+            SetSource(source, ddiskId, ddiskInstanceGuid);
+            return source;
         }
     };
 
-    DECLARE_DDISK_EVENT(SyncWithDDiskResult) {
-        TEvSyncWithDDiskResult() = default;
+    DECLARE_DDISK_EVENT(SyncResult) {
+        TEvSyncResult() = default;
 
-        TEvSyncWithDDiskResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
+        TEvSyncResult(NKikimrBlobStorage::NDDisk::TReplyStatus::E status,
                 const std::optional<TString>& errorReason = std::nullopt) {
             Record.SetStatus(status);
             if (errorReason) {

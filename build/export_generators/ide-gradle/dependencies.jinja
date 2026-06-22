@@ -3,17 +3,21 @@
 {%-         set first_ap = annotation_processors|first -%}
 {%-         set annotation_processors = annotation_processors|unique|sort -%}
 {%-         set lomboks = annotation_processors|selectattr('jar', 'startsWith', LOMBOK_PATH) -%}
+{%-         set lombok_jars = lomboks|map(attribute='jar')|unique -%}
 {%-         set nolomboks = annotation_processors|rejectattr('jar', 'startsWith', LOMBOK_PATH) -%}
+{%-         set nolombok_jars = nolomboks|map(attribute='jar')|unique -%}
 {%-         if lomboks|length -%}
-{%-             for annotation_processor in lomboks -%}
+{%-             for lombok_jar in lombok_jars -%}
+{%-                 set annotation_processor = lomboks|selectattr('jar', 'eq', lombok_jar)|first -%}
 {%-                 set parts = rsplit(annotation_processor.jar, "/", 4) %}
     {{ func }}("{{ parts[0]|replace("contrib/java/", "")|replace("/", ".") }}:{{ parts[1] }}:{{ parts[2] }}")
 {%-             endfor -%}
 {%-         endif -%}
 {%-         if nolomboks|length -%}
-{%-             for annotation_processor in nolomboks -%}
+{%-             for nolombok_jar in nolombok_jars -%}
+{%-                 set annotation_processor = nolomboks|selectattr('jar', 'eq', nolombok_jar)|first -%}
 {%-                 if [annotation_processor.jar]|select('startsWith', 'contrib/java/')|length -%}
-{#-                         Contrib AP, use by classpath -#}
+{#-                     Contrib AP, use by classpath -#}
 {%-                     set parts = rsplit(annotation_processor.jar, "/", 4) %}
     {{ func }}("{{ parts[0]|replace("contrib/java/", "")|replace("/", ".") }}:{{ parts[1] }}:{{ parts[2] }}")
 {%-                 else -%}
@@ -32,13 +36,13 @@
 {%-     endif -%}
 {%- endmacro -%}
 
-{%- macro Kapts(func, kapts, file_jars, test_file_jars) -%}
+{%- macro Kapts(func, kapts, file_jars, alltests_file_jars) -%}
 {%-     if kapts|length -%}
 {%-         set kapt_first = kapts|first -%}
 {%-         set kapt_jars = kapts|map(attribute='jar')|unique|sort -%}
 {%-         for kapt_jar in kapt_jars -%}
 {%-             set kapt = kapts|selectattr('jar', 'eq', kapt_jar)|first -%}
-{%-             if (kapt_jar in file_jars) or (kapt_jar in test_file_jars) -%}
+{%-             if (kapt_jar in file_jars) or (kapt_jar in alltests_file_jars) -%}
 {#-                 found KAPT jar in depends => use kapt as jar #}
     {{ func }}(files(listOf(
 {%-                if kapt.deps|length -%}
@@ -50,8 +54,7 @@
     )))
 {%-             else -%}
 {#-                 no in depends jar => use KAPT as project() -#}
-{%-                 set path_and_jar = rsplit(kapt_jar, "/", 2) -%}
-{%-                 set classpath = 'project(":' + path_and_jar[0]|replace("/", ":") + '")' -%}
+{%-                 set classpath = 'project(":' + dirname(kapt_jar)|replace("/", ":") + '")' -%}
 {%-                 include "[generator]/patch_classpath.jinja" %}
     {{ func }}({{ classpath }})
 {%-             endif -%}

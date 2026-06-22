@@ -34,6 +34,8 @@ SRCS(
     helpers_flags_n.h
     ls_checks.cpp
     ls_checks.h
+    olap_helpers.cpp
+    olap_helpers.h
     schemeshard_counters.cpp
     schemeshard_counters.h
     shred_helpers.cpp

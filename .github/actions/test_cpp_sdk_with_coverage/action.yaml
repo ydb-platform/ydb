@@ -1,0 +1,88 @@
+name: Ya-Build-Test-Coverage
+inputs:
+  bazel_remote_uri:
+    type: string
+    default: ""
+  bazel_remote_username:
+    type: string
+    default: ""
+  bazel_remote_password:
+    type: string
+    default: ""
+  test_threads:
+    type: string
+    default: "28"
+  link_threads:
+    type: string
+    default: "12"
+defaults:
+  run:
+    shell: bash
+runs:
+  using: composite
+  steps:
+    - name: Run coverage on base and PR
+      if: github.event_name == 'pull_request' || github.event_name == 'pull_request_target'
+      shell: bash
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
+        BUILD_PRESET: profile
+      run: |
+        set -ex
+
+        BAZEL_REMOTE_PASSWORD_FILE=$(mktemp)
+        echo -n "${{ inputs.bazel_remote_password }}" > "$BAZEL_REMOTE_PASSWORD_FILE"
+
+        run_sdk_coverage() {
+          local out_dir="$1"
+          mkdir -p "$out_dir"
+          local params=(
+            -tA --build profile
+            --clang-coverage --coverage-report
+            -DCOVERAGE_TARGET_REGEXP=ydb/public/sdk/cpp
+            --test-threads "${{ inputs.test_threads }}"
+            --link-threads "${{ inputs.link_threads }}"
+            --output "$out_dir"
+            --no-dir-outputs
+          )
+          if [ -n "${{ inputs.bazel_remote_uri }}" ]; then
+            params+=(--bazel-remote-store --bazel-remote-base-uri "${{ inputs.bazel_remote_uri }}")
+            params+=(--bazel-remote-username "${{ inputs.bazel_remote_username }}")
+            params+=(--bazel-remote-password-file "$BAZEL_REMOTE_PASSWORD_FILE")
+            params+=(--bazel-remote-put --dist-cache-max-file-size=209715200 --dist-cache-evict-test-runs)
+          fi
+          ./ya make "${params[@]}" ydb/public/sdk/cpp
+        }
+
+        MERGE_HEAD=$(git rev-parse HEAD)
+        BASE_REF="${{ github.event.pull_request.base.ref }}"
+        BASE_OUT="$(pwd)/coverage_workspace/$BASE_REF"
+        PR_OUT="$(pwd)/coverage_workspace/pr"
+        BASE_COVERAGE_JSON="$BASE_OUT/line_coverage.json"
+        PR_COVERAGE_JSON="$PR_OUT/line_coverage.json"
+
+        git fetch origin "$BASE_REF"
+        git checkout "origin/$BASE_REF"
+        run_sdk_coverage "$BASE_OUT"
+        python3 .github/scripts/tests/compare_cpp_sdk_coverage.py extract \
+          "$BASE_OUT/coverage.report" "$BASE_COVERAGE_JSON"
+
+        git checkout "$MERGE_HEAD"
+        run_sdk_coverage "$PR_OUT"
+        python3 .github/scripts/tests/compare_cpp_sdk_coverage.py extract \
+          "$PR_OUT/coverage.report" "$PR_COVERAGE_JSON"
+
+        CURRENT=$(python3 -c 'import json; print(json.load(open("'"$PR_COVERAGE_JSON"'"))["line_pct"])')
+        BASELINE=$(python3 -c 'import json; print(json.load(open("'"$BASE_COVERAGE_JSON"'"))["line_pct"])')
+        if python3 .github/scripts/tests/compare_cpp_sdk_coverage.py check "$PR_COVERAGE_JSON" "$BASE_COVERAGE_JSON"; then
+          STATE=success; COLOR=green; MSG="CPP SDK line coverage: ${CURRENT}% (${BASE_REF}: ${BASELINE}%) — OK"
+        else
+          STATE=failure; COLOR=red; MSG="CPP SDK line coverage: ${CURRENT}% (${BASE_REF}: ${BASELINE}%) — FAILED"
+        fi
+        SHA="${{ github.event.pull_request.head.sha }}"
+        curl --retry 5 --fail -L -X POST \
+          -H "Authorization: Bearer $GITHUB_TOKEN" -H "Accept: application/vnd.github+json" \
+          "https://api.github.com/repos/$GITHUB_REPOSITORY/statuses/$SHA" \
+          -d "{\"state\":\"$STATE\",\"description\":\"${CURRENT}% vs ${BASE_REF} ${BASELINE}%\",\"context\":\"coverage_cpp_sdk\"}"
+        echo "$MSG" | .github/scripts/tests/comment-pr.py --color "$COLOR"
+        [[ "$STATE" == success ]]

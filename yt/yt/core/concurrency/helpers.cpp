@@ -35,9 +35,10 @@ TTagSet GetBucketTags(
 TTagSet GetQueueTags(
     const std::string& threadName,
     const std::string& bucketName,
-    const std::string& queueName)
+    const std::string& queueName,
+    const TTagSet& extraTags)
 {
-    TTagSet tags;
+    TTagSet tags = extraTags;
 
     tags.AddTag(TTag("thread", threadName));
     tags.AddTag(TTag("bucket", bucketName), -1);

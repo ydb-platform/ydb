@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    entity.cpp
     response.cpp
     source.cpp
     support_links_resolver.cpp

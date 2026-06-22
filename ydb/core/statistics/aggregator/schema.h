@@ -116,6 +116,7 @@ struct TAggregatorSchema : NIceDb::Schema {
     static constexpr ui64 SysParam_TraversalIsColumnTable = 11;
     static constexpr ui64 SysParam_GlobalTraversalRound = 12;
     static constexpr ui64 SysParam_TraversalTableDatabase = 13;
+    static constexpr ui64 SysParam_ForceTraversalOperationId = 14;
 };
 
 } // NKikimr::NStat

@@ -4,6 +4,7 @@
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
 #include <ydb/core/base/path.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 
@@ -456,9 +457,83 @@ TVector<ISubOperation::TPtr> CreateDropIndex(TOperationId nextId, const TTxTrans
         return {CreateReject(nextId, NKikimrScheme::StatusMultipleModifications, errStr)};
     }
 
+    // A fulltext index built on a table with a custom (non single-integer) primary key uses a
+    // synthetic __ydb_row_id column as its doc_id and resolves it back to the primary key through a
+    // single-column GlobalUnique secondary index over __ydb_row_id (auto-named uniq__ydb_row_id).
+    // Dropping that unique index while such a fulltext index still exists would orphan every fulltext
+    // posting entry, so forbid it unless another Ready unique index over __ydb_row_id remains to take
+    // over the resolution. Detection mirrors the runtime's own index selection (signature, not name),
+    // see kqp_query_compiler.cpp and index_utils.cpp.
+    if (const auto* droppedIndex = context.SS->Indexes.FindPtr(indexPath.Base()->PathId)) {
+        const auto& info = *droppedIndex;
+        const bool isRowIdUniqueIndex = info->Type == NKikimrSchemeOp::EIndexTypeGlobalUnique
+            && info->IndexKeys.size() == 1
+            && info->IndexKeys.front() == NTableIndex::NFulltext::RowIdColumn;
+
+        if (isRowIdUniqueIndex) {
+            bool fulltextDependsOnRowId = false;
+            bool anotherReadyRowIdUniqueIndex = false;
+
+            for (const auto& [_, childPathId] : mainTablePath.Base()->GetChildren()) {
+                if (childPathId == indexPath.Base()->PathId) {
+                    continue; // the index being dropped
+                }
+                auto childPath = context.SS->PathsById.at(childPathId);
+                if (!childPath->IsTableIndex() || childPath->Dropped() || childPath->PlannedToDrop()) {
+                    continue;
+                }
+                const auto* sibling = context.SS->Indexes.FindPtr(childPathId);
+                if (!sibling) {
+                    continue;
+                }
+                const auto& siblingInfo = *sibling;
+
+                if (const auto* ft = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(
+                        &siblingInfo->SpecializedIndexDescription);
+                    ft && ft->GetUseRowIdAsDocId())
+                {
+                    fulltextDependsOnRowId = true;
+                }
+
+                if (siblingInfo->Type == NKikimrSchemeOp::EIndexTypeGlobalUnique
+                    && siblingInfo->State == NKikimrSchemeOp::EIndexStateReady
+                    && siblingInfo->IndexKeys.size() == 1
+                    && siblingInfo->IndexKeys.front() == NTableIndex::NFulltext::RowIdColumn)
+                {
+                    anotherReadyRowIdUniqueIndex = true;
+                }
+            }
+
+            if (fulltextDependsOnRowId && !anotherReadyRowIdUniqueIndex) {
+                return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed, TStringBuilder()
+                    << "Cannot drop unique index '" << indexPath.LeafName() << "' over '"
+                    << NTableIndex::NFulltext::RowIdColumn << "' of table '" << mainTablePath.PathString()
+                    << "': it is required by a fulltext index to resolve documents back to the primary key;"
+                    << " drop the fulltext index(es) first")};
+            }
+        }
+    }
+
+    // The generic drop path only targets row tables. The only local index on a row table
+    // is the prefix bloom filter, backed by ByKeyFilterPrefix in the partition config.
+    bool isPrefixBloomIndex = false;
+    ui32 droppedPrefixLen = 0;
+    if (auto it = context.SS->Indexes.find(indexPath.Base()->PathId); it != context.SS->Indexes.end()) {
+        isPrefixBloomIndex = it->second->Type == NKikimrSchemeOp::EIndexTypeLocalBloomFilter;
+        droppedPrefixLen = it->second->IndexKeys.size();
+    }
+
     TVector<ISubOperation::TPtr> result;
 
-    {
+    if (isPrefixBloomIndex) {
+        // Row-table prefix bloom filter has no impl table. Removing the matching ByKeyFilterPrefix
+        // from the main table's partition config is modeled as a normal table alter.
+        auto mainTableAltering = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
+        auto* alter = mainTableAltering.MutableAlterTable();
+        alter->SetName(mainTablePath.LeafName());
+        alter->MutablePartitionConfig()->AddDropByKeyFilterPrefixLengths(droppedPrefixLen);
+        result.push_back(CreateAlterTable(NextPartId(nextId, result), mainTableAltering));
+    } else {
         auto mainTableIndexDropping = TransactionTemplate(workingDirPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpDropTableIndexAtMainTable);
         auto operation = mainTableIndexDropping.MutableDropIndex();
         operation->SetTableName(mainTablePath.LeafName());

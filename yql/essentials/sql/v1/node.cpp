@@ -312,6 +312,10 @@ void INode::DisableSort() {
     DisableSort_ = true;
 }
 
+void INode::PreserveSort() {
+    PreserveSort_ = true;
+}
+
 bool INode::UsedSubquery() const {
     return false;
 }
@@ -1178,7 +1182,7 @@ bool TWinCumeDist::DoInit(TContext& ctx, ISource* src) {
     YQL_ENSURE(Args_.empty());
     TVector<TNodePtr> optionsElements;
     if (ctx.AnsiCurrentRow) {
-        optionsElements.push_back(BuildTuple(Pos_, {BuildQuotedAtom(Pos_, "ansi", NYql::TNodeFlags::Default)}));
+        optionsElements.push_back(BuildTuple(Pos_, {BuildQuotedAtom(Pos_, "ansi", NYql::TAstNodeFlags::Default)}));
     }
     Args_.push_back(BuildTuple(Pos_, optionsElements));
 
@@ -1312,9 +1316,9 @@ bool TWinRank::DoInit(TContext& ctx, ISource* src) {
 
     TVector<TNodePtr> optionsElements;
     if (!ctx.AnsiRankForNullableKeys.Defined()) {
-        optionsElements.push_back(BuildTuple(Pos_, {BuildQuotedAtom(Pos_, "warnNoAnsi", NYql::TNodeFlags::Default)}));
+        optionsElements.push_back(BuildTuple(Pos_, {BuildQuotedAtom(Pos_, "warnNoAnsi", NYql::TAstNodeFlags::Default)}));
     } else if (*ctx.AnsiRankForNullableKeys) {
-        optionsElements.push_back(BuildTuple(Pos_, {BuildQuotedAtom(Pos_, "ansi", NYql::TNodeFlags::Default)}));
+        optionsElements.push_back(BuildTuple(Pos_, {BuildQuotedAtom(Pos_, "ansi", NYql::TAstNodeFlags::Default)}));
     }
     Args_.push_back(BuildTuple(Pos_, optionsElements));
 
@@ -1994,7 +1998,7 @@ StringContentInternal(TContext& ctx, TPosition pos, const TString& input, EStrin
             return {};
         }
 
-        result.Flags = NYql::TNodeFlags::ArbitraryContent;
+        result.Flags = NYql::TAstNodeFlags::ArbitraryContent;
         result.Content = UnescapeAnsiQuoted(input);
         return result;
     }
@@ -2050,7 +2054,7 @@ StringContentInternal(TContext& ctx, TPosition pos, const TString& input, EStrin
     bool singleQuoted = !doubleQuoted && (str.StartsWith('\'') && str.EndsWith('\''));
 
     if (str.size() >= 2 && (doubleQuoted || singleQuoted)) {
-        result.Flags = NYql::TNodeFlags::ArbitraryContent;
+        result.Flags = NYql::TAstNodeFlags::ArbitraryContent;
         if (ctx.Settings.AnsiLexer) {
             YQL_ENSURE(singleQuoted);
             result.Content = UnescapeAnsiQuoted(str);
@@ -2404,9 +2408,9 @@ TDeferredAtom::TDeferredAtom()
 {
 }
 
-TDeferredAtom::TDeferredAtom(TPosition pos, const TString& str)
+TDeferredAtom::TDeferredAtom(TPosition pos, const TString& str, ui32 flags)
 {
-    Node_ = BuildQuotedAtom(pos, str);
+    Node_ = BuildQuotedAtom(pos, str, flags);
     Explicit_ = str;
     Repr_ = str;
 }

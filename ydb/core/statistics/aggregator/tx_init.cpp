@@ -89,6 +89,10 @@ struct TStatisticsAggregator::TTxInit : public TTxBase {
                         SA_LOG_D("[" << Self->TabletID() << "] Loaded global traversal round: " << value);
                         break;
                     }
+                    case Schema::SysParam_ForceTraversalOperationId:
+                        Self->ForceTraversalOperationId = value;
+                        SA_LOG_D("[" << Self->TabletID() << "] Loaded force traversal operation id: " << value);
+                        break;
                     default:
                         SA_LOG_CRIT("[" << Self->TabletID() << "] Unexpected SysParam id: " << id);
                 }

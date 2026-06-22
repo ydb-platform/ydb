@@ -95,8 +95,7 @@ class CompactWorkload:
 
     def compact(self):
         with ydb.QuerySessionPool(self.fixture.driver) as session_pool:
-            # TODO: add CASCADE = true and PARALLEL
-            session_pool.execute_with_retries(f"ALTER TABLE `{self.TABLE_NAME}` COMPACT;")
+            session_pool.execute_with_retries(f"ALTER TABLE `{self.TABLE_NAME}` COMPACT WITH (CASCADE = true, PARALLEL = 2);")
 
     def assert_row_count(self, expected):
         table = self.TABLE_NAME

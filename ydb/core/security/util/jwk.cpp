@@ -4,6 +4,8 @@
 
 #include <library/cpp/string_utils/base64/base64.h>
 
+#include <util/string/cast.h>
+
 #include <openssl/sha.h>
 
 #include <string>
@@ -24,39 +26,6 @@ inline constexpr std::string_view X5T = "x5t";
 inline constexpr std::string_view X5T_S256 = "x5t#S256";
 inline constexpr std::string_view KEYS = "keys";
 
-const std::unordered_map<std::string_view, TKeyType> KTY_TO_KEY_TYPE = {
-    {"RSA", TKeyType::RSA},
-    {"EC", TKeyType::EC},
-};
-
-const std::unordered_map<std::string_view, TUsage> USE_TO_USAGE = {
-    {"sig", TUsage::SIG},
-    {"enc", TUsage::ENC},
-};
-
-const std::unordered_map<std::string_view, TKeyOps> KEY_OPS_TO_KEY_OPS = {
-    {"sign", TKeyOps::SIGN},
-    {"verify", TKeyOps::VERIFY},
-    {"encrypt", TKeyOps::ENCRYPT},
-    {"decrypt", TKeyOps::DECRYPT},
-    {"wrapKey", TKeyOps::WRAP_KEY},
-    {"unwrapKey", TKeyOps::UNWRAP_KEY},
-    {"deriveKey", TKeyOps::DERIVE_KEY},
-    {"deriveBits", TKeyOps::DERIVE_BITS},
-};
-
-const std::unordered_map<std::string_view, TAlg> ALG_TO_ALG = {
-    {"RS256", TAlg::RS256},
-    {"RS384", TAlg::RS384},
-    {"RS512", TAlg::RS512},
-    {"ES256", TAlg::ES256},
-    {"ES384", TAlg::ES384},
-    {"ES512", TAlg::ES512},
-    {"PS256", TAlg::PS256},
-    {"PS384", TAlg::PS384},
-    {"PS512", TAlg::PS512},
-};
-
 std::optional<std::string> ParseStr(const NJson::TJsonValue& jwk, const std::string_view name) {
     if (!jwk.Has(name) || !jwk[name].IsString()) {
         return std::nullopt;
@@ -65,79 +34,79 @@ std::optional<std::string> ParseStr(const NJson::TJsonValue& jwk, const std::str
 }
 
 // The only MUST parameter
-std::optional<TJWK> ParseKeyType(const NJson::TJsonValue& jwk) {
+std::optional<TJwk> ParseKeyType(const NJson::TJsonValue& jwk) {
     const auto kty = ParseStr(jwk, KTY);
     if (!kty.has_value()) {
         return std::nullopt;
     }
 
-    const auto it = KTY_TO_KEY_TYPE.find(kty.value());
-    return (it != KTY_TO_KEY_TYPE.end()) ? std::make_optional(TJWK{it->second}) : std::nullopt;
+    EJwkKeyType res = EJwkKeyType::RSA;
+    return TryFromString(kty.value(), res) ? std::make_optional(TJwk{res}) : std::nullopt;
 }
 
-std::optional<TUsage> ParseUsage(const NJson::TJsonValue& jwk) {
+std::optional<EJwkUsage> ParseUsage(const NJson::TJsonValue& jwk) {
     const auto usage = ParseStr(jwk, USE);
     if (!usage.has_value()) {
         return std::nullopt;
     }
 
-    const auto it = USE_TO_USAGE.find(usage.value());
-    return (it != USE_TO_USAGE.end()) ? std::make_optional(it->second) : std::nullopt;
+    EJwkUsage res = EJwkUsage::SIG;
+    return TryFromString(usage.value(), res) ? std::make_optional(res) : std::nullopt;
 }
 
-std::vector<TKeyOps> ParseKeyOps(const NJson::TJsonValue& jwk) {
+std::vector<EJwkKeyOps> ParseKeyOps(const NJson::TJsonValue& jwk) {
     if (!jwk.Has(KEY_OPS) || !jwk[KEY_OPS].IsArray()) {
         return {};
     }
 
-    std::vector<TKeyOps> keyOps;
+    std::vector<EJwkKeyOps> keyOps;
 
     for (const auto& op : jwk[KEY_OPS].GetArray()) {
         if (!op.IsString()) {
             continue;
         }
 
-        const auto it = KEY_OPS_TO_KEY_OPS.find(op.GetString());
-        if (it == KEY_OPS_TO_KEY_OPS.end()) {
+        EJwkKeyOps res = EJwkKeyOps::SIGN;
+        if (!TryFromString(op.GetString(), res)) {
             continue;
         }
 
-        keyOps.push_back(it->second);
+        keyOps.push_back(res);
     }
 
     return keyOps;
 }
 
-std::optional<TAlg> ParseAlg(const NJson::TJsonValue& jwk) {
+std::optional<EJwkAlg> ParseAlg(const NJson::TJsonValue& jwk) {
     const auto alg = ParseStr(jwk, ALG);
     if (!alg.has_value()) {
         return std::nullopt;
     }
 
-    const auto it = ALG_TO_ALG.find(alg.value());
-    return (it != ALG_TO_ALG.end()) ? std::make_optional(it->second) : std::nullopt;
+    EJwkAlg res = EJwkAlg::RS256;
+    return TryFromString(alg.value(), res) ? std::make_optional(res) : std::nullopt;
 }
 
-bool IsCompatibleAlgorithm(TKeyType keyType, TAlg algorithm) {
+bool IsCompatibleAlgorithm(EJwkKeyType keyType, EJwkAlg algorithm) {
     switch (keyType) {
-        case TKeyType::RSA: {
-            return algorithm == TAlg::RS256
-                || algorithm == TAlg::RS384
-                || algorithm == TAlg::RS512
-                || algorithm == TAlg::PS256
-                || algorithm == TAlg::PS384
-                || algorithm == TAlg::PS512;
+        case EJwkKeyType::RSA: {
+            return algorithm == EJwkAlg::RS256
+                || algorithm == EJwkAlg::RS384
+                || algorithm == EJwkAlg::RS512
+                || algorithm == EJwkAlg::PS256
+                || algorithm == EJwkAlg::PS384
+                || algorithm == EJwkAlg::PS512;
         }
-        case TKeyType::EC: {
-            return algorithm == TAlg::ES256
-                || algorithm == TAlg::ES384
-                || algorithm == TAlg::ES512;
+        case EJwkKeyType::EC: {
+            return algorithm == EJwkAlg::ES256
+                || algorithm == EJwkAlg::ES384
+                || algorithm == EJwkAlg::ES512;
         }
-        default: Y_UNREACHABLE();
+        default: return false;
     }
 }
 
-std::optional<TAlg> ParseCompatibleAlg(const NJson::TJsonValue& jwk, TKeyType keyType) {
+std::optional<EJwkAlg> ParseCompatibleAlg(const NJson::TJsonValue& jwk, EJwkKeyType keyType) {
     const auto algorithm = ParseAlg(jwk);
     if (!algorithm.has_value() || !IsCompatibleAlgorithm(keyType, algorithm.value())) {
         return std::nullopt;
@@ -214,7 +183,7 @@ std::optional<std::string> ParseThumbprint(
 }
 
 // Parsing based on https://datatracker.ietf.org/doc/html/rfc7517
-std::optional<TJWK> ParseJwkRfc7517(const NJson::TJsonValue& jwk) {
+std::optional<TJwk> ParseJwkRfc7517(const NJson::TJsonValue& jwk) {
     auto res = ParseKeyType(jwk);
     if (!res.has_value()) {
         return std::nullopt;
@@ -263,7 +232,7 @@ std::string CalculateThumbprint(const std::string& cert) {
     return hash;
 }
 
-bool CheckCertificateThumbprints(const TJWK& jwk, const std::string& cert) {
+bool CheckCertificateThumbprints(const TJwk& jwk, const std::string& cert) {
     if (!jwk.X509CertificateSha1ThumbprintBytes.empty()
         && jwk.X509CertificateSha1ThumbprintBytes != CalculateThumbprint<SHA1, SHA_DIGEST_LENGTH>(cert))
     {
@@ -279,7 +248,7 @@ bool CheckCertificateThumbprints(const TJWK& jwk, const std::string& cert) {
     return true;
 }
 
-std::optional<std::string> GetPublicKeyFromX5C(const TJWK& jwk) {
+std::optional<std::string> GetPublicKeyFromX5C(const TJwk& jwk) {
     if (jwk.X509Chain.empty()) {
         return std::nullopt;
     }
@@ -302,31 +271,48 @@ std::optional<std::string> GetPublicKeyFromX5C(const TJWK& jwk) {
 
 } // namespace
 
-TJWK::TJWK(TKeyType type)
+TJwk::TJwk(EJwkKeyType type)
     : Type(type)
 {}
+
+std::optional<EJwkKeyType> GetKeyType(EJwkAlg alg) {
+    switch (alg) {
+        case EJwkAlg::RS256:
+        case EJwkAlg::RS384:
+        case EJwkAlg::RS512:
+        case EJwkAlg::PS256:
+        case EJwkAlg::PS384:
+        case EJwkAlg::PS512:
+            return EJwkKeyType::RSA;
+        case EJwkAlg::ES256:
+        case EJwkAlg::ES384:
+        case EJwkAlg::ES512:
+            return EJwkKeyType::EC;
+        default: return std::nullopt;
+    }
+}
 
 // Currently this implementation is x5c-only: a public key can be derived
 // only from the first certificate in the X.509 chain. RFC 7518 RSA/EC
 // parameter-based key construction is not implemented here yet.
-std::optional<std::string> TJWK::CalculatePublicKey() const {
+std::optional<std::string> TJwk::CalculatePublicKey() const {
     // TODO(vlad-serikov): write code to generate public key from RSA/EC parameters
     // TODO(vlad-serikov): validate cert key matches key from RSA/EC parameters
     return GetPublicKeyFromX5C(*this);
 }
 
-std::optional<TJWK> ParseJWK(const NJson::TJsonValue& jwk) {
+std::optional<TJwk> ParseJwk(const NJson::TJsonValue& jwk) {
     return ParseJwkRfc7517(jwk);
 }
 
-std::optional<TJWKSet> ParseJWKSet(const NJson::TJsonValue& jwkSet) {
+std::optional<TJwkSet> ParseJwkSet(const NJson::TJsonValue& jwkSet) {
     if (!jwkSet.Has(KEYS) || !jwkSet[KEYS].IsArray()) {
         return std::nullopt;
     }
 
-    TJWKSet res;
+    TJwkSet res;
     for (const auto& key : jwkSet[KEYS].GetArray()) {
-        auto jwk = ParseJWK(key);
+        auto jwk = ParseJwk(key);
         if (!jwk.has_value()) {
             // Unsupported JWK doesn't mean, that we cannot use other JWK from the current set
             continue;

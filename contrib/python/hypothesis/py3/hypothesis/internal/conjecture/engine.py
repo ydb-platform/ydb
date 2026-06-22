@@ -27,6 +27,7 @@ from hypothesis.database import ExampleDatabase, choices_from_bytes, choices_to_
 from hypothesis.errors import (
     BackendCannotProceed,
     FlakyBackendFailure,
+    FlakyStrategyDefinition,
     HypothesisException,
     InvalidArgument,
     StopTest,
@@ -103,7 +104,7 @@ CACHE_SIZE: int = 10000
 MIN_TEST_CALLS: int = 10
 
 # we use this to isolate Hypothesis from interacting with the global random,
-# to make it easier to reason about our global random warning logic easier (see
+# to make it easier to reason about our global random warning logic (see
 # deprecate_random_in_strategy).
 _random = Random()
 
@@ -225,6 +226,7 @@ StatisticsDict = TypedDict(
         "generate-phase": NotRequired[PhaseStatistics],
         "reuse-phase": NotRequired[PhaseStatistics],
         "shrink-phase": NotRequired[PhaseStatistics],
+        "explain-phase": NotRequired[PhaseStatistics],
         "stopped-because": NotRequired[str],
         "targets": NotRequired[dict[str, float]],
         "nodeid": NotRequired[str],
@@ -307,6 +309,8 @@ class ConjectureRunner:
         self._current_phase: str = "(not a phase)"
         self.statistics: StatisticsDict = {}
         self.stats_per_test_case: list[CallStats] = []
+        # Time spent in any nested phase, so the enclosing phase can exclude it.
+        self._nested_phase_seconds: float = 0.0
 
         self.interesting_examples: dict[InterestingOrigin, ConjectureResult] = {}
         # We use call_count because there may be few possible valid_examples.
@@ -378,20 +382,36 @@ class ConjectureRunner:
 
     @contextmanager
     def _log_phase_statistics(
-        self, phase: Literal["reuse", "generate", "shrink"]
+        self, phase: Literal["reuse", "generate", "shrink", "explain"]
     ) -> Generator[None, None, None]:
-        self.stats_per_test_case.clear()
+        # Phases may nest - the explain phase runs inside the shrink phase - so
+        # we save and restore the per-call stats and current phase, exclude the
+        # duration of any nested phase, and accumulate when a phase is entered
+        # more than once (the explain phase runs once per shrinking target).
+        saved_stats = self.stats_per_test_case
+        saved_phase = self._current_phase
+        saved_nested_seconds = self._nested_phase_seconds
+        self.stats_per_test_case = []
+        self._current_phase = phase
+        self._nested_phase_seconds = 0.0
         start_time = time.perf_counter()
         try:
-            self._current_phase = phase
             yield
         finally:
-            self.statistics[phase + "-phase"] = {  # type: ignore
-                "duration-seconds": time.perf_counter() - start_time,
-                "test-cases": list(self.stats_per_test_case),
-                "distinct-failures": len(self.interesting_examples),
-                "shrinks-successful": self.shrinks,
-            }
+            elapsed = time.perf_counter() - start_time
+            # A phase can be entered more than once (the explain phase runs once
+            # per shrinking target), so accumulate into any existing bucket.
+            stats = self.statistics.setdefault(
+                phase + "-phase",  # type: ignore
+                {"duration-seconds": 0.0, "test-cases": []},
+            )
+            stats["duration-seconds"] += elapsed - self._nested_phase_seconds
+            stats["test-cases"] += self.stats_per_test_case
+            stats["distinct-failures"] = len(self.interesting_examples)
+            stats["shrinks-successful"] = self.shrinks
+            self.stats_per_test_case = saved_stats
+            self._current_phase = saved_phase
+            self._nested_phase_seconds = saved_nested_seconds + elapsed
 
     @property
     def should_optimise(self) -> bool:
@@ -562,8 +582,15 @@ class ConjectureRunner:
             interrupted = True
             data.freeze()
             return
-        except BaseException:
+        except BaseException as err:
             data.freeze()
+            if isinstance(err, FlakyStrategyDefinition) and data._stateful_repr_parts:
+                # In a stateful test, surface the steps leading up to the
+                # inconsistency.
+                report(
+                    "Steps leading up to this error:\n"
+                    + "\n".join(f"  {s}" for s in data._stateful_repr_parts)
+                )
             if self.settings.backend != "hypothesis":
                 try:
                     realize_choices(data, for_failure=True)

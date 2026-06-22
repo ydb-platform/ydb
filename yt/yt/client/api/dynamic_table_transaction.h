@@ -6,6 +6,8 @@
 
 #include <yt/yt/client/table_client/row_base.h>
 #include <yt/yt/client/table_client/schema.h>
+#include <yt/yt/client/table_client/unversioned_row.h>
+#include <yt/yt/client/table_client/versioned_row.h>
 
 #include <yt/yt/client/tablet_client/public.h>
 
@@ -14,6 +16,71 @@
 #include <library/cpp/yt/memory/shared_range.h>
 
 namespace NYT::NApi {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NFuture {
+
+////////////////////////////////////////////////////////////////////////////////
+
+namespace NRowModifications {
+
+////////////////////////////////////////////////////////////////////////////////
+
+struct TWriteRow
+{
+    explicit TWriteRow(NTableClient::TUnversionedRow row)
+        : Row(row)
+    { }
+
+    NTableClient::TUnversionedRow Row;
+};
+
+struct TDeleteRow
+{
+    explicit TDeleteRow(NTableClient::TLegacyKey key)
+        : Key(key)
+    { }
+
+    NTableClient::TLegacyKey Key;
+};
+
+struct TVersionedWriteRow
+{
+    explicit TVersionedWriteRow(NTableClient::TTypeErasedRow row)
+        : Row(row)
+    { }
+
+    // NB: Versioned write to an ordered tablet will contain unversioned rows.
+    NTableClient::TTypeErasedRow Row;
+};
+
+struct TWriteAndLockRow
+{
+    TWriteAndLockRow(NTableClient::TUnversionedRow row, NTableClient::TLockMask locks)
+        : Row(row)
+        , Locks(std::move(locks))
+    { }
+
+    NTableClient::TUnversionedRow Row;
+    NTableClient::TLockMask Locks;
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NRowModifications
+
+////////////////////////////////////////////////////////////////////////////////
+
+using TRowModification = std::variant<
+    NRowModifications::TWriteRow,
+    NRowModifications::TDeleteRow,
+    NRowModifications::TVersionedWriteRow,
+    NRowModifications::TWriteAndLockRow>;
+
+////////////////////////////////////////////////////////////////////////////////
+
+} // namespace NFuture
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -114,6 +181,12 @@ struct IDynamicTableTransaction
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
         TSharedRange<TRowModification> modifications,
+        const TModifyRowsOptions& options = {}) = 0;
+
+    virtual void FutureModifyRows(
+        const NYPath::TYPath& path,
+        NTableClient::TNameTablePtr nameTable,
+        TSharedRange<NFuture::TRowModification> modifications,
         const TModifyRowsOptions& options = {}) = 0;
 };
 

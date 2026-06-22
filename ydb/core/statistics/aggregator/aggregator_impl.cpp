@@ -781,6 +781,7 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
                 }
 
                 ForceTraversalOperationId = operation.OperationId;
+                PersistSysParam(db, Schema::SysParam_ForceTraversalOperationId, ForceTraversalOperationId);
                 TraversalDatabase = operation.DatabaseName;
                 TraversalPathId = operationTable.PathId;
 
@@ -1141,6 +1142,7 @@ void TStatisticsAggregator::PersistTraversal(NIceDb::TNiceDb& db) {
     PersistSysParam(db, Schema::SysParam_TraversalTableLocalPathId, ToString(TraversalPathId.LocalPathId));
     PersistSysParam(db, Schema::SysParam_TraversalStartTime, ToString(TraversalStartTime.MicroSeconds()));
     PersistSysParam(db, Schema::SysParam_TraversalIsColumnTable, ToString(TraversalIsColumnTable));
+    PersistSysParam(db, Schema::SysParam_ForceTraversalOperationId, ForceTraversalOperationId);
 }
 
 void TStatisticsAggregator::PersistStartKey(NIceDb::TNiceDb& db) {

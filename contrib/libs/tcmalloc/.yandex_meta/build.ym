@@ -12,6 +12,7 @@ https://github.com/google/tcmalloc/archive/{{self.version().strip()}}.tar.gz
 common.inc
 default/ya.make
 dynamic/ya.make
+internal_utils/ya.make
 malloc_extension/ya.make
 no_percpu_cache/ya.make
 no_percpu_cache/aligned_alloc.c
@@ -44,6 +45,7 @@ IF (NOT DLL_FOR)
     RECURSE(
         default
         dynamic
+        internal_utils
         malloc_extension
         no_percpu_cache
         numa_256k

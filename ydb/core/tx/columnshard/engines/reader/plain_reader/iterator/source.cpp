@@ -4,7 +4,6 @@
 #include "source.h"
 
 #include <ydb/core/tx/columnshard/blobs_reader/actor.h>
-#include <ydb/core/tx/columnshard/blobs_reader/events.h>
 #include <ydb/core/tx/columnshard/engines/portions/data_accessor.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/common/accessor_callback.h>

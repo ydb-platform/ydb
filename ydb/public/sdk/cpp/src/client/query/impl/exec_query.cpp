@@ -159,6 +159,8 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
     std::optional<TTransaction> Tx_;
     std::vector<std::string> ArrowSchemas_;
     std::vector<std::vector<std::string>> BytesData_;
+    std::optional<TExecuteQueryPart> FirstPart_;
+    size_t AggregatedParts_ = 0;
 
     void Next() {
         TPtr self(this);
@@ -175,33 +177,12 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                 std::swap(self->Stats_, stats);
 
                 if (part.EOS()) {
-                    std::vector<NYdb::NIssue::TIssue> issues;
-                    std::vector<Ydb::ResultSet> resultProtos;
-                    std::optional<TTransaction> tx;
-                    std::vector<std::string> arrowSchemas;
-                    std::vector<std::vector<std::string>> bytesData;
-
-                    std::swap(self->Issues_, issues);
-                    std::swap(self->ResultSets_, resultProtos);
-                    std::swap(self->Tx_, tx);
-                    std::swap(self->ArrowSchemas_, arrowSchemas);
-                    std::swap(self->BytesData_, bytesData);
-
-                    std::vector<TResultSet> resultSets;
-                    for (size_t i = 0; i < resultProtos.size(); ++i) {
-                        auto proto = std::move(resultProtos[i]);
-                        auto arrowSchema = arrowSchemas.size() > i ? std::move(arrowSchemas[i]) : std::string();
-                        auto data = bytesData.size() > i ? std::move(bytesData[i]) : std::vector<std::string>();
-
-                        resultSets.emplace_back(std::move(proto), std::move(arrowSchema), std::move(data));
+                    if (self->FirstPart_ && self->AggregatedParts_ == 0 && self->CanCompleteFromSinglePart(*self->FirstPart_)) {
+                        self->CompleteFromSinglePart(std::move(*self->FirstPart_), std::move(stats));
+                    } else {
+                        self->FlushFirstPart();
+                        self->CompleteFromAggregatedParts(std::move(stats));
                     }
-
-                    self->Promise_.SetValue(TExecuteQueryResult(
-                        TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues(std::move(issues))),
-                        std::move(resultSets),
-                        std::move(stats),
-                        std::move(tx)
-                    ));
                 } else {
                     self->Promise_.SetValue(TExecuteQueryResult(std::move(part), {}, std::move(stats), {}));
                 }
@@ -209,44 +190,116 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
                 return;
             }
 
-            self->Issues_.insert(self->Issues_.end(), part.GetIssues().begin(), part.GetIssues().end());
-
-            if (part.HasResultSet()) {
-                auto inRs = part.ExtractResultSet();
-                auto& inRsProto = TProtoAccessor::GetProto(inRs);
-
-                // TODO: Use result sets metadata
-                if (self->ResultSets_.size() <= part.GetResultSetIndex()) {
-                    self->ResultSets_.resize(part.GetResultSetIndex() + 1);
-                }
-
-                auto& resultSet = self->ResultSets_[part.GetResultSetIndex()];
-                resultSet.set_format(inRsProto.format());
-
-                switch (resultSet.format()) {
-                    case Ydb::ResultSet::FORMAT_UNSPECIFIED:
-                    case Ydb::ResultSet::FORMAT_VALUE: {
-                        self->CollectYdbValues(resultSet, inRsProto);
-                        break;
-                    }
-                    case Ydb::ResultSet::FORMAT_ARROW: {
-                        self->CollectArrowBytes(resultSet, inRs.MutableProto(), part.GetResultSetIndex());
-                        break;
-                    }
-                    default:
-                        break;
-                }
-            }
-
-            if (const auto& tx = part.GetTransaction()) {
-                self->Tx_ = tx;
-            }
-
+            self->FlushFirstPart();
+            self->FirstPart_.emplace(std::move(part));
             self->Next();
         });
     }
 
 private:
+    bool CanCompleteFromSinglePart(const TExecuteQueryPart& part) const {
+        return !part.HasResultSet() || part.GetResultSetIndex() == 0;
+    }
+
+    void CompleteFromSinglePart(TExecuteQueryPart&& part, std::optional<TExecStats>&& stats) {
+        std::vector<NYdb::NIssue::TIssue> issues(part.GetIssues().begin(), part.GetIssues().end());
+
+        std::vector<TResultSet> resultSets;
+        if (part.HasResultSet()) {
+            // TResultSet already owns extracted Arrow schema/data, so moving it
+            // preserves both value-format rows and a single Arrow response part.
+            resultSets.emplace_back(part.ExtractResultSet());
+        }
+
+        std::optional<TTransaction> tx;
+        if (const auto& partTx = part.GetTransaction()) {
+            tx = partTx;
+        }
+
+        Promise_.SetValue(TExecuteQueryResult(
+            TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues(std::move(issues))),
+            std::move(resultSets),
+            std::move(stats),
+            std::move(tx)
+        ));
+    }
+
+    void CompleteFromAggregatedParts(std::optional<TExecStats>&& stats) {
+        std::vector<NYdb::NIssue::TIssue> issues;
+        std::vector<Ydb::ResultSet> resultProtos;
+        std::optional<TTransaction> tx;
+        std::vector<std::string> arrowSchemas;
+        std::vector<std::vector<std::string>> bytesData;
+
+        std::swap(Issues_, issues);
+        std::swap(ResultSets_, resultProtos);
+        std::swap(Tx_, tx);
+        std::swap(ArrowSchemas_, arrowSchemas);
+        std::swap(BytesData_, bytesData);
+
+        std::vector<TResultSet> resultSets;
+        for (size_t i = 0; i < resultProtos.size(); ++i) {
+            auto proto = std::move(resultProtos[i]);
+            auto arrowSchema = arrowSchemas.size() > i ? std::move(arrowSchemas[i]) : std::string();
+            auto data = bytesData.size() > i ? std::move(bytesData[i]) : std::vector<std::string>();
+
+            resultSets.emplace_back(std::move(proto), std::move(arrowSchema), std::move(data));
+        }
+
+        Promise_.SetValue(TExecuteQueryResult(
+            TStatus(EStatus::SUCCESS, NYdb::NIssue::TIssues(std::move(issues))),
+            std::move(resultSets),
+            std::move(stats),
+            std::move(tx)
+        ));
+    }
+
+    void FlushFirstPart() {
+        if (!FirstPart_) {
+            return;
+        }
+
+        AddPart(std::move(*FirstPart_));
+        FirstPart_.reset();
+    }
+
+    void AddPart(TExecuteQueryPart&& part) {
+        Issues_.insert(Issues_.end(), part.GetIssues().begin(), part.GetIssues().end());
+
+        if (part.HasResultSet()) {
+            auto inRs = part.ExtractResultSet();
+            auto& inRsProto = TProtoAccessor::GetProto(inRs);
+
+            // TODO: Use result sets metadata
+            if (ResultSets_.size() <= part.GetResultSetIndex()) {
+                ResultSets_.resize(part.GetResultSetIndex() + 1);
+            }
+
+            auto& resultSet = ResultSets_[part.GetResultSetIndex()];
+            resultSet.set_format(inRsProto.format());
+
+            switch (resultSet.format()) {
+                case Ydb::ResultSet::FORMAT_UNSPECIFIED:
+                case Ydb::ResultSet::FORMAT_VALUE: {
+                    CollectYdbValues(resultSet, inRsProto);
+                    break;
+                }
+                case Ydb::ResultSet::FORMAT_ARROW: {
+                    CollectArrowBytes(resultSet, inRs.MutableProto(), part.GetResultSetIndex());
+                    break;
+                }
+                default:
+                    break;
+            }
+        }
+
+        if (const auto& tx = part.GetTransaction()) {
+            Tx_ = tx;
+        }
+
+        ++AggregatedParts_;
+    }
+
     void CollectYdbValues(Ydb::ResultSet& resultSet, const Ydb::ResultSet& inRsProto) {
         if (resultSet.columns().empty()) {
             resultSet.mutable_columns()->CopyFrom(inRsProto.columns());

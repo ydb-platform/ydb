@@ -212,7 +212,9 @@ namespace NKikimr::NDDisk {
                 NMonitoring::THistogramPtr QueueTime;
             } DirectIO;
 
+#if defined(__linux__)
             NPDisk::TUringCounters UringCounters;
+#endif
 
             struct {
                 NMonitoring::TDynamicCounters::TCounterPtr AllocatedChunks;

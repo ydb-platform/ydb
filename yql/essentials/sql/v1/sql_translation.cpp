@@ -6487,4 +6487,18 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
     }
 }
 
+bool TSqlTranslation::WarnUnusedCTEs() const {
+    bool isOk = true;
+
+    CTEs_->ForEachTopLevelUnused([&](const TReadyCTE& cte) {
+        const auto& [alias, v] = cte;
+
+        isOk &= Ctx_.Warning(alias.Position, TIssuesIds::YQL_UNUSED_SYMBOL, [&](auto& out) {
+            out << "CTE Symbol " << alias.Name << " is not used";
+        });
+    });
+
+    return isOk;
+}
+
 } // namespace NSQLTranslationV1

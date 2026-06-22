@@ -30,6 +30,7 @@ SRCS(
     insert.cpp
     list_builtin.cpp
     match_recognize.cpp
+    namespace.cpp
     node.cpp
     result.cpp
     secret_settings.cpp

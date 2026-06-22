@@ -89,7 +89,7 @@ flatbuffers::Offset<flatbuf::Field> CreateRegularField(
 ////////////////////////////////////////////////////////////////////////////////
 
 constexpr i64 ArrowAlignment = 8;
-const TString AlignmentString(ArrowAlignment, 0);
+const std::string AlignmentString(ArrowAlignment, 0);
 
 flatbuffers::Offset<flatbuffers::String> SerializeString(
     flatbuffers::FlatBufferBuilder* flatbufBuilder,

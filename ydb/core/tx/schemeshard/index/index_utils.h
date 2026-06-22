@@ -25,6 +25,15 @@ struct TIndexObjectCounts {
 
 TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationConfig& indexDesc);
 
+// Fulltext index key columns are ordered [prefix..., text]; the text column is always last.
+// Returns the leading prefix columns (empty for a non-prefixed index).
+inline TVector<TString> GetFulltextPrefixColumns(const NProtoBuf::RepeatedPtrField<TString>& keyColumnNames) {
+    if (keyColumnNames.size() <= 1) {
+        return {};
+    }
+    return TVector<TString>{keyColumnNames.begin(), keyColumnNames.end() - 1};
+}
+
 NKikimrSchemeOp::TTableDescription CalcImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const TTableColumns& implTableColumns,
@@ -83,7 +92,8 @@ NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
-    const NKikimrSchemeOp::EIndexType indexType);
+    const NKikimrSchemeOp::EIndexType indexType,
+    const TVector<TString>& prefixColumns = {});
 
 NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
@@ -91,21 +101,24 @@ NKikimrSchemeOp::TTableDescription CalcFulltextImplTableDesc(
     const THashSet<TString>& indexDataColumns,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription& indexDesc,
-    const NKikimrSchemeOp::EIndexType indexType);
+    const NKikimrSchemeOp::EIndexType indexType,
+    const TVector<TString>& prefixColumns = {});
 
 NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
-    const NKikimrSchemeOp::EIndexType indexType);
+    const NKikimrSchemeOp::EIndexType indexType,
+    const TVector<TString>& prefixColumns = {});
 
 NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& baseTableDescr,
     const NKikimrSchemeOp::TPartitionConfig& baseTablePartitionConfig,
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
-    const NKikimrSchemeOp::EIndexType indexType);
+    const NKikimrSchemeOp::EIndexType indexType,
+    const TVector<TString>& prefixColumns = {});
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(
     const NSchemeShard::TTableInfo::TPtr& baseTableInfo,
@@ -282,6 +295,15 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
             // We have already checked this in IsCompatibleIndex
             Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
 
+            // Fulltext index key columns are [prefix..., text]; more than one key column means the
+            // index has prefix columns. Enforce the feature flag server-side so direct scheme
+            // operations or older clients cannot bypass the KQP-side check.
+            if (indexKeys.KeyColumns.size() > 1 && !AppData()->FeatureFlags.GetEnableFulltextIndexPrefix()) {
+                status = NKikimrScheme::EStatus::StatusPreconditionFailed;
+                error = "Fulltext index prefix columns support is disabled";
+                return false;
+            }
+
             // __ydb_row_id opt-in: when MaybeEnableFulltextRowIdMode() has set the flag,
             // skip the single-integer-PK requirement (the doc_id is __ydb_row_id, not the PK).
             if (!indexDesc.GetFulltextIndexDescription().GetUseRowIdAsDocId()) {
@@ -316,9 +338,14 @@ bool CommonCheck(const TTableDesc& tableDesc, const NKikimrSchemeOp::TIndexCreat
         case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact: {
             Y_ABORT_UNLESS(indexKeys.KeyColumns.size() >= 1);
 
-            if (!CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, "JSON", error)) {
-                status = NKikimrScheme::EStatus::StatusInvalidParameter;
-                return false;
+            // __ydb_row_id opt-in: when the rowid mode has been enabled (ClassifyFulltextRowId /
+            // MaybeEnableFulltextRowIdMode), skip the single-integer-PK requirement - the doc_id is
+            // __ydb_row_id, not the PK. Mirrors the fulltext case above.
+            if (!indexDesc.GetFulltextIndexDescription().GetUseRowIdAsDocId()) {
+                if (!CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, "JSON", error)) {
+                    status = NKikimrScheme::EStatus::StatusInvalidParameter;
+                    return false;
+                }
             }
 
             if (indexKeys.KeyColumns.size() != 1) {

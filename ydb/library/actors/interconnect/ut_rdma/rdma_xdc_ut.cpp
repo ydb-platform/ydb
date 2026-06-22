@@ -3,6 +3,7 @@
 #include <ydb/library/actors/interconnect/rdma/ut/utils/utils.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/gtest/gtest.h>
 
 #include <ydb/library/actors/interconnect/ut/protos/interconnect_test.pb.h>
@@ -349,6 +350,58 @@ static bool WaitForRdmaSessionDropOrStatus(TTestICCluster& cluster, ui32 me, ui3
 
 static TString FormatLastRdmaStatus(const TString& status) {
     return status.empty() ? TString("<no session>") : status;
+}
+
+struct TCounterSumConsumer : NMonitoring::ICountableConsumer {
+    const TString CounterName;
+    ui64 Sum = 0;
+
+    explicit TCounterSumConsumer(TStringBuf counterName)
+        : CounterName(counterName)
+    {}
+
+    void OnCounter(const TString& /*labelName*/, const TString& labelValue,
+            const NMonitoring::TCounterForPtr* counter) override {
+        if (labelValue == CounterName) {
+            Sum += counter->Val();
+        }
+    }
+
+    void OnHistogram(const TString& /*labelName*/, const TString& /*labelValue*/,
+            NMonitoring::IHistogramSnapshotPtr /*snapshot*/, bool /*derivative*/) override {
+    }
+
+    void OnGroupBegin(const TString& /*labelName*/, const TString& /*labelValue*/,
+            const NMonitoring::TDynamicCounters* /*group*/) override {
+    }
+
+    void OnGroupEnd(const TString& /*labelName*/, const TString& /*labelValue*/,
+            const NMonitoring::TDynamicCounters* /*group*/) override {
+    }
+};
+
+static ui64 GetNodeCounterSum(TTestICCluster& cluster, ui32 nodeId, TStringBuf counterName) {
+    const auto nodeCounters = cluster.GetCounters()->FindSubgroup("nodeId", ToString(nodeId));
+    if (!nodeCounters) {
+        return 0;
+    }
+
+    TCounterSumConsumer consumer(counterName);
+    nodeCounters->Accept({}, {}, consumer);
+    return consumer.Sum;
+}
+
+static bool WaitForNodeCounterSum(TTestICCluster& cluster, ui32 nodeId, TStringBuf counterName, ui64 expected,
+        TDuration timeout, ui64& lastValue) {
+    const TInstant deadline = TInstant::Now() + timeout;
+    while (TInstant::Now() < deadline) {
+        lastValue = GetNodeCounterSum(cluster, nodeId, counterName);
+        if (lastValue == expected) {
+            return true;
+        }
+        Sleep(TDuration::MilliSeconds(100));
+    }
+    return false;
 }
 
 class TWaitForConnectionActor: public TActorBootstrapped<TWaitForConnectionActor> {
@@ -1044,6 +1097,8 @@ TEST_F(XdcRdmaTest, SendRdmaWithMultiGlue) {
 }
 
 TEST_F(XdcRdmaTest, RestoreRdmaSession) {
+    constexpr TStringBuf RdmaRetryWatchdogPendingSessions = "RdmaRetryWatchdogPendingSessions";
+
     const NInterconnect::NRdma::TMemPoolSettings settings {
         .SizeLimitMb = 256
     };
@@ -1076,6 +1131,10 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
 
         UNIT_ASSERT(receiverPtr->WaitForReceive(1, 20));
     }
+    ui64 lastWatchdogPending = 0;
+    UNIT_ASSERT_C(WaitForNodeCounterSum(cluster, 2, RdmaRetryWatchdogPendingSessions, 0,
+            TDuration::Seconds(5), lastWatchdogPending),
+        "last RDMA retry watchdog pending sessions: " << lastWatchdogPending);
 
     // Exhaust the same allocation class (5KB) that receiver uses for RDMA sections.
     // This makes the "undelivered due to no RDMA memory on receiver" check deterministic.
@@ -1109,6 +1168,9 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
         "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
     UNIT_ASSERT_STRINGS_EQUAL(lastRdmaStatus.c_str(), "Off");
     lastRdmaStatus.clear();
+    UNIT_ASSERT_C(WaitForNodeCounterSum(cluster, 2, RdmaRetryWatchdogPendingSessions, 1,
+            TDuration::Seconds(30), lastWatchdogPending),
+        "last RDMA retry watchdog pending sessions: " << lastWatchdogPending);
 
     // Send one more time (will be delivered through TCP)
     {
@@ -1136,6 +1198,9 @@ TEST_F(XdcRdmaTest, RestoreRdmaSession) {
     UNIT_ASSERT_C(WaitForRdmaChecksumStatus(cluster, 2, 1, "On | SoftwareChecksum", 30, lastRdmaStatus),
         "last RDMA status: " << FormatLastRdmaStatus(lastRdmaStatus));
     UNIT_ASSERT_STRINGS_EQUAL(lastRdmaStatus.c_str(), "On | SoftwareChecksum");
+    UNIT_ASSERT_C(WaitForNodeCounterSum(cluster, 2, RdmaRetryWatchdogPendingSessions, 0,
+            TDuration::Seconds(10), lastWatchdogPending),
+        "last RDMA retry watchdog pending sessions: " << lastWatchdogPending);
 }
 
 TEST_P(XdcRdmaTestCqMode, SendMix) {

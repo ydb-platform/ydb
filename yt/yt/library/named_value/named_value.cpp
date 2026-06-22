@@ -125,11 +125,11 @@ void FormatValue(TStringBuilderBase* builder, const TNamedValue& value, TStringB
     auto text = std::visit([] (const auto& value) -> std::string {
         using T = std::decay_t<decltype(value)>;
         if constexpr (std::is_same_v<T, TNamedValue::TAny>) {
-            auto result = TString("<type=any>");
+            auto result = std::string("<type=any>");
             result += value.Value;
             return ConvertToYsonString(TYsonString(result), EYsonFormat::Text).ToString();
         } else if constexpr (std::is_same_v<T, TNamedValue::TComposite>) {
-            auto result = TString("<type=composite>");
+            auto result = std::string("<type=composite>");
             result += ConvertToYsonString(TYsonString(value.Value)).ToString();
             return ConvertToYsonString(TYsonString(result), EYsonFormat::Text).ToString();
         } else if constexpr (std::is_same_v<T, std::nullptr_t>) {

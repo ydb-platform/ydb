@@ -190,7 +190,9 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::BypassMerge(TExprBase n
                         auto builder = Build<TYtPath>(ctx, mergePath.Pos()).InitFrom(mergePath);
 
                         if (columns) {
-                            builder.Columns(columns.Cast());
+                            TYtColumnsInfo innerColumns(mergePath.Columns());
+                            innerColumns.Apply(TYtColumnsInfo(columns.Cast()));
+                            builder.Columns(innerColumns.ToExprNode(ctx, columns.Cast().Pos()));
                         }
                         if (!path.Ranges().Maybe<TCoVoid>()) {
                             builder.Ranges(path.Ranges());

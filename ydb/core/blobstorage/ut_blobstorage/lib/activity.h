@@ -154,7 +154,7 @@ public:
             IssueWrites();
         } else {
             auto msg = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, Generation, 1, 0, true,
-                Generation - 1, Max<ui32>(), nullptr, nullptr, TInstant::Max(), false, false);
+                Generation - 1, Max<ui32>(), nullptr, nullptr, TInstant::Max(), false, TWriteSource::Unknown, false);
             YDB_LOG_DEBUG_COMP(NActorsServices::TEST, "Sending",
                 {"prefix", Prefix},
                 {"TEvCollectGarbage", msg->ToString()});

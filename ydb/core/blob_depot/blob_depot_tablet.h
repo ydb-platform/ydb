@@ -324,7 +324,7 @@ namespace NKikimr::NBlobDepot {
 
         bool OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TActorContext&) override;
 
-        void RenderMainPage(IOutputStream& s);
+        void RenderMainPage(IOutputStream& s, const TString& nonce);
         NJson::TJsonValue RenderJson(bool pretty);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////

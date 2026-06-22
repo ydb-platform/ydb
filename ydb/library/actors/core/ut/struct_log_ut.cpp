@@ -1,3 +1,4 @@
+#include "actorid.h"
 #include <ydb/library/actors/struct_log/create_message.h>
 #include <ydb/library/actors/struct_log/json_writer.h>
 #include <ydb/library/actors/struct_log/key_name.h>

@@ -88,7 +88,7 @@ The first host in the cluster configuration becomes the orchestrator; all other 
 
 The primary way to observe a Nemesis run and inspect its results is the web UI served by the orchestrator. Open the URL printed at the end of `nemesis install` in a browser; by default it is available at:
 
-```
+```bash
 http://<orchestrator_host>:31434/static/index.html
 ```
 

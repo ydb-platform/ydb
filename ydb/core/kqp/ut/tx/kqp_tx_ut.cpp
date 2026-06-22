@@ -681,20 +681,20 @@ Y_UNIT_TEST_SUITE(KqpTx) {
         TKikimrSettings settings;
         settings.SetEnableStrictSerializableIsolation(true);
         auto kikimr = DefaultKikimrRunner({}, "", settings);
-        auto db = kikimr.GetTableClient();
-        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
 
-        auto result = session.ExecuteDataQuery(R"(
+        auto result = session.ExecuteQuery(R"(
             UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (100u, "Strict");
-        )", TTxControl::BeginTx(TTxSettings::SerializableRW(
-            TTxSerializableSettings().Strict(true))).CommitTx()).ExtractValueSync();
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW(
+            NYdb::NQuery::TTxSerializableSettings().Strict(true))).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
-        result = session.ExecuteDataQuery(R"(
+        result = session.ExecuteQuery(R"(
             SELECT * FROM `/Root/KeyValue` WHERE Key = 100u;
-        )", TTxControl::BeginTx(TTxSettings::SerializableRW(
-            TTxSerializableSettings().Strict(true))).CommitTx()).ExtractValueSync();
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW(
+            NYdb::NQuery::TTxSerializableSettings().Strict(true))).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([[[100u];["Strict"]]])", FormatResultSetYson(result.GetResultSet(0)));

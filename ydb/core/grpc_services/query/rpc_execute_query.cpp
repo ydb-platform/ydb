@@ -53,7 +53,7 @@ bool FillTxSettings(const Ydb::Query::TransactionSettings& from, Ydb::Table::Tra
 {
     switch (from.tx_mode_case()) {
         case Ydb::Query::TransactionSettings::kSerializableReadWrite:
-            to.mutable_serializable_read_write();
+            to.mutable_serializable_read_write()->set_strict(from.serializable_read_write().strict());
             break;
         case Ydb::Query::TransactionSettings::kOnlineReadOnly:
             to.mutable_online_read_only()->set_allow_inconsistent_reads(

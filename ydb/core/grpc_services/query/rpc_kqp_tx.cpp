@@ -98,9 +98,11 @@ private:
                 Request->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, TStringBuilder()
                     << "Failed to begin transaction: tx mode was not set"));
                 return Reply(Ydb::StatusIds::BAD_REQUEST);
-            case Ydb::Query::TransactionSettings::kSerializableReadWrite:
-                ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+            case Ydb::Query::TransactionSettings::kSerializableReadWrite: {
+                auto* settings = ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
+                settings->set_strict(req->tx_settings().serializable_read_write().strict());
                 break;
+            }
             case Ydb::Query::TransactionSettings::kSnapshotReadOnly:
                 ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_snapshot_read_only();
                 break;

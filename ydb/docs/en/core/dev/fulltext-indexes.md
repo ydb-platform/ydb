@@ -168,7 +168,7 @@ If the table already has more than one fulltext index, they all **reuse** the sa
 
 The `__ydb_row_id` column and the `__ydb_unique_row_id` index are managed by {{ ydb-short-name }}:
 
-* Let {{ ydb-short-name }} populate `__ydb_row_id` — omit it from `INSERT` / `UPSERT` and it is filled in automatically. If you supply a value explicitly, it is stored as given, and you become responsible for keeping it unique (the `__ydb_unique_row_id` index rejects duplicates). `BulkUpsert` does not support `__ydb_row_id` and rejects requests that set it.
+* Let {{ ydb-short-name }} populate `__ydb_row_id` — omit it from `INSERT` / `UPSERT` and it is filled in automatically. User modification of the `__ydb_row_id` column is forbidden — any attempts to set or change the value of this column will be rejected.
 * The `__ydb_unique_row_id` index cannot be dropped while any fulltext index depends on it. Drop the dependent fulltext index(es) first.
 
 {% endnote %}

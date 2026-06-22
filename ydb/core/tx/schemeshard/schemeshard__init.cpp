@@ -5345,8 +5345,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     }
 
                     TString serializedColumns = rowset.GetValue<Schema::SetColumnConstraint::SerializedColumnNames>();
-                    auto deserialized = DeserializeSetColumnConstraintColumnNames(serializedColumns);
-                    operationInfo->SetNotNullColumns = std::vector<std::string>(deserialized.begin(), deserialized.end());
+                    operationInfo->SetNotNullColumns = DeserializeSetColumnConstraintColumnNames(serializedColumns);
 
                     operationInfo->ValidationFailed = rowset.GetValueOrDefault<Schema::SetColumnConstraint::ValidationFailed>(false);
                     operationInfo->OperationState = TSetColumnConstraintOperationInfo::EOperationState(

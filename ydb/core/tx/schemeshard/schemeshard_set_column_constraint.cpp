@@ -1,30 +1,19 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_set_column_constraint.h"
+#include <util/string/split.h>
 #include <ydb/core/tx/schemeshard/index/index_build_info.h>
 
 namespace NKikimr {
 namespace NSchemeShard {
 
-TString SerializeSetColumnConstraintColumnNames(const std::vector<std::string>& columns) {
+TString SerializeSetColumnConstraintColumnNames(const std::vector<TString>& columns) {
     return JoinSeq("$", columns);
 }
 
-std::vector<std::string> DeserializeSetColumnConstraintColumnNames(const TString& serialized) {
-    if (serialized.size() == 0) {
-        return {};
-    }
-
-    std::vector<std::string> parts = {""};
-
-    for (size_t i = 0; i < serialized.size(); ++i) {
-        if (serialized[i] == '$') {
-            parts.push_back("");
-        } else {
-            parts.back() += serialized[i];
-        }
-    }
-
-    return parts;
+std::vector<TString> DeserializeSetColumnConstraintColumnNames(const TString& serialized) {
+    std::vector<TString> result;
+    StringSplitter(serialized).Split('$').Collect(&result);
+    return result;
 }
 
 void TSchemeShard::PersistCreateSetColumnConstraint(NIceDb::TNiceDb& db, const TSetColumnConstraintOperationInfo& operationInfo) {

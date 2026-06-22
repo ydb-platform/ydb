@@ -982,7 +982,7 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     };
 
     EOperationState OperationState = EOperationState::Invalid;
-    std::vector<std::string> SetNotNullColumns;
+    std::vector<TString> SetNotNullColumns;
 
     TTxId LockNullWritesTxId = TTxId();
     NKikimrScheme::EStatus LockNullWritesTxStatus = NKikimrScheme::StatusSuccess;

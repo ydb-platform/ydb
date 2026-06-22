@@ -19,6 +19,7 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TRANSFER
 
+using namespace NActors::NStructuredLog;
 using namespace NFq::NRowDispatcher;
 using namespace NKikimr::NReplication::NService;
 
@@ -49,7 +50,7 @@ public:
 
 private:
     void GetTableScheme() {
-        YDB_LOG_DEBUG("GetTableScheme",
+        YDB_LOG_DEBUG("[TransferWriter] GetTableScheme",
             {"logPrefix", GetLogPrefix()},
             {"worker", Worker});
         Become(&TThis::StateGetTableScheme);
@@ -72,13 +73,13 @@ private:
     }
 
     void LogCritAndLeave(const TString& error) {
-        YDB_LOG_CRIT(error,
+        YDB_LOG_CRIT("[TransferWriter] " << error,
             {"logPrefix", GetLogPrefix()});
         Leave(TEvWorker::TEvGone::SCHEME_ERROR, error);
     }
 
     void LogWarnAndRetry(const TString& error) {
-        YDB_LOG_WARN(error,
+        YDB_LOG_WARN("[TransferWriter] " << error,
             {"logPrefix", GetLogPrefix()});
         Retry();
     }
@@ -116,7 +117,7 @@ private:
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         auto& result = ev->Get()->Request;
 
-        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+        YDB_LOG_DEBUG("[TransferWriter] Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
             {"logPrefix", GetLogPrefix()},
             {"result", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
@@ -155,7 +156,7 @@ private:
 
 private:
     void CompileTransferLambda() {
-        YDB_LOG_DEBUG("CompileTransferLambda",
+        YDB_LOG_DEBUG("[TransferWriter] CompileTransferLambda",
             {"logPrefix", GetLogPrefix()},
             {"worker", Worker});
 
@@ -185,7 +186,7 @@ private:
         sb << "SELECT * FROM (\n";
         sb << "  SELECT $__ydb_transfer_lambda(TableRow()) AS " << SystemColumns::Root << " FROM Input\n";
         sb << ") FLATTEN BY " << SystemColumns::Root << ";\n";
-        YDB_LOG_TRACE("Dump logPrefix, SQL",
+        YDB_LOG_TRACE("[TransferWriter] Dump logPrefix, SQL",
             {"logPrefix", GetLogPrefix()},
             {"SQL", sb});
         return sb;
@@ -194,12 +195,12 @@ private:
     void Handle(NFq::TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) {
         const auto& result = ev->Get();
 
-        YDB_LOG_DEBUG("Handle TEvPurecalcCompileResponse",
+        YDB_LOG_DEBUG("[TransferWriter] Handle TEvPurecalcCompileResponse",
             {"logPrefix", GetLogPrefix()},
             {"result", (result ? result->Issues.ToOneLineString() : "nullptr")});
 
         if (ev->Cookie != InFlightCompilationId) {
-            YDB_LOG_DEBUG("Outdated compiler response ignored for id current compile id",
+            YDB_LOG_DEBUG("[TransferWriter] Outdated compiler response ignored for id current compile id",
                 {"logPrefix", GetLogPrefix()},
                 {"cookie", ev->Cookie},
                 {"inFlightCompilationId", InFlightCompilationId});
@@ -250,7 +251,7 @@ private:
 
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
         Worker = ev->Sender;
-        YDB_LOG_DEBUG("Handshake",
+        YDB_LOG_DEBUG("[TransferWriter] Handshake",
             {"logPrefix", GetLogPrefix()},
             {"worker", Worker});
 
@@ -269,7 +270,7 @@ private:
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle TEvData record",
+        YDB_LOG_DEBUG("[TransferWriter] Handle TEvData record",
             {"logPrefix", GetLogPrefix()},
             {"count", ev->Get()->Records.size()});
         ProcessData(ev->Get()->PartitionId, ev->Get()->Records);
@@ -390,7 +391,7 @@ private:
     }
 
     void Handle(NTransferPrivate::TEvWriteCompleeted::TPtr& ev) {
-        YDB_LOG_DEBUG("Handle NTransferPrivate::TEvWriteCompleeted",
+        YDB_LOG_DEBUG("[TransferWriter] Handle NTransferPrivate::TEvWriteCompleeted",
             {"logPrefix", GetLogPrefix()},
             {"worker", Worker},
             {"status", ev->Get()->Status},
@@ -450,11 +451,9 @@ private:
         return PendingRecords && PendingRecords->empty();
     }
 
-    TStringBuf GetLogPrefix() const {
+    TStructuredMessage GetLogPrefix() const {
         if (!LogPrefix) {
-            LogPrefix = TStringBuilder()
-                << "[TransferWriter]"
-                << SelfId() << " ";
+            LogPrefix = YDB_LOG_CREATE_MESSAGE({"selfId", SelfId()});
         }
 
         return LogPrefix.GetRef();
@@ -468,7 +467,7 @@ private:
     }
 
     void Leave(TEvWorker::TEvGone::EStatus status, const TString& message) {
-        YDB_LOG_INFO("Leave " << message,
+        YDB_LOG_INFO("[TransferWriter] Leave " << message,
             {"logPrefix", GetLogPrefix()});
 
         if (Worker) {
@@ -555,7 +554,7 @@ private:
     mutable bool RequiredFlush = false;
     mutable std::optional<TInstant> LastWriteTime;
 
-    mutable TMaybe<TString> LogPrefix;
+    mutable TMaybe<TStructuredMessage> LogPrefix;
 
     mutable TEvWorker::TEvGone::EStatus ProcessingErrorStatus;
     mutable TMaybe<TString> ProcessingError;

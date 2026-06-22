@@ -60,15 +60,10 @@ private:
         CookieMapping[cookie] = {tablePath, actorId};
     }
 
-    std::string GetLogPrefix() const {
-        return "RowTableUploader: ";
-    }
-
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
         auto it = CookieMapping.find(ev->Cookie);
         if (it == CookieMapping.end()) {
-            YDB_LOG_WARN_COMP(NKikimrServices::TRANSFER, "Processed unknown cookie",
-                {"logPrefix", GetLogPrefix()},
+            YDB_LOG_WARN_COMP(NKikimrServices::TRANSFER, "RowTableUploader: Processed unknown cookie",
                 {"cookie", ev->Cookie});
             return;
         }
@@ -111,8 +106,7 @@ private:
 
         auto withRetry = retry.Backoff.HasMore() && retry.SchemeCount < MaxSchemeRetries;
         if (withRetry) {
-            YDB_LOG_DEBUG_COMP(NKikimrServices::TRANSFER, "Schedule retry",
-                {"logPrefix", GetLogPrefix()},
+            YDB_LOG_DEBUG_COMP(NKikimrServices::TRANSFER, "RowTableUploader: Schedule retry",
                 {"table", tablePath},
                 {"iteration", retry.Backoff.GetIteration()},
                 {"error", status},
@@ -172,8 +166,7 @@ private:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues) {
-        YDB_LOG_ERROR_COMP(NKikimrServices::TRANSFER, "Upload error",
-            {"logPrefix", GetLogPrefix()},
+        YDB_LOG_ERROR_COMP(NKikimrServices::TRANSFER, "RowTableUploader: Upload error",
             {"error", status},
             {"issues", issues.ToOneLineString()});
 

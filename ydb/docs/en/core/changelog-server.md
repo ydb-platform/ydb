@@ -765,5 +765,6 @@ Release date: October 12, 2022. To update to version **22.4**, select the [Downl
   * Added TTL support for tables with asynchronous secondary indexes.
   * Added compression support for data export to S3.
   * Added an audit log for DDL statements.
-  * Added support for authentication with static credentials.
   * Added system tables for query performance troubleshooting.
+  * Added support for authentication with static credentials.
+  

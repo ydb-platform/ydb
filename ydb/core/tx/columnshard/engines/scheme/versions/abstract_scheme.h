@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/container/container.h>
 #include <ydb/core/formats/arrow/process_columns.h>
 #include <ydb/core/formats/arrow/save_load/loader.h>
 #include <ydb/core/formats/arrow/save_load/saver.h>

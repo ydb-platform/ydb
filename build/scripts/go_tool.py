@@ -952,7 +952,12 @@ if __name__ == '__main__':
     parser.add_argument('++xtest_srcs', nargs='*')
     parser.add_argument('++cover_info', nargs='*')
     parser.add_argument('++cover-mode', choices=['set', 'count', 'atomic'])
-    parser.add_argument('++cover-cfg')
+    parser.add_argument('++cover-cfg', help='coverage output config, if zero-size, really no coverage')
+    parser.add_argument(
+        '++cover-covervars',
+        default='covervars.go',
+        help='basename of coverage vars go-file, if zero-size ++cover-cfg, must be excluded',
+    )
     parser.add_argument('++ld_plugins', nargs='*')
     parser.add_argument('++output', nargs='?', default=None)
     parser.add_argument('++source-root', default=None)
@@ -991,6 +996,14 @@ if __name__ == '__main__':
     parser.add_argument('++embed', action='append', nargs='*')
     parser.add_argument('++embed_xtest', action='append', nargs='*')
     args = parser.parse_args(args)
+
+    if args.cover_cfg:
+        coveragecfg = os.path.join(args.output_root, args.cover_cfg)
+        # when not found source files for covering config is empty
+        if not os.path.getsize(coveragecfg):
+            args.cover_cfg = None  # really no coverage
+            # if no coverage, we must exclude covervars.go from compile
+            args.srcs = [src for src in args.srcs if not src.endswith(os.path.join('', args.cover_covervars))]
 
     arc_project_prefix = args.arc_project_prefix
     std_lib_prefix = args.std_lib_prefix

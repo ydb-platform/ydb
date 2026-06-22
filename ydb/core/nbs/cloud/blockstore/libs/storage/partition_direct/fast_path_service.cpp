@@ -21,8 +21,11 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
+#include <library/cpp/threading/future/wait/wait.h>
+
 #include <util/system/fs.h>
 
+#include <memory>
 #include <utility>
 
 using namespace NKikimr;
@@ -184,7 +187,7 @@ TFastPathService::~TFastPathService()
     }
 }
 
-void TFastPathService::Run()
+NThreading::TFuture<void> TFastPathService::Run()
 {
     LOG_INFO(
         *ActorSystem,
@@ -192,13 +195,17 @@ void TFastPathService::Run()
         "TFastPathService::Run %s",
         DiskId.Quote().c_str());
 
+    TVector<NThreading::TFuture<void>> initialReadyFutures;
+    initialReadyFutures.reserve(DirectBlockGroups.size());
     for (const auto& dbg: DirectBlockGroups) {
-        dbg->Run(this);
+        initialReadyFutures.push_back(dbg->Run(this));
     }
     for (const auto& region: Regions) {
         region->Run();
     }
     ScheduleDirtyMapDebugPrint();
+
+    return NThreading::WaitAll(initialReadyFutures);
 }
 
 NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
@@ -218,6 +225,13 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
 
     const size_t regionIndex =
         GetRegionIndex(*request->Headers.VolumeConfig, request->Headers.Range);
+
+    Y_ABORT_UNLESS(
+        regionIndex < Regions.size(),
+        "Region index out of bound: %" PRISZT " >= %" PRISZT,
+        regionIndex,
+        Regions.size());
+
     auto result = Regions[regionIndex]->ReadBlocksLocal(
         std::move(callContext),
         std::move(request),
@@ -260,6 +274,12 @@ TFastPathService::WriteBlocksLocal(
 
     const size_t regionIndex =
         GetRegionIndex(*request->Headers.VolumeConfig, request->Headers.Range);
+
+    Y_ABORT_UNLESS(
+        regionIndex < Regions.size(),
+        "Region index out of bound: %" PRISZT " >= %" PRISZT,
+        regionIndex,
+        Regions.size());
 
     auto result = Regions[regionIndex]->WriteBlocksLocal(
         std::move(callContext),
@@ -336,9 +356,9 @@ void TFastPathService::ScheduleAfterDelay(
 
 void TFastPathService::UpdateVChunkConfig(const TVChunkConfig& cfg)
 {
-    ActorSystem->Send(
-        PartitionActorId,
-        new TEvPartitionDirectPrivate::TEvUpdateVChunkConfig(cfg));
+    auto event =
+        std::make_unique<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>(cfg);
+    ActorSystem->Send(PartitionActorId, event.release());
 }
 
 ui64 TFastPathService::GenerateLsn()

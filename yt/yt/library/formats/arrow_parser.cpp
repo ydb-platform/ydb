@@ -1050,27 +1050,19 @@ private:
         auto array = std::static_pointer_cast<arrow20::StructArray>(Array_);
         YT_VERIFY(array->length() <= std::ssize(*RowValues_));
         auto timestampArray = std::static_pointer_cast<TInnerArray>(array->field(0));
+        auto tzIdArray = std::static_pointer_cast<arrow20::UInt16Array>(array->field(1));
         for (i64 rowIndex = 0; rowIndex < array->length(); ++rowIndex) {
             if (array->IsNull(rowIndex)) {
                 (*RowValues_)[rowIndex] = MakeUnversionedNullValue(ColumnId_);
             } else {
                 auto timestamp = timestampArray->Value(rowIndex);
+                auto tzId = tzIdArray->Value(rowIndex);
 
-                std::string_view tzName;
-                if (array->field(1)->type_id() == arrow20::Type::BINARY) {
-                    auto tzNameArray = std::static_pointer_cast<arrow20::BinaryArray>(array->field(1));
-                    auto tzValue = tzNameArray->Value(rowIndex);
-                    tzName = std::string_view(tzValue.data(), tzValue.size());
-                } else {
-                    auto tzIndexArray = std::static_pointer_cast<arrow20::UInt16Array>(array->field(1));
-                    tzName = GetTzName(tzIndexArray->Value(rowIndex));
-                }
-                int tzStringSize = tzName.size() + sizeof(timestamp);
-
+                constexpr int tzStringSize = GetTzStringSize<decltype(timestamp)>();
                 char* buffer = BufferForStringLikeValues_->Preallocate(tzStringSize);
 
                 (*RowValues_)[rowIndex] = MakeUnversionedStringValue(
-                    MakeTzString(timestamp, tzName, buffer, tzStringSize),
+                    MakeTzString(timestamp, tzId, buffer, tzStringSize),
                     ColumnId_);
                 BufferForStringLikeValues_->Advance(tzStringSize);
             }
@@ -1506,21 +1498,14 @@ private:
     {
         auto array = std::static_pointer_cast<arrow20::StructArray>(Array_);
         auto timestampArray = std::static_pointer_cast<TInnerArray>(array->field(0));
+        auto tzIdArray = std::static_pointer_cast<arrow20::UInt16Array>(array->field(1));
         if (array->IsNull(RowIndex_)) {
             Writer_->WriteEntity();
         } else {
             auto timestamp = timestampArray->Value(RowIndex_);
-            std::string_view tzName;
-            if (array->field(1)->type_id() == arrow20::Type::BINARY) {
-                auto tzNameArray = std::static_pointer_cast<arrow20::BinaryArray>(array->field(1));
-                auto tzValue = tzNameArray->Value(RowIndex_);
-                tzName = std::string_view(tzValue.data(), tzValue.size());
-            } else {
-                auto tzIndexArray = std::static_pointer_cast<arrow20::UInt16Array>(array->field(1));
-                tzName = GetTzName(tzIndexArray->Value(RowIndex_));
-            }
+            auto tzId = tzIdArray->Value(RowIndex_);
 
-            Writer_->WriteBinaryString(MakeTzString(timestamp, tzName));
+            Writer_->WriteBinaryString(MakeTzString(timestamp, tzId));
         }
         return arrow20::Status::OK();
     }

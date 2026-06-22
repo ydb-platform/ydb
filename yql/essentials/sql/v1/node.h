@@ -204,6 +204,7 @@ public:
     virtual bool SetYqlSelectWindowName(TContext& ctx, TString name);
     void UseAsInner();
     void DisableSort();
+    void PreserveSort();
     virtual bool UsedSubquery() const;
     virtual bool IsSelect() const;
     virtual bool HasSelectResult() const;
@@ -301,6 +302,7 @@ protected:
     mutable TNodeState State_;
     bool AsInner_ = false;
     bool DisableSort_ = false;
+    bool PreserveSort_ = false;
 };
 using TNodePtr = INode::TPtr;
 
@@ -1750,6 +1752,7 @@ TNodePtr BuildAlterTransfer(TPosition pos, const TString& id, std::optional<TStr
                             const TObjectOperatorContext& context);
 TNodePtr BuildDropTransfer(TPosition pos, const TString& id, bool cascade, const TObjectOperatorContext& context);
 TNodePtr BuildWriteResult(TPosition pos, const TString& label, TNodePtr settings);
+TNodePtr BuildMaterialize(TPosition pos, TSourcePtr source, const TString& serviceId, TNodePtr cluster, TTableHints hints, TString alias, TScopedStatePtr scoped);
 TNodePtr BuildCommitClusters(TPosition pos);
 TNodePtr BuildRollbackClusters(TPosition pos);
 TNodePtr BuildQuery(TPosition pos, const TVector<TNodePtr>& blocks, bool topLevel, TScopedStatePtr scoped, bool useSeq);

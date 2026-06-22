@@ -10,7 +10,12 @@ Use this only for debugging and inspecting topic data. For production workloads,
 
 {% note info %}
 
-In the examples, `ydb_source` is a pre-created [external data source](../../../../concepts/datamodel/external_data_source.md), and `topic_name` is a topic available through it.
+In the examples:
+
+- `ext_source` — a pre-created [external data source](../../../../concepts/datamodel/external_data_source.md);
+- `input_topic` — a local or external topic.
+
+See [local and external topics in streaming queries](../../../../dev/streaming-query/local-and-external-topics.md).
 
 {% endnote %}
 
@@ -20,7 +25,7 @@ In the examples, `ydb_source` is a pre-created [external data source](../../../.
 SELECT
     Data
 FROM
-    ydb_source.topic_name
+    ext_source.input_topic -- or local topic input_topic
 WITH (
     FORMAT = raw,
     SCHEMA = (

@@ -185,27 +185,27 @@ def mypy_unicode_typing() -> None:
 
     t = T()
     reveal_type(
-        Unicode(  # R: traitlets.traitlets.Unicode[builtins.str, Union[builtins.str, builtins.bytes]]
+        Unicode(  # R: traitlets.traitlets.Unicode[builtins.str, builtins.str | builtins.bytes]
             "foo"
         )
     )
     reveal_type(
-        Unicode(  # R: traitlets.traitlets.Unicode[builtins.str, Union[builtins.str, builtins.bytes]]
+        Unicode(  # R: traitlets.traitlets.Unicode[builtins.str, builtins.str | builtins.bytes]
             ""
         ).tag(sync=True)
     )
     reveal_type(
-        Unicode(  # R: traitlets.traitlets.Unicode[Union[builtins.str, None], Union[builtins.str, builtins.bytes, None]]
+        Unicode(  # R: traitlets.traitlets.Unicode[builtins.str | None, builtins.str | builtins.bytes | None]
             None, allow_none=True
         )
     )
     reveal_type(
-        Unicode(  # R: traitlets.traitlets.Unicode[Union[builtins.str, None], Union[builtins.str, builtins.bytes, None]]
+        Unicode(  # R: traitlets.traitlets.Unicode[builtins.str | None, builtins.str | builtins.bytes | None]
             None, allow_none=True
         ).tag(sync=True)
     )
     reveal_type(
-        T.export_format  # R: traitlets.traitlets.Unicode[builtins.str, Union[builtins.str, builtins.bytes]]
+        T.export_format  # R: traitlets.traitlets.Unicode[builtins.str, builtins.str | builtins.bytes]
     )
     reveal_type(t.export_format)  # R: builtins.str
 
@@ -312,37 +312,37 @@ def mypy_bool_typing() -> None:
 
     t = T()
     reveal_type(
-        Bool(True)  # R: traitlets.traitlets.Bool[builtins.bool, Union[builtins.bool, builtins.int]]
+        Bool(True)  # R: traitlets.traitlets.Bool[builtins.bool, builtins.bool | builtins.int]
     )
     reveal_type(
-        Bool(  # R: traitlets.traitlets.Bool[builtins.bool, Union[builtins.bool, builtins.int]]
+        Bool(  # R: traitlets.traitlets.Bool[builtins.bool, builtins.bool | builtins.int]
             True
         ).tag(sync=True)
     )
     reveal_type(
-        Bool(  # R: traitlets.traitlets.Bool[Union[builtins.bool, None], Union[builtins.bool, builtins.int, None]]
+        Bool(  # R: traitlets.traitlets.Bool[builtins.bool | None, builtins.bool | builtins.int | None]
             None, allow_none=True
         )
     )
     reveal_type(
-        Bool(  # R: traitlets.traitlets.Bool[Union[builtins.bool, None], Union[builtins.bool, builtins.int, None]]
+        Bool(  # R: traitlets.traitlets.Bool[builtins.bool | None, builtins.bool | builtins.int | None]
             None, allow_none=True
         ).tag(sync=True)
     )
     reveal_type(
-        T.b  # R: traitlets.traitlets.Bool[builtins.bool, Union[builtins.bool, builtins.int]]
+        T.b  # R: traitlets.traitlets.Bool[builtins.bool, builtins.bool | builtins.int]
     )
     reveal_type(t.b)  # R: builtins.bool
-    reveal_type(t.ob)  # R: Union[builtins.bool, None]
+    reveal_type(t.ob)  # R: builtins.bool | None
     reveal_type(
-        T.b  # R: traitlets.traitlets.Bool[builtins.bool, Union[builtins.bool, builtins.int]]
+        T.b  # R: traitlets.traitlets.Bool[builtins.bool, builtins.bool | builtins.int]
     )
     reveal_type(
-        T.ob  # R: traitlets.traitlets.Bool[Union[builtins.bool, None], Union[builtins.bool, builtins.int, None]]
+        T.ob  # R: traitlets.traitlets.Bool[builtins.bool | None, builtins.bool | builtins.int | None]
     )
-    # we would expect this to be Optional[Union[bool, int]], but...
-    t.b = "foo"  # E: Incompatible types in assignment (expression has type "str", variable has type "Union[bool, int]")  [assignment]
-    t.b = None  # E: Incompatible types in assignment (expression has type "None", variable has type "Union[bool, int]")  [assignment]
+    # we would expect this to be Optional[bool | int], but...
+    t.b = "foo"  # E: Incompatible types in assignment (expression has type "str", variable has type "bool | int")  [assignment]
+    t.b = None  # E: Incompatible types in assignment (expression has type "None", variable has type "bool | int")  [assignment]
 
 
 @pytest.mark.mypy_testing
@@ -355,21 +355,21 @@ def mypy_int_typing() -> None:
     reveal_type(Int(True))  # R: traitlets.traitlets.Int[builtins.int, builtins.int]
     reveal_type(Int(True).tag(sync=True))  # R: traitlets.traitlets.Int[builtins.int, builtins.int]
     reveal_type(
-        Int(  # R: traitlets.traitlets.Int[Union[builtins.int, None], Union[builtins.int, None]]
+        Int(  # R: traitlets.traitlets.Int[builtins.int | None, builtins.int | None]
             None, allow_none=True
         )
     )
     reveal_type(
-        Int(  # R: traitlets.traitlets.Int[Union[builtins.int, None], Union[builtins.int, None]]
+        Int(  # R: traitlets.traitlets.Int[builtins.int | None, builtins.int | None]
             None, allow_none=True
         ).tag(sync=True)
     )
     reveal_type(T.i)  # R: traitlets.traitlets.Int[builtins.int, builtins.int]
     reveal_type(t.i)  # R: builtins.int
-    reveal_type(t.oi)  # R: Union[builtins.int, None]
+    reveal_type(t.oi)  # R: builtins.int | None
     reveal_type(T.i)  # R: traitlets.traitlets.Int[builtins.int, builtins.int]
     reveal_type(
-        T.oi  # R: traitlets.traitlets.Int[Union[builtins.int, None], Union[builtins.int, None]]
+        T.oi  # R: traitlets.traitlets.Int[builtins.int | None, builtins.int | None]
     )
     t.i = "foo"  # E: Incompatible types in assignment (expression has type "str", variable has type "int")  [assignment]
     t.i = None  # E: Incompatible types in assignment (expression has type "None", variable has type "int")  [assignment]
@@ -386,18 +386,18 @@ def mypy_cint_typing() -> None:
     reveal_type(CInt(42))  # R: traitlets.traitlets.CInt[builtins.int, Any]
     reveal_type(CInt(42).tag(sync=True))  # R: traitlets.traitlets.CInt[builtins.int, Any]
     reveal_type(
-        CInt(None, allow_none=True)  # R: traitlets.traitlets.CInt[Union[builtins.int, None], Any]
+        CInt(None, allow_none=True)  # R: traitlets.traitlets.CInt[builtins.int | None, Any]
     )
     reveal_type(
-        CInt(  # R: traitlets.traitlets.CInt[Union[builtins.int, None], Any]
+        CInt(  # R: traitlets.traitlets.CInt[builtins.int | None, Any]
             None, allow_none=True
         ).tag(sync=True)
     )
     reveal_type(T.i)  # R: traitlets.traitlets.CInt[builtins.int, Any]
     reveal_type(t.i)  # R: builtins.int
-    reveal_type(t.oi)  # R: Union[builtins.int, None]
+    reveal_type(t.oi)  # R: builtins.int | None
     reveal_type(T.i)  # R: traitlets.traitlets.CInt[builtins.int, Any]
-    reveal_type(T.oi)  # R: traitlets.traitlets.CInt[Union[builtins.int, None], Any]
+    reveal_type(T.oi)  # R: traitlets.traitlets.CInt[builtins.int | None, Any]
 
 
 @pytest.mark.mypy_testing
@@ -416,17 +416,17 @@ def mypy_tcp_typing() -> None:
             sync=True
         )
     )
-    reveal_type(t.otcp)  # R: Union[tuple[builtins.str, builtins.int], None]
+    reveal_type(t.otcp)  # R: tuple[builtins.str, builtins.int] | None
     reveal_type(
-        T.otcp  # R: traitlets.traitlets.TCPAddress[Union[tuple[builtins.str, builtins.int], None], Union[tuple[builtins.str, builtins.int], None]]
+        T.otcp  # R: traitlets.traitlets.TCPAddress[tuple[builtins.str, builtins.int] | None, tuple[builtins.str, builtins.int] | None]
     )
     reveal_type(
-        T.otcp.tag(  # R: traitlets.traitlets.TCPAddress[Union[tuple[builtins.str, builtins.int], None], Union[tuple[builtins.str, builtins.int], None]]
+        T.otcp.tag(  # R: traitlets.traitlets.TCPAddress[tuple[builtins.str, builtins.int] | None, tuple[builtins.str, builtins.int] | None]
             sync=True
         )
     )
     t.tcp = "foo"  # E: Incompatible types in assignment (expression has type "str", variable has type "tuple[str, int]")  [assignment]
-    t.otcp = "foo"  # E: Incompatible types in assignment (expression has type "str", variable has type "Optional[tuple[str, int]]")  [assignment]
+    t.otcp = "foo"  # E: Incompatible types in assignment (expression has type "str", variable has type "tuple[str, int] | None")  [assignment]
     t.tcp = None  # E: Incompatible types in assignment (expression has type "None", variable has type "tuple[str, int]")  [assignment]
 
 
@@ -441,14 +441,14 @@ def mypy_instance_typing() -> None:
     reveal_type(t.inst)  # R: tests.test_typing.Foo
     reveal_type(T.inst)  # R: traitlets.traitlets.Instance[tests.test_typing.Foo]
     reveal_type(T.inst.tag(sync=True))  # R: traitlets.traitlets.Instance[tests.test_typing.Foo]
-    reveal_type(t.oinst)  # R: Union[tests.test_typing.Foo, None]
-    reveal_type(t.oinst_string)  # R: Union[Any, None]
-    reveal_type(T.oinst)  # R: traitlets.traitlets.Instance[Union[tests.test_typing.Foo, None]]
+    reveal_type(t.oinst)  # R: tests.test_typing.Foo | None
+    reveal_type(t.oinst_string)  # R: Any | None
+    reveal_type(T.oinst)  # R: traitlets.traitlets.Instance[tests.test_typing.Foo | None]
     reveal_type(
-        T.oinst.tag(  # R: traitlets.traitlets.Instance[Union[tests.test_typing.Foo, None]]
+        T.oinst.tag(  # R: traitlets.traitlets.Instance[tests.test_typing.Foo | None]
             sync=True
         )
     )
     t.inst = "foo"  # E: Incompatible types in assignment (expression has type "str", variable has type "Foo")  [assignment]
-    t.oinst = "foo"  # E: Incompatible types in assignment (expression has type "str", variable has type "Optional[Foo]")  [assignment]
+    t.oinst = "foo"  # E: Incompatible types in assignment (expression has type "str", variable has type "Foo | None")  [assignment]
     t.inst = None  # E: Incompatible types in assignment (expression has type "None", variable has type "Foo")  [assignment]

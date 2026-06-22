@@ -4,7 +4,6 @@
 #include "scan_snapshot_guard.h"
 
 #include "blobs_action/bs/storage.h"
-#include "blobs_reader/events.h"
 #include "blobs_reader/task.h"
 #include "common/tablet_id.h"
 #include "resource_subscriber/task.h"
@@ -1595,6 +1594,12 @@ void TColumnShard::Handle(NOlap::NDataSharing::NEvents::TEvApplyLinksModificatio
 
 void TColumnShard::Handle(TAutoPtr<TEventHandle<NOlap::NBackground::TEvExecuteGeneralLocalTransaction>>& ev, const TActorContext& ctx) {
     Execute(ev->Get()->ExtractTransaction().release(), ctx);
+}
+
+void TColumnShard::Handle(NOlap::NBackground::TEvRemoveSession::TPtr& ev, const TActorContext& ctx) {
+    auto txRemove = BackgroundSessionsManager->TxRemove(ev->Get()->GetClassName(), ev->Get()->GetIdentifier());
+    AFL_VERIFY(!!txRemove);
+    Execute(txRemove.release(), ctx);
 }
 
 void TColumnShard::Handle(NOlap::NBlobOperations::NEvents::TEvDeleteSharedBlobs::TPtr& ev, const TActorContext& ctx) {

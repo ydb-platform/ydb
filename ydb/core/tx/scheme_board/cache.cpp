@@ -756,6 +756,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             Columns.clear();
             KeyColumnTypes.clear();
             NotNullColumns.clear();
+            SetNotNullInProgressColumns.clear();
             Indexes.clear();
             Sequences.clear();
             CdcStreams.clear();
@@ -798,6 +799,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 column.PType = typeInfoMod.TypeInfo;
                 column.PTypeMod = typeInfoMod.TypeMod;
                 column.IsBuildInProgress = columnDesc.GetIsBuildInProgress();
+                column.SetNotNullInProgress = columnDesc.GetSetNotNullInProgress();
 
                 if (columnDesc.HasDefaultFromSequence()) {
                     column.SetDefaultFromSequence();
@@ -810,6 +812,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
                 if (columnDesc.GetNotNull()) {
                     column.IsNotNullColumn = true;
                     NotNullColumns.insert(columnDesc.GetName());
+                }
+
+                if (columnDesc.GetSetNotNullInProgress()) {
+                    column.SetNotNullInProgress = true;
+                    SetNotNullInProgressColumns.insert(columnDesc.GetName());
                 }
             }
 
@@ -1990,6 +1997,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             entry.Self = Self;
             entry.Columns = Columns;
             entry.NotNullColumns = NotNullColumns;
+            entry.SetNotNullInProgressColumns = SetNotNullInProgressColumns;
             entry.Indexes = Indexes;
             entry.CdcStreams = CdcStreams;
             entry.Sequences = Sequences;
@@ -2269,6 +2277,7 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         THashMap<ui32, TSysTables::TTableColumnInfo> Columns;
         TVector<NScheme::TTypeInfo> KeyColumnTypes;
         THashSet<TString> NotNullColumns;
+        THashSet<TString> SetNotNullInProgressColumns;
         TVector<NKikimrSchemeOp::TIndexDescription> Indexes;
         TVector<NKikimrSchemeOp::TCdcStreamDescription> CdcStreams;
         TVector<NKikimrSchemeOp::TSequenceDescription> Sequences;

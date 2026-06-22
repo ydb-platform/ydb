@@ -15,7 +15,7 @@ namespace NYT::NLogging {
 struct TLogWriterConfig
     : public NYTree::TYsonStruct
 {
-    TString Type;
+    std::string Type;
 
     ELogFormat Format;
 
@@ -35,7 +35,7 @@ struct TLogWriterConfig
     //! Structured formatter options.
     bool EnableSystemFields;
     bool EnableHostField;
-    THashMap<TString, NYTree::INodePtr> CommonFields;
+    THashMap<std::string, NYTree::INodePtr> CommonFields;
     NJson::TJsonFormatConfigPtr JsonFormat;
 
     bool AreSystemMessagesEnabled() const;
@@ -76,7 +76,7 @@ struct TFileLogWriterConfig
 {
     static constexpr const TStringBuf WriterType = "file";
 
-    TString FileName;
+    std::string FileName;
     //! If `true` add `timestamp` to all log files including active one.
     bool UseTimestampSuffix;
     //! If `true` add `timestamp` only to old versions of log files and  use format `%Y%m%d-%H%M%S` for timestamp.
@@ -114,15 +114,15 @@ DEFINE_REFCOUNTED_TYPE(TStderrLogWriterConfig)
 struct TRuleConfig
     : public NYTree::TYsonStruct
 {
-    std::optional<THashSet<TString>> IncludeCategories;
-    THashSet<TString> ExcludeCategories;
+    std::optional<THashSet<std::string>> IncludeCategories;
+    THashSet<std::string> ExcludeCategories;
 
     ELogLevel MinLevel;
     ELogLevel MaxLevel;
 
     std::optional<ELogFamily> Family;
 
-    std::vector<TString> Writers;
+    std::vector<std::string> Writers;
 
     bool IsApplicable(TStringBuf category, ELogFamily family) const;
     bool IsApplicable(TStringBuf category, ELogLevel level, ELogFamily family) const;
@@ -156,8 +156,8 @@ struct TLogManagerConfig
     TDuration ShutdownBusyTimeout;
 
     std::vector<TRuleConfigPtr> Rules;
-    THashMap<TString, NYTree::IMapNodePtr> Writers;
-    THashMap<TString, i64> CategoryRateLimits;
+    THashMap<std::string, NYTree::IMapNodePtr> Writers;
+    THashMap<std::string, i64> CategoryRateLimits;
 
     //! Messages with these prefixes will not be logged regardless of the configured levels.
     std::vector<std::string> SuppressedMessages;
@@ -178,7 +178,7 @@ struct TLogManagerConfig
     TLogManagerConfigPtr ApplyDynamic(const TLogManagerDynamicConfigPtr& dynamicConfig) const;
 
     static TLogManagerConfigPtr CreateStderrLogger(ELogLevel logLevel);
-    static TLogManagerConfigPtr CreateLogFile(const TString& path, ELogLevel logLevel = ELogLevel::Trace);
+    static TLogManagerConfigPtr CreateLogFile(const std::string& path, ELogLevel logLevel = ELogLevel::Trace);
     static TLogManagerConfigPtr CreateDefault();
     static TLogManagerConfigPtr CreateQuiet();
     static TLogManagerConfigPtr CreateSilent();
@@ -186,10 +186,10 @@ struct TLogManagerConfig
     //! Also allows adding structured logs. For example, pair ("RpcProxyStructuredMain", "main") would
     //! make structured messages with RpcProxyStructuredMain category go to #directory/#componentName.yson.main.log.
     static TLogManagerConfigPtr CreateYTServer(
-        const TString& componentName,
-        const TString& directory = ".",
-        const THashMap<TString, TString>& structuredCategoryToWriterName = {});
-    static TLogManagerConfigPtr CreateFromFile(const TString& file, const NYPath::TYPath& path = "");
+        const std::string& componentName,
+        const std::string& directory = ".",
+        const THashMap<std::string, std::string>& structuredCategoryToWriterName = {});
+    static TLogManagerConfigPtr CreateFromFile(const std::string& file, const NYPath::TYPath& path = "");
     static TLogManagerConfigPtr CreateFromNode(NYTree::INodePtr node, const NYPath::TYPath& path = "");
     static TLogManagerConfigPtr TryCreateFromEnv();
 
@@ -215,7 +215,7 @@ struct TLogManagerDynamicConfig
     std::optional<int> LowBacklogWatermark;
 
     std::optional<std::vector<TRuleConfigPtr>> Rules;
-    std::optional<THashMap<TString, i64>> CategoryRateLimits;
+    std::optional<THashMap<std::string, i64>> CategoryRateLimits;
 
     std::optional<std::vector<std::string>> SuppressedMessages;
     THashMap<std::string, ELogLevel> MessageLevelOverrides;

@@ -419,15 +419,6 @@ struct TVersionedObjectId
     static TVersionedObjectId FromString(TStringBuf str);
 };
 
-//! Formats id into a string (for debugging and logging purposes mainly).
-void FormatValue(TStringBuilderBase* builder, const TVersionedObjectId& id, TStringBuf spec);
-
-//! Compares TVersionedNodeId s for equality.
-bool operator==(const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
-
-//! Compares TVersionedNodeId s for "less than".
-bool operator <  (const TVersionedObjectId& lhs, const TVersionedObjectId& rhs);
-
 class TObjectServiceProxy;
 
 struct TObjectIdEntropyHash;

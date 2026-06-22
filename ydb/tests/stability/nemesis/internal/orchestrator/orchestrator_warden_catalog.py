@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import Any, Callable, List, Tuple
 
 from ydb.tests.library.harness.kikimr_cluster import ExternalKiKiMRCluster
-from ydb.tests.library.nemesis.safety_warden import UnifiedAgentVerifyFailedSafetyWarden
 from ydb.tests.library.wardens.datashard import TxCompleteLagLivenessWarden
 from ydb.tests.library.wardens.disk import AllPDisksAreInValidStateSafetyWarden
 from ydb.tests.library.wardens.hive import AllTabletsAliveLivenessWarden, BootQueueSizeWarden
@@ -49,7 +48,8 @@ def collect_orchestrator_cluster_safety_specs(
 class OrchestratorAggregatedSafetyCheck:
     """
     Aggregate over agent safety responses.
-    agent_source_class_name — warden class name on the agent; matching logic see UnifiedAgentVerifyFailedAggregated._row_matches_class.
+    agent_source_class_name — agent catalog slot name (e.g. "unified_agent_verify_failed"); matched against the agent-reported check["name"] field.
+    See UnifiedAgentVerifyFailedAggregated._row_matches_class.
     """
 
     name: str
@@ -68,7 +68,7 @@ ORCHESTRATOR_AGGREGATED_SAFETY_CHECKS: Tuple[OrchestratorAggregatedSafetyCheck, 
     OrchestratorAggregatedSafetyCheck(
         name="UnifiedAgentVerifyFailedAggregated",
         description="Aggregate and deduplicate VERIFY failed errors from all agents",
-        agent_source_class_name=UnifiedAgentVerifyFailedSafetyWarden.__name__,
+        agent_source_class_name='unified_agent_verify_failed',
         impl=UnifiedAgentVerifyFailedAggregated,
     ),
 )

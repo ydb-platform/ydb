@@ -3,6 +3,7 @@ LIBRARY()
 INCLUDE(${ARCADIA_ROOT}/library/cpp/yt/ya_cpp.make.inc)
 
 SRCS(
+    cpu_id.cpp
     env.cpp
     exit.cpp
     process_id.cpp
@@ -11,9 +12,16 @@ SRCS(
 )
 
 PEERDIR(
+    library/cpp/yt/cpu_clock
     library/cpp/yt/exception
     library/cpp/yt/misc
 )
+
+IF (OS_LINUX)
+    PEERDIR(
+        library/cpp/yt/rseq
+    )
+ENDIF()
 
 END()
 

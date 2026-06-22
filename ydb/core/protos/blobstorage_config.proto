@@ -673,10 +673,10 @@ message TInferPDiskSlotCountForDriveTypeSettings {
     // where SlotSizeInUnits = 2^N is chosen to meet ExpectedSlotCount <= MaxSlots
     optional uint64 UnitSize = 1; // in bytes
     optional uint32 MaxSlots = 2;
-    // Applies to UnitSize/MaxSlots inference. Unless true, PDisk.ExpectedSlotCount overrides inferred settings.
+    // Unless true, explicit PDisk slot settings override inferred settings.
     optional bool PreferInferredSettingsOverExplicit = 3;
     // SlotSize is used as PDiskConfig ExpectedSlotSize for this drive type.
-    // It is mutually exclusive with UnitSize, MaxSlots and PreferInferredSettingsOverExplicit.
+    // It is mutually exclusive with UnitSize and requires MaxSlots as slot-count cap.
     optional uint64 SlotSize = 4; // in bytes
 }
 

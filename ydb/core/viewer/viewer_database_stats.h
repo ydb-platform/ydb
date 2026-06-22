@@ -414,10 +414,10 @@ public:
                         storageConsumed += record.GetAllocatedSize();
                         auto itPDisk = pDisksIdx.find(std::make_pair(nodeId, record.GetPDiskId()));
                         if (itPDisk != pDisksIdx.end()) {
-                            const ui64 expectedSlotSize = itPDisk->second.GetExpectedSlotSize();
-                            auto slotSize = expectedSlotSize
-                                ? expectedSlotSize
-                                : itPDisk->second.GetEnforcedDynamicSlotSize();
+                            auto slotSize = itPDisk->second.GetEnforcedDynamicSlotSize();
+                            if (!slotSize) {
+                                slotSize = itPDisk->second.GetExpectedSlotSize();
+                            }
                             if (!slotSize) {
                                 auto slotCount = itPDisk->second.GetExpectedSlotCount();
                                 if (!slotCount) {
@@ -430,7 +430,7 @@ public:
                             const ui32 ownerWeight = TPDiskConfig::GetOwnerWeight(
                                 itGroup->second.GetInfo().GetGroupSizeInUnits(),
                                 itPDisk->second.GetSlotSizeInUnits(),
-                                expectedSlotSize);
+                                itPDisk->second.GetExpectedSlotSize());
                             storageTotal += slotSize * ownerWeight;
                         } else {
                             unknownPDisk = true;

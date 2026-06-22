@@ -5,6 +5,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/fulltext_query.h>
 #include <ydb/core/base/table_index.h>
 
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
@@ -691,6 +692,9 @@ public:
     TOwnedTableRange WordKeyCells;
     bool L1 = true;
     bool L2 = false;
+    // Set from the `+term` query syntax: a required (Lucene MUST) term that every
+    // matching document must contain. Drives the required-term L1/L2 split.
+    bool Required = false;
     ui32 L2StreamIndex = 0;
     ui64 StartReadKeyFrom = 0;
 
@@ -1819,9 +1823,11 @@ private:
 
                 if (analyzer.column() == column.GetName()) {
                     size_t wordIndex = 0;
-                    for (const TString& query: NFulltext::BuildSearchTerms(expr, analyzer.analyzers())) {
+                    for (const auto& term: NFulltext::BuildSearchTermsStructured(expr, analyzer.analyzers())) {
                         YQL_ENSURE(IndexTableReader);
-                        Words.emplace_back(MakeIntrusive<TWordReadState>(wordIndex++, query, IndexTableReader));
+                        auto word = MakeIntrusive<TWordReadState>(wordIndex++, term.Token, IndexTableReader);
+                        word->Required = term.Required;
+                        Words.emplace_back(std::move(word));
                     }
                 }
             }
@@ -1909,7 +1915,46 @@ private:
             return;
         }
 
-        if (IsNgram || MainTableReader->GetWithRelevance()) {
+        // `+term` required-term mode (Lucene MUST). Under the OR operator, terms
+        // marked required must appear in every match while minimum_should_match
+        // applies to the remaining optional terms. Required terms drive the read as
+        // a strict AND (L1); optional terms are verified per candidate (L2,
+        // threshold). When every term is required it degenerates to a strict AND
+        // with no L2 layer. This is mutually exclusive with the imbalance heuristic.
+        size_t requiredCount = 0;
+        for (const auto& word : Words) {
+            if (word->Required) {
+                ++requiredCount;
+            }
+        }
+        const bool hasRequired = defaultOperator == EDefaultOperator::Or && requiredCount >= 1;
+        const bool requiredDriven = hasRequired && requiredCount < Words.size();
+
+        if (hasRequired) {
+            // Order required terms first (L1) and optional terms after (L2); the
+            // reassigned contiguous WordIndex doubles as the L1/L2 stream index.
+            TVector<TWordReadState::TPtr> ordered;
+            ordered.reserve(Words.size());
+            for (auto& word : Words) {
+                if (word->Required) {
+                    word->L1 = true;
+                    word->L2 = false;
+                    ordered.emplace_back(std::move(word));
+                }
+            }
+            for (auto& word : Words) {
+                if (word) { // remaining (optional) terms, required ones were moved out
+                    word->L1 = false;
+                    word->L2 = true;
+                    ordered.emplace_back(std::move(word));
+                }
+            }
+            std::swap(Words, ordered);
+            for (size_t i = 0; i < Words.size(); ++i) {
+                Words[i]->WordIndex = i;
+            }
+            needL2Layer = requiredDriven;
+        } else if (IsNgram || MainTableReader->GetWithRelevance()) {
             // Queries often contain 'imbalanced' ngrams. I.e. some ngrams
             // are really frequent and others aren't, like one with 5.5 million
             // documents and other with 400 documents. In such cases we can
@@ -1959,7 +2004,17 @@ private:
             }
         }
 
-        ui32 minimumShouldMatch = MinimumShouldMatchFromString(Words.size(), defaultOperator, Settings->GetMinimumShouldMatch(), explain);
+        ui32 minimumShouldMatch;
+        if (requiredDriven) {
+            // minimum_should_match counts only the optional (non-required) terms.
+            const size_t optionalCount = Words.size() - requiredCount;
+            minimumShouldMatch = MinimumShouldMatchFromString(optionalCount, defaultOperator, Settings->GetMinimumShouldMatch(), explain);
+        } else if (hasRequired) {
+            // Every term is required -> strict AND; minimum_should_match is moot.
+            minimumShouldMatch = Words.size();
+        } else {
+            minimumShouldMatch = MinimumShouldMatchFromString(Words.size(), defaultOperator, Settings->GetMinimumShouldMatch(), explain);
+        }
         if (!explain.empty()) {
             RuntimeError(explain, NYql::NDqProto::StatusIds::BAD_REQUEST);
             return;
@@ -1998,20 +2053,33 @@ private:
         }
 
         if (l2streams.size() > 0) {
-            YQL_ENSURE(defaultOperator == EDefaultOperator::And);
-
-            L2MergeAlgo = std::make_unique<TAndOptimizedMergeAlgorithm>(
-                std::move(l2streams),
-                minimumShouldMatch,
-                MainTableReader->GetWithRelevance(),
-                MainTableReader->GetKeyColumnTypes()
-            );
+            if (requiredDriven) {
+                // Optional terms: a candidate passes when at least minimum_should_match
+                // of them are present. Threshold merge over the per-candidate lookups.
+                L2MergeAlgo = std::make_unique<TDefaultMergeAlgorithm>(
+                    std::move(l2streams),
+                    minimumShouldMatch,
+                    MainTableReader->GetWithRelevance(),
+                    MainTableReader->GetKeyColumnTypes()
+                );
+            } else {
+                YQL_ENSURE(defaultOperator == EDefaultOperator::And);
+                L2MergeAlgo = std::make_unique<TAndOptimizedMergeAlgorithm>(
+                    std::move(l2streams),
+                    minimumShouldMatch,
+                    MainTableReader->GetWithRelevance(),
+                    MainTableReader->GetKeyColumnTypes()
+                );
+            }
         }
 
-        if (defaultOperator == EDefaultOperator::And) {
+        if (defaultOperator == EDefaultOperator::And || hasRequired) {
+            // Strict AND over the L1 tokens: AND default operator, or the required
+            // terms of a `+term` query (every required term must be present).
+            const ui64 l1MinShouldMatch = hasRequired ? l1streams.size() : minimumShouldMatch;
             L1MergeAlgo = std::make_unique<TAndOptimizedMergeAlgorithm>(
                 std::move(l1streams),
-                minimumShouldMatch,
+                l1MinShouldMatch,
                 MainTableReader->GetWithRelevance(),
                 MainTableReader->GetKeyColumnTypes()
             );

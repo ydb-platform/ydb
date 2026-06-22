@@ -441,6 +441,7 @@ class TRowDispatcher : public TActorBootstrapped<TRowDispatcher> {
 
     THashMap<NActors::TActorId, TAtomicSharedPtr<TConsumerInfo>> Consumers;      // key - read actor id
     TMap<ui64, TAtomicSharedPtr<TConsumerInfo>> ConsumersByEventQueueId;
+    THashMap<TString, TSet<TActorId>> ConsumersByQueryId;                        // key - query id, value - set of read actor ids
     THashMap<TTopicSessionKey, TTopicSessionInfo, TTopicSessionKeyHash> TopicSessions;
     TMap<TActorId, TReadActorInfo> ReadActorsInternalState;
     bool EnableStreamingQueriesCounters = false;
@@ -920,6 +921,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
 
     Consumers[ev->Sender] = consumerInfo;
     ConsumersByEventQueueId[consumerInfo->EventQueueId] = consumerInfo;
+    ConsumersByQueryId[consumerInfo->QueryId].insert(ev->Sender);
     if (!CheckSession(consumerInfo, ev)) {
         return;
     }
@@ -1088,6 +1090,18 @@ void TRowDispatcher::DeleteConsumer(NActors::TActorId readActorId) {
     }
     ConsumersByEventQueueId.erase(consumerIt->second->EventQueueId);
     Consumers.erase(consumerIt);
+    
+    const TString queryId = consumerIt->second->QueryId;
+    auto queryIt = ConsumersByQueryId.find(queryId);
+    if (queryIt != ConsumersByQueryId.end()) {
+        queryIt->second.erase(readActorId);
+        if (queryIt->second.empty()) {
+            ConsumersByQueryId.erase(queryIt);
+            if (EnableStreamingQueriesCounters) {
+                Metrics.Counters->RemoveSubgroup("query_id", queryId);
+            }
+        }
+    }
     Metrics.ClientsCount->Set(Consumers.size());
 }
 

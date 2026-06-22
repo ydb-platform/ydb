@@ -1,6 +1,5 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
-#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/library/testlib/helpers.h>
@@ -1123,11 +1122,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
-<<<<<<< HEAD
         // STATE_DONE_SUCCESSFUL/STATE_DONE_FAILED: operation is fully finished.
-=======
-        // STATE_DONE: operation is fully finished.
->>>>>>> 28c574266ea (add unit)
         answers.push_back(DoGetRequest(setConstraintTxId, runtime, root).GetState());
 
         UNIT_ASSERT_VALUES_EQUAL_C(

@@ -10,8 +10,9 @@ Stream processing is widely used in systems such as [Apache Flink](https://flink
 
 Regular queries operate on data already stored in tables. The query runs, returns a result, and completes. A streaming query is created and keeps running indefinitely until explicitly stopped by the user. Data continuously arrives in a topic, flows through the query, and is written to a sink—another topic or a table.
 
+
 | Characteristic | Regular queries | Streaming queries |
-| --- | --- | --- |
+|----------------|-----------------|-------------------|
 | Data | Finite sets in tables | Unbounded event streams |
 | Lifetime | Completes after processing | Runs continuously |
 | Result | Available after completion | Updates as data arrives |
@@ -55,7 +56,7 @@ We are actively improving stream processing. Delivery guarantees will get strong
 
 {% note warning %}
 
-- The query must contain at least one read from a topic, because stream processing requires a continuous input stream.
+- The query must contain at least one read from a topic, because streaming processing requires a continuous input stream.
 - `JOIN` between two streams is not supported (a temporary architectural limitation).
 
 {% endnote %}

@@ -26,7 +26,6 @@ When writing to a topic, `SELECT` must return a single column of type `String`, 
 
 Single-column write:
 
-
 ```sql
 CREATE STREAMING QUERY write_string_example AS
 DO BEGIN
@@ -46,9 +45,7 @@ DO BEGIN
 END DO
 ```
 
-
 To write multiple columns, serialize them to JSON:
-
 
 ```sql
 CREATE STREAMING QUERY write_json_example AS
@@ -70,17 +67,15 @@ DO BEGIN
 END DO
 ```
 
-
 See also: [TableRow](../../yql/reference/builtins/basic#tablerow), [Yson::From](../../yql/reference/udf/list/yson#ysonfrom), [Yson::SerializeJson](../../yql/reference/udf/list/yson#ysonserializejson), [Unwrap](../../yql/reference/builtins/basic#unwrap), [ToBytes](../../yql/reference/builtins/basic#to-from-bytes).
 
 ## Read formats {#read_formats}
 
-### csv_with_names {#csv_with_names}
+### `csv_with_names` {#csv_with_names}
 
 Based on [CSV](https://en.wikipedia.org/wiki/Comma-separated_values). Values are comma-separated; the first line contains column names.
 
 Example payload (one message):
-
 
 ```text
 Year,Manufacturer,Model,Price
@@ -88,9 +83,7 @@ Year,Manufacturer,Model,Price
 1999,Man_2,Model_2,4900.00
 ```
 
-
 Example query:
-
 
 ```sql
 CREATE STREAMING QUERY csv_example AS
@@ -114,13 +107,11 @@ DO BEGIN
 END DO
 ```
 
-
-### tsv_with_names {#tsv_with_names}
+### `tsv_with_names` {#tsv_with_names}
 
 Based on [TSV](https://en.wikipedia.org/wiki/Tab-separated_values). Values are tab-separated (`0x9`); the first line contains column names.
 
 Example payload (one message):
-
 
 ```text
 Year    Manufacturer    Model   Price
@@ -128,9 +119,7 @@ Year    Manufacturer    Model   Price
 1999    Man_2   Model_2    4900.00
 ```
 
-
 Example query:
-
 
 ```sql
 CREATE STREAMING QUERY tsv_example AS
@@ -154,13 +143,11 @@ DO BEGIN
 END DO
 ```
 
-
-### json_list {#json_list}
+### `json_list` {#json_list}
 
 Based on [JSON](https://en.wikipedia.org/wiki/JSON). Each message must be a JSON **array** of objects.
 
 Valid example:
-
 
 ```json
 [
@@ -169,18 +156,14 @@ Valid example:
 ]
 ```
 
-
 Invalid example (separate objects per line, not wrapped in an array):
-
 
 ```json
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
 { "Year": 1999, "Manufacturer": "Man_2", "Model": "Model_2", "Price": 4900.00 }
 ```
 
-
 Example query:
-
 
 ```sql
 CREATE STREAMING QUERY json_list_example AS
@@ -204,14 +187,12 @@ DO BEGIN
 END DO
 ```
 
-
-### json_each_row {#json_each_row}
+### `json_each_row` {#json_each_row}
 
 Based on [JSON](https://en.wikipedia.org/wiki/JSON). Each message must be a single JSON **object**. Common for systems like Apache Kafka or [{{ ydb-full-name }} topics](../../concepts/datamodel/topic.md).
 Multiple separate JSON objects in one message are not supported; a JSON array is also not supported.
 
 Valid example (one message):
-
 
 ```json
 { "Year": 1997, "Manufacturer": "Man_1", "Model": "Model_1", "Price": 3000.0 }
@@ -224,9 +205,7 @@ Invalid example:
 { "Year": 1999, "Manufacturer": "Man_2", "Model": "Model_2", "Price": 4900.00 }
 ```
 
-
 Example query:
-
 
 ```sql
 CREATE STREAMING QUERY json_each_row_example AS
@@ -250,8 +229,7 @@ DO BEGIN
 END DO
 ```
 
-
-### json_as_string {#json_as_string}
+### `json_as_string` {#json_as_string}
 
 Based on [JSON](https://en.wikipedia.org/wiki/JSON).
 
@@ -264,17 +242,14 @@ Each message may contain:
 
 Valid examples:
 
-
 ```json
 { "Year": 1997, "Attrs": { "Manufacturer": "Man_1", "Model": "Model_1" }, "Price": 3000.0 }
 { "Year": 1999, "Attrs": { "Manufacturer": "Man_2", "Model": "Model_2" }, "Price": 4900.00 }
 ```
 
-
 In this format the schema must be a single column of an allowed type — see [below](#schema).
 
 Example query:
-
 
 ```sql
 CREATE STREAMING QUERY json_as_string_example AS
@@ -295,13 +270,11 @@ DO BEGIN
 END DO
 ```
 
-
-### parquet {#parquet}
+### `parquet` {#parquet}
 
 Reads message payloads in [Apache Parquet](https://parquet.apache.org) format.
 
 Example query:
-
 
 ```sql
 CREATE STREAMING QUERY parquet_example AS
@@ -325,13 +298,11 @@ DO BEGIN
 END DO
 ```
 
-
 ### `raw` {#raw}
 
 Reads message payloads as raw bytes. Data read this way can be processed with [YQL](../../yql/reference/udf/list/string) string functions. Default schema: `SCHEMA(Data String)`.
 
 Example query:
-
 
 ```sql
 CREATE STREAMING QUERY raw_example AS
@@ -357,34 +328,31 @@ END DO
 Table of all supported types in the query schema:
 
 | Type | csv_with_names | tsv_with_names | json_list | json_each_row | json_as_string | parquet | raw |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `Int8`, `Int16`, `Int32`, `Int64`,<br/>`Uint8`, `Uint16`, `Uint32`, `Uint64`,<br/>`Float`, `Double` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |  |
-| `Bool` | ✓ | ✓ | ✓ | ✓ |  | ✓ |  |
-| `DyNumber` |  |  |  |  |  |  |  |
+|------|------------------|----------------|-----------|---------------|----------------|---------|-----|
+| `Int8`, `Int16`, `Int32`, `Int64`,<br/>`Uint8`, `Uint16`, `Uint32`, `Uint64`,<br/>`Float`, `Double` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | |
+| `Bool` | ✓ | ✓ | ✓ | ✓ | | ✓ | |
+| `DyNumber` | | | | | | | |
 | `String`, `Utf8` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
-| `Json` |  |  |  |  | ✓ |  | ✓ |
-| `JsonDocument` |  |  |  |  |  |  |  |
-| `Yson` |  |  |  |  |  |  |  |
-| `Uuid` |  |  |  | ✓ |  |  |  |
-| `Date`, `Datetime`, `Timestamp`,<br/>`TzDate`, `TzDatetime`, `TzTimestamp` |  |  |  |  |  |  |  |
-| `Interval` |  |  |  |  |  |  |  |
-| `Date32`, `Datetime64`, `Timestamp64`,<br/>`Interval64`,<br/>`TzDate32`, `TzDatetime64`, `TzTimestamp64` |  |  |  |  |  |  |  |
+| `Json` | | | | | ✓ | | ✓ |
+| `JsonDocument` | | | | | | | |
+| `Yson` | | | | | | | |
+| `Uuid` | | | | ✓ | | | |
+| `Date`, `Datetime`, `Timestamp`,<br/>`TzDate`, `TzDatetime`, `TzTimestamp` | | | | | | | |
+| `Interval` | | | | | | | |
+| `Date32`, `Datetime64`, `Timestamp64`,<br/>`Interval64`,<br/>`TzDate32`, `TzDatetime64`, `TzTimestamp64` | | | | | | | |
 | `Optional<T>` | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ | ✓ |
 
-## Examples of parsing data in custom formats {#parsing}
+## Parsing custom formats {#parsing}
 
-### Parsing JSON with built-in functions {#json_builtins}
+### JSON with built-in functions {#json_builtins}
 
 Sample data:
-
 
 ```json
 {"key": 1997, "value": "42"}
 ```
 
-
 Example query:
-
 
 ```sql
 CREATE STREAMING QUERY json_builtins_example AS
@@ -406,21 +374,17 @@ DO BEGIN
 END DO
 ```
 
-
 See [JSON_VALUE](../../yql/reference/builtins/json.md#json_value).
 
-### Parsing JSON with Yson {#json_yson}
+### JSON with Yson {#json_yson}
 
-Sample data ([Change Data Capture](../../concepts/cdc.md) format):
-
+Sample data ([Change Data Capture](../../concepts/cdc.md) style):
 
 ```json
 {"update":{"volume":10,"product":"bWlsaw=="},"key":[6],"ts":[1765192622420,18446744073709551615]}
 ```
 
-
 Example query:
-
 
 ```sql
 CREATE STREAMING QUERY json_yson_example AS
@@ -454,16 +418,14 @@ DO BEGIN
 END DO
 ```
 
-
-More about functions:
+See also:
 
 - [Yson::ConvertTo](../../yql/reference/udf/list/yson#ysonconvertto)
 - [FLATTEN COLUMNS](../../yql/reference/syntax/select/flatten.md#flatten-columns).
 
-### Parsing DSV (TSKV) {#dsv}
+### DSV (TSKV) {#dsv}
 
 Sample data:
-
 
 ```text
 name=Elena  uid=95792365232151958
@@ -471,9 +433,7 @@ name=Denis  uid=78086244452810046
 name=Mikhail    uid=70609792906901286
 ```
 
-
 Example query:
-
 
 ```sql
 CREATE STREAMING QUERY dsv_example AS
@@ -497,8 +457,7 @@ DO BEGIN
 END DO
 ```
 
-
-More about functions:
+See also:
 
 - [String::SplitToList](../../yql/reference/udf/list/string.md#splittolist)
 - [DictLookup](../../yql/reference/builtins/dict.md#dictlookup)

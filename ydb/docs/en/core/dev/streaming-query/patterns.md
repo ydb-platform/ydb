@@ -21,7 +21,6 @@ In the examples:
 
 The following snippet reads JSON events from a topic. Use it inside [CREATE STREAMING QUERY](../../yql/reference/syntax/create-streaming-query.md) in a `DO BEGIN ... END DO` block:
 
-
 ```yql
 SELECT
     *
@@ -36,13 +35,11 @@ WITH (
 );
 ```
 
-
 For more on formats, see [{#T}](streaming-query-formats.md).
 
 ## Writing to a topic (JSON) {#topic-json}
 
 The query reads events from the input topic, builds a JSON object from fields, and writes to the output topic. `AsStruct` builds a structure from the fields, `Yson::From` converts it to Yson, `Yson::SerializeJson` serializes to a JSON string, and `ToBytes` converts to `String`, which is required for topic writes.
-
 
 ```yql
 CREATE STREAMING QUERY write_json_example AS
@@ -67,7 +64,6 @@ WITH (
 END DO
 ```
 
-
 More on the functions:
 
 - [AsStruct](../../yql/reference/builtins/basic#as-container)
@@ -79,7 +75,6 @@ More on the functions:
 ## Writing to a topic (string) {#topic-utf8}
 
 The query reads events from the input topic and writes a single field as a string to the output topic. Topic writes require `SELECT` to return a single column of type `String` or `Utf8`.
-
 
 ```yql
 CREATE STREAMING QUERY write_utf8_example AS
@@ -101,7 +96,6 @@ WITH (
 END DO
 ```
 
-
 More on write formats: [{#T}](streaming-query-formats.md#write_formats).
 
 ## Writing to a table {#table-write}
@@ -113,7 +107,6 @@ The query reads events from a topic and writes them to `output_table`. Create th
 Table writes in streaming queries support **UPSERT only**. `INSERT INTO` is not supported: with [at-least-once](../../concepts/streaming-query.md#guarantees) delivery, retries would duplicate rows. With `UPSERT`, an existing row with the same primary key is updated; otherwise a new row is inserted, while `INSERT INTO` fails.
 
 {% endnote %}
-
 
 ```yql
 CREATE STREAMING QUERY write_table_example AS
@@ -136,7 +129,6 @@ WITH (
 
 END DO
 ```
-
 
 More details: [{#T}](table-writing.md).
 

@@ -1711,6 +1711,83 @@ Y_UNIT_TEST_SUITE(EvWrite) {
         auto readResult = ReadAllAsBatch(runtime, tableId, NOlap::TSnapshot(planStep, txId), schema);
         UNIT_ASSERT_VALUES_EQUAL(readResult->num_rows(), 2 * 2048);
     }
+
+    Y_UNIT_TEST(WriteIntoReadOnlyTableFails) {
+        using namespace NArrow;
+
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        const ui64 dstPathId = 2;
+        const std::vector<NArrow::NTest::TTestColumn> schema = { NArrow::NTest::TTestColumn("key", TTypeInfo(NTypeIds::Uint64)),
+            NArrow::NTest::TTestColumn("field", TTypeInfo(NTypeIds::Utf8)) };
+        const std::vector<ui32> columnIds = { 1, 2 };
+
+        auto planStep = PrepareTablet(runtime, srcPathId, schema);
+
+        NConstruction::IArrayBuilder::TPtr keyColumn =
+            std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TIntSeqFiller<arrow::UInt64Type>>>("key");
+        NConstruction::IArrayBuilder::TPtr column = std::make_shared<NConstruction::TSimpleArrayConstructor<NConstruction::TStringPoolFiller>>(
+            "field", NConstruction::TStringPoolFiller(8, 100));
+        auto batch = NConstruction::TRecordBatchConstructor({ keyColumn, column }).BuildBatch(2048);
+
+        // Sanity check: writing into the source table works before any copy is made.
+        {
+            const ui64 lockId = 111;
+            NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, srcPathId, lockId);
+            AFL_VERIFY(writer.Write(batch, columnIds, lockId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            AFL_VERIFY(writer.Abort() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+
+        // Create a read-only copy of the source table at dstPathId.
+        ui64 schemaTxId = 10;
+        {
+            const auto copyPlanStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, dstPathId, 1), ++schemaTxId);
+            PlanSchemaTx(runtime, sender, NOlap::TSnapshot(copyPlanStep, schemaTxId));
+            planStep = copyPlanStep;
+        }
+
+        // Writing into the read-only destination table must fail with STATUS_BAD_REQUEST
+        // and the response must contain a "table is read only" error issue.
+        {
+            const ui64 lockId = 222;
+            TActorId roSender = runtime.AllocateEdgeActor();
+            TString blobData = NArrow::SerializeBatchNoCompression(batch);
+
+            auto evWrite = std::make_unique<NEvents::TDataEvents::TEvWrite>(NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            evWrite->SetTxId(lockId);
+            evWrite->SetLockId(lockId, 1);
+            const ui64 payloadIndex = NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite>(*evWrite).AddDataToPayload(std::move(blobData));
+            evWrite->AddOperation(NKikimrDataEvents::TEvWrite::TOperation::OPERATION_REPLACE, { 0, dstPathId, 1 /*schemaVersion*/ }, columnIds,
+                payloadIndex, NKikimrDataEvents::FORMAT_ARROW);
+
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, roSender, evWrite.release());
+
+            TAutoPtr<NActors::IEventHandle> handle;
+            auto event = runtime.GrabEdgeEvent<NEvents::TDataEvents::TEvWriteResult>(handle);
+            UNIT_ASSERT(event);
+
+            const auto& record = event->Record;
+            UNIT_ASSERT_VALUES_EQUAL(record.GetOrigin(), TTestTxConfig::TxTablet0);
+            UNIT_ASSERT_VALUES_EQUAL_C(record.GetStatus(), NKikimrDataEvents::TEvWriteResult::STATUS_BAD_REQUEST,
+                NKikimrDataEvents::TEvWriteResult::EStatus_Name(record.GetStatus()));
+
+            const TString issuesText = NYql::IssuesFromMessageAsString(record.GetIssues());
+            UNIT_ASSERT_C(issuesText.Contains("table is read only"), "expected 'table is read only' in error issues, got: " << issuesText);
+        }
+
+        // The original source table must remain writable.
+        {
+            const ui64 lockId = 333;
+            NTxUT::TShardWriter writer(runtime, TTestTxConfig::TxTablet0, srcPathId, lockId);
+            AFL_VERIFY(writer.Write(batch, columnIds, lockId) == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+            AFL_VERIFY(writer.Abort() == NKikimrDataEvents::TEvWriteResult::STATUS_COMPLETED);
+        }
+    }
 }
 
 Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {

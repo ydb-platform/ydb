@@ -23,6 +23,6 @@ items:
 - { name: ORDER BY,             href: order_by.md                                             }
 - { name: ASSUME ORDER BY,      href: assume_order_by.md                                      }
 - { name: LIMIT OFFSET,         href: limit_offset.md                                         }
-- { name: SAMPLE,               href: sample.md                                               }
-- { name: TABLESAMPLE,          href: sample.md                                               }
+- { name: SAMPLE,               href: sample.md,                when: feature_tablesample     }
+- { name: TABLESAMPLE,          href: sample.md,                when: feature_tablesample     }
 - { name: MATCH_RECOGNIZE,      href: match_recognize.md                                      }

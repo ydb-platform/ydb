@@ -1596,7 +1596,7 @@ namespace NKikimr::NDataStreams::V1 {
             for (const auto& r : readResult.GetResult()) {
                 lastWriteTimestampMs = r.GetWriteTimestampMS();
                 const ui64 nextResultOffset = r.GetOffset() + r.GetLogicalMessageCount();
-                if (r.GetOffset() < readOffset) {
+                if (nextResultOffset <= readOffset) {
                     nextSequenceNumber = Max(nextSequenceNumber.GetOrElse(readOffset), nextResultOffset);
                     continue;
                 }

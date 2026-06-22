@@ -2522,6 +2522,100 @@ waitForNavCache:
         UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), 0);
     }
 
+    Y_UNIT_TEST(TestGetRecordsFromMiddleOfKafkaBatchReturnsBatch) {
+        TInsecureDatastreamsTestServer testServer;
+        const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;
+        {
+            auto result = testServer.DataStreamsClient->CreateStream(streamName,
+                NYDS_V1::TCreateStreamSettings().ShardCount(1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        NYdb::NTopic::TTopicClient topicClient(*testServer.Driver);
+        constexpr size_t dataSize = 8;
+        NKikimr::NPQ::NTest::WriteKafkaBatchMessages(
+            topicClient,
+            "/Root/" + streamName,
+            "datastreams-batch-middle-read-producer",
+            dataSize,
+            3,
+            {
+                {1, 3, 'a'},
+                {4, 3, 'b'},
+            });
+
+        TString shardIterator;
+        {
+            auto result = testServer.DataStreamsClient->GetShardIterator(streamName, "shard-000000",
+                YDS_V1::ShardIteratorType::AT_SEQUENCE_NUMBER,
+                NYDS_V1::TGetShardIteratorSettings().StartingSequenceNumber("1")).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            shardIterator = result.GetResult().shard_iterator();
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->GetRecords(shardIterator,
+                NYDS_V1::TGetRecordsSettings().Limit(1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), 1);
+
+            const auto& record = result.GetResult().records(0);
+            UNIT_ASSERT_VALUES_EQUAL(record.sequence_number(), "0");
+            UNIT_ASSERT_VALUES_EQUAL(record.codec(), static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH));
+            NKafka::NTest::AssertKafkaBatchPayload(record.data(), 3, 'a', dataSize);
+
+            shardIterator = result.GetResult().next_shard_iterator();
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->GetRecords(shardIterator,
+                NYDS_V1::TGetRecordsSettings().Limit(1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), 1);
+
+            const auto& record = result.GetResult().records(0);
+            UNIT_ASSERT_VALUES_EQUAL(record.sequence_number(), "3");
+            UNIT_ASSERT_VALUES_EQUAL(record.codec(), static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH));
+            NKafka::NTest::AssertKafkaBatchPayload(record.data(), 3, 'b', dataSize);
+
+            shardIterator = result.GetResult().next_shard_iterator();
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->GetRecords(shardIterator,
+                NYDS_V1::TGetRecordsSettings().Limit(1)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), 0);
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->GetShardIterator(streamName, "shard-000000",
+                YDS_V1::ShardIteratorType::AT_SEQUENCE_NUMBER,
+                NYDS_V1::TGetShardIteratorSettings().StartingSequenceNumber("3")).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            shardIterator = result.GetResult().shard_iterator();
+        }
+
+        {
+            auto result = testServer.DataStreamsClient->GetRecords(shardIterator,
+                NYDS_V1::TGetRecordsSettings().Limit(10)).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.IsTransportError(), false);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL(result.GetResult().records().size(), 1);
+
+            const auto& record = result.GetResult().records(0);
+            UNIT_ASSERT_VALUES_EQUAL(record.sequence_number(), "3");
+            UNIT_ASSERT_VALUES_EQUAL(record.codec(), static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH));
+            NKafka::NTest::AssertKafkaBatchPayload(record.data(), 3, 'b', dataSize);
+        }
+    }
+
     Y_UNIT_TEST(TestGetRecordsStreamWithMultipleShards) {
         TInsecureDatastreamsTestServer testServer;
         const TString streamName = TStringBuilder() << "stream_" << Y_UNIT_TEST_NAME;

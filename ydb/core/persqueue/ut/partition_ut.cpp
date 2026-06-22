@@ -4956,6 +4956,43 @@ Y_UNIT_TEST_F(FinalizeEmptyBlobEncoderResetsHeadPartNo, TPartitionFixture) {
     UNIT_ASSERT_VALUES_EQUAL(encoder.Head.Offset, 100u);
 }
 
+Y_UNIT_TEST_F(FinalizeEmptyBlobEncoderClearsNewHead, TPartitionFixture) {
+    UNIT_ASSERT(Ctx.Defined());
+    TPartition* partition = CreatePartition({.Partition = TPartitionId{1}, .Begin = 0, .End = 0});
+
+    const TPartitionId partitionId(1);
+    auto& encoder = TPartitionTestWrapper::CompactionBlobEncoder(*partition);
+    while (encoder.DataKeysHead.size() < 4) {
+        encoder.DataKeysHead.emplace_back(8_MB);
+    }
+
+    std::deque<TClientBlob> dq;
+    dq.push_back(MakeSinglePartBodyReadBlob(1, 'n'));
+    TBatch newHeadBatch = TBatch::FromBlobs(50, std::move(dq));
+    newHeadBatch.Pack();
+    const ui32 newHeadBatchSize = newHeadBatch.GetPackedSize();
+
+    encoder.NewHead.Offset = 50;
+    encoder.NewHead.PartNo = 1;
+    encoder.NewHead.PackedSize = newHeadBatchSize;
+    encoder.NewHead.AddBatch(newHeadBatch);
+
+    const TKey newHeadKey = TKey::ForHead(TKeyPrefix::TypeData, partitionId, 50, 1, 1, 0);
+    encoder.NewHeadKey = TDataKey{newHeadKey, newHeadBatchSize, TInstant::MilliSeconds(1), 0, MakeTestBlobKeyToken()};
+
+    UNIT_ASSERT(!encoder.NewHead.GetBatches().empty());
+    UNIT_ASSERT_VALUES_UNEQUAL(encoder.NewHeadKey.Size, 0u);
+
+    TPartitionTestWrapper::FinalizeEmptyBlobEncoder(*partition, encoder, 100, true);
+
+    UNIT_ASSERT(encoder.NewHead.GetBatches().empty());
+    UNIT_ASSERT_VALUES_EQUAL(encoder.NewHead.PackedSize, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.NewHead.PartNo, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.NewHead.Offset, 100u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.NewHeadKey.Size, 0u);
+    UNIT_ASSERT_VALUES_EQUAL(encoder.NewHeadKey.Key.GetOffset(), 0u);
+}
+
 Y_UNIT_TEST_F(CleanUpBlobsResetsStaleCompactionZoneHeadPartNo, TPartitionFixture) {
     UNIT_ASSERT(Ctx.Defined());
     Ctx->Runtime->GetAppData(0).FeatureFlags.SetEnableTopicRetentionDeleteLastBlob(true);

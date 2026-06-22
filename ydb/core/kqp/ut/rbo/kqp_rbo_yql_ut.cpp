@@ -871,6 +871,27 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(residualPredicate.Contains("b") && residualPredicate.Contains(" < ") && residualPredicate.Contains("c"), plan);
     }
 
+    Y_UNIT_TEST(CommonConjunctExtractionFeedsJoinKey) {
+        TExplainPlanTestContext testContext;
+        auto plan = ExecuteExplain(testContext.GetSession(), R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA AnsiImplicitCrossJoin;
+
+            SELECT count(*)
+            FROM `/Root/t1` AS t1, `/Root/t2` AS t2
+            WHERE
+                (t1.a = t2.a AND t1.b = 1)
+                OR
+                (t1.a = t2.a AND t2.b = 2);
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* joinOp = FindOperatorByStringField(simplifiedPlan, "JoinKind", "Inner");
+        UNIT_ASSERT_C(joinOp, plan);
+        const auto condition = GetStringField(*joinOp, "Condition");
+        UNIT_ASSERT_C(condition.Contains("t1.a = t2.a") || condition.Contains("t2.a = t1.a"), plan);
+    }
+
     Y_UNIT_TEST(ExplainExpressionPrintingJoinFilters) {
         NYql::TExprContext exprCtx;
         TPlanProps planProps;

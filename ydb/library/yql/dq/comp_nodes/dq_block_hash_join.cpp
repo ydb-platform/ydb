@@ -10,6 +10,9 @@
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
 #include <arrow/scalar.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/concatenate.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/util.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api.h>
 
 #include "dq_join_common.h"
 
@@ -18,6 +21,11 @@ namespace NKikimr::NMiniKQL {
 namespace {
 
 using TDqJoinImplRenames = TDqRenames<ESide>;
+
+struct TFetchedBlock {
+    TPackResult Packed;
+    TVector<arrow::Datum> Arrow;
+};
 
 struct TDqBlockJoinContext {
     TSides<TVector<TBlockType*>> InputTypes;
@@ -56,7 +64,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         return Buff_.size() - 1;
     }
 
-    FetchResult<IBlockLayoutConverter::TPackResult> FetchRow() {
+    FetchResult<TFetchedBlock> FetchRow() {
         if (Finished()) {
             return Finish{};
         }
@@ -77,9 +85,10 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
             }
             columns = std::move(permuted);
         }
-        IBlockLayoutConverter::TPackResult result;
-        ArrowBlockToInternalConverter_->Pack(columns, result);
-        return One{std::move(result)};
+        TFetchedBlock block;
+        ArrowBlockToInternalConverter_->Pack(columns, block.Packed);
+        block.Arrow = std::move(columns);
+        return One{std::move(block)};
     }
 
   private:
@@ -217,6 +226,332 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     bool LeftIsBuild_;
 };
 
+std::shared_ptr<arrow::UInt32Array> MakeUInt32Array(const TMKQLVector<ui32>& indices) {
+    auto buffer = arrow::Buffer::Wrap(indices.data(), static_cast<int64_t>(indices.size()) * sizeof(ui32));
+    auto data = arrow::ArrayData::Make(arrow::uint32(), indices.size(), {nullptr, buffer});
+    return std::make_shared<arrow::UInt32Array>(data);
+}
+
+template<EJoinKind Kind>
+struct TArrowGatherOutput : NNonCopyable::TMoveOnly {
+    TArrowGatherOutput(const TDqBlockJoinContext* meta,
+                       TSides<IBlockLayoutConverter*> converters,
+                       const TVector<TType*>& userNullTypes,
+                       arrow::MemoryPool& arrowPool)
+        : Renames_(&meta->Renames)
+        , Converters_(converters)
+        , LeftIsBuild_(meta->Settings.LeftIsBuild())
+        , ArrowPool_(&arrowPool)
+    {
+        if constexpr (Kind == EJoinKind::Left) {
+            TVector<arrow::Datum> nullDatums;
+            for (auto* type : userNullTypes) {
+                auto strname = type->GetKindAsStr();
+                MKQL_ENSURE(type->IsOptional(),
+                    Sprintf("expected every type of right side to be optional when join type is Left, got type: %s", strname.data()));
+                int blockSize = NMiniKQL::CalcBlockLen(NMiniKQL::CalcMaxBlockItemSize(type));
+                auto builder = MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), type, arrowPool, blockSize, nullptr);
+                builder->Add(NYql::NUdf::TBlockItem{});
+                auto arr = builder->Build(true);
+                NullArrowArrays_.push_back(arr.make_array());
+                nullDatums.push_back(std::move(arr));
+            }
+            if (LeftIsBuild_) {
+                Converters_.Probe->Pack(nullDatums, FallbackNulls_);
+            } else {
+                Converters_.Build->Pack(nullDatums, FallbackNulls_);
+            }
+        }
+    }
+
+    int Columns() const {
+        return Renames_->size();
+    }
+
+    i64 SizeTuples() const {
+        i64 fallbackCount = std::max(FallbackOutput_.Probe.NTuples, FallbackOutput_.Build.NTuples);
+        i64 indexedCount = 0;
+        if constexpr (LeftSemiOrOnly(Kind)) {
+            indexedCount = static_cast<i64>(ProbeOnlyIndices_.size());
+        } else {
+            indexedCount = static_cast<i64>(BuildGlobalIndices_.size())
+                + static_cast<i64>(UnmatchedProbeIndices_.size())
+                + static_cast<i64>(UnmatchedBuildIndices_.size());
+        }
+        return fallbackCount + indexedCount;
+    }
+
+    void SetBuildArrowData(TVector<std::shared_ptr<arrow::Array>>* concatBuildCols) {
+        ConcatenatedBuildCols_ = concatBuildCols;
+    }
+
+    void SetCurrentProbeArrow(TVector<arrow::Datum>* probeArrow) {
+        CurrentProbeArrow_ = probeArrow;
+    }
+
+    void SetBucketGlobalIndices(const TMKQLVector<TMKQLVector<ui32>>* indices) {
+        BucketGlobalIndices_ = indices;
+    }
+
+    struct IndexedConsumeFn {
+        TArrowGatherOutput& Self;
+        int CurrentBucketIdx = -1;
+        ui32 CurrentProbeLocalIdx = 0;
+
+        void operator()(ui32 buildPosInBucket, TSingleTuple) {
+            MKQL_ENSURE(CurrentBucketIdx >= 0, "bucket index not set");
+            ui32 globalIdx = (*Self.BucketGlobalIndices_)[CurrentBucketIdx][buildPosInBucket];
+            Self.BuildGlobalIndices_.push_back(globalIdx);
+            Self.ProbeLocalIndices_.push_back(CurrentProbeLocalIdx);
+        }
+
+        void operator()(TSingleTuple tuple) {
+            if constexpr (Kind == EJoinKind::Left) {
+                Self.UnmatchedProbeIndices_.push_back(CurrentProbeLocalIdx);
+            } else if constexpr (SemiOrOnlyJoin(Kind)) {
+                Self.ProbeOnlyIndices_.push_back(CurrentProbeLocalIdx);
+            }
+            Y_UNUSED(tuple);
+        }
+
+        void FallbackConsumeUnmatched(TSingleTuple buildTuple) {
+            if constexpr (Kind == EJoinKind::Left) {
+                TSingleTuple null{.PackedData = Self.FallbackNulls_.PackedTuples.data(),
+                                  .OverflowBegin = Self.FallbackNulls_.Overflow.data()};
+                if (Self.LeftIsBuild_) {
+                    (*this)(TSides<TSingleTuple>{.Build = buildTuple, .Probe = null});
+                } else {
+                    (*this)(TSides<TSingleTuple>{.Build = null, .Probe = buildTuple});
+                }
+            }
+        }
+
+        void FallbackConsumeSingle(TSingleTuple tuple) {
+            if constexpr (SemiOrOnlyJoin(Kind)) {
+                Self.FallbackOutput_.Probe.AppendTuple(tuple, Self.Converters_.Probe->GetTupleLayout());
+            } else if constexpr (Kind == EJoinKind::Left) {
+                FallbackConsumeUnmatched(tuple);
+            }
+        }
+
+        void operator()(TSides<TSingleTuple> tuples) {
+            for (ESide side : EachSide) {
+                Self.FallbackOutput_.SelectSide(side).AppendTuple(
+                    tuples.SelectSide(side),
+                    Self.Converters_.SelectSide(side)->GetTupleLayout());
+            }
+        }
+
+        void EmitUnmatchedBuild(ui32 buildPosInBucket) {
+            MKQL_ENSURE(CurrentBucketIdx >= 0, "bucket index not set");
+            ui32 globalIdx = (*Self.BucketGlobalIndices_)[CurrentBucketIdx][buildPosInBucket];
+            Self.UnmatchedBuildIndices_.push_back(globalIdx);
+        }
+    };
+
+    auto MakeIndexedConsumeFn() {
+        return IndexedConsumeFn{.Self = *this};
+    }
+
+    auto MakeConsumeFn() {
+        return FallbackConsumeFn_{*this};
+    }
+
+    TVector<arrow::Datum> FlushAndApplyRenames() {
+        bool hasFallback = FallbackOutput_.Probe.NTuples > 0 || FallbackOutput_.Build.NTuples > 0;
+        bool hasIndexed = !BuildGlobalIndices_.empty() || !UnmatchedProbeIndices_.empty()
+            || !UnmatchedBuildIndices_.empty() || !ProbeOnlyIndices_.empty();
+
+        if (hasFallback && hasIndexed) {
+            auto arrowResult = FlushArrow();
+            auto fallbackResult = FlushFallback();
+            MKQL_ENSURE(arrowResult.size() == fallbackResult.size(), "column count mismatch between arrow and fallback");
+            TVector<arrow::Datum> merged;
+            for (size_t i = 0; i < arrowResult.size(); ++i) {
+                std::vector<std::shared_ptr<arrow::Array>> chunks;
+                chunks.push_back(arrowResult[i].make_array());
+                chunks.push_back(fallbackResult[i].make_array());
+                auto concat = arrow::Concatenate(chunks, ArrowPool_);
+                MKQL_ENSURE(concat.ok(), concat.status().ToString().c_str());
+                merged.push_back(arrow::Datum(*concat));
+            }
+            return merged;
+        }
+        if (hasFallback) {
+            return FlushFallback();
+        }
+        return FlushArrow();
+    }
+
+  private:
+    TVector<arrow::Datum> FlushArrow() {
+        TVector<arrow::Datum> result;
+
+        if constexpr (LeftSemiOrOnly(Kind)) {
+            if (ProbeOnlyIndices_.empty()) {
+                return result;
+            }
+            auto probeIdxArr = MakeUInt32Array(ProbeOnlyIndices_);
+            for (auto& rename : *Renames_) {
+                MKQL_ENSURE(rename.Side == ESide::Probe, "renames in Semi or Only Left Join shouldn't contain columns from right side");
+                auto& col = (*CurrentProbeArrow_)[rename.Index];
+                auto taken = arrow::compute::Take(col, probeIdxArr);
+                MKQL_ENSURE(taken.ok(), taken.status().ToString().c_str());
+                result.push_back(*taken);
+            }
+            ProbeOnlyIndices_.clear();
+            return result;
+        }
+
+        if (BuildGlobalIndices_.empty() && UnmatchedProbeIndices_.empty() && UnmatchedBuildIndices_.empty()) {
+            return result;
+        }
+
+        auto buildIdxArr = BuildGlobalIndices_.empty()
+            ? std::shared_ptr<arrow::UInt32Array>{}
+            : MakeUInt32Array(BuildGlobalIndices_);
+        auto probeIdxArr = ProbeLocalIndices_.empty()
+            ? std::shared_ptr<arrow::UInt32Array>{}
+            : MakeUInt32Array(ProbeLocalIndices_);
+
+        std::shared_ptr<arrow::UInt32Array> unmatchedProbeIdxArr;
+        std::shared_ptr<arrow::UInt32Array> unmatchedBuildIdxArr;
+        if constexpr (Kind == EJoinKind::Left) {
+            if (!UnmatchedProbeIndices_.empty()) {
+                unmatchedProbeIdxArr = MakeUInt32Array(UnmatchedProbeIndices_);
+            }
+            if (!UnmatchedBuildIndices_.empty()) {
+                unmatchedBuildIdxArr = MakeUInt32Array(UnmatchedBuildIndices_);
+            }
+        }
+
+        for (auto& rename : *Renames_) {
+            std::vector<std::shared_ptr<arrow::Array>> chunks;
+            if (rename.Side == ESide::Build) {
+                if (buildIdxArr) {
+                    auto& col = (*ConcatenatedBuildCols_)[rename.Index];
+                    auto taken = arrow::compute::Take(col, buildIdxArr);
+                    MKQL_ENSURE(taken.ok(), taken.status().ToString().c_str());
+                    chunks.push_back((*taken).make_array());
+                }
+                if constexpr (Kind == EJoinKind::Left) {
+                    if (unmatchedProbeIdxArr) {
+                        auto& nullArr = NullArrowArrays_[rename.Index];
+                        i64 numUnmatched = unmatchedProbeIdxArr->length();
+                        auto repeatedNull = arrow::MakeArrayFromScalar(*nullArr->GetScalar(0).ValueOrDie(), numUnmatched, ArrowPool_);
+                        MKQL_ENSURE(repeatedNull.ok(), repeatedNull.status().ToString().c_str());
+                        chunks.push_back(*repeatedNull);
+                    }
+                    if (unmatchedBuildIdxArr) {
+                        auto& col = (*ConcatenatedBuildCols_)[rename.Index];
+                        auto taken = arrow::compute::Take(col, unmatchedBuildIdxArr);
+                        MKQL_ENSURE(taken.ok(), taken.status().ToString().c_str());
+                        chunks.push_back((*taken).make_array());
+                    }
+                }
+            } else {
+                if (probeIdxArr) {
+                    auto& col = (*CurrentProbeArrow_)[rename.Index];
+                    auto taken = arrow::compute::Take(col, probeIdxArr);
+                    MKQL_ENSURE(taken.ok(), taken.status().ToString().c_str());
+                    chunks.push_back((*taken).make_array());
+                }
+                if constexpr (Kind == EJoinKind::Left) {
+                    if (unmatchedProbeIdxArr) {
+                        auto& col = (*CurrentProbeArrow_)[rename.Index];
+                        auto takenUnmatched = arrow::compute::Take(col, unmatchedProbeIdxArr);
+                        MKQL_ENSURE(takenUnmatched.ok(), takenUnmatched.status().ToString().c_str());
+                        chunks.push_back((*takenUnmatched).make_array());
+                    }
+                    if (unmatchedBuildIdxArr) {
+                        auto& nullArr = NullArrowArrays_[rename.Index];
+                        i64 numUnmatched = unmatchedBuildIdxArr->length();
+                        auto repeatedNull = arrow::MakeArrayFromScalar(*nullArr->GetScalar(0).ValueOrDie(), numUnmatched, ArrowPool_);
+                        MKQL_ENSURE(repeatedNull.ok(), repeatedNull.status().ToString().c_str());
+                        chunks.push_back(*repeatedNull);
+                    }
+                }
+            }
+            MKQL_ENSURE(!chunks.empty(), "no data chunks for rename column in FlushArrow");
+            if (chunks.size() == 1) {
+                result.push_back(arrow::Datum(chunks[0]));
+            } else {
+                auto concat = arrow::Concatenate(chunks, ArrowPool_);
+                MKQL_ENSURE(concat.ok(), concat.status().ToString().c_str());
+                result.push_back(arrow::Datum(*concat));
+            }
+        }
+
+        BuildGlobalIndices_.clear();
+        ProbeLocalIndices_.clear();
+        UnmatchedProbeIndices_.clear();
+        UnmatchedBuildIndices_.clear();
+        return result;
+    }
+
+    TVector<arrow::Datum> FlushFallback() {
+        if constexpr (LeftSemiOrOnly(Kind)) {
+            TVector<arrow::Datum> out;
+            Converters_.Probe->Unpack(FallbackOutput_.Probe, out);
+            FallbackOutput_.Probe.Clear();
+            TVector<arrow::Datum> renamed;
+            for (auto rename : *Renames_) {
+                MKQL_ENSURE(rename.Side == ESide::Probe, "renames in Semi or Only Left Join shouldn't contain columns from right side");
+                renamed.push_back(out[rename.Index]);
+            }
+            return renamed;
+        } else {
+            TSides<TVector<arrow::Datum>> sides;
+            for (ESide side : EachSide) {
+                Converters_.SelectSide(side)->Unpack(FallbackOutput_.SelectSide(side), sides.SelectSide(side));
+                FallbackOutput_.SelectSide(side).Clear();
+            }
+            TVector<arrow::Datum> renamed;
+            for (auto rename : *Renames_) {
+                renamed.push_back(sides.SelectSide(rename.Side)[rename.Index]);
+            }
+            return renamed;
+        }
+    }
+
+    struct FallbackConsumeFn_ {
+        TArrowGatherOutput& Self;
+        void operator()(TSides<TSingleTuple> tuples) {
+            for (ESide side : EachSide) {
+                Self.FallbackOutput_.SelectSide(side).AppendTuple(
+                    tuples.SelectSide(side),
+                    Self.Converters_.SelectSide(side)->GetTupleLayout());
+            }
+        }
+        void operator()(TSingleTuple tuple) {
+            if constexpr (Kind == EJoinKind::Left) {
+                MKQL_ENSURE(false, "Left join unmatched in fallback path should use AppendTuple with null");
+            } else if constexpr (SemiOrOnlyJoin(Kind)) {
+                Self.FallbackOutput_.Probe.AppendTuple(tuple, Self.Converters_.Probe->GetTupleLayout());
+            }
+        }
+    };
+
+    TMKQLVector<ui32> BuildGlobalIndices_;
+    TMKQLVector<ui32> ProbeLocalIndices_;
+    TMKQLVector<ui32> UnmatchedProbeIndices_;
+    TMKQLVector<ui32> UnmatchedBuildIndices_;
+    TMKQLVector<ui32> ProbeOnlyIndices_;
+
+    TSides<TPackResult> FallbackOutput_;
+    TPackResult FallbackNulls_;
+
+    const TDqJoinImplRenames* Renames_;
+    TSides<IBlockLayoutConverter*> Converters_;
+    bool LeftIsBuild_;
+    arrow::MemoryPool* ArrowPool_;
+
+    TVector<std::shared_ptr<arrow::Array>> NullArrowArrays_;
+    TVector<std::shared_ptr<arrow::Array>>* ConcatenatedBuildCols_ = nullptr;
+    TVector<arrow::Datum>* CurrentProbeArrow_ = nullptr;
+    const TMKQLVector<TMKQLVector<ui32>>* BucketGlobalIndices_ = nullptr;
+};
+
 template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapper<Kind>> {
   private:
     using TBaseComputation = TMutableComputationNode<TBlockHashJoinWrapper>;
@@ -264,7 +599,11 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                     meta->Settings)
             , Ctx_(&ctx)
             , Output_(meta, {.Build = Converters_.Build.get(), .Probe = Converters_.Probe.get()}, userBuildTypes, ctx.ArrowMemoryPool)
-        {}
+        {
+            Output_.SetBuildArrowData(&Join_.GetConcatenatedBuildCols());
+            Output_.SetBucketGlobalIndices(&Join_.GetBucketRowGlobalIndices());
+            Output_.SetCurrentProbeArrow(&Join_.GetCurrentProbeArrow());
+        }
 
         NUdf::EFetchStatus FlushTo(NUdf::TUnboxedValue* output) {
             MKQL_ENSURE(Output_.SizeTuples() != 0, "make sure we are flushing something, not empty set of tuples");
@@ -291,7 +630,8 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                 return Output_.SizeTuples() >= MaxOutputRows_;
             };
             while (!outputIsFull()) {
-                auto res = Join_.MatchRows(*Ctx_, Output_.MakeConsumeFn(), outputIsFull);
+                auto indexedConsume = Output_.MakeIndexedConsumeFn();
+                auto res = Join_.MatchRows(*Ctx_, indexedConsume, outputIsFull);
                 switch (res) {
                 case EFetchResult::Finish: {
                     if (Output_.SizeTuples() == 0) {
@@ -303,6 +643,9 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
                 case EFetchResult::Yield:
                     return NYql::NUdf::EFetchStatus::Yield;
                 case EFetchResult::One:
+                    if (Output_.SizeTuples() > 0) {
+                        return FlushTo(output);
+                    }
                     break;
                 }
             }
@@ -314,7 +657,7 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
         TSides<std::unique_ptr<IBlockLayoutConverter>> Converters_;
         JoinType Join_;
         TComputationContext* Ctx_;
-        TRenamesPackedTupleOutput<Kind> Output_;
+        TArrowGatherOutput<Kind> Output_;
         static constexpr i64 MaxOutputRows_ = 10000;
         bool Finished_ = false;
     };

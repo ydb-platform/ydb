@@ -11,6 +11,9 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
 
+#include <arrow/datum.h>
+#include <contrib/libs/apache/arrow/cpp/src/arrow/array/concatenate.h>
+
 namespace NKikimr::NMiniKQL {
 
 struct TColumnsMetadata {
@@ -228,6 +231,15 @@ template <typename T> [[nodiscard]] T ExtractReadyFuture(NThreading::TFuture<T>&
 template<typename T>
 concept JoinMatchFn = std::invocable<T, TSingleTuple> && std::invocable<T, TSides<TSingleTuple>>;
 
+template<typename T>
+concept HasArrowField = requires(T t) { t.Arrow; t.Packed; };
+
+template<typename T>
+concept HasIndexedConsume = requires(T t) {
+    { t.CurrentBucketIdx } -> std::convertible_to<int>;
+    { t.CurrentProbeLocalIdx } -> std::convertible_to<ui32>;
+};
+
 TPackResult GetPage(TFuturePage&& future);
 
 using ProbeSpillingPage = std::optional<TPackResult>;
@@ -273,7 +285,7 @@ template <typename Source> class TInMemoryHashJoin {
     EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx,
                            JoinMatchFun<TSingleTuple> auto consumeOneOrTwoTuples, auto isFull) {
         while (!Sources_.Build.Finished()) {
-            FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Build.FetchRow();
+            auto var = Sources_.Build.FetchRow();
             switch (AsStatus(var)) {
             case NYql::NUdf::EFetchStatus::Finish: {
                 Table_.BuildWith(Flatten(std::move(BuildChunks_)));
@@ -283,7 +295,12 @@ template <typename Source> class TInMemoryHashJoin {
                 return EFetchResult::Yield;
             }
             case NYql::NUdf::EFetchStatus::Ok: {
-                BuildChunks_.push_back(std::move(GetPayload(var)));
+                auto& payload = GetPayload(var);
+                if constexpr (HasArrowField<std::decay_t<decltype(payload)>>) {
+                    BuildChunks_.push_back(std::move(payload.Packed));
+                } else {
+                    BuildChunks_.push_back(std::move(payload));
+                }
                 break;
             }
             default:
@@ -313,11 +330,16 @@ template <typename Source> class TInMemoryHashJoin {
         }
 
         if (!Sources_.Probe.Finished()) {
-            FetchResult<IBlockLayoutConverter::TPackResult> var = Sources_.Probe.FetchRow();
+            auto var = Sources_.Probe.FetchRow();
             const NKikimr::NMiniKQL::EFetchResult resEnum = AsResult(var);
 
             if (resEnum == EFetchResult::One) {
-                FetchedPack_ = std::move(GetPayload(var));
+                auto& payload = GetPayload(var);
+                if constexpr (HasArrowField<std::decay_t<decltype(payload)>>) {
+                    FetchedPack_ = std::move(payload.Packed);
+                } else {
+                    FetchedPack_ = std::move(payload);
+                }
                 ResumeIndex_ = 0;
                 ui32 idx = 0;
                 for (TSingleTuple probeTuple : *FetchedPack_) {
@@ -489,6 +511,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         , Spiller_(ctx.SpillerFactory ? ctx.SpillerFactory->CreateSpiller() : nullptr)
         , Sources_(std::move(sources))
         , Settings_(settings)
+        , BucketRowGlobalIndices_(Settings.Buckets)
     {
     }
 
@@ -509,11 +532,30 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     }
 
 
+    const TMKQLVector<TMKQLVector<ui32>>& GetBucketRowGlobalIndices() const {
+        return BucketRowGlobalIndices_;
+    }
+
+    TVector<std::shared_ptr<arrow::Array>>& GetConcatenatedBuildCols() {
+        return ConcatenatedBuildCols_;
+    }
+
+    TVector<arrow::Datum>& GetCurrentProbeArrow() {
+        return CurrentProbeArrow_;
+    }
+
     EFetchResult MatchRows([[maybe_unused]] TComputationContext& ctx, auto consume, auto isFull) {
         auto notEnoughMemory = [hasSpiller = !!Spiller_] {
             return hasSpiller && TlsAllocState->IsMemoryYellowZoneEnabled();
         };
-        auto lookupToTable = [&](TTable& table, TSingleTuple tuple) {
+        auto consumeSingle = [&](TSingleTuple tuple) {
+            if constexpr (HasIndexedConsume<decltype(consume)>) {
+                consume.FallbackConsumeSingle(tuple);
+            } else if constexpr (std::invocable<decltype(consume), TSingleTuple>) {
+                consume(tuple);
+            }
+        };
+        auto lookupToTableFallback = [&](TTable& table, TSingleTuple tuple) {
             bool found = false;
             if constexpr (Kind == EJoinKind::Left) {
                 if (Settings_.LeftIsBuild()) {
@@ -527,7 +569,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
                     });
                     if (!found) {
-                        consume(tuple);
+                        consumeSingle(tuple);
                     }
                 }
             } else {
@@ -539,13 +581,42 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 });
                 if constexpr (Kind == EJoinKind::LeftOnly) {
                     if (!found) {
-                        consume(tuple);
+                        consumeSingle(tuple);
                     }
                 }
                 if constexpr(Kind == EJoinKind::LeftSemi) {
                     if (found) {
-                        consume(tuple);
+                        consumeSingle(tuple);
                     }
+                }
+            }
+        };
+        [[maybe_unused]] auto lookupToTableIndexed = [&](TTable& table, TSingleTuple tuple, int bucketIdx, ui32 probeLocalIdx, auto& indexedConsume) {
+            bool found = false;
+            table.LookupWithIndex(tuple, [&](ui32 buildPosInBucket, TSingleTuple buildTuple) {
+                found = true;
+                if constexpr (Kind == EJoinKind::Inner || Kind == EJoinKind::Left) {
+                    indexedConsume.CurrentBucketIdx = bucketIdx;
+                    indexedConsume.CurrentProbeLocalIdx = probeLocalIdx;
+                    indexedConsume(buildPosInBucket, buildTuple);
+                }
+            });
+            if constexpr (Kind == EJoinKind::Left) {
+                if (!Settings_.LeftIsBuild() && !found) {
+                    indexedConsume.CurrentProbeLocalIdx = probeLocalIdx;
+                    indexedConsume(tuple);
+                }
+            }
+            if constexpr (Kind == EJoinKind::LeftOnly) {
+                if (!found) {
+                    indexedConsume.CurrentProbeLocalIdx = probeLocalIdx;
+                    indexedConsume(tuple);
+                }
+            }
+            if constexpr (Kind == EJoinKind::LeftSemi) {
+                if (found) {
+                    indexedConsume.CurrentProbeLocalIdx = probeLocalIdx;
+                    indexedConsume(tuple);
                 }
             }
         };
@@ -554,12 +625,19 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         } else if (auto* s = std::get_if<FetchingBuild>(&State_)) {
             FetchingBuild& state = *s;
             if (!state.Pack.has_value()) {
-                FetchResult<TPackResult> var = state.Build.FetchRow();
+                auto var = state.Build.FetchRow();
                 NYql::NUdf::EFetchStatus status = AsStatus(var);
                 if (status == NYql::NUdf::EFetchStatus::Yield) {
                     return EFetchResult::Yield;
                 } else if (status == NYql::NUdf::EFetchStatus::Ok) {
-                    state.Pack = std::move(GetPayload(var));
+                    auto& block = GetPayload(var);
+                    if constexpr (HasArrowField<std::decay_t<decltype(block)>>) {
+                        state.Pack = std::move(block.Packed);
+                        BuildArrowBlocks_.push_back(std::move(block.Arrow));
+                        BuildBlockCumRows_.push_back(BuildGlobalRowCount_);
+                    } else {
+                        state.Pack = std::move(block);
+                    }
                 } else {
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unhandled status");
                     MKQL_ENSURE(state.Build.Finished(), "sanity check");
@@ -576,8 +654,11 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     break;
                 }
                 }
-                for (TSingleTuple tuple: *state.Pack) { 
-                    state.Spiller.AddRow(tuple); 
+                for (TSingleTuple tuple: *state.Pack) {
+                    int bucketIndex = Settings.BucketIndex(tuple);
+                    state.Spiller.AddRow(tuple);
+                    BucketRowGlobalIndices_[bucketIndex].push_back(static_cast<ui32>(BuildGlobalRowCount_));
+                    BuildGlobalRowCount_++;
                 }
                 state.Pack = std::nullopt;
             }
@@ -616,6 +697,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         probeBucket = std::move(thisBucket);
                     }
                 }
+                ConcatenateBuildArrow();
                 State_ = Probing{*this, std::move(state.ProbeState)};
             } else {
                 TTable* table = std::get_if<TTable>(&state.ProbeState.Buckets[*smallestBucket]);
@@ -629,17 +711,27 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         } else if (auto* s = std::get_if<Probing>(&State_)) {
             Probing& state = *s;
             if (!state.FetchedPack.has_value()) {
-                FetchResult<TPackResult> var = state.Probe.FetchRow();
+                auto var = state.Probe.FetchRow();
                 NYql::NUdf::EFetchStatus status = AsStatus(var);
                 if (status == NYql::NUdf::EFetchStatus::Yield) {
                     return EFetchResult::Yield;
                 } else if (status == NYql::NUdf::EFetchStatus::Ok) {
-                    state.FetchedPack = std::move(GetPayload(var));
+                    auto& block = GetPayload(var);
+                    if constexpr (HasArrowField<std::decay_t<decltype(block)>>) {
+                        state.FetchedPack = std::move(block.Packed);
+                        CurrentProbeArrow_ = std::move(block.Arrow);
+                    } else {
+                        state.FetchedPack = std::move(block);
+                    }
                 } else {
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unexpected enum");
                     if constexpr (Kind == EJoinKind::Left) {
                         if (Settings_.LeftIsBuild()) {
-                            EmitUnmatchedFromInMemoryBuckets(state.Spiller, consume);
+                            if constexpr (HasIndexedConsume<decltype(consume)>) {
+                                EmitUnmatchedFromInMemoryBucketsIndexed(state.Spiller, consume);
+                            } else {
+                                EmitUnmatchedFromInMemoryBuckets(state.Spiller, consume);
+                            }
                         }
                     }
                     std::unordered_map<int, TSpilledBucket> alreadyDumped;
@@ -668,6 +760,8 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     }
                     state.Spiller.GetState().InMemoryPages.clear();
                     state.Spiller.GetState().InMemoryPages.shrink_to_fit();
+                    BuildArrowBlocks_.clear();
+                    BuildBlockCumRows_.clear();
                     if (futures.empty()) {
                         if (alreadyDumped.empty()) {
                             State_ = Finish{};
@@ -704,7 +798,11 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     } else {
                         TTable* thisTable = std::get_if<TTable>(&state.Spiller.GetState().Buckets[bucketIndex]);
                         MKQL_ENSURE(thisTable, "sanity check");
-                        lookupToTable(*thisTable, tuple);
+                        if constexpr (HasIndexedConsume<decltype(consume)>) {
+                            lookupToTableIndexed(*thisTable, tuple, bucketIndex, idx - 1, consume);
+                        } else {
+                            lookupToTableFallback(*thisTable, tuple);
+                        }
                     }
                     if (isFull()) {
                         state.ResumeIndex = idx;
@@ -728,7 +826,6 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 return WaitWhileSpilling();
             }
         } else if (auto* s = std::get_if<JoinPairsOfPartitions>(&State_)) {
-            // TODO: Implement repartitioning logic here to handle cases where a single partition is too large and may cause out-of-memory (OOM) errors.
             JoinPairsOfPartitions& state = *s;
             if (!state.SelectedPair.has_value()) {
                 std::optional bucket = GetFrontOrNull(state.Pairs);
@@ -772,7 +869,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                             if (idx++ < table->ProbeResumeIndex) {
                                 continue;
                             }
-                            lookupToTable(table->Table, probeTuple);
+                            lookupToTableFallback(table->Table, probeTuple);
                             if (isFull()) {
                                 table->ProbeResumeIndex = idx;
                                 return EFetchResult::One;
@@ -784,7 +881,13 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         MKQL_ENSURE(currentProbe.empty(), "sanity check");
                         if constexpr (Kind == EJoinKind::Left) {
                             if (Settings_.LeftIsBuild()) {
-                                table->Table.ForEachUnused(consume);
+                                if constexpr (HasIndexedConsume<decltype(consume)>) {
+                                    table->Table.ForEachUnused([&](TSingleTuple buildTuple) {
+                                        consume.FallbackConsumeUnmatched(buildTuple);
+                                    });
+                                } else {
+                                    table->Table.ForEachUnused(consume);
+                                }
                             }
                         }
                         state.SelectedPair = std::nullopt;
@@ -820,7 +923,41 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
         }
     }
 
+    template <typename TSpiller, typename F>
+    void EmitUnmatchedFromInMemoryBucketsIndexed(TSpiller& spiller, F& consume) {
+        for (int index = 0; index < std::ssize(spiller.GetState().Buckets); ++index) {
+            if (spiller.IsBucketSpilled(index)) {
+                continue;
+            }
+            TTable* table = std::get_if<TTable>(&spiller.GetState().Buckets[index]);
+            if (table && !table->Empty()) {
+                consume.CurrentBucketIdx = index;
+                table->ForEachUnusedWithIndex([&](ui32 posInBucket, TSingleTuple) {
+                    consume.EmitUnmatchedBuild(posInBucket);
+                });
+            }
+        }
+    }
+
   private:
+    void ConcatenateBuildArrow() {
+        if (BuildArrowBlocks_.empty()) {
+            return;
+        }
+        int numCols = BuildArrowBlocks_[0].size();
+        ConcatenatedBuildCols_.resize(numCols);
+        for (int col = 0; col < numCols; col++) {
+            std::vector<std::shared_ptr<arrow::Array>> chunks;
+            chunks.reserve(BuildArrowBlocks_.size());
+            for (auto& block : BuildArrowBlocks_) {
+                chunks.push_back(block[col].make_array());
+            }
+            auto concat = arrow::Concatenate(chunks);
+            MKQL_ENSURE(concat.ok(), concat.status().ToString().c_str());
+            ConcatenatedBuildCols_[col] = *concat;
+        }
+    }
+
     const Logger Logger_;
     TSides<const NPackedTuple::TTupleLayout*> Layouts_;
     ISpiller::TPtr Spiller_;
@@ -828,6 +965,13 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     TBlockHashJoinSettings Settings_;
     std::variant<Init, FetchingBuild, BuildingInMemoryTable, Probing, DumpRestOfPages, JoinPairsOfPartitions, Finish>
         State_ = Init{};
+
+    TMKQLVector<TVector<arrow::Datum>> BuildArrowBlocks_;
+    TMKQLVector<i64> BuildBlockCumRows_;
+    i64 BuildGlobalRowCount_ = 0;
+    TMKQLVector<TMKQLVector<ui32>> BucketRowGlobalIndices_;
+    TVector<std::shared_ptr<arrow::Array>> ConcatenatedBuildCols_;
+    TVector<arrow::Datum> CurrentProbeArrow_;
 };
 } // namespace NJoinPackedTuples
 

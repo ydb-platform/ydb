@@ -183,6 +183,8 @@ struct TKiExploreTxResults {
 
         if (uncommittedChangesRead || IsolateEffects) {
             AddQueryBlock();
+        }
+        if (uncommittedChangesRead) {
             SetBlockHasUncommittedChangesRead();
         }
     }

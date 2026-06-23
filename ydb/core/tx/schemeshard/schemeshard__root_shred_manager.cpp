@@ -408,7 +408,7 @@ TRootShredManager::TQueue::TConfig TRootShredManager::ConvertConfig(const NKikim
     return queueConfig;
 }
 
-void TRootShredManager::CleanupOldGenerationsOnRestore(NIceDb::TNiceDb& db, TVector<ui64> generationsToCleanup) {
+void TRootShredManager::CleanupOldGenerationsOnRestore(NIceDb::TNiceDb& db, const TVector<ui64>& generationsToCleanup) {
     for (ui64 generation : generationsToCleanup) {
         Y_ABORT_UNLESS(generation < Generation, "[RootShredManager] CleanupOldGenerationsOnRestore: generation %" PRIu64 " >= Generation %" PRIu64, generation, Generation);
         db.Table<Schema::ShredGenerations>().Key(generation).Delete(); 
@@ -419,7 +419,7 @@ void TRootShredManager::CleanupOldGenerationsOnShred(NIceDb::TNiceDb& db) {
     if (Generation >= 2) {
         // Generation - 2 is used in order not to remove record with max Generation that might be used within TRootShredManager::Restore
         // to restore Generation property. In case of (Generation -1) removal there is a chance of data loss if SchemaShard will die after
-        // removal but before updateing Schema::ShredGenerations with new value.
+        // removal but before updating Schema::ShredGenerations with new value.
         db.Table<Schema::ShredGenerations>().Key(Generation - 2).Delete();
     }
 }

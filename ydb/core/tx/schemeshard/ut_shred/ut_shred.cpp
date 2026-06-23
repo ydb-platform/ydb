@@ -1130,7 +1130,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
             auto gens = getShredGenerations();
             for (ui64 gen : gens) {
                 UNIT_ASSERT_C(
-                    gen == expectedGeneration == 0 || expectedGeneration || (gen == expectedGeneration - 1),
+                    gen == 0 || gen == expectedGeneration || (expectedGeneration > 0 && gen == expectedGeneration - 1),
                     "Unexpected generation " << gen << " in DataErasureGenerations"
                     << " after completing cycle " << expectedGeneration
                     << "; allowed values are {" << expectedGeneration
@@ -1174,7 +1174,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
             auto gens = getTenantShredGenerations();
             for (ui64 gen : gens) {
                 UNIT_ASSERT_C(
-                    gen == expectedGeneration == 0 || expectedGeneration || (gen == expectedGeneration - 1),
+                    gen == 0 || gen == expectedGeneration || (expectedGeneration > 0 && gen == expectedGeneration - 1),
                     "Unexpected generation " << gen << " in TenantDataErasureGenerations"
                     << " after completing cycle " << expectedGeneration
                     << "; allowed values are {" << expectedGeneration

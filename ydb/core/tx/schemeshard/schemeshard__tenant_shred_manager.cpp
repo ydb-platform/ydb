@@ -385,7 +385,7 @@ bool TTenantShredManager::StopWaitingShred(const TShardIdx& shardIdx) {
     return false;
 }
 
-void TTenantShredManager::CleanupOldGenerationsOnRestore(NIceDb::TNiceDb& db, TVector<ui64> generationsToCleanup) {
+void TTenantShredManager::CleanupOldGenerationsOnRestore(NIceDb::TNiceDb& db, const TVector<ui64>& generationsToCleanup) {
     for (ui64 generation : generationsToCleanup) {
         Y_ABORT_UNLESS(generation < Generation, "[TenantShredManager] CleanupOldGenerationsOnRestore: generation %" PRIu64 " >= Generation %" PRIu64, generation, Generation);
         db.Table<Schema::TenantShredGenerations>().Key(generation).Delete();  
@@ -396,8 +396,8 @@ void TTenantShredManager::CleanupOldGenerationsOnShred(NIceDb::TNiceDb& db) {
     if (Generation >= 2) {
         // Generation - 2 is used in order not to remove record with max Generation that might be used within TTenantShredManager::Restore
         // to restore Generation property. In case of (Generation -1) removal there is a chance of data loss if SchemaShard will die after
-        // removal but before updateing Schema::TenantShredGenerations with new value.
-        db.Table<Schema::TenantShredGenerations>(). Key(Generation - 2).Delete();
+        // removal but before updating Schema::TenantShredGenerations with new value.
+        db.Table<Schema::TenantShredGenerations>().Key(Generation - 2).Delete();
     }
 }
 

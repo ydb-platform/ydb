@@ -283,12 +283,16 @@ jobs:
           TEST_THREADS="${{ inputs.test_threads }}"
           if [[ "${{ inputs.build_preset }}" == "relwithdebinfo" ]]; then
             echo "threads_count=$TEST_THREADS" >> $GITHUB_ENV
+            echo "timeout=1200" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-asan" ]]; then
             echo "threads_count=$(awk "BEGIN {x=$TEST_THREADS * 0.38; printf \"%.0f\", (x < 1 ? 1 : x)}")" >> $GITHUB_ENV
+            echo "timeout=1200" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-msan" ]]; then
             echo "threads_count=$(awk "BEGIN {x=$TEST_THREADS * 0.1; printf \"%.0f\", (x < 1 ? 1 : x)}")" >> $GITHUB_ENV
+            echo "timeout=1200" >> $GITHUB_ENV
           elif [[ "${{ inputs.build_preset }}" == "release-tsan" ]]; then
             echo "threads_count=$(awk "BEGIN {x=$TEST_THREADS * 0.35; printf \"%.0f\", (x < 1 ? 1 : x)}")" >> $GITHUB_ENV
+            echo "timeout=1200" >> $GITHUB_ENV
           else
             echo "Unknown build_preset value."
             exit 1
@@ -338,6 +342,7 @@ jobs:
 
       - name: Ya CI build and test
         id: run_tests
+        timeout-minutes: ${{ fromJson(env.timeout) }}
         uses: ./.github/actions/ya_ci_core_build_test
         with:
           build_preset: ${{ inputs.build_preset }}

@@ -1056,6 +1056,15 @@ bool TClusterInfo::NodeHasRunningSystemTablet(ui32 nodeId) const {
     return false;
 }
 
+bool TClusterInfo::HostHasRunningSystemTablet(const TString &hostName) const {
+    for (const auto *node : HostNodes(hostName)) {
+        if (NodeHasRunningSystemTablet(node->NodeId)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 void TClusterInfo::GenerateClusterNodesCheckers() {
     for (auto &[nodeId, nodeInfo] : Nodes) {
         const ui32 pileId = nodeInfo->PileId.GetOrElse(0);

@@ -11,3 +11,4 @@
 | [Linq To DB](https://linq2db.github.io/)                        | [Инструкция](../linq2db.md)          |
 | [SQLAlchemy](https://www.sqlalchemy.org/)                       | [Инструкция](../sqlalchemy.md)       |
 | [Django](https://www.djangoproject.com/)                        | [Инструкция](../django.md)           |
+| [Drizzle ORM](https://orm.drizzle.team/)                        | [Инструкция](../drizzle.md)          |

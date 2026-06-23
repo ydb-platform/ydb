@@ -19,32 +19,33 @@ namespace {
 
 using TDqJoinImplRenames = TDqRenames<ESide>;
 
-/// Wide-flow for join: direct wide-flow node, or inner flow of MKQL `FromFlow` (wide stream as Stream(Multi)).
+/// Wide-flow for join: direct wide-flow node or inner flow of MKQL `FromFlow`.
 IComputationWideFlowNode* LocateWideFlowJoinInput(
     const TComputationNodeFactoryContext& ctx,
     TCallable& callable,
     ui32 inputIndex)
 {
-    TNode* rootNode = callable.GetInput(inputIndex).GetNode();
-    MKQL_ENSURE(rootNode, "Scalar hash join input graph node is null");
-
     IComputationNode* located = LocateNode(ctx.NodeLocator, callable, inputIndex);
     if (auto* wide = dynamic_cast<IComputationWideFlowNode*>(located)) {
         return wide;
     }
 
-    if (rootNode->GetType()->IsCallable()) {
-        const auto* callableType = AS_TYPE(TCallableType, rootNode->GetType());
-        if (callableType->GetName() == TStringBuf("FromFlow")) {
-            auto* fromFlow = AsCallable("FromFlow", callable.GetInput(inputIndex), __LOCATION__);
-            MKQL_ENSURE(fromFlow->GetInputsCount() == 1, "FromFlow expects one argument");
-            const TRuntimeNode innerArg = fromFlow->GetInput(0);
-            MKQL_ENSURE(innerArg.GetStaticType()->IsFlow(), "FromFlow argument must be Flow");
-            auto* innerLocated = LocateNode(ctx.NodeLocator, *innerArg.GetNode(), false);
-            return dynamic_cast<IComputationWideFlowNode*>(innerLocated);
-        }
+    TNode* rootNode = callable.GetInput(inputIndex).GetNode();
+    if (!rootNode || !rootNode->GetType()->IsCallable()) {
+        return nullptr;
     }
-    return nullptr;
+
+    const auto* callableType = AS_TYPE(TCallableType, rootNode->GetType());
+    if (TStringBuf(callableType->GetName()) != "FromFlow") {
+        return nullptr;
+    }
+
+    auto* fromFlow = AsCallable("FromFlow", callable.GetInput(inputIndex), __LOCATION__);
+    MKQL_ENSURE(fromFlow->GetInputsCount() == 1, "FromFlow expects one argument");
+    const TRuntimeNode innerArg = fromFlow->GetInput(0);
+    MKQL_ENSURE(innerArg.GetStaticType()->IsFlow(), "FromFlow argument must be Flow");
+    auto* innerLocated = LocateNode(ctx.NodeLocator, *innerArg.GetNode(), false);
+    return dynamic_cast<IComputationWideFlowNode*>(innerLocated);
 }
 
 struct TDqScalarJoinContext {
@@ -323,7 +324,9 @@ private:
                 }
             }
             for (int index = 0; index < expectedWidth; ++index) {
-                *output[index] = Buffer_->Buffer[BufferPos_ + index];
+                if (const auto out = output[index]) {
+                    *out = Buffer_->Buffer[BufferPos_ + index];
+                }
             }
             BufferPos_ += expectedWidth;
             if (BufferPos_ >= Buffer_->Buffer.size()) {

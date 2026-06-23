@@ -1160,22 +1160,10 @@ TExprBase DqPeepholeRewriteScalarHashJoin(const TExprBase& node, TExprContext& c
         ctx.NewCallable(scalarHashJoin.RightInput().Pos(), "ToFlow", {scalarHashJoin.RightInput().Ptr()}),
         ctx, rightConvertedItems, pos);
 
-    auto leftInput = ctx.Builder(pos)
-        .Callable("FromFlow")
-            .Add(0, std::move(leftWideFlow))
-        .Seal()
-        .Build();
-
-    auto rightInput = ctx.Builder(pos)
-        .Callable("FromFlow")
-            .Add(0, std::move(rightWideFlow))
-        .Seal()
-        .Build();
-
     auto scalarJoinCore = ctx.Builder(pos)
         .Callable("ScalarHashJoinCore")
-            .Add(0, std::move(leftInput))
-            .Add(1, std::move(rightInput))
+            .Add(0, std::move(leftWideFlow))
+            .Add(1, std::move(rightWideFlow))
             .Add(2, scalarHashJoin.JoinType().Ptr())
             .Add(3, ctx.NewList(pos, std::move(leftKeyColumnNodes)))
             .Add(4, ctx.NewList(pos, std::move(rightKeyColumnNodes)))
@@ -1203,9 +1191,7 @@ TExprBase DqPeepholeRewriteScalarHashJoin(const TExprBase& node, TExprContext& c
 
     auto result = ctx.Builder(pos)
         .Callable("NarrowMap")
-            .Callable(0, "ToFlow")
-                .Add(0, std::move(wideResult))
-            .Seal()
+            .Add(0, std::move(wideResult))
             .Lambda(1)
                 .Params("output", totalColumns)
                 .Callable("AsStruct")

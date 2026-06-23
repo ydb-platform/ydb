@@ -459,6 +459,13 @@ bool CanPropagateWideBlockThroughChannel(
     return true;
 }
 
+bool StageUsesScalarHashJoin(const TExprNode::TPtr& programBody) {
+    return !!FindNode(programBody,
+        [](const TExprNode::TPtr& node) {
+            return TDqPhyScalarHashJoin::Match(node.Get()) || TDqScalarHashJoinCore::Match(node.Get());
+        });
+}
+
 TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprContext& ctx,
     TTypeAnnotationContext& typesCtx, THashSet<ui64>& optimizedStages,
     TKikimrConfiguration::TPtr config, bool withFinalStageRules, TSet<TString> disabledOpts)
@@ -496,13 +503,17 @@ TMaybeNode<TKqpPhysicalTx> PeepholeOptimize(const TKqpPhysicalTx& tx, TExprConte
                 }
             }
 
+            const bool stageUsesScalarHashJoin =
+                StageUsesScalarHashJoin(stage.Program().Body().Ptr());
+
             for (size_t i = 0; i < stage.Inputs().Size(); ++i) {
                 auto oldArg = stage.Program().Args().Arg(i);
                 auto newArg = TCoArgument(ctx.NewArgument(oldArg.Pos(), oldArg.Name()));
                 newArg.MutableRef().SetTypeAnn(oldArg.Ref().GetTypeAnn());
                 newArgs.emplace_back(newArg);
 
-                if (auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>(); scalarHashShuffleCount <= 1 && connection &&
+                if (auto connection = stage.Inputs().Item(i).Maybe<TDqConnection>();
+                    !stageUsesScalarHashJoin && scalarHashShuffleCount <= 1 && connection &&
                     CanPropagateWideBlockThroughChannel(connection.Cast().Output(), programs, ctx, typesCtx))
                 {
                     TExprNode::TPtr newArgNode = ctx.Builder(oldArg.Pos())

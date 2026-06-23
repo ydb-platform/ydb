@@ -300,15 +300,29 @@ private:
                         code = StatusIds::BAD_REQUEST;
                         return false;
                     }
-                    
-                    if (auto it = colNameToId.find(index.index_columns(0)); it == colNameToId.end()) {
-                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0)));
-                        issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0))));
+                    const NKikimrSchemeOp::TOlapColumnDescription* columnDesc = nullptr;
+
+                    for (auto& column: schema->GetColumns()) {
+                        if (column.GetName() == index.index_columns(0)){
+                            columnDesc = &column;
+                            break;
+                        }
+                    }
+
+                    if (!columnDesc) {
+                        TVector<TString> tableColumnNames;
+                        for (const auto& col: schema->GetColumns()) {
+                            tableColumnNames.push_back(col.GetName());
+                        }
+                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames));
+                        issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames)));
                         code = StatusIds::BAD_REQUEST;
                         return false;
-                    } else {
-                        min_max->SetColumnId(it->second);
                     }
+
+                    auto it = colNameToId.find(index.index_columns(0));
+                    min_max->SetColumnId(it->second);
+                    NKikimr::NOlap::NIndexes::NMinMax::SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(*olapIndex, columnDesc->GetType());
                     break;
                 }                
                 case Ydb::Table::TableIndex::TYPE_NOT_SET:

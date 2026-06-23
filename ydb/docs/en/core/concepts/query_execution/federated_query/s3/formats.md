@@ -271,6 +271,8 @@ Year,Manufacturer,Model,Price
 
 {% endcut %}
 
+{% endnote %}
+
 ## Supported Compression Algorithms {#compression}
 
 The use of compression algorithms depends on the file formats. For all file formats except Parquet, the following compression algorithms can be used:

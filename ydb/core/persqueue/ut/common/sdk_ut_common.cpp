@@ -51,12 +51,13 @@ void WriteKafkaBatchMessages(
         const ui64 lastSeqNo = firstSeqNo + messageCount - 1;
         ui64 nextSeqNo = firstSeqNo;
         THashSet<ui64> ackedSeqNos;
+        const TString payload(dataSize, fill);
 
         while (ackedSeqNos.size() < messageCount) {
             if (token.has_value() && nextSeqNo <= lastSeqNo) {
-                NYdb::NTopic::TWriteMessage message(TString(dataSize, fill));
+                NYdb::NTopic::TWriteMessage message(payload);
                 message.SeqNo(nextSeqNo);
-                message.CreateTimestamp(baseCreateTimestamp + TDuration::MilliSeconds(nextSeqNo - 1));
+                message.CreateTimestamp(baseCreateTimestamp + TDuration::MilliSeconds(nextSeqNo - firstSeqNo));
                 ++nextSeqNo;
                 writeSession->Write(std::move(*token), std::move(message));
                 token.reset();

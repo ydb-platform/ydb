@@ -1008,6 +1008,31 @@ void TClusterInfo::GenerateSysTabletsNodesCheckers() {
     }
 }
 
+bool TClusterInfo::NodeHasRunningSystemTablet(ui32 nodeId) const {
+    if (!NodeToTabletTypes.contains(nodeId)) {
+        return false;
+    }
+
+    auto nodeIt = Nodes.find(nodeId);
+    if (nodeIt == Nodes.end()) {
+        return false;
+    }
+
+    for (const ui64 tabletId : nodeIt->second->Tablets) {
+        auto tabletIt = Tablets.find(tabletId);
+        if (tabletIt == Tablets.end()) {
+            continue;
+        }
+
+        const TTabletInfo &tablet = tabletIt->second;
+        if (tablet.Leader && tablet.State == NKikimrWhiteboard::TTabletStateInfo::Active) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 void TClusterInfo::GenerateClusterNodesCheckers() {
     for (auto &[nodeId, nodeInfo] : Nodes) {
         const ui32 pileId = nodeInfo->PileId.GetOrElse(0);

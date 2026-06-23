@@ -839,6 +839,8 @@ public:
         return Tablets;
     }
 
+    bool NodeHasRunningSystemTablet(ui32 nodeId) const;
+
     bool HasPDisk(TPDiskID pdId) const {
         return PDisks.contains(pdId);
     }

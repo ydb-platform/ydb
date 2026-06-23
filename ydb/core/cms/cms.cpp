@@ -953,9 +953,13 @@ void TCms::SortActionsBySysTabletPriority(
     TPermissionRequest &request) const
 {
     auto *actions = request.MutableActions();
-    std::partition(actions->begin(), actions->end(),
+    auto pivot = std::partition(actions->begin(), actions->end(),
         [this](const TAction &action) {
             return !ClusterInfo->HostHasSysTablet(action.GetHost());
+        });
+    std::partition(pivot, actions->end(),
+        [this](const TAction &action) {
+            return !ClusterInfo->NodeHasRunningSystemTablet(action.GetNodeId());
         });
 }
 

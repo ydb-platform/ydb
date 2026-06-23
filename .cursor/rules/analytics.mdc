@@ -14,7 +14,7 @@ alwaysApply: false
 
 # Analytics Skill (router)
 
-**Canonical map:** [`.github/scripts/analytics/ARCHITECTURE.md`](../../.github/scripts/analytics/ARCHITECTURE.md) — diagram, workflow→table→consumer, maintenance checklist.
+**Canonical map:** [`.github/scripts/analytics/ARCHITECTURE.md`](../../.github/scripts/analytics/ARCHITECTURE.md) — overview diagram, **table dependency maps** (mute/github/PR chains), mart SQL registry, maintenance checklist.
 
 **Table registry (source of truth):** `.github/config/ydb_qa_config.json` **and** GitHub var `YDB_QA_CONFIG` (CI reads var, not repo file). Never invent paths.
 
@@ -79,6 +79,7 @@ Then: `gh pr list --search "merged:>=<DATE>"` · `gh pr diff <N>` · mute: `mute
 | `ydb_wrapper.py` | YDB client |
 | `data_mart_executor.py` | SQL file → YDB table |
 | `check_architecture_sync.py` | Fail if analytics changed without ARCHITECTURE.md |
+| `list_mart_dependencies.py` | Print mart SQL reads/writes (`--markdown` for registry table) |
 
 ## Cross-links
 

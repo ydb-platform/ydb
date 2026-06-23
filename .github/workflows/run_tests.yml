@@ -345,7 +345,6 @@ jobs:
           test_threads: ${{ env.threads_count }}
           test_size: ${{ inputs.test_size }}
           test_type: ${{ inputs.test_type }}
-          timeout_minutes: '1200'
           increment: 'false'
           build_target: ${{ inputs.test_targets }}
           additional_ya_make_args_append: ${{ inputs.additional_ya_make_args }}

@@ -1,7 +1,7 @@
 name: Ya CI core (build and test)
 description: >
   Shared checkout, optional blacklist, credentials, and build_and_test_ya.
-  Run parameters (threads, size, timeout) are set by the calling workflow.
+  Run parameters (threads, size) are set by the calling workflow.
 
 inputs:
   build_preset:
@@ -24,9 +24,6 @@ inputs:
   link_threads:
     required: false
     default: '12'
-  timeout_minutes:
-    required: false
-    default: '660'
   build_target:
     required: false
     default: 'ydb/'
@@ -108,7 +105,6 @@ runs:
         ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
 
     - name: Build and test
-      timeout-minutes: ${{ fromJSON(inputs.timeout_minutes) }}
       uses: ./.github/actions/build_and_test_ya
       with:
         build_preset: ${{ inputs.build_preset }}

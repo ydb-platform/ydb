@@ -28,7 +28,6 @@ jobs:
         )
       }}
     name: Build and test ${{ matrix.build_preset }}
-    timeout-minutes: 660
     runs-on:
       - self-hosted
       - auto-provisioned
@@ -38,5 +37,6 @@ jobs:
       - uses: ./.github/actions/ya_ci_core_build_test
         with:
           build_preset: ${{ matrix.build_preset }}
+          build_target: "ydb/"
           test_threads: '52'
           test_size: small,medium

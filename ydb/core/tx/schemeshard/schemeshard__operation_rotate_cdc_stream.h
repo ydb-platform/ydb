@@ -9,6 +9,7 @@ void DoRotateStream(
     const NKikimrSchemeOp::TRotateCdcStream& op,
     const TOperationId& opId,
     const TPath& workingDirPath,
-    const TPath& tablePath);
+    const TPath& tablePath,
+    const bool omitObjectLimitChecks = false);
 
 } // namespace NKikimr::NSchemesShard::NCdc

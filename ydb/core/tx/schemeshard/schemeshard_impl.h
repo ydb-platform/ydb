@@ -709,6 +709,12 @@ public:
 
     const TTableInfo* GetMainTableForIndex(TPathId indexTableId) const;
     bool IsBackupTable(TPathId pathId) const;
+    // True if the path is an export-backup table (IsBackup) or is stored inside a backup collection
+    // (backup tables and the per-run directories, full and incremental). Such objects are accounted as
+    // EPathCategory::Backup so they do not consume the user object/path quota. The classification is
+    // purely structural over the persisted path tree, so create-commit, drop/uncount and restart rebuild
+    // all derive the same category and the backup counters never drift.
+    bool IsBackupObject(TPathElement::TPtr node) const;
 
     TPathId ResolvePathIdForDomain(TPathId pathId) const;
     TPathId ResolvePathIdForDomain(TPathElement::TPtr pathEl) const;

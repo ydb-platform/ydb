@@ -48,6 +48,7 @@ void DoCreatePqPart(
     const TString& streamName,
     TTableInfo::TCPtr table,
     const TVector<TString>& boundaries,
-    const bool acceptExisted);
+    const bool acceptExisted,
+    const bool omitObjectLimitChecks = false);
 
 } // namespace NKikimr::NSchemesShard::NCdc

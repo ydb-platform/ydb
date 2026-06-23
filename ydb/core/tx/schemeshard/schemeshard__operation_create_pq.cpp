@@ -359,10 +359,18 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName(context.UserToken.Get())
-                    .DepthLimit()
-                    .PathsLimit()
-                    .DirChildrenLimit()
+                    .IsValidLeafName(context.UserToken.Get());
+
+                // Incremental backup creates a CDC topic per increment; skip the object/path limits so
+                // the backup is not blocked (the topic is accounted as Regular, like full-backup topics).
+                if (!Transaction.GetOmitObjectLimitChecks()) {
+                    checks
+                        .DepthLimit()
+                        .PathsLimit()
+                        .DirChildrenLimit();
+                }
+
+                checks
                     .IsValidACL(acl);
             }
 
@@ -403,7 +411,7 @@ public:
 
         const PQGroupReserve reserve(config, partitionsToCreate);
 
-        {
+        if (!Transaction.GetOmitObjectLimitChecks()) {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks
                 .ShardsLimit(shardsToCreate)

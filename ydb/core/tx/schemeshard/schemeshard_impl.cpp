@@ -1897,6 +1897,33 @@ bool TSchemeShard::IsBackupTable(TPathId pathId) const {
     return it->second->IsBackup;
 }
 
+bool TSchemeShard::IsBackupObject(TPathElement::TPtr node) const {
+    if (!node) {
+        return false;
+    }
+    if (IsBackupTable(node->PathId)) {
+        return true;
+    }
+    // Walk the node and its ancestors: everything stored inside a backup collection (backup tables and
+    // the per-run directories, full and incremental) is backup data and must not consume the user
+    // object/path quota. The check is purely structural over the persisted path tree, so create-commit,
+    // drop/uncount and restart rebuild all derive the same category (the backup counters never drift).
+    for (TPathElement::TPtr cur = node; ; ) {
+        if (cur->IsBackupCollection()) {
+            return true;
+        }
+        if (cur->IsRoot()) {
+            break;
+        }
+        auto it = PathsById.find(cur->ParentPathId);
+        if (it == PathsById.end() || !it->second || it->second == cur) {
+            break;
+        }
+        cur = it->second;
+    }
+    return false;
+}
+
 TPathElement::EPathState TSchemeShard::CalcPathState(TTxState::ETxType txType, TPathElement::EPathState oldState) {
     // Do not change state if PathId is dropped. It can't become alive.
     switch (oldState) {
@@ -6261,7 +6288,9 @@ THashSet<TShardIdx> TSchemeShard::CollectAllShards(const THashSet<TPathId> &path
 }
 
 void TSchemeShard::UncountNode(TPathElement::TPtr node) {
-    const auto isBackupTable = IsBackupTable(node->PathId);
+    // Objects stored inside a backup collection (backup tables + per-run dirs, full and incremental)
+    // are accounted as Backup, like full-backup tables, so they are subtracted from the user limits.
+    const auto isBackupTable = IsBackupObject(node);
     EPathCategory pathCategory;
     if (isBackupTable) {
         pathCategory = EPathCategory::Backup;

@@ -585,6 +585,223 @@ Y_UNIT_TEST_SUITE(TBackupCollectionTests) {
                               {NLs::PathNotExist});
         }
 
+        TString FindChildEndingWith(TTestBasicRuntime& runtime, const TString& parent, const TString& suffix) {
+            auto desc = DescribePath(runtime, parent, false, false, true);
+            const auto& pd = desc.GetPathDescription();
+            for (ui32 i = 0; i < pd.ChildrenSize(); ++i) {
+                const auto& name = pd.GetChildren(i).GetName();
+                if (name.EndsWith(suffix)) {
+                    return name;
+                }
+            }
+            UNIT_ASSERT_C(false, "no child of " << parent << " ending with " << suffix);
+            return {};
+        }
+
+        // The incremental backup destination table must stay a regular, readable table (NOT IsBackup),
+        // matching the full backup-collection table; limit bypass is done via OmitObjectLimitChecks, not
+        // by marking it a backup table (which would make it unreadable).
+        Y_UNIT_TEST(IncrementalBackupTableIsNotMarkedBackup) {
+            TTestBasicRuntime runtime;
+            TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+            ui64 txId = 100;
+
+            SetupLogging(runtime);
+            PrepareDirs(runtime, env, txId);
+
+            TString collectionSettingsWithIncremental = R"(
+                Name: ")" DEFAULT_NAME_1 R"("
+
+                ExplicitEntryList {
+                    Entries {
+                        Type: ETypeTable
+                        Path: "/MyRoot/Table1"
+                    }
+                }
+                Cluster: {}
+                IncrementalBackupConfig: {}
+            )";
+
+            TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettingsWithIncremental);
+            env.TestWaitNotification(runtime, txId);
+
+            TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )");
+            env.TestWaitNotification(runtime, txId);
+
+            TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            env.TestWaitNotification(runtime, txId);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            env.TestWaitNotification(runtime, txId);
+
+            const TString collectionPath = "/MyRoot/.backups/collections/" DEFAULT_NAME_1;
+            const TString incrDir = FindChildEndingWith(runtime, collectionPath, "_incremental");
+
+            // The incremental backup table is created with IsBackup=true (this is what excludes it from
+            // the path/children/shard limits and drives drop/rebuild accounting symmetrically).
+            TestDescribeResult(DescribePath(runtime, collectionPath + "/" + incrDir + "/Table1", false, false, true), {
+                NLs::PathExist,
+                NLs::IsBackupTable(false),
+            });
+        }
+
+        void GetDomainCounters(TTestBasicRuntime& runtime, ui64& paths, ui64& shards, ui64& pqParts) {
+            auto desc = DescribePath(runtime, "/MyRoot");
+            const auto& d = desc.GetPathDescription().GetDomainDescription();
+            paths = d.GetPathsInside();
+            shards = d.GetShardsInside();
+            pqParts = d.GetPQPartitionsInside();
+        }
+
+        // Phases 1-3 end to end: an incremental backup must succeed even when the domain has no headroom
+        // for the per-increment shards/partitions (the topic) — proving the table (IsBackup) and the CDC
+        // stream / PQ topic (OmitObjectLimitChecks) all bypass the schemeshard object/path limits.
+        Y_UNIT_TEST(IncrementalBackupBypassesObjectLimits) {
+            TTestBasicRuntime runtime;
+            TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+            ui64 txId = 100;
+
+            SetupLogging(runtime);
+            PrepareDirs(runtime, env, txId);
+
+            TString collectionSettingsWithIncremental = R"(
+                Name: ")" DEFAULT_NAME_1 R"("
+
+                ExplicitEntryList {
+                    Entries {
+                        Type: ETypeTable
+                        Path: "/MyRoot/Table1"
+                    }
+                }
+                Cluster: {}
+                IncrementalBackupConfig: {}
+            )";
+
+            TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettingsWithIncremental);
+            env.TestWaitNotification(runtime, txId);
+
+            TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )");
+            env.TestWaitNotification(runtime, txId);
+
+            TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            env.TestWaitNotification(runtime, txId);
+
+            // Tighten the limits to current usage: zero headroom for shards and PQ partitions (only the
+            // increment's topic would add those), and only a little path headroom for the per-run dir.
+            ui64 paths = 0, shards = 0, pqParts = 0;
+            GetDomainCounters(runtime, paths, shards, pqParts);
+
+            NKikimr::NSchemeShard::TSchemeLimits limits;
+            limits.MaxPaths = paths + 3;
+            limits.MaxShards = shards;
+            limits.MaxPQPartitions = pqParts;
+            SetSchemeshardSchemaLimits(runtime, limits);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            // Without the bypass this fails with StatusResourceExhausted; with it, it succeeds.
+            TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")",
+                {NKikimrScheme::StatusAccepted});
+            env.TestWaitNotification(runtime, txId);
+
+            const TString collectionPath = "/MyRoot/.backups/collections/" DEFAULT_NAME_1;
+            const TString incrDir = FindChildEndingWith(runtime, collectionPath, "_incremental");
+            TestDescribeResult(DescribePath(runtime, collectionPath + "/" + incrDir + "/Table1", false, false, true), {
+                NLs::PathExist,
+                NLs::IsBackupTable(false),
+            });
+        }
+
+        // Proves backup objects do NOT consume the user object/path quota: after an incremental backup,
+        // set MaxPaths to the current raw PathsInside (which now includes the not-counted backup table
+        // and dir). A regular user MkDir must still succeed, because the backup objects are subtracted
+        // from the limit check. Without not-counting this MkDir would fail with StatusResourceExhausted.
+        Y_UNIT_TEST(IncrementalBackupDoesNotConsumeUserQuota) {
+            TTestBasicRuntime runtime;
+            TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));
+            ui64 txId = 100;
+
+            SetupLogging(runtime);
+            PrepareDirs(runtime, env, txId);
+
+            TString collectionSettingsWithIncremental = R"(
+                Name: ")" DEFAULT_NAME_1 R"("
+
+                ExplicitEntryList {
+                    Entries {
+                        Type: ETypeTable
+                        Path: "/MyRoot/Table1"
+                    }
+                }
+                Cluster: {}
+                IncrementalBackupConfig: {}
+            )";
+
+            TestCreateBackupCollection(runtime, ++txId, "/MyRoot/.backups/collections/", collectionSettingsWithIncremental);
+            env.TestWaitNotification(runtime, txId);
+
+            TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "Table1"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )");
+            env.TestWaitNotification(runtime, txId);
+
+            TestBackupBackupCollection(runtime, ++txId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            env.TestWaitNotification(runtime, txId);
+
+            runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+
+            TestBackupIncrementalBackupCollection(runtime, ++txId, "/MyRoot",
+                R"(Name: ".backups/collections/)" DEFAULT_NAME_1 R"(")");
+            env.TestWaitNotification(runtime, txId);
+
+            ui64 paths = 0, shards = 0, pqParts = 0;
+            GetDomainCounters(runtime, paths, shards, pqParts);
+
+            // No room for any *regular* object beyond what already exists as regular...
+            NKikimr::NSchemeShard::TSchemeLimits limits;
+            limits.MaxPaths = paths;
+            SetSchemeshardSchemaLimits(runtime, limits);
+
+            // ...yet a user dir still fits, because the backup table + dir are not counted.
+            TestMkDir(runtime, ++txId, "/MyRoot", "UserDir", {NKikimrScheme::StatusAccepted});
+            env.TestWaitNotification(runtime, txId);
+        }
+
+        // Negative control: a plain user CreateTable must still NOT be able to set IsBackup. The
+        // relaxation only applies when IncrementalBackupConfig is present (the incremental backup path).
+        Y_UNIT_TEST(UserCannotCreateBackupTable) {
+            TTestBasicRuntime runtime;
+            TTestEnv env(runtime);
+            ui64 txId = 100;
+
+            TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+                Name: "UserBackup"
+                Columns { Name: "key" Type: "Uint32" }
+                KeyColumnNames: ["key"]
+                IsBackup: true
+            )", {NKikimrScheme::StatusInvalidParameter});
+        }
+
         Y_UNIT_TEST(DropCollectionDuringActiveBackup) {
             TTestBasicRuntime runtime;
             TTestEnv env(runtime, TTestEnvOptions().EnableBackupService(true));

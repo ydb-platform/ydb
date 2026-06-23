@@ -609,7 +609,6 @@ public:
 
         auto schema = Transaction.GetCreateTable();
         const bool isBackup = schema.GetIsBackup();
-        const EPathCategory pathCategory = isBackup ? EPathCategory::Backup : EPathCategory::Regular;
 
         TPath dstPath = parent.Child(name);
         {
@@ -900,10 +899,15 @@ public:
         const ui32 shardsToCreate = tableInfo->GetPartitions().size();
         Y_VERIFY_S(shardsToCreate <= maxShardsToCreate, "shardsToCreate: " << shardsToCreate << " maxShardsToCreate: " << maxShardsToCreate);
 
-        dstPath.DomainInfo()->IncPathsInside(context.SS, 1, pathCategory);
-        dstPath.DomainInfo()->AddInternalShards(txState, context.SS, isBackup);
+        // Export-backup tables (IsBackup) and any table copied into a backup collection (full backup)
+        // are accounted as Backup so they do not consume the user object/path quota. UncountNode and
+        // restart rebuild derive the same classification (IsBackupObject).
+        const bool isBackupObject = isBackup || context.SS->IsBackupObject(dstPath.Base());
+        const EPathCategory commitCategory = isBackupObject ? EPathCategory::Backup : EPathCategory::Regular;
+        dstPath.DomainInfo()->IncPathsInside(context.SS, 1, commitCategory);
+        dstPath.DomainInfo()->AddInternalShards(txState, context.SS, isBackupObject);
         dstPath.Base()->IncShardsInside(shardsToCreate);
-        IncAliveChildrenSafeWithUndo(OperationId, parent, context, isBackup);
+        IncAliveChildrenSafeWithUndo(OperationId, parent, context, isBackupObject);
 
         LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TCopyTable Propose creating new table"

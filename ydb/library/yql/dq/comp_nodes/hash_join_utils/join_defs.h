@@ -88,15 +88,29 @@ struct TBucket {
     }
 
     TPackResult BuildingPage;
+    // Parallel to BuildingPage rows. Empty after the building page is detached.
+    TMKQLVector<TArrowRowRef> BuildingPageRefs;
     std::optional<TMKQLVector<ISpiller::TKey>> SpilledPages;
+
     const TMKQLVector<TPackResult>& InMemoryPages() const {
         return InMemoryPages_;
     }
+    const TMKQLVector<TMKQLVector<TArrowRowRef>>& InMemoryPageRefs() const {
+        return InMemoryPageRefs_;
+    }
+
     std::optional<TPackResult> ReleaseAtMostOnePage() {
+        // Refs are released alongside the page to keep the parallel arrays in sync.
+        if (!InMemoryPageRefs_.empty()) {
+            InMemoryPageRefs_.pop_back();
+        }
         return GetBackOrNull(InMemoryPages_);
     }
     TMKQLVector<TPackResult> ReleaseInMemoryPages() {
         return std::move(InMemoryPages_);
+    }
+    TMKQLVector<TMKQLVector<TArrowRowRef>> ReleaseInMemoryPageRefs() {
+        return std::move(InMemoryPageRefs_);
     }
 
     bool DetatchBuildingPage() {
@@ -108,21 +122,29 @@ struct TBucket {
         InMemoryPages_.clear();
         return pages;
     }
+    TMKQLVector<TMKQLVector<TArrowRowRef>> DetatchPageRefs() {
+        auto refs = std::move(InMemoryPageRefs_);
+        InMemoryPageRefs_.clear();
+        return refs;
+    }
 
 
     template <int SizeLimit> bool DetatchBuildingPageIfLimitReached() {
         if (BuildingPage.AllocatedBytes() > SizeLimit) {
-            // MKQL_ENSURE(condition, message)
             InMemoryPages_.push_back(std::move(BuildingPage));
             InMemoryPages_.back().PackedTuples.shrink_to_fit();
             InMemoryPages_.back().Overflow.shrink_to_fit();
+            InMemoryPageRefs_.push_back(std::move(BuildingPageRefs));
             BuildingPage.NTuples = 0;
+            BuildingPageRefs.clear();
             return true;
         }
         return false;
     }
 private:
 TMKQLVector<TPackResult> InMemoryPages_;
+// Parallel to InMemoryPages_; entry i contains refs for rows of InMemoryPages_[i].
+TMKQLVector<TMKQLVector<TArrowRowRef>> InMemoryPageRefs_;
 };
 
 using TBuckets = TMKQLVector<TBucket>;

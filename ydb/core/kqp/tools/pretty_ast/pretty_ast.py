@@ -3,13 +3,14 @@
 import sys
 import argparse
 import json
-from typing import Self
+from typing_extensions import Self
 
 NEVER_INLINE = {
     'DqPhyStage',
 }
 
 COMPLEX_ARGS = {
+    'NarrowSqueezeToDict',
     'DqCnHashShuffle',
     'DqCnMerge',
     'DqCnMap',
@@ -56,6 +57,8 @@ COMPLEX_ARGS = {
     'If',
     'IfPresent',
     'TupleType',
+    'WideChopper',
+    'WideSort',
 }
 
 SIMPLE_OPERATORS = {

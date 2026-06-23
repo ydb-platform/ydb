@@ -154,6 +154,10 @@ message StreamWriteMessage {
 
         optional TransactionIdentity tx = 3;
 
+        // Deferred topic publish identity.
+        // Must not be set together with tx (KQP transaction).
+        optional DeferredPublishIdentity deferred_publish = 9;
+
         message MessageData {
             // Message sequence number, provided by client for deduplication. Max sequence number for batch messages.
             // Starts at 1
@@ -716,6 +720,15 @@ message TransactionIdentity {
 
     // Session identifier from TableService.
     string session = 2;
+}
+
+// Identity of a deferred topic publication for StreamWrite.
+// int_publication_id is assigned by the server in BeginPublication.
+// ext_publication_id is repeated from BeginPublication on each write batch.
+message DeferredPublishIdentity {
+    uint64 int_publication_id = 1;
+
+    string ext_publication_id = 2 [(Ydb.length).le = 2048];
 }
 
 // Add offsets to transaction request sent from client to server.

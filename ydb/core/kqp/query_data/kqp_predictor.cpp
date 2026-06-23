@@ -133,17 +133,15 @@ ui32 TStagePredictor::GetUsableThreads() {
 }
 
 ui32 TStagePredictor::GetPossibleMaxLimitThreads() {
-    std::optional<ui32> userPoolSize;
     if (HasAppData() && TlsActivationContext && TlsActivationContext->ActorSystem()) {
         TExecutorPoolState poolState;
         GetActorSystemStats().GetExecutorPoolState(AppData()->UserPoolId, poolState);
-        userPoolSize = Max<ui32>(1, static_cast<ui32>(poolState.PossibleMaxLimit));
+        if (poolState.PossibleMaxLimit > 0) {
+            return Max<ui32>(1, static_cast<ui32>(poolState.PossibleMaxLimit));
+        }
     }
-    if (!userPoolSize) {
-        ALS_INFO(NKikimrServices::KQP_EXECUTER) << "user pool is undefined for executer tasks construction";
-        userPoolSize = NSystemInfo::NumberOfCpus();
-    }
-    return Max<ui32>(1, *userPoolSize);
+
+    return GetUsableThreads();
 }
 
 ui32 TStagePredictor::CalcTasksOptimalCount(const ui32 availableThreadsCount, const std::optional<ui32> previousStageTasksCount) const {

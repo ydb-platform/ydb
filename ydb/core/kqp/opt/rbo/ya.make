@@ -22,6 +22,7 @@ SRCS(
     traces/kqp_rbo_trace.cpp
     traces/kqp_rbo_trace_log.cpp
     traces/kqp_rbo_trace_output.cpp
+    traces/kqp_rbo_trace_ast_snapshot.cpp
     traces/kqp_rbo_rule_trace.cpp
 )
 

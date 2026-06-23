@@ -625,6 +625,13 @@ Trace& TraceOutput::trace(const std::string& title) {
     return Impl_->Session->Page.trace(title);
 }
 
+Trace& TraceOutput::trace(const std::string& title, const std::string& id) {
+    if (!isOpen()) {
+        throw std::logic_error("TraceOutput::trace() requires an open output");
+    }
+    return Impl_->Session->Page.trace(title, id);
+}
+
 GenerateResult TraceOutput::submit(Trace::Tile& tile) {
     if (!isOpen()) {
         return GenerateResult::failure("TraceOutput::submit() requires an open output");

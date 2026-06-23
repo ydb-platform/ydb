@@ -12,14 +12,29 @@ namespace NKikimr::NSchemeShard {
 class TOlapOptionsUpdate {
 private:
     YDB_ACCESSOR(bool, SchemeNeedActualization, false);
+    YDB_ACCESSOR(bool, SchemeNeedActualizationSpecified, false);
+    YDB_ACCESSOR(bool, ScanReaderPolicyNameSpecified, false);
     YDB_ACCESSOR_DEF(std::optional<TString>, ScanReaderPolicyName);
     YDB_ACCESSOR_DEF(NOlap::NStorageOptimizer::TOptimizerPlannerConstructorContainer, CompactionPlannerConstructor);
     YDB_ACCESSOR_DEF(NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer, MetadataManagerConstructor);
 public:
+
     bool Parse(const NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest, IErrorCollector& errors) {
-        SchemeNeedActualization = alterRequest.GetOptions().GetSchemeNeedActualization();
+        if (!alterRequest.HasOptions()) {
+            return true;
+        }
+        if (alterRequest.GetOptions().HasSchemeNeedActualization()) {
+            SetSchemeNeedActualizationSpecified(true);
+            SetSchemeNeedActualization(alterRequest.GetOptions().GetSchemeNeedActualization());
+        }
         if (alterRequest.GetOptions().HasScanReaderPolicyName()) {
-            ScanReaderPolicyName = alterRequest.GetOptions().GetScanReaderPolicyName();
+            SetScanReaderPolicyNameSpecified(true);
+            const TString& name = alterRequest.GetOptions().GetScanReaderPolicyName();
+            if (name.empty()) {
+                ScanReaderPolicyName = std::nullopt;
+            } else {
+                ScanReaderPolicyName = name;
+            }
         }
         if (alterRequest.GetOptions().HasMetadataManagerConstructor()) {
             auto container = NOlap::NDataAccessorControl::TMetadataManagerConstructorContainer::BuildFromProto(alterRequest.GetOptions().GetMetadataManagerConstructor());
@@ -40,9 +55,15 @@ public:
         return true;
     }
     void SerializeToProto(NKikimrSchemeOp::TAlterColumnTableSchema& alterRequest) const {
-        alterRequest.MutableOptions()->SetSchemeNeedActualization(SchemeNeedActualization);
-        if (ScanReaderPolicyName) {
-            alterRequest.MutableOptions()->SetScanReaderPolicyName(*ScanReaderPolicyName);
+        if (GetSchemeNeedActualizationSpecified()) {
+            alterRequest.MutableOptions()->SetSchemeNeedActualization(GetSchemeNeedActualization());
+        }
+        if (GetScanReaderPolicyNameSpecified()) {
+            if (ScanReaderPolicyName) {
+                alterRequest.MutableOptions()->SetScanReaderPolicyName(*ScanReaderPolicyName);
+            } else {
+                alterRequest.MutableOptions()->SetScanReaderPolicyName(TString{});
+            }
         }
         if (CompactionPlannerConstructor.HasObject()) {
             CompactionPlannerConstructor.SerializeToProto(*alterRequest.MutableOptions()->MutableCompactionPlannerConstructor());

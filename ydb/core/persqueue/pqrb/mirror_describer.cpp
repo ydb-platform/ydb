@@ -37,7 +37,7 @@ void TMirrorDescriber::StartInit(const TActorContext& ctx) {
 
 void TMirrorDescriber::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
     YDB_LOG_NOTICE("Killed",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     CredentialsProvider = nullptr;
     Die(ctx);
 }
@@ -53,7 +53,7 @@ void TMirrorDescriber::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr&
     if (!equalConfigs) {
         Config = ev->Get()->Config.GetPartitionConfig().GetMirrorFrom();
         YDB_LOG_INFO("Changing config",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         StartInit(ctx);
     }
 }
@@ -91,7 +91,7 @@ void TMirrorDescriber::HandleDescriptionResult(TEvPQ::TEvMirrorTopicDescription:
 void TMirrorDescriber::DescribeTopic(const TActorContext& ctx) {
     if (DescribeTopicRequestInFlight) {
         YDB_LOG_INFO("Description request already inflight",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         return;
     }
 
@@ -125,7 +125,7 @@ void TMirrorDescriber::DescribeTopic(const TActorContext& ctx) {
 void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
     if (CredentialsRequestInFlight) {
         YDB_LOG_WARN("Credentials request already inflight",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         return;
     }
     CredentialsProvider = nullptr;

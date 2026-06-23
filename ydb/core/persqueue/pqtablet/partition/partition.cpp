@@ -1365,7 +1365,7 @@ void TPartition::AddPendingEvent(TAutoPtr<TEventHandle<T>>& ev)
 void TPartition::HandleOnInit(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext&)
 {
     YDB_LOG_DEBUG_COMP(Service, "HandleOnInit TEvPQ::TEvTxCalcPredicate",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     AddPendingEvent(ev);
 }
@@ -1373,7 +1373,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorC
 void TPartition::HandleOnInit(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext&)
 {
     YDB_LOG_DEBUG_COMP(Service, "HandleOnInit TEvPQ::TEvTxCommit",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     AddPendingEvent(ev);
 }
@@ -1381,7 +1381,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext&
 void TPartition::HandleOnInit(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext&)
 {
     YDB_LOG_DEBUG_COMP(Service, "HandleOnInit TEvPQ::TEvTxRollback",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     AddPendingEvent(ev);
 }
@@ -1389,7 +1389,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContex
 void TPartition::HandleOnInit(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const TActorContext&)
 {
     YDB_LOG_DEBUG_COMP(Service, "HandleOnInit TEvPQ::TEvProposePartitionConfig",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     AddPendingEvent(ev);
 }
@@ -1397,7 +1397,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const 
 void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& /* ctx */)
 {
     YDB_LOG_DEBUG_COMP(Service, "HandleOnInit TEvPQ::TEvGetWriteInfoRequest",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     PQ_ENSURE(IsSupportive());
 
@@ -1408,7 +1408,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TAc
 void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext& /* ctx */)
 {
     YDB_LOG_DEBUG_COMP(Service, "HandleOnInit TEvPQ::TEvGetWriteInfoResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     PQ_ENSURE(!IsSupportive());
 
@@ -1418,7 +1418,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TA
 void TPartition::HandleOnInit(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& /* ctx */)
 {
     YDB_LOG_DEBUG_COMP(Service, "HandleOnInit TEvPQ::TEvGetWriteInfoError",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     PQ_ENSURE(!IsSupportive());
 
@@ -1571,7 +1571,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
 
     if (ClosedInternalPartition || WaitingForPreviousBlobQuota() || (CurrentStateFunc() != &TThis::StateIdle)) {
         YDB_LOG_DEBUG_COMP(Service, "Send TEvPQ::TEvGetWriteInfoError",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         auto* response = new TEvPQ::TEvGetWriteInfoError(Partition.InternalPartitionId,
                                                          "Write info requested while writes are not complete");
         ctx.Send(originalPartition, response);
@@ -1607,13 +1607,13 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoReque
     };
 
     YDB_LOG_DEBUG_COMP(Service, "Send TEvPQ::TEvGetWriteInfoResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     ctx.Send(originalPartition, response);
 }
 
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_DEBUG_COMP(Service, "Handle TEvPQ::TEvGetWriteInfoRequest",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     ev->Get()->OriginalPartition = ev->Sender;
     ev->Get()->Span = NWilson::TSpan(TWilsonTopic::TopicTopLevel,
@@ -1624,7 +1624,7 @@ void TPartition::Handle(TEvPQ::TEvGetWriteInfoRequest::TPtr& ev, const TActorCon
     StopCompaction = true;
     if (CompactionInProgress) {
         YDB_LOG_DEBUG_COMP(Service, "Event TEvPQ::TEvGetWriteInfoRequest will be processed later",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         PendingGetWriteInfoRequest.reset(ev->Release().Release());
         return;
     }
@@ -1775,7 +1775,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoRespo
 
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoResponse::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_DEBUG_COMP(Service, "Handle TEvPQ::TEvGetWriteInfoResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     ev->Get()->SupportivePartition = ev->Sender;
 
@@ -2307,7 +2307,7 @@ void TPartition::Handle(NQuoterEvents::TEvQuotaUpdated::TPtr& ev, const TActorCo
 
 void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_DEBUG_COMP(Service, "Received TEvKeyValue::TEvResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     auto& response = ev->Get()->Record;
 
@@ -2478,7 +2478,7 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext&)
 {
     if (KVWriteInProgress) {
         YDB_LOG_DEBUG_COMP(Service, "Writing. Can't process user action and tx events",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         return;
     }
 
@@ -2503,17 +2503,17 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext&)
     }
 
     YDB_LOG_DEBUG_COMP(Service, "Process user action and tx events",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     ProcessUserActionAndTxEvents();
     DumpTheSizeOfInternalQueues();
     if (!UserActionAndTxPendingWrite.empty()) {
         YDB_LOG_DEBUG_COMP(Service, "Waiting for the batch to finish",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         return;
     }
 
     YDB_LOG_DEBUG_COMP(Service, "Process user action and tx pending commits",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     ProcessUserActionAndTxPendingCommits();
     DumpTheSizeOfInternalQueues();
 
@@ -2526,7 +2526,7 @@ void TPartition::ProcessTxsAndUserActs(const TActorContext&)
     CurrentBatchSize = 0;
 
     YDB_LOG_DEBUG_COMP(Service, "Try persist",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     RunPersist();
 }
 
@@ -2591,7 +2591,7 @@ auto TPartition::ProcessUserActionAndTxEvent(TSimpleSharedPtr<TEvPQ::TEvSetClien
                                              TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers) -> EProcessResult
 {
     YDB_LOG_DEBUG_COMP(Service, "TPartition::ProcessUserActionAndTxEvent(TEvPQ::TEvSetClientInfo)",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     return PreProcessUserActionOrTransaction(event, affectedSourceIdsAndConsumers);
 }
 
@@ -2608,7 +2608,7 @@ auto TPartition::ProcessUserActionAndTxEvent(TMessage& msg,
                                              TAffectedSourceIdsAndConsumers& affectedSourceIdsAndConsumers) -> EProcessResult
 {
     YDB_LOG_DEBUG_COMP(Service, "TPartition::ProcessUserActionAndTxEvent(TMessage)",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     return PreProcessUserActionOrTransaction(msg, affectedSourceIdsAndConsumers);
 }
 
@@ -2659,7 +2659,7 @@ void TPartition::ProcessUserActionAndTxPendingCommit(TSimpleSharedPtr<TEvPQ::TEv
                                                      TEvKeyValue::TEvRequest* request)
 {
     YDB_LOG_DEBUG_COMP(Service, "TPartition::ProcessUserActionAndTxPendingCommit(TEvPQ::TEvSetClientInfo)",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     ExecUserActionOrTransaction(event, request);
 }
 
@@ -2676,7 +2676,7 @@ void TPartition::ProcessUserActionAndTxPendingCommit(TMessage& msg,
                                                      TEvKeyValue::TEvRequest* request)
 {
     YDB_LOG_DEBUG_COMP(Service, "TPartition::ProcessUserActionAndTxPendingCommit(TMessage)",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     ExecUserActionOrTransaction(msg, request);
 }
 
@@ -3052,7 +3052,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
     } else if (t->ProposeConfig) {
         if (HasPendingCommitsOrPendingWrites()) {
             YDB_LOG_DEBUG_COMP(Service, "Wait until the operation with the config becomes the first in the queue",
-                 {"logPrefix", NPQ_LOG_PREFIX});
+                {"logPrefix", NPQ_LOG_PREFIX});
             return EProcessResult::Blocked;
         }
         t->Predicate = BeginTransactionConfig();
@@ -3067,7 +3067,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
         PQ_ENSURE(!ChangeConfig && !ChangingConfig);
         if (HasPendingCommitsOrPendingWrites()) {
             YDB_LOG_DEBUG_COMP(Service, "Wait until the operation with the config becomes the first in the queue",
-                 {"logPrefix", NPQ_LOG_PREFIX});
+                {"logPrefix", NPQ_LOG_PREFIX});
             return EProcessResult::Blocked;
         }
         ChangingConfig = true;
@@ -4682,7 +4682,7 @@ void TPartition::Handle(TEvPQ::TEvApproveWriteQuota::TPtr& ev, const TActorConte
 void TPartition::Handle(NQuoterEvents::TEvQuotaCountersUpdated::TPtr& ev, const TActorContext&) {
     if (ev->Get()->ForWriteQuota) {
         YDB_LOG_ALERT_COMP(Service, "Got TEvQuotaCountersUpdated for write counters, this is unexpected. Event ignored",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         return;
     } else if (PartitionCountersLabeled) {
         PartitionCountersLabeled->GetCounters()[METRIC_READ_INFLIGHT_LIMIT_THROTTLED].Set(ev->Get()->AvgInflightLimitThrottledMicroseconds);
@@ -4760,7 +4760,7 @@ void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
 void TPartition::HandleOnInit(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext&)
 {
     YDB_LOG_DEBUG_COMP(Service, "HandleOnInit TEvPQ::TEvDeletePartition",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     PQ_ENSURE(IsSupportive());
 
@@ -4790,7 +4790,7 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvDeletePartition> 
 void TPartition::Handle(TEvPQ::TEvDeletePartition::TPtr& ev, const TActorContext& ctx)
 {
     YDB_LOG_DEBUG_COMP(Service, "Handle TEvPQ::TEvDeletePartition",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     ProcessPendingEvent(ev, ctx);
 }

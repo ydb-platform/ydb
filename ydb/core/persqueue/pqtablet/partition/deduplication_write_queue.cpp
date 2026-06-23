@@ -182,7 +182,7 @@ private:
 
     void Handle(TEvPQ::TEvWrite::TPtr& ev) {
         YDB_LOG_DEBUG("Handle TEvWrite",
-             {"logPrefix", NPQ_LOG_PREFIX},
+            {"logPrefix", NPQ_LOG_PREFIX},
             {"bypassMode", BypassMode});
         if (TryBypass(ev)) {
             return;

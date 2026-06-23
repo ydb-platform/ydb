@@ -20,7 +20,7 @@ void TDescriberActor::Bootstrap() {
 
 void TDescriberActor::DoDescribe() {
     YDB_LOG_DEBUG("Start describe",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TDescriberActor::DescribeState);
 
     NDescriber::TDescribeSettings settings = {
@@ -32,7 +32,7 @@ void TDescriberActor::DoDescribe() {
 
 void TDescriberActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     ChildActorId = {};
 
@@ -66,7 +66,7 @@ STFUNC(TDescriberActor::DescribeState) {
 
 void TDescriberActor::DoRuntimeAttributes() {
     YDB_LOG_DEBUG("Start DoRuntimeAttributes",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TDescriberActor::RuntimeAttributesState);
     SendToTablet(TopicInfo.Info->Description.GetBalancerTabletID(), new TEvPQ::TEvMLPGetRuntimeAttributesRequest(Settings.TopicName, Settings.Consumer));
 }
@@ -92,7 +92,7 @@ void TDescriberActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         return;
     }
     YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     if (Backoff.HasMore()) {
         Backoff.Next();
         return DoRuntimeAttributes();

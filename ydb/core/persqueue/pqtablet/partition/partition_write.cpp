@@ -108,14 +108,14 @@ void TPartition::HandleOnIdle(TEvPQ::TEvUpdateAvailableSize::TPtr&, const TActor
 
 void TPartition::HandleOnWrite(TEvPQ::TEvUpdateAvailableSize::TPtr&, const TActorContext& ctx) {
     YDB_LOG_TRACE("TPartition::HandleOnWrite TEvUpdateAvailableSize",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     UpdateAvailableSize(ctx);
 }
 
 void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, const TActorContext& ctx) {
     YDB_LOG_TRACE("TPartition::ProcessChangeOwnerRequest",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     auto &owner = ev->Owner;
     auto it = Owners.find(owner);
@@ -147,7 +147,7 @@ void TPartition::ProcessChangeOwnerRequest(TAutoPtr<TEvPQ::TEvChangeOwner> ev, c
 
 THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator TPartition::DropOwner(THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator& it, const TActorContext& ctx) {
     YDB_LOG_DEBUG("TPartition::DropOwner",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     PQ_ENSURE(ReservedSize >= it->second.ReservedSize);
     ReservedSize -= it->second.ReservedSize;
@@ -164,7 +164,7 @@ THashMap<TString, NKikimr::NPQ::TOwnerInfo>::iterator TPartition::DropOwner(THas
 
 void TPartition::Handle(TEvPQ::TEvChangeOwner::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE("TPartition::HandleOnWrite TEvChangeOwner",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     bool res = OwnerPipes.insert(ev->Get()->PipeClient).second;
     PQ_ENSURE(res);
@@ -174,7 +174,7 @@ void TPartition::Handle(TEvPQ::TEvChangeOwner::TPtr& ev, const TActorContext& ct
 
 void TPartition::ProcessReserveRequests(const TActorContext& ctx) {
     YDB_LOG_TRACE("TPartition::ProcessReserveRequests",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     const ui64 maxWriteInflightSize = Config.GetPartitionConfig().GetMaxWriteInflightSize();
 
@@ -236,7 +236,7 @@ void TPartition::UpdateWriteBufferIsFullState(const TInstant& now) {
 
 void TPartition::Handle(TEvPQ::TEvReserveBytes::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE("TPartition::HandleOnWrite TEvReserveBytes",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     if (ShouldUseDeduplicationQueue() && !ev->Get()->FromDeduplicatedQueue) {
         Forward(ev, DeduplicationQueueActor);
@@ -453,7 +453,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 
 void TPartition::SyncMemoryStateWithKVState(const TActorContext& ctx) {
     YDB_LOG_TRACE("TPartition::SyncMemoryStateWithKVState",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     BlobEncoder.SyncHeadKeys();
     BlobEncoder.SyncNewHeadKey();
@@ -520,7 +520,7 @@ void TPartition::OnHandleWriteResponse(const TActorContext& ctx)
 void TPartition::Handle(TEvPQ::TEvHandleWriteResponse::TPtr&, const TActorContext& ctx)
 {
     YDB_LOG_DEBUG("Received TPartition::Handle TEvHandleWriteResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     OnHandleWriteResponse(ctx);
 }
 
@@ -549,7 +549,7 @@ void TPartition::UpdateAfterWriteCounters(bool writeComplete) {
 
 void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     YDB_LOG_TRACE("TPartition::HandleWriteResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     if (!HaveWriteMsg) {
         return;
     }
@@ -678,7 +678,7 @@ bool TPartition::ShouldUseDeduplicationQueue() const {
 
 void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_DEBUG("Received TPartition::TEvWrite",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     if (!CanEnqueue()) {
         ReplyError(ctx, ev->Get()->Cookie, InactivePartitionErrorCode,
@@ -690,7 +690,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
 
     if (ShouldUseDeduplicationQueue() && ev->Get()->ExternalDeduplicationStatus == TEvPQ::TEvWrite::EWriteExternalDeduplicationStatus::Unchecked) {
         YDB_LOG_DEBUG("Forwarding TPartition::TEvWrite to DeduplicationQueueActor",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         Forward(ev, DeduplicationQueueActor);
         return;
     }
@@ -828,7 +828,7 @@ void TPartition::HandleOnIdle(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TA
 
 void TPartition::HandleOnWrite(TEvPQ::TEvRegisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE("TPartition::HandleOnWrite TEvRegisterMessageGroup",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     const auto& body = ev->Get()->Body;
 
@@ -868,7 +868,7 @@ void TPartition::HandleOnIdle(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const 
 
 void TPartition::HandleOnWrite(TEvPQ::TEvDeregisterMessageGroup::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE("TPartition::HandleOnWrite TEvDeregisterMessageGroup",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     const auto& body = ev->Get()->Body;
 
@@ -889,7 +889,7 @@ void TPartition::HandleOnIdle(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActo
 
 void TPartition::HandleOnWrite(TEvPQ::TEvSplitMessageGroup::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_TRACE("TPartition::HandleOnWrite TEvSplitMessageGroup",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     if (ev->Get()->Deregistrations.size() > 1) {
         return ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
@@ -935,7 +935,7 @@ void TPartition::Handle(TEvPQ::TEvProcessChangeOwnerRequests::TPtr&, const TActo
 
 void TPartition::ProcessChangeOwnerRequests(const TActorContext& ctx) {
     YDB_LOG_TRACE("TPartition::ProcessChangeOwnerRequests",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     while (!WaitToChangeOwner.empty()) {
         auto &ev = WaitToChangeOwner.front();
@@ -1641,7 +1641,7 @@ std::pair<TKey, ui32> TPartition::GetNewFastWriteKey(bool headCleared)
 void TPartition::AddNewFastWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TEvRequest* request, const TActorContext& ctx)
 {
     YDB_LOG_TRACE("TPartition::AddNewFastWriteBlob",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     const auto& key = res.first;
 
@@ -1670,7 +1670,7 @@ void TPartition::AddNewFastWriteBlob(std::pair<TKey, ui32>& res, TEvKeyValue::TE
 
 void TPartition::SetDeadlinesForWrites(const TActorContext& ctx) {
     YDB_LOG_TRACE("TPartition::SetDeadlinesForWrites",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     auto quotaWaitDurationMs = TDuration::MilliSeconds(AppData(ctx)->PQConfig.GetQuotingConfig().GetQuotaWaitDurationMs());
     if (SubDomainOutOfSpace) {
         quotaWaitDurationMs = quotaWaitDurationMs ? std::min(quotaWaitDurationMs, SubDomainQuotaWaitDurationMs) : SubDomainQuotaWaitDurationMs;
@@ -1684,7 +1684,7 @@ void TPartition::SetDeadlinesForWrites(const TActorContext& ctx) {
 
 void TPartition::Handle(TEvPQ::TEvQuotaDeadlineCheck::TPtr&, const TActorContext& ctx) {
     YDB_LOG_TRACE("TPartition::Handle TEvQuotaDeadlineCheck",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     FilterDeadlinedWrites(ctx);
 }
@@ -1694,7 +1694,7 @@ void TPartition::FilterDeadlinedWrites(const TActorContext& ctx) {
         return;
     }
     YDB_LOG_TRACE("TPartition::FilterDeadlinedWrites",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     FilterDeadlinedWrites(ctx, PendingRequests);
 
@@ -1979,7 +1979,7 @@ bool TPartition::WaitingForSubDomainQuota(const ui64 withSize) const {
 void TPartition::RequestBlobQuota(size_t quotaSize, size_t messagesQuotaSize)
 {
     YDB_LOG_TRACE("TPartition::RequestBlobQuota",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     PQ_ENSURE(!WaitingForPreviousBlobQuota());
 

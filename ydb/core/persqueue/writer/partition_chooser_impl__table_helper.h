@@ -49,7 +49,8 @@ public:
 
         YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "TTableHelper",
             {"selectQuery", SelectQuery});
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, "TTableHelper " << "UpdateQuery: " << UpdateQuery);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "TTableHelper",
+            {"updateQuery", UpdateQuery});
         YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "TTableHelper",
             {"updateAccessTimeQuery", UpdateAccessTimeQuery});
 

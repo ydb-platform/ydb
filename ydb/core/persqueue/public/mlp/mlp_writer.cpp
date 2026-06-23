@@ -30,7 +30,7 @@ void TWriterActor::PassAway() {
 
 void TWriterActor::DoDescribe() {
     YDB_LOG_DEBUG("Start describe",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TWriterActor::DescribeState);
 
     NDescriber::TDescribeSettings settings = {
@@ -42,7 +42,7 @@ void TWriterActor::DoDescribe() {
 
 void TWriterActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     ChildActorId = {};
 
@@ -123,7 +123,7 @@ size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueueP
 
 void TWriterActor::DoWrite() {
     YDB_LOG_DEBUG("Start write",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TWriterActor::WriteState);
 
     struct TInfo {
@@ -183,7 +183,7 @@ void TWriterActor::DoWrite() {
 
 void TWriterActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPersQueue::TEvResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     bool alreadyReceived = false;
     auto& record = ev->Get()->Record;
@@ -217,7 +217,7 @@ void TWriterActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 
 void TWriterActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     const auto tabletId = ev->Get()->TabletId;
 

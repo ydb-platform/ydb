@@ -296,7 +296,7 @@ namespace NPQ {
         void Handle(TEvKeyValue::TEvRequest::TPtr& ev, const TActorContext& ctx)
         {
             YDB_LOG_DEBUG_COMP(Service, "CacheProxy. Passthrough write request to KV",
-                 {"logPrefix", NPQ_LOG_PREFIX});
+                {"logPrefix", NPQ_LOG_PREFIX});
 
             auto& srcRequest = ev->Get()->Record;
 

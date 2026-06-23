@@ -44,7 +44,7 @@ private:
 
     void DoDescribe() {
         YDB_LOG_DEBUG_COMP(Service, "Start describe",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         TBase::Become(&TThis::DescribeState);
 
         NDescriber::TDescribeSettings settings = {
@@ -56,7 +56,7 @@ private:
 
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
         YDB_LOG_DEBUG_COMP(Service, "Handle NDescriber::TEvDescribeTopicsResponse",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
 
         ChildActorId = {};
 
@@ -91,7 +91,7 @@ private:
 
     void DoChanges() {
         YDB_LOG_DEBUG_COMP(Service, "Start DoChanges",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         TBase::Become(&TThis::ChangesState);
 
         for (const TMessageId& messageId: Settings.Messages) {

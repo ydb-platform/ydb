@@ -127,7 +127,7 @@ void TMirrorer::StartInit(const TActorContext& ctx) {
 
 void TMirrorer::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
     YDB_LOG_NOTICE("Killed",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     if (ReadSession)
         ReadSession->Close(TDuration::Zero());
     ReadSession = nullptr;
@@ -318,7 +318,7 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
                 {"#_PartitionStream->GetPartitionSessionId", PartitionStream->GetPartitionSessionId()});
         } else {
             YDB_LOG_NOTICE("[STATE] hasn't partition stream",
-                 {"logPrefix", NPQ_LOG_PREFIX});
+                {"logPrefix", NPQ_LOG_PREFIX});
         }
         if (StreamStatus) {
             YDB_LOG_NOTICE("[STATE] last source partition",
@@ -393,7 +393,7 @@ void TMirrorer::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, co
     if (!equalConfigs) {
         Config = ev->Get()->Config.GetPartitionConfig().GetMirrorFrom();
         YDB_LOG_NOTICE("Changing config",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
 
         StartInit(ctx);
     }
@@ -445,18 +445,18 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
     }
     if (WriteRequestInFlight || !Queue.empty()) {
         YDB_LOG_DEBUG("Postpone split-merge event until all write operations completed",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         return;
     }
     const bool isSplit = EndPartitionSessionEvent->GetAdjacentPartitionIds().empty();
     if (!isSplit) {
         YDB_LOG_WARN("Topic merge not supported yet",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         return;
     }
     if (EndPartitionSessionEvent->GetChildPartitionIds().empty()) {
         YDB_LOG_WARN("Split-merge operation has no child partitions",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         return;
     }
     const ::NKikimrPQ::EScaleStatus value = isSplit ? NKikimrPQ::EScaleStatus::NEED_SPLIT : NKikimrPQ::EScaleStatus::NEED_MERGE;
@@ -477,7 +477,7 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
 void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
     if (CredentialsRequestInFlight) {
         YDB_LOG_WARN("Credentials request already inflight",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         return;
     }
     LastInitStageTimestamp = ctx.Now();
@@ -551,13 +551,13 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
         // защита от гонки между TEvInitCredentials, TEvCredentialsCreated и TEvCreateConsumer
         // когда придёт TEvCredentialsCreated актор ещё раз отправит себе TEvCreateConsumer
         YDB_LOG_WARN("Wait for credentials response",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         return;
     }
 
     LastInitStageTimestamp = ctx.Now();
     YDB_LOG_NOTICE("Creating new read session",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     if (!Queue.empty()) {
         OffsetToRead = Queue.front().GetOffset();
@@ -660,7 +660,7 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
     Become(&TThis::StateInitConsumer);
 
     YDB_LOG_NOTICE("Schedule consumer creation",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     ScheduleWithIncreasingTimeout<TEvPQ::TEvCreateConsumer>(SelfId(), ConsumerInitInterval, CONSUMER_INIT_INTERVAL_MAX, ctx);
 }
 
@@ -802,7 +802,7 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
             {"event", endPartitionSessionEvent->DebugString()});
         if (EndPartitionSessionEvent.has_value()) {
             YDB_LOG_WARN("Already has end partition session event",
-                 {"logPrefix", NPQ_LOG_PREFIX});
+                {"logPrefix", NPQ_LOG_PREFIX});
             EndPartitionSessionEvent.reset();
         }
         EndPartitionSessionEvent = *endPartitionSessionEvent;

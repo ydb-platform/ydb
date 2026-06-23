@@ -70,7 +70,7 @@ TString TDLQMoverActor::BuildLogPrefix() const  {
 
 void TDLQMoverActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     auto& topics = ev->Get()->Topics;
     if (topics.size() != 1) {
@@ -94,7 +94,7 @@ void TDLQMoverActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
 
 void TDLQMoverActor::Handle(NSQS::TSqsEvents::TEvConfiguration::TPtr& ev) {
     YDB_LOG_DEBUG("Handle NSQS::TSqsEvents::TEvConfiguration",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     const auto& result = *ev->Get();
     if (!result.UserExists || !result.QueueExists) {
         return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "SQS DLQ '" << Settings.DestinationTopic << "' queue does not exist");
@@ -116,7 +116,7 @@ void TDLQMoverActor::Handle(NSQS::TSqsEvents::TEvConfiguration::TPtr& ev) {
 
 void TDLQMoverActor::CreateWriter() {
     YDB_LOG_DEBUG("Writer creating",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TDLQMoverActor::StateInit);
 
     ProducerId = TStringBuilder() << "DLQMover/" << Settings.TabletId
@@ -142,7 +142,7 @@ void TDLQMoverActor::CreateWriter() {
 
 void TDLQMoverActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPartitionWriter::TEvInitResult",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     const auto* result = ev->Get();
     if (!result->IsSuccess()) {
@@ -168,7 +168,7 @@ void TDLQMoverActor::Handle(TEvPartitionWriter::TEvInitResult::TPtr& ev) {
 
 void TDLQMoverActor::Handle(TEvPartitionWriter::TEvDisconnected::TPtr&) {
     YDB_LOG_DEBUG("Handle TEvPartitionWriter::TEvDisconnected",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "The writer disconnected");
 }
 
@@ -186,7 +186,7 @@ void TDLQMoverActor::ProcessQueue() {
 
 void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPersQueue::TEvResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     if (!IsSucess(ev)) {
         return ReplyError(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Fetch message failed: " << ev->Get()->Record.DebugString());
@@ -228,18 +228,18 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 
 void TDLQMoverActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
     YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     ReplyError(Ydb::StatusIds::INTERNAL_ERROR, "Source topic unavailable");
 }
 
 void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteAccepted::TPtr&) {
     YDB_LOG_DEBUG("Handle TEvPartitionWriter::TEvWriteAccepted",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 }
 
 void TDLQMoverActor::Handle(TEvPartitionWriter::TEvWriteResponse::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPartitionWriter::TEvWriteResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     auto* result = ev->Get();
     if (!result->IsSuccess()) {

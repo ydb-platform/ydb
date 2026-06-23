@@ -227,7 +227,9 @@ private:
                 {"session", ev->Get()->ReadKey.SessionId});
             return;
         }
-        LOG_DEBUG_S(ctx, NKikimrServices::PQ_READ_PROXY, TStringBuilder() << "Direct read cache: " << "forget read: " << ev->Get()->ReadKey.ReadId << " for session " << key.SessionId);
+        YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: forget for session",
+            {"read", ev->Get()->ReadKey.ReadId},
+            {"#_key.SessionId", key.SessionId});
 
         const auto& generation = ev->Get()->TabletGeneration;
         if (iter->second.Generation != generation) { // Stale generation in event, ignore it

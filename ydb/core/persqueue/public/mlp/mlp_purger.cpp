@@ -17,7 +17,7 @@ void TPurgerActor::Bootstrap() {
 
 void TPurgerActor::DoDescribe() {
     YDB_LOG_DEBUG("Start describe",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TPurgerActor::DescribeState);
 
     NDescriber::TDescribeSettings settings = {
@@ -29,7 +29,7 @@ void TPurgerActor::DoDescribe() {
 
 void TPurgerActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     ChildActorId = {};
 
@@ -58,7 +58,7 @@ STFUNC(TPurgerActor::DescribeState) {
 
 void TPurgerActor::DoPurge() {
     YDB_LOG_DEBUG("Start purge",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TPurgerActor::PurgeState);
 
     for (auto& partition : TopicInfo.Info->Description.GetPartitions()) {
@@ -128,7 +128,7 @@ void TPurgerActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev)
 void TPurgerActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev)
 {
     YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     auto tabletId = ev->Get()->TabletId;
     ++TabletCookies[tabletId];
@@ -144,7 +144,7 @@ void TPurgerActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev)
 
 void TPurgerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvents::TEvWakeup",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     auto partitionId = ev->Get()->Tag;
     auto& partitionStatus = Partitions[partitionId];

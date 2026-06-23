@@ -81,7 +81,7 @@ private:
 
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
         YDB_LOG_DEBUG("Handle TEvTxUserProxy::TEvProposeTransactionStatus",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
 
         const auto status = ev->Get()->Status();
         const auto& record = ev->Get()->Record;
@@ -116,7 +116,7 @@ private:
 
     void HandleOnPropose(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         YDB_LOG_DEBUG("HandleOnPropose TEvPipeCache::TEvDeliveryProblem",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         if (TPipeCacheClient::OnUndelivered(ev)) {
             return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
                 TStringBuilder() << "SchemeShard " << ev->Get()->TabletId << " is unavailable");
@@ -147,13 +147,13 @@ private:
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&) {
         YDB_LOG_DEBUG("Handle TEvSchemeShard::TEvNotifyTxCompletionResult",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         ReplyOkAndDie();
     }
 
     void HandleOnWaitCompletion(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         OnUndelivered(ev);
         if (++WaitTxCompletionRetries > MaxWaitTxCompletionRetries) {
             return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
@@ -187,7 +187,7 @@ private:
 
     void ReplyOkAndDie() {
         YDB_LOG_DEBUG("ReplyOkAndDie",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         Send(ParentId, new TEvSchemaOperationResponse(), 0, Cookie);
         PassAway();
     }

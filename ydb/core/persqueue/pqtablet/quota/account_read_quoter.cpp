@@ -61,7 +61,7 @@ void TBasicAccountQuoter::InitCounters(const TActorContext& ctx) {
 
 void TBasicAccountQuoter::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
     YDB_LOG_INFO_COMP(Service, "Killed",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     for (const auto& event : Queue) {
         auto cookie = event.Request->Get()->Cookie;
         ReplyPersQueueError(

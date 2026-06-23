@@ -45,14 +45,14 @@ public:
 private:
     void DoGetClustersList() {
         YDB_LOG_DEBUG("DoGetClustersList",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         Become(&TCreateTopicOperationActor::GetClustersListState);
         Send(NPQ::NClusterTracker::MakeClusterTrackerID(), new NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersList());
     }
 
     void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse::TPtr& ev) {
         YDB_LOG_DEBUG("Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
 
         auto& response = *ev->Get();
         if (response.Success) {
@@ -124,7 +124,7 @@ private:
 
     void Handle(TEvSchemaOperationResponse::TPtr& ev) {
         YDB_LOG_DEBUG("Handle TEvSchemaOperationResponse",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         auto& response = *ev->Get();
         return ReplyAndDie(response.Status, std::move(response.ErrorMessage));
     }

@@ -24,7 +24,7 @@ void TReaderActor::Bootstrap() {
 
 void TReaderActor::DoDescribe() {
     YDB_LOG_DEBUG("Start describe",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TReaderActor::DescribeState);
 
     NDescriber::TDescribeSettings settings = {
@@ -36,7 +36,7 @@ void TReaderActor::DoDescribe() {
 
 void TReaderActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
     YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     ChildActorId = {};
 
@@ -70,7 +70,7 @@ STFUNC(TReaderActor::DescribeState) {
 
 void TReaderActor::DoSelectPartition() {
     YDB_LOG_DEBUG("Start select partition",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TReaderActor::SelectPartitionState);
     SendToTablet(Info->Description.GetBalancerTabletID(), new TEvPQ::TEvMLPGetPartitionRequest(Settings.TopicName, Settings.Consumer));
 }
@@ -96,7 +96,7 @@ void TReaderActor::HandleOnSelectPartition(TEvPipeCache::TEvDeliveryProblem::TPt
         return;
     }
     YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     if (Backoff.HasMore()) {
         Backoff.Next();
         return DoSelectPartition();
@@ -115,7 +115,7 @@ STFUNC(TReaderActor::SelectPartitionState) {
 
 void TReaderActor::DoRead() {
     YDB_LOG_DEBUG("Start read",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TReaderActor::ReadState);
 
     auto* request = new TEvPQ::TEvMLPReadRequest(
@@ -132,7 +132,7 @@ void TReaderActor::DoRead() {
 
 void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPReadResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     auto response = std::make_unique<TEvReadResponse>();
     for (auto& message : *ev->Get()->Record.MutableMessage()) {
@@ -194,7 +194,7 @@ void TReaderActor::HandleOnRead(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         return;
     }
     YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     if (Backoff.HasMore()) {
         Backoff.Next();
         return DoRead();

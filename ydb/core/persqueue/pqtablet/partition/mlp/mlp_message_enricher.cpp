@@ -23,7 +23,7 @@ void TMessageEnricherActor::Bootstrap() {
 
 void TMessageEnricherActor::PassAway() {
     YDB_LOG_DEBUG("PassAway",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     for (auto& reply : Queue) {
         Send(reply.Sender, new TEvPQ::TEvMLPErrorResponse(PartitionId, Ydb::StatusIds::SCHEME_ERROR, "Shutdown"), 0, reply.Cookie);
     }
@@ -35,7 +35,7 @@ void TMessageEnricherActor::PassAway() {
 
 void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPersQueue::TEvResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     if (!IsSucess(ev)) {
         YDB_LOG_WARN("Fetch messages",
@@ -93,7 +93,7 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 
 void TMessageEnricherActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
     YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     PassAway();
 }
 

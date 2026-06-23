@@ -40,7 +40,7 @@ public:
 private:
     void DoDescribe() {
         YDB_LOG_DEBUG("DoDescribe",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         Become(&TAlterTopicOperationActor::DescribeState);
 
         RegisterWithSameMailbox(NDescriber::CreateDescriberActor(
@@ -56,7 +56,7 @@ private:
 
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
         YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
 
         auto& topics = ev->Get()->Topics;
         AFL_ENSURE(topics.size() == 1)("s", topics.size());
@@ -95,7 +95,7 @@ private:
 private:
     void DoGetClustersList() {
         YDB_LOG_DEBUG("DoGetClustersList",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         Become(&TAlterTopicOperationActor::GetClustersListState);
         Send(NPQ::NClusterTracker::MakeClusterTrackerID(), new NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersList());
     }
@@ -123,7 +123,7 @@ private:
 private:
     void DoAlter() {
         YDB_LOG_DEBUG("DoAlter",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
 
         Become(&TAlterTopicOperationActor::AlterState);
 
@@ -186,7 +186,7 @@ private:
 
     void Handle(TEvSchemaOperationResponse::TPtr& ev) {
         YDB_LOG_DEBUG("Handle TEvSchemaOperationResponse",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         auto& response = *ev->Get();
         return ReplyAndDie(response.Status, std::move(response.ErrorMessage));
     }

@@ -175,7 +175,7 @@ ui64 TPartition::GetCompactedBlobSizeLowerBound() const
 void TPartition::DumpKeysForBlobsCompaction() const
 {
     YDB_LOG_DEBUG_COMP(Service, "==== keys for blobs compaction ====",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     for (size_t i = 0; i < BlobEncoder.DataKeysBody.size(); ++i) {
         const auto& k = BlobEncoder.DataKeysBody[i];
         YDB_LOG_DEBUG_COMP(Service, "Dump NPQLOGPREFIX, #_((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' '*'), #_k.Key, #_k.Size",
@@ -185,26 +185,26 @@ void TPartition::DumpKeysForBlobsCompaction() const
             {"#_k.Size", k.Size});
     }
     YDB_LOG_DEBUG_COMP(Service, "===================================",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 }
 
 void TPartition::TryRunCompaction(bool force)
 {
     if (StopCompaction) {
         YDB_LOG_DEBUG_COMP(Service, "Blobs compaction is stopped",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         return;
     }
 
     if (CompactionInProgress) {
         YDB_LOG_DEBUG_COMP(Service, "Blobs compaction in progress",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         return;
     }
 
     if (BlobEncoder.DataKeysBody.empty()) {
         YDB_LOG_DEBUG_COMP(Service, "No data for blobs compaction",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         return;
     }
 
@@ -215,7 +215,7 @@ void TPartition::TryRunCompaction(bool force)
 
     if ((BlobEncoder.DataKeysBody.size() < blobsKeyCountLimit) && (BlobEncoder.GetSize() < GetCumulativeSizeLimit()) && !force) {
         YDB_LOG_DEBUG_COMP(Service, "No data for blobs compaction",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         return;
     }
 
@@ -500,7 +500,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
     const auto& ctx = ActorContext();
 
     YDB_LOG_DEBUG_COMP(Service, "Continue blobs compaction",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     YDB_LOG_INFO_COMP(NKikimrServices::PQ_KV_OPS, "Begin blobs compaction",
         {"LOGPREFIXINT", LOG_PREFIX_INT});
 

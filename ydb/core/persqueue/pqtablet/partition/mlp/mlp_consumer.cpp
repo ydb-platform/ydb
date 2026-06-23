@@ -177,7 +177,7 @@ void TConsumerActor::Bootstrap() {
 
 void TConsumerActor::PassAway() {
     YDB_LOG_DEBUG("PassAway",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     RollbackAll(SelfId(), PartitionId,PendingReadQueue);
     RollbackAll(SelfId(), PartitionId, PendingCommitQueue);
@@ -278,7 +278,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TP
 
 void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
     YDB_LOG_DEBUG("HandleOnInit TEvKeyValue::TEvResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     auto& record = ev->Get()->Record;
 
     if (record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
@@ -308,7 +308,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
 
                     if (Config.GetGeneration() == snapshot.GetConfiguration().GetGeneration()) {
                         YDB_LOG_DEBUG("Read snapshot",
-                             {"logPrefix", NPQ_LOG_PREFIX});
+                            {"logPrefix", NPQ_LOG_PREFIX});
                         HasSnapshot = true;
                         LastWALIndex = snapshot.GetWALIndex();
                         Storage->Initialize(snapshot);
@@ -323,7 +323,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
                 }
                 case NKikimrProto::NODATA: {
                     YDB_LOG_DEBUG("Initializing new consumer",
-                         {"logPrefix", NPQ_LOG_PREFIX});
+                        {"logPrefix", NPQ_LOG_PREFIX});
                     break;
                 }
                 default:
@@ -365,7 +365,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
 
                     if (walResult.GetStatus() == NKikimrProto::OVERRUN) {
                         YDB_LOG_DEBUG("WAL overrun",
-                             {"logPrefix", NPQ_LOG_PREFIX});
+                            {"logPrefix", NPQ_LOG_PREFIX});
                         auto request = std::make_unique<TEvKeyValue::TEvRequest>();
                         request->Record.SetCookie(static_cast<ui64>(EKvCookie::WALRead));
 
@@ -384,7 +384,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
                 }
                 case NKikimrProto::NODATA: {
                     YDB_LOG_DEBUG("Initializing new consumer",
-                         {"logPrefix", NPQ_LOG_PREFIX});
+                        {"logPrefix", NPQ_LOG_PREFIX});
                     break;
                 }
                 default:
@@ -403,7 +403,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
 
     if (!FetchMessagesIfNeeded()) {
         YDB_LOG_DEBUG("Initialized",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         NotifyPQRB(true);
         Become(&TConsumerActor::StateWork);
         ProcessEventQueue();
@@ -433,14 +433,14 @@ void TConsumerActor::Handle(TEvKeyValue::TEvResponse::TPtr& ev) {
 
     if (record.GetCookie() == static_cast<ui64>(EKvCookie::BackgroundWrite)) {
         YDB_LOG_DEBUG("Background write finished",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         return;
     }
 
     AFL_ENSURE(CurrentStateFunc() == &TConsumerActor::StateWrite)("c", record.GetCookie());
 
     YDB_LOG_DEBUG("TX write finished",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TConsumerActor::StateWork);
 
     CommitIfNeeded();
@@ -700,7 +700,7 @@ void TConsumerActor::ScheduleProcessing() {
 
 void TConsumerActor::ProcessEventQueue() {
     YDB_LOG_DEBUG("ProcessEventQueue",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     NextProcessingTime = TInstant::Now() + TDuration::MilliSeconds(AppData()->PQConfig.GetMLPBatchWindowMilliSeconds());
 
@@ -818,14 +818,14 @@ void TConsumerActor::ProcessEventQueue() {
 
 void TConsumerActor::Persist() {
     YDB_LOG_DEBUG("Persist",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     Storage->Compact();
 
     auto batch = Storage->ExtractBatch();
     if (batch.Empty()) {
         YDB_LOG_DEBUG("Batch is empty",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         MoveToDLQIfPossible();
         return;
     }
@@ -950,7 +950,7 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
     auto& metrics = Storage->GetMetrics();
     if (metrics.InflightMessageCount >= Storage->MaxMessages) {
         YDB_LOG_DEBUG("Skip fetch: infly limit exceeded",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         return false;
     }
     if (!Config.GetKeepMessageOrder()
@@ -981,21 +981,21 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
 
 void TConsumerActor::Handle(TEvPQ::TEvProxyResponse::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPQ::TEvProxyResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     AFL_ENSURE(IsSucess(ev))("e", ev->Get()->Response->DebugString());
 }
 
 void TConsumerActor::HandleOnInit(TEvPersQueue::TEvResponse::TPtr& ev) {
     YDB_LOG_DEBUG("Initialized",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TConsumerActor::StateWork);
     Handle(ev);
 }
 
 void TConsumerActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPersQueue::TEvResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     FetchInProgress = false;
 
@@ -1128,7 +1128,7 @@ void TConsumerActor::MoveToDLQIfPossible() {
 
 void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPDLQMoverResponse",
-         {"logPrefix", NPQ_LOG_PREFIX});
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
         YDB_LOG_WARN("Error moving messages to the",
@@ -1244,7 +1244,7 @@ void TConsumerActor::UpdateLockedGroupsIdInChildPartitions(bool force) {
     const bool shouldSend = force || AnyOf(IterateValues(ChildPartitionsOrderManager.ChildrenPartitionWithKeepOrder), &TChildPartitionsOrderManager::TChildrenPartitionWithKeepOrder::NeedSendFullState);
     if (!shouldSend) {
         YDB_LOG_DEBUG("UpdateLockedGroupsIdInChildPartitions no send diff",
-             {"logPrefix", NPQ_LOG_PREFIX});
+            {"logPrefix", NPQ_LOG_PREFIX});
         return;
     }
     ++ChildPartitionsOrderManager.ConsumerStep;

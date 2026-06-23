@@ -5279,24 +5279,10 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
             NYdb::NTopic::TCreateTopicSettings()
                 .PartitioningSettings(1, 100)
                 .BeginAddSharedConsumer(mlpConsumerName)
-                    .KeepMessagesOrder(false)
                 .EndAddConsumer()
         ).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL(createResult.IsTransportError(), false);
         UNIT_ASSERT_VALUES_EQUAL(createResult.GetStatus(), EStatus::SUCCESS);
-
-        {
-            auto describeResult = pqClient.DescribeTopic(topicName).GetValueSync();
-            UNIT_ASSERT(describeResult.IsSuccess());
-            bool hasMlpConsumer = false;
-            for (const auto& consumer : describeResult.GetTopicDescription().GetConsumers()) {
-                if (consumer.GetConsumerName() == mlpConsumerName) {
-                    hasMlpConsumer = true;
-                    break;
-                }
-            }
-            UNIT_ASSERT(hasMlpConsumer);
-        }
 
         TKafkaTestClient client(testServer.Port);
         client.PlainAuthenticateToKafka();

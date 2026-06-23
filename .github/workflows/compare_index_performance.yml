@@ -70,7 +70,7 @@ on:
 jobs:
   compare:
     name: Compare performance (${{ inputs.ref || 'main' }} vs current)
-    runs-on: [ self-hosted, auto-provisioned, "build-preset-relwithdebinfo" ]
+    runs-on: [ self-hosted, auto-provisioned, "build-preset-${{ inputs.build_preset || 'relwithdebinfo' }}" ]
     timeout-minutes: 1200
     steps:
       - name: Checkout

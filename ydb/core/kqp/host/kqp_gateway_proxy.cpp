@@ -1067,7 +1067,42 @@ public:
                                         }
                                     }
                                 }
-                                bloomPrefixes[prefix] = fpp;
+
+                                if (AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
+                                    // The named scheme object stores the index columns explicitly, so they
+                                    // must be a genuine leading prefix of the primary key (the engine prefix
+                                    // is length-only and always covers the first N PK columns).
+                                    const auto& pk = metadata->KeyColumnNames;
+                                    bool validPrefix = index.KeyColumns.size() <= pk.size();
+                                    for (size_t i = 0; validPrefix && i < index.KeyColumns.size(); ++i) {
+                                        validPrefix = (index.KeyColumns[i] == pk[i]);
+                                    }
+                                    if (!validPrefix) {
+                                        tablePromise.SetValue(ResultFromError<TGenericResult>(
+                                            "Bloom filter index columns must be a prefix of the primary key"));
+                                        return;
+                                    }
+
+                                    // Mirror the prefix bloom filter as a named TTableIndex scheme object,
+                                    // in addition to the engine-facing ByKeyFilterPrefixes. Two indexes over
+                                    // the same PK prefix would collapse to a single engine prefix, so reject
+                                    // the duplicate column set.
+                                    if (!bloomPrefixes.emplace(prefix, fpp).second) {
+                                        tablePromise.SetValue(ResultFromError<TGenericResult>(
+                                            "Multiple LocalBloomFilter indexes over the same primary-key prefix are not allowed"));
+                                        return;
+                                    }
+                                    auto* indexDesc = schemeTx.MutableCreateIndexedTable()->AddIndexDescription();
+                                    indexDesc->SetName(index.Name);
+                                    indexDesc->SetType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+                                    indexDesc->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+                                    for (const auto& col : index.KeyColumns) {
+                                        indexDesc->AddKeyColumnNames(col);
+                                    }
+                                    indexDesc->MutableBloomFilterDescription()->SetFalsePositiveProbability(fpp);
+                                } else {
+                                    bloomPrefixes[prefix] = fpp;
+                                }
                             }
                             continue;
                         }
@@ -1095,6 +1130,7 @@ public:
                             case TIndexDescription::EType::GlobalAsync:
                             case TIndexDescription::EType::GlobalSyncUnique:
                             case TIndexDescription::EType::GlobalJson:
+                            case TIndexDescription::EType::GlobalJsonCompact:
                                 // no specialized index description
                                 Y_ASSERT(std::holds_alternative<std::monostate>(index.SpecializedIndexDescription));
                                 break;
@@ -1103,6 +1139,8 @@ public:
                                 break;
                             case TIndexDescription::EType::GlobalFulltextPlain:
                             case TIndexDescription::EType::GlobalFulltextRelevance:
+                            case TIndexDescription::EType::GlobalFulltextCompact:
+                            case TIndexDescription::EType::GlobalFulltextCompactRelevance:
                                 *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(index.SpecializedIndexDescription).GetSettings();
                                 break;
                             default:
@@ -2695,7 +2733,7 @@ public:
 
             if (!settings.ColumnFamilies.empty()) {
                 IKqpGateway::TGenericResult errResult;
-                errResult.AddIssue(NYql::TIssue("TableStore does not support column families"));
+                errResult.AddIssue(NYql::TIssue("Column FAMILY is not supported for column tables"));
                 errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
                 return MakeFuture(std::move(errResult));
             }

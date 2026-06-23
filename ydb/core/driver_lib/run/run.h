@@ -127,6 +127,8 @@ protected:
         TIntrusivePtr<TServiceInitializersList> serviceInitializers,
         const TBasicKikimrServicesMask& serviceMask = {});
 
+    void RecordEmptyDomainSensor();
+
     TIntrusivePtr<TServiceInitializersList> CreateServiceInitializersList(
         const TKikimrRunConfig& runConfig,
         const TBasicKikimrServicesMask& serviceMask = {});

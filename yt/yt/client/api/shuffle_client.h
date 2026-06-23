@@ -4,6 +4,8 @@
 
 #include <yt/yt/client/table_client/schema.h>
 
+#include <yt/yt/core/yson/string.h>
+
 namespace NYT::NApi {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -23,6 +25,9 @@ struct TShuffleHandle
     //! pull-based it may be null (schemaless) for backward compatibility, but a
     //! schema will eventually be required there too.
     NTableClient::TTableSchemaPtr Schema;
+
+    //! YSON-serialized TPushShuffleConfig; push-based only.
+    std::optional<NYson::TYsonString> PushConfig;
 
     REGISTER_YSON_STRUCT(TShuffleHandle);
 
@@ -45,6 +50,8 @@ struct TStartShuffleOptions
     bool UsePushBasedShuffle = false;
     //! Required when UsePushBasedShuffle is set.
     NTableClient::TTableSchemaPtr Schema;
+    //! YSON-serialized TPushShuffleConfig; push-based only.
+    std::optional<NYson::TYsonString> PushConfig;
 };
 
 struct TShuffleReaderOptions

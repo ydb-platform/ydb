@@ -35,6 +35,28 @@ table_service_config:
 
 [Спиллинг](../../concepts/query_execution/spilling.md) — это механизм управления памятью в {{ ydb-short-name }}, который временно сохраняет данные на диск при нехватке оперативной памяти.
 
+### Включение {#enable}
+
+Спиллинг включён по умолчанию. Следующий параметр управляет включением и отключением сервиса спиллинга.
+
+#### local_file_config.enable {#local-file-config-enable}
+
+**Расположение:** `table_service_config.spilling_service_config.local_file_config.enable`  
+**Тип:** `boolean`  
+**По умолчанию:** `true`  
+**Описание:** Включает или отключает сервис спиллинга. При отключении (`false`) [спиллинг](../../concepts/query_execution/spilling.md) не функционирует, что может привести к ошибкам при обработке больших объёмов данных.
+
+##### Возможные ошибки
+
+- `Spilling Service not started` / `Service not started` — попытка использования спиллинга при выключенном Spilling Service. См. [{#T}](../../troubleshooting/spilling/service-not-started.md)
+
+```yaml
+table_service_config:
+  spilling_service_config:
+    local_file_config:
+      enable: true
+```
+
 ### Основные параметры конфигурации
 
 ```yaml
@@ -43,9 +65,6 @@ table_service_config:
     local_file_config:
       root: ""
       max_total_size: 21474836480
-      io_thread_pool:
-        workers_count: 2
-        queue_size: 1000
 ```
 
 ### Конфигурация директории
@@ -107,42 +126,6 @@ table_service_config:
 
 - `Total size limit exceeded: X/YMb` — превышен максимальный суммарный размер файлов спиллинга. См. [{#T}](../../troubleshooting/spilling/total-size-limit-exceeded.md)
 
-### Конфигурация пула потоков
-
-{% note info %}
-
-Потоки пула I/O для спиллинга создаются дополнительно к потокам, выделяемым для [акторной системы](../../concepts/glossary.md#actor-system). При планировании количества потоков учитывайте общую нагрузку на систему.
-
-**Важно:** Пул потоков спиллинга отделен от пулов потоков акторной системы.
-
-Для получения информации о настройке пулов потоков акторной системы и их влиянии на производительность системы см. [Конфигурация акторной системы](index.md#actor-system) и [Изменение конфигурации акторной системы](../../devops/configuration-management/configuration-v1/change_actorsystem_configs.md). Для Configuration V2 настройки акторной системы описаны в [настройках Configuration V2](../../devops/configuration-management/configuration-v2/config-settings.md).
-
-{% endnote %}
-
-#### local_file_config.io_thread_pool.workers_count
-
-**Тип:** `uint32`  
-**По умолчанию:** `2`  
-**Описание:** Количество рабочих потоков для обработки операций ввода-вывода спиллинга.
-
-##### Рекомендации
-
-- Увеличивайте для высоконагруженных систем
-
-##### Возможные ошибки
-
-- `Can not run operation` — переполнение очереди операций в пуле потоков I/O. См. [{#T}](../../troubleshooting/spilling/can-not-run-operation.md)
-
-#### local_file_config.io_thread_pool.queue_size
-
-**Тип:** `uint32`  
-**По умолчанию:** `1000`  
-**Описание:** Размер очереди операций спиллинга. Каждая задача отправляет только один блок данных на спиллинг одновременно, поэтому большие значения обычно не требуются.
-
-##### Возможные ошибки
-
-- `Can not run operation` — переполнение очереди операций в пуле потоков I/O. См. [{#T}](../../troubleshooting/spilling/can-not-run-operation.md)
-
 ### Управление памятью {#memory-management}
 
 #### Связь с memory_controller_config
@@ -168,7 +151,7 @@ table_service_config:
 
 {% note info %}
 
-Для получения информации о настройке лимитов файловых дескрипторов при первоначальном развертывании см. раздел [Лимиты файловых дескрипторов](../../../devops/deployment-options/manual/initial-deployment.html#file-descriptors).
+Для получения информации о настройке лимитов файловых дескрипторов при первоначальном развертывании см. раздел [Лимиты файловых дескрипторов](../../devops/deployment-options/manual/initial-deployment/deployment-preparation.md#file-descriptors).
 
 {% endnote %}
 
@@ -176,7 +159,7 @@ table_service_config:
 
 #### Высоконагруженная система
 
-Для максимальной производительности в высоконагруженных системах рекомендуется увеличить размер спиллинга и количество рабочих потоков:
+Для максимальной производительности в высоконагруженных системах рекомендуется увеличить размер спиллинга:
 
 ```yaml
 table_service_config:
@@ -184,9 +167,6 @@ table_service_config:
     local_file_config:
       root: ""
       max_total_size: 107374182400   # 100 GiB
-      io_thread_pool:
-        workers_count: 8
-        queue_size: 2000
 ```
 
 #### Ограниченные ресурсы
@@ -199,79 +179,17 @@ table_service_config:
     local_file_config:
       root: ""
       max_total_size: 5368709120     # 5 GiB
-      io_thread_pool:
-        workers_count: 1
-        queue_size: 500
 ```
-
-### Расширенная конфигурация
-
-#### Включение и отключение спиллинга
-
-Следующие параметры управляют включением и отключением различных типов спиллинга. Их следует изменять только при наличии специфических требований системы.
-
-##### local_file_config.enable
-
-**Расположение:** `table_service_config.spilling_service_config.local_file_config.enable`
-**Тип:** `boolean`  
-**По умолчанию:** `true`  
-**Описание:** Включает или отключает сервис спиллинга. При отключении (`false`) [спиллинг](../../concepts/query_execution/spilling.md) не функционирует, что может привести к ошибкам при обработке больших объемов данных.
-
-##### Возможные ошибки
-
-- `Spilling Service not started` / `Service not started` — попытка использования спиллинга при выключенном Spilling Service. См. [{#T}](../../troubleshooting/spilling/service-not-started.md)
-
-```yaml
-table_service_config:
-  spilling_service_config:
-    local_file_config:
-      enable: true
-```
-
-##### enable_spilling_nodes
-
-**Расположение:** `table_service_config.enable_spilling_nodes`  
-**Тип:** `bool`  
-**По умолчанию:** `true`  
-**Описание:** Включает спиллинг на узлах базы данных. При отключении (`false`) спиллинг не функционирует на узлах базы данных.
-
-```yaml
-table_service_config:
-  enable_spilling_nodes: true
-```
-
-##### enable_query_service_spilling
-
-**Расположение:** `table_service_config.enable_query_service_spilling`  
-**Тип:** `boolean`  
-**По умолчанию:** `true`  
-**Описание:** Глобальная опция, которая включает транспортный спиллинг при передаче данных между задачами.
-
-```yaml
-table_service_config:
-  enable_query_service_spilling: true
-```
-
-{% note info %}
-
-Эта настройка работает совместно с локальной конфигурацией сервиса спиллинга. При отключении (`false`) транспортный спиллинг не функционирует даже при включенном `spilling_service_config`.
-
-{% endnote %}
 
 ### Полный пример
 
 ```yaml
 table_service_config:
-  enable_spilling_nodes: true
-  enable_query_service_spilling: true
   spilling_service_config:
     local_file_config:
       enable: true
       root: "/var/spilling"
       max_total_size: 53687091200    # 50 GiB
-      io_thread_pool:
-        workers_count: 4
-        queue_size: 1500
 ```
 
 ## См. также

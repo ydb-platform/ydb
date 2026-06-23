@@ -1,8 +1,5 @@
 #include "write_request_test_fixture.h"
 
-#include "write_with_direct_replication_request.h"
-#include "write_with_pb_replication_request.h"
-
 using namespace NThreading;
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -180,9 +177,9 @@ TWriteRequestTestFixture::GetManyPBuffersHandlerWithImmediateOkResponse()
     return result;
 }
 
-std::shared_ptr<TBaseWriteRequestExecutor>
-TWriteRequestTestFixture::CreatePBufferReplicationExecutor(
-    TRequestHeaders headers)
+TWriteRequestExecutorPtr TWriteRequestTestFixture::CreateRequestExecutor(
+    TRequestHeaders headers,
+    EWriteMode writeMode)
 {
     auto originalRequest =
         std::make_shared<TWriteBlocksLocalRequest>(std::move(headers));
@@ -194,43 +191,15 @@ TWriteRequestTestFixture::CreatePBufferReplicationExecutor(
         std::move(originalRequest),
         NWilson::TTraceId(),
         MakeIntrusive<TCallContext>(),
-        Range,
-        UserLsn);
+        Range);
+    bundle->SetLsn(UserLsn);
 
     WriteClient->Response.reset();
+    DirectBlockGroup->Oracle.WriteMode = writeMode;
 
-    auto request = std::make_shared<TWriteWithPbReplicationRequestExecutor>(
+    auto request = CreateWriteRequestExecutor(
         Runtime->GetActorSystem(0),
-        LogTitle.GetChild(GetCycleCount()),
-        VChunkConfig,
-        DirectBlockGroup,
-        std::move(bundle));
-
-    return request;
-}
-
-std::shared_ptr<TBaseWriteRequestExecutor>
-TWriteRequestTestFixture::CreateDirectReplicationExecutor(
-    TRequestHeaders headers)
-{
-    auto originalRequest =
-        std::make_shared<TWriteBlocksLocalRequest>(std::move(headers));
-    originalRequest->Sglist = MakeSgList();
-
-    auto bundle = std::make_shared<TWriteRequestBundle>(
-        Runtime->GetActorSystem(0),
-        WriteClient,
-        std::move(originalRequest),
-        NWilson::TTraceId(),
-        MakeIntrusive<TCallContext>(),
-        Range,
-        UserLsn);
-
-    WriteClient->Response.reset();
-
-    auto request = std::make_shared<TWriteWithDirectReplicationRequestExecutor>(
-        Runtime->GetActorSystem(0),
-        LogTitle.GetChild(GetCycleCount()),
+        LogTitle,
         VChunkConfig,
         DirectBlockGroup,
         std::move(bundle));

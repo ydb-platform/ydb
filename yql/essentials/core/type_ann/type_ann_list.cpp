@@ -5703,7 +5703,7 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!ctx.Types.OrderedColumns) {
+        if (!ctx.Types.DeriveColumnOrder) {
             output = input->HeadPtr();
             return IGraphTransformer::TStatus::Repeat;
         }
@@ -5824,7 +5824,8 @@ namespace {
             }
 
             auto savedType = lambdaSave->GetTypeAnn();
-            if (!noSaveLoad && !EnsurePersistableType(lambdaSave->Pos(), *savedType, ctx.Expr)) {
+            // we will check for persistable later
+            if (!noSaveLoad && !EnsureComputableType(lambdaSave->Pos(), *savedType, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
 
@@ -9648,7 +9649,9 @@ namespace {
         auto& keyExtractLambda = input->ChildRef(3U);
         auto& argMapLambda = input->ChildRef(4U);
 
-        bool isPresortUniversal;
+        // XXX: Explicitly initialize, since sort traits validation is omitted
+        // when both components are Void callable (see more info below).
+        bool isPresortUniversal = false;
         bool isKeyUniversal;
         bool isArgMapUniversal;
 

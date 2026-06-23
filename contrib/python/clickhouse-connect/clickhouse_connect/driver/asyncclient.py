@@ -45,7 +45,14 @@ from clickhouse_connect.driver.external import ExternalData
 from clickhouse_connect.driver.insert import InsertContext
 from clickhouse_connect.driver.models import ColumnDef, SettingDef
 from clickhouse_connect.driver.options import check_arrow, check_numpy, check_pandas, check_polars
-from clickhouse_connect.driver.query import QueryContext, QueryResult, TzMode, TzSource, arrow_buffer
+from clickhouse_connect.driver.query import (
+    QueryContext,
+    QueryResult,
+    TzMode,
+    TzSource,
+    arrow_buffer,
+    returns_empty_string_on_empty_body,
+)
 from clickhouse_connect.driver.streaming import StreamingFileAdapter, StreamingInsertSource, StreamingResponseSource
 from clickhouse_connect.driver.summary import QuerySummary
 from clickhouse_connect.driver.transform import NativeTransform
@@ -143,6 +150,21 @@ def _release_lease(response: aiohttp.ClientResponse | None) -> None:
     release = getattr(response, "_lease_release", None)
     if release is not None:
         release()
+
+
+_REMOTE_CLOSE_ERRORS = (ConnectionResetError, BrokenPipeError)
+
+
+def _is_retryable_async_connection_error(error: aiohttp.ClientConnectionError) -> bool:
+    if isinstance(error, (aiohttp.ServerTimeoutError, aiohttp.ClientConnectorError, aiohttp.ServerFingerprintMismatch)):
+        return False
+    if isinstance(error, aiohttp.ServerDisconnectedError):
+        return True
+    if isinstance(error, _REMOTE_CLOSE_ERRORS):
+        return True
+    if isinstance(error.__cause__, _REMOTE_CLOSE_ERRORS):
+        return True
+    return isinstance(error.__context__, _REMOTE_CLOSE_ERRORS)
 
 
 class AsyncClient(Client):
@@ -951,6 +973,8 @@ class AsyncClient(Client):
             _release_lease(response)
 
         if not body:
+            if returns_empty_string_on_empty_body(cmd):
+                return ""
             return QuerySummary(summary)
 
         loop = asyncio.get_running_loop()
@@ -983,7 +1007,15 @@ class AsyncClient(Client):
         try:
             url = f"{self.url}/ping"
             timeout = aiohttp.ClientTimeout(total=3.0)
-            async with session.get(url, timeout=timeout) as response:
+            get_kwargs: dict[str, Any] = {"timeout": timeout}
+            if self._proxy_url:
+                get_kwargs["proxy"] = self._proxy_url
+            if self.server_host_name:
+                get_kwargs["headers"] = {"Host": self.server_host_name}
+                if self._ssl_context is not None:
+                    get_kwargs["ssl"] = self._ssl_context
+                    get_kwargs["server_hostname"] = self.server_host_name
+            async with session.get(url, **get_kwargs) as response:
                 return 200 <= response.status < 300
         except (aiohttp.ClientError, asyncio.TimeoutError):
             logger.debug("ping failed", exc_info=True)
@@ -1945,6 +1977,9 @@ class AsyncClient(Client):
                 # Construct full URL (aiohttp doesn't have base_url)
                 url = f"{self.url}/"
                 request_kwargs = {"method": method, "url": url, "params": final_params, "headers": req_headers}
+                if self.server_host_name and self._ssl_context is not None:
+                    request_kwargs["ssl"] = self._ssl_context
+                    request_kwargs["server_hostname"] = self.server_host_name
                 if hasattr(self, "_proxy_url") and self._proxy_url:
                     request_kwargs["proxy"] = self._proxy_url
                 if files:
@@ -1985,17 +2020,25 @@ class AsyncClient(Client):
                         continue
                 await self._error_handler(response)
 
-            except aiohttp.ServerConnectionError as e:
+            except aiohttp.ClientConnectionError as e:
                 msg = str(e)
-                if "Connection reset" in msg or "Remote end closed" in msg or "Cannot connect" in msg or "Server disconnected" in msg:
-                    if attempts == 1:
+                if _is_retryable_async_connection_error(e):
+                    # Always allow at least one retry on a clean connection error so a single stale
+                    # keep-alive socket doesn't surface to the caller, and additionally honor the
+                    # retries budget when it is larger (e.g. query_retries for reads), so that
+                    # bursts of stale pooled connections can be drained before giving up.
+                    max_attempts = max(2, retries + 1)
+                    if attempts < max_attempts:
                         if retry_body is not None:
                             data = await retry_body()
-                            logger.debug("Retrying after connection error with rebuilt body")
+                            logger.debug("Retrying after connection error with rebuilt body (attempt %s/%s)", attempts, max_attempts)
+                            await asyncio.sleep(0.1 * attempts)
                             continue
                         if data is None or isinstance(data, (bytes, bytearray, str, dict)):
-                            logger.debug("Retrying after connection error from remote host")
+                            logger.debug("Retrying after connection error from remote host (attempt %s/%s)", attempts, max_attempts)
+                            await asyncio.sleep(0.1 * attempts)
                             continue
+                logger.debug("Non-retryable aiohttp connection error type=%s", type(e).__name__)
                 raise OperationalError(f"Network Error: {msg}") from e
 
             except (aiohttp.ClientError, asyncio.TimeoutError) as e:

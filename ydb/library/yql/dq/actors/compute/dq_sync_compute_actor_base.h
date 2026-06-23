@@ -182,7 +182,8 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
                 continue;
             }
 
-            if (!channelInfo.IsPaused()) {
+            // A finished channel may no longer become paused, but its buffer still needs to be drained.
+            if (!channelInfo.IsPaused() && !channelInfo.Channel->IsFinished()) {
                 return false;
             }
 

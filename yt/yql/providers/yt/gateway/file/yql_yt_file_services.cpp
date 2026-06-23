@@ -25,14 +25,14 @@ TYtFileServices::TYtFileServices(
     const TString& tmpDir,
     bool keepTempTables,
     const THashMap<TString, TString>& dirMapping,
-    const THashMap<TString, TString>& secureParams
+    bool writeOutputRowCount
 )
     : FunctionRegistry_(registry)
     , TablesMapping_(mapping)
     , TablesDirMapping_(dirMapping)
-    , SecureParams_(secureParams)
     , TmpDir_(tmpDir)
     , KeepTempTables_(keepTempTables)
+    , WriteOutputRowCount_(writeOutputRowCount)
 {
     FileStorage_ = fileStorage;
     if (!FileStorage_) {

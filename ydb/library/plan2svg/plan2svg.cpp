@@ -201,6 +201,25 @@ TString DivP1(ui32 divisible, ui32 divisor) {
     return result;
 }
 
+const NJson::TJsonValue* GetOutputStatNode(const NJson::TJsonValue& node) {
+    // if Push.Bytes found, use Push (channels 1.0 do not report Output.Push.Bytes)
+    auto* pushNode = node.GetValueByPath("Push");
+    if (pushNode && pushNode->GetValueByPath("Bytes")) {
+        return pushNode;
+    }
+    // else if Pop.Bytes found, use Pop
+    auto* popNode = node.GetValueByPath("Pop");
+    if (popNode && popNode->GetValueByPath("Bytes")) {
+        return popNode;
+    }
+    // else Push as default
+    return pushNode;
+}
+
+const NJson::TJsonValue* GetInputStatNode(const NJson::TJsonValue& node) {
+    return node.GetValueByPath("Pop");
+}
+
 bool TAggregation::Load(const NJson::TJsonValue& node) {
     if (auto* countNode = node.GetValueByPath("Count")) {
         Count = countNode->GetIntegerSafe();
@@ -696,13 +715,13 @@ void TPlan::ResolveCteRefs() {
                 for (const auto& subNode : inputNode->GetArray()) {
                     if (auto* nameNode = subNode.GetValueByPath("Name")) {
                         if (ToString(it->second->PlanNodeId) == nameNode->GetStringSafe()) {
-                            if (auto* pushNode = subNode.GetValueByPath("Pop")) {
-                                if (auto* bytesNode = pushNode->GetValueByPath("Bytes")) {
+                            if (auto* statNode = GetInputStatNode(subNode)) {
+                                if (auto* bytesNode = statNode->GetValueByPath("Bytes")) {
                                     cteRef.second->InputBytes = std::make_shared<TSingleMetric>(InputBytes,
                                         *bytesNode, 0, 0,
-                                        pushNode->GetValueByPath("FirstMessageMs"),
-                                        pushNode->GetValueByPath("LastMessageMs"),
-                                        pushNode->GetValueByPath("WaitTimeUs.History")
+                                        statNode->GetValueByPath("FirstMessageMs"),
+                                        statNode->GetValueByPath("LastMessageMs"),
+                                        statNode->GetValueByPath("WaitTimeUs.History")
                                     );
                                     Min0(cteRef.second->Stage.MinTime, cteRef.second->InputBytes->MinTime);
                                     Max0(cteRef.second->Stage.MaxTime, cteRef.second->InputBytes->MaxTime);
@@ -710,12 +729,12 @@ void TPlan::ResolveCteRefs() {
                                 } else {
                                     cteRef.second->InputBytes = std::make_shared<TSingleMetric>(InputBytes);
                                 }
-                                if (auto* rowsNode = pushNode->GetValueByPath("Rows")) {
+                                if (auto* rowsNode = statNode->GetValueByPath("Rows")) {
                                     cteRef.second->InputRows = std::make_shared<TSingleMetric>(InputRows, *rowsNode);
                                 } else {
                                     cteRef.second->InputRows = std::make_shared<TSingleMetric>(InputRows);
                                 }
-                                if (auto* chunksNode = pushNode->GetValueByPath("Chunks")) {
+                                if (auto* chunksNode = statNode->GetValueByPath("Chunks")) {
                                     if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
                                         cteRef.second->InputChunks = sumNode->GetIntegerSafe();
                                         if (cteRef.second->InputChunks) {
@@ -738,13 +757,13 @@ void TPlan::ResolveCteRefs() {
                 for (const auto& subNode : outputNode->GetArray()) {
                     if (auto* nameNode = subNode.GetValueByPath("Name")) {
                         if (ToString(cteRef.second->Stage.PlanNodeId) == nameNode->GetStringSafe()) {
-                            if (auto* popNode = subNode.GetValueByPath("Push")) {
-                                if (auto* bytesNode = popNode->GetValueByPath("Bytes")) {
+                            if (auto* statNode = GetOutputStatNode(subNode)) {
+                                if (auto* bytesNode = statNode->GetValueByPath("Bytes")) {
                                     cteRef.second->CteOutputBytes = std::make_shared<TSingleMetric>(OutputBytes,
                                         *bytesNode, 0, 0,
-                                        popNode->GetValueByPath("FirstMessageMs"),
-                                        popNode->GetValueByPath("LastMessageMs"),
-                                        popNode->GetValueByPath("WaitTimeUs.History")
+                                        statNode->GetValueByPath("FirstMessageMs"),
+                                        statNode->GetValueByPath("LastMessageMs"),
+                                        statNode->GetValueByPath("WaitTimeUs.History")
                                     );
                                     Min0(cteRef.second->FromStage->MinTime, cteRef.second->CteOutputBytes->MinTime);
                                     Max0(cteRef.second->FromStage->MaxTime, cteRef.second->CteOutputBytes->MaxTime);
@@ -752,13 +771,13 @@ void TPlan::ResolveCteRefs() {
                                 } else {
                                     cteRef.second->CteOutputBytes = std::make_shared<TSingleMetric>(OutputBytes);
                                 }
-                                if (auto* rowsNode = popNode->GetValueByPath("Rows")) {
+                                if (auto* rowsNode = statNode->GetValueByPath("Rows")) {
                                     cteRef.second->CteOutputRows = std::make_shared<TSingleMetric>(OutputRows, *rowsNode);
                                     cteRef.second->CteOperatorOutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows, *rowsNode);
                                 } else {
                                     cteRef.second->CteOutputRows = std::make_shared<TSingleMetric>(OutputRows);
                                 }
-                                if (auto* chunksNode = popNode->GetValueByPath("Chunks")) {
+                                if (auto* chunksNode = statNode->GetValueByPath("Chunks")) {
                                     if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
                                         cteRef.second->CteOutputChunks = sumNode->GetIntegerSafe();
                                         if (cteRef.second->CteOutputChunks) {
@@ -1196,7 +1215,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                     }
                                 }
                                 if (!ingressNode) {
-                                    ingressNode = ingress0.GetValueByPath("Pop");
+                                    ingressNode = GetInputStatNode(ingress0);
                                 }
                                 if (ingressNode) {
                                     if (auto* bytesNode = ingressNode->GetValueByPath("Bytes")) {
@@ -1305,20 +1324,20 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                 if (auto* nameNode = subNode.GetValueByPath("Name")) {
                     auto name = nameNode->GetStringSafe();
                     if ((outputConnection && name == ToString(outputConnection->Stage.PlanNodeId)) || name == "RESULT") {
-                        if (auto* popNode = subNode.GetValueByPath("Push")) {
-                            if (auto* bytesNode = popNode->GetValueByPath("Bytes")) {
+                        if (auto* statNode = GetOutputStatNode(subNode)) {
+                            if (auto* bytesNode = statNode->GetValueByPath("Bytes")) {
                                 stage->OutputBytes = std::make_shared<TSingleMetric>(OutputBytes,
                                     *bytesNode, 0, 0,
-                                    popNode->GetValueByPath("FirstMessageMs"),
-                                    popNode->GetValueByPath("LastMessageMs"),
-                                    popNode->GetValueByPath("WaitTimeUs.History")
+                                    statNode->GetValueByPath("FirstMessageMs"),
+                                    statNode->GetValueByPath("LastMessageMs"),
+                                    statNode->GetValueByPath("WaitTimeUs.History")
                                 );
                                 Min0(stage->MinTime, stage->OutputBytes->MinTime);
                                 Max0(stage->MaxTime, stage->OutputBytes->MaxTime);
                             } else {
                                 stage->OutputBytes = std::make_shared<TSingleMetric>(OutputBytes);
                             }
-                            if (auto* rowsNode = popNode->GetValueByPath("Rows")) {
+                            if (auto* rowsNode = statNode->GetValueByPath("Rows")) {
                                 stage->OutputRows = std::make_shared<TSingleMetric>(OutputRows, *rowsNode);
 
                                 if (!stage->Operators.front().OutputRows) {
@@ -1331,7 +1350,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                     stage->Operators.front().OutputRows = std::make_shared<TSingleMetric>(OperatorOutputRows);
                                 }
                             }
-                            if (auto* chunksNode = popNode->GetValueByPath("Chunks")) {
+                            if (auto* chunksNode = statNode->GetValueByPath("Chunks")) {
                                 if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
                                     stage->OutputChunks = sumNode->GetIntegerSafe();
                                     if (stage->OutputChunks) {
@@ -1425,13 +1444,13 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                 for (const auto& subNode : inputNode->GetArray()) {
                                     if (auto* nameNode = subNode.GetValueByPath("Name")) {
                                         if (planNodeId == nameNode->GetStringSafe()) {
-                                            if (auto* pushNode = subNode.GetValueByPath("Pop")) {
-                                                if (auto* bytesNode = pushNode->GetValueByPath("Bytes")) {
+                                            if (auto* statNode = GetInputStatNode(subNode)) {
+                                                if (auto* bytesNode = statNode->GetValueByPath("Bytes")) {
                                                     connection->InputBytes = std::make_shared<TSingleMetric>(InputBytes,
                                                         *bytesNode, 0, 0,
-                                                        pushNode->GetValueByPath("FirstMessageMs"),
-                                                        pushNode->GetValueByPath("LastMessageMs"),
-                                                        pushNode->GetValueByPath("WaitTimeUs.History")
+                                                        statNode->GetValueByPath("FirstMessageMs"),
+                                                        statNode->GetValueByPath("LastMessageMs"),
+                                                        statNode->GetValueByPath("WaitTimeUs.History")
                                                     );
                                                     Min0(stage->MinTime, connection->InputBytes->MinTime);
                                                     Max0(stage->MaxTime, connection->InputBytes->MaxTime);
@@ -1439,7 +1458,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                                 } else {
                                                     connection->InputBytes = std::make_shared<TSingleMetric>(InputBytes);
                                                 }
-                                                if (auto* rowsNode = pushNode->GetValueByPath("Rows")) {
+                                                if (auto* rowsNode = statNode->GetValueByPath("Rows")) {
                                                     connection->InputRows = std::make_shared<TSingleMetric>(InputRows, *rowsNode);
                                                     for (auto& op : stage->Operators) {
                                                         for(auto& input : op.Inputs) {
@@ -1451,7 +1470,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                                 } else {
                                                     connection->InputRows = std::make_shared<TSingleMetric>(InputRows);
                                                 }
-                                                if (auto* chunksNode = pushNode->GetValueByPath("Chunks")) {
+                                                if (auto* chunksNode = statNode->GetValueByPath("Chunks")) {
                                                     if (auto* sumNode = chunksNode->GetValueByPath("Sum")) {
                                                         connection->InputChunks = sumNode->GetIntegerSafe();
                                                         if (connection->InputChunks) {
@@ -1545,7 +1564,7 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                                 }
                             }
                             if (!ingressNode) {
-                                ingressNode = ingress0.GetValueByPath("Pop");
+                                ingressNode = GetInputStatNode(ingress0);
                             }
                             if (ingressNode) {
                                 if (auto* bytesNode = ingressNode->GetValueByPath("Bytes")) {
@@ -1593,11 +1612,11 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
         // CTE Refs are NOT processed yet, so we don't know their Min/MaxTime - parse it explicitly
         if (inputNode) {
             for (const auto& subNode : inputNode->GetArray()) {
-                if (auto* pushNode = subNode.GetValueByPath("Pop")) {
-                    if (auto* firstMessageMaxNode = pushNode->GetValueByPath("FirstMessageMs.Min")) {
+                if (auto* statNode = GetInputStatNode(subNode)) {
+                    if (auto* firstMessageMaxNode = statNode->GetValueByPath("FirstMessageMs.Min")) {
                         Min0(stage->MinTime, firstMessageMaxNode->GetIntegerSafe());
                     }
-                    if (auto* lastMessageMaxNode = pushNode->GetValueByPath("LastMessageMs.Max")) {
+                    if (auto* lastMessageMaxNode = statNode->GetValueByPath("LastMessageMs.Max")) {
                         Max0(stage->MaxTime, lastMessageMaxNode->GetIntegerSafe());
                     }
                 }
@@ -1929,7 +1948,7 @@ void TPlan::PrintStageSummary(TStringBuilder& background, ui32 viewLeft, ui32 vi
         if (iconRef) {
             width -= INTERNAL_WIDTH;
         }
-        auto x2 = x0 + width - scalar->Value * width / scalar->Summary->Max;
+        auto x2 = x0 + width - (scalar->Summary->Max ? scalar->Value * width / scalar->Summary->Max : 0);
         background
         << "  <line x1='" << x0 << "' y1='" << y0 + h - 3 << "' x2='" << x2 << "' y2='" << y0 + h - 3
         << "' stroke-width='3' stroke='" << lightColor << "' stroke-dasharray='1,1'/>" << Endl;
@@ -2131,12 +2150,13 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
     SummaryBuilder
         << ", Avg " << Sprintf("%lu.%.2lu", usagePS / 100, usagePS % 100) << " CPU/s";
     }
+    auto cpuGroups = GetCriticalCpuGroups();
     SummaryBuilder
         << "</title>" << Endl
-        << "  <rect x='" << Config.SummaryLeft + INTERNAL_GAP_X + summary3 << "' y='" << titleHeight + INTERNAL_GAP_Y
+        << "  <rect class='cpupath' data-groups='" << cpuGroups << "' x='" << Config.SummaryLeft + INTERNAL_GAP_X + summary3 << "' y='" << titleHeight + INTERNAL_GAP_Y
         << "' width='" << Config.SummaryWidth - (summary3 + INTERNAL_GAP_X) * 2 << "' height='" << TIME_HEIGHT
         << "' stroke-width='0' fill='" << Config.Palette.CpuMedium << "'/>" << Endl
-        << "  <text font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
+        << "  <text class='cpupath' data-groups='" << cpuGroups << "' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextLight
         << "' x='" << Config.SummaryLeft + INTERNAL_GAP_X + summary3 + 2
         << "' y='" << titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatUsage(p->CpuTime->Value) << "</text>" << Endl
         << "</g>" << Endl;
@@ -2151,13 +2171,14 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
         << "' y='" << titleHeight + INTERNAL_GAP_Y + INTERNAL_TEXT_HEIGHT << "'>" << FormatBytes(p->MaxMemoryUsage->Value) << "</text>" << Endl
         << "</g>" << Endl;
 
+    auto timeGroups = GetCriticalTimeGroups();
     auto x = Config.TimelineLeft + (Config.TimelineWidth - timelineDelta) * (p->TimeOffset + p->MaxTime) / maxTime;
     SummaryBuilder
         << "<g><title>" << "Duration: " << FormatTimeMs(p->MaxTime) << ", Total " << FormatTimeMs(p->MaxTime + p->TimeOffset) << "</title>" << Endl
-        << "  <rect x='" << x - summary3 << "' y='" << INTERNAL_GAP_Y + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
+        << "  <rect class='timepath' data-groups='" << timeGroups << "' x='" << x - summary3 << "' y='" << INTERNAL_GAP_Y + (INTERNAL_HEIGHT - INTERNAL_TEXT_HEIGHT) / 2
         << "' width='" << summary3 << "' height='" << TIME_HEIGHT
         << "' stroke-width='0' fill='" << Config.Palette.StageGrid << "'/>" << Endl
-        << "  <text text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextInverted << "' x='" << x - 2
+        << "  <text class='timepath' data-groups='" << timeGroups << "' text-anchor='end' font-family='Verdana' font-size='" << INTERNAL_TEXT_HEIGHT << "px' fill='" << Config.Palette.TextInverted << "' x='" << x - 2
         << "' y='" << titleHeight << "'>" << FormatTimeMs(p->MaxTime + p->TimeOffset) << "</text>" << Endl
         << "</g>" << Endl;
 
@@ -3090,9 +3111,74 @@ struct TVS {
     ui32 StageId;
 };
 
+TString TPlan::GetCriticalCpuGroups() {
+    TStringBuilder builder;
+    if (!Stages.empty()) {
+        auto* stage = Stages[0].get();
+        builder << 'g' << stage->GroupId;
+        while (stage) {
+            if (stage->CriticalCpuConnection) {
+                builder << ",g" << stage->CriticalCpuConnection->GroupId;
+                stage = stage->CriticalCpuConnection->FromStage.get();
+                builder << ",g" << stage->GroupId;
+            } else {
+                stage = nullptr;
+            }
+        }
+    }
+    return builder;
+}
+
+TString TPlan::GetCriticalTimeGroups() {
+    TStringBuilder builder;
+    if (!Stages.empty()) {
+        auto* stage = Stages[0].get();
+        builder << 'g' << stage->GroupId;
+        while (stage) {
+            if (stage->CriticalTimeConnection) {
+                builder << ",g" << stage->CriticalTimeConnection->GroupId;
+                stage = stage->CriticalTimeConnection->FromStage.get();
+                builder << ",g" << stage->GroupId;
+            } else {
+                stage = nullptr;
+            }
+        }
+    }
+    return builder;
+}
+
+void TPlan::CalcCriticals(TStage& stage) {
+    if (stage.CriticalCpuTotal == 0 && stage.CriticalTimeTotal == 0) {
+        for (auto& connection : stage.Connections) {
+            if (connection->FromStage) {
+                CalcCriticals(*connection->FromStage);
+                if (!stage.CriticalCpuConnection || stage.CriticalCpuTotal < connection->FromStage->CriticalCpuTotal) {
+                    stage.CriticalCpuConnection = connection;
+                    stage.CriticalCpuTotal = connection->FromStage->CriticalCpuTotal;
+                }
+                if (!stage.CriticalTimeConnection || stage.CriticalTimeTotal < connection->FromStage->CriticalTimeTotal) {
+                    stage.CriticalTimeConnection = connection;
+                    stage.CriticalTimeTotal = connection->FromStage->CriticalTimeTotal;
+                }
+            }
+        }
+        if (stage.CpuTime) {
+            auto cpu = stage.CpuTime->Details.Sum;
+            if (stage.Tasks) {
+                cpu /= stage.Tasks;
+            }
+            stage.CriticalCpuTotal += cpu;
+        }
+        stage.CriticalTimeTotal += stage.MaxTime - stage.MinTime;
+    }
+}
+
 void TPlan::CalcHotPath() {
     std::vector<TVS> cpuTimes;
     std::unordered_map<ui32, TStage*> StageIdToStage;
+    if (!Stages.empty()) {
+        CalcCriticals(*Stages[0]);
+    }
     for (auto s : Stages) {
         if (!s->External && s->CpuTime && s->Tasks && !s->CpuTime->History.Values.empty()) {
             auto stageId = s->PhysicalStageId;
@@ -3428,7 +3514,7 @@ TString TPlanVisualizer::PrintSvg() {
     svg << R"(
 <script type="text/ecmascript">
 <![CDATA[
-    var selectedGroup;
+    var selectedGroups = [];
 
     function shift_nodes(node, delta) {
         while(node && node.tagName == "svg") {
@@ -3526,32 +3612,59 @@ TString TPlanVisualizer::PrintSvg() {
         }
     }
 
-    function toggle_selection(node) {
-        var g = node.getAttribute("data-group");
-        if (g) {
-            if (selectedGroup) {
-                var e = document.querySelectorAll("[data-group='" + selectedGroup + "']");
-                for (var i = 0; i < e.length; i++) {
-                    e[i].classList.remove("selected");
-                }
+    function deselect_selected() {
+        for (const group of selectedGroups) {
+            var nodes = document.querySelectorAll("[data-group='" + group + "']");
+            for (const node of nodes) {
+                node.classList.remove("selected");
             }
-            if (g == selectedGroup) {
-                selectedGroup = null;
+        }
+    }
+
+    function select_selected() {
+        for (const group of selectedGroups) {
+            var nodes = document.querySelectorAll("[data-group='" + group + "']");
+            for (const node of nodes) {
+                node.classList.add("selected");
+                toggle_slim_off(find_parent_svg(node));
+            }
+        }
+    }
+
+    function select_cpu_path(groups) {
+        deselect_selected();
+        selectedGroups = groups.split(',');
+        select_selected();
+    }
+
+    function select_time_path(groups) {
+        deselect_selected();
+        selectedGroups = groups.split(',');
+        select_selected();
+    }
+
+    function toggle_selection(node) {
+        var group = node.getAttribute("data-group");
+        if (group) {
+            deselect_selected();
+            if (selectedGroups.length == 1 && selectedGroups[0] == group) {
+                selectedGroups = [];
             } else {
-                selectedGroup = g;
-                var e = document.querySelectorAll("[data-group='" + selectedGroup + "']");
-                for (var i = 0; i < e.length; i++) {
-                    e[i].classList.add("selected");
-                    toggle_slim_off(find_parent_svg(e[i]));
-                }
+                selectedGroups = [group];
+                select_selected();
             }
         }
     }
 
     window.onload = function() {
-        var node = document.querySelector(".selected");
-        if (node) {
-            selectedGroup = node.getAttribute("data-group");
+        var nodes = document.querySelectorAll(".selected");
+        if (nodes.length > 0) {
+            selectedGroups = [];
+            for (const node of nodes) {
+                selectedGroups.push(node.getAttribute("data-group"));
+            }
+        } else {
+            select_selected();
         }
     }
 
@@ -3577,6 +3690,14 @@ TString TPlanVisualizer::PrintSvg() {
             if (node.classList.contains("selectable")) {
                 toggle_slim_off(find_parent_svg(node));
                 toggle_selection(node);
+                return;
+            }
+            if (node.classList.contains("cpupath")) {
+                select_cpu_path(node.getAttribute("data-groups"));
+                return;
+            }
+            if (node.classList.contains("timepath")) {
+                select_time_path(node.getAttribute("data-groups"));
                 return;
             }
             node = node.parentElement;

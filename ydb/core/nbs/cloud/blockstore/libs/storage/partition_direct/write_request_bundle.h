@@ -37,8 +37,7 @@ public:
         std::shared_ptr<TWriteBlocksLocalRequest> request,
         const NWilson::TTraceId& traceId,
         TCallContextPtr callContext,
-        TBlockRange64 vchunkRange,
-        ui64 lsn);
+        TBlockRange64 vchunkRange);
 
     // Respond via WriteClient to VChunk.
     void Reply(
@@ -54,6 +53,7 @@ public:
     NThreading::TFuture<TWriteBlocksLocalResponse> GetFuture();
     NWilson::TSpan& GetSpan();
     TBlockRange64 GetVChunkRange() const;
+    void SetLsn(ui64 lsn);
     ui64 GetLsn() const;
     TGuardedSgList& GetSgList();
 

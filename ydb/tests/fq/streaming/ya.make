@@ -3,6 +3,7 @@ PY3TEST()
 INCLUDE(${ARCADIA_ROOT}/ydb/tests/tools/fq_runner/ydb_runner_with_datastreams.inc)
 
 TEST_SRCS(
+    test_scalar_topic_write.py
     test_streaming.py
     test_watermarks.py
 )

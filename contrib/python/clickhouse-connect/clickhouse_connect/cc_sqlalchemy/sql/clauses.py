@@ -1,5 +1,7 @@
 from sqlalchemy import and_, true
+from sqlalchemy.ext.compiler import compiles
 from sqlalchemy.sql.base import Immutable
+from sqlalchemy.sql.elements import ColumnElement, Label
 from sqlalchemy.sql.selectable import FromClause, Join
 from sqlalchemy.sql.visitors import InternalTraversal
 
@@ -97,6 +99,30 @@ class ArrayJoin(Immutable, FromClause):
 
         self.left = clone(self.left, **kw)
         self.array_columns = [(clone(col, **kw), alias) for col, alias in self.array_columns]
+
+
+@compiles(ArrayJoin)
+def _compile_array_join(element, compiler, **kw):
+    """Render an ArrayJoin FromClause. Registered via @compiles so any compiler
+    (including the default StrSQLCompiler used for statement introspection) can
+    render it. A SQLAlchemy Label becomes the ARRAY JOIN alias so downstream
+    `column("name")` references bind; an explicit alias= argument overrides.
+    """
+    kw.pop("asfrom", None)
+    kw.pop("from_linter", None)
+    left = compiler.process(element.left, asfrom=True, **kw)
+    join_type = "LEFT ARRAY JOIN" if element.is_left else "ARRAY JOIN"
+    parts = []
+    for col, explicit_alias in element.array_columns:
+        if explicit_alias is None and isinstance(col, Label):
+            body_text = compiler.process(col.element, **kw)
+            col_text = f"{body_text} AS {compiler.preparer.quote(col.name)}"
+        else:
+            col_text = compiler.process(col, **kw)
+            if explicit_alias is not None:
+                col_text += f" AS {compiler.preparer.quote(explicit_alias)}"
+        parts.append(col_text)
+    return f"{left} {join_type} {', '.join(parts)}"
 
 
 def array_join(left, array_column, alias=None, is_left=False):
@@ -301,3 +327,66 @@ def ch_join(
         _is_cross=cross,
         using=using,
     )
+
+
+class PreWhereClause:
+    """State container for ClickHouse PREWHERE, stored on a Select and rendered by the dialect compiler."""
+
+    def __init__(self, whereclause):
+        self.whereclause = whereclause
+
+
+class LimitByClause:
+    """State container for ClickHouse LIMIT BY (top-N per group). Renders as `LIMIT [offset,] limit BY by_clauses`."""
+
+    def __init__(self, by_clauses, limit, offset=None):
+        self.by_clauses = tuple(by_clauses)
+        self.limit = limit
+        self.offset = offset
+
+
+class Lambda(ColumnElement):
+    """ClickHouse lambda expression for higher-order functions (arrayMap, arrayFilter, arraySort).
+
+    Lambda(params, body) where params is a parameter name string or a list/tuple
+    of parameter names, and body is any SQLAlchemy ColumnElement. Use
+    `sqlalchemy.column(name)` to reference lambda params inside body. Renders as
+    `param -> body` for one param, `(p1, p2) -> body` for multiple.
+
+    Intentionally does NOT introspect Python lambdas (too brittle across
+    closures and default args). Pass an explicit ColumnElement body instead.
+
+    Example:
+        func.arrayMap(Lambda('x', column('x') * 2), table.c.numbers)
+    """
+
+    __visit_name__ = "lambda_expr"
+
+    def __init__(self, params, body):
+        super().__init__()
+        if isinstance(params, str):
+            param_list = (params,)
+        elif isinstance(params, (list, tuple)):
+            if not params:
+                raise ValueError("Lambda requires at least one parameter name")
+            param_list = tuple(params)
+        else:
+            raise TypeError("Lambda params must be a string or a list/tuple of strings")
+        for p in param_list:
+            if not isinstance(p, str):
+                raise TypeError("Lambda parameter names must be strings")
+            if not p.isidentifier():
+                raise ValueError(f"Lambda parameter name '{p}' is not a valid identifier")
+        # Not `self.params`: ColumnElement.params is a bind-parameter method on the base class.
+        self.param_names = param_list
+        self.body = body
+
+
+@compiles(Lambda)
+def _compile_lambda(element, compiler, **kw):
+    """Render a Lambda as ClickHouse lambda syntax via @compiles so any compiler can render it."""
+    body_text = compiler.process(element.body, **kw)
+    if len(element.param_names) == 1:
+        return f"{element.param_names[0]} -> {body_text}"
+    params_text = ", ".join(element.param_names)
+    return f"({params_text}) -> {body_text}"

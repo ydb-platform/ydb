@@ -977,19 +977,31 @@ TStatus AnnotateUpsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
     if (!upsertSettings.IsUpdate) {
         for (auto& [name, meta] : table.second->Metadata->Columns) {
-            if (meta.NotNull && !rowType->FindItem(name)) {
-                ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
-                    << "Missing not null column in input: " << name
-                    << ". All not null columns should be initialized"));
+            if ((meta.NotNull || meta.SetNotNullInProgress) && !rowType->FindItem(name)) {
+                if (meta.SetNotNullInProgress) {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
+                        << "Missing column in input: " << name
+                        << ". `SET NOT NULL` operation is currently in progress for this column"));
+                } else {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
+                        << "Missing not null column in input: " << name
+                        << ". All not null columns should be initialized"));
+                }
                 return TStatus::Error;
             }
 
 
-            if (meta.NotNull && rowType->FindItemType(name)->HasOptionalOrNull()) {
+            if ((meta.NotNull || meta.SetNotNullInProgress) && rowType->FindItemType(name)->HasOptionalOrNull()) {
                 if (rowType->FindItemType(name)->GetKind() != ETypeAnnotationKind::Pg) {
-                    ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                        << "Can't set optional or NULL value to not null column: " << name
-                        << ". All not null columns should be initialized"));
+                    if (meta.SetNotNullInProgress) {
+                        ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                            << "Can't set optional or NULL value to column: " << name
+                            << ". `SET NOT NULL` operation is currently in progress for this column"));
+                    } else {
+                        ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                            << "Can't set optional or NULL value to not null column: " << name
+                            << ". All not null columns should be initialized"));
+                    }
                     return TStatus::Error;
                 }
             }
@@ -1054,18 +1066,30 @@ TStatus AnnotateInsertRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     }
 
     for (auto& [name, meta] : table.second->Metadata->Columns) {
-        if (meta.NotNull && !rowType->FindItem(name)) {
-            ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
-                << "Missing not null column in input: " << name
-                << ". All not null columns should be initialized"));
+        if ((meta.NotNull || meta.SetNotNullInProgress) && !rowType->FindItem(name)) {
+            if (meta.SetNotNullInProgress) {
+                ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
+                    << "Missing column in input: " << name
+                    << ". `SET NOT NULL` operation is currently in progress for this column"));
+            } else {
+                ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_NO_COLUMN_DEFAULT_VALUE, TStringBuilder()
+                    << "Missing not null column in input: " << name
+                    << ". All not null columns should be initialized"));
+            }
             return TStatus::Error;
         }
 
-        if (meta.NotNull && rowType->FindItemType(name)->HasOptionalOrNull()) {
+        if ((meta.NotNull || meta.SetNotNullInProgress) && rowType->FindItemType(name)->HasOptionalOrNull()) {
             if (rowType->FindItemType(name)->GetKind() != ETypeAnnotationKind::Pg) {
-                ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                    << "Can't set optional or NULL value to not null column: " << name
-                    << ". All not null columns should be initialized"));
+                if (meta.SetNotNullInProgress) {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                        << "Can't set optional or NULL value to column: " << name
+                        << ". `SET NOT NULL` operation is currently in progress for this column"));
+                } else {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                        << "Can't set optional or NULL value to not null column: " << name
+                        << ". All not null columns should be initialized"));
+                }
                 return TStatus::Error;
             }
         }
@@ -1133,10 +1157,16 @@ TStatus AnnotateUpdateRows(const TExprNode::TPtr& node, TExprContext& ctx, const
     for (const auto& item : rowType->GetItems()) {
         auto column = table.second->Metadata->Columns.FindPtr(TString(item->GetName()));
         YQL_ENSURE(column);
-        if (column->NotNull && item->HasOptionalOrNull()) {
+        if ((column->NotNull || column->SetNotNullInProgress) && item->HasOptionalOrNull()) {
             if (item->GetItemType()->GetKind() != ETypeAnnotationKind::Pg) {
-                ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
-                    << "Can't set optional or NULL value to not null column: " << column->Name));
+                if (column->SetNotNullInProgress) {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                        << "Can't set optional or NULL value to column: " << column->Name
+                        << ". `SET NOT NULL` operation is currently in progress for this column"));
+                } else {
+                    ctx.AddError(YqlIssue(ctx.GetPosition(node->Pos()), TIssuesIds::KIKIMR_BAD_COLUMN_TYPE, TStringBuilder()
+                        << "Can't set optional or NULL value to not null column: " << column->Name));
+                }
                 return TStatus::Error;
             }
         }
@@ -2137,6 +2167,44 @@ TStatus AnnotateKqpLockAndCheck(
 }
 
 
+TStatus AnnotateKqpStreamEnumerate(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!EnsureArgsCount(*node, 1, ctx)) {
+        return TStatus::Error;
+    }
+
+    const TTypeAnnotationNode* inputType = node->Child(0)->GetTypeAnn();
+    if (!inputType) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Child(0)->Pos()), "KqpStreamEnumerate: input has no type"));
+        return TStatus::Error;
+    }
+
+    const TTypeAnnotationNode* itemType = nullptr;
+    const auto kind = inputType->GetKind();
+    switch (kind) {
+        case ETypeAnnotationKind::List:   itemType = inputType->Cast<TListExprType>()->GetItemType(); break;
+        case ETypeAnnotationKind::Flow:   itemType = inputType->Cast<TFlowExprType>()->GetItemType(); break;
+        case ETypeAnnotationKind::Stream: itemType = inputType->Cast<TStreamExprType>()->GetItemType(); break;
+        default:
+            ctx.AddError(TIssue(ctx.GetPosition(node->Child(0)->Pos()), TStringBuilder()
+                << "KqpStreamEnumerate: expected List, Flow or Stream, but got: " << *inputType));
+            return TStatus::Error;
+    }
+
+    const auto* rankType = ctx.MakeType<TDataExprType>(EDataSlot::Uint64);
+    const auto* pairType = ctx.MakeType<TTupleExprType>(TTypeAnnotationNode::TListType{rankType, itemType});
+
+    const TTypeAnnotationNode* resultType = nullptr;
+    switch (kind) {
+        case ETypeAnnotationKind::List:   resultType = ctx.MakeType<TListExprType>(pairType); break;
+        case ETypeAnnotationKind::Flow:   resultType = ctx.MakeType<TFlowExprType>(pairType); break;
+        case ETypeAnnotationKind::Stream: resultType = ctx.MakeType<TStreamExprType>(pairType); break;
+        default: Y_ABORT("unreachable");
+    }
+
+    node->SetTypeAnn(resultType);
+    return TStatus::Ok;
+}
+
 TStatus AnnotateFulltextAnalyze(const TExprNode::TPtr& node, TExprContext& ctx) {
     if (!EnsureArgsCount(*node, 3, ctx)) {
         return TStatus::Error;
@@ -2914,23 +2982,45 @@ TStatus AnnotateOpFilter(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 bool IsSupportedJoinKind(const TString &joinKind) {
-    return joinKind == "Left" || joinKind == "Inner" || joinKind == "Cross";
+    return joinKind == "Left" || joinKind == "LeftSemi" || joinKind == "LeftOnly" || 
+        joinKind == "Right" || joinKind == "RightSemi" || joinKind == "RightOnly" || 
+        joinKind == "Inner" || joinKind == "Cross" || joinKind == "Full";
 }
 
 const TStructExprType* JoinResultType(const TTypeAnnotationNode* leftType, const TTypeAnnotationNode* rightType, TString joinKind, TExprContext& ctx) {
     auto leftItemType = leftType->Cast<TListExprType>()->GetItemType();
     auto rightItemType = rightType->Cast<TListExprType>()->GetItemType();
 
-    const bool rightSideColumnsNeedsOptional = joinKind == "Left";
-    TVector<const TItemExprType*> structItemTypes = leftItemType->Cast<TStructExprType>()->GetItems();
+    const bool columnsNeedOptional = (joinKind == "Left" || joinKind == "Right" || joinKind == "Full");
+    const bool rightJoin = (joinKind == "Right" || joinKind == "RightSemi" || joinKind == "RightOnly");
+    const bool semiOrOnlyJoin = (joinKind == "LeftSemi" || joinKind == "LeftOnly" || joinKind == "RightSemi" || joinKind == "RightOnly");
+    const bool isFullJoin = (joinKind == "Full");
+    
+    if (rightJoin) {
+        std::swap(leftItemType, rightItemType);
+    }
 
-    for (const auto *item : rightItemType->Cast<TStructExprType>()->GetItems()) {
-        if (item->GetItemType()->IsOptionalOrNull() || !rightSideColumnsNeedsOptional) {
+    TVector<const TItemExprType*> structItemTypes;
+    
+    for (const auto *item : leftItemType->Cast<TStructExprType>()->GetItems()){
+        if (item->GetItemType()->IsOptionalOrNull() || !isFullJoin) {
             structItemTypes.push_back(item);
         } else {
             auto colName = item->GetName();
             const TTypeAnnotationNode* colType = item->GetItemType();
             structItemTypes.push_back(ctx.MakeType<TItemExprType>(colName, ctx.MakeType<TOptionalExprType>(colType)));
+        }
+    }
+
+    if (!semiOrOnlyJoin) {
+        for (const auto *item : rightItemType->Cast<TStructExprType>()->GetItems()) {
+            if (item->GetItemType()->IsOptionalOrNull() || !columnsNeedOptional) {
+                structItemTypes.push_back(item);
+            } else {
+                auto colName = item->GetName();
+                const TTypeAnnotationNode* colType = item->GetItemType();
+                structItemTypes.push_back(ctx.MakeType<TItemExprType>(colName, ctx.MakeType<TOptionalExprType>(colType)));
+            }
         }
     }
     auto resultStructType = ctx.MakeType<TStructExprType>(structItemTypes);
@@ -2974,25 +3064,48 @@ TStatus AnnotateOpJoin(const TExprNode::TPtr& input, TExprContext& ctx) {
     return TStatus::Ok;
 }
 
-TStatus AnnotateOpUnionAll(const TExprNode::TPtr& input, TExprContext& ctx) {
-    auto leftInputType = input->ChildPtr(TKqpOpJoin::idx_LeftInput)->GetTypeAnn();
-    auto rightInputType = input->ChildPtr(TKqpOpJoin::idx_RightInput)->GetTypeAnn();
+TStatus AnnotateOpSetOp(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto leftInputType = input->ChildPtr(TKqpOpSetOp::idx_LeftInput)->GetTypeAnn();
+    auto rightInputType = input->ChildPtr(TKqpOpSetOp::idx_RightInput)->GetTypeAnn();
     auto leftStructType = leftInputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto rightStructType = rightInputType->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     auto leftItems = leftStructType->GetItems();
     auto rightItems = rightStructType->GetItems();
-    Y_ENSURE(leftItems.size() == rightItems.size(), "Invalid number of fields for Union all.");
+    Y_ENSURE(leftItems.size() == rightItems.size(), "Invalid number of fields for set operation.");
 
-    TVector<const TItemExprType*> newItemTypes;
-    for (ui32 i = 0, e = leftItems.size(); i < e; ++i) {
-        if (leftItems[i]->GetItemType()->IsOptionalOrNull()) {
-            newItemTypes.push_back(leftItems[i]);
-        } else {
-            newItemTypes.push_back(rightItems[i]);
+    const TTypeAnnotationNode* resultType;
+
+    TString setOp = TString(input->ChildPtr(TKqpOpSetOp::idx_SetOp)->Content());
+
+    if (setOp == "union" || setOp == "union_all") {
+        TVector<const TItemExprType*> newItemTypes;
+        for (ui32 i = 0, e = leftItems.size(); i < e; ++i) {
+            if (leftItems[i]->GetItemType()->IsOptionalOrNull()) {
+                newItemTypes.push_back(leftItems[i]);
+            } else {
+                newItemTypes.push_back(rightItems[i]);
+            }
         }
+        resultType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(newItemTypes));
+    }
+    else if (setOp == "intersect" || setOp == "intersect_all") {
+        TVector<const TItemExprType*> newItemTypes;
+        for (ui32 i = 0, e = leftItems.size(); i < e; ++i) {
+            auto itemType = leftItems[i]->GetItemType();
+            if (itemType->IsOptionalOrNull() && !rightItems[i]->GetItemType()->IsOptionalOrNull()) {
+                auto nonOptType = ETypeAnnotationKind::Optional == itemType->GetKind() ? itemType->Cast<TOptionalExprType>()->GetItemType() : itemType;
+                newItemTypes.push_back(ctx.MakeType<TItemExprType>(leftItems[i]->GetName(), nonOptType));
+            } else {
+                newItemTypes.push_back(leftItems[i]);
+            }
+        }
+        resultType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(newItemTypes));
+    } else if (setOp == "except" || setOp == "except_all") {
+        resultType = leftInputType;
+    } else {
+        Y_ENSURE(false, TStringBuilder() << "Illegal set operator: " << setOp);
     }
 
-    auto resultType = ctx.MakeType<TListExprType>(ctx.MakeType<TStructExprType>(newItemTypes));
     input->SetTypeAnn(resultType);
 
     return TStatus::Ok;
@@ -3182,6 +3295,7 @@ public:
         AddHandler({TKqpEnsure::CallableName()}, Hndl(&AnnotateKqpEnsure));
         AddHandler({TKqpLockAndCheck::CallableName()}, HndlInt(&AnnotateKqpLockAndCheck));
         AddHandler({TFulltextAnalyze::CallableName()}, Hndl(&AnnotateFulltextAnalyze));
+        AddHandler({TKqpStreamEnumerate::CallableName()}, Hndl(&AnnotateKqpStreamEnumerate));
         AddHandler({TKqpReadTableFullTextIndexSourceSettings::CallableName()}, HndlInt(&AnnotateReadTableFullTextIndexSourceSettings));
         AddHandler({TKqpReadRangesSourceSettings::CallableName()}, HndlInt(&AnnotateKqpSourceSettings));
         AddHandler({TKqpReadSysViewSourceSettings::CallableName()}, HndlInt(&AnnotateSysViewSourceSettings));
@@ -3204,7 +3318,7 @@ public:
         AddHandler({TKqpOpFilter::CallableName()}, Hndl(&AnnotateOpFilter));
         AddHandler({TKqpOpJoinFilter::CallableName()}, Hndl(&AnnotateOpJoinFilter));
         AddHandler({TKqpOpJoin::CallableName()}, Hndl(&AnnotateOpJoin));
-        AddHandler({TKqpOpUnionAll::CallableName()}, Hndl(&AnnotateOpUnionAll));
+        AddHandler({TKqpOpSetOp::CallableName()}, Hndl(&AnnotateOpSetOp));
         AddHandler({TKqpOpLimit::CallableName()}, Hndl(&AnnotateOpLimit));
         AddHandler({TKqpOpSortElement::CallableName()}, Hndl(&AnnotateOpSortElement));
         AddHandler({TKqpOpSort::CallableName()}, Hndl(&AnnotateOpSort));

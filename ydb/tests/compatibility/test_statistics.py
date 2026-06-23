@@ -138,9 +138,7 @@ class TestStatisticsFollowersRollingUpdate(RollingUpgradeAndDowngradeFixture):
             pytest.skip("Only available since 25-1")
 
         yield from self.setup_cluster(
-            extra_feature_flags={
-                "enable_follower_stats": True
-            }
+            extra_feature_flags=["enable_follower_stats"]
         )
 
     def write_data(self):
@@ -271,7 +269,7 @@ class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
 
         yield from self.setup_cluster(
             tenant_db="mydb",
-            extra_feature_flags={"enable_column_statistics": True},
+            extra_feature_flags=["enable_column_statistics"],
             additional_log_configs={
                 'STATISTICS': LogLevels.DEBUG,
             },

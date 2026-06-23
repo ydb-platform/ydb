@@ -1,8 +1,8 @@
 items:
-- name: Spring Data JDBC
-  href: spring-data-jdbc.md
 - name: Hibernate
   href: hibernate.md
+- name: Spring Data JDBC
+  href: spring-data-jdbc.md
 - name: JOOQ
   href: jooq.md
 - name: Dapper
@@ -15,3 +15,5 @@ items:
   href: sqlalchemy.md
 - name: Django
   href: django.md
+- name: Kotlin Exposed
+  href: exposed.md

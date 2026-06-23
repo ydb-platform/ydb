@@ -191,6 +191,7 @@ void TTransaction::Detach()
 
     auto req = Proxy_.DetachTransaction();
     ToProto(req->mutable_transaction_id(), GetId());
+    SetControlMultiplexingBandIfEnabled(*req, Connection_->GetConfig());
     // Fire-and-forget.
     YT_UNUSED_FUTURE(req->Invoke());
 }
@@ -335,6 +336,7 @@ TFuture<TTransactionCommitResult> TTransaction::Commit(const TTransactionCommitO
                 ToProto(req->mutable_prerequisite_options(), options);
                 ToProto(req->mutable_mutating_options(), options);
                 req->set_max_allowed_commit_timestamp(options.MaxAllowedCommitTimestamp);
+                SetControlMultiplexingBandIfEnabled(*req, Connection_->GetConfig());
                 return req->Invoke();
             }))
         .Apply(
@@ -385,20 +387,23 @@ TFuture<void> TTransaction::Abort(const TTransactionAbortOptions& options)
     return DoAbort(&guard, options);
 }
 
-void TTransaction::ModifyRows(
+void TTransaction::FutureModifyRows(
     const TYPath& path,
     TNameTablePtr nameTable,
-    TSharedRange<TRowModification> modifications,
+    TSharedRange<NFuture::TRowModification> modifications,
     const TModifyRowsOptions& options)
 {
     ValidateTabletTransactionId(GetId());
 
     for (const auto& modification : modifications) {
         // TODO(sandello): handle versioned rows
-        YT_VERIFY(
-            modification.Type == ERowModificationType::Write ||
-            modification.Type == ERowModificationType::Delete ||
-            modification.Type == ERowModificationType::WriteAndLock);
+        Visit(modification,
+            [] (const NFuture::NRowModifications::TWriteRow&) { },
+            [] (const NFuture::NRowModifications::TDeleteRow&) { },
+            [] (const NFuture::NRowModifications::TWriteAndLockRow&) { },
+            [] (const NFuture::NRowModifications::TVersionedWriteRow&) {
+                YT_ABORT();
+            });
     }
 
     auto reqSequenceNumber = ModifyRowsRequestSequenceCounter_.fetch_add(1);
@@ -421,7 +426,11 @@ void TTransaction::ModifyRows(
     bool usedStrongLocks = false;
     bool usedWideLocks = false;
     for (const auto& modification : modifications) {
-        auto mask = modification.Locks;
+        if (!std::holds_alternative<NFuture::NRowModifications::TWriteAndLockRow>(modification)) {
+            continue;
+        }
+
+        auto mask = std::get<NFuture::NRowModifications::TWriteAndLockRow>(modification).Locks;
         usedWideLocks |= mask.GetSize() > TLegacyLockMask::MaxCount;
         if (usedWideLocks) {
             break;
@@ -448,27 +457,50 @@ void TTransaction::ModifyRows(
         req->RequireServerFeature(ERpcProxyFeature::WideLocks);
     }
 
-    for (const auto& modification : modifications) {
-        rows.emplace_back(modification.Row);
-        req->add_row_modification_types(static_cast<NProto::ERowModificationType>(modification.Type));
-
+    // NB: Should be called for every modification to keep index correspondence.
+    auto fillCorrespondingLock = [&req, usedWideLocks, usedStrongLocks] (const TLockMask& locks) {
         if (usedWideLocks) {
-            ToProto(req->add_row_locks(), modification.Locks);
+            ToProto(req->add_row_locks(), locks);
         } else if (usedStrongLocks) {
-            auto locks = modification.Locks;
             YT_VERIFY(!locks.HasNewLocks());
             req->add_row_legacy_locks(locks.ToLegacyMask().GetBitmap());
         } else {
             TLegacyLockBitmap bitmap = 0;
             for (int index = 0; index < TLegacyLockMask::MaxCount; ++index) {
-                if (modification.Locks.Get(index) == ELockType::SharedWeak) {
+                if (locks.Get(index) == ELockType::SharedWeak) {
                     bitmap |= 1u << index;
                 }
             }
-
             req->add_row_legacy_read_locks(bitmap);
         }
+    };
+
+    for (const auto& modification : modifications) {
+        Visit(modification,
+            [&req, &rows, &fillCorrespondingLock] (const NFuture::NRowModifications::TWriteRow& modification) {
+                rows.emplace_back(modification.Row);
+                req->add_row_modification_types(NProto::ERowModificationType::RMT_WRITE);
+                fillCorrespondingLock(TLockMask{});
+            },
+            [&req, &rows, &fillCorrespondingLock] (const NFuture::NRowModifications::TDeleteRow& modification) {
+                rows.emplace_back(modification.Key);
+                req->add_row_modification_types(NProto::ERowModificationType::RMT_DELETE);
+                fillCorrespondingLock(TLockMask{});
+            },
+            [&req, &rows, &fillCorrespondingLock] (const NFuture::NRowModifications::TWriteAndLockRow& writeAndLockModification) {
+                rows.emplace_back(writeAndLockModification.Row);
+                req->add_row_modification_types(NProto::ERowModificationType::RMT_MODIFY);
+                fillCorrespondingLock(writeAndLockModification.Locks);
+            },
+            [] (const NFuture::NRowModifications::TVersionedWriteRow&) {
+                // NB: Checked above.
+                YT_ABORT();
+            });
     }
+
+    YT_VERIFY(modifications.size() == static_cast<size_t>(req->row_legacy_read_locks_size()) ||
+        modifications.size() == static_cast<size_t>(req->row_legacy_locks_size()) ||
+        modifications.size() == static_cast<size_t>(req->row_locks_size()));
 
     req->Attachments() = SerializeRowset(
         nameTable,
@@ -1079,6 +1111,7 @@ TFuture<void> TTransaction::DoAbort(
 
     auto req = Proxy_.AbortTransaction();
     ToProto(req->mutable_transaction_id(), GetId());
+    SetControlMultiplexingBandIfEnabled(*req, Connection_->GetConfig());
 
     req->Invoke().Subscribe(
         BIND([=, this, this_ = MakeStrong(this)] (const TApiServiceProxy::TErrorOrRspAbortTransactionPtr& rspOrError) {
@@ -1134,7 +1167,7 @@ TFuture<void> TTransaction::SendPing()
     auto req = Proxy_.PingTransaction();
     ToProto(req->mutable_transaction_id(), GetId());
     req->set_ping_ancestors(PingAncestors_);
-    SetControlMultiplexingBandIfNeeded(*req);
+    SetControlMultiplexingBandIfEnabled(*req, Connection_->GetConfig());
 
     return req->Invoke().Apply(
         BIND([=, this, this_ = MakeStrong(this)] (const TApiServiceProxy::TErrorOrRspPingTransactionPtr& rspOrError) {
@@ -1344,13 +1377,6 @@ void TTransaction::SubscribeModificationsFlushed(const TModificationsFlushedHand
 void TTransaction::UnsubscribeModificationsFlushed(const TModificationsFlushedHandler& handler)
 {
     ModificationsFlushed_.Unsubscribe(handler);
-}
-
-void TTransaction::SetControlMultiplexingBandIfNeeded(NRpc::TClientRequest& req)
-{
-    if (Client_->GetOptions().EnableControlMultiplexingBand) {
-        req.SetMultiplexingBand(NRpc::EMultiplexingBand::Control);
-    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

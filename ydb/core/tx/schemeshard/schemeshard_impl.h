@@ -344,7 +344,7 @@ public:
 
     ui64 NextLocalShardIdx = 0;
     THashMap<TShardIdx, TShardInfo> ShardInfos;
-    THashMap<TShardIdx, THashSet<TPathId>> SharedShards; // Maps shard to all paths that share it
+    THashMap<TShardIdx, THashMap<TPathId, TTxId>> SharedShards; // Maps shard to all paths that share it, with per-entry LastTxId
     THashMap<TShardIdx, TAdoptedShard> AdoptedShards;
     THashMap<TTabletId, TShardIdx> TabletIdToShardIdx;
     THashMap<TShardIdx, TVector<TActorId>> ShardDeletionSubscribers; // for tests
@@ -417,6 +417,7 @@ public:
     bool EnableAddUniqueIndex = false;
     bool EnableOnlineAddUniqueIndex = false;
     bool EnableFulltextIndex = false;
+    bool EnableCompactFulltextIndex = false;
     bool EnableJsonIndex = false;
     bool EnableExternalDataSourcesOnServerless = false;
     bool EnableShred = false;
@@ -880,6 +881,7 @@ public:
     void PersistDeleteAdopted(NIceDb::TNiceDb& db, TShardIdx shardIdx);
     void PersistAddSharedShard(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId);
     void PersistRemoveSharedShard(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId);
+    void PersistSharedShardTx(NIceDb::TNiceDb& db, TShardIdx shardIdx, TPathId pathId, TTxId txId);
 
     void PersistSnapshotTable(NIceDb::TNiceDb& db, const TTxId snapshotId, const TPathId tableId);
     void PersistSnapshotStepId(NIceDb::TNiceDb& db, const TTxId snapshotId, const TStepId stepId);
@@ -1845,6 +1847,13 @@ public:
     void PersistBuildIndexAlterMainTableTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexAlterMainTableTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
 
+    void PersistBuildIndexCreateBuildSequenceTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexCreateBuildSequenceTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+    void PersistBuildIndexCreateBuildSequenceTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+
+    // Persists the fulltext rowid auto-provisioning intent + child-build linkage fields together.
+    void PersistBuildIndexFulltextProvisioning(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
+
     void PersistBuildIndexInitiateTxId(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexInitiateTxStatus(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
     void PersistBuildIndexInitiateTxDone(NIceDb::TNiceDb& db, const TIndexBuildInfo& indexInfo);
@@ -1977,6 +1986,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxReplyModifySetColumnConstraint(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxReplyCompletedSetColumnConstraint(TTxId completedTxId);
     NTabletFlatExecutor::ITransaction* CreateTxReplyValidateRowCondition(TIndexBuildId operationId, TEvDataShard::TEvValidateRowConditionResponse::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreatePipeRetrySetColumnConstraint(TIndexBuildId operationId, TTabletId tabletId);
 
     THashMap<TIndexBuildId, std::shared_ptr<TSetColumnConstraintOperationInfo>> SetColumnConstraintOperations;
     THashMap<TString, std::shared_ptr<TSetColumnConstraintOperationInfo>> SetColumnConstraintOperationsByUid;
@@ -2016,12 +2026,13 @@ public:
     TFifoQueue<TPathId> ForcedCompactionTablesQueue;
     THashMap<TPathId, TFifoQueue<TShardIdx>> ForcedCompactionShardsByTable;
     ui64 ForcedCompactionTotalInQueues = 0;
-    bool InProcessForcedCompactionQueues = false;
+    bool ForcedCompactionProgressScheduled = false;
 
-    TVector<std::pair<TShardIdx, TForcedCompactionInfo::TPtr>> ForcedCompactionsDoneShardsToPersist; // info may be null
+    THashMap<TShardIdx, TForcedCompactionInfo::TPtr> ForcedCompactionsDoneShardsToPersist; // info may be null
     ui32 ForcedCompactionPersistBatchSize = 100;
     TInstant ForcedCompactionProgressStartTime;
     TDuration ForcedCompactionPersistBatchMaxTime = TDuration::MilliSeconds(100);
+    bool ForcedCompactionNeedsImmediatePersist = false;
 
     struct TCancellingForcedCompaction {
         struct TWaiter {
@@ -2068,16 +2079,15 @@ public:
 
     void CompleteForcedCompactionForShard(const TShardIdx& shardIdx, const TActorContext &ctx);
     bool IsForcedCompactionCompleted(const TForcedCompactionInfo& forcedCompactionInfo) const;
-    void RetryForcedCompactionForShard(const TShardIdx& shardIdx, const TPathId& tablePathId);
+    void RetryForcedCompactionForShard(const TShardIdx& shardIdx, const TPathId& tablePathId, const TActorContext &ctx);
     void ProcessForcedCompactionQueues();
-    void ProcessForcedCompactionQueuesForTable(const TPathId& tablePathId, TForcedCompactionInfo& compaction);
-    void TryEnqueueOneShard(const TPathId& tablePathId, TForcedCompactionInfo& forcedCompactionInfo, THashSet<TPathId>* tablesWithoutCandidates);
     void UpdateForcedCompactionQueueMetrics();
 
     void EnqueueForcedCompaction(const TShardIdx& shardIdx);
     NOperationQueue::EStartStatus StartForcedCompaction(const TShardIdx& shardIdx);
     void OnForcedCompactionTimeout(const TShardIdx& shardIdx);
     void HandleForcedCompactionResult(TEvDataShard::TEvCompactTableResult::TPtr &ev, const TActorContext &ctx);
+    void ScheduleForcedCompactionProgress(const TActorContext& ctx);
 
     void ProcessForcedCompactionOnSplitMerge(
         NIceDb::TNiceDb& db,
@@ -2097,6 +2107,7 @@ public:
     void Handle(TEvForcedCompaction::TEvCancelRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvForcedCompaction::TEvForgetRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvForcedCompaction::TEvListRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvPrivate::TEvProgressForcedCompaction::TPtr& ev, const TActorContext& ctx);
     // } // NForcedCompaction
 
     // namespace NCdcStreamScan {

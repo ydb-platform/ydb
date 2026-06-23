@@ -1,6 +1,6 @@
 #include "named_span.h"
 
-#include <ydb/library/actors/retro_tracing/universal_span.h>
+#include <ydb/library/actors/retro_tracing/span/universal_span.h>
 #include "universal_span_wilson_api.h"
 
 #include <ydb/core/base/appdata_fwd.h>

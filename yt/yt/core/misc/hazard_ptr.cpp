@@ -138,7 +138,7 @@ public:
         void* reclaimPtr,
         THazardPtrReclaimer reclaimer);
 
-    void ReclaimHazardPointers(bool flush);
+    bool ReclaimHazardPointers(bool flush);
 
 private:
     std::atomic<int> ThreadCount_ = 0;
@@ -247,13 +247,19 @@ bool THazardPointerManager::TryReclaimHazardPointers()
         std::ssize(threadState->RetireList) > threadCount;
 }
 
-void THazardPointerManager::ReclaimHazardPointers(bool flush)
+bool THazardPointerManager::ReclaimHazardPointers(bool flush)
 {
     if (flush) {
         while (TryReclaimHazardPointers());
     } else {
         TryReclaimHazardPointers();
     }
+
+    // Report whether some retired pointers are still pending on this thread.
+    // They could not be reclaimed because they are currently protected; the
+    // caller must retry maintenance later rather than park indefinitely.
+    auto* threadState = HazardThreadState();
+    return threadState && !threadState->RetireList.empty();
 }
 
 void THazardPointerManager::InitThreadState()
@@ -427,9 +433,9 @@ void RetireHazardPointer(
         reclaimer);
 }
 
-void ReclaimHazardPointers(bool flush)
+bool ReclaimHazardPointers(bool flush)
 {
-    NYT::NDetail::THazardPointerManager::Get()->ReclaimHazardPointers(flush);
+    return NYT::NDetail::THazardPointerManager::Get()->ReclaimHazardPointers(flush);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

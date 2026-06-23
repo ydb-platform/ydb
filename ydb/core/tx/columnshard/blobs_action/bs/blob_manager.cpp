@@ -79,7 +79,14 @@ void TBlobBatch::SendWriteRequest(
     //auto handleClass = NKikimrBlobStorage::AsyncBlob; // TODO: what's the difference?
     auto tactic = TEvBlobStorage::TEvPut::TacticMaxThroughput;
 
-    THolder<TEvBlobStorage::TEvPut> put(new TEvBlobStorage::TEvPut(logoBlobId, data, deadline, handleClass, tactic));
+    THolder<TEvBlobStorage::TEvPut> put(new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
+        .BlobId = logoBlobId,
+        .Buffer = TRope(data),
+        .Deadline = deadline,
+        .HandleClass = handleClass,
+        .Tactic = tactic,
+        .WriteSource = TWriteSource::ColumnShardPut,
+    }));
     SendPutToGroup(ctx, groupId, BatchInfo->TabletInfo.Get(), std::move(put), cookie);
 }
 

@@ -427,7 +427,9 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbageEntry(
             keep.empty() ? nullptr : new TVector<TLogoBlobID>(std::move(keep)),
             notKeep.empty() ? nullptr : new TVector<TLogoBlobID>(std::move(notKeep)),
             TInstant::Max(),
-            !hard, hard);
+            !hard,
+            TWriteSource::FlatCollectGarbage,
+            hard);
     GcCounter += ev->PerGenerationCounterStepSize();
     SendToBSProxy(ctx, bsgroup, ev.Release());
     ++GcWaitFor;

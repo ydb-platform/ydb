@@ -1,6 +1,8 @@
 #include "data.h"
 #include "coro_tx.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT BLOB_DEPOT
+
 namespace NKikimr::NBlobDepot {
 
     class TBlobDepot::TData::TResolveDecommitActor : public TActorBootstrapped<TResolveDecommitActor> {
@@ -200,8 +202,11 @@ namespace NKikimr::NBlobDepot {
                 return PassAway();
             }
 
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT42, "TResolveDecommitActor::Bootstrap", (Id, Self->GetLogId()),
-                (Sender, Ev->Sender), (Cookie, Ev->Cookie));
+            YDB_LOG_DEBUG("TResolveDecommitActor::Bootstrap",
+                {"marker", "BDT42"},
+                {"id", Self->GetLogId()},
+                {"sender", Ev->Sender},
+                {"cookie", Ev->Cookie});
 
             std::deque<TScan> scans;
 
@@ -272,8 +277,15 @@ namespace NKikimr::NBlobDepot {
         // recover any data; thus they are IsIndexOnly and not MustRestoreFirst range queries
 
         void IssueRange(ui64 tabletId, TLogoBlobID from, TLogoBlobID to, bool mustRestoreFirst) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT50, "going to TEvRange", (Id, Self->GetLogId()), (Sender, Ev->Sender),
-                (Cookie, Ev->Cookie), (TabletId, tabletId), (From, from), (To, to), (MustRestoreFirst, mustRestoreFirst));
+            YDB_LOG_DEBUG("Going to TEvRange",
+                {"marker", "BDT50"},
+                {"id", Self->GetLogId()},
+                {"sender", Ev->Sender},
+                {"cookie", Ev->Cookie},
+                {"tabletId", tabletId},
+                {"from", from},
+                {"to", to},
+                {"mustRestoreFirst", mustRestoreFirst});
             auto ev = std::make_unique<TEvBlobStorage::TEvRange>(tabletId, from, to, false, TInstant::Max(), true);
             ev->Decommission = true;
             SendToBSProxy(SelfId(), Self->Config.GetVirtualGroupId(), ev.release(), mustRestoreFirst);
@@ -282,9 +294,17 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvBlobStorage::TEvRangeResult::TPtr ev) {
             auto& msg = *ev->Get();
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT55, "TEvRangeResult", (Id, Self->GetLogId()), (Sender, Ev->Sender),
-                (Cookie, Ev->Cookie), (Msg, msg), (GetsInFlight, GetsInFlight), (RangesInFlight, RangesInFlight),
-                (TxInFlight, TxInFlight), (PutsInFlight, PutsInFlight), (GetQ.size, GetQ.size()));
+            YDB_LOG_DEBUG("TEvRangeResult",
+                {"marker", "BDT55"},
+                {"id", Self->GetLogId()},
+                {"sender", Ev->Sender},
+                {"cookie", Ev->Cookie},
+                {"msg", msg},
+                {"getsInFlight", GetsInFlight},
+                {"rangesInFlight", RangesInFlight},
+                {"txInFlight", TxInFlight},
+                {"putsInFlight", PutsInFlight},
+                {"GetQ.size", GetQ.size()});
 
             if (msg.Status == NKikimrProto::OK) {
                 for (const auto& r : msg.Responses) {
@@ -315,8 +335,13 @@ namespace NKikimr::NBlobDepot {
         // have to put it to BlobDepot storage
 
         void IssueGet(TLogoBlobID id, bool mustRestoreFirst) {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT86, "going to TEvGet", (Id, Self->GetLogId()), (Sender, Ev->Sender),
-                (Cookie, Ev->Cookie), (BlobId, id), (MustRestoreFirst, mustRestoreFirst));
+            YDB_LOG_DEBUG("Going to TEvGet",
+                {"marker", "BDT86"},
+                {"id", Self->GetLogId()},
+                {"sender", Ev->Sender},
+                {"cookie", Ev->Cookie},
+                {"blobId", id},
+                {"mustRestoreFirst", mustRestoreFirst});
             GetQ.emplace_back(id, mustRestoreFirst);
             ProcessGetQueue();
         }
@@ -343,9 +368,17 @@ namespace NKikimr::NBlobDepot {
 
         void Handle(TEvBlobStorage::TEvGetResult::TPtr ev) {
             auto& msg = *ev->Get();
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT87, "TEvGetResult", (Id, Self->GetLogId()), (Sender, Ev->Sender),
-                (Cookie, Ev->Cookie), (Msg, msg), (GetsInFlight, GetsInFlight), (RangesInFlight, RangesInFlight),
-                (TxInFlight, TxInFlight), (PutsInFlight, PutsInFlight), (GetQ.size, GetQ.size()));
+            YDB_LOG_DEBUG("TEvGetResult",
+                {"marker", "BDT87"},
+                {"id", Self->GetLogId()},
+                {"sender", Ev->Sender},
+                {"cookie", Ev->Cookie},
+                {"msg", msg},
+                {"getsInFlight", GetsInFlight},
+                {"rangesInFlight", RangesInFlight},
+                {"txInFlight", TxInFlight},
+                {"putsInFlight", PutsInFlight},
+                {"GetQ.size", GetQ.size()});
 
             for (ui32 i = 0; i < msg.ResponseSz; ++i) {
                 auto& r = msg.Responses[i];
@@ -383,10 +416,19 @@ namespace NKikimr::NBlobDepot {
                 const ui64 value = channel.NextBlobSeqId++;
                 const auto blobSeqId = TBlobSeqId::FromSequentalNumber(channel.Index, Self->Executor()->Generation(), value);
                 const TLogoBlobID id = blobSeqId.MakeBlobId(Self->TabletID(), EBlobType::VG_DATA_BLOB, 0, buffer.size());
-                STLOG(PRI_DEBUG, BLOB_DEPOT, BDT91, "going to TEvPut", (Id, Self->GetLogId()), (Sender, Ev->Sender),
-                    (Cookie, Ev->Cookie), (Key, key), (BlobId, id));
-                SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(id, TRcBuf(buffer), TInstant::Max()),
-                    (ui64)keep | (ui64)doNotKeep << 1);
+                YDB_LOG_DEBUG("Going to TEvPut",
+                    {"marker", "BDT91"},
+                    {"id", Self->GetLogId()},
+                    {"sender", Ev->Sender},
+                    {"cookie", Ev->Cookie},
+                    {"key", key},
+                    {"blobId", id});
+                SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(TEvBlobStorage::TEvPut::TParameters{
+                        .BlobId = id,
+                        .Buffer = TRope(TRcBuf(buffer)),
+                        .Deadline = TInstant::Max(),
+                        .WriteSource = TWriteSource::BlobDepotPut,
+                    }), (ui64)keep | (ui64)doNotKeep << 1);
                 const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second; // prevent from barrier advancing
                 Y_ABORT_UNLESS(inserted);
                 const bool inserted1 = IdToKey.try_emplace(id, std::move(key)).second;
@@ -408,10 +450,20 @@ namespace NKikimr::NBlobDepot {
             const bool keep = ev->Cookie & 1;
             const bool doNotKeep = ev->Cookie >> 1 & 1;
 
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT88, "got TEvPutResult", (Id, Self->GetLogId()), (Sender, Ev->Sender),
-                (Cookie, Ev->Cookie), (Msg, msg), (Key, key), (Keep, keep), (DoNotKeep, doNotKeep),
-                (GetsInFlight, GetsInFlight), (RangesInFlight, RangesInFlight), (TxInFlight, TxInFlight),
-                (PutsInFlight, PutsInFlight), (GetQ.size, GetQ.size()));
+            YDB_LOG_DEBUG("Got TEvPutResult",
+                {"marker", "BDT88"},
+                {"id", Self->GetLogId()},
+                {"sender", Ev->Sender},
+                {"cookie", Ev->Cookie},
+                {"msg", msg},
+                {"key", key},
+                {"keep", keep},
+                {"doNotKeep", doNotKeep},
+                {"getsInFlight", GetsInFlight},
+                {"rangesInFlight", RangesInFlight},
+                {"txInFlight", TxInFlight},
+                {"putsInFlight", PutsInFlight},
+                {"GetQ.size", GetQ.size()});
 
             if (msg.Status != NKikimrProto::OK) { // do not reply OK to this item
                 ResolutionErrors.insert(key.GetBlobId());
@@ -428,9 +480,16 @@ namespace NKikimr::NBlobDepot {
         }
 
         void HandleTxComplete() {
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT84, "HandleTxComplete", (Id, Self->GetLogId()), (Sender, Ev->Sender),
-                (Cookie, Ev->Cookie), (GetsInFlight, GetsInFlight), (RangesInFlight, RangesInFlight),
-                (TxInFlight, TxInFlight), (PutsInFlight, PutsInFlight), (GetQ.size, GetQ.size()));
+            YDB_LOG_DEBUG("HandleTxComplete",
+                {"marker", "BDT84"},
+                {"id", Self->GetLogId()},
+                {"sender", Ev->Sender},
+                {"cookie", Ev->Cookie},
+                {"getsInFlight", GetsInFlight},
+                {"rangesInFlight", RangesInFlight},
+                {"txInFlight", TxInFlight},
+                {"putsInFlight", PutsInFlight},
+                {"GetQ.size", GetQ.size()});
 
             Y_ABORT_UNLESS(TxInFlight);
             --TxInFlight;
@@ -448,9 +507,13 @@ namespace NKikimr::NBlobDepot {
             Y_ABORT_UNLESS(!Finished);
             Finished = true;
 
-            STLOG(PRI_DEBUG, BLOB_DEPOT, BDT92, "request succeeded", (Id, Self->GetLogId()), (Sender, Ev->Sender),
-                (Cookie, Ev->Cookie), (ResolutionErrors.size, ResolutionErrors.size()),
-                (DecommitBlobs.size, DecommitBlobs.size()));
+            YDB_LOG_DEBUG("Request succeeded",
+                {"marker", "BDT92"},
+                {"id", Self->GetLogId()},
+                {"sender", Ev->Sender},
+                {"cookie", Ev->Cookie},
+                {"ResolutionErrors.size", ResolutionErrors.size()},
+                {"DecommitBlobs.size", DecommitBlobs.size()});
 
             Self->Execute(std::make_unique<TTxDecommitBlobs>(Self, std::move(ResolutionErrors), std::move(DecommitBlobs), Ev));
             PassAway();
@@ -466,8 +529,12 @@ namespace NKikimr::NBlobDepot {
             Y_ABORT_UNLESS(!Finished);
             Finished = true;
 
-            STLOG(prio, BLOB_DEPOT, BDT89, "request failed", (Id, Self->GetLogId()), (Sender, Ev->Sender),
-                (Cookie, Ev->Cookie), (ErrorReason, errorReason));
+            YDB_LOG(prio, "Request failed",
+                {"marker", "BDT89"},
+                {"id", Self->GetLogId()},
+                {"sender", Ev->Sender},
+                {"cookie", Ev->Cookie},
+                {"errorReason", errorReason});
             auto [response, record] = TEvBlobDepot::MakeResponseFor(*Ev, NKikimrProto::ERROR, std::move(errorReason));
             TActivationContext::Send(response.release());
             PassAway();
@@ -486,7 +553,10 @@ namespace NKikimr::NBlobDepot {
 
                 default:
                     Y_DEBUG_ABORT("unexpected event Type# %08" PRIx32, type);
-                    STLOG(PRI_CRIT, BLOB_DEPOT, BDT90, "unexpected event", (Id, Self->GetLogId()), (Type, type));
+                    YDB_LOG_CRIT("Unexpected event",
+                        {"marker", "BDT90"},
+                        {"id", Self->GetLogId()},
+                        {"type", type});
                     break;
             }
 

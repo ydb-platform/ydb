@@ -180,7 +180,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
                     << csController->GetIndexesSkippingOnSelect().Val());
         }
     }
-    TString scriptChunkDetailsMinMax = R"(
+    TString scriptChunkDetailsMinMaxWithLocalDBStorage = R"(
         STOP_COMPACTION
         ------
         SCHEMA:
@@ -203,11 +203,43 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"x\",\"max\":\"x\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
         EXPECTED: [[%true]]
     )";
-    Y_UNIT_TEST(ChunkDetailsMinMax, ELocalIndexAsSchemeObject) {
+
+    Y_UNIT_TEST(ChunkDetailsMinMaxWithLocalDBStorage, ELocalIndexAsSchemeObject) {
         const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
-        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMax)).Execute(settings);
+        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMaxWithLocalDBStorage)).Execute(settings);
+    }   
+    
+    TString scriptChunkDetailsMinMaxWithBSStorage = R"(
+        STOP_COMPACTION
+        ------
+        SCHEMA:
+        CREATE TABLE `/Root/ColumnTable` (
+            pk Uint64 NOT NULL,
+            field Utf8,
+            PRIMARY KEY (pk)
+        )
+        PARTITION BY HASH(pk)
+        WITH (STORE = COLUMN, PARTITION_COUNT = 1);
+        ------
+        DATA:
+        REPLACE INTO `/Root/ColumnTable` (pk, field) VALUES (1u, 'x');
+        ------
+        SCHEMA:
+        ALTER OBJECT `/Root/ColumnTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=field_mm, TYPE=MIN_MAX, FEATURES=`{"storage_id": "__DEFAULT", "column_name" : "field"}`);
+        ------
+        ONE_ACTUALIZATION
+        ------
+        READ: SELECT COALESCE(sum(CAST(ChunkDetails = "{\"min\":\"x\",\"max\":\"x\"}" as Uint32) ), 0) = count(ChunkDetails) FROM `/Root/ColumnTable/.sys/primary_index_stats` WHERE EntityName="field_mm";
+        EXPECTED: [[%true]]
+    )";
+    
+    Y_UNIT_TEST(ChunkDetailsMinMaxWithBSStorage, ELocalIndexAsSchemeObject) {
+        const bool LocalIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        auto settings = TKikimrSettings().SetColumnShardAlterObjectEnabled(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
+        Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMaxWithBSStorage)).Execute(settings);
     }
 
 
@@ -217,6 +249,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableLocalMinMaxIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
@@ -263,11 +296,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             WITH (
                 STORE = COLUMN
             );
-        )");
-
-        assertDDLQueryOk(R"(
-            ALTER OBJECT `/Root/minmax_test_applied_applied` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=value_mm, TYPE=MIN_MAX, FEATURES=`{"column_name" : "value"}`);
-
+            ALTER TABLE `/Root/minmax_test_applied_applied` ADD INDEX `value_mm` LOCAL USING min_max ON(`value`);
         )");
 
         runDMLQuery(R"(
@@ -283,36 +312,81 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         )");
         csController->WaitCompactions(TDuration::Seconds(5));
 
-        auto skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
+        struct TQueryResult {
+            ui64 CountResult;
+            bool MinMaxIndexUsed;
+        };
 
+        auto runQuery = [&](TString text) -> TQueryResult {
+            ui64 skippedAndApprovedBeforeQuery = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
+            auto ysonArrayWithOneInteger = runDMLQuery(text);
+            ui64 skippedAndApprovedAfterQuery = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
+            
+            return TQueryResult {
+                .CountResult = NYT::NodeFromYsonString(ysonArrayWithOneInteger).AsList()[0].AsList()[0].AsUint64(),
+                .MinMaxIndexUsed = skippedAndApprovedBeforeQuery < skippedAndApprovedAfterQuery
+            };
+        };
 
-        CompareYson(runDMLQuery(R"(
+        TQueryResult resLess = runQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` < "Value_500000";
-        )"), "[[944450u]]");
-        Cerr << "not built indexes: " << csController->GetIndexesSkippedNoData().Val() << '\n';
-
-        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
-        skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
-
-        CompareYson(runDMLQuery(R"(
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resLess.CountResult, 944450, "incorrect result for query with '<' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resLess.MinMaxIndexUsed, "query with '<' filter over min_max-indexed column doesn't use min_max index");
+        
+        TQueryResult resGreater = runQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` > "Value_500000";
-        )"), "[[555549u]]");
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resGreater.CountResult, 555549, "incorrect result for query with '>' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resGreater.MinMaxIndexUsed, "query with '>' filter over min_max-indexed column doesn't use min_max index");
 
-        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
-        skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
-
-        CompareYson(runDMLQuery(R"(
+        TQueryResult resLessOrEqual = runQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` <= "Value_500000";
-        )"), "[[944451u]]");
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resLessOrEqual.CountResult, 944451, "incorrect result for query with '<=' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resLessOrEqual.MinMaxIndexUsed, "query with '<=' filter over min_max-indexed column doesn't use min_max index");
 
-        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
-        skipped_and_approved = csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val();
-
-        CompareYson(runDMLQuery(R"(
+        TQueryResult resGreaterOrEqual = runQuery(R"(
             SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` >= "Value_500000";
-        )"), "[[555550u]]");
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resGreaterOrEqual.CountResult, 555550, "incorrect result for query with '>=' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resGreaterOrEqual.MinMaxIndexUsed, "query with '>=' filter over min_max-indexed column doesn't use min_max index");
 
-        UNIT_ASSERT_GT(csController->GetIndexesSkippingOnSelect().Val() + csController->GetIndexesApprovedOnSelect().Val(), skipped_and_approved);
+        TQueryResult resBetween = runQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` BETWEEN "Value_500000" AND "Value_500001";
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resBetween.CountResult, 2, "incorrect result for query with 'BETWEEN' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resBetween.MinMaxIndexUsed, "query with 'BETWEEN' filter over min_max-indexed column doesn't use min_max index");
+
+        TQueryResult resAnd = runQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` >= "Value_500000" AND `value` <= "Value_500001";
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resAnd.CountResult, 2, "incorrect result for query with '`col` >= ... AND `col` <= ...' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resAnd.MinMaxIndexUsed, "query with '`col` >= ... AND `col` <= ...' filter over min_max-indexed column doesn't use min_max index");
+        
+        TQueryResult resOr = runQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` >= "Value_500000" OR `value` <= "Value_500001";
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resOr.CountResult, 1500000, "incorrect result for query with '`col` >= ... OR `col` <= ...' filter over min_max-indexed column");
+        UNIT_ASSERT_C(resOr.MinMaxIndexUsed, "query with '`col` >= ... OR `col` <= ...' filter over min_max-indexed column doesn't use min_max index");
+        
+        TQueryResult resNeq = runQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` != "Value_500000";
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resNeq.CountResult, 1499999, "incorrect result for query with '!=' filter over min_max-indexed column");
+        UNIT_ASSERT_C(!resNeq.MinMaxIndexUsed, "query with '!=' filter over min_max-indexed column use min_max index, but it shouldn't");
+        
+        TQueryResult resIsNotNull = runQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` IS NOT NULL;
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resIsNotNull.CountResult, 1500000, "incorrect result for query with 'IS NOT NULL' filter over min_max-indexed column");
+        UNIT_ASSERT_C(!resIsNotNull.MinMaxIndexUsed, "query with 'IS NOT NULL' filter over min_max-indexed column use min_max index, but it shouldn't(will use in future, see https://github.com/ydb-platform/ydb/issues/38574)");
+        
+        TQueryResult resDistinctFromNull = runQuery(R"(
+            SELECT COUNT(*) FROM `/Root/minmax_test_applied_applied` WHERE `value` IS DISTINCT FROM NULL;
+        )");
+        UNIT_ASSERT_VALUES_EQUAL_C(resDistinctFromNull.CountResult, 1500000, "incorrect result for query with 'IS DISCTINCT FROM NULL' filter over min_max-indexed column");
+        UNIT_ASSERT_C(!resDistinctFromNull.MinMaxIndexUsed, "query with 'IS DISCTINCT FROM NULL' filter over min_max-indexed column use min_max index, but it shouldn't(will use in future, see https://github.com/ydb-platform/ydb/issues/38574)");
     }
 
     Y_UNIT_TEST(MinMaxNulls, EUseQueryService, ELocalIndexAsSchemeObject) {
@@ -902,7 +976,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
     Y_UNIT_TEST(LocalBloomNgramIndexDefaultCaseSensitivePersisted, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
@@ -939,7 +1013,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
 Y_UNIT_TEST(LocalBloomIndexHasNoCaseSensitiveInShowCreate, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
@@ -975,7 +1049,7 @@ Y_UNIT_TEST(LocalBloomIndexHasNoCaseSensitiveInShowCreate, EUseQueryService) {
 
 Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
@@ -1016,7 +1090,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
 
     Y_UNIT_TEST(RenameLocalBloomNgramIndex, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
@@ -1057,7 +1131,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
 
     Y_UNIT_TEST(RenameLocalBloomAndBloomNgramIndexes, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
@@ -1220,7 +1294,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
     // DEPRECATED: old syntax
     Y_UNIT_TEST(LocalBloomNgramIndexDeprecatedSyntaxFilterSizeRecordsCount, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         TKikimrRunner kikimr(settings);
@@ -1379,7 +1453,6 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             TString result = StreamResultToYson(it);
             CompareYson(result, R"([[0u;]])");
             AFL_VERIFY(csController->GetIndexesSkippedNoData().Val() == 0);
-            AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() == 0);
             AFL_VERIFY(csController->GetIndexesApprovedOnSelect().Val() < csController->GetIndexesSkippingOnSelect().Val())
             ("approve", csController->GetIndexesApprovedOnSelect().Val())("skip", csController->GetIndexesSkippingOnSelect().Val());
         }
@@ -3080,7 +3153,7 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
 
     Y_UNIT_TEST(LocalBloomIndexesCompatibleWithDictionaryEncoding, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true).SetEnableShowCreate(true);
+        auto settings = TKikimrSettings().SetWithSampleTables(false).SetColumnShardAlterObjectEnabled(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableLocalBloomNgramFilterIndex(true);
         settings.AppConfig.MutableFeatureFlags()->SetEnableCsDictionaryEncoding(true);

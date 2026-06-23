@@ -7,18 +7,6 @@
 
 #include <variant>
 
-#if defined(__x86_64__)
-#include <contrib/restricted/abseil-cpp-tstring/y_absl/crc/internal/non_temporal_memcpy.h>
-#endif
-
-Y_FORCE_INLINE void MemcpyNoCache(void* dst, const void* src, size_t len) {
-#if defined(__x86_64__)
-    y_absl::crc_internal::non_temporal_store_memcpy_avx(dst, src, len);
-#else
-    memcpy(dst, src, len);
-#endif
-}
-
 namespace NActors {
     LWTRACE_USING(ACTORLIB_PROVIDER);
 
@@ -79,20 +67,16 @@ namespace NActors {
         return 0;
     }
 
-    static bool NeedReallocateRdma(const NInterconnect::NRdma::TMemRegionSlice& region) {
-        // More complex logic here...
-
-        return !region.Empty();
+    static bool NeedReallocateRdma(const NInterconnect::NRdma::TMemRegionSlice& region, ui32 copySizeThreshold) {
+        return !region.Empty() && region.GetSize() < copySizeThreshold;
     }
 
-    static void ReallocPayload(TRope& rope) {
+    static void ReallocPayload(TRope& rope, ui32 copySizeThreshold) {
         for (TRope::TIterator it = rope.Begin(); it != rope.End(); ++it) {
             TRcBuf& chunk = it.GetChunk();
             const auto& region = NInterconnect::NRdma::TryExtractFromRcBuf(chunk);
-            if (NeedReallocateRdma(region)) {
-                auto newChunk = TRcBuf::Uninitialized(chunk.Size(), chunk.Headroom(), chunk.Tailroom());
-                MemcpyNoCache(newChunk.GetContiguousSpanMut().data(), chunk.GetContiguousSpan().data(), chunk.Size());
-                chunk = newChunk;
+            if (NeedReallocateRdma(region, copySizeThreshold)) {
+                chunk = TRcBuf::Copy(chunk.GetContiguousSpan(), chunk.Headroom(), chunk.Tailroom());
             }
         }
     }
@@ -989,7 +973,7 @@ namespace NActors {
             }
             pendingEvent.SerializationInfo.IsExtendedFormat = descr.Flags & IEventHandle::FlagExtendedFormat;
 
-            ReallocPayload(payload);
+            ReallocPayload(payload, Common->Settings.RdmaPayloadCopySizeThreshold);
 
             auto ev = std::make_unique<IEventHandle>(SessionId,
                 descr.Type,

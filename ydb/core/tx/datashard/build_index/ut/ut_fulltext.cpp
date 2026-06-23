@@ -834,6 +834,197 @@ key = 4, data = (empty maybe), __ydb_length = 2
 )");
         }
 
+        Y_UNIT_TEST(BuildWithRelevance_ManyRows) {
+            // Regression: production wikipedia2 build with ~485K rows produced an
+            // indexImplDocsTable populated with only ~53% of the expected rows.
+            // The build interleaves uploads to two destinations (posting + docs)
+            // through a single Uploader slot; under heavy load the docs buffer
+            // may be skipped at the final drain. This test reproduces a similar
+            // shape with a few hundred rows and a forced tiny batch limit so that
+            // many partial flushes happen during the scan. Both tables must end
+            // up with exactly DocCount = N entries.
+            TPortManager pm;
+            TServerSettings serverSettings(pm.GetPort(2134));
+            serverSettings.SetDomainName("Root");
+
+            Tests::TServer::TPtr server = new TServer(serverSettings);
+            auto sender = server->GetRuntime()->AllocateEdgeActor();
+
+            server->GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+            InitRoot(server, sender);
+
+            CreateMainTable(server, sender);
+            CreateIndexTable(server, sender, /*withRelevance=*/true);
+            CreateDocsTable(server, sender);
+
+            constexpr ui32 N = 500;
+            {
+                // Each row has multiple tokens, including overlap between rows to
+                // produce a posting table that hits the batch limit much sooner
+                // than the docs table — this is the production-like ratio.
+                TStringBuilder sb;
+                sb << "UPSERT INTO `/Root/table-main` (key, text, data) VALUES ";
+                for (ui32 i = 0; i < N; ++i) {
+                    if (i > 0) {
+                        sb << ", ";
+                    }
+                    sb << "(" << (i + 1)
+                       << ", \"alpha beta gamma delta epsilon row" << i
+                       << " tok" << (i % 19) << " tok" << (i % 13) << " tok" << (i % 7)
+                       << "\", \"d" << i << "\")";
+                }
+                ExecSQL(server, sender, sb);
+            }
+
+            auto reply = DoBuildRaw(server, sender, [](auto& request) {
+                request.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance);
+                // Tiny batch: every few rows produces enough posting entries to
+                // exceed MaxBatchRows, forcing many partial flushes interleaved
+                // with new docs entries.
+                request.MutableScanSettings()->SetMaxBatchRows(16);
+            });
+            UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Record.GetDocCount(), N);
+
+            // The docs table must have exactly N rows — one per source row —
+            // and every source key must be present exactly once.
+            auto docs = ReadShardedTable(server, kDocsTable);
+            ui32 docRowCount = 0;
+            for (char c : docs) {
+                if (c == '\n') {
+                    ++docRowCount;
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(docRowCount, N,
+                "indexImplDocsTable is missing rows after fulltext relevance build."
+                " Expected " << N << " rows, observed " << docRowCount
+                << ". Docs content:\n" << docs);
+        }
+        Y_UNIT_TEST(BuildWithRelevance_ResumeFromLastKeyAckPreservesDocsRows) {
+            // Regression: with FulltextRelevance the scan writes to TWO destinations
+            // (posting + docs), and the posting buffer fills much faster than docs
+            // because every source row produces multiple posting entries but only
+            // one docs entry. The old code advanced LastAckedKey on every flush —
+            // including posting-only flushes — even though docs entries for the
+            // same rows were still buffered. If the SchemeShard restarts and
+            // resumes the build from that LastKeyAck (exclusive), the buffered
+            // docs entries are lost permanently.
+            //
+            // This test reproduces that scenario: partial scan → capture the first
+            // IN_PROGRESS LastKeyAck → resume from there → verify the docs table
+            // has all N rows.
+            TPortManager pm;
+            TServerSettings serverSettings(pm.GetPort(2134));
+            serverSettings.SetDomainName("Root");
+
+            Tests::TServer::TPtr server = new TServer(serverSettings);
+            auto sender = server->GetRuntime()->AllocateEdgeActor();
+
+            server->GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_DEBUG);
+
+            InitRoot(server, sender);
+            CreateMainTable(server, sender);
+            CreateIndexTable(server, sender, /*withRelevance=*/true);
+            CreateDocsTable(server, sender);
+
+            constexpr ui32 N = 200;
+            {
+                TStringBuilder sb;
+                sb << "UPSERT INTO `/Root/table-main` (key, text, data) VALUES ";
+                for (ui32 i = 0; i < N; ++i) {
+                    if (i > 0) {
+                        sb << ", ";
+                    }
+                    sb << "(" << (i + 1)
+                       << ", \"alpha beta gamma delta epsilon row" << i
+                       << " tok" << (i % 19) << " tok" << (i % 13) << " tok" << (i % 7)
+                       << "\", \"d" << i << "\")";
+                }
+                ExecSQL(server, sender, sb);
+            }
+
+            // Step 1: partial scan, stop after first IN_PROGRESS so we capture an
+            // intermediate LastKeyAck.
+            TString lastKeyAck;
+            {
+                auto ev = std::make_unique<TEvDataShard::TEvBuildFulltextIndexRequest>();
+                auto tabletId = FillRequest(server, sender, ev->Record,
+                    [](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& req) {
+                        req.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance);
+                        req.MutableScanSettings()->SetMaxBatchRows(16);
+                    });
+
+                auto& runtime = *server->GetRuntime();
+                runtime.SendToPipe(tabletId, sender, ev.release(), 0, GetPipeConfigWithRetries());
+
+                while (true) {
+                    auto reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvBuildFulltextIndexResponse>(sender);
+                    const auto& rec = reply->Get()->Record;
+                    if (rec.HasLastKeyAck()) {
+                        lastKeyAck = rec.GetLastKeyAck();
+                    }
+                    if (rec.GetStatus() != NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS) {
+                        break;
+                    }
+                    // Stop at the first IN_PROGRESS to emulate a SchemeShard restart
+                    // immediately after persisting the first checkpoint.
+                    break;
+                }
+            }
+            UNIT_ASSERT_C(!lastKeyAck.empty(),
+                "Expected at least one IN_PROGRESS with LastKeyAck before resume");
+
+            // Step 2: resume from LastKeyAck (exclusive). With the buggy code the
+            // resumed scan would skip rows for which docs entries were still in
+            // the buffer of the cancelled scan, leaving the docs table short.
+            {
+                auto ev = std::make_unique<TEvDataShard::TEvBuildFulltextIndexRequest>();
+                auto tabletId = FillRequest(server, sender, ev->Record,
+                    [&](NKikimrTxDataShard::TEvBuildFulltextIndexRequest& req) {
+                        req.SetIndexType(NKikimrTxDataShard::EFulltextIndexType::FulltextRelevance);
+                        req.MutableScanSettings()->SetMaxBatchRows(16);
+                        TSerializedCellVec ackCells(lastKeyAck);
+                        TSerializedTableRange range(ackCells.GetCells(), false /*exclusive*/, {}, false);
+                        range.Serialize(*req.MutableKeyRange());
+                    });
+
+                const ui64 seqNoGen = ev->Record.GetSeqNoGeneration();
+                const ui64 seqNoRound = ev->Record.GetSeqNoRound();
+
+                auto& runtime = *server->GetRuntime();
+                runtime.SendToPipe(tabletId, sender, ev.release(), 0, GetPipeConfigWithRetries());
+
+                TEvDataShard::TEvBuildFulltextIndexResponse::TPtr reply;
+                do {
+                    reply = runtime.GrabEdgeEventRethrow<TEvDataShard::TEvBuildFulltextIndexResponse>(sender);
+                    if (reply->Get()->Record.GetRequestSeqNoGeneration() != seqNoGen ||
+                        reply->Get()->Record.GetRequestSeqNoRound() != seqNoRound) {
+                        reply = nullptr;
+                    }
+                } while (!reply ||
+                         reply->Get()->Record.GetStatus() == NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS);
+                UNIT_ASSERT_EQUAL_C(reply->Get()->Record.GetStatus(),
+                    NKikimrIndexBuilder::EBuildStatus::DONE,
+                    reply->Get()->Record.ShortDebugString());
+            }
+
+            // The docs table must have exactly N rows. Any missing rows mean the
+            // first scan's LastKeyAck advanced past rows whose docs entries were
+            // still buffered, and the resumed scan skipped them.
+            auto docs = ReadShardedTable(server, kDocsTable);
+            ui32 docRowCount = 0;
+            for (char c : docs) {
+                if (c == '\n') {
+                    ++docRowCount;
+                }
+            }
+            UNIT_ASSERT_VALUES_EQUAL_C(docRowCount, N,
+                "indexImplDocsTable lost rows across the resume boundary. Expected "
+                << N << " rows, observed " << docRowCount
+                << ". This indicates LastKeyAck advanced past rows whose docs"
+                   " entries were still buffered. Docs:\n" << docs);
+        }
+
         void DoTestBuildCompact(bool WithRelevance, const char *keyType = "Uint64") {
             TPortManager pm;
             TServerSettings serverSettings(pm.GetPort(2134));

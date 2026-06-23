@@ -757,6 +757,7 @@ public:
             .EnableTablePgTypes = true,
             .EnableTableDatetime64 = true,
             .EnableParameterizedDecimal = true,
+            .EnableDetailedMetrics = true,
         };
         TTableInfo::TAlterDataPtr alterData = TTableInfo::CreateAlterData(nullptr, schema, *typeRegistry,
             limits, *domainInfo, featureFlags, errStr, LocalSequences);
@@ -1065,10 +1066,18 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
                 case NKikimrSchemeOp::EIndexTypeGlobal:
                 case NKikimrSchemeOp::EIndexTypeGlobalAsync:
                 case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-                case NKikimrSchemeOp::EIndexTypeGlobalJson:
                 case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                     // no specialized index description
                     Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+                    break;
+                case NKikimrSchemeOp::EIndexTypeGlobalJson:
+                case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                    // JSON indexes carry a fulltext description only in rowid mode (__ydb_row_id as doc_id).
+                    if (const auto* ft = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexInfo->SpecializedIndexDescription)) {
+                        *operation->MutableFulltextIndexDescription() = *ft;
+                    } else {
+                        Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+                    }
                     break;
                 case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
                     *operation->MutableVectorIndexKmeansTreeDescription() =
@@ -1076,6 +1085,8 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
                     break;
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
                     *operation->MutableFulltextIndexDescription() =
                         std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
                     break;
@@ -1092,7 +1103,12 @@ TVector<ISubOperation::TPtr> CreateCopyTable(TOperationId nextId, const TTxTrans
             }
 
             if (TTableIndexInfo::IsLocalIndex(indexInfo->Type)) {
-                result.push_back(CreateNewLocalIndex(NextPartId(nextId, result), schema));
+                // Column tables use the OLAP local-index op; row tables use the generic one.
+                if (srcPath.Base()->IsColumnTable()) {
+                    result.push_back(CreateNewColumnTableLocalIndex(NextPartId(nextId, result), schema));
+                } else {
+                    result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));
+                }
                 continue; // local indexes have no impl tables
             } else {
                 result.push_back(CreateNewTableIndex(NextPartId(nextId, result), schema));

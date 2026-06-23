@@ -1,5 +1,7 @@
 #include "check_format.h"
 
+#include "ast.h"
+
 #include <util/string/builder.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 
@@ -18,86 +20,25 @@
 
 namespace NSQLFormat {
 
-bool IsQueryTextMayPresent(const google::protobuf::Message* message) {
-    const auto& root = static_cast<const NSQLTranslationV1::TSQLv1ParserAST&>(*message);
-    auto statementNames = NSQLTranslationV1::StatementNames(root.GetRule_sql_query());
-    return AnyOf(statementNames, [](const auto& x) {
-        return x.Internal == "CreateView";
-    });
-}
-
-google::protobuf::Message* SqlToProtoAst(
-    const NSQLTranslationV1::TParsers& parsers,
-    const TString& query,
-    const NSQLTranslation::TTranslationSettings& settings,
-    NSQLTranslation::TTranslationSettings& effectiveSettings,
-    NYql::TIssues& issues)
-{
-    effectiveSettings = settings;
-    if (!NSQLTranslation::ParseTranslationSettings(query, effectiveSettings, issues)) {
-        return nullptr;
-    }
-
-    return NSQLTranslationV1::SqlAST(
-        parsers, query, effectiveSettings.File, issues,
-        NSQLTranslation::SQL_MAX_PARSER_ERRORS,
-        effectiveSettings.AnsiLexer, effectiveSettings.Arena);
-}
-
-NYql::TAstParseResult ProtoAstToAst(
-    const NSQLTranslationV1::TLexers& lexers,
-    const NSQLTranslationV1::TParsers& parsers,
-    const TString& query,
-    const google::protobuf::Message* protoAst,
-    const NSQLTranslation::TTranslationSettings& effectiveSettings)
-{
-    NSQLTranslation::TTranslators translators(
-        /* V0 = */ nullptr,
-        MakeTranslator(lexers, parsers),
-        /* PG = */ nullptr);
-
-    auto lexer = MakeLexer(lexers, effectiveSettings.AnsiLexer);
-    YQL_ENSURE(lexer);
-
-    NSQLTranslation::TSQLHints hints;
-    if (NYql::TAstParseResult res; !CollectSqlHints(
-            *lexer,
-            query,
-            effectiveSettings.File,
-            effectiveSettings.File,
-            hints,
-            res.Issues,
-            effectiveSettings.MaxErrors,
-            /*utf8Aware=*/true))
-    {
-        return res;
-    }
-
-    return NSQLTranslation::SqlASTToYql(
-        translators, query, *protoAst, hints, effectiveSettings);
-}
-
 bool ValidateAST(
-    const TString& originalQuery,
-    const NYql::TAstNode* originalAst,
+    const TString& original,
+    TMaybe<const NYql::TAstNode*> originalRes,
     const TString& formatted,
     const NSQLTranslation::TTranslationSettings& settings,
     const NSQLTranslationV1::TLexers& lexers,
     const NSQLTranslationV1::TParsers& parsers,
     NYql::TIssues& issues)
 {
-    NSQLTranslation::TTranslationSettings formattedEffectiveSettings;
-    const auto* formattedProtoAst = SqlToProtoAst(
-        parsers, formatted, settings, formattedEffectiveSettings, issues);
-    if (!formattedProtoAst) {
-        return false;
+    NYql::TAstParseResult originalResHolder;
+    if (!originalRes.Defined()) {
+        originalResHolder = NSQLTranslationV1::SqlToYql(lexers, parsers, original, settings);
+        originalRes = originalResHolder.Root;
     }
 
-    NYql::TAstParseResult formattedRes = ProtoAstToAst(
-        lexers, parsers, formatted, formattedProtoAst, formattedEffectiveSettings);
+    const NYql::TAstNode* expectedYQLs = *originalRes;
 
+    NYql::TAstParseResult formattedRes = NSQLTranslationV1::SqlToYql(lexers, parsers, formatted, settings);
     const NYql::TAstNode* formattedYQLs = formattedRes.Root;
-    const NYql::TAstNode* expectedYQLs = originalAst;
 
     const bool formattedIsOk = static_cast<bool>(formattedYQLs);
     const bool expectedIsOk = static_cast<bool>(expectedYQLs);
@@ -111,21 +52,9 @@ bool ValidateAST(
         return false;
     }
 
-    if (IsQueryTextMayPresent(formattedProtoAst)) {
-        Y_UNUSED(originalQuery);
-        return true; // TODO(YQL-21134): normalize embedded query text;
-    }
-
     if (expectedYQLs && formattedYQLs) {
-        const auto printFlags = NYql::TAstPrintFlags::PerLine | NYql::TAstPrintFlags::ShortQuote;
-
-        TStringStream formattedYQLsText;
-        formattedYQLs->PrettyPrintTo(formattedYQLsText, printFlags);
-
-        TStringStream expectedYQLsText;
-        expectedYQLs->PrettyPrintTo(expectedYQLsText, printFlags);
-
-        if (expectedYQLsText.Str() != formattedYQLsText.Str()) {
+        TMaybe<bool> areEqual = AreAstEqual(expectedYQLs, formattedYQLs);
+        if (areEqual && !*areEqual) {
             issues.AddIssue("Source query's AST and formatted query's AST are not same");
             return false;
         }
@@ -187,16 +116,14 @@ bool ValidateConvergence(
 
 TMaybe<TString> CheckedFormat(
     const TString& query,
-    const NYql::TAstNode* ast,
-    const NSQLTranslation::TTranslationSettings& settings,
+    TMaybe<const NYql::TAstNode*> ast,
+    NSQLTranslation::TTranslationSettings settings,
     NYql::TIssues& issues,
     EConvergenceRequirement convergence)
 {
-    if (NSQLTranslation::TTranslationSettings effective;
-        !NSQLTranslation::ParseTranslationSettings(query, effective, issues))
-    {
+    if (!NSQLTranslation::ParseTranslationSettings(query, settings, issues)) {
         return Nothing();
-    } else if (effective.PgParser) {
+    } else if (settings.PgParser) {
         return query;
     }
 

@@ -7,6 +7,8 @@ SRCS(
     cache.cpp
     cache.h
     circular_queue.h
+    circular_sparse_queue.h
+    circular_sparse_queue.cpp
     concurrent_rw_hash.cpp
     concurrent_rw_hash.h
     console.cpp

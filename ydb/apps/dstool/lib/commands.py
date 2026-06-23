@@ -44,10 +44,20 @@ import ydb.apps.dstool.lib.dstool_cmd_cluster_get as cluster_get
 import ydb.apps.dstool.lib.dstool_cmd_cluster_set as cluster_set
 import ydb.apps.dstool.lib.dstool_cmd_cluster_workload_run as cluster_workload_run
 
-import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_create as nbs_partition_create
-import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_delete as nbs_partition_delete
-import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_get_load_actor_adapter_actor_id as nbs_partition_get_load_actor_adapter_actor_id
-import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_io as nbs_partition_io
+# NBS partition commands depend on ydb/core/nbs, which only builds on Linux
+# (vhost-user uses epoll/eventfd/timerfd). On other platforms these modules
+# are absent from the bundle; importing them must not break the rest of dstool.
+try:
+    import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_create as nbs_partition_create
+    import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_delete as nbs_partition_delete
+    import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_get_load_actor_adapter_actor_id as nbs_partition_get_load_actor_adapter_actor_id
+    import ydb.apps.dstool.lib.dstool_cmd_nbs_partition_io as nbs_partition_io
+    _nbs_partition_modules = [
+        nbs_partition_create, nbs_partition_delete,
+        nbs_partition_get_load_actor_adapter_actor_id, nbs_partition_io,
+    ]
+except ImportError:
+    _nbs_partition_modules = []
 
 import sys
 import ydb.apps.dstool.lib.common as common
@@ -63,7 +73,7 @@ modules = [
     group_state, group_take_snapshot, group_add, group_resize, group_list, group_virtual_create, group_virtual_cancel, group_virtual_reconfigure,
     pdisk_add_by_serial, pdisk_remove_by_serial, pdisk_set, pdisk_list, pdisk_stop, pdisk_restart, pdisk_readonly, pdisk_move, pdisk_populate,
     vdisk_evict, vdisk_list, vdisk_set_read_only, vdisk_remove_donor, vdisk_wipe, vdisk_compact, device_list,
-    nbs_partition_create, nbs_partition_delete, nbs_partition_get_load_actor_adapter_actor_id, nbs_partition_io,
+    *_nbs_partition_modules,
 ]
 
 default_structure = [
@@ -76,8 +86,14 @@ default_structure = [
     ('box', ['list']),
     ('node', ['list']),
     ('cluster', ['balance', 'get', 'set', ('workload', ['run']), 'list']),
-    ('nbs', [('partition', ['create', 'delete', 'get-load-actor-adapter-actor-id', 'io'])]),
 ]
+
+# Only expose the `nbs partition ...` subcommand tree when the modules are
+# available; otherwise argparse would render them as UNIMPLEMETED stubs.
+if _nbs_partition_modules:
+    default_structure.append(
+        ('nbs', [('partition', ['create', 'delete', 'get-load-actor-adapter-actor-id', 'io'])]),
+    )
 
 
 def make_command_map_by_structure(subparsers, modules=modules, structure=default_structure):

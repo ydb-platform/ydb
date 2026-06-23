@@ -23,10 +23,12 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_actor.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/executer_actor/kqp_executer.h>
+#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
 #include <ydb/core/kqp/finalize_script_service/kqp_finalize_script_service.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/behaviour.h>
 #include <ydb/core/kqp/node_service/kqp_node_service.h>
 #include <ydb/core/kqp/proxy_service/kqp_query_text_cache_service.h>
+#include <ydb/core/kqp/rm_service/kqp_rm_service.h>
 #include <ydb/core/kqp/session_actor/kqp_worker_common.h>
 #include <ydb/core/kqp/workload_service/kqp_workload_service.h>
 #include <ydb/core/mon/mon.h>
@@ -291,8 +293,6 @@ public:
                 NYql::NDq::TFileSpillingServiceConfig{
                     .Root = spillingRoot,
                     .MaxTotalSize = cfg.GetMaxTotalSize(),
-                    .MaxFileSize = cfg.GetMaxFileSize(),
-                    .MaxFilePartSize = cfg.GetMaxFilePartSize(),
                     .IoThreadPoolWorkersCount = cfg.GetIoThreadPool().GetWorkersCount(),
                     .IoThreadPoolQueueSize = cfg.GetIoThreadPool().GetQueueSize(),
                     .CleanupOnShutdown = false
@@ -404,6 +404,7 @@ public:
 
         InitSharedReading();
         InitCheckpointStorage();
+        InitDescribeResourceIdService();
 
         Become(&TKqpProxyService::MainState);
         StartCollectPeerProxyData();
@@ -512,6 +513,9 @@ public:
         if (CheckpointStorageService) {
             Send(CheckpointStorageService, new TEvents::TEvPoison());
         }
+        if (DescribeResourceIdService) {
+            Send(DescribeResourceIdService, new TEvents::TEvPoison());
+        }
 
         LocalSessions->ForEachNode([this](TNodeId node) {
             Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
@@ -565,6 +569,7 @@ public:
         Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
         InitSharedReading();
         InitCheckpointStorage();
+        InitDescribeResourceIdService();
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -718,14 +723,8 @@ public:
         bool explicitSession = true;
         if (ev->Get()->GetSessionId().empty()) {
             TProcessResult<TKqpSessionInfo*> result;
-            // TODO(anely-d): workaround — warmup needs ydb_user in GUCSettings to match
-            // explicit sessions for compile cache key. Pass "" instead of Nothing() so
-            // FillGUCSettings sets ydb_user="". Proper fix: normalize GUCSettings globally.
-            auto userName = ev->Get()->GetIsWarmupCompilation()
-                ? TMaybe<TString>("")
-                : Nothing();
             if (!CreateNewSessionWorker(requestInfo, TString(DefaultKikimrPublicClusterName), false,
-                database, false, false, "", "", "", "", "", "", userName, result))
+                database, false, false, "", "", "", "", "", "", Nothing(), result))
             {
                 ReplyProcessError(result.YdbStatus, result.Error, requestId);
                 return;
@@ -1027,8 +1026,17 @@ public:
     void Handle(TEvPrivate::TEvCollectPeerProxyData::TPtr&) {
         if (!ShutdownRequested) {
             TDuration d;
-            if (!WarmupStarted && TableServiceConfig.GetEnableCompileCacheWarmup()) {
-                // Short polling interval until warmup starts
+            // Fast-poll only while warmup may still fire and RM board hasn't converged
+            // (post-convergence the warmup actor self-skips, so 2s polling is pointless).
+            bool fastPoll = false;
+            if (!WarmupStarted
+                && TableServiceConfig.GetEnableCompileCacheWarmup()
+                && PeerProxyNodeResources.size() <= 1)
+            {
+                auto rm = TryGetKqpResourceManager(SelfId().NodeId());
+                fastPoll = !rm || !rm->GetInitialBoardSyncDone();
+            }
+            if (fastPoll) {
                 d = TDuration::Seconds(2);
             } else {
                 const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
@@ -1985,6 +1993,16 @@ private:
             NYql::NDq::MakeCheckpointStorageID(), CheckpointStorageService);
     }
 
+    void InitDescribeResourceIdService() {
+        if (!FederatedQuerySetup || !FeatureFlags.GetEnableExternalDataSourceAuthMethodIam() || DescribeResourceIdService) {
+            return;
+        }
+        auto actor = CreateDescribeResourceIdServiceActor(FederatedQuerySetup->Driver);
+        DescribeResourceIdService = TActivationContext::Register(actor);
+        TActivationContext::ActorSystem()->RegisterLocalService(
+            MakeKqpDescribeResourceIdServiceId(), DescribeResourceIdService);
+    }
+
 private:
     NKikimrConfig::TLogConfig LogConfig;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
@@ -2045,6 +2063,7 @@ private:
     TActorId KqpQueryTextCacheService;
     TActorId RowDispatcherService;
     TActorId CheckpointStorageService;
+    TActorId DescribeResourceIdService;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     enum class EScriptExecutionsCreationStatus {

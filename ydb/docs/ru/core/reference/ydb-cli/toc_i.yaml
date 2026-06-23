@@ -45,8 +45,6 @@ items:
       href: commands/explain-plan.md
     - name: Потоковое чтение таблицы
       href: commands/readtable.md
-    - name: Скан запросы
-      href: commands/scan-query.md
   - name: Выгрузка и загрузка данных
     include:
       mode: link
@@ -83,6 +81,8 @@ items:
       href: parameterized-query-execution.md
     - name: Интерактивный режим выполнения запросов
       href: interactive-cli.md
+    - name: Скан запросы
+      href: scan-query.md
 # Справки по устаревшим командам:
     - name: Выполнение скрипта (с поддержкой стриминга)
       href: yql.md
@@ -146,6 +146,8 @@ items:
       href: workload-query.md
     - name: Fulltext нагрузка
       href: workload-fulltext.md
+    - name: Vector нагрузка
+      href: workload-vector.md
   - name: Работа с конфигурацией
     href: configs.md
     include:

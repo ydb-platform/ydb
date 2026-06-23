@@ -2043,6 +2043,109 @@ partitioning_settings {
         }
     }
 
+    Y_UNIT_TEST(ShouldRetryCopyTablesProposeAfterConcurrentResolved) {
+        Env();
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Utf8" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        ui64 copyTablesTxIdA = 0;
+        ui64 copyTablesTxIdB = 0;
+        TVector<THolder<IEventHandle>> heldSchemaChanged;
+        THolder<IEventHandle> heldBMultipleMods;
+
+        auto origObserver = Runtime().SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+            case TEvSchemeShard::EvModifySchemeTransaction: {
+                const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransaction>()->Record;
+                if (record.TransactionSize() > 0
+                    && record.GetTransaction(0).GetOperationType()
+                        == NKikimrSchemeOp::ESchemeOpCreateConsistentCopyTables)
+                {
+                    if (copyTablesTxIdA == 0) {
+                        copyTablesTxIdA = record.GetTxId();
+                    } else if (copyTablesTxIdB == 0 && record.GetTxId() != copyTablesTxIdA) {
+                        copyTablesTxIdB = record.GetTxId();
+                    }
+                }
+                break;
+            }
+            case TEvDataShard::EvSchemaChanged: {
+                const auto& record = ev->Get<TEvDataShard::TEvSchemaChanged>()->Record;
+                if (copyTablesTxIdA != 0 && record.GetTxId() == copyTablesTxIdA) {
+                    heldSchemaChanged.emplace_back(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                break;
+            }
+            case TEvSchemeShard::EvModifySchemeTransactionResult: {
+                const auto& record = ev->Get<TEvSchemeShard::TEvModifySchemeTransactionResult>()->Record;
+                if (copyTablesTxIdB != 0 && record.GetTxId() == copyTablesTxIdB
+                    && record.GetStatus() == NKikimrScheme::StatusMultipleModifications
+                    && !heldBMultipleMods)
+                {
+                    heldBMultipleMods.Reset(ev.Release());
+                    return TTestActorRuntime::EEventAction::DROP;
+                }
+                break;
+            }
+            default:
+                break;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        const auto exportA = ++txId;
+        TestExport(Runtime(), exportA, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: "A"
+              }
+            }
+        )", S3Port()));
+
+        Runtime().WaitFor("A's SchemaChanged held",
+            [&] { return !heldSchemaChanged.empty(); });
+
+        const auto exportB = ++txId;
+        TestExport(Runtime(), exportB, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: "B"
+              }
+            }
+        )", S3Port()));
+
+        Runtime().WaitFor("B's MultipleMods response held",
+            [&] { return bool(heldBMultipleMods); });
+
+        Runtime().SetObserverFunc(origObserver);
+
+        for (auto& ev : heldSchemaChanged) {
+            Runtime().Send(ev.Release(), 0, true);
+        }
+        heldSchemaChanged.clear();
+        Env().TestWaitNotification(Runtime(), exportA);
+        TestGetExport(Runtime(), exportA, "/MyRoot", Ydb::StatusIds::SUCCESS);
+
+        Runtime().Send(heldBMultipleMods.Release(), 0, true);
+
+        Env().TestWaitNotification(Runtime(), exportB);
+        TestGetExport(Runtime(), exportB, "/MyRoot", Ydb::StatusIds::SUCCESS);
+    }
+
     Y_UNIT_TEST(ShouldSucceedOnConcurrentImport) {
         Env(); // Init test env
         ui64 txId = 100;

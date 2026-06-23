@@ -1,5 +1,8 @@
 #include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
+#include <ydb/core/persqueue/ut/common/sdk_ut_common.h>
 
+#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/data_plane_helpers.h>
 
@@ -265,6 +268,135 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
                     }
                 }
             }
+        }
+    }
+
+    Y_UNIT_TEST(MirrorKafkaBatchesAsBatches) {
+        auto pqSettings = NYdb::NTopic::NTests::TTopicSdkTestSetup::MakeServerSettings();
+        NPQ::NTest::EnableTopicBatching(pqSettings);
+
+        NYdb::NTopic::NTests::TTopicSdkTestSetup setup("MirrorKafkaBatchesAsBatches", pqSettings, false);
+        auto& server = setup.GetServer();
+        const auto& settings = server.CleverServer->GetRuntime()->GetAppData().PQConfig.GetMirrorConfig().GetPQLibSettings();
+
+        auto fabric = std::make_shared<NKikimr::NPQ::TPersQueueMirrorReaderFactory>();
+        fabric->Initialize(server.CleverServer->GetRuntime()->GetAnyNodeActorSystem(), settings);
+        for (ui32 nodeId = 0; nodeId < server.CleverServer->GetRuntime()->GetNodeCount(); ++nodeId) {
+            server.CleverServer->GetRuntime()->GetAppData(nodeId).PersQueueMirrorReaderFactory = fabric.get();
+        }
+
+        const TString srcTopic = "batch_source";
+        const TString dstTopic = "batch_mirror";
+        const TString srcTopicFullName = "rt3.dc1--" + srcTopic;
+        const TString dstTopicFullName = "rt3.dc1--" + dstTopic;
+        const TString srcTopicSdkPath = "PQ/" + srcTopicFullName;
+        const TString dstTopicPath = "/Root/" + dstTopicFullName;
+        const TString mirrorConsumer = "mirror_user";
+        const TString readerConsumer = "reader";
+
+        setup.CreateTopic(srcTopicSdkPath, mirrorConsumer, 1);
+
+        NKikimrPQ::TMirrorPartitionConfig mirrorFrom;
+        mirrorFrom.SetEndpoint("localhost");
+        mirrorFrom.SetEndpointPort(server.GrpcPort);
+        mirrorFrom.SetTopic(setup.GetFullTopicPath(srcTopicSdkPath));
+        mirrorFrom.SetConsumer(mirrorConsumer);
+
+        auto driver = server.AnnoyingClient->GetDriver();
+        NYdb::NTopic::TTopicClient client(*driver);
+
+        TRequestCreatePQ createDstTopic(
+            dstTopicFullName,
+            /*partitionsCount =*/ 1,
+            /*cacheSize =*/ 0,
+            /*lifetimeS =*/ 86400,
+            /*lowWatermark =*/ 8_MB,
+            /*writeSpeed =*/ 20000000,
+            /*user =*/ "",
+            /*readSpeed =*/ 200000000,
+            /*rr =*/ {readerConsumer},
+            /*important =*/ {},
+            mirrorFrom
+        );
+        server.AnnoyingClient->CreateTopic(createDstTopic, false);
+
+        const TInstant createDeadline = TInstant::Now() + TDuration::Seconds(30);
+        bool dstTopicCreated = false;
+        while (TInstant::Now() < createDeadline) {
+            auto describeResult = client.DescribeTopic(dstTopicPath).GetValueSync();
+            if (describeResult.IsSuccess()) {
+                dstTopicCreated = true;
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(500));
+        }
+        UNIT_ASSERT_C(dstTopicCreated, TStringBuilder() << "Timed out waiting for topic " << dstTopicPath);
+
+        constexpr size_t dataSize = 16;
+        constexpr ui64 maxBatchMessageCount = 5;
+        const TVector<std::tuple<ui64, ui32, char>> writes = {
+            {1, 5, 'a'},
+            {6, 3, 'b'},
+        };
+
+        NPQ::NTest::WriteKafkaBatchMessages(
+            client,
+            setup.GetFullTopicPath(srcTopicSdkPath),
+            "batch_producer",
+            dataSize,
+            maxBatchMessageCount,
+            writes
+        );
+
+        auto dstReader = client.CreateReadSession(
+            NYdb::NTopic::TReadSessionSettings()
+                .AppendTopics(NYdb::NTopic::TTopicReadSettings(dstTopicPath).AppendPartitionIds(0))
+                .ConsumerName(readerConsumer)
+                .Decompress(false)
+        );
+
+        TVector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> mirroredBatches;
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(60);
+        while (mirroredBatches.size() < writes.size() && TInstant::Now() < deadline) {
+            auto event = GetNextMessageSkipAssignment(dstReader, TDuration::Seconds(5));
+            UNIT_ASSERT_C(event, "Timed out waiting for mirrored batch");
+            UNIT_ASSERT(event->HasCompressedMessages());
+            for (auto& message : event->GetCompressedMessages()) {
+                mirroredBatches.push_back(std::move(message));
+            }
+        }
+        dstReader->Close(TDuration::Zero());
+
+        UNIT_ASSERT_VALUES_EQUAL(mirroredBatches.size(), writes.size());
+
+        ui64 expectedOffset = 0;
+        for (size_t i = 0; i < writes.size(); ++i) {
+            const auto& [firstSeqNo, messageCount, fill] = writes[i];
+            const auto& message = mirroredBatches[i];
+
+            UNIT_ASSERT_VALUES_EQUAL(message.GetCodec(), NYdb::NTopic::ECodec::KAFKA_BATCH);
+            UNIT_ASSERT_VALUES_EQUAL(message.GetOffset(), expectedOffset);
+            UNIT_ASSERT_VALUES_EQUAL(message.GetSeqNo(), firstSeqNo);
+
+            auto header = NKafka::ReadKafkaBatchHeader(message.GetData());
+            UNIT_ASSERT(header);
+            UNIT_ASSERT_VALUES_EQUAL(header->RecordsCount, static_cast<i32>(messageCount));
+
+            auto [error, maxSeqNo] = NKafka::GetBatchMaxSeqNo(*header, message.GetSeqNo());
+            UNIT_ASSERT_VALUES_EQUAL(error, NKafka::EKafkaErrors::NONE_ERROR);
+            UNIT_ASSERT_VALUES_EQUAL(maxSeqNo, firstSeqNo + messageCount - 1);
+
+            auto batch = NKafka::ReadKafkaRecordBatch(message.GetData());
+            UNIT_ASSERT_VALUES_EQUAL(batch.Records.size(), messageCount);
+            for (ui32 recordIndex = 0; recordIndex < messageCount; ++recordIndex) {
+                UNIT_ASSERT_VALUES_EQUAL(batch.Records[recordIndex].OffsetDelta, recordIndex);
+                UNIT_ASSERT_VALUES_EQUAL(NKafka::GetRecordSeqNo(batch, recordIndex, batch.Records[recordIndex]), firstSeqNo + recordIndex);
+                UNIT_ASSERT(batch.Records[recordIndex].Value);
+                const auto& value = *batch.Records[recordIndex].Value;
+                UNIT_ASSERT_VALUES_EQUAL(TString(value.data(), value.size()), TString(dataSize, fill));
+            }
+
+            expectedOffset += messageCount;
         }
     }
 

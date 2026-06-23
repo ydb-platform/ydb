@@ -1,3 +1,4 @@
+#include "actorid.h"
 #include <ydb/library/actors/struct_log/create_message.h>
 #include <ydb/library/actors/struct_log/json_writer.h>
 #include <ydb/library/actors/struct_log/key_name.h>
@@ -243,6 +244,18 @@ Y_UNIT_TEST_SUITE(StructLog) {
         TString ToString() const {
             return "some value";
         }
+
+        TString ToString() {
+            return "wrong value from non-const ToString()";
+        }
+
+        static TString ToString(int) {
+            return "wrong value from static ToString(int)";
+        }
+
+        TString ToString(bool) {
+            return "wrong value from ToString(bool)";
+        }
     };
 
     struct TTestTypeToStructuredMessage {
@@ -386,6 +399,15 @@ Y_UNIT_TEST_SUITE(StructLog) {
                 TEST_MESSAGE(TLogStack::GetTop(), "v1=1, v2=2");
             }
 
+            TEST_MESSAGE(TLogStack::GetTop(), "v1=1");
+        }
+        TEST_MESSAGE(TLogStack::GetTop(), "");
+    }
+
+    Y_UNIT_TEST(LogStackCreateContext) {
+        TEST_MESSAGE(TLogStack::GetTop(), "");
+        {
+            YDB_LOG_CREATE_CONTEXT({"v1", 1});
             TEST_MESSAGE(TLogStack::GetTop(), "v1=1");
         }
         TEST_MESSAGE(TLogStack::GetTop(), "");

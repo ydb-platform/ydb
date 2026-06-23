@@ -6,10 +6,10 @@ FORK_SUBTESTS()
 SIZE(MEDIUM)
 
 TEST_SRCS(
+    test_column_family_negative.py
     test_disabled.py
     test_incorrect.py
     test_mixed.py
-    test_obsolete.py
 )
 
 PEERDIR(

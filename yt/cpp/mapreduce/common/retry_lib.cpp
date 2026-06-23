@@ -123,6 +123,12 @@ public:
         return Wrap(MakeIntrusive<TAttemptLimitedRetryPolicy>(static_cast<ui32>(Config_->ReadRetryCount), Config_));
     }
 
+    IRequestRetryPolicyPtr CreatePolicyForCheckClusterLiveness() override
+    {
+        return Wrap(MakeIntrusive<TAttemptLimitedRetryPolicy>(static_cast<ui32>(Config_->CheckLivenessRetryCount), Config_));
+    }
+
+
     IRequestRetryPolicyPtr Wrap(IRequestRetryPolicyPtr basePolicy)
     {
         auto config = RetryConfigProvider_->CreateRetryConfig();

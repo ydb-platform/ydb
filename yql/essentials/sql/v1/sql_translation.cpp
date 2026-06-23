@@ -5738,7 +5738,9 @@ bool TSqlTranslation::ParseViewQuery(
         return false;
     }
     queryText << CollectTokens(query);
-    features["query_text"] = {Ctx_.Pos(), queryText};
+
+    ui32 flags = NYql::TAstNodeFlags::ArbitraryContent | NYql::TAstNodeFlags::UnstableFormat;
+    features["query_text"] = {Ctx_.Pos(), queryText, flags};
 
     // The AST is needed solely for the validation of the CREATE VIEW statement.
     // The final storage format for the query is a plain text, not an AST.
@@ -5813,7 +5815,10 @@ bool TSqlTranslation::ParseViewQuery(
     YQL_ENSURE(begin < Ctx_.Query.size() && end < Ctx_.Query.size());
     begin += beforeToken.value().size();
     YQL_ENSURE(begin < end);
-    features[TStreamingQuerySettings::QUERY_TEXT_FEATURE] = TDeferredAtom(Ctx_.Pos(), Ctx_.Query.substr(begin, end - begin));
+
+    ui32 flags = NYql::TAstNodeFlags::ArbitraryContent | NYql::TAstNodeFlags::UnstableFormat;
+    features[TStreamingQuerySettings::QUERY_TEXT_FEATURE] =
+        TDeferredAtom(Ctx_.Pos(), Ctx_.Query.substr(begin, end - begin), flags);
 
     return true;
 }
@@ -6429,10 +6434,6 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
         return legacy();
     }
 
-    if (!Ctx_.EnsureAvailable(Ctx_.Pos(), NYql::NFeature::YqlSelect)) {
-        return nullptr;
-    }
-
     TNodeResult result = std::unexpected(ESQLError::Basic);
     {
         Ctx_.SetYqlSelectMode(mode);
@@ -6440,7 +6441,21 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
             Ctx_.SetYqlSelectMode(prevMode);
         };
 
-        result = yqlSelect();
+        bool isAnyIncompatiblePragma = false;
+        for (const auto& [prefix, pragma] : Ctx_.Scoped->ActivePragmas) {
+            if (IsYqlSelectCompatiblePragma(prefix, pragma)) {
+                continue;
+            }
+
+            UnsupportedYqlSelect(Ctx_, TStringBuilder() << "Pragma '" << pragma << "'");
+            isAnyIncompatiblePragma = true;
+        }
+
+        if (!isAnyIncompatiblePragma) {
+            result = yqlSelect();
+        } else {
+            result = std::unexpected(ESQLError::UnsupportedYqlSelect);
+        }
     }
 
     if (result) {
@@ -6470,6 +6485,20 @@ TNodePtr TSqlTranslation::YqlSelectOrLegacy(
             return legacy();
         }
     }
+}
+
+bool TSqlTranslation::WarnUnusedCTEs() const {
+    bool isOk = true;
+
+    CTEs_->ForEachTopLevelUnused([&](const TReadyCTE& cte) {
+        const auto& [alias, v] = cte;
+
+        isOk &= Ctx_.Warning(alias.Position, TIssuesIds::YQL_UNUSED_SYMBOL, [&](auto& out) {
+            out << "CTE Symbol " << alias.Name << " is not used";
+        });
+    });
+
+    return isOk;
 }
 
 } // namespace NSQLTranslationV1

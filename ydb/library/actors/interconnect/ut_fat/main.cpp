@@ -126,15 +126,42 @@ namespace {
     };
 
     TString GetZcState(TTestICCluster& testCluster, ui32 me, ui32 peer) {
-        auto httpResp = testCluster.GetSessionDbg(me, peer);
-        const TString& resp = httpResp.GetValueSync();
         const TString pattern = "<tr><td>ZeroCopy state</td><td>";
-        auto pos = resp.find(pattern);
-        UNIT_ASSERT_C(pos != std::string::npos, "zero copy field was not found in http info");
-        pos += pattern.size();
-        size_t end = resp.find('<', pos);
-        UNIT_ASSERT(end != std::string::npos);
-        return resp.substr(pos, end - pos);
+        return ExtractPattern(testCluster, me, peer, pattern, "<");
+    }
+
+    void WaitForTraffic(TTestICCluster& testCluster, ui32 senderNode, const TActorId& sender, const TReceiverActor* receiver) {
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
+        while (TInstant::Now() < deadline) {
+            if (receiver->GetReceivedCount() > 0) {
+                return;
+            }
+
+            testCluster.GetNode(senderNode)->Send(sender, new TEvents::TEvWakeup);
+            Sleep(TDuration::MilliSeconds(100));
+        }
+
+        UNIT_FAIL("no interconnect traffic detected");
+    }
+
+    TString WaitForZcState(TTestICCluster& testCluster, ui32 me, ui32 peer, TStringBuf expected) {
+        TString lastState = "<not read>";
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
+        while (TInstant::Now() < deadline) {
+            try {
+                lastState = GetZcState(testCluster, me, peer);
+                if (lastState == expected) {
+                    return lastState;
+                }
+            } catch (const TPatternNotFound&) {
+                lastState = "<no session>";
+            }
+
+            Sleep(TDuration::MilliSeconds(100));
+        }
+
+        UNIT_FAIL(TStringBuilder() << "zero copy state didn't become " << expected << ", last state: " << lastState);
+        return {};
     }
 }
 
@@ -222,10 +249,10 @@ Y_UNIT_TEST_SUITE(InterconnectZcLocalOp) {
         TReceiverActor* receiverActor = new TReceiverActor(testCluster.GetNode(1));
         const TActorId recipient = testCluster.RegisterActor(receiverActor, 2);
         TSenderActor* senderActor = new TSenderActor(recipient, flags, false);
-        testCluster.RegisterActor(senderActor, 1);
+        const TActorId senderActorId = testCluster.RegisterActor(senderActor, 1);
 
-        NanoSleep(5ULL * 1000 * 1000 * 1000);
-        UNIT_ASSERT_VALUES_EQUAL("Disabled", GetZcState(testCluster, 1, 2));
+        WaitForTraffic(testCluster, 1, senderActorId, receiverActor);
+        UNIT_ASSERT_VALUES_EQUAL("Disabled", WaitForZcState(testCluster, 1, 2, "Disabled"));
     }
 
     Y_UNIT_TEST(ZcDisabledAfterHiddenCopy) {
@@ -237,14 +264,14 @@ Y_UNIT_TEST_SUITE(InterconnectZcLocalOp) {
         TReceiverActor* receiverActor = new TReceiverActor(testCluster.GetNode(1));
         const TActorId recipient = testCluster.RegisterActor(receiverActor, 2);
         TSenderActor* senderActor = new TSenderActor(recipient, flags, true);
-        testCluster.RegisterActor(senderActor, 1);
+        const TActorId senderActorId = testCluster.RegisterActor(senderActor, 1);
 
-        NanoSleep(5ULL * 1000 * 1000 * 1000);
+        WaitForTraffic(testCluster, 1, senderActorId, receiverActor);
         // Zero copy send via loopback causes hidden copy inside linux kernel
 #if defined (__linux__)
-        UNIT_ASSERT_VALUES_EQUAL("DisabledHiddenCopy", GetZcState(testCluster, 1, 2));
+        UNIT_ASSERT_VALUES_EQUAL("DisabledHiddenCopy", WaitForZcState(testCluster, 1, 2, "DisabledHiddenCopy"));
 #else
-        UNIT_ASSERT_VALUES_EQUAL("Disabled", GetZcState(testCluster, 1, 2));
+        UNIT_ASSERT_VALUES_EQUAL("Disabled", WaitForZcState(testCluster, 1, 2, "Disabled"));
 #endif
     }
 }

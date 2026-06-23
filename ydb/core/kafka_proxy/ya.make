@@ -56,6 +56,7 @@ PEERDIR(
     ydb/public/sdk/cpp/src/client/params
     ydb/library/actors/core
     ydb/library/actors/protos
+    ydb/library/kafka
     ydb/core/base
     ydb/core/persqueue/public/describer
     ydb/core/persqueue/public/fetcher
@@ -65,6 +66,7 @@ PEERDIR(
     ydb/core/raw_socket
     ydb/core/security/sasl
     ydb/services/persqueue_v1
+    ydb/core/persqueue/public
 )
 
 END()

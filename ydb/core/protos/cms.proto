@@ -185,6 +185,9 @@ message TPermissionRequest {
   // Evit vdisks before granting permission
   optional bool EvictVDisks = 11 [default = false];
   optional int32 Priority = 12;
+  // Maximum number of permissions that may be issued by a single check of this request.
+  // Unset means "no cap", 0 means "cap is zero".
+  optional uint32 MaxPermissionCount = 13 [default = 0];
 }
 
 enum EExtensionType {

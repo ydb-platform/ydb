@@ -9,7 +9,7 @@
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
-#include <ydb/core/protos/index_builder.pb.h>
+#include <ydb/core/protos/set_column_constraint.pb.h>
 
 #include <ydb/core/tx/datashard/build_index/common_helper.h>
 
@@ -62,7 +62,7 @@ public:
         for (const auto& cell : rowCells) {
             if (cell.IsNull()) {
                 IsValid = false;
-                Status = NKikimrIndexBuilder::EBuildStatus::DONE;
+                Status = NKikimrSetColumnConstraint::EValidateStatus::DONE;
                 return EScan::Final;
             }
         }
@@ -74,8 +74,8 @@ public:
         response->Record.SetId(Request.GetId());
         response->Record.SetTabletId(TabletId);
 
-        if (Status == NKikimrIndexBuilder::EBuildStatus::INVALID) {
-            Status = NKikimrIndexBuilder::EBuildStatus::DONE;
+        if (Status == NKikimrSetColumnConstraint::EValidateStatus::INVALID) {
+            Status = NKikimrSetColumnConstraint::EValidateStatus::DONE;
         }
 
         response->Record.SetStatus(Status);
@@ -87,7 +87,7 @@ public:
             issue->set_message("Constraint violation: NULL value found.");
         }
 
-        if (Status == NKikimrIndexBuilder::EBuildStatus::DONE && IsValid) {
+        if (Status == NKikimrSetColumnConstraint::EValidateStatus::DONE && IsValid) {
             LOG_N("TValidateRowConditionScan: Done (valid)"
                 << " id# " << Request.GetId()
                 << " tabletId# " << TabletId
@@ -130,7 +130,7 @@ private:
     const TActorId Sender;
     const ui64 TabletId;
     TTags ScanTags;
-    NKikimrIndexBuilder::EBuildStatus Status = NKikimrIndexBuilder::EBuildStatus::INVALID;
+    NKikimrSetColumnConstraint::EValidateStatus Status = NKikimrSetColumnConstraint::EValidateStatus::INVALID;
     bool IsValid = true;
 };
 
@@ -179,7 +179,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
         return;
     }
 
-    auto sendResponse = [&](NKikimrIndexBuilder::EBuildStatus buildStatus, const TString& error = "") {
+    auto sendResponse = [&](NKikimrSetColumnConstraint::EValidateStatus buildStatus, const TString& error = "") {
         auto response = MakeHolder<TEvDataShard::TEvValidateRowConditionResponse>();
         response->Record.SetId(id);
         response->Record.SetTabletId(TabletID());
@@ -197,7 +197,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
             << " id# " << id
             << " expected# " << TabletID()
             << " got# " << record.GetTabletId());
-        sendResponse(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST, TStringBuilder() << "Wrong shard " << record.GetTabletId() << " this is " << TabletID());
+        sendResponse(NKikimrSetColumnConstraint::EValidateStatus::BAD_REQUEST, TStringBuilder() << "Wrong shard " << record.GetTabletId() << " this is " << TabletID());
         return;
     }
 
@@ -206,7 +206,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
         LOG_E("HandleSafe TEvValidateRowConditionRequest: unknown table"
             << " id# " << id
             << " localPathId# " << tableId.PathId.LocalPathId);
-        sendResponse(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST, TStringBuilder() << "Unknown table id: " << tableId.PathId.LocalPathId);
+        sendResponse(NKikimrSetColumnConstraint::EValidateStatus::BAD_REQUEST, TStringBuilder() << "Unknown table id: " << tableId.PathId.LocalPathId);
         return;
     }
 
@@ -214,7 +214,7 @@ void TDataShard::HandleSafe(TEvDataShard::TEvValidateRowConditionRequest::TPtr& 
         LOG_E("HandleSafe TEvValidateRowConditionRequest: shard not active"
             << " id# " << id
             << " tabletId# " << TabletID());
-        sendResponse(NKikimrIndexBuilder::EBuildStatus::BAD_REQUEST, TStringBuilder() << "Shard " << TabletID() << " is not ready for requests");
+        sendResponse(NKikimrSetColumnConstraint::EValidateStatus::BAD_REQUEST, TStringBuilder() << "Shard " << TabletID() << " is not ready for requests");
         return;
     }
 

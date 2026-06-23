@@ -5,6 +5,7 @@
 namespace NSQLTranslationV1 {
 
 struct TYqlSourceAlias {
+    TPosition Position;
     TString Name;
     TVector<TString> Columns;
 };
@@ -123,6 +124,8 @@ TNodePtr ToTableExpression(TNodePtr source);
 TYqlSelectArgs DestructYqlSelect(TNodePtr node);
 
 TNodePtr BuildYqlTableRef(TPosition position, TYqlTableRefArgs&& args);
+
+TNodePtr BuildYqlSelf(TPosition position);
 
 TNodePtr BuildYqlValues(TPosition position, TYqlValuesArgs&& args);
 

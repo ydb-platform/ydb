@@ -1014,7 +1014,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             ui64 PartitionId;
         };
 
-        TAssignInfo GetNextAssign(const TString& topic, ui64 prevGeneration=0) {
+        TAssignInfo GetNextAssign(const TString& topic, ui64 prevGeneration=0, ui64 readOffset=0, ui64 commitOffset=0, ui64 maxOffset=0) {
             // Get StartPartitionSessionRequest, send StartPartitionSessionResponse.
 
             Cerr << "Get next assign id\n";
@@ -1035,6 +1035,12 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
                 Topic::StreamReadMessage::FromClient req;
                 req.mutable_start_partition_session_response()->set_partition_session_id(result.AssignId);
+                if (readOffset)
+                    req.mutable_start_partition_session_response()->set_read_offset(readOffset);
+                if (commitOffset)
+                    req.mutable_start_partition_session_response()->set_commit_offset(commitOffset);
+                if (maxOffset)
+                    req.mutable_start_partition_session_response()->set_max_offset(maxOffset);
                 if (!ControlStream->Write(req)) {
                     ythrow yexception() << "write fail";
                 }
@@ -1228,6 +1234,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             req.mutable_init_request()->add_topics_read_settings()->set_path(topic);
             req.mutable_init_request()->set_consumer(consumer);
             req.mutable_init_request()->set_session_id(SessionId);
+            Cerr << "Send direct read init request: " << req.ShortDebugString() << Endl;
             if (!DirectStream->Write(req)) {
                 ythrow yexception() << "write fail";
             }
@@ -1574,6 +1581,75 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                                   << " startOffset = " << resp.Range.first << " endOffset = " << resp.Range.second << Endl);
         UNIT_ASSERT_VALUES_EQUAL(endOffset, resp.Range.first);
         UNIT_ASSERT_VALUES_EQUAL(resp.Range.second, 2);
+    }
+
+    Y_UNIT_TEST(DirectReadCorrectMaxOffsetOnRestart) {
+        TPersQueueV1TestServer server{{.CheckACL=true, .NodeCount=1}};
+        SET_LOCALS;
+        TString topicPath{"acc/topic1"};
+        TString oldPath{"/Root/PQ/rt3.dc1--acc--topic1"};
+        TDirectReadTestSetup setup{server};
+
+        {
+            // 1. Write 10 messages.
+            Cerr << (TStringBuilder() << "XXXXX Write 10 messages" << Endl);
+            setup.DoWrite(pqClient->GetDriver(), topicPath, 10_KB, 10);
+        }
+
+        Cerr << (TStringBuilder() << "XXXXX InitControlSession" << Endl);
+        setup.InitControlSession(topicPath, 1_MB);
+
+        Cerr << "XXXXX GetNextAssign\n";
+        auto assignRes = setup.GetNextAssign(topicPath, 0, /*read_offset*/5, /*commit_offset*/2, /*max_offset*/8);
+        UNIT_ASSERT_VALUES_EQUAL(assignRes.PartitionId, 0);
+        auto assignId = assignRes.AssignId;
+
+        Cerr << (TStringBuilder() << "XXXXX InitDirectSession" << Endl);
+        setup.InitDirectSession(topicPath);
+
+        // Send StartDirectReadPartitionSessionRequest, get StartDirectReadPartitionSessionResponse
+        setup.SendReadSessionAssign(assignId, assignRes.Generation);
+
+        // 2. Read the message back. It should contain 4 messages from 5 to 8 (inclusive).
+        Cerr << "XXXXX ReadDataNoAck\n";
+        auto resp = setup.ReadDataNoAck(assignId, 1);
+        auto startOffset = resp.Range.first;
+        auto endOffset = resp.Range.second;
+        Cerr << (TStringBuilder() << "XXXXX startOffset = " << startOffset << " endOffset = " << endOffset << Endl);
+        UNIT_ASSERT_VALUES_EQUAL(5, startOffset);
+        UNIT_ASSERT_VALUES_EQUAL(8 + 1, endOffset);
+
+        Cerr << "XXXXX Kill tablet\n";
+        auto pathDescr = server.Server->AnnoyingClient->Ls(oldPath)->Record.GetPathDescription().GetPersQueueGroup();
+        auto tabletId = pathDescr.GetPartitions(0).GetTabletId();
+        server.Server->AnnoyingClient->KillTablet(*(server.Server->CleverServer), tabletId);
+        Cerr << "XXXXX ExpectDestroyPartitionSession\n";
+        setup.ExpectDestroyPartitionSession(assignId);
+
+        Cerr << "XXXXX Sleep 1 seconds\n";
+        Sleep(TDuration::Seconds(1));
+
+        Cerr << "XXXXX GetNextAssign\n";
+        auto nextAssignRes = setup.GetNextAssign(topicPath, assignRes.Generation);
+        assignId = nextAssignRes.AssignId;
+
+        Cerr << "XXXXX Sleep 2 seconds\n";
+        Sleep(TDuration::Seconds(2));
+
+        Cerr << "XXXXX SendReadSessionAssign\n";
+        setup.SendReadSessionAssign(assignId, nextAssignRes.Generation);
+
+        Cerr << "XXXXX Sleep 3 seconds\n";
+        Sleep(TDuration::Seconds(3));
+
+        Cerr << "XXXXX ReadDataNoAck direct_read_id = 1\n";
+        resp = setup.ReadDataNoAck(assignId, 1);
+        Cerr << (TStringBuilder() << "XXXXX grpcByteSize = " << resp.Response.ByteSize() << " bytes_size = " << resp.Response.direct_read_response().bytes_size()
+                                  << " startOffset = " << resp.Range.first << " endOffset = " << resp.Range.second << Endl);
+        UNIT_ASSERT_VALUES_EQUAL(startOffset, resp.Range.first);
+        UNIT_ASSERT_VALUES_EQUAL(endOffset, resp.Range.second);
+
+
     }
 
     Y_UNIT_TEST(DirectReadBadCases) {
@@ -8633,7 +8709,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
             bool res = writer->Close(TDuration::Seconds(10));
             UNIT_ASSERT(res);
         }
-        {
+        for (bool pass = false; !pass; ) {
+            pass = true;
+            Sleep(TDuration::MilliSeconds(100));
             using namespace NYdb::NTopic;
             auto settings = TDescribeTopicSettings().IncludeStats(true);
             auto client = TTopicClient(server.Server->GetDriver());
@@ -8658,6 +8736,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
                     UNIT_ASSERT_VALUES_EQUAL(stats.value().GetStartOffset(), 0);
                     UNIT_ASSERT_VALUES_EQUAL(stats.value().GetEndOffset(), nMsg);
                 } else {
+                    if (stats.value().GetStartOffset() == 0) {
+                        pass = false;
+                        continue; // wait for compaction & cleanup
+                    }
                     UNIT_ASSERT_GT(stats.value().GetStartOffset(),  0);
                     UNIT_ASSERT_VALUES_EQUAL(stats.value().GetEndOffset(), nMsg);
                 }
@@ -8710,7 +8792,150 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
     Y_UNIT_TEST(ConsumerAvailabilityPeriod) {
         TestConsumerAvailabilityPeriod(true);
+    }
+
+    Y_UNIT_TEST(ConsumerAvailabilityPeriodCleanup) {
         TestConsumerAvailabilityPeriod(false);
+    }
+
+    Y_UNIT_TEST(ReadCommitMaxOffset) {
+        NPersQueue::TTestServer server;
+        TString topicFullName = "rt3.dc1--topic1";
+        auto driver = SetupTestAndGetDriver(server, topicFullName);
+
+        auto topicClient = NYdb::NTopic::TTopicClient(*driver);
+
+        NYdb::NTopic::TWriteSessionSettings wSettings {topicFullName, "srcId", "srcId"};
+        wSettings.DirectWriteToPartition(false);
+        auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
+        for (int i = 1; i <= 10; ++i) {
+            auto res = writer->Write("Message_" + ToString(i), i);
+            UNIT_ASSERT(res);
+        }
+        auto res = writer->Close();
+        UNIT_ASSERT(res);
+
+        {
+            std::optional<ui64> readOffset = 4;
+            std::optional<ui64> commitOffset = 3;
+            std::optional<ui64> maxOffset = 6; //inclusive
+            NYdb::NTopic::TReadSessionSettings rSettings;
+            rSettings.ConsumerName("debug").AppendTopics({topicFullName});
+            auto readSession = topicClient.CreateReadSession(rSettings);
+
+            auto ev = readSession->GetEvent(true);
+            UNIT_ASSERT(ev.has_value());
+            auto spsEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev);
+            UNIT_ASSERT(spsEv);
+            spsEv->Confirm(readOffset, commitOffset, maxOffset);
+            ev = readSession->GetEvent(true);
+            auto dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev);
+            UNIT_ASSERT(dataEv);
+            const auto& messages = dataEv->GetMessages();
+            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(messages[0].GetData(), "Message_5");
+            UNIT_ASSERT_VALUES_EQUAL(messages[1].GetData(), "Message_6");
+            UNIT_ASSERT_VALUES_EQUAL(messages[2].GetData(), "Message_7");
+
+            UNIT_ASSERT(!readSession->WaitEvent().Wait(TDuration::Seconds(3))); // no more events
+        }
+
+    }
+
+    Y_UNIT_TEST(ReadCommitMaxOffsetWithGaps) {
+        NPersQueue::TTestServer server;
+        TString topicFullName = "rt3.dc1--topic1";
+        auto driver = SetupTestAndGetDriver(server, topicFullName);
+
+        auto topicClient = NYdb::NTopic::TTopicClient(*driver);
+
+        /*NYdb::NTopic::TWriteSessionSettings wSettings {topicFullName, "srcId", "srcId"};
+        wSettings.DirectWriteToPartition(false);
+        auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
+        for (int i = 1; i <= 10; ++i) {
+            auto res = writer->Write("Message_" + ToString(i), i);
+            UNIT_ASSERT(res);
+        }
+        auto res = writer->Close();
+        UNIT_ASSERT(res);
+        */
+
+        auto write = [&](TRequestWritePQ& writeRequest, const TString& data, const TMaybe<i64>& writeOffset = {}) {
+            NKikimrPQClient::TDataChunk dataChunk;
+            dataChunk.SetCreateTime(42);
+            dataChunk.SetSeqNo(++writeRequest.SeqNo);
+            dataChunk.SetData(data);
+
+            TString serialized;
+            UNIT_ASSERT(dataChunk.SerializeToString(&serialized));
+            server.AnnoyingClient->WriteToPQ(writeRequest, serialized, "", NMsgBusProxy::MSTATUS_OK, NMsgBusProxy::MSTATUS_OK, writeOffset);
+        };
+
+        TRequestWritePQ writeRequest = {topicFullName, 0, NPQ::NSourceIdEncoding::Decode("srcId"), 0};
+        // write 10 messages
+        for (ui64 i = 1; i <= 10; ++i) {
+            write(writeRequest, "Message_" + ToString(i));
+        }
+
+        // write one message with offset gap - offset = 20
+        write(writeRequest, "Message_21", 20);
+        //  write the rest
+        for (ui64 i = 22; i <= 30; ++i) {
+            write(writeRequest, "Message_" + ToString(i));
+        }
+
+        {
+            // set max offset in the gap - should get back messages 8, 9, 10
+            std::optional<ui64> readOffset = 7;
+            std::optional<ui64> commitOffset = 3;
+            std::optional<ui64> maxOffset = 12; //inclusive
+            NYdb::NTopic::TReadSessionSettings rSettings;
+            rSettings.ConsumerName("debug").AppendTopics({topicFullName});
+            auto readSession = topicClient.CreateReadSession(rSettings);
+
+            auto ev = readSession->GetEvent(true);
+            UNIT_ASSERT(ev.has_value());
+            auto spsEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev);
+            UNIT_ASSERT(spsEv);
+            spsEv->Confirm(readOffset, commitOffset, maxOffset);
+            ev = readSession->GetEvent(true);
+            auto dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev);
+            UNIT_ASSERT(dataEv);
+            const auto& messages = dataEv->GetMessages();
+            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(messages[0].GetData(), "Message_8");
+            UNIT_ASSERT_VALUES_EQUAL(messages[1].GetData(), "Message_9");
+            UNIT_ASSERT_VALUES_EQUAL(messages[2].GetData(), "Message_10");
+
+            UNIT_ASSERT(!readSession->WaitEvent().Wait(TDuration::Seconds(3))); // no more events
+        }
+
+        {
+            // set read offset before the gap, max offset after the gap - should get back messages 10, 21, 22
+            std::optional<ui64> readOffset = 9;
+            std::optional<ui64> commitOffset = 3;
+            std::optional<ui64> maxOffset = 21; //inclusive
+            NYdb::NTopic::TReadSessionSettings rSettings;
+            rSettings.ConsumerName("debug").AppendTopics({topicFullName});
+            auto readSession = topicClient.CreateReadSession(rSettings);
+
+            auto ev = readSession->GetEvent(true);
+            UNIT_ASSERT(ev.has_value());
+            auto spsEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent>(&*ev);
+            UNIT_ASSERT(spsEv);
+            spsEv->Confirm(readOffset, commitOffset, maxOffset);
+            ev = readSession->GetEvent(true);
+            auto dataEv = std::get_if<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent>(&*ev);
+            UNIT_ASSERT(dataEv);
+            const auto& messages = dataEv->GetMessages();
+            UNIT_ASSERT_VALUES_EQUAL(messages.size(), 3);
+            UNIT_ASSERT_VALUES_EQUAL(messages[0].GetData(), "Message_10");
+            UNIT_ASSERT_VALUES_EQUAL(messages[1].GetData(), "Message_21");
+            UNIT_ASSERT_VALUES_EQUAL(messages[2].GetData(), "Message_22");
+
+            UNIT_ASSERT(!readSession->WaitEvent().Wait(TDuration::Seconds(3))); // no more events
+        }
+
     }
 }
 }

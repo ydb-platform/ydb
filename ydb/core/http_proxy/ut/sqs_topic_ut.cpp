@@ -598,6 +598,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         Y_UNIT_TEST_F(TestReceiveMessageInvalidQueueUrl, TFixture) {
             auto jsonReceived = ReceiveMessage({{"QueueUrl", "/invalid/queue/url/"}, {"WaitTimeSeconds", 1}}, 400);
             TString resultType = GetByPath<TString>(jsonReceived, "__type");
+            UNIT_ASSERT_VALUES_EQUAL(resultType, "InvalidArgumentException");
         }
 
         Y_UNIT_TEST_F(TestReceiveMessageNonExistingQueue, TFixture) {
@@ -657,6 +658,25 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             const NYdb::NTopic::ICodec* codec = NYdb::NTopic::TCodecMap::GetTheCodecMap().GetOrThrow(
                 static_cast<uint32_t>(NYdb::NTopic::ECodec::ZSTD));
             const TString decompressed = codec->Decompress(Base64Decode(message["Body"].GetString()));
+            UNIT_ASSERT_VALUES_EQUAL(decompressed, messageBody);
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageNotUtf8, TFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+            bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+            UNIT_ASSERT(a);
+
+            const TString messageBody = "\xc3\x28";
+            WriteMessageViaTopicSdk(driver, path.TopicPath, messageBody, NYdb::NTopic::ECodec::RAW);
+
+            auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 20}});
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
+
+            const auto& message = jsonReceived["Messages"][0];
+            UNIT_ASSERT_VALUES_EQUAL(message["Attributes"]["BodyEncoding"].GetString(), "base64");
+
+            const TString decompressed = Base64Decode(message["Body"].GetString());
             UNIT_ASSERT_VALUES_EQUAL(decompressed, messageBody);
         }
 
@@ -1602,6 +1622,35 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         });
         TString queueUrl = GetPathFromQueueUrlMap(json);
         UNIT_ASSERT(queueUrl.Contains("ExampleQueue.fifo"));
+    }
+
+    Y_UNIT_TEST_F(TestCreateFifoQueueWithoutSuffix, TFixture) {
+        const TString queueName = "CreateQueueWithoutSuffix";
+
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}, {"ContentBasedDeduplication", "true"}}}
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+        Cerr << (TStringBuilder() << "queueUrl: " << queueUrl << Endl);
+        UNIT_ASSERT_C(queueUrl.Contains(queueName), queueUrl);
+
+        json = GetQueueAttributes({{"QueueUrl", queueUrl}, {"AttributeNames", NJson::TJsonArray{"FifoQueue"}}});
+        UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["FifoQueue"], "true");
+
+        json = GetQueueUrl({{"QueueName", queueName}});
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+        queueUrl = GetPathFromQueueUrlMap(json);
+        Cerr << (TStringBuilder() << "queueUrl: " << queueUrl << Endl);
+        UNIT_ASSERT_C(queueUrl.Contains(queueName), queueUrl);
+
+        json = SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "test"}});
+        UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
+
+        json = ReceiveMessage({{"QueueUrl", queueUrl}});
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithAttributes, TFixture) {

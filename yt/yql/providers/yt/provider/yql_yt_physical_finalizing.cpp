@@ -1684,7 +1684,7 @@ private:
                         continue;
                     }
 
-                    if (NYql::HasAnySetting(section.Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample | EYtSettingType::QLFilter)) {
+                    if (NYql::HasAnySetting(section.Settings().Ref(), EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::Sample)) {
                         continue;
                     }
                     if (NYql::HasNonEmptyKeyFilter(section)) {
@@ -2281,7 +2281,7 @@ private:
                     const auto outIndex = FromString<size_t>(out.OutIndex().Value());
                     YQL_ENSURE(outIndex < outTypes.size());
                     const auto path = std::get<3>(reader);
-                    if (path && (!TCoVoid::Match(path->Child(TYtPath::idx_Ranges)) || !TCoVoid::Match(path->Child(TYtPath::idx_QLFilter)))) {
+                    if (path && !TCoVoid::Match(path->Child(TYtPath::idx_Ranges))) {
                         exclusiveOuts.insert(outIndex);
                     }
                     auto section = std::get<1>(reader); // section
@@ -2290,7 +2290,7 @@ private:
                         // Used in unknown callables. Don't process
                         exclusiveOuts.insert(outIndex);
                     }
-                    if (section && (NYql::HasAnySetting(*section->Child(TYtSection::idx_Settings), EYtSettingType::Take | EYtSettingType::Skip | EYtSettingType::QLFilter)
+                    if (section && (NYql::HasAnySetting(*section->Child(TYtSection::idx_Settings), EYtSettingType::Take | EYtSettingType::Skip)
                         || HasNonEmptyKeyFilter(TYtSection(section))))
                     {
                         exclusiveOuts.insert(outIndex);
@@ -2397,6 +2397,7 @@ private:
                                             updatedPaths.push_back(Build<TYtPath>(ctx, path.Pos())
                                                 .InitFrom(path)
                                                 .Table(it->second)
+                                                .QLFilter<TCoVoid>().Build()
                                                 .Done());
                                         }
                                         updated = true;
@@ -2509,7 +2510,8 @@ private:
         } else { // nextNewOutIndex > 1
             TVector<TExprBase> tupleTypes;
             for (auto out: joinedOutTables) {
-                auto itemType = out.Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType();
+                // Use the extended type to take into account synthetic (aux) sort columns of sorted outputs
+                const TStructExprType* itemType = TYqlRowSpecInfo(out.RowSpec()).GetExtendedType(ctx);
                 tupleTypes.push_back(TExprBase(ExpandType(out.Pos(), *itemType, ctx)));
             }
             TExprBase varType = Build<TCoVariantType>(ctx, lambda->Pos())
@@ -2643,7 +2645,7 @@ private:
                             const auto outerSection = outerMap.Input().Item(0);
                             if (outerSection.Paths().Size() == 1 && outerSection.Settings().Size() == 0) {
                                 const auto outerPath = outerSection.Paths().Item(0);
-                                if (outerPath.Ranges().Maybe<TCoVoid>() && outerPath.QLFilter().Maybe<TCoVoid>()) {
+                                if (outerPath.Ranges().Maybe<TCoVoid>()) {
                                     matched = reader;
                                 }
                             }

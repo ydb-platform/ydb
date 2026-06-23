@@ -104,6 +104,7 @@ static void FillColumns(
         }
         colDescr->SetId(cinfo.Id);
         colDescr->SetNotNull(cinfo.NotNull);
+        colDescr->SetSetNotNullInProgress(cinfo.SetNotNullInProgress);
 
         if (cinfo.Family != 0) {
             colDescr->SetFamily(cinfo.Family);
@@ -209,7 +210,7 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
                 case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
                     return TPathElement::EPathSubType::EPathSubTypeLocalBloomNgramFilterIndex;
                 case NKikimrSchemeOp::EIndexTypeLocalMinMax:
-                    return TPathElement::EPathSubType::EPathSubTypeLocalMinMaxIndex;                
+                    return TPathElement::EPathSubType::EPathSubTypeLocalMinMaxIndex;
                 case NKikimrSchemeOp::EIndexTypeInvalid:
                 case NKikimrSchemeOp::EIndexTypeGlobal:
                 case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -218,6 +219,9 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
                 case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
                 case NKikimrSchemeOp::EIndexTypeGlobalJson:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+                case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+                case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
                     break;
             }
         }
@@ -245,8 +249,11 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
                 return TPathElement::EPathSubType::EPathSubTypeVectorKmeansTreeIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
                 return TPathElement::EPathSubType::EPathSubTypeFulltextIndexImplTable;
             case NKikimrSchemeOp::EIndexTypeGlobalJson:
+            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
                 return TPathElement::EPathSubType::EPathSubTypeJsonIndexImplTable;
             default:
                 Y_DEBUG_ABORT_S(NTableIndex::InvalidIndexType(indexInfo->Type));
@@ -1537,16 +1544,27 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
         case NKikimrSchemeOp::EIndexTypeGlobal:
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
-        case NKikimrSchemeOp::EIndexTypeGlobalJson:
         case NKikimrSchemeOp::EIndexTypeLocalMinMax:
             // no specialized index description
             Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+            break;
+        case NKikimrSchemeOp::EIndexTypeGlobalJson:
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+            // JSON indexes carry a fulltext description only when rowid mode (__ydb_row_id as doc_id)
+            // is enabled; otherwise there is no specialized index description.
+            if (const auto* ft = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&indexInfo->SpecializedIndexDescription)) {
+                *entry.MutableFulltextIndexDescription() = *ft;
+            } else {
+                Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
+            }
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree:
             *entry.MutableVectorIndexKmeansTreeDescription() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(indexInfo->SpecializedIndexDescription);
             break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
             *entry.MutableFulltextIndexDescription() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(indexInfo->SpecializedIndexDescription);
             break;
         case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:

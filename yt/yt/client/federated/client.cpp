@@ -4,6 +4,7 @@
 #include "private.h"
 
 #include <yt/yt/client/api/client.h>
+#include <yt/yt/client/api/helpers.h>
 #include <yt/yt/client/api/transaction.h>
 #include <yt/yt/client/api/rpc_proxy/transaction_impl.h>
 #include <yt/yt/client/api/dynamic_table_transaction_mixin.h>
@@ -42,22 +43,6 @@ DECLARE_REFCOUNTED_CLASS(TClient)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TFuture<std::optional<std::string>> GetDataCenterByClient(const IClientPtr& client)
-{
-    TListNodeOptions options;
-    options.MaxSize = 1;
-
-    return client->ListNode(RpcProxiesPath, options)
-        .Apply(BIND([] (const NYson::TYsonString& items) {
-            auto itemsList = NYTree::ConvertTo<NYTree::IListNodePtr>(items);
-            if (!itemsList->GetChildCount()) {
-                return std::optional<std::string>();
-            }
-            auto host = itemsList->GetChildren()[0];
-            return NNet::InferYPClusterFromHostName(host->GetValue<std::string>());
-        }));
-}
-
 class TTransaction
     : public virtual ITransaction
     , public TDynamicTableTransactionMixin
@@ -81,10 +66,10 @@ public:
         const std::string& query,
         const TSelectRowsOptions& options = {}) override;
 
-    void ModifyRows(
+    void FutureModifyRows(
         const NYPath::TYPath& path,
         NTableClient::TNameTablePtr nameTable,
-        TSharedRange<TRowModification> modifications,
+        TSharedRange<NFuture::TRowModification> modifications,
         const TModifyRowsOptions& options) override;
 
     using TQueueTransactionMixin::AdvanceQueueConsumer;
@@ -255,13 +240,6 @@ private:
 DECLARE_REFCOUNTED_TYPE(TTransaction)
 
 ////////////////////////////////////////////////////////////////////////////////
-
-enum class EClientPriority : ui8
-{
-    Local,
-    Remote,
-    Undefined,
-};
 
 DECLARE_REFCOUNTED_STRUCT(TClientDescription)
 
@@ -497,7 +475,7 @@ public:
     UNIMPLEMENTED_METHOD(TFuture<TIssueTokenResult>, IssueToken, (const std::string&, const std::string&, const TIssueTokenOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, RevokeToken, (const std::string&, const std::string&, const std::string&, const TRevokeTokenOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TListUserTokensResult>, ListUserTokens, (const std::string&, const std::string&, const TListUserTokensOptions&));
-    UNIMPLEMENTED_METHOD(TFuture<NQueryTrackerClient::TQueryId>, StartQuery, (NQueryTrackerClient::EQueryEngine, const TString&, const TStartQueryOptions&));
+    UNIMPLEMENTED_METHOD(TFuture<NQueryTrackerClient::TQueryId>, StartQuery, (NQueryTrackerClient::EQueryEngine, const std::string&, const TStartQueryOptions&));
     UNIMPLEMENTED_METHOD(TFuture<void>, AbortQuery, (NQueryTrackerClient::TQueryId, const TAbortQueryOptions&));
     UNIMPLEMENTED_METHOD(TFuture<IUnversionedRowsetPtr>, ReadQueryResult, (NQueryTrackerClient::TQueryId, i64, const TReadQueryResultOptions&));
     UNIMPLEMENTED_METHOD(TFuture<TQuery>, GetQuery, (NQueryTrackerClient::TQueryId, const TGetQueryOptions&));
@@ -556,7 +534,7 @@ private:
 private:
     const TFederationConfigPtr Config_;
     const NConcurrency::TPeriodicExecutorPtr Executor_;
-    const TString LocalDatacenter_;
+    const std::string LocalDatacenter_;
 
     std::vector<TClientDescriptionPtr> UnderlyingClients_;
     IClientPtr ActiveClient_;
@@ -606,13 +584,13 @@ TRANSACTION_METHOD_IMPL(NYson::TYsonString, GetNode, (const NYPath::TYPath&, con
 TRANSACTION_METHOD_IMPL(NYson::TYsonString, ListNode, (const NYPath::TYPath&, const TListNodeOptions&));
 TRANSACTION_METHOD_IMPL(bool, NodeExists, (const NYPath::TYPath&, const TNodeExistsOptions&));
 
-void TTransaction::ModifyRows(
+void TTransaction::FutureModifyRows(
     const NYPath::TYPath& path,
     NTableClient::TNameTablePtr nameTable,
-    TSharedRange<TRowModification> modifications,
+    TSharedRange<NFuture::TRowModification> modifications,
     const TModifyRowsOptions& options)
 {
-    Underlying_->ModifyRows(path, nameTable, modifications, options);
+    Underlying_->FutureModifyRows(path, nameTable, modifications, options);
 }
 
 TFuture<TTransactionFlushResult> TTransaction::Flush()

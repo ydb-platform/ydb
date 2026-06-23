@@ -34,11 +34,21 @@ void TOracleMock::OnRequestFailed(
 }
 
 THostIndex TOracleMock::SelectBestPBufferHost(
-    std::span<const THostIndex> hostIndexes,
+    THostMask hosts,
     EOperation operation) const
 {
     Y_UNUSED(operation);
-    return hostIndexes[0];
+    return *hosts.First();
+}
+
+TDuration TOracleMock::GetReadHedgingDelay() const
+{
+    return ReadHedgingDelay;
+}
+
+TDuration TOracleMock::GetReadRequestTimeout() const
+{
+    return ReadRequestTimeout;
 }
 
 TDuration TOracleMock::GetWriteHedgingDelay() const
@@ -107,9 +117,9 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
         Y_ABORT_UNLESS(false, "Should set SyncWithPBufferHandler");
         return NThreading::TFuture<TDBGFlushResponse>();
     };
-    EraseFromPBufferHandler = [](const auto&...)
+    BatchEraseFromPBufferHandler = [](const auto&...)
     {
-        Y_ABORT_UNLESS(false, "Should set EraseFromPBufferHandler");
+        Y_ABORT_UNLESS(false, "Should set BatchEraseFromPBufferHandler");
         return NThreading::TFuture<TDBGEraseResponse>();
     };
     RestoreDBGPBuffersHandler = [](const auto&...)
@@ -158,9 +168,13 @@ std::shared_ptr<NWilson::TSpan> TDirectBlockGroupMock::CreateChildSpan(
     return nullptr;
 }
 
-void TDirectBlockGroupMock::Run(IPartitionDirectService* service)
+NThreading::TFuture<void> TDirectBlockGroupMock::Run(
+    IPartitionDirectService* service)
 {
     Y_UNUSED(service);
+    // The mock is considered ready immediately - tests that do not exercise
+    // session locking should not block on the initial-ready gate.
+    return NThreading::MakeFuture();
 }
 
 NThreading::TFuture<TDBGReadBlocksResponse>
@@ -269,13 +283,29 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroupMock::SyncWithPBuffer(
         traceId);
 }
 
-NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroupMock::EraseFromPBuffer(
+NThreading::TFuture<TDBGEraseResponse>
+TDirectBlockGroupMock::BatchEraseFromPBuffer(
     ui32 vChunkIndex,
     THostIndex hostIndex,
     const TVector<TPBufferSegment>& segments,
     const NWilson::TTraceId& traceId)
 {
-    return EraseFromPBufferHandler(vChunkIndex, hostIndex, segments, traceId);
+    return BatchEraseFromPBufferHandler(
+        vChunkIndex,
+        hostIndex,
+        segments,
+        traceId);
+}
+
+void TDirectBlockGroupMock::BarrierEraseFromPBuffer(ui64 lsn)
+{
+    Y_UNUSED(lsn);
+}
+
+NThreading::TFuture<std::optional<ui64>>
+TDirectBlockGroupMock::GatherSafeBarrierForErase()
+{
+    return NThreading::MakeFuture<std::optional<ui64>>(std::nullopt);
 }
 
 NThreading::TFuture<TDBGRestoreResponse>

@@ -55,6 +55,7 @@ TDetailedMetrics::TDetailedMetrics(const NKikimrPQ::TPQTabletConfig::TConsumer& 
 
     InflightCommittedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.committed_messages", false);
     InflightLockedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.locked_messages", false);
+    InflightMessageGroupCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.message_groups", false);
     InflightDelayedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.delayed_messages", false);
     InflightUnlockedCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.unlocked_messages", false);
     InflightScheduledToDLQCount = consumerGroup->GetExpiringNamedCounter("name", "topic.partition.inflight.scheduled_to_dlq_messages", false);
@@ -88,6 +89,7 @@ void SetCounters(NMonitoring::THistogramPtr& counter, const TTabletPercentileCou
 void TDetailedMetrics::UpdateMetrics(const TMetrics& metrics) {
     InflightCommittedCount->Set(metrics.CommittedMessageCount);
     InflightLockedCount->Set(metrics.LockedMessageCount);
+    InflightMessageGroupCount->Set(metrics.InflightMessageGroupCount);
     InflightDelayedCount->Set(metrics.DelayedMessageCount);
     InflightUnlockedCount->Set(metrics.UnprocessedMessageCount);
     InflightScheduledToDLQCount->Set(metrics.DLQMessageCount);

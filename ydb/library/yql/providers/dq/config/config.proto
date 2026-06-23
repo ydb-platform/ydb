@@ -1,7 +1,6 @@
-import "ydb/public/api/protos/annotations/sensitive.proto";
-
 package NYql.NProto;
 option java_package = "ru.yandex.yql.proto";
+option go_package = "github.com/ydb-platform/ydb/ydb/library/yql/providers/dq/config;config_pb";
 
 message TDqConfig {
     optional uint32 NodeId = 1; // autofilled by yqlworker
@@ -45,7 +44,7 @@ message TDqConfig {
 
     message TSolomon {
         optional string TokenFile = 1;
-        optional string Token = 2 [(Ydb.sensitive) = true];
+        optional string Token = 2;
         optional string Server = 3 [default = "https://solomon.yandex.net"];
         optional string Path = 4 [default = "/api/v2/push"];
         optional int32 Port = 5 [default = 443];
@@ -101,7 +100,7 @@ message TDqConfig {
         optional string UploadPrefix = 6; // deprecated option
         optional string Pool = 7;
         repeated string PoolTrees = 24;
-        optional string Token = 8 [(Ydb.sensitive) = true]; // for internal use only
+        optional string Token = 8; // for internal use only
         optional int64 MemoryLimit = 9;
         optional int64 CpuLimit = 29;
         repeated TAttr VaultEnv = 34;
@@ -131,6 +130,7 @@ message TDqConfig {
         optional bool UseLocalLDLibraryPath = 41 [default = false];
         optional string SchedulingTagFilter = 42;
         optional uint64 EnforceRegexpProbabilityFail = 43; // Same as _EnforceRegexpProbabilityFail.
+        optional string ProxyAddress = 44; // full URL to YT proxy, e.g. https://my.com
     }
 
     repeated TYtBackend YtBackends = 5;
@@ -147,6 +147,7 @@ message TDqConfig {
         repeated string ServiceNodeHostPort = 9; // for tests and debug only
         optional string Revision = 10; // for tests and debug only
         optional string LockType = 11 [default = "yt"]; // for tests and debug only
+        optional string ProxyAddress = 12; // full URL to YT proxy, e.g. https://my.com
     }
 
     optional TYtCoordinator YtCoordinator = 6;
@@ -173,6 +174,7 @@ message TDqConfig {
         repeated string IndexedUdfsToWarmup = 2;
         optional bool WaitOnStart = 3 [default = false];
         optional bool EnableStrip = 4 [default = true];
+        optional bool EnableCliqueWarmup = 5 [default = false];
     }
 
     optional TDqControl Control = 11;

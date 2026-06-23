@@ -40,7 +40,7 @@ public:
                     auto value = f.GetValue();
                     if (self->ParentSpan_) {
                         self->ParentSpan_->SetRetryCount(self->RetryNumber_);
-                        self->ParentSpan_->End(value.GetStatus());
+                        self->ParentSpan_->End(GetRetryStatusCode(value));
                     }
                     return value;
                 } catch (...) {
@@ -97,12 +97,13 @@ protected:
     }
 
     static void HandleStatusAsync(TPtr self, const TStatusType& status) {
-        self->EndAttemptSpan(status.GetStatus());
-        auto nextStep = self->GetNextStep(status);
+        const TStatus& retryStatus = GetRetryStatus(status);
+        self->EndAttemptSpan(retryStatus.GetStatus());
+        auto nextStep = self->GetNextStep(retryStatus);
         if (nextStep != NextStep::Finish) {
             self->RetryNumber_++;
-            self->Client_.Impl_->CollectRetryStatAsync(status.GetStatus());
-            self->LogRetry(status);
+            self->Client_.Impl_->CollectRetryStatAsync(retryStatus.GetStatus());
+            self->LogRetry(retryStatus);
         }
         switch (nextStep) {
             case NextStep::RetryImmediately:
@@ -175,6 +176,7 @@ public:
 
 protected:
     TAsyncStatusType RunOperation() override {
+        TInRetryOperationContextClientGuard guard(this->Client_);
         if constexpr (TFunctionArgs<TOperation>::Length == 1) {
             return Operation_(this->Client_);
         } else {
@@ -239,6 +241,7 @@ private:
     }
 
     TAsyncStatusType RunOperation() override {
+        TInRetryOperationContextClientGuard guard(this->Client_);
         if constexpr (TFunctionArgs<TOperation>::Length == 1) {
             return Operation_(this->Session_.value());
         } else {

@@ -55,7 +55,6 @@ public:
     NThreading::TFuture<TWriteBlocksLocalResponse> WriteBlocksLocal(
         TCallContextPtr callContext,
         std::shared_ptr<TWriteBlocksLocalRequest> request,
-        ui64 lsn,
         const NWilson::TTraceId& traceId);
 
     void SetHostState(THostIndex hostIndex, EHostState state);
@@ -63,6 +62,11 @@ public:
     [[nodiscard]] const TVChunkConfig& GetConfig() const;
     [[nodiscard]] ui64 GetPBufferUsedSize(THostIndex hostIndex) const;
     [[nodiscard]] TString DebugPrintDirtyMap();
+
+    // This vchunk's contribution to the tablet-wide cleanup watermark: the
+    // smallest lsn still held in PBuffers, or nullopt when nothing is inflight.
+    // Must run on the executor thread.
+    [[nodiscard]] std::optional<ui64> GetSafeBarrierForErase() const;
 
     // IWriteClient implementation
     void OnWriteBlocksResponse(
@@ -125,7 +129,15 @@ private:
         EHostState state) const;
     void ApplyConfig();
 
+    void OnCopierStopped(
+        THostIndex hostIndex,
+        TDDiskDataCopier::EResult result);
     void OnCopyComplete(THostIndex hostIndex, TDDiskDataCopier::EResult result);
+
+    // Checks DirtyMap's initial readiness and waits it if need.
+    void WaitForDirtyMapReady();
+
+    [[nodiscard]] TString PrintInflight() const;
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     IPartitionDirectService* const PartitionDirectService = nullptr;
@@ -140,12 +152,15 @@ private:
     TVChunkConfig VChunkConfig;
     TList<TPendingVChunkConfig> PendingVChunkConfigs;
     TBlocksDirtyMap BlocksDirtyMap;
-    bool DirtyMapRestored = false;
+    // One-shot signal of the INITIAL DirtyMap assembly at tablet start.
+    NThreading::TPromise<void> DirtyMapReady = NThreading::NewPromise();
     TMap<THostIndex, TDDiskDataCopierPtr> Copiers;
 
     size_t InflightWritesCount = 0;
     size_t InflightFlushesCount = 0;
     bool CleaningUpScheduled = false;
+
+    TVector<IRequestExecutorWeakPtr> Inflight;
 
     TVChunkCounters Counters;
 

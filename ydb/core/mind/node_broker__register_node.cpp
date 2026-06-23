@@ -55,7 +55,7 @@ public:
         if (Response->Record.GetStatus().GetCode() == TStatus::OK)
             Self->FillNodeInfo(Self->Committed.Nodes.at(NodeId), *Response->Record.MutableNode());
 
-        LOG_TRACE_S(ctx, NKikimrServices::NODE_BROKER,
+        LOG_INFO_S(ctx, NKikimrServices::NODE_BROKER,
                     "TTxRegisterNode reply with: " << Response->Record.ShortDebugString());
 
         if (ScopeId != NActors::TScopeId()) {
@@ -76,7 +76,7 @@ public:
         auto expire = rec.GetFixedNodeId() ? TInstant::Max() : Self->Dirty.Epoch.NextEnd;
 
         LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxRegisterNode Execute");
-        LOG_DEBUG_S(ctx, NKikimrServices::NODE_BROKER,
+        LOG_INFO_S(ctx, NKikimrServices::NODE_BROKER,
                     "Registration request from " << host << ":" << port << " "
                     << (rec.GetFixedNodeId() ? "(fixed)" : "(not fixed)") << " "
                     << "tenant: " << (rec.HasPath() ? rec.GetPath() : "<unspecified>"));

@@ -144,9 +144,7 @@ class TestSecondaryIndexFollowers(RollingUpgradeAndDowngradeFixture):
             pytest.skip("Only available since 25-1")
 
         yield from self.setup_cluster(
-            extra_feature_flags={
-                "enable_follower_stats": True
-            }
+            extra_feature_flags=["enable_follower_stats"]
         )
 
     def create_table(self, enable_followers):

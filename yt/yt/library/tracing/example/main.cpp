@@ -79,7 +79,8 @@ NAuth::TTvmServiceConfigPtr GetTvmMockConfig()
     auto config = New<NAuth::TTvmServiceConfig>();
     config->EnableMock = true;
     config->ClientSelfSecret = "TestSecret-0";
-    config->ClientDstMap["tracing"] = 10;
+    config->ClientSelfId = NAuth::TTvmId{0};
+    config->ClientDstMap["tracing"] = NAuth::TTvmId{10};
     config->ClientEnableServiceTicketFetching = true;
 
     return config;
@@ -88,9 +89,9 @@ NAuth::TTvmServiceConfigPtr GetTvmMockConfig()
 NAuth::TTvmServiceConfigPtr GetTvmConfig()
 {
     auto config = New<NAuth::TTvmServiceConfig>();
-    config->ClientSelfId = FromString<NAuth::TTvmId>(GetEnv("TVM_ID"));
+    config->ClientSelfId = NAuth::TTvmId{FromString<ui32>(GetEnv("TVM_ID"))};
     config->ClientSelfSecretEnv = "TVM_SECRET";
-    config->ClientDstMap["tracing"] = FromString<NAuth::TTvmId>(GetEnv("TRACING_TVM_ID"));
+    config->ClientDstMap["tracing"] = NAuth::TTvmId{FromString<ui32>(GetEnv("TRACING_TVM_ID"))};
     config->ClientEnableServiceTicketFetching = true;
 
     return config;

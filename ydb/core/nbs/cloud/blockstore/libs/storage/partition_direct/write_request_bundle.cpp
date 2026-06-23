@@ -13,8 +13,7 @@ TWriteRequestBundle::TWriteRequestBundle(
     std::shared_ptr<TWriteBlocksLocalRequest> request,
     const NWilson::TTraceId& traceId,
     TCallContextPtr callContext,
-    TBlockRange64 vchunkRange,
-    ui64 lsn)
+    TBlockRange64 vchunkRange)
     : WriteClient(std::move(writeClient))
     , Request(std::move(request))
     , Span(
@@ -25,7 +24,6 @@ TWriteRequestBundle::TWriteRequestBundle(
           actorSystem)
     , CallContext(std::move(callContext))
     , VChunkRange(vchunkRange)
-    , Lsn(lsn)
     , Promise(NThreading::NewPromise<TWriteBlocksLocalResponse>())
 {}
 
@@ -79,6 +77,11 @@ NWilson::TSpan& TWriteRequestBundle::GetSpan()
 TBlockRange64 TWriteRequestBundle::GetVChunkRange() const
 {
     return VChunkRange;
+}
+
+void TWriteRequestBundle::SetLsn(ui64 lsn)
+{
+    Lsn = lsn;
 }
 
 ui64 TWriteRequestBundle::GetLsn() const

@@ -111,36 +111,40 @@ Y_UNIT_TEST_SUITE(AuthTokenAllowed) {
 
 Y_UNIT_TEST_SUITE(AuthStrictDatabaseOnly) {
 
-    const TStrictDatabaseOnlyFixture Fixture;
-
     Y_UNIT_TEST(PassOnDatabaseAllowedSidOnly) {
+        TStrictDatabaseOnlyFixture fixture;
         NACLib::TUserToken token({ .UserSID = "database" });
-        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(Fixture.GetAppData(), token.SerializeAsString()), true);
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(fixture.GetAppData(), token.SerializeAsString()), true);
     }
 
     Y_UNIT_TEST(PassOnDatabaseAllowedGroupSidOnly) {
+        TStrictDatabaseOnlyFixture fixture;
         NACLib::TUserToken token({ .UserSID = "user", .GroupSIDs = {"database"} });
-        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(Fixture.GetAppData(), token.SerializeAsString()), true);
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(fixture.GetAppData(), token.SerializeAsString()), true);
     }
 
     Y_UNIT_TEST(FailWithoutDatabaseAllowedSid) {
+        TStrictDatabaseOnlyFixture fixture;
         NACLib::TUserToken token({ .UserSID = "user" });
-        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(Fixture.GetAppData(), token.SerializeAsString()), false);
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(fixture.GetAppData(), token.SerializeAsString()), false);
     }
 
     Y_UNIT_TEST(FailOnViewerAllowedSid) {
+        TStrictDatabaseOnlyFixture fixture;
         NACLib::TUserToken token({ .UserSID = "database", .GroupSIDs = {"viewer"} });
-        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(Fixture.GetAppData(), token.SerializeAsString()), false);
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(fixture.GetAppData(), token.SerializeAsString()), false);
     }
 
     Y_UNIT_TEST(FailOnMonitoringAllowedSid) {
+        TStrictDatabaseOnlyFixture fixture;
         NACLib::TUserToken token({ .UserSID = "database", .GroupSIDs = {"monitoring"} });
-        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(Fixture.GetAppData(), token.SerializeAsString()), false);
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(fixture.GetAppData(), token.SerializeAsString()), false);
     }
 
     Y_UNIT_TEST(FailOnAdministrationAllowedSid) {
+        TStrictDatabaseOnlyFixture fixture;
         NACLib::TUserToken token({ .UserSID = "database", .GroupSIDs = {"admin"} });
-        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(Fixture.GetAppData(), token.SerializeAsString()), false);
+        UNIT_ASSERT_EQUAL(IsStrictDatabaseOnlyToken(fixture.GetAppData(), token.SerializeAsString()), false);
     }
 
 }

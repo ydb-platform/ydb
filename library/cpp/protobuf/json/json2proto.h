@@ -102,6 +102,11 @@ namespace NProtobufJson {
             return *this;
         }
 
+        TSelf& SetVectorizeObjects(bool vectorizeObjects) {
+            VectorizeObjects = vectorizeObjects;
+            return *this;
+        }
+
         TSelf& SetAllowComments(bool value) {
             AllowComments = value;
             return *this;
@@ -109,6 +114,16 @@ namespace NProtobufJson {
 
         TSelf& SetAllowUnknownFields(bool value) {
             AllowUnknownFields = value;
+            return *this;
+        }
+
+        TSelf& SetAllowFieldNameAliases(bool value) {
+            AllowFieldNameAliases = value;
+            return *this;
+        }
+
+        TSelf& SetAllowUnknownEnumValues(bool value) {
+            AllowUnknownEnumValues = value;
             return *this;
         }
 
@@ -161,6 +176,12 @@ namespace NProtobufJson {
 
         /// Append scalars to repeated fields
         bool VectorizeScalars = false;
+
+        bool VectorizeObjects = false;
+
+        bool AllowFieldNameAliases = false;
+
+        bool AllowUnknownEnumValues = false;
 
         /// Custom spliter non array value to repeated fields.
         TValueVectorizer ValueVectorizer = {};

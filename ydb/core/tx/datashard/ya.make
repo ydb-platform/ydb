@@ -276,6 +276,7 @@ PEERDIR(
     ydb/core/tablet_flat
     ydb/core/tx/long_tx_service/public
     ydb/core/tx/locks
+    ydb/core/tx/sequenceproxy/public
     ydb/core/util
     ydb/core/wrappers
     ydb/core/ydb_convert
@@ -316,6 +317,7 @@ END()
 
 RECURSE_FOR_TESTS(
     build_index/ut
+    ut_bloom_filter
     ut_borrowed_compaction
     ut_change_collector
     ut_change_exchange
@@ -326,6 +328,7 @@ RECURSE_FOR_TESTS(
     ut_export
     ut_external_blobs
     ut_followers
+    ut_fulltext
     ut_incremental_backup
     ut_incremental_restore_scan
     ut_init

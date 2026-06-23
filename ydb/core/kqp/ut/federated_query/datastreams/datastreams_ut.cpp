@@ -1437,6 +1437,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(CreateExternalDataSourceAuthMethodIam, TStreamingWithSchemaSecretsTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
         ++DynamicNodeCount;
         auto storagePoolType = StoragePoolTypes.emplace_back("hdd");
         auto& appConfig = SetupAppConfig();
@@ -1453,12 +1454,20 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
         {
             NYdb::TDriver driver(
                 NYdb::TDriverConfig()
+                    .SetDiscoveryMode(NYdb::EDiscoveryMode::Async)
                     .SetEndpoint(location)
                     .SetDatabase(databasePath)
             );
             NYdb::NTopic::TTopicClient topicClient(driver);
-            auto result = topicClient.CreateTopic(topicName).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            WaitFor(TEST_OPERATION_TIMEOUT, "CreateTopic", [&](TString& error) {
+                auto result = topicClient.CreateTopic(topicName).GetValueSync();
+                if (result.IsSuccess()) {
+                   return true;
+                }
+                error = result.GetIssues().ToString();
+                UNIT_ASSERT_STRING_CONTAINS(error, "Database nodes resolve failed with no certain result");
+                return false;
+            });
             driver.Stop(true);
         }
 
@@ -1711,18 +1720,6 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
             )sql", "source"_a = source, "i"_a = input1),
             EStatus::GENERIC_ERROR,
             "Reducing by keys of streaming input is not supported"
-        );
-
-        //// Writing ////
-
-        // Upsert into test table returning id
-        ExecQuery(fmt::format(R"sql(
-                UPSERT INTO `{t}`
-                SELECT Data AS Name, LENGTH(Data) AS id FROM `{source}`.`{i}` WITH (STREAMING = "TRUE")
-                RETURNING id;
-            )sql", "source"_a = source, "i"_a = input1, "t"_a = table),
-            EStatus::GENERIC_ERROR,
-            "Streaming input is not supported for DqPrecompute"
         );
     }
 

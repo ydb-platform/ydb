@@ -4,6 +4,12 @@ SRCS(
     export.cpp
 )
 
+IF (OS_WINDOWS)
+    CFLAGS(
+        -DKIKIMR_DISABLE_S3_OPS
+    )
+ENDIF()
+
 PEERDIR(
     yql/essentials/public/types
     ydb/core/tx/columnshard/engines/scheme/defaults/protos

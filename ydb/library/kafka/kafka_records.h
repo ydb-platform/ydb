@@ -1,18 +1,11 @@
 #pragma once
 
-#include <ydb/core/protos/grpc_pq_old.pb.h>
-
 #include "kafka.h"
 
-namespace NKafka {
+#include <optional>
+#include <utility>
 
-enum ECompressionType {
-    NONE = 0,
-    GZIP = 1,
-    SNAPPY = 2,
-    LZ4 = 3,
-    ZSTD = 4
-};
+namespace NKafka {
 
 enum ETimestampType {
     CREATE_TIME = 0,
@@ -70,8 +63,6 @@ public:
     bool operator==(const TKafkaHeader& other) const = default;
 };
 
-
-
 class TKafkaRecord: public TMessage {
 public:
     struct MessageMeta {
@@ -80,7 +71,16 @@ public:
     };
 
     TKafkaRecord();
+    TKafkaRecord(const TKafkaRecord& other);
+    TKafkaRecord(TKafkaRecord&& other) noexcept;
+    TKafkaRecord& operator=(const TKafkaRecord& other);
+    TKafkaRecord& operator=(TKafkaRecord&& other) noexcept;
     ~TKafkaRecord() = default;
+
+    void SetKey(TString key);
+    void SetValue(TString value);
+    void AddHeader(TString key, TString value);
+    void OwnPayload();
 
     struct LengthMeta {
         using Type = TKafkaInt32;
@@ -194,12 +194,34 @@ public:
     void Read(TKafkaReadable& readable, TKafkaVersion version) override;
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
 
-    bool operator==(const TKafkaRecord& other) const = default;
+    bool operator==(const TKafkaRecord& other) const;
 
-    NKikimrPQClient::TDataChunk DataChunk;
+private:
+    struct TStorage {
+        struct THeaderData {
+            std::optional<TString> Key;
+            std::optional<TString> Value;
+        };
+
+        std::optional<TString> Key;
+        std::optional<TString> Value;
+        std::vector<THeaderData> Headers;
+    };
+
+    TStorage Storage_;
+
+    void RebindStorage();
 };
 
+namespace NPrivate {
 
+void ReadLegacyRecordBatch(
+    TKafkaReadable& readable,
+    TKafkaVersion magic,
+    size_t length,
+    TKafkaRecordBatch& batch);
+
+} // namespace NPrivate
 
 class TKafkaRecordBatch: public TMessage {
 public:
@@ -413,13 +435,69 @@ public:
 
     bool operator==(const TKafkaRecordBatch& other) const = default;
 
-    ECompressionType CompressionType();
+    ECompressionType CompressionType() const;
     ETimestampType TimestampType();
     bool Transactional();
     bool ControlBatch();
     bool HasDeleteHorizonMs();
+
+    void Compress(TKafkaVersion version = MessageMeta::PresentVersions.Max);
+    void Decompress(TKafkaVersion version = MessageMeta::PresentVersions.Max);
 };
 
+
+struct TKafkaBatchHeader: public TMessage {
+    using MessageMeta = TKafkaRecordBatch::MessageMeta;
+    using BaseOffsetMeta = TKafkaRecordBatch::BaseOffsetMeta;
+    using BatchLengthMeta = TKafkaRecordBatch::BatchLengthMeta;
+    using PartitionLeaderEpochMeta = TKafkaRecordBatch::PartitionLeaderEpochMeta;
+    using MagicMeta = TKafkaRecordBatch::MagicMeta;
+    using CrcMeta = TKafkaRecordBatch::CrcMeta;
+    using AttributesMeta = TKafkaRecordBatch::AttributesMeta;
+    using LastOffsetDeltaMeta = TKafkaRecordBatch::LastOffsetDeltaMeta;
+    using BaseTimestampMeta = TKafkaRecordBatch::BaseTimestampMeta;
+    using MaxTimestampMeta = TKafkaRecordBatch::MaxTimestampMeta;
+    using ProducerIdMeta = TKafkaRecordBatch::ProducerIdMeta;
+    using ProducerEpochMeta = TKafkaRecordBatch::ProducerEpochMeta;
+    using BaseSequenceMeta = TKafkaRecordBatch::BaseSequenceMeta;
+
+    struct RecordsCountMeta {
+        using Type = TKafkaInt32;
+        using TypeDesc = NPrivate::TKafkaIntDesc;
+
+        static constexpr const char* Name = "recordsCount";
+        static constexpr const char* About = "";
+        static constexpr Type Default = 0;
+
+        static constexpr TKafkaVersions PresentVersions = VersionsAlways;
+        static constexpr TKafkaVersions TaggedVersions = VersionsNever;
+        static constexpr TKafkaVersions NullableVersions = VersionsNever;
+        static constexpr TKafkaVersions FlexibleVersions = VersionsNever;
+    };
+
+    TKafkaBatchHeader();
+    ~TKafkaBatchHeader() = default;
+
+    BaseOffsetMeta::Type BaseOffset;
+    BatchLengthMeta::Type BatchLength;
+    PartitionLeaderEpochMeta::Type PartitionLeaderEpoch;
+    MagicMeta::Type Magic;
+    CrcMeta::Type Crc;
+    AttributesMeta::Type Attributes;
+    LastOffsetDeltaMeta::Type LastOffsetDelta;
+    BaseTimestampMeta::Type BaseTimestamp;
+    MaxTimestampMeta::Type MaxTimestamp;
+    ProducerIdMeta::Type ProducerId;
+    ProducerEpochMeta::Type ProducerEpoch;
+    BaseSequenceMeta::Type BaseSequence;
+    RecordsCountMeta::Type RecordsCount;
+
+    i32 Size(TKafkaVersion version) const override;
+    void Read(TKafkaReadable& readable, TKafkaVersion version) override;
+    void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
+
+    bool operator==(const TKafkaBatchHeader& other) const = default;
+};
 
 class TKafkaRecordV0: public TMessage {
 public:
@@ -540,6 +618,8 @@ public:
     void Write(TKafkaWritable& writable, TKafkaVersion version) const override;
 
     bool operator==(const TKafkaRecordV0& other) const = default;
+
+    ECompressionType CompressionType() const;
 };
 
 class TKafkaRecordBatchV0: public TMessage {
@@ -587,5 +667,24 @@ public:
 
     bool operator==(const TKafkaRecordBatchV0& other) const = default;
 };
+
+std::optional<TKafkaBatchHeader> ReadKafkaBatchHeader(
+    TStringBuf data,
+    TKafkaVersion version = 2);
+
+TKafkaBatchHeader ReadLegacyRecordBatchHeader(
+    TKafkaReadable& readable,
+    TKafkaVersion magic,
+    size_t length);
+
+TKafkaRecordBatch ReadKafkaRecordBatch(
+    TStringBuf data,
+    TKafkaVersion version = 2);
+TKafkaRecordBatch ReadRecordBatch(TStringBuf data);
+TString WriteKafkaRecordBatch(const TKafkaRecordBatch& batch, TKafkaVersion version = 2);
+
+std::pair<EKafkaErrors, ui64> GetBatchBaseSeqNo(const TKafkaBatchHeader& header);
+std::pair<EKafkaErrors, ui64> GetBatchMaxSeqNo(const TKafkaBatchHeader& header, ui64 baseSeqNo);
+ui64 GetRecordSeqNo(const TKafkaRecordBatch& batch, size_t recordIndex, const TKafkaRecord& record);
 
 } // namespace NKafka

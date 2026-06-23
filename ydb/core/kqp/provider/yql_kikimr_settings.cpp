@@ -80,6 +80,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, HashJoinMode).Parser([](const TString& v) { return FromString<NDq::EHashJoinMode>(v); });
 
     REGISTER_SETTING(*this, OptDisableTopSort);
+    REGISTER_SETTING(*this, OptDisableAutoIndexSelection);
     REGISTER_SETTING(*this, OptDisableSqlInToJoin);
     REGISTER_SETTING(*this, OptEnableInplaceUpdate);
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
@@ -145,6 +146,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, MaxSequentialReadsInFlight);
 
     REGISTER_SETTING(*this, KMeansTreeSearchTopSize);
+    REGISTER_SETTING(*this, HybridSearchFactor);
+    REGISTER_SETTING(*this, HybridSearchK);
     REGISTER_SETTING(*this, DisableCheckpoints);
 
     REGISTER_SETTING(*this, DefaultTxMode).Parser(
@@ -310,6 +313,10 @@ bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
 
 bool TKikimrConfiguration::GetUseDqHashCombine() const {
     return UseDqHashCombine.Get().GetOrElse(TTableServiceConfig::GetEnableDqHashCombineByDefault());
+}
+
+bool TKikimrConfiguration::IsAutoIndexSelectionDisabled() const {
+    return OptDisableAutoIndexSelection.Get().GetOrElse(false);
 }
 
 NSQLTranslation::EBindingsMode TKikimrConfiguration::GetYqlBindingsMode() const {

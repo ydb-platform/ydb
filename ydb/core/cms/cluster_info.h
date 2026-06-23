@@ -726,7 +726,7 @@ public:
     void GenerateSysTabletsNodesCheckers();
     void GenerateClusterNodesCheckers();
 
-    bool IsStateStorageReplicaNode(ui32 nodeId) {
+    bool IsStateStorageReplicaNode(ui32 nodeId) const {
         return StateStorageReplicas.contains(nodeId);
     }
 

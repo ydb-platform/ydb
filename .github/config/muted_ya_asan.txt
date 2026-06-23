@@ -4,6 +4,7 @@ ydb/core/blobstorage/ddisk/ut TDDiskActorTest.LateOutdatedSyncReadResultDoesNotL
 ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskSyncTest.Large_4Tablets_32VChunks_FullBlocks_16Segments
 ydb/core/blobstorage/ddisk/ut_large TDDiskActorPDiskSyncTest.Large_4Tablets_32VChunks_FullBlocks_1Segment
 ydb/core/blobstorage/ddisk/ut_large unittest.[*/*] chunk
+ydb/core/blobstorage/pdisk/ut TPDiskTest.TestPDiskFormattingCases
 ydb/core/blobstorage/ut_blobstorage NodeDisconnected.BsQueueRetries
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/blobstorage/ut_blobstorage/ut_balancing VDiskBalancing.TestRandom_Block42
@@ -388,6 +389,7 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateAndAlte
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.CreateStreamingQueryMatchRecognize
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithDoubleYdbJoin
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithMultipleWrites
+ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithOffsetAndLimit
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithProcess+EnableKqpConstraintsTransformer
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithProcess-EnableKqpConstraintsTransformer
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithS3Join
@@ -859,6 +861,7 @@ ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-6-True-1-2-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-6-True-2-1-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-6-True-2-2-fq_client0-mvp_external_ydb_endpoint0]
+ydb/tests/fq/generic/streaming test_join.py.TestJoinStreaming.test_streamlookup_watermarks[v1-8-True-1-2-fq_client0-mvp_external_ydb_endpoint0]
 ydb/tests/fq/http_api test_http_api.py.TestHttpApi.test_simple_analytics_query
 ydb/tests/fq/s3 test_statistics.py.TestS3.test_aborted_by_user[v2-client0]
 ydb/tests/fq/s3 test_streaming_join.py.TestStreamingJoin.test_grace_join[v1-client0]

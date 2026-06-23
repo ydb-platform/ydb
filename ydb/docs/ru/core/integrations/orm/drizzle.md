@@ -2,7 +2,7 @@
 
 [Drizzle ORM](https://orm.drizzle.team/) — это лёгкая TypeScript ORM для Node.js с типобезопасным построителем запросов и DSL для описания схемы.
 
-{{ ydb-short-name }} поддерживает интеграцию с Drizzle ORM через адаптер [`@ydbjs/drizzle-adapter`](https://www.npmjs.com/package/@ydbjs/drizzle-adapter), который входит в [{{ ydb-short-name }} JavaScript/TypeScript SDK](https://github.com/ydb-platform/ydb-js-sdk). Адаптер предоставляет привычный для Drizzle API и учитывает особенности {{ ydb-short-name }}: первичные ключи, вторичные и векторные индексы, TTL, партиционирование и колоночные семейства.
+{{ ydb-short-name }} поддерживает интеграцию с Drizzle ORM через адаптер [`@ydbjs/drizzle-adapter`](https://www.npmjs.com/package/@ydbjs/drizzle-adapter), который входит в [{{ ydb-short-name }} JavaScript/TypeScript SDK](https://github.com/ydb-platform/ydb-js-sdk). Адаптер предоставляет привычный для Drizzle API и учитывает особенности {{ ydb-short-name }}: первичные ключи, вторичные и векторные индексы, TTL, партиционирование и семейства колонок.
 
 Эта страница — краткий обзор интеграции. Подробное руководство со всеми возможностями (построители запросов, реляционный API, миграции, DDL, векторный поиск) доступно на [ydb.js.org](https://ydb.js.org/guide/drizzle/).
 

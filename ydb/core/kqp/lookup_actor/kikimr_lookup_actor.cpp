@@ -1,37 +1,36 @@
 #include "kikimr_lookup_actor.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/protos/kqp_lookup_source.pb.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorsystem.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/mkql_proto/mkql_proto.h>
-#include <yql/essentials/core/yql_expr_type_annotation.h>
-#include <yql/essentials/minikql/mkql_node_cast.h>
-#include <yql/essentials/minikql/mkql_type_builder.h>
-#include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
-#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
-#include <yql/essentials/minikql/mkql_node_builder.h>
-#include <yql/essentials/public/udf/udf_type_printer.h>
-#include <ydb/core/protos/kqp_lookup_source.pb.h>
-#include <yql/essentials/providers/common/provider/yql_provider_names.h>
-#include <yql/essentials/public/udf/arrow/util.h>
-#include <yql/essentials/utils/yql_panic.h>
-#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
-#include <ydb/core/formats/arrow/serializer/abstract.h>
 #include <ydb/library/yql/dq/actors/dq.h>
-
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/grpc_services/base/base.h>
-#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
+#include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_node_builder.h>
+#include <yql/essentials/minikql/mkql_node_cast.h>
+#include <yql/essentials/minikql/mkql_type_builder.h>
+#include <yql/essentials/providers/common/provider/yql_provider_names.h>
+#include <yql/essentials/public/udf/arrow/util.h>
+#include <yql/essentials/public/udf/udf_type_printer.h>
+#include <yql/essentials/utils/yql_panic.h>
+
 #include <util/string/escape.h>
-#include <ydb/core/util/backoff.h>
-#include <ydb/library/actors/core/log.h>
-#include <ydb/library/yverify_stream/yverify_stream.h>
 
 #define LOG_T_AS(ctx, s) LOG_TRACE_S(ctx, NKikimrServices::KQP_COMPUTE, s)
 #define LOG_T(s) LOG_T_AS(*NActors::TlsActivationContext, this->LogPrefix << s)
@@ -119,6 +118,7 @@ namespace NYql::NDq {
         constexpr ui32 RetriesLimit = 20; // TODO lookup parameters or PRAGMA?
         constexpr TDuration MinRetryDelay = TDuration::MilliSeconds(10);
         constexpr TDuration RetriesTimeout = TDuration::Minutes(3); // TODO lookup parameters or PRAGMA?
+        constexpr ui64 TableServiceResultLimit = 1000;
 
         const NKikimr::NMiniKQL::TStructType* MergeStructTypes(const NKikimr::NMiniKQL::TTypeEnvironment& env, const NKikimr::NMiniKQL::TStructType* t1, const NKikimr::NMiniKQL::TStructType* t2) {
             Y_ABORT_UNLESS(t1);
@@ -571,9 +571,10 @@ namespace NYql::NDq {
 
         void ProcessReceivedData(Ydb::Table::ExecuteQueryResult& result, TLookupState::TPtr state) {
             Y_ENSURE(result.result_setsSize() == 1);
-            ProcessReceivedData(result.result_sets()[0], std::move(state));
+            ProcessReceivedData(result.result_sets()[0], state);
             LOG_T("tx meta: " << result.tx_meta().DebugString() << " query meta: " << result.query_meta().DebugString());
             LOG_D("query stats: " << result.query_stats().DebugString());
+            Y_ENSURE(state->ResultRows < TableServiceResultLimit || state->FullscanLimit == TableServiceResultLimit, "Result size " << state->ResultRows << " exceed safe TableService size " << (TableServiceResultLimit - 1) << ", terminate to avoid data loss");
         }
 
         void ProcessReceivedData(const Ydb::ResultSet& resultSet, TLookupState::TPtr state) {
@@ -584,7 +585,7 @@ namespace NYql::NDq {
                 LOG_D("ProcessReceivedData: parent MIA");
                 return;
             }
-            Y_ENSURE(!resultSet.truncated(), (state->FullscanLimit > 0 ? TStringBuilder() << "Fullscan request for " << state->FullscanLimit << " keys" : TStringBuilder() << "Keyed request for " << request->size() << " keys") << ": truncated result");
+            Y_ENSURE(!resultSet.truncated(), (state->FullscanLimit > 0 ? TStringBuilder() << "Fullscan request for " << state->FullscanLimit << " keys" : TStringBuilder() << "Keyed request for " << request->size() << " keys") << ": truncated result, terminate to avoid data loss");
             NYdb::TResultSetParser parser(resultSet);
             ui32 columnsCount = SelectResultType->GetMembersCount();
             TVector<ui32> columnMap(columnsCount);
@@ -800,7 +801,7 @@ namespace NYql::NDq {
         ::NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlight;
         ::NMonitoring::TDynamicCounters::TCounterPtr Sessions;
-        static constexpr size_t MaxSupportedFullscanRequest = 1000; // todo: consider making tweakable
+        static constexpr size_t MaxSupportedFullscanRequest = TableServiceResultLimit; // todo: consider making tweakable
         // N.B. TableService limits with 1000
     };
 

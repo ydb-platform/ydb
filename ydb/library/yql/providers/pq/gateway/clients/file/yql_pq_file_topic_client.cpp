@@ -379,14 +379,14 @@ public:
     TAsyncDescribeTopicResult DescribeTopic(const TString& path, const TDescribeTopicSettings& settings) final {
         Y_UNUSED(settings);
         Ydb::Topic::DescribeTopicResult describeTopicResult;
-        const auto& key = std::make_pair("pq", SkipDatabasePrefix(path));
+        const TClusterNPath key { "pq", SkipDatabasePrefix(path) };
         const auto topicsIt = Topics.find(key);
         if (topicsIt == Topics.end()) {
             NYdb::NIssue::TIssues issues;
-            issues.AddIssue(TStringBuilder() << "Cluster: " << key.first << ", topic: " << key.second << " not found" );
+            issues.AddIssue(TStringBuilder() << "Cluster: " << key.first << ", topic: " << key.second << " not found");
             return NThreading::MakeFuture(TDescribeTopicResult(TStatus(EStatus::NOT_FOUND, std::move(issues)), {}));
         }
-        for (ui32 partition = 0; partition < topicsIt->second.PartitionsCount; ++partition) {
+        for (size_t partition = 0; partition < topicsIt->second.PartitionsCount; ++partition) {
             auto& partitionInfo = *describeTopicResult.add_partitions();
             partitionInfo.set_partition_id(partition);
             partitionInfo.set_active(true);

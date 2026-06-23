@@ -65,6 +65,28 @@ void RenameRightGeneratedIgnoreConflicts(
     rightInput = MakeIntrusive<TOpMap>(rightInput, pos, mapElements);
 }
 
+void AddVisibleDependencies(const TIntrusivePtr<IOperator>& op, TInfoUnitSet& dependencies) {
+    if (!op) {
+        return;
+    }
+
+    switch (op->Kind) {
+        case EOperator::AddDependencies: {
+            auto deps = CastOperator<TOpAddDependencies>(op);
+            AddInfoUnits(dependencies, deps->Dependencies);
+            AddVisibleDependencies(deps->GetInput(), dependencies);
+            break;
+        }
+        case EOperator::Filter:
+        case EOperator::Limit:
+        case EOperator::Sort:
+            AddVisibleDependencies(CastOperator<IUnaryOperator>(op)->GetInput(), dependencies);
+            break;
+        default:
+            break;
+    }
+}
+
 /**
  * Computes dependent variables and updates the plan
  */
@@ -367,8 +389,10 @@ TIntrusivePtr<IOperator> PlanConverter::ConvertTKqpOpMap(TExprNode::TPtr node) {
                 renameSources.insert(mapElement.GetRename());
             }
         }
+        TInfoUnitSet visibleDependencies;
+        AddVisibleDependencies(input, visibleDependencies);
         for (const auto& iu : input->GetOutputIUs()) {
-            if (renameSources.contains(iu) || IsGeneratedIgnoreIU(iu)) {
+            if (renameSources.contains(iu) || visibleDependencies.contains(iu) || IsGeneratedIgnoreIU(iu)) {
                 continue;
             }
             mapElements.emplace_back(MakeGeneratedIgnoreIU(PlanProps), iu, node->Pos(), &Ctx, &PlanProps);

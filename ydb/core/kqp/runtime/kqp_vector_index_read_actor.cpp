@@ -309,9 +309,38 @@ private:
 
     void StartLevelRound() {
         LevelChildren.clear();
-        ParentQueue.assign(CurrentParents.begin(), CurrentParents.end());
         Phase = EPhase::Level;
-        ProcessNextRead();
+
+        // Read all parents of this round in a single inner read: it fans the
+        // per-parent ranges out across the level table's shards in parallel
+        // instead of doing one sequential round-trip per parent. Parents already
+        // in the shared level cache are served from it and excluded from the read.
+        ReadingParents.clear();
+        CachingLevelBatches.clear();
+        TVector<TClusterId> toRead;
+        toRead.reserve(CurrentParents.size());
+        for (TClusterId parent : CurrentParents) {
+            if (UseLevelCache) {
+                auto cached = LevelsCache->Get(LevelTablePathId, SerializeParentKey(parent));
+                if (cached && !cached->BatchRows.empty()) {
+                    for (TConstArrayRef<TCell> row : cached->BatchRows) {
+                        // Cached row layout: [id (Uint64), centroid (String)].
+                        LevelChildren[row[0].AsValue<ui64>()] = TString(row[1].AsBuf());
+                    }
+                    continue;
+                }
+                // Cache miss: accumulate this parent's read rows to populate it.
+                CachingLevelBatches.emplace(parent, TOwnedCellVecBatch());
+            }
+            ReadingParents.insert(parent);
+            toRead.push_back(parent);
+        }
+
+        if (toRead.empty()) {
+            OnLevelRoundDone();
+        } else {
+            StartLevelRead(toRead);
+        }
     }
 
     void OnLevelRoundDone() {
@@ -360,12 +389,19 @@ private:
     void StartPosting() {
         // Candidate leaf clusters are now in CurrentParents. For a prefixed index,
         // also scan the prefix groups' direct posting partitions (roots that had no
-        // level-table subtree), which bypassed level traversal.
-        ParentQueue.assign(CurrentParents.begin(), CurrentParents.end());
-        ParentQueue.insert(ParentQueue.end(), DirectPostingParents.begin(), DirectPostingParents.end());
+        // level-table subtree), which bypassed level traversal. They are all read in
+        // a single inner read, fanned out across the posting table's shards.
+        TVector<TClusterId> toRead;
+        toRead.reserve(CurrentParents.size() + DirectPostingParents.size());
+        toRead.insert(toRead.end(), CurrentParents.begin(), CurrentParents.end());
+        toRead.insert(toRead.end(), DirectPostingParents.begin(), DirectPostingParents.end());
         PostingKeys.clear();
         Phase = EPhase::Posting;
-        ProcessNextRead();
+        if (toRead.empty()) {
+            OnPostingDone();
+        } else {
+            StartPostingRead(toRead);
+        }
     }
 
     void OnPostingDone() {
@@ -390,6 +426,20 @@ private:
         FinalizeResults();
     }
 
+    // Populate the shared level cache with the children read for each cache-miss
+    // parent of the round (keyed by parent id; empty results are not cached).
+    void FlushLevelCache() {
+        for (auto& [parent, batch] : CachingLevelBatches) {
+            if (batch.empty()) {
+                continue;
+            }
+            auto data = MakeIntrusive<TCachedLevelTableData>();
+            data->BatchRows = std::move(batch);
+            LevelsCache->Put(LevelTablePathId, SerializeParentKey(parent), data);
+        }
+        CachingLevelBatches.clear();
+    }
+
     // Keep the TopK nearest candidate rows by distance and hand them off.
     void FinalizeResults() {
         auto guard = BindAllocator();
@@ -405,28 +455,6 @@ private:
         NotifyCA();
     }
 
-    // Drives the per-parent sequence of level/posting reads.
-    void ProcessNextRead() {
-        if (Failed) {
-            return;
-        }
-        if (ParentQueue.empty()) {
-            if (Phase == EPhase::Level) {
-                OnLevelRoundDone();
-            } else if (Phase == EPhase::Posting) {
-                OnPostingDone();
-            }
-            return;
-        }
-        auto parent = ParentQueue.front();
-        ParentQueue.pop_front();
-        if (Phase == EPhase::Level) {
-            StartLevelRead(parent);
-        } else {
-            StartPostingRead(parent);
-        }
-    }
-
     // ---- Inner reads -------------------------------------------------------
 
     static TSerializedTableRange SingleColumnPointRange(ui64 value) {
@@ -435,6 +463,22 @@ private:
         auto from = value > 0 ? TCell::Make(value - 1) : TCell();
         auto to = TCell::Make(value);
         return TSerializedTableRange({&from, 1}, false, {&to, 1}, true);
+    }
+
+    static TString SerializeParentKey(TClusterId parent) {
+        return TSerializedCellVec::Serialize({TCell::Make(parent)});
+    }
+
+    // Emit one point range per parent into the read's range list. A single inner
+    // read over all of them fans out across the table's shards in parallel. The
+    // read actor matches ranges against partitions in lockstep, so the ranges must
+    // be globally sorted ascending by parent id.
+    void AddParentRanges(NKikimrTxDataShard::TKqpReadRangesSourceSettings* src, TVector<TClusterId>& parents) {
+        std::sort(parents.begin(), parents.end());
+        auto* ranges = src->MutableRanges();
+        for (TClusterId parent : parents) {
+            SingleColumnPointRange(parent).Serialize(*ranges->AddKeyRanges());
+        }
     }
 
     // immutableFollowerRead: the table is an immutable index impl table being read
@@ -520,41 +564,19 @@ private:
     // requested columns list (datashard interprets VectorTopK.Column as that index,
     // not as a column id); both call sites read the output columns first, so the
     // embedding sits at that position.
-    void SetVectorTopK(NKikimrTxDataShard::TKqpReadRangesSourceSettings* src) {
+    NKikimrKqp::TReadVectorTopK* SetVectorTopK(NKikimrTxDataShard::TKqpReadRangesSourceSettings* src) {
         auto* topK = src->MutableVectorTopK();
         topK->SetColumn(Settings.GetVectorColumnIndex());
         *topK->MutableSettings() = Settings.GetIndexSettings();
         topK->SetTargetVector(TargetVector);
         topK->SetLimit(TopK);
+        return topK;
     }
 
-    void StartLevelRead(TClusterId parent) {
-        ReadingParent = parent;
-
-        // Serve the parent's children from the shared level cache when possible.
-        if (UseLevelCache) {
-            CurrentLevelCacheKey = TSerializedCellVec::Serialize({TCell::Make(parent)});
-            auto cached = LevelsCache->Get(LevelTablePathId, CurrentLevelCacheKey);
-            if (cached && !cached->BatchRows.empty()) {
-                for (TConstArrayRef<TCell> row : cached->BatchRows) {
-                    // Cached row layout: [id (Uint64), centroid (String)].
-                    TClusterId child = row[0].AsValue<ui64>();
-                    LevelChildren[child] = TString(row[1].AsBuf());
-                }
-                CachingCurrentLevel = false;
-                ProcessNextRead();
-                return;
-            }
-            // Cache miss: accumulate the read rows so we can populate the cache.
-            CachingCurrentLevel = true;
-            CurrentLevelBatch = TOwnedCellVecBatch();
-        } else {
-            CachingCurrentLevel = false;
-        }
-
+    void StartLevelRead(TVector<TClusterId>& parents) {
         TIntrusivePtr<NActors::TProtoArenaHolder> arena;
         auto* src = MakeSourceSettings(arena, Settings.GetLevelTable(), Settings.GetUseFollowers());
-        SingleColumnPointRange(parent).Serialize(*src->MutableFullRange());
+        AddParentRanges(src, parents);
 
         // Level table key is (parent, id), both Uint64.
         AddUint64KeyColumnType(src);
@@ -567,10 +589,10 @@ private:
         LaunchInnerRead(src, arena);
     }
 
-    void StartPostingRead(TClusterId parent) {
+    void StartPostingRead(TVector<TClusterId>& parents) {
         TIntrusivePtr<NActors::TProtoArenaHolder> arena;
         auto* src = MakeSourceSettings(arena, Settings.GetPostingTable(), Settings.GetUseFollowers());
-        SingleColumnPointRange(parent).Serialize(*src->MutableFullRange());
+        AddParentRanges(src, parents);
 
         // Posting key is (__ydb_parent, <main PK columns>).
         AddUint64KeyColumnType(src);
@@ -594,8 +616,14 @@ private:
                 AddColumn(src, Settings.GetPostingTableKeyColumnIds(j + 1), pk.GetName(), pk.GetType(), ti, pk.GetNotNull());
             }
             // Covered index ranks on the posting table: push top-K down so the
-            // datashard returns only the nearest rows of this leaf cluster.
-            SetVectorTopK(src);
+            // datashard returns only the nearest rows. A single read batches several
+            // leaf clusters, and with overlap the same row can appear under multiple
+            // clusters; dedup by PK inside the pushed-down top-K so duplicates don't
+            // crowd out distinct nearest rows (the actor still dedups across shards).
+            auto* topK = SetVectorTopK(src);
+            for (ui32 pos : CoveredPkPositions) {
+                topK->AddDistinctColumns(pos);
+            }
         } else {
             // Read just the PK columns (using posting table column ids) to feed
             // the main table read.
@@ -606,7 +634,6 @@ private:
             }
         }
 
-        ReadingParent = parent;
         LaunchInnerRead(src, arena);
     }
 
@@ -713,19 +740,21 @@ private:
                 rows.clear();
             }
             if (!Failed) {
-                if (Phase == EPhase::Level && CachingCurrentLevel && !CurrentLevelBatch.empty()) {
-                    // Populate the shared level cache with this parent's children.
-                    auto data = MakeIntrusive<TCachedLevelTableData>();
-                    data->BatchRows = std::move(CurrentLevelBatch);
-                    LevelsCache->Put(LevelTablePathId, CurrentLevelCacheKey, data);
-                    CachingCurrentLevel = false;
-                }
-                if (Phase == EPhase::Main) {
-                    // The main read is a single read (not per-parent), so finishing
-                    // it means all candidate rows have been collected.
-                    OnMainDone();
-                } else {
-                    ProcessNextRead();
+                switch (Phase) {
+                    case EPhase::Level:
+                        FlushLevelCache();
+                        OnLevelRoundDone();
+                        break;
+                    case EPhase::Posting:
+                        OnPostingDone();
+                        break;
+                    case EPhase::Main:
+                        // The main read is a single read, so finishing it means all
+                        // candidate rows have been collected.
+                        OnMainDone();
+                        break;
+                    default:
+                        break;
                 }
             }
             return;
@@ -738,7 +767,7 @@ private:
         switch (Phase) {
             case EPhase::Level: {
                 TClusterId parent = value.GetElement(0).Get<ui64>();
-                if (parent != ReadingParent) {
+                if (!ReadingParents.contains(parent)) {
                     RuntimeError("Returned clusters for invalid parent", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
                     return;
                 }
@@ -746,13 +775,13 @@ private:
                 auto centroid = value.GetElement(2);
                 auto centroidRef = centroid.AsStringRef();
                 LevelChildren[child] = TString(centroidRef);
-                if (CachingCurrentLevel) {
+                if (auto it = CachingLevelBatches.find(parent); it != CachingLevelBatches.end()) {
                     // Store [id (Uint64), centroid (String)]; Append copies the cells.
                     TCell cells[2] = {
                         TCell::Make(child),
                         TCell(centroidRef.Data(), centroidRef.Size()),
                     };
-                    CurrentLevelBatch.Append(TConstArrayRef<TCell>(cells, 2));
+                    it->second.Append(TConstArrayRef<TCell>(cells, 2));
                 }
                 break;
             }
@@ -958,17 +987,18 @@ private:
     // traversal); the rest are level-traversal roots.
     TVector<TClusterId> RootParents;
     TVector<TClusterId> DirectPostingParents;
-    TDeque<TClusterId> ParentQueue;
-    TClusterId ReadingParent = 0;
+    // Parents of the current round being read (level phase); a read row's parent
+    // must be one of these.
+    THashSet<TClusterId> ReadingParents;
     TMap<TClusterId, TString> LevelChildren;
 
     // Shared, process-wide cache of immutable level-table rows.
     TIntrusivePtr<TVectorIndexLevelsCache> LevelsCache;
     TPathId LevelTablePathId;
     bool UseLevelCache = false;
-    bool CachingCurrentLevel = false;
-    TString CurrentLevelCacheKey;
-    TOwnedCellVecBatch CurrentLevelBatch;
+    // Per-parent accumulators for the round's cache-miss parents; their read rows
+    // are gathered here and inserted into the shared cache when the read finishes.
+    THashMap<TClusterId, TOwnedCellVecBatch> CachingLevelBatches;
 
     TVector<TString> PostingKeys;         // serialized PK cell vecs
     THashSet<TString> SeenKeys;

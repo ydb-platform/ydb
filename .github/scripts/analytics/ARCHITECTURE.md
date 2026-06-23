@@ -122,7 +122,26 @@ flowchart TB
 
 ## Table dependency maps
 
-Overview diagram above shows **workflows and layers**. This section shows **YDB table-level reads/writes** for SQL marts and Python collectors.
+Overview diagram above shows **workflows and layers** (legend: [Layer legend](#layer-legend-colors-on-diagram) · L0–L6). This section shows **YDB table-level reads/writes** for SQL marts and Python collectors.
+
+### Diagram legend (shapes & colors)
+
+Read domain diagrams **top → bottom** (TB) or **left → right** (LR). Arrow **`A → B`** = B **reads** A (A must exist / be fresh first).
+
+| Shape in diagram | Meaning |
+|------------------|---------|
+| Cylinder `[(…)]` | **YDB table** — persisted rows |
+| Rectangle `[…]` | **Process** — Python (`.py`) or mart SQL (`.sql` via `data_mart_executor.py`) |
+| `script.sql` → `[(table)]` | SQL **reads** upstream tables, **writes** the green cylinder |
+
+| Color | Role | Examples |
+|-------|------|----------|
+| Amber | Raw CI facts | `test_runs_column` |
+| Cyan | Enriched / reference / upstream | `github_data/issues`, `area_to_owner_mapping`, `flaky_tests_window`, `tests_monitor` *(when used as input to another mart)* |
+| Green | Mart output table | `tests_monitor`, `github_issues_timeline`, `muted_tests_daily_by_team`, `pr_blocked_by_*` |
+| Orange | Script or SQL step (not storage) | `tests_monitor.py`, `github_issues_timeline.sql`, `create_new_muted_ya.py` |
+
+**Workflow vs table:** purple nodes in the [overview](#data-flow-overview) are GitHub Actions jobs; orange/green/cyan here are **files and YDB paths** inside those jobs.
 
 **Cross-workflow note:** `tests_monitor` is **written** by `update_muted_ya` (hourly) and **read** by many marts in `collect_analytics_fast` (every 30m). Timeline/mute BI marts assume `tests_monitor` is already populated.
 

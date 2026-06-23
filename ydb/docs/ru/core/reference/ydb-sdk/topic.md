@@ -654,9 +654,9 @@
 - C++
 
   В C++ SDK для записи в топик доступно несколько вариантов:
-    - `IWriteSession` - максимально функциональная сессия записи для работы с одной партицией топика. Позволяет делать тонкую настройку и писать асинхронный код. Использовать стоит, когда следующие два интерфейса не подошли.
-    - `ISimpleBlockingWriteSession` - простой синхронный вариант `IWriteSession` для записи в одну партицию топика. Метод `Write` не ждёт подтверждения от сервера синхронно, а кладёт сообщения во внутренний буфер и позволяет писать эффективно. Рекомендованный способ работы, если покрывает ваш сценарий.
-    - `IProducer` - высокоуровневый интерфейс для работы с несколькими партициями топика: он шардирует записи по ним. Вдохновлен интерфейсом Producer в Apache Kafka, однако учитывает особенности YDB и позволяет работать с полными гарантиями порядка и exactly-once в топиках с [автопартиционированием](../../concepts/datamodel/topic.md#autopartitioning).
+    - `IWriteSession` — максимально функциональная сессия записи для работы с одной партицией топика. Позволяет делать тонкую настройку и писать асинхронный код. Использовать стоит, когда следующие два интерфейса не подошли.
+    - `ISimpleBlockingWriteSession` — простой синхронный вариант `IWriteSession` для записи в одну партицию топика. Метод `Write` не ждёт подтверждения от сервера, а кладёт сообщение во внутренний буфер; вызов блокируется только при превышении числа inflight записей или размера буфера SDK. Рекомендованный способ работы, если покрывает ваш сценарий.
+    - `IProducer` — высокоуровневый интерфейс для работы с несколькими партициями топика: он шардирует записи по ним. Вдохновлён интерфейсом Producer в Apache Kafka, однако учитывает особенности {{ ydb-short-name }} и позволяет работать с полными гарантиями порядка и exactly-once в топиках с [автопартиционированием](../../concepts/datamodel/topic.md#autopartitioning).
 
   {% list tabs %}
 
@@ -664,7 +664,7 @@
 
     `IWriteSession` — базовая сессия записи, от которой наследуют настройки другие варианты записи. Настройки сессии записи представлены структурой `TWriteSessionSettings`, для варианта `ISimpleBlockingWriteSession` часть настроек не поддерживается.
 
-    Полный список настроек смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1199).
+    Полный список настроек смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h#L56).
 
     ```cpp
     std::string producerAndGroupID = "group-id";
@@ -680,7 +680,7 @@
 
     `ISimpleBlockingWriteSession` — простой синхронный вариант сессии записи `IWriteSession` для записи по одному сообщению без подтверждения по каждому сообщению. Метод `Write` блокируется при превышении числа inflight записей или размера буфера SDK. Настройки сессии записи представлены структурой `TWriteSessionSettings`, как и в случае `IWriteSession`, однако часть настроек не поддерживается.
 
-    Полный список настроек смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1199).
+    Полный список настроек смотри [в заголовочном файле](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/write_session.h#L56).
 
     ```cpp
     std::string producerAndGroupID = "group-id";
@@ -1731,11 +1731,7 @@
 
     У `IProducer` транзакция задаётся не аргументом `Write`, а в `TWriteMessage` через `Tx()`. После этого продюсер записывает сообщение так же, как обычное сообщение с ключом партиционирования:
 
-    ```cpp
-    NYdb::NTopic::TWriteMessage writeMessage("message");
-    writeMessage.Tx(tx);
-    producer->Write(std::move(writeMessage));
-    ```
+    
 
   {% endlist %}
 

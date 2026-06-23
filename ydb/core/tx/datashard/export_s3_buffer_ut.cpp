@@ -55,7 +55,7 @@ public:
             {
                 TParquetExportSettings dataFormatSettings;
                 dataFormatSettings.WithColumns(Columns);
-                dataFormatSettings.WithRowGroupSize(2);
+                dataFormatSettings.WithRowGroupSize(100);
                 // Mirror production: Parquet handles compression internally, so
                 // buffer-level compression is disabled and the codec is forwarded
                 // to the Parquet writer instead.
@@ -112,7 +112,7 @@ public:
     // Tests impl
     void TestMinBufferSize(EDataFormat dataFormat, ui64 minBufferSize) {
         for (ui32 i = 0; i < 10000; ++i) {
-            UNIT_ASSERT(CollectKeyValue(dataFormat, i, TString("v") * 20));
+            UNIT_ASSERT(CollectKeyValue(dataFormat, i, TString("v") * 16));
             NExportScan::IBuffer::TStats stats;
             auto buffer = Buffer(dataFormat);
             if (buffer->IsFilled()) {
@@ -135,7 +135,7 @@ public:
 
 Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
     Y_UNIT_TEST(MinBufferSize, EDataFormat) {
-        ui64 minBufferSize = 50000;
+        ui64 minBufferSize = 100000;
         auto dataFormat = Arg<0>();
         Settings()
             .WithMaxRows(2)
@@ -157,7 +157,7 @@ Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
     }
 
     Y_UNIT_TEST(MinBufferSizeWithCompression, EDataFormat) {
-        ui64 minBufferSize = 50000;
+        ui64 minBufferSize = 100000;
         auto dataFormat = Arg<0>();
         Settings()
             .WithCompression(TS3ExportBufferSettings::ZstdCompression(20))
@@ -169,7 +169,7 @@ Y_UNIT_TEST_SUITE_F(ExportS3BufferTest, TExportS3BufferFixture) {
     }
 
     Y_UNIT_TEST(MinBufferSizeWithCompressionAndEncryption, EDataFormat) {
-        ui64 minBufferSize = 50000;
+        ui64 minBufferSize = 100000;
         auto dataFormat = Arg<0>();
         Settings()
             .WithCompression(TS3ExportBufferSettings::ZstdCompression(20))

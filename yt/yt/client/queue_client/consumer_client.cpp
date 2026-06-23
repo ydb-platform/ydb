@@ -377,7 +377,7 @@ private:
     const TUnversionedOwningRow RowPrefix_;
     //! A condition of form ([ColumnName0], [ColumnName1], ...) = (RowPrefix_[0], RowPrefix_[1], ...)
     //! defining this subconsumer.
-    TString RowPrefixCondition_;
+    std::string RowPrefixCondition_;
     const TStringBuf PartitionIndexColumnName_;
     const TStringBuf OffsetColumnName_;
     const TTableSchemaPtr ConsumerTableSchema_;

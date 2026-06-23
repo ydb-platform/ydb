@@ -460,7 +460,8 @@ private:
 
         auto commitMsg = std::make_unique<NPDisk::TEvLog>(Ctx.LogCtx->PDiskCtx->Dsk->Owner,
                 Ctx.LogCtx->PDiskCtx->Dsk->OwnerRound, TLogSignature::SignatureChunkKeeper,
-                std::move(commitRecord), SerializeEntryPoint(), seg, nullptr);
+                std::move(commitRecord), SerializeEntryPoint(), seg, nullptr, TWriteSource::ChunkKeeperCommit,
+                NPDisk::TEvLog::TCallback());
 
         STLOG(PRI_DEBUG, BS_CHUNK_KEEPER, BSCK15, VDISKP(Ctx.LogCtx->VCtx, "Sending TEvLog"),
                 (Event, commitMsg->ToString()));
@@ -482,7 +483,7 @@ private:
                     return;
                 }
             } else {
-                Y_VERIFY_DEBUG_S(!DeletionsInFlight.contains(chunkIdx), Ctx.LogCtx->VCtx->VDiskLogPrefix << 
+                Y_VERIFY_DEBUG_S(!DeletionsInFlight.contains(chunkIdx), Ctx.LogCtx->VCtx->VDiskLogPrefix <<
                         "Chunk is being allocated and deleted simultaneously, ChunkIdx# " << chunkIdx);
             }
             auto* chunk = proto.AddChunks();

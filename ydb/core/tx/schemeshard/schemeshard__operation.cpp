@@ -1088,13 +1088,13 @@ ISubOperation::TPtr TOperation::RestorePart(TTxState::ETxType txType, TTxState::
     case TTxState::ETxType::TxDropColumnTable:
         return CreateDropColumnTable(NextPartId(), txState);
     case TTxState::ETxType::TxCreateLocalIndex:
-        return CreateNewLocalIndex(NextPartId(), txState);
+        return CreateNewColumnTableLocalIndex(NextPartId(), txState);
     case TTxState::ETxType::TxDropLocalIndex:
-        return CreateDropLocalIndex(NextPartId(), txState);
+        return CreateDropColumnTableLocalIndex(NextPartId(), txState);
     case TTxState::ETxType::TxAlterLocalIndex:
-        return CreateAlterLocalIndex(NextPartId(), txState);
+        return CreateAlterColumnTableLocalIndex(NextPartId(), txState);
     case TTxState::ETxType::TxMoveLocalIndex:
-        return CreateMoveLocalIndex(NextPartId(), txState);
+        return CreateMoveColumnTableLocalIndex(NextPartId(), txState);
 
     case TTxState::ETxType::TxCreatePQGroup:
         return CreateNewPQ(NextPartId(), txState);

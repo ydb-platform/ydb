@@ -281,6 +281,7 @@ message TMigrateColumn {
     optional bytes DefaultValue = 9;
     optional bool NotNull = 10;
     optional bool IsBuildInProgress = 12;
+    optional bool SetNotNullInProgress = 13;
 }
 
 message TMigratePartition {

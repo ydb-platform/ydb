@@ -6,7 +6,8 @@ from _common import resolve_common_const
 PLACEHOLDER_EXT = "external"
 
 
-def onlarge_files(unit, *args):
+@ymake.macro
+def LARGE_FILES(unit: ymake.Unit, *args: tuple[str, ...]):
     """
     @usage LARGE_FILES([AUTOUPDATED] Files...)
 

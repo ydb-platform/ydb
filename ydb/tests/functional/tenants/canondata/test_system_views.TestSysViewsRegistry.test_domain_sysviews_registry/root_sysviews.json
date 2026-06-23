@@ -496,6 +496,10 @@
         "type": "Uint32?"
       },
       {
+        "name": "PhantomOnly",
+        "type": "Bool?"
+      },
+      {
         "name": "PDiskId",
         "type": "Uint32?"
       },

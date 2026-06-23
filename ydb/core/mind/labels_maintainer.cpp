@@ -8,6 +8,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/actors/core/subsystems/inmemory_metrics.h>
 
 namespace NKikimr {
 
@@ -47,6 +48,7 @@ public:
     {
         LOG_DEBUG(ctx, NKikimrServices::LABELS_MAINTAINER, "Bootstrap");
 
+        UpdateInMemoryCommonLabels(ctx);
         Send(MakeTenantPoolRootID(), new TEvents::TEvSubscribe);
         SubscribeForConfig(ctx);
         ReportHistoryCounter(ctx);
@@ -82,9 +84,70 @@ private:
             RemoveLabels(ctx);
             ResetDerivCounters(ctx);
             AddLabels(ctx);
+            UpdateInMemoryCommonLabels(ctx);
         } else if (res.second) {
             ResetDerivCounters(ctx);
         }
+    }
+
+    TSmallVec<std::pair<TString, TString>> BuildCurrentDatabaseLabels() const
+    {
+        TSmallVec<std::pair<TString, TString>> dbLabels;
+        if (DatabaseLabelsEnabled && CurrentDatabaseLabel) {
+            if (GroupAllMetrics) {
+                dbLabels.push_back({DATABASE_LABEL, ""});
+            } else {
+                dbLabels.push_back({DATABASE_LABEL, CurrentDatabaseLabel});
+            }
+
+            dbLabels.push_back({SLOT_LABEL, "static"});
+            if (!CurrentHostLabel.empty()) {
+                dbLabels.push_back({HOST_LABEL, CurrentHostLabel});
+            }
+        }
+        return dbLabels;
+    }
+
+    TSmallVec<std::pair<TString, TString>> BuildCurrentAttributeLabels() const
+    {
+        TSmallVec<std::pair<TString, TString>> attrLabels;
+        if (DatabaseAttributeLabelsEnabled) {
+            for (auto &attr : GetDatabaseAttributeLabels()) {
+                if (CurrentAttributes.contains(attr)) {
+                    attrLabels.push_back(*CurrentAttributes.find(attr));
+                }
+            }
+        }
+        return attrLabels;
+    }
+
+    void UpdateInMemoryCommonLabels(const TActorContext& ctx)
+    {
+        auto* registry = ctx.ActorSystem()->GetSubSystem<NActors::TInMemoryMetricsRegistry>();
+        if (!registry) {
+            return;
+        }
+
+        TVector<NActors::TLabel> labels;
+        labels.push_back({
+            .Name = "node_id",
+            .Value = ToString(ctx.SelfID.NodeId()),
+        });
+
+        for (const auto& [name, value] : BuildCurrentDatabaseLabels()) {
+            labels.push_back({
+                .Name = name,
+                .Value = value,
+            });
+        }
+        for (const auto& [name, value] : BuildCurrentAttributeLabels()) {
+            labels.push_back({
+                .Name = name,
+                .Value = value,
+            });
+        }
+
+        registry->SetCommonLabels(labels);
     }
 
     std::pair<bool, bool> RecomputeLabels()
@@ -189,29 +252,8 @@ private:
     void AddLabels(const TActorContext &ctx)
     {
         // NOTE: order of labels should match skip order in GetServiceCounters
-        TSmallVec<std::pair<TString, TString>> dbLabels;
-        TSmallVec<std::pair<TString, TString>> attrLabels;
-
-        if (DatabaseLabelsEnabled && CurrentDatabaseLabel) {
-            if (GroupAllMetrics) {
-                dbLabels.push_back({DATABASE_LABEL, ""});
-            } else {
-                dbLabels.push_back({DATABASE_LABEL, CurrentDatabaseLabel});
-            }
-
-            dbLabels.push_back({SLOT_LABEL, "static"});
-            if (!CurrentHostLabel.empty()) {
-                dbLabels.push_back({HOST_LABEL, CurrentHostLabel});
-            }
-        }
-
-        if (DatabaseAttributeLabelsEnabled) {
-            for (auto &attr : GetDatabaseAttributeLabels()) {
-                if (CurrentAttributes.contains(attr)) {
-                    attrLabels.push_back(*CurrentAttributes.find(attr));
-                }
-            }
-        }
+        const auto dbLabels = BuildCurrentDatabaseLabels();
+        const auto attrLabels = BuildCurrentAttributeLabels();
 
         if (!dbLabels.empty() || !attrLabels.empty()) {
             AddLabelsToServices(ctx, AllSensorServices, dbLabels, attrLabels);
@@ -291,6 +333,7 @@ private:
         ResetDerivCounters(ctx);
         RecomputeLabels();
         AddLabels(ctx);
+        UpdateInMemoryCommonLabels(ctx);
     }
 
     void ParseConfig(const NKikimrConfig::TMonitoringConfig &config)

@@ -13,12 +13,14 @@
 #include "log.h"
 #include "probes.h"
 #include "ask.h"
+#include "subsystems/inmemory_metrics.h"
 #include "subsystems/stats.h"
 #include "thread_context.h"
 #include <ydb/library/actors/util/affinity.h>
 #include <ydb/library/actors/util/datetime.h>
 #include <ydb/library/actors/interconnect/events_local.h>
 #include <util/generic/hash.h>
+#include <util/generic/size_literals.h>
 #include <util/system/backtrace.h>
 #include <util/system/rwlock.h>
 #include <util/random/random.h>
@@ -28,6 +30,8 @@
 namespace NActors {
 
     namespace {
+        constexpr ui64 DefaultInMemoryMetricsMemoryBytes = 4_MB;
+
         template<class TCallback>
         void ForEachSubSystem(std::vector<std::unique_ptr<ISubSystem>>& subsystems, TCallback&& callback) {
             for (const auto& subsystem : subsystems) {
@@ -169,6 +173,14 @@ namespace NActors {
         if (!GetSubSystem<TActorSystemStatsSubSystem>()) {
             RegisterSubSystem(MakeActorSystemStatsSubSystem(CpuManager.Get()));
         }
+        if (!GetSubSystem<TInMemoryMetricsRegistry>()) {
+            RegisterSubSystem(MakeInMemoryMetricsRegistry({
+                .MemoryBytes = DefaultInMemoryMetricsMemoryBytes,
+            }));
+        }
+        SystemSetup->LocalServices.emplace_back(
+            TActorId(),
+            TActorSetupCmd(CreateInMemoryMetricsStatsActor(), TMailboxType::ReadAsFilled, 0));
     }
 
     TActorSystem::~TActorSystem() {

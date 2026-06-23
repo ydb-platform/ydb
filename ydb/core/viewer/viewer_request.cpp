@@ -5,6 +5,7 @@
 #include "viewer_pdiskinfo.h"
 #include "viewer_bsgroupinfo.h"
 #include "viewer_nodeinfo.h"
+#include "viewer_inmemory_metrics.h"
 #include "wb_req.h"
 
 #include <library/cpp/json/json_reader.h>
@@ -119,6 +120,44 @@ IActor* CreateViewerRequestHandler(TEvViewer::TEvViewerRequest::TPtr& request) {
             return new TViewerWhiteboardRequest<TEvWhiteboard::TEvBSGroupStateRequest, TEvWhiteboard::TEvBSGroupStateResponse>(request);
         case NKikimrViewer::TEvViewerRequest::kNodeRequest:
             return new TViewerWhiteboardRequest<TEvWhiteboard::TEvNodeStateRequest, TEvWhiteboard::TEvNodeStateResponse>(request);
+        case NKikimrViewer::TEvViewerRequest::kInMemoryMetricsRequest: {
+            class TViewerInMemoryMetricsRequest : public TActorBootstrapped<TViewerInMemoryMetricsRequest> {
+                TEvViewer::TEvViewerRequest::TPtr Event;
+
+            public:
+                static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+                    return NKikimrServices::TActivity::VIEWER_HANDLER;
+                }
+
+                explicit TViewerInMemoryMetricsRequest(TEvViewer::TEvViewerRequest::TPtr& ev)
+                    : Event(ev)
+                {}
+
+                void Bootstrap() {
+                    auto response = MakeHolder<TEvViewer::TEvViewerResponse>();
+                    const auto* inMemoryMetrics = TActivationContext::ActorSystem()->GetSubSystem<TInMemoryMetricsRegistry>();
+                    if (!inMemoryMetrics) {
+                        NJson::TJsonValue json;
+                        json["status"] = "error";
+                        json["errorType"] = "execution";
+                        json["error"] = "In-memory metrics subsystem is not registered";
+                        response->Record.MutableInMemoryMetricsResponse()->SetJson(SerializeJsonValue(json));
+                    } else {
+                        TCgiParameters params(Event->Get()->Record.GetInMemoryMetricsRequest().GetQuery());
+                        TInMemoryMetricsPrometheusProcessor processor(
+                            Event->Get()->Record.GetInMemoryMetricsRequest().GetPath(),
+                            params);
+                        response->Record.MutableInMemoryMetricsResponse()->SetJson(
+                            SerializeJsonValue(processor.Execute(*inMemoryMetrics).Json));
+                    }
+
+                    Send(Event->Sender, response.Release(), 0, Event->Cookie);
+                    PassAway();
+                }
+            };
+
+            return new TViewerInMemoryMetricsRequest(request);
+        }
         default:
             return nullptr;
     }

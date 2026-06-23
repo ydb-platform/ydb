@@ -743,6 +743,15 @@ message THttpProxyRequest {
     bytes UserToken = 3;
 }
 
+message TInMemoryMetricsRequest {
+    string Path = 1;
+    string Query = 2;
+}
+
+message TInMemoryMetricsResponse {
+    string Json = 1;
+}
+
 message TSchemeCacheRequest {
     string Database = 1;
     repeated string Tables = 2;
@@ -764,7 +773,7 @@ message TEvViewerRequest {
         THttpProxyRequest QueryRequest = 13;
         THttpProxyRequest RenderRequest = 14;
         TSchemeCacheRequest AutocompleteRequest = 15;
-        bytes Reserved20 = 20;
+        TInMemoryMetricsRequest InMemoryMetricsRequest = 20;
         bytes Reserved21 = 21;
         bytes Reserved22 = 22;
         bytes Reserved23 = 23;
@@ -783,7 +792,7 @@ message TEvViewerResponse {
         NKikimrKqp.TEvQueryResponse QueryResponse = 13;
         NKikimrGraph.TEvMetricsResult RenderResponse = 14;
         TQueryAutocomplete AutocompleteResponse = 15;
-        bytes Reserved20 = 20;
+        TInMemoryMetricsResponse InMemoryMetricsResponse = 20;
         bytes Reserved21 = 21;
         bytes Reserved22 = 22;
         bytes Reserved23 = 23;

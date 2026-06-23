@@ -6,6 +6,7 @@ PY_SRCS (
 )
 
 TEST_SRCS(
+    test_inmemory_metrics.py
     test_restarts.py
     test_analyze.py
 )
@@ -17,6 +18,7 @@ DEPENDS(
 )
 
 PEERDIR(
+    contrib/python/requests
     ydb/tests/library
     ydb/tests/library/fixtures
     ydb/tests/oss/ydb_sdk_import

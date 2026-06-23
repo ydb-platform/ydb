@@ -1,17 +1,11 @@
 name: Ya CI core (build and test)
 description: >
-  Shared checkout, optional blacklist, credentials, and build_and_test_ya.
-  Run parameters (threads, size) are set by the calling workflow.
+  Shared checkout (caller must run actions/checkout first), optional blacklist,
+  credentials, and build_and_test_ya. Run parameters are set by the calling workflow.
 
 inputs:
   build_preset:
     required: true
-  checkout_ref:
-    required: false
-    default: ''
-  fetch_depth:
-    required: false
-    default: '2'
   test_threads:
     required: false
     default: '52'
@@ -61,12 +55,6 @@ inputs:
 runs:
   using: composite
   steps:
-    - name: Checkout
-      uses: actions/checkout@v5
-      with:
-        ref: ${{ inputs.checkout_ref || github.sha }}
-        fetch-depth: ${{ inputs.fetch_depth }}
-
     - name: Optional test blacklist file
       id: blacklist
       shell: bash

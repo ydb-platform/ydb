@@ -28,6 +28,7 @@ DEFAULT_GITHUB_REPO = "ydb-platform/ydb"
 DASHBOARD_LINK = "📊 [Dashboard details](https://datalens.yandex/wkptiaeyxz7qj?tab=ka)"
 
 # (pattern, display_name, threshold_spec). threshold_spec: float or [(start_utc, end_utc, hours), ...] (overnight: start > end).
+# Substring patterns: list more specific names before shared prefixes (e.g. Postcommit_cmake before Postcommit_).
 WORKFLOW_THRESHOLDS = [
     ("PR-check", "PR-check", [(8, 20, 1), (20, 8, 3.0)]),   # 8–20 UTC: 1 h, 20–8 UTC: 3 h
     ("Postmerge", "Postmerge", 6),
@@ -293,11 +294,15 @@ def generate_stuck_jobs_summary(stuck_jobs: List[Dict[str, Any]]) -> List[str]:
     stuck_counts = count_stuck_jobs_by_type(stuck_jobs)
     current_time = datetime.now(timezone.utc)
     descriptions = []
+    emitted_display_names = set()
     for pattern, display_name, spec in WORKFLOW_THRESHOLDS:
+        if display_name in emitted_display_names:
+            continue
         count = stuck_counts.get(display_name, 0)
         if count > 0:
             th = threshold_for_time(current_time, spec)
             descriptions.append(f"⚠️ {display_name} job(s) have been in the queue for more than {th} hour(s)! Total: {count} job(s).")
+            emitted_display_names.add(display_name)
     
     # Add Other if any
     other_count = stuck_counts.get('Other', 0)

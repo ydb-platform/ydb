@@ -109,9 +109,9 @@ runs:
       with:
         build_preset: ${{ inputs.build_preset }}
         build_target: ${{ inputs.build_target }}
-        increment: ${{ inputs.increment == true || inputs.increment == 'true' }}
-        run_build: ${{ inputs.run_build == true || inputs.run_build == 'true' }}
-        run_tests: ${{ inputs.run_tests == true || inputs.run_tests == 'true' }}
+        increment: ${{ inputs.increment == 'true' }}
+        run_build: ${{ inputs.run_build == 'true' }}
+        run_tests: ${{ inputs.run_tests == 'true' }}
         test_size: ${{ inputs.test_size }}
         test_type: ${{ inputs.test_type }}
         test_threads: ${{ inputs.test_threads }}
@@ -119,7 +119,7 @@ runs:
         test_retry_count: ${{ inputs.test_retry_count }}
         custom_branch_name: ${{ inputs.custom_branch_name }}
         pull_number: ${{ inputs.pull_number }}
-        collect_coredumps: ${{ inputs.collect_coredumps == true || inputs.collect_coredumps == 'true' }}
+        collect_coredumps: ${{ inputs.collect_coredumps == 'true' }}
         put_build_results_to_cache: true
         additional_ya_make_args: ${{ steps.merged_ya.outputs.args }}
         secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',

@@ -1776,6 +1776,8 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
         return items
     ```
 
+    {% endcut %}
+
 - C++ (alternative)
 
     ```cpp

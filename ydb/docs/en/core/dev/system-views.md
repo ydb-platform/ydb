@@ -394,7 +394,7 @@ ORDER BY IntervalEnd desc, LocksBroken desc
 
 ## Resource pool information {#resource_pools}
 
-The `resource_pools` system view contains information about [settings](../yql/reference/syntax/create-resource-pool.md#parameters) of [resource pools](../concepts/glossary.md#resource-pool).
+The `resource_pools` system view contains information about settings of [resource pools](../concepts/glossary.md#resource-pool).
 
 System view structure:
 
@@ -433,7 +433,7 @@ WHERE Name = "default";
 
 ## Resource pool classifier information {#resource_pools_classifiers}
 
-The `resource_pools_classifiers` system view contains information about [settings](../yql/reference/syntax/create-resource-pool-classifier.md#parameters) of [resource pool classifiers](../concepts/glossary.md#resource-pool-classifier).
+The `resource_pools_classifiers` system view contains information about settings of [resource pool classifiers](../concepts/glossary.md#resource-pool-classifier).
 
 System view structure:
 

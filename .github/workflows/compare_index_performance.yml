@@ -30,10 +30,14 @@ on:
           - vector
           - fulltext
         default: all
+      rows:
+        description: 'Number of rows in generated database'
+        required: false
+        default: '100000'
       targets:
         description: 'Number of query vectors for vector select'
         required: false
-        default: '100'
+        default: '10000'
       iterations:
         description: 'Number of iterations per workload (median reported)'
         required: false
@@ -102,8 +106,9 @@ jobs:
             --duration ${{ inputs.duration || '600' }} \
             --build-preset ${{ inputs.build_preset || 'relwithdebinfo' }} \
             --ref ${{ inputs.ref || 'main' }} \
-            --targets ${{ inputs.targets || '100' }} \
+            --targets ${{ inputs.targets || '10000' }} \
             --workload ${{ inputs.workload || 'all' }} \
+            --rows ${{ inputs.rows || '100000' }} \
             --iterations ${{ inputs.iterations || '3' }} \
             --warmup ${{ inputs.warmup || '30' }} \
             $MAIN_FLAG_ARGS \

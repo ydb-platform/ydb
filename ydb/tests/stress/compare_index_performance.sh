@@ -18,9 +18,10 @@
 #   --current-ydbd PATH    Path to pre-built current branch ydbd (skips building)
 #   --ref REF              S3 ref to download ydbd from (default: main)
 #   --workload WORKLOAD    Run only specified workload: vector, fulltext, or all (default: all)
-#   --targets N            Number of query vectors for vector select (default: 100)
+#   --targets N            Number of query vectors for vector select (default: 10000)
 #   --iterations N         Number of iterations per workload (default: 3)
 #   --warmup SECONDS       Warmup duration before each measured run (default: 30)
+#   --rows N               Number of rows in generated database (default: 100000)
 #   --main-feature-flag FLAG     Enable a feature flag for main branch (repeatable)
 #   --current-feature-flag FLAG  Enable a feature flag for current branch (repeatable)
 #   --main-table-service-config KEY=VALUE     Set table_service_config option for main branch (repeatable)
@@ -36,9 +37,10 @@ CURRENT_YDBD=""
 S3_REF="main"
 BUILD_PRESET="relwithdebinfo"
 WORKLOAD="all"
-TARGETS=100
+TARGETS=10000
 ITERATIONS=3
 WARMUP=30
+ROWS=100000
 MAIN_FEATURE_FLAGS=()
 CURRENT_FEATURE_FLAGS=()
 MAIN_TABLE_SERVICE_CONFIG=()
@@ -57,6 +59,7 @@ while [[ $# -gt 0 ]]; do
         --targets) TARGETS="$2"; shift 2 ;;
         --iterations) ITERATIONS="$2"; shift 2 ;;
         --warmup) WARMUP="$2"; shift 2 ;;
+        --rows) ROWS="$2"; shift 2 ;;
         --main-feature-flag) MAIN_FEATURE_FLAGS+=("$2"); shift 2 ;;
         --current-feature-flag) CURRENT_FEATURE_FLAGS+=("$2"); shift 2 ;;
         --main-table-service-config) MAIN_TABLE_SERVICE_CONFIG+=("$2"); shift 2 ;;
@@ -99,6 +102,7 @@ echo "Workload: $WORKLOAD"
 echo "Vector targets: $TARGETS"
 echo "Iterations: $ITERATIONS"
 echo "Warmup: ${WARMUP}s"
+echo "Rows: $ROWS"
 if [[ ${#MAIN_FEATURE_FLAGS[@]} -gt 0 ]]; then
     echo "Main feature flags: ${MAIN_FEATURE_FLAGS[*]}"
 fi
@@ -313,6 +317,7 @@ if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "vector" ]]; then
             --test-param vector_data_dir="$VECTOR_DATA_DIR"
             --test-param vector_targets="$TARGETS"
             --test-param vector_warmup="$WARMUP"
+            --test-param vector_rows="$ROWS"
         )
         if [[ -n "$MAIN_FEATURE_FLAGS_PARAM" ]]; then
             VECTOR_EXTRA_PARAMS+=(--test-param feature_flags="$MAIN_FEATURE_FLAGS_PARAM")
@@ -335,6 +340,7 @@ if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "vector" ]]; then
             --test-param vector_data_dir="$VECTOR_DATA_DIR"
             --test-param vector_targets="$TARGETS"
             --test-param vector_warmup="$WARMUP"
+            --test-param vector_rows="$ROWS"
         )
         if [[ -n "$CURRENT_FEATURE_FLAGS_PARAM" ]]; then
             VECTOR_EXTRA_PARAMS+=(--test-param feature_flags="$CURRENT_FEATURE_FLAGS_PARAM")

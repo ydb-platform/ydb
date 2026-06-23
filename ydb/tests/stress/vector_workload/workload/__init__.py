@@ -15,7 +15,7 @@ QUERY_TABLE_NAME = "vector_query_table"
 
 
 class YdbVectorWorkload(WorkloadBase):
-    def __init__(self, endpoint, database, duration, mode="standalone", data_dir=None, targets=100, warmup=0):
+    def __init__(self, endpoint, database, duration, mode="standalone", data_dir=None, targets=10000, warmup=0, rows=100000):
         super().__init__(None, '', 'vector_workload', None)
         self.endpoint = endpoint
         self.database = database
@@ -24,6 +24,7 @@ class YdbVectorWorkload(WorkloadBase):
         self.data_dir = data_dir
         self.targets = str(targets)
         self.warmup = str(warmup)
+        self.rows = str(rows)
         self.tempdir = None
         self._unpack_resource('ydb_cli')
 
@@ -124,13 +125,13 @@ class YdbVectorWorkload(WorkloadBase):
         self.cmd_run(
             self.get_command_prefix(subcmds=[
                 'import', 'generator',
-                '--rows', '10000',
+                '--rows', self.rows,
                 '--distance', 'cosine',
                 '--index-type', 'None',
             ])
         )
         # Build index explicitly and wait for completion
-        self.cmd_run(
+        self.cmd_run_with_retry(
             self.get_command_prefix(subcmds=[
                 'build-index',
                 '--distance', 'cosine',

@@ -11,6 +11,8 @@
 #include <ydb/library/actors/core/subsystems/stats.h>
 #include <ydb/library/services/services.pb.h>
 
+#include <cmath>
+
 namespace NKikimr::NKqp {
 
 using namespace NActors;
@@ -138,7 +140,7 @@ ui32 TStagePredictor::GetPossibleMaxLimitThreads() {
         TExecutorPoolState poolState;
         GetActorSystemStats().GetExecutorPoolState(AppData()->UserPoolId, poolState);
         if (poolState.PossibleMaxLimit > 0) {
-            return Max(usableThreads, static_cast<ui32>(poolState.PossibleMaxLimit));
+            return Max(usableThreads, static_cast<ui32>(std::ceil(poolState.PossibleMaxLimit)));
         }
     }
 

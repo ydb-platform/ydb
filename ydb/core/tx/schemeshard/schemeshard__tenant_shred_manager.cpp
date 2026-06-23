@@ -137,6 +137,7 @@ void TTenantShredManager::Stop() {
 void TTenantShredManager::StartShred(NIceDb::TNiceDb& db, ui64 newGen) {
     const auto& ctx = SchemeShard->ActorContext();
     SetGeneration(newGen);
+    CleanupOldGenerationsOnShred(db);
     Queue->Clear();
     ActivePipes.clear();
     for (const auto& [shardIdx, status] : WaitingShredShards) {
@@ -304,8 +305,10 @@ bool TTenantShredManager::Restore(NIceDb::TNiceDb& db) {
         if (!rowset.IsReady()) {
             return false;
         }
+        TVector<ui64> generationsToCleanup;
         while (!rowset.EndOfSet()) {
             ui64 generation = rowset.GetValue<Schema::TenantShredGenerations::Generation>();
+            generationsToCleanup.push_back(generation);
             if (generation >= Generation) {
                 Generation = generation;
                 Status = rowset.GetValue<Schema::TenantShredGenerations::Status>();
@@ -317,6 +320,10 @@ bool TTenantShredManager::Restore(NIceDb::TNiceDb& db) {
                 return false;
             }
         }
+        // Max generation should not be removed.
+        generationsToCleanup.erase(std::remove(generationsToCleanup.begin(), generationsToCleanup.end(), Generation), generationsToCleanup.end());
+
+        CleanupOldGenerationsOnRestore(db, generationsToCleanup); 
     }
     {
         auto rowset = db.Table<Schema::WaitingShredShards>().Range().Select();
@@ -376,6 +383,22 @@ bool TTenantShredManager::StopWaitingShred(const TShardIdx& shardIdx) {
         return true;
     }
     return false;
+}
+
+void TTenantShredManager::CleanupOldGenerationsOnRestore(NIceDb::TNiceDb& db, TVector<ui64> generationsToCleanup) {
+    for (ui64 generation : generationsToCleanup) {
+        Y_ABORT_UNLESS(generation < Generation, "[TenantShredManager] CleanupOldGenerationsOnRestore: generation %" PRIu64 " >= Generation %" PRIu64, generation, Generation);
+        db.Table<Schema::TenantShredGenerations>().Key(generation).Delete();  
+    }
+}
+
+void TTenantShredManager::CleanupOldGenerationsOnShred(NIceDb::TNiceDb& db) {
+    if (Generation >= 2) {
+        // Generation - 2 is used in order not to remove record with max Generation that might be used within TTenantShredManager::Restore
+        // to restore Generation property. In case of (Generation -1) removal there is a chance of data loss if SchemaShard will die after
+        // removal but before updateing Schema::TenantShredGenerations with new value.
+        db.Table<Schema::TenantShredGenerations>(). Key(Generation - 2).Delete();
+    }
 }
 
 struct TSchemeShard::TTxRunTenantShred : public TSchemeShard::TRwTxBase {

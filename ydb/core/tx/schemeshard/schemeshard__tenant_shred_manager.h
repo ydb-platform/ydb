@@ -80,6 +80,8 @@ private:
     static TQueue::TConfig ConvertConfig(const NKikimrConfig::TDataErasureConfig& config);
 
     NOperationQueue::EStartStatus StartShredOperation(const TShardIdx& shardIdx);
+    void CleanupOldGenerationsOnRestore(NIceDb::TNiceDb& db, TVector<ui64> generationsToCleanup);
+    void CleanupOldGenerationsOnShred(NIceDb::TNiceDb& db);
 };
 
 } // NKikimr::NSchemeShard

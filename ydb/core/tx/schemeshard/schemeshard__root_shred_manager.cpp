@@ -95,6 +95,7 @@ void TRootShredManager::StartShred(NIceDb::TNiceDb& db) {
     const auto ctx = SchemeShard->ActorContext();
     ++Generation;
     ++BscGeneration;
+    CleanupOldGenerationsOnShred(db);
     Queue->Clear();
     ActivePipes.clear();
     for (const auto& [pathId, status] : WaitingShredTenants) {
@@ -313,8 +314,10 @@ bool TRootShredManager::Restore(NIceDb::TNiceDb& db) {
         } else {
             Generation = 0;
             Status = EShredStatus::UNSPECIFIED;
+            TVector<ui64> generationsToCleanup;
             while (!rowset.EndOfSet()) {
                 ui64 generation = rowset.GetValue<Schema::ShredGenerations::Generation>();
+                generationsToCleanup.push_back(generation);
                 if (generation >= Generation) {
                     Generation = generation;
                     BscGeneration = Generation;
@@ -325,6 +328,8 @@ bool TRootShredManager::Restore(NIceDb::TNiceDb& db) {
                     return false;
                 }
             }
+            // Max generation should not be removed.
+            generationsToCleanup.erase(std::remove(generationsToCleanup.begin(), generationsToCleanup.end(), Generation), generationsToCleanup.end());
             if (Status == EShredStatus::UNSPECIFIED || Status == EShredStatus::COMPLETED) {
                 auto ctx = SchemeShard->ActorContext();
                 TDuration interval = AppData(ctx)->TimeProvider->Now() - StartTime;
@@ -334,6 +339,8 @@ bool TRootShredManager::Restore(NIceDb::TNiceDb& db) {
                     CurrentWakeupInterval = ShredInterval - interval;
                 }
             }
+
+            CleanupOldGenerationsOnRestore(db, generationsToCleanup);
         }
     }
     {
@@ -399,6 +406,22 @@ TRootShredManager::TQueue::TConfig TRootShredManager::ConvertConfig(const NKikim
     queueConfig.InflightLimit = config.GetInflightLimit();
     queueConfig.Timeout = TDuration::Zero(); // unlimited
     return queueConfig;
+}
+
+void TRootShredManager::CleanupOldGenerationsOnRestore(NIceDb::TNiceDb& db, TVector<ui64> generationsToCleanup) {
+    for (ui64 generation : generationsToCleanup) {
+        Y_ABORT_UNLESS(generation < Generation, "[RootShredManager] CleanupOldGenerationsOnRestore: generation %" PRIu64 " >= Generation %" PRIu64, generation, Generation);
+        db.Table<Schema::ShredGenerations>().Key(generation).Delete(); 
+    }
+}
+
+void TRootShredManager::CleanupOldGenerationsOnShred(NIceDb::TNiceDb& db) {
+    if (Generation >= 2) {
+        // Generation - 2 is used in order not to remove record with max Generation that might be used within TRootShredManager::Restore
+        // to restore Generation property. In case of (Generation -1) removal there is a chance of data loss if SchemaShard will die after
+        // removal but before updateing Schema::ShredGenerations with new value.
+        db.Table<Schema::ShredGenerations>().Key(Generation - 2).Delete();
+    }
 }
 
 struct TSchemeShard::TTxShredManagerInit : public TSchemeShard::TRwTxBase {
@@ -575,3 +598,4 @@ NTabletFlatExecutor::ITransaction* TSchemeShard::CreateTxCompleteShredBSC(TEvBlo
 }
 
 } // NKikimr::NSchemeShard
+

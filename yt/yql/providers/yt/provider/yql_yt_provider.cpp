@@ -1,3 +1,4 @@
+#include "yql_yt_helpers.h"
 #include "yql_yt_provider.h"
 #include "yql_yt_dq_integration.h"
 #include "yql_yt_ytflow_integration.h"
@@ -563,6 +564,7 @@ bool TYtState::IsHybridEnabled() const {
 }
 
 bool TYtState::IsHybridEnabledForCluster(const std::string_view& cluster) const {
+    YQL_ENSURE(cluster != YtUnspecifiedCluster);
     return Configuration->_EnableDq.Get(TString(cluster)).GetOrElse(true);
 }
 
@@ -572,6 +574,7 @@ bool TYtState::HybridTakesTooLong() const {
 }
 
 TMaybe<TString> TYtState::ResolveClusterToken(const TString& cluster) {
+    YQL_ENSURE(cluster != YtUnspecifiedCluster);
     // todo: get token by cluster name from Auth when it will be implemented
     if (auto token = Configuration->Auth.Get()) {
         return *token;

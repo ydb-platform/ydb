@@ -338,10 +338,6 @@ ORDER BY IntervalEnd desc, CPUCores desc
 
 * `"YYYY-MM-DDTHH:MM:SS.UUUUUUZ"`: Time in the UTC 0 zone (`YYYY` stands for year, `MM`, for month, `DD`, for date, `hh`, for hours, `mm`, for minutes, `ss`, for seconds, and `uuuuuu`, for microseconds). For example, `"2023-01-26T13:00:00.000000Z"`.
 
-## Users, groups, and access rights {#auth}
-
-The following system views contain information about users, access groups, user membership in groups, as well as information about access rights granted to groups or directly to users.
-
 ## History of partitions with broken locks {#top-tli-partitions}
 
 The following system views contain a history of moments with a non-zero number of broken [locks](../contributor/datashard-locks-and-change-visibility.md) `LocksBroken` in individual partitions of DB tables:

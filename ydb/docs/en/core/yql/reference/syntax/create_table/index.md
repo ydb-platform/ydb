@@ -47,7 +47,7 @@ The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ conc
 
 The path of the table to be created.
 
-When choosing a name for the table, consider the common [schema object naming rules](../../../../concepts/datamodel/_includes/object-naming-rules.md#object-naming-rules).
+When choosing a name for the table, consider the common [schema object naming rules](../../../../concepts/datamodel/index.md#object-naming-rules).
 
 ### IF NOT EXISTS
 

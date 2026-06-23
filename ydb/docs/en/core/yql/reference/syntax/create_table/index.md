@@ -47,7 +47,7 @@ The invocation of `CREATE TABLE` creates {% if concept_table %}a [table]({{ conc
 
 The path of the table to be created.
 
-When choosing a name for the table, consider the common [schema object naming rules](../../../../concepts/datamodel/cluster-namespace.md#object-naming-rules).
+When choosing a name for the table, consider the common [schema object naming rules](../../../../concepts/datamodel/_includes/object-naming-rules.md#object-naming-rules).
 
 ### IF NOT EXISTS
 
@@ -67,7 +67,7 @@ The data type of the column. The complete list of data types supported by {{ ydb
 
 ### INDEX
 
-Definition of an index on the table. [Secondary indexes](secondary_index.md), [vector indexes](vector_index.md), and [fulltext indexes](fulltext_index.md) are supported.
+Definition of an index on the table. [Secondary indexes](secondary_index.md), [vector indexes](vector_index.md), and fulltext indexes are supported.
 
 ### PRIMARY KEY
 

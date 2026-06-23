@@ -26,7 +26,7 @@ void TLocalSnapshotsStorage::Clear() {
 }
 
 const TLocalSnapshotInfo* TLocalSnapshotsStorage::TView::Next() {
-    while (Iter != End && (Iter->CreationTime > MaxCreationTime || !Iter->AliveFlag->load())) {
+    while (Iter != End && (Iter->Snapshot.Step > MaxSnapshotStep || !Iter->AliveFlag->load())) {
         ++Iter;
     }
 
@@ -37,11 +37,18 @@ const TLocalSnapshotInfo* TLocalSnapshotsStorage::TView::Next() {
 }
 
 TLocalSnapshotsStorage::TView TLocalSnapshotsStorage::View() const {
-    auto now = AppData()->TimeProvider->Now();
+    return View(AppData()->TimeProvider->Now());
+}
+
+TLocalSnapshotsStorage::TView TLocalSnapshotsStorage::View(TInstant now) const {
+    const ui64 promotionMs =
+        TDuration::Seconds(AppData()->LongTxServiceConfig.GetLocalSnapshotPromotionTimeSeconds()).MilliSeconds();
+    const ui64 nowMs = now.MilliSeconds();
+    const ui64 maxSnapshotStep = nowMs > promotionMs ? nowMs - promotionMs : 0;
     return TLocalSnapshotsStorage::TView{
         LocalSnapshots.begin(),
         LocalSnapshots.end(),
-        now - TDuration::Seconds(AppData()->LongTxServiceConfig.GetLocalSnapshotPromotionTimeSeconds())};
+        maxSnapshotStep};
 }
 
 void TRemoteSnapshotsStorage::Init(const TVector<TRemoteSnapshotInfo>& snapshots, const THashMap<ui32, TInstant>& nodeIdToCollectionTime) {

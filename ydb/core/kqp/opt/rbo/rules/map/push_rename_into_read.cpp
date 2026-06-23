@@ -24,9 +24,12 @@ bool TPushRenameIntoReadRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRB
     }
 
     const auto oldOutput = read->OutputIUs;
+    const auto oldCachedOutput = read->Props.OutputIUs;
     read->RenameIUs({{candidate->From, candidate->To}}, ctx.ExprCtx);
-    if (HasOutputConflicts(read->GetOutputIUs())) {
+    read->Props.OutputIUs = read->OutputIUs;
+    if (HasOutputConflicts(read->OutputIUs)) {
         read->OutputIUs = oldOutput;
+        read->Props.OutputIUs = oldCachedOutput;
         return false;
     }
 

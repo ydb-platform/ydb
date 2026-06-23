@@ -88,6 +88,37 @@ TVector<TInfoUnit> KeepLiveColumns(const TVector<TInfoUnit>& columns, const TInf
     return newColumns;
 }
 
+TVector<TInfoUnit> BuildMapOutput(const TVector<TInfoUnit>& inputOutput, const TVector<TMapElement>& elements) {
+    TVector<TInfoUnit> output = inputOutput;
+    TInfoUnitSet renameSources;
+    for (const auto& element : elements) {
+        if (element.IsRename()) {
+            AddInfoUnit(renameSources, element.GetRename());
+        }
+    }
+
+    if (!renameSources.empty()) {
+        TVector<TInfoUnit> kept;
+        kept.reserve(output.size());
+        for (const auto& iu : output) {
+            if (!renameSources.contains(iu)) {
+                kept.push_back(iu);
+            }
+        }
+        output = std::move(kept);
+    }
+
+    for (const auto& element : elements) {
+        output.push_back(element.GetElementName());
+    }
+
+    return output;
+}
+
+TVector<TInfoUnit> BuildMapOutput(const TIntrusivePtr<TOpMap>& map, const TVector<TMapElement>& elements) {
+    return BuildMapOutput(map->GetInput()->GetOutputIUs(), elements);
+}
+
 bool NarrowReadColumns(const TIntrusivePtr<TOpRead>& read, const TVector<TInfoUnit>& liveOutput) {
     TInfoUnitSet requiredColumns;
     AddInfoUnits(requiredColumns, liveOutput);
@@ -118,6 +149,7 @@ bool NarrowReadColumns(const TIntrusivePtr<TOpRead>& read, const TVector<TInfoUn
 
     read->Columns = std::move(newColumns);
     read->OutputIUs = std::move(newOutputIUs);
+    read->Props.OutputIUs = read->OutputIUs;
     return true;
 }
 
@@ -142,6 +174,11 @@ bool PruneAggregateTraits(const TIntrusivePtr<TOpAggregate>& aggregate, const TV
     }
 
     aggregate->AggregationTraitsList = std::move(newTraits);
+    TVector<TInfoUnit> output = aggregate->KeyColumns;
+    for (const auto& traits : aggregate->AggregationTraitsList) {
+        output.push_back(traits.ResultColName);
+    }
+    aggregate->Props.OutputIUs = std::move(output);
     return true;
 }
 

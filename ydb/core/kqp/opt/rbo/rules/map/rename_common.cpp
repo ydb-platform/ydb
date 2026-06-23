@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/opt/rbo/rules/map/rename_common.h>
+#include <ydb/core/kqp/opt/rbo/rules/map/projection_pruning_helpers.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -178,6 +179,7 @@ bool FinishRenamePush(
     TPlanProps& props)
 {
     RemoveTopRenameAndRewriteResiduals(topMap, candidate.Index, candidate.From, candidate.To);
+    topMap->Props.OutputIUs = BuildMapOutput(topMap, topMap->MapElements);
     props.Subplans.RenameIUs({{candidate.From, candidate.To}}, ctx.ExprCtx);
 
     if (topMap->MapElements.empty()) {

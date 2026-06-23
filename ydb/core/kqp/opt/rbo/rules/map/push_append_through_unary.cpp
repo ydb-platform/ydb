@@ -43,6 +43,7 @@ TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
     }
 
     const auto unaryInput = unary->GetInput();
+    const auto oldUnaryOutput = unary->Props.OutputIUs;
     const auto inputIUs = unaryInput->GetOutputIUs();
 
     TVector<TMapElement> pushedElements;
@@ -56,8 +57,10 @@ TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
         bool valid = !HasOutputConflicts(pushedMap->GetOutputIUs());
         if (valid) {
             unary->SetInput(pushedMap);
+            unary->ComputeOutputIUs();
             valid = !HasOutputConflicts(unary->GetOutputIUs());
             unary->SetInput(unaryInput);
+            unary->Props.OutputIUs = oldUnaryOutput;
         }
 
         if (!valid) {
@@ -84,10 +87,12 @@ TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
 
     auto pushedMap = MakeIntrusive<TOpMap>(unaryInput, topMap->Pos, pushedElements);
     unary->SetInput(pushedMap);
+    unary->ComputeOutputIUs();
 
     if (topElements.empty()) {
         if (!CanReplaceInParents(topMap, unary, props)) {
             unary->SetInput(unaryInput);
+            unary->Props.OutputIUs = oldUnaryOutput;
             return input;
         }
         return unary;
@@ -96,6 +101,7 @@ TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
     auto newTopMap = MakeIntrusive<TOpMap>(unary, topMap->Pos, topElements, topMap->Ordered);
     if (!CanExposeOutput(topMap, newTopMap->GetOutputIUs(), props)) {
         unary->SetInput(unaryInput);
+        unary->Props.OutputIUs = oldUnaryOutput;
         return input;
     }
 

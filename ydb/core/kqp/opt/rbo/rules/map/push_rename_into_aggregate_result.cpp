@@ -37,6 +37,7 @@ bool TPushRenameIntoAggregateResultRule::MatchAndApply(TIntrusivePtr<IOperator>&
     }
 
     const auto oldTraits = aggregate->AggregationTraitsList;
+    const auto oldOutput = aggregate->Props.OutputIUs;
     for (auto& traits : aggregate->AggregationTraitsList) {
         if (traits.ResultColName == candidate->From) {
             traits.ResultColName = candidate->To;
@@ -44,8 +45,10 @@ bool TPushRenameIntoAggregateResultRule::MatchAndApply(TIntrusivePtr<IOperator>&
         }
     }
 
+    aggregate->ComputeOutputIUs();
     if (HasOutputConflicts(aggregate->GetOutputIUs())) {
         aggregate->AggregationTraitsList = oldTraits;
+        aggregate->Props.OutputIUs = oldOutput;
         return false;
     }
 

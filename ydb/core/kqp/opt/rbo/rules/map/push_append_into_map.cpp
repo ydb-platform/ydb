@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/opt/rbo/rules/kqp_rules_include.h>
+#include <ydb/core/kqp/opt/rbo/rules/map/projection_pruning_helpers.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -12,12 +13,16 @@ bool TryAppendToBottomMap(const TIntrusivePtr<TOpMap>& bottomMap, const TMapElem
         return false;
     }
 
-    bottomMap->MapElements.push_back(mapElement);
-    if (!CanExposeOutput(bottomMap, bottomMap->GetOutputIUs(), props)) {
-        bottomMap->MapElements.pop_back();
+    auto elements = bottomMap->MapElements;
+    elements.push_back(mapElement);
+
+    auto output = BuildMapOutput(bottomMap, elements);
+    if (!CanExposeOutput(bottomMap, output, props)) {
         return false;
     }
 
+    bottomMap->MapElements = std::move(elements);
+    bottomMap->Props.OutputIUs = std::move(output);
     return true;
 }
 
@@ -39,6 +44,7 @@ TPushAppendIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& inpu
     auto bottomMap = CastOperator<TOpMap>(topMap->GetInput());
     const auto bottomInputIUs = bottomMap->GetInput()->GetOutputIUs();
     auto originalBottomElements = bottomMap->MapElements;
+    auto originalBottomOutput = bottomMap->Props.OutputIUs;
 
     TVector<TMapElement> topElements;
     bool pushed = false;
@@ -60,6 +66,7 @@ TPushAppendIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& inpu
     if (topElements.empty()) {
         if (!CanReplaceInParents(topMap, bottomMap, props)) {
             bottomMap->MapElements = std::move(originalBottomElements);
+            bottomMap->Props.OutputIUs = std::move(originalBottomOutput);
             return input;
         }
         return bottomMap;

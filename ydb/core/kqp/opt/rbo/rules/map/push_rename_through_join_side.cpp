@@ -48,6 +48,7 @@ bool TPushRenameThroughJoinSideRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
     const auto oldRightInput = join->GetRightInput();
     const auto oldKeys = join->JoinKeys;
     const auto oldFilters = join->JoinFilters;
+    const auto oldJoinOutput = join->Props.OutputIUs;
 
     auto pushedMap = MakeIntrusive<TOpMap>(selectedInput, topMap->Pos, TVector<TMapElement>{NMapRules::MakeRenameElement(*candidate, topMap)});
     if (HasOutputConflicts(pushedMap->GetOutputIUs())) {
@@ -60,11 +61,13 @@ bool TPushRenameThroughJoinSideRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
         join->SetRightInput(pushedMap);
     }
     join->RenameIUs({{candidate->From, candidate->To}}, ctx.ExprCtx);
+    join->ComputeOutputIUs();
     if (HasOutputConflicts(join->GetOutputIUs())) {
         join->SetLeftInput(oldLeftInput);
         join->SetRightInput(oldRightInput);
         join->JoinKeys = oldKeys;
         join->JoinFilters = oldFilters;
+        join->Props.OutputIUs = oldJoinOutput;
         return false;
     }
 

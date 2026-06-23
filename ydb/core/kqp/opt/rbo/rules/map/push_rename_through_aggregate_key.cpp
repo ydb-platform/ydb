@@ -35,6 +35,7 @@ bool TPushRenameThroughAggregateKeyRule::MatchAndApply(TIntrusivePtr<IOperator>&
     const auto oldInput = aggregate->GetInput();
     const auto oldKeys = aggregate->KeyColumns;
     const auto oldTraits = aggregate->AggregationTraitsList;
+    const auto oldOutput = aggregate->Props.OutputIUs;
     auto pushedMap = MakeIntrusive<TOpMap>(oldInput, topMap->Pos, TVector<TMapElement>{NMapRules::MakeRenameElement(*candidate, topMap)});
     if (HasOutputConflicts(pushedMap->GetOutputIUs())) {
         return false;
@@ -42,10 +43,12 @@ bool TPushRenameThroughAggregateKeyRule::MatchAndApply(TIntrusivePtr<IOperator>&
 
     aggregate->SetInput(pushedMap);
     aggregate->RenameIUs({{candidate->From, candidate->To}}, ctx.ExprCtx);
+    aggregate->ComputeOutputIUs();
     if (HasOutputConflicts(aggregate->GetOutputIUs())) {
         aggregate->SetInput(oldInput);
         aggregate->KeyColumns = oldKeys;
         aggregate->AggregationTraitsList = oldTraits;
+        aggregate->Props.OutputIUs = oldOutput;
         return false;
     }
 

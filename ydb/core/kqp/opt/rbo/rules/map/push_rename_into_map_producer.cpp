@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/opt/rbo/rules/map/rename_common.h>
+#include <ydb/core/kqp/opt/rbo/rules/map/projection_pruning_helpers.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -25,14 +26,17 @@ bool TPushRenameIntoMapProducerRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
         return false;
     }
 
-    const auto oldElements = map->MapElements;
-    outputElement->SetElementName(candidate->To);
+    const auto outputElementIdx = outputElement - map->MapElements.data();
+    auto elements = map->MapElements;
+    elements[outputElementIdx].SetElementName(candidate->To);
 
-    if (HasOutputConflicts(map->GetOutputIUs())) {
-        map->MapElements = oldElements;
+    auto output = BuildMapOutput(map, elements);
+    if (!CanExposeOutput(map, output, props)) {
         return false;
     }
 
+    map->MapElements = std::move(elements);
+    map->Props.OutputIUs = std::move(output);
     return NMapRules::FinishRenamePush(input, topMap, *candidate, ctx, props);
 }
 

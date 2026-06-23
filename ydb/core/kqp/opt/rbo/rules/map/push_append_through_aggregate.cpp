@@ -99,6 +99,7 @@ TIntrusivePtr<IOperator> TPushAppendThroughAggregateRule::SimpleMatchAndApply(co
         const auto oldAggregateInput = aggregate->GetInput();
         const auto oldKeys = aggregate->KeyColumns;
         const auto oldTraits = aggregate->AggregationTraitsList;
+        const auto oldAggregateOutput = aggregate->Props.OutputIUs;
         const auto aggregateInputIUs = oldAggregateInput->GetOutputIUs();
         if (!mapElement.DependsOnlyOn(aggregateInputIUs) || ContainsInfoUnit(aggregateInputIUs, to)) {
             continue;
@@ -111,10 +112,12 @@ TIntrusivePtr<IOperator> TPushAppendThroughAggregateRule::SimpleMatchAndApply(co
 
         aggregate->SetInput(pushedMap);
         RenameAggregateKey(*aggregate, from, to);
+        aggregate->ComputeOutputIUs();
         if (HasOutputConflicts(aggregate->GetOutputIUs())) {
             aggregate->SetInput(oldAggregateInput);
             aggregate->KeyColumns = oldKeys;
             aggregate->AggregationTraitsList = oldTraits;
+            aggregate->Props.OutputIUs = oldAggregateOutput;
             continue;
         }
 
@@ -132,6 +135,7 @@ TIntrusivePtr<IOperator> TPushAppendThroughAggregateRule::SimpleMatchAndApply(co
                 aggregate->SetInput(oldAggregateInput);
                 aggregate->KeyColumns = oldKeys;
                 aggregate->AggregationTraitsList = oldTraits;
+                aggregate->Props.OutputIUs = oldAggregateOutput;
                 return input;
             }
             return aggregate;
@@ -142,6 +146,7 @@ TIntrusivePtr<IOperator> TPushAppendThroughAggregateRule::SimpleMatchAndApply(co
             aggregate->SetInput(oldAggregateInput);
             aggregate->KeyColumns = oldKeys;
             aggregate->AggregationTraitsList = oldTraits;
+            aggregate->Props.OutputIUs = oldAggregateOutput;
             return input;
         }
 

@@ -63,7 +63,7 @@ The data type of the column. The complete list of data types supported by {{ ydb
 
 ### INDEX
 
-Definition of an index on the table. [Secondary indexes](secondary_index.md), [vector indexes](vector_index.md), and [fulltext indexes](fulltext_index.md) are supported.
+Definition of an index on the table. [Secondary indexes](secondary_index.md), [vector indexes](vector_index.md), and fulltext indexes are supported.
 
 ### PRIMARY KEY
 

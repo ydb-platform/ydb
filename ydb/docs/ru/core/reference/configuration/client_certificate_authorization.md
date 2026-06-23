@@ -66,7 +66,6 @@ client_certificate_authorization:
         values: ["server1.internal.corp"]
 ```
 
-Также можно идентифицировать узел по компоненту `OU` и проверять поле "Subject Alternative Name". Следующий фрагмент конфигурации требует клиентский сертификат узла с компонентами `OU=cluster1` и `O=YDB` в поле "Subject", а также проверяет, что поле "Subject Alternative Name" содержит имя хоста, заканчивающееся на суффикс `.cluster1.ydb.company.net`. Для такого сертификата будет сформирован SID `OU=cluster1,O=YDB@cert` и будет назначена группа `registerNode@cert`:
 
 ```yaml
 client_certificate_authorization:

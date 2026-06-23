@@ -801,8 +801,15 @@ void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TKqpStatsStor
     }
 
     double selectivity = AggregateSelectivity(aggStats, strKeys);
-    aggStats->Nrows = aggStats->Nrows * selectivity;
-    aggStats->ByteSize = aggStats->ByteSize * selectivity;
+    if (strKeys.empty()) {
+        double rowBytes = aggStats->Nrows > 0.0 ? aggStats->ByteSize / aggStats->Nrows : aggStats->ByteSize;
+        aggStats->Nrows = 1.0;
+        aggStats->ByteSize = rowBytes;
+        aggStats->Type = EStatisticsType::Constant;
+    } else {
+        aggStats->Nrows = aggStats->Nrows * selectivity;
+        aggStats->ByteSize = aggStats->ByteSize * selectivity;
+    }
 
     YQL_CLOG(TRACE, CoreDq) << "Infer statistics for AggregateBase with keys: " << JoinSeq(", ", strKeys) << ", with stats: " << aggStats->ToString();
     kqpStats->SetStats(input.Get(), std::move(aggStats));
@@ -832,8 +839,15 @@ void InferStatisticsForAggregateMergeFinalize(const TExprNode::TPtr& input, TKqp
     }
 
     double selectivity = AggregateSelectivity(aggStats, strKeys);
-    aggStats->Nrows = aggStats->Nrows * selectivity;
-    aggStats->ByteSize = aggStats->ByteSize * selectivity;
+    if (strKeys.empty()) {
+        double rowBytes = aggStats->Nrows > 0.0 ? aggStats->ByteSize / aggStats->Nrows : aggStats->ByteSize;
+        aggStats->Nrows = 1.0;
+        aggStats->ByteSize = rowBytes;
+        aggStats->Type = EStatisticsType::Constant;
+    } else {
+        aggStats->Nrows = aggStats->Nrows * selectivity;
+        aggStats->ByteSize = aggStats->ByteSize * selectivity;
+    }
 
     kqpStats->SetStats( input.Get(), aggStats );
 }

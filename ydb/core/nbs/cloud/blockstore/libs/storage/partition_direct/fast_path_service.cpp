@@ -95,7 +95,7 @@ size_t RegionCount(ui64 blockCount, ui32 blockSize)
     return AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
 }
 
-TVector<std::shared_ptr<TRegion>> CreateRegions(
+TVector<TRegionPtr> CreateRegions(
     IPartitionDirectService* partitionDirectService,
     ui64 blockCount,
     ui32 blockSize,
@@ -105,7 +105,7 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
     NMonitoring::TDynamicCounterPtr counters)
 {
     const size_t regionCount = RegionCount(blockCount, blockSize);
-    TVector<std::shared_ptr<TRegion>> regions(regionCount);
+    TVector<TRegionPtr> regions(regionCount);
     for (size_t i = 0; i < regionCount; i++) {
         NMonitoring::TDynamicCounterPtr regionCounters =
             counters->GetSubgroup("region", ToString(i));
@@ -179,12 +179,6 @@ TFastPathService::~TFastPathService()
         NKikimrServices::NBS_PARTITION,
         "TFastPathService::Destroy %s",
         DiskId.Quote().c_str());
-
-    // TODO. Should stop and destroy regions before TFastPathService
-    // destruction.
-    for (const auto& region: Regions) {
-        region->Stop();
-    }
 }
 
 NThreading::TFuture<void> TFastPathService::Run()
@@ -206,6 +200,22 @@ NThreading::TFuture<void> TFastPathService::Run()
     ScheduleDirtyMapDebugPrint();
 
     return NThreading::WaitAll(initialReadyFutures);
+}
+
+NThreading::TFuture<void> TFastPathService::Stop()
+{
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TFastPathService::Stop %s",
+        DiskId.Quote().c_str());
+
+    TVector<NThreading::TFuture<void>> stopFutures;
+    for (const auto& region: Regions) {
+        stopFutures.push_back(region->Stop());
+    }
+
+    return NThreading::WaitAll(stopFutures);
 }
 
 NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(

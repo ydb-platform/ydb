@@ -1,3 +1,7 @@
+* The `ydb` interactive AI mode can now search the YDB documentation.
+
+## 2.32.0 ##
+
 * Added `--no-consumer` option to `ydb topic read` command.
 * Added an AI mode to the `ydb` interactive mode. Press Ctrl+T to switch to it.
 * Added `--codec kafka-batch`, `--batch-inner-codec`, `--batch-flush-interval`, `--batch-flush-size`, and `--batch-flush-message-count` options to `ydb workload topic run write|full` commands.

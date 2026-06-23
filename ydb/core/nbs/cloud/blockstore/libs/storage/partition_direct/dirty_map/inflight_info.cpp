@@ -49,6 +49,8 @@ TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
     , Lsn(other.Lsn)
     , ByteCount(other.ByteCount)
     , StartAt(other.StartAt)
+    , PBuffersLockCount(other.PBuffersLockCount)
+    , QuorumReadyPromise(std::move(other.QuorumReadyPromise))
     , WriteRequested(other.WriteRequested)
     , WriteConfirmed(other.WriteConfirmed)
     , FlushRequested(other.FlushRequested)
@@ -57,6 +59,7 @@ TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
     , EraseConfirmed(other.EraseConfirmed)
 {
     other.ReadyQueue = nullptr;
+    other.PBuffersLockCount = 0;
 }
 
 TInflightInfo::~TInflightInfo()

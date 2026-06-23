@@ -67,16 +67,8 @@ TString TFlushRequestExecutor::Print()
 {
     TStringBuilder result;
     result << LogTitle.GetWithTime();
-    result << "{";
-    bool first = true;
-    for (const auto& segment: Hint.Segments) {
-        if (!first) {
-            result << ",";
-        }
-        result << " " << segment.Lsn;
-        first = false;
-    }
-    result << "}";
+    result << Hint.DebugPrint(true);
+    result << (Promise.IsReady() ? ",Replied" : ",NotReplied");
     return result;
 }
 

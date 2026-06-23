@@ -212,7 +212,7 @@ public:
         Children.reserve(Topics.size());
         Results.reserve(Topics.size());
         for (size_t i = 0; i < Topics.size(); ++i) {
-            YDB_LOG_DEBUG("Create read rule deleter actor for ` `",
+            YDB_LOG_DEBUG("Create read rule deleter actor",
                 {"queryId", QueryId},
                 {"topicPath", Topics[i].topic_path()},
                 {"i", i});

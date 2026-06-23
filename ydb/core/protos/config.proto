@@ -307,7 +307,7 @@ message TDomainsConfig {
         optional bool DisableBuiltinGroups = 20;
         optional bool DisableBuiltinAccess = 21;
         optional bool HideAuthenticationFailureReasons = 22 [default = true];
-        optional bool AlwaysSetSystemOwner = 23 [default = false];
+        optional bool AlwaysSetSystemOwner = 23 [default = true];
     }
 
     repeated TDomain Domain = 1;

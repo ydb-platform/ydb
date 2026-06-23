@@ -35,7 +35,7 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , HedgingDelay(DirectBlockGroup->GetOracle()->GetWriteHedgingDelay())
     , RequestTimeout(DirectBlockGroup->GetOracle()->GetWriteRequestTimeout())
     , IndirectWriteReplyTimeout(
-          DirectBlockGroup->GetOracle()->GetPBufferReplyTimeout())
+          DirectBlockGroup->GetOracle()->GetIndirectWriteReplyTimeout())
 {}
 
 TWriteRequestExecutor::~TWriteRequestExecutor()
@@ -66,11 +66,11 @@ void TWriteRequestExecutor::Run()
     ScheduleHedging();
 
     switch (WriteMode) {
-        case EWriteMode::PBufferReplication: {
+        case EWriteMode::IndirectWrite: {
             SendIndirectWriteRequest(hosts);
             break;
         }
-        case EWriteMode::DirectPBuffersFilling: {
+        case EWriteMode::DirectWrite: {
             for (auto host: hosts) {
                 SendDirectWriteRequest(host);
             }
@@ -468,11 +468,11 @@ void TWriteRequestExecutor::OnHedgingTimeout()
         ExtendedDebugState().c_str());
 
     switch (WriteMode) {
-        case EWriteMode::PBufferReplication: {
+        case EWriteMode::IndirectWrite: {
             SendAdditionalDirectWrites();
             break;
         }
-        case EWriteMode::DirectPBuffersFilling: {
+        case EWriteMode::DirectWrite: {
             SendDirectWriteRequestsToHandoffs(GetQuorumDeficit());
             break;
         }

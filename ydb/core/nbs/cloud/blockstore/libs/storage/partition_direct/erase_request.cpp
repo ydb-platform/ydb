@@ -1,5 +1,8 @@
 #include "erase_request.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+
+#include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -26,6 +29,7 @@ TEraseRequestExecutor::TEraseRequestExecutor(
     , Span(std::move(span))
     , Host(host)
     , Hint(std::move(hint))
+    , RequestTimeout(DirectBlockGroup->GetOracle()->GetEraseRequestTimeout())
 {}
 
 TEraseRequestExecutor::~TEraseRequestExecutor()
@@ -43,6 +47,8 @@ TEraseRequestExecutor::~TEraseRequestExecutor()
 
 void TEraseRequestExecutor::Run()
 {
+    ScheduleRequestTimeout();
+
     auto future = DirectBlockGroup->BatchEraseFromPBuffer(
         VChunkConfig.GetVChunkIndex(),
         Host,
@@ -97,6 +103,44 @@ void TEraseRequestExecutor::Reply(
         .Host = Host,
         .EraseOk = std::move(eraseOk),
         .EraseFailed = std::move(eraseFailed)});
+}
+
+void TEraseRequestExecutor::ScheduleRequestTimeout()
+{
+    if (!RequestTimeout) {
+        return;
+    }
+
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Schedule OnRequestTimeout %s",
+        LogTitle.GetWithTime().c_str(),
+        FormatDuration(RequestTimeout).c_str());
+
+    DirectBlockGroup->Schedule(
+        RequestTimeout,
+        [weakSelf = weak_from_this()]()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->OnRequestTimeout();
+            }
+        });
+}
+
+void TEraseRequestExecutor::OnRequestTimeout()
+{
+    if (Promise.IsReady()) {
+        return;
+    }
+
+    LOG_WARN(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s OnRequestTimeout.",
+        LogTitle.GetWithTime().c_str());
+
+    Reply({}, Hint.MakeLsnVector());
 }
 
 ////////////////////////////////////////////////////////////////////////////////

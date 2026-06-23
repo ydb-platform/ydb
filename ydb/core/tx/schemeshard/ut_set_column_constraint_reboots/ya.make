@@ -17,7 +17,7 @@ PEERDIR(
 )
 
 SRCS(
-    ut_set_column_constraint.cpp
+    ut_set_column_constraint_reboots.cpp
 )
 
 YQL_LAST_ABI_VERSION()

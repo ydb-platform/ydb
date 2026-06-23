@@ -10338,7 +10338,7 @@
             {
                 "ColumnId": 4,
                 "ColumnName": "SerializedColumnNames",
-                "ColumnType": "Utf8"
+                "ColumnType": "String"
             },
             {
                 "ColumnId": 5,

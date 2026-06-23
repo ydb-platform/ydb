@@ -2613,8 +2613,8 @@ struct Schema : NIceDb::Schema {
         struct OperationId :            Column<1, NScheme::NTypeIds::Uint64>  { using Type = TIndexBuildId; };
         struct TableOwnerId :           Column<2, NScheme::NTypeIds::Uint64>  { using Type = TOwnerId; };
         struct TableLocalId :           Column<3, NScheme::NTypeIds::Uint64>  { using Type = TLocalPathId; };
-        // ColumnNames in `column_name_1$column_name_2$...$column_name_n` format
-        struct SerializedColumnNames :  Column<4, NScheme::NTypeIds::Utf8>    {};
+        // ColumnNames in protobuf format
+        struct SerializedColumnNames :  Column<4, NScheme::NTypeIds::String>  {};
 
         struct ValidationFailed :       Column<5, NScheme::NTypeIds::Bool>    { static constexpr bool Default = false; };
         struct OperationState :         Column<6, NScheme::NTypeIds::Uint32>  {};

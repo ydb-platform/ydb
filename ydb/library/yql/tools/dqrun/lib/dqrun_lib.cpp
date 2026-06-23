@@ -1,5 +1,7 @@
 #include "dqrun_lib.h"
 
+#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
+
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file.h>
 #include <yt/yql/providers/yt/gateway/native/yql_yt_native.h>
 #include <yt/yql/providers/yt/provider/yql_yt_provider.h>
@@ -80,6 +82,7 @@ const std::initializer_list<TString> SUPPORTED_GATEWAYS = {
 
 TDqRunTool::TDqRunTool()
     : TYtRunTool("dqrun")
+    , CredentialsFactory_(NYql::CreateStructuredTokenCredentialsFactory(nullptr))
 {
     GetRunOptions().SetSupportedGateways(SUPPORTED_GATEWAYS);
     GetRunOptions().GatewayTypes.insert(SUPPORTED_GATEWAYS);
@@ -179,7 +182,7 @@ TDqRunTool::TDqRunTool()
                 if (ss.size() != 2) {
                     throw yexception() << "Invalid tokenAccessorEndpoint: " << endpoint;
                 }
-                CredentialsFactory_ = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(ss[1], ss[0] == "grpcs", "");
+                CredentialsFactory_ = NYql::CreateStructuredTokenCredentialsOverTokenAccessorFactory(ss[1], ss[0] == "grpcs", "");
             });
     });
 
@@ -453,7 +456,7 @@ IPqGateway::TPtr TDqRunTool::GetPqGateway() {
             TPqGatewayServices pqServices(
                 GetYdbDriver(),
                 nullptr,
-                nullptr, // credentials factory
+                CredentialsFactory_,
                 std::make_shared<TPqGatewayConfig>(GetRunOptions().GatewaysConfig->GetPq()),
                 GetFuncRegistry().Get()
             );
@@ -513,17 +516,17 @@ NDq::IDqAsyncIoFactory::TPtr TDqRunTool::CreateAsyncIoFactory() {
         RegisterYtLookupActorFactory(*factory, GetYtFileServices(), *GetFuncRegistry());
     }
     if (GetRunOptions().GatewaysConfig->HasPq() || !TopicMapping_.empty()) {
-        RegisterDqPqReadActorFactory(*factory, GetYdbDriver(), nullptr, GetPqGateway());
-        RegisterDqPqWriteActorFactory(*factory, GetYdbDriver(), nullptr, GetPqGateway());
+        RegisterDqPqReadActorFactory(*factory, GetYdbDriver(), CredentialsFactory_, GetPqGateway());
+        RegisterDqPqWriteActorFactory(*factory, GetYdbDriver(), CredentialsFactory_, GetPqGateway());
     }
     if (GetRunOptions().GatewaysConfig->HasYdb()) {
-        RegisterYdbReadActorFactory(*factory, GetYdbDriver(), nullptr);
+        RegisterYdbReadActorFactory(*factory, GetYdbDriver(), CredentialsFactory_);
     }
     if (GetRunOptions().GatewaysConfig->HasSolomon()) {
-        RegisterDQSolomonReadActorFactory(*factory, nullptr);
+        RegisterDQSolomonReadActorFactory(*factory, CredentialsFactory_);
     }
     if (GetRunOptions().GatewaysConfig->HasClickHouse()) {
-        RegisterClickHouseReadActorFactory(*factory, nullptr, GetHttpGateway());
+        RegisterClickHouseReadActorFactory(*factory, CredentialsFactory_, GetHttpGateway());
     }
     if (GetRunOptions().GatewaysConfig->HasGeneric()) {
         RegisterGenericProviderFactories(*factory, CredentialsFactory_, GetGenericClient());
@@ -538,8 +541,8 @@ NDq::IDqAsyncIoFactory::TPtr TDqRunTool::CreateAsyncIoFactory() {
             ? GetRunOptions().GatewaysConfig->GetHttpGateway().GetMaxRetries()
             : 2;
 
-        s3ActorsFactory->RegisterS3WriteActorFactory(*factory, nullptr, GetHttpGateway(), GetHTTPDefaultRetryPolicy());
-        s3ActorsFactory->RegisterS3ReadActorFactory(*factory, nullptr, GetHttpGateway(), GetHTTPDefaultRetryPolicy(TDuration::Seconds(requestTimeout), maxRetries));
+        s3ActorsFactory->RegisterS3WriteActorFactory(*factory, CredentialsFactory_, GetHttpGateway(), GetHTTPDefaultRetryPolicy());
+        s3ActorsFactory->RegisterS3ReadActorFactory(*factory, CredentialsFactory_, GetHttpGateway(), GetHTTPDefaultRetryPolicy(TDuration::Seconds(requestTimeout), maxRetries));
     }
 
     return factory;

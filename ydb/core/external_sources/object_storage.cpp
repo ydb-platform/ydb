@@ -42,7 +42,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
     explicit TObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns,
                                           NActors::TActorSystem* actorSystem,
                                           size_t pathsLimit,
-                                          std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
+                                          std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> credentialsFactory,
                                           bool enableInfer,
                                           bool allowLocalFiles)
         : HostnamePatterns(hostnamePatterns)
@@ -379,7 +379,7 @@ struct TObjectStorageExternalSource : public IExternalSource {
         }
 
         // Stage 1: credentials.
-        const NYql::TS3Credentials credentials(CredentialsFactory, BuildStructuredToken(*meta, CredentialsFactory));
+        const NYql::TS3Credentials credentials(CredentialsFactory, BuildStructuredToken(*meta));
 
         const TString path = meta->TableLocation;
         const TString filePattern = meta->Attributes.Value("filepattern", TString{});
@@ -480,10 +480,7 @@ private:
     };
 
     // Build a structured token JSON for an external source's auth.
-    static TString BuildStructuredToken(
-        const TMetadata& meta,
-        const std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory>& credentialsFactory)
-    {
+    TString BuildStructuredToken(const TMetadata& meta) {
         NYql::TStructuredTokenBuilder builder;
         if (std::holds_alternative<NAuth::TAws>(meta.Auth)) {
             const auto& aws = std::get<NAuth::TAws>(meta.Auth);
@@ -492,7 +489,7 @@ private:
             params.SetAwsRegion(aws.Region);
             builder.SetBasicAuth(params.SerializeAsString(), aws.SecretAccessKey);
         } else if (std::holds_alternative<NAuth::TServiceAccount>(meta.Auth)) {
-            if (!credentialsFactory) {
+            if (!CredentialsFactory) {
                 throw yexception{} << "trying to authenticate with service account credentials, internal error";
             }
             const auto& sa = std::get<NAuth::TServiceAccount>(meta.Auth);
@@ -982,7 +979,7 @@ private:
     const std::vector<TRegExMatch> HostnamePatterns;
     const size_t PathsLimit;
     NActors::TActorSystem* ActorSystem = nullptr;
-    std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> CredentialsFactory;
+    std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> CredentialsFactory;
     const bool EnableInfer = false;
     const bool AllowLocalFiles;
 };
@@ -993,7 +990,7 @@ private:
 IExternalSource::TPtr CreateObjectStorageExternalSource(const std::vector<TRegExMatch>& hostnamePatterns,
                                                         NActors::TActorSystem* actorSystem,
                                                         size_t pathsLimit,
-                                                        std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory,
+                                                        std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> credentialsFactory,
                                                         bool enableInfer,
                                                         bool allowLocalFiles) {
     return MakeIntrusive<TObjectStorageExternalSource>(hostnamePatterns, actorSystem, pathsLimit, std::move(credentialsFactory), enableInfer, allowLocalFiles);

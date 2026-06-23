@@ -11,11 +11,9 @@
 #include <ydb/library/yql/providers/pq/gateway/abstract/yql_pq_gateway.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 #include <ydb/library/yql/providers/solomon/gateway/yql_solomon_gateway.h>
-#include <ydb/public/api/protos/ydb_value.pb.h>
 
 #include <yql/essentials/core/dq_integration/transform/yql_dq_task_transform.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
-#include <yql/essentials/public/issue/yql_issue_message.h>
 
 #include <yt/yql/providers/yt/provider/yql_yt_gateway.h>
 
@@ -29,8 +27,6 @@ namespace NKqpProto {
 }  // namespace NKqpProto
 
 namespace NKikimr::NKqp {
-
-    bool CheckNestingDepth(const google::protobuf::Message& message, ui32 maxDepth);
 
     NYql::IYtGateway::TPtr MakeYtGateway(const NMiniKQL::IFunctionRegistry* functionRegistry, const NKikimrConfig::TQueryServiceConfig& queryServiceConfig);
 
@@ -60,7 +56,7 @@ namespace NKikimr::NKqp {
         std::shared_ptr<NYdb::TDriver> Driver;
         NYql::IHTTPGateway::TPtr HttpGateway;
         NYql::NConnector::IClient::TPtr ConnectorClient;
-        NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+        NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
         NYql::IDatabaseAsyncResolver::TPtr DatabaseAsyncResolver;
         NYql::TS3GatewayConfig S3GatewayConfig;
         NYql::TGenericGatewayConfig GenericGatewayConfig;
@@ -115,7 +111,7 @@ namespace NKikimr::NKqp {
         NYql::TYtGatewayConfig YtGatewayConfig;
         NYql::IYtGateway::TPtr YtGateway;
         NYql::TSolomonGatewayConfig SolomonGatewayConfig;
-        NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+        NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
         NYql::NConnector::IClient::TPtr ConnectorClient;
         std::optional<NActors::TActorId> DatabaseResolverActorId;
         NYql::IMdbEndpointGenerator::TPtr MdbEndpointGenerator;
@@ -134,7 +130,7 @@ namespace NKikimr::NKqp {
         TKqpFederatedQuerySetupFactoryMock(
             NYql::IHTTPGateway::TPtr httpGateway,
             NYql::NConnector::IClient::TPtr connectorClient,
-            NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+            NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
             NYql::IDatabaseAsyncResolver::TPtr databaseAsyncResolver,
             const NYql::TS3GatewayConfig& s3GatewayConfig,
             const NYql::TGenericGatewayConfig& genericGatewayConfig,
@@ -189,7 +185,7 @@ namespace NKikimr::NKqp {
     private:
         NYql::IHTTPGateway::TPtr HttpGateway;
         NYql::NConnector::IClient::TPtr ConnectorClient;
-        NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+        NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
         NYql::IDatabaseAsyncResolver::TPtr DatabaseAsyncResolver;
         NYql::TS3GatewayConfig S3GatewayConfig;
         NYql::TGenericGatewayConfig GenericGatewayConfig;
@@ -215,17 +211,6 @@ namespace NKikimr::NKqp {
 
     // Used only for unit tests
     bool WaitHttpGatewayFinalization(NMonitoring::TDynamicCounterPtr countersRoot, TDuration timeout = TDuration::Minutes(1), TDuration refreshPeriod = TDuration::MilliSeconds(100));
-
-    NYql::TIssues TruncateIssues(const NYql::TIssues& issues, ui32 maxLevels = 50, ui32 keepTailLevels = 3);
-
-    template <typename TIssueMessage>
-    void TruncateIssues(google::protobuf::RepeatedPtrField<TIssueMessage>* issuesProto, ui32 maxLevels = 50, ui32 keepTailLevels = 3) {
-        NYql::TIssues issues;
-        NYql::IssuesFromMessage(*issuesProto, issues);
-        NYql::IssuesToMessage(TruncateIssues(issues, maxLevels, keepTailLevels), issuesProto);
-    }
-
-    NYql::TIssues ValidateResultSetColumns(const google::protobuf::RepeatedPtrField<Ydb::Column>& columns, ui32 maxNestingDepth = 90);
 
     struct TGetSchemeEntryResult {
         TMaybe<NYdb::NScheme::ESchemeEntryType> EntryType;

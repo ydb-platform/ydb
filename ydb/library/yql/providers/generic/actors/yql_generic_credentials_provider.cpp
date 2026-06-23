@@ -7,7 +7,7 @@
 namespace NYql::NDq {
     TGenericCredentialsProvider::TGenericCredentialsProvider(
         const TString& structuredTokenJSON,
-        const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
+        const IStructuredTokenCredentialsFactory::TPtr& credentialsFactory) {
         if (IsStructuredTokenJson(structuredTokenJSON)) {
             TStructuredTokenParser parser = CreateStructuredTokenParser(structuredTokenJSON);
             if (parser.HasBasicAuth()) {
@@ -19,11 +19,7 @@ namespace NYql::NDq {
             }
         }
 
-        auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(
-            credentialsFactory,
-            structuredTokenJSON,
-            false);
-
+        auto credentialsProviderFactory = credentialsFactory->Create(structuredTokenJSON, false);
         CredentialsProvider_ = credentialsProviderFactory->CreateProvider();
     }
 
@@ -55,7 +51,7 @@ namespace NYql::NDq {
 
     TGenericCredentialsProvider::TPtr
     CreateGenericCredentialsProvider(const TString& structuredTokenJSON,
-                                     const ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory) {
+                                     const IStructuredTokenCredentialsFactory::TPtr& credentialsFactory) {
         return std::make_unique<TGenericCredentialsProvider>(structuredTokenJSON, credentialsFactory);
     }
 } // namespace NYql::NDq

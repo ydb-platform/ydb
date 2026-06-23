@@ -24,7 +24,7 @@ class IFunctionRegistry;
 namespace NYql {
 
 struct TS3Configuration;
-class ISecuredServiceAccountCredentialsFactory;
+class IStructuredTokenCredentialsFactory;
 
 struct TS3State : public TThrRefBase {
     using TPtr = TIntrusivePtr<TS3State>;
@@ -41,7 +41,7 @@ struct TS3State : public TThrRefBase {
     TTypeAnnotationContext* Types = nullptr;
     TIntrusivePtr<TS3Configuration> Configuration;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
-    std::shared_ptr<ISecuredServiceAccountCredentialsFactory> CredentialsFactory;
+    std::shared_ptr<IStructuredTokenCredentialsFactory> CredentialsFactory;
     IHTTPGateway::TPtr Gateway;
     IHTTPGateway::TRetryPolicy::TPtr GatewayRetryPolicy;
     ui32 ExecutorPoolId = 0;
@@ -51,7 +51,7 @@ struct TS3State : public TThrRefBase {
 };
 
 TDataProviderInitializer GetS3DataProviderInitializer(
-    IHTTPGateway::TPtr gateway, std::shared_ptr<ISecuredServiceAccountCredentialsFactory> credentialsFactory = nullptr,
+    IHTTPGateway::TPtr gateway, std::shared_ptr<IStructuredTokenCredentialsFactory> credentialsFactory = nullptr,
     NActors::TActorSystem* actorSystem = nullptr, TS3Configuration::TSetupper configurationInit = nullptr);
 
 TIntrusivePtr<IDataProvider> CreateS3DataSource(TS3State::TPtr state);

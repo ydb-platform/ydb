@@ -6,7 +6,7 @@
 
 namespace NFq {
 
-NActors::IActor* CreateDatabaseResolver(NActors::TActorId httpProxy, NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
+NActors::IActor* CreateDatabaseResolver(NActors::TActorId httpProxy, NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory);
 NActors::TActorId MakeDatabaseResolverActorId();
 
 } /* namespace NFq */

@@ -28,9 +28,9 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateDqSolom
     const THashMap<TString, TString>& secureParams,
     IMemoryQuotaManager::TPtr memoryQuotaManager,
     const ::NMonitoring::TDynamicCounterPtr& counters,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     const NSo::TSolomonReadActorConfig& cfg);
 
-void RegisterDQSolomonReadActorFactory(TDqAsyncIoFactory& factory, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
+void RegisterDQSolomonReadActorFactory(TDqAsyncIoFactory& factory, IStructuredTokenCredentialsFactory::TPtr credentialsFactory);
 
 } // namespace NYql::NDq

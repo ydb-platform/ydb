@@ -13,6 +13,9 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#include <algorithm>
+#include <limits>
+
 namespace NKikimr::NStat {
 
 TStatisticsAggregator::TStatisticsAggregator(const NActors::TActorId& tablet, TTabletStorageInfo* info)
@@ -498,7 +501,10 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeStatus::TPtr& ev) {
         outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_IN_PROGRESS);
     } else {
         auto forceTraversalOperation = ForceTraversalOperation(operationId);
-        if (forceTraversalOperation) {
+        // Terminal operations are preserved in history but no longer "in-progress"
+        const bool isTerminal = forceTraversalOperation &&
+            IsTerminalAnalyzeState(forceTraversalOperation->State);
+        if (forceTraversalOperation && !isTerminal) {
             outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_ENQUEUED);
         } else {
             outRecord.SetStatus(NKikimrStat::TEvAnalyzeStatusResponse::STATUS_NO_OPERATION);
@@ -608,6 +614,20 @@ void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeCancel::TPtr& ev) {
 
     SA_LOG_D("Got TEvAnalyzeCancel, operationId: " << operationId.Quote());
     DispatchFinishTraversalTx(NKikimrStat::TEvAnalyzeResponse::STATUS_CANCELLED);
+}
+
+void TStatisticsAggregator::Handle(TEvStatistics::TEvAnalyzeActorProgress::TPtr& ev) {
+    const auto& msg = *ev->Get();
+    auto* op = ForceTraversalOperation(msg.OperationId);
+    if (!op || IsTerminalAnalyzeState(op->State)) {
+        return;
+    }
+    auto* table = ForceTraversalTable(msg.OperationId, msg.PathId);
+    if (!table) {
+        return;
+    }
+    table->ShardsTotal = msg.ShardsTotal;
+    table->ShardsDone  = std::max(table->ShardsDone, msg.ShardsDone);
 }
 
 void TStatisticsAggregator::InitializeStatisticsTable() {
@@ -743,6 +763,11 @@ void TStatisticsAggregator::ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActo
     Y_ABORT_UNLESS(!AnalyzeActorId);
 
     for (TForceTraversalOperation& operation : ForceTraversals) {
+        // Skip terminal operations (history entries) — they have no pending work.
+        if (IsTerminalAnalyzeState(operation.State)) {
+            continue;
+        }
+
         for (TForceTraversalTable& operationTable : operation.Tables) {
             if (operationTable.Status == TForceTraversalTable::EStatus::None
                 || (operationTable.Status == TForceTraversalTable::EStatus::AnalyzeStarted
@@ -859,7 +884,11 @@ void TStatisticsAggregator::StartTraversal(NIceDb::TNiceDb& db) {
     Navigate();
 }
 
-void TStatisticsAggregator::FinishTraversal(NIceDb::TNiceDb& db, bool finishAllForceTraversalTables) {
+void TStatisticsAggregator::FinishTraversal(
+    NIceDb::TNiceDb& db,
+    std::optional<Ydb::Table::AnalyzeState::State> forceTerminalState,
+    NYql::TIssues issues)
+{
     auto pathId = TraversalPathId;
 
     auto pathIt = ScheduleTraversals.find(pathId);
@@ -876,19 +905,21 @@ void TStatisticsAggregator::FinishTraversal(NIceDb::TNiceDb& db, bool finishAllF
 
     auto forceTraversalOperation = CurrentForceTraversalOperation();
     if (forceTraversalOperation) {
-        if (finishAllForceTraversalTables) {
-            DeleteForceTraversalOperation(ForceTraversalOperationId, db);
+        if (forceTerminalState.has_value()) {
+            MarkForceTraversalOperationFinished(ForceTraversalOperationId,
+                *forceTerminalState, TActivationContext::Now(), db, std::move(issues));
         } else {
             auto operationTable = CurrentForceTraversalTable();
 
             UpdateForceTraversalTableStatus(
                 TForceTraversalTable::EStatus::TraversalFinished,
-                forceTraversalOperation->OperationId, *operationTable,  db);
+                forceTraversalOperation->OperationId, *operationTable, db);
 
             bool tablesRemained = std::any_of(forceTraversalOperation->Tables.begin(), forceTraversalOperation->Tables.end(),
             [](const TForceTraversalTable& elem) { return elem.Status != TForceTraversalTable::EStatus::TraversalFinished;});
             if (!tablesRemained) {
-                DeleteForceTraversalOperation(ForceTraversalOperationId, db);
+                MarkForceTraversalOperationFinished(ForceTraversalOperationId,
+                    Ydb::Table::AnalyzeState::STATE_DONE, TActivationContext::Now(), db);
             }
         }
     }
@@ -943,12 +974,136 @@ void TStatisticsAggregator::DeleteForceTraversalOperation(const TString& operati
     db.Table<Schema::ForceTraversalOperations>().Key(operationId).Delete();
 
     auto operation = ForceTraversalOperation(operationId);
-    for(const TForceTraversalTable& table : operation->Tables) {
-        db.Table<Schema::ForceTraversalTables>().Key(operationId, table.PathId.OwnerId, table.PathId.LocalPathId).Delete();
+    if (operation) {
+        for (const TForceTraversalTable& table : operation->Tables) {
+            db.Table<Schema::ForceTraversalTables>().Key(operationId, table.PathId.OwnerId, table.PathId.LocalPathId).Delete();
+        }
+        ForceTraversals.remove_if([operationId](const TForceTraversalOperation& elem) { return elem.OperationId == operationId;});
+        RecalcForceTraversalsInflightSizeCounter();
+    }
+}
+
+size_t TStatisticsAggregator::InflightForceTraversalCount() const {
+    size_t n = 0;
+    for (const auto& op : ForceTraversals) {
+        if (!IsTerminalAnalyzeState(op.State)) {
+            ++n;
+        }
+    }
+    return n;
+}
+
+void TStatisticsAggregator::RecalcForceTraversalsInflightSizeCounter() {
+    TabletCounters->Simple()[COUNTER_FORCE_TRAVERSALS_INFLIGHT_SIZE]
+        .Set(InflightForceTraversalCount());
+}
+
+void TStatisticsAggregator::RecalcForceTraversalInflightMaxTimeCounter(TInstant now) {
+    TDuration time = TDuration::Zero();
+    for (const auto& op : ForceTraversals) {
+        if (!IsTerminalAnalyzeState(op.State)) {
+            time = now - op.CreatedAt;
+            break; // first non-terminal is the oldest (list is insertion-ordered)
+        }
+    }
+    TabletCounters->Simple()[COUNTER_FORCE_TRAVERSAL_INFLIGHT_MAX_TIME].Set(time.MicroSeconds());
+}
+
+void TStatisticsAggregator::MarkForceTraversalOperationFinished(
+    const TString& operationId,
+    Ydb::Table::AnalyzeState::State state,
+    TInstant endTime,
+    NIceDb::TNiceDb& db,
+    NYql::TIssues issues)
+{
+    auto* op = ForceTraversalOperation(operationId);
+    if (!op) {
+        return;
+    }
+    if (IsTerminalAnalyzeState(op->State)) {
+        return;
     }
 
-    ForceTraversals.remove_if([operationId](const TForceTraversalOperation& elem) { return elem.OperationId == operationId;});
-    TabletCounters->Simple()[COUNTER_FORCE_TRAVERSALS_INFLIGHT_SIZE].Set(ForceTraversals.size());
+    // When the long-running operation API is disabled, fall back to pre-PR behavior:
+    // delete the operation on completion instead of retaining it as history.
+    if (!AppData()->FeatureFlags.GetEnableAnalyzeLongRunningOperation()) {
+        DeleteForceTraversalOperation(operationId, db);
+        return;
+    }
+
+    op->State = state;
+    op->EndTime = endTime;
+    if (!issues.Empty()) {
+        op->Issues = std::move(issues);
+    }
+
+    db.Table<Schema::ForceTraversalOperations>().Key(operationId).Update(
+        NIceDb::TUpdate<Schema::ForceTraversalOperations::State>(static_cast<ui64>(state)),
+        NIceDb::TUpdate<Schema::ForceTraversalOperations::EndTime>(endTime.GetValue())
+    );
+
+    // The op transitions from in-flight to history; the inflight counter shrinks.
+    RecalcForceTraversalsInflightSizeCounter();
+}
+
+void TStatisticsAggregator::FillAnalyzeOperationProto(
+    const TForceTraversalOperation& op,
+    NKikimrAnalyzeOp::TAnalyzeOperation& proto) const
+{
+    proto.SetOperationId(op.OperationId);
+    proto.SetDatabaseName(op.DatabaseName);
+
+    {
+        auto* ts = proto.MutableCreateTime();
+        ts->set_seconds(op.CreatedAt.Seconds());
+        ts->set_nanos(op.CreatedAt.NanoSeconds() % 1'000'000'000);
+    }
+
+    // Derive state
+    Ydb::Table::AnalyzeState::State state;
+    if (IsTerminalAnalyzeState(op.State)) {
+        state = op.State;
+        auto* ts = proto.MutableEndTime();
+        ts->set_seconds(op.EndTime.Seconds());
+        ts->set_nanos(op.EndTime.NanoSeconds() % 1'000'000'000);
+    } else if (ForceTraversalOperationId == op.OperationId) {
+        state = Ydb::Table::AnalyzeState::STATE_IN_PROGRESS;
+    } else {
+        state = Ydb::Table::AnalyzeState::STATE_ENQUEUED;
+    }
+    proto.SetState(state);
+
+    for (const auto& issue : op.Issues) {
+        NYql::IssueToMessage(issue, proto.AddIssues());
+    }
+
+    ui64 shardsTotalSum = 0;
+    ui64 shardsDoneSum = 0;
+    for (const auto& t : op.Tables) {
+        proto.AddPaths(t.Path);
+        shardsTotalSum += t.ShardsTotal;
+        shardsDoneSum  += t.ShardsDone;
+        if (t.Status == TForceTraversalTable::EStatus::TraversalFinished) {
+            proto.AddDonePaths(t.Path);
+        } else if (t.Status != TForceTraversalTable::EStatus::None &&
+                   state == Ydb::Table::AnalyzeState::STATE_IN_PROGRESS) {
+            proto.AddInProgressPaths(t.Path);
+        }
+    }
+
+    if (state == Ydb::Table::AnalyzeState::STATE_DONE) {
+        proto.SetProgress(100.0f);
+    } else if (state == Ydb::Table::AnalyzeState::STATE_CANCELLED ||
+               state == Ydb::Table::AnalyzeState::STATE_FAILED ||
+               state == Ydb::Table::AnalyzeState::STATE_ENQUEUED)
+    {
+        proto.SetProgress(0.0f);
+    } else if (shardsTotalSum == 0) {
+        proto.SetProgress(0.0f);
+    } else {
+        // Use double for the intermediate to avoid float32 precision loss for shard counts > 16M.
+        proto.SetProgress(static_cast<float>(100.0 * shardsDoneSum / shardsTotalSum));
+    }
 }
 
 TStatisticsAggregator::TForceTraversalTable* TStatisticsAggregator::ForceTraversalTable(const TString& operationId, const TPathId& pathId) {

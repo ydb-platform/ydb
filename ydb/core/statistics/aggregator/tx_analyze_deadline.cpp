@@ -6,9 +6,13 @@
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxAnalyzeDeadline : public TTxBase {
-    TString OperationId;
-    TActorId ReplyToActorId;
-    
+    struct TDeadlineEntry {
+        TString OperationId;
+        TActorId ReplyToActorId;
+    };
+    std::vector<TDeadlineEntry> DeadlineExceeded;
+    bool ActiveDeadlineExceeded = false;
+
     TTxAnalyzeDeadline(TSelf* self)
         : TTxBase(self)
     {}
@@ -19,18 +23,43 @@ struct TStatisticsAggregator::TTxAnalyzeDeadline : public TTxBase {
         SA_LOG_T("[" << Self->TabletID() << "] TTxAnalyzeDeadline::Execute");
 
         NIceDb::TNiceDb db(txc.DB);
-        auto now = ctx.Now();
+        const auto now = ctx.Now();
 
-        for (TForceTraversalOperation& operation : Self->ForceTraversals) {
-            if (operation.CreatedAt + Self->AnalyzeDeadline < now) {
-                SA_LOG_E("[" << Self->TabletID() << "] Delete long analyze operation, OperationId=" << operation.OperationId.Quote());
+        // Collect ids to avoid mutating ForceTraversals during iteration
+        std::vector<TString> toFailDeadline;  // non-terminal queued, deadline exceeded
+        std::vector<TString> toDelete;        // terminal, retention exceeded
 
-                OperationId = operation.OperationId;
-                ReplyToActorId = operation.ReplyToActorId;
-                Self->DeleteForceTraversalOperation(operation.OperationId, db);
-                break;
+        for (const auto& operation : Self->ForceTraversals) {
+            if (IsTerminalAnalyzeState(operation.State)) {
+                if (operation.EndTime && now - operation.EndTime >= Self->AnalyzeOpHistoryRetention) {
+                    toDelete.push_back(operation.OperationId);
+                }
+            } else {
+                if (operation.CreatedAt + Self->AnalyzeDeadline < now) {
+                    if (Self->ForceTraversalOperationId == operation.OperationId) {
+                        ActiveDeadlineExceeded = true;
+                    } else {
+                        toFailDeadline.push_back(operation.OperationId);
+                    }
+                }
             }
-        }        
+        }
+
+        NYql::TIssues deadlineIssues;
+        deadlineIssues.AddIssue(NYql::TIssue("ANALYZE deadline exceeded"));
+
+        for (const auto& operationId : toFailDeadline) {
+            auto* op = Self->ForceTraversalOperation(operationId);
+            if (!op) continue;
+            DeadlineExceeded.push_back({operationId, op->ReplyToActorId});
+            Self->MarkForceTraversalOperationFinished(operationId,
+                Ydb::Table::AnalyzeState::STATE_FAILED, now, db, deadlineIssues);
+        }
+
+        for (const auto& operationId : toDelete) {
+            SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeDeadline: deleting expired history for operationId=" << operationId.Quote());
+            Self->DeleteForceTraversalOperation(operationId, db);
+        }
 
         return true;
     }
@@ -38,23 +67,28 @@ struct TStatisticsAggregator::TTxAnalyzeDeadline : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         SA_LOG_T("[" << Self->TabletID() << "] TTxAnalyzeDeadline::Complete");
 
-        if (OperationId) {
-            if (ReplyToActorId) {
-                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeDeadline::Complete. " <<
-                    "Send TEvAnalyzeResponse for deleted operation, OperationId=" << OperationId.Quote() << ", ActorId=" << ReplyToActorId);
+        for (const auto& entry : DeadlineExceeded) {
+            SA_LOG_E("[" << Self->TabletID() << "] TTxAnalyzeDeadline: deadline exceeded, operationId=" << entry.OperationId.Quote());
+            if (entry.ReplyToActorId) {
                 auto response = std::make_unique<TEvStatistics::TEvAnalyzeResponse>();
-                response->Record.SetOperationId(OperationId);
+                response->Record.SetOperationId(entry.OperationId);
                 response->Record.SetStatus(NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
                 NYql::IssueToMessage(
                     NYql::TIssue("ANALYZE deadline exceeded"), response->Record.AddIssues());
-                ctx.Send(ReplyToActorId, response.release());
-            } else {
-                SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeDeadline::Complete. No ActorId to send reply. OperationId=" << OperationId.Quote());
+                ctx.Send(entry.ReplyToActorId, response.release());
             }
-            ctx.Send(Self->SelfId(), new TEvPrivate::TEvAnalyzeDeadline());
-        } else {
-            ctx.Schedule(AnalyzeDeadlinePeriod, new TEvPrivate::TEvAnalyzeDeadline());
         }
+
+        if (ActiveDeadlineExceeded) {
+            SA_LOG_E("[" << Self->TabletID() << "] TTxAnalyzeDeadline: active deadline exceeded, operationId="
+                << Self->ForceTraversalOperationId.Quote());
+            NYql::TIssues issues;
+            issues.AddIssue(NYql::TIssue("ANALYZE deadline exceeded"));
+            Self->DispatchFinishTraversalTx(
+                NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR, std::move(issues));
+        }
+
+        ctx.Schedule(AnalyzeDeadlinePeriod, new TEvPrivate::TEvAnalyzeDeadline());
     }
 };
 

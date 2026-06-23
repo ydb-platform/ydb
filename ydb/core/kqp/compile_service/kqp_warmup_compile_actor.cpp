@@ -314,6 +314,7 @@ public:
             return;
         }
 
+        TopologyWaitStartedAt = TActivationContext::Monotonic();
         Schedule(TopologyCheckInterval, new TEvPrivate::TEvCheckTopology());
         Become(&TThis::StateWaitingTopology);
     }
@@ -416,6 +417,12 @@ private:
     void HandleCheckTopology() {
         auto rm = TryGetKqpResourceManager(SelfId().NodeId());
         if (!rm || !rm->GetInitialBoardSyncDone()) {
+            if (TActivationContext::Monotonic() - TopologyWaitStartedAt >= BoardSyncDeadline) {
+                LOG_W("Board not synced within " << BoardSyncDeadline
+                      << ", topology not ready, skipping warmup");
+                Complete(true, "Skipped: board not synced");
+                return;
+            }
             Schedule(TopologyCheckInterval, new TEvPrivate::TEvCheckTopology());
             return;
         }
@@ -724,6 +731,8 @@ private:
     }
 
     static constexpr TDuration TopologyCheckInterval = TDuration::MilliSeconds(500);
+    // Board syncs in ~1s if ever; longer means no topology here (root/storage domain).
+    static constexpr TDuration BoardSyncDeadline = TDuration::Seconds(3);
 
     const TKqpWarmupConfig Config;
 
@@ -745,6 +754,7 @@ private:
     bool SoftDeadlineReached = false;
     NActors::TSchedulerCookieHolder SoftDeadlineCookieHolder;
     TInstant HardDeadlineTimestamp;
+    NMonotonic::TMonotonic TopologyWaitStartedAt;
     TString SkipReason;
     TVector<ui32> NodeIds;
 };

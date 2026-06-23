@@ -1,6 +1,4 @@
 # Mainline checks when main, stable-*, or stream-nb-* advance (e.g. after merge).
-# Build presets: repo variable TEST_BUILD_TYPES JSON key postmerge (same schema as PR-check).
-# Build/test params: hardcoded below (same as main postcommit workflows).
 # Kill switch: CHECKS_SWITCH.postmerge, or legacy postcommit_<preset> keys per matrix entry.
 name: Postmerge
 
@@ -13,15 +11,14 @@ on:
     paths-ignore:
       - 'ydb/docs/**'
 
-env:
-  BUILD_TYPES_JSON: ${{ vars.TEST_BUILD_TYPES || '{"pr_check":["relwithdebinfo","release-asan"],"postmerge":["relwithdebinfo","release-asan"]}' }}
-
 jobs:
   build_and_test:
     strategy:
       fail-fast: false
       matrix:
-        build_preset: ${{ fromJSON(env.BUILD_TYPES_JSON).postmerge }}
+        build_preset:
+          - relwithdebinfo
+          - release-asan
     if: >-
       ${{
         vars.CHECKS_SWITCH != '' && (

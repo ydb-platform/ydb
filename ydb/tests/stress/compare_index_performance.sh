@@ -22,6 +22,7 @@
 #   --iterations N         Number of iterations per workload (default: 3)
 #   --warmup SECONDS       Warmup duration before each measured run (default: 30)
 #   --rows N               Number of rows in generated database (default: 100000)
+#   --threads N            Number of threads for load testing (default: 10)
 #   --main-feature-flag FLAG     Enable a feature flag for main branch (repeatable)
 #   --current-feature-flag FLAG  Enable a feature flag for current branch (repeatable)
 #   --main-table-service-config KEY=VALUE     Set table_service_config option for main branch (repeatable)
@@ -37,10 +38,11 @@ CURRENT_YDBD=""
 S3_REF="main"
 BUILD_PRESET="relwithdebinfo"
 WORKLOAD="all"
-TARGETS=10000
+TARGETS=1000
 ITERATIONS=3
 WARMUP=30
 ROWS=100000
+THREADS=10
 MAIN_FEATURE_FLAGS=()
 CURRENT_FEATURE_FLAGS=()
 MAIN_TABLE_SERVICE_CONFIG=()
@@ -60,6 +62,7 @@ while [[ $# -gt 0 ]]; do
         --iterations) ITERATIONS="$2"; shift 2 ;;
         --warmup) WARMUP="$2"; shift 2 ;;
         --rows) ROWS="$2"; shift 2 ;;
+        --threads) THREADS="$2"; shift 2 ;;
         --main-feature-flag) MAIN_FEATURE_FLAGS+=("$2"); shift 2 ;;
         --current-feature-flag) CURRENT_FEATURE_FLAGS+=("$2"); shift 2 ;;
         --main-table-service-config) MAIN_TABLE_SERVICE_CONFIG+=("$2"); shift 2 ;;
@@ -103,6 +106,7 @@ echo "Vector targets: $TARGETS"
 echo "Iterations: $ITERATIONS"
 echo "Warmup: ${WARMUP}s"
 echo "Rows: $ROWS"
+echo "Threads: $THREADS"
 if [[ ${#MAIN_FEATURE_FLAGS[@]} -gt 0 ]]; then
     echo "Main feature flags: ${MAIN_FEATURE_FLAGS[*]}"
 fi
@@ -318,6 +322,7 @@ if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "vector" ]]; then
             --test-param vector_targets="$TARGETS"
             --test-param vector_warmup="$WARMUP"
             --test-param vector_rows="$ROWS"
+            --test-param vector_threads="$THREADS"
         )
         if [[ -n "$MAIN_FEATURE_FLAGS_PARAM" ]]; then
             VECTOR_EXTRA_PARAMS+=(--test-param feature_flags="$MAIN_FEATURE_FLAGS_PARAM")
@@ -341,6 +346,7 @@ if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "vector" ]]; then
             --test-param vector_targets="$TARGETS"
             --test-param vector_warmup="$WARMUP"
             --test-param vector_rows="$ROWS"
+            --test-param vector_threads="$THREADS"
         )
         if [[ -n "$CURRENT_FEATURE_FLAGS_PARAM" ]]; then
             VECTOR_EXTRA_PARAMS+=(--test-param feature_flags="$CURRENT_FEATURE_FLAGS_PARAM")
@@ -393,7 +399,11 @@ if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "fulltext" ]]; then
         echo "=== Fulltext iteration $i/$ITERATIONS ==="
 
         # Run main
-        FULLTEXT_EXTRA_PARAMS=()
+        FULLTEXT_EXTRA_PARAMS=(
+            --test-param fulltext_rows="$ROWS"
+            --test-param fulltext_threads="$THREADS"
+            --test-param fulltext_targets="$TARGETS"
+        )
         if [[ -n "$MAIN_FEATURE_FLAGS_PARAM" ]]; then
             FULLTEXT_EXTRA_PARAMS+=(--test-param feature_flags="$MAIN_FEATURE_FLAGS_PARAM")
         fi
@@ -410,7 +420,11 @@ if [[ "$WORKLOAD" == "all" || "$WORKLOAD" == "fulltext" ]]; then
         echo "  $S3_REF iteration $i: $val Txs/Sec"
 
         # Run current
-        FULLTEXT_EXTRA_PARAMS=()
+        FULLTEXT_EXTRA_PARAMS=(
+            --test-param fulltext_rows="$ROWS"
+            --test-param fulltext_threads="$THREADS"
+            --test-param fulltext_targets="$TARGETS"
+        )
         if [[ -n "$CURRENT_FEATURE_FLAGS_PARAM" ]]; then
             FULLTEXT_EXTRA_PARAMS+=(--test-param feature_flags="$CURRENT_FEATURE_FLAGS_PARAM")
         fi

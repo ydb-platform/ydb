@@ -37,7 +37,7 @@ on:
       targets:
         description: 'Number of query vectors for vector select'
         required: false
-        default: '10000'
+        default: '1000'
       iterations:
         description: 'Number of iterations per workload (median reported)'
         required: false
@@ -46,6 +46,10 @@ on:
         description: 'Warmup duration in seconds before each measured run'
         required: false
         default: '30'
+      threads:
+        description: 'Number of threads for load testing'
+        required: false
+        default: '10'
       main_feature_flags:
         description: 'Comma-separated feature flags for main branch (e.g. enable_foo,enable_bar)'
         required: false
@@ -106,11 +110,12 @@ jobs:
             --duration ${{ inputs.duration || '600' }} \
             --build-preset ${{ inputs.build_preset || 'relwithdebinfo' }} \
             --ref ${{ inputs.ref || 'main' }} \
-            --targets ${{ inputs.targets || '10000' }} \
+            --targets ${{ inputs.targets || '1000' }} \
             --workload ${{ inputs.workload || 'all' }} \
             --rows ${{ inputs.rows || '100000' }} \
             --iterations ${{ inputs.iterations || '3' }} \
             --warmup ${{ inputs.warmup || '30' }} \
+            --threads ${{ inputs.threads || '10' }} \
             $MAIN_FLAG_ARGS \
             $CURRENT_FLAG_ARGS \
             $MAIN_TSC_ARGS \

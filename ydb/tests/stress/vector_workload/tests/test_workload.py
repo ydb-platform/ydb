@@ -30,6 +30,7 @@ class TestYdbVectorWorkload(StressFixture):
         targets = yatest.common.get_param('vector_targets', default='10000')
         warmup = yatest.common.get_param('vector_warmup', default='0')
         rows = yatest.common.get_param('vector_rows', default='100000')
+        threads = yatest.common.get_param('vector_threads', default='10')
 
         cmd = [
             yatest.common.binary_path(os.environ["YDB_WORKLOAD_PATH"]),
@@ -40,6 +41,7 @@ class TestYdbVectorWorkload(StressFixture):
             "--targets", targets,
             "--warmup", warmup,
             "--rows", rows,
+            "--threads", threads,
         ]
         if data_dir:
             cmd.extend(["--data-dir", data_dir])

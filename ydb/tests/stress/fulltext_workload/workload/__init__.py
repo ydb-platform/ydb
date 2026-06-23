@@ -15,11 +15,14 @@ MARKOV_MODEL_FILENAME = "markov_dict.tsv.gz"
 
 
 class YdbFulltextWorkload(WorkloadBase):
-    def __init__(self, endpoint, database, duration):
+    def __init__(self, endpoint, database, duration, rows=100000, targets=1000, threads=10):
         super().__init__(None, '', 'fulltext_workload', None)
         self.endpoint = endpoint
         self.database = database
         self.duration = str(duration)
+        self.rows = str(rows)
+        self.targets = str(targets)
+        self.threads = str(threads)
         self.tempdir = None
         self._unpack_resource('ydb_cli')
         self._download_model()
@@ -76,7 +79,7 @@ class YdbFulltextWorkload(WorkloadBase):
             self.get_command_prefix(subcmds=[
                 'import', 'generator',
                 '--model', self.model_path,
-                '--rows', '10000',
+                '--rows', self.rows,
             ])
         )
         # run select
@@ -85,7 +88,8 @@ class YdbFulltextWorkload(WorkloadBase):
                 'run', 'select',
                 '--model', self.model_path,
                 '--seconds', self.duration,
-                '--threads', '10',
+                '--threads', self.threads,
+                '--top-size', self.targets,
             ])
         )
         # clean

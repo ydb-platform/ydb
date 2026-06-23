@@ -10,7 +10,7 @@ namespace NKikimr::NBlobDepot {
             NKikimrBlobStorage::TPDiskSpaceColor::E color) {
         using TColor = NKikimrBlobStorage::TPDiskSpaceColor;
         switch (color) {
-            case TColor::GREEN: return NKikimrBlobDepot::COUNTER_SPACE_COLOR;
+            case TColor::GREEN: return NKikimrBlobDepot::COUNTER_SPACE_COLOR_GREEN;
             case TColor::CYAN: return NKikimrBlobDepot::COUNTER_SPACE_COLOR_CYAN;
             case TColor::LIGHT_YELLOW: return NKikimrBlobDepot::COUNTER_SPACE_COLOR_LIGHT_YELLOW;
             case TColor::YELLOW: return NKikimrBlobDepot::COUNTER_SPACE_COLOR_YELLOW;

@@ -233,6 +233,7 @@ namespace NKikimr::NBlobDepot {
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsSlowDown;
 
         NMonitoring::TDynamicCounterPtr S3Counters;
+        THashMap<std::pair<TString, int>, NMonitoring::TDynamicCounters::TCounterPtr> S3HttpErrorCounters;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsInFlightCounter;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsMaxInFlightCounter;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsPendingQueueSizeCounter;

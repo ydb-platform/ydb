@@ -19,7 +19,6 @@ enum ESimpleCounters {
     COUNTER_DECOMMIT_MODE_PREPARING = 11 [(NKikimr.CounterOpts) = {Name: "DecommitMode/Preparing"}];
     COUNTER_DECOMMIT_MODE_IN_PROGRESS = 12 [(NKikimr.CounterOpts) = {Name: "DecommitMode/InProgress"}];
     COUNTER_DECOMMIT_MODE_DONE = 13 [(NKikimr.CounterOpts) = {Name: "DecommitMode/Done"}];
-    COUNTER_SPACE_COLOR = 14 [(NKikimr.CounterOpts) = {Name: "SpaceColor/Green"}];
     COUNTER_APPROXIMATE_FREE_SPACE_SHARE = 15 [(NKikimr.CounterOpts) = {Name: "ApproximateFreeSpaceShare"}];
     COUNTER_S3_PUT_WRITES_IN_FLIGHT = 16 [(NKikimr.CounterOpts) = {Name: "S3/Put/WritesInFlight"}];
     COUNTER_S3_PUT_MAX_WRITES_IN_FLIGHT = 17 [(NKikimr.CounterOpts) = {Name: "S3/Put/MaxWritesInFlight"}];
@@ -27,6 +26,7 @@ enum ESimpleCounters {
     COUNTER_S3_DELETE_QUEUE_SIZE = 19 [(NKikimr.CounterOpts) = {Name: "S3/Delete/QueueSize"}];
     COUNTER_S3_DELETE_MAX_IN_FLIGHT = 20 [(NKikimr.CounterOpts) = {Name: "S3/Delete/MaxInFlight"}];
     COUNTER_AGENTS_CONNECTED = 21 [(NKikimr.CounterOpts) = {Name: "AgentsConnected"}];
+    COUNTER_SPACE_COLOR_GREEN = 14 [(NKikimr.CounterOpts) = {Name: "SpaceColor/Green"}];
     COUNTER_SPACE_COLOR_CYAN = 22 [(NKikimr.CounterOpts) = {Name: "SpaceColor/Cyan"}];
     COUNTER_SPACE_COLOR_LIGHT_YELLOW = 23 [(NKikimr.CounterOpts) = {Name: "SpaceColor/LightYellow"}];
     COUNTER_SPACE_COLOR_YELLOW = 24 [(NKikimr.CounterOpts) = {Name: "SpaceColor/Yellow"}];

@@ -133,9 +133,16 @@ namespace NKikimr::NBlobDepot {
         if (httpCode <= 0 || !S3Counters) {
             return;
         }
-        ++*S3Counters->GetSubgroup(operation, "httpCode")
-            ->GetSubgroup("code", ::ToString(httpCode))
-            ->GetCounter("", true);
+        const auto key = std::make_pair(operation, httpCode);
+        auto it = S3HttpErrorCounters.find(key);
+        if (it == S3HttpErrorCounters.end()) {
+            auto counter = S3Counters->GetSubgroup(operation, "httpCode")
+                ->GetSubgroup("code", ::ToString(httpCode))
+                ->GetCounter("", true);
+            it = S3HttpErrorCounters.emplace(key, counter).first;
+        }
+
+        ++*it->second;
     }
 
     IActor *CreateBlobDepotAgent(ui32 virtualGroupId, TIntrusivePtr<TBlobStorageGroupInfo> info, TActorId proxyId) {

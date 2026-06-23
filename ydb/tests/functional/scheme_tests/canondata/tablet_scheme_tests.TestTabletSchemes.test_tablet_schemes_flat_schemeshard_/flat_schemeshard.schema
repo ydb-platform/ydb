@@ -10338,11 +10338,9 @@
             {
                 "ColumnId": 4,
                 "ColumnName": "SerializedColumnNames",
-<<<<<<< HEAD
                 "ColumnType": "String"
-=======
                 "ColumnType": "Utf8"
->>>>>>> ac7870a1b50 (canonize test)
+                "ColumnType": "String"
             },
             {
                 "ColumnId": 5,

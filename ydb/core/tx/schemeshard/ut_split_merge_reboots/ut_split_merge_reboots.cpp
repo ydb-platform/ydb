@@ -1236,8 +1236,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
     }
 
     /* Test that multiple bloom filter prefixes are preserved during split and merge operations */
-    Y_UNIT_TEST(SplitMergePreservesMultipleBloomPrefixes) {
-        TTestWithReboots t;
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitMergePreservesMultipleBloomPrefixes, 2, 1, false) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
 
@@ -1260,11 +1259,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                     if (idx.GetName() == "idx_bloom_1") {
                         foundIdx1 = true;
                         UNIT_ASSERT_VALUES_EQUAL(idx.GetType(), NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+                        UNIT_ASSERT_VALUES_EQUAL(idx.GetState(), NKikimrSchemeOp::EIndexStateReady);
                         UNIT_ASSERT_VALUES_EQUAL(idx.KeyColumnNamesSize(), 1);
                         UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(0), "key1");
                     } else if (idx.GetName() == "idx_bloom_2") {
                         foundIdx2 = true;
                         UNIT_ASSERT_VALUES_EQUAL(idx.GetType(), NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+                        UNIT_ASSERT_VALUES_EQUAL(idx.GetState(), NKikimrSchemeOp::EIndexStateReady);
                         UNIT_ASSERT_VALUES_EQUAL(idx.KeyColumnNamesSize(), 3);
                         UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(0), "key1");
                         UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(1), "key2");

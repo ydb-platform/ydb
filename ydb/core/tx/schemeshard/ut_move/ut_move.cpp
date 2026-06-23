@@ -2052,30 +2052,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
             UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
             UNIT_ASSERT_DOUBLES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
 
-            // Check scheme objects exist (if migration has occurred)
-            if (table.TableIndexesSize() > 0) {
-                bool foundIdx1 = false, foundIdx2 = false;
-                for (const auto& idx : table.GetTableIndexes()) {
-                    if (idx.GetType() == NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
-                        if (idx.GetName() == "idx_bloom_1") {
-                            foundIdx1 = true;
-                            UNIT_ASSERT_VALUES_EQUAL(idx.KeyColumnNamesSize(), 1);
-                            UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(0), "key1");
-                        } else if (idx.GetName() == "idx_bloom_2") {
-                            foundIdx2 = true;
-                            UNIT_ASSERT_VALUES_EQUAL(idx.KeyColumnNamesSize(), 3);
-                            UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(0), "key1");
-                            UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(1), "key2");
-                            UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(2), "key3");
-                        }
-                    }
-                }
-                // If scheme objects exist, both should be found
-                if (foundIdx1 || foundIdx2) {
-                    UNIT_ASSERT(foundIdx1);
-                    UNIT_ASSERT(foundIdx2);
+            // Check scheme objects exist
+            UNIT_ASSERT_VALUES_EQUAL(table.TableIndexesSize(), 2);
+            bool foundIdx1 = false, foundIdx2 = false;
+            for (const auto& idx : table.GetTableIndexes()) {
+                UNIT_ASSERT_VALUES_EQUAL(idx.GetType(), NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+                UNIT_ASSERT_VALUES_EQUAL(idx.GetState(), NKikimrSchemeOp::EIndexStateReady);
+                if (idx.GetName() == "idx_bloom_1") {
+                    foundIdx1 = true;
+                    UNIT_ASSERT_VALUES_EQUAL(idx.KeyColumnNamesSize(), 1);
+                    UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(0), "key1");
+                } else if (idx.GetName() == "idx_bloom_3") {
+                    foundIdx2 = true;
+                    UNIT_ASSERT_VALUES_EQUAL(idx.KeyColumnNamesSize(), 3);
+                    UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(0), "key1");
+                    UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(1), "key2");
+                    UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(2), "key3");
                 }
             }
+            UNIT_ASSERT(foundIdx1);
+            UNIT_ASSERT(foundIdx2);
         };
 
         // Create source table with multiple bloom filter prefixes
@@ -2096,7 +2092,31 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         // Restart SchemeShard to trigger migration to scheme objects
         TActorId sender = runtime.AllocateEdgeActor();
         GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
-        runtime.SimulateSleep(TDuration::Seconds(5));
+
+        // Wait deterministically for migration to complete by polling for scheme objects
+        int retries = 10;
+        while (retries--) {
+            auto tableDescr = DescribePath(runtime, "/MyRoot/Table", true);
+            const auto& table = tableDescr.GetPathDescription().GetTable();
+
+            // Check if migration has completed (scheme objects exist)
+            if (table.TableIndexesSize() == 2) {
+                bool allReady = true;
+                for (const auto& idx : table.GetTableIndexes()) {
+                    if (idx.GetState() != NKikimrSchemeOp::EIndexStateReady) {
+                        allReady = false;
+                        break;
+                    }
+                }
+                if (allReady) {
+                    break; // Migration complete
+                }
+            }
+
+            // Dispatch events to allow migration to progress
+            TDispatchOptions opts;
+            runtime.DispatchEvents(opts, TDuration::MilliSeconds(100));
+        }
 
         // Verify source table has multiple bloom filter prefixes and scheme objects after migration
         checkBloomSchemeObjects("/MyRoot/Table");

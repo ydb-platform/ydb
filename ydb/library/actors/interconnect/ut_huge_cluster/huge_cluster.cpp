@@ -6,6 +6,7 @@
 
 #include <vector>
 
+
 Y_UNIT_TEST_SUITE(HugeCluster) {
     using namespace NActors;
 

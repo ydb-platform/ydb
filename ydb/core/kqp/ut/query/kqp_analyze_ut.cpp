@@ -14,6 +14,7 @@ using namespace NYdb;
 using namespace NTable;
 using namespace NYdb::NTable;
 
+
 Y_UNIT_TEST_SUITE(KqpAnalyze) {
 
 using namespace NStat;

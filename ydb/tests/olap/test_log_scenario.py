@@ -159,7 +159,7 @@ class TestLogScenario(object):
 
     @pytest.mark.parametrize('timestamp_deviation', [3 * 60, 365 * 24 * 60 * 2])  # [3 hours, 2 years]
     def test_log_deviation(self, timestamp_deviation: int):
-        """As per https://github.com/ydb-platform/ydb/issues/13530"""
+        """As per https://github.com/ydb-platform/ydb/issues/13530. """
 
         wait_time: int = int(get_external_param("wait_seconds", "3"))
         self.table_name: str = "log"

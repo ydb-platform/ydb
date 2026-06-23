@@ -13,6 +13,7 @@ from ydb.tests.library.predicates import blobstorage
 TIMEOUT_SECONDS = 480
 
 
+
 class TestReplicationAfterNodesRestart(object):
     def __setup_cluster(self, erasure):
         self.cluster = KiKiMR(configurator=KikimrConfigGenerator(erasure=erasure))

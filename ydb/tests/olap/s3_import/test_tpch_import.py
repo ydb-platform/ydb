@@ -47,7 +47,7 @@ class TestS3TpchImport(S3ImportTestBase):
         assert check_result.check_hash == lineitem_result.lineitem_hash
 
     def test_import_and_export(self):
-        test_bucket = "test_import_and_export_bucket"
+        test_bucket = "test_import_and_export_bucket"  # 123
         self.s3_client.create_bucket(test_bucket)
 
         access_key_id_secret_name = f"{test_bucket}_key_id"

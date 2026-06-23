@@ -2027,6 +2027,7 @@ It complements tests from basic_usage_ut.cpp etc, as we run them with direct rea
 
 class DirectReadWithServer : public TTopicTestFixture {};
 
+
 TEST_F(DirectReadWithServer, Devslice) {
     GTEST_SKIP() << "Skipping devslice test";
 

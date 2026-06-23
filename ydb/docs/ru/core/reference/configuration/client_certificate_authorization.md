@@ -65,18 +65,3 @@ client_certificate_authorization:
       - short_name: "CN"
         values: ["server1.internal.corp"]
 ```
-
-
-```yaml
-client_certificate_authorization:
-  request_client_certificate: true
-  client_certificate_definitions:
-    - member_groups: ["registerNode@cert"]
-      subject_dns:
-        suffixes: [".cluster1.ydb.company.net"]
-      subject_terms:
-      - short_name: "OU"
-        values: ["cluster1"]
-      - short_name: "O"
-        values: ["YDB"]
-```

@@ -10,22 +10,9 @@
 
 namespace optimizer_trace {
 
-struct GenerateOptions {
-    enum class Compression {
-        Auto,
-        Identity,
-        Brotli
-    };
-
-    Compression compression = Compression::Auto;
-    int compressionLevel = 6;
-};
-
 struct TracePageOptions {
-    GenerateOptions::Compression compression = GenerateOptions::Compression::Auto;
     int compressionLevel = 6;
     std::size_t maxBufferedRules = 100;
-    std::size_t maxBufferedBytes = 1024 * 1024;
     std::size_t maxBufferedPayloadBytes = 8 * 1024 * 1024;
     bool flushOnEverySubmit = false;
 };
@@ -121,9 +108,7 @@ public:
     Graph& addNode(const GraphNode& graphNode);
     GraphEdge& edge(const std::string& from, const std::string& to);
     Graph& addEdge(const GraphEdge& graphEdge);
-    Graph& layout(const std::string& direction,
-                  double rankSeparation = 0.0,
-                  double nodeSeparation = 0.0);
+    Graph& layout(const std::string& direction, double rankSeparation = 0.0, double nodeSeparation = 0.0);
     Graph& directed(bool value = true);
     Graph& undirected();
 
@@ -149,34 +134,18 @@ public:
     Widget& operator=(Widget&& other) noexcept;
 
     static Widget text(const std::string& title, const std::string& body);
-    static Widget unwrappedText(const std::string& title,
-                                const std::string& body,
-                                bool lineNumbers = false);
-    static Widget table(const std::string& title,
-                        const std::vector<std::pair<std::string, std::string>>& rows);
-    static Widget list(const std::string& title,
-                       const std::vector<std::string>& items,
-                       bool ordered = false);
-    static Widget list(const std::string& title,
-                       const std::vector<std::pair<std::string, std::string>>& items,
-                       bool ordered = false);
-    static Widget list(const std::string& title,
-                       std::initializer_list<std::pair<std::string, std::string>> items,
-                       bool ordered = false);
-    static Widget warning(const std::string& title,
-                          const std::string& message,
-                          const std::string& severity = "warning",
-                          const std::string& details = "");
+    static Widget unwrappedText(const std::string& title, const std::string& body, bool lineNumbers = false);
+    static Widget table(const std::string& title, const std::vector<std::pair<std::string, std::string>>& rows);
+    static Widget list(const std::string& title, const std::vector<std::string>& items, bool ordered = false);
+    static Widget list(const std::string& title, const std::vector<std::pair<std::string, std::string>>& items, bool ordered = false);
+    static Widget list(const std::string& title, std::initializer_list<std::pair<std::string, std::string>> items, bool ordered = false);
+    static Widget warning(const std::string& title, const std::string& message, const std::string& severity = "warning", const std::string& details = "");
     static Widget graph(const std::string& title, const Graph& graph);
     static Widget switcher(const std::string& title);
     static Widget switcher(const std::string& id, const std::string& title);
 
-    Widget& option(const std::string& id,
-                   const std::string& title,
-                   const std::vector<Widget>& widgets);
-    Widget& option(const std::string& id,
-                   const std::string& title,
-                   std::initializer_list<Widget> widgets);
+    Widget& option(const std::string& id, const std::string& title, const std::vector<Widget>& widgets);
+    Widget& option(const std::string& id, const std::string& title, std::initializer_list<Widget> widgets);
     Widget& defaultOption(const std::string& id);
     Widget& target(const Target& target);
     Widget& targets(const std::vector<Target>& refs);
@@ -232,9 +201,7 @@ public:
          const std::string& fullLabel);
 
     Field& field(const std::string& key, const std::string& value);
-    Node& child(const std::string& id,
-                const std::string& operatorName,
-                const std::string& fullLabel);
+    Node& child(const std::string& id, const std::string& operatorName, const std::string& fullLabel);
     Node& child(const Node& node);
 
     std::size_t childCount() const;
@@ -376,11 +343,10 @@ public:
     void defineFields(const std::vector<std::pair<std::string, std::string>>& fields);
     void pinFields(const std::vector<std::string>& keys);
     void addPinnedFieldPreset(const std::string& label, const std::vector<std::string>& keys);
-    void definePinnedFieldPresets(
-        const std::vector<std::pair<std::string, std::vector<std::string>>>& presets);
+    void definePinnedFieldPresets(const std::vector<std::pair<std::string, std::vector<std::string>>>& presets);
+    void addDiffFieldPreset(const std::string& label, const std::vector<std::string>& keys);
+    void defineDiffFieldPresets(const std::vector<std::pair<std::string, std::vector<std::string>>>& presets);
     Stage& stage(const std::string& name);
-    GenerateResult generateHTML(const std::string& filename,
-                                const GenerateOptions& options = GenerateOptions()) const;
 
 private:
     friend class TracePage;
@@ -392,6 +358,7 @@ private:
     std::vector<std::pair<std::string, std::string>> fieldDefinitions_;
     std::vector<std::string> pinnedFields_;
     std::vector<std::pair<std::string, std::vector<std::string>>> pinnedFieldPresets_;
+    std::vector<std::pair<std::string, std::vector<std::string>>> diffFieldPresets_;
 };
 
 class ITracePageSink {
@@ -400,17 +367,15 @@ public:
 
     virtual GenerateResult Reset(const std::string& content) = 0;
     virtual GenerateResult Append(const std::string& content) = 0;
+    virtual GenerateResult WriteInitial(const std::string& shell, const std::string& firstBlock);
 };
 
 class TracePage {
 public:
     TracePage();
-    explicit TracePage(const std::string& filename,
-                       const TracePageOptions& options = TracePageOptions(),
-                       bool shellAlreadyWritten = false);
-    explicit TracePage(std::shared_ptr<ITracePageSink> sink,
-                       const TracePageOptions& options = TracePageOptions(),
-                       bool shellAlreadyWritten = false);
+    explicit TracePage(const std::string& filename, const TracePageOptions& options = TracePageOptions(), bool shellAlreadyWritten = false);
+    explicit TracePage(std::shared_ptr<ITracePageSink> sink, const TracePageOptions& options = TracePageOptions(), bool shellAlreadyWritten = false);
+
     ~TracePage();
     TracePage(const TracePage& other);
     TracePage& operator=(const TracePage& other);
@@ -420,8 +385,6 @@ public:
     Trace& trace(const std::string& title);
     GenerateResult submit(Trace::Tile& tile);
     GenerateResult flush();
-    GenerateResult generateHTML(const std::string& filename,
-                                const GenerateOptions& options = GenerateOptions()) const;
 
 private:
     friend class detail::Emitter;

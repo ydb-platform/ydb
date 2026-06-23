@@ -1296,21 +1296,21 @@ function emptyStagesRowHtml() {
            '</span></div>';
 }
 
-function nodeColumnsSectionHtml() {
-    return '<div class="settings-section node-columns-section" ' +
-           'data-settings-section="node-columns" hidden>' +
-           '<button type="button" class="settings-overflow-row node-columns-menu-button" ' +
-           'id="node-columns-button" data-trace-action="toggle-node-columns-menu" ' +
-           'aria-expanded="false" aria-controls="node-columns-menu">' +
-           '<span class="settings-overflow-label">Pinned columns</span>' +
-           '<span class="settings-overflow-value" id="node-columns-summary">Default</span>' +
+function pinnedFieldsSectionHtml() {
+    return '<div class="settings-section pinned-fields-section" ' +
+           'data-settings-section="pinned-fields" hidden>' +
+           '<button type="button" class="settings-overflow-row pinned-fields-menu-button" ' +
+           'id="pinned-fields-button" data-trace-action="toggle-pinned-fields-menu" ' +
+           'aria-expanded="false" aria-controls="pinned-fields-menu">' +
+           '<span class="settings-overflow-label">Pinned fields</span>' +
+           '<span class="settings-overflow-value" id="pinned-fields-summary">Default</span>' +
            '<span class="settings-overflow-caret" aria-hidden="true"></span></button>' +
-           '<div class="node-columns-menu" id="node-columns-menu" hidden>' +
-           '<input type="search" class="node-columns-filter" id="node-columns-filter" ' +
-           'data-trace-action="node-columns-filter" placeholder="Filter fields" ' +
+           '<div class="pinned-fields-menu" id="pinned-fields-menu" hidden>' +
+           '<input type="search" class="pinned-fields-filter" id="pinned-fields-filter" ' +
+           'data-trace-action="pinned-fields-filter" placeholder="Filter fields" ' +
            'autocomplete="off" spellcheck="false" aria-label="Filter fields" hidden>' +
-           '<div class="node-columns-list" id="node-columns-list"></div>' +
-           '<div class="node-columns-actions" hidden></div></div></div>';
+           '<div class="pinned-fields-list" id="pinned-fields-list"></div>' +
+           '<div class="pinned-fields-actions" hidden></div></div></div>';
 }
 
 function diffFieldsSectionHtml() {
@@ -1335,7 +1335,10 @@ function optimizerTraceAppShellHtml() {
            '<div class="left-controls">' +
            '<h1 class="trace-title" id="trace-title">RBO Trace</h1>' +
            '<span class="trace-picker-wrap" id="trace-picker-wrap" hidden>' +
-           '<select class="trace-picker" id="trace-picker" data-trace-action="set-active-trace" hidden></select>' +
+           '<button type="button" class="trace-picker" id="trace-picker-button" ' +
+           'data-trace-action="toggle-trace-picker-menu" aria-expanded="false" ' +
+           'aria-controls="trace-picker-menu" hidden></button>' +
+           '<div class="trace-picker-menu" id="trace-picker-menu" hidden></div>' +
            '</span></div>' +
            '<div class="center-controls">' +
            '<button class="ctrl-btn cycle-btn" id="cycle-button" ' +
@@ -1399,10 +1402,10 @@ function optimizerTraceAppShellHtml() {
            '<div class="settings-menu-title">Details</div>' +
            emptyStagesRowHtml() +
            detailBulkRowHtml('fields', 'Fields', 'fields') +
-           detailBulkRowHtml('pinned', 'Pinned columns', 'pinned columns') +
+           detailBulkRowHtml('pinned', 'Pinned fields', 'pinned fields') +
            detailBulkRowHtml('info', 'Information', 'information') +
            '</div>' +
-           nodeColumnsSectionHtml() +
+           pinnedFieldsSectionHtml() +
            diffFieldsSectionHtml() +
            '<div class="settings-section">' +
            '<div class="settings-menu-title">Appearance</div>' +
@@ -2335,12 +2338,25 @@ function renderTraceShell() {
     refreshTraceScrollbarGeometry(false);
 }
 
-function tracePickerOptionsHtml() {
+function tracePickerMenuHtml() {
     var html = '';
     var traces = traceDataTraces();
+    var selection = activeTraceSelection();
     for (var i = 0; i < traces.length; i++) {
         var trace = normalizeTraceData(traces[i], i);
-        html += '<option value="' + i + '">' + htmlEscape(trace.title) + '</option>';
+        var order = selection.indexOf(i);
+        var selected = order >= 0;
+        var singleSelected = selected && selection.length <= 1;
+        html += '<div class="trace-picker-option' + (selected ? ' selected' : '') + '">' +
+            '<button type="button" class="trace-picker-order' + (selected ? ' selected' : '') + '" ' +
+            'data-trace-action="toggle-trace-selection" data-trace-index="' + i + '" ' +
+            'aria-label="' + htmlEscape(selected ? 'Hide trace ' + trace.title : 'Show trace ' + trace.title) + '"' +
+            (singleSelected ? ' aria-disabled="true"' : '') + '>' +
+            (selected ? String(order + 1) : '') + '</button>' +
+            '<button type="button" class="trace-picker-option-title" ' +
+            'data-trace-action="set-active-trace-only" data-trace-index="' + i + '">' +
+            htmlEscape(trace.title) + '</button>' +
+            '</div>';
     }
     return html;
 }
@@ -2403,9 +2419,12 @@ function updateTracePickerPreferredWidth(picker, wrap, traces) {
 function syncTracePicker() {
     if (!hasDOM()) return;
     var title = document.getElementById('trace-title');
-    var picker = document.getElementById('trace-picker');
+    var button = document.getElementById('trace-picker-button');
+    var menu = document.getElementById('trace-picker-menu');
     var wrap = document.getElementById('trace-picker-wrap');
     var traces = traceDataTraces();
+    var selection = activeTraceSelection();
+    var selectionKey = traceSelectionKey(selection);
     if (title) {
         title.textContent = 'RBO Trace';
         title.hidden = false;
@@ -2416,15 +2435,17 @@ function syncTracePicker() {
             wrap.parentElement.classList.toggle('trace-picker-active', traces.length > 1);
         }
     }
-    if (!picker) return;
-
-    if (picker.__traceOptionCount !== traces.length) {
-        picker.innerHTML = tracePickerOptionsHtml();
-        picker.__traceOptionCount = traces.length;
+    if (button) {
+        button.hidden = traces.length <= 1;
+        button.textContent = traceSelectionTitle(selection, traces);
+        button.title = button.textContent;
     }
-    picker.hidden = traces.length <= 1;
-    picker.value = String(traceRuntime().activeTraceIndex);
-    updateTracePickerPreferredWidth(picker, wrap, traces);
+    if (menu && (menu.__traceOptionCount !== traces.length || menu.__traceSelectionKey !== selectionKey)) {
+        menu.innerHTML = tracePickerMenuHtml();
+        menu.__traceOptionCount = traces.length;
+        menu.__traceSelectionKey = selectionKey;
+    }
+    updateTracePickerPreferredWidth(button, wrap, traces);
 }
 
 function resetTraceScroll() {

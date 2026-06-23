@@ -69,27 +69,29 @@ class WorkloadBloomFilterIndex(WorkloadBase):
         return self.client.query(sql, False)
 
     def _verify_scheme_objects(self, table_path, expected_indexes):
-        """Verify that bloom filter indexes exist as scheme objects"""
-        try:
-            # Query to check table schema
-            schema_query = f"SHOW CREATE TABLE `{table_path}`;"
-            result = self.client.query(schema_query, True)
+        """Verify that bloom filter indexes exist as scheme objects."""
+        schema_query = f"SHOW CREATE TABLE `{table_path}`;"
+        result_sets = self.client.query(schema_query, True)
 
-            if not result or not result[0].rows or not result[0].rows[0]:
-                logger.warning(f"Could not verify scheme objects for {table_path}")
-                return
+        if not (result_sets and result_sets[0].rows and result_sets[0].rows[0]):
+            raise AssertionError(f"SHOW CREATE TABLE `{table_path}` returned no data.")
 
-            create_query = result[0].rows[0][0]
+        create_query_column_index = -1
+        for i, col in enumerate(result_sets[0].columns):
+            if col.name == "CreateQuery":
+                create_query_column_index = i
+                break
 
-            # Verify each expected index exists in the schema
-            for index_name in expected_indexes:
-                if index_name not in create_query:
-                    logger.warning(f"Expected bloom filter index '{index_name}' not found in schema")
-                else:
-                    logger.info(f"Verified scheme object '{index_name}' exists")
+        if create_query_column_index == -1:
+            raise AssertionError(f"Column 'CreateQuery' not found in SHOW CREATE TABLE result for {table_path}.")
 
-        except Exception as e:
-            logger.warning(f"Failed to verify scheme objects: {e}")
+        create_query = result_sets[0].rows[0][create_query_column_index]
+
+        missing = [index_name for index_name in expected_indexes if index_name not in create_query]
+        if missing:
+            raise AssertionError(
+                f"Expected bloom filter indexes not found in schema for {table_path}: {', '.join(missing)}"
+            )
 
     def _check_loop(self, table_path, num_key_columns):
         key_col_names = [f"k{i}" for i in range(num_key_columns)]

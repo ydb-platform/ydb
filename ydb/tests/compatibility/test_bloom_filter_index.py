@@ -108,11 +108,16 @@ class TestBloomFilterIndex(RestartToAnotherVersionFixture):
 
         create_query = schema_after[0].rows[0][create_query_column_index]
 
-        # Verify both bloom filter scheme objects survived with complete definitions
-        assert "INDEX idx_bloom_1 LOCAL USING bloom_filter ON (key1) WITH (false_positive_probability=0.05)" in create_query, \
-            f"Bloom filter scheme object 'idx_bloom_1' not found with complete definition after version change"
-        assert "INDEX idx_bloom_2 LOCAL USING bloom_filter ON (key1, key2) WITH (false_positive_probability=0.01)" in create_query, \
-            f"Bloom filter scheme object 'idx_bloom_2' not found with complete definition after version change"
+        # Verify both bloom filter scheme objects survived with complete definitions.
+        # Normalize whitespace/backticks because SHOW CREATE TABLE formats identifiers with backticks.
+        normalized = "".join(create_query.split()).replace("`", "")
+
+        assert (
+            "INDEXidx_bloom_1LOCALUSINGbloom_filterON(key1)WITH(false_positive_probability=0.05)" in normalized
+        ), "Bloom filter scheme object 'idx_bloom_1' not found with complete definition after version change"
+        assert (
+            "INDEXidx_bloom_2LOCALUSINGbloom_filterON(key1,key2)WITH(false_positive_probability=0.01)" in normalized
+        ), "Bloom filter scheme object 'idx_bloom_2' not found with complete definition after version change"
 
         # Data should survive version change, point lookup should work
         result_after = self._execute(f"SELECT * FROM `{self.table_name}` WHERE key1 = 1;")

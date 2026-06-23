@@ -1,5 +1,4 @@
 name: PR-check
-# release-tsan / release-msan: separate jobs below, only when PR has run-*-tests labels (not in default matrix).
 on:
   pull_request_target:
     branches:
@@ -229,56 +228,23 @@ jobs:
     name: Build and test ${{ matrix.build_preset }}
     steps:
       - uses: ./.github/actions/ya_ci_core_build_test
+        if: |
+          (matrix.build_preset == 'release-asan') ||
+          (matrix.build_preset == 'relwithdebinfo') ||
+
+            (matrix.build_preset == 'release-tsan' &&
+            contains(github.event.pull_request.labels.*.name, 'run-tsan-tests') ||
+            contains(github.event.pull_request.labels.*.name, 'run-sanitizer-tests')) ||
+
+            (matrix.build_preset == 'release-msan' &&
+            contains(github.event.pull_request.labels.*.name, 'run-msan-tests') ||
+            contains(github.event.pull_request.labels.*.name, 'run-sanitizer-tests'))
         with:
           build_preset: ${{ matrix.build_preset }}
           build_target: ${{ matrix.build_target }}
           checkout_ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
           test_threads: ${{ matrix.threads_count }}
           test_size: ${{ matrix.test_size }}
-  build_and_test_tsan:
-    needs:
-      - check-running-allowed
-    if: >-
-      ${{
-        needs.check-running-allowed.outputs.result == 'true' &&
-        needs.check-running-allowed.outputs.commit_sha != '' &&
-        (
-          contains(github.event.pull_request.labels.*.name, 'run-tsan-tests') ||
-          contains(github.event.pull_request.labels.*.name, 'run-sanitizer-tests')
-        )
-      }}
-    runs-on: [ self-hosted, auto-provisioned, build-preset-release-tsan ]
-    name: Build and test release-tsan
-    steps:
-      - uses: ./.github/actions/ya_ci_core_build_test
-        with:
-          build_preset: release-tsan
-          build_target: "ydb/"
-          checkout_ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
-          test_threads: '52'
-          test_size: small,medium
-  build_and_test_msan:
-    needs:
-      - check-running-allowed
-    if: >-
-      ${{
-        needs.check-running-allowed.outputs.result == 'true' &&
-        needs.check-running-allowed.outputs.commit_sha != '' &&
-        (
-          contains(github.event.pull_request.labels.*.name, 'run-msan-tests') ||
-          contains(github.event.pull_request.labels.*.name, 'run-sanitizer-tests')
-        )
-      }}
-    runs-on: [ self-hosted, auto-provisioned, build-preset-release-msan ]
-    name: Build and test release-msan
-    steps:
-      - uses: ./.github/actions/ya_ci_core_build_test
-        with:
-          build_preset: release-msan
-          build_target: "ydb/"
-          checkout_ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
-          test_threads: '52'
-          test_size: small,medium
   update_integrated_status:
     runs-on: [self-hosted, tiny-worker]
     needs: build_and_test

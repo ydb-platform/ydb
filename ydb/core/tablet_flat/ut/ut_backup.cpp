@@ -246,6 +246,28 @@ struct TTxWriteValue : public ITransaction {
     }
 }; // TTxWriteValue
 
+struct TTxWriteKeyOnly : public ITransaction {
+    const TActorId Owner;
+    const ui64 Key;
+
+    TTxWriteKeyOnly(TActorId owner, ui64 key)
+        : Owner(owner)
+        , Key(key)
+    {}
+
+    bool Execute(TTransactionContext &txc, const TActorContext &) override {
+        NIceDb::TNiceDb db(txc.DB);
+
+        db.Table<TSchema::Data>().Key(Key).Update();
+
+        return true;
+    }
+
+    void Complete(const TActorContext &ctx) override {
+        ctx.Send(Owner, new NFake::TEvResult);
+    }
+}; // TTxWriteKeyOnly
+
 struct TTxWriteRange : public ITransaction {
     const TActorId Owner;
     const ui64 KeyStart;
@@ -940,6 +962,11 @@ struct TEnv : public TMyEnvBase {
 
     void WriteValue(ui64 key, ui32 value) {
         SendAsync(new NFake::TEvExecute{ new TTxWriteValue(Edge, key, value) });
+        WaitFor<NFake::TEvResult>();
+    }
+
+    void WriteKeyOnly(ui64 key) {
+        SendAsync(new NFake::TEvExecute{ new TTxWriteKeyOnly(Edge, key) });
         WaitFor<NFake::TEvResult>();
     }
 
@@ -4028,6 +4055,47 @@ Y_UNIT_TEST_SUITE(Backup) {
             auto wrongUtf8 = env.ReadAllTypesRow(WRONG_UTF8_KEY);
             UNIT_ASSERT_VALUES_EQUAL(*wrongUtf8.StringVal, wrongUtf8Val);
             UNIT_ASSERT_VALUES_EQUAL(*wrongUtf8.Utf8Val, wrongUtf8Val);
+        };
+
+        env.WaitChangelogFlush();
+        auto changelogBackup = env.GetLastBackupPath();
+
+        Cerr << "...restarting tablet that data goes to snapshot" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+        auto snapshotBackup = env.GetLastBackupPath();
+
+        assertState();
+        env.RestoreBackup(changelogBackup, TestTabletFlags);
+        assertState();
+
+        assertState();
+        env.RestoreBackup(snapshotBackup, TestTabletFlags);
+        assertState();
+    }
+
+    Y_UNIT_TEST(KeyOnlyRow) {
+        TEnv env;
+
+        Cerr << "...starting tablet" << Endl;
+        env.FireDummyTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...initing schema" << Endl;
+        env.InitSchema();
+
+        Cerr << "...restarting tablet" << Endl;
+        env.RestartTablet(TestTabletFlags);
+        env.WaitFor<NFake::TEvSnapshotBackedUp>();
+
+        Cerr << "...inserting row with only key column" << Endl;
+        env.WriteKeyOnly(7);
+
+        auto assertState = [&env]() {
+            UNIT_ASSERT_VALUES_EQUAL(env.CountRows<TSchema::Data>(), 1);
+
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::Value>(7), 0);
+            UNIT_ASSERT_VALUES_EQUAL(env.ReadValue<TSchema::Data::DefaultValue>(7), 42);
         };
 
         env.WaitChangelogFlush();

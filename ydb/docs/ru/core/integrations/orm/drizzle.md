@@ -115,17 +115,19 @@ await db
 Транзакции запускаются через `db.transaction()`. Поддерживаются режимы доступа и уровни изоляции {{ ydb-short-name }}, а также флаг идемпотентности для автоматических повторов при сетевых ошибках.
 
 ```typescript
+import { eq } from 'drizzle-orm'
 import { TransactionRollbackError } from 'drizzle-orm/errors'
 
 try {
   await db.transaction(
     async (tx) => {
-      await tx.insert(users).values({ id: 4, email: 'delta@example.com' }).execute()
-
-      const user = await tx.select().from(users).where(eq(users.id, 4)).execute()
-      if (user.length === 0) {
+      // Проверяем предусловие перед изменением данных
+      const inviter = await tx.select().from(users).where(eq(users.id, 1)).execute()
+      if (inviter.length === 0) {
         tx.rollback()
       }
+
+      await tx.insert(users).values({ id: 4, email: 'delta@example.com' }).execute()
     },
     {
       accessMode: 'read write',

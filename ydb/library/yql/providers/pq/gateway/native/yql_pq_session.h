@@ -45,7 +45,7 @@ private:
     const NPq::NConfigurationManager::IConnections::TPtr CmConnections;
     const NYdb::TDriver YdbDriver;
     const TPqClusterConfigsMapPtr ClusterConfigs;
-    const IStructuredTokenCredentialsFactory::TPtr CredentialsProvider;
+    const IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     const IPqLocalClientFactory::TPtr LocalTopicClientFactory;
 
     TMutex Mutex;

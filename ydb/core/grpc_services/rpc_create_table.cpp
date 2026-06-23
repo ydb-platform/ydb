@@ -137,6 +137,207 @@ private:
             }
         }
 
+<<<<<<< HEAD
+=======
+        // Assign temporary IDs to columns so we can reference them in indexes.
+        // Keep nextColId monotonic and collision-free even if explicit ids are non-monotonic.
+        ui32 nextColId = 1;
+        THashSet<ui32> usedColIds;
+        THashMap<TString, ui32> colNameToId;
+        for (auto& col : *schema->MutableColumns()) {
+            if (col.HasId()) {
+                if (!usedColIds.insert(col.GetId()).second) {
+                    issues.AddIssue(NYql::TIssue(TStringBuilder() << "Duplicate column ID " << col.GetId() << " for column '" << col.GetName() << "'"));
+                    code = StatusIds::BAD_REQUEST;
+                    return false;
+                }
+                nextColId = Max(nextColId, col.GetId() + 1);
+                continue;
+            }
+
+            while (usedColIds.contains(nextColId)) {
+                ++nextColId;
+            }
+
+            col.SetId(nextColId);
+            usedColIds.insert(nextColId);
+            ++nextColId;
+        }
+
+        for (const auto& col : schema->GetColumns()) {
+            colNameToId[col.GetName()] = col.GetId();
+        }
+        schema->SetNextColumnId(nextColId);
+
+        // Validate index names: check for empty and duplicate names
+        THashSet<TString> indexNames;
+        for (const auto& index : req.indexes()) {
+            if (index.name().empty()) {
+                issues.AddIssue(NYql::TIssue("Index name cannot be empty"));
+                code = StatusIds::BAD_REQUEST;
+                return false;
+            }
+            if (!indexNames.insert(index.name()).second) {
+                issues.AddIssue(NYql::TIssue(TStringBuilder() << "Duplicate index name: " << index.name()));
+                code = StatusIds::BAD_REQUEST;
+                return false;
+            }
+        }
+
+        ui32 nextIndexId = 1;
+        for (const auto& index : req.indexes()) {
+            auto* olapIndex = schema->AddIndexes();
+            olapIndex->SetId(nextIndexId++);
+            olapIndex->SetName(index.name());
+            switch (index.type_case()) {
+                case Ydb::Table::TableIndex::kLocalBloomFilterIndex: {
+                    if (!AppData()->FeatureFlags.GetEnableLocalBloomFilterIndex() ||
+                        !AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
+                        issues.AddIssue(NYql::TIssue("Local bloom filter index is not enabled"));
+                        code = StatusIds::BAD_REQUEST;
+                        return false;
+                    }
+                    olapIndex->SetClassName("BLOOM_FILTER");
+                    auto* bloom = olapIndex->MutableBloomFilter();
+                    if (index.local_bloom_filter_index().has_false_positive_probability()) {
+                        const double fpp = index.local_bloom_filter_index().false_positive_probability();
+                        if (auto c = NKikimr::NLocalIndex::NBloom::TConstants::ValidateParams(fpp, NKikimr::NLocalIndex::NBloom::NDefaults::NGrammSize);
+                            c.IsFail())
+                        {
+                            issues.AddIssue(NYql::TIssue(TStringBuilder() << "Invalid bloom filter index '" << index.name() << "' parameters: " << c.GetErrorMessage()));
+                            code = StatusIds::BAD_REQUEST;
+                            return false;
+                        }
+                        bloom->SetFalsePositiveProbability(fpp);
+                    }
+                    if (index.index_columns().size() != 1) {
+                        issues.AddIssue(NYql::TIssue("Bloom filter index supports exactly one column"));
+                        code = StatusIds::BAD_REQUEST;
+                        return false;
+                    }
+                    {
+                        auto it = colNameToId.find(index.index_columns(0));
+                        if (it == colNameToId.end()) {
+                            issues.AddIssue(NYql::TIssue(TStringBuilder() << "Unknown column '" << index.index_columns(0) << "' in index '" << index.name() << "'"));
+                            code = StatusIds::BAD_REQUEST;
+                            return false;
+                        }
+                        bloom->AddColumnIds(it->second);
+                    }
+                    break;
+                }
+                case Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex: {
+                    if (!AppData()->FeatureFlags.GetEnableLocalBloomNgramFilterIndex() ||
+                        !AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
+                        issues.AddIssue(NYql::TIssue("Local bloom ngram filter index is not enabled"));
+                        code = StatusIds::BAD_REQUEST;
+                        return false;
+                    }
+                    olapIndex->SetClassName("BLOOM_NGRAMM_FILTER");
+                    auto* ngram = olapIndex->MutableBloomNGrammFilter();
+                    const auto& idxProto = index.local_bloom_ngram_filter_index();
+
+                    using namespace NKikimr::NLocalIndex::NBloom;
+                    TRequestSettings request;
+                    if (idxProto.has_false_positive_probability()) {
+                        request.FalsePositiveProbability = idxProto.false_positive_probability();
+                    }
+                    if (idxProto.ngram_size()) {
+                        request.NGrammSize = idxProto.ngram_size();
+                    }
+                    if (idxProto.has_case_sensitive()) {
+                        request.CaseSensitive = idxProto.case_sensitive();
+                    }
+                    if (auto c = TConstants::ValidateParams(
+                            request.ResolvedFalsePositiveProbability(),
+                            request.ResolvedNGrammSize());
+                        c.IsFail())
+                    {
+                        issues.AddIssue(NYql::TIssue(TStringBuilder() << "Invalid bloom ngram filter index '" << index.name() << "' parameters: " << c.GetErrorMessage()));
+                        code = StatusIds::BAD_REQUEST;
+                        return false;
+                    }
+                    request.SerializeToProtoFilterRaw(*ngram);
+
+                    if (index.index_columns().size() != 1) {
+                        issues.AddIssue(NYql::TIssue("Bloom NGram filter index supports exactly one column"));
+                        code = StatusIds::BAD_REQUEST;
+                        return false;
+                    }
+                    {
+                        auto it = colNameToId.find(index.index_columns(0));
+                        if (it == colNameToId.end()) {
+                            issues.AddIssue(NYql::TIssue(TStringBuilder() << "Unknown column '" << index.index_columns(0) << "' in index '" << index.name() << "'"));
+                            code = StatusIds::BAD_REQUEST;
+                            return false;
+                        }
+                        ngram->SetColumnId(it->second);
+                    }
+                    break;
+                }
+                case Ydb::Table::TableIndex::kLocalMinMaxIndex: {
+                    if (!AppData()->FeatureFlags.GetEnableLocalMinMaxIndex()) {
+                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage);
+                        issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::FeatureFlagDisabledErrorMessage));
+                        code = StatusIds::BAD_REQUEST;
+                        return false;
+                    } 
+
+                    if (!AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
+                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::SchemeObjectFeatureFlagDisabledErrorMessage);
+                        issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::SchemeObjectFeatureFlagDisabledErrorMessage));
+                        code = StatusIds::BAD_REQUEST;
+                        return false;
+                    }
+
+                    olapIndex->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
+                    auto* min_max = olapIndex->MutableMinMaxIndex();
+                    if (index.index_columns().size() != 1) {
+                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns()));
+                        issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns())));
+                        code = StatusIds::BAD_REQUEST;
+                        return false;
+                    }
+                    const NKikimrSchemeOp::TOlapColumnDescription* columnDesc = nullptr;
+
+                    for (auto& column: schema->GetColumns()) {
+                        if (column.GetName() == index.index_columns(0)){
+                            columnDesc = &column;
+                            break;
+                        }
+                    }
+
+                    if (!columnDesc) {
+                        TVector<TString> tableColumnNames;
+                        for (const auto& col: schema->GetColumns()) {
+                            tableColumnNames.push_back(col.GetName());
+                        }
+                        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::GRPC_PROXY, NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames));
+                        issues.AddIssue(NYql::TIssue(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames)));
+                        code = StatusIds::BAD_REQUEST;
+                        return false;
+                    }
+
+                    auto it = colNameToId.find(index.index_columns(0));
+                    min_max->SetColumnId(it->second);
+                    NKikimr::NOlap::NIndexes::NMinMax::SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(*olapIndex, columnDesc->GetType());
+                    break;
+                }                
+                case Ydb::Table::TableIndex::TYPE_NOT_SET:
+                case Ydb::Table::TableIndex::kGlobalIndex:
+                case Ydb::Table::TableIndex::kGlobalAsyncIndex:
+                case Ydb::Table::TableIndex::kGlobalUniqueIndex:
+                case Ydb::Table::TableIndex::kGlobalVectorKmeansTreeIndex:
+                case Ydb::Table::TableIndex::kGlobalFulltextPlainIndex:
+                case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex:
+                case Ydb::Table::TableIndex::kGlobalJsonIndex:
+                    issues.AddIssue(NYql::TIssue("This index is not supported for column tables"));
+                    code = StatusIds::BAD_REQUEST;
+                    return false;
+            }
+        }
+
+>>>>>>> c1b26e59009 (use most appropriate storage type when creating min_max index through yql ddl (#43731))
         return true;
     }
 

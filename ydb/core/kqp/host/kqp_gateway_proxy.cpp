@@ -639,12 +639,23 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                     error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.DataColumns);
                     return false;
                 }
-                auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
-                if (columnIdIt == columnIdsByName.end()) {
+                const NKikimrSchemeOp::TOlapColumnDescription* columnDesc = nullptr;
+                for (auto& column: tableDesc.GetSchema().GetColumns()) {
+                    if (column.GetName() == index.KeyColumns.front()) {
+                        columnDesc = &column;
+                        break;
+                    }
+                }
+                if (!columnDesc) {
                     code = Ydb::StatusIds::BAD_REQUEST;
-                    error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.KeyColumns.front());
+                    TVector<TString> tableColumnNames;
+                    for (const auto& col: tableDesc.GetSchema().GetColumns()) {
+                        tableColumnNames.push_back(col.GetName());
+                    }
+                    error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.KeyColumns.front(), tableColumnNames);
                     return false;
                 }
+                auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
 
                 auto* upsert = tableDesc.MutableSchema()->AddIndexes();
                 upsert->SetId(nextEntityId++);
@@ -652,7 +663,7 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                 upsert->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
                 auto* minmax = upsert->MutableMinMaxIndex();
                 minmax->SetColumnId(columnIdIt->second);
-
+                NKikimr::NOlap::NIndexes::NMinMax::SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(*upsert, columnDesc->GetType());
                 break;
             }
             default:
@@ -2442,12 +2453,13 @@ public:
             if (cluster != SessionCtx->GetCluster()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
             }
+            auto metadata = SessionCtx->Tables().GetTable(cluster, req.path()).Metadata;
 
             NKikimrSchemeOp::TModifyScheme schemeTx;
 
             Ydb::StatusIds::StatusCode code;
             TString error;
-            if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, code, error)) {
+            if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, metadata, code, error)) {
                 IKqpGateway::TGenericResult errResult;
                 errResult.AddIssue(NYql::TIssue(error));
                 errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));

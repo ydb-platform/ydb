@@ -236,6 +236,59 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMaxWithBSStorage)).Execute(settings);
     }
 
+    Y_UNIT_TEST(AlterIndexOnNotExistingTableResultsInError, EUseQueryService, ELocalIndexAsSchemeObject) {
+        const bool useQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool localIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableLocalMinMaxIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(localIndexAsSchemeObject);
+        TKikimrRunner kikimr(settings);
+
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapStandaloneTable();
+        helper.SetForcedCompaction();
+        auto tableClient = kikimr.GetTableClient();
+        auto queryServiceCLient = kikimr.GetQueryClient();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+
+        auto runDDLQuery = [&](TString query) {
+            if (useQueryService) {
+                auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                return *static_cast<NYdb::TStatus*>(&result);
+            } else {
+                return tableClient.CreateSession().GetValueSync().GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            }
+        };
+
+        auto assertDDLQueryOk = [&](TString query) {
+            auto result = runDDLQuery(query);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+
+
+        assertDDLQueryOk(R"(
+            CREATE TABLE `/Root/minmax_test_applied_applied` (
+                `key` Int32 NOT NULL,
+                `value` String NOT NULL,
+                PRIMARY KEY (`key`)
+            )
+            PARTITION BY HASH (`key`)
+            WITH (
+                STORE = COLUMN
+            );
+        )");
+
+        NYdb::TStatus status = runDDLQuery(R"(
+            ALTER TABLE `/Root/minmax_test_table_doesnt_exist` ADD INDEX `value_mm` LOCAL USING min_max ON(`value`);            
+        )");
+        
+        UNIT_ASSERT_C(!status.IsSuccess(), status.GetIssues().ToString());
+    }
 
     Y_UNIT_TEST(MinMaxIndexUsedInQueries, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
@@ -385,7 +438,155 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         UNIT_ASSERT_C(!resDistinctFromNull.MinMaxIndexUsed, "query with 'IS DISCTINCT FROM NULL' filter over min_max-indexed column use min_max index, but it shouldn't(will use in future, see https://github.com/ydb-platform/ydb/issues/38574)");
     }
 
+<<<<<<< HEAD
     Y_UNIT_TEST(MinMaxNulls, EUseQueryService) {
+=======
+    Y_UNIT_TEST(MinMaxIndexStoredInBSForStringsAndInLocalDBOtherwise, EUseQueryService, ELocalIndexAsSchemeObject) {
+        const bool useQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool localIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableLocalMinMaxIndex(true);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(localIndexAsSchemeObject);
+        TKikimrRunner kikimr(settings);
+
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapStandaloneTable();
+        helper.SetForcedCompaction();
+        auto tableClient = kikimr.GetTableClient();
+        auto queryServiceClient = kikimr.GetQueryClient();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+
+
+        auto assertDDLQueryOk = [&](TString query) {
+            if (useQueryService) {
+                auto result = queryServiceClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            } else {
+                auto session = tableClient.CreateSession().GetValueSync().GetSession();
+                auto res = session.ExecuteSchemeQuery(query).GetValueSync();
+                UNIT_ASSERT_C(res.IsSuccess(), res.GetIssues().ToString());
+            }
+        };
+
+
+        auto runDMLQuery = [&] (TString query) -> THashMap<TString, TVector<NYdb::TValue>> {
+            auto result = queryServiceClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            THashMap<TString, TVector<NYdb::TValue>> columns;
+            for(auto& rs: result.GetResultSets()) {
+                NYdb::TResultSetParser rsParser(rs);
+                while (rsParser.TryNextRow()) {
+                    // THashMap<TString, NYdb::TValue> row;
+                    for (size_t ci = 0; ci < rs.ColumnsCount(); ++ci) {
+                        columns[rs.GetColumnsMeta()[ci].Name].emplace_back(rsParser.GetValue(ci));
+                    }
+                }
+            }
+            return columns;
+        };
+
+        assertDDLQueryOk(R"(
+            CREATE TABLE `/Root/minmax_test_appropriate_storage_location` (
+                `key` Int32 NOT NULL,
+                `value_str` String NOT NULL,
+                `value_utf` Utf8 NOT NULL,
+                `value_int` Int32 NOT NULL,
+                `value_ts` Timestamp NOT NULL,
+                INDEX `value_str_mm` LOCAL USING min_max ON(`value_str`),
+                INDEX `value_utf_mm` LOCAL USING min_max ON(`value_utf`),
+                INDEX `value_int_mm` LOCAL USING min_max ON(`value_int`),
+                INDEX `value_ts_mm` LOCAL USING min_max ON(`value_ts`),
+                PRIMARY KEY (`key`)
+            )
+            PARTITION BY HASH (`key`)
+            WITH (
+                STORE = COLUMN
+            );
+        )");
+
+        runDMLQuery(R"(
+            $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
+            UPSERT INTO `/Root/minmax_test_appropriate_storage_location` (`key`, `value_str`, `value_utf`, `value_int`, `value_ts`) SELECT 
+            CAST(item AS Int32) AS `key`,
+            "Value_" || CAST(item+1 AS String) AS `value_str`,
+            CAST(item+1 AS Utf8) AS `value_utf`,
+            CAST(item+1 AS Int32) as `value_int`,
+            Unwrap(DateTime::FromSeconds(CAST(item+1 AS Uint32))) as `value_ts`
+            FROM AS_TABLE($data1);
+        )");
+
+        runDMLQuery(R"(
+            $data1 = ListMap(ListFromRange(1, 1500001), ($x) -> { RETURN AsStruct($x AS item); });
+            UPSERT INTO `/Root/minmax_test_appropriate_storage_location` (`key`, `value_str`, `value_utf`, `value_int`, `value_ts`) SELECT 
+            CAST(item AS Int32) AS `key`,
+            "Value_" || CAST(item AS String) AS `value_str`,
+            CAST(item AS Utf8) AS `value_utf`,
+            CAST(item AS Int32) as `value_int`,
+            Unwrap(DateTime::FromSeconds(CAST(item AS Uint32))) as `value_ts`
+            FROM AS_TABLE($data1);
+        )");
+        csController->WaitCompactions(TDuration::Seconds(5));
+
+
+        using TQueryResult = TVector<TString>; 
+
+        auto runDMLQueryTyped = [&](TString text) -> TQueryResult {
+            auto columns = runDMLQuery(text);
+            TQueryResult res;
+            for (const auto& row: columns["TierName"]) {
+                UNIT_ASSERT(row.GetProto().has_text_value());
+                res.push_back(row.GetProto().text_value());
+            }
+            return res;
+        };
+        
+        {
+            TQueryResult tierNamesStr = runDMLQueryTyped(R"(
+                SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_str_mm";
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesStr.size(), 0, "portions are not min_max indexed with String column type");
+            for (const auto& tierName: tierNamesStr) {
+                UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__DEFAULT", "min_max index must store its data is BS when building over String column");
+            }            
+        }
+        {
+            TQueryResult tierNamesUtf8 = runDMLQueryTyped(R"(
+                SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_utf_mm";
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesUtf8.size(), 0, "portions are not min_max indexed with Utf8 column type");
+            for (const auto& tierName: tierNamesUtf8) {
+                UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__DEFAULT", "min_max index must store its data is BS when building over Utf8 column");
+            }
+
+        }
+        {
+            TQueryResult tierNamesInt = runDMLQueryTyped(R"(
+                SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_int_mm";
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesInt.size(), 0, "portions are not min_max indexed with Int32 column type");
+            for(auto& tierName: tierNamesInt) {
+                UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__LOCAL_METADATA", "min_max index must store its data is local database when building over Int32 column");
+            }
+        }
+        {
+            TQueryResult tierNamesTs = runDMLQueryTyped(R"(
+                SELECT TierName FROM `/Root/minmax_test_appropriate_storage_location/.sys/primary_index_stats` WHERE EntityName == "value_ts_mm";
+            )");
+            UNIT_ASSERT_VALUES_UNEQUAL_C(tierNamesTs.size(), 0, "portions are not min_max indexed with Timestamp column type");
+            for (const auto& tierName: tierNamesTs) {
+                UNIT_ASSERT_VALUES_EQUAL_C(tierName, "__LOCAL_METADATA", "min_max index must store its data is local database when building over Timestamp column");
+            }
+
+        }
+    }
+
+    Y_UNIT_TEST(MinMaxNulls, EUseQueryService, ELocalIndexAsSchemeObject) {
+>>>>>>> c1b26e59009 (use most appropriate storage type when creating min_max index through yql ddl (#43731))
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)

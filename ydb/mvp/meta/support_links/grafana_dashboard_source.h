@@ -48,7 +48,7 @@ inline void ValidateGrafanaDashboardSourceConfig(const TSupportLinkEntryConfig& 
     if (!IsAbsoluteUrl(config.GetUrl()) && metaSettings.SupportLinks.GrafanaEndpoint.empty()) {
         ythrow yexception() << "grafana.endpoint is required for relative url";
     }
-    ValidateResolvedParamBindings(ResolveParamBindings(config, BuildDefaultGrafanaDashboardParamBindings()), config);
+    ValidateParamsAreUnique(ResolveParamBindings(config, BuildDefaultGrafanaDashboardParamBindings()), config);
 }
 
 inline std::shared_ptr<ILinkSource> MakeGrafanaDashboardSource(TSupportLinkEntryConfig config, const TMetaSettings& metaSettings) {

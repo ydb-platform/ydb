@@ -208,7 +208,7 @@ inline void ValidateGrafanaDashboardSearchSourceConfig(const TSupportLinkEntryCo
     if (TMVP::MetaDatabaseTokenName.empty()) {
         ythrow yexception() << "meta.meta_database_token_name is required for source=" << config.GetSource();
     }
-    ValidateResolvedParamBindings(ResolveParamBindings(config, BuildDefaultGrafanaDashboardParamBindings()), config);
+    ValidateParamsAreUnique(ResolveParamBindings(config, BuildDefaultGrafanaDashboardParamBindings()), config);
 }
 
 inline std::shared_ptr<ILinkSource> MakeGrafanaDashboardSearchSource(TSupportLinkEntryConfig config, const TMetaSettings& metaSettings) {

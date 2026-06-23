@@ -15,12 +15,14 @@ message TMetaConfig {
             message TLinkParameterMapping {
                 // Target parameter name in the generated link.
                 optional string Parameter = 1;
-                // Request parameter name used as the mapping source.
-                optional string FromRequest = 2;
-                // Cluster info column name used as the mapping source.
-                optional string FromClusterInfo = 3;
-                // Constant value used as the mapping source.
-                optional string StaticValue = 4;
+                oneof SourceValue {
+                    // Request parameter name used as the mapping source.
+                    string FromRequest = 10;
+                    // Cluster info column name used as the mapping source.
+                    string FromClusterInfo = 11;
+                    // Constant value used as the mapping source.
+                    string StaticValue = 12;
+                }
             }
 
             // Link source identifier (for example: grafana/dashboard/search).

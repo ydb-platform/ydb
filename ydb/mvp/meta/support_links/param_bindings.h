@@ -28,23 +28,19 @@ inline TResolvedParamBindings ResolveConfiguredParamMappings(const TSupportLinkE
             ythrow yexception() << "link_parameter_mappings.parameter is required for source=" << config.GetSource();
         }
 
-        const bool hasFromRequest = mapping.HasFromRequest();
-        const bool hasFromClusterInfo = mapping.HasFromClusterInfo();
-        const bool hasStaticValue = mapping.HasStaticValue();
-        const size_t sourceCount = hasFromRequest + hasFromClusterInfo + hasStaticValue;
-        if (sourceCount != 1) {
+        if (!mapping.HasFromRequest() && !mapping.HasFromClusterInfo() && !mapping.HasStaticValue()) {
             ythrow yexception()
                 << "link_parameter_mappings.parameter=" << mapping.GetParameter()
-                << " must set exactly one of from_request, from_cluster_info or static_value for source="
+                << " must set one of from_request, from_cluster_info or static_value for source="
                 << config.GetSource();
         }
 
-        if (hasFromRequest) {
+        if (mapping.HasFromRequest()) {
             paramBindings.RequestMappings.emplace_back(mapping.GetFromRequest(), mapping.GetParameter());
             continue;
         }
 
-        if (hasFromClusterInfo) {
+        if (mapping.HasFromClusterInfo()) {
             paramBindings.ClusterInfoMappings.emplace_back(mapping.GetFromClusterInfo(), mapping.GetParameter());
         } else {
             paramBindings.StaticMappings.emplace_back(mapping.GetStaticValue(), mapping.GetParameter());
@@ -62,7 +58,7 @@ inline TResolvedParamBindings ResolveParamBindings(const TSupportLinkEntryConfig
     return defaultParamBindings;
 }
 
-inline void ValidateResolvedParamBindings(const TResolvedParamBindings& paramBindings, const TSupportLinkEntryConfig& config) {
+inline void ValidateParamsAreUnique(const TResolvedParamBindings& paramBindings, const TSupportLinkEntryConfig& config) {
     THashSet<TString> labels;
 
     for (const auto& [requestParamName, targetLabel] : paramBindings.RequestMappings) {

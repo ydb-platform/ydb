@@ -188,7 +188,7 @@ inline void ValidateGrafanaLoggingSourceConfig(const TSupportLinkEntryConfig& co
     if (!IsAbsoluteUrl(url) && metaSettings.SupportLinks.GrafanaEndpoint.empty()) {
         ythrow yexception() << "grafana.endpoint is required for relative url";
     }
-    ValidateResolvedParamBindings(ResolveParamBindings(config, BuildDefaultGrafanaLoggingParamBindings()), config);
+    ValidateParamsAreUnique(ResolveParamBindings(config, BuildDefaultGrafanaLoggingParamBindings()), config);
 }
 
 inline std::shared_ptr<ILinkSource> MakeGrafanaLoggingSource(TSupportLinkEntryConfig config, const TMetaSettings& metaSettings) {

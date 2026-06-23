@@ -15,7 +15,7 @@ MARKOV_MODEL_FILENAME = "markov_dict.tsv.gz"
 
 
 class YdbFulltextWorkload(WorkloadBase):
-    def __init__(self, endpoint, database, duration, rows=100000, targets=1000, threads=10):
+    def __init__(self, endpoint, database, duration, rows=10000, targets=1000, threads=10):
         super().__init__(None, '', 'fulltext_workload', None)
         self.endpoint = endpoint
         self.database = database
@@ -28,7 +28,8 @@ class YdbFulltextWorkload(WorkloadBase):
         self._download_model()
 
     def __del__(self):
-        self.tempdir.cleanup()
+        if self.tempdir is not None:
+            self.tempdir.cleanup()
 
     def _unpack_resource(self, name):
         self.tempdir = tempfile.TemporaryDirectory(dir=os.getcwd())

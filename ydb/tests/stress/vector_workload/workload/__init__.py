@@ -15,7 +15,7 @@ QUERY_TABLE_NAME = "vector_query_table"
 
 
 class YdbVectorWorkload(WorkloadBase):
-    def __init__(self, endpoint, database, duration, mode="standalone", data_dir=None, targets=1000, warmup=0, rows=100000, threads=10):
+    def __init__(self, endpoint, database, duration, mode="standalone", data_dir=None, targets=1000, warmup=0, rows=10000, threads=10):
         super().__init__(None, '', 'vector_workload', None)
         self.endpoint = endpoint
         self.database = database
@@ -30,7 +30,8 @@ class YdbVectorWorkload(WorkloadBase):
         self._unpack_resource('ydb_cli')
 
     def __del__(self):
-        self.tempdir.cleanup()
+        if self.tempdir is not None:
+            self.tempdir.cleanup()
 
     def _unpack_resource(self, name):
         self.tempdir = tempfile.TemporaryDirectory(dir=os.getcwd())

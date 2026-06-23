@@ -26,7 +26,7 @@ class TestYdbFulltextWorkload(StressFixture):
         yield from self.setup_cluster(extra_feature_flags=extra_flags, table_service_config=tsc or None)
 
     def test(self):
-        rows = yatest.common.get_param('fulltext_rows', default='100000')
+        rows = yatest.common.get_param('fulltext_rows', default='10000')
         targets = yatest.common.get_param('fulltext_targets', default='1000')
         threads = yatest.common.get_param('fulltext_threads', default='10')
 

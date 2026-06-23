@@ -11,6 +11,9 @@
 # Usage:
 #   ./ydb/tests/stress/compare_index_performance.sh [OPTIONS]
 #
+# Defaults are for quick local runs. The GitHub workflow uses larger values
+# (duration=600, iterations=20) for CI.
+#
 # Options:
 #   --duration SECONDS     Duration of each workload run (default: 60)
 #   --build-preset PRESET  Build preset for both binaries (default: relwithdebinfo)
@@ -18,10 +21,10 @@
 #   --current-ydbd PATH    Path to pre-built current branch ydbd (skips building)
 #   --ref REF              S3 ref to download ydbd from (default: main)
 #   --workload WORKLOAD    Run only specified workload: vector, fulltext, or all (default: all)
-#   --targets N            Number of query vectors for vector select (default: 10000)
+#   --targets N            Number of query vectors for vector select (default: 1000)
 #   --iterations N         Number of iterations per workload (default: 3)
 #   --warmup SECONDS       Warmup duration before each measured run (default: 30)
-#   --rows N               Number of rows in generated database (default: 100000)
+#   --rows N               Number of rows in generated database (default: 10000)
 #   --threads N            Number of threads for load testing (default: 10)
 #   --main-feature-flag FLAG     Enable a feature flag for main branch (repeatable)
 #   --current-feature-flag FLAG  Enable a feature flag for current branch (repeatable)
@@ -41,7 +44,7 @@ WORKLOAD="all"
 TARGETS=1000
 ITERATIONS=3
 WARMUP=30
-ROWS=100000
+ROWS=10000
 THREADS=10
 MAIN_FEATURE_FLAGS=()
 CURRENT_FEATURE_FLAGS=()
@@ -168,6 +171,7 @@ run_test() {
 
     echo "--- Running $test_path with $label ydbd ---"
     cd "$REPO_ROOT"
+    rm -rf "$REPO_ROOT/$test_path/test-results"
     ./ya make --build "$BUILD_PRESET" -tA "$test_path" \
         -DYDB_DRIVER_BINARY_PREBUILT="$ydbd_path" \
         --test-param stress_default_duration="$DURATION" \
@@ -233,7 +237,7 @@ calc_diff() {
         echo "N/A"
         return
     fi
-    awk "BEGIN { diff = ($current_val - $main_val) / $main_val * 100; printf \"%+.1f%%\", diff }"
+    awk "BEGIN { if ($main_val == 0) { print \"N/A (zero base)\" } else { diff = ($current_val - $main_val) / $main_val * 100; printf \"%+.1f%%\", diff } }"
 }
 
 calc_significance() {
@@ -261,7 +265,7 @@ calc_significance() {
         diff = $current_mean - $main_mean
         absdiff = (diff < 0) ? -diff : diff
         threshold = 3 * se
-        pct = diff / $main_mean * 100
+        pct = ($main_mean != 0) ? diff / $main_mean * 100 : 0
         if (threshold > 0 && absdiff > threshold) {
             printf \"SIGNIFICANT (%+.1f%%, |diff|=%.1f > 3sigma=%.1f)\", pct, absdiff, threshold
         } else if (threshold > 0) {

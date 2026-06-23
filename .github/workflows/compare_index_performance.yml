@@ -33,7 +33,7 @@ on:
       rows:
         description: 'Number of rows in generated database'
         required: false
-        default: '100000'
+        default: '10000'
       targets:
         description: 'Number of query vectors for vector select'
         required: false
@@ -77,45 +77,59 @@ jobs:
         uses: actions/checkout@v5
 
       - name: Run performance comparison
+        env:
+          INPUT_DURATION: ${{ inputs.duration || '600' }}
+          INPUT_BUILD_PRESET: ${{ inputs.build_preset || 'relwithdebinfo' }}
+          INPUT_REF: ${{ inputs.ref || 'main' }}
+          INPUT_WORKLOAD: ${{ inputs.workload || 'all' }}
+          INPUT_ROWS: ${{ inputs.rows || '10000' }}
+          INPUT_TARGETS: ${{ inputs.targets || '1000' }}
+          INPUT_ITERATIONS: ${{ inputs.iterations || '20' }}
+          INPUT_WARMUP: ${{ inputs.warmup || '30' }}
+          INPUT_THREADS: ${{ inputs.threads || '10' }}
+          INPUT_MAIN_FEATURE_FLAGS: ${{ inputs.main_feature_flags || '' }}
+          INPUT_CURRENT_FEATURE_FLAGS: ${{ inputs.current_feature_flags || '' }}
+          INPUT_MAIN_TABLE_SERVICE_CONFIG: ${{ inputs.main_table_service_config || '' }}
+          INPUT_CURRENT_TABLE_SERVICE_CONFIG: ${{ inputs.current_table_service_config || '' }}
         run: |
           MAIN_FLAG_ARGS=""
-          IFS=',' read -ra FLAGS <<< "${{ inputs.main_feature_flags || '' }}"
+          IFS=',' read -ra FLAGS <<< "$INPUT_MAIN_FEATURE_FLAGS"
           for flag in "${FLAGS[@]}"; do
             if [[ -n "$flag" ]]; then
               MAIN_FLAG_ARGS="$MAIN_FLAG_ARGS --main-feature-flag $flag"
             fi
           done
           CURRENT_FLAG_ARGS=""
-          IFS=',' read -ra FLAGS <<< "${{ inputs.current_feature_flags || '' }}"
+          IFS=',' read -ra FLAGS <<< "$INPUT_CURRENT_FEATURE_FLAGS"
           for flag in "${FLAGS[@]}"; do
             if [[ -n "$flag" ]]; then
               CURRENT_FLAG_ARGS="$CURRENT_FLAG_ARGS --current-feature-flag $flag"
             fi
           done
           MAIN_TSC_ARGS=""
-          IFS=',' read -ra OPTS <<< "${{ inputs.main_table_service_config || '' }}"
+          IFS=',' read -ra OPTS <<< "$INPUT_MAIN_TABLE_SERVICE_CONFIG"
           for opt in "${OPTS[@]}"; do
             if [[ -n "$opt" ]]; then
               MAIN_TSC_ARGS="$MAIN_TSC_ARGS --main-table-service-config $opt"
             fi
           done
           CURRENT_TSC_ARGS=""
-          IFS=',' read -ra OPTS <<< "${{ inputs.current_table_service_config || '' }}"
+          IFS=',' read -ra OPTS <<< "$INPUT_CURRENT_TABLE_SERVICE_CONFIG"
           for opt in "${OPTS[@]}"; do
             if [[ -n "$opt" ]]; then
               CURRENT_TSC_ARGS="$CURRENT_TSC_ARGS --current-table-service-config $opt"
             fi
           done
           ./ydb/tests/stress/compare_index_performance.sh \
-            --duration ${{ inputs.duration || '600' }} \
-            --build-preset ${{ inputs.build_preset || 'relwithdebinfo' }} \
-            --ref ${{ inputs.ref || 'main' }} \
-            --targets ${{ inputs.targets || '1000' }} \
-            --workload ${{ inputs.workload || 'all' }} \
-            --rows ${{ inputs.rows || '100000' }} \
-            --iterations ${{ inputs.iterations || '3' }} \
-            --warmup ${{ inputs.warmup || '30' }} \
-            --threads ${{ inputs.threads || '10' }} \
+            --duration "$INPUT_DURATION" \
+            --build-preset "$INPUT_BUILD_PRESET" \
+            --ref "$INPUT_REF" \
+            --targets "$INPUT_TARGETS" \
+            --workload "$INPUT_WORKLOAD" \
+            --rows "$INPUT_ROWS" \
+            --iterations "$INPUT_ITERATIONS" \
+            --warmup "$INPUT_WARMUP" \
+            --threads "$INPUT_THREADS" \
             $MAIN_FLAG_ARGS \
             $CURRENT_FLAG_ARGS \
             $MAIN_TSC_ARGS \

@@ -106,7 +106,7 @@ WITH (
 
 By default, if the `STORE` parameter is not specified, a row-oriented table is created.
 
-{% endif %}
+{% endnote %}
 
 {% note info %}
 

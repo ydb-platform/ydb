@@ -77,11 +77,11 @@ namespace NCoordination {
                 session.Close().GetValueSync();
             } catch (...) {}
         }
-        TImpl(TClient& client, std::string_view path, std::string_view name, TDuration timeout)
-            : name(name)
-            , path(path)
+        TImpl(TClient& client, const TDistributedLockSettings& lockSettings)
+            : name(lockSettings.Name_)
+            , path(lockSettings.Path_)
             , client(client)
-            , timeout_(timeout)
+            , timeout_(lockSettings.Timeout_)
         {
             settings = TAcquireSemaphoreSettings()
                 .Exclusive()
@@ -147,8 +147,11 @@ namespace NCoordination {
             ResetSession(true);
         }
     };
-    TDistributedLock::TDistributedLock(TClient& client, std::string_view path, std::string_view name, TDuration timeout) {
-        impl_ = std::make_unique<TImpl>(client, path, name, timeout);
+    TDistributedLock::TDistributedLock(TClient& client, const TDistributedLockSettings& settings) {
+        impl_ = std::make_unique<TImpl>(client, settings);
+    }
+    TDistributedLock TClient::GetDistributedLock(const TDistributedLockSettings& settings) {
+        return TDistributedLock(*this, settings);
     }
     TDistributedLock::~TDistributedLock() = default;
     void TDistributedLock::lock() {

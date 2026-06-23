@@ -1088,10 +1088,10 @@ void TRowDispatcher::DeleteConsumer(NActors::TActorId readActorId) {
             }
         }
     }
+    const TString queryId = consumerIt->second->QueryId;
     ConsumersByEventQueueId.erase(consumerIt->second->EventQueueId);
     Consumers.erase(consumerIt);
     
-    const TString queryId = consumerIt->second->QueryId;
     auto queryIt = ConsumersByQueryId.find(queryId);
     if (queryIt != ConsumersByQueryId.end()) {
         queryIt->second.erase(readActorId);

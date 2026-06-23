@@ -75,6 +75,7 @@ public:
         bool EnforceUserTokenRequirement : 1 = false;
         bool EnableTopicPartitionSplitBasedOnKllSketch : 1 = false;
         bool EnableTopicPartitionSplitBasedOnMessages : 1 = false;
+        bool EnableAccessServiceV2Interface : 1 = false;
     };
 
     void InitAll(const TInitParameters initParameters);
@@ -333,9 +334,9 @@ private:
 
     void InitKikimr(const TInitParameters& initParameters);
 
-    void InitAccessServiceService();
+    void InitAccessServiceService(bool enableAccessServiceV2Interface);
 
-    void InitHttpServer(bool yandexCloudMode, bool enableSqsTopic);
+    void InitHttpServer(bool yandexCloudMode, bool enableSqsTopic, bool enableAccessServiceV2Interface);
 
 public:
     std::shared_ptr<NKikimr::NHttpProxy::IAuthFactory> AuthFactory;
@@ -343,6 +344,7 @@ public:
     TPortManager PortManager;
     TTestActorRuntime* ActorRuntime = nullptr;
     TAccessServiceMock AccessServiceMock;
+    TAccessServiceMockV2 AccessServiceMockV2;
     TString AccessServiceEndpoint;
     std::unique_ptr<grpc::Server> AccessServiceServer;
     std::unique_ptr<grpc::Server> IamTokenServer;
@@ -404,6 +406,15 @@ public:
     void SetUp(NUnitTest::TTestContext&) override {
         InitAll(TInitParameters{
             .EnableTopicPartitionSplitBasedOnKllSketch = true,
+        });
+    }
+};
+
+class THttpProxyTestMockForAccessServiceV2 : public THttpProxyTestMock {
+public:
+    void SetUp(NUnitTest::TTestContext&) override {
+        InitAll(TInitParameters{
+            .EnableAccessServiceV2Interface = true,
         });
     }
 };

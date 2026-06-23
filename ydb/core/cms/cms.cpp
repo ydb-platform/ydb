@@ -421,14 +421,13 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         return opts;
     };
 
-    std::deque<const TAction*> sysTabletDeferredActions;
+     TVector<const TAction*> sysTabletDeferredActions;
 
-    for (const auto &action : request.GetActions()) {
-        if (capHit) {
-            break;
-        }
-
+    auto processAction = [&](const TAction &action, bool allowDefer) -> bool {
         TActionOptions opts = buildOpts(action);
+        if (!allowDefer) {
+            opts.CapEnabled = false;
+        }
 
         TErrorInfo error;
 
@@ -456,7 +455,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
                           maxPermissions);
                 capHit = true;
             }
-        } else if (error.Code == TStatus::DISALLOW_TEMP_SYS_TABLET) {
+        } else if (allowDefer && error.Code == TStatus::DISALLOW_TEMP_SYS_TABLET) {
             LOG_DEBUG(ctx, NKikimrServices::CMS,
                       "Result: DISALLOW_TEMP_SYS_TABLET, deferring action: %s",
                       action.ShortDebugString().data());
@@ -487,62 +486,49 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
             }
 
             if (!allowPartial)
-                break;
+                return false;
         }
+
+        return true;
+    };
+
+    for (const auto &action : request.GetActions()) {
+        if (capHit) {
+            break;
+        }
+
+        if (!processAction(action, /* allowDefer = */ true)) {
+            break;
+        }
+
         ++processedActions;
     }
 
-    while (capEnabled && !sysTabletDeferredActions.empty()) {
+    while (capEnabled && !capHit && !sysTabletDeferredActions.empty()) {
         const TAction *deferredAction = sysTabletDeferredActions.back();
-        if (static_cast<ui32>(response.PermissionsSize()) < maxPermissions) {
-            LOG_DEBUG(ctx, NKikimrServices::CMS,
-                "Granting deferred sys-tablet action to fill the batch: %s",
-                deferredAction->ShortDebugString().data());
-
-            auto *permission = response.AddPermissions();
-            permission->MutableAction()->CopyFrom(*deferredAction);
-            permission->MutableAction()->ClearIssue();
-            permission->SetDeadline(error.Deadline.GetValue());
-            AddPermissionExtensions(*deferredAction, *permission);
-
-            ClusterInfo->AddTempLocks(*deferredAction, request.GetPriority(), requestId, &ctx);
-        } else {
-            if (CodesRate[response.GetStatus().GetCode()] > CodesRate[TStatus::DISALLOW_TEMP]) {
-                response.MutableStatus()->SetCode(TStatus::DISALLOW_TEMP);
-                response.SetDeadline(error.Deadline.GetValue());
-            }
-
-            if (schedule) {
-                auto *scheduledAction = scheduled.AddActions();
-                scheduledAction->CopyFrom(action);
-
-                // Limit stored issues to avoid overloading the local database
-                if (storedIssues < MAX_ISSUES_TO_STORE) {
-                    *scheduledAction->MutableIssue() = ConvertIssue(error.Reason);
-                    ++storedIssues;
-                } else {
-                    scheduledAction->ClearIssue();
-                }
-            }
-        }
-
         sysTabletDeferredActions.pop_back();
+        processAction(*deferredAction, /* allowDefer = */ false);
     }
 
     ClusterInfo->RollbackLocks(point);
 
+    auto scheduleTail = [&](const TAction &action) {
+        auto* scheduledAction = scheduled.MutableActions()->Add();
+        scheduledAction->CopyFrom(action);
+        scheduledAction->ClearIssue();
+    };
+
     if (capHit && schedule && processedActions < static_cast<size_t>(request.ActionsSize())) {
         const auto& allActions = request.GetActions();
-        auto* mutableActions = scheduled.MutableActions();
-        const size_t from = processedActions;
-
-        mutableActions->Reserve(mutableActions->size() + (allActions.size() - from));
-        std::for_each(allActions.begin() + from, allActions.end(), [mutableActions](const auto& action) {
-            auto* scheduledAction = mutableActions->Add();
-            scheduledAction->CopyFrom(action);
-            scheduledAction->ClearIssue();
-        });
+        std::for_each(allActions.begin() + processedActions, allActions.end(), scheduleTail);
         processedActions = allActions.size();
+    }
+
+    if (schedule && !sysTabletDeferredActions.empty()) {
+        std::for_each(sysTabletDeferredActions.begin(), sysTabletDeferredActions.end(),
+            [&scheduleTail](const TAction *deferredAction) {
+                scheduleTail(*deferredAction);
+            });
     }
 
     // Handle partial permission and reject cases. Partial permission requires

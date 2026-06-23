@@ -37,7 +37,7 @@ linecache is already handled by fix-traceback.patch.
          return filename
      # only return a non-existent filename if the module has a PEP 302 loader
      module = getmodule(object, filename)
-@@ -1028,9 +1028,10 @@ def getmodule(object, _filename=None):
+@@ -1028,10 +1028,10 @@ def getmodule(object, _filename=None):
                  # Have already mapped this module, so skip it
                  continue
              _filesbymodname[modname] = f

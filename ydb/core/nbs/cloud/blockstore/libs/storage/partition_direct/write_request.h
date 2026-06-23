@@ -2,6 +2,7 @@
 
 #include "public.h"
 
+#include "request_executor.h"
 #include "write_request_bundle.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
@@ -21,7 +22,8 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 ////////////////////////////////////////////////////////////////////////////////
 
 class TWriteRequestExecutor
-    : public std::enable_shared_from_this<TWriteRequestExecutor>
+    : public IRequestExecutor
+    , public std::enable_shared_from_this<TWriteRequestExecutor>
 {
 public:
     TWriteRequestExecutor(
@@ -31,12 +33,14 @@ public:
         IDirectBlockGroupPtr directBlockGroup,
         std::shared_ptr<TWriteRequestBundle> bundle);
 
-    virtual ~TWriteRequestExecutor();
+    ~TWriteRequestExecutor() override;
 
-    void Run();
+    // Implementation of IRequestExecutor
+    void Run() override;
+    TString Print() override;
 
 private:
-    void SendIndirectWriteRequest();
+    void SendIndirectWriteRequest(THostMask hosts);
     void OnIndirectWriteResponse(
         const TDBGWriteBlocksToManyPBuffersResponse& response);
     void SendAdditionalDirectWrites();

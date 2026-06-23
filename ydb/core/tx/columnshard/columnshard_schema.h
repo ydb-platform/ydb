@@ -999,6 +999,14 @@ struct Schema: NIceDb::Schema {
             .Update(NIceDb::TUpdate<TableInfoV1::DropStep>(dropStep), NIceDb::TUpdate<TableInfoV1::DropTxId>(dropTxId));
     }
 
+    static void SaveTableCopyVersionV1(NIceDb::TNiceDb& db, const TInternalPathId pathId, const TSchemeShardLocalPathId schemeShardLocalPathId,
+        const NOlap::TSnapshot& copyVersion) {
+        db.Table<TableInfoV1>()
+            .Key(pathId.GetRawValue(), schemeShardLocalPathId.GetRawValue())
+            .Update(NIceDb::TUpdate<TableInfoV1::CopyStep>(copyVersion.GetPlanStep()),
+                NIceDb::TUpdate<TableInfoV1::CopyTxId>(copyVersion.GetTxId()), NIceDb::TUpdate<TableInfoV1::IsReadOnly>(true));
+    }
+
     static void EraseTableVersionInfo(NIceDb::TNiceDb& db, TInternalPathId pathId, const NOlap::TSnapshot& version) {
         db.Table<TableVersionInfo>().Key(pathId.GetRawValue(), version.GetPlanStep(), version.GetTxId()).Delete();
     }

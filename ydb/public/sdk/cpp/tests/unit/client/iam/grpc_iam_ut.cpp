@@ -128,17 +128,16 @@ private:
 } // namespace
 
 TEST(GrpcIamCredentialsProvider, StopDuringFillContextDoesNotHang) {
-    TBlockingIamTokenService iamService;
-    TBlockingIamReleaseGuard releaseGuard(iamService);
-    TIamGrpcServer server(&iamService);
+    TIamTokenServiceStub iamStub;
+    iamStub.SetResponseToken("unit-test-iam-token");
+    TIamGrpcServer server(&iamStub);
     ASSERT_TRUE(server.Start());
-
-    iamService.Release();
 
     auto authProvider = std::make_shared<TSlowBlockingAuthProvider>();
 
     TIamOAuth params = MakeOAuthParams(server.Endpoint());
     params.RefreshPeriod = TDuration::MilliSeconds(50);
+    params.RequestTimeout = TDuration::MilliSeconds(400);
 
     std::shared_ptr<TGrpcIamCredentialsProvider<CreateIamTokenRequest, CreateIamTokenResponse, IamTokenService>> provider;
     auto facility = std::make_shared<TSimpleCoreFacility>();
@@ -155,7 +154,16 @@ TEST(GrpcIamCredentialsProvider, StopDuringFillContextDoesNotHang) {
         facility,
         authProvider);
 
-    ASSERT_TRUE(authProvider->WaitUntilBlocked(std::chrono::seconds(10)))
+    struct TAuthReleaseGuard {
+        std::shared_ptr<TSlowBlockingAuthProvider> Provider;
+        ~TAuthReleaseGuard() {
+            if (Provider) {
+                Provider->Release();
+            }
+        }
+    } authReleaseGuard{authProvider};
+
+    ASSERT_TRUE(authProvider->WaitUntilBlocked(std::chrono::seconds(30)))
         << "FillContext should block inside slow AuthTokenProvider during refresh";
 
     std::future<void> stopDone = std::async(std::launch::async,
@@ -166,9 +174,6 @@ TEST(GrpcIamCredentialsProvider, StopDuringFillContextDoesNotHang) {
     ASSERT_EQ(stopDone.wait_for(std::chrono::seconds(20)), std::future_status::ready)
         << "provider destructor (Stop()) must complete while FillContext is blocked in GetAuthInfo()";
     stopDone.get();
-
-    authProvider->Release();
-    facility.reset();
 
     server.Stop();
 }

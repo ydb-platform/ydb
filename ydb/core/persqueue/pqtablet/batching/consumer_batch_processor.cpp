@@ -1,5 +1,6 @@
 #include "consumer_batch_processor.h"
 
+#include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NPQ::NBatching {
@@ -9,7 +10,7 @@ TConsumerBatchProcessor::TConsumerBatchProcessor(ui64 tabletId, const NActors::T
     , User(std::move(user))
     , LogPrefix(TStringBuilder() << "ConsumerBatchProcessor " << TabletId << " [" << User << "]: ")
 {
-    BatchCutters.emplace(NKikimrClient::KAFKA_BATCH, MakeHolder<TKafkaBatchCutter>());
+    BatchCutters.emplace(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1, MakeHolder<TKafkaBatchCutter>());
 }
 
 const TString& TConsumerBatchProcessor::GetLogPrefix() const {
@@ -63,8 +64,16 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
     };
 
     for (auto& originalResult : originalResults) {
-        const auto messageFormat = static_cast<NKikimrClient::EMessageFormat>(originalResult.GetMessageFormat());
-        auto it = BatchCutters.find(messageFormat);
+        auto dataChunk = NKikimr::GetDeserializedData(originalResult.GetData());
+
+        if (!originalResult.GetIsBatch()) {
+            if (addResult(originalResult)) {
+                break;
+            }
+            continue;
+        }
+
+        auto it = BatchCutters.find(dataChunk.GetCodec());
         if (it == BatchCutters.end()) {
             if (addResult(originalResult)) {
                 break;
@@ -72,7 +81,9 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
             continue;
         }
 
-        auto cutResults = it->second->Cut(originalResult, context.Offset);
+        TBatchCutterData data(originalResult, std::move(dataChunk));
+
+        auto cutResults = it->second->Cut(data, context.Offset);
         for (auto& cutResult : cutResults) {
             if (addResult(cutResult)) {
                 break;

@@ -5,6 +5,7 @@ import os
 import signal
 import sys
 import subprocess
+import time
 
 from yatest.common import process
 import six
@@ -83,6 +84,13 @@ class Daemon(object):
         new_command_tuple = tuple(new_command)
         if self.__command != new_command_tuple:
             self.__command = new_command_tuple
+
+    def update_aux_file(self, new_aux_file_name):
+        self.__aux_file_name = new_aux_file_name
+
+        if self.__aux_file is not None:
+            self.__aux_file.close()
+            self.__aux_file = open(self.__aux_file_name, mode='w+b')
 
     def __open_output_files(self):
         self.__stdout_file = open(self.__stdout_file_name, mode='ab')
@@ -194,14 +202,18 @@ class Daemon(object):
         if not self.__check_can_launch_stop("stop"):
             return
 
+        stop_start_at = time.time()
         self.__daemon.process.terminate()
-        wait_for(lambda: not self.is_alive(), self.__timeout)
+        wait_for(lambda: not self.is_alive(), self.__timeout, step_seconds=0.001, max_step_seconds=1)
 
         is_killed = False
         if self.is_alive():
+            self.logger.info("Force stop daemon, still alive after %s s" % self.__timeout)
             self.__daemon.process.send_signal(signal.SIGKILL)
             wait_for(lambda: not self.is_alive(), self.__timeout)
             is_killed = True
+
+        self.logger.info("Daemon stopped in %s s" % (time.time() - stop_start_at))
         self.__check_before_end_stop("stop")
         self.__close_output_files()
 

@@ -163,7 +163,6 @@ public:
         , const std::shared_ptr<NObservability::TRequestSpan>& parent = nullptr
     );
 
-public:
     TClientSettings Settings_;
 
 private:

@@ -373,6 +373,10 @@ namespace NKikimr::NDDisk {
                 CollectPbStatsSnapshot();
                 break;
             }
+            case EWakeupTag::WakeupProcessPersistentBufferBatchWrite: {
+                ProcessPersistentBufferBatchWrite();
+                break;
+            }
         }
     }
 

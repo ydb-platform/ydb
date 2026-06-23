@@ -30,6 +30,7 @@ SRCS(
     insert.cpp
     list_builtin.cpp
     match_recognize.cpp
+    namespace.cpp
     node.cpp
     result.cpp
     secret_settings.cpp
@@ -63,9 +64,9 @@ GENERATE_ENUM_SERIALIZATION(sql_call_param.h)
 END()
 
 RECURSE(
-    complete
     format
     highlight
+    ide
     lexer
     perf
     proto_parser

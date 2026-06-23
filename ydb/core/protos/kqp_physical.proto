@@ -102,6 +102,9 @@ message TKqpPhyColumn {
     // operation.
     optional bool IsBuildInProgress = 7;
     optional TKqpPhySequenceId DefaultFromSequencePathId = 8;
+    // flag that indicates that column is currently under the set not null
+    // operation.
+    optional bool SetNotNullInProgress = 9;
 }
 
 enum EKqpPhyTableKind {
@@ -423,6 +426,14 @@ message TKqpFullTextSource {
 
         // Pre-compiled tokens extracted from jsonpath at query compile time (JSON index only)
         repeated TQueryToken Tokens = 3;
+
+        // Equality bindings for the index prefix columns (KeyColumnNames[0..n-2]).
+        // Each value is a literal or $param expression resolved at task build time.
+        message TPrefixColumn {
+            optional NKikimrKqp.TKqpColumnMetadataProto Column = 1;
+            optional TKqpPhyValue Value = 2;
+        }
+        repeated TPrefixColumn PrefixColumns = 4;
     }
 
     message TIndexTable {

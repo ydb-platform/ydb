@@ -190,18 +190,6 @@ public:
         return Type;
     }
 
-    const std::optional<TVector<TInfoUnit>>& GetOutputIUsOverride() const {
-        return OutputIUsOverride;
-    }
-
-    void SetOutputIUsOverride(TVector<TInfoUnit> outputIUs) {
-        OutputIUsOverride = std::move(outputIUs);
-    }
-
-    void ClearOutputIUsOverride() {
-        OutputIUsOverride.reset();
-    }
-
     EOperator GetKind() const {
         return Kind;
     }
@@ -212,9 +200,6 @@ public:
     const TTypeAnnotationNode* Type = nullptr;
     TVector<TIntrusivePtr<IOperator>> Children;
     TVector<std::pair<IOperator*, ui32>> Parents;
-
-private:
-    std::optional<TVector<TInfoUnit>> OutputIUsOverride;
 };
 
 template <class K>
@@ -431,17 +416,20 @@ public:
 
 struct TOpAggregationTraits {
     TOpAggregationTraits() = default;
-    TOpAggregationTraits(const TInfoUnit& originalColName, const TString& aggFunction, const TInfoUnit& resultColName, bool distinct = false)
+    TOpAggregationTraits(const TInfoUnit& originalColName, const TString& aggFunction, const TInfoUnit& resultColName, bool distinct = false,
+                         bool unwrap = false)
         : OriginalColName(originalColName)
         , AggFunction(aggFunction)
         , ResultColName(resultColName)
-        , Distinct(distinct) {
+        , Distinct(distinct)
+        , Unwrap(unwrap) {
     }
 
     TInfoUnit OriginalColName;
     TString AggFunction;
     TInfoUnit ResultColName;
     bool Distinct;
+    bool Unwrap;
 };
 
 class TOpAggregate: public IUnaryOperator {
@@ -546,10 +534,13 @@ public:
 
 class TOpUnionAll: public IBinaryOperator {
 public:
-    TOpUnionAll(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos, bool ordered = false);
+    TOpUnionAll(TIntrusivePtr<IOperator> leftArg, TIntrusivePtr<IOperator> rightArg, TPositionHandle pos,
+                TVector<TInfoUnit> columns, bool ordered = false);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual bool PropagateNameConstraints(INameConstraintsContext& ctx) override;
+    void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
+                   const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
     virtual NJson::TJsonValue ToJson(ui32 explainFlags) override;
     virtual TString GetExplainName() const override { return "UnionAll"; }
@@ -557,6 +548,7 @@ public:
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
 
+    TVector<TInfoUnit> Columns;
     bool Ordered;
 };
 

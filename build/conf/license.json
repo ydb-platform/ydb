@@ -185,6 +185,16 @@
             "BSD-2-Clause-Patent",
             "BSD-2-Clause-Views",
             "BSD-3-Clause",
+            // Stands for
+            //
+            // Google hereby grants to You a perpetual, worldwide, non-exclusive,
+            // no-charge, royalty-free, irrevocable (except as stated in this section)
+            // patent license to make, have made, use, offer to sell, sell, import
+            // transfer and otherwise run, modify and propagate the contents of this
+            // implementation ...
+            // 2
+            // As seen in libwebp, libjxl, webrtc, Go etc.
+            "BSD-3-Clause WITH Google-Patent-License",
             "BSD-3-Clause WITH Google-Patent-License-Webm",
             "BSD-3-Clause WITH Google-Patent-License-Webrtc",
             "BSD-3-Clause-LBNL",

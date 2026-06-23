@@ -4,16 +4,19 @@ PROGRAM()
 
 LICENSE(
     APSL-2.0 AND
+    Apache-2.0 AND
+    BSD-2-Clause AND
     BSD-3-Clause AND
     BSD-4-Clause-UC AND
     FSFAP AND
     MIT AND
-    Unicode-Mappings
+    Unicode AND
+    curl
 )
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(2022.07.12)
+VERSION(2023.01.27)
 
 PEERDIR(
     contrib/libs/breakpad/src/client/linux

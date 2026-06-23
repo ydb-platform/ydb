@@ -1,5 +1,4 @@
 #include "partition.h"
-#include <ydb/core/persqueue/pqtablet/blob/message_format.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include "partition_util.h"
@@ -456,8 +455,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
                          Nothing(),
                          TInstant::MilliSeconds(res.GetWriteTimestampMS()), TInstant::MilliSeconds(res.GetCreateTimestampMS()),
                          res.GetUncompressedSize(), std::move(*res.MutablePartitionKey()), std::move(*res.MutableExplicitHash()),
-                         res.GetMessageCount(),
-                         FromProtoMessageFormat(res.GetMessageFormat()));
+                         res.GetMessageCount(), res.GetIsBatch());
 
         if (res.HasTotalParts()) {
             blob.PartData = TPartData{static_cast<ui16>(res.GetPartNo()), static_cast<ui16>(res.GetTotalParts()), res.GetTotalSize()};

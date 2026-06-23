@@ -1,5 +1,25 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.32.0 {#2-32-0}
+
+Released on June 22, 2026. To update to version **2.32.0**, select the [Downloads](downloads/ydb-cli.md) section.
+
+### Features
+
+* Added an AI mode to the `{{ ydb-cli }}` [interactive mode](./reference/ydb-cli/interactive-cli.md). Press `Ctrl+T` to switch to it.
+* Added the [`{{ ydb-cli }} workload fulltext`](./reference/ydb-cli/workload-fulltext.md) command for load testing and measuring the quality of fulltext indexes.
+* Added the `SET resource_pool` command to the `{{ ydb-cli }}` [interactive mode](./reference/ydb-cli/interactive-cli.md).
+* Added the `--resource-pool` option to the `{{ ydb-cli }} sql` [command](./reference/ydb-cli/sql.md).
+* Added the `--no-consumer` option to the `{{ ydb-cli }} topic read` [command](./reference/ydb-cli/topic-read.md) for reading from a topic without a consumer.
+* Added the `--partition-write-speed-mps` and `--partition-write-burst-messages` options to the `{{ ydb-cli }} topic create` [command](./reference/ydb-cli/topic-create.md) and `{{ ydb-cli }} topic alter` [command](./reference/ydb-cli/topic-alter.md).
+* Added the `--partition-max-inflight-bytes` option to the `{{ ydb-cli }} workload topic` [command](./reference/ydb-cli/workload-topic.md).
+* Added the `--codec kafka-batch`, `--batch-inner-codec`, `--batch-flush-interval`, `--batch-flush-size`, and `--batch-flush-message-count` options to the `{{ ydb-cli }} workload topic run write|full` [commands](./reference/ydb-cli/workload-topic.md).
+* Added CPU time statistics to the `{{ ydb-cli }} workload * run` [commands](./reference/ydb-cli/commands/workload/index.md).
+
+### Improvements
+
+* The `{{ ydb-cli }} scheme describe` [command](./reference/ydb-cli/commands/scheme-describe.md) now prints a human-readable description for external data sources (source type, location, authentication method, database, properties, and creation time) instead of empty output.
+
 ## Version 2.31.0 {#2-31-0}
 
 Released on April 20, 2026. To update to version **2.31.0**, select the [Downloads](downloads/ydb-cli.md) section.

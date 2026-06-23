@@ -611,7 +611,7 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
     ReadFeatures.clear();
     WaitNextReaderEventInFlight = false;
     LastReadEventTime = TInstant::Zero();
-    LastReadOffset = Nothing();;
+    LastReadOffset = Nothing();
 
     Become(&TThis::StateInitConsumer);
 
@@ -769,7 +769,7 @@ static TDuration GetRewindCommitDelay(const TActorContext& ctx) {
 
 bool TMirrorer::TryRewindCommittedOffset(const TActorContext& ctx) {
     LOG_T("TryRewindCommittedOffset " << LabeledOutput(OffsetToRead, StreamStatus->GetCommittedOffset(),  StreamStatus->GetReadOffset(), StreamStatus->GetEndOffset(), (ctx.Now() - LastInitStageTimestamp).Seconds(), (ctx.Now() - LastRewindCommitTimestamp).Seconds()));
-    if (!(LastReadOffset.Empty() /* never seen any data */
+    if (!(LastReadOffset.Empty() /* never seen any data is this read session */
         && StreamStatus->GetCommittedOffset() < StreamStatus->GetEndOffset()
         && StreamStatus->GetReadOffset() == StreamStatus->GetEndOffset())) {
         return false;

@@ -1,5 +1,5 @@
 {
-  "_comment": "Source of truth for CI preset defaults (threads, sizes, timeouts). Bundled copy: .github/actions/ya_ci_core_build_test/ci_presets.json — keep in sync.",
+  "_comment": "Single source of truth for CI preset defaults (threads, sizes, timeouts). Profiles: ci (PR-check/Postmerge), run_tests (Run-tests).",
   "relwithdebinfo": {
     "ci": {
       "test_threads": 52,

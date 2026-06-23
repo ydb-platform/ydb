@@ -1,9 +1,9 @@
 name: Ya CI core (build and test)
 description: >
   Shared checkout, preset resolution, optional blacklist, credentials, and build_and_test_ya.
-  Presets: .github/config/ci_presets.json (source of truth; bundled fallback in this action for
-  branches without that file). Profiles ci | run_tests. Step timeout from config; workflow jobs
-  should set timeout-minutes as an outer safety net.
+  Presets: .github/config/ci_presets.json on the repo default branch (checkout override if present).
+  Profiles ci | run_tests. Step timeout from config; workflow jobs should set timeout-minutes
+  as an outer safety net.
 
 inputs:
   profile:
@@ -73,6 +73,14 @@ inputs:
 runs:
   using: composite
   steps:
+    - name: Checkout CI presets from default branch
+      uses: actions/checkout@v5
+      with:
+        ref: ${{ github.event.repository.default_branch }}
+        sparse-checkout: .github/config/ci_presets.json
+        sparse-checkout-cone-mode: false
+        path: _ci_presets_main
+
     - name: Checkout
       uses: actions/checkout@v5
       with:
@@ -84,7 +92,7 @@ runs:
       shell: python
       env:
         REPO_ROOT: ${{ github.workspace }}
-        FALLBACK_CONFIG_PATH: ${{ github.action_path }}/ci_presets.json
+        PRESETS_FROM_DEFAULT_BRANCH: ${{ github.workspace }}/_ci_presets_main/.github/config/ci_presets.json
         PROFILE: ${{ inputs.profile }}
         BUILD_PRESET: ${{ inputs.build_preset }}
         OVERRIDE_THREADS: ${{ inputs.profile == 'ci' && inputs.test_threads || '' }}

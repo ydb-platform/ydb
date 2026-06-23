@@ -18,22 +18,22 @@ def _write_output(name: str, value: str) -> None:
         handle.write(f"{name}={value}\n")
 
 
-def _pick_config_path(repo_root: Path, fallback_config: str) -> Path:
-    primary = repo_root / ".github/config/ci_presets.json"
-    if primary.is_file():
-        return primary
+def _pick_config_path(repo_root: Path, presets_from_default_branch: str) -> Path:
+    checkout_config = repo_root / ".github/config/ci_presets.json"
+    if checkout_config.is_file():
+        return checkout_config
 
-    fallback = Path(fallback_config).resolve() if fallback_config.strip() else None
-    if fallback is not None and fallback.is_file():
+    fallback = Path(presets_from_default_branch).resolve()
+    if fallback.is_file():
         print(
-            f"ci_presets.json not in checkout; using bundled fallback: {fallback}",
+            f"ci_presets.json not in checkout; using default branch config: {fallback}",
             file=sys.stderr,
         )
         return fallback
 
     raise FileNotFoundError(
         "ci_presets.json not found in checkout "
-        f"({primary}) and no bundled fallback ({fallback_config!r})"
+        f"({checkout_config}) or default branch ({presets_from_default_branch})"
     )
 
 
@@ -104,7 +104,7 @@ def main() -> None:
     repo_root = Path(os.environ.get("REPO_ROOT", ".")).resolve()
     config_path = _pick_config_path(
         repo_root,
-        os.environ.get("FALLBACK_CONFIG_PATH", ""),
+        os.environ.get("PRESETS_FROM_DEFAULT_BRANCH", ""),
     )
 
     resolved = resolve(

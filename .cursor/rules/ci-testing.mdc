@@ -16,6 +16,10 @@ globs:
   - ".github/scripts/tests/**"
   - ".github/config/muted_ya*.txt"
   - ".github/config/stable_tests_branches.json"
+  - ".github/workflows/automerge_pr.yaml"
+  - ".github/workflows/rebase.yml"
+  - ".github/workflows/automerge*.yaml"
+  - "ydb/ci/rightlib/automerge.py"
 alwaysApply: false
 ---
 
@@ -141,7 +145,78 @@ Local repo file `.github/config/ydb_qa_config.json` is **not** read by CI upload
 | YDB tables, marts, investigations | `.cursor/rules/analytics.mdc`, `ARCHITECTURE.md` |
 | Mute/unmute rules & automation | `.github/config/mute_rules.md`, `update_muted_ya.yml` |
 | Build bloat in CI | `ydb/ci/build_bloat/`, `test_bloat.py` in test_ya |
-| Release / docs / cherry-pick CI | Out of scope — no skill yet |
+| PR merge commit staleness | [issue #36673](https://github.com/ydb-platform/ydb/issues/36673) |
+| Automerge base refresh / cron polling | [PR #44180](https://github.com/ydb-platform/ydb/pull/44180), `automerge_pr.yaml` |
+| Release / docs / cherry-pick CI | Out of scope — see [Security](#security-supply-chain) for docs build |
+
+## GitHub platform behavior (read before changing `.github/`)
+
+**Do not assume GitHub Actions semantics from memory.** Re-read current docs when touching workflows, composite actions, or action scripts:
+
+- [Events that trigger workflows](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows)
+- [`pull_request_target`](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request_target)
+- [Workflow syntax](https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions)
+- [Scheduled workflows](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#schedule)
+
+### Known YDB-specific traps (verified in production)
+
+| Trap | What happens | Mitigation / reference |
+|------|----------------|------------------------|
+| **`pull_request_target` workflow file from default branch** | For PRs into `stable-*`, the **workflow definition runs from `main`**, not from the target branch. Changing `.github/workflows` on `main` affects all base branches immediately. | Before merge: list who still relies on old layout on stable branches; plan backport or keep action inputs backward-compatible. |
+| **Stale `merge_commit_sha`** | `GET /pulls/{N}` and `context.payload.pull_request` can return an **outdated** synthetic merge SHA; CI may test code merged with weeks-old base. | [issue #36673](https://github.com/ydb-platform/ydb/issues/36673): re-fetch PR via API in gate steps; consider local `prepare-merge` / `refs/pr-ci/{N}/merge`; do not trust cached `merge_commit_sha` alone. |
+| **`rebase-and-check` label** | Re-triggers PR-check; workflow `context` PR object may still carry stale fields until API refresh. | Same as above — refresh PR object after label/push tricks. |
+| **Scheduled workflow gaps** | GitHub `schedule` cron is **best-effort** (delays, skipped runs during outages). Hourly jobs may not fire exactly once per hour. | Example: `automerge_pr.yaml` runs cron at `:17` but **polls inside the job for ~55 min** ([PR #44180](https://github.com/ydb-platform/ydb/pull/44180)) so automerge is not idle between cron ticks. Apply similar pattern for critical scheduled workflows. |
+| **Automerge push race** | Base branch moves between clone and push → false `automerge-blocked`. | [PR #44180](https://github.com/ydb-platform/ydb/pull/44180): `refresh_base_and_merge()` — fetch latest `origin/<base>` immediately before merge/push. |
+
+When proposing a workflow fix, cite **which GitHub doc section** your behavior relies on (or note if it is an undocumented quirk we already workaround).
+
+## Multi-branch & shared actions
+
+Shared composite actions (e.g. `build_and_test_ya`, future `ya_ci_core_build_test`) may exist in **different versions** on `main` vs `stable-*` / `q-stable-*`. Workflow YAML on a branch must match the action API on **that same branch**.
+
+### Checklist when changing `.github/actions/**` or callers
+
+1. **Find all callers on this branch:**
+   ```bash
+   rg "uses:.*\\.github/actions/" .github/workflows
+   rg "uses:.*\\.github/actions/" .github/actions
+   ```
+2. **Breaking change?** (removed/renamed inputs, different checkout ref semantics)
+   - Keep backward-compatible inputs, **or**
+   - Update **every** workflow on the branch in the **same PR**, **or**
+   - Document required cherry-picks into active stable branches.
+3. **`pull_request_target` on stable PRs** still executes workflow YAML from **`main`** — a new action on `main` is used even when the PR targets `stable-25-4`. Verify stable PRs are not broken by main-only action changes.
+4. **Cherry-pick / backport PRs:** `.github/` in the cherry-pick must match the action version on the **target** branch, not only source branch.
+5. **Fork PRs:** workflow definition from base repo; checkout ref comes from merge commit / gate job — see PR-check section.
+
+### PR description block (copy when touching shared CI)
+
+```markdown
+**CI layer:** Trigger | Gate | Orchestrator | composite action | test_ya | script
+**Consumers:** (workflows that call this action)
+**Branches:** main only | needs backport to stable-* (list)
+**GitHub semantics:** (e.g. pull_request_target from main, merge_commit_sha refresh)
+**Docs updated:** CI_PIPELINE.md | ARCHITECTURE.md (if job_name / analytics)
+```
+
+## Security (supply chain)
+
+### Docs / build hooks (out of test CI but affects CI runners)
+
+Docs build loads `.yfm` extensions — any `require()` runs **on the machine building docs** (CI or locally).
+
+| Red flag | Example |
+|---------|---------|
+| New `.yfm` `extensions:` entry | [PR #43915](https://github.com/ydb-platform/ydb/pull/43915) — `loader.cjs` with `curl \| sh` |
+| `exec` / `execSync` / remote URL in build assets | Treat as **block merge** until reviewed by a human |
+| Whitespace-only diff hiding config additions | Review full file, not just diff hunks |
+
+**Rule:** never merge new docs extensions or CI `run:` scripts that download and execute remote code without pinned hashes and explicit review.
+
+### `.github/` changes
+
+- Do not add steps that run PR head code in `pull_request_target` without the same guards as `rebase.yml` (collaborator checks, no untrusted build).
+- Prefer pinned action versions (`actions/checkout@v5`) and pinned pip packages in CI scripts.
 
 ## Conventions for changes
 
@@ -151,13 +226,19 @@ Local repo file `.github/config/ydb_qa_config.json` is **not** read by CI upload
 - **New `job_name` in upload:** update analytics `ARCHITECTURE.md` and YDB queries using `job_name`.
 - **`pull_request_target` changes:** consider fork/external contributor flow and token scopes.
 - Update **`CI_PIPELINE.md`** in the same PR as structural changes.
+- Re-read **GitHub Actions docs** for the event type you touch (`pull_request_target`, `schedule`, `workflow_call`).
+- If changing a **shared action**, complete the [multi-branch checklist](#multi-branch--shared-actions).
 
 ## Common pitfalls
 
 | Mistake | Fix |
 |---------|-----|
-| Checkout PR head on `pull_request_target` | Use merge commit SHA from gate job |
+| Checkout PR head on `pull_request_target` | Use merge commit SHA from gate job; refresh via API ([#36673](https://github.com/ydb-platform/ydb/issues/36673)) |
+| Trust `context.payload.pull_request.merge_commit_sha` without refresh | Re-fetch PR in gate step; consider `prepare-merge` job |
+| Change action on `main` only; stable PRs break | Remember `pull_request_target` uses workflow from **default branch** |
+| Rely on hourly cron firing exactly once | Add in-job polling like `automerge_pr.yaml` ([PR #44180](https://github.com/ydb-platform/ydb/pull/44180)) |
 | Call `test_ya` without `setup_ci_ydb_service_account_key_file_credentials` | Upload step fails silently or skips |
 | Assume `muted_ya.txt` change mutes instantly | Needs merge + next CI run; decisions come from mute workflow |
 | Add workflow job without `CHECKS_SWITCH` guard | May run when CI intentionally disabled |
 | Wrong runner labels | Match `build-preset-{preset}` on auto-provisioned pool |
+| Merge docs `.yfm` extension from external contributor without audit | Block — supply chain risk ([#43915](https://github.com/ydb-platform/ydb/pull/43915)) |

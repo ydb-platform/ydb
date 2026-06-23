@@ -306,6 +306,7 @@ Optional CI hook: run the same command on PRs that touch watched paths.
 | PR-check, test_ya, GitHub statuses | `.cursor/rules/ci-testing.mdc`, `.github/docs/CI_PIPELINE.md` |
 | Mute/unmute rules | `.github/config/mute_rules.md` |
 | Raw data ingestion | `upload_tests_results.py` in `test_ya` action (CI skill) |
+| CI platform traps (merge SHA, stable wf from main) | `.cursor/rules/ci-testing.mdc` → GitHub platform behavior |
 
 ## Conventions
 

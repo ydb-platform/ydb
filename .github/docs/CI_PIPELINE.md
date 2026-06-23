@@ -97,6 +97,7 @@ File: `.github/workflows/pr_check.yml`
 | Topic | Behavior |
 |-------|----------|
 | Event | `pull_request_target` (runs in base repo context; checkout uses **merge commit** SHA) |
+| Merge commit | Gate job outputs `commit_sha` from `pr.merge_commit_sha` — can be **stale**; see [GitHub platform traps](#github-platform-traps) ([#36673](https://github.com/ydb-platform/ydb/issues/36673)) |
 | Concurrency | One run per PR; cancelled on new push; label-only events use fake group to avoid cancelling |
 | Re-trigger labels | `ok-to-test`, `rebase-and-check` only |
 | External forks | Tests run only after maintainer adds `ok-to-test` |
@@ -153,6 +154,35 @@ For mute workflow architecture see `mute_rules.md` and analytics `ARCHITECTURE.m
 | `.github/scripts/tests/` | Report transform, summary, mute helpers |
 | `.github/config/muted_ya*.txt` | Per-sanitizer mute lists |
 | `.github/config/stable_tests_branches.json` | Branch list for regression |
+| `.github/workflows/automerge_pr.yaml` | Scheduled automerge; in-job polling for cron gaps ([#44180](https://github.com/ydb-platform/ydb/pull/44180)) |
+| `ydb/ci/rightlib/automerge.py` | Automerge logic; base refresh before push |
+
+## GitHub platform traps
+
+Re-read [GitHub Actions docs](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows) when changing workflows — behavior changes over time.
+
+| Trap | Impact on YDB CI |
+|------|------------------|
+| **`pull_request_target` uses workflow from default branch (`main`)** | PR into `stable-*` still runs **`main`'s** workflow YAML. A merge to `main` changes CI for all base branches at once. |
+| **Stale `merge_commit_sha`** | Tests may run against an old synthetic merge; base moved but GitHub API cache lagged. Track: [#36673](https://github.com/ydb-platform/ydb/issues/36673). Mitigations: API re-fetch in gate, local `prepare-merge`, `rebase-and-check` refresh. |
+| **`schedule` cron is best-effort** | Missed/delayed ticks. `automerge_pr.yaml`: cron at `:17` + **~55 min poll loop** inside the job ([#44180](https://github.com/ydb-platform/ydb/pull/44180)). |
+| **Automerge base race** | `main` advances between clone and push → spurious block. `automerge.py`: fetch `origin/<base>` immediately before merge. |
+
+## Multi-branch & shared actions
+
+When changing `.github/actions/**` or workflow steps that call them:
+
+1. `rg 'uses:.*\.github/actions/' .github/workflows` — all callers on this branch.
+2. Breaking input/output change → update all callers **same PR** or backport to active `stable-*` / `q-stable-*`.
+3. Remember: stable-target PRs execute **main's** workflow file under `pull_request_target`.
+4. Cherry-picks: `.github/` on target branch must match action API there.
+
+Skill checklist: `.cursor/rules/ci-testing.mdc` → **Multi-branch & shared actions**.
+
+## Security notes
+
+- **Docs build:** `.yfm` `extensions:` run Node code at build time — block unreviewed remote execution ([PR #43915](https://github.com/ydb-platform/ydb/pull/43915)).
+- **`pull_request_target`:** do not run untrusted PR head scripts without collaborator/fork guards (see `rebase.yml` header comment).
 
 ## Maintenance
 
@@ -171,9 +201,15 @@ Update: diagram edge, workflow table row, PR-check table if gate logic changed.
 
 ```markdown
 - [ ] Change reflected in CI_PIPELINE.md (diagram and/or table)
+- [ ] GitHub Actions semantics verified against current docs (event type, branch source)
+- [ ] Shared action change: all workflow callers updated on this branch; stable backport plan if needed
+- [ ] pull_request_target change: considered effect on stable-* PRs (workflow always from main)
+- [ ] merge_commit / checkout ref: stale SHA risk considered ([#36673](https://github.com/ydb-platform/ydb/issues/36673))
+- [ ] Scheduled workflow: cron gap / in-job polling if critical path
 - [ ] If new GitHub status context: update integrated status logic in pr_check if needed
 - [ ] If new job_name in YDB upload: document in analytics ARCHITECTURE.md too
 - [ ] Tested on fork/external PR flow if changing pull_request_target gate
+- [ ] No unreviewed docs extensions or remote curl|sh in CI/build hooks
 ```
 
 ### For Cursor agents

@@ -32,26 +32,25 @@ SKIP_UNDER_ANALYTICS = (
 
 def changed_files(base: str | None) -> set[str]:
     if base:
-        cmd = ["git", "diff", "--name-only", f"{base}...HEAD"]
-        out = subprocess.check_output(cmd, cwd=REPO_ROOT, text=True)
+        out = subprocess.check_output(
+            ["git", "diff", "--name-only", f"{base}...HEAD"],
+            cwd=REPO_ROOT,
+            text=True,
+        )
     else:
         out = subprocess.check_output(
             ["git", "diff", "--name-only", "HEAD"], cwd=REPO_ROOT, text=True
         )
-    staged = subprocess.check_output(
-        ["git", "diff", "--name-only", "--cached"], cwd=REPO_ROOT, text=True
-    )
-    untracked = subprocess.check_output(
-        ["git", "ls-files", "--others", "--exclude-standard"],
-        cwd=REPO_ROOT,
-        text=True,
-    )
-    names = {
-        line.strip()
-        for line in (out + staged + untracked).splitlines()
-        if line.strip()
-    }
-    return names
+        staged = subprocess.check_output(
+            ["git", "diff", "--name-only", "--cached"], cwd=REPO_ROOT, text=True
+        )
+        untracked = subprocess.check_output(
+            ["git", "ls-files", "--others", "--exclude-standard"],
+            cwd=REPO_ROOT,
+            text=True,
+        )
+        out = out + staged + untracked
+    return {line.strip() for line in out.splitlines() if line.strip()}
 
 
 def touches_analytics(paths: set[str]) -> bool:
@@ -84,10 +83,10 @@ def main() -> int:
 
     print(
         f"ERROR: analytics paths changed but {arch_rel} was not updated.\n"
-        f"Changed files:\n  " + "\n  ".join(sorted(paths & set(
-            p for p in paths
-            if any(p.startswith(w) for w in WATCH_PREFIXES)
-        ))),
+        f"Changed files:\n  "
+        + "\n  ".join(
+            sorted(p for p in paths if any(p.startswith(w) for w in WATCH_PREFIXES))
+        ),
         file=sys.stderr,
     )
     print(f"\nUpdate {arch_rel} (diagram + table) in the same PR.", file=sys.stderr)

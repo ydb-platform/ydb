@@ -157,10 +157,10 @@ Status: **active** | **legacy (manual)** | **manual-only SQL**
 | `update_muted_ya` | `flaky_tests_history.py`, `tests_monitor.py` | `flaky_tests_window_*`, `tests_monitor` | mute decisions |
 | `update_muted_ya` | mute scripts | `muted_ya.txt` PR | CI mute rules |
 | `create_issues_for_muted_tests` | monitor + `export_issues` | issues in GitHub | mute issues |
-| `telegram_scheduled_notifications` | `send_digest.py` | reads `digest_queue` | Telegram |
+| `telegram_scheduled_notifications` | `.github/scripts/telegram/send_digest.py` | reads `digest_queue` | Telegram |
 | `monitoring_queries` | `monitoring_queries_executor.py` | none (read-only alerts) | on-call / ops |
 | `collect_analytics.yml` | monitor scripts | same as mute path | **legacy**, manual |
-| `datalens_ds_queries/*.sql` | — | — | **manual-only** DataLens |
+| `data_mart_queries/datalens_ds_queries/*.sql` | — | — | **manual-only** DataLens |
 
 Table path registry: `.github/config/ydb_qa_config.json` (repo) and GitHub variable **`YDB_QA_CONFIG`** (CI — must stay in sync).
 

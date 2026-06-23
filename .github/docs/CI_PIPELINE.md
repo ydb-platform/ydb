@@ -112,13 +112,13 @@ File: `.github/workflows/pr_check.yml`
 | Step | Script / tool | Purpose |
 |------|---------------|---------|
 | Init | pip install, `TMP_DIR`, `PUBLIC_DIR` | S3-backed public artifact dir |
-| Graph compare | `graph_compare.py` (if `increment=true`) | Select tests affected by diff |
+| Graph compare | `.github/scripts/graph_compare.py` (if `increment=true`) | Select tests affected by diff |
 | ya make | `./ya -T …` in systemd scope | Build + test with retries |
-| Report | `report_analyzer.py`, `fail-checker.py` | Failure counts, summaries |
-| Mute filter | `transform_build_results.py` + `muted_ya.txt` | Mark muted tests in report |
-| PR comment | `generate-summary.py`, `comment-pr.py` | Collapsible summary on PR |
-| Analytics ingest | `upload_tests_results.py` | Write to YDB (needs SA + `YDB_QA_CONFIG`) |
-| Binary stats | `send_build_stats.py` | `binary_size` table |
+| Report | `.github/scripts/tests/report_analyzer.py`, `fail-checker.py` | Failure counts, summaries |
+| Mute filter | `.github/scripts/tests/transform_build_results.py` + `muted_ya.txt` | Mark muted tests in report |
+| PR comment | `.github/scripts/tests/generate-summary.py`, `comment-pr.py` | Collapsible summary on PR |
+| Analytics ingest | `.github/scripts/analytics/upload_tests_results.py` | Write to YDB (needs SA + `YDB_QA_CONFIG`) |
+| Binary stats | `.github/scripts/send_build_stats.py` | `binary_size` table |
 | Status API | curl commit statuses | `build_{preset}`, `test_{preset}` |
 
 Retry: controlled by `test_retry_count` input; TSAN/MSAN default retry=1 and `IS_TEST_RESULT_IGNORED=1`.

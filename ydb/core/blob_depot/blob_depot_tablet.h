@@ -263,7 +263,6 @@ namespace NKikimr::NBlobDepot {
 
         bool Configured = false;
         NKikimrBlobDepot::TBlobDepotConfig Config;
-        TIntrusivePtr<TBlobStorageGroupInfo> GroupInfo;
 
         void Handle(TEvBlobDepot::TEvApplyConfig::TPtr ev);
 
@@ -358,14 +357,6 @@ namespace NKikimr::NBlobDepot {
         void OnUpdateDecommitState();
 
         ui32 PerGenerationCounter = 1;
-
-        ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-        TActorId GroupRecommissionerId;
-
-        class TGroupRecommissioner;
-
-        void StartGroupRecommissioner();
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Group metrics exchange

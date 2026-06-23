@@ -56,6 +56,7 @@ bool TPushRenameThroughTransparentUnaryRule::MatchAndApply(TIntrusivePtr<IOperat
     }
 
     const auto oldInput = unary->GetInput();
+    const auto oldUnaryOutput = unary->Props.OutputIUs;
     auto pushedMap = MakeIntrusive<TOpMap>(oldInput, topMap->Pos, TVector<TMapElement>{NMapRules::MakeRenameElement(*candidate, topMap)});
     if (HasOutputConflicts(pushedMap->GetOutputIUs())) {
         return false;
@@ -63,9 +64,11 @@ bool TPushRenameThroughTransparentUnaryRule::MatchAndApply(TIntrusivePtr<IOperat
 
     unary->SetInput(pushedMap);
     unary->RenameIUs({{candidate->From, candidate->To}}, ctx.ExprCtx);
+    unary->ComputeOutputIUs();
     if (HasOutputConflicts(unary->GetOutputIUs())) {
         unary->RenameIUs({{candidate->To, candidate->From}}, ctx.ExprCtx);
         unary->SetInput(oldInput);
+        unary->Props.OutputIUs = oldUnaryOutput;
         return false;
     }
 

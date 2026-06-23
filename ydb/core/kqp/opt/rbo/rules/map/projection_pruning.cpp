@@ -26,22 +26,24 @@ bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
     }
 
     auto newElements = KeepLiveMapElements(map, liveIt->second, props, keepKeyColumns);
-    if (newElements.size() == map->MapElements.size()) {
-        return false;
-    }
 
     if (newElements.empty()) {
-        if (!CanReplaceInParents(map, map->GetInput(), props)) {
+        const auto& replacementOutput = map->GetInput()->GetOutputIUs();
+        if (!CanExposeOutput(map, replacementOutput, props)) {
             return false;
         }
         input = map->GetInput();
     } else {
-        auto oldElements = std::move(map->MapElements);
-        map->MapElements = std::move(newElements);
-        if (!CanExposeToParents(map.get(), props)) {
-            map->MapElements = std::move(oldElements);
+        if (newElements.size() == map->MapElements.size()) {
             return false;
         }
+
+        auto newOutput = BuildMapOutput(map, newElements);
+        if (!CanExposeOutput(map, newOutput, props)) {
+            return false;
+        }
+        map->MapElements = std::move(newElements);
+        map->Props.OutputIUs = std::move(newOutput);
     }
 
     return true;

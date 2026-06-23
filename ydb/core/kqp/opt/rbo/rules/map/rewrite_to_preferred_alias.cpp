@@ -273,6 +273,7 @@ bool RewriteAggregateInputs(TOpAggregate& aggregate, const TInfoUnitSet& liveOut
 
     const auto oldKeys = aggregate.KeyColumns;
     const auto oldTraits = aggregate.AggregationTraitsList;
+    const auto oldOutput = aggregate.Props.OutputIUs;
 
     bool changed = false;
     for (auto& key : aggregate.KeyColumns) {
@@ -285,9 +286,11 @@ bool RewriteAggregateInputs(TOpAggregate& aggregate, const TInfoUnitSet& liveOut
         }
     }
 
+    aggregate.ComputeOutputIUs();
     if (HasOutputConflicts(aggregate.GetOutputIUs()) || !CanExposeToParents(&aggregate, props)) {
         aggregate.KeyColumns = oldKeys;
         aggregate.AggregationTraitsList = oldTraits;
+        aggregate.Props.OutputIUs = oldOutput;
         return false;
     }
 

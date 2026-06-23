@@ -13,6 +13,7 @@ void TLogicalOutputPruningStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
     Y_UNUSED(ctx);
 
     bool pruned = true;
+    THashMap<IOperator*, TVector<TInfoUnit>> cacheOnlyOutputs;
     while (pruned) {
         pruned = false;
         ComputePlanLiveness(root);
@@ -30,18 +31,29 @@ void TLogicalOutputPruningStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
             }
 
             auto newElements = KeepLiveMapElements(map, liveIt->second, root.PlanProps);
-            if (newElements.size() == map->MapElements.size()) {
+            const auto inputLiveIt = root.PlanProps.LiveOut.find(map->GetInput().get());
+            TVector<TInfoUnit> inputOutput = map->GetInput()->GetOutputIUs();
+            if (inputLiveIt != root.PlanProps.LiveOut.end()) {
+                inputOutput = KeepLiveColumns(inputOutput, inputLiveIt->second);
+            }
+
+            auto newOutput = BuildMapOutput(inputOutput, newElements);
+            if (newElements.size() == map->MapElements.size() && newOutput == map->GetOutputIUs()) {
                 continue;
             }
 
-            auto oldElements = std::move(map->MapElements);
+            if (!CanExposeOutput(map, newOutput, root.PlanProps)) {
+                continue;
+            }
+
+            const bool elementsChanged = newElements.size() != map->MapElements.size();
             map->MapElements = std::move(newElements);
-            if (!CanExposeToParents(map.get(), root.PlanProps)) {
-                map->MapElements = std::move(oldElements);
-                continue;
+            auto [cacheOnlyIt, inserted] = cacheOnlyOutputs.emplace(map.get(), newOutput);
+            if (elementsChanged || inserted || cacheOnlyIt->second != newOutput) {
+                cacheOnlyIt->second = newOutput;
+                pruned = true;
             }
-
-            pruned = true;
+            map->Props.OutputIUs = std::move(newOutput);
         }
 
         for (const auto& iter : root) {

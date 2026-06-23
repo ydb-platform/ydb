@@ -82,6 +82,7 @@ TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const T
     auto join = CastOperator<TOpJoin>(topMap->GetInput());
     const auto originalLeftInput = join->GetLeftInput();
     const auto originalRightInput = join->GetRightInput();
+    const auto oldJoinOutput = join->Props.OutputIUs;
     if (!join->IsSingleConsumer() || !originalLeftInput->IsSingleConsumer() || !originalRightInput->IsSingleConsumer()) {
         return input;
     }
@@ -145,9 +146,11 @@ TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const T
         join->SetRightInput(rightMap);
     }
 
+    join->ComputeOutputIUs();
     if (HasOutputConflicts(join->GetOutputIUs())) {
         join->SetLeftInput(originalLeftInput);
         join->SetRightInput(originalRightInput);
+        join->Props.OutputIUs = oldJoinOutput;
         return input;
     }
 
@@ -164,6 +167,7 @@ TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const T
         if (!CanReplaceInParents(topMap, join, props)) {
             join->SetLeftInput(originalLeftInput);
             join->SetRightInput(originalRightInput);
+            join->Props.OutputIUs = oldJoinOutput;
             return input;
         }
         return join;

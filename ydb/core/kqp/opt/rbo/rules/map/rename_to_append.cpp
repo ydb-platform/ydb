@@ -1,21 +1,20 @@
 #include <ydb/core/kqp/opt/rbo/rules/kqp_rules_include.h>
+#include <ydb/core/kqp/opt/rbo/rules/map/projection_pruning_helpers.h>
 
 namespace NKikimr {
 namespace NKqp {
 
 namespace {
 
-bool CanConvertRenameToAppend(const TIntrusivePtr<TOpMap>& map, size_t renameIdx, const TPlanProps& props) {
+bool CanConvertRenameToAppend(const TIntrusivePtr<TOpMap>& map, size_t renameIdx, const TPlanProps& props, TVector<TInfoUnit>& output) {
     if (map->MapElements[renameIdx].GetRename() == map->MapElements[renameIdx].GetElementName()) {
         return false;
     }
 
-    auto oldElements = map->MapElements;
-    map->MapElements[renameIdx].SetIsRename(false);
-    const bool valid = CanExposeToParents(map.get(), props);
-    map->MapElements = std::move(oldElements);
-
-    return valid;
+    auto elements = map->MapElements;
+    elements[renameIdx].SetIsRename(false);
+    output = BuildMapOutput(map, elements);
+    return CanExposeOutput(map, output, props);
 }
 
 } // anonymous namespace
@@ -35,11 +34,13 @@ bool TRenameToAppendRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOCon
             continue;
         }
 
-        if (!CanConvertRenameToAppend(map, idx, props)) {
+        TVector<TInfoUnit> output;
+        if (!CanConvertRenameToAppend(map, idx, props, output)) {
             continue;
         }
 
         map->MapElements[idx].SetIsRename(false);
+        map->Props.OutputIUs = std::move(output);
         changed = true;
     }
 

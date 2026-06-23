@@ -159,4 +159,6 @@ message TEvUploadSampleKResponse {
 
     reserved 4 to 5;
     optional NKikimrIndexBuilder.TMeteringStats MeteringStats = 6;
+
+    optional uint64 Parent = 7;
 }

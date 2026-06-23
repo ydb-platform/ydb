@@ -439,6 +439,27 @@ public:
 
     std::unique_ptr<NKikimr::NKMeans::IClusters> Clusters;
 
+    struct TParentIndexBuildState {
+        NTableIndex::NKMeans::TClusterId Child = 0;
+        TKMeans::EState Phase = TKMeans::Sample;
+        ui32 Round = 0;
+        TSample Sample;
+        std::unique_ptr<NKikimr::NKMeans::IClusters> Clusters;
+        TDeque<TShardIdx> ToUploadShards;
+        THashSet<TShardIdx> InProgressShards;
+        std::vector<TShardIdx> DoneShards;
+        std::vector<TShardIdx> ShardSet;
+        THashMap<TShardIdx, TString> LastKeyAck;
+        bool UploadPending = false;
+    };
+
+    TMap<NTableIndex::NKMeans::TClusterId, TParentIndexBuildState> ParentIndexBuildState;
+    TDeque<NTableIndex::NKMeans::TClusterId> PendingMultiShardParents;
+    THashMap<TShardIdx, NTableIndex::NKMeans::TClusterId> ShardParentMap;
+    TSet<NTableIndex::NKMeans::TClusterId> CompletedParents;
+    std::optional<NTableIndex::NKMeans::TClusterId> CurrentResponseParent;
+    static constexpr ui32 MaxParallelParents = 4;
+
     TString DebugString() const {
         auto result = TStringBuilder() << BuildKind << " " << State << "/" << SubState << " ";
 

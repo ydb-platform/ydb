@@ -57,6 +57,7 @@ protected:
 
     const TActorId ResponseActorId;
     const TIndexBuildId BuildId;
+    const ui64 Parent;
 
     std::shared_ptr<NTxProxy::TUploadTypes> Types;
     TVector<std::pair<TSerializedCellVec, TSerializedCellVec>> InputRows;
@@ -75,12 +76,14 @@ public:
                    const TActorId& responseActorId,
                    TIndexBuildId buildId,
                    std::shared_ptr<NTxProxy::TUploadTypes> types,
-                   TVector<std::pair<TSerializedCellVec, TSerializedCellVec>>&& rows)
+                   TVector<std::pair<TSerializedCellVec, TSerializedCellVec>>&& rows,
+                   ui64 parent = 0)
         : DatabaseName(databaseName)
         , TargetTable(targetTable)
         , ScanSettings(scanSettings)
         , ResponseActorId(responseActorId)
         , BuildId(buildId)
+        , Parent(parent)
         , Types(types)
         , InputRows(std::move(rows))
     {
@@ -165,6 +168,9 @@ private:
         TAutoPtr<TEvIndexBuilder::TEvUploadSampleKResponse> response = new TEvIndexBuilder::TEvUploadSampleKResponse;
 
         response->Record.SetId(ui64(BuildId));
+        if (Parent) {
+            response->Record.SetParent(Parent);
+        }
         response->Record.MutableMeteringStats()->SetUploadRows(UploadRows->size());
         response->Record.MutableMeteringStats()->SetUploadBytes(UploadBytes);
 
@@ -676,7 +682,7 @@ struct TSchemeShard::TIndexBuilder::TTxProgress: public TSchemeShard::TIndexBuil
 private:
     TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
 
-    template <bool WithSnapshot = true, typename TRequest>
+    template <bool WithSnapshot = true, bool WithKeyRange = true, typename TRequest>
     TTabletId FillScanRequestCommon(TRequest& request, TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         TTabletId shardId = Self->ShardInfos.at(shardIdx).TabletID;
         request.SetTabletId(ui64(shardId));
@@ -690,12 +696,14 @@ private:
         }
 
         auto& shardStatus = buildInfo.Shards.at(shardIdx);
-        if constexpr (requires { request.MutableKeyRange(); }) {
-            if (shardStatus.LastKeyAck) {
-                TSerializedTableRange range = TSerializedTableRange(shardStatus.LastKeyAck, "", false, false);
-                range.Serialize(*request.MutableKeyRange());
-            } else if (buildInfo.KMeans.Parent == 0) {
-                shardStatus.Range.Serialize(*request.MutableKeyRange());
+        if constexpr (WithKeyRange) {
+            if constexpr (requires { request.MutableKeyRange(); }) {
+                if (shardStatus.LastKeyAck) {
+                    TSerializedTableRange range = TSerializedTableRange(shardStatus.LastKeyAck, "", false, false);
+                    range.Serialize(*request.MutableKeyRange());
+                } else if (buildInfo.KMeans.Parent == 0) {
+                    shardStatus.Range.Serialize(*request.MutableKeyRange());
+                }
             }
         }
 
@@ -729,7 +737,10 @@ private:
         }
     }
 
-    void SendSampleKRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+    void SendSampleKRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo,
+                            NTableIndex::NKMeans::TClusterId parent,
+                            ui64 maxProbability,
+                            const TString& lastKeyAck) {
         Y_ENSURE(buildInfo.IsBuildVectorIndex());
         auto ev = MakeHolder<TEvDataShard::TEvSampleKRequest>();
         ev->Record.SetId(ui64(BuildId));
@@ -750,12 +761,19 @@ private:
             *ev->Record.MutableSettings() = vectorSettings;
         }
         ev->Record.SetK(buildInfo.KMeans.K);
-        ev->Record.SetMaxProbability(buildInfo.Sample.MaxProbability);
-        if (buildInfo.KMeans.Parent != 0) {
-            auto from = TCell::Make(buildInfo.KMeans.Parent - 1);
-            auto to = TCell::Make(buildInfo.KMeans.Parent);
+        ev->Record.SetMaxProbability(maxProbability);
+
+        if (lastKeyAck) {
+            TSerializedCellVec key{lastKeyAck};
+            TSerializedTableRange range{key.GetCells(), false, {}, false};
+            range.Serialize(*ev->Record.MutableKeyRange());
+        } else if (parent != 0) {
+            auto from = TCell::Make(parent - 1);
+            auto to = TCell::Make(parent);
             TSerializedTableRange range{{&from, 1}, false, {&to, 1}, true};
             range.Serialize(*ev->Record.MutableKeyRange());
+        } else {
+            buildInfo.Shards.at(shardIdx).Range.Serialize(*ev->Record.MutableKeyRange());
         }
 
         ev->Record.AddColumns(buildInfo.IndexColumns.back());
@@ -764,7 +782,7 @@ private:
             ev->Record.AddColumns(NTableIndex::NKMeans::IsForeignColumn);
         }
 
-        auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
+        auto shardId = FillScanRequestNoKeyRange(ev->Record, shardIdx, buildInfo);
         FillScanRequestSeed(ev->Record);
         LOG_N("TTxBuildProgress: TEvSampleKRequest: " << ev->Record.ShortDebugString());
 
@@ -795,7 +813,11 @@ private:
         ToTabletSend.emplace(shardId, std::move(ev));
     }
 
-    void SendKMeansReshuffleRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+    void SendKMeansReshuffleRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo,
+                                    NTableIndex::NKMeans::TClusterId parent,
+                                    NTableIndex::NKMeans::TClusterId child,
+                                    const TIndexBuildInfo::TSample& sample,
+                                    const TString& lastKeyAck) {
         Y_ENSURE(buildInfo.IsBuildVectorIndex());
         auto ev = MakeHolder<TEvDataShard::TEvReshuffleKMeansRequest>();
         ev->Record.SetId(ui64(BuildId));
@@ -811,14 +833,14 @@ private:
         *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
             buildInfo.SpecializedIndexDescription).GetSettings().settings();
         ev->Record.SetUpload(buildInfo.KMeans.GetUpload());
-        ev->Record.SetParent(buildInfo.KMeans.Parent);
-        ev->Record.SetChild(buildInfo.KMeans.Child);
+        ev->Record.SetParent(parent);
+        ev->Record.SetChild(child);
 
-        Y_ENSURE(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
+        Y_ENSURE(sample.Rows.size() <= buildInfo.KMeans.K);
         auto& clusters = *ev->Record.MutableClusters();
-        clusters.Reserve(buildInfo.Sample.Rows.size());
-        for (const auto& [_, row] : buildInfo.Sample.Rows) {
-            *clusters.Add() = TSerializedCellVec::ExtractCell(row, 0).AsBuf();
+        clusters.Reserve(sample.Rows.size());
+        for (const auto& row : sample.Rows) {
+            *clusters.Add() = TSerializedCellVec::ExtractCell(row.Row, 0).AsBuf();
         }
 
         ev->Record.SetDatabaseName(CanonizePath(Self->RootPathElements));
@@ -833,23 +855,27 @@ private:
         ev->Record.SetOverlapRatio(buildInfo.KMeans.OverlapRatio);
         ev->Record.SetOverlapOutForeign(buildInfo.KMeans.OverlapClusters > 1 && buildInfo.KMeans.Levels > 1);
 
-        auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
-        {
-            auto& shardStatus = buildInfo.Shards.at(shardIdx);
-            if (shardStatus.LastKeyAck) {
-                TSerializedCellVec lastKey{shardStatus.LastKeyAck};
-                TSerializedTableRange range{lastKey.GetCells(), false, {}, false};
-                range.Serialize(*ev->Record.MutableKeyRange());
-            } else {
-                shardStatus.Range.Serialize(*ev->Record.MutableKeyRange());
-            }
+        auto shardId = FillScanRequestNoKeyRange(ev->Record, shardIdx, buildInfo);
+        if (lastKeyAck) {
+            TSerializedCellVec lastKey{lastKeyAck};
+            TSerializedTableRange range{lastKey.GetCells(), false, {}, false};
+            range.Serialize(*ev->Record.MutableKeyRange());
+        } else {
+            buildInfo.Shards.at(shardIdx).Range.Serialize(*ev->Record.MutableKeyRange());
         }
         LOG_N("TTxBuildProgress: TEvReshuffleKMeansRequest: " << ToShortDebugString(ev->Record));
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
 
-    void SendKMeansRecomputeRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+    void SendKMeansReshuffleRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+        SendKMeansReshuffleRequest(shardIdx, buildInfo, buildInfo.KMeans.Parent,
+                                   buildInfo.KMeans.Child, buildInfo.Sample, buildInfo.Shards.at(shardIdx).LastKeyAck);
+    }
+
+    void SendKMeansRecomputeRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo,
+                                    NTableIndex::NKMeans::TClusterId parent,
+                                    const TIndexBuildInfo::TSample& sample) {
         Y_ENSURE(buildInfo.IsBuildVectorIndex());
         auto ev = MakeHolder<TEvDataShard::TEvRecomputeKMeansRequest>();
         ev->Record.SetId(ui64(BuildId));
@@ -864,18 +890,18 @@ private:
 
         *ev->Record.MutableSettings() = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
             buildInfo.SpecializedIndexDescription).GetSettings().settings();
-        ev->Record.SetParent(buildInfo.KMeans.Parent);
+        ev->Record.SetParent(parent);
 
-        Y_ENSURE(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
+        Y_ENSURE(sample.Rows.size() <= buildInfo.KMeans.K);
         auto& clusters = *ev->Record.MutableClusters();
-        clusters.Reserve(buildInfo.Sample.Rows.size());
-        for (const auto& [_, row] : buildInfo.Sample.Rows) {
-            *clusters.Add() = TSerializedCellVec::ExtractCell(row, 0).AsBuf();
+        clusters.Reserve(sample.Rows.size());
+        for (const auto& row : sample.Rows) {
+            *clusters.Add() = TSerializedCellVec::ExtractCell(row.Row, 0).AsBuf();
         }
 
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
 
-        auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
+        auto shardId = FillScanRequestNoKeyRange(ev->Record, shardIdx, buildInfo);
         LOG_N("TTxBuildProgress: TEvRecomputeKMeansRequest: " << ToShortDebugString(ev->Record));
 
         ToTabletSend.emplace(shardId, std::move(ev));
@@ -1220,10 +1246,14 @@ private:
         ToTabletSend.emplace(shardId, std::move(ev));
     }
 
-    void SendUploadSampleKRequest(TIndexBuildInfo& buildInfo) {
-        buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
+    void SendUploadSampleKRequest(TIndexBuildInfo& buildInfo,
+                                  NTableIndex::NKMeans::TClusterId parent,
+                                  NTableIndex::NKMeans::TClusterId child,
+                                  TIndexBuildInfo::TSample& sample,
+                                  ui64 responseParent) {
+        sample.MakeStrictTop(buildInfo.KMeans.K);
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::NKMeans::LevelTable);
-        Y_ENSURE(buildInfo.Sample.Rows.size() <= buildInfo.KMeans.K);
+        Y_ENSURE(sample.Rows.size() <= buildInfo.KMeans.K);
 
         TVector<std::pair<TSerializedCellVec, TSerializedCellVec>> uploadRows;
         std::array<TCell, 2> pk;
@@ -1238,19 +1268,18 @@ private:
                 uploadRows.emplace_back(TSerializedCellVec{pk}, emptyCells);
             }
         } else {
-            Y_ENSURE(buildInfo.KMeans.Parent < buildInfo.KMeans.Child);
-            Y_ENSURE(buildInfo.KMeans.Child != 0);
-            uploadRows.reserve(buildInfo.Sample.Rows.size());
-            pk[0] = TCell::Make(buildInfo.KMeans.Parent);
-            auto child = buildInfo.KMeans.Child;
+            Y_ENSURE(parent < child);
+            Y_ENSURE(child != 0);
+            uploadRows.reserve(sample.Rows.size());
+            pk[0] = TCell::Make(parent);
             if (!buildInfo.KMeans.NeedsAnotherLevel()) {
                 child = NTableIndex::NKMeans::SetPostingParentFlag(child);
             } else {
                 NTableIndex::NKMeans::EnsureNoPostingParentFlag(child);
             }
-            for (auto& [_, row] : buildInfo.Sample.Rows) {
+            for (auto& row : sample.Rows) {
                 pk[1] = TCell::Make(child);
-                uploadRows.emplace_back(TSerializedCellVec{pk}, TSerializedCellVec(row));
+                uploadRows.emplace_back(TSerializedCellVec{pk}, TSerializedCellVec(row.Row));
                 child++;
             }
         }
@@ -1264,11 +1293,14 @@ private:
         (*types)[2] = {NTableIndex::NKMeans::CentroidColumn, type};
 
         auto actor = new TUploadSampleK(CanonizePath(Self->RootPathElements), path.PathString(),
-            buildInfo.ScanSettings, Self->SelfId(), BuildId, types, std::move(uploadRows));
-
+            buildInfo.ScanSettings, Self->SelfId(), BuildId, types, std::move(uploadRows), responseParent);
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
 
         LOG_N("TTxBuildProgress: TUploadSampleK: " << buildInfo);
+    }
+
+    void SendUploadSampleKRequest(TIndexBuildInfo& buildInfo) {
+        SendUploadSampleKRequest(buildInfo, buildInfo.KMeans.Parent, buildInfo.KMeans.Child, buildInfo.Sample, 0);
     }
 
     void SendBuildFulltextIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -1683,16 +1715,25 @@ private:
             buildInfo.InProgressShards.clear();
             return true;
         }
-        return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendSampleKRequest(shardIdx, buildInfo); });
+        return SendToShards(buildInfo, [&](TShardIdx shardIdx) {
+            SendSampleKRequest(shardIdx, buildInfo, buildInfo.KMeans.Parent,
+                buildInfo.Sample.MaxProbability, buildInfo.Shards.at(shardIdx).LastKeyAck);
+        });
     }
 
     bool SendKMeansReshuffle(TIndexBuildInfo& buildInfo) {
         buildInfo.Sample.MakeStrictTop(buildInfo.KMeans.K);
-        return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendKMeansReshuffleRequest(shardIdx, buildInfo); });
+        return SendToShards(buildInfo, [&](TShardIdx shardIdx) {
+            SendKMeansReshuffleRequest(shardIdx, buildInfo, buildInfo.KMeans.Parent,
+                buildInfo.KMeans.Child, buildInfo.Sample, buildInfo.Shards.at(shardIdx).LastKeyAck);
+        });
     }
 
     bool SendKMeansRecompute(TIndexBuildInfo& buildInfo) {
-        return SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendKMeansRecomputeRequest(shardIdx, buildInfo); });
+        return SendToShards(buildInfo, [&](TShardIdx shardIdx) {
+            SendKMeansRecomputeRequest(shardIdx, buildInfo, buildInfo.KMeans.Parent,
+                buildInfo.Sample);
+        });
     }
 
     bool SendKMeansFilter(TIndexBuildInfo& buildInfo) {
@@ -1922,8 +1963,250 @@ private:
         return false;
     }
 
+    template <bool WithSnapshot = true, typename TRequest>
+    TTabletId FillScanRequestNoKeyRange(TRequest& request, TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+        return FillScanRequestCommon<WithSnapshot, false>(request, shardIdx, buildInfo);
+    }
+
+
+    void ClearParentDoneShards(TTransactionContext& txc, TIndexBuildInfo& buildInfo,
+                               TIndexBuildInfo::TParentIndexBuildState& parentState) {
+        if (parentState.DoneShards.empty()) {
+            return;
+        }
+        NIceDb::TNiceDb db{txc.DB};
+        for (const auto& idx : parentState.DoneShards) {
+            auto& status = buildInfo.Shards.at(idx);
+            Self->PersistBuildIndexShardStatusReset(db, BuildId, idx, status);
+        }
+        parentState.DoneShards.clear();
+        Self->PersistBuildIndexProcessed(db, buildInfo);
+    }
+
+    static void UpdateParentSampleFromClusters(TIndexBuildInfo::TParentIndexBuildState& parentState) {
+        parentState.Sample.Clear();
+        const auto& clusters = parentState.Clusters->GetClusters();
+        for (ui32 i = 0; i < clusters.size(); i++) {
+            TVector<TCell> cells{TCell(clusters[i])};
+            auto sampleRow = TSerializedCellVec::Serialize(cells);
+            parentState.Sample.Add(i + 1, std::move(sampleRow));
+        }
+    }
+
+    void SendRequestsToParentShards(TIndexBuildInfo& buildInfo,
+                                    NTableIndex::NKMeans::TClusterId parent,
+                                    TIndexBuildInfo::TParentIndexBuildState& parentState) {
+        while (!parentState.ToUploadShards.empty() &&
+               parentState.InProgressShards.size() < buildInfo.MaxInProgressShards) {
+            auto shardIdx = parentState.ToUploadShards.front();
+            parentState.ToUploadShards.pop_front();
+            parentState.InProgressShards.insert(shardIdx);
+            buildInfo.InProgressShards.insert(shardIdx);
+            buildInfo.ShardParentMap[shardIdx] = parent;
+
+            switch (parentState.Phase) {
+            case TIndexBuildInfo::TKMeans::Sample:
+                SendSampleKRequest(shardIdx, buildInfo, parent, parentState.Sample.MaxProbability, TString{});
+                break;
+            case TIndexBuildInfo::TKMeans::Recompute:
+                SendKMeansRecomputeRequest(shardIdx, buildInfo, parent, parentState.Sample);
+                break;
+            case TIndexBuildInfo::TKMeans::Reshuffle: {
+                auto it = parentState.LastKeyAck.find(shardIdx);
+                SendKMeansReshuffleRequest(shardIdx, buildInfo, parent, parentState.Child, parentState.Sample,
+                    it != parentState.LastKeyAck.end() ? it->second : TString{});
+                break;
+            }
+            default:
+                Y_ENSURE(false, "Unexpected phase in SendRequestsToParentShards");
+            }
+        }
+    }
+
+    void StartParent(TIndexBuildInfo& buildInfo, NTableIndex::NKMeans::TClusterId parent) {
+        auto it = buildInfo.Cluster2Shards.lower_bound(parent);
+        Y_ENSURE(it != buildInfo.Cluster2Shards.end());
+        Y_ENSURE(it->second.Shards.size() > 1);
+
+        auto& parentState = buildInfo.ParentIndexBuildState[parent];
+        parentState.Phase = TIndexBuildInfo::TKMeans::Sample;
+        parentState.Round = 0;
+        parentState.Sample.Clear();
+        parentState.Clusters.reset();
+        parentState.ToUploadShards.clear();
+        parentState.InProgressShards.clear();
+        parentState.DoneShards.clear();
+        parentState.ShardSet.clear();
+        parentState.LastKeyAck.clear();
+        parentState.UploadPending = false;
+        parentState.Child = buildInfo.KMeans.ChildBegin +
+                    (parent - buildInfo.KMeans.ParentBegin) * buildInfo.KMeans.K;
+
+        for (const auto& idx : it->second.Shards) {
+            parentState.ShardSet.push_back(idx);
+            parentState.ToUploadShards.push_back(idx);
+        }
+    }
+
+    void FinishParent(TTransactionContext& txc, TIndexBuildInfo& buildInfo,
+                      NTableIndex::NKMeans::TClusterId parent,
+                      TIndexBuildInfo::TParentIndexBuildState& parentState) {
+        ClearParentDoneShards(txc, buildInfo, parentState);
+        buildInfo.ParentIndexBuildState.erase(parent);
+    }
+
+    void InitParallelMode(TIndexBuildInfo& buildInfo) {
+        buildInfo.PendingMultiShardParents.clear();
+        const auto end = buildInfo.KMeans.ParentEnd();
+        for (auto p = buildInfo.KMeans.Parent; p <= end; p++) {
+            auto it = buildInfo.Cluster2Shards.lower_bound(p);
+            if (it != buildInfo.Cluster2Shards.end() && it->second.Shards.size() > 1) {
+                buildInfo.PendingMultiShardParents.push_back(p);
+            }
+        }
+    }
+
+    void TryStartPendingParents(TIndexBuildInfo& buildInfo) {
+        while (buildInfo.ParentIndexBuildState.size() < buildInfo.MaxParallelParents &&
+               !buildInfo.PendingMultiShardParents.empty()) {
+            auto parent = buildInfo.PendingMultiShardParents.front();
+            buildInfo.PendingMultiShardParents.pop_front();
+
+            if (buildInfo.ParentIndexBuildState.contains(parent)) {
+                continue;
+            }
+
+            auto it = buildInfo.Cluster2Shards.lower_bound(parent);
+            if (it == buildInfo.Cluster2Shards.end()) {
+                continue;
+            }
+
+            StartParent(buildInfo, parent);
+            SendRequestsToParentShards(buildInfo, parent, buildInfo.ParentIndexBuildState.at(parent));
+        }
+    }
+
+    bool AdvanceParentPhase(TTransactionContext& txc, TIndexBuildInfo& buildInfo,
+                            NTableIndex::NKMeans::TClusterId parent,
+                            TIndexBuildInfo::TParentIndexBuildState& parentState) {
+        SendRequestsToParentShards(buildInfo, parent, parentState);
+
+        if (!parentState.InProgressShards.empty() || !parentState.ToUploadShards.empty()) {
+            return false;
+        }
+        if (parentState.UploadPending) {
+            return false;
+        }
+
+        switch (parentState.Phase) {
+        case TIndexBuildInfo::TKMeans::Sample: {
+            ClearParentDoneShards(txc, buildInfo, parentState);
+            if (parentState.Sample.Rows.empty()) {
+                return true;
+            }
+
+            if (!parentState.Clusters) {
+                const auto& desc = std::get<NKikimrSchemeOp::TVectorIndexKmeansTreeDescription>(
+                    buildInfo.SpecializedIndexDescription);
+                TString error;
+                parentState.Clusters = NKikimr::NKMeans::CreateClusters(
+                    desc.GetSettings().settings(), buildInfo.KMeans.Rounds, error);
+                Y_ENSURE(parentState.Clusters, "Parallel parent cluster creation failed: " << error);
+            }
+
+            parentState.Sample.MakeStrictTop(buildInfo.KMeans.K);
+            {
+                TVector<TString> clusters;
+                for (const auto& row : parentState.Sample.Rows) {
+                    clusters.push_back(TString(TSerializedCellVec::ExtractCell(row.Row, 0).AsBuf()));
+                }
+                bool ok = parentState.Clusters->SetClusters(std::move(clusters));
+                Y_ENSURE(ok);
+            }
+
+            if (buildInfo.KMeans.Rounds > 1) {
+                parentState.Phase = TIndexBuildInfo::TKMeans::Recompute;
+                parentState.Round = 1;
+                parentState.Clusters->SetRound(1);
+                for (const auto& idx : parentState.ShardSet) {
+                    parentState.ToUploadShards.push_back(idx);
+                }
+                SendRequestsToParentShards(buildInfo, parent, parentState);
+            } else {
+                SendUploadSampleKRequest(buildInfo, parent, parentState.Child, parentState.Sample, parent);
+                parentState.UploadPending = true;
+            }
+            return false;
+        }
+
+        case TIndexBuildInfo::TKMeans::Recompute: {
+            ClearParentDoneShards(txc, buildInfo, parentState);
+            bool lastRound = parentState.Clusters->NextRound();
+            if (!lastRound && parentState.Round < buildInfo.KMeans.Rounds) {
+                parentState.Round++;
+                UpdateParentSampleFromClusters(parentState);
+                for (const auto& idx : parentState.ShardSet) {
+                    parentState.ToUploadShards.push_back(idx);
+                }
+                SendRequestsToParentShards(buildInfo, parent, parentState);
+            } else {
+                UpdateParentSampleFromClusters(parentState);
+                SendUploadSampleKRequest(buildInfo, parent, parentState.Child, parentState.Sample, parent);
+                parentState.UploadPending = true;
+            }
+            return false;
+        }
+
+        case TIndexBuildInfo::TKMeans::Reshuffle: {
+            ClearParentDoneShards(txc, buildInfo, parentState);
+            return true;
+        }
+
+        default:
+            Y_ENSURE(false, "Unexpected phase in AdvanceParentPhase: " << (int)parentState.Phase);
+            return false;
+        }
+    }
+
+    bool FillVectorIndexParallel(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
+        TryStartPendingParents(buildInfo);
+
+        TVector<NTableIndex::NKMeans::TClusterId> toFinish;
+        for (auto& [parent, parentState] : buildInfo.ParentIndexBuildState) {
+            if (AdvanceParentPhase(txc, buildInfo, parent, parentState)) {
+                toFinish.push_back(parent);
+            }
+        }
+
+        for (auto parent : toFinish) {
+            auto& parentState = buildInfo.ParentIndexBuildState.at(parent);
+            FinishParent(txc, buildInfo, parent, parentState);
+        }
+
+        if (!toFinish.empty()) {
+            TryStartPendingParents(buildInfo);
+        }
+
+        if (buildInfo.ParentIndexBuildState.empty() && buildInfo.PendingMultiShardParents.empty()) {
+            buildInfo.KMeans.Parent = buildInfo.KMeans.ParentEnd();
+            buildInfo.KMeans.Child  = buildInfo.KMeans.ChildBegin +
+                (buildInfo.KMeans.ParentEnd() - buildInfo.KMeans.ParentBegin) *
+                buildInfo.KMeans.K;
+            buildInfo.CompletedParents.clear();
+            PersistKMeansState(txc, buildInfo);
+            return FillVectorIndexNextParent(txc, buildInfo);
+        }
+
+        return false;
+    }
+
     bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         LOG_D("FillVectorIndex Start " << buildInfo.DebugString());
+
+        // If parallel mode is active, dispatch directly to the parallel handler
+        if (!buildInfo.ParentIndexBuildState.empty() || !buildInfo.PendingMultiShardParents.empty()) {
+            return FillVectorIndexParallel(txc, buildInfo);
+        }
 
         // (Sample -> Recompute* -> Reshuffle)* -> MultiLocal -> (Filter)? -> NextLevel
         if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Sample) {
@@ -2015,6 +2298,24 @@ private:
                         }
                     }
                     return FillVectorIndexNextParent(txc, buildInfo);
+                }
+                // Multi-shard parent: enter parallel mode (only at Level>1, where multiple
+                // independent parents exist; at Level==1 there is only one root parent
+                // and shards are scanned with their native table ranges).
+                if (buildInfo.KMeans.Level > 1 &&
+                    !buildInfo.KMeans.NeedVectorAutodetect &&
+                    buildInfo.ParentIndexBuildState.empty() &&
+                    buildInfo.PendingMultiShardParents.empty()) {
+                    LOG_D("FillVectorIndex EnteringParallelMode " << buildInfo.DebugString());
+                    // Clear the shards just added by AddGlobalShardsForCurrentParent —
+                    // parallel StartParent will re-add them correctly.
+                    buildInfo.DoneShards.clear();
+                    buildInfo.ToUploadShards.clear();
+                    buildInfo.InProgressShards.clear();
+                    InitParallelMode(buildInfo);
+                    TryStartPendingParents(buildInfo);
+                    Progress(BuildId);
+                    return false;
                 }
                 // Otherwise, we collect samples
                 LOG_D("FillVectorIndex Samples " << buildInfo.DebugString());
@@ -3177,7 +3478,14 @@ public:
             Y_ENSURE(false, "Unreachable");
         case NKikimrIndexBuilder::EBuildStatus::ACCEPTED: // TODO: do we need ACCEPTED?
         case NKikimrIndexBuilder::EBuildStatus::IN_PROGRESS: {
+            {
+                auto parallelIt = buildInfo.ShardParentMap.find(shardIdx);
+                buildInfo.CurrentResponseParent = (parallelIt != buildInfo.ShardParentMap.end())
+                    ? std::optional<NTableIndex::NKMeans::TClusterId>(parallelIt->second)
+                    : std::nullopt;
+            }
             HandleProgress(shardStatus, buildInfo);
+            buildInfo.CurrentResponseParent.reset();
             Self->PersistBuildIndexShardStatus(db, BuildId, shardIdx, shardStatus);
             // no progress
             // no pipe close
@@ -3186,11 +3494,23 @@ public:
         case NKikimrIndexBuilder::EBuildStatus::DONE: {
             bool erased = buildInfo.InProgressShards.erase(shardIdx);
             Y_ENSURE(erased);
-            buildInfo.DoneShards.emplace_back(shardIdx);
             if (!issues.Empty()) {
                 Self->PersistBuildIndexAddIssue(db, buildInfo, issues.ToString());
             }
+            auto parallelIt = buildInfo.ShardParentMap.find(shardIdx);
+            if (parallelIt != buildInfo.ShardParentMap.end()) {
+                auto parentId = parallelIt->second;
+                buildInfo.ShardParentMap.erase(parallelIt);
+                buildInfo.CurrentResponseParent = parentId;
+                auto& parentState = buildInfo.ParentIndexBuildState.at(parentId);
+                parentState.InProgressShards.erase(shardIdx);
+                parentState.DoneShards.push_back(shardIdx);
+            } else {
+                buildInfo.DoneShards.emplace_back(shardIdx);
+                buildInfo.CurrentResponseParent.reset();
+            }
             HandleDone(db, buildInfo);
+            buildInfo.CurrentResponseParent.reset();
             Self->PersistBuildIndexShardStatus(db, BuildId, shardIdx, shardStatus);
             Self->IndexBuildPipes.Close(BuildId, shardId, ctx);
             Progress(BuildId);
@@ -3200,7 +3520,16 @@ public:
             // datashard gracefully rebooted, reschedule shard
             bool erased = buildInfo.InProgressShards.erase(shardIdx);
             Y_ENSURE(erased);
-            buildInfo.ToUploadShards.emplace_front(shardIdx);
+            auto parallelIt = buildInfo.ShardParentMap.find(shardIdx);
+            if (parallelIt != buildInfo.ShardParentMap.end()) {
+                auto parentId = parallelIt->second;
+                buildInfo.ShardParentMap.erase(parallelIt);
+                auto& parentState = buildInfo.ParentIndexBuildState.at(parentId);
+                parentState.InProgressShards.erase(shardIdx);
+                parentState.ToUploadShards.push_front(shardIdx);
+            } else {
+                buildInfo.ToUploadShards.emplace_front(shardIdx);
+            }
             Self->PersistBuildIndexShardStatus(db, BuildId, shardIdx, shardStatus);
             Self->IndexBuildPipes.Close(BuildId, shardId, ctx);
             Progress(BuildId);
@@ -3292,11 +3621,28 @@ struct TSchemeShard::TIndexBuilder::TTxReplySampleK: public TTxShardReply<TEvDat
     void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) override {
         auto& record = Response->Get()->Record;
 
-        if (record.ProbabilitiesSize()) {
-            Y_ENSURE(record.RowsSize());
-            auto& probabilities = record.GetProbabilities();
-            auto& rows = *record.MutableRows();
-            Y_ENSURE(probabilities.size() == rows.size());
+        if (!record.ProbabilitiesSize()) {
+            return;
+        }
+        Y_ENSURE(record.RowsSize());
+        auto& probabilities = record.GetProbabilities();
+        auto& rows = *record.MutableRows();
+        Y_ENSURE(probabilities.size() == rows.size());
+
+        if (buildInfo.CurrentResponseParent) {
+            // Parallel mode: accumulate into per-parent sample (no DB writes)
+            auto& parentState = buildInfo.ParentIndexBuildState.at(*buildInfo.CurrentResponseParent);
+            auto& sample = parentState.Sample.Rows;
+            for (int i = 0; i != probabilities.size(); ++i) {
+                if (probabilities[i] >= parentState.Sample.MaxProbability) {
+                    break;
+                }
+                sample.emplace_back(probabilities[i], std::move(rows[i]));
+            }
+            parentState.Sample.MakeWeakTop(buildInfo.KMeans.K);
+            Y_UNUSED(db);
+        } else {
+            // Sequential mode: accumulate into global sample with DB persistence
             auto& sample = buildInfo.Sample.Rows;
             auto from = sample.size();
             for (int i = 0; i != probabilities.size(); ++i) {
@@ -3334,17 +3680,33 @@ struct TSchemeShard::TIndexBuilder::TTxReplyRecomputeKMeans: public TTxShardRepl
 
     void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) override {
         auto& record = Response->Get()->Record;
-        Y_ENSURE(record.ClustersSize() == buildInfo.Sample.Rows.size());
-        Y_ENSURE(record.ClusterSizesSize() == buildInfo.Sample.Rows.size());
         auto& clusters = record.GetClusters();
         auto& sizes = record.GetClusterSizes();
-        for (ui32 i = 0; i < buildInfo.Sample.Rows.size(); i++) {
-            if (sizes[i] > 0) {
-                buildInfo.Clusters->AggregateToCluster(i, clusters[i], sizes[i]);
+
+        if (buildInfo.CurrentResponseParent) {
+            // Parallel mode: use per-parent Clusters (no DB writes)
+            auto& parentState = buildInfo.ParentIndexBuildState.at(*buildInfo.CurrentResponseParent);
+            Y_ENSURE((size_t)record.ClustersSize() == parentState.Sample.Rows.size());
+            Y_ENSURE((size_t)record.ClusterSizesSize() == parentState.Sample.Rows.size());
+            for (ui32 i = 0; i < parentState.Sample.Rows.size(); i++) {
+                if (sizes[i] > 0) {
+                    parentState.Clusters->AggregateToCluster(i, clusters[i], sizes[i]);
+                }
             }
+            parentState.Clusters->RecomputeClusters();
+            Y_UNUSED(db);
+        } else {
+            // Sequential mode
+            Y_ENSURE((size_t)record.ClustersSize() == buildInfo.Sample.Rows.size());
+            Y_ENSURE((size_t)record.ClusterSizesSize() == buildInfo.Sample.Rows.size());
+            for (ui32 i = 0; i < buildInfo.Sample.Rows.size(); i++) {
+                if (sizes[i] > 0) {
+                    buildInfo.Clusters->AggregateToCluster(i, clusters[i], sizes[i]);
+                }
+            }
+            buildInfo.Clusters->RecomputeClusters();
+            Self->PersistBuildIndexClustersUpdate(db, buildInfo);
         }
-        buildInfo.Clusters->RecomputeClusters();
-        Self->PersistBuildIndexClustersUpdate(db, buildInfo);
     }
 
     TString ResponseShortDebugString() const override {
@@ -3417,15 +3779,31 @@ struct TSchemeShard::TIndexBuilder::TTxReplyReshuffleKMeans: public TTxShardRepl
     }
 
     void HandleProgress(TIndexBuildShardStatus& shardStatus, TIndexBuildInfo& buildInfo) override {
-        UpdateLastKeyAck(shardStatus, buildInfo, Response->Get()->Record.GetLastKeyAck());
+        const auto& lastKeyAck = Response->Get()->Record.GetLastKeyAck();
+        if (buildInfo.CurrentResponseParent && !lastKeyAck.empty()) {
+            // Parallel mode: store LastKeyAck in per-parent map
+            auto& parentState = buildInfo.ParentIndexBuildState.at(*buildInfo.CurrentResponseParent);
+            TTabletId shardId = TTabletId(Response->Get()->Record.GetTabletId());
+            TShardIdx shardIdx = Self->GetShardIdx(shardId);
+            parentState.LastKeyAck[shardIdx] = lastKeyAck;
+        } else {
+            UpdateLastKeyAck(shardStatus, buildInfo, lastKeyAck);
+        }
     }
 
     void HandleDone(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) override {
         const auto& record = Response->Get()->Record;
         TTabletId shardId = TTabletId(record.GetTabletId());
         TShardIdx shardIdx = Self->GetShardIdx(shardId);
-        TIndexBuildShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
-        UpdateLastKeyAck(shardStatus, buildInfo, record.GetLastKeyAck());
+        const auto& lastKeyAck = record.GetLastKeyAck();
+        if (buildInfo.CurrentResponseParent && !lastKeyAck.empty()) {
+            // Parallel mode: store LastKeyAck in per-parent map
+            auto& parentState = buildInfo.ParentIndexBuildState.at(*buildInfo.CurrentResponseParent);
+            parentState.LastKeyAck[shardIdx] = lastKeyAck;
+        } else {
+            TIndexBuildShardStatus& shardStatus = buildInfo.Shards.at(shardIdx);
+            UpdateLastKeyAck(shardStatus, buildInfo, lastKeyAck);
+        }
         Y_UNUSED(db);
     }
 };
@@ -3493,9 +3871,40 @@ public:
             LOG_I("TTxReply : TEvUploadSampleKResponse superfluous event, id# " << BuildId);
             return true;
         }
-        Y_ENSURE(!buildInfo.IsBuildVectorIndex() || buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload);
-
         NIceDb::TNiceDb db(txc.DB);
+
+        // Parallel mode: upload belongs to a specific in-flight parent
+        const ui64 parallelParent = record.GetParent();
+        if (parallelParent != 0) {
+            auto* parentStatePtr = buildInfo.ParentIndexBuildState.FindPtr(parallelParent);
+            if (!parentStatePtr) {
+                // Parent already finished or cancelled; ignore stale response
+                return true;
+            }
+
+            buildInfo.Processed += record.GetMeteringStats();
+            Self->PersistBuildIndexProcessed(db, buildInfo);
+
+            auto status = record.GetUploadStatus();
+            if (status == Ydb::StatusIds::SUCCESS) {
+                parentStatePtr->UploadPending = false;
+                // Upload is always centroids; after upload completes, start Reshuffle
+                parentStatePtr->Phase = TIndexBuildInfo::TKMeans::Reshuffle;
+                for (const auto& shardIdx : parentStatePtr->ShardSet) {
+                    parentStatePtr->ToUploadShards.push_back(shardIdx);
+                }
+                Progress(BuildId);
+            } else {
+                NYql::TIssues issues;
+                NYql::IssuesFromMessage(record.GetIssues(), issues);
+                Self->PersistBuildIndexAddIssue(db, buildInfo, issues.ToString());
+                ChangeState(buildInfo.Id, TIndexBuildInfo::EState::Rejection_Applying);
+                Progress(BuildId);
+            }
+            return true;
+        }
+
+        Y_ENSURE(!buildInfo.IsBuildVectorIndex() || buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload);
 
         buildInfo.Processed += record.GetMeteringStats();
         // As long as we don't try to upload sample in parallel with requests to shards,

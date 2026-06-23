@@ -2162,6 +2162,99 @@ Y_UNIT_TEST_SUITE(VectorIndexBuildTest) {
             {NLs::PathExist, NLs::IndexesCount(1)});
     }
 
+    // Verifies that Level 2 of a multi-level vector index build dispatches SampleK requests
+    // to multiple parents simultaneously (parallel mode), not one at a time (serial mode).
+    // The test reshards the Level 1 build table so that each Level 2 parent has its own
+    // set of shards — making the parents non-conflicting and eligible for parallel dispatch.
+    Y_UNIT_TEST(ParallelLevel2_Concurrency) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        // Set up table and reshard Level 1 build table to produce multi-shard Level 2 parents.
+        // DoCreateIndexWithShardedLevel1 returns a blocker that fires just before Level 2 begins.
+        ui64 buildIndexTx = 0;
+        auto level1Blocker = DoCreateIndexWithShardedLevel1(runtime, env, txId, buildIndexTx, tenantSchemeShard, /*overlap=*/false);
+
+        // Count SampleK requests that arrive after Level 2 starts.
+        // In parallel mode all 4 parents dispatch to their 3 shards each = 12 requests
+        // before the first response comes back.
+        // In serial mode only 3 requests (one parent's shards) would arrive first.
+        int sampleKSeen = 0;
+        TBlockEvents<TEvDataShard::TEvSampleKRequest> reqCounter(runtime, [&](const auto&) {
+            ++sampleKSeen;
+            return false; // don't block, just count
+        });
+        TBlockEvents<TEvDataShard::TEvSampleKResponse> respBlocker(runtime, [](const auto&) {
+            return true; // block all responses so requests pile up
+        });
+
+        // Release the level-1-done blocker — Level 2 starts now.
+        level1Blocker->Stop().Unblock();
+
+        // Wait until at least 2 parents have dispatched their requests concurrently.
+        // Each parent has 3 shards, so > 3 requests means > 1 parent is in-flight.
+        runtime.WaitFor("parallel SampleK requests", [&]{ return sampleKSeen > 3; });
+
+        reqCounter.Stop();
+        respBlocker.Stop().Unblock();
+
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(1)});
+        {
+            auto rows = CountRows(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable");
+            UNIT_ASSERT_VALUES_EQUAL(rows, 200);
+        }
+    }
+
+    // Verifies that a schemeshard restart while Level 2 parallel SampleK requests are in-flight
+    // does not corrupt the index. After restart the build resumes from the persisted watermark
+    // and completes correctly.
+    Y_UNIT_TEST(ParallelLevel2_RestartDuringSample) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        ui64 tenantSchemeShard = 0;
+        TestCreateServerLessDb(runtime, env, txId, tenantSchemeShard);
+
+        ui64 buildIndexTx = 0;
+        auto level1Blocker = DoCreateIndexWithShardedLevel1(runtime, env, txId, buildIndexTx, tenantSchemeShard, /*overlap=*/false);
+
+        // Block SampleK responses so that parallel parents are mid-flight when we reboot.
+        TBlockEvents<TEvDataShard::TEvSampleKResponse> respBlocker(runtime, [](const auto&) {
+            return true;
+        });
+
+        level1Blocker->Stop().Unblock();
+
+        // Wait for at least one Level 2 SampleK response to be pending (parallel in-flight).
+        runtime.WaitFor("Level2 SampleK responses queued", [&]{ return respBlocker.size() >= 1; });
+
+        // Reboot schemeshard while parallel parents are in-flight.
+        // Per-parent state is in-memory only; on restart the build re-runs from the
+        // persisted KMeans.Parent watermark (all Level 2 parents restart from the beginning).
+        respBlocker.Stop().Unblock();
+        Cerr << "... rebooting scheme shard during parallel Level 2 sample" << Endl;
+        RebootTablet(runtime, tenantSchemeShard, runtime.AllocateEdgeActor());
+
+        env.TestWaitNotification(runtime, buildIndexTx, tenantSchemeShard);
+        TestDescribeResult(DescribePath(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table"),
+            {NLs::PathExist, NLs::IndexesCount(1)});
+        {
+            auto rows = CountRows(runtime, tenantSchemeShard, "/MyRoot/ServerLessDB/Table/index1/indexImplPostingTable");
+            UNIT_ASSERT_VALUES_EQUAL(rows, 200);
+        }
+    }
+
     Y_UNIT_TEST_FLAG(ImportExport, Materialized) {
         NKikimr::InitAwsAPI();
 

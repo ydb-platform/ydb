@@ -22,12 +22,13 @@ public:
     void StartBuilding();
 
     // Adds DoNotKeep flags from synclog if needed
-    void ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec, ui64 sizeLimit);
+    void ProcessBlobRecordFromSyncLog(const TLogoBlobRec* blobRec, ui64 sizeLimit, ui64 blobSizeLimit);
 
     // Add all DoNotKeep records from cut synclog snapshot up to sizeLimit
     // Note: in some obscure cases there may be two active builders simultaneously
     // It shouldn't make any difference though, we just add more flags
-    void FinishBuilding(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds, ui64 sizeLimit);
+    void FinishBuilding(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds, ui64 sizeLimit,
+            ui64 blobSizeLimit);
     void Deactivate();
 
     // TODO: rebuild thresholds structure after restart. Either write it to VDisk log or rebuild from hull snapshot
@@ -62,6 +63,7 @@ private:
     TPhantomFlags StoredFlags;
     ui64 MaxFlagsStoredCount;
     TSyncedMask SyncedMask;
+    ui64 BlobSizeLimit = 0;
     bool Active = false;
     bool Building = false;
 };

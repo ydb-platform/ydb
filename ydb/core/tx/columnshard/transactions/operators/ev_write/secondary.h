@@ -34,6 +34,7 @@ private:
     bool ReceiveAck = false;
     std::optional<bool> SelfBroken;
     std::optional<bool> TxBroken;
+    bool SelfBrokenFlagPersisted = false;
 
     virtual bool DoParseImpl(TColumnShard& /*owner*/, const NKikimrTxColumnShard::TCommitWriteTxBody& commitTxBody) override {
         if (!commitTxBody.HasSecondaryTabletData()) {
@@ -66,11 +67,11 @@ private:
     private:
         using TBase = TExtendedTransactionBase;
         const ui64 TxId;
-        std::optional<bool> LockBroken;
 
         virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& txc, const NActors::TActorContext& /*ctx*/) override {
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId);
             if (op->SelfBroken.has_value()) {
+                op->SelfBrokenFlagPersisted = true;
                 if (!op->ReceiveAck) {
                     // We can send the result here, because we are sure that SelfBroken is persisted
                     op->SendResult(*Self);
@@ -78,11 +79,7 @@ private:
             } else {
                 auto& lock = Self->GetOperationsManager().GetLockVerified(Self->GetOperationsManager().GetLockForTxVerified(TxId));
                 op->SelfBroken = lock.IsBroken();
-                // lock.IsBroken() may change by DoComplete because of noTxWrites, so we remember it here
-                LockBroken = lock.IsBroken();
                 Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
-                // We will set it in DoComplete, when we are sure it is persisted
-                op->SelfBroken = std::nullopt;
             }
             return true;
         }
@@ -90,9 +87,8 @@ private:
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitSecondaryTransactionOperator>(TxId, true);
             if (op) {
-                if (!op->SelfBroken.has_value()) {
-                    AFL_VERIFY(LockBroken.has_value());
-                    op->SelfBroken = LockBroken.value();
+                if (!op->SelfBrokenFlagPersisted) {
+                    op->SelfBrokenFlagPersisted = true;
                     if (!op->ReceiveAck) {
                         op->SendResult(*Self);
                     }
@@ -239,7 +235,7 @@ private:
     }
 
     virtual void OnTimeout(TColumnShard& owner) override {
-        if (!ReceiveAck && SelfBroken.has_value()) {
+        if (SelfBrokenFlagPersisted && !ReceiveAck) {
             SendResult(owner);
         }
     }

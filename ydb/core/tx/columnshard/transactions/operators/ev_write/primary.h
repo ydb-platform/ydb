@@ -23,6 +23,7 @@ private:
     std::set<ui64> WaitShardsBrokenFlags;
     std::set<ui64> WaitShardsResultAck;
     std::optional<bool> TxBroken;
+    bool SelfBrokenFlagPersisted = false;
 
     virtual void DoSerializeToProto(NKikimrTxColumnShard::TCommitWriteTxBody& result) const override {
         auto& data = *result.MutablePrimaryTabletData();
@@ -94,10 +95,8 @@ private:
                     "wait_broken_flags", JoinSeq(",", op->WaitShardsBrokenFlags))("wait_result_ack", JoinSeq(",", op->WaitShardsResultAck))(
                     "receive", Self->TabletID());
                 Self->GetProgressTxController().WriteTxOperatorInfo(txc, TxId, op->SerializeToProto().SerializeAsString());
-                // We must be sure that we persisted the lock.IsBroken() value, so we will erase it in OnComplete
-                op->WaitShardsBrokenFlags.emplace(Self->TabletID());
             } else {
-                // lock.IsBroken() is already persisted, so we can proceed right away
+                op->SelfBrokenFlagPersisted = true;
                 op->InitializeRequests(*Self);
             }
             return true;
@@ -106,8 +105,8 @@ private:
         virtual void DoComplete(const NActors::TActorContext& /*ctx*/) override {
             auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TEvWriteCommitPrimaryTransactionOperator>(TxId, true);
             if (op) {
-                if (op->WaitShardsBrokenFlags.contains(Self->TabletID())) {
-                    AFL_VERIFY(op->WaitShardsBrokenFlags.erase(Self->TabletID()));
+                if (!op->SelfBrokenFlagPersisted) {
+                    op->SelfBrokenFlagPersisted = true;
                     op->InitializeRequests(*Self);
                 }
             }
@@ -217,7 +216,7 @@ private:
     }
 
     void InitializeRequests(TColumnShard& owner) {
-        if (WaitShardsBrokenFlags.empty()) {
+        if (SelfBrokenFlagPersisted && WaitShardsBrokenFlags.empty()) {
             if (WaitShardsResultAck.size()) {
                 SendResult(owner);
             } else {

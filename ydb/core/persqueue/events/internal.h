@@ -1847,12 +1847,14 @@ struct TEvPQ {
     };
 
     struct TEvRewindCommitResult: public TEventLocal<TEvRewindCommitResult, EvRewindCommitResult> {
-        explicit TEvRewindCommitResult(NYdb::TStatus status)
+        explicit TEvRewindCommitResult(NYdb::TStatus status, ui64 endOffset)
             : Status(std::move(status))
+            , EndOffset(endOffset)
         {
         }
 
         NYdb::TStatus Status;
+        ui64 EndOffset;
     };
 };
 

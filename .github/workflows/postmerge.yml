@@ -32,7 +32,7 @@ jobs:
       - self-hosted
       - auto-provisioned
       - "${{ format('build-preset-{0}', matrix.build_preset) }}"
-      - postcommit
+      - postcommit  # intentional: gate_postcommits.yml removes this label under load; do not rename to postmerge
     steps:
       - uses: ./.github/actions/ya_ci_core_build_test
         with:

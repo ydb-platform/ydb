@@ -133,15 +133,15 @@ ui32 TStagePredictor::GetUsableThreads() {
 }
 
 ui32 TStagePredictor::GetPossibleMaxLimitThreads() {
+    const ui32 usableThreads = GetUsableThreads();
     if (HasAppData() && TlsActivationContext && TlsActivationContext->ActorSystem()) {
         TExecutorPoolState poolState;
         GetActorSystemStats().GetExecutorPoolState(AppData()->UserPoolId, poolState);
         if (poolState.PossibleMaxLimit > 0) {
-            return Max<ui32>(1, static_cast<ui32>(poolState.PossibleMaxLimit));
+            return Max(usableThreads, static_cast<ui32>(poolState.PossibleMaxLimit));
         }
     }
-
-    return GetUsableThreads();
+    return usableThreads;
 }
 
 ui32 TStagePredictor::CalcTasksOptimalCount(const ui32 availableThreadsCount, const std::optional<ui32> previousStageTasksCount) const {

@@ -174,6 +174,25 @@ ui64 CreatePartitionTablet(TEnvironmentSetup& env, ui64 blockCount = 32768)
     return PartitionTabletId;
 }
 
+void StopFastPathService(
+    TEnvironmentSetup& env,
+    ui64 partitionTabletId,
+    const TActorId& edge)
+{
+    auto request = std::make_unique<
+        TEvPartitionDirectPrivate::TEvFastPathServiceShutdown>();
+    env.Runtime->SendToPipe(
+        partitionTabletId,
+        edge,
+        request.release(),
+        0,
+        TTestActorSystem::GetPipeConfigWithRetries());
+
+    auto res = env.WaitForEdgeActorEvent<
+        TEvPartitionDirectPrivate::TEvFastPathServiceStopped>(edge, false);
+    UNIT_ASSERT(res);
+}
+
 TActorId GetLoadActorAdapterActorId(
     TEnvironmentSetup& env,
     ui64 partitionTabletId,
@@ -402,6 +421,8 @@ void BasicWriteRead(EWriteMode writeMode)
             res->Get()->Record.MutableBlocks()->GetBuffers(0),
             expectedData);
     }
+
+    StopFastPathService(env, partition, edge);
 }
 
 void ShouldWriteAndReadBlocksInDifferentRegions(EWriteMode writeMode)
@@ -548,6 +569,8 @@ void RandomWrites(EWriteMode writeMode)
             res->Get()->Record.MutableBlocks()->GetBuffers(0),
             expectedData);
     }
+
+    StopFastPathService(env, partition, edge);
 }
 
 void ShouldWriteAndReadMultipleBlocks(EWriteMode writeMode)
@@ -611,6 +634,8 @@ void ShouldWriteAndReadMultipleBlocks(EWriteMode writeMode)
             res->Get()->Record.MutableBlocks()->GetBuffers(0),
             expectedData);
     }
+
+    StopFastPathService(env, partition, edge);
 }
 
 }   // namespace
@@ -682,10 +707,17 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             return true;
         };
 
-        CreatePartitionTablet(
+        const ui64 partition = CreatePartitionTablet(
             env,
             4 * BlocksPerRegion + 1   // blockCount
         );
+
+        const TActorId& edge = runtime->AllocateEdgeActor(
+            env.Settings.ControllerNodeId,
+            __FILE__,
+            __LINE__);
+
+        StopFastPathService(env, partition, edge);
     }
 
     Y_UNIT_TEST(BasicWriteReadPBufferReplication)
@@ -845,6 +877,8 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 res->Get()->Record.GetBlocks().GetBuffers(0),
                 expectedData);
         }
+
+        StopFastPathService(env, partition, edge);
     }
 
     Y_UNIT_TEST(ShouldWriteAndReadFromHandoffPersistentBuffers)
@@ -954,6 +988,8 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 res->Get()->Record.GetBlocks().GetBuffers(0),
                 expectedData);
         }
+
+        StopFastPathService(env, partition, edge);
     }
 
     Y_UNIT_TEST(ShouldRestorePartitionAfterRestart)
@@ -1127,6 +1163,8 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 ReadBlock(env, loadActorAdapter, edge, i),
                 data[i]);
         }
+
+        StopFastPathService(env, partition, edge);
     }
 
     // PBuffer cleanup must never barrier-erase a record that has not been
@@ -1221,6 +1259,8 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 ReadBlock(env, loadActorAdapter, edge, i),
                 data[i]);
         }
+
+        StopFastPathService(env, partition, edge);
     }
 }
 

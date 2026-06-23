@@ -1,14 +1,9 @@
 name: Ya CI core (build and test)
 description: >
-  Shared checkout, preset resolution, optional blacklist, credentials, and build_and_test_ya.
-  Presets: repo variable CI_PRESET_DEFAULTS (JSON); built-in defaults when unset (forks).
-  Profiles ci | run_tests.
+  Shared checkout, optional blacklist, credentials, and build_and_test_ya.
+  Run parameters (threads, size, timeout) are set by the calling workflow.
 
 inputs:
-  profile:
-    required: false
-    default: ci
-    description: Preset profile from CI_PRESET_DEFAULTS (ci for PR-check/postmerge, run_tests for Run-tests).
   build_preset:
     required: true
   checkout_ref:
@@ -19,20 +14,19 @@ inputs:
     default: '2'
   test_threads:
     required: false
-    default: ''
-    description: Optional override; empty = test_threads from CI_PRESET_DEFAULTS for build_preset and profile.
+    default: '52'
   test_size:
     required: false
-    default: ''
+    default: 'small,medium'
   test_type:
     required: false
     default: ''
   link_threads:
     required: false
-    default: ''
+    default: '12'
   timeout_minutes:
     required: false
-    default: ''
+    default: '660'
   build_target:
     required: false
     default: 'ydb/'
@@ -76,20 +70,6 @@ runs:
         ref: ${{ inputs.checkout_ref || github.sha }}
         fetch-depth: ${{ inputs.fetch_depth }}
 
-    - name: Resolve CI preset defaults
-      id: preset
-      shell: python
-      env:
-        CI_PRESET_DEFAULTS: ${{ vars.CI_PRESET_DEFAULTS }}
-        PROFILE: ${{ inputs.profile }}
-        BUILD_PRESET: ${{ inputs.build_preset }}
-        OVERRIDE_THREADS: ${{ inputs.test_threads }}
-        OVERRIDE_SIZE: ${{ inputs.test_size }}
-        OVERRIDE_TYPE: ${{ inputs.test_type }}
-        OVERRIDE_LINK: ${{ inputs.link_threads }}
-        OVERRIDE_TIMEOUT: ${{ inputs.timeout_minutes }}
-      run: python3 "${{ github.action_path }}/resolve_ci_preset.py"
-
     - name: Optional test blacklist file
       id: blacklist
       shell: bash
@@ -128,7 +108,7 @@ runs:
         ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
 
     - name: Build and test
-      timeout-minutes: ${{ steps.preset.outputs.timeout_minutes }}
+      timeout-minutes: ${{ fromJSON(inputs.timeout_minutes) }}
       uses: ./.github/actions/build_and_test_ya
       with:
         build_preset: ${{ inputs.build_preset }}
@@ -136,10 +116,10 @@ runs:
         increment: ${{ inputs.increment == true || inputs.increment == 'true' }}
         run_build: ${{ inputs.run_build == true || inputs.run_build == 'true' }}
         run_tests: ${{ inputs.run_tests == true || inputs.run_tests == 'true' }}
-        test_size: ${{ steps.preset.outputs.test_size }}
-        test_type: ${{ steps.preset.outputs.test_type }}
-        test_threads: ${{ steps.preset.outputs.test_threads }}
-        link_threads: ${{ steps.preset.outputs.link_threads }}
+        test_size: ${{ inputs.test_size }}
+        test_type: ${{ inputs.test_type }}
+        test_threads: ${{ inputs.test_threads }}
+        link_threads: ${{ inputs.link_threads }}
         test_retry_count: ${{ inputs.test_retry_count }}
         custom_branch_name: ${{ inputs.custom_branch_name }}
         pull_number: ${{ inputs.pull_number }}

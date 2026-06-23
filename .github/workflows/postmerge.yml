@@ -1,6 +1,6 @@
 # Mainline checks when main, stable-*, or stream-nb-* advance (e.g. after merge).
 # Build presets: repo variable TEST_BUILD_TYPES JSON key postmerge (same schema as PR-check).
-# Threads/size/timeout: repo variable CI_PRESET_DEFAULTS (profile ci).
+# Build/test params: hardcoded below (same as main postcommit workflows).
 # Kill switch: CHECKS_SWITCH.postmerge, or legacy postcommit_<preset> keys per matrix entry.
 name: Postmerge
 
@@ -41,3 +41,5 @@ jobs:
       - uses: ./.github/actions/ya_ci_core_build_test
         with:
           build_preset: ${{ matrix.build_preset }}
+          test_threads: '52'
+          test_size: small,medium

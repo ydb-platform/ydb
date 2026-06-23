@@ -43,16 +43,10 @@ on:
         type: string
         default: ''
       test_threads:
-        description: 'Optional test thread count; empty = CI_PRESET_DEFAULTS run_tests profile for build_preset'
+        description: 'Test threads count (default: 52; build presets use a fraction of this value)'
         required: false
         type: string
         default: ''
-      collect_coredumps:
-        required: false
-        type: boolean
-        default: false
-
-  workflow_dispatch:
     inputs:
       pull_number:
         description: 'Pull request number, ex: 12345'
@@ -96,9 +90,9 @@ on:
         default: false
         description: "Collect coredumps via ulimit -c unlimited"
       test_threads:
-        description: 'Optional test thread count; empty = CI_PRESET_DEFAULTS run_tests profile for build_preset'
+        description: 'Test threads count (default: 52; build presets use a fraction of this value)'
         required: false
-        default: ''
+        default: '52'
 
 jobs:
   prepare:
@@ -281,6 +275,23 @@ jobs:
       matrix:
         branch: ${{ fromJson(needs.prepare.outputs.branch_array) }}
     steps:
+      - name: Set variables based on build_preset
+        id: set-vars
+        run: |
+          TEST_THREADS="${{ inputs.test_threads }}"
+          if [[ "${{ inputs.build_preset }}" == "relwithdebinfo" ]]; then
+            echo "threads_count=$TEST_THREADS" >> $GITHUB_ENV
+          elif [[ "${{ inputs.build_preset }}" == "release-asan" ]]; then
+            echo "threads_count=$(awk "BEGIN {x=$TEST_THREADS * 0.38; printf \"%.0f\", (x < 1 ? 1 : x)}")" >> $GITHUB_ENV
+          elif [[ "${{ inputs.build_preset }}" == "release-msan" ]]; then
+            echo "threads_count=$(awk "BEGIN {x=$TEST_THREADS * 0.1; printf \"%.0f\", (x < 1 ? 1 : x)}")" >> $GITHUB_ENV
+          elif [[ "${{ inputs.build_preset }}" == "release-tsan" ]]; then
+            echo "threads_count=$(awk "BEGIN {x=$TEST_THREADS * 0.35; printf \"%.0f\", (x < 1 ? 1 : x)}")" >> $GITHUB_ENV
+          else
+            echo "Unknown build_preset value."
+            exit 1
+          fi
+
       - name: Determine branch name and PR number for test history
         id: determine-branch
         run: |
@@ -327,12 +338,12 @@ jobs:
         id: run_tests
         uses: ./.github/actions/ya_ci_core_build_test
         with:
-          profile: run_tests
           build_preset: ${{ inputs.build_preset }}
           checkout_ref: ${{ matrix.branch }}
-          test_threads: ${{ inputs.test_threads }}
+          test_threads: ${{ env.threads_count }}
           test_size: ${{ inputs.test_size }}
           test_type: ${{ inputs.test_type }}
+          timeout_minutes: '1200'
           increment: 'false'
           build_target: ${{ inputs.test_targets }}
           additional_ya_make_args_append: ${{ inputs.additional_ya_make_args }}

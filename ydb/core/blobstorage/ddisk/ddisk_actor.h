@@ -88,10 +88,6 @@ namespace NKikimr::NDDisk {
         std::vector<std::pair<TString, TString>> CountersChain;
         ui64 DDiskInstanceGuid = RandomNumber<ui64>();
 
-#if defined(__linux__)
-        std::unique_ptr<NPDisk::TUringRouter> UringRouter;
-#endif
-
         static constexpr ui32 MaxInFlight = 256; // TODO: make configurable
 
         class TDirectIoOpBase;
@@ -226,6 +222,13 @@ namespace NKikimr::NDDisk {
         };
 
         TCounters Counters;
+
+#if defined(__linux__)
+        // we share Counters with UringRouter, so that
+        // UringRouter must be after the counters to have a
+        // proper destruction order
+        std::unique_ptr<NPDisk::TUringRouter> UringRouter;
+#endif
 
     public:
         struct TEvPrivate {

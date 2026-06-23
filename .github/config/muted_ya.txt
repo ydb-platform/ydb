@@ -42,7 +42,6 @@ ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestam
 ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
 ydb/services/deprecated/persqueue_v0/ut TDeprecatedPQGrpcDeadTest.ProcessGlobalGrpcDeadDoesNotStopLiveDeprecatedPQWriteSession
 ydb/services/deprecated/persqueue_v0/ut TDeprecatedPQGrpcDeadTest.StoppingAnotherGrpcServerDoesNotStopLiveDeprecatedPQWriteSession
-ydb/tests/compatibility test_ctas.py.TestCTASOperations.test_ctas_oltp[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_prestable-26-3_to_prestable-26-3]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_prestable-26-3_to_stable-26-2-1]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_stable-26-1-1_to_stable-26-2-1]
@@ -95,6 +94,7 @@ ydb/tests/datashard/truncate/concurrency py3test.[test_truncate_table_concurrenc
 ydb/tests/datashard/truncate/concurrency test_truncate_table_concurrency.py.TestTruncateTableConcurrency.test_truncate_with_concurrent_rw_operations
 ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_limit[False-False]
+ydb/tests/fq/yds test_watermarks.py.TestWatermarks.test_idle_watermarks[1-no_shared]
 ydb/tests/functional/blobstorage test_vdisks.py.TestTinyVDisks.test_disabled_enabled
 ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_basic
 ydb/tests/functional/bridge test_discovery.py.TestDiscovery.test_update_piles

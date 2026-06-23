@@ -264,7 +264,7 @@ def fetch_test_runs_for_window(
     for sf_batch in batches:
         quoted = ', '.join(f"'{_sql_escape(sf)}'" for sf in sf_batch)
 
-        # Branch runs (for criteria calculation) — scheduled/postcommit jobs only, no PR-check or manual
+        # Branch runs (for criteria calculation) — scheduled/postmerge jobs only, no PR-check or manual
         branch_query = f"""
         SELECT suite_folder, test_name, run_timestamp, status
         FROM `{table}`
@@ -278,7 +278,6 @@ def fetch_test_runs_for_window(
               'Regression-run_compatibility',
               'Regression-whitelist-run',
               'Postmerge',
-              'Postcommit',
               'Postcommit_relwithdebinfo',
               'Postcommit_asan'
           )

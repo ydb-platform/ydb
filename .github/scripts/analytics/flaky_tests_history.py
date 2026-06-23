@@ -176,8 +176,7 @@ def build_history_query(date, test_runs_table, testowners_table, build_type, bra
                             'Regression-run_compatibility',
                             'Regression-whitelist-run',
                             'Postmerge',
-                            'Postcommit',
-                            'Postcommit_relwithdebinfo', 
+                            'Postcommit_relwithdebinfo',
                             'Postcommit_asan'
                         ) 
                         and build_type = '{build_type}'

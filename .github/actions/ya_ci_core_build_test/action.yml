@@ -1,14 +1,14 @@
 name: Ya CI core (build and test)
 description: >
   Shared checkout, preset resolution, optional blacklist, credentials, and build_and_test_ya.
-  Presets: .github/config/ci_presets.json (checkout, or fetched from default branch if missing).
+  Presets: repo variable CI_PRESET_DEFAULTS (JSON); built-in defaults when unset (forks).
   Profiles ci | run_tests.
 
 inputs:
   profile:
     required: false
     default: ci
-    description: Preset profile from ci_presets.json (ci for PR-check/postmerge, run_tests for Run-tests workflow).
+    description: Preset profile from CI_PRESET_DEFAULTS (ci for PR-check/postmerge, run_tests for Run-tests).
   build_preset:
     required: true
   checkout_ref:
@@ -20,9 +20,7 @@ inputs:
   test_threads:
     required: false
     default: ''
-    description: >
-      ci profile — optional direct override. run_tests profile — optional base count scaled
-      per preset via test_threads_base_ratio in ci_presets.json; empty = preset defaults.
+    description: Optional override; empty = test_threads from CI_PRESET_DEFAULTS for build_preset and profile.
   test_size:
     required: false
     default: ''
@@ -78,29 +76,14 @@ runs:
         ref: ${{ inputs.checkout_ref || github.sha }}
         fetch-depth: ${{ inputs.fetch_depth }}
 
-    - name: Ensure CI presets config
-      shell: bash
-      run: |
-        CONFIG=".github/config/ci_presets.json"
-        if [ -f "$CONFIG" ]; then
-          echo "Using ci_presets.json from checkout"
-          exit 0
-        fi
-        mkdir -p .github/config
-        curl -fsSL \
-          "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.event.repository.default_branch }}/.github/config/ci_presets.json" \
-          -o "$CONFIG"
-        echo "Fetched ci_presets.json from ${{ github.event.repository.default_branch }}"
-
     - name: Resolve CI preset defaults
       id: preset
       shell: python
       env:
-        REPO_ROOT: ${{ github.workspace }}
+        CI_PRESET_DEFAULTS: ${{ vars.CI_PRESET_DEFAULTS }}
         PROFILE: ${{ inputs.profile }}
         BUILD_PRESET: ${{ inputs.build_preset }}
-        OVERRIDE_THREADS: ${{ inputs.profile == 'ci' && inputs.test_threads || '' }}
-        TEST_THREADS_BASE: ${{ inputs.profile == 'run_tests' && inputs.test_threads || '' }}
+        OVERRIDE_THREADS: ${{ inputs.test_threads }}
         OVERRIDE_SIZE: ${{ inputs.test_size }}
         OVERRIDE_TYPE: ${{ inputs.test_type }}
         OVERRIDE_LINK: ${{ inputs.link_threads }}

@@ -54,7 +54,6 @@ def main():
             'Regression-run_compatibility',
             'Regression-whitelist-run',
             'Postmerge',
-            'Postcommit',
             'Postcommit_relwithdebinfo',
             'Postcommit_asan'
         )

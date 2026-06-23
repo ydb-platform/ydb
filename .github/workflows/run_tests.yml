@@ -43,7 +43,7 @@ on:
         type: string
         default: ''
       test_threads:
-        description: 'Optional base thread count for run_tests (scaled per preset); empty = ci_presets.json defaults'
+        description: 'Optional test thread count; empty = CI_PRESET_DEFAULTS run_tests profile for build_preset'
         required: false
         type: string
         default: ''
@@ -96,7 +96,7 @@ on:
         default: false
         description: "Collect coredumps via ulimit -c unlimited"
       test_threads:
-        description: 'Optional base thread count for run_tests (scaled per preset); empty = ci_presets.json defaults'
+        description: 'Optional test thread count; empty = CI_PRESET_DEFAULTS run_tests profile for build_preset'
         required: false
         default: ''
 

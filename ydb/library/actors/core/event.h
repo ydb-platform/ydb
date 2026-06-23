@@ -133,6 +133,7 @@ namespace NActors {
             return x;
         }
 
+        // Note that ChannelBits bits in Flags are reserved for channel
         enum EFlags: ui32 {
             FlagTrackDelivery = 1 << 0,
             FlagForwardOnNondelivery = 1 << 1,
@@ -141,6 +142,7 @@ namespace NActors {
             FlagGenerateUnsureUndelivered = 1 << 4,
             FlagExtendedFormat = 1 << 5,
             FlagDebugTrackReceive = 1 << 6,
+            FlagDisablePayloadChecksums = 1 << 8, // When set, IC will not calculate or check XDC/RDMA checksums
         };
         using TEventFlags = ui32;
 

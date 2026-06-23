@@ -1,3 +1,5 @@
+#include "logical_analysis_utils.h"
+
 #include <ydb/core/kqp/opt/rbo/analysis/logical_name_constraints.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
@@ -11,22 +13,18 @@ namespace {
 
 class TLogicalNameConstraints: public INameConstraintsContext {
 public:
-    explicit TLogicalNameConstraints(TPlanProps& props)
-        : Props(props) {
+    explicit TLogicalNameConstraints(TOpRoot& root)
+        : Props(root.PlanProps)
+        , Traversal(root) {
     }
 
-    void Run(TOpRoot& root) {
+    void Run() {
         Props.NameConstraints.Clear();
 
-        bool changed = true;
-        ui32 iteration = 0;
-        while (changed) {
-            changed = false;
-            for (const auto& iter : root) {
-                changed |= iter.Current->PropagateNameConstraints(*this);
-            }
-            Y_ENSURE(++iteration < 1000, "Name constraint propagation did not converge");
+        for (const auto& op : Traversal.PreOrder()) {
+            Enqueue(op);
         }
+        Propagate();
     }
 
     TInfoUnitSet GetIncomingForbidden(IOperator* op) const override {
@@ -42,11 +40,34 @@ public:
             return false;
         }
         Y_ENSURE(childIdx < parent->Children.size());
-        return Props.NameConstraints.AddForbiddenOut(parent, childIdx, parent->Children[childIdx].get(), forbidden);
+        const auto& child = parent->Children[childIdx];
+        const bool changed = Props.NameConstraints.AddForbiddenOut(parent, childIdx, child.get(), forbidden);
+        if (changed) {
+            Enqueue(child);
+        }
+        return changed;
     }
 
 private:
+    void Enqueue(const TIntrusivePtr<IOperator>& op) {
+        if (op && Queued.insert(op.get()).second) {
+            Queue.push_back(op);
+        }
+    }
+
+    void Propagate() {
+        for (size_t index = 0; index < Queue.size(); ++index) {
+            auto op = Queue[index];
+            Queued.erase(op.get());
+            op->PropagateNameConstraints(*this);
+        }
+        Queue.clear();
+    }
+
     TPlanProps& Props;
+    TPlanAnalysisTraversal Traversal;
+    THashSet<IOperator*> Queued;
+    TVector<TIntrusivePtr<IOperator>> Queue;
 };
 
 bool CanExposeToParents(IOperator* op, const TPlanProps& props, THashSet<IOperator*>& visited) {
@@ -272,7 +293,7 @@ bool TOpUnionAll::PropagateNameConstraints(INameConstraintsContext& ctx) {
 }
 
 void ComputePlanNameConstraints(TOpRoot& root) {
-    TLogicalNameConstraints(root.PlanProps).Run(root);
+    TLogicalNameConstraints(root).Run();
 }
 
 } // namespace NKqp

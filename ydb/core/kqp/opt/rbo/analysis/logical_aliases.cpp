@@ -1,8 +1,9 @@
+#include "logical_analysis_utils.h"
+
 #include <ydb/core/kqp/opt/rbo/kqp_rbo.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 
 #include <algorithm>
-#include <functional>
 
 namespace NKikimr {
 namespace NKqp {
@@ -154,7 +155,8 @@ TAliasMap BuildMapAliases(TOpMap& map, const TPlanAliases& planAliases) {
 
         const auto from = mapElement.GetColumnAccess();
         const auto* sourceCandidates = FindAliases(inputAliases, from);
-        TCandidates sourceClass = sourceCandidates ? *sourceCandidates : TCandidates{{from, 0}};
+        const TCandidates fallbackSourceClass{{from, 0}};
+        const auto& sourceClass = sourceCandidates ? *sourceCandidates : fallbackSourceClass;
         const auto canonical = sourceCandidates ? GetCanonicalAlias(*sourceCandidates) : from;
         const auto fromPriority = GetAliasPriority(sourceClass, from);
 
@@ -248,23 +250,10 @@ TPlanAliases::TAliasMap TOpSort::ComputeAliases(const TPlanAliases& planAliases)
 
 void ComputePlanAliases(TOpRoot& root) {
     root.PlanProps.Aliases.Clear();
+    TPlanAnalysisTraversal traversal(root);
 
-    THashSet<IOperator*> visited;
-    std::function<void(const TIntrusivePtr<IOperator>&)> compute = [&](const TIntrusivePtr<IOperator>& op) {
-        if (!op || !visited.insert(op.get()).second) {
-            return;
-        }
-
-        for (const auto& child : op->Children) {
-            compute(child);
-        }
-
+    for (const auto& op : traversal.PostOrder()) {
         root.PlanProps.Aliases.AliasesAtOutput[op.get()] = op->ComputeAliases(root.PlanProps.Aliases);
-    };
-
-    compute(root.GetInput());
-    for (const auto& subPlan : root.PlanProps.Subplans.Get()) {
-        compute(CastOperator<IOperator>(subPlan.Plan));
     }
 }
 

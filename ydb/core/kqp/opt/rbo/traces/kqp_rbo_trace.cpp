@@ -1007,43 +1007,12 @@ void DefineHtmlTraceFields(optimizer_trace::Trace& trace) {
     trace.pinFields({"ERows", "EBytes", "Selectivity", "Cost"});
     trace.definePinnedFieldPresets({
         {"None", {}},
-        {"Stages", {"Stage"}}
+        {"Stages", {"Stage"}},
+        {"Stats", {"ERows", "EBytes", "Selectivity", "Cost"}}
     });
     trace.defineDiffFieldPresets({
         {"None", {}},
-        {"Stages", {"Stage"}},
-        {"All", {
-            "OutputColumns",
-            "OutputType",
-            "SubplanType",
-            "SubplanTuple",
-            "SubplanDependentIUs",
-            "Stage",
-            "Algorithm",
-            "JoinAlgo",
-            "LeftShuffleBy",
-            "RightShuffleBy",
-            "OrderEnforcer",
-            "EnsureAtMostOne",
-            "Storage",
-            "KeyColumns",
-            "SortBy",
-            "ShuffledBy",
-            "ShufflingOrderingIdx",
-            "SortingOrderingIdx",
-            "Type",
-            "LogicalCard",
-            "Lineage",
-            "LiveOut",
-            "UsedIUs",
-            "Aliases",
-            "ForbiddenOut",
-            "OutputConflicts",
-            "ERows",
-            "EBytes",
-            "Selectivity",
-            "Cost"
-        }}
+        {"Stages", {"Stage"}}
     });
 }
 

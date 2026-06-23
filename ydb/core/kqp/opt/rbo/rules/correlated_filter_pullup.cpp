@@ -36,7 +36,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
     THashSet<TInfoUnit, TInfoUnit::THashFunction> correlated;
     THashSet<TInfoUnit, TInfoUnit::THashFunction> covered;
 
-    for (auto const& conj : conjuncts) {
+    for (auto& conj : conjuncts) {
         auto conjIUs = conj.GetInputIUs();
         auto conjDeps = IUSetIntersect(conjIUs, deps->Dependencies);
         if (!conjDeps.empty()) {
@@ -68,7 +68,7 @@ bool TPullUpCorrelatedFilterRule::MatchAndApply(TIntrusivePtr<IOperator> &input,
         auto map = CastOperator<TOpMap>(input);
 
         // Stop if we compute something from one of the dependent columns, except for Just
-        for (const auto & mapEl : map->MapElements) {
+        for (auto & mapEl : map->MapElements) {
             for (const auto & iu : mapEl.GetExpression().GetInputIUs(false, true)) {
                 if (correlated.contains(iu)) {
                     if (!mapEl.IsColumnAccess() && !mapEl.GetExpression().IsSingleCallable({"Just"})) {

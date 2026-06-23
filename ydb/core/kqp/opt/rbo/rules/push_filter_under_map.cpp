@@ -32,7 +32,7 @@ TIntrusivePtr<IOperator> TPushFilterUnderMapRule::SimpleMatchAndApply(const TInt
         newMapColumns.push_back(mapEl.GetElementName());
     }
 
-    for (const auto & c : conjuncts) {
+    for (auto & c : conjuncts) {
         if (IUSetIntersect(c.GetInputIUs(false,true), newMapColumns).empty()){
             pushedFilters.push_back(c);
         } else {

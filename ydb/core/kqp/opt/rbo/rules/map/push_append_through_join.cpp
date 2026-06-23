@@ -93,7 +93,7 @@ TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const T
     TVector<TMapElement> rightMapElements;
     TVector<std::pair<TMapElement, EPushTarget>> classifiedElements;
 
-    for (const auto& mapElement : topMap->MapElements) {
+    for (auto& mapElement : topMap->MapElements) {
         EPushTarget target = EPushTarget::Top;
         const bool isExtractableAppend = topMap->IsExtractableAppend(mapElement);
         if (isExtractableAppend && mapElement.IsColumnAccess()) {

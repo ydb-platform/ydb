@@ -5,7 +5,7 @@ namespace NKqp {
 
 namespace {
 
-bool TryAppendToBottomMap(const TIntrusivePtr<TOpMap>& bottomMap, const TMapElement& mapElement,
+bool TryAppendToBottomMap(const TIntrusivePtr<TOpMap>& bottomMap, TMapElement& mapElement,
                           const TVector<TInfoUnit>& bottomInputIUs, const TPlanProps& props) {
     // Move an append into the bottom map only when it can be evaluated before that map.
     if (!mapElement.DependsOnlyOn(bottomInputIUs)) {
@@ -45,7 +45,7 @@ TPushAppendIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& inpu
 
     // Map(Map(input, bottomElements), topElements) ->
     // Map(input, bottomElements + movable top appends), with non-movable top elements left above.
-    for (const auto& mapElement : topMap->MapElements) {
+    for (auto& mapElement : topMap->MapElements) {
         if (topMap->IsExtractableAppend(mapElement) && TryAppendToBottomMap(bottomMap, mapElement, bottomInputIUs, props)) {
             pushed = true;
         } else {

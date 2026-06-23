@@ -56,7 +56,7 @@ public:
         return changed;
     }
 
-    void AddExpressionDeps(const TExpression& expr, TInfoUnitSet& target) override {
+    void AddExpressionDeps(TExpression expr, TInfoUnitSet& target) override {
         AddInfoUnits(target, expr.GetInputIUs(false, true));
 
         for (const auto& iu : expr.GetInputIUs(true, false)) {
@@ -122,7 +122,7 @@ void TOpMap::PropagateLiveness(ILivenessContext& ctx) {
     TInfoUnitSet inputLive;
     TInfoUnitSet renameSources;
 
-    for (const auto& mapElement : MapElements) {
+    for (auto& mapElement : MapElements) {
         if (mapElement.IsRename()) {
             renameSources.insert(mapElement.GetRename());
         }

@@ -2634,7 +2634,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
         auto kikimrSettings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
 
-        kikimrSettings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::EPriority::PRI_TRACE);
+        kikimrSettings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::EPriority::PRI_CRIT);
         kikimrSettings.LogSettings->DefaultLogPriority = NActors::NLog::EPriority::PRI_CRIT;
 
         TKikimrRunner kikimr(kikimrSettings);
@@ -4293,9 +4293,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                            /*queriesWithoutCboCheck=*/{15, 31, 58, 64, 72, 78, 85});
     }
 
-    Y_UNIT_TEST(TPCH_YQL_22) {
-        RunTPC_YqlTest(EBenchType::TPCH, 22, true, true);
+    Y_UNIT_TEST(TPCH_YQL_17) {
+        RunTPC_YqlTest(EBenchType::TPCH, 17, true, true);
     }
+
+    Y_UNIT_TEST(TPCDS_YQL_66) {
+        RunTPC_YqlTest(EBenchType::TPCDS, 66, true, true);
+    }
+
 
     Y_UNIT_TEST(TPCDS_YQL_4) {
         RunTPC_YqlTest(EBenchType::TPCDS, 4, true, true);
@@ -4321,6 +4326,19 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         for (int i=0; i<10; i++) {
             RunTPC_YqlTest(EBenchType::TPCDS, 4, true, true);
+        }
+
+        elapsed_time = double(clock() - the_time) / CLOCKS_PER_SEC;
+        Cout << "Elasped average: " << elapsed_time / 10.0;
+    }
+
+    Y_UNIT_TEST(Bench_TPCH_21) {
+        clock_t the_time;
+        double elapsed_time;
+        the_time = clock();
+
+        for (int i=0; i<10; i++) {
+            RunTPC_YqlTest(EBenchType::TPCH, 21, true, true);
         }
 
         elapsed_time = double(clock() - the_time) / CLOCKS_PER_SEC;

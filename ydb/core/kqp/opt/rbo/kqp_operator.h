@@ -96,7 +96,7 @@ public:
     virtual const TInfoUnitSet& GetLiveOut(IOperator* op) const = 0;
     virtual bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TVector<TInfoUnit>& columns) = 0;
     virtual bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TInfoUnitSet& columns) = 0;
-    virtual void AddExpressionDeps(const TExpression& expr, TInfoUnitSet& target) = 0;
+    virtual void AddExpressionDeps(TExpression expr, TInfoUnitSet& target) = 0;
 };
 
 class INameConstraintsContext {
@@ -343,15 +343,15 @@ public:
 
     bool IsRename() const;
     void SetIsRename(bool isRename);
-    bool IsColumnAccess() const;
-    TInfoUnit GetRename() const;
-    TInfoUnit GetColumnAccess() const;
+    bool IsColumnAccess();
+    TInfoUnit GetRename();
+    TInfoUnit GetColumnAccess();
 
     TInfoUnit GetElementName() const;
     void SetElementName(const TInfoUnit& elementName);
     TExpression GetExpression() const;
     TExpression& GetExpressionRef();
-    bool DependsOnlyOn(const TVector<TInfoUnit>& availableIUs) const;
+    bool DependsOnlyOn(const TVector<TInfoUnit>& availableIUs);
     void SetExpression(TExpression expr);
 
 private:
@@ -373,10 +373,10 @@ public:
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual bool PropagateNameConstraints(INameConstraintsContext& ctx) override;
     virtual TPlanAliases::TAliasMap ComputeAliases(const TPlanAliases& planAliases) override;
-    TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
-    TInfoUnitSet GetRenameSources() const;
-    bool IsExtractableAppend(const TMapElement& element) const;
-    TVector<std::pair<TInfoUnit, TInfoUnit>> GetPropertyPreservingMappings(TPlanProps& props) const;
+    TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames();
+    TInfoUnitSet GetRenameSources();
+    bool IsExtractableAppend(TMapElement& element);
+    TVector<std::pair<TInfoUnit, TInfoUnit>> GetPropertyPreservingMappings(TPlanProps& props);
     virtual void ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) override;
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
@@ -505,7 +505,7 @@ public:
     virtual TPlanAliases::TAliasMap ComputeAliases(const TPlanAliases& planAliases) override;
     virtual void ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) override;
 
-    TVector<TInfoUnit> GetFilterIUs(TPlanProps& props) const;
+    TVector<TInfoUnit> GetFilterIUs(TPlanProps& props);
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
 

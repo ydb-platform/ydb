@@ -56,11 +56,11 @@ void AddReadOriginalPredicateDeps(const TOpRead& read, TInfoUnitSet& requiredCol
 
 } // anonymous namespace
 
-TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const TInfoUnitSet& liveOut, const TPlanProps& props, const TInfoUnitSet& keepKeyColumns) {
+TVector<TMapElement> KeepLiveMapElements(TIntrusivePtr<TOpMap>& map, const TInfoUnitSet& liveOut, const TPlanProps& props, const TInfoUnitSet& keepKeyColumns) {
     TVector<TMapElement> newElements;
     newElements.reserve(map->MapElements.size());
 
-    for (const auto& mapElement : map->MapElements) {
+    for (auto& mapElement : map->MapElements) {
         const auto to = mapElement.GetElementName();
         if (mapElement.IsRename()) {
             const auto from = mapElement.GetRename();

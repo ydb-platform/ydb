@@ -16,7 +16,7 @@ bool CanRewriteResidualTopMap(
             continue;
         }
 
-        const auto& element = topMap->MapElements[idx];
+        auto& element = topMap->MapElements[idx];
         if (element.GetElementName() == to) {
             return false;
         }
@@ -79,7 +79,7 @@ TIntrusivePtr<IOperator> TPushAppendThroughAggregateRule::SimpleMatchAndApply(co
     }
 
     for (size_t appendIdx = 0; appendIdx < topMap->MapElements.size(); ++appendIdx) {
-        const auto& mapElement = topMap->MapElements[appendIdx];
+        auto& mapElement = topMap->MapElements[appendIdx];
         if (!topMap->IsExtractableAppend(mapElement) || !mapElement.IsColumnAccess()) {
             continue;
         }

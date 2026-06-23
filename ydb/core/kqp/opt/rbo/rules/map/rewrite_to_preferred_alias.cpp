@@ -92,7 +92,7 @@ bool RenameInfoUnit(TInfoUnit& iu, const TRenameMap& renameMap) {
     return true;
 }
 
-bool HasDirectExpressionRename(const TExpression& expr, const TRenameMap& renameMap) {
+bool HasDirectExpressionRename(TExpression& expr, TRenameMap& renameMap) {
     for (const auto& iu : expr.GetInputIUs(true, false)) {
         if (renameMap.contains(iu)) {
             return true;
@@ -101,7 +101,7 @@ bool HasDirectExpressionRename(const TExpression& expr, const TRenameMap& rename
     return false;
 }
 
-bool RenameExpression(TExpression& expr, const TRenameMap& renameMap) {
+bool RenameExpression(TExpression& expr, TRenameMap& renameMap) {
     if (renameMap.empty() || !HasDirectExpressionRename(expr, renameMap)) {
         return false;
     }
@@ -156,7 +156,7 @@ bool RewriteFilterInputs(TOpFilter& filter, const TInfoUnitSet& liveOut, TRBOCon
         return false;
     }
 
-    const auto renameMap = BuildPreferredAliasRenameMap(props, filter.GetInput(), filter.FilterExpr.GetInputIUs(false, true), liveOut);
+    auto renameMap = BuildPreferredAliasRenameMap(props, filter.GetInput(), filter.FilterExpr.GetInputIUs(false, true), liveOut);
     if (renameMap.empty()) {
         return false;
     }
@@ -184,7 +184,7 @@ bool RewriteJoinInputs(TOpJoin& join, const TInfoUnitSet& liveOut, TRBOContext& 
         leftUsed.push_back(leftKey);
         rightUsed.push_back(rightKey);
     }
-    for (const auto& filter : join.JoinFilters) {
+    for (auto& filter : join.JoinFilters) {
         const auto filterIUs = filter.GetInputIUs(false, true);
         filterUsed.insert(filterUsed.end(), filterIUs.begin(), filterIUs.end());
     }
@@ -213,18 +213,18 @@ bool RewriteJoinInputs(TOpJoin& join, const TInfoUnitSet& liveOut, TRBOContext& 
 
 bool RewriteLimitInputs(TOpLimit& limit, const TInfoUnitSet& liveOut, TRBOContext& ctx, TPlanProps& props) {
     TVector<TInfoUnit> usedIUs = limit.LimitCond.GetInputIUs(false, true);
-    if (const auto offset = limit.GetOffsetCond()) {
+    if (auto offset = limit.GetOffsetCond()) {
         const auto offsetIUs = offset->GetInputIUs(false, true);
         usedIUs.insert(usedIUs.end(), offsetIUs.begin(), offsetIUs.end());
     }
 
-    const auto renameMap = BuildPreferredAliasRenameMap(props, limit.GetInput(), usedIUs, liveOut);
+    auto renameMap = BuildPreferredAliasRenameMap(props, limit.GetInput(), usedIUs, liveOut);
     if (renameMap.empty()) {
         return false;
     }
 
     bool changed = HasDirectExpressionRename(limit.LimitCond, renameMap);
-    if (const auto offset = limit.GetOffsetCond()) {
+    if (auto offset = limit.GetOffsetCond()) {
         changed |= HasDirectExpressionRename(*offset, renameMap);
     }
     if (changed) {
@@ -244,7 +244,7 @@ bool RewriteSortInputs(TOpSort& sort, const TInfoUnitSet& liveOut, TRBOContext& 
         usedIUs.insert(usedIUs.end(), limitIUs.begin(), limitIUs.end());
     }
 
-    const auto renameMap = BuildPreferredAliasRenameMap(props, sort.GetInput(), usedIUs, liveOut);
+    auto renameMap = BuildPreferredAliasRenameMap(props, sort.GetInput(), usedIUs, liveOut);
     if (renameMap.empty()) {
         return false;
     }

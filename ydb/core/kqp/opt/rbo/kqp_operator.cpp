@@ -63,7 +63,9 @@ NJson::TJsonValue IOperator::ToJson(ui32 explainFlags)
 const TVector<TInfoUnit>& IOperator::GetOutputIUs() {
     if (!Props.OutputIUs.has_value()) {
         ComputeOutputIUsSubtree();
-        Y_ENSURE(Props.OutputIUs.has_value(), "Computation of output IUs failed");
+        if(!Props.OutputIUs.has_value()) {
+            Y_ENSURE(Props.OutputIUs.has_value(), "Computation of output IUs failed");
+        }
     }
     return Props.OutputIUs.value();
 }
@@ -90,7 +92,7 @@ void IOperator::ComputeOutputIUsSubtree() {
 
 void TOpEmptySource::ComputeOutputIUs() {
     if (!Props.OutputIUs.has_value()) {
-        Props.OutputIUs = {};
+        Props.OutputIUs = std::move(TVector<TInfoUnit>());
     }
 }
 
@@ -249,7 +251,7 @@ void TMapElement::SetIsRename(bool isRename) {
     Rename = isRename;
 }
 
-bool TMapElement::IsColumnAccess() const {
+bool TMapElement::IsColumnAccess() {
     return Expr.IsColumnAccess();
 }
 
@@ -269,17 +271,17 @@ TExpression& TMapElement::GetExpressionRef() {
     return Expr;
 }
 
-bool TMapElement::DependsOnlyOn(const TVector<TInfoUnit>& availableIUs) const {
-    const auto usedIUs = Expr.GetInputIUs(false, true);
+bool TMapElement::DependsOnlyOn(const TVector<TInfoUnit>& availableIUs) {
+    auto usedIUs = Expr.GetInputIUs(false, true);
     return IUSetDiff(usedIUs, availableIUs).empty();
 }
 
-TInfoUnit TMapElement::GetRename() const {
+TInfoUnit TMapElement::GetRename() {
     Y_ENSURE(Rename, "Map element is not a semantic rename");
     return GetColumnAccess();
 }
 
-TInfoUnit TMapElement::GetColumnAccess() const {
+TInfoUnit TMapElement::GetColumnAccess() {
     auto IUs = Expr.GetInputIUs(true);
     Y_ENSURE(IUs.size()==1, "No or multiple column references in rename");
     return IUs[0];
@@ -327,9 +329,9 @@ bool TOpMap::HasOutputElement(const TInfoUnit& output) const {
     return FindOutputElement(output) != nullptr;
 }
 
-TInfoUnitSet TOpMap::GetRenameSources() const {
+TInfoUnitSet TOpMap::GetRenameSources() {
     TInfoUnitSet result;
-    for (const auto& mapElement : MapElements) {
+    for (auto& mapElement : MapElements) {
         if (mapElement.IsRename()) {
             result.insert(mapElement.GetRename());
         }
@@ -337,12 +339,12 @@ TInfoUnitSet TOpMap::GetRenameSources() const {
     return result;
 }
 
-bool TOpMap::IsExtractableAppend(const TMapElement& element) const {
+bool TOpMap::IsExtractableAppend(TMapElement& element) {
     bool found = false;
     bool usedByRename = false;
     const auto output = element.GetElementName();
 
-    for (const auto& mapElement : MapElements) {
+    for (auto& mapElement : MapElements) {
         if (&mapElement == &element) {
             found = true;
         }
@@ -429,9 +431,9 @@ TVector<TInfoUnit> TOpMap::GetSubplanIUs(TPlanProps& props) {
 
 // Returns explicit renames as pairs of <to, from>
 
-TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenames() const {
+TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenames() {
     TVector<std::pair<TInfoUnit, TInfoUnit>> result;
-    for (const auto& mapElement : MapElements) {
+    for (auto& mapElement : MapElements) {
         if (mapElement.IsRename()) {
             result.push_back(std::make_pair(mapElement.GetElementName(), mapElement.GetRename()));
         }
@@ -441,11 +443,11 @@ TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetRenames() const {
 
 // Both a := b and a <- b let a inherit key, shuffle, and lineage properties from b.
 // a := b keeps b visible, while a <- b removes the old b binding from Map output.
-TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetPropertyPreservingMappings(TPlanProps& props) const {
+TVector<std::pair<TInfoUnit, TInfoUnit>> TOpMap::GetPropertyPreservingMappings(TPlanProps& props) {
     Y_UNUSED(props);
     TVector<std::pair<TInfoUnit, TInfoUnit>> result;
 
-    for (const auto& mapElement : MapElements) {
+    for (auto& mapElement : MapElements) {
         if (mapElement.IsRename()) {
             result.push_back(std::make_pair(mapElement.GetElementName(), mapElement.GetRename()));
             continue;
@@ -478,7 +480,7 @@ TString TOpMap::ToString(TExprContext& ctx) {
     auto res = TStringBuilder();
     res << "Map [";
     for (size_t i = 0, e = MapElements.size(); i < e; i++) {
-        const auto& mapElement = MapElements[i];
+        auto& mapElement = MapElements[i];
         const auto k = FormatMapElementName(mapElement.GetElementName());
 
         TString fromName;
@@ -503,7 +505,7 @@ NJson::TJsonValue TOpMap::ToJson(ui32 explainFlags) {
     TStringBuilder name;
     name << "Map [";
     for (size_t i = 0, e = MapElements.size(); i < e; ++i) {
-        const auto& mapElement = MapElements[i];
+        auto& mapElement = MapElements[i];
         name << FormatMapElementName(mapElement.GetElementName()) << (mapElement.IsRename() ? " <- " : " := ");
         if (mapElement.IsRename()) {
             name << mapElement.GetRename().GetFullName();
@@ -612,7 +614,7 @@ void TOpFilter::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext & ct
     FilterExpr.ApplyReplaceMap(map, ctx);
 }
 
-TVector<TInfoUnit> TOpFilter::GetFilterIUs(TPlanProps& props) const {
+TVector<TInfoUnit> TOpFilter::GetFilterIUs(TPlanProps& props) {
     Y_UNUSED(props);
     return std::move(FilterExpr.GetInputIUs(true, true));
 }
@@ -700,7 +702,7 @@ TVector<TInfoUnit> TOpJoin::GetUsedIUs(TPlanProps& props) {
         result.push_back(rightKey);
     }
 
-    for (const auto & f : JoinFilters) {
+    for (auto & f : JoinFilters) {
         auto filterIUs = f.GetInputIUs(true, true);
         result.insert(result.end(), filterIUs.begin(), filterIUs.end());
     }
@@ -802,7 +804,7 @@ NJson::TJsonValue TOpJoin::ToJson(ui32 explainFlags) {
     }
     if (!JoinFilters.empty()) {
         NJson::TJsonValue filters(NJson::EJsonValueType::JSON_ARRAY);
-        for (const auto& filter : JoinFilters) {
+        for (auto& filter : JoinFilters) {
             filters.AppendValue(filter.ToExplainString());
         }
         res["Filters"] = filters;

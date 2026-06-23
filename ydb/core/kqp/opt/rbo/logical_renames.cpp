@@ -115,7 +115,7 @@ void TOpMap::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunc
     Y_UNUSED(ctx);
     TVector<TMapElement> newMapElements;
 
-    for (const auto& el : MapElements) {
+    for (auto& el : MapElements) {
         TInfoUnit newIU = el.GetElementName();
         const auto it = renameMap.find(newIU);
         if (it != renameMap.end()) {

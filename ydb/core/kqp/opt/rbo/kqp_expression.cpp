@@ -346,7 +346,7 @@ std::optional<TString> FormatSimpleExpression(TExprNode::TPtr node, ui32 depth) 
     return {};
 }
 
-TString FormatExpressionDependencies(const TExpression& expr) {
+TString FormatExpressionDependencies(TExpression& expr) {
     TVector<TInfoUnit> deps;
     try {
         deps = expr.GetInputIUs(true, true);
@@ -476,19 +476,35 @@ TExprNode::TPtr TExpression::GetExpressionBody() const {
     return Node->ChildPtr(1);
 }
 
-TVector<TInfoUnit> TExpression::GetInputIUs(bool includeSubplanVars, bool includeCorrelatedDeps) const {
+const TVector<TInfoUnit>& TExpression::GetInputIUs(bool includeSubplanVars, bool includeCorrelatedDeps) {
     Y_ENSURE(Node->IsLambda(), "Expression node is not lambda");
+    ui32 index = ui32(includeSubplanVars)*2 + ui32(includeCorrelatedDeps);
+    ui32 allIUsIndex = ui32(true)*2 + ui32(false);
+
+    if (InputIUs[index].has_value()) {
+        return InputIUs[index].value();
+    }
+
+    if (!InputIUs[allIUsIndex].has_value()) {
+        TVector<TInfoUnit> IUs;
+        GetAllMembers(Node, IUs);
+        if (IUs.empty()) {
+            InputIUs[allIUsIndex] = std::move(TVector<TInfoUnit>());
+            return InputIUs[allIUsIndex].value();
+        } else {
+            InputIUs[allIUsIndex] = std::move(IUs);
+        }
+    }
+    
+    if (InputIUs[allIUsIndex].value().empty()) {
+        return InputIUs[allIUsIndex].value();
+    }
+
     TVector<TInfoUnit> IUs;
-    GetAllMembers(Node, IUs);
-    if (IUs.empty()) {
-        return {};
-    }
-    else {
-        IUs.clear();
-        Y_ENSURE(PlanProps, "Plan properties null for an expression with members");
-        GetAllMembers(Node, IUs, *PlanProps, includeSubplanVars, includeCorrelatedDeps);
-        return std::move(IUs);
-    }
+    Y_ENSURE(PlanProps, "Plan properties null for an expression with members");
+    GetAllMembers(Node, IUs, *PlanProps, includeSubplanVars, includeCorrelatedDeps);
+    InputIUs[index] = std::move(IUs);
+    return InputIUs[index].value();
 }
 
 TExpression TExpression::ApplyRenames(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap) const {
@@ -538,7 +554,7 @@ TString TExpression::ToString() const {
     return PrintRBOExpression(Node, *Ctx);
 }
 
-TString TExpression::ToExplainString() const {
+TString TExpression::ToExplainString() {
     if (auto simple = FormatSimpleExpression(Node)) {
         return *simple;
     }

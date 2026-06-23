@@ -133,7 +133,7 @@ TIntrusivePtr<IOperator> TInlineJoinFiltersRule::SimpleMatchAndApply(const TIntr
         usedIUs.insert(leftKey);
         usedIUs.insert(rightKey);
     }
-    for (const auto& joinFilter : join->JoinFilters) {
+    for (auto& joinFilter : join->JoinFilters) {
         AddUsedIUs(usedIUs, joinFilter.GetInputIUs(false, true));
     }
 

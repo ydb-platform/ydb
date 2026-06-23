@@ -141,7 +141,7 @@ TAliasMap BuildMapAliases(TOpMap& map, const TPlanAliases& planAliases) {
         }
     }
 
-    for (const auto& mapElement : map.MapElements) {
+    for (auto& mapElement : map.MapElements) {
         const auto to = mapElement.GetElementName();
         if (!visible.contains(to)) {
             continue;

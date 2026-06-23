@@ -60,7 +60,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
 
     bool canPushRight = join->JoinKind != "LeftSemi" && join->JoinKind != "LeftOnly";
 
-    for (const auto& conj : conjuncts) {
+    for (auto& conj : conjuncts) {
         if (conj.MaybeEquiJoinCondition()) {
             TEquiJoinCondition cond(conj);
 

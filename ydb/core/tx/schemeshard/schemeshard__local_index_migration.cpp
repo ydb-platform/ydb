@@ -132,32 +132,51 @@ private:
 
         auto& modifyScheme = *record.AddTransaction();
         modifyScheme.SetWorkingDir(parentDir);
-        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
         modifyScheme.SetInternal(true);
         modifyScheme.SetFailOnExist(false);
 
-        auto& alterColumnTable = *modifyScheme.MutableAlterColumnTable();
-        alterColumnTable.SetName(tableName);
+        if (item.IsColumnTable) {
+            modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterColumnTable);
 
-        auto& alterSchema = *alterColumnTable.MutableAlterSchema();
-        auto& upsertIndex = *alterSchema.AddUpsertIndexes();
+            auto& alterColumnTable = *modifyScheme.MutableAlterColumnTable();
+            alterColumnTable.SetName(tableName);
 
-        // Convert TIndexCreationConfig to TOlapIndexRequested
-        if (!NOlap::ConvertCreationConfigToRequested(item.IndexConfig, upsertIndex)) {
-            SchemeShard->ReturnTxIdToCache(txId);
-            if (item.Backoff.HasMore()) {
-                auto delay = item.Backoff.Next();
-                LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "LocalIndexMigrator at schemeshard: " << SelfTabletId
-                    << ", failed to convert index config for '" << item.WorkingDir << "', will retry after delay " << delay);
-                ctx.Schedule(delay, new TEvents::TEvWakeup());
-            } else {
-                LOG_CRIT_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "LocalIndexMigrator at schemeshard: " << SelfTabletId
-                    << ", failed to convert index config for '" << item.WorkingDir << "' after max retries, dying");
-                PassAway();
+            auto& alterSchema = *alterColumnTable.MutableAlterSchema();
+            auto& upsertIndex = *alterSchema.AddUpsertIndexes();
+
+            // Convert TIndexCreationConfig to TOlapIndexRequested
+            if (!NOlap::ConvertCreationConfigToRequested(item.IndexConfig, upsertIndex)) {
+                SchemeShard->ReturnTxIdToCache(txId);
+                if (item.Backoff.HasMore()) {
+                    auto delay = item.Backoff.Next();
+                    LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "LocalIndexMigrator at schemeshard: " << SelfTabletId
+                        << ", failed to convert index config for '" << item.WorkingDir << "', will retry after delay " << delay);
+                    ctx.Schedule(delay, new TEvents::TEvWakeup());
+                } else {
+                    LOG_CRIT_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                        "LocalIndexMigrator at schemeshard: " << SelfTabletId
+                        << ", failed to convert index config for '" << item.WorkingDir << "' after max retries, dying");
+                    PassAway();
+                }
+                return;
             }
-            return;
+        } else {
+            // Row table: register the scheme object only; ByKeyFilterPrefixes already exists.
+            modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpAlterTable);
+            auto& alterTable = *modifyScheme.MutableAlterTable();
+            alterTable.SetName(tableName);
+            const auto& cfg = item.IndexConfig;
+            auto& indexDesc = *alterTable.AddTableIndexes();
+            indexDesc.SetName(cfg.GetName());
+            indexDesc.SetType(cfg.GetType());
+            indexDesc.SetState(cfg.GetState());
+            for (const auto& col : cfg.GetKeyColumnNames()) {
+                indexDesc.AddKeyColumnNames(col);
+            }
+            if (cfg.HasBloomFilterDescription()) {
+                *indexDesc.MutableBloomFilterDescription() = cfg.GetBloomFilterDescription();
+            }
         }
 
         AwaitingRequests.emplace(txId, std::move(item));

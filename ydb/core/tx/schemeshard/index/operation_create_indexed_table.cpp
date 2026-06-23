@@ -134,6 +134,28 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
     for (auto& indexDescription: indexedTable.GetIndexDescription()) {
         const auto& indexName = indexDescription.GetName();
         const auto indexType = GetIndexType(indexDescription);
+
+        if (TTableIndexInfo::IsLocalIndex(indexType)) {
+            // Row-table local indexes (prefix bloom filters) have no impl table. Full column
+            // validation is done in KQP; here we enforce a valid, unique name and a non-empty
+            // primary-key prefix - drop logic later treats IndexKeys.size() as the prefix length.
+            if (indexType != NKikimrSchemeOp::EIndexTypeLocalBloomFilter || indexDescription.KeyColumnNamesSize() == 0) {
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
+                    TStringBuilder() << "Local index '" << indexName
+                        << "' must be a local bloom filter over a non-empty primary-key prefix")};
+            }
+            TPath indexPath = baseTablePath.Child(indexName);
+            TString msg = "invalid table index name: ";
+            if (!indexPath.IsValidLeafName(context.UserToken.Get(), msg)) {
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusSchemeError, msg)};
+            }
+            if (indexes.contains(indexName)) {
+                return {CreateReject(nextId, NKikimrScheme::EStatus::StatusInvalidParameter,
+                    TStringBuilder() << "Can't create indexes with not unique names for table, for example: " << indexName)};
+            }
+            indexes.emplace(indexName, TTableColumns{});
+            continue;
+        }
         switch (indexType) {
             case NKikimrSchemeOp::EIndexTypeGlobal:
             case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -310,6 +332,11 @@ TVector<ISubOperation::TPtr> CreateIndexedTable(TOperationId nextId, const TTxTr
             scheme.MutableCreateTableIndex()->SetType(GetIndexType(indexDescription));
 
             result.push_back(CreateNewTableIndex(NextPartId(nextId, result), scheme));
+        }
+
+        if (TTableIndexInfo::IsLocalIndex(GetIndexType(indexDescription))) {
+            // Local index (e.g. row-table prefix bloom filter) has no impl table
+            continue;
         }
 
         auto createIndexImplTable = [&] (NKikimrSchemeOp::TTableDescription&& implTableDesc, const THashSet<TString>& localSequences = {}) {

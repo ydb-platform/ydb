@@ -23,7 +23,7 @@ env:
 jobs:
   add-backport-table:
     name: Add backport table to merged PR
-    runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    runs-on: [ self-hosted, auto-provisioned, tiny-worker]
     if: >
       (
         github.event_name == 'workflow_dispatch'

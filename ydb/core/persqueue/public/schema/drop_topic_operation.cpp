@@ -39,7 +39,7 @@ public:
 
 private:
     void DoDescribe() {
-        LOG_D("DoDescribe");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "DoDescribe");
         Become(&TDropTopicOperationActor::DescribeState);
 
         RegisterWithSameMailbox(NDescriber::CreateDescriberActor(
@@ -54,7 +54,7 @@ private:
     }
 
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-        LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle NDescriber::TEvDescribeTopicsResponse");
 
         auto& topics = ev->Get()->Topics;
         AFL_ENSURE(topics.size() == 1)("s", topics.size());
@@ -91,7 +91,7 @@ private:
 
 private:
     void DoDrop() {
-        LOG_D("DoDrop");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "DoDrop");
 
         Become(&TDropTopicOperationActor::DropState);
 
@@ -126,7 +126,7 @@ private:
     }
 
     void Handle(TEvSchemaOperationResponse::TPtr& ev) {
-        LOG_D("Handle TEvSchemaOperationResponse");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvSchemaOperationResponse");
         auto& response = *ev->Get();
         return ReplyAndDie(response.Status, std::move(response.ErrorMessage));
     }

@@ -37,7 +37,7 @@ public:
 
 private:
     void DoDescribe() {
-        LOG_D("DoDescribe");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "DoDescribe");
         Become(&TAlterTopicOperationActor::DescribeState);
 
         RegisterWithSameMailbox(NDescriber::CreateDescriberActor(
@@ -52,7 +52,7 @@ private:
     }
 
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-        LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle NDescriber::TEvDescribeTopicsResponse");
 
         auto& topics = ev->Get()->Topics;
         AFL_ENSURE(topics.size() == 1)("s", topics.size());
@@ -90,13 +90,13 @@ private:
 
 private:
     void DoGetClustersList() {
-        LOG_D("DoGetClustersList");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "DoGetClustersList");
         Become(&TAlterTopicOperationActor::GetClustersListState);
         Send(NPQ::NClusterTracker::MakeClusterTrackerID(), new NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersList());
     }
 
     void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse::TPtr& ev) {
-        LOG_D("Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse: "
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse: "
             << (ev->Get()->Success ? ev->Get()->ClustersList->DebugString() : "error"));
 
         auto& response = *ev->Get();
@@ -116,7 +116,7 @@ private:
 
 private:
     void DoAlter() {
-        LOG_D("DoAlter");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "DoAlter");
 
         Become(&TAlterTopicOperationActor::AlterState);
 
@@ -178,7 +178,7 @@ private:
     }
 
     void Handle(TEvSchemaOperationResponse::TPtr& ev) {
-        LOG_D("Handle TEvSchemaOperationResponse");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvSchemaOperationResponse");
         auto& response = *ev->Get();
         return ReplyAndDie(response.Status, std::move(response.ErrorMessage));
     }
@@ -192,7 +192,7 @@ private:
 
 private:
     void ReplyAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-        LOG_D("ReplyAndDie " << errorCode << " '" << errorMessage << "'");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "ReplyAndDie " << errorCode << " '" << errorMessage << "'");
         if (errorCode == Ydb::StatusIds::SUCCESS && !Settings.PrepareOnly) {
             ModifyScheme = {};
         }

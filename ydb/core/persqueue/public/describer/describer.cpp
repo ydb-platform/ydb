@@ -1,10 +1,6 @@
 #include "describer.h"
 
 #define LOG_PREFIX NActors::TlsActivationContext->AsActorContext().SelfID
-#define LOG_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
-#define LOG_W(stream) LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
-#define LOG_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
 
 
 namespace NKikimr::NPQ::NDescriber {
@@ -29,7 +25,7 @@ public:
     }
 
     void DoRequest(const std::unordered_set<TString>& topicPath) {
-        LOG_D("Create request [" << JoinRange(", ", topicPath.begin(), topicPath.end()) << "] with SyncVersion=" << RetryWithSyncVersion);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << "Create request [" << JoinRange(", ", topicPath.begin(), topicPath.end()) << "] with SyncVersion=" << RetryWithSyncVersion);
 
         auto schemeRequest = std::make_unique<TSchemeCacheNavigate>(1);
         schemeRequest->DatabaseName = DatabasePath;
@@ -55,7 +51,7 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult");
         auto& result = ev->Get()->Request;
 
         std::unordered_set<TString> unknownPaths;
@@ -75,7 +71,7 @@ public:
                 case TSchemeCacheNavigate::EStatus::PathErrorUnknown:
                 case TSchemeCacheNavigate::EStatus::RootUnknown: {
                     if (RetryWithSyncVersion) {
-                        LOG_D("Path '" << realPath << "' not found");
+                        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << "Path '" << realPath << "' not found");
                         Result[originalPath] = TTopicInfo{
                             .Status = EStatus::NOT_FOUND
                         };
@@ -86,12 +82,12 @@ public:
                 }
                 case TSchemeCacheNavigate::EStatus::Ok: {
                     if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                        LOG_D("Path '" << realPath << "' is a CDC");
+                        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << "Path '" << realPath << "' is a CDC");
                         CDCPaths[TStringBuilder() << realPath << "/streamImpl"] = originalPath;
                     } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
                         if (!entry.PQGroupInfo || entry.PQGroupInfo->Description.GetBalancerTabletID() == 0) {
                             if (RetryWithSyncVersion) {
-                                LOG_D("Path '" << realPath << "' not found");
+                                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << "Path '" << realPath << "' not found");
                                 Result[originalPath] = TTopicInfo{
                                     .Status = EStatus::NOT_FOUND
                                 };
@@ -100,13 +96,13 @@ public:
                             }
                         } else {
                             if (Settings.UserToken && !entry.SecurityObject->CheckAccess(Settings.AccessRights, *Settings.UserToken)) {
-                                LOG_D("Path '" << realPath << "' UNAUTHORIZED");
+                                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << "Path '" << realPath << "' UNAUTHORIZED");
                                 Result[originalPath] = TTopicInfo{
                                     .Status = entry.SecurityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Settings.UserToken)
                                             ? EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS : EStatus::UNAUTHORIZED
                                 };
                             } else {
-                                LOG_D("Path '" << realPath << "' SUCCESS");
+                                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << "Path '" << realPath << "' SUCCESS");
                                 Result[originalPath] = TTopicInfo{
                                     .Status = EStatus::SUCCESS,
                                     .RealPath = realPath,
@@ -119,9 +115,9 @@ public:
                             }
                         }
                     } else {
-                        LOG_D("Path '" << realPath << "' is not a topic: " << entry.Kind);
+                        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << "Path '" << realPath << "' is not a topic: " << entry.Kind);
                         if (Settings.UserToken && !entry.SecurityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Settings.UserToken)) {
-                            LOG_D("Path '" << realPath << "' UNAUTHORIZED");
+                            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << "Path '" << realPath << "' UNAUTHORIZED");
                             Result[originalPath] = TTopicInfo{
                                 .Status = EStatus::UNAUTHORIZED
                             };
@@ -135,7 +131,7 @@ public:
                     break;
                 }
                 default: {
-                    LOG_D("Path '" << realPath << "' unknown error");
+                    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << "Path '" << realPath << "' unknown error");
                     Result[originalPath] = TTopicInfo{
                         .Status = EStatus::UNKNOWN_ERROR,
                         .RealPath = realPath

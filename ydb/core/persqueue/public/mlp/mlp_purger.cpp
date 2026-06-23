@@ -14,7 +14,7 @@ void TPurgerActor::Bootstrap() {
 }
 
 void TPurgerActor::DoDescribe() {
-    LOG_D("Start describe");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Start describe");
     Become(&TPurgerActor::DescribeState);
 
     NDescriber::TDescribeSettings settings = {
@@ -25,7 +25,7 @@ void TPurgerActor::DoDescribe() {
 }
 
 void TPurgerActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-    LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle NDescriber::TEvDescribeTopicsResponse");
 
     ChildActorId = {};
 
@@ -53,7 +53,7 @@ STFUNC(TPurgerActor::DescribeState) {
 }
 
 void TPurgerActor::DoPurge() {
-    LOG_D("Start purge");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Start purge");
     Become(&TPurgerActor::PurgeState);
 
     for (auto& partition : TopicInfo.Info->Description.GetPartitions()) {
@@ -69,7 +69,7 @@ void TPurgerActor::DoPurge() {
 
 void TPurgerActor::Handle(TEvPQ::TEvMLPPurgeResponse::TPtr& ev)
 {
-    LOG_D("Handle TEvPQ::TEvMLPPurgeResponse " << ev->Get()->Record.ShortDebugString());
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvPQ::TEvMLPPurgeResponse " << ev->Get()->Record.ShortDebugString());
 
     auto partitionId = ev->Get()->GetPartitionId();
     auto& partitionStatus = Partitions[partitionId];
@@ -100,7 +100,7 @@ void TPurgerActor::RetryIfPossible(ui32 partitionId, TPartitionStatus& partition
 
 void TPurgerActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev)
 {
-    LOG_D("Handle TEvPQ::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvPQ::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
 
     auto partitionId = ev->Get()->GetPartitionId();
     auto& partitionStatus = Partitions[partitionId];
@@ -118,7 +118,7 @@ void TPurgerActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev)
 
 void TPurgerActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev)
 {
-    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvPipeCache::TEvDeliveryProblem");
 
     auto tabletId = ev->Get()->TabletId;
     ++TabletCookies[tabletId];
@@ -133,7 +133,7 @@ void TPurgerActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev)
 }
 
 void TPurgerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
-    LOG_D("Handle TEvents::TEvWakeup");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvents::TEvWakeup");
 
     auto partitionId = ev->Get()->Tag;
     auto& partitionStatus = Partitions[partitionId];
@@ -168,7 +168,7 @@ void TPurgerActor::RequestPartitionIfNeeded(ui32 partitionId,TPartitionStatus& s
 }
 
 void TPurgerActor::ReplyIfPossible() {
-    LOG_D("ReplyIfPossible: PendingPartitions " << PendingPartitions << " PendingRetries " << PendingRetries);
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "ReplyIfPossible: PendingPartitions " << PendingPartitions << " PendingRetries " << PendingRetries);
     if (PendingPartitions > 0 || PendingRetries > 0) {
         return;
     }
@@ -190,7 +190,7 @@ void TPurgerActor::SendToTablet(ui64 tabletId, IEventBase *ev, ui64 cookie) {
 }
 
 void TPurgerActor::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-    LOG_I("Reply error " << Ydb::StatusIds::StatusCode_Name(errorCode));
+    LOG_INFO_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Reply error " << Ydb::StatusIds::StatusCode_Name(errorCode));
     Send(ParentId, new TEvPurgeResponse(errorCode, std::move(errorMessage)));
     PassAway();
 }

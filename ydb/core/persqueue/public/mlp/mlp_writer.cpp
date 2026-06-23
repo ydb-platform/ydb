@@ -27,7 +27,7 @@ void TWriterActor::PassAway() {
 }
 
 void TWriterActor::DoDescribe() {
-    LOG_D("Start describe");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Start describe");
     Become(&TWriterActor::DescribeState);
 
     NDescriber::TDescribeSettings settings = {
@@ -38,7 +38,7 @@ void TWriterActor::DoDescribe() {
 }
 
 void TWriterActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-    LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle NDescriber::TEvDescribeTopicsResponse");
 
     ChildActorId = {};
 
@@ -118,7 +118,7 @@ size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueueP
 }
 
 void TWriterActor::DoWrite() {
-    LOG_D("Start write");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Start write");
     Become(&TWriterActor::WriteState);
 
     struct TInfo {
@@ -177,7 +177,7 @@ void TWriterActor::DoWrite() {
 }
 
 void TWriterActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
-    LOG_D("Handle TEvPersQueue::TEvResponse");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvPersQueue::TEvResponse");
 
     bool alreadyReceived = false;
     auto& record = ev->Get()->Record;
@@ -210,7 +210,7 @@ void TWriterActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 }
 
 void TWriterActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvPipeCache::TEvDeliveryProblem");
 
     const auto tabletId = ev->Get()->TabletId;
 
@@ -242,7 +242,7 @@ void TWriterActor::SendToTablet(ui64 tabletId, IEventBase *ev) {
 }
 
 bool TWriterActor::OnUnhandledException(const std::exception& exc) {
-    LOG_C("unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
+    LOG_CRIT_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
         << TBackTrace::FromCurrentException().PrintToString());
 
     PendingRequests = 0;
@@ -253,11 +253,11 @@ bool TWriterActor::OnUnhandledException(const std::exception& exc) {
 
 bool TWriterActor::IsSuccess(const NKikimrClient::TResponse& record) {
     if (record.HasErrorCode() && record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
-        LOG_W("Write error: " << record.ShortDebugString());
+        LOG_WARN_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Write error: " << record.ShortDebugString());
         return false;
     }
     if (!record.HasPartitionResponse()) {
-        LOG_W("Missing partition response: " << record.ShortDebugString());
+        LOG_WARN_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Missing partition response: " << record.ShortDebugString());
         return false;
     }
 

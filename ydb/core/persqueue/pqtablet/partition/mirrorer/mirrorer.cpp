@@ -124,7 +124,7 @@ void TMirrorer::StartInit(const TActorContext& ctx) {
 }
 
 void TMirrorer::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
-    LOG_N("killed");
+    LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "killed");
     if (ReadSession)
         ReadSession->Close(TDuration::Zero());
     ReadSession = nullptr;
@@ -203,7 +203,7 @@ void TMirrorer::ProcessError(const TActorContext& ctx, const TString& msg, const
 void TMirrorer::AfterSuccesWrite(const TActorContext& ctx) {
     PQ_ENSURE(WriteInFlight.empty());
     PQ_ENSURE(WriteRequestInFlight);
-    LOG_I("written " <<  WriteRequestInFlight.value().CmdWriteSize()
+    LOG_INFO_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "written " <<  WriteRequestInFlight.value().CmdWriteSize()
         << " messages with first offset=" << WriteRequestInFlight.value().GetCmdWriteOffset()
         << ", current queue size: " << Queue.size() << "(" << BytesInFlight << "bytes)");
 
@@ -271,7 +271,7 @@ void TMirrorer::Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext&
                 return;
             }
             case EEventCookie::UPDATE_WRITE_TIMESTAMP: {
-                LOG_D("got response to update write timestamp request: " << partitionResponse);
+                LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "got response to update write timestamp request: " << partitionResponse);
                 return;
             }
             default: {
@@ -291,33 +291,33 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
 
     if (ctx.Now() - LastStateLogTimestamp > LOG_STATE_INTERVAL) {
         LastStateLogTimestamp = ctx.Now();
-        LOG_N("[STATE] current state=" << GetCurrentState()
+        LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "[STATE] current state=" << GetCurrentState()
             << ", read session=" << bool(ReadSession) << ", credentials provider=" << bool(CredentialsProvider)
             << ", credentials request inflight=" << CredentialsRequestInFlight);
         if (ReadSession) {
-            LOG_N("[STATE] read session id " << ReadSession->GetSessionId());
+            LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "[STATE] read session id " << ReadSession->GetSessionId());
         }
         if (PartitionStream) {
-            LOG_N("[STATE] has partition stream " << PartitionStream->GetTopicPath()
+            LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "[STATE] has partition stream " << PartitionStream->GetTopicPath()
                 << ":" << PartitionStream->GetPartitionId()
                 << " with id " << PartitionStream->GetPartitionSessionId());
         } else {
-            LOG_N("[STATE] hasn't partition stream");
+            LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "[STATE] hasn't partition stream");
         }
         if (StreamStatus) {
-            LOG_N("[STATE] last source partition status: " << StreamStatus->DebugString());
+            LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "[STATE] last source partition status: " << StreamStatus->DebugString());
         }
-        LOG_N("[STATE] next offset to read " << OffsetToRead << ", current end offset " << EndOffset);
-        LOG_N("[STATE] bytes in flight " << BytesInFlight
+        LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "[STATE] next offset to read " << OffsetToRead << ", current end offset " << EndOffset);
+        LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "[STATE] bytes in flight " << BytesInFlight
             << ", messages in write request " << WriteInFlight.size()
             << ", queue to write: " << Queue.size());
-        LOG_N("[STATE] wait new reader event=" << WaitNextReaderEventInFlight
+        LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "[STATE] wait new reader event=" << WaitNextReaderEventInFlight
             << ", last received event time=" << LastReadEventTime
             << ", read futures inflight  " << ReadFuturesInFlight << ", last id=" << ReadFeatureId);
         if (!ReadFeatures.empty()) {
             const auto& oldest = *ReadFeatures.begin();
             const auto& info = oldest.second;
-            LOG_N("[STATE] The oldest read future id=" << oldest.first
+            LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "[STATE] The oldest read future id=" << oldest.first
             << ", ts=" << info.first << " age=" << (ctx.Now() - info.first)
             << ", future state: " << info.second.Initialized()
             << "/" << info.second.HasValue() << "/" << info.second.HasException());
@@ -339,7 +339,7 @@ void TMirrorer::Handle(TEvPQ::TEvUpdateCounters::TPtr& /*ev*/, const TActorConte
         return;
     }
     if (WriteRequestInFlight && WriteRequestTimestamp + WRITE_TIMEOUT < ctx.Now()) {
-        LOG_E("write request was sent at "
+        LOG_ERROR_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "write request was sent at "
             << WriteRequestTimestamp.Seconds() << ", but no response has been received yet. Tablet will be killed.");
         if (WriteTimeoutCounter) {
             WriteTimeoutCounter.Inc(1);
@@ -356,10 +356,10 @@ void TMirrorer::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr& ev, co
         Config,
         ev->Get()->Config.GetPartitionConfig().GetMirrorFrom()
     );
-    LOG_N("got new config, equal with previous: " << equalConfigs);
+    LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "got new config, equal with previous: " << equalConfigs);
     if (!equalConfigs) {
         Config = ev->Get()->Config.GetPartitionConfig().GetMirrorFrom();
-        LOG_N("changing config");
+        LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "changing config");
 
         StartInit(ctx);
     }
@@ -410,16 +410,16 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
         return;
     }
     if (WriteRequestInFlight || !Queue.empty()) {
-        LOG_D("postpone split-merge event until all write operations completed");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "postpone split-merge event until all write operations completed");
         return;
     }
     const bool isSplit = EndPartitionSessionEvent->GetAdjacentPartitionIds().empty();
     if (!isSplit) {
-        LOG_W("topic merge not supported yet.");
+        LOG_WARN_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "topic merge not supported yet.");
         return;
     }
     if (EndPartitionSessionEvent->GetChildPartitionIds().empty()) {
-        LOG_W("split-merge operation has no child partitions");
+        LOG_WARN_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "split-merge operation has no child partitions");
         return;
     }
     const ::NKikimrPQ::EScaleStatus value = isSplit ? NKikimrPQ::EScaleStatus::NEED_SPLIT : NKikimrPQ::EScaleStatus::NEED_MERGE;
@@ -439,7 +439,7 @@ void TMirrorer::TryToSplitMerge(const TActorContext& ctx) {
 
 void TMirrorer::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
     if (CredentialsRequestInFlight) {
-        LOG_W("credentials request already inflight.");
+        LOG_WARN_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "credentials request already inflight.");
         return;
     }
     LastInitStageTimestamp = ctx.Now();
@@ -480,7 +480,7 @@ void TMirrorer::HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev,
     }
 
     CredentialsProvider = ev->Get()->Credentials;
-    LOG_N("credentials provider created " << bool(CredentialsProvider));
+    LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "credentials provider created " << bool(CredentialsProvider));
     ConsumerInitInterval = CONSUMER_INIT_INTERVAL_START;
     ScheduleConsumerCreation(ctx);
 }
@@ -510,12 +510,12 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
     if (CredentialsRequestInFlight) {
         // защита от гонки между TEvInitCredentials, TEvCredentialsCreated и TEvCreateConsumer
         // когда придёт TEvCredentialsCreated актор ещё раз отправит себе TEvCreateConsumer
-        LOG_W("wait for credentials response.");
+        LOG_WARN_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "wait for credentials response.");
         return;
     }
 
     LastInitStageTimestamp = ctx.Now();
-    LOG_N("creating new read session");
+    LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "creating new read session");
 
     if (!Queue.empty()) {
         OffsetToRead = Queue.front().GetOffset();
@@ -556,7 +556,7 @@ void TMirrorer::CreateConsumer(TEvPQ::TEvCreateConsumer::TPtr&, const TActorCont
         return;
     }
 
-    LOG_N("read session created: " << ReadSession->GetSessionId());
+    LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "read session created: " << ReadSession->GetSessionId());
 
     Send(SelfId(), new TEvents::TEvWakeup());
     Become(&TThis::StateWork);
@@ -574,7 +574,7 @@ void TMirrorer::RequestSourcePartitionStatus() {
 
 void TMirrorer::TryUpdateWriteTimetsamp(const TActorContext &ctx) {
     if (Config.GetSyncWriteTime() && !WriteRequestInFlight && StreamStatus && EndOffset == StreamStatus->GetEndOffset()) {
-        LOG_I("update write timestamp from original topic: " << StreamStatus->DebugString());
+        LOG_INFO_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "update write timestamp from original topic: " << StreamStatus->DebugString());
         THolder<TEvPersQueue::TEvRequest> request = MakeHolder<TEvPersQueue::TEvRequest>();
         auto req = request->Record.MutablePartitionRequest();
         req->SetTopic(TopicConverter->GetClientsideName());
@@ -613,7 +613,7 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
 
     Become(&TThis::StateInitConsumer);
 
-    LOG_N("schedule consumer creation");
+    LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "schedule consumer creation");
     ScheduleWithIncreasingTimeout<TEvPQ::TEvCreateConsumer>(SelfId(), ConsumerInitInterval, CONSUMER_INIT_INTERVAL_MAX, ctx);
 }
 
@@ -668,7 +668,7 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
         return;
     }
     std::optional<NYdb::NTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
-    LOG_D("got next reader event: " << bool(event));
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "got next reader event: " << bool(event));
 
     if (wakeup && !event) {
         return;
@@ -684,7 +684,7 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
     if (auto* dataEvent = std::get_if<TPersQueueReadEvent::TDataReceivedEvent>(&event.value())) {
         AddMessagesToQueue(std::move(dataEvent->GetCompressedMessages()));
     } else if (auto* createStream = std::get_if<TPersQueueReadEvent::TStartPartitionSessionEvent>(&event.value())) {
-        LOG_I("got create stream event for '" << createStream->DebugString()
+        LOG_INFO_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "got create stream event for '" << createStream->DebugString()
                 << " and will set offset=" << OffsetToRead);
         if (PartitionStream) {
             ProcessError(ctx, TStringBuilder() << " already has stream " << PartitionStream->GetPartitionSessionId()
@@ -714,10 +714,10 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
         destroyStream->Confirm();
 
         PartitionStream.Reset();
-        LOG_I("got destroy stream event: " << destroyStream->DebugString());
+        LOG_INFO_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "got destroy stream event: " << destroyStream->DebugString());
    } else if (auto* streamClosed = std::get_if<TPersQueueReadEvent::TPartitionSessionClosedEvent>(&event.value())) {
         PartitionStream.Reset();
-        LOG_I("got stream closed event for partition stream id: "
+        LOG_INFO_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "got stream closed event for partition stream id: "
                 << streamClosed->GetPartitionSession()->GetPartitionSessionId()
                 << " reason: " << streamClosed->GetReason());
 
@@ -735,15 +735,15 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
             TryUpdateWriteTimetsamp(ctx);
         }
     } else if (auto* commitAck = std::get_if<TPersQueueReadEvent::TCommitOffsetAcknowledgementEvent>(&event.value())) {
-        LOG_I("got commit responce, commited offset: " << commitAck->GetCommittedOffset());
+        LOG_INFO_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "got commit responce, commited offset: " << commitAck->GetCommittedOffset());
     } else if (auto* closeSessionEvent = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&event.value())) {
         ProcessError(ctx, TStringBuilder() << " read session closed: " << closeSessionEvent->DebugString());
         ScheduleConsumerCreation(ctx);
         return;
     } else if (auto* endPartitionSessionEvent = std::get_if<TPersQueueReadEvent::TEndPartitionSessionEvent>(&event.value())) {
-        LOG_I("got end partion session event: " << endPartitionSessionEvent->DebugString());
+        LOG_INFO_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "got end partion session event: " << endPartitionSessionEvent->DebugString());
         if (EndPartitionSessionEvent.has_value()) {
-            LOG_W("already has end partition session event");
+            LOG_WARN_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "already has end partition session event");
             EndPartitionSessionEvent.reset();
         }
         EndPartitionSessionEvent = *endPartitionSessionEvent;
@@ -766,7 +766,7 @@ static TDuration GetRewindCommitDelay(const TActorContext& ctx) {
 }
 
 bool TMirrorer::TryRewindCommittedOffset(const TActorContext& ctx) {
-    LOG_T("TryRewindCommittedOffset " << LabeledOutput(OffsetToRead, StreamStatus->GetCommittedOffset(),  StreamStatus->GetReadOffset(), StreamStatus->GetEndOffset(), (ctx.Now() - LastInitStageTimestamp).Seconds(), (ctx.Now() - LastRewindCommitTimestamp).Seconds()));
+    LOG_TRACE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "TryRewindCommittedOffset " << LabeledOutput(OffsetToRead, StreamStatus->GetCommittedOffset(),  StreamStatus->GetReadOffset(), StreamStatus->GetEndOffset(), (ctx.Now() - LastInitStageTimestamp).Seconds(), (ctx.Now() - LastRewindCommitTimestamp).Seconds()));
     if (!(OffsetToRead == 0 /* never seen any data */
         && StreamStatus->GetCommittedOffset() < StreamStatus->GetEndOffset()
         && StreamStatus->GetCommittedOffset() == 0 /* new mirror rule */
@@ -781,7 +781,7 @@ bool TMirrorer::TryRewindCommittedOffset(const TActorContext& ctx) {
         return false;
     }
     LastRewindCommitTimestamp = now;
-    LOG_I("topic contains only old messages. Rewinding committed offset forward" << " from " << StreamStatus->GetCommittedOffset() << " to " << StreamStatus->GetEndOffset());
+    LOG_INFO_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "topic contains only old messages. Rewinding committed offset forward" << " from " << StreamStatus->GetCommittedOffset() << " to " << StreamStatus->GetEndOffset());
     auto* factory = AppData(ctx)->PersQueueMirrorReaderFactory;
     PQ_ENSURE(factory);
     auto future = factory->CommitOffset(Config, CredentialsProvider, Partition, StreamStatus->GetEndOffset());
@@ -801,7 +801,7 @@ bool TMirrorer::TryRewindCommittedOffset(const TActorContext& ctx) {
 }
 
 void TMirrorer::HandleRewindCommit(TEvPQ::TEvRewindCommitResult::TPtr& ev, const TActorContext& ctx) {
-    LOG_I("Rewind committed offset result: " << ev->Get()->Status);
+    LOG_INFO_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Rewind committed offset result: " << ev->Get()->Status);
     if (!ev->Get()->Status.IsSuccess()) {
         ProcessError(ctx, TStringBuilder() << "failed to rewind committed offset: " << ev->Get()->Status);
         return;

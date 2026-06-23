@@ -60,7 +60,7 @@ void TBasicAccountQuoter::InitCounters(const TActorContext& ctx) {
 }
 
 void TBasicAccountQuoter::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
-    LOG_I("killed");
+    LOG_INFO_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "killed");
     for (const auto& event : Queue) {
         auto cookie = event.Request->Get()->Cookie;
         ReplyPersQueueError(
@@ -78,7 +78,7 @@ void TBasicAccountQuoter::HandleUpdateCounters(TEvPQ::TEvUpdateCounters::TPtr&, 
 }
 
 void TBasicAccountQuoter::HandleQuotaRequest(NAccountQuoterEvents::TEvRequest::TPtr& ev, const TActorContext& ctx) {
-    LOG_D("quota required for cookie=" << ev->Get()->Cookie);
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "quota required for cookie=" << ev->Get()->Cookie);
     InitCounters(ctx);
     bool hasActualErrors = ctx.Now() - LastReportedErrorTime < DoNotQuoteAfterErrorPeriod;
     if (ResourcePath && (QuotaRequestInFlight || !InProcessQuotaRequestCookies.empty()) && !hasActualErrors) {
@@ -90,7 +90,7 @@ void TBasicAccountQuoter::HandleQuotaRequest(NAccountQuoterEvents::TEvRequest::T
 
 void TBasicAccountQuoter::HandleQuotaConsumed(NAccountQuoterEvents::TEvConsumed::TPtr& ev, const TActorContext& ctx) {
     ConsumedBytesInCredit += ev->Get()->BytesConsumed;
-    LOG_D("consumed quota " << ev->Get()->BytesConsumed
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "consumed quota " << ev->Get()->BytesConsumed
         << " bytes by cookie=" << ev->Get()->RequestCookie
         << ", consumed in credit " << ConsumedBytesInCredit << "/" << CreditBytes
     );
@@ -120,7 +120,7 @@ void TBasicAccountQuoter::HandleQuotaConsumed(NAccountQuoterEvents::TEvConsumed:
 void TBasicAccountQuoter::HandleClearance(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& ctx) {
     QuotaRequestInFlight = false;
     const ui64 cookie = ev->Cookie;
-    LOG_D("Got quota from Kesus:" << ev->Get()->Result << ". Cookie: " << cookie);
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Got quota from Kesus:" << ev->Get()->Result << ". Cookie: " << cookie);
 
     PQ_ENSURE(CurrentQuotaRequestCookie == cookie);
     if (!Queue.empty()) {
@@ -131,7 +131,7 @@ void TBasicAccountQuoter::HandleClearance(TEvQuota::TEvClearance::TPtr& ev, cons
     if (Y_UNLIKELY(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Success)) {
         PQ_ENSURE(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Deadline); // We set deadline == inf in quota request.
         if (ctx.Now() - LastReportedErrorTime > TDuration::Minutes(1)) {
-            LOG_E("Got quota request error: " << ev->Get()->Result);
+            LOG_ERROR_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Got quota request error: " << ev->Get()->Result);
             LastReportedErrorTime = ctx.Now();
         }
         return;
@@ -139,7 +139,7 @@ void TBasicAccountQuoter::HandleClearance(TEvQuota::TEvClearance::TPtr& ev, cons
 }
 
 void TBasicAccountQuoter::ApproveQuota(NAccountQuoterEvents::TEvRequest::TPtr& ev, TInstant startWait, const TActorContext& ctx) {
-    LOG_D("approve read for cookie=" << ev->Get()->Cookie
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "approve read for cookie=" << ev->Get()->Cookie
     );
     InProcessQuotaRequestCookies.insert(ev->Get()->Cookie);
 
@@ -179,7 +179,7 @@ TAccountReadQuoter::TAccountReadQuoter(
             AppData()->PQConfig.GetQuotingConfig().GetReadCreditBytes(), counters, DO_NOT_QUOTE_AFTER_ERROR_PERIOD)
     , User(user)
 {
-    LOG_I("kesus=" << KesusPath << " resource_path=" << ResourcePath);
+    LOG_INFO_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "kesus=" << KesusPath << " resource_path=" << ResourcePath);
     ConsumerPath = NPersQueue::ConvertOldConsumerName(user);
 }
 
@@ -225,7 +225,7 @@ TAccountWriteQuoter::TAccountWriteQuoter(
                           0, counters,
                           TDuration::Zero())
 {
-    LOG_D("topicWriteQuotaResourcePath '" << ResourcePath
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "topicWriteQuotaResourcePath '" << ResourcePath
                 << "' topicWriteQuoterPath '" << KesusPath
                 << "' account '" << topicConverter->GetAccount()
                 << "'"

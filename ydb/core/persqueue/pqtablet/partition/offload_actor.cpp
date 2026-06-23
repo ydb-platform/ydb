@@ -89,7 +89,7 @@ public:
     }
 
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle " << ev->Get()->ToString());
         if (ev->Get()->Status == TEvWorker::TEvGone::DONE) {
             NotifySchemeShard();
         }
@@ -113,14 +113,14 @@ public:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle " << ev->Get()->ToString());
         if (SchemeShardPipe == ev->Get()->ClientId) {
             OnPipeDestroyed();
         }
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle " << ev->Get()->ToString());
 
         if (SchemeShardPipe == ev->Get()->ClientId && ev->Get()->Status != NKikimrProto::OK) {
             NTabletPipe::CloseClient(SelfId(), SchemeShardPipe);
@@ -147,7 +147,7 @@ public:
             hFunc(TEvTabletPipe::TEvClientConnected, Handle);
             cFunc(TEvents::TEvPoisonPill::EventType, PassAway);
         default:
-            LOG_W("Unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
+            LOG_WARN_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
         }
     }
 };

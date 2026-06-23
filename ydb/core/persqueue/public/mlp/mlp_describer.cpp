@@ -17,7 +17,7 @@ void TDescriberActor::Bootstrap() {
 }
 
 void TDescriberActor::DoDescribe() {
-    LOG_D("Start describe");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Start describe");
     Become(&TDescriberActor::DescribeState);
 
     NDescriber::TDescribeSettings settings = {
@@ -28,7 +28,7 @@ void TDescriberActor::DoDescribe() {
 }
 
 void TDescriberActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-    LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle NDescriber::TEvDescribeTopicsResponse");
 
     ChildActorId = {};
 
@@ -61,13 +61,13 @@ STFUNC(TDescriberActor::DescribeState) {
 }
 
 void TDescriberActor::DoRuntimeAttributes() {
-    LOG_D("Start DoRuntimeAttributes");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Start DoRuntimeAttributes");
     Become(&TDescriberActor::RuntimeAttributesState);
     SendToTablet(TopicInfo.Info->Description.GetBalancerTabletID(), new TEvPQ::TEvMLPGetRuntimeAttributesRequest(Settings.TopicName, Settings.Consumer));
 }
 
 void TDescriberActor::Handle(TEvPQ::TEvMLPGetRuntimeAttributesResponse::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvMLPGetRuntimeAttributesResponse " << ev->Get()->Record.ShortDebugString());
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvPQ::TEvMLPGetRuntimeAttributesResponse " << ev->Get()->Record.ShortDebugString());
     auto* result = ev->Get();
 
     auto response = std::make_unique<TEvDescribeResponse>();
@@ -84,7 +84,7 @@ void TDescriberActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
     if (ev->Cookie != Cookie) {
         return;
     }
-    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvPipeCache::TEvDeliveryProblem");
     if (Backoff.HasMore()) {
         Backoff.Next();
         return DoRuntimeAttributes();
@@ -103,7 +103,7 @@ STFUNC(TDescriberActor::RuntimeAttributesState) {
 
 
 void TDescriberActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
-    LOG_D("Handle TEvPQ::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvPQ::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
     ReplyErrorAndDie(ev->Get()->GetStatus(), std::move(ev->Get()->GetErrorMessage()));
 }
 
@@ -113,7 +113,7 @@ void TDescriberActor::SendToTablet(ui64 tabletId, IEventBase *ev) {
 }
 
 void TDescriberActor::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-    LOG_I("Reply error " << Ydb::StatusIds::StatusCode_Name(errorCode));
+    LOG_INFO_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Reply error " << Ydb::StatusIds::StatusCode_Name(errorCode));
     Send(ParentId, new TEvDescribeResponse(errorCode, std::move(errorMessage)));
     PassAway();
 }

@@ -242,7 +242,7 @@ void TDistributedTransaction::OnPlanStep(ui64 step)
 
 void TDistributedTransaction::OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPredicateResult& event)
 {
-    PQ_LOG_TX_D("Handle TEvTxCalcPredicateResult");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_TX, LogPrefix() << "Handle TEvTxCalcPredicateResult");
 
     TMaybe<EDecision> decision;
 
@@ -277,7 +277,7 @@ void UpdatePartitionsData(NKikimrPQ::TPartitions& partitionsData, NKikimrPQ::TPa
 
 void TDistributedTransaction::OnProposePartitionConfigResult(TEvPQ::TEvProposePartitionConfigResult& event)
 {
-    PQ_LOG_TX_D("Handle TEvProposePartitionConfigResult");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_TX, LogPrefix() << "Handle TEvProposePartitionConfigResult");
 
     UpdatePartitionsData(PartitionsData, event.Data);
 
@@ -299,14 +299,14 @@ void TDistributedTransaction::OnPartitionResult(const E& event, TMaybe<EDecision
 
     ++PartitionRepliesCount;
 
-    PQ_LOG_TX_D("Partition responses " << PartitionRepliesCount << "/" << PartitionRepliesExpected);
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_TX, LogPrefix() << "Partition responses " << PartitionRepliesCount << "/" << PartitionRepliesExpected);
 }
 
 void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
                                         const TActorId& sender,
                                         std::unique_ptr<TEvTxProcessing::TEvReadSetAck> ack)
 {
-    PQ_LOG_TX_D("Handle TEvReadSet " << TxId);
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_TX, LogPrefix() << "Handle TEvReadSet " << TxId);
 
     TX_ENSURE((Step == Max<ui64>()) || (event.HasStep() && (Step == event.GetStep())));
     TX_ENSURE(event.HasTxId() && (TxId == event.GetTxId()));
@@ -323,7 +323,7 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
             p.SetPredicate(data.GetDecision() == NKikimrTx::TReadSetData::DECISION_COMMIT);
             ++ReadSetCount;
 
-            PQ_LOG_TX_D("Predicates " << ReadSetCount << "/" << PredicatesReceived.size());
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_TX, LogPrefix() << "Predicates " << ReadSetCount << "/" << PredicatesReceived.size());
         }
 
         NKikimrPQ::TPartitions d;
@@ -342,7 +342,7 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
 
 void TDistributedTransaction::OnReadSetAck(const NKikimrTx::TEvReadSetAck& event)
 {
-    PQ_LOG_TX_D("Handle TEvReadSetAck txId " << TxId);
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_TX, LogPrefix() << "Handle TEvReadSetAck txId " << TxId);
 
     TX_ENSURE(event.HasStep() && (Step == event.GetStep()));
     TX_ENSURE(event.HasTxId() && (TxId == event.GetTxId()));
@@ -356,7 +356,7 @@ void TDistributedTransaction::OnReadSetAck(ui64 tabletId)
         PredicateRecipients[tabletId] = true;
         ++PredicateAcksCount;
 
-        PQ_LOG_TX_D("Predicate acks " << PredicateAcksCount << "/" << PredicateRecipients.size());
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_TX, LogPrefix() << "Predicate acks " << PredicateAcksCount << "/" << PredicateRecipients.size());
     }
 }
 
@@ -404,7 +404,7 @@ bool TDistributedTransaction::HaveParticipantsDecision() const
 
 bool TDistributedTransaction::HaveAllRecipientsReceive() const
 {
-    PQ_LOG_TX_D("PredicateAcks: " << PredicateAcksCount << "/" << PredicateRecipients.size());
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_TX, LogPrefix() << "PredicateAcks: " << PredicateAcksCount << "/" << PredicateRecipients.size());
     return PredicateRecipients.size() == PredicateAcksCount;
 }
 
@@ -412,7 +412,7 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
                                           EState state)
 {
     auto tx = Serialize(state);
-    PQ_LOG_TX_D("Save tx " << tx.ShortDebugString());
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_TX, LogPrefix() << "Save tx " << tx.ShortDebugString());
 
     TString value;
     TX_ENSURE(tx.SerializeToString(&value));

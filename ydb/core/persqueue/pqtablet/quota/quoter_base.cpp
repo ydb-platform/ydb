@@ -152,7 +152,7 @@ void TPartitionQuoterBase::HandleConsumed(TEvPQ::TEvConsumed::TPtr& ev, const TA
         RequestsInflight--;
         ProcessInflightQueue();
     } else {
-        LOG_E("Attempt to make the inflight counter below zero. Topic " << TopicConverter->GetClientsideName() <<
+        LOG_ERROR_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Attempt to make the inflight counter below zero. Topic " << TopicConverter->GetClientsideName() <<
               " partition " << Partition <<
               " readCookie " << ev->Get()->RequestCookie);
     }

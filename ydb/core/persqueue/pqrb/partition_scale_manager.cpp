@@ -35,9 +35,9 @@ void TPartitionScaleManager::HandleScaleStatusChange(const ui32 partitionId, NKi
     TMaybe<NKikimrPQ::TPartitionScaleParticipants> participants,
     TMaybe<TString> splitBoundary,
     const TActorContext& ctx) {
-    PQ_LOG_D("Handle HandleScaleStatusChange. Scale status: " << NKikimrPQ::EScaleStatus_Name(scaleStatus));
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << "Handle HandleScaleStatusChange. Scale status: " << NKikimrPQ::EScaleStatus_Name(scaleStatus));
     if (scaleStatus == NKikimrPQ::EScaleStatus::NEED_SPLIT) {
-        PQ_LOG_D("::HandleScaleStatusChange need to split partition " << partitionId);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << "::HandleScaleStatusChange need to split partition " << partitionId);
         TPartitionScaleOperationInfo op{
             .PartitionId = partitionId,
             .PartitionScaleParticipants = std::move(participants),
@@ -58,13 +58,13 @@ void TPartitionScaleManager::TrySendScaleRequest(const TActorContext& ctx) {
 
     auto splitMergeRequest = BuildScaleRequest(ctx);
     if (splitMergeRequest.Empty()) {
-        PQ_LOG_D("splitMergeRequest empty");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << "splitMergeRequest empty");
         return;
     }
 
     RequestInflight = true;
     RootPartitionsResetRequestInflight = !splitMergeRequest.SetBoundary.empty();
-    PQ_LOG_D("send split request");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << "send split request");
     CurrentScaleRequest = ctx.Register(new TPartitionScaleRequest(
         TopicName,
         TopicPath,
@@ -129,7 +129,7 @@ TPartitionScaleManager::TScaleRequest TPartitionScaleManager::BuildScaleRequest(
     auto mergesToApply = BuildMergeRequest(allowedSplitsCount);
     auto splitsToApply = BuildSplitRequest(allowedSplitsCount);
 
-    PQ_LOG_D(fmt::format("Scale request: #splits={}, #unprocessed={}, splitsLimit={}, #merges={}",
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << fmt::format("Scale request: #splits={}, #unprocessed={}, splitsLimit={}, #merges={}",
         splitsToApply.Requests.size(),
         splitsToApply.Unprocessed,
         allowedSplitsCountLimit,
@@ -166,7 +166,7 @@ TPartitionScaleManager::TRequests<TPartitionScaleManager::TPartitionBoundary> TP
                 allowedSplitsCount -= cost;
                 boundsToApply.push_back(std::move(part));
             } else {
-                PQ_LOG_W(fmt::format("MaxActivePartitions ({}) is too low to recreate {} root partitions from the mirror source topic",
+                LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << fmt::format("MaxActivePartitions ({}) is too low to recreate {} root partitions from the mirror source topic",
                                      BalancerConfig.MaxActivePartitions,
                                      RootPartitionsToCreate->size()));
                 // don't send request at all, if there is not enough quota
@@ -175,7 +175,7 @@ TPartitionScaleManager::TRequests<TPartitionScaleManager::TPartitionBoundary> TP
                 };
             }
         }
-        PQ_LOG_D(fmt::format("Set partition boundaries requsts: #modify={}, #create{}",
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << fmt::format("Set partition boundaries requsts: #modify={}, #create{}",
             modifyPartitions,
             createPartitions
         ));
@@ -221,21 +221,21 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
     const ui32 partitionId = splitParameters.PartitionId;
     if (MirroredFromSomewhere)  {
         if (!AppData()->FeatureFlags.GetEnableMirroredTopicSplitMerge()) {
-            PQ_LOG_D("split request for mirrored topic is disabled. Partition# " << partitionId);
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << "split request for mirrored topic is disabled. Partition# " << partitionId);
             return {.Split = Nothing(), .Remove = false};
         }
         if (!splitParameters.PartitionScaleParticipants.Defined()) {
-            PQ_LOG_NOTICE("split request for mirrored topic doesn't have prescribed partition ids. Partition# " << partitionId);
+            LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << "split request for mirrored topic doesn't have prescribed partition ids. Partition# " << partitionId);
             return {.Split = Nothing(), .Remove = true};
         }
     }
     const auto* node = PartitionGraph.GetPartition(partitionId);
     if (node == nullptr) {
         if (splitParameters.PartitionScaleParticipants.Defined()) {
-            PQ_LOG_NOTICE("attempt to split partition that was not created yet. Partition# " << partitionId);
+            LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << "attempt to split partition that was not created yet. Partition# " << partitionId);
             return {.Split = Nothing(), .Remove = false};
         } else {
-            PQ_LOG_ERROR("partition not found. Partition# " << partitionId);
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << "partition not found. Partition# " << partitionId);
             return {.Split = Nothing(), .Remove = true};
         }
     }
@@ -244,16 +244,16 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
         auto to = node->To;
         auto mid = splitParameters.SplitBoundary.GetOrElse(MiddleOf(from, to));
         if (mid.empty()) {
-            PQ_LOG_ERROR("wrong partition key range. Can't get mid. Partition# " << partitionId);
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << "wrong partition key range. Can't get mid. Partition# " << partitionId);
             return {.Split = Nothing(), .Remove = true};
         }
 
         if (splitParameters.PartitionScaleParticipants.Defined() && splitParameters.PartitionScaleParticipants->AdjacentPartitionIdsSize() != 0) {
-            PQ_LOG_ERROR("split request cannot have adjacent partitions. Partition# " << partitionId);
+            LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << "split request cannot have adjacent partitions. Partition# " << partitionId);
             return {.Split = Nothing(), .Remove = true};
         }
 
-        PQ_LOG_D("partition split ranges. From# '" << ToHex(from)
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << "partition split ranges. From# '" << ToHex(from)
                 << "'. To# '" << ToHex(to) << "'. Mid# '" << ToHex(mid)
                 << "'. Partition# " << partitionId);
 
@@ -264,7 +264,7 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
             for (const auto& childPartitionId : splitParameters.PartitionScaleParticipants->GetChildPartitionIds()) {
                 split.add_childpartitionids(childPartitionId);
                 if (const auto* childNode = PartitionGraph.GetPartition(childPartitionId); childNode != nullptr) {
-                    PQ_LOG_NOTICE(fmt::format("Child partition# {} already exists. Performing unordered split. Partition# {}", childPartitionId, partitionId));
+                    LOG_NOTICE_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << fmt::format("Child partition# {} already exists. Performing unordered split. Partition# {}", childPartitionId, partitionId));
                     split.set_createrootlevelsibling(true);
                 }
             }
@@ -276,7 +276,7 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
             const auto& prescribedChildrenIds = splitParameters.PartitionScaleParticipants->GetChildPartitionIds();
             if (!std::ranges::is_permutation(nodeChildrenIds, prescribedChildrenIds)) {
                 const std::string mappingStr = fmt::format("([{}]->[{}])", fmt::join(nodeChildrenIds, ","), fmt::join(prescribedChildrenIds, ","));
-                PQ_LOG_ERROR("trying to split partition into different set of children partitions " << mappingStr << ". Partition# " << partitionId);
+                LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << "trying to split partition into different set of children partitions " << mappingStr << ". Partition# " << partitionId);
             }
         }
         return {.Split = Nothing(), .Remove = true};
@@ -287,7 +287,7 @@ void TPartitionScaleManager::HandleScaleRequestResult(TPartitionScaleRequest::TE
     RequestInflight = false;
     LastResponseTime = ctx.Now();
     auto result = ev->Get();
-    PQ_LOG_D("HandleScaleRequestResult scale request result: " << result->Status);
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << "HandleScaleRequestResult scale request result: " << result->Status);
     if (result->Status == TEvTxUserProxy::TResultStatus::ExecComplete) {
         RequestTimeout = TDuration::Zero();
         Backoff.Reset();
@@ -312,7 +312,7 @@ void TPartitionScaleManager::UpdateMirrorRootPartitionsSet() {
 
     NMirror::TMirrorGraphComparisonResult cmp = NMirror::ComparePartitionGraphs(PartitionGraph, MirrorTopicDescription->GetPartitions());
     if (!cmp.RootPartitionsMismatch.has_value()) {
-        PQ_LOG_D("Topic has all root partitions from the source topic");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << "Topic has all root partitions from the source topic");
         RootPartitionsToCreate.reset();
         MirrorTopicError.reset();
         return;
@@ -320,14 +320,14 @@ void TPartitionScaleManager::UpdateMirrorRootPartitionsSet() {
     auto& rootPartitionsMismatch = cmp.RootPartitionsMismatch.value();
     if (rootPartitionsMismatch.Error.has_value()) {
         std::string msg = TStringBuilder() << "Incompatable configuration of root partitions between source and target topics:" << rootPartitionsMismatch.Error.value();
-        PQ_LOG_ERROR(msg);
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << msg);
         RootPartitionsToCreate.reset();
         MirrorTopicError = std::move(*rootPartitionsMismatch.Error);
         return;
     }
     const size_t existingPartitions = std::ranges::count(rootPartitionsMismatch.AlterRootPartitions, NMirror::EPartitionAction::Modify, &NMirror::TPartitionWithBounds::Action);
     const size_t newPartitions = std::ranges::count(rootPartitionsMismatch.AlterRootPartitions, NMirror::EPartitionAction::Create, &NMirror::TPartitionWithBounds::Action);
-    PQ_LOG_I(fmt::format("Topic has less root partitions than the mirror source. New configuration has {}+{} partitions.",
+    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << fmt::format("Topic has less root partitions than the mirror source. New configuration has {}+{} partitions.",
                          existingPartitions,
                          newPartitions));
 
@@ -341,7 +341,7 @@ std::expected<void, std::string> TPartitionScaleManager::HandleMirrorTopicDescri
     } else {
         auto& description = ev->Get()->Description;
         if (!description.has_value() || !description.value().IsSuccess()) {
-            PQ_LOG_W("Ignoring invalid mirror source description");
+            LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << "Ignoring invalid mirror source description");
             return {};
         }
         MirrorTopicDescription.emplace(std::move(description->GetTopicDescription()));

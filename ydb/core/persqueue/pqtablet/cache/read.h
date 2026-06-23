@@ -64,7 +64,7 @@ namespace NPQ {
                 TBlobId blob = MakeBlobId(kvRequest.Partition, reqBlob);
                 auto it = ReadsInProgress.find(blob);
                 if (it != ReadsInProgress.end()) {
-                    LOG_D("Read request is blocked. Partition "
+                    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Read request is blocked. Partition "
                         << blob.Partition << " offset " << blob.Offset);
                     // Save only first occured blocker, others (if any) would be checked later
                     BlockedReads[blob].emplace_back(std::move(kvRequest));
@@ -83,7 +83,7 @@ namespace NPQ {
 
                 auto it = BlockedReads.find(blob);
                 if (it != BlockedReads.end()) {
-                    LOG_D("Read requests are unblocked. Partition "
+                    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Read requests are unblocked. Partition "
                         << blob.Partition << " offset " << blob.Offset << " num unblocked " << it->second.size());
                     for (TKvRequest& kvReq : it->second)
                         unblocked.emplace_back(std::move(kvReq));
@@ -122,7 +122,7 @@ namespace NPQ {
             ui32 fromCache = Cache.RequestBlobs(ctx, kvReq);
 
             if (fromCache == kvReq.Blobs.size()) { // all from cache
-                LOG_D("Reading cookie " << kvReq.CookiePQ
+                LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Reading cookie " << kvReq.CookiePQ
                     << ". All " << fromCache << " blobs are from cache.");
 
                 THolder<TEvPQ::TEvBlobResponse> response = kvReq.MakePQResponse(ctx);
@@ -133,12 +133,12 @@ namespace NPQ {
             }
 
             if (CheckInProgress(ctx, kvReq)) {
-                LOG_D("Reading cookie " << kvReq.CookiePQ
+                LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Reading cookie " << kvReq.CookiePQ
                     << ". There's another reading of the same blob. Waiting");
                 return;
             }
 
-            LOG_D("Reading cookie " << kvReq.CookiePQ
+            LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Reading cookie " << kvReq.CookiePQ
                 << ". Have to read " << kvReq.Blobs.size() - fromCache << " of " << kvReq.Blobs.size() << " from KV");
 
             SaveInProgress(kvReq);
@@ -175,11 +175,11 @@ namespace NPQ {
             ui32 cachedCount = std::accumulate(outBlobs.begin(), outBlobs.end(), 0u, [](ui32 sum, const TRequestedBlob& blob) {
                                                                                     return sum + (blob.Empty() ? 0 : 1);
                                                                                 });
-            LOG_D("Got results. " << resp.ReadResultSize() << " of " << outBlobs.size() << " from KV. Status " << resp.GetStatus());
+            LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Got results. " << resp.ReadResultSize() << " of " << outBlobs.size() << " from KV. Status " << resp.GetStatus());
 
             TErrorInfo error;
             if (resp.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
-                LOG_E("Got Error response for whole request status "
+                LOG_ERROR_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Got Error response for whole request status "
                     << resp.GetStatus() << " cookie " << kvReq.CookiePQ);
                 error = TErrorInfo(NPersQueue::NErrorCode::ERROR, Sprintf("Got bad response: %s", resp.DebugString().c_str()));
             } else {
@@ -192,7 +192,7 @@ namespace NPQ {
                 ui32 pos = 0;
                 for (ui32 i = 0; i < resp.ReadResultSize(); ++i, ++pos) {
                     auto* r = resp.MutableReadResult(i);
-                    LOG_D("Got results. result " << i << " from KV. Status " << r->GetStatus());
+                    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Got results. result " << i << " from KV. Status " << r->GetStatus());
                     if (r->GetStatus() == NKikimrProto::OVERRUN) { //this blob and next are not readed at all. Return as answer only previous blobs
                         AFL_ENSURE(i > 0)("description", "OVERRUN in first read request")("i", i);
                         break;
@@ -212,7 +212,7 @@ namespace NPQ {
                         outBlobs[pos].RawValue = r->GetValue();
                         outBlobs[pos].CreationUnixTime = r->GetCreationUnixTime();
                     } else {
-                        LOG_E("Got Error response " << r->GetStatus()
+                        LOG_ERROR_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Got Error response " << r->GetStatus()
                                         << " for " << i << "'s blob from " << resp.ReadResultSize() << " blobs");
                         error = TErrorInfo(r->GetStatus() == NKikimrProto::NODATA ? NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET
                                                                               : NPersQueue::NErrorCode::ERROR,
@@ -272,7 +272,7 @@ namespace NPQ {
         // Passthrough request to KV
         void Handle(TEvKeyValue::TEvRequest::TPtr& ev, const TActorContext& ctx)
         {
-            LOG_D("CacheProxy. Passthrough write request to KV");
+            LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "CacheProxy. Passthrough write request to KV");
 
             auto& srcRequest = ev->Get()->Record;
 
@@ -309,7 +309,7 @@ namespace NPQ {
                     kvReq.Blobs.push_back(std::move(reqBlob));
                     const TRequestedBlob& blob = kvReq.Blobs.back();
 
-                    LOG_D("CacheProxy. Passthrough blob. Partition "
+                    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "CacheProxy. Passthrough blob. Partition "
                         << kvReq.Partition << " offset " << blob.Offset << " partNo " << blob.PartNo << " count " << blob.Count << " size " << value.size());
                 } else {
                     kvReq.MetadataWritesCount++;
@@ -328,7 +328,7 @@ namespace NPQ {
                 }
                 kvReq.RenamedBlobs.emplace_back(cmd.GetOldKey(), cmd.GetNewKey());
 
-                LOG_D("CacheProxy. Rename blob from " << cmd.GetOldKey() << " to " << cmd.GetNewKey());
+                LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "CacheProxy. Rename blob from " << cmd.GetOldKey() << " to " << cmd.GetNewKey());
             }
         }
 
@@ -345,7 +345,7 @@ namespace NPQ {
                 kvReq.DeletedBlobs.emplace_back(range.GetFrom(), range.GetIncludeFrom(),
                                                 range.GetTo(), range.GetIncludeTo());
 
-                LOG_D("CacheProxy. Delete blobs from " <<
+                LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "CacheProxy. Delete blobs from " <<
                             range.GetFrom() << "(" << (range.GetIncludeFrom() ? '+' : '-') << ") to " <<
                             range.GetTo() << "(" << (range.GetIncludeTo() ? '+' : '-') << ")");
             }
@@ -368,7 +368,7 @@ namespace NPQ {
                 Cache.RemoveEvictedBlob(ctx, TBlobId(blob.Partition, blob.Offset, blob.PartNo, blob.Count, blob.InternalPartsCount, blob.Suffix), blob.Value);
 
             if (resp->Overload) {
-                LOG_D("Have to remove new data from cache. Topic " << TopicName << ", cookie " << resp->Cookie);
+                LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Have to remove new data from cache. Topic " << TopicName << ", cookie " << resp->Cookie);
             }
 
             UpdateCounters(ctx);

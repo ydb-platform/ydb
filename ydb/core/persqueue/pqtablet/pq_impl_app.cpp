@@ -153,7 +153,7 @@ private:
             }
         }
 
-        LOG_D("Answer TEvRemoteHttpInfoRes: to " << Sender << " self " << ctx.SelfID);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Answer TEvRemoteHttpInfoRes: to " << Sender << " self " << ctx.SelfID);
         ctx.Send(Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
         Die(ctx);
     }
@@ -326,7 +326,7 @@ bool TPersQueue::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev, const TAc
         return OnRenderAppHtmlPageTx(ev, ctx);
     }
 
-    PQ_LOG_I("Handle TEvRemoteHttpInfo: " << ev->Get()->Query);
+    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE, LogPrefix() << "Handle TEvRemoteHttpInfo: " << ev->Get()->Query);
 
     TMap<ui32, TActorId> res;
     for (auto& p : Partitions) {

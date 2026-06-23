@@ -90,7 +90,7 @@ public:
 
 protected:
     void OnWriteImpl(const TString& sourceId, ui64 delta, const TString& key = "") {
-        PQ_LOG_D("TAutopartitioningManager::OnWrite"
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE, LogPrefix() << "TAutopartitioningManager::OnWrite"
             << " sourceId# " << sourceId
             << " delta# " << delta
             << " key# " << key
@@ -168,7 +168,7 @@ protected:
             auto* partition = GetPartition();
             const auto& keyRange = partition->GetKeyRange();
 
-            PQ_LOG_D(
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE, LogPrefix() << 
                 TStringBuilder()
                 << "TAutopartitioningManager::SplitBoundary KLL sketch enabled, no median key found, will split by middle of key range");
             return MiddleOf(keyRange.GetFromBound(), keyRange.GetToBound());
@@ -195,7 +195,7 @@ protected:
             || Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
         auto mergeEnabled = Config.GetPartitionStrategy().GetPartitionStrategyType() == ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE;
 
-        PQ_LOG_D("TPartition::CheckScaleStatus"
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE, LogPrefix() << "TPartition::CheckScaleStatus"
             << " splitMergeAvgWriteBytes# " << SumMetric->GetValue()
             << " usagePercent# " << usagePercent
             << " scaleThresholdSeconds# " << Config.GetPartitionStrategy().GetScaleThresholdSeconds()
@@ -210,10 +210,10 @@ protected:
                 >= Config.GetPartitionStrategy().GetScaleUpPartitionWriteSpeedThresholdPercent();
 
         if (splitEnabled && canSplit && shouldSplit) {
-            PQ_LOG_D("TPartition::CheckScaleStatus NEED_SPLIT.");
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE, LogPrefix() << "TPartition::CheckScaleStatus NEED_SPLIT.");
             return NKikimrPQ::EScaleStatus::NEED_SPLIT;
         } else if (mergeEnabled && usagePercent <= Config.GetPartitionStrategy().GetScaleDownPartitionWriteSpeedThresholdPercent()) {
-            PQ_LOG_D("TPartition::CheckScaleStatus NEED_MERGE."
+            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE, LogPrefix() << "TPartition::CheckScaleStatus NEED_MERGE."
                 << " usagePercent: " << usagePercent);
             return NKikimrPQ::EScaleStatus::NEED_MERGE;
         }

@@ -30,7 +30,7 @@ public:
     }
 
     void OnException(const std::exception& exc) override {
-        LOG_E("OnException: " << exc.what());
+        LOG_ERROR_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "OnException: " << exc.what());
 
         TEvSchemaResponse response(Path, Ydb::StatusIds::INTERNAL_ERROR, exc.what());
 
@@ -43,7 +43,7 @@ public:
 
 private:
     void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
-        LOG_D("Handle TEvSchemaResponse. Status: " << ev->Get()->Status << ", ErrorMessage: " << ev->Get()->ErrorMessage);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvSchemaResponse. Status: " << ev->Get()->Status << ", ErrorMessage: " << ev->Get()->ErrorMessage);
 
         Promise.SetValue({
             .Path = Path,

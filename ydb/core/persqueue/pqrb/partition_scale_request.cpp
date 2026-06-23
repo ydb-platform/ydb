@@ -76,7 +76,7 @@ void TPartitionScaleRequest::FillProposeRequest(TEvTxUserProxy::TEvProposeTransa
         }
         logMessage << ".";
     }
-    PQ_LOG_D( logMessage);
+    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() <<  logMessage);
 
     for(const auto& merge: Merges) {
         auto* newMerge = groupDescription.AddMerge();
@@ -124,7 +124,7 @@ void TPartitionScaleRequest::Handle(TEvTxUserProxy::TEvProposeTransactionStatus:
         for (auto& issue : ev->Get()->Record.GetIssues()) {
             issues << issue.ShortDebugString() + ", ";
         }
-        PQ_LOG_ERROR("TPartitionScaleRequest SchemaShard error when trying to execute a split request: " << issues);
+        LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE_READ_BALANCER, LogPrefix() << "TPartitionScaleRequest SchemaShard error when trying to execute a split request: " << issues);
         Send(ParentActorId, scaleRequestResult.release());
         Die(ctx);
     } else {

@@ -42,13 +42,13 @@ public:
 
 private:
     void DoGetClustersList() {
-        LOG_D("DoGetClustersList");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "DoGetClustersList");
         Become(&TCreateTopicOperationActor::GetClustersListState);
         Send(NPQ::NClusterTracker::MakeClusterTrackerID(), new NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersList());
     }
 
     void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse::TPtr& ev) {
-        LOG_D("Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse");
 
         auto& response = *ev->Get();
         if (response.Success) {
@@ -67,7 +67,7 @@ private:
 
 private:
     void DoCreate() {
-        LOG_D("DoCreate IfNotExists: " << Settings.IfNotExists);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "DoCreate IfNotExists: " << Settings.IfNotExists);
         Become(&TCreateTopicOperationActor::CreateState);
 
         auto database = CanonizePath(Settings.Database);
@@ -117,7 +117,7 @@ private:
     }
 
     void Handle(TEvSchemaOperationResponse::TPtr& ev) {
-        LOG_D("Handle TEvSchemaOperationResponse");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvSchemaOperationResponse");
         auto& response = *ev->Get();
         return ReplyAndDie(response.Status, std::move(response.ErrorMessage));
     }
@@ -131,7 +131,7 @@ private:
 
 private:
     void ReplyAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-        LOG_D("ReplyAndDie " << errorCode << " '" << errorMessage << "'");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "ReplyAndDie " << errorCode << " '" << errorMessage << "'");
         if ((errorCode == Ydb::StatusIds::SUCCESS || errorCode == Ydb::StatusIds::ALREADY_EXISTS) && !Settings.PrepareOnly) {
             ModifyScheme = {};
         }

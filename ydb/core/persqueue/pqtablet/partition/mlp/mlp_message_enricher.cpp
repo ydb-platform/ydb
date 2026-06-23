@@ -20,7 +20,7 @@ void TMessageEnricherActor::Bootstrap() {
 }
 
 void TMessageEnricherActor::PassAway() {
-    LOG_D("PassAway");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "PassAway");
     for (auto& reply : Queue) {
         Send(reply.Sender, new TEvPQ::TEvMLPErrorResponse(PartitionId, Ydb::StatusIds::SCHEME_ERROR, "Shutdown"), 0, reply.Cookie);
     }
@@ -31,10 +31,10 @@ void TMessageEnricherActor::PassAway() {
 }
 
 void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
-    LOG_D("Handle TEvPersQueue::TEvResponse");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvPersQueue::TEvResponse");
 
     if (!IsSucess(ev)) {
-        LOG_W("Fetch messages failed: " << ev->Get()->Record.DebugString());
+        LOG_WARN_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Fetch messages failed: " << ev->Get()->Record.DebugString());
         return PassAway();
     }
 
@@ -86,7 +86,7 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 }
 
 void TMessageEnricherActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
-    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
+    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvPipeCache::TEvDeliveryProblem");
     PassAway();
 }
 
@@ -96,7 +96,7 @@ STFUNC(TMessageEnricherActor::StateWork) {
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
-            LOG_E("Unexpected " << EventStr("StateWork", ev));
+            LOG_ERROR_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Unexpected " << EventStr("StateWork", ev));
     }
 }
 
@@ -111,7 +111,7 @@ void TMessageEnricherActor::ProcessQueue() {
         }
 
         auto firstOffset = reply.Messages.front().Offset;
-        LOG_D("Fetching from offset " << firstOffset << " from " << TabletId);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Fetching from offset " << firstOffset << " from " << TabletId);
         SendToPQTablet(MakeEvPQRead(ConsumerName, PartitionId, firstOffset, 1));
 
         return;

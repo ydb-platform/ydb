@@ -55,7 +55,7 @@ public:
 
 private:
     void DoPropose() {
-        LOG_D("DoPropose retry: " << ProposeBackoff.GetIteration());
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "DoPropose retry: " << ProposeBackoff.GetIteration());
         Become(&TSchemaOperationActor::ProposeState);
 
         auto request = std::make_unique<TEvTxUserProxy::TEvProposeTransaction>();
@@ -76,7 +76,7 @@ private:
     }
 
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        LOG_D("Handle TEvTxUserProxy::TEvProposeTransactionStatus");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvTxUserProxy::TEvProposeTransactionStatus");
 
         const auto status = ev->Get()->Status();
         const auto& record = ev->Get()->Record;
@@ -110,7 +110,7 @@ private:
     }
 
     void HandleOnPropose(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        LOG_D("HandleOnPropose TEvPipeCache::TEvDeliveryProblem");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "HandleOnPropose TEvPipeCache::TEvDeliveryProblem");
         if (TPipeCacheClient::OnUndelivered(ev)) {
             return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
                 TStringBuilder() << "SchemeShard " << ev->Get()->TabletId << " is unavailable");
@@ -129,7 +129,7 @@ private:
 
 private:
     void DoWaitCompletion() {
-        LOG_D("DoWaitTxCompletion SchemeShardTabletId: " << SchemeShardTabletId << " TxId: " << TxId);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "DoWaitTxCompletion SchemeShardTabletId: " << SchemeShardTabletId << " TxId: " << TxId);
         Become(&TSchemaOperationActor::WaitCompletionState);
 
         auto request = std::make_unique<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>(TxId);
@@ -137,12 +137,12 @@ private:
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr&) {
-        LOG_D("Handle TEvSchemeShard::TEvNotifyTxCompletionResult");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvSchemeShard::TEvNotifyTxCompletionResult");
         ReplyOkAndDie();
     }
 
     void HandleOnWaitCompletion(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvPipeCache::TEvDeliveryProblem");
         OnUndelivered(ev);
         if (++WaitTxCompletionRetries > MaxWaitTxCompletionRetries) {
             return ReplyErrorAndDie(Ydb::StatusIds::UNAVAILABLE,
@@ -166,13 +166,13 @@ private:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-        LOG_D("ReplyErrorAndDie: " << errorCode << " " << errorMessage);
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "ReplyErrorAndDie: " << errorCode << " " << errorMessage);
         Send(ParentId, new TEvSchemaOperationResponse(errorCode, std::move(errorMessage)), 0, Cookie);
         PassAway();
     }
 
     void ReplyOkAndDie() {
-        LOG_D("ReplyOkAndDie");
+        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "ReplyOkAndDie");
         Send(ParentId, new TEvSchemaOperationResponse(), 0, Cookie);
         PassAway();
     }

@@ -50,7 +50,7 @@ STFUNC(TBatchProcessor::StateWork) {
         HFunc(TEvPQ::TEvConsumerRemoved, HandleConsumerRemoved);
         HFunc(NActors::TEvents::TEvPoisonPill, Handle);
     default:
-        LOG_W("Unexpected event in TBatchProcessor: " << ev->GetTypeRewrite());
+        LOG_WARN_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Unexpected event in TBatchProcessor: " << ev->GetTypeRewrite());
         break;
     }
 }

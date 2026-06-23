@@ -69,13 +69,17 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
             return Yield{};
         }
         const size_t cols = UserDataCols();
-        TVector<arrow::Datum> columns = ArrowFromUV({Buff_.data(), cols});
-        if (!ColumnPermutation_.empty()) {
-            TVector<arrow::Datum> permuted(cols);
+        TVector<arrow::Datum> columns;
+        columns.reserve(cols);
+        const NYql::NUdf::TUnboxedValue* buff = Buff_.data();
+        if (ColumnPermutation_.empty()) {
             for (size_t j = 0; j < cols; ++j) {
-                permuted[j] = std::move(columns[ColumnPermutation_[j]]);
+                columns.push_back(TArrowBlock::From(buff[j]).GetDatum());
             }
-            columns = std::move(permuted);
+        } else {
+            for (size_t j = 0; j < cols; ++j) {
+                columns.push_back(TArrowBlock::From(buff[ColumnPermutation_[j]]).GetDatum());
+            }
         }
         IBlockLayoutConverter::TPackResult result;
         ArrowBlockToInternalConverter_->Pack(columns, result);
@@ -83,14 +87,6 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
     }
 
   private:
-    TVector<arrow::Datum> ArrowFromUV(std::span<const NYql::NUdf::TUnboxedValue> UVs) {
-        TVector<arrow::Datum> arrow;
-        for (const auto& uv : UVs) {
-            arrow.push_back(TArrowBlock::From(uv).GetDatum());
-        }
-        return arrow;
-    }
-
     bool Finished_ = false;
     [[maybe_unused]]ESide Side_;
     IComputationNode* Stream_;
@@ -167,26 +163,28 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
 
     TVector<arrow::Datum> FlushAndApplyRenames() {
         if constexpr(LeftSemiOrOnly(Kind)) {
-            TVector<arrow::Datum> out;
-            Converters_.Probe->Unpack(Output_.Probe, out);
+            UnpackScratchProbe_.clear();
+            Converters_.Probe->Unpack(Output_.Probe, UnpackScratchProbe_);
             Output_.Probe.Clear();
-            TVector<arrow::Datum> renamed;
-            for(auto rename: *Renames_){
+            RenamedScratch_.clear();
+            RenamedScratch_.reserve(Renames_->size());
+            for (auto rename : *Renames_) {
                 MKQL_ENSURE(rename.Side == ESide::Probe, "renames in Semi or Only Left Join shouldn't contain columns from right side");
-                renamed.push_back(out[rename.Index]);
+                RenamedScratch_.push_back(UnpackScratchProbe_[rename.Index]);
             }
-            return renamed;
+            return std::move(RenamedScratch_);
         } else {
-            TSides<TVector<arrow::Datum>> sides;
-            for(ESide side: EachSide) {
-                Converters_.SelectSide(side)->Unpack(Output_.SelectSide(side), sides.SelectSide(side));
+            for (ESide side : EachSide) {
+                UnpackScratchSides_.SelectSide(side).clear();
+                Converters_.SelectSide(side)->Unpack(Output_.SelectSide(side), UnpackScratchSides_.SelectSide(side));
                 Output_.SelectSide(side).Clear();
             }
-            TVector<arrow::Datum> renamed;
+            RenamedScratch_.clear();
+            RenamedScratch_.reserve(Renames_->size());
             for (auto rename : *Renames_) {
-                renamed.push_back(sides.SelectSide(rename.Side)[rename.Index]);
+                RenamedScratch_.push_back(UnpackScratchSides_.SelectSide(rename.Side)[rename.Index]);
             }
-            return renamed;
+            return std::move(RenamedScratch_);
         }
     }
 
@@ -215,6 +213,10 @@ struct TRenamesPackedTupleOutput : NNonCopyable::TMoveOnly {
     TSides<IBlockLayoutConverter*> Converters_;
     BuildNullIfNeeded Nulls_;
     bool LeftIsBuild_;
+    // Reused across flushes to avoid reallocating TVector and arrow::Datum shells every batch.
+    TSides<TVector<arrow::Datum>> UnpackScratchSides_;
+    TVector<arrow::Datum> UnpackScratchProbe_;
+    TVector<arrow::Datum> RenamedScratch_;
 };
 
 template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputationNode<TBlockHashJoinWrapper<Kind>> {

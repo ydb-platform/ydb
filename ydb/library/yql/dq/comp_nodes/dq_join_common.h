@@ -295,16 +295,14 @@ template <typename Source> class TInMemoryHashJoin {
         }
 
         if (FetchedPack_.has_value()) {
-            ui32 idx = 0;
-            for (TSingleTuple probeTuple : *FetchedPack_) {
-                if (idx++ < ResumeIndex_) {
-                    continue;
-                }
+            const TPackResult& pack = *FetchedPack_;
+            for (i64 i = static_cast<i64>(ResumeIndex_); i < pack.NTuples; ++i) {
+                TSingleTuple probeTuple = pack.TupleAt(i);
                 Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
                     consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
                 });
                 if (isFull()) {
-                    ResumeIndex_ = idx;
+                    ResumeIndex_ = static_cast<ui32>(i + 1);
                     return EFetchResult::One;
                 }
             }
@@ -319,14 +317,14 @@ template <typename Source> class TInMemoryHashJoin {
             if (resEnum == EFetchResult::One) {
                 FetchedPack_ = std::move(GetPayload(var));
                 ResumeIndex_ = 0;
-                ui32 idx = 0;
-                for (TSingleTuple probeTuple : *FetchedPack_) {
-                    idx++;
+                const TPackResult& pack = *FetchedPack_;
+                for (i64 i = 0; i < pack.NTuples; ++i) {
+                    TSingleTuple probeTuple = pack.TupleAt(i);
                     Table_.Lookup(probeTuple, [&](TSingleTuple buildTuple) {
                         consumeOneOrTwoTuples(TSides<TSingleTuple>{.Build = buildTuple, .Probe = probeTuple});
                     });
                     if (isFull()) {
-                        ResumeIndex_ = idx;
+                        ResumeIndex_ = static_cast<ui32>(i + 1);
                         return EFetchResult::One;
                     }
                 }
@@ -692,11 +690,9 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 default:
                     MKQL_ENSURE(false, "unhandled ESpillResult case");
                 }
-                ui32 idx = 0;
-                for (TSingleTuple tuple : *state.FetchedPack) {
-                    if (idx++ < state.ResumeIndex) {
-                        continue;
-                    }
+                const TPackResult& probePack = *state.FetchedPack;
+                for (i64 i = static_cast<i64>(state.ResumeIndex); i < probePack.NTuples; ++i) {
+                    TSingleTuple tuple = probePack.TupleAt(i);
                     int bucketIndex = Settings.BucketIndex(tuple);
                     bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
                     if (thisBucketSpilled) {
@@ -707,7 +703,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         lookupToTable(*thisTable, tuple);
                     }
                     if (isFull()) {
-                        state.ResumeIndex = idx;
+                        state.ResumeIndex = static_cast<ui32>(i + 1);
                         return EFetchResult::One;
                     }
                 }
@@ -767,14 +763,12 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         table->Futures.push_back(Spiller_->Extract(*GetBackOrNull(currentProbe)));
                     }
                     if (table->CurrentProbePack.has_value()) {
-                        ui32 idx = 0;
-                        for (TSingleTuple probeTuple : *table->CurrentProbePack) {
-                            if (idx++ < table->ProbeResumeIndex) {
-                                continue;
-                            }
+                        const TPackResult& ppack = *table->CurrentProbePack;
+                        for (i64 i = static_cast<i64>(table->ProbeResumeIndex); i < ppack.NTuples; ++i) {
+                            TSingleTuple probeTuple = ppack.TupleAt(i);
                             lookupToTable(table->Table, probeTuple);
                             if (isFull()) {
-                                table->ProbeResumeIndex = idx;
+                                table->ProbeResumeIndex = static_cast<ui32>(i + 1);
                                 return EFetchResult::One;
                             }
                         }

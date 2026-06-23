@@ -7,6 +7,7 @@ PEERDIR(
     yql/essentials/utils
     yql/essentials/utils/log
     library/cpp/digest/crc32c
+    library/cpp/containers/absl_flat_hash
     ydb/library/yql/dq/comp_nodes/hash_join_utils/simd
 )
 

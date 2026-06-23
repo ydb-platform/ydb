@@ -69,6 +69,13 @@ struct TPackResult {
     auto begin() const {return Iterator(*this, 0);}
     auto end() const {return Iterator(*this, this->NTuples);}
 
+    /// Random access by row index (same layout as Iterator).
+    TSingleTuple TupleAt(i64 tupleIndex) const {
+        MKQL_ENSURE(NTuples > 0, "TupleAt on empty pack");
+        MKQL_ENSURE(tupleIndex >= 0 && tupleIndex < NTuples, "TupleAt index out of range");
+        const i32 rowWidth = static_cast<i32>(PackedTuples.size() / NTuples);
+        return {.PackedData = PackedTuples.data() + rowWidth * tupleIndex, .OverflowBegin = Overflow.data()};
+    }
 
     void Clear() {
         *this = TPackResult{};

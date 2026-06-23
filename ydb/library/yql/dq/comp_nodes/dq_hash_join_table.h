@@ -1,7 +1,7 @@
 #pragma once
 #include "type_utils.h"
 #include <ydb/library/yql/dq/comp_nodes/hash_join_utils/block_layout_converter.h>
-#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/neumann_hash_table.h>
+#include <ydb/library/yql/dq/comp_nodes/hash_join_utils/swiss_join_hash_table.h>
 #include <yql/essentials/minikql/comp_nodes/mkql_rh_hash.h>
 
 namespace NKikimr::NMiniKQL::NJoinTable {
@@ -146,7 +146,7 @@ class TNeumannJoinTable : public NNonCopyable::TMoveOnly {
 
   private:
     IBlockLayoutConverter::TPackResult BuildData_;
-    NKikimr::NMiniKQL::NPackedTuple::TNeumannHashTable<false, false> Table_;
+    NKikimr::NMiniKQL::NPackedTuple::TSwissJoinHashTable Table_;
     size_t RowWidth_ = 0;
     bool TrackUsed_ = false;
     TMKQLVector<ui8> Used_;

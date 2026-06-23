@@ -58,6 +58,8 @@ namespace NActors {
         DECLARE_SECTION_INLINE,
         DECLARE_SECTION_RDMA,
         RDMA_READ,
+        PUSH_DATA_NO_CHECKSUMS,
+        RDMA_READ_NO_CHECKSUMS,
     };
 
     struct TExSerializedEventTooLarge : std::exception {
@@ -159,7 +161,7 @@ namespace NActors {
         const static ui32 RdmaCredsMinSizeSerialized;
 
         template<bool External>
-        bool SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, size_t *bytesSerialized);
+        bool SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, bool disableChecksums, size_t *bytesSerialized);
         bool SerializeEventRdma(TEventHolder& event);
 
         bool FeedPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex);

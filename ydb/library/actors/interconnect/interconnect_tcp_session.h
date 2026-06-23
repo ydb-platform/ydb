@@ -155,7 +155,7 @@ namespace NActors {
                 std::deque<NInterconnect::NRdma::TMemRegionSlice> RdmaBuffers;
                 TRdmaReadContext::TPtr RdmaReadContext = nullptr;
                 size_t RdmaSize = 0;
-                ui32 RdmaCumulativeCheckSum = 0;
+                std::optional<ui32> RdmaCumulativeCheckSum;
             };
 
             std::deque<TPendingEvent> PendingEvents;
@@ -303,7 +303,7 @@ namespace NActors {
         };
         std::deque<TInboundPacket> InboundPacketQ;
         std::deque<std::tuple<ui16, TMutableContiguousSpan>> XdcInputQ; // target buffers for the XDC stream with channel reference
-        std::deque<std::tuple<ui16, ui32>> XdcChecksumQ; // (size, expectedChecksum)
+        std::deque<std::tuple<ui16, std::optional<ui32>>> XdcChecksumQ; // (size, optional(expectedChecksum)). nullopt if checksums are disabled. 
         ui32 XdcCurrentChecksum = 0;
 
         // catch stream -- used after TCP reconnect to match XDC stream with main packet stream

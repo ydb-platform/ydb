@@ -74,7 +74,7 @@ PY
 
 Do not rely on a hardcoded table list below — read config or query YDB.
 
-Current aliases in `databases.main.tables`:
+All aliases in `databases.main.tables` (mirror of `ydb_qa_config.json` — update both when adding tables):
 
 | Alias | Path | Description |
 |-------|------|-------------|
@@ -84,14 +84,27 @@ Current aliases in `databases.main.tables`:
 | `testowners` | `test_results/analytics/testowners` | Test owners (codeowners) |
 | `flaky_tests_window` | `test_results/analytics/flaky_tests_window_1_days` | Flaky tests in 1-day window |
 | `all_tests_with_owner_and_mute` | `test_results/all_tests_with_owner_and_mute` | All tests + owner + mute status |
-| `pr_blocked_by_failed_tests_rich` | `test_results/analytics/pr_blocked_by_failed_tests_rich` | PRs blocked by test failures |
+| `muted_tests_daily_by_team` | `test_results/analytics/muted_tests_daily_by_team` | Daily muted test counts by team |
+| `muted_tests_with_issue_and_area` | `test_results/analytics/muted_tests_with_issue_and_area` | Muted tests with linked GitHub issue and area |
+| `pr_blocked_by_failed_tests_rich` | `test_results/analytics/pr_blocked_by_failed_tests_rich` | PRs blocked by test failures (rich) |
+| `pr_blocked_by_tests` | `test_results/analytics/pr_blocked_by_tests` | PRs blocked by test failures |
 | `pr_check_failures_by_attempt` | `test_results/analytics/pr_check_failures_by_attempt` | PR-check failures per attempt |
 | `issues` | `github_data/issues` | Exported GitHub issues |
 | `pull_requests` | `github_data/pull_requests` | Exported GitHub pull requests |
+| `github_issue_mapping` | `test_results/analytics/github_issue_mapping` | Test ↔ GitHub issue mapping |
+| `github_issues_timeline` | `test_results/analytics/github_issues_timeline` | GitHub issue timeline events |
+| `area_to_owner_mapping` | `test_results/analytics/area_to_owner_mapping` | Area → owner mapping for issues |
 | `mute_events` | `test_results/analytics/mute_events` | Mute/unmute events |
 | `mute_latency` | `test_results/analytics/mute_latency` | Delay between failure and mute |
+| `mute_latency_affected_prs` | `test_results/analytics/mute_latency_affected_prs` | PRs affected by mute latency |
+| `fast_unmute_active` | `test_mute/fast_unmute_active` | Active fast-unmute candidates |
+| `fast_unmute_grace` | `test_mute/fast_unmute_grace` | Fast-unmute grace period tracking |
+| `binary_size` | `binary_size` | Binary size stats from CI builds |
+| `digest_queue` | `test_results/analytics/digest_queue` | Queue for Telegram digest notifications |
 
-Additional data marts (see `collect_analytics_fast.yml` for full list): `test_results/analytics/github_issues_timeline`, `test_results/analytics/muted_tests_daily_by_team`, `perfomance/olap/fast_results`, `nemesis/aggregated_mart`, etc.
+Statistics DB (`databases.statistics.tables`): `query_statistics` → `analytics/query_statistics` (YDBWrapper query logging).
+
+Additional data marts **not** in `ydb_qa_config.json` (see `collect_analytics_fast.yml`): `perfomance/olap/fast_results`, `nemesis/aggregated_mart`, etc.
 
 ### Column schemas (use these, do not invent)
 

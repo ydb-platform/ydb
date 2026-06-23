@@ -523,10 +523,8 @@ private:
     bool InitiateValidationShards(TSetColumnConstraintOperationInfo& operationInfo) {
         LOG_D("InitiateValidationShards, id# " << BuildId);
 
-        Y_ENSURE(operationInfo.ValidationShards.empty());
         Y_ENSURE(operationInfo.ToValidateShards.empty());
         Y_ENSURE(operationInfo.InProgressValidationShards.empty());
-        Y_ENSURE(operationInfo.DoneValidationShards.empty());
 
         TPath path = TPath::Init(operationInfo.TablePathId, Self);
         if (!path.IsLocked()) {

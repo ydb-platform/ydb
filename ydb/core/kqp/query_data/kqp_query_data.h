@@ -290,5 +290,11 @@ public:
 };
 
 
+bool GetFirstTypeIncompatibility(
+    const NMiniKQL::TType* expected,
+    const NMiniKQL::TType* actual,
+    TStringBuf path,
+    TString& incompatibility);
+
 
 } // namespace NKikimr::NKqp

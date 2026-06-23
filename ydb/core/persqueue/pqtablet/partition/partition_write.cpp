@@ -569,6 +569,9 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     UpdateAvgWriteBytes(WriteNewSize, now);
     UpdateAvgWriteBytes(WriteNewSizeFromSupportivePartitions, now);
 
+    AvgQuotaMessages.Update(WriteNewMessages, now);
+    AvgQuotaMessages.Update(WriteNewMessagesFromSupportivePartitions, now);
+
     for (auto& avg : AvgQuotaBytes) {
         avg.Update(WriteNewSize, now);
         avg.Update(WriteNewSizeFromSupportivePartitions, now);
@@ -576,7 +579,8 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
 
     LOG_D("TPartition::HandleWriteResponse " <<
              "writeNewSize# " << WriteNewSize <<
-             " WriteNewSizeFromSupportivePartitions# " << WriteNewSizeFromSupportivePartitions);
+             " WriteNewSizeFromSupportivePartitions# " << WriteNewSizeFromSupportivePartitions <<
+             " WriteNewMessagesFromSupportivePartitions# " << WriteNewMessagesFromSupportivePartitions);
 
     if (SupportivePartitionTimeLag) {
         SupportivePartitionTimeLag->UpdateTimestamp(now.MilliSeconds());
@@ -590,7 +594,10 @@ void TPartition::HandleWriteResponse(const TActorContext& ctx) {
     WriteNewSizeUncompressedFull = 0;
     WriteNewMessages = 0;
     WriteNewMessagesInternal = 0;
+    BlobQuotaSize = 0;
+    MessagesQuotaSize = 0;
     WriteNewSizeFromSupportivePartitions = 0;
+    WriteNewMessagesFromSupportivePartitions = 0;
     UpdateWriteBufferIsFullState(now);
 
     AnswerCurrentWrites(ctx);
@@ -1188,7 +1195,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     auto& sourceIdBatch = parameters.SourceIdBatch;
     auto sourceId = sourceIdBatch.GetSource(p.Msg.SourceId);
 
-    AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size(), p.Msg.ChoosePartitionKey);
+    AutopartitioningManager->OnWrite(p.Msg.SourceId, p.Msg.Data.size(), 1, p.Msg.ChoosePartitionKey);
 
     TabletCounters.Percentile()[COUNTER_LATENCY_PQ_RECEIVE_QUEUE].IncrementFor(ctx.Now().MilliSeconds() - p.Msg.ReceiveTimestamp);
     //check already written
@@ -1632,14 +1639,11 @@ bool TPartition::RequestBlobQuota()
     }
 
     size_t quotaSize = 0;
-    size_t deduplicationIdQuotaSize = 0;
+    size_t messagesQuotaSize = 0;
     for (auto& r : PendingRequests) {
         quotaSize += r.GetWriteSize();
-        if (r.IsWrite()) {
-            auto& write = r.GetWrite();
-            if (write.Msg.MessageDeduplicationId && write.Msg.PartNo == 0) {
-                ++deduplicationIdQuotaSize;
-            }
+        if (r.IsWrite() && r.GetWrite().Msg.PartNo == 0) {
+            ++messagesQuotaSize;
         }
     }
 
@@ -1653,7 +1657,7 @@ bool TPartition::RequestBlobQuota()
     }
 
     RemovePendingRequests(QuotaWaitingRequests);
-    RequestBlobQuota(quotaSize, deduplicationIdQuotaSize);
+    RequestBlobQuota(quotaSize, messagesQuotaSize);
 
     return true;
 }
@@ -1844,7 +1848,7 @@ bool TPartition::WaitingForSubDomainQuota(const ui64 withSize) const {
     return UserDataSize() + withSize > ReserveSize();
 }
 
-void TPartition::RequestBlobQuota(size_t quotaSize, size_t deduplicationIdQuotaSize)
+void TPartition::RequestBlobQuota(size_t quotaSize, size_t messagesQuotaSize)
 {
     LOG_T("TPartition::RequestBlobQuota.");
 
@@ -1852,7 +1856,7 @@ void TPartition::RequestBlobQuota(size_t quotaSize, size_t deduplicationIdQuotaS
 
     TopicQuotaRequestCookie = NextTopicWriteQuotaRequestCookie++;
     BlobQuotaSize = quotaSize;
-    DeduplicationIdQuotaSize = deduplicationIdQuotaSize;
+    MessagesQuotaSize = messagesQuotaSize;
     RequestQuotaForWriteBlobRequest(quotaSize, TopicQuotaRequestCookie);
 }
 
@@ -1863,7 +1867,7 @@ void TPartition::ConsumeBlobQuota()
     }
 
     PQ_ENSURE(TopicQuotaRequestCookie != 0);
-    Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(BlobQuotaSize, DeduplicationIdQuotaSize, TopicQuotaRequestCookie, {}));
+    Send(WriteQuotaTrackerActor, new TEvPQ::TEvConsumed(BlobQuotaSize, MessagesQuotaSize, TopicQuotaRequestCookie, {}));
 }
 
 } // namespace NKikimr::NPQ

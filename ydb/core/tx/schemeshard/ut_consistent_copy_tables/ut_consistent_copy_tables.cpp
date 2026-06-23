@@ -654,38 +654,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
             runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
 
-            // Helper to check bloom filter scheme objects exist
-            auto checkBloomSchemeObjects = [&](const TString& tablePath) {
-                auto tableDescr = DescribePath(runtime, tablePath, true);
-                const auto& table = tableDescr.GetPathDescription().GetTable();
-
-                // Check engine prefixes
-                const auto& partitionConfig = table.GetPartitionConfig();
-                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.ByKeyFilterPrefixesSize(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
-
-                // Check scheme objects exist
-                UNIT_ASSERT_VALUES_EQUAL(table.TableIndexesSize(), 2);
-                bool foundIdx1 = false, foundIdx2 = false;
-                for (const auto& idx : table.GetTableIndexes()) {
-                    UNIT_ASSERT_VALUES_EQUAL(idx.GetType(), NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
-                    UNIT_ASSERT_VALUES_EQUAL(idx.GetState(), NKikimrSchemeOp::EIndexStateReady);
-                    if (idx.GetName() == "idx_bloom_1") {
-                        foundIdx1 = true;
-                        UNIT_ASSERT_VALUES_EQUAL(idx.KeyColumnNamesSize(), 1);
-                        UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(0), "Key1");
-                    } else if (idx.GetName() == "idx_bloom_2") {
-                        foundIdx2 = true;
-                        UNIT_ASSERT_VALUES_EQUAL(idx.KeyColumnNamesSize(), 2);
-                        UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(0), "Key1");
-                        UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(1), "Key2");
-                    }
-                }
-                UNIT_ASSERT(foundIdx1);
-                UNIT_ASSERT(foundIdx2);
-            };
-
             {
                 TInactiveZone inactive(activeZone);
                 // Create source table with multiple bloom filter prefixes
@@ -708,7 +676,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                 runtime.SimulateSleep(TDuration::Seconds(5));
 
                 // Verify source has bloom filters after migration
-                checkBloomSchemeObjects("/MyRoot/src");
+                NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/src",
+                    {1, 2},
+                    {{"idx_bloom_1", {"Key1"}}, {"idx_bloom_2", {"Key1", "Key2"}}});
             }
 
             // Perform consistent copy operation with reboots
@@ -722,7 +692,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
                 // Verify copy has all bloom filters
-                checkBloomSchemeObjects("/MyRoot/dst");
+                NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/dst",
+                    {1, 2},
+                    {{"idx_bloom_1", {"Key1"}}, {"idx_bloom_2", {"Key1", "Key2"}}});
             }
         });
     }

@@ -2040,40 +2040,6 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
         ui64 txId = 100;
 
-        // Helper to check bloom filter scheme objects exist
-        auto checkBloomSchemeObjects = [&](const TString& tablePath) {
-            auto tableDescr = DescribePath(runtime, tablePath, true);
-            const auto& table = tableDescr.GetPathDescription().GetTable();
-
-            // Check engine prefixes
-            const auto& partitionConfig = table.GetPartitionConfig();
-            UNIT_ASSERT_VALUES_EQUAL(partitionConfig.ByKeyFilterPrefixesSize(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
-            UNIT_ASSERT_DOUBLES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
-
-            // Check scheme objects exist
-            UNIT_ASSERT_VALUES_EQUAL(table.TableIndexesSize(), 2);
-            bool foundIdx1 = false, foundIdx2 = false;
-            for (const auto& idx : table.GetTableIndexes()) {
-                UNIT_ASSERT_VALUES_EQUAL(idx.GetType(), NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
-                UNIT_ASSERT_VALUES_EQUAL(idx.GetState(), NKikimrSchemeOp::EIndexStateReady);
-                if (idx.GetName() == "idx_bloom_1") {
-                    foundIdx1 = true;
-                    UNIT_ASSERT_VALUES_EQUAL(idx.KeyColumnNamesSize(), 1);
-                    UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(0), "key1");
-                } else if (idx.GetName() == "idx_bloom_3") {
-                    foundIdx2 = true;
-                    UNIT_ASSERT_VALUES_EQUAL(idx.KeyColumnNamesSize(), 3);
-                    UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(0), "key1");
-                    UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(1), "key2");
-                    UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(2), "key3");
-                }
-            }
-            UNIT_ASSERT(foundIdx1);
-            UNIT_ASSERT(foundIdx2);
-        };
-
         // Create source table with multiple bloom filter prefixes
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
             Name: "Table"
@@ -2113,20 +2079,23 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                 }
             }
 
-            // Dispatch events to allow migration to progress
-            TDispatchOptions opts;
-            runtime.DispatchEvents(opts, TDuration::MilliSeconds(100));
+            // Use SimulateSleep instead of manual DispatchEvents
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
         }
 
         // Verify source table has multiple bloom filter prefixes and scheme objects after migration
-        checkBloomSchemeObjects("/MyRoot/Table");
+        NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/Table",
+            {1, 3},
+            {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
 
         // Perform CopyTable operation
         TestCopyTable(runtime, ++txId, "/MyRoot", "TableCopy", "/MyRoot/Table");
         env.TestWaitNotification(runtime, txId);
 
         // Verify copied table has all bloom filter prefixes and scheme objects
-        checkBloomSchemeObjects("/MyRoot/TableCopy");
+        NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/TableCopy",
+            {1, 3},
+            {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
 
         // Perform MoveTable operation on the copied table
         TestMoveTable(runtime, ++txId, "/MyRoot/TableCopy", "/MyRoot/TableMove");
@@ -2137,7 +2106,9 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
                            {NLs::PathNotExist});
 
         // Verify moved table has all bloom filter prefixes and scheme objects
-        checkBloomSchemeObjects("/MyRoot/TableMove");
+        NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/TableMove",
+            {1, 3},
+            {{"idx_bloom_1", {"key1"}}, {"idx_bloom_3", {"key1", "key2", "key3"}}});
     }
 
 

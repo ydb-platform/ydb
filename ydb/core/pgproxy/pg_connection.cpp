@@ -241,7 +241,7 @@ protected:
                 prefix << "<- [" << OutgoingSequenceNumber << "] ";
                 break;
         }
-        YDB_LOG_DEBUG(prefix << message,
+        YDB_LOG_DEBUG(prefix << GetMessageName(direction, message),
             {"logPrefix", LogPrefix()},
             {"name", GetMessageName(direction, message)},
             {"size", message.GetDataSize()},

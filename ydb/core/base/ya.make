@@ -72,6 +72,7 @@ SRCS(
     storage_pools.h
     subdomain.h
     subdomain.cpp
+    superlemmer.h
     table_index.cpp
     tablet.cpp
     tablet.h

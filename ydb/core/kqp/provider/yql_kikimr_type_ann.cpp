@@ -1504,6 +1504,10 @@ private:
                         ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), error));
                         return IGraphTransformer::TStatus::Error;
                     }
+                    if (NKikimr::NFulltext::HasSuperLemmer(fulltextIndexDescription.GetSettings()) && !SessionCtx->Config().FeatureFlags.GetEnableSuperLemmer()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(index.IndexSettings().Pos()), "SuperLemmer support is disabled"));
+                        return IGraphTransformer::TStatus::Error;
+                    }
                     specializedIndexDescription = std::move(fulltextIndexDescription);
                     break;
                 }

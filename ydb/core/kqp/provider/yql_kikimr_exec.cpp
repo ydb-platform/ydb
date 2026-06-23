@@ -2600,12 +2600,20 @@ public:
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
                                 return SyncError();
                             }
+                            if (NKikimr::NFulltext::HasSuperLemmer(add_index->global_fulltext_plain_index().fulltext_settings()) && !SessionCtx->Config().FeatureFlags.GetEnableSuperLemmer()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "SuperLemmer support is disabled"));
+                                return SyncError();
+                            }
                             break;
                         }
                         case Ydb::Table::TableIndex::kGlobalFulltextRelevanceIndex: {
                             TString error;
                             if (!NKikimr::NFulltext::ValidateSettings(add_index->global_fulltext_relevance_index().fulltext_settings(), error)) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), error));
+                                return SyncError();
+                            }
+                            if (NKikimr::NFulltext::HasSuperLemmer(add_index->global_fulltext_relevance_index().fulltext_settings()) && !SessionCtx->Config().FeatureFlags.GetEnableSuperLemmer()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Pos()), "SuperLemmer support is disabled"));
                                 return SyncError();
                             }
                             break;

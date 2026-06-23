@@ -227,17 +227,17 @@ namespace NKikimr::NBlobDepot {
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsOk;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsError;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsSlowDown;
+        NMonitoring::TDynamicCounters::TCounterPtr S3GetsInFlightCounter;
+        NMonitoring::TDynamicCounters::TCounterPtr S3GetsMaxInFlightCounter;
+        NMonitoring::TDynamicCounters::TCounterPtr S3GetsPendingQueueSizeCounter;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutBytesOk;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsOk;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsError;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsSlowDown;
+        NMonitoring::TDynamicCounters::TCounterPtr S3PutsInFlightCounter;
 
         NMonitoring::TDynamicCounterPtr S3Counters;
         THashMap<std::pair<TString, int>, NMonitoring::TDynamicCounters::TCounterPtr> S3HttpErrorCounters;
-        NMonitoring::TDynamicCounters::TCounterPtr S3GetsInFlightCounter;
-        NMonitoring::TDynamicCounters::TCounterPtr S3GetsMaxInFlightCounter;
-        NMonitoring::TDynamicCounters::TCounterPtr S3GetsPendingQueueSizeCounter;
-        NMonitoring::TDynamicCounters::TCounterPtr S3PutsInFlightCounter;
 
         NMonitoring::TDynamicCounters::TCounterPtr AllocateIdFailures;
         NMonitoring::TDynamicCounters::TCounterPtr PendingEventQueueOverflows;

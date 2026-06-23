@@ -92,17 +92,16 @@ namespace NKikimr::NBlobDepot {
         S3GetsOk = s3->GetCounter("GetsOk", true);
         S3GetsError = s3->GetCounter("GetsError", true);
         S3GetsSlowDown = s3->GetCounter("GetsSlowDown", true);
+        S3GetsInFlightCounter = s3->GetCounter("GetsInFlight", false);
+        S3GetsMaxInFlightCounter = s3->GetCounter("GetsMaxInFlight", false);
+        S3GetsPendingQueueSizeCounter = s3->GetCounter("GetsPendingQueueSize", false);
 
         S3PutBytesOk = s3->GetCounter("PutBytesOk", true);
         S3PutsOk = s3->GetCounter("PutsOk", true);
         S3PutsError = s3->GetCounter("PutsError", true);
         S3PutsSlowDown = s3->GetCounter("PutsSlowDown", true);
-        S3Counters = s3;
-
-        S3GetsInFlightCounter = s3->GetCounter("GetsInFlight", false);
-        S3GetsMaxInFlightCounter = s3->GetCounter("GetsMaxInFlight", false);
-        S3GetsPendingQueueSizeCounter = s3->GetCounter("GetsPendingQueueSize", false);
         S3PutsInFlightCounter = s3->GetCounter("PutsInFlight", false);
+        S3Counters = s3;
 
         auto allocate = AgentCounters->GetSubgroup("subsystem", "allocate");
         AllocateIdFailures = allocate->GetCounter("IdFailures", true);

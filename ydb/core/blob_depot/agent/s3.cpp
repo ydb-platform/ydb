@@ -294,6 +294,7 @@ namespace NKikimr::NBlobDepot {
             void Finish(std::optional<TString>&& error, bool slowDown, int httpCode = 0) {
                 InvokeOtherActor(Query->Agent, &TBlobDepotAgent::Invoke, [&] {
                     auto& Agent = Query->Agent;
+                    const auto& QueryId = Query->QueryId;
                     if (!LifetimeToken.expired()) {
                         Agent.IncS3HttpErrorCounter("Puts", httpCode);
 
@@ -302,7 +303,7 @@ namespace NKikimr::NBlobDepot {
                             {"VG", Agent.VirtualGroupId},
                             {"BDT", Agent.TabletId},
                             {"G", Agent.BlobDepotGeneration},
-                            {"Q", Query->QueryId},
+                            {"Q", QueryId},
                             {"blobId", Id},
                             {"locator", Locator});
                         Query->OnPutS3ObjectResponse(std::move(error), slowDown);

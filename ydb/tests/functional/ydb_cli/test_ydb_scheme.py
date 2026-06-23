@@ -252,23 +252,11 @@ class TestSecretSchemeDescribe:
 class TestViewSchemeDescribe:
     @pytest.fixture(
         scope="module",
-        params=[
-            (True, True),
-            (True, False),
-            (False, True),
-            (False, False),
-        ],
-        ids=lambda param: f"show_create_{"enabled" if param[0] else "disabled"}_view_service_{"enabled" if param[1] else "disabled"}",
+        params=[True, False],
+        ids=lambda param: f"view_service_{"enabled" if param else "disabled"}",
     )
     def ydb_cluster_configuration(self, request):
-        show_create_enabled, view_service_enabled = request.param
-
-        extra_feature_flags = []
-        disabled_feature_flags = []
-        if show_create_enabled:
-            extra_feature_flags = ["enable_show_create"]
-        else:
-            disabled_feature_flags = ["enable_show_create"]
+        view_service_enabled = request.param
 
         extra_grpc_services = []
         disabled_grpc_services = []
@@ -278,8 +266,6 @@ class TestViewSchemeDescribe:
             disabled_grpc_services = ["view"]
 
         return dict(
-            extra_feature_flags=extra_feature_flags,
-            disabled_feature_flags=disabled_feature_flags,
             extra_grpc_services=extra_grpc_services,
             disabled_grpc_services=disabled_grpc_services,
         )
@@ -295,16 +281,6 @@ class TestViewSchemeDescribe:
             view_name = "view"
             create_view(session, view_name)
 
-            should_fail = (
-                "enable_show_create" in ydb_cluster_configuration["disabled_feature_flags"]
-                and "view" in ydb_cluster_configuration["disabled_grpc_services"]
-            )
-
-            if should_fail:
-                with pytest.raises(yatest.common.process.ExecutionError):
-                    execute_ydb_cli_command(ydb_cluster.nodes[1], ydb_database, ["scheme", "describe", view_name])
-                output = ""
-            else:
-                output = execute_ydb_cli_command(ydb_cluster.nodes[1], ydb_database, ["scheme", "describe", view_name])
+            output = execute_ydb_cli_command(ydb_cluster.nodes[1], ydb_database, ["scheme", "describe", view_name])
 
             return canonical_result(output, self.tmp_path)

@@ -1,4 +1,5 @@
 #include "fulltext.h"
+#include "fulltext_query.h"
 
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/generic/xrange.h>
@@ -105,13 +106,21 @@ Y_UNIT_TEST_SUITE(NFulltext) {
         settings.add_columns()->set_column("column2");
 
         UNIT_ASSERT(!ValidateColumnsMatches(TVector<TString>{"column2"}, settings, error));
-        UNIT_ASSERT_VALUES_EQUAL(error, "columns [ column1 column2 ] should be [ column2 ]");
+        UNIT_ASSERT_VALUES_EQUAL(error, "indexed columns [ column1 column2 ] should be the suffix of index columns [ column2 ]");
 
         UNIT_ASSERT(!ValidateColumnsMatches(TVector<TString>{"column2", "column1"}, settings, error));
-        UNIT_ASSERT_VALUES_EQUAL(error, "columns [ column1 column2 ] should be [ column2 column1 ]");
+        UNIT_ASSERT_VALUES_EQUAL(error, "indexed columns [ column1 column2 ] should be the suffix of index columns [ column2 column1 ]");
 
         UNIT_ASSERT(ValidateColumnsMatches(TVector<TString>{"column1", "column2"}, settings, error));
         UNIT_ASSERT_VALUES_EQUAL(error, "");
+
+        // prefix columns are allowed before the indexed (text) suffix
+        Ydb::Table::FulltextIndexSettings single;
+        single.add_columns()->set_column("text");
+        UNIT_ASSERT(ValidateColumnsMatches(TVector<TString>{"user_id", "text"}, single, error));
+        UNIT_ASSERT_VALUES_EQUAL(error, "");
+        UNIT_ASSERT(ValidateColumnsMatches(TVector<TString>{"a", "b", "text"}, single, error));
+        UNIT_ASSERT(!ValidateColumnsMatches(TVector<TString>{"user_id", "other"}, single, error));
     }
 
     Y_UNIT_TEST(ValidateSettings) {
@@ -446,6 +455,51 @@ Y_UNIT_TEST_SUITE(NFulltext) {
             BuildNgrams("👨‍👩‍👧‍👦🇦🇨", 2, 2, false, ngrams);
             UNIT_ASSERT_VALUES_EQUAL(ngrams, (TVector<TString>{"👨\u200D", "\u200D👩", "👩\u200D", "\u200D👧", "👧\u200D", "\u200D👦", "👦🇦", "🇦🇨"}));
         }
+    }
+
+    Y_UNIT_TEST(BuildSearchTermsStructured) {
+        using T = TSearchTerm;
+        Ydb::Table::FulltextIndexSettings::Analyzers analyzers;
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::STANDARD);
+
+        // No `+`: every term optional, tokenized like BuildSearchTerms.
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("apple banana", analyzers),
+            (TVector<T>{{"apple", false}, {"banana", false}}));
+
+        // Leading `+` marks a required term; bare terms stay optional.
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("+apple banana", analyzers),
+            (TVector<T>{{"apple", true}, {"banana", false}}));
+
+        // Multiple required terms mixed with optional ones.
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("+apple +banana cherry", analyzers),
+            (TVector<T>{{"apple", true}, {"banana", true}, {"cherry", false}}));
+
+        // A `+` term that analyzes into several tokens marks all of them required.
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("+spaced-dog cat", analyzers),
+            (TVector<T>{{"spaced", true}, {"dog", true}, {"cat", false}}));
+
+        // Bare `+` (no body) is ignored.
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("+ apple", analyzers),
+            (TVector<T>{{"apple", false}}));
+
+        // A `+` inside a term (not at term start) is not an operator.
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("c++ test", analyzers),
+            (TVector<T>{{"c", false}, {"test", false}}));
+
+        // Extra whitespace between terms is collapsed.
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("+apple   banana", analyzers),
+            (TVector<T>{{"apple", true}, {"banana", false}}));
+
+        // Analyzer filters apply to the term body after stripping `+`.
+        analyzers.set_use_filter_lowercase(true);
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("+Apple banana", analyzers),
+            (TVector<T>{{"apple", true}, {"banana", false}}));
+        analyzers.set_use_filter_lowercase(false);
+
+        // Keyword tokenizer without `+` keeps the whole query as a single token.
+        analyzers.set_tokenizer(Ydb::Table::FulltextIndexSettings::KEYWORD);
+        UNIT_ASSERT_VALUES_EQUAL(BuildSearchTermsStructured("foo bar", analyzers),
+            (TVector<T>{{"foo bar", false}}));
     }
 }
 

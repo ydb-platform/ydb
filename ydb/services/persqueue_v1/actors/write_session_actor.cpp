@@ -3,6 +3,7 @@
 #include "codecs.h"
 #include "helpers.h"
 
+#include <ydb/library/kafka/kafka_records.h>
 #include <ydb/services/metadata/manager/common.h>
 
 #include <ydb/library/persqueue/topic_parser/counters.h>
@@ -10,12 +11,15 @@
 #include <ydb/library/wilson_ids/wilson.h>
 #include <ydb/core/base/wilson_tracing_control.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/public/codecs/pqv1.h>
 #include <ydb/core/persqueue/public/pq_database.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/base/feature_flags.h>
+#include <ydb/core/base/appdata.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/public/lib/deprecated/kicli/kicli.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
+#include <ydb/core/persqueue/public/config.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/library/actors/core/log.h>
 #include <google/protobuf/util/time_util.h>
@@ -153,9 +157,8 @@ inline void FillChunkDataFromReq(
     const auto& msg = writeRequest.messages(messageIndex);
     proto.SetSeqNo(msg.seq_no());
     proto.SetCreateTime(::google::protobuf::util::TimeUtil::TimestampToMilliseconds(msg.created_at()));
-    // TODO (ildar-khisam@): refactor codec enum convert
     if (writeRequest.codec() > 0) {
-        proto.SetCodec(writeRequest.codec() - 1);
+        proto.SetCodec(static_cast<NPersQueueCommon::ECodec>(FromTopicCodec(static_cast<NYdb::NTopic::ECodec>(writeRequest.codec()))));
     }
     proto.SetData(msg.data());
     auto* msgMeta = proto.MutableMessageMeta();
@@ -170,6 +173,27 @@ static const TDuration SOURCEID_UPDATE_PERIOD = TDuration::Hours(1);
 
 // metering
 static const ui64 WRITE_BLOCK_SIZE = 4_KB;
+
+void FillBatchFieldsFromTopicWriteMessage(
+        const Ydb::Topic::StreamWriteMessage::WriteRequest& writeRequest,
+        const Ydb::Topic::StreamWriteMessage::WriteRequest::MessageData& msg,
+        NKikimrClient::TPersQueuePartitionRequest::TCmdWrite& cmdWrite)
+{
+    if (writeRequest.codec() != static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH)) {
+        return;
+    }
+
+    const auto header = NKafka::ReadKafkaBatchHeader(msg.data());
+    if (!header || header->RecordsCount == 0) {
+        return;
+    }
+
+    const i64 maxSeqNo = msg.seq_no();
+    cmdWrite.SetSeqNo(header->BaseSequence);
+    cmdWrite.SetMessageCount(static_cast<size_t>(header->RecordsCount));
+    cmdWrite.SetIsBatch(true);
+    cmdWrite.SetMaxSeqNo(maxSeqNo);
+}
 
 //TODO: add here tracking of bytes in/out
 
@@ -904,6 +928,7 @@ void TWriteSessionActor<UseMigrationProtocol>::MakeAndSendInitResponse(
                 init->mutable_supported_codecs()->add_codecs(CodecByName<UseMigrationProtocol>(codecName));
             }
         }
+        init->set_is_batching_supported(NPQ::IsTopicMessagesBatchingEnabled(ctx));
     }
 
     InitSpan.End();
@@ -1108,11 +1133,18 @@ void TWriteSessionActor<UseMigrationProtocol>::ProcessWriteResponse(
                     return;
                 }
                 const auto& partitionCmdWriteResult = response.GetCmdWriteResult(partitionCmdWriteResultIndex);
-                const auto writtenSequenceNumber = userWriteRequest->Request.write_request().messages(messageIndex).seq_no();
-                if (UseDeduplication && partitionCmdWriteResult.GetSeqNo() != writtenSequenceNumber) {
+                const auto& writeMessage = userWriteRequest->Request.write_request().messages(messageIndex);
+                const auto writtenSequenceNumber = writeMessage.seq_no();
+                auto expectedPartitionSequenceNumber = writtenSequenceNumber;
+                if (userWriteRequest->Request.write_request().codec() == static_cast<i32>(Ydb::Topic::CODEC_KAFKA_BATCH)) {
+                    if (const auto header = NKafka::ReadKafkaBatchHeader(writeMessage.data())) {
+                        expectedPartitionSequenceNumber = header->BaseSequence;
+                    }
+                }
+                if (UseDeduplication && partitionCmdWriteResult.GetSeqNo() != expectedPartitionSequenceNumber) {
                     CloseSession(TStringBuilder() << "Expected partition " << Partition
                                                   << " write result for message with sequence number "
-                                                  << writtenSequenceNumber << " but got for "
+                                                  << expectedPartitionSequenceNumber << " but got for "
                                                   << partitionCmdWriteResult.GetSeqNo(), PersQueue::ErrorCode::ERROR, ctx);
                     return;
                 }
@@ -1238,6 +1270,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
     };
 
     ui64 maxMessageMetadataSize = 0;
+    TMaybe<TString> batchError;
     auto addData = [&](const Topic::StreamWriteMessage::WriteRequest& writeRequest, const i32 messageIndex) {
         const auto& msg = writeRequest.messages(messageIndex);
 
@@ -1254,12 +1287,20 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         w->SetClientDC(ClientDC);
         w->SetIgnoreQuotaDeadline(true);
 
+        FillBatchFieldsFromTopicWriteMessage(writeRequest, msg, *w);
+
         payloadSize += w->GetData().size() + w->GetSourceId().size();
 
         ui64 currMetadataSize = 0;
+        const bool isBatch = w->HasMessageCount() && w->GetMessageCount() > 1;
         for (const auto& metaItem : msg.metadata_items()) {
             if (metaItem.key() == PARTITION_KEY_META_KEY) {
-                w->SetChoosePartitionKey(metaItem.value());
+                if (isBatch) {
+                    auto* partitionKey = w->AddPartitionKeys();
+                    partitionKey->SetKey(metaItem.value());
+                } else {
+                    w->SetChoosePartitionKey(metaItem.value());
+                }
             }
             currMetadataSize += metaItem.key().size() + metaItem.value().size();
         }
@@ -1273,6 +1314,10 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
     } else {
         for (i32 messageIndex = 0; messageIndex != writeRequest.messages_size(); ++messageIndex) {
             addData(writeRequest, messageIndex);
+            if (batchError) {
+                CloseSession(*batchError, PersQueue::ErrorCode::BAD_REQUEST, ctx);
+                return;
+            }
         }
     }
 
@@ -1503,8 +1548,9 @@ void TWriteSessionActor<UseMigrationProtocol>::Handle(typename TEvWrite::TPtr& e
             }
 
             const ui32 codecID = data.codec();
+            const bool isKafkaBatch = codecID == static_cast<ui32>(Ydb::Topic::CODEC_KAFKA_BATCH);
             TString error = "unspecified (id 0)";
-            if (codecID == 0 || !ValidateWriteWithCodec(InitialPQTabletConfig, codecID - 1, error)) {
+            if (codecID == 0 || (!isKafkaBatch && !ValidateWriteWithCodec(InitialPQTabletConfig, FromTopicCodec(static_cast<NYdb::NTopic::ECodec>(codecID)), error))) {
                 CloseSession(TStringBuilder() << "bad write request - codec is invalid: " << error, PersQueue::ErrorCode::BAD_REQUEST, ctx);
                 return false;
             }

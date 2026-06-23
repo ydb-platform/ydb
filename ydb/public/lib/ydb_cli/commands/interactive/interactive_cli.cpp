@@ -166,8 +166,10 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         }
     }
 
+    // The completer driver only serves on-demand autocompletion lookups, so it
+    // is released after a short idle period instead of running discovery forever.
     auto completerLazyDriver = std::make_shared<TLazyDriver>(
-        [&config] { return TDriver(config.CreateDriverConfig()); });
+        [&config] { return TDriver(config.CreateDriverConfig()); }, TDuration::Seconds(30));
     auto sqlLazyDriver = std::make_shared<TLazyDriver>(
         [&config] { return TDriver(config.CreateDriverConfigWithBuildInfo("interactive-sql")); });
     auto sqlTxLazyDriver = std::make_shared<TLazyDriver>(

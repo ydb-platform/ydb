@@ -284,7 +284,8 @@ protected:
         }
 
         if (execve(ExeName.c_str(), ExecArgs.data(), ExecEnv.data()) == -1) {
-            ythrow TSystemError() << "Cannot execl";
+            YQL_CLOG(ERROR, ProviderDq) << "Cannot execve: " << ExeName << ", args: " << JoinSeq(',', Args);
+            ythrow TSystemError() << "Cannot execve: " << ExeName;
         }
     }
 };
@@ -520,7 +521,8 @@ private:
         }
 
         if (execvp(PortoCtl.c_str(), ExecArgs.data()) == -1) {
-            ythrow TSystemError() << "Cannot execl";
+            YQL_CLOG(ERROR, ProviderDq) << "Cannot execvp: " << PortoCtl << ", args: " << JoinSeq(',', ArgsElems);
+            ythrow TSystemError() << "Cannot execvp: " << PortoCtl;
         }
     }
 

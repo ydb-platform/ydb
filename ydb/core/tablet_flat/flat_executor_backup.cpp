@@ -678,9 +678,22 @@ public:
         }
     }
 
-    bool NoOps(ui32 tid, TOps ops) const {
+    bool IsUpdateExcluded(ui32 tid, TOps ops) const {
+        if (!Exclusion) {
+            return false;
+        }
+
+        if (Exclusion->HasTable(tid)) {
+            return true;
+        }
+
+        if (ops.empty()) {
+            return false;
+        }
+
+        // ignore data changes that contain only excluded columns
         for (const auto& op : ops) {
-            if (!Exclusion || !Exclusion->HasColumn(tid, op.Tag)) {
+            if (!Exclusion->HasColumn(tid, op.Tag)) {
                 return false;
             }
         }
@@ -689,12 +702,8 @@ public:
 
     void DoUpdate(ui32 tid, ERowOp rop, TKeys key, TOps ops, TRowVersion)
     {
-        if (Exclusion && Exclusion->HasTable(tid)) {
+        if (IsUpdateExcluded(tid, ops)) {
             return;
-        }
-
-        if (NoOps(tid, ops) && !TCellOp::HaveNoOps(rop)) {
-            return; // ignore data changes that contain only excluded columns
         }
 
         BeginCommit();

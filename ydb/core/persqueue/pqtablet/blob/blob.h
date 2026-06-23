@@ -13,14 +13,8 @@ namespace NPQ {
 
 class TBlobSerializer;
 
-enum class EMessageFormat : ui8 {
-    STANDARD = 0,
-    KAFKA_BATCH = 1,
-    COUNT,
-};
-
-static constexpr ui32 MESSAGE_FORMAT_BITS = 3;
-static constexpr ui32 MESSAGE_COUNT_BITS = 32 - MESSAGE_FORMAT_BITS;
+static constexpr ui32 MESSAGE_METADATA_RESERVED_BITS = 1;
+static constexpr ui32 MESSAGE_COUNT_BITS = 32 - MESSAGE_METADATA_RESERVED_BITS;
 static constexpr ui32 MAX_MESSAGE_COUNT = (1u << MESSAGE_COUNT_BITS) - 1;
 
 // Large messages are split into small 512KB parts, and stored in separate parts.
@@ -52,13 +46,13 @@ struct TClientBlob {
     TString PartitionKey;
     TString ExplicitHashKey;
     ui32 MessageCount = 1;
-    EMessageFormat MessageFormat = EMessageFormat::STANDARD;
+    bool IsBatch = false;
 
     TClientBlob();
     TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const TMaybe<TPartData>& partData,
         const TInstant writeTimestamp, const TInstant createTimestamp,
         const ui64 uncompressedSize, TString&& partitionKey, TString&& explicitHashKey,
-        ui32 messageCount = 1, EMessageFormat messageFormat = EMessageFormat::STANDARD);
+        ui32 messageCount = 1, bool isBatch = false);
 
     ui32 GetSerializedSize() const;
     ui16 GetPartNo() const;

@@ -1,20 +1,13 @@
-from _common import sort_by_keywords
 import ymake
 
 
-def get_or_default(kv, name, default):
-    if name in kv:
-        return kv[name][0]
-    return default
-
-
 @ymake.macro
-def REGISTER_YQL_PYTHON_UDF(unit: ymake.Unit, *args: tuple[str, ...]):
-    flat, kv = sort_by_keywords({'NAME': 1, 'RESOURCE_NAME': 1, 'ADD_LIBRA_MODULES': 1}, args)
-    assert len(flat) == 0
-    name = get_or_default(kv, 'NAME', 'CustomPython')
-    resource_name = get_or_default(kv, 'RESOURCE_NAME', name)
-    add_libra_modules = get_or_default(kv, 'ADD_LIBRA_MODULES', 'no') == 'yes'
+def REGISTER_YQL_PYTHON_UDF(
+    unit: ymake.Unit, *, NAME: str = 'CustomPython', RESOURCE_NAME: str = '', ADD_LIBRA_MODULES: str = 'no'
+):
+    if not RESOURCE_NAME:
+        RESOURCE_NAME = NAME
+    add_libra_modules = ADD_LIBRA_MODULES == 'yes'
 
     use_arcadia_python = unit.get('USE_ARCADIA_PYTHON') == 'yes'
     py3 = unit.get('PYTHON3') == 'yes'
@@ -53,14 +46,14 @@ def REGISTER_YQL_PYTHON_UDF(unit: ymake.Unit, *args: tuple[str, ...]):
     if add_libra_modules:
         output_includes.append('yql/udfs/quality/libra/module/module.h')
 
-    path = name + '.yql_python_udf.cpp'
+    path = NAME + '.yql_python_udf.cpp'
     libra_flag = '1' if add_libra_modules else '0'
     unit.onrun_python3(
         [
             'build/scripts/gen_yql_python_udf.py',
             flavor,
-            name,
-            resource_name,
+            NAME,
+            RESOURCE_NAME,
             path,
             libra_flag,
             'OUT',

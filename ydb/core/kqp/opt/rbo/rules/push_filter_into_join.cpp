@@ -5,9 +5,39 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
+bool IsSimpleConstant(const TExprBase& input) {
+    if (auto maybeData = input.Maybe<TCoDataCtor>()) {
+        auto data = maybeData.Cast();
+        return data.Maybe<TCoBool>() || data.Maybe<TCoFloat>() || data.Maybe<TCoDouble>() || data.Maybe<TCoInt8>() || data.Maybe<TCoInt16>() ||
+               data.Maybe<TCoInt32>() || data.Maybe<TCoInt64>() || data.Maybe<TCoUint8>() || data.Maybe<TCoUint16>() || data.Maybe<TCoUint32>() ||
+               data.Maybe<TCoUint64>() || data.Maybe<TCoUtf8>() || data.Maybe<TCoString>() || data.Maybe<TCoDate>() || data.Maybe<TCoDate32>() ||
+               data.Maybe<TCoDatetime>() || data.Maybe<TCoDatetime64>() || data.Maybe<TCoTimestamp64>() || data.Maybe<TCoInterval64>() ||
+               data.Maybe<TCoInterval>() || data.Maybe<TCoTimestamp>();
+    }
+    return false;
+}
+
+bool IsValidComparator(TExprNode::TPtr input) {
+    return input->IsCallable({"==", "<=", ">=", "<", ">", "!="});
+}
+
+bool IsSimpleColumnAccess(const TExprBase& colAccess, const TExprBase& columnArg) {
+    if (auto maybeMember = colAccess.Maybe<TCoMember>()) {
+        return maybeMember.Cast().Struct().Ptr().Get() == columnArg.Ptr().Get();
+    }
+    return false;
+}
+
 bool IsNullRejectingPredicate(const TExpression& filter) {
-    // FIXME: Add proper analysis.
-    Y_UNUSED(filter);
+    auto lambda = TCoLambda(filter.GetLambda());
+    auto arg = lambda.Args().Arg(0);
+    auto body = lambda.Body();
+    if (IsValidComparator(body.Ptr())) {
+        auto compare = body.Cast<TCoCompare>();
+        auto leftArg = compare.Left();
+        auto rightArg = compare.Right();
+        return (IsSimpleColumnAccess(leftArg, arg) && IsSimpleConstant(rightArg)) || (IsSimpleColumnAccess(rightArg, arg) && IsSimpleConstant(leftArg));
+    }
     return false;
 }
 }
@@ -16,7 +46,7 @@ namespace NKikimr {
 namespace NKqp {
 
 // FIXME: We currently support pushing filter into Inner, Cross and Left Join
-TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
@@ -38,7 +68,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
         return input;
     }
 
-    if (join->JoinKind != "Inner" && join->JoinKind != "Cross" && join->JoinKind != "Left") {
+    if (join->JoinKind != "Inner" && join->JoinKind != "Cross" && join->JoinKind != "Left" && join->JoinKind != "LeftSemi" && join->JoinKind != "LeftOnly") {
         YQL_CLOG(TRACE, CoreDq) << "Wrong join type " << join->JoinKind << Endl;
         return input;
     }
@@ -58,22 +88,27 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
     TVector<TExpression> pushRight;
     TVector<std::pair<TInfoUnit, TInfoUnit>> joinConditions;
 
+    bool canPushRight = join->JoinKind != "LeftSemi" && join->JoinKind != "LeftOnly";
+
     for (const auto& conj : conjuncts) {
         if (conj.MaybeEquiJoinCondition()) {
             TEquiJoinCondition cond(conj);
 
-            if (IUSetDiff({cond.GetLeftIU()}, leftIUs).empty() && IUSetDiff({cond.GetRightIU()}, rightIUs).empty()) {
-                joinConditions.push_back(std::make_pair(cond.GetLeftIU(), cond.GetRightIU()));
-                continue;
-            } else if (IUSetDiff({cond.GetLeftIU()}, rightIUs).empty() && IUSetDiff({cond.GetRightIU()}, leftIUs).empty()) {
-                joinConditions.push_back(std::make_pair(cond.GetRightIU(), cond.GetLeftIU()));
-                continue;
+            // We cannot push filter into join conditions of a LeftOnly join - will break semantics
+            if(join->JoinKind != "LeftOnly") {
+                if (IUSetDiff({cond.GetLeftIU()}, leftIUs).empty() && IUSetDiff({cond.GetRightIU()}, rightIUs).empty()) {
+                    joinConditions.push_back(std::make_pair(cond.GetLeftIU(), cond.GetRightIU()));
+                    continue;
+                } else if (IUSetDiff({cond.GetLeftIU()}, rightIUs).empty() && IUSetDiff({cond.GetRightIU()}, leftIUs).empty()) {
+                    joinConditions.push_back(std::make_pair(cond.GetRightIU(), cond.GetLeftIU()));
+                    continue;
+                }
             }
         }
 
-        if (IUSetDiff(conj.GetInputIUs(true, true), leftIUs).empty()) {
+        if (IUSetDiff(conj.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true), leftIUs).empty()) {
             pushLeft.push_back(conj);
-        } else if (IUSetDiff(conj.GetInputIUs(true, true), rightIUs).empty()) {
+        } else if (IUSetDiff(conj.GetInputIUs(/*includeSubplanVars=*/true, /*includeCorrelatedDeps=*/true), rightIUs).empty() && canPushRight) {
             pushRight.push_back(conj);
         } else {
             topLevelPreds.push_back(conj);
@@ -86,7 +121,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
         return input;
     }
 
-    if (!joinConditions.empty()) {
+    if ((join->JoinKind == "Cross" || join->JoinKind == "Left" ) && !joinConditions.empty()) {
         join->JoinKind = "Inner";
     }
 

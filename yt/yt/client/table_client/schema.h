@@ -49,6 +49,10 @@ public:
 
     TLegacyLockBitmap GetBitmap() const;
 
+    //! Returns the length of the shortest prefix containing all non-None locks
+    //! (one past the largest set index), or 0 if all locks are None.
+    int GetLockedPrefixLength() const;
+
     TLegacyLockMask(const TLegacyLockMask& other) = default;
     TLegacyLockMask& operator=(const TLegacyLockMask& other) = default;
 

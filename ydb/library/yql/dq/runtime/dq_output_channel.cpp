@@ -158,7 +158,8 @@ public:
         NKikimr::NMiniKQL::TUnboxedValueVector outputValues;
         outputValues.reserve(data.size());
         for (auto& datum : data) {
-            outputValues.emplace_back(HolderFactory->CreateArrowBlock(std::move(datum)));
+            // Pass NYql::EDatumValidationMode::None since we do not create new blocks and just pass existing ones.
+            outputValues.emplace_back(HolderFactory->CreateArrowBlock(std::move(datum), NYql::EDatumValidationMode::None));
         }
         Packer.AddWideItem(outputValues.data(), outputValues.size());
 

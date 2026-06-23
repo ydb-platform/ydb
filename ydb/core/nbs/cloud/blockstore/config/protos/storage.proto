@@ -125,4 +125,10 @@ message TStorageServiceConfig
     // Persistent buffer cleanup is triggered once the cleanup LSN advances by
     // at least this many LSNs since the last cleanup. 0 disables cleanup.
     optional uint64 PBufferCleanupLsnStep = 26;
+
+    // Delay (in microseconds) before reading from another location.
+    optional uint32 ReadHedgingDelay = 27;
+
+    // Timeout (in milliseconds) for reading request handlers.
+    optional uint32 ReadRequestTimeout = 28;
 }

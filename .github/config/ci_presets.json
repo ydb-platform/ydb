@@ -1,5 +1,5 @@
 {
-  "_comment": "Single source of truth for CI preset defaults (threads, sizes, timeouts). Profiles: ci (PR-check/Postmerge), run_tests (Run-tests).",
+  "_comment": "Source of truth on main. Checkout uses this file when present; otherwise resolver built-in defaults (stable without backport).",
   "relwithdebinfo": {
     "ci": {
       "test_threads": 52,

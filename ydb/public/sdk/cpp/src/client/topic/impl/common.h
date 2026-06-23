@@ -2,13 +2,24 @@
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/errors.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/read_events.h>
+#include <ydb/public/sdk/cpp/src/client/topic/impl/transaction.h>
 
+#include <util/generic/size_literals.h>
 #include <util/thread/pool.h>
+#include <util/system/types.h>
+#include <util/datetime/base.h>
 
 #include <ydb/public/sdk/cpp/src/client/common_client/impl/client.h>
 
+#include <google/protobuf/wire_format_lite.h>
+
 #include <queue>
 #include <condition_variable>
+#include <optional>
+#include <string>
+#include <string_view>
+#include <utility>
+#include <vector>
 
 namespace NYdb::inline Dev::NTopic {
 
@@ -20,6 +31,182 @@ void Cancel(NYdbGrpc::IQueueClientContextPtr& context);
 NYdb::NIssue::TIssues MakeIssueWithSubIssues(const std::string& description, const NYdb::NIssue::TIssues& subissues);
 
 std::string IssuesSingleLineString(const NYdb::NIssue::TIssues& issues);
+
+namespace NWriteSessionGrpc {
+
+inline constexpr std::string_view PARTITION_KEY_META_KEY = "__partition_key";
+
+inline size_t GetMaxGrpcMessageSize() {
+    return 120_MB;
+}
+
+using TWireFormatLite = google::protobuf::internal::WireFormatLite;
+
+inline size_t ProtoInt32FieldSize(ui32 fieldNumber, i32 value) {
+    if (value == 0) {
+        return 0;
+    }
+    return TWireFormatLite::TagSize(fieldNumber, TWireFormatLite::TYPE_INT32)
+        + TWireFormatLite::Int32Size(value);
+}
+
+inline size_t ProtoInt64FieldSize(ui32 fieldNumber, i64 value) {
+    if (value == 0) {
+        return 0;
+    }
+    return TWireFormatLite::TagSize(fieldNumber, TWireFormatLite::TYPE_INT64)
+        + TWireFormatLite::Int64Size(value);
+}
+
+inline size_t ProtoInt64FieldSizeUpperBound(ui32 fieldNumber) {
+    static constexpr size_t MaxInt64VarintPayloadSize = 10;
+
+    return TWireFormatLite::TagSize(fieldNumber, TWireFormatLite::TYPE_INT64)
+        + MaxInt64VarintPayloadSize;
+}
+
+inline size_t ProtoPackedInt64FieldSize(ui32 fieldNumber, size_t dataSize) {
+    if (dataSize == 0) {
+        return 0;
+    }
+    return TWireFormatLite::TagSize(fieldNumber, TWireFormatLite::TYPE_INT64)
+        + TWireFormatLite::LengthDelimitedSize(dataSize);
+}
+
+inline size_t ProtoBytesFieldSize(ui32 fieldNumber, size_t size) {
+    if (size == 0) {
+        return 0;
+    }
+    return TWireFormatLite::TagSize(fieldNumber, TWireFormatLite::TYPE_BYTES)
+        + TWireFormatLite::LengthDelimitedSize(size);
+}
+
+inline size_t ProtoStringFieldSize(ui32 fieldNumber, size_t size) {
+    if (size == 0) {
+        return 0;
+    }
+    return TWireFormatLite::TagSize(fieldNumber, TWireFormatLite::TYPE_STRING)
+        + TWireFormatLite::LengthDelimitedSize(size);
+}
+
+inline size_t ProtoMessageFieldSize(ui32 fieldNumber, size_t size) {
+    return TWireFormatLite::TagSize(fieldNumber, TWireFormatLite::TYPE_MESSAGE)
+        + TWireFormatLite::LengthDelimitedSize(size);
+}
+
+class TRequestSizeLimiter {
+public:
+    explicit TRequestSizeLimiter(ui32 envelopeFieldNumber, size_t maxSize = GetMaxGrpcMessageSize())
+        : EnvelopeFieldNumber(envelopeFieldNumber)
+        , MaxSize(maxSize)
+    {
+    }
+
+    bool Empty() const {
+        return BodySize == 0;
+    }
+
+    bool CanAdd(size_t deltaSize) const {
+        return Empty() || ProtoMessageFieldSize(EnvelopeFieldNumber, BodySize + deltaSize) <= MaxSize;
+    }
+
+    void Add(size_t deltaSize) {
+        BodySize += deltaSize;
+    }
+
+private:
+    size_t BodySize = 0;
+    ui32 EnvelopeFieldNumber;
+    size_t MaxSize;
+};
+
+inline size_t ProtoTimestampFieldSize(ui32 fieldNumber, TInstant timestamp) {
+    const ui64 milliseconds = timestamp.MilliSeconds();
+    const i64 seconds = milliseconds / 1000;
+    const i32 nanos = (milliseconds % 1000) * 1000000;
+    const size_t timestampSize = ProtoInt64FieldSize(1, seconds)
+        + ProtoInt32FieldSize(2, nanos);
+    return ProtoMessageFieldSize(fieldNumber, timestampSize);
+}
+
+inline size_t ProtoMetadataItemFieldSize(ui32 fieldNumber, const std::pair<std::string, std::string>& item) {
+    const size_t itemSize = ProtoStringFieldSize(1, item.first.size())
+        + ProtoBytesFieldSize(2, item.second.size());
+    return ProtoMessageFieldSize(fieldNumber, itemSize);
+}
+
+inline size_t ProtoTransactionIdentityFieldSize(ui32 fieldNumber, const std::optional<TTransactionId>& tx) {
+    if (!tx) {
+        return 0;
+    }
+    const size_t txSize = ProtoStringFieldSize(1, tx->TxId.size())
+        + ProtoStringFieldSize(2, tx->SessionId.size());
+    return ProtoMessageFieldSize(fieldNumber, txSize);
+}
+
+inline size_t ProtoTopicMessageDataFieldSize(
+        TInstant createdAt,
+        size_t dataSize,
+        size_t uncompressedSize,
+        size_t metadataSize) {
+    const size_t messageDataSize = ProtoInt64FieldSizeUpperBound(1)
+        + ProtoTimestampFieldSize(2, createdAt)
+        + ProtoBytesFieldSize(3, dataSize)
+        + ProtoInt64FieldSize(4, uncompressedSize)
+        + metadataSize;
+    return ProtoMessageFieldSize(1, messageDataSize);
+}
+
+template <typename TBlock, typename TOriginalMessages>
+size_t EstimateTopicWriteRequestBlockSize(
+        const TBlock& block,
+        const TOriginalMessages& originalMessages,
+        bool includeRequestFields) {
+    Y_ABORT_UNLESS(!originalMessages.empty());
+
+    size_t size = 0;
+    if (includeRequestFields) {
+        size += ProtoInt32FieldSize(2, static_cast<i32>(block.CodecID));
+        size += ProtoTransactionIdentityFieldSize(3, originalMessages.front().Tx);
+    }
+
+    if (block.MessageCount > 1) {
+        size_t metadataSize = 0;
+        auto message = originalMessages.begin();
+        const TInstant firstMessageCreatedAt = message->CreatedAt;
+        for (const auto& item : message->MessageMeta) {
+            metadataSize += ProtoMetadataItemFieldSize(7, item);
+        }
+        ++message;
+        for (size_t i = 1; i < block.MessageCount; ++i) {
+            Y_ABORT_UNLESS(message != originalMessages.end());
+            for (const auto& item : message->MessageMeta) {
+                if (item.first == PARTITION_KEY_META_KEY) {
+                    metadataSize += ProtoMetadataItemFieldSize(7, item);
+                }
+            }
+            ++message;
+        }
+        return size + ProtoTopicMessageDataFieldSize(firstMessageCreatedAt, block.Data.size(), block.OriginalSize, metadataSize);
+    }
+
+    const auto& message = originalMessages.front();
+    size_t metadataSize = 0;
+    for (const auto& item : message.MessageMeta) {
+        metadataSize += ProtoMetadataItemFieldSize(7, item);
+    }
+
+    if (block.Compressed) {
+        return size + ProtoTopicMessageDataFieldSize(message.CreatedAt, block.Data.size(), block.OriginalSize, metadataSize);
+    }
+
+    for (const auto& buffer : block.OriginalDataRefs) {
+        size += ProtoTopicMessageDataFieldSize(message.CreatedAt, buffer.size(), block.OriginalSize, metadataSize);
+    }
+    return size;
+}
+
+} // namespace NWriteSessionGrpc
 
 template <typename TEvent>
 size_t CalcDataSize(const typename TEvent::TEvent& event) {

@@ -10,30 +10,12 @@ The reference is fully loaded into memory when the query starts. If the data in 
 
 {% endnote %}
 
-## Preparing a data source for working with topics
+Enrichment works with [local and external topics](./local-and-external-topics.md).
 
-Create an external data source for working with topics. A [secret](../../yql/reference/syntax/create-secret.md) is used to store the token, and the source is created using [CREATE EXTERNAL DATA SOURCE](../../yql/reference/syntax/create-external-data-source.md).
+In the examples below:
 
-
-```yql
--- Секрет с токеном для подключения к YDB
-CREATE SECRET `secrets/ydb_token` WITH (value = "<ydb_token>");
-
--- Источник данных YDB для чтения/записи топиков
-CREATE EXTERNAL DATA SOURCE ydb_source WITH (
-    SOURCE_TYPE = "Ydb",
-    LOCATION = "<ydb_endpoint>",
-    DATABASE_NAME = "<db_name>",
-    AUTH_METHOD = "TOKEN",
-    TOKEN_SECRET_PATH = "secrets/ydb_token"
-);
-```
-
-
-Where:
-
-- `<ydb_endpoint>` — endpoint of {{ ydb-short-name }}, for example `grpcs://<ydb_host>:2135`.
-- `<db_name>` — path to the database {{ ydb-short-name }}, for example `/Root/database`.
+- `ext_source` — a pre-created [external data source](../../concepts/datamodel/external_data_source.md) for topics in another {{ ydb-short-name }} database;
+- `input_topic` and `output_topic` — topics in the current or an external {{ ydb-short-name }} database.
 
 ## Streaming queries for data enrichment
 
@@ -58,11 +40,11 @@ Create a [streaming query](../../concepts/streaming-query.md) that performs enri
 CREATE STREAMING QUERY query_with_table_join AS
 DO BEGIN
 
--- Чтение событий из входного топика
+-- Read events from the input topic
 $topic_data = SELECT
     *
 FROM
-    ydb_source.input_topic
+    ext_source.input_topic -- or local topic input_topic
 WITH (
     FORMAT = json_each_row,
     SCHEMA = (
@@ -72,7 +54,7 @@ WITH (
     )
 );
 
--- Присоединение справочника к потоку по ServiceId
+-- Join the reference to the stream by ServiceId
 $joined_data = SELECT
     s.Name AS Name,
     t.*
@@ -83,9 +65,9 @@ LEFT JOIN
 ON
     t.ServiceId = s.ServiceId;
 
--- Запись в выходной топик (JSON)
+-- Write to the output topic (JSON)
 INSERT INTO
-    ydb_source.output_topic
+    output_topic -- or external topic ext_source.output_topic
 SELECT
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
 FROM
@@ -103,7 +85,7 @@ Create an additional [external data source](../../yql/reference/syntax/create-ex
 
 
 ```yql
--- Источник данных S3 для чтения справочника
+-- S3 data source for reading the reference
 CREATE EXTERNAL DATA SOURCE s3_source WITH (
     SOURCE_TYPE = "ObjectStorage",
     LOCATION = "<s3_endpoint>",
@@ -123,11 +105,11 @@ Create a [streaming query](../../concepts/streaming-query.md) that performs enri
 CREATE STREAMING QUERY query_with_join AS
 DO BEGIN
 
--- Чтение событий из входного топика
+-- Read events from the input topic
 $topic_data = SELECT
     *
 FROM
-    ydb_source.input_topic
+    input_topic -- or external topic ext_source.input_topic
 WITH (
     FORMAT = json_each_row,
     SCHEMA = (
@@ -137,7 +119,7 @@ WITH (
     )
 );
 
--- Чтение справочника сервисов из S3
+-- Read the services reference from S3
 $s3_data = SELECT
     *
 FROM
@@ -150,7 +132,7 @@ WITH (
     )
 );
 
--- Присоединение справочника к потоку по ServiceId
+-- Join the reference to the stream by ServiceId
 $joined_data = SELECT
     s.Name AS Name,
     t.*
@@ -161,9 +143,9 @@ LEFT JOIN
 ON
     t.ServiceId = s.ServiceId;
 
--- Запись результата в выходной топик в формате JSON
+-- Write the result to the output topic as JSON
 INSERT INTO
-    ydb_source.output_topic
+    ext_source.output_topic -- or local topic output_topic
 SELECT
     ToBytes(Unwrap(Yson::SerializeJson(Yson::From(TableRow()))))
 FROM

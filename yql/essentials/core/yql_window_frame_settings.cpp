@@ -26,8 +26,6 @@ using namespace NNodes;
 
 struct TUnsortedTag {};
 
-struct TManyColumnsInSort {};
-
 struct TSorted {
     enum class ESortDir {
         Asc,
@@ -37,7 +35,7 @@ struct TSorted {
     ESortDir SortDir;
 };
 
-using TSortTraitsInfo = std::variant<TUnsortedTag, TManyColumnsInSort, TSorted>;
+using TSortTraitsInfo = std::variant<TUnsortedTag, TSorted>;
 
 TExprNode::TPtr GetSettingByName(const TExprNode::TChildrenType& settings, TStringBuf name) {
     for (const auto& setting : settings) {
@@ -52,9 +50,6 @@ TExprNode::TPtr GetSettingByName(const TExprNode::TChildrenType& settings, TStri
 ESortOrder GetSortOrder(const TSortTraitsInfo& info) {
     return std::visit(TOverloaded{
                           [&](const TUnsortedTag&) {
-                              return ESortOrder::Unimportant;
-                          },
-                          [&](const TManyColumnsInSort&) {
                               return ESortOrder::Unimportant;
                           },
                           [&](const TSorted& sorted) {
@@ -416,12 +411,8 @@ TSortTraitsInfo ExtractSortTraitsInfo(const TExprNode::TPtr& sortTraits) {
 
     const TTypeAnnotationNode* lambdaType = sortKeyLambda->GetTypeAnn();
     YQL_ENSURE(lambdaType, "Expected to have non null lambda type.");
-    const TTypeAnnotationNode* firstColumnType = lambdaType;
-    if (lambdaType->GetKind() == ETypeAnnotationKind::Tuple) {
-        return TManyColumnsInSort{};
-    }
 
-    return TSorted{.SortedColumnType = firstColumnType,
+    return TSorted{.SortedColumnType = lambdaType,
                    .SortDir = ExtractSortDirection(sortDirections)};
 }
 
@@ -471,6 +462,16 @@ enum class EType {
     NonNumeric,
 };
 
+TString GetErrorMessageForNonNumericBoundMisuse(const TTypeAnnotationNode* columnType) {
+    if (columnType) {
+        return TStringBuilder() << "RANGE frames over an ORDER BY expression of type \""
+                                << *columnType
+                                << "\" support only RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW mode";
+    } else {
+        return "RANGE frames over an ORDER BY expression of that type support only RANGE BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW mode";
+    }
+}
+
 template <EType DispatchType>
 class TParseFrameRangeBound {
 public:
@@ -482,10 +483,10 @@ public:
         YQL_ENSURE(frameBound->IsList(), "List expected");
 
         if (!EnsureTupleMinSize(*frameBound, 1, ctx)) {
-            return std::unexpected(TIssue(ctx.GetPosition(frameBound->Pos()), "Expected tuple with at least one size."));
+            return std::unexpected(TIssue(ctx.GetPosition(frameBound->Pos()), "Expected tuple with at least one size"));
         }
         if (!EnsureAtom(frameBound->Head(), ctx)) {
-            return std::unexpected(TIssue(ctx.GetPosition(frameBound->Pos()), "Head must be an atom."));
+            return std::unexpected(TIssue(ctx.GetPosition(frameBound->Pos()), "Head must be an atom"));
         }
 
         auto type = frameBound->Head().Content();
@@ -503,7 +504,7 @@ public:
         EDirection direction = (type == "preceding") ? EDirection::Preceding : EDirection::Following;
 
         if (!EnsureTupleSize(*frameBound, 2, ctx)) {
-            return std::unexpected(TIssue(ctx.GetPosition(frameBound->Pos()), "Expected tuple with at least 2 size for frame bounds."));
+            return std::unexpected(TIssue(ctx.GetPosition(frameBound->Pos()), "Expected tuple with at least 2 size for frame bounds"));
         }
 
         auto boundValue = frameBound->ChildPtr(1);
@@ -516,7 +517,7 @@ public:
         }
 
         if constexpr (Type() == EType::NonNumeric) {
-            return std::unexpected(TIssue(ctx.GetPosition(boundValue->Pos()), TStringBuilder() << "Offset specifing is not allowed here since that column type does not support for RANGE mode."));
+            return std::unexpected(TIssue(ctx.GetPosition(boundValue->Pos()), GetErrorMessageForNonNumericBoundMisuse(sortColumnType)));
         }
         YQL_ENSURE(sortColumnType, "Sorted column expected");
         auto message = TStringBuilder() << "Error while processing RANGE bound for column type: " << *sortColumnType << " and offset type: " << *boundValue->GetTypeAnn();
@@ -573,7 +574,7 @@ public:
         auto end = GetSettingByName(frameSpec->Children(), "end");
         if (!begin || !end) {
             ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()),
-                                TStringBuilder() << "Expected begin and end for row frames."));
+                                TStringBuilder() << "Expected begin and end for row frames"));
             return {};
         }
         auto beginParse = SingleBound(sortColumnType, begin, ctx);
@@ -637,10 +638,6 @@ public:
     }
 };
 
-constexpr TStringBuf ErrorNonNumeric = "Range frame for not sorted frames is only allowed to be UNBOUNDED PRECEDING AND CURRENT ROW.";
-constexpr TStringBuf ErrorMultipleColumns = "Range frame for multiple expressions is only allowed to be UNBOUNDED PRECEDING AND CURRENT ROW.";
-constexpr TStringBuf ErrorNonNumericSingleColumn = "Range frame for non numeric expressions is only allowed to be UNBOUNDED PRECEDING AND CURRENT ROW.";
-
 bool VerifySettings(const TExprNode::TChildrenType& settings, TExprContext& ctx) {
     for (const auto& setting : settings) {
         if (!EnsureTupleMinSize(*setting, 1, ctx)) {
@@ -654,8 +651,8 @@ bool VerifySettings(const TExprNode::TChildrenType& settings, TExprContext& ctx)
     return true;
 }
 
-TMaybe<TWindowFrameSettings> TryParseRangeForNotNumericFrameSettings(TExprNode::TPtr frameSpec, TStringBuf error, TExprContext& ctx) {
-    auto result = TParseFrameRangeBound<EType::NonNumeric>::Bounds(nullptr, frameSpec, ctx);
+TMaybe<TWindowFrameSettings> TryParseRangeForNotNumericFrameSettings(TExprNode::TPtr frameSpec, const TTypeAnnotationNode* sortColumnType, TExprContext& ctx) {
+    auto result = TParseFrameRangeBound<EType::NonNumeric>::Bounds(sortColumnType, frameSpec, ctx);
     if (!result) {
         return result;
     }
@@ -666,20 +663,25 @@ TMaybe<TWindowFrameSettings> TryParseRangeForNotNumericFrameSettings(TExprNode::
         return result;
     }
 
-    ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()), error));
+    ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()), GetErrorMessageForNonNumericBoundMisuse(sortColumnType)));
     return {};
 }
 
 TMaybe<TWindowFrameSettings> TryParseRangeWindowFrameSettings(TExprNode::TPtr frameSpec, TExprContext& ctx) {
     auto sortTraits = ExtractSortTraitsInfo(GetSettingByName(frameSpec->Children(), "sortSpec"));
     if (std::holds_alternative<TUnsortedTag>(sortTraits)) {
-        return TryParseRangeForNotNumericFrameSettings(frameSpec, ErrorNonNumeric, ctx);
-    } else if (std::holds_alternative<TManyColumnsInSort>(sortTraits)) {
-        return TryParseRangeForNotNumericFrameSettings(frameSpec, ErrorMultipleColumns, ctx);
+        return TryParseRangeForNotNumericFrameSettings(frameSpec, nullptr, ctx);
     }
     YQL_ENSURE(std::holds_alternative<TSorted>(sortTraits));
     auto sortedTraits = std::get<TSorted>(sortTraits);
     auto* type = sortedTraits.SortedColumnType;
+    if (type->GetKind() == ETypeAnnotationKind::Error) {
+        auto issue = TIssue(ctx.GetPosition(frameSpec->Pos()),
+                            "RANGE frame got error in ORDER BY expression");
+        issue.AddSubIssue(MakeIntrusive<TIssue>(type->Cast<TErrorExprType>()->GetError()));
+        ctx.AddError(issue);
+        return {};
+    }
     if (type->GetKind() == ETypeAnnotationKind::Pg) {
         return TParseFrameRangeBound<EType::PG>::Bounds(sortedTraits.SortedColumnType, frameSpec, ctx);
     }
@@ -715,10 +717,10 @@ TMaybe<TWindowFrameSettings> TryParseRangeWindowFrameSettings(TExprNode::TPtr fr
             case NUdf::EDataSlot::Decimal:
                 return TParseFrameRangeBound<EType::YQL>::Bounds(sortedTraits.SortedColumnType, frameSpec, ctx);
             default:
-                return TryParseRangeForNotNumericFrameSettings(frameSpec, ErrorNonNumericSingleColumn, ctx);
+                return TryParseRangeForNotNumericFrameSettings(frameSpec, sortedTraits.SortedColumnType, ctx);
         }
     }
-    return TryParseRangeForNotNumericFrameSettings(frameSpec, ErrorNonNumericSingleColumn, ctx);
+    return TryParseRangeForNotNumericFrameSettings(frameSpec, sortedTraits.SortedColumnType, ctx);
 }
 
 TMaybe<TWindowFrameSettings> TryParseWindowFrameSettingsFromList(const TExprNode& node, TExprContext& ctx) {
@@ -728,7 +730,7 @@ TMaybe<TWindowFrameSettings> TryParseWindowFrameSettingsFromList(const TExprNode
     if (node.IsCallable({"WinOnRows", "WinFilter"})) {
         if (!GetSettingByName(frameSpec->Children(), "begin") || !GetSettingByName(frameSpec->Children(), "end")) {
             ctx.AddError(TIssue(ctx.GetPosition(frameSpec->Pos()),
-                                TStringBuilder() << "Expected begin and end for row frames."));
+                                TStringBuilder() << "Expected begin and end for row frames"));
             return {};
         }
         auto leftParse = ParseFrameRowsBounds(GetSettingByName(frameSpec->Children(), "begin"), ctx);

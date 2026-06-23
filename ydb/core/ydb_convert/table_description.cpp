@@ -353,6 +353,8 @@ bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Tabl
     auto* tableDesc = modifyScheme->MutableAlterTable();
     tableDesc->SetName(pathPair.second);
 
+    const bool asSchemeObject = AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject();
+
     // Deduplicate prefix lengths: multiple bloom indexes with the same column count collapse into one.
     // Last specified FPP wins for each prefix length; 0 means "not set, use default".
     TMap<ui32, double> bloomPrefixes;
@@ -368,6 +370,7 @@ bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Tabl
 
         const ui32 prefixLen = static_cast<ui32>(index.index_columns_size());
         const auto& bloomSettings = index.local_bloom_filter_index();
+        double resolvedFpp = 0.0;
         if (bloomSettings.has_false_positive_probability()) {
             const double fpp = bloomSettings.false_positive_probability();
             if (fpp <= 0.0 || fpp >= 1.0) {
@@ -375,10 +378,35 @@ bool BuildAlterTableBloomFilterModifyScheme(const TString& path, const Ydb::Tabl
                 error = "false_positive_probability must be in range (0, 1)";
                 return false;
             }
-            bloomPrefixes[prefixLen] = fpp;
-        } else {
-            bloomPrefixes.emplace(prefixLen, 0.0);
+            resolvedFpp = fpp;
         }
+
+        if (asSchemeObject) {
+            // Mirror the prefix bloom filter as a named TTableIndex scheme object. Two indexes
+            // over the same PK prefix collapse to a single engine prefix, so reject duplicates.
+
+            if (index.name().empty()) {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = "Bloom filter index name must not be empty";
+                return false;
+            }
+            if (bloomPrefixes.contains(prefixLen)) {
+                code = Ydb::StatusIds::BAD_REQUEST;
+                error = "Multiple LocalBloomFilter indexes over the same primary-key prefix are not allowed";
+                return false;
+            }
+            auto* indexDesc = modifyScheme->MutableAlterTable()->AddTableIndexes();
+            indexDesc->SetName(index.name());
+            indexDesc->SetType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+            indexDesc->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+            for (const auto& col : index.index_columns()) {
+                indexDesc->AddKeyColumnNames(col);
+            }
+            indexDesc->MutableBloomFilterDescription()->SetFalsePositiveProbability(
+                resolvedFpp > 0.0 ? resolvedFpp : NTable::DefaultBloomFilterFpp);
+        }
+
+        bloomPrefixes[prefixLen] = resolvedFpp;
     }
 
     for (auto&& [prefixLen, fpp] : bloomPrefixes) {
@@ -1759,7 +1787,11 @@ void FillLocalBloomFilterIndexSettings(Ydb::Table::LocalBloomFilterIndex& settin
 ) {
     if (tableIndex.HasBloomFilterDescription()) {
         const auto& desc = tableIndex.GetBloomFilterDescription();
-        if (desc.HasFalsePositiveProbability()) {
+        // The scheme object always stores a resolved FPP, but a default value is an implementation
+        // detail: suppress it so DescribeTable / SHOW CREATE only surface an explicitly chosen FPP
+        // (matching the synthesized "idx_bloom_<N>" path below).
+        if (desc.HasFalsePositiveProbability()
+            && desc.GetFalsePositiveProbability() != NTable::DefaultBloomFilterFpp) {
             settings.set_false_positive_probability(desc.GetFalsePositiveProbability());
         }
     }
@@ -1904,12 +1936,27 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
 
     // Synthesize LocalBloomFilter index entries for DataShard tables.
     // ByKeyFilterPrefixes stores prefix lengths (not index names), so names are generated
-    // as "idx_bloom_<prefixLen>".
+    // as "idx_bloom_<prefixLen>". When the bloom filter is already registered as a named
+    // TTableIndex scheme object (EnableLocalIndexAsSchemeObject), it was rendered above from
+    // GetTableIndexes(); skip those prefix lengths here to avoid double-listing.
     if (in.HasPartitionConfig() && in.GetPartitionConfig().ByKeyFilterPrefixesSize() > 0) {
         const auto& pkCols = in.GetKeyColumnNames();
+        // Dedup by prefix length (column count), not column identity. This is exact only because a
+        // bloom filter's columns must be a left prefix of the PK, so a given length maps to exactly
+        // one valid column set. If that invariant is ever relaxed (arbitrary column subsets), this
+        // would need to key on the column set itself.
+        THashSet<ui32> prefixesWithSchemeObject;
+        for (const auto& tableIndex : in.GetTableIndexes()) {
+            if (tableIndex.GetType() == NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
+                prefixesWithSchemeObject.insert(tableIndex.GetKeyColumnNames().size());
+            }
+        }
         for (auto&& filterPrefix : in.GetPartitionConfig().GetByKeyFilterPrefixes()) {
             const ui32 prefixLen = filterPrefix.GetPrefixLength();
             if (prefixLen == 0 || static_cast<int>(prefixLen) > pkCols.size()) {
+                continue;
+            }
+            if (prefixesWithSchemeObject.contains(prefixLen)) {
                 continue;
             }
 

@@ -2,7 +2,8 @@
 
 #include <ydb/core/formats/arrow/accessor/plain/accessor.h>
 #include <ydb/core/formats/arrow/accessor/sparsed/accessor.h>
-#include <ydb/core/formats/arrow/arrow_filter.h>
+#include <ydb/core/formats/arrow/container/filterable/filterable.h>
+#include <ydb/core/formats/arrow/filter/filter.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
 
 #include <ydb/library/formats/arrow/arrow_helpers.h>
@@ -270,8 +271,7 @@ TConclusion<std::shared_ptr<TJsonPathAccessor>> TOthersData::GetPathAccessor(con
     for (TIterator it(Records); it.IsValid(); it.Next()) {
         filter.Add(it.GetKeyIndex() == *idx);
     }
-    auto recordsFiltered = Records;
-    filter.Apply(recordsFiltered);
+    auto recordsFiltered = NArrow::ApplyFilter(filter, Records);
     auto table = recordsFiltered->BuildTableVerified(std::set<std::string>({ "record_idx", "value" }));
 
     TSparsedArray::TBuilder builder(nullptr, arrow::binary());

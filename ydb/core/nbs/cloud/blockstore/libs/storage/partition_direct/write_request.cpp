@@ -26,7 +26,9 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
           {{"t", ToString(WriteMode)},
-           {"r", bundle->GetVChunkRange().Print()}}))
+           {"lsn", ToString(bundle->GetLsn())},
+           {"r", bundle->GetRange().Print()},
+           {"rv", bundle->GetVChunkRange().Print()}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , Bundle(std::move(bundle))
@@ -34,11 +36,7 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , RequestTimeout(DirectBlockGroup->GetOracle()->GetWriteRequestTimeout())
     , IndirectWriteReplyTimeout(
           DirectBlockGroup->GetOracle()->GetPBufferReplyTimeout())
-{
-    Y_ABORT_UNLESS(
-        VChunkConfig.GetDesiredPBuffers().Count() >=
-        QuorumDirectBlockGroupHostCount);
-}
+{}
 
 TWriteRequestExecutor::~TWriteRequestExecutor()
 {
@@ -57,16 +55,23 @@ TWriteRequestExecutor::~TWriteRequestExecutor()
 void TWriteRequestExecutor::Run()
 {
     Bundle->GetSpan().Event("Run");
+
+    const auto hosts = VChunkConfig.GetDesiredPBuffers();
+    if (hosts.Count() < QuorumDirectBlockGroupHostCount) {
+        Reply(MakeError(E_REJECTED, "Not enough PBuffer hosts"));
+        return;
+    }
+
     ScheduleRequestTimeout();
     ScheduleHedging();
 
     switch (WriteMode) {
         case EWriteMode::PBufferReplication: {
-            SendIndirectWriteRequest();
+            SendIndirectWriteRequest(hosts);
             break;
         }
         case EWriteMode::DirectPBuffersFilling: {
-            for (auto host: VChunkConfig.GetDesiredPBuffers()) {
+            for (auto host: hosts) {
                 SendDirectWriteRequest(host);
             }
             break;
@@ -83,10 +88,9 @@ TString TWriteRequestExecutor::Print()
     return result;
 }
 
-void TWriteRequestExecutor::SendIndirectWriteRequest()
+void TWriteRequestExecutor::SendIndirectWriteRequest(THostMask hosts)
 {
-    RequestedIndirectWrites = VChunkConfig.GetDesiredPBuffers();
-    auto hosts = RequestedIndirectWrites.Hosts();
+    RequestedIndirectWrites = hosts;
 
     LOG_DEBUG(
         *ActorSystem,
@@ -103,7 +107,7 @@ void TWriteRequestExecutor::SendIndirectWriteRequest()
     DirectBlockGroup->WriteBlocksToManyPBuffers(
         VChunkConfig.GetVChunkIndex(),
         coordinator,
-        std::move(hosts),
+        hosts.Hosts(),
         Bundle->GetLsn(),
         Bundle->GetVChunkRange(),
         IndirectWriteReplyTimeout,

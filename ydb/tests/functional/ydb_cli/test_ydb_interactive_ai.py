@@ -3175,7 +3175,7 @@ class _ToolTestBase(BaseAiInteractiveTest):
         """
         handler, call_count = self._make_tool_handler(
             "docs_search",
-            {"action": "get", "language": "en", "path": "core/concepts/scan_query.md"},
+            {"action": "get", "language": "en", "path": "core/concepts/query_execution/scan_query.md"},
             "Include resolved."
         )
         self._set_handler(handler)

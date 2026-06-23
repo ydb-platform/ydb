@@ -12,20 +12,27 @@
 //     TPersistentBufferHeader { BatchSize = N, ... }
 //     N × TPersistentBufferLsnRecordHeader
 //     N × (sectorsCnt × TPersistentBufferSectorInfo)   [data sector locations]
-//   Sectors 1..K (data sectors for each record, written immediately)
+//   Sectors 1..K (data sectors for each record)
 //
-// ProcessPersistentBufferBatchWrite() is called on the wakeup timer and
-// writes the unified header sector.  Only after BOTH all data parts AND the
-// header part complete does HandleWritePart() reply to the callers.
+// NEW behavior (after batch-write refactor):
+//   ProcessPersistentBufferBatchWriteData() does NOT issue any disk writes.
+//   All data (payload bytes) are accumulated in inflight.DataToWrite (a TRope).
+//   The header sector is the FIRST sector of DataToWrite (pre-allocated as a placeholder).
+//   ProcessPersistentBufferBatchWrite() is called on the wakeup timer and:
+//     - fills the header sector with metadata
+//     - frees unused pre-allocated sectors
+//     - calls SlicePersistentBufferData() and issues ALL disk writes at once
+//       (header + all data sectors in one or more TEvChunkWriteRaw events)
 //
-// IMPORTANT: The batch path requires an in-flight operation when the second
-// write arrives.  The correct test sequence is:
-//   1. Send write A → PDisk write arrives (keep it pending — A is in-flight)
-//   2. Send write B while A is still in-flight → B goes through batch path
-//   3. Complete A's PDisk write → A replies
-//   4. Complete B's data write
-//   5. Wakeup fires → header write
-//   6. Complete header write → B replies
+// Correct test sequence for a single batched record B:
+//   1. Send write A → PDisk write arrives (2 sectors: header + data)
+//      (keep it pending — A is in-flight, which activates the batch path)
+//   2. Send write B while A is still in-flight → B enters batch path,
+//      data is accumulated internally; NO immediate PDisk write for B.
+//   3. Complete A's PDisk write → A replies.
+//   4. Wakeup timer fires → ProcessPersistentBufferBatchWrite writes
+//      a single combined PDisk write: header sector + B's data sector (2 sectors).
+//   5. Complete the combined write → B replies.
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -361,19 +368,23 @@ ui32 GetPBFreeSectors(TTestContext& ctx, const TDiskHandle& disk) {
 Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Test 1: two small writes are batched into a single header sector.
+    // Test 1: two small writes are batched; all data is flushed in one write.
     //
-    // The batch path requires an in-flight operation when the second write
-    // arrives.  Correct sequence:
-    //   1. Send write A → PDisk write arrives (keep it pending — A is in-flight).
-    //   2. Send write B while A is still in-flight → B goes through batch path.
-    //      PDisk write for B's data sector arrives immediately (1 sector, no header).
+    // NEW behavior: ProcessPersistentBufferBatchWriteData() does NOT write to disk.
+    // All data (payload bytes) are accumulated internally.
+    // ProcessPersistentBufferBatchWrite() (wakeup timer) issues ONE combined write:
+    //   header sector + B's data sector.
+    //
+    // Sequence:
+    //   1. Send write A → PDisk write arrives (2 sectors: header + data).
+    //      (keep it pending — A is in-flight, which activates the batch path)
+    //   2. Send write B while A is in-flight → B enters batch path.
+    //      NO immediate PDisk write for B (data accumulated internally).
     //   3. Complete A's PDisk write → A replies.
-    //   4. Complete B's data write.
-    //   5. Wakeup timer fires → ProcessPersistentBufferBatchWrite writes the
-    //      shared header sector for B (1 sector).
-    //   6. Complete the header write → B's reply arrives.
-    //   7. Verify both records are readable and their data is correct.
+    //   4. Wakeup timer fires → ProcessPersistentBufferBatchWrite issues ONE
+    //      combined write: header sector + B's data sector (2 * BlockSize total).
+    //   5. Complete the combined write → B's reply arrives.
+    //   6. Verify both records are readable and their data is correct.
     // ─────────────────────────────────────────────────────────────────────────
     Y_UNIT_TEST(BatchWriteTwoRecordsShareHeaderSector) {
         TTestContext ctx;
@@ -398,52 +409,45 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
             "First (non-batch) write must produce header + data sectors");
 
         // ── Step 2: send write B while A is still in-flight (batch path) ─────
-        // B's data sector is written immediately; the header is deferred.
+        // B's data is accumulated internally; NO immediate PDisk write for B.
         {
             auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
                 creds, selectorB, 2, NDDisk::TWriteInstruction(0));
             write->AddPayload(TRope(payloadB));
             SendToDDisk(ctx, disk.PBServiceId, write.release());
         }
-        // B's data sector write arrives (1 sector, no header yet).
-        auto rawB_data = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
-        UNIT_ASSERT_VALUES_EQUAL_C(rawB_data->Get()->Data.size(), BlockSize,
-            "Batch data write must be exactly one data sector (no header)");
 
         // ── Step 3: complete A's PDisk write → A replies ──────────────────────
         ctx.SendPDiskResponse(disk, *rawA, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         auto wrA = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
         AssertStatus(wrA, TReplyStatus::OK);
 
-        // ── Step 4: complete B's data write ──────────────────────────────────
-        ctx.SendPDiskResponse(disk, *rawB_data, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        // ── Step 4: wakeup fires → ProcessPersistentBufferBatchWrite ─────────
+        // One combined write: header sector (sector 0) + B's data sector (sector 1).
+        auto rawB_combined = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        UNIT_ASSERT_VALUES_EQUAL_C(rawB_combined->Get()->Data.size(), 2 * BlockSize,
+            "Batch combined write must contain header sector + B's data sector (2 sectors total)");
 
-        // ── Step 5: wakeup fires → ProcessPersistentBufferBatchWrite ─────────
-        // The header sector for B is written now (1 sector).
-        auto rawB_header = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
-        UNIT_ASSERT_VALUES_EQUAL_C(rawB_header->Get()->Data.size(), BlockSize,
-            "Batch header write must be exactly one sector");
-
-        // Verify the header sector starts with the PB signature.
+        // Verify the header sector (first BlockSize bytes) starts with the PB signature.
         {
-            TString headerBytes = rawB_header->Get()->Data.ConvertToString();
+            TString rawData = rawB_combined->Get()->Data.ConvertToString();
             UNIT_ASSERT_C(
-                memcmp(headerBytes.data(),
+                memcmp(rawData.data(),
                     NDDisk::TPersistentBufferHeader::PersistentBufferHeaderSignature,
                     sizeof(NDDisk::TPersistentBufferHeader::PersistentBufferHeaderSignature)) == 0,
-                "Header sector must start with PersistentBufferHeaderSignature");
+                "First sector of combined write must start with PersistentBufferHeaderSignature");
             // BatchSize must be 1 (only record B is in this batch).
-            const auto* hdr = reinterpret_cast<const NDDisk::TPersistentBufferHeader*>(headerBytes.data());
+            const auto* hdr = reinterpret_cast<const NDDisk::TPersistentBufferHeader*>(rawData.data());
             UNIT_ASSERT_VALUES_EQUAL_C(hdr->BatchSize, 1u,
                 "BatchSize in header must equal the number of batched records");
         }
 
-        // ── Step 6: complete the header write → B's reply arrives ────────────
-        ctx.SendPDiskResponse(disk, *rawB_header, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        // ── Step 5: complete the combined write → B's reply arrives ──────────
+        ctx.SendPDiskResponse(disk, *rawB_combined, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         auto writeResultB = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
         AssertStatus(writeResultB, TReplyStatus::OK);
 
-        // ── Step 7: verify both records are readable ──────────────────────────
+        // ── Step 6: verify both records are readable ──────────────────────────
         auto readA = SendToDDiskAndWait<NDDisk::TEvReadPersistentBufferResult>(
             ctx, disk.PBServiceId,
             new NDDisk::TEvReadPersistentBuffer(creds, selectorA, 1, 1, {true}));
@@ -458,17 +462,19 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Test 2: batch write reply is deferred until BOTH data parts AND the header
-    // sector are written.  If the header write is still in-flight when all data
-    // parts complete, the caller must NOT receive a reply yet.
+    // Test 2: batch write reply is deferred until the combined write completes.
+    //
+    // NEW behavior: B does NOT trigger any PDisk write during accumulation.
+    // The combined write (header + B's data) is issued at wakeup time.
+    // B must NOT receive a reply before the combined write completes.
     //
     // Sequence:
     //   1. Send write A → PDisk write arrives (keep pending — A is in-flight).
-    //   2. Send write B while A is in-flight → batch path, data sector written.
+    //   2. Send write B while A is in-flight → batch path, no PDisk write yet.
     //   3. Complete A's PDisk write → A replies.
-    //   4. Complete B's data write.
-    //   5. Verify no reply for B yet (header not written) using a sentinel actor.
-    //   6. Complete the header write → B's reply arrives.
+    //   4. Wakeup fires → combined write (header + B data) arrives.
+    //      Verify no reply for B yet (write not complete).
+    //   5. Complete the combined write → B's reply arrives.
     // ─────────────────────────────────────────────────────────────────────────
     Y_UNIT_TEST(BatchWriteReplyDeferredUntilHeaderWritten) {
         TTestContext ctx;
@@ -490,58 +496,54 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
         auto rawA = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
 
         // ── Step 2: send write B while A is in-flight (batch path) ───────────
+        // NO immediate PDisk write for B — data is accumulated internally.
         {
             auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
                 creds, selectorB, 2, NDDisk::TWriteInstruction(0));
             write->AddPayload(TRope(payloadB));
             SendToDDisk(ctx, disk.PBServiceId, write.release());
         }
-        auto rawB_data = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
-        UNIT_ASSERT_VALUES_EQUAL_C(rawB_data->Get()->Data.size(), BlockSize,
-            "Batch data write must be exactly one data sector");
 
         // ── Step 3: complete A's PDisk write → A replies ──────────────────────
         ctx.SendPDiskResponse(disk, *rawA, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         auto wrA = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
         AssertStatus(wrA, TReplyStatus::OK);
 
-        // ── Step 4: complete B's data write ──────────────────────────────────
-        ctx.SendPDiskResponse(disk, *rawB_data, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        // ── Step 4: wakeup fires → combined write arrives ─────────────────────
+        // Header sector + B's data sector = 2 * BlockSize.
+        auto rawB_combined = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        UNIT_ASSERT_VALUES_EQUAL_C(rawB_combined->Get()->Data.size(), 2 * BlockSize,
+            "Batch combined write must contain header + data sectors (2 * BlockSize)");
 
-        // ── Step 5: verify no reply yet (header not written) ─────────────────
-        // The header write request must arrive before any write result for B.
-        auto rawB_header = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
-        UNIT_ASSERT_VALUES_EQUAL_C(rawB_header->Get()->Data.size(), BlockSize,
-            "Batch header write must be exactly one sector");
-
-        // Verify the sentinel is still pending (no spurious reply for B).
+        // Verify the sentinel is still pending (no spurious reply for B before the write completes).
         {
             TActorId sentinel = ctx.Runtime.AllocateEdgeActor(NodeId, __FILE__, __LINE__);
             ctx.Runtime.Send(new IEventHandle(sentinel, ctx.Edge, new TEvents::TEvWakeup()), NodeId);
             auto ev = ctx.Runtime.WaitForEdgeActorEvent({ctx.Edge, sentinel});
             UNIT_ASSERT_VALUES_EQUAL_C(ev->Recipient, sentinel,
-                "B must not reply before the header sector is written");
+                "B must not reply before the combined write completes");
         }
 
-        // ── Step 6: complete the header write → B's reply arrives ────────────
-        ctx.SendPDiskResponse(disk, *rawB_header, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        // ── Step 5: complete the combined write → B's reply arrives ──────────
+        ctx.SendPDiskResponse(disk, *rawB_combined, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         auto writeResultB = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
         AssertStatus(writeResultB, TReplyStatus::OK);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Test 3: the header sector written by ProcessPersistentBufferBatchWrite
+    // Test 3: the combined write issued by ProcessPersistentBufferBatchWrite
     // contains correct TPersistentBufferLsnRecordHeader metadata for the
     // batched record (TabletId, Generation, VChunkIndex, OffsetInBytes, Size, Lsn).
     //
+    // The header is in the FIRST BlockSize bytes of the combined write.
+    //
     // Sequence:
     //   1. Send write A → PDisk write arrives (keep pending — A is in-flight).
-    //   2. Send write B while A is in-flight → batch path.
+    //   2. Send write B while A is in-flight → batch path, no PDisk write yet.
     //   3. Complete A's PDisk write → A replies.
-    //   4. Complete B's data write.
-    //   5. Wakeup fires → header sector written.
-    //   6. Parse the raw header bytes and verify TPersistentBufferLsnRecordHeader
-    //      fields match what was sent in the write request.
+    //   4. Wakeup fires → combined write (header + B data) arrives.
+    //   5. Parse the header bytes (first BlockSize bytes) and verify
+    //      TPersistentBufferLsnRecordHeader fields match what was sent.
     // ─────────────────────────────────────────────────────────────────────────
     Y_UNIT_TEST(BatchWriteHeaderSectorContainsCorrectMetadata) {
         TTestContext ctx;
@@ -571,37 +573,36 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
         auto rawA = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
 
         // ── Step 2: send write B while A is in-flight (batch path) ───────────
+        // NO immediate PDisk write for B.
         {
             auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
                 creds, selectorB, lsnB, NDDisk::TWriteInstruction(0));
             write->AddPayload(TRope(payloadB));
             SendToDDisk(ctx, disk.PBServiceId, write.release());
         }
-        auto rawB_data = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
 
         // ── Step 3: complete A's PDisk write → A replies ──────────────────────
         ctx.SendPDiskResponse(disk, *rawA, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         auto wrA = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
         AssertStatus(wrA, TReplyStatus::OK);
 
-        // ── Step 4: complete B's data write ──────────────────────────────────
-        ctx.SendPDiskResponse(disk, *rawB_data, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        // ── Step 4: wakeup fires → combined write arrives ─────────────────────
+        // Header sector + B's data sector = 2 * BlockSize.
+        auto rawB_combined = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        UNIT_ASSERT_VALUES_EQUAL_C(rawB_combined->Get()->Data.size(), 2 * BlockSize,
+            "Batch combined write must contain header + data sectors (2 * BlockSize)");
 
-        // ── Step 5: wakeup fires → header sector written ──────────────────────
-        auto rawB_header = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
-        UNIT_ASSERT_VALUES_EQUAL_C(rawB_header->Get()->Data.size(), BlockSize,
-            "Batch header write must be exactly one sector");
-
-        // ── Step 6: parse and verify TPersistentBufferLsnRecordHeader fields ──
+        // ── Step 5: parse and verify TPersistentBufferLsnRecordHeader fields ──
+        // The header is in the FIRST BlockSize bytes of the combined write.
         {
-            TString headerBytes = rawB_header->Get()->Data.ConvertToString();
-            const auto* hdr = reinterpret_cast<const NDDisk::TPersistentBufferHeader*>(headerBytes.data());
+            TString rawData = rawB_combined->Get()->Data.ConvertToString();
+            const auto* hdr = reinterpret_cast<const NDDisk::TPersistentBufferHeader*>(rawData.data());
 
             UNIT_ASSERT_VALUES_EQUAL_C(hdr->BatchSize, 1u,
                 "BatchSize must be 1 for a single batched record");
 
             const auto* recHdr = reinterpret_cast<const NDDisk::TPersistentBufferLsnRecordHeader*>(
-                headerBytes.data() + sizeof(NDDisk::TPersistentBufferHeader));
+                rawData.data() + sizeof(NDDisk::TPersistentBufferHeader));
 
             UNIT_ASSERT_VALUES_EQUAL_C(recHdr->TabletId, tabletId,
                 "LsnRecordHeader.TabletId must match the write request");
@@ -617,33 +618,31 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
                 "LsnRecordHeader.Lsn must match the write request");
         }
 
-        // Complete the header write so the actor can clean up.
-        ctx.SendPDiskResponse(disk, *rawB_header, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        // Complete the combined write so the actor can clean up.
+        ctx.SendPDiskResponse(disk, *rawB_combined, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         auto writeResultB = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
         AssertStatus(writeResultB, TReplyStatus::OK);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Test 4: when two batch records share a single header sector, both records
-    // receive their replies after the single shared header write completes.
+    // Test 4: when two batch records share a single batch, both records
+    // receive their replies after the single combined write completes.
     //
-    // Note: the current implementation sets BatchSize=1 in the header sector
-    // regardless of how many records are batched (the BatchSize field tracks
-    // the number of records in the header for the restore path, but the current
-    // code hardcodes it to 1).  This test verifies the observable behavior:
-    // both B and C get OK replies after the single header write, and both
-    // records are readable.
+    // NEW behavior: neither B nor C triggers any immediate PDisk write.
+    // At wakeup time, ONE combined write is issued:
+    //   header sector + B's data sector + C's data sector = 3 * BlockSize.
+    // Both B and C reply after this single write completes.
     //
     // Sequence:
     //   1. Send write A → PDisk write arrives (keep pending — A is in-flight).
     //   2. Send write B while A is in-flight → batch path (first batch record).
+    //      No immediate PDisk write for B.
     //   3. Send write C while B's batch cookie is active → batch path (second).
+    //      No immediate PDisk write for C.
     //   4. Complete A's PDisk write → A replies.
-    //   5. Complete B's data write.
-    //   6. Complete C's data write.
-    //   7. Wakeup fires → single header sector written.
-    //   8. Complete header write → both B and C reply with OK.
-    //   9. Verify both B and C are readable.
+    //   5. Wakeup fires → single combined write: header + B data + C data (3 * BlockSize).
+    //   6. Complete combined write → both B and C reply with OK.
+    //   7. Verify both B and C are readable.
     // ─────────────────────────────────────────────────────────────────────────
     Y_UNIT_TEST(BatchWriteTwoRecordsShareSingleHeaderWrite) {
         TTestContext ctx;
@@ -669,63 +668,56 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
         auto rawA = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
 
         // ── Step 2: send write B while A is in-flight (first batch record) ────
+        // No immediate PDisk write for B.
         {
             auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
                 creds, selectorB, lsnB, NDDisk::TWriteInstruction(0));
             write->AddPayload(TRope(payloadB));
             SendToDDisk(ctx, disk.PBServiceId, write.release());
         }
-        auto rawB_data = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
-        UNIT_ASSERT_VALUES_EQUAL_C(rawB_data->Get()->Data.size(), BlockSize,
-            "First batch data write must be exactly one data sector");
 
         // ── Step 3: send write C while batch cookie is active (second record) ─
+        // No immediate PDisk write for C.
         {
             auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
                 creds, selectorC, lsnC, NDDisk::TWriteInstruction(0));
             write->AddPayload(TRope(payloadC));
             SendToDDisk(ctx, disk.PBServiceId, write.release());
         }
-        auto rawC_data = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
-        UNIT_ASSERT_VALUES_EQUAL_C(rawC_data->Get()->Data.size(), BlockSize,
-            "Second batch data write must be exactly one data sector");
 
         // ── Step 4: complete A's PDisk write → A replies ──────────────────────
         ctx.SendPDiskResponse(disk, *rawA, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         auto wrA = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
         AssertStatus(wrA, TReplyStatus::OK);
 
-        // ── Step 5: complete B's data write ──────────────────────────────────
-        ctx.SendPDiskResponse(disk, *rawB_data, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        // ── Step 5: wakeup fires → single combined write ──────────────────────
+        // B and C share the same batch inflight → ONE write: header + B data + C data = 3 * BlockSize.
+        auto rawBC_combined = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        UNIT_ASSERT_VALUES_EQUAL_C(rawBC_combined->Get()->Data.size(), 3 * BlockSize,
+            "Batch combined write must contain header + B data + C data (3 sectors total)");
 
-        // ── Step 6: complete C's data write ──────────────────────────────────
-        ctx.SendPDiskResponse(disk, *rawC_data, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
-
-        // ── Step 7: wakeup fires → single header sector written ───────────────
-        // Both B and C share the same batch inflight → only ONE header write.
-        auto rawBC_header = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
-        UNIT_ASSERT_VALUES_EQUAL_C(rawBC_header->Get()->Data.size(), BlockSize,
-            "Batch header write must be exactly one sector for both records");
-
-        // Verify the header sector has the PB signature.
+        // Verify the first sector (header) has the PB signature.
         {
-            TString headerBytes = rawBC_header->Get()->Data.ConvertToString();
+            TString rawData = rawBC_combined->Get()->Data.ConvertToString();
             UNIT_ASSERT_C(
-                memcmp(headerBytes.data(),
+                memcmp(rawData.data(),
                     NDDisk::TPersistentBufferHeader::PersistentBufferHeaderSignature,
                     sizeof(NDDisk::TPersistentBufferHeader::PersistentBufferHeaderSignature)) == 0,
-                "Header sector must start with PersistentBufferHeaderSignature");
+                "First sector of combined write must start with PersistentBufferHeaderSignature");
+            const auto* hdr = reinterpret_cast<const NDDisk::TPersistentBufferHeader*>(rawData.data());
+            UNIT_ASSERT_VALUES_EQUAL_C(hdr->BatchSize, 2u,
+                "BatchSize in header must equal 2 for both batch records B and C");
         }
 
-        // ── Step 8: complete header write → both B and C reply ───────────────
-        ctx.SendPDiskResponse(disk, *rawBC_header, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        // ── Step 6: complete combined write → both B and C reply ─────────────
+        ctx.SendPDiskResponse(disk, *rawBC_combined, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         // Both B and C share the same inflight → both replies arrive.
         auto writeResult1 = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
         AssertStatus(writeResult1, TReplyStatus::OK);
         auto writeResult2 = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
         AssertStatus(writeResult2, TReplyStatus::OK);
 
-        // ── Step 9: verify both B and C are readable ──────────────────────────
+        // ── Step 7: verify both B and C are readable ──────────────────────────
         auto readB = SendToDDiskAndWait<NDDisk::TEvReadPersistentBufferResult>(
             ctx, disk.PBServiceId,
             new NDDisk::TEvReadPersistentBuffer(creds, selectorB, lsnB, 1, {true}));
@@ -740,14 +732,18 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // Test 5: when the header sector write fails, the batch write must reply
+    // Test 5: when the combined write fails, the batch write must reply
     // with an error and the allocated sectors must be freed.
     //
-    // Injection strategy: intercept TEvWritePersistentBufferPart for the header
-    // write (IsErase=false) and replace it with a failed version.  The data
-    // sector write is allowed to succeed normally.
+    // NEW behavior: B does NOT trigger any immediate PDisk write.
+    // At wakeup time, a COMBINED write (header + B data) is issued.
+    // This combined write is intercepted and injected with a failure.
     //
-    // Covers: HandleWritePart → error path → PersistentBufferSpaceAllocator.Free
+    // Injection strategy: intercept TEvWritePersistentBufferPart for the
+    // combined write (IsErase=false) and replace it with a failed version.
+    //
+    // Sector count: B allocates 2 sectors (1 header + 1 data).
+    // After failure, both must be freed → freeAfterFail == freeAfterA + 2.
     // ─────────────────────────────────────────────────────────────────────────
     Y_UNIT_TEST(BatchWriteHeaderWriteFailureReturnsError) {
         TTestContext ctx;
@@ -768,116 +764,98 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
         }
         auto rawA = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
 
+        // Capture free sectors BEFORE B is sent (A's sectors already allocated,
+        // B's batch pre-allocation has not happened yet).
+        // After a failed batch write, ALL pre-allocated batch sectors are freed,
+        // restoring the pool to this baseline.
+        const ui32 freeBeforeB = GetPBFreeSectors(ctx, disk);
+
         // ── Send write B while A is in-flight (batch path) ───────────────────
+        // No immediate PDisk write for B. ProcessPersistentBufferBatchWriteData
+        // pre-allocates MaxLsnsPerPack * MaxSectorsPerPackBufferRecord + 1 sectors.
         {
             auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
                 creds, selectorB, 2, NDDisk::TWriteInstruction(0));
             write->AddPayload(TRope(payloadB));
             SendToDDisk(ctx, disk.PBServiceId, write.release());
         }
-        auto rawB_data = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
 
         // Complete A's PDisk write → A replies.
         ctx.SendPDiskResponse(disk, *rawA, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         auto wrA = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
         AssertStatus(wrA, TReplyStatus::OK);
 
-        // Capture free sectors after A is committed (A consumed some sectors).
-        const ui32 freeAfterA = GetPBFreeSectors(ctx, disk);
-
-        // Complete B's data write (OK).
-        ctx.SendPDiskResponse(disk, *rawB_data, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
-
-        // Wakeup fires → header sector write arrives.
-        auto rawB_header = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
-        UNIT_ASSERT_VALUES_EQUAL_C(rawB_header->Get()->Data.size(), BlockSize,
-            "Batch header write must be exactly one sector");
-
-        // Install a filter that intercepts the internal TEvWritePersistentBufferPart
-        // completion for the header write and replaces it with a failure.
-        // The filter is installed AFTER B's data write has already completed, so the
-        // next non-erase TEvWritePersistentBufferPart that arrives is the header write.
+        // Wakeup fires → combined write (header + B data) arrives.
+        // Install a filter BEFORE completing the combined write to intercept
+        // the TEvWritePersistentBufferPart completion and inject failure.
         bool intercepted = false;
         ctx.Runtime.FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) -> bool {
             if (!intercepted &&
                     ev->GetTypeRewrite() == NDDisk::TDDiskActor::TEvPrivate::TEvWritePersistentBufferPart::EventType) {
                 auto* orig = reinterpret_cast<TEventHandle<NDDisk::TDDiskActor::TEvPrivate::TEvWritePersistentBufferPart>*>(ev.get());
                 if (!orig->Get()->IsErase) {
-                    // This is the header write completion — inject failure.
+                    // This is the combined write completion — inject failure.
                     intercepted = true;
                     auto failed = std::make_unique<NDDisk::TDDiskActor::TEvPrivate::TEvWritePersistentBufferPart>(
                         orig->Get()->InflightCookie,
                         orig->Get()->PartCookie,
                         NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
-                        "injected header write failure");
+                        "injected combined write failure");
                     ev.reset(new IEventHandle(ev->Recipient, ev->Sender, failed.release(), 0, ev->Cookie));
                 }
             }
             return true;
         };
 
-        // Acknowledge the raw header write with OK so the actor stays alive.
-        ctx.SendPDiskResponse(disk, *rawB_header, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        // Wait for the combined write request (wakeup fires after A completes).
+        auto rawB_combined = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk);
+        UNIT_ASSERT_VALUES_EQUAL_C(rawB_combined->Get()->Data.size(), 2 * BlockSize,
+            "Batch combined write must contain header + data sectors (2 * BlockSize)");
+
+        // Acknowledge the raw combined write with OK so the actor stays alive.
+        ctx.SendPDiskResponse(disk, *rawB_combined, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
 
         // B must receive an error reply.
         auto writeResultB = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
         ctx.Runtime.FilterFunction = {};
 
-        UNIT_ASSERT_C(intercepted, "Filter must have fired for the header write");
+        UNIT_ASSERT_C(intercepted, "Filter must have fired for the combined write");
         UNIT_ASSERT_C(
             static_cast<TReplyStatus::E>(writeResultB->Get()->Record.GetStatus()) != TReplyStatus::OK,
-            "Batch write must fail when the header sector write fails");
+            "Batch write must fail when the combined write fails");
 
         // B must NOT appear in the list.
         auto listResult = SendToDDiskAndWait<NDDisk::TEvListPersistentBufferResult>(
             ctx, disk.PBServiceId, new NDDisk::TEvListPersistentBuffer(creds));
         AssertStatus(listResult, TReplyStatus::OK);
         UNIT_ASSERT_VALUES_EQUAL_C(listResult->Get()->Record.RecordsSize(), 1,
-            "Only record A must remain after B's header write failed");
+            "Only record A must remain after B's combined write failed");
 
-        // Sectors allocated for B (data + header) must be freed.
-        // B allocated 2 sectors (1 header + 1 data); after failure both must be returned.
+        // All sectors pre-allocated for the batch (MaxLsnsPerPack * MaxSectorsPerPackBufferRecord + 1)
+        // must be freed after failure, restoring the pool to its state before B was sent.
         const ui32 freeAfterFail = GetPBFreeSectors(ctx, disk);
-        const ui32 bSectors = selectorB.Size / BlockSize + 1; // data sectors + 1 header
-        UNIT_ASSERT_VALUES_EQUAL_C(freeAfterFail, freeAfterA + bSectors,
-            "Sectors allocated for the failed batch write must be freed");
+        UNIT_ASSERT_VALUES_EQUAL_C(freeAfterFail, freeBeforeB,
+            "All sectors pre-allocated for the failed batch write must be freed");
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // Test 6: batch-written records are correctly restored after a restart.
     //
-    // This test exercises the `for (ui32 batchIdx = 0; batchIdx < header->BatchSize; ++batchIdx)`
-    // loop added to RestorePersistentBufferChunk in the current branch.
-    //
-    // Strategy:
-    //   Phase 1 (instance 1, pdiskId=50):
-    //     - Write record A (non-batch) and complete it.
-    //     - Write record B (batch path, while A is in-flight).
-    //     - Capture the raw bytes of EVERY TEvChunkWriteRaw issued (both data
-    //       and header sectors) and build a full-chunk buffer.
-    //     - Extract PersistentBufferUniqueId from the header sector bytes.
-    //
-    //   Phase 2 (instance 2, pdiskId=51, same TTestContext):
-    //     - Pass the captured chunk data and (actualUniqueId - 1) as oldUniqueId
-    //       so CreateDDiskWithRestoredChunkData uses (oldUniqueId + 1) = actualUniqueId.
-    //     - Checksums pass → RestorePersistentBufferChunk restores the record.
-    //     - Verify record B is listed after restore.
-    //     - Verify record B's data is readable.
-    //
-    // Covers: RestorePersistentBufferChunk BatchSize loop (line 464 in the branch).
-    // ─────────────────────────────────────────────────────────────────────────
-    // Tests that batch-written records with BatchSize > 1 are correctly restored after
-    // a restart. Specifically exercises the for (batchIdx < header->BatchSize) loop in
-    // RestorePersistentBufferChunk and the pos-advance fix
-    // (pos += sizeof(TPersistentBufferSectorInfo) * (record.Sectors.size() - 1)).
-    //
     // Write sequence:
     //   A  — non-batch (keeps PDisk write in-flight so B enters batch path)
-    //   B  — batch (data write while A in-flight)
-    //   C  — batch (data write while B's data write still in-flight → same batch as B)
+    //   B  — batch (data accumulated while A in-flight, no immediate write)
+    //   C  — batch (data accumulated while B's batch cookie is active, same batch)
     //
-    // B and C share ONE header sector (BatchSize=2).  After restart, all three records
-    // must be listed and both B and C must be readable with their original payloads.
+    // NEW behavior: B and C generate NO immediate PDisk writes.
+    // At wakeup time, ONE combined write is issued:
+    //   header sector + B's data sector + C's data sector = 3 * BlockSize.
+    //
+    // B and C share ONE header sector (BatchSize=2).  After restart, all three
+    // records must be listed and both B and C must be readable with their original
+    // payloads.
+    //
+    // Covers: RestorePersistentBufferChunk BatchSize loop.
+    // ─────────────────────────────────────────────────────────────────────────
     Y_UNIT_TEST(BatchWriteRecordRestoredAfterRestart) {
         TTestContext ctx;
 
@@ -922,50 +900,38 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
         captureWrite(rawA);
 
         // ── Step 2: send B while A is in-flight → B enters batch path ────────
+        // No immediate PDisk write for B.
         {
             auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
                 creds1, selectorB, lsnB, NDDisk::TWriteInstruction(0));
             write->AddPayload(TRope(payloadB));
             SendToDDisk(ctx, disk1.PBServiceId, write.release());
         }
-        auto rawB_data = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk1);
-        UNIT_ASSERT_VALUES_EQUAL_C(rawB_data->Get()->Data.size(), BlockSize,
-            "B: batch data write must be exactly one data sector");
-        captureWrite(rawB_data);
 
-        // ── Step 3: send C while B's data write is still in-flight ───────────
-        // C joins the same batch inflight as B (PersistentBufferBatchWriteCookie != 0).
+        // ── Step 3: send C while B's batch cookie is active (same batch) ─────
+        // No immediate PDisk write for C.
         {
             auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
                 creds1, selectorC, lsnC, NDDisk::TWriteInstruction(0));
             write->AddPayload(TRope(payloadC));
             SendToDDisk(ctx, disk1.PBServiceId, write.release());
         }
-        auto rawC_data = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk1);
-        UNIT_ASSERT_VALUES_EQUAL_C(rawC_data->Get()->Data.size(), BlockSize,
-            "C: batch data write must be exactly one data sector");
-        captureWrite(rawC_data);
 
         // ── Step 4: complete A → A replies ───────────────────────────────────
         ctx.SendPDiskResponse(disk1, *rawA, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         auto wrA = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
         AssertStatus(wrA, TReplyStatus::OK);
 
-        // ── Step 5: complete B's data write ──────────────────────────────────
-        ctx.SendPDiskResponse(disk1, *rawB_data, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        // ── Step 5: wakeup fires → combined write for B and C ─────────────────
+        // ONE combined write: header sector + B data + C data = 3 * BlockSize.
+        auto rawBC_combined = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk1);
+        UNIT_ASSERT_VALUES_EQUAL_C(rawBC_combined->Get()->Data.size(), 3 * BlockSize,
+            "Combined write must contain header + B data + C data (3 sectors)");
+        captureWrite(rawBC_combined);
 
-        // ── Step 6: complete C's data write ──────────────────────────────────
-        ctx.SendPDiskResponse(disk1, *rawC_data, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
-
-        // ── Step 7: wakeup fires → shared header sector written (BatchSize=2) ─
-        auto rawBC_header = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk1);
-        UNIT_ASSERT_VALUES_EQUAL_C(rawBC_header->Get()->Data.size(), BlockSize,
-            "Shared header write must be exactly one sector");
-        captureWrite(rawBC_header);
-
-        // Verify BatchSize == 2 in the written header.
-        const ui32 headerChunkIdx = rawBC_header->Get()->ChunkIdx;
-        const ui32 headerOffset   = rawBC_header->Get()->Offset;
+        // Verify BatchSize == 2 in the written header (first sector of the combined write).
+        const ui32 headerChunkIdx = rawBC_combined->Get()->ChunkIdx;
+        const ui32 headerOffset   = rawBC_combined->Get()->Offset;
         const ui64 actualUniqueId = [&]() -> ui64 {
             const TString& buf = chunkBufs[headerChunkIdx];
             const auto* hdr = reinterpret_cast<const NDDisk::TPersistentBufferHeader*>(
@@ -976,8 +942,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
         }();
         UNIT_ASSERT_C(actualUniqueId != 0, "PersistentBufferUniqueId must not be zero");
 
-        // ── Step 8: complete header write → B and C both reply ───────────────
-        ctx.SendPDiskResponse(disk1, *rawBC_header, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        // ── Step 6: complete combined write → B and C both reply ─────────────
+        ctx.SendPDiskResponse(disk1, *rawBC_combined, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         auto writeResultB = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
         AssertStatus(writeResultB, TReplyStatus::OK);
         auto writeResultC = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
@@ -990,14 +956,6 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
         }
 
         // ── Phase 2: restart with instance 2 (same PDiskId, same UniqueId) ───
-        // TransformEvent resolves service IDs to actor IDs BEFORE scheduling, so
-        // by the time FilterFunction runs, ev->GetRecipientRewrite() is already the
-        // resolved edge actor ID (not the service ID).
-        //
-        // Strategy:
-        //   - Drop all events from disk1's actor (identified by sender).
-        //   - After disk2 is created, auto-respond to TEvChunkReadRaw going to
-        //     disk2's PDisk edge with the correct byte slice from chunkBufs.
         std::optional<TActorId> disk2PdiskEdge;
 
         ctx.Runtime.FilterFunction = [&](ui32 /*nodeId*/, std::unique_ptr<IEventHandle>& ev) -> bool {
@@ -1011,7 +969,6 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
                 return false;
             }
             // Auto-respond to TEvChunkReadRaw from disk2 with the captured chunk slice.
-            // TrimData asserts data.size() == pr.Size, so we must return exactly req->Size bytes.
             if (disk2PdiskEdge &&
                     ev->GetTypeRewrite() == NPDisk::TEvChunkReadRaw::EventType &&
                     ev->GetRecipientRewrite() == *disk2PdiskEdge) {
@@ -1075,22 +1032,19 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
     // Test 7: batch-written records from DIFFERENT tablets are correctly
     // restored after a restart.
     //
-    // This test is analogous to BatchWriteRecordRestoredAfterRestart but
-    // exercises the case where B and C belong to two distinct tablets
-    // (different TabletId / Generation credentials).  The shared header sector
-    // must encode the correct TabletId/Generation for each record so that the
-    // restore path can reconstruct both records independently.
-    //
     // Write sequence:
     //   A  — non-batch, tablet 91 gen 1  (keeps PDisk write in-flight so B/C
     //         enter the batch path)
-    //   B  — batch, tablet 92 gen 1      (data write while A in-flight)
-    //   C  — batch, tablet 93 gen 2      (data write while B's data write still
-    //         in-flight → same batch as B, BatchSize=2)
+    //   B  — batch, tablet 92 gen 1      (accumulated while A in-flight)
+    //   C  — batch, tablet 93 gen 2      (accumulated while B's batch cookie active,
+    //         same batch as B, BatchSize=2)
     //
-    // B and C share ONE header sector.  After restart all three records must be
-    // listed and both B and C must be readable with their original payloads via
-    // their respective credentials.
+    // NEW behavior: B and C generate NO immediate PDisk writes.
+    // At wakeup time, ONE combined write is issued:
+    //   header sector + B's data sector + C's data sector = 3 * BlockSize.
+    //
+    // After restart all three records must be listed and both B and C must be
+    // readable with their original payloads via their respective credentials.
     // ─────────────────────────────────────────────────────────────────────────
     Y_UNIT_TEST(BatchWriteMultiTabletRecordsRestoredAfterRestart) {
         TTestContext ctx;
@@ -1140,46 +1094,34 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
         captureWrite(rawA);
 
         // ── Step 2: send B (tablet 92) while A is in-flight → batch path ─────
+        // No immediate PDisk write for B.
         {
             auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
                 credsB, selectorB, lsnB, NDDisk::TWriteInstruction(0));
             write->AddPayload(TRope(payloadB));
             SendToDDisk(ctx, disk1.PBServiceId, write.release());
         }
-        auto rawB_data = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk1);
-        UNIT_ASSERT_VALUES_EQUAL_C(rawB_data->Get()->Data.size(), BlockSize,
-            "B: batch data write must be exactly one data sector");
-        captureWrite(rawB_data);
 
-        // ── Step 3: send C (tablet 93 gen 2) while B's data write is in-flight ─
-        // C joins the same batch inflight as B (PersistentBufferBatchWriteCookie != 0).
+        // ── Step 3: send C (tablet 93 gen 2) while B's batch cookie is active ─
+        // No immediate PDisk write for C.
         {
             auto write = std::make_unique<NDDisk::TEvWritePersistentBuffer>(
                 credsC, selectorC, lsnC, NDDisk::TWriteInstruction(0));
             write->AddPayload(TRope(payloadC));
             SendToDDisk(ctx, disk1.PBServiceId, write.release());
         }
-        auto rawC_data = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk1);
-        UNIT_ASSERT_VALUES_EQUAL_C(rawC_data->Get()->Data.size(), BlockSize,
-            "C: batch data write must be exactly one data sector");
-        captureWrite(rawC_data);
 
         // ── Step 4: complete A → A replies ───────────────────────────────────
         ctx.SendPDiskResponse(disk1, *rawA, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         auto wrA = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
         AssertStatus(wrA, TReplyStatus::OK);
 
-        // ── Step 5: complete B's data write ──────────────────────────────────
-        ctx.SendPDiskResponse(disk1, *rawB_data, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
-
-        // ── Step 6: complete C's data write ──────────────────────────────────
-        ctx.SendPDiskResponse(disk1, *rawC_data, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
-
-        // ── Step 7: wakeup fires → shared header sector written (BatchSize=2) ─
-        auto rawBC_header = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk1);
-        UNIT_ASSERT_VALUES_EQUAL_C(rawBC_header->Get()->Data.size(), BlockSize,
-            "Shared header write must be exactly one sector");
-        captureWrite(rawBC_header);
+        // ── Step 5: wakeup fires → combined write for B and C ─────────────────
+        // ONE combined write: header sector + B data + C data = 3 * BlockSize.
+        auto rawBC_combined = ctx.WaitPDiskRequest<NPDisk::TEvChunkWriteRaw>(disk1);
+        UNIT_ASSERT_VALUES_EQUAL_C(rawBC_combined->Get()->Data.size(), 3 * BlockSize,
+            "Combined write must contain header + B data + C data (3 sectors)");
+        captureWrite(rawBC_combined);
 
         // Verify BatchSize == 2 and extract PersistentBufferUniqueId.
         //
@@ -1193,8 +1135,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
         // Each record here has exactly 1 data sector, so Sectors.size() == 2
         // (header sector + 1 data sector), meaning (Sectors.size()-1) == 1
         // TPersistentBufferSectorInfo entry follows each LsnRecordHeader.
-        const ui32 headerChunkIdx = rawBC_header->Get()->ChunkIdx;
-        const ui32 headerOffset   = rawBC_header->Get()->Offset;
+        const ui32 headerChunkIdx = rawBC_combined->Get()->ChunkIdx;
+        const ui32 headerOffset   = rawBC_combined->Get()->Offset;
         const ui64 actualUniqueId = [&]() -> ui64 {
             const TString& buf = chunkBufs[headerChunkIdx];
             const auto* hdr = reinterpret_cast<const NDDisk::TPersistentBufferHeader*>(
@@ -1226,8 +1168,8 @@ Y_UNIT_TEST_SUITE(TDDiskActorBatchWriteTest) {
         }();
         UNIT_ASSERT_C(actualUniqueId != 0, "PersistentBufferUniqueId must not be zero");
 
-        // ── Step 8: complete header write → B and C both reply ───────────────
-        ctx.SendPDiskResponse(disk1, *rawBC_header, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
+        // ── Step 6: complete combined write → B and C both reply ─────────────
+        ctx.SendPDiskResponse(disk1, *rawBC_combined, new NPDisk::TEvChunkWriteRawResult(NKikimrProto::OK, ""));
         auto writeResultB = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);
         AssertStatus(writeResultB, TReplyStatus::OK);
         auto writeResultC = WaitFromDDisk<NDDisk::TEvWritePersistentBufferResult>(ctx);

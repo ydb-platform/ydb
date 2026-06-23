@@ -17,7 +17,15 @@ bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
         return false;
     }
 
-    auto newElements = KeepLiveMapElements(map, liveIt->second, props);
+    // If we need to keep key columns, add them to keep list
+    TInfoUnitSet keepKeyColumns;
+    if (!PruneKeyColumns) {
+        for (auto column : input->Props.Metadata->KeyColumns) {
+            keepKeyColumns.insert(column);
+        }
+    }
+
+    auto newElements = KeepLiveMapElements(map, liveIt->second, props, keepKeyColumns);
     if (newElements.size() == map->MapElements.size()) {
         return false;
     }
@@ -52,7 +60,15 @@ bool TPruneDeadReadColumnsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
         return false;
     }
 
-    const auto liveOutput = KeepLiveColumns(read->GetOutputIUs(), liveIt->second);
+    // If we need to keep key columns, add them to keep list
+    TInfoUnitSet keepKeyColumns;
+    if (!PruneKeyColumns) {
+        for (auto column : input->Props.Metadata->KeyColumns) {
+            keepKeyColumns.insert(column);
+        }
+    }
+
+    const auto liveOutput = KeepLiveColumns(read->GetOutputIUs(), liveIt->second, keepKeyColumns);
     return NarrowReadColumns(read, liveOutput);
 }
 
@@ -69,6 +85,7 @@ bool TPruneDeadAggregateTraitsRule::MatchAndApply(TIntrusivePtr<IOperator>& inpu
         return false;
     }
 
+    // Key columns will be preserved in the aggregate anyway
     const auto liveOutput = KeepLiveColumns(aggregate->GetOutputIUs(), liveIt->second);
     return PruneAggregateTraits(aggregate, liveOutput);
 }

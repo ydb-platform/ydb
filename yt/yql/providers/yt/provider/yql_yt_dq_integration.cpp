@@ -698,8 +698,12 @@ public:
         YQL_ENSURE(ytState);
 
         if (auto maybeYtReadTable = TMaybeNode<TYtReadTable>(read)) {
-            TMaybeNode<TCoSecureParam> secParams;
             const auto cluster = maybeYtReadTable.Cast().DataSource().Cluster().StringValue();
+            if (!ytState->Configuration->_EnableDq.Get(cluster).GetOrElse(true)) {
+                AddErrorWrap(ctx, read->Pos(), TStringBuilder() << "disabled for cluster " << cluster);
+                return nullptr;
+            }
+            TMaybeNode<TCoSecureParam> secParams;
             if (ytState->ResolveClusterToken(cluster)) {
                 secParams = Build<TCoSecureParam>(ctx, read->Pos()).Name().Build(TString("cluster:default_").append(cluster)).Done();
             }
@@ -718,6 +722,11 @@ public:
 
         if (auto maybeWrite = TMaybeNode<TYtWriteTable>(write)) {
             if (ytState->Configuration->_EnableYtDqProcessWriteConstraints.Get().GetOrElse(DEFAULT_ENABLE_DQ_WRITE_CONSTRAINTS)) {
+                const auto cluster = maybeWrite.Cast().DataSink().Cluster().StringValue();
+                if (!ytState->Configuration->_EnableDq.Get(cluster).GetOrElse(true)) {
+                    AddErrorWrap(ctx, write->Pos(), TStringBuilder() << "disabled for cluster " << cluster);
+                    return nullptr;
+                }
                 const auto& content = maybeWrite.Cast().Content();
                 if (TYtMaterialize::Match(&SkipCallables(content.Ref(), {TCoSort::CallableName(), TCoTopSort::CallableName(), TCoAssumeSorted::CallableName(), TCoAssumeConstraints::CallableName()}))) {
                     return write;

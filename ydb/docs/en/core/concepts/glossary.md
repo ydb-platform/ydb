@@ -58,6 +58,8 @@ A **storage group**, **Distributed storage group**, or **Blob storage group** is
 
 [Distributed storage](#distributed-storage) typically manages a large number of relatively small storage groups. Each group can be assigned to a specific [database](#database) to increase disk capacity and input/output throughput available to this database.
 
+[Static](#static-group) and [dynamic](#dynamic-group) storage groups are physical, meaning their data is stored directly on [VDisks](#vdisk).
+
 #### Static group {#static-group}
 
 A **static group** is a special [storage group](#storage-group) created during the initial cluster deployment. Its primary role is to store system [tablet's](#tablet) data, which can be considered cluster-wide metadata.
@@ -100,24 +102,25 @@ Technically, tablets are [actors](#actor) with a persistent state reliably saved
 
 Together, these mechanisms allow {{ ydb-short-name }} to provide [strict consistency](https://en.wikipedia.org/wiki/Consistency_model#Strict_consistency).
 
+{% if oss %}
+
 The implementation of distributed transactions is covered in a separate article [{#T}](../contributor/datashard-distributed-txs.md), while below there's a list of several [related terms](#deterministic-transactions).
 
-### Implicit Transactions {#implicit-transactions}
-
-An **implicit transaction** is the query execution mode used when the [transaction mode](transactions.md#modes) is not specified. {{ ydb-short-name }} automatically determines the behavior for each statement — whether to wrap it in a transaction or execute it outside one. This mode is described in more detail in [{#T}](transactions.md#implicit).
-
-### Interactive transactions {#interactive-transaction}
-
-The term **interactive transactions** refers to transactions that are split into multiple queries and involve data processing by an application between these queries. For example:
-
-1. Select some data.
-1. Process the selected data in the application.
-1. Update some data in the database.
-1. Commit the transaction in a separate query.
+{% endif %}
 
 ### Sessions
 
-Logical "connections" to the database that maintains the context needed to execute queries and manage transactions. They are explained in more detail in [{#T}](query_execution/index.md#sessions).
+Logical connections to the database that store the context needed to execute queries and manage transactions. They are explained in more detail in [{#T}](query_execution/index.md#sessions).
+
+### Client-side timeout {#client-timeout}
+
+A **client-side timeout** or **client timeout** is a time limit on how long an application or the {{ ydb-short-name }} SDK waits for a database operation to complete (for example, query execution or receiving a response over gRPC). When this time expires, the client usually stops waiting: it closes the connection or data stream and receives a transport or SDK error — before the server has returned an explicit response (see {{ ydb-short-name }} server response [status codes](../reference/ydb-sdk/ydb-status-codes.md)).
+
+If the client-side timeout is shorter than the query execution time on the {{ ydb-short-name }} side, a query interrupted on the client may continue running on the server for some time due to how queries are processed in the cluster. If this happens at scale, the server becomes overloaded with queries whose responses the client no longer waits for. Therefore, frequently retrying the same query immediately after a timeout can worsen overload. For more information, see [{#T}](../troubleshooting/performance/queries/retry-cascade.md) and [{#T}](../troubleshooting/performance/queries/overloaded-errors.md); SDK retry policies are described in [{#T}](../reference/ydb-sdk/error_handling.md).
+
+### Implicit Transactions {#implicit-transactions}
+
+An **implicit transaction** is the query execution mode used when the [transaction mode](transactions.md#modes) is not specified. In this case, {{ ydb-short-name }} automatically determines whether to wrap statements in a transaction. This mode is described in more detail in [{#T}](transactions.md#implicit).
 
 ### Multi-version concurrency control {#mvcc}
 
@@ -203,19 +206,27 @@ The fulltext search capabilities and index parameters are described in [{#T}](..
 
 A **column family** or **column group** is a feature that allows storing a subset of [row-oriented table](#row-oriented-table) columns separately in a distinct family or group. The primary use case is to store some columns on different kinds of disk drives (offload less important columns to HDD) or with various compression settings. If the workload requires many column families, consider using [column-oriented tables](#column-oriented-table) instead.
 
+#### Column encoding {#column-encoding}
+
+**Column encoding** is a mechanism for optimizing data storage in table columns that reduces disk usage and can speed up some operations.
+
 #### Time to live {#ttl}
 
 **Time to live** or **TTL** is a mechanism for automatically removing old rows from a table asynchronously in the background. It is explained in a separate article [{#T}](ttl.md).
 
 ### View {#view}
 
-A **view** logically represents a table formed by a given query. The view itself contains no data. The content of a view is generated every time you SELECT from it. Thus, any changes in the underlying tables are reflected immediately in the view.
+A **view** is a way to save a query and access its results as if they were a real table. The view itself stores no data except the query text. The query stored in the view is executed on every SELECT from it, generating the returned result. Any changes in the tables referenced by the view are immediately reflected in read results from it.
+
+{% if feature_view %}
 
 There are user-defined and system-defined views.
 
 #### User-defined view {#user-view}
 
-A **user-defined view** is created by a user with the [{#T}](../yql/reference/syntax/create-view.md) statement.  For more information, see [{#T}](../concepts/datamodel/view.md).
+**User-defined views** are created by a user with the [{#T}](../yql/reference/syntax/create-view.md) statement. They are described in more detail in [{#T}](../concepts/datamodel/view.md).
+
+{% endif %}
 
 #### System view {#system-view}
 
@@ -270,17 +281,29 @@ A **backup** is a copy of data at a specific point in time that can be used to r
 
 A **backup chain** is an ordered sequence of [backups](#backup) starting with a full backup followed by zero or more incremental backups. Each incremental backup depends on all previous backups in the chain. Deleting any backup in the chain makes subsequent incremental backups unrestorable.
 
+{% if feature_async_replication == true %}
+
 ### Asynchronous replication instance {#async-replication-instance}
 
-**Asynchronous replication instance** is a named entity that stores [asynchronous replication](async-replication.md) settings (connection properties, a list of replicated objects, etc.) It can also be used to retrieve the status of asynchronous replication, such as the [initial synchronization process](async-replication.md#initial-scan), [replication lag](async-replication.md#replication-of-changes), [errors](async-replication.md#error-handling), and more.
+An **asynchronous replication instance** is a named entity that stores [asynchronous replication](async-replication.md) settings (connection properties, a list of replicated objects, etc.). It can also be used to retrieve the status of asynchronous replication, such as the [initial synchronization process](async-replication.md#initial-scan), [replication lag](async-replication.md#replication-of-changes), [errors](async-replication.md#error-handling), and more.
 
 #### Replicated object {#replicated-object}
 
-**Replicated object** is an object, for example, a table, that is asynchronously replicated to the target database.
+A **replicated object** is an object (for example, a table) for which asynchronous replication is configured.
 
 #### Replica object {#replica-object}
 
-**Replica object** is a mirror copy of the replicated object, automatically created by an [asynchronous replication instance](#async-replication-instance). Replica objects are typically read-only.
+A **replica object** is a mirror copy of the replicated object, automatically created by an asynchronous replication instance. As a rule, it is read-only.
+
+{% endif %}
+
+{% if feature_transfer == true %}
+
+### Transfer instance {#transfer-instance}
+
+A **transfer instance** is a named entity that stores [transfer](transfer.md) settings, including connection settings and data transformation rules. It can also be used to retrieve transfer status information, such as [errors](transfer.md#error-handling).
+
+{% endif %}
 
 ### Coordination node {#coordination-node}
 
@@ -604,7 +627,7 @@ The **Mediator** is a system tablet that distributes the transactions planned by
 
 #### Hive {#hive}
 
-A **Hive** is a system tablet responsible for launching and managing other tablets. It also moves tablets between nodes in case of [node](#node) failures or overload. You can learn more about Hive in a [dedicated article](../contributor/hive.md).
+A **Hive** is a system tablet responsible for launching and managing other tablets. Its responsibilities include moving tablets between nodes in case of [node](#node) failure or overload.{% if audience != "corp" %} You can learn more about Hive in a [dedicated article](../contributor/hive.md).{% endif %}
 
 #### Cluster management system {#cms}
 
@@ -613,6 +636,42 @@ The **cluster management system** or **CMS** is a system tablet responsible for 
 #### Node Broker {#node-broker}
 
 The **Node Broker** is a system tablet that registers [dynamic nodes](#dynamic-node) in the cluster.
+
+#### BSController {#ds-controller}
+
+**BSController**, **blob storage controller**, or **distributed storage controller** manages the dynamic configuration of distributed storage, including information about [PDisks](#pdisk), [VDisks](#vdisk), and [storage groups](#storage-group). It interacts with [node warden](#node-warden) to launch various distributed storage components. It interacts with [Hive](#hive) to allocate [channels](#channel) to tablets.
+
+#### Console {#console}
+
+**Console** is a system tablet responsible for storing [dynamic configuration](../devops/configuration-management/configuration-v1/dynamic-config.md) and delivering it to cluster nodes.
+
+#### Kesus {#kesus}
+
+**Kesus** is a tablet that implements a [coordination node](datamodel/coordination-node.md).
+
+#### SysViewProcessor {#sys-view-processor}
+
+**SysViewProcessor** is a tablet that stores data for some of the [system views](../dev/system-views.md).
+
+{% if feature_serial %}
+
+#### SequenceShard {#sequence-shard}
+
+**SequenceShard** is a tablet that serves Sequence objects used to implement [serial data types](../yql/reference/types/serial.md).
+
+{% endif %}
+
+{% if feature_async_replication %}
+
+#### ReplicationController {#replication-controller}
+
+**ReplicationController** is a tablet responsible for the [asynchronous replication](async-replication.md) process.
+
+{% endif %}
+
+#### StatisticsAggregator {#statistics-aggregator}
+
+**StatisticsAggregator** is a tablet responsible for collecting statistics used in cost-based optimization.
 
 ### Slot {#slot}
 
@@ -744,9 +803,9 @@ A **channel** is a logical connection between a [tablet](#tablet) and [Distribut
 * Record more data than one storage group can contain.
 * Store different [LogoBlobs](#logoblob) on different storage groups, with different properties like erasure encoding or on different storage media (HDD, SSD, NVMe).
 
-### Distributed transactions implementation {#distributed-transaction-implementation}
+### Distributed transactions implementation {#transaction-implementation}
 
-Terms related to the implementation of [distributed transactions](#transactions) are explained below. The implementation itself is described in a separate article [{#T}](../contributor/datashard-distributed-txs.md).
+Terms related to the implementation of [distributed transactions](#transactions) are explained below.{% if oss == true %} The implementation itself is described in a separate article [{#T}](../contributor/datashard-distributed-txs.md).{% endif %}
 
 #### Deterministic transactions {#deterministic-transactions}
 

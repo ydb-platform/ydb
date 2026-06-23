@@ -197,4 +197,4 @@ Fails if analytics paths changed in git diff but `ARCHITECTURE.md` did not.
 
 ### For Cursor agents
 
-Rule: `.cursor/rules/analytics.mdc` — on analytics edits, update this document in the same task/PR.
+Router: `.cursor/rules/analytics.mdc` (pitfalls, templates). **Canonical detail stays in this file** — update diagram/table in the same PR as code changes.

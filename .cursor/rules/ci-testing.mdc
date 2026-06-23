@@ -1,244 +1,76 @@
 ---
-description: "CI testing skill: PR-check, ya make, test_ya, build_and_test_ya, regression, mute enforcement, GitHub statuses"
+description: "CI test pipeline & GitHub Actions: PR-check, test_ya, platform traps, multi-branch — read CI_PIPELINE.md first"
 globs:
   - ".github/docs/CI_PIPELINE.md"
+  - ".github/docs/CI_PLATFORM.md"
   - ".github/workflows/pr_check.yml"
   - ".github/workflows/run_tests.yml"
   - ".github/workflows/run_and_debug_tests.yml"
-  - ".github/workflows/postcommit_*.yml"
+  - ".github/workflows/postcommit*.yml"
   - ".github/workflows/regression_*.yml"
   - ".github/workflows/regression_whitelist_run.yml"
   - ".github/workflows/build_and_test_ya.yml"
   - ".github/actions/test_ya/**"
   - ".github/actions/build_and_test_ya/**"
+  - ".github/actions/ya_ci_core_build_test/**"
   - ".github/actions/s3cmd/**"
-  - ".github/actions/prepare_vm/**"
   - ".github/scripts/tests/**"
   - ".github/config/muted_ya*.txt"
-  - ".github/config/stable_tests_branches.json"
   - ".github/workflows/automerge_pr.yaml"
   - ".github/workflows/rebase.yml"
-  - ".github/workflows/automerge*.yaml"
   - "ydb/ci/rightlib/automerge.py"
 alwaysApply: false
 ---
 
-# CI Testing Skill
+# CI Testing Skill (router)
 
-## Stack
+**Do not duplicate pipeline details here.** Read canonical docs first:
 
-GitHub Actions (self-hosted runners) + composite actions + `./ya make` + S3 public artifacts + GitHub commit statuses.
+| Doc | When |
+|-----|------|
+| [`.github/docs/CI_PIPELINE.md`](../../.github/docs/CI_PIPELINE.md) | Workflows, action stack, PR-check, test_ya, config, maintenance checklist |
+| [`.github/docs/CI_PLATFORM.md`](../../.github/docs/CI_PLATFORM.md) | GitHub traps (#36673, #44180), multi-branch, security (#43915), PR template |
 
-**Not in scope here:** YDB analytics marts, mute decision workflows, docs/release CI — see cross-links below.
+## Stack (one line)
 
-## Pipeline map (read first)
+`workflow → build_and_test_ya → test_ya → ya make → transform_build_results → statuses / S3 / upload_tests_results`
 
-**Human overview:** `.github/docs/CI_PIPELINE.md` — update with every structural CI change.
+Workflows call **`build_and_test_ya`**, not `test_ya` directly. Mute **enforcement** = `muted_ya.txt` in `test_ya`; mute **decisions** = analytics skill + `mute_rules.md`.
 
-```text
-Trigger → Gate (PR-check) → build_and_test_ya → test_ya → ya make / retry
-  → transform_build_results (muted_ya.txt) → generate-summary / comment-pr
-  → GitHub statuses + S3 artifacts + upload_tests_results (YDB)
-```
+## Agent rules
 
-## Where CI testing lives
+1. **Structural CI change** → update `CI_PIPELINE.md` (same PR). Platform/security/multi-branch → also `CI_PLATFORM.md`.
+2. **New `job_name` in upload** → update analytics `ARCHITECTURE.md` + SQL `job_name` filters.
+3. **Shared action API change** → complete multi-branch checklist in `CI_PLATFORM.md`.
+4. **Before changing events** → re-read [GitHub Actions docs](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows); cite section in PR.
+5. **Minimal diff** — one layer per PR (gate / orchestrator / test_ya / script).
 
-| Location | Purpose |
-|----------|---------|
-| `.github/docs/CI_PIPELINE.md` | **Pipeline map** (workflows, actions, scripts, outputs) |
-| `.github/workflows/pr_check.yml` | Pre-commit on PRs (`pull_request_target`) |
-| `.github/workflows/postcommit_*.yml` | Post-merge checks on main/stable |
-| `.github/workflows/run_tests.yml` | Reusable runner (`workflow_call`) for regression/manual |
-| `.github/workflows/regression_*.yml` | Large/regression test matrices |
-| `.github/actions/build_and_test_ya/` | Standard wrapper: s3cmd + test_ya |
-| `.github/actions/test_ya/` | Core: ya make, retry, reports, YDB upload |
-| `.github/scripts/tests/` | Report post-processing, PR comments, mute helpers |
-| `.github/config/muted_ya*.txt` | Mute rules applied during test report transform |
+## Pitfalls (quick reference)
 
-## Action stack (conventions)
-
-1. Workflows call **`build_and_test_ya`**, not `test_ya` directly.
-2. `build_and_test_ya` sets up **`s3cmd`** (folder prefix, preset) then delegates to **`test_ya`**.
-3. Secrets/vars passed as JSON strings: `secs='{"AWS_KEY_ID":...}'`, `vars='{"AWS_BUCKET":...}'` — see `pr_check.yml` for template.
-4. Build presets: `relwithdebinfo`, `release-asan`, `release-tsan`, `release-msan`.
-
-## PR-check (`pr_check.yml`)
-
-| Topic | Detail |
-|-------|--------|
-| Event | `pull_request_target` — workflow runs with base repo permissions |
-| Checkout | `needs.check-running-allowed.outputs.commit_sha` (merge commit, not PR head alone) |
-| Who can run | Repo owner, collaborator, or PR with `ok-to-test` label |
-| Re-trigger | Labels `ok-to-test`, `rebase-and-check` only (other labels must not cancel in-progress run) |
-| Enable flag | `vars.CHECKS_SWITCH` → JSON field `pr_check` |
-| Runners | `[self-hosted, auto-provisioned, build-preset-{preset}]` |
-| Default matrix | relwithdebinfo + release-asan; `ydb/`; sizes small,medium; `increment: true` |
-| Extra sanitizers | Labels `run-tsan-tests`, `run-msan-tests`, `run-sanitizer-tests` |
-| Integrated check | `checks_integrated` = all 4 contexts green: `build_*` + `test_*` for relwithdebinfo and release-asan |
-
-### Debugging a PR-check failure
-
-1. Open the job log link from the PR comment (via `comment-pr.py`).
-2. S3 artifact index: `PUBLIC_DIR_URL/index.html` — ya output, `ya-test.html`, fail_summary.
-3. GitHub statuses on HEAD: `build_{preset}`, `test_{preset}`.
-4. For test data after the run: analytics skill + YDB (`job_name = 'PR-check'`).
-
-```bash
-gh run list --repo ydb-platform/ydb --workflow pr_check.yml --limit 10
-gh run view <RUN_ID> --repo ydb-platform/ydb
-gh pr checks <PR_NUMBER> --repo ydb-platform/ydb
-```
-
-## `test_ya` key behaviors
-
-| Input | Effect |
-|-------|--------|
-| `increment: true` | `graph_compare.py` limits tests to graph delta vs previous commit |
-| `test_size` | Comma list → `--test-size=small` etc. |
-| `test_retry_count` | Retry failed tests; TSAN/MSAN default 1 retry |
-| `run_tests: false` | Build only |
-| `pull_number` | Passed to upload for PR attribution |
-
-Important scripts inside the action (do not duplicate logic in workflows):
-
-| Script | When |
-|--------|------|
-| `transform_build_results.py` | After each ya make try; applies `muted_ya.txt` |
-| `fail-checker.py` | Count failures; drives retry loop |
-| `generate-summary.py` | Final PR summary table |
-| `comment-pr.py` | Rewrites/updates PR status comment |
-| `upload_tests_results.py` | YDB ingest (requires YDB setup step in workflow) |
-| `send_build_stats.py` | Binary size stats |
-
-## Mute in CI (enforcement only)
-
-- **File:** `.github/config/muted_ya.txt` (+ `muted_ya_asan.txt`, etc.)
-- **Applied in:** `transform_build_results.py` during `test_ya`
-- **Decisions / automation:** `update_muted_ya.yml`, `mute_rules.md` — see **analytics skill**, not this file
-
-Do not edit mute decision logic in `test_ya`; change rules file or mute workflow instead.
-
-## Regression & manual runs
-
-| Workflow | Entry |
-|----------|-------|
-| `run_tests.yml` | `workflow_call` from regression workflows; branch selection via `branches` or `stable_tests_branches.json` |
-| `regression_run.yml` | Dispatches full matrix across presets |
-| `run_and_debug_tests.yml` | Debug runs, optional coredumps |
-| ydbbot "Run Extra Tests" | Triggers `run_tests.yml` with PR number |
-
-## Config & secrets
-
-| Name | Purpose |
-|------|---------|
-| `CHECKS_SWITCH` | Per-workflow toggles (JSON in repo variables) |
-| `YDB_QA_CONFIG` | Required for `upload_tests_results` in CI |
-| `CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS` | YDB SA for upload step |
-| `AWS_BUCKET`, `AWS_ENDPOINT`, `REMOTE_CACHE_URL_YA` | S3 logs + ya cache |
-
-Local repo file `.github/config/ydb_qa_config.json` is **not** read by CI upload — CI uses `vars.YDB_QA_CONFIG`.
-
-## Cross-links
-
-| Topic | Doc / skill |
-|-------|-------------|
-| YDB tables, marts, investigations | `.cursor/rules/analytics.mdc`, `ARCHITECTURE.md` |
-| Mute/unmute rules & automation | `.github/config/mute_rules.md`, `update_muted_ya.yml` |
-| Build bloat in CI | `ydb/ci/build_bloat/`, `test_bloat.py` in test_ya |
-| PR merge commit staleness | [issue #36673](https://github.com/ydb-platform/ydb/issues/36673) |
-| Automerge base refresh / cron polling | [PR #44180](https://github.com/ydb-platform/ydb/pull/44180), `automerge_pr.yaml` |
-| Release / docs / cherry-pick CI | Out of scope — see [Security](#security-supply-chain) for docs build |
-
-## GitHub platform behavior (read before changing `.github/`)
-
-**Do not assume GitHub Actions semantics from memory.** Re-read current docs when touching workflows, composite actions, or action scripts:
-
-- [Events that trigger workflows](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows)
-- [`pull_request_target`](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#pull_request_target)
-- [Workflow syntax](https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions)
-- [Scheduled workflows](https://docs.github.com/en/actions/using-workflows/events-that-trigger-workflows#schedule)
-
-### Known YDB-specific traps (verified in production)
-
-| Trap | What happens | Mitigation / reference |
-|------|----------------|------------------------|
-| **`pull_request_target` workflow file from default branch** | For PRs into `stable-*`, the **workflow definition runs from `main`**, not from the target branch. Changing `.github/workflows` on `main` affects all base branches immediately. | Before merge: list who still relies on old layout on stable branches; plan backport or keep action inputs backward-compatible. |
-| **Stale `merge_commit_sha`** | `GET /pulls/{N}` and `context.payload.pull_request` can return an **outdated** synthetic merge SHA; CI may test code merged with weeks-old base. | [issue #36673](https://github.com/ydb-platform/ydb/issues/36673): re-fetch PR via API in gate steps; consider local `prepare-merge` / `refs/pr-ci/{N}/merge`; do not trust cached `merge_commit_sha` alone. |
-| **`rebase-and-check` label** | Re-triggers PR-check; workflow `context` PR object may still carry stale fields until API refresh. | Same as above — refresh PR object after label/push tricks. |
-| **Scheduled workflow gaps** | GitHub `schedule` cron is **best-effort** (delays, skipped runs during outages). Hourly jobs may not fire exactly once per hour. | Example: `automerge_pr.yaml` runs cron at `:17` but **polls inside the job for ~55 min** ([PR #44180](https://github.com/ydb-platform/ydb/pull/44180)) so automerge is not idle between cron ticks. Apply similar pattern for critical scheduled workflows. |
-| **Automerge push race** | Base branch moves between clone and push → false `automerge-blocked`. | [PR #44180](https://github.com/ydb-platform/ydb/pull/44180): `refresh_base_and_merge()` — fetch latest `origin/<base>` immediately before merge/push. |
-
-When proposing a workflow fix, cite **which GitHub doc section** your behavior relies on (or note if it is an undocumented quirk we already workaround).
-
-## Multi-branch & shared actions
-
-Shared composite actions (e.g. `build_and_test_ya`, future `ya_ci_core_build_test`) may exist in **different versions** on `main` vs `stable-*` / `q-stable-*`. Workflow YAML on a branch must match the action API on **that same branch**.
-
-### Checklist when changing `.github/actions/**` or callers
-
-1. **Find all callers on this branch:**
-   ```bash
-   rg "uses:.*\\.github/actions/" .github/workflows
-   rg "uses:.*\\.github/actions/" .github/actions
-   ```
-2. **Breaking change?** (removed/renamed inputs, different checkout ref semantics)
-   - Keep backward-compatible inputs, **or**
-   - Update **every** workflow on the branch in the **same PR**, **or**
-   - Document required cherry-picks into active stable branches.
-3. **`pull_request_target` on stable PRs** still executes workflow YAML from **`main`** — a new action on `main` is used even when the PR targets `stable-25-4`. Verify stable PRs are not broken by main-only action changes.
-4. **Cherry-pick / backport PRs:** `.github/` in the cherry-pick must match the action version on the **target** branch, not only source branch.
-5. **Fork PRs:** workflow definition from base repo; checkout ref comes from merge commit / gate job — see PR-check section.
-
-### PR description block (copy when touching shared CI)
-
-```markdown
-**CI layer:** Trigger | Gate | Orchestrator | composite action | test_ya | script
-**Consumers:** (workflows that call this action)
-**Branches:** main only | needs backport to stable-* (list)
-**GitHub semantics:** (e.g. pull_request_target from main, merge_commit_sha refresh)
-**Docs updated:** CI_PIPELINE.md | ARCHITECTURE.md (if job_name / analytics)
-```
-
-## Security (supply chain)
-
-### Docs / build hooks (out of test CI but affects CI runners)
-
-Docs build loads `.yfm` extensions — any `require()` runs **on the machine building docs** (CI or locally).
-
-| Red flag | Example |
-|---------|---------|
-| New `.yfm` `extensions:` entry | [PR #43915](https://github.com/ydb-platform/ydb/pull/43915) — `loader.cjs` with `curl \| sh` |
-| `exec` / `execSync` / remote URL in build assets | Treat as **block merge** until reviewed by a human |
-| Whitespace-only diff hiding config additions | Review full file, not just diff hunks |
-
-**Rule:** never merge new docs extensions or CI `run:` scripts that download and execute remote code without pinned hashes and explicit review.
-
-### `.github/` changes
-
-- Do not add steps that run PR head code in `pull_request_target` without the same guards as `rebase.yml` (collaborator checks, no untrusted build).
-- Prefer pinned action versions (`actions/checkout@v5`) and pinned pip packages in CI scripts.
-
-## Conventions for changes
-
-- **Minimal diff:** one concern per PR (workflow gate vs test_ya retry vs script output).
-- **PR description:** layer (Trigger / Gate / Orchestrator / test_ya / script), upstream workflow, downstream (statuses, S3, YDB, mute).
-- **New status context:** update `update_integrated_status` in `pr_check.yml` if it must gate merge.
-- **New `job_name` in upload:** update analytics `ARCHITECTURE.md` and YDB queries using `job_name`.
-- **`pull_request_target` changes:** consider fork/external contributor flow and token scopes.
-- Update **`CI_PIPELINE.md`** in the same PR as structural changes.
-- Re-read **GitHub Actions docs** for the event type you touch (`pull_request_target`, `schedule`, `workflow_call`).
-- If changing a **shared action**, complete the [multi-branch checklist](#multi-branch--shared-actions).
-
-## Common pitfalls
+Full table in `CI_PLATFORM.md`. Highest-impact:
 
 | Mistake | Fix |
 |---------|-----|
-| Checkout PR head on `pull_request_target` | Use merge commit SHA from gate job; refresh via API ([#36673](https://github.com/ydb-platform/ydb/issues/36673)) |
-| Trust `context.payload.pull_request.merge_commit_sha` without refresh | Re-fetch PR in gate step; consider `prepare-merge` job |
-| Change action on `main` only; stable PRs break | Remember `pull_request_target` uses workflow from **default branch** |
-| Rely on hourly cron firing exactly once | Add in-job polling like `automerge_pr.yaml` ([PR #44180](https://github.com/ydb-platform/ydb/pull/44180)) |
-| Call `test_ya` without `setup_ci_ydb_service_account_key_file_credentials` | Upload step fails silently or skips |
-| Assume `muted_ya.txt` change mutes instantly | Needs merge + next CI run; decisions come from mute workflow |
-| Add workflow job without `CHECKS_SWITCH` guard | May run when CI intentionally disabled |
-| Wrong runner labels | Match `build-preset-{preset}` on auto-provisioned pool |
-| Merge docs `.yfm` extension from external contributor without audit | Block — supply chain risk ([#43915](https://github.com/ydb-platform/ydb/pull/43915)) |
+| Trust stale `merge_commit_sha` | Re-fetch PR API; see [#36673](https://github.com/ydb-platform/ydb/issues/36673) |
+| Change workflow on `main`; break stable PRs | `pull_request_target` always uses **main** YAML |
+| `test_ya` without YDB setup step | `setup_ci_ydb_service_account_key_file_credentials` required for upload |
+| Rely on hourly cron exactly once | In-job polling — `automerge_pr.yaml` ([#44180](https://github.com/ydb-platform/ydb/pull/44180)) |
+| Merge docs `.yfm` extension unreviewed | Block — [#43915](https://github.com/ydb-platform/ydb/pull/43915) |
+
+## Debug PR-check
+
+```bash
+gh run list --repo ydb-platform/ydb --workflow pr_check.yml --limit 5
+gh run view <RUN_ID> --repo ydb-platform/ydb
+gh pr checks <N> --repo ydb-platform/ydb
+```
+
+S3 index in PR comment → `ya-test.html`, fail_summary. Live test data → **analytics skill** (`job_name = 'PR-check'`).
+
+## Cross-links
+
+| Topic | Where |
+|-------|--------|
+| YDB marts, regressions, YQL | `.cursor/rules/analytics.mdc` |
+| Mute automation | `.github/config/mute_rules.md` |
+| Build bloat | `ydb/ci/build_bloat/` |

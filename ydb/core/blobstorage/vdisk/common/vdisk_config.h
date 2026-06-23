@@ -278,6 +278,11 @@ namespace NKikimr {
         TControlWrapper MaxInProgressSyncCount;
         TControlWrapper EnablePhantomFlagStorage;
         TControlWrapper PhantomFlagStorageLimit;
+<<<<<<< HEAD
+=======
+        TControlWrapper VolatilePhantomFlagStorageBlobSizeLimit;
+        TControlWrapper EnableFreshSyncDataThrottling;
+>>>>>>> 0dfc3c930dd (Configure the size of blobs protected by PhantomFlagStorage (#43892))
 
         ///////////// CHUNK Keeper //////////////////
         TControlWrapper EnableChunkKeeper;

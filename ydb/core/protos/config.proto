@@ -1846,6 +1846,54 @@ message TImmediateControlsConfig {
             MaxValue: 1,
             DefaultValue: 0,
         }];
+<<<<<<< HEAD
+=======
+
+        optional uint64 EnablePersistentPhantomFlagStorage = 42 [(ControlOptions) = {
+            Description: "Enables Persistent Phantom Flag Storage",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
+        }];
+
+        optional uint64 MaxInProgressStartupDataSyncCount = 43 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous startup data sync processes; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 MaxInProgressStartupDataSyncPerPDiskCount = 44 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous startup data sync processes per PDisk; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 MaxInProgressLocalRecoveryCount = 45 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous local recovery processes; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 MaxInProgressLocalRecoveryPerPDiskCount = 46 [(ControlOptions) = {
+            Description: "Maximum number of simultaneous local recovery processes per PDisk; 0 means no limit",
+            MinValue: 0,
+            MaxValue: 10000,
+            DefaultValue: 0 }];
+
+        optional uint64 EnableFreshSyncDataThrottling = 47 [(ControlOptions) = {
+            Description: "Enables throttling of sync data being applied to fresh index",
+            MinValue: 0,
+            MaxValue: 1,
+            DefaultValue: 0,
+        }];
+
+        optional uint64 VolatilePhantomFlagStorageBlobSizeLimitBytes = 48 [(ControlOptions) = {
+            Description: "Minimum size of a blob in bytes covered by PhantomFlagStorage",
+            MinValue: 1,
+            MaxValue: 10000000,     // 10 MB
+            DefaultValue: 1000000,  // 1 MB
+        }];
+>>>>>>> 0dfc3c930dd (Configure the size of blobs protected by PhantomFlagStorage (#43892))
     }
 
     message TTabletControls {

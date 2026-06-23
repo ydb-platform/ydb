@@ -219,17 +219,19 @@ jobs:
         include:
           - build_preset: relwithdebinfo
             threads_count: 52
+            build_target: "ydb/"
             test_size: small,medium
           - build_preset: release-asan
             threads_count: 52
+            build_target: "ydb/"
             test_size: small,medium
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
     name: Build and test ${{ matrix.build_preset }}
-    timeout-minutes: 660
     steps:
       - uses: ./.github/actions/ya_ci_core_build_test
         with:
           build_preset: ${{ matrix.build_preset }}
+          build_target: ${{ matrix.build_target }}
           checkout_ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
           test_threads: ${{ matrix.threads_count }}
           test_size: ${{ matrix.test_size }}
@@ -247,11 +249,11 @@ jobs:
       }}
     runs-on: [ self-hosted, auto-provisioned, build-preset-release-tsan ]
     name: Build and test release-tsan
-    timeout-minutes: 660
     steps:
       - uses: ./.github/actions/ya_ci_core_build_test
         with:
           build_preset: release-tsan
+          build_target: "ydb/"
           checkout_ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
           test_threads: '52'
           test_size: small,medium
@@ -269,11 +271,11 @@ jobs:
       }}
     runs-on: [ self-hosted, auto-provisioned, build-preset-release-msan ]
     name: Build and test release-msan
-    timeout-minutes: 660
     steps:
       - uses: ./.github/actions/ya_ci_core_build_test
         with:
           build_preset: release-msan
+          build_target: "ydb/"
           checkout_ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
           test_threads: '52'
           test_size: small,medium

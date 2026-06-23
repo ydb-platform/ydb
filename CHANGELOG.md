@@ -76,6 +76,9 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 41598:Add total_memory_limit_percent_per_node resource pool parameter [#41598](https://github.com/ydb-platform/ydb/pull/41598) ([Slusarenko Igor](https://github.com/buhtr))
+* 41250:Delete reference api proto from service_account service [#41250](https://github.com/ydb-platform/ydb/pull/41250) ([Artem](https://github.com/ArtemTrofimushkin))
+* 40827:Added VDisk operation brokers to throttle local recovery and startup data sync by node and by PDisk, with new immediate controls and monitoring pages. [#40827](https://github.com/ydb-platform/ydb/pull/40827) ([Semyon Danilov](https://github.com/SammyVimes))
 
 ### Bug fixes
 
@@ -146,12 +149,13 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
-
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
-
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* None:CreateStreamingQueryMatchRecognize
+* 41721:Fixed empty compile error in group by hop [#41721](https://github.com/ydb-platform/ydb/pull/41721) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 41680:[Fix bug 41464](https://github.com/ydb-platform/ydb/issues/41464) [#41680](https://github.com/ydb-platform/ydb/pull/41680) ([kruall](https://github.com/kruall))
+* 41573:Issue: https://github.com/ydb-platform/ydb/issues/41557 [#41573](https://github.com/ydb-platform/ydb/pull/41573) ([mregrock](https://github.com/mregrock))
+* 41411:Fixed memory leak in load external sources metadata [#41411](https://github.com/ydb-platform/ydb/pull/41411) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* 41340:- Fix flaky test_workload_manager_version_upgrade compatibility (#40903) [#41340](https://github.com/ydb-platform/ydb/pull/41340) ([Slusarenko Igor](https://github.com/buhtr))
+* 40974:Fixed race in federated query setup init [#40974](https://github.com/ydb-platform/ydb/pull/40974) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 
 ### YDB UI
 

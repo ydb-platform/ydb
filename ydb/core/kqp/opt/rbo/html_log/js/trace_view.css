@@ -2841,18 +2841,6 @@ body.rule-resizing {
     z-index: 2;
 }
 
-.info-tabs-head::after {
-    content: "";
-    position: absolute;
-    right: 10px;
-    bottom: -9px;
-    left: 10px;
-    height: 10px;
-    border-radius: 0 0 8px 8px;
-    background: linear-gradient(to bottom, var(--surface-panel) 8%, transparent);
-    pointer-events: none;
-}
-
 .info-tabs {
     display: flex;
     flex: 1 1 auto;

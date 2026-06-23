@@ -599,12 +599,15 @@ std::vector<optimizer_trace::Target> GetOperatorTargets(
 
 optimizer_trace::Widget BuildPlanOverviewWidget(const TTraceBuildState& state) {
     optimizer_trace::Graph overview;
-    overview.layout("TB", 70, 42);
+    overview.layout("TB", 48, 30);
 
     for (const auto& node : state.OverviewNodes) {
         auto& graphNode = overview.node(node.Id, node.Label);
         if (node.Op) {
-            const auto targets = GetOperatorTargets(state, *node.Op);
+            std::vector<optimizer_trace::Target> targets;
+            for (const auto& target : GetOperatorTargets(state, *node.Op)) {
+                targets.push_back(optimizer_trace::Target::node(target.nodeId()));
+            }
             if (!targets.empty()) {
                 graphNode.targets(targets).primaryTarget(targets.front());
             }
@@ -700,7 +703,7 @@ std::optional<optimizer_trace::Widget> BuildJoinOrderWidget(const TOpRoot& root)
     return optimizer_trace::Widget::unwrappedText(
         "Join order",
         ToStdString(NJson::WriteJson(joinOrder.Json, true, false, true)),
-        true);
+        false);
 }
 
 optimizer_trace::Widget BuildStageGraphWidget(const TStageGraph& graph, const TTraceBuildState& state) {

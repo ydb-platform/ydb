@@ -208,7 +208,7 @@ void TStreamingTestFixture::WaitCheckpointByPath(const TString& path, i64 count,
     for (;;) {
         auto counters = GetCounters("kqp", nodeIdx);
         if (path) {
-            counters = counters->GetSubgroup("Path", path);
+            counters = counters->GetSubgroup("path", path);
         }
         auto coordinator = counters->FindSubgroup("subsystem", "checkpoint_coordinator");
         if (!coordinator) {

@@ -310,6 +310,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     }
 
     Y_UNIT_TEST_F(MaxStreamingQueryExecutionsLimit, TStreamingTestFixture) {
+        SetupAppConfig().MutableFeatureFlags()->SetEnableStreamingQueriesCounters(true);
         constexpr ui64 executionsLimit = 3;
         constexpr char inputTopicName[] = "maxStreamingQueryExecutionsLimitInputTopic";
         constexpr char outputTopicName[] = "maxStreamingQueryExecutionsLimitOutputTopic";
@@ -347,7 +348,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         std::vector<std::string> messages = {"key1value1"};
         messages.reserve(2 * executionsLimit + 1);
         for (ui64 i = 0; i < 2 * executionsLimit; ++i) {
-            WaitCheckpointByPath();
+            WaitCheckpointByPath(JoinPath({TEST_DATABASE, queryName}));
 
             ExecQuery(fmt::format(R"(
                 ALTER STREAMING QUERY `{query_name}` SET (

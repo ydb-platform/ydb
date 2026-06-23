@@ -46,6 +46,7 @@ namespace NKikimr {
             , PhantomFlagStorageState(SlCtx)
             , EnablePhantomFlagStorage(SlCtx->EnablePhantomFlagStorage)
             , PhantomFlagStorageLimit(SlCtx->PhantomFlagStorageLimit)
+            , VolatilePhantomFlagStorageBlobSizeLimit(SlCtx->VolatilePhantomFlagStorageBlobSizeLimit)
             , SelfOrderNumber(SlCtx->VCtx->Top->GetOrderNumber(SlCtx->VCtx->ShortSelfVDisk))
         {
             Y_VERIFY_S(SlCtx->VCtx->Top->GetTotalVDisksNum() <= MaxPossibleDisksInGroup,
@@ -87,7 +88,7 @@ namespace NKikimr {
             // Put blob record to PhantomFlagStorage
             if (PhantomFlagStorageState.IsActive() && rec->RecType == TRecordHdr::RecLogoBlob) {
                 PhantomFlagStorageState.ProcessBlobRecordFromSyncLog(rec->GetLogoBlob(),
-                        PhantomFlagStorageLimit);
+                        PhantomFlagStorageLimit, VolatilePhantomFlagStorageBlobSizeLimit);
             }
         }
 
@@ -98,6 +99,7 @@ namespace NKikimr {
                 DelayedActions.MemOverflow = true;
 
             // Put all blob records to PhantomFlagStorage
+            ui64 blobSizeLimit = VolatilePhantomFlagStorageBlobSizeLimit;
             TRecordHdr* rec = (TRecordHdr*)buf;
             ui32 recSize = 0;
             do {
@@ -105,7 +107,7 @@ namespace NKikimr {
                 Y_DEBUG_ABORT_UNLESS(recSize <= size);
                 if (PhantomFlagStorageState.IsActive() && rec->RecType == TRecordHdr::RecLogoBlob) {
                     PhantomFlagStorageState.ProcessBlobRecordFromSyncLog(rec->GetLogoBlob(),
-                            PhantomFlagStorageLimit);
+                            PhantomFlagStorageLimit, blobSizeLimit);
                 }
                 rec = rec->Next();
                 size -= recSize;
@@ -460,7 +462,8 @@ namespace NKikimr {
         }
 
         void TSyncLogKeeperState::FinishPhantomFlagStorageBuilder(TPhantomFlags&& flags, TPhantomFlagThresholds&& thresholds) {
-            PhantomFlagStorageState.FinishBuilding(std::move(flags), std::move(thresholds), PhantomFlagStorageLimit);
+            PhantomFlagStorageState.FinishBuilding(std::move(flags), std::move(thresholds),
+                    PhantomFlagStorageLimit, VolatilePhantomFlagStorageBlobSizeLimit);
         }
 
         TPhantomFlagStorageSnapshot TSyncLogKeeperState::GetPhantomFlagStorageSnapshot() const {
@@ -496,6 +499,12 @@ namespace NKikimr {
         void TSyncLogKeeperState::UpdateMetrics() {
             PhantomFlagStorageState.UpdateMetrics();
             SlCtx->PhantomFlagStorageGroup.SyncedMask() = SyncedMask.to_ullong();
+        }
+
+        void TSyncLogKeeperState::UpdateAtomics(TInstant now) {
+            VolatilePhantomFlagStorageBlobSizeLimit.Update(now);
+            PhantomFlagStorageLimit.Update(now);
+            EnablePhantomFlagStorage.Update(now);
         }
 
     } // NSyncLog

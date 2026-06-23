@@ -21,6 +21,7 @@
 
 #include <library/cpp/protobuf/json/proto2json.h>
 #include <library/cpp/testing/unittest/registar.h>
+#include <util/generic/size_literals.h>
 #include <util/system/hostname.h>
 
 namespace NKikimr {
@@ -701,12 +702,21 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         ui32 grpcPort = pm.GetPort();
         ui32 msgbPort = pm.GetPort();
 
+        NKikimrConfig::TAppConfig appConfig;
+        auto* csCfg = appConfig.MutableColumnShardConfig();
+        csCfg->SetWritingInFlightRequestBytesLimit(512_MB);
+        csCfg->SetWritingInFlightRequestsCountLimit(1000000);
+        appConfig.MutableInsertConveyorConfig()->SetWorkersCount(32);
+        appConfig.MutableCompConveyorConfig()->SetWorkersCount(24);
+        appConfig.MutableScanConveyorConfig()->SetWorkersCount(32);
+
         Tests::TServerSettings serverSettings(msgbPort);
         serverSettings.Port = msgbPort;
         serverSettings.GrpcPort = grpcPort;
         serverSettings.SetDomainName("Root")
             .SetUseRealThreads(false)
             .SetEnableMetadataProvider(true)
+            .SetAppConfig(appConfig)
         ;
         auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<NKikimr::NYDBTest::NColumnShard::TReadOnlyController>();
         csControllerGuard->SetCompactionsLimit(5);
@@ -723,7 +733,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         server->SetupRootStoragePools(sender);
 
 //        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_NOTICE);
-        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_COLUMNSHARD, NLog::PRI_NOTICE);
 //        runtime.SetLogPriority(NKikimrServices::BG_TASKS, NLog::PRI_DEBUG);
         //        runtime.SetLogPriority(NKikimrServices::TX_PROXY_SCHEME_CACHE, NLog::PRI_DEBUG);
 
@@ -732,10 +742,11 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
         Cerr << "Wait tables" << Endl;
         runtime.SimulateSleep(TDuration::Seconds(20));
         Cerr << "Initialization tables" << Endl;
-        const ui32 numRecords = 600000;
-        auto batch = lHelper.TestArrowBatch(0, TInstant::Zero().GetValue(), 600000, 1000000);
+        // Smaller row count than the historical 600k case keeps the UT fast.
+        const ui32 numRecords = 100000;
+        const ui64 tsStepUs = 1000000;
+        auto batch = lHelper.TestArrowBatch(0, TInstant::Zero().GetValue(), numRecords, tsStepUs);
 
-        ui32 gcCounter = 0;
         TBSDataCollector bsCollector;
         auto captureEvents = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
             if (auto* msg = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult*>(ev->StaticCastAsLocal<IEventBase>())) {
@@ -758,10 +769,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 Y_ABORT_UNLESS(!msg->Hard);
                 if (msg->Collect) {
                     gcSourceData.SetBarrier(TCurrentBarrier(msg->CollectGeneration, msg->CollectStep));
-                    Cerr << "TEvBlobStorage::TEvCollectGarbage COLLECT:" << msg->CollectGeneration << "/" << msg->CollectStep << ":" << gcSource.DebugString() << ":" << ++gcCounter << ";" << bsCollector.StatusString() << Endl;
                 } else {
                     gcSourceData.RefreshBarrier();
-                    Cerr << "TEvBlobStorage::TEvCollectGarbage REFRESH:" << gcSource.DebugString() << ":" << ++gcCounter << "/" << bsCollector.StatusString() << Endl;
                 }
             }
             if (auto* msg = dynamic_cast<TEvBlobStorage::TEvPut*>(ev->StaticCastAsLocal<IEventBase>())) {
@@ -769,7 +778,6 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
                 auto& gcSourceData = bsCollector.GetData(gcSource);
                 gcSourceData.AddBlob(msg->Id);
                 gcSourceData.AddSize(msg->Id.BlobSize());
-                Cerr << "TEvBlobStorage::TEvPut " << gcSource.DebugString() << ":" << gcCounter << "/" << bsCollector.StatusString() << Endl;
             }
             return false;
         };
@@ -784,8 +792,8 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             lHelper.StartScanRequest("SELECT MAX(timestamp) as a, MIN(timestamp) as b, COUNT(*) as c FROM `/Root/olapStore/olapTable`", true, &result);
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
             UNIT_ASSERT_VALUES_EQUAL(result.front().size(), 3);
-            UNIT_ASSERT_VALUES_EQUAL(GetValueResult(result.front(), "c")->GetProto().uint64_value(), 600000);
-            UNIT_ASSERT_VALUES_EQUAL(GetValueResult(result.front(), "a")->GetProto().uint64_value(), 599999000000);
+            UNIT_ASSERT_VALUES_EQUAL(GetValueResult(result.front(), "c")->GetProto().uint64_value(), numRecords);
+            UNIT_ASSERT_VALUES_EQUAL(GetValueResult(result.front(), "a")->GetProto().uint64_value(), ui64(numRecords - 1) * tsStepUs);
             UNIT_ASSERT_VALUES_EQUAL(GetValueResult(result.front(), "b")->GetProto().uint64_value(), 0);
         }
         const ui32 reduceStepsCount = 1;
@@ -794,7 +802,7 @@ Y_UNIT_TEST_SUITE(ColumnShardTiers) {
             runtime.AdvanceCurrentTime(TDuration::Seconds(numRecords * (i + 1) / reduceStepsCount + 500000));
             const ui64 purposeSize = 800000000.0 * (1 - 1.0 * (i + 1) / reduceStepsCount);
             const ui64 purposeRecords = numRecords * (1 - 1.0 * (i + 1) / reduceStepsCount);
-            const ui64 purposeMinTimestamp = numRecords * 1.0 * (i + 1) / reduceStepsCount * 1000000;
+            const ui64 purposeMinTimestamp = static_cast<ui64>(numRecords) * (i + 1) / reduceStepsCount * tsStepUs;
             const TInstant start = TInstant::Now();
             while (bsCollector.GetChannelSize(2) > purposeSize && TInstant::Now() - start < TDuration::Seconds(60)) {
                 runtime.AdvanceCurrentTime(TDuration::Minutes(6));

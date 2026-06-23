@@ -208,6 +208,8 @@ void RegisterMax(IBuiltinFunctionRegistry& registry) {
 
     RegisterCustomSameTypesFunction<NUdf::TDataType<char*>, TCustomMax, TBinaryArgsOpt>(registry, "Max");
     RegisterCustomSameTypesFunction<NUdf::TDataType<NUdf::TUtf8>, TCustomMax, TBinaryArgsOpt>(registry, "Max");
+    RegisterCustomSameTypesFunction<NUdf::TDataType<NUdf::TDyNumber>, TCustomMax, TBinaryArgsOpt>(registry, "Max");
+    RegisterCustomSameTypesFunction<NUdf::TDataType<NUdf::TUuid>, TCustomMax, TBinaryArgsOpt>(registry, "Max");
 }
 
 void RegisterAggrMax(IBuiltinFunctionRegistry& registry) {
@@ -221,6 +223,8 @@ void RegisterAggrMax(IBuiltinFunctionRegistry& registry) {
 
     RegisterCustomAggregateFunction<NUdf::TDataType<char*>, TCustomMax, TBinaryArgsSameOpt>(registry, "AggrMax");
     RegisterCustomAggregateFunction<NUdf::TDataType<NUdf::TUtf8>, TCustomMax, TBinaryArgsSameOpt>(registry, "AggrMax");
+    RegisterCustomAggregateFunction<NUdf::TDataType<NUdf::TDyNumber>, TCustomMax, TBinaryArgsSameOpt>(registry, "AggrMax");
+    RegisterCustomAggregateFunction<NUdf::TDataType<NUdf::TUuid>, TCustomMax, TBinaryArgsSameOpt>(registry, "AggrMax");
 }
 
 } // namespace NMiniKQL

@@ -215,12 +215,11 @@ TTxController::TProposeResult TSchemaTransactionOperator::DoStartProposeOnExecut
 NKikimr::TConclusionStatus TSchemaTransactionOperator::ValidateTableSchema(const NKikimrSchemeOp::TColumnTableSchema& schema) const {
     namespace NTypeIds = NScheme::NTypeIds;
     static const THashSet<NScheme::TTypeId> pkSupportedTypes = { NTypeIds::Bool, NTypeIds::Timestamp, NTypeIds::Date32, NTypeIds::Datetime64,
-        NTypeIds::Timestamp64, NTypeIds::Interval64, NTypeIds::Int8, NTypeIds::Int16, NTypeIds::Int32, NTypeIds::Int64, NTypeIds::Uint8,
+        NTypeIds::Timestamp64, NTypeIds::Interval64, NTypeIds::Interval, NTypeIds::Int8, NTypeIds::Int16, NTypeIds::Int32, NTypeIds::Int64, NTypeIds::Uint8,
         NTypeIds::Uint16, NTypeIds::Uint32, NTypeIds::Uint64, NTypeIds::Date, NTypeIds::Datetime,
-        //NTypeIds::Interval,
         //NTypeIds::Float,
         //NTypeIds::Double,
-        NTypeIds::String, NTypeIds::Utf8, NTypeIds::Decimal };
+        NTypeIds::String, NTypeIds::Utf8, NTypeIds::Decimal, NTypeIds::DyNumber, NTypeIds::Uuid };
 
     if (!schema.KeyColumnNamesSize()) {
         return TConclusionStatus::Fail("There is no key columns");

@@ -11,6 +11,7 @@
 #include <yql/essentials/parser/pg_wrapper/interface/pack.h>
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
 #include <yql/essentials/public/udf/arrow/util.h>
+#include <util/generic/guid.h>
 #include <yql/essentials/utils/yql_panic.h>
 
 #include <contrib/libs/apache/arrow/cpp/src/arrow/compute/api_scalar.h>
@@ -65,13 +66,18 @@ TBytesStatistics GetUnboxedValueSize(const NUdf::TUnboxedValue& value, const NSc
             YQL_ENSURE(value.IsEmbedded(), "Passed wrong type: " << NScheme::TypeName(type.GetTypeId()));
             return { sizeof(NUdf::TUnboxedValue), sizeof(NYql::NDecimal::TInt128) };
         }
+        case NTypeIds::Uuid:
+        {
+            const auto size = value.AsStringRef().Size();
+            Y_VERIFY_DEBUG_S(size == sizeof(TGUID), "Wrong Uuid size: " << size);
+            return { sizeof(NUdf::TUnboxedValue) + size, size };
+        }
         case NTypeIds::String:
         case NTypeIds::Utf8:
         case NTypeIds::Json:
         case NTypeIds::Yson:
         case NTypeIds::JsonDocument:
         case NTypeIds::DyNumber:
-        case NTypeIds::Uuid:
         case NTypeIds::PairUi64Ui64:
         {
             if (value.IsEmbedded()) {
@@ -277,6 +283,26 @@ public:
 };
 
 template <>
+class TElementAccessor<arrow::FixedSizeBinaryArray, TGUID> {
+public:
+    using TArrayType = arrow::FixedSizeBinaryArray;
+    static void Validate(const arrow::FixedSizeBinaryArray& array) {
+        YQL_ENSURE(
+            array.byte_width() == static_cast<i32>(sizeof(TGUID)),
+            "Wrong Uuid byte width in FixedSizeBinaryArray: " << array.byte_width());
+    }
+
+    static NYql::NUdf::TUnboxedValue ExtractValue(const arrow::FixedSizeBinaryArray& array, const ui32 rowIndex) {
+        auto data = array.GetView(rowIndex);
+        YQL_ENSURE(data.size() == sizeof(TGUID), "Wrong data size");
+        return MakeString(NUdf::TStringRef(data.data(), data.size()));
+    }
+    static TFixedWidthStatAccumulator BuildStatAccumulator(const NScheme::TTypeInfo& typeInfo) {
+        return TFixedWidthStatAccumulator(typeInfo);
+    }
+};
+
+template <>
 class TElementAccessor<arrow::BinaryArray, NUdf::TStringRef> {
 public:
     using TArrayType = arrow::BinaryArray;
@@ -459,6 +485,10 @@ TBytesStatistics WriteColumnValuesFromArrowImpl(TAccessor editAccessor,
                     YQL_ENSURE(false, "Unsupported Arrow type for Decimal column: " << columnPtr->type()->ToString());
                     return {};
             }
+        }
+        case NTypeIds::Uuid:
+        {
+            return WriteColumnValuesFromArrowSpecImpl<TElementAccessor<arrow::FixedSizeBinaryArray, TGUID>>(editAccessor, batch, columnIndex, columnPtr, columnType);
         }
         case NTypeIds::PairUi64Ui64:
         case NTypeIds::ActorId:

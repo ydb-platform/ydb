@@ -6,6 +6,7 @@
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_type_ops.h>
 #include <yql/essentials/public/udf/udf_type_size_check.h>
+#include <util/generic/guid.h>
 
 namespace NYql::NUdf {
 
@@ -54,6 +55,15 @@ class TFixedSizeBlockItemHasher<NYql::NDecimal::TInt128, Nullable>: public TBloc
 public:
     ui64 DoHash(TBlockItem value) const {
         return GetValueHash<TDataType<NUdf::TDecimal>::Slot>(NUdf::TUnboxedValuePod(value.GetInt128()));
+    }
+};
+
+template <bool Nullable>
+class TFixedSizeBlockItemHasher<TGUID, Nullable>: public TBlockItemHasherBase<TFixedSizeBlockItemHasher<TGUID, Nullable>, Nullable> {
+public:
+    ui64 DoHash(TBlockItem value) const {
+        const auto ref = value.AsStringRef();
+        return CityHash64(ref.Data(), ref.Size());
     }
 };
 

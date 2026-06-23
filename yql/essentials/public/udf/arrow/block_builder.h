@@ -533,6 +533,49 @@ public:
 };
 
 template <bool Nullable>
+class TFixedSizeArrayBuilder<TGUID, Nullable> final: public TFixedSizeArrayBuilderBase<TGUID, Nullable, TFixedSizeArrayBuilder<TGUID, Nullable>> {
+    using TSelf = TFixedSizeArrayBuilder<TGUID, Nullable>;
+    using TBase = TFixedSizeArrayBuilderBase<TGUID, Nullable, TSelf>;
+    using TParams = TArrayBuilderBase::TParams;
+
+public:
+    TFixedSizeArrayBuilder(const ITypeInfoHelper& typeInfoHelper, std::shared_ptr<arrow::DataType> arrowType, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+        : TBase(typeInfoHelper, std::move(arrowType), pool, maxLen, params)
+    {
+    }
+
+    TFixedSizeArrayBuilder(const TType* type, const ITypeInfoHelper& typeInfoHelper, arrow::MemoryPool& pool, size_t maxLen, const TParams& params = {})
+        : TBase(typeInfoHelper, type, pool, maxLen, params)
+    {
+    }
+
+    void DoAddNotNull(TUnboxedValuePod value) {
+        const auto ref = value.AsStringRef();
+        TGUID uuid;
+        std::memcpy(&uuid, ref.Data(), sizeof(uuid));
+        this->PlaceItem(std::move(uuid));
+    }
+
+    void DoAddNotNull(TBlockItem value) {
+        const auto ref = value.AsStringRef();
+        TGUID uuid;
+        std::memcpy(&uuid, ref.Data(), sizeof(uuid));
+        this->PlaceItem(std::move(uuid));
+    }
+
+    void DoAddNotNull(TInputBuffer& input) {
+        this->PlaceItem(input.PopNumber<TGUID>());
+    }
+
+    void DoAddNotNull(TBlockItem value, size_t count) {
+        const auto ref = value.AsStringRef();
+        TGUID uuid;
+        std::memcpy(&uuid, ref.Data(), sizeof(uuid));
+        std::fill(this->DataPtr_ + this->GetCurrLen(), this->DataPtr_ + this->GetCurrLen() + count, uuid);
+    }
+};
+
+template <bool Nullable>
 class TResourceArrayBuilder final: public TFixedSizeArrayBuilderBase<TUnboxedValue, Nullable, TResourceArrayBuilder<Nullable>> {
     using TBase = TFixedSizeArrayBuilderBase<TUnboxedValue, Nullable, TResourceArrayBuilder<Nullable>>;
     using TParams = TArrayBuilderBase::TParams;

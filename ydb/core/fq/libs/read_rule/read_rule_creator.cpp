@@ -238,7 +238,7 @@ public:
         Children.reserve(TopicConsumers.size());
         Results.reserve(TopicConsumers.size());
         for (size_t i = 0; i < TopicConsumers.size(); ++i) {
-            YDB_LOG_DEBUG("Create read rule creation actor for ` `",
+            YDB_LOG_DEBUG("Create read rule creation actor",
                 {"queryId", QueryId},
                 {"topicPath", TopicConsumers[i].topic_path()},
                 {"i", i});

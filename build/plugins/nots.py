@@ -41,6 +41,7 @@ TS_LINT_DART_FIELDS = (
     df.Size.from_macro_args_and_unit,
     df.CustomDependencies.test_depends_only,  # from macro DEPENDS()
     df.NodejsRootVarName.value,
+    df.TsResources.value,
     df.TsCheckType.value,
     df.TsCheckHasCoverage.value,
 )
@@ -1156,6 +1157,7 @@ def on_ts_check_configure(unit: NotsUnitType, validation_mode: str) -> None:
             NAME=[script_name],  # df.TestName.name_from_macro_args expects array
             TS_CHECK_TYPE=check_type,
             TS_CHECK_HAS_COVERAGE="yes" if cov_script_name in pj_scripts else "no",
+            erm_json=_create_erm_json(unit),
         )
         if is_medium == "yes":
             spec_args["SIZE"] = "MEDIUM"  # if not set read from macro SIZE

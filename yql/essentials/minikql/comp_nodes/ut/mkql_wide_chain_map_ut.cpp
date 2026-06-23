@@ -1,23 +1,21 @@
 #include "mkql_computation_node_ut.h"
 #include <yql/essentials/minikql/mkql_runtime_version.h>
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 namespace NKikimr {
 namespace NMiniKQL {
+
+using NTest::TUtf8;
+using NYql::NUdf::TUnboxedValueComparatorStreamView;
 
 Y_UNIT_TEST_SUITE(TMiniKQLWideChain1MapTest) {
 Y_UNIT_TEST_LLVM(TestThinLambda) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i32>::Id));
-    const auto tupleType = pb.NewTupleType({dataType});
-
-    const auto data1 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(1))});
-    const auto data2 = pb.NewTuple(tupleType, {pb.NewEmptyOptional(dataType)});
-    const auto data3 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(3))});
-    const auto data4 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(4))});
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3, data4});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<std::tuple<TMaybe<i32>>>{
+                                                               {TMaybe<i32>{1}}, {TMaybe<i32>{}}, {TMaybe<i32>{3}}, {TMaybe<i32>{4}}});
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChain1Map(pb.ExpandMap(pb.ToFlow(list),
                                                                                  [&](TRuntimeNode) -> TRuntimeNode::TList { return {}; }),
@@ -26,29 +24,20 @@ Y_UNIT_TEST_LLVM(TestThinLambda) {
                                                    [&](TRuntimeNode::TList) -> TRuntimeNode { return pb.NewTuple({}); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<std::tuple<>>{{}, {}, {}, {}});
 }
 
 Y_UNIT_TEST_LLVM(TestSimpleSwap) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i32>::Id));
-    const auto tupleType = pb.NewTupleType({dataType, dataType, dataType});
-
-    const auto data1 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(1)), pb.NewEmptyOptional(dataType), pb.NewOptional(pb.NewDataLiteral<i32>(-1))});
-    const auto data2 = pb.NewTuple(tupleType, {pb.NewEmptyOptional(dataType), pb.NewOptional(pb.NewDataLiteral<i32>(2)), pb.NewOptional(pb.NewDataLiteral<i32>(-2))});
-    const auto data3 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(3)), pb.NewEmptyOptional(dataType), pb.NewOptional(pb.NewDataLiteral<i32>(-3))});
-    const auto data4 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(4)), pb.NewOptional(pb.NewDataLiteral<i32>(4)), pb.NewEmptyOptional(dataType)});
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3, data4});
+    using TTuple = std::tuple<TMaybe<i32>, TMaybe<i32>, TMaybe<i32>>;
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TTuple>{
+                                                               {TMaybe<i32>{1}, TMaybe<i32>{}, TMaybe<i32>{-1}},
+                                                               {TMaybe<i32>{}, TMaybe<i32>{2}, TMaybe<i32>{-2}},
+                                                               {TMaybe<i32>{3}, TMaybe<i32>{}, TMaybe<i32>{-3}},
+                                                               {TMaybe<i32>{4}, TMaybe<i32>{4}, TMaybe<i32>{}},
+                                                           });
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChain1Map(pb.ExpandMap(pb.ToFlow(list),
                                                                                  [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
@@ -57,41 +46,27 @@ Y_UNIT_TEST_LLVM(TestSimpleSwap) {
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 1);
-    UNIT_ASSERT(!item.GetElement(1));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), -1);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), -2);
-    UNIT_ASSERT(!item.GetElement(1));
-    UNIT_ASSERT(!item.GetElement(2));
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), -3);
-    UNIT_ASSERT(!item.GetElement(1));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 3);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0));
-    UNIT_ASSERT(!item.GetElement(1));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 4);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TTuple>{
+                                                          {TMaybe<i32>{1}, TMaybe<i32>{}, TMaybe<i32>{-1}},
+                                                          {TMaybe<i32>{-2}, TMaybe<i32>{}, TMaybe<i32>{}},
+                                                          {TMaybe<i32>{-3}, TMaybe<i32>{}, TMaybe<i32>{3}},
+                                                          {TMaybe<i32>{}, TMaybe<i32>{}, TMaybe<i32>{4}},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TestSimpleChain) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i32>::Id));
-    const auto tupleType = pb.NewTupleType({dataType, dataType, dataType});
+    const auto dataType = NTest::ConvertToMinikqlType<TMaybe<i32>>(pb);
 
-    const auto data1 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(1)), pb.NewOptional(pb.NewDataLiteral<i32>(-5)), pb.NewOptional(pb.NewDataLiteral<i32>(-6))});
-    const auto data2 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(2)), pb.NewOptional(pb.NewDataLiteral<i32>(-4)), pb.NewOptional(pb.NewDataLiteral<i32>(-7))});
-    const auto data3 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(3)), pb.NewOptional(pb.NewDataLiteral<i32>(-7)), pb.NewOptional(pb.NewDataLiteral<i32>(-8))});
-    const auto data4 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(4)), pb.NewEmptyOptional(dataType), pb.NewOptional(pb.NewDataLiteral<i32>(-9))});
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3, data4});
+    using TTuple = std::tuple<TMaybe<i32>, TMaybe<i32>, TMaybe<i32>>;
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TTuple>{
+                                                               {TMaybe<i32>{1}, TMaybe<i32>{-5}, TMaybe<i32>{-6}},
+                                                               {TMaybe<i32>{2}, TMaybe<i32>{-4}, TMaybe<i32>{-7}},
+                                                               {TMaybe<i32>{3}, TMaybe<i32>{-7}, TMaybe<i32>{-8}},
+                                                               {TMaybe<i32>{4}, TMaybe<i32>{}, TMaybe<i32>{-9}},
+                                                           });
 
     const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideChain1Map(pb.ExpandMap(pb.ToFlow(list),
                                                                                   [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
@@ -101,40 +76,25 @@ Y_UNIT_TEST_LLVM(TestSimpleChain) {
 
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto iterator = graph->GetValue();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(NUdf::EFetchStatus::Ok == iterator.Fetch(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), -4);
-    UNIT_ASSERT(!item.GetElement(1));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), -1);
-    UNIT_ASSERT(NUdf::EFetchStatus::Ok == iterator.Fetch(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), -5);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), -4);
-    UNIT_ASSERT(!item.GetElement(2));
-    UNIT_ASSERT(NUdf::EFetchStatus::Ok == iterator.Fetch(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), -7);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), -5);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), -5);
-    UNIT_ASSERT(NUdf::EFetchStatus::Ok == iterator.Fetch(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), -5);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), -7);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), -6);
-    UNIT_ASSERT(NUdf::EFetchStatus::Finish == iterator.Fetch(item));
-    UNIT_ASSERT(NUdf::EFetchStatus::Finish == iterator.Fetch(item));
+    AssertUnboxedValueElementEqual(iterator, TUnboxedValueComparatorStreamView<TTuple>({
+                                                 {TMaybe<i32>{-4}, TMaybe<i32>{}, TMaybe<i32>{-1}},
+                                                 {TMaybe<i32>{-5}, TMaybe<i32>{-4}, TMaybe<i32>{}},
+                                                 {TMaybe<i32>{-7}, TMaybe<i32>{-5}, TMaybe<i32>{-5}},
+                                                 {TMaybe<i32>{-5}, TMaybe<i32>{-7}, TMaybe<i32>{-6}},
+                                             }));
 }
 
 Y_UNIT_TEST_LLVM(TestAgrregateWithPrevious) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i32>::Id));
-    const auto tupleType = pb.NewTupleType({dataType, dataType, dataType});
-
-    const auto data1 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(1)), pb.NewEmptyOptional(dataType), pb.NewOptional(pb.NewDataLiteral<i32>(-1))});
-    const auto data2 = pb.NewTuple(tupleType, {pb.NewEmptyOptional(dataType), pb.NewOptional(pb.NewDataLiteral<i32>(2)), pb.NewOptional(pb.NewDataLiteral<i32>(-2))});
-    const auto data3 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(3)), pb.NewEmptyOptional(dataType), pb.NewOptional(pb.NewDataLiteral<i32>(-3))});
-    const auto data4 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(4)), pb.NewOptional(pb.NewDataLiteral<i32>(5)), pb.NewEmptyOptional(dataType)});
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3, data4});
+    using TTuple = std::tuple<TMaybe<i32>, TMaybe<i32>, TMaybe<i32>>;
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TTuple>{
+                                                               {TMaybe<i32>{1}, TMaybe<i32>{}, TMaybe<i32>{-1}},
+                                                               {TMaybe<i32>{}, TMaybe<i32>{2}, TMaybe<i32>{-2}},
+                                                               {TMaybe<i32>{3}, TMaybe<i32>{}, TMaybe<i32>{-3}},
+                                                               {TMaybe<i32>{4}, TMaybe<i32>{5}, TMaybe<i32>{}},
+                                                           });
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChain1Map(pb.ExpandMap(pb.ToFlow(list),
                                                                                  [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
@@ -143,41 +103,25 @@ Y_UNIT_TEST_LLVM(TestAgrregateWithPrevious) {
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), -1);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 1);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), -1);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), -2);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), -2);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), -4);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), -2);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 5);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 2);
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TTuple>{
+                                                          {TMaybe<i32>{}, TMaybe<i32>{-1}, TMaybe<i32>{1}},
+                                                          {TMaybe<i32>{-1}, TMaybe<i32>{2}, TMaybe<i32>{-2}},
+                                                          {TMaybe<i32>{2}, TMaybe<i32>{-2}, TMaybe<i32>{-4}},
+                                                          {TMaybe<i32>{-2}, TMaybe<i32>{5}, TMaybe<i32>{2}},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TestPasstroughtFieldSplitAsIs) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i32>::Id));
-    const auto tupleType = pb.NewTupleType({dataType, dataType, dataType});
-
-    const auto data1 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(1)), pb.NewOptional(pb.NewDataLiteral<i32>(-6)), pb.NewOptional(pb.NewDataLiteral<i32>(-5))});
-    const auto data2 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(2)), pb.NewOptional(pb.NewDataLiteral<i32>(-4)), pb.NewOptional(pb.NewDataLiteral<i32>(-4))});
-    const auto data3 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(3)), pb.NewOptional(pb.NewDataLiteral<i32>(-7)), pb.NewOptional(pb.NewDataLiteral<i32>(-3))});
-    const auto data4 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(4)), pb.NewEmptyOptional(dataType), pb.NewOptional(pb.NewDataLiteral<i32>(0))});
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3, data4});
+    using TTuple = std::tuple<TMaybe<i32>, TMaybe<i32>, TMaybe<i32>>;
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TTuple>{
+                                                               {TMaybe<i32>{1}, TMaybe<i32>{-6}, TMaybe<i32>{-5}},
+                                                               {TMaybe<i32>{2}, TMaybe<i32>{-4}, TMaybe<i32>{-4}},
+                                                               {TMaybe<i32>{3}, TMaybe<i32>{-7}, TMaybe<i32>{-3}},
+                                                               {TMaybe<i32>{4}, TMaybe<i32>{}, TMaybe<i32>{0}},
+                                                           });
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChain1Map(pb.ExpandMap(pb.ToFlow(list),
                                                                                  [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
@@ -186,41 +130,25 @@ Y_UNIT_TEST_LLVM(TestPasstroughtFieldSplitAsIs) {
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), -6);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), -5);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), -6);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), -4);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 10);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), -4);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), -7);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), -7);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 0);
-    UNIT_ASSERT(!item.GetElement(2));
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TTuple>{
+                                                          {TMaybe<i32>{-6}, TMaybe<i32>{-5}, TMaybe<i32>{-6}},
+                                                          {TMaybe<i32>{-4}, TMaybe<i32>{10}, TMaybe<i32>{-4}},
+                                                          {TMaybe<i32>{-7}, TMaybe<i32>{0}, TMaybe<i32>{-7}},
+                                                          {TMaybe<i32>{}, TMaybe<i32>{0}, TMaybe<i32>{}},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TestFieldBothWayPasstroughtAndArg) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i32>::Id));
-    const auto tupleType = pb.NewTupleType({dataType, dataType, dataType});
-
-    const auto data1 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(1)), pb.NewOptional(pb.NewDataLiteral<i32>(-5)), pb.NewOptional(pb.NewDataLiteral<i32>(-6))});
-    const auto data2 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(2)), pb.NewOptional(pb.NewDataLiteral<i32>(-4)), pb.NewOptional(pb.NewDataLiteral<i32>(-7))});
-    const auto data3 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(3)), pb.NewOptional(pb.NewDataLiteral<i32>(-7)), pb.NewOptional(pb.NewDataLiteral<i32>(-8))});
-    const auto data4 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(4)), pb.NewEmptyOptional(dataType), pb.NewOptional(pb.NewDataLiteral<i32>(-9))});
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3, data4});
+    using TTuple = std::tuple<TMaybe<i32>, TMaybe<i32>, TMaybe<i32>>;
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TTuple>{
+                                                               {TMaybe<i32>{1}, TMaybe<i32>{-5}, TMaybe<i32>{-6}},
+                                                               {TMaybe<i32>{2}, TMaybe<i32>{-4}, TMaybe<i32>{-7}},
+                                                               {TMaybe<i32>{3}, TMaybe<i32>{-7}, TMaybe<i32>{-8}},
+                                                               {TMaybe<i32>{4}, TMaybe<i32>{}, TMaybe<i32>{-9}},
+                                                           });
 
     const auto pgmReturn = pb.Collect(pb.NarrowMap(pb.WideChain1Map(pb.ExpandMap(pb.ToFlow(list),
                                                                                  [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
@@ -229,44 +157,27 @@ Y_UNIT_TEST_LLVM(TestFieldBothWayPasstroughtAndArg) {
                                                    [&](TRuntimeNode::TList items) -> TRuntimeNode { return pb.NewTuple(items); }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), -5);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 7);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 5);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), -4);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 12);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 4);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), -7);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 17);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(2).template Get<i32>(), 7);
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT(!item.GetElement(0));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 22);
-    UNIT_ASSERT(!item.GetElement(2));
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TTuple>{
+                                                          {TMaybe<i32>{-5}, TMaybe<i32>{7}, TMaybe<i32>{5}},
+                                                          {TMaybe<i32>{-4}, TMaybe<i32>{12}, TMaybe<i32>{4}},
+                                                          {TMaybe<i32>{-7}, TMaybe<i32>{17}, TMaybe<i32>{7}},
+                                                          {TMaybe<i32>{}, TMaybe<i32>{22}, TMaybe<i32>{}},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TestDotCalculateUnusedField) {
     TSetup<LLVM> setup;
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    const auto dataType = pb.NewOptionalType(pb.NewDataType(NUdf::TDataType<i32>::Id));
-    const auto tupleType = pb.NewTupleType({dataType, dataType, dataType});
-    const auto null = pb.NewEmptyOptional(dataType);
+    using TTuple = std::tuple<TMaybe<i32>, TMaybe<i32>, TMaybe<i32>>;
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TTuple>{
+                                                               {TMaybe<i32>{1}, TMaybe<i32>{}, TMaybe<i32>{-1}},
+                                                               {TMaybe<i32>{2}, TMaybe<i32>{}, TMaybe<i32>{-2}},
+                                                               {TMaybe<i32>{3}, TMaybe<i32>{}, TMaybe<i32>{-3}},
+                                                               {TMaybe<i32>{4}, TMaybe<i32>{}, TMaybe<i32>{-4}},
+                                                           });
 
-    const auto data1 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(1)), null, pb.NewOptional(pb.NewDataLiteral<i32>(-1))});
-    const auto data2 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(2)), null, pb.NewOptional(pb.NewDataLiteral<i32>(-2))});
-    const auto data3 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(3)), null, pb.NewOptional(pb.NewDataLiteral<i32>(-3))});
-    const auto data4 = pb.NewTuple(tupleType, {pb.NewOptional(pb.NewDataLiteral<i32>(4)), null, pb.NewOptional(pb.NewDataLiteral<i32>(-4))});
-
-    const auto list = pb.NewList(tupleType, {data1, data2, data3, data4});
-
-    const auto landmine = pb.NewDataLiteral<NUdf::EDataSlot::Utf8>("Veszély! Aknák!");
+    const auto landmine = NTest::ConvertValueToLiteralNode(pb, TUtf8{"Veszély! Aknák!"});
 
     const auto pgmReturn = pb.FromFlow(pb.NarrowMap(pb.WideChain1Map(pb.ExpandMap(pb.ToFlow(list),
                                                                                   [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
@@ -276,21 +187,12 @@ Y_UNIT_TEST_LLVM(TestDotCalculateUnusedField) {
 
     const auto graph = setup.BuildGraph(pgmReturn);
     const auto iterator = graph->GetValue();
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(NUdf::EFetchStatus::Ok == iterator.Fetch(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 1);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), -1);
-    UNIT_ASSERT(NUdf::EFetchStatus::Ok == iterator.Fetch(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 3);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 2);
-    UNIT_ASSERT(NUdf::EFetchStatus::Ok == iterator.Fetch(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 6);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), -6);
-    UNIT_ASSERT(NUdf::EFetchStatus::Ok == iterator.Fetch(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(0).template Get<i32>(), 10);
-    UNIT_ASSERT_VALUES_EQUAL(item.GetElement(1).template Get<i32>(), 24);
-    UNIT_ASSERT(NUdf::EFetchStatus::Finish == iterator.Fetch(item));
-    UNIT_ASSERT(NUdf::EFetchStatus::Finish == iterator.Fetch(item));
+    AssertUnboxedValueElementEqual(iterator, TUnboxedValueComparatorStreamView<std::tuple<i32, i32>>({
+                                                 {1, -1},
+                                                 {3, 2},
+                                                 {6, -6},
+                                                 {10, 24},
+                                             }));
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideChain1MapTest)
 

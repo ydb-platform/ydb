@@ -1,8 +1,11 @@
 #include "kqp_rbo_physical_query_builder.h"
 
+#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_context.h>
+#include <ydb/core/kqp/opt/rbo/physical_conversion/kqp_rbo_physical_convertion_utils.h>
+#include <ydb/core/kqp/opt/rbo/traces/kqp_rbo_yql_ast_trace.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 #include <ydb/library/yql/dq/opt/dq_opt_build.h>
 #include <ydb/library/yql/dq/opt/dq_opt_peephole.h>
@@ -11,11 +14,102 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 
+#include <cctype>
+#include <optional>
+#include <sstream>
+
 namespace NKikimr::NKqp {
 
 using namespace NYql;
 using namespace NYql::NNodes;
 using namespace NKikimr;
+
+namespace {
+
+std::string TraceRootId(const std::string& title) {
+    std::string id = "physical-ast";
+    for (const char ch : title) {
+        id += (std::isalnum(static_cast<unsigned char>(ch)) ? ch : '-');
+    }
+    return id;
+}
+
+std::string ToStdString(TStringBuf value) {
+    return std::string(value.data(), value.size());
+}
+
+std::string FormatExprForTrace(const TExprNode::TPtr& node, TExprContext& ctx) {
+    if (!node) {
+        return {};
+    }
+
+    return ToStdString(KqpExprToPrettyString(*node, ctx));
+}
+
+std::string FormatPhysicalStagesForTrace(const TVector<TExprNode::TPtr>& stages, TExprContext& ctx) {
+    std::ostringstream out;
+    for (size_t i = 0; i < stages.size(); ++i) {
+        if (i) {
+            out << "\n";
+        }
+        out << "----- Stage " << i << " -----\n"
+            << FormatExprForTrace(stages[i], ctx)
+            << "\n";
+    }
+
+    return out.str();
+}
+
+void AddAstInfoTabs(
+    optimizer_trace::Trace::Tile& tile,
+    const std::optional<optimizer_trace::Widget>& linkGraph,
+    const std::string& text)
+{
+    if (linkGraph) {
+        tile.info().tab("dag-links", "DAG links")
+            .widget(*linkGraph);
+    }
+    if (!text.empty()) {
+        tile.info().tab("yql-ast-text", "YQL AST text")
+            .widget(optimizer_trace::Widget::unwrappedText("Regular YQL AST", text, true));
+    }
+}
+
+void SubmitPhysicalAstTrace(TRBOContext& rboCtx, const std::string& title, NYqlAstTrace::TBuildResult astTrace, std::string text) {
+    if (!rboCtx.NeedToLog()) {
+        return;
+    }
+
+    auto& tile = rboCtx.TraceLog.currentStage().tree(title, astTrace.Root);
+    AddAstInfoTabs(tile, astTrace.LinkGraph, text);
+    rboCtx.TraceLog.Submit(tile);
+}
+
+void SubmitPhysicalStagesTrace(TRBOContext& rboCtx, const std::string& title, const TVector<TExprNode::TPtr>& stages) {
+    if (!rboCtx.NeedToLog()) {
+        return;
+    }
+
+    SubmitPhysicalAstTrace(
+        rboCtx,
+        title,
+        NYqlAstTrace::BuildStageListTreeWithInfo(stages, TraceRootId(title)),
+        FormatPhysicalStagesForTrace(stages, rboCtx.ExprCtx));
+}
+
+void SubmitPhysicalExprTrace(TRBOContext& rboCtx, const std::string& title, const TExprNode::TPtr& node) {
+    if (!rboCtx.NeedToLog() || !node) {
+        return;
+    }
+
+    SubmitPhysicalAstTrace(
+        rboCtx,
+        title,
+        NYqlAstTrace::BuildExprTreeWithInfo(node, TraceRootId(title)),
+        FormatExprForTrace(node, rboCtx.ExprCtx));
+}
+
+} // anonymous namespace
 
 TPhysicalQueryBuilder::TPhysicalQueryBuilder(TOpRoot& root, TStageGraph&& graph, THashMap<ui32, TExprNode::TPtr>&& stages, THashMap<ui32, TVector<TExprNode::TPtr>>&& stageArgs,
     THashMap<ui32, TPositionHandle>&& stagePos, TRBOContext& rboCtx)
@@ -29,9 +123,14 @@ TPhysicalQueryBuilder::TPhysicalQueryBuilder(TOpRoot& root, TStageGraph&& graph,
 
 TExprNode::TPtr TPhysicalQueryBuilder::BuildPhysicalQuery() {
     auto phyStages = BuildPhysicalStageGraph();
+    SubmitPhysicalStagesTrace(RBOCtx, "After physical stage graph build", phyStages);
     phyStages = EnableWideChannelsPhysicalStages(std::move(phyStages));
+    SubmitPhysicalStagesTrace(RBOCtx, "After wide channel rewrite", phyStages);
     phyStages = PeepHoleOptimizePhysicalStages(std::move(phyStages));
-    return BuildPhysicalQuery(std::move(phyStages));
+    SubmitPhysicalStagesTrace(RBOCtx, "After physical peephole", phyStages);
+    auto physicalQuery = BuildPhysicalQuery(std::move(phyStages));
+    SubmitPhysicalExprTrace(RBOCtx, "Final physical query", physicalQuery);
+    return physicalQuery;
 }
 
 TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
@@ -113,10 +212,15 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::BuildPhysicalStageGraph() {
     Y_ENSURE(!stageIds.empty());
     const auto maybeFinalStage = finalizedStages.at(stageIds.back());
     const auto finalStage = GetFinalStage(maybeFinalStage);
+    const bool needFinalNarrowing = NeedFinalNarrowing();
+    const auto finalResultStage = needFinalNarrowing ? BuildFinalNarrowStage(finalStage) : finalStage;
     if (finalStage.Get() != maybeFinalStage.Get()) {
-        phyStages.push_back(finalStage);
+        phyStages.push_back(finalResultStage);
+    } else if (needFinalNarrowing) {
+        Y_ENSURE(!phyStages.empty());
+        Y_ENSURE(phyStages.back().Get() == finalStage.Get());
+        phyStages.back() = finalResultStage;
     }
-    phyStages.push_back(BuildFinalNarrowStage(finalStage));
 
     return phyStages;
 }
@@ -174,6 +278,21 @@ bool TPhysicalQueryBuilder::IsSingleTaskConnection(const TExprBase& input) const
     return input.Maybe<TDqCnUnionAll>() || input.Maybe<TDqCnMerge>();
 }
 
+bool TPhysicalQueryBuilder::NeedFinalNarrowing() {
+    const auto outputIUs = Root.GetInput()->GetOutputIUs();
+    if (outputIUs.size() != Root.ColumnOrder.size()) {
+        return true;
+    }
+
+    for (ui32 i = 0; i < Root.ColumnOrder.size(); ++i) {
+        if (outputIUs[i] != TInfoUnit(Root.ColumnOrder[i])) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 TExprNode::TPtr TPhysicalQueryBuilder::GetFinalStage(const TExprNode::TPtr& stage) const {
     auto& ctx = RBOCtx.ExprCtx;
     TExprNode::TPtr finalStage;
@@ -221,51 +340,25 @@ TExprNode::TPtr TPhysicalQueryBuilder::GetFinalStage(const TExprNode::TPtr& stag
 
 TExprNode::TPtr TPhysicalQueryBuilder::BuildFinalNarrowStage(const TExprNode::TPtr& stage) const {
     auto& ctx = RBOCtx.ExprCtx;
-    const auto pos = Root.Pos;
+    const auto dqStage = TDqPhyStage(stage);
 
-    // clang-format off
-    auto input = Build<TDqCnUnionAll>(ctx, pos)
-        .Output()
-            .Stage(stage)
-            .Index().Build("0")
-        .Build()
-    .Done().Ptr();
-
-    auto programArg = Build<TCoArgument>(ctx, pos)
-        .Name("final_result_arg")
-    .Done().Ptr();
-
-    auto rowArg = Build<TCoArgument>(ctx, pos)
-        .Name("final_result_row")
-    .Done().Ptr();
-    // clang-format on
-
-    TVector<TExprBase> items;
+    TVector<TInfoUnit> finalColumns;
+    finalColumns.reserve(Root.ColumnOrder.size());
     for (const auto& column : Root.ColumnOrder) {
-        // clang-format off
-        auto tuple = Build<TCoNameValueTuple>(ctx, pos)
-            .Name().Build(column)
-            .Value<TCoMember>()
-                .Struct(rowArg)
-                .Name().Build(column)
-            .Build()
-        .Done();
-        // clang-format on
-        items.push_back(tuple);
+        finalColumns.emplace_back(column);
     }
 
+    const auto narrowBody =
+        NPhysicalConvertionUtils::ExtractMembers(dqStage.Program().Body().Ptr(), ctx, std::move(finalColumns));
+
     // clang-format off
-    auto narrowBody = Build<TCoMap>(ctx, pos)
-        .Input(programArg)
-        .Lambda<TCoLambda>()
-            .Args({rowArg})
-            .Body<TCoAsStruct>()
-                .Add(items)
-            .Build()
+    return Build<TDqPhyStage>(ctx, stage->Pos())
+        .InitFrom(dqStage)
+        .Program()
+            .Args(dqStage.Program().Args())
+            .Body(narrowBody)
         .Build()
     .Done().Ptr();
-
-    return BuildDqPhyStage({input}, {programArg}, narrowBody, NYql::NDq::TDqStageSettings().BuildNode(ctx, pos), ctx, pos);
     // clang-format on
 }
 

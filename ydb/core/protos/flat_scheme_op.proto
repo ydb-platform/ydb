@@ -117,6 +117,9 @@ message TColumnDescription {
     // operation.
     optional bool IsBuildInProgress = 11 [default = false];
     optional TColumnCompression Compression = 13;
+    // flag that indicates that SET NOT NULL operation is currently in progress
+    // for this column (full scan is running to verify no nulls exist).
+    optional bool SetNotNullInProgress = 14 [default = false];
 }
 
 message TStorageSettings {
@@ -211,6 +214,7 @@ message TPartitionConfig {
     optional uint64 KeepSnapshotTimeout = 25; // milliseconds
     reserved 26; // deprecated -> ByKeyFilterPrefixes
     repeated TByKeyFilterPrefix ByKeyFilterPrefixes = 27; // Bloom filters on PK prefixes
+    repeated uint32 DropByKeyFilterPrefixLengths = 28; // Bloom filter prefix lengths to drop
 }
 
 message TByKeyFilterPrefix {

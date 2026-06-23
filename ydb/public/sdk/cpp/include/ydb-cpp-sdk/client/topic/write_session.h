@@ -98,6 +98,10 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     FLUENT_SETTING_DEFAULT(ECodec, Codec, ECodec::GZIP);
     FLUENT_SETTING_DEFAULT(int32_t, CompressionLevel, 4);
 
+    //! Inner compression for Kafka record batch payload when Codec is KAFKA_BATCH.
+    //! Allowed values: not set (no inner compression), GZIP, ZSTD.
+    FLUENT_SETTING_OPTIONAL(ECodec, BatchInnerCodec);
+
     //! Writer will not accept new messages if memory usage exceeds this limit.
     //! Memory usage consists of raw data pending compression and compressed messages being sent.
     FLUENT_SETTING_DEFAULT(uint64_t, MaxMemoryUsage, 20_MB);
@@ -122,10 +126,13 @@ struct TWriteSessionSettings : public TRequestSettings<TWriteSessionSettings> {
     //! but for no longer than BatchFlushInterval.
     //! Upon reaching FlushInterval or FlushSize limit, all messages will be written with one batch.
     //! Greatly increases performance for small messages.
-    //! Setting either value to zero means immediate write with no batching. (Unrecommended, especially for clients
-    //! sending small messages at high rate).
-    FLUENT_SETTING_OPTIONAL(TDuration, BatchFlushInterval);
+    //! Zero BatchFlushInterval or BatchFlushSizeBytes disables the corresponding limit (immediate flush).
+    FLUENT_SETTING_DEFAULT(TDuration, BatchFlushInterval, TDuration::Seconds(1));
     FLUENT_SETTING_OPTIONAL(uint64_t, BatchFlushSizeBytes);
+
+    //! Max number of logical messages packed into a single write block.
+    //! Values greater than 1 are sent as a single batch block.
+    FLUENT_SETTING_DEFAULT(uint32_t, BatchFlushMessageCount, 1);
 
     FLUENT_SETTING_DEFAULT(TDuration, ConnectTimeout, TDuration::Seconds(30));
 

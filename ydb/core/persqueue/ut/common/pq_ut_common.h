@@ -504,6 +504,7 @@ struct TPQCmdReadSettings : public TPQCmdSettingsBase {
     ui64 DirectReadId = 0;
     i64 LastOffset = 0;
     TActorId Pipe;
+    bool CanReadBatches = false;
 
     ui64* SizeLag = nullptr;
 

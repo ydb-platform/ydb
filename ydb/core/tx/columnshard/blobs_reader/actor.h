@@ -1,6 +1,6 @@
 #pragma once
 
-#include "events.h"
+#include "retry_state.h"
 #include "task.h"
 
 #include <ydb/core/tx/columnshard/blob.h>
@@ -14,6 +14,9 @@ namespace NKikimr::NOlap::NBlobOperations::NRead {
 class TActor: public TActorBootstrapped<TActor> {
 private:
     std::shared_ptr<ITask> Task;
+    TRetryState RetryState;
+
+    void HandleRetryTimer();
 
 public:
     static TAtomicCounter WaitingBlobsCount;
@@ -27,6 +30,7 @@ public:
         TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("event_type", ev->GetTypeName());
         switch (ev->GetTypeRewrite()) {
             hFunc(NBlobCache::TEvBlobCache::TEvReadBlobRangeResult, Handle);
+            cFunc(TEvents::TSystem::Wakeup, HandleRetryTimer);
             default:
                 AFL_VERIFY(false);
         }

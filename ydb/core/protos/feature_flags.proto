@@ -197,7 +197,7 @@ message TFeatureFlags {
     optional bool EnableChangefeedsImport = 170 [default = true];
     optional bool EnablePermissionsExport = 171 [default = true];
     optional bool EnableDataErasure = 172 [default = false];
-    optional bool EnableShowCreate = 173 [default = true];
+    optional bool EnableShowCreate = 173 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableChangefeedsExport = 174 [default = true];
     optional bool EnableKafkaNativeBalancing = 175 [default = true];
     optional bool EnableTabletRestartOnUnhandledExceptions = 176 [default = true];
@@ -233,7 +233,7 @@ message TFeatureFlags {
     optional bool EnableStreamingQueries = 206 [default = true];
     optional bool EnableTinyDisks = 207 [default = false];
     optional bool EnableMetricsLevel = 208 [default = true];
-    optional bool EnableCompileCacheView = 209 [default = false];
+    optional bool EnableCompileCacheView = 209 [default = true];
     optional bool EnableSecureScriptExecutions = 210 [default = false];
     optional bool EnableColumnshardBool = 211 [default = true];
     optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
@@ -320,4 +320,8 @@ message TFeatureFlags {
     optional bool EnableLocalIndexAsSchemeObject = 278 [default = true];
     optional bool EnableDataShardDetailedMetrics = 279 [default = false];
     optional bool EnableCompactFulltextIndex = 280 [default = false];
+    optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
+    optional bool EnableFulltextIndexPrefix = 282 [default = false];
+    optional bool EnableAccessServiceV2Interface = 283 [default = false, (RequireRestart) = true];
+    optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
 }

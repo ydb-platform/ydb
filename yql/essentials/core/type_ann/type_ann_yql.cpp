@@ -89,6 +89,33 @@ TVector<ui32> GroupingSetsSortedNotNullIndexes(const TExprNode& groupingSets) {
     return indexes;
 }
 
+bool IsEmptyGroupingSetPresent(const TExprNode& groupingSets) {
+    for (const auto& component : groupingSets.Children()) {
+        bool hasEmptySet = AnyOf(component->Children(), [](const auto& set) {
+            return set->ChildrenSize() == 0;
+        });
+
+        if (!hasEmptySet) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+bool IsOptionalAggregation(const TExprNode::TPtr& options) {
+    TExprNode::TPtr groupSets = GetSetting(*options, "group_sets");
+    TExprNode::TPtr groupBy = GetSetting(*options, "group_by");
+    if (!groupBy) {
+        groupBy = GetSetting(*options, "group_exprs");
+    }
+
+    const bool hasGroupingKey = groupBy && 0 < groupBy->Tail().ChildrenSize();
+    const bool hasEmptyGroupingSet = groupSets && IsEmptyGroupingSetPresent(groupSets->Tail());
+
+    return !(hasGroupingKey && !hasEmptyGroupingSet);
+}
+
 TMaybe<IGraphTransformer::TStatus> TryFinishYqlTypeSlot(
     const TExprNode::TPtr& slot,
     const TExprNode::TPtr& input,
@@ -330,12 +357,7 @@ IGraphTransformer::TStatus PromoteYqlAggOptions(
         return IGraphTransformer::TStatus::Ok;
     }
 
-    TExprNode::TPtr groupBy = GetSetting(*options, "group_by");
-    if (!groupBy) {
-        groupBy = GetSetting(*options, "group_exprs");
-    }
-
-    if (groupBy && 0 < groupBy->Tail().ChildrenSize()) {
+    if (!IsOptionalAggregation(options)) {
         return IGraphTransformer::TStatus::Ok;
     }
 
@@ -350,11 +372,11 @@ IGraphTransformer::TStatus PromoteYqlAggOptions(
         }
 
         TExprNode::TPtr options = node->ChildPtr(1);
-        if (GetSetting(*options, "nokey")) {
+        if (GetSetting(*options, "as_optional")) {
             return node;
         }
 
-        options = AddSetting(*options, node->Pos(), "nokey", /*value=*/nullptr, ctx);
+        options = AddSetting(*options, node->Pos(), "as_optional", /*value=*/nullptr, ctx);
         return ctx.ChangeChild(*node, 1, std::move(options));
     }, ctx.Expr, settings);
 
@@ -560,7 +582,7 @@ IGraphTransformer::TStatus YqlAggWrapper(
             if (!EnsureTupleSize(*setting, 1, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
-        } else if (content == "nokey") {
+        } else if (content == "as_optional") {
             if (!EnsureTupleSize(*setting, 1, ctx.Expr)) {
                 return IGraphTransformer::TStatus::Error;
             }
@@ -611,20 +633,11 @@ IGraphTransformer::TStatus YqlAggWrapper(
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!isDefault && GetSetting(*settings, "nokey")) {
+    if (!isDefault && GetSetting(*settings, "as_optional")) {
         // clang-format off
         result = ctx.Expr.Builder(input->Pos())
-            .Callable("MatchType")
+            .Callable("AsOptionalType")
                 .Add(0, result)
-                .Atom(1, "Optional")
-                .Lambda(2)
-                    .Set(result)
-                .Seal()
-                .Lambda(3)
-                    .Callable("OptionalType")
-                        .Add(0, result)
-                    .Seal()
-                .Seal()
             .Seal()
             .Build();
         // clang-format on

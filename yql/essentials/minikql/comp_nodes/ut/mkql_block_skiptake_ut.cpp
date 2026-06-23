@@ -3,6 +3,8 @@
 #include <yql/essentials/minikql/arrow/arrow_defs.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_codegen.h> // Y_IGNORE
+#include <yql/essentials/minikql/comp_nodes/ut/mkql_program_builder_test_utils.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 #include <arrow/array/builder_primitive.h>
 
@@ -107,9 +109,9 @@ TRuntimeNode MakeFlow(TSetup<LLVM>& setup) {
     TCallableBuilder callableBuilder(*setup.Env, "TestBlockFlow",
                                      pb.NewFlowType(
                                          pb.NewMultiType({
-                                             pb.NewBlockType(pb.NewDataType(NUdf::EDataSlot::Uint64), TBlockType::EShape::Many),
-                                             pb.NewBlockType(pb.NewDataType(NUdf::EDataSlot::Uint64), TBlockType::EShape::Scalar),
-                                             pb.NewBlockType(pb.NewDataType(NUdf::EDataSlot::Uint64), TBlockType::EShape::Scalar),
+                                             pb.NewBlockType(NTest::ConvertToMinikqlType<ui64>(pb), TBlockType::EShape::Many),
+                                             pb.NewBlockType(NTest::ConvertToMinikqlType<ui64>(pb), TBlockType::EShape::Scalar),
+                                             pb.NewBlockType(NTest::ConvertToMinikqlType<ui64>(pb), TBlockType::EShape::Scalar),
                                          })));
     return TRuntimeNode(callableBuilder.Build(), false);
 }
@@ -123,7 +125,7 @@ Y_UNIT_TEST_LLVM(TestWideSkipBlocks) {
 
     const auto flow = MakeFlow(setup);
 
-    const auto part = pb.WideSkipBlocks(pb.FromFlow(flow), pb.NewDataLiteral<ui64>(7));
+    const auto part = pb.WideSkipBlocks(pb.FromFlow(flow), NTest::ConvertValueToLiteralNode(pb, ui64(7)));
     const auto plain = pb.ToFlow(pb.WideFromBlocks(part));
 
     const auto singleValueFlow = pb.NarrowMap(plain, [&](TRuntimeNode::TList items) -> TRuntimeNode {
@@ -133,20 +135,7 @@ Y_UNIT_TEST_LLVM(TestWideSkipBlocks) {
     const auto pgmReturn = pb.ForwardList(singleValueFlow);
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 8);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 9);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 10);
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui64>{8, 9, 10});
 }
 
 Y_UNIT_TEST_LLVM(TestWideTakeBlocks) {
@@ -155,7 +144,7 @@ Y_UNIT_TEST_LLVM(TestWideTakeBlocks) {
 
     const auto flow = MakeFlow(setup);
 
-    const auto part = pb.WideTakeBlocks(pb.FromFlow(flow), pb.NewDataLiteral<ui64>(4));
+    const auto part = pb.WideTakeBlocks(pb.FromFlow(flow), NTest::ConvertValueToLiteralNode(pb, ui64(4)));
     const auto plain = pb.ToFlow(pb.WideFromBlocks(part));
 
     const auto singleValueFlow = pb.NarrowMap(plain, [&](TRuntimeNode::TList items) -> TRuntimeNode {
@@ -165,23 +154,7 @@ Y_UNIT_TEST_LLVM(TestWideTakeBlocks) {
     const auto pgmReturn = pb.ForwardList(singleValueFlow);
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 0);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 1);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 2);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 3);
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui64>{0, 1, 2, 3});
 }
 
 Y_UNIT_TEST_LLVM(TestWideTakeSkipBlocks) {
@@ -190,7 +163,7 @@ Y_UNIT_TEST_LLVM(TestWideTakeSkipBlocks) {
 
     const auto flow = MakeFlow(setup);
 
-    const auto part = pb.WideTakeBlocks(pb.WideSkipBlocks(pb.FromFlow(flow), pb.NewDataLiteral<ui64>(3)), pb.NewDataLiteral<ui64>(5));
+    const auto part = pb.WideTakeBlocks(pb.WideSkipBlocks(pb.FromFlow(flow), NTest::ConvertValueToLiteralNode(pb, ui64(3))), NTest::ConvertValueToLiteralNode(pb, ui64(5)));
     const auto plain = pb.ToFlow(pb.WideFromBlocks(part));
 
     const auto singleValueFlow = pb.NarrowMap(plain, [&](TRuntimeNode::TList items) -> TRuntimeNode {
@@ -211,26 +184,7 @@ Y_UNIT_TEST_LLVM(TestWideTakeSkipBlocks) {
     const auto pgmReturn = pb.ForwardList(singleValueFlow);
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    const auto iterator = graph->GetValue().GetListIterator();
-
-    NUdf::TUnboxedValue item;
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 3);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 4);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 6);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 7);
-
-    UNIT_ASSERT(iterator.Next(item));
-    UNIT_ASSERT_VALUES_EQUAL(item.Get<ui64>(), 8);
-
-    UNIT_ASSERT(!iterator.Next(item));
-    UNIT_ASSERT(!iterator.Next(item));
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui64>{3, 4, 6, 7, 8});
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLWideTakeSkipBlocks)
 

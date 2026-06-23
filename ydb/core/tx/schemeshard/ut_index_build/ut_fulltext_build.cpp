@@ -199,6 +199,98 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
         env.TestWaitNotification(runtime, txId);
     }
 
+    // Helpers for the prefixed fulltext index tests below: the table carries a non-key prefix column
+    // ("lang") in front of the text column, and the index is declared on (lang, text). The text column
+    // is always the LAST index column; everything before it is a prefix key column.
+
+    void DoCreatePrefixedTextTable(TTestBasicRuntime& runtime, TTestEnv& env, ui64& txId) {
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "texts"
+            Columns { Name: "id"   Type: "Uint64" }
+            Columns { Name: "lang" Type: "Utf8" }
+            Columns { Name: "text" Type: "String" }
+            Columns { Name: "data" Type: "String" }
+            KeyColumnNames: [ "id" ]
+        )");
+        env.TestWaitNotification(runtime, txId);
+    }
+
+    void DoWriteRowsPrefixed(TTestBasicRuntime& runtime) {
+        auto fnWriteRow = [&] (ui64 id, TString lang, TString text, TString data) {
+            TString writeQuery = Sprintf(R"(
+                (
+                    (let key   '( '('id   (Uint64 '%u) ) ) )
+                    (let row   '( '('lang (Utf8 '%s) )  '('text (String '"%s") )  '('data (String '"%s") ) ) )
+                    (return (AsList (UpdateRow '__user__texts key row) ))
+                )
+            )", id, lang.c_str(), text.c_str(), data.c_str());
+
+            NKikimrMiniKQL::TResult result;
+            TString err;
+            NKikimrProto::EReplyStatus status = LocalMiniKQL(runtime, TTestTxConfig::FakeHiveTablets, writeQuery, result, err);
+            UNIT_ASSERT_VALUES_EQUAL_C(status, NKikimrProto::EReplyStatus::OK, err);
+        };
+
+        fnWriteRow(1, "en", "green apple",              "one");
+        fnWriteRow(2, "en", "red apple and blue apple", "two");
+        fnWriteRow(3, "fr", "yellow apple",             "three");
+        fnWriteRow(4, "fr", "red car",                  "four");
+    }
+
+    Ydb::Table::TableIndex PrefixedFulltextIndexConfig(bool relevance) {
+        // Index on (lang, text): "lang" is the prefix column, "text" is the (last) text column.
+        // The fulltext settings only describe the text column - prefix columns are not analyzed.
+        Ydb::Table::TableIndex index = FulltextIndexConfig(relevance);
+        index.clear_index_columns();
+        index.add_index_columns("lang");
+        index.add_index_columns("text");
+        return index;
+    }
+
+    // Regression test for the crash at build_index__progress.cpp SendUploadFulltextBordersRequest:
+    // building a *prefixed* relevance index (e.g. ALTER TABLE ... ADD INDEX ... ON (lang, text))
+    // hit `Y_ENSURE(buildInfo.IndexColumns.size() == 1)` because IndexColumns is [lang, text].
+    // The borders upload (indexImplDictTable) must use the text column (IndexColumns.back()), not [0].
+    Y_UNIT_TEST(PrefixedRelevanceBuilds) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableFulltextIndexPrefix(true);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::BUILD_INDEX, NLog::PRI_TRACE);
+
+        DoCreatePrefixedTextTable(runtime, env, txId);
+        DoWriteRowsPrefixed(runtime);
+
+        Ydb::Table::TableIndex index = PrefixedFulltextIndexConfig(/*relevance*/ true);
+        const ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
+        env.TestWaitNotification(runtime, buildIndexTx);
+
+        // Without the fix the async build crashes; with it the build completes.
+        {
+            auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
+                Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
+        }
+
+        // The dictionary table (produced by SendUploadFulltextBordersRequest) exists and is populated.
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_idx/indexImplDictTable"), {
+            NLs::PathExist,
+        });
+        auto dictRows = ReadShards(runtime, TTestTxConfig::SchemeShard,
+            "/MyRoot/texts/fulltext_idx/indexImplDictTable").at(0);
+        Cerr << "indexImplDictTable rows: " << dictRows << "\n";
+        // "apple" appears in the corpus, so the dictionary borders must contain it.
+        UNIT_ASSERT_C(dictRows.Contains("apple"), "indexImplDictTable missing tokens: " << dictRows);
+
+        // The posting impl-table is keyed with the prefix column prepended before the token.
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts/fulltext_idx/indexImplTable"), {
+            NLs::PathExist,
+        });
+    }
+
     Y_UNIT_TEST(DropTableWithFlatRelevance) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
@@ -633,6 +725,129 @@ Y_UNIT_TEST_SUITE(FulltextIndexBuildTest) {
                 { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
                 /*ensureNoOther=*/ true),
         });
+    }
+
+    Y_UNIT_TEST(RejectDropRowIdUniqueIndexUsedByFulltext) {
+        // The auto-provisioned unique index over __ydb_row_id must not be droppable while a fulltext
+        // index resolves its documents through it - dropping it would orphan every posting entry. Once
+        // the dependent fulltext index is gone, the unique index can be dropped.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableAutoProvisionFlags(runtime);
+        ui64 txId = 100;
+
+        DoCreateCustomPkTextTable(runtime, env, txId);
+        DoWriteRowsCustomPk(runtime);
+
+        Ydb::Table::TableIndex index = FulltextIndexConfig(/*relevance*/ false);
+        const ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
+        env.TestWaitNotification(runtime, buildIndexTx);
+        {
+            auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
+                Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
+        }
+
+        const TString uniqueIndexPath = TStringBuilder()
+            << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdUniqueIndexName;
+
+        // Dropping the unique index while the fulltext index depends on it is rejected.
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableName: "texts"
+            IndexName: "%s"
+        )", NTableIndex::NFulltext::RowIdUniqueIndexName),
+            {NKikimrScheme::StatusPreconditionFailed});
+
+        // ... and the unique index is still present and Ready.
+        TestDescribeResult(DescribePrivatePath(runtime, uniqueIndexPath), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+
+        // Drop the dependent fulltext index first ...
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
+            TableName: "texts"
+            IndexName: "fulltext_idx"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // ... now nothing depends on the unique index over __ydb_row_id, so it can be dropped.
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableName: "texts"
+            IndexName: "%s"
+        )", NTableIndex::NFulltext::RowIdUniqueIndexName));
+        env.TestWaitNotification(runtime, txId);
+
+        TestDescribeResult(DescribePrivatePath(runtime, uniqueIndexPath), {
+            NLs::PathNotExist,
+        });
+    }
+
+    Y_UNIT_TEST(DropRowIdColumnAfterRemovingFulltextInfra) {
+        // Once the fulltext index and the unique index over __ydb_row_id are gone, the synthetic
+        // __ydb_row_id column itself can be dropped - and its backing sequence is removed with it.
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        EnableAutoProvisionFlags(runtime);
+        ui64 txId = 100;
+
+        DoCreateCustomPkTextTable(runtime, env, txId);
+        DoWriteRowsCustomPk(runtime);
+
+        Ydb::Table::TableIndex index = FulltextIndexConfig(/*relevance*/ false);
+        const ui64 buildIndexTx = ++txId;
+        TestBuildIndex(runtime, buildIndexTx, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
+        env.TestWaitNotification(runtime, buildIndexTx);
+        {
+            auto op = TestGetBuildIndex(runtime, TTestTxConfig::SchemeShard, "/MyRoot", buildIndexTx);
+            UNIT_ASSERT_VALUES_EQUAL_C(op.GetIndexBuild().GetState(),
+                Ydb::Table::IndexBuildState::STATE_DONE, op.DebugString());
+        }
+
+        const TString rowIdSequencePath = TStringBuilder()
+            << "/MyRoot/texts/" << NTableIndex::NFulltext::RowIdSequenceName;
+
+        // The synthetic column's backing sequence was provisioned as a child of the table.
+        TestDescribeResult(DescribePrivatePath(runtime, rowIdSequencePath), { NLs::PathExist });
+
+        // While the unique index over __ydb_row_id exists, the column is an index key and
+        // cannot be dropped.
+        TestAlterTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            Name: "texts"
+            DropColumns { Name: "%s" }
+        )", NTableIndex::NFulltext::RowIdColumn),
+            {NKikimrScheme::StatusPreconditionFailed});
+
+        // Remove the dependents: the fulltext index, then the unique index over __ydb_row_id.
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", R"(
+            TableName: "texts"
+            IndexName: "fulltext_idx"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropTableIndex(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableName: "texts"
+            IndexName: "%s"
+        )", NTableIndex::NFulltext::RowIdUniqueIndexName));
+        env.TestWaitNotification(runtime, txId);
+
+        // Now __ydb_row_id is an ordinary sequence-backed column: dropping it cascade-drops the
+        // backing sequence in the same operation.
+        TestAlterTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            Name: "texts"
+            DropColumns { Name: "%s" }
+        )", NTableIndex::NFulltext::RowIdColumn));
+        env.TestWaitNotification(runtime, txId);
+
+        // The column is gone from the table ...
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts"), {
+            NLs::CheckColumns("texts", {"pk", "text", "data"}, {NTableIndex::NFulltext::RowIdColumn}, {"pk"}),
+        });
+
+        // ... and its backing sequence was dropped together with it.
+        TestDescribeResult(DescribePrivatePath(runtime, rowIdSequencePath), { NLs::PathNotExist });
     }
 
     Y_UNIT_TEST(AutoProvision_SecondFulltextBuildReusesInfra) {

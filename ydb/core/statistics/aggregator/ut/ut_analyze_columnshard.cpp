@@ -110,7 +110,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         UNIT_ASSERT_VALUES_EQUAL(analyzeResonse->Get()->Record.GetOperationId(), operationId);
 
         AnalyzeStatus(runtime, sender, tableInfo.SaTabletId, operationId, NKikimrStat::TEvAnalyzeStatusResponse::STATUS_NO_OPERATION);
-    }    
+    }
 
     Y_UNIT_TEST(AnalyzeSameOperationId) {
         TTestEnv env(1, 1);
@@ -133,7 +133,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         block.Unblock();
         block.Stop();
-        
+
         auto response1 = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
         UNIT_ASSERT(response1);
         UNIT_ASSERT_VALUES_EQUAL(response1->Get()->Record.GetOperationId(), operationId);
@@ -168,8 +168,8 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
             auto response = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeResponse>(sender);
             UNIT_ASSERT(response);
             UNIT_ASSERT_VALUES_EQUAL(response->Get()->Record.GetOperationId(), GetOperationId(i));
-        }        
-    }    
+        }
+    }
 
     Y_UNIT_TEST(AnalyzeRebootSa) {
         TTestEnv env(1, 1);
@@ -191,6 +191,11 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
 
         runtime.WaitFor("TEvKqpScan", [&]{ return !block.empty(); });
         RebootTablet(runtime, tableInfo.SaTabletId, sender);
+
+        // After restart, the operation must still appear as IN_PROGRESS, not ENQUEUED.
+        AnalyzeStatus(runtime, sender, tableInfo.SaTabletId, "operationId",
+            NKikimrStat::TEvAnalyzeStatusResponse::STATUS_IN_PROGRESS);
+
         block.Unblock();
         block.Stop();
 
@@ -249,7 +254,7 @@ Y_UNIT_TEST_SUITE(AnalyzeColumnshard) {
         UNIT_ASSERT_VALUES_EQUAL(record.GetOperationId(), "operationId");
         UNIT_ASSERT_VALUES_EQUAL(record.GetStatus(), NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR);
         UNIT_ASSERT(!record.GetIssues().empty());
-    }    
+    }
 
     Y_UNIT_TEST(AnalyzeCancel) {
         TTestEnv env(1, 1);

@@ -11,12 +11,16 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 TEraseRequestExecutor::TEraseRequestExecutor(
     NActors::TActorSystem* actorSystem,
+    const TLogTitle& logTitle,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     THostIndex host,
     TEraseHint hint,
     NWilson::TSpan span)
     : ActorSystem(actorSystem)
+    , LogTitle(logTitle.GetChildWithTags(
+          GetCycleCount(),
+          {{"t", "BatchErase"}, {"h", PrintHostIndex(host)}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , Span(std::move(span))
@@ -30,7 +34,8 @@ TEraseRequestExecutor::~TEraseRequestExecutor()
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TEraseRequestExecutor. Reply not sent");
+            "%s Reply not sent",
+            LogTitle.GetWithTime().c_str());
 
         Y_ABORT_UNLESS(false);
     }
@@ -52,6 +57,15 @@ void TEraseRequestExecutor::Run()
         });
 }
 
+TString TEraseRequestExecutor::Print()
+{
+    TStringBuilder result;
+    result << LogTitle.GetWithTime();
+    result << Hint.DebugPrint(true);
+    result << (Promise.IsReady() ? ",Replied" : ",NotReplied");
+    return result;
+}
+
 NThreading::TFuture<TEraseRequestExecutor::TResponse>
 TEraseRequestExecutor::GetFuture() const
 {
@@ -60,24 +74,19 @@ TEraseRequestExecutor::GetFuture() const
 
 void TEraseRequestExecutor::OnEraseResponse(const TDBGEraseResponse& response)
 {
-    TVector<ui64> lsns;
-    lsns.reserve(Hint.Segments.size());
-    for (const auto& segment: Hint.Segments) {
-        lsns.push_back(segment.Lsn);
-    }
-
     if (HasError(response.Error)) {
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TEraseRequestExecutor. Erase failed: %s",
+            "%s Erase failed: %s",
+            LogTitle.GetWithTime().c_str(),
             FormatError(response.Error).c_str());
 
-        Reply({}, std::move(lsns));
+        Reply({}, Hint.MakeLsnVector());
         return;
     }
 
-    Reply(std::move(lsns), {});
+    Reply(Hint.MakeLsnVector(), {});
 }
 
 void TEraseRequestExecutor::Reply(

@@ -1500,15 +1500,11 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
             }
             if (alteredTable->Columns.find(index.index_columns(0)) == alteredTable->Columns.end()) {
                 status = Ydb::StatusIds::BAD_REQUEST;
-                if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
-                    TVector<TString> tableColumnNames;
-                    for(auto& col: alteredTable->Columns) {
-                        tableColumnNames.push_back(col.first);
-                    }
-                    error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames);
-                } else {
-                    error = TStringBuilder() << "Unknown index column: " << index.index_columns(0);
+                TVector<TString> tableColumnNames;
+                for(auto& col: alteredTable->Columns) {
+                    tableColumnNames.push_back(col.first);
                 }
+                error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames);
                 return false;
             }
 

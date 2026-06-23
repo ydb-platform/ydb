@@ -16,19 +16,9 @@
 #include <optional>
 #include <type_traits>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FS_WRAPPER
+
 namespace NKikimr::NWrappers::NExternalStorage {
-
-#define FS_LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
-#define FS_LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
-#define FS_LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
-#define FS_LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
-#define FS_LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::FS_WRAPPER, stream)
-
-#define FS_LOG_T_SAFE(stream) do { if (TlsActivationContext) { FS_LOG_T(stream); } } while (false)
-#define FS_LOG_I_SAFE(stream) do { if (TlsActivationContext) { FS_LOG_I(stream); } } while (false)
-#define FS_LOG_D_SAFE(stream) do { if (TlsActivationContext) { FS_LOG_D(stream); } } while (false)
-#define FS_LOG_W_SAFE(stream) do { if (TlsActivationContext) { FS_LOG_W(stream); } } while (false)
-#define FS_LOG_E_SAFE(stream) do { if (TlsActivationContext) { FS_LOG_E(stream); } } while (false)
 
 namespace {
 
@@ -189,9 +179,9 @@ private:
         auto opts = ClassifyFsError(ex.Status()).value_or(TReplyErrorOpts{});
 
         if (opts.Retryable) {
-            FS_LOG_W(msg);
+            YDB_LOG_WARN(msg);
         } else {
-            FS_LOG_E(msg);
+            YDB_LOG_ERROR(msg);
         }
 
         if (opts.ErrorMessage.empty()) {
@@ -211,7 +201,7 @@ public:
     }
 
     void Bootstrap() {
-        FS_LOG_T("TFsOperationActor Bootstrap called");
+        YDB_LOG_TRACE("TFsOperationActor Bootstrap called");
         Become(&TThis::StateWork);
     }
 
@@ -222,21 +212,27 @@ public:
 
 private:
     void CleanupActiveSessions() {
-        FS_LOG_D_SAFE("TFsOperationActor: cleaning up"
-            << ": active MPU sessions# " << ActiveUploads.size());
+        if (TlsActivationContext) {
+            YDB_LOG_DEBUG("TFsOperationActor: cleaning up active MPU",
+                {"sessions", ActiveUploads.size()});
+        }
         for (auto& [uploadId, session] : ActiveUploads) {
             try {
                 const TString filePath = session.Key;
                 NFs::Remove(filePath);
                 session.File.Close();
 
-                FS_LOG_T_SAFE("TFsOperationActor: closed and deleted incomplete file"
-                    << ": uploadId# " << uploadId
-                    << ", file# " << filePath);
+                if (TlsActivationContext) {
+                    YDB_LOG_TRACE("TFsOperationActor: closed and deleted incomplete file",
+                        {"uploadId", uploadId},
+                        {"file", filePath});
+                }
             } catch (const std::exception& ex) {
-                FS_LOG_W_SAFE("Failed to cleanup MPU session"
-                    << ": uploadId# " << uploadId
-                    << ", error# " << ex.what());
+                if (TlsActivationContext) {
+                    YDB_LOG_WARN("Failed to cleanup MPU session",
+                        {"uploadId", uploadId},
+                        {"error", ex.what()});
+                }
             }
         }
         ActiveUploads.clear();
@@ -245,8 +241,8 @@ private:
 public:
 
     STATEFN(StateWork) {
-        FS_LOG_T("TFsOperationActor StateWork received event type"
-            << ": type# " << ev->GetTypeRewrite());
+        YDB_LOG_TRACE("TFsOperationActor StateWork received event type",
+            {"type", ev->GetTypeRewrite()});
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPutObjectRequest, Handle);
             hFunc(TEvGetObjectRequest, Handle);
@@ -262,8 +258,8 @@ public:
             hFunc(TEvUploadPartCopyRequest, Handle);
             sFunc(NActors::TEvents::TEvPoison, PassAway);
             default:
-                FS_LOG_W("TFsOperationActor StateWork received unknown event type"
-                    << ": type# " << ev->GetTypeRewrite());
+                YDB_LOG_WARN("TFsOperationActor StateWork received unknown event type",
+                    {"type", ev->GetTypeRewrite()});
         }
     }
 
@@ -276,9 +272,9 @@ public:
         const auto& body = ev->Get()->Body;
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
-        FS_LOG_D("PutObject"
-            << ": key# " << key
-            << ", size# " << body.size());
+        YDB_LOG_DEBUG("PutObject",
+            {"key", key},
+            {"size", body.size()});
 
         try {
             TFsPath fsPath(key);
@@ -295,9 +291,9 @@ public:
                 TStringBuilder() << "PutObject failed with system error"
                     << ": key# " << key, ex, key);
         } catch (const std::exception& ex) {
-            FS_LOG_E("PutObject failed"
-                << ": key# " << key
-                << ", error# " << ex.what());
+            YDB_LOG_ERROR("PutObject failed",
+                {"key", key},
+                {"error", ex.what()});
             ReplyError<TEvPutObjectResponse>(ev->Sender, {.ErrorMessage = ex.what()}, key);
         }
     }
@@ -306,8 +302,8 @@ public:
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
-        FS_LOG_D("GetObject"
-            << ": key# " << key);
+        YDB_LOG_DEBUG("GetObject",
+            {"key", key});
 
         try {
             TFile file(key, RdOnly);
@@ -359,9 +355,9 @@ public:
             size_t bytesRead = file.Read(data.begin(), length);
             data.resize(bytesRead);
 
-            FS_LOG_I("GetObject read"
-                << ": bytes# " << bytesRead
-                << ", from# " << key);
+            YDB_LOG_INFO("GetObject read",
+                {"bytes", bytesRead},
+                {"from", key});
 
             Aws::S3::Model::GetObjectResult awsResult;
             awsResult.SetContentLength(bytesRead);
@@ -375,9 +371,9 @@ public:
                 TStringBuilder() << "GetObject failed with system error"
                     << ": key# " << key, ex, key, InvalidRange);
         } catch (const std::exception& ex) {
-            FS_LOG_E("GetObject error"
-                << ": key# " << key
-                << ", error# " << ex.what());
+            YDB_LOG_ERROR("GetObject error",
+                {"key", key},
+                {"error", ex.what()});
             ReplyError<TEvGetObjectResponse>(ev->Sender,
                 {.ErrorMessage = TString("File read error: ") + ex.what()},
                 key, InvalidRange);
@@ -388,16 +384,16 @@ public:
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
-        FS_LOG_D("HeadObject"
-            << ": key# " << key);
+        YDB_LOG_DEBUG("HeadObject",
+            {"key", key});
 
         try {
             TFile file(key, RdOnly | Seq);
             const i64 fileSize = file.GetLength();
 
-            FS_LOG_I("HeadObject"
-                << ": file size# " << fileSize
-                << " for# " << key);
+            YDB_LOG_INFO("HeadObject file",
+                {"size", fileSize},
+                {"for", key});
 
             Aws::S3::Model::HeadObjectResult awsResult;
             awsResult.SetContentLength(fileSize);
@@ -411,9 +407,9 @@ public:
                 TStringBuilder() << "HeadObject failed with system error"
                     << ": key# " << key, ex, key);
         } catch (const std::exception& ex) {
-            FS_LOG_E("HeadObject error"
-                << ": key# " << key
-                << ", error# " << ex.what());
+            YDB_LOG_ERROR("HeadObject error",
+                {"key", key},
+                {"error", ex.what()});
             ReplyError<TEvHeadObjectResponse>(ev->Sender,
                 {.ErrorMessage = TStringBuilder() << "File head error: " << ex.what()}, key);
         }
@@ -422,14 +418,14 @@ public:
     void Handle(TEvDeleteObjectRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
-        FS_LOG_W("DeleteObject: not implemented");
+        YDB_LOG_WARN("DeleteObject: not implemented");
         ReplyError<TEvDeleteObjectResponse>(ev->Sender, {.ErrorMessage = "Not implemented"}, key);
     }
 
     void Handle(TEvCheckObjectExistsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
-        FS_LOG_W("CheckObjectExists: not implemented");
+        YDB_LOG_WARN("CheckObjectExists: not implemented");
         ReplyError<TEvCheckObjectExistsResponse>(ev->Sender, {.ErrorMessage = "Not implemented"}, key);
     }
 
@@ -489,10 +485,10 @@ public:
             ? std::min(request.GetMaxKeys(), DefaultMaxListKeys)
             : DefaultMaxListKeys;
 
-        FS_LOG_D("ListObjects"
-            << ": prefix# " << prefix
-            << ", marker# " << marker
-            << ", maxKeys# " << maxKeys);
+        YDB_LOG_DEBUG("ListObjects",
+            {"prefix", prefix},
+            {"marker", marker},
+            {"maxKeys", maxKeys});
 
         try {
             TFsPath dirPath(prefix);
@@ -533,9 +529,9 @@ public:
                 TStringBuilder() << "ListObjects failed with system error"
                     << ": prefix# " << prefix, ex);
         } catch (const std::exception& ex) {
-            FS_LOG_E("ListObjects failed"
-                << ": prefix# " << prefix
-                << ", error# " << ex.what());
+            YDB_LOG_ERROR("ListObjects failed",
+                {"prefix", prefix},
+                {"error", ex.what()});
             ReplyError<TEvListObjectsResponse>(ev->Sender,
                 {.ErrorMessage = TString("ListObjects error: ") + ex.what()});
         }
@@ -543,7 +539,8 @@ public:
 
     void Handle(TEvDeleteObjectsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
-        FS_LOG_W("DeleteObjects: not implemented, objects count# " << request.GetDelete().GetObjects().size());
+        YDB_LOG_WARN("DeleteObjects: not implemented, objects",
+            {"count", request.GetDelete().GetObjects().size()});
         ReplyError<TEvDeleteObjectsResponse>(ev->Sender, {.ErrorMessage = "Not implemented"});
     }
 
@@ -551,8 +548,8 @@ public:
         const auto& request = ev->Get()->GetRequest();
         const TString originalKey = TString(request.GetKey().data(), request.GetKey().size());
 
-        FS_LOG_D("CreateMultipartUpload"
-            << ": key# " << originalKey);
+        YDB_LOG_DEBUG("CreateMultipartUpload",
+            {"key", originalKey});
 
         try {
             const TString key = GetIncompletePath(originalKey.c_str());
@@ -562,10 +559,9 @@ public:
 
             ActiveUploads.emplace(uploadId, TMultipartUploadSession(key));
 
-            FS_LOG_I("CreateMultipartUpload"
-                << ": key# " << key
-                << ", uploadId# " << uploadId
-                << ", file opened with exclusive lock");
+            YDB_LOG_INFO("CreateMultipartUpload file opened with exclusive lock",
+                {"key", key},
+                {"uploadId", uploadId});
 
             Aws::S3::Model::CreateMultipartUploadResult awsResult;
             awsResult.SetKey(request.GetKey());
@@ -579,9 +575,9 @@ public:
                 TStringBuilder() << "CreateMultipartUpload failed with system error"
                     << ": key# " << originalKey, ex, originalKey);
         } catch (const std::exception& ex) {
-            FS_LOG_E("CreateMultipartUpload failed"
-                << ": key# " << originalKey
-                << ", error# " << ex.what());
+            YDB_LOG_ERROR("CreateMultipartUpload failed",
+                {"key", originalKey},
+                {"error", ex.what()});
             ReplyError<TEvCreateMultipartUploadResponse>(ev->Sender, {.ErrorMessage = ex.what()}, originalKey);
         }
     }
@@ -593,11 +589,11 @@ public:
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
         const int partNumber = request.GetPartNumber();
 
-        FS_LOG_D("UploadPart"
-            << ": key# " << originalKey
-            << ", uploadId# " << uploadId
-            << ", part# " << partNumber
-            << ", size# " << body.size());
+        YDB_LOG_DEBUG("UploadPart",
+            {"key", originalKey},
+            {"uploadId", uploadId},
+            {"part", partNumber},
+            {"size", body.size()});
 
         try {
             const TString key = GetIncompletePath(originalKey.c_str());
@@ -610,7 +606,9 @@ public:
                     const TString errorMsg = TStringBuilder()
                         << "Cannot create new upload session for part " << partNumber
                         << " (uploadId: " << uploadId << "). Session must start with part 1.";
-                    FS_LOG_E("UploadPart: " << errorMsg);
+                    YDB_LOG_ERROR("Cannot create new upload session for part. Session must start with part 1",
+                        {"part", partNumber},
+                        {"uploadId", uploadId});
                     ReplyError<TEvUploadPartResponse>(ev->Sender,
                         {.ErrorMessage = errorMsg, .ErrorType = Aws::S3::S3Errors::INTERNAL_FAILURE},
                         originalKey);
@@ -625,10 +623,10 @@ public:
             session.File.Flush();
             session.TotalSize += body.size();
 
-            FS_LOG_I("UploadPart: written under lock"
-                << ": uploadId# " << uploadId
-                << ", part# " << partNumber
-                << ", total size# " << session.TotalSize);
+            YDB_LOG_INFO("UploadPart: written under lock total",
+                {"uploadId", uploadId},
+                {"part", partNumber},
+                {"size", session.TotalSize});
 
             const TString etag = TStringBuilder() << "\"part" << partNumber << "\"";
 
@@ -644,10 +642,10 @@ public:
                     << ": key# " << originalKey
                     << ", uploadId# " << uploadId, ex, originalKey);
         } catch (const std::exception& ex) {
-            FS_LOG_E("UploadPart failed"
-                << ": key# " << originalKey
-                << ", uploadId# " << uploadId
-                << ", error# " << ex.what());
+            YDB_LOG_ERROR("UploadPart failed",
+                {"key", originalKey},
+                {"uploadId", uploadId},
+                {"error", ex.what()});
             ReplyError<TEvUploadPartResponse>(ev->Sender, {.ErrorMessage = ex.what()}, originalKey);
         }
     }
@@ -657,9 +655,9 @@ public:
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
 
-        FS_LOG_D("CompleteMultipartUpload"
-            << ": key# " << key
-            << ", uploadId# " << uploadId);
+        YDB_LOG_DEBUG("CompleteMultipartUpload",
+            {"key", key},
+            {"uploadId", uploadId});
 
         try {
             const TString incompleteKey = GetIncompletePath(key.c_str());
@@ -683,7 +681,9 @@ public:
                 const TString errorMsg = TStringBuilder()
                     << "Failed to rename " << incompleteKey << " to " << key
                     << ": " << LastSystemErrorText();
-                FS_LOG_E("CompleteMultipartUpload: " << errorMsg);
+                YDB_LOG_ERROR("Failed to rename",
+                    {"incompleteKey", incompleteKey},
+                    {"key", key});
 
                 session.File.Close();
                 NFs::Remove(incompleteKey);
@@ -702,10 +702,11 @@ public:
             FsyncParentDir(key);
             session.File.Close();
 
-            FS_LOG_I("CompleteMultipartUpload"
-                << ": uploadId# " << uploadId
-                << ", total size# " << session.TotalSize
-                << ", file mv from# " << incompleteKey << " to# " << key);
+            YDB_LOG_INFO("CompleteMultipartUpload total file mv",
+                {"uploadId", uploadId},
+                {"size", session.TotalSize},
+                {"from", incompleteKey},
+                {"to", key});
 
             ActiveUploads.erase(it);
 
@@ -723,7 +724,10 @@ public:
                     << ": key# " << key
                     << ", uploadId# " << uploadId, ex, key);
         } catch (const std::exception& ex) {
-            FS_LOG_E("CompleteMultipartUpload failed: key# " << key << ", uploadId# " << uploadId << ", error# " << ex.what());
+            YDB_LOG_ERROR("CompleteMultipartUpload failed",
+                {"key", key},
+                {"uploadId", uploadId},
+                {"error", ex.what()});
             ReplyError<TEvCompleteMultipartUploadResponse>(ev->Sender, {.ErrorMessage = ex.what()}, key);
         }
     }
@@ -733,39 +737,37 @@ public:
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
         const TString uploadId = TString(request.GetUploadId().data(), request.GetUploadId().size());
 
-        FS_LOG_D("AbortMultipartUpload"
-            << ": key# " << key
-            << ", uploadId# " << uploadId);
+        YDB_LOG_DEBUG("AbortMultipartUpload",
+            {"key", key},
+            {"uploadId", uploadId});
 
         try {
             auto it = ActiveUploads.find(uploadId);
             if (it == ActiveUploads.end()) {
-                FS_LOG_W("AbortMultipartUpload"
-                    << ": session not found"
-                    << ": uploadId# " << uploadId);
+                YDB_LOG_WARN("AbortMultipartUpload session not found",
+                    {"uploadId", uploadId});
             } else {
                 auto& session = it->second;
                 const TString filePath = session.Key;
 
                 bool removed = NFs::Remove(filePath);
                 if (!removed) {
-                    FS_LOG_W("AbortMultipartUpload: failed to delete incomplete file"
-                        << ": uploadId# " << uploadId
-                        << ", file# " << filePath);
+                    YDB_LOG_WARN("AbortMultipartUpload: failed to delete incomplete file",
+                        {"uploadId", uploadId},
+                        {"file", filePath});
                 }
                 ActiveUploads.erase(it);
 
-                FS_LOG_I("AbortMultipartUpload"
-                    << ": uploadId# " << uploadId
-                    << ", file deleted, lock released");
+                YDB_LOG_INFO("AbortMultipartUpload file deleted, lock released",
+                    {"uploadId", uploadId});
             }
 
             ReplySuccess<TEvAbortMultipartUploadResponse>(ev->Sender, key);
         } catch (const std::exception& ex) {
-            FS_LOG_E("AbortMultipartUpload failed"
-                << ": key# " << key
-                << ", uploadId# " << uploadId
-                << ", error# " << ex.what());
+            YDB_LOG_ERROR("AbortMultipartUpload failed",
+                {"key", key},
+                {"uploadId", uploadId},
+                {"error", ex.what()});
             ReplyError<TEvAbortMultipartUploadResponse>(ev->Sender, {.ErrorMessage = ex.what()}, key);
         }
     }
@@ -774,7 +776,7 @@ public:
         const auto& request = ev->Get()->GetRequest();
         const TString key = TString(request.GetKey().data(), request.GetKey().size());
 
-        FS_LOG_W("UploadPartCopy: not implemented");
+        YDB_LOG_WARN("UploadPartCopy: not implemented");
         ReplyError<TEvUploadPartCopyResponse>(ev->Sender, {.ErrorMessage = "Not implemented"}, key);
     }
 };
@@ -800,14 +802,14 @@ void TFsExternalStorage::EnsureActor() const {
         actor, TMailboxType::HTSwap, AppData()->IOPoolId);
     ActorCreated = true;
 
-    FS_LOG_I("TFsExternalStorage: Created persistent actor"
-        << ": OperationActorId# " << OperationActorId);
+    YDB_LOG_INFO("TFsExternalStorage: Created persistent actor",
+        {"operationActorId", OperationActorId});
 }
 
 void TFsExternalStorage::Shutdown() {
     if (ActorCreated && TlsActivationContext) {
-        FS_LOG_I("TFsExternalStorage: Shutting down actor"
-            << ": OperationActorId# " << OperationActorId);
+        YDB_LOG_INFO("TFsExternalStorage: Shutting down actor",
+            {"operationActorId", OperationActorId});
         TlsActivationContext->AsActorContext().Send(OperationActorId, new NActors::TEvents::TEvPoison());
         ActorCreated = false;
     }

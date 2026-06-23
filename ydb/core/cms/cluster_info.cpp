@@ -978,7 +978,7 @@ void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> i
     }
 }
 
-void TClusterInfo::FillNodeRoles(const TNodeInfo &node, Ydb::Maintenance::Node &out) {
+void TClusterInfo::FillNodeRoles(const TNodeInfo &node, Ydb::Maintenance::Node &out) const {
     if (node.Services & EService::DynamicNode) {
         out.add_roles(Ydb::Maintenance::Node::COMPUTE);
     } else {

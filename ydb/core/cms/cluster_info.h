@@ -1001,7 +1001,7 @@ public:
 
     // Computes cluster roles for the given node and appends them to the
     // repeated `roles` field of the maintenance Node message.
-    void FillNodeRoles(const TNodeInfo &node, Ydb::Maintenance::Node &out);
+    void FillNodeRoles(const TNodeInfo &node, Ydb::Maintenance::Node &out) const;
 
 private:
     TNodeInfo &NodeRef(ui32 nodeId) const {

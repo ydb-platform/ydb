@@ -6,12 +6,12 @@ How to view current metric values in the [built-in web interface](../../../devop
 
 ## Resource usage metrics {#resources}
 
-| Metric name<br/>Type, units | Description<br/>Labels |
-| --- | --- |
-| `resources.storage.used_bytes`<br/>`IGAUGE`, bytes | Size of user and service data stored in the distributed network storage. `resources.storage.used_bytes` = `resources.storage.table.used_bytes` + `resources.storage.topic.used_bytes`. |
-| `resources.storage.table.used_bytes`<br/>`IGAUGE`, bytes | Size of user and service data stored by tables in the distributed network storage. Service data includes data of primary, [secondary indexes](../../../concepts/glossary.md#secondary-index), [vector indexes](../../../concepts/glossary.md#vector-index), [full-text indexes](../../../concepts/glossary.md#fulltext-index), and [local Bloom indexes](../../../concepts/glossary.md#local-bloom-skip-index). |
-| `resources.storage.topic.used_bytes`<br/>`IGAUGE`, bytes | Size of the distributed network storage used by topics. Equal to the sum of `topic.storage_bytes` values of all topics. |
-| `resources.storage.limit_bytes`<br/>`IGAUGE`, bytes | Limit on the size of user and service data that the database can store in the distributed network storage. |
+| Metric name<br/>Type, units of measurement | Description<br/>Labels |
+| ----- | ----- |
+| `resources.storage.used_bytes`<br/>`IGAUGE`, bytes | The size of user and service data stored in distributed network storage. `resources.storage.used_bytes` = `resources.storage.table.used_bytes` + `resources.storage.topic.used_bytes`. |
+| `resources.storage.table.used_bytes`<br/>`IGAUGE`, bytes | The size of user and service data stored by tables in distributed network storage. Service data includes the data of the primary, [secondary indexes](../../../concepts/glossary.md#secondary-index), [vector indexes](../../../concepts/glossary.md#vector-index), [fulltext indexes](../../../concepts/glossary.md#fulltext-index), and [local Bloom skip indexes](../../../concepts/glossary.md#local-bloom-skip-index). |
+| `resources.storage.topic.used_bytes`<br/>`IGAUGE`, bytes | The size of storage used by topics. This metric sums the `topic.storage_bytes` values of all topics. |
+| `resources.storage.limit_bytes`<br/>`IGAUGE`, bytes | A limit on the size of user and service data that a database can store in distributed network storage. |
 
 ## Common gRPC API metrics {#api}
 

@@ -17,6 +17,7 @@
 - [вторичный индекс](../../../../concepts/glossary.md#secondary-index);
 - [векторный индекс](../../../../concepts/glossary.md#vector-index);
 - [полнотекстовый индекс](../../../../concepts/glossary.md#fulltext-index);
+- [локальный Блум-индекс](../../../../concepts/glossary.md#local-bloom-skip-index);
 - [топик](../../../../concepts/datamodel/topic.md) (только схема).
 
 Для более простого экспорта одиночных строковых и колоночных таблиц в S3-совместимое хранилище данных можно использовать [внешние источники данных](../../../../concepts/datamodel/external_data_source.md). Подробнее см. в статье [{#T}](../../../../concepts/query_execution/federated_query/s3/write_data.md#export-to-s3).

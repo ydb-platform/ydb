@@ -27,6 +27,11 @@ items:
   include:
     mode: link
     path: fulltext-search/toc_p.yaml
+- name: Локальные индексы
+  href: local-indexes/index.md
+  include:
+    mode: link
+    path: local-indexes/toc_p.yaml
 - name: Трансфер
   href: transfer/index.md
   include:

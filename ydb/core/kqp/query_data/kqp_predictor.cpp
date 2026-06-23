@@ -141,6 +141,7 @@ ui32 TStagePredictor::GetPossibleMaxLimitThreads() {
             return Max(usableThreads, static_cast<ui32>(poolState.PossibleMaxLimit));
         }
     }
+
     return usableThreads;
 }
 

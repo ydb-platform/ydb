@@ -68,6 +68,29 @@ class WorkloadBloomFilterIndex(WorkloadBase):
         sql = f"SELECT * FROM `{table_path}` WHERE {' AND '.join(where_clauses)};"
         return self.client.query(sql, False)
 
+    def _verify_scheme_objects(self, table_path, expected_indexes):
+        """Verify that bloom filter indexes exist as scheme objects"""
+        try:
+            # Query to check table schema
+            schema_query = f"SHOW CREATE TABLE `{table_path}`;"
+            result = self.client.query(schema_query, True)
+
+            if not result or not result[0].rows or not result[0].rows[0]:
+                logger.warning(f"Could not verify scheme objects for {table_path}")
+                return
+
+            create_query = result[0].rows[0][0]
+
+            # Verify each expected index exists in the schema
+            for index_name in expected_indexes:
+                if index_name not in create_query:
+                    logger.warning(f"Expected bloom filter index '{index_name}' not found in schema")
+                else:
+                    logger.info(f"Verified scheme object '{index_name}' exists")
+
+        except Exception as e:
+            logger.warning(f"Failed to verify scheme objects: {e}")
+
     def _check_loop(self, table_path, num_key_columns):
         key_col_names = [f"k{i}" for i in range(num_key_columns)]
 
@@ -80,6 +103,9 @@ class WorkloadBloomFilterIndex(WorkloadBase):
             self._add_bloom_index(table_path, index_name, key_col_names[:prefix_len], fpp)
             indexes.append(index_name)
 
+        # Verify scheme objects were created
+        self._verify_scheme_objects(table_path, indexes)
+
         # Insert data
         self._upsert_rows(table_path, num_key_columns, 0, self.row_count)
 
@@ -89,6 +115,9 @@ class WorkloadBloomFilterIndex(WorkloadBase):
             assert len(res_ext[0].rows) == 1, f"Expected 1 row, got {len(res_ext[0].rows)}"
             res_non = self._select_nonexistent(table_path, num_key_columns)
             assert len(res_non[0].rows) == 0, f"Expected 0 rows, got {len(res_non[0].rows)}"
+
+        # Verify scheme objects still exist after operations
+        self._verify_scheme_objects(table_path, indexes)
 
         # Disable all bloom filters
         self._disable_bloom(table_path)

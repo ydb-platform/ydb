@@ -219,6 +219,15 @@ message FulltextIndexSettings {
         //   Tokens: ["cars", "beautifully", "conspired"]
         //   Output: ["car", "beauti", "conspir"]
         optional bool use_filter_snowball = 140;
+
+        // Whether to apply superlemmer suffix replacement to each token
+        // Generalizes lemmas by suffix replacement using a built-in dictionary
+        // Works on UTF-8 text, primarily optimized for Russian
+        // Cannot be used together with use_filter_snowball, use_filter_ngram, or use_filter_edge_ngram
+        // Example:
+        //   Tokens: ["мороженое", "уже"]
+        //   Output: ["мороженый", "узкий"]
+        optional bool use_filter_superlemmer = 141;
     }
 
     // Represents text analyzers settings for a specific column

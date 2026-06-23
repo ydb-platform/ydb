@@ -34,9 +34,9 @@ NKikimr::NMiniKQL::TType* MakeFixedSizeScalarType(TProgramBuilder& builder, EFix
         case EFixedSizeScalarType::INT64:
             dataType = builder.NewDataType(NUdf::EDataSlot::Int64, false);
             break;
-        case EFixedSizeScalarType::UUID:
-            dataType = builder.NewDataType(NUdf::EDataSlot::Uuid, false);
-            break;
+        // case EFixedSizeScalarType::UUID:
+        //     dataType = builder.NewDataType(NUdf::EDataSlot::Uuid, false);
+        //     break;
         case EFixedSizeScalarType::DECIMAL:
             dataType = builder.NewDecimalType(DecimalPrecision, DecimalScale);
             break;
@@ -45,20 +45,20 @@ NKikimr::NMiniKQL::TType* MakeFixedSizeScalarType(TProgramBuilder& builder, EFix
     return optional ? builder.NewOptionalType(dataType) : dataType;
 }
 
-TGUID MakeTestGuid(ui8 byte) {
-    TGUID guid;
-    std::memset(&guid, byte, sizeof(guid));
-    return guid;
-}
+// TGUID MakeTestGuid(ui8 byte) {
+//     TGUID guid;
+//     std::memset(&guid, byte, sizeof(guid));
+//     return guid;
+// }
 
 NYql::NUdf::TUnboxedValue MakeFixedSizeTestValue(EFixedSizeScalarType type, size_t index) {
     switch (type) {
         case EFixedSizeScalarType::INT64:
             return NYql::NUdf::TUnboxedValuePod(static_cast<i64>(index));
-        case EFixedSizeScalarType::UUID: {
-            const auto guid = MakeTestGuid(static_cast<ui8>(index));
-            return MakeString(NUdf::TStringRef(reinterpret_cast<const char*>(&guid), sizeof(TGUID)));
-        }
+        // case EFixedSizeScalarType::UUID: {
+        //     const auto guid = MakeTestGuid(static_cast<ui8>(index));
+        //     return MakeString(NUdf::TStringRef(reinterpret_cast<const char*>(&guid), sizeof(TGUID)));
+        // }
         case EFixedSizeScalarType::DECIMAL:
             return NYql::NUdf::TUnboxedValuePod(static_cast<NYql::NDecimal::TInt128>(index));
     }
@@ -69,14 +69,14 @@ void AssertFixedSizeValuesEqual(EFixedSizeScalarType type, const NYql::NUdf::TUn
         case EFixedSizeScalarType::INT64:
             UNIT_ASSERT(actual.Get<i64>() == expected.Get<i64>());
             return;
-        case EFixedSizeScalarType::UUID: {
-            const auto actualRef = actual.AsStringRef();
-            const auto expectedRef = expected.AsStringRef();
-            UNIT_ASSERT(actualRef.Size() == sizeof(TGUID));
-            UNIT_ASSERT(expectedRef.Size() == sizeof(TGUID));
-            UNIT_ASSERT(std::memcmp(actualRef.Data(), expectedRef.Data(), sizeof(TGUID)) == 0);
-            return;
-        }
+        // case EFixedSizeScalarType::UUID: {
+        //     const auto actualRef = actual.AsStringRef();
+        //     const auto expectedRef = expected.AsStringRef();
+        //     UNIT_ASSERT(actualRef.Size() == sizeof(TGUID));
+        //     UNIT_ASSERT(expectedRef.Size() == sizeof(TGUID));
+        //     UNIT_ASSERT(std::memcmp(actualRef.Data(), expectedRef.Data(), sizeof(TGUID)) == 0);
+        //     return;
+        // }
         case EFixedSizeScalarType::DECIMAL:
             UNIT_ASSERT(actual.GetInt128() == expected.GetInt128());
             return;

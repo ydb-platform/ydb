@@ -291,6 +291,9 @@ struct TDescribeSemaphoreSettings {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+class TDistributedLock;
+struct TDistributedLockSettings;
+
 class TClient {
 public:
     TClient(const TDriver& driver, const TCommonClientSettings& settings = TCommonClientSettings());
@@ -311,6 +314,8 @@ public:
 
     TAsyncDescribeNodeResult DescribeNode(const std::string& path,
         const TDescribeNodeSettings& settings = TDescribeNodeSettings());
+
+    TDistributedLock GetDistributedLock(const TDistributedLockSettings& settings);
 
 private:
     class TImpl;

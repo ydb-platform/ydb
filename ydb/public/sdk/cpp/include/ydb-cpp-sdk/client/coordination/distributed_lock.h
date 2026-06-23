@@ -6,11 +6,17 @@ namespace NCoordination {
     struct TYdbLockException : public TYdbException {
         TYdbLockException(const std::string& message) : TYdbException(message) {}
     };
+    struct TDistributedLockSettings {
+        using TSelf = TDistributedLockSettings;
+        FLUENT_SETTING(std::string, Path);
+        FLUENT_SETTING(std::string, Name);
+        FLUENT_SETTING_DEFAULT(TDuration, Timeout, TDuration::Seconds(5));
+    };
     // Distributed exclusive lock backed by a YDB coordination semaphore.
     // Satisfies BasicLockable (lock/unlock) for std::lock_guard; not a blocking Lockable.
     class TDistributedLock {
     public:
-        TDistributedLock(TClient& client, std::string_view path, std::string_view name, TDuration timeout);
+        TDistributedLock(TClient& client, const TDistributedLockSettings& settings);
         ~TDistributedLock();
         TDistributedLock(const TDistributedLock&) = delete;
         TDistributedLock& operator=(const TDistributedLock&) = delete;
@@ -19,14 +25,10 @@ namespace NCoordination {
         // Throws TYdbLockException on session start failure, acquire timeout, transport
         // error, or contention timeout (timeout bounds the acquire wait).
         void lock();
-
-
         // Same as lock()
         void Acquire();
-
         // noexcept. Undefined behavior if called when the lock is not held (same as std::mutex).
         void unlock() noexcept;
-
         // Same as unlock()
         void Release() noexcept;
         // noexcept. Returns false on any failure without throwing.

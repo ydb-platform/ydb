@@ -56,7 +56,7 @@ The file includes data without any additional information. The `,` character is 
 
 {% note info %}
 
-The `release_date` column in the `series` table has the [Date](../../../../yql/reference/types/primitive.md#datetime) type, so the release date in the imported file has a numeric format. To import values in the [timestamp]{% if lang == "ru" %}(https://ru.wikipedia.org/wiki/ISO_8601){% endif %}{% if lang == "en" %}(https://en.wikipedia.org/wiki/ISO_8601){% endif %} format, use string-type table columns for them. Alternatively, you can import them to a temporary table and convert them to a relevant type.
+The `release_date` column in the `series` table has the [Date](../../../../yql/reference/types/primitive.md#datetime) type, so the release date in the imported file has a numeric format. To import values in the [timestamp](https://en.wikipedia.org/wiki/ISO_8601) format, use string-type table columns for them. Alternatively, you can import them to a temporary table and convert them to a relevant type.
 
 {% endnote %}
 

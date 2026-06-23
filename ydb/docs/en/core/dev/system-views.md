@@ -337,10 +337,6 @@ ORDER BY IntervalEnd desc, CPUCores desc
 
 * `"YYYY-MM-DDTHH:MM:SS.UUUUUUZ"`: Time in the UTC 0 zone (`YYYY` stands for year, `MM`, for month, `DD`, for date, `hh`, for hours, `mm`, for minutes, `ss`, for seconds, and `uuuuuu`, for microseconds). For example, `"2023-01-26T13:00:00.000000Z"`.
 
-## Users, groups, and access rights {#auth}
-
-The following system views contain information about users, access groups, user membership in groups, as well as information about access rights granted to groups or directly to users.
-
 ## History of partitions with broken locks {#top-tli-partitions}
 
 The following system views contain a history of moments with a non-zero number of broken [locks](../contributor/datashard-locks-and-change-visibility.md) `LocksBroken` in individual partitions of DB tables:
@@ -393,7 +389,7 @@ ORDER BY IntervalEnd desc, LocksBroken desc
 
 ## Resource pool information {#resource_pools}
 
-The `resource_pools` system view contains information about [settings](../yql/reference/syntax/create-resource-pool.md#parameters) of [resource pools](../concepts/glossary.md#resource-pool).
+The `resource_pools` system view contains information about settings of [resource pools](../concepts/glossary.md#resource-pool).
 
 System view structure:
 
@@ -403,7 +399,7 @@ System view structure:
 | `ConcurrentQueryLimit` | Maximum number of concurrently executing queries in the resource pool.<br/>Type: `Int32`. |
 | `QueueSize` | Maximum queue size.<br/>Type: `Int32`. |
 | `DatabaseLoadCpuThreshold` | CPU load threshold for the entire database, in percent, after which queries are not sent for execution and remain in the queue.<br/>Type: `Double`. |
-| `ResourceWeight` | [Weights](../dev/resource-consumption-management.md#resources_weight) for distributing resources between pools.<br/>Type: `Double`. |
+| `ResourceWeight` | Weights for distributing resources between pools.<br/>Type: `Double`. |
 | `TotalCpuLimitPercentPerNode` | Percentage of available CPU that all queries on a node in this resource pool can use.<br/>Type: `Double`. |
 | `QueryCpuLimitPercentPerNode` | Percentage of available CPU on a node for a single query in the resource pool.<br/>Type: `Double`. |
 | `QueryMemoryLimitPercentPerNode` | Percentage of available memory on a node that a query in this resource pool can use.<br/>Type: `Double`. |
@@ -432,7 +428,7 @@ WHERE Name = "default";
 
 ## Resource pool classifier information {#resource_pools_classifiers}
 
-The `resource_pools_classifiers` system view contains information about [settings](../yql/reference/syntax/create-resource-pool-classifier.md#parameters) of [resource pool classifiers](../concepts/glossary.md#resource-pool-classifier).
+The `resource_pools_classifiers` system view contains information about settings of [resource pool classifiers](../concepts/glossary.md#resource-pool-classifier).
 
 System view structure:
 

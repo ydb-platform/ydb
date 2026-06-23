@@ -45,6 +45,7 @@ npm install @ydbjs/drizzle-adapter drizzle-orm
   import { YdbDriver, createDrizzle } from '@ydbjs/drizzle-adapter'
 
   const driver = new Driver('grpc://localhost:2136/local')
+  await driver.ready()
   const db = createDrizzle({
     client: new YdbDriver(driver),
   })

@@ -20,16 +20,7 @@
 - No `-j` flag (ya handles parallelism internally)
 - No force rebuild flag
 - Use `2>&1 | tail` for test output
-
-### Build Presets
-
-| Preset | Use Case |
-|--------|----------|
-| `relwithdebinfo` | Default, recommended (uses remote cache) |
-| `release` | Release build |
-| `release-asan` | AddressSanitizer |
-| `release-tsan` | ThreadSanitizer |
-| `release-msan` | MemorySanitizer |
+- Use `./ya make --help` if you need info about flags and build presets
 
 ### Important Build Targets
 
@@ -41,18 +32,6 @@
 ./ya make ydb/apps/ydb --build relwithdebinfo
 ```
 
-## Architecture
-
-- `ydb/` - Main YDB server code
-  - `ydb/apps/` - Executables (ydbd, ydb CLI)
-  - `ydb/core/` - Core database engine (internal)
-  - `ydb/public/lib/` - Public APIs and reusable libraries
-  - `ydb/tests/` - Integration tests
-- `yql/` - YQL (YDB Query Language)
-- `util/` - Utility libraries
-- `library/` - Additional libraries
-- `contrib/` - Contributed/vendored code
-
 ## C++
 
 - Standard: C++20 or earlier
@@ -62,6 +41,7 @@
 Documentation is located in `ydb/docs/en/` (English) and `ydb/docs/ru/` (Russian).
 When exploring code, also check documentation for insights.
 
-## CLI
+## Important
 
-See `ydb/public/lib/ydb_cli/AGENTS.md` for CLI modification instructions
+- Add `AFL_ENSURE` for all your assumptions about code that can be checked in `O(1)`
+- Do not add silent fallbacks. If anything goes wrong don't ignore it and return error.

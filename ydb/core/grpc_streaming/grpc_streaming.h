@@ -225,7 +225,7 @@ private:
         }
 
         YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Stream accepted",
-            {"this", this},
+            {"this", static_cast<void*>(this)},
             {"name", Name},
             {"statusOk", status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false"},
             {"peer", this->GetPeer()});
@@ -242,7 +242,7 @@ private:
         if (!Server->RegisterRequestCtx(this)) {
             // It's unsafe to send replies, so just cancel the request
             YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Dropping request due to shutdown",
-                {"this", this},
+                {"this", static_cast<void*>(this)},
                 {"name", Name});
             this->Context.TryCancel();
             return;
@@ -268,7 +268,7 @@ private:
 
     void OnDone(NYdbGrpc::EQueueEventStatus status) {
         YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Stream done notification",
-            {"this", this},
+            {"this", static_cast<void*>(this)},
             {"name", Name},
             {"statusOk", status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false"},
             {"peer", this->GetPeer()});
@@ -290,7 +290,7 @@ private:
 
     void Cancel() {
         YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Facade cancel",
-            {"this", this},
+            {"this", static_cast<void*>(this)},
             {"name", Name},
             {"peer", this->GetPeer()});
 
@@ -303,7 +303,7 @@ private:
 
     void Attach(TActorId actor) {
         YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Facade attach",
-            {"this", this},
+            {"this", static_cast<void*>(this)},
             {"name", Name},
             {"actor", actor},
             {"peer", this->GetPeer()});
@@ -329,7 +329,7 @@ private:
 
     bool Read() {
         YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Facade read",
-            {"this", this},
+            {"this", static_cast<void*>(this)},
             {"name", Name},
             {"peer", this->GetPeer()});
 
@@ -356,7 +356,7 @@ private:
 
     void OnReadDone(NYdbGrpc::EQueueEventStatus status) {
         YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Read finished",
-            {"this", this},
+            {"this", static_cast<void*>(this)},
             {"name", Name},
             {"statusOk", status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false"},
             {"readInProgress", NYdbGrpc::FormatMessage<TIn>(ReadInProgress->Record, status == NYdbGrpc::EQueueEventStatus::OK)},
@@ -383,7 +383,7 @@ private:
                 Y_DEBUG_ABORT_UNLESS(flags & FlagFinishCalled);
                 if (Flags.compare_exchange_weak(flags, flags & ~FlagRegistered, std::memory_order_acq_rel)) {
                     YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Deregistering request (read done)",
-                        {"this", this},
+                        {"this", static_cast<void*>(this)},
                         {"name", Name},
                         {"peer", this->GetPeer()});
                     Server->DeregisterRequestCtx(this);
@@ -401,7 +401,7 @@ private:
     bool Write(TOut&& message, const grpc::WriteOptions& options = { }, const grpc::Status* status = nullptr) {
         if (status) {
             YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Facade write grpc",
-                {"this", this},
+                {"this", static_cast<void*>(this)},
                 {"name", Name},
                 {"message", NYdbGrpc::FormatMessage<TOut>(message)},
                 {"peer", this->GetPeer()},
@@ -409,7 +409,7 @@ private:
                 {"errorMessage", status->error_message()});
         } else {
             YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Facade write",
-                {"this", this},
+                {"this", static_cast<void*>(this)},
                 {"name", Name},
                 {"message", NYdbGrpc::FormatMessage<TOut>(message)},
                 {"peer", this->GetPeer()});
@@ -465,7 +465,7 @@ private:
 
     void OnWriteDone(NYdbGrpc::EQueueEventStatus status) {
         YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Write finished",
-            {"this", this},
+            {"this", static_cast<void*>(this)},
             {"name", Name},
             {"statusOk", status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false"},
             {"peer", this->GetPeer()});
@@ -520,7 +520,7 @@ private:
 
     bool Finish(const grpc::Status& status) {
         YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Facade finish grpc",
-            {"this", this},
+            {"this", static_cast<void*>(this)},
             {"name", Name},
             {"peer", this->GetPeer()},
             {"errorCode", static_cast<int>(status.error_code())},
@@ -556,7 +556,7 @@ private:
 
     void OnFinishDone(NYdbGrpc::EQueueEventStatus status) {
         YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Stream finished grpc",
-            {"this", this},
+            {"this", static_cast<void*>(this)},
             {"name", Name},
             {"statusOk", status == NYdbGrpc::EQueueEventStatus::OK ? "true" : "false"},
             {"peer", this->GetPeer()},
@@ -594,7 +594,7 @@ private:
         while ((flags & FlagRegistered) && ReadQueue.load() == 0) {
             if (Flags.compare_exchange_weak(flags, flags & ~FlagRegistered, std::memory_order_acq_rel)) {
                 YDB_LOG_DEBUG_CTX_COMP(ActorSystem, LoggerServiceId, "Deregistering request (finish done)",
-                    {"this", this},
+                    {"this", static_cast<void*>(this)},
                     {"name", Name},
                     {"peer", this->GetPeer()});
                 Server->DeregisterRequestCtx(this);

@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
-
+#include <ydb/core/tx/data_events/events.h>
+#include <ydb/core/tx/datashard/datashard.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 
@@ -680,7 +681,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
     Y_UNIT_TEST(StrictSerializable_Basic) {
         TKikimrSettings settings;
         settings.SetEnableStrictSerializableIsolation(true);
-        auto kikimr = DefaultKikimrRunner({}, "", settings);
+        auto kikimr = TKikimrRunner(settings);
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
 
@@ -698,6 +699,181 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([[[100u];["Strict"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    Y_UNIT_TEST(StrictSerializable_RequiresFeatureFlag) {
+        TKikimrSettings settings;
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        auto result = session.ExecuteQuery(R"(
+            UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (100u, "Strict");
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW(
+            NYdb::NQuery::TTxSerializableSettings().Strict(true))).CommitTx()).ExtractValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
+        UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Strict Serializable mode is disabled");
+    }
+
+    Y_UNIT_TEST(StrictSerializable_UsesEvWritePrepare) {
+        TKikimrSettings settings;
+        settings
+            .SetUseRealThreads(false)
+            .SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        bool foundEvWriteWithPrepareMode = false;
+        auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                if (evWrite->Record.OperationsSize() == 1
+                        && evWrite->Record.GetOperations()[0].GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPSERT
+                        && evWrite->Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_PREPARE) {
+                    foundEvWriteWithPrepareMode = true;
+                } else {
+                    UNIT_ASSERT(false);
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto saveObserver = runtime.SetObserverFunc(grab);
+        Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+        auto result = kikimr.RunCall([&] { return session.ExecuteQuery(R"(
+                UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (100u, "Strict");
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW(
+                NYdb::NQuery::TTxSerializableSettings().Strict(true))).CommitTx()).ExtractValueSync();
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(foundEvWriteWithPrepareMode);
+    }
+
+    Y_UNIT_TEST(StrictSerializable_SnapshotTaken) {
+        TKikimrSettings settings;
+        settings
+            .SetUseRealThreads(false)
+            .SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        bool foundReadWithSnapshot = false;
+        auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == NKikimr::TEvDataShard::TEvRead::EventType) {
+                auto& record = ev->Get<NKikimr::TEvDataShard::TEvRead>()->Record;
+                if (record.HasSnapshot()
+                        && record.GetSnapshot().GetStep() != 0
+                        && record.GetSnapshot().GetTxId() != 0) {
+                    foundReadWithSnapshot = true;
+                } else {
+                    UNIT_ASSERT(false);
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto saveObserver = runtime.SetObserverFunc(grab);
+        Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+        auto result = kikimr.RunCall([&] { return session.ExecuteQuery(R"(
+                SELECT * FROM `/Root/KeyValue` WHERE Key = 100u;
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW(
+                NYdb::NQuery::TTxSerializableSettings().Strict(true))).CommitTx()).ExtractValueSync();
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(foundReadWithSnapshot);
+    }
+
+    Y_UNIT_TEST(StrictSerializable_UpdateUsesEvWritePrepare) {
+        TKikimrSettings settings;
+        settings
+            .SetUseRealThreads(false)
+            .SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+
+        bool foundUpdateWithPrepare = false;
+        auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                if (evWrite->Record.OperationsSize() == 1
+                        && evWrite->Record.GetOperations()[0].GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE
+                        && evWrite->Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_PREPARE
+                        && evWrite->Record.GetMvccSnapshot().GetStep() == 0
+                        && evWrite->Record.GetMvccSnapshot().GetTxId() == 0) {
+                    foundUpdateWithPrepare = true;
+                } else {
+                    UNIT_ASSERT(false);
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto saveObserver = runtime.SetObserverFunc(grab);
+        Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+        auto result = kikimr.RunCall([&] { return session.ExecuteQuery(R"(
+                UPDATE `/Root/KeyValue` ON (Key, Value) VALUES (100u, "Updated");
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW(
+                NYdb::NQuery::TTxSerializableSettings().Strict(true))).CommitTx()).ExtractValueSync();
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(foundUpdateWithPrepare);
+    }
+
+    Y_UNIT_TEST(StrictSerializable_InsertUsesEvWritePrepare) {
+        TKikimrSettings settings;
+        settings
+            .SetUseRealThreads(false)
+            .SetEnableStrictSerializableIsolation(true);
+        auto kikimr = TKikimrRunner(settings);
+        auto db = kikimr.GetQueryClient();
+        auto session = kikimr.RunCall([&] { return db.GetSession().GetValueSync().GetSession(); });
+        auto& runtime = *kikimr.GetTestServer().GetRuntime();
+
+        bool foundInsertWithImmediate = false;
+        bool foundPrepare = false;
+        auto grab = [&](TAutoPtr<IEventHandle>& ev) -> auto {
+            if (ev->GetTypeRewrite() == NKikimr::NEvents::TDataEvents::TEvWrite::EventType) {
+                auto* evWrite = ev->Get<NKikimr::NEvents::TDataEvents::TEvWrite>();
+                if (evWrite->Record.OperationsSize() == 0
+                        && evWrite->Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_PREPARE
+                        && evWrite->Record.GetMvccSnapshot().GetStep() == 0
+                        && evWrite->Record.GetMvccSnapshot().GetTxId() == 0) {
+                    foundPrepare = true;
+                } else if (evWrite->Record.OperationsSize() == 1
+                        && evWrite->Record.GetOperations()[0].GetType() == NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT
+                        && evWrite->Record.GetTxMode() == NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE
+                        && evWrite->Record.GetMvccSnapshot().GetStep() == 0
+                        && evWrite->Record.GetMvccSnapshot().GetTxId() == 0) {
+                    foundInsertWithImmediate = true;
+                } else {
+                    UNIT_ASSERT(false);
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto saveObserver = runtime.SetObserverFunc(grab);
+        Y_DEFER { runtime.SetObserverFunc(saveObserver); };
+
+        auto result = kikimr.RunCall([&] { return session.ExecuteQuery(R"(
+                INSERT INTO `/Root/KeyValue` (Key, Value) VALUES (200u, "Inserted");
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW(
+                NYdb::NQuery::TTxSerializableSettings().Strict(true))).CommitTx()).ExtractValueSync();
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        UNIT_ASSERT(foundInsertWithImmediate);
+        UNIT_ASSERT(foundPrepare);
     }
 }
 

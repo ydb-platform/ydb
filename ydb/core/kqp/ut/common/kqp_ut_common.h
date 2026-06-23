@@ -279,15 +279,6 @@ inline TKikimrRunner DefaultKikimrRunner(TVector<NKikimrKqp::TKqpSetting> kqpSet
     return TKikimrRunner{settings};
 }
 
-inline TKikimrRunner DefaultKikimrRunner(TVector<NKikimrKqp::TKqpSetting> kqpSettings,
-    const TString& authToken, const TKikimrSettings& settings)
-{
-    auto modifiedSettings = settings;
-    modifiedSettings.KqpSettings = kqpSettings;
-    modifiedSettings.AuthToken = authToken;
-    return TKikimrRunner{modifiedSettings};
-}
-
 struct TCollectedStreamResult {
     TString ResultSetYson;
     TMaybe<TString> PlanJson;

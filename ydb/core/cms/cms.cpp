@@ -421,7 +421,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         return opts;
     };
 
-     TVector<const TAction*> sysTabletDeferredActions;
+    TVector<const TAction*> sysTabletDeferredActions;
 
     auto processAction = [&](const TAction &action, bool allowDefer) -> bool {
         TActionOptions opts = buildOpts(action);
@@ -748,19 +748,6 @@ bool TCms::CheckActionShutdownNode(const NKikimrCms::TAction &action,
         return false;
     }
 
-    // Keep this check last so that NodeHasRunningSystemTablet is the only reason
-    // the lock was not taken: all other checks above have already passed, meaning
-    // the lock would be granted if not for the running system tablet.
-    // поэтому мы в дальнейшем можем взять лок без лишних проверок
-    if (opts.CapEnabled && ClusterInfo->NodeHasRunningSystemTablet(node.NodeId)) {
-        error.Code = TStatus::DISALLOW_TEMP_SYS_TABLET;
-        error.Reason = TReason(
-            TStringBuilder() << "Node " << node.NodeId
-                << " has a running tablet");
-        error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
-        return false;
-    }
-
     return true;
 }
 
@@ -1033,6 +1020,15 @@ bool TCms::TryToLockNode(const TAction& action,
         && !ClusterInfo->TenantNodesChecker[node.PileId.GetOrElse(0)][node.Tenant]->TryToLockNode(node.NodeId, lockCtx, error.Reason))
     {
         error.Code = TStatus::DISALLOW_TEMP;
+        error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
+        return false;
+    }
+
+    if (opts.CapEnabled && ClusterInfo->NodeHasRunningSystemTablet(node.NodeId)) {
+        error.Code = TStatus::DISALLOW_TEMP_SYS_TABLET;
+        error.Reason = TReason(
+            TStringBuilder() << "Node " << node.NodeId
+                << " has a running tablet");
         error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
         return false;
     }

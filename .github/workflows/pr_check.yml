@@ -1,9 +1,10 @@
 name: PR-check
 # Repo variable TEST_BUILD_TYPES (JSON):
-#   pr_check          — matrix presets for this PR-check workflow
+#   pr_check          — default matrix presets (keep relwithdebinfo + release-asan unless intentional)
 #   postmerge         — matrix presets for the Postmerge workflow
 #   pr_merge_required — presets that must be green (build_* and test_* each) for checks_integrated
 #     If missing, null, or [] → use full pr_check list instead
+# release-tsan / release-msan: separate jobs below, only when PR has run-*-tests labels (not in default matrix).
 # Defaults: see workflow env BUILD_TYPES_JSON below
 on:
   pull_request_target:
@@ -231,6 +232,46 @@ jobs:
       - uses: ./.github/actions/ya_ci_core_build_test
         with:
           build_preset: ${{ matrix.build_preset }}
+          checkout_ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
+  build_and_test_tsan:
+    needs:
+      - check-running-allowed
+    if: >-
+      ${{
+        needs.check-running-allowed.outputs.result == 'true' &&
+        needs.check-running-allowed.outputs.commit_sha != '' &&
+        (
+          contains(github.event.pull_request.labels.*.name, 'run-tsan-tests') ||
+          contains(github.event.pull_request.labels.*.name, 'run-sanitizer-tests')
+        )
+      }}
+    runs-on: [ self-hosted, auto-provisioned, build-preset-release-tsan ]
+    name: Build and test release-tsan
+    timeout-minutes: 660
+    steps:
+      - uses: ./.github/actions/ya_ci_core_build_test
+        with:
+          build_preset: release-tsan
+          checkout_ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
+  build_and_test_msan:
+    needs:
+      - check-running-allowed
+    if: >-
+      ${{
+        needs.check-running-allowed.outputs.result == 'true' &&
+        needs.check-running-allowed.outputs.commit_sha != '' &&
+        (
+          contains(github.event.pull_request.labels.*.name, 'run-msan-tests') ||
+          contains(github.event.pull_request.labels.*.name, 'run-sanitizer-tests')
+        )
+      }}
+    runs-on: [ self-hosted, auto-provisioned, build-preset-release-msan ]
+    name: Build and test release-msan
+    timeout-minutes: 660
+    steps:
+      - uses: ./.github/actions/ya_ci_core_build_test
+        with:
+          build_preset: release-msan
           checkout_ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
   update_integrated_status:
     runs-on: [self-hosted, tiny-worker]

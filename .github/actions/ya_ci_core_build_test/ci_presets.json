@@ -1,5 +1,5 @@
 {
-  "_comment": "Source of truth for CI preset defaults (threads, sizes, timeouts). Bundled copy: .github/actions/ya_ci_core_build_test/ci_presets.json — keep in sync.",
+  "_comment": "Bundled fallback — keep in sync with .github/config/ci_presets.json (source of truth).",
   "relwithdebinfo": {
     "ci": {
       "test_threads": 52,

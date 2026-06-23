@@ -36,7 +36,43 @@ YDB (YQL/SQL) + Python + GitHub Actions + MCP `user-ydb-qa`
 
 ## Key Tables
 
-**Always read `.github/config/ydb_qa_config.json` first** — new tables are added there; do not rely on a hardcoded list.
+**Always read table registry first** — paths live in two places that must stay in sync:
+
+| Where | Used by |
+|-------|---------|
+| `.github/config/ydb_qa_config.json` | Local dev, docs, agents reading the repo |
+| GitHub repo variable **`YDB_QA_CONFIG`** (`vars.YDB_QA_CONFIG` in workflows) | **CI** — analytics workflows pass it to `setup_ci_ydb_service_account_key_file_credentials` → `YDBWrapper` |
+
+Adding a new table alias: update **both** the JSON file in the repo **and** the `YDB_QA_CONFIG` variable (Settings → Secrets and variables → Actions → Variables, or `gh variable set`).
+
+**Agents with `gh` access** — compare local file vs CI var before/after table changes:
+
+```bash
+# Read CI config (JSON string)
+gh api repos/ydb-platform/ydb/actions/variables/YDB_QA_CONFIG --jq '.value' | python3 -m json.tool
+
+# Diff table aliases: local repo file vs GitHub variable
+python3 <<'PY'
+import json, subprocess
+local = json.load(open(".github/config/ydb_qa_config.json"))
+remote = json.loads(subprocess.check_output(
+    ["gh", "api", "repos/ydb-platform/ydb/actions/variables/YDB_QA_CONFIG", "--jq", ".value"],
+    text=True,
+))
+lt = local["databases"]["main"]["tables"]
+rt = remote["databases"]["main"]["tables"]
+only_local = sorted(set(lt) - set(rt))
+only_ci = sorted(set(rt) - set(lt))
+if only_local:
+    print("ONLY in repo file (missing in YDB_QA_CONFIG var):", only_local)
+if only_ci:
+    print("ONLY in CI var (missing in repo file):", only_ci)
+if not only_local and not only_ci:
+    print("Table aliases match between repo file and YDB_QA_CONFIG")
+PY
+```
+
+Do not rely on a hardcoded table list below — read config or query YDB.
 
 Current aliases in `databases.main.tables`:
 
@@ -92,35 +128,34 @@ Expected: `ok = 1`. If tools are missing or auth fails, stop and help with setup
 
 #### How to get YDB MCP in Cursor
 
-1. **Credentials** — service account JSON with read access to the QA YDB cluster (same class of access as CI `CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS`; ask the CI/analytics team if you don't have a key).
-2. **Endpoint** — from `.github/config/ydb_qa_config.json` → `databases.main.endpoint` + `databases.main.path` (see example).
-3. **Install** [ydb-mcp](https://github.com/ydb-platform/ydb-mcp) (`pip install ydb-mcp` or `uvx ydb-mcp`). Docs: `ydb/docs/en/core/reference/languages-and-apis/mcp/index.md`.
-4. **Cursor MCP config** — create `.cursor/mcp.json` locally (**gitignored**, do not commit secrets):
+1. **Install** [ydb-mcp](https://github.com/ydb-platform/ydb-mcp) into a venv you control (e.g. repo `veydb/`) or use `pip install ydb-mcp` / `uvx`. Docs: `ydb/docs/en/core/reference/languages-and-apis/mcp/index.md`.
+2. **Credentials** — service account JSON with read access to QA YDB (`--ydb-sa-key-file`; same class of key as CI).
+3. **Endpoint / database** — from `.github/config/ydb_qa_config.json` → `databases.main.endpoint` and `databases.main.path` (**separate** MCP args).
+4. **Cursor MCP config** — `.cursor/mcp.json` locally (**gitignored**). Recommended shape (matches team setup):
 
 ```json
 {
   "mcpServers": {
     "ydb-qa": {
-      "command": "uvx",
+      "command": "/path/to/python-with-ydb-mcp",
       "args": [
-        "ydb-mcp",
-        "--ydb-endpoint",
-        "grpcs://<host>:2135/ru-central1/<folder>/<database-id>"
-      ],
-      "env": {
-        "YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS": "/absolute/path/to/ydb-qa-sa-key.json"
-      }
+        "-m", "ydb_mcp",
+        "--ydb-endpoint", "grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135",
+        "--ydb-database", "/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8",
+        "--ydb-auth-mode", "service-account",
+        "--ydb-sa-key-file", "/absolute/path/to/service-account.json"
+      ]
     }
   }
 }
 ```
 
-Build `--ydb-endpoint` from config: `{endpoint without trailing slash}{path}` — e.g. `grpcs://lb….ydb.mdb.yandexcloud.net:2135` + `/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8`.
+Use `endpoint` and `path` from config as **two args** (`--ydb-endpoint`, `--ydb-database`), not concatenated into one URL.
 
-5. **Enable in Cursor:** Settings → MCP → ensure the server is on; restart Cursor if tools don't appear.
-6. **Verify:** `ydb_query` with `SELECT 1`. Server name in UI may differ (e.g. `user-ydb-qa`); tool names are `ydb_query`, `ydb_explain_query`, etc.
+5. **Enable in Cursor:** Settings → MCP → server on; restart if tools missing.
+6. **Verify:** `ydb_query` with `SELECT 1 AS ok`. Cursor may show the server as `ydb-qa` or `user-ydb-qa` depending on your config name; tool names are always `ydb_query`, `ydb_explain_query`, etc.
 
-Tracked template (no secrets): `.github/scripts/analytics/mcp.ydb-qa.example.json`.
+Tracked template: `.github/scripts/analytics/mcp.ydb-qa.example.json`.
 
 ### MCP tools (preferred in Cursor)
 
@@ -173,6 +208,9 @@ gh run view <RUN_ID> --repo ydb-platform/ydb
 gh pr list --repo ydb-platform/ydb --state merged --search "merged:>=2026-01-01"
 gh pr view <PR_NUMBER> --repo ydb-platform/ydb
 gh pr diff <PR_NUMBER> --repo ydb-platform/ydb
+
+# CI table registry (compare with .github/config/ydb_qa_config.json)
+gh api repos/ydb-platform/ydb/actions/variables/YDB_QA_CONFIG --jq '.value' | python3 -m json.tool
 ```
 
 Key workflows to inspect: `Collect-analytics-fast-run`, `Update Muted tests`, `Create issues for muted tests`, `PR-check`.
@@ -219,7 +257,7 @@ For mute-related regressions also check `tests_monitor`, `mute_events`, `flaky_t
 
 ### When to update ARCHITECTURE.md (same PR)
 
-Any change to: analytics scripts/SQL, analytics workflows, `ydb_qa_config.json` tables, or new consumers (DataLens, Telegram, mute).
+Any change to: analytics scripts/SQL, analytics workflows, **`ydb_qa_config.json` + GitHub `YDB_QA_CONFIG` var**, or new consumers (DataLens, Telegram, mute).
 
 Agents: after editing analytics code, update diagram and/or table in `ARCHITECTURE.md` before finishing the task.
 
@@ -235,7 +273,7 @@ Optional CI hook: run the same command on PRs that touch watched paths.
 
 | Script | Usage |
 |--------|-------|
-| `.github/config/ydb_qa_config.json` | Table aliases and YDB endpoint — **source of truth** |
+| `.github/config/ydb_qa_config.json` | Table aliases and endpoint — **repo copy**; CI uses `vars.YDB_QA_CONFIG` (must match) |
 | `.github/scripts/analytics/ydb_wrapper.py` | YDB client (`YDBWrapper` context manager) |
 | `.github/scripts/analytics/data_mart_executor.py` | Run SQL file → upsert into YDB table |
 | `.github/scripts/analytics/test_history_fast.py` | Upload fast test history |
@@ -251,7 +289,8 @@ Optional CI hook: run the same command on PRs that touch watched paths.
 
 - SQL dialect: YQL (YDB Query Language); use backticks for table paths: `` `test_results/test_runs_column` ``
 - Table paths: relative to YDB database root (same as in `ydb_qa_config.json`)
-- Resolve alias → path via `ydb_qa_config.json` → `databases.main.tables.<alias>`
+- Resolve alias → path via `ydb_qa_config.json` or `YDB_QA_CONFIG` → `databases.main.tables.<alias>`
+- New table alias: edit repo JSON **and** update GitHub variable `YDB_QA_CONFIG`; verify with `gh api` diff (see Key Tables section)
 - Copy patterns from `.github/scripts/analytics/data_mart_queries/` (CTEs as `$name = (SELECT ...)`, `PRAGMA AnsiInForEmptyOrNullableItemsCollections`)
 - Time filters: prefer `CurrentUtcDate() - N * Interval("P1D")` for rolling windows; use `DateTime('YYYY-MM-DDTHH:MM:SSZ')` for fixed merge timestamps; `mute_events` uses `commit_time` + `Timestamp('...')`
 - YQL rules:
@@ -260,4 +299,4 @@ Optional CI hook: run the same command on PRs that touch watched paths.
   - Use `String::Contains` / `String::StartsWith`, not exact `test_name =` for C++/Python tests
   - Always add `LIMIT` on exploratory queries
 - GitHub CLI: `gh pr view` / `gh issue view` accept **one** number per invocation; loop for multiple
-- CI sets `YDB_QA_CONFIG` from GitHub vars; locally use config file or export the same JSON
+- **CI config:** workflows inject `vars.YDB_QA_CONFIG` as env `YDB_QA_CONFIG` (not the repo file). Local default: repo file when env unset (`ydb_wrapper.py`)

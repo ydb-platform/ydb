@@ -162,7 +162,7 @@ Status: **active** | **legacy (manual)** | **manual-only SQL**
 | `collect_analytics.yml` | monitor scripts | same as mute path | **legacy**, manual |
 | `datalens_ds_queries/*.sql` | — | — | **manual-only** DataLens |
 
-Table path registry: `.github/config/ydb_qa_config.json`.
+Table path registry: `.github/config/ydb_qa_config.json` (repo) and GitHub variable **`YDB_QA_CONFIG`** (CI — must stay in sync).
 
 ## Maintenance
 
@@ -172,7 +172,7 @@ Same PR as the code change if you touch any of:
 
 - `.github/scripts/analytics/**` (new/changed script or SQL mart)
 - `.github/workflows/collect_analytics*.yml`, `update_muted_ya.yml`, `create_issues_for_muted_tests.yml`, `monitoring_queries.yml`
-- `.github/config/ydb_qa_config.json` (new table alias/path)
+- `.github/config/ydb_qa_config.json` (new table alias/path) — **and** GitHub Actions variable `YDB_QA_CONFIG`
 - A new **consumer** (DataLens dashboard, Telegram profile, mute rule source)
 
 Update: diagram (new node/edge), table row, layer legend if adding a new layer.
@@ -181,7 +181,8 @@ Update: diagram (new node/edge), table row, layer legend if adding a new layer.
 
 ```markdown
 - [ ] Change is reflected in ARCHITECTURE.md (diagram and/or table)
-- [ ] New YDB table added to ydb_qa_config.json
+- [ ] New YDB table: alias in `.github/config/ydb_qa_config.json` **and** in repo variable `YDB_QA_CONFIG` (CI reads vars, not the file)
+- [ ] Verified alias sync: `gh api repos/ydb-platform/ydb/actions/variables/YDB_QA_CONFIG --jq '.value'` vs local JSON
 - [ ] Mart SQL has `-- consumed by:` comment (optional but helpful)
 ```
 

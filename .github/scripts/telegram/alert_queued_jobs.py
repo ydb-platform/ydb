@@ -31,6 +31,7 @@ DASHBOARD_LINK = "📊 [Dashboard details](https://datalens.yandex/wkptiaeyxz7qj
 WORKFLOW_THRESHOLDS = [
     ("PR-check", "PR-check", [(8, 20, 1), (20, 8, 3.0)]),   # 8–20 UTC: 1 h, 20–8 UTC: 3 h
     ("Postmerge", "Postmerge", 6),
+    ("Postcommit_", "Postcommit", 6),  # legacy Postcommit_relwithdebinfo / Postcommit_asan workflow names
 ]
 
 EMPTY_QUEUE_MESSAGE = (

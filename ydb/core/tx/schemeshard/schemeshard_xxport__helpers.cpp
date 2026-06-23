@@ -24,10 +24,20 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> MakeModifySchemeTransactionI
     auto& record = propose->Record;
     record.SetPeerName(xxportInfo.PeerName);
     record.SetSanitizedToken(xxportInfo.SanitizedToken);
+
+    const bool alwaysSetSystemOwner = AppData()->AlwaysSetSystemOwner;
     if (xxportInfo.UserSID) {
-        record.SetOwner(*xxportInfo.UserSID);
+        if (!alwaysSetSystemOwner) {
+            record.SetOwner(*xxportInfo.UserSID);
+        }
+
         record.SetUserSID(*xxportInfo.UserSID);
     }
+
+    if (alwaysSetSystemOwner) {
+        record.SetOwner(BUILTIN_ACL_BASIC_OWNER);
+    }
+
     return propose;
 }
 

@@ -121,7 +121,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     THolder<TEvSchemeShardPropose> MakePropose(ui64 schemeshardIdToRequest) {
         auto request = MakeHolder<TEvSchemeShardPropose>(TxId, schemeshardIdToRequest);
 
-        if (UserToken) {
+        if (AppData()->AlwaysSetSystemOwner) {
+            request->Record.SetOwner(BUILTIN_ACL_BASIC_OWNER);
+        } else if (UserToken) {
             request->Record.SetOwner(UserToken->GetUserSID());
         }
 

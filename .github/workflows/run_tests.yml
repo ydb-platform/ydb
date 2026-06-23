@@ -46,7 +46,9 @@ on:
         description: 'Test threads count (default: 52; build presets use a fraction of this value)'
         required: false
         type: string
-        default: ''
+        default: '52'
+
+  workflow_dispatch:
     inputs:
       pull_number:
         description: 'Pull request number, ex: 12345'
@@ -102,7 +104,7 @@ jobs:
       branch_name_map: ${{ steps.set-branches.outputs.branch_name_map }}
       pr_number_map: ${{ steps.set-branches.outputs.pr_number_map }}
     steps:
-      - name: Checkout ${{ matrix.branch }}
+      - name: Checkout
         uses: actions/checkout@v5
         with:
           sparse-checkout: |

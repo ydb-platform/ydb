@@ -395,6 +395,7 @@ public:
         case NKikimrCms::TStatus::ALLOW:
         case NKikimrCms::TStatus::ALLOW_PARTIAL:
         case NKikimrCms::TStatus::DISALLOW_TEMP:
+        case NKikimrCms::TStatus::DISALLOW_TEMP_SYS_TABLET:
             break;
         case NKikimrCms::TStatus::ERROR_TEMP:
             return this->Reply(Ydb::StatusIds::UNAVAILABLE, record.GetStatus().GetReason());

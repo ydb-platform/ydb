@@ -6,6 +6,7 @@
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 #include <ydb/core/base/ticket_parser.h>
+#include <ydb/core/base/tabletid.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 
 #include <library/cpp/svnversion/svnversion.h>
@@ -35,6 +36,21 @@ void CheckLoadLogRecord(const NKikimrCms::TLogRecord &rec,
     UNIT_ASSERT_VALUES_EQUAL(data.GetHost(), host);
     UNIT_ASSERT_VALUES_EQUAL(data.GetNodeId(), nodeId);
     UNIT_ASSERT_VALUES_EQUAL(data.GetVersion(), version);
+}
+
+void SetRunningSysTablet(ui32 nodeId, bool running) {
+    TGuard<TMutex> guard(TFakeNodeWhiteboardService::Mutex);
+    auto &info = TFakeNodeWhiteboardService::Info[nodeId];
+    const ui64 tabletId = MakeBSControllerID();
+    if (running) {
+        auto &tablet = info.TabletStateInfo[tabletId];
+        tablet.SetTabletId(tabletId);
+        tablet.SetType(TTabletTypes::BSController);
+        tablet.SetState(NKikimrWhiteboard::TTabletStateInfo::Active);
+        tablet.SetLeader(true);
+    } else {
+        info.TabletStateInfo.erase(tabletId);
+    }
 }
 
 } // anonymous namespace
@@ -3108,6 +3124,116 @@ Y_UNIT_TEST_SUITE(TCmsTest) {
         for (size_t i = 0; i < resp2.PermissionsSize(); ++i) {
             UNIT_ASSERT(sysNodeHosts.contains(resp2.GetPermissions(i).GetAction().GetHost()));
         }
+    }
+
+    Y_UNIT_TEST(SysTabletsNodeThreeGroupsOrder)
+    {
+        TCmsTestEnv env(TTestEnvOpts(16, 0));
+
+        // Nodes 0-9: sys tablet candidates. Nodes 10-15: no sys tablets.
+        NKikimrConfig::TBootstrap bootstrapConfig;
+        TVector<ui32> sysNodes;
+        for (ui32 i = 0; i < 10; ++i) {
+            sysNodes.push_back(env.GetNodeId(i));
+        }
+        auto addTablet = [&](NKikimrConfig::TBootstrap::ETabletType type) {
+            auto *tablet = bootstrapConfig.AddTablet();
+            tablet->SetType(type);
+            for (ui32 nodeId : sysNodes) {
+                tablet->AddNode(nodeId);
+            }
+        };
+        addTablet(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+
+        TFakeNodeWhiteboardService::BootstrapConfig = bootstrapConfig;
+        env.EnableSysNodeChecking();
+        env.RestartCms();
+
+        // Group 3: candidates that currently host a running leader tablet.
+        SetRunningSysTablet(env.GetNodeId(0), true);
+        SetRunningSysTablet(env.GetNodeId(1), true);
+        env.RestartCms();
+
+        THashSet<TString> g3Hosts = {ToString(env.GetNodeId(0)), ToString(env.GetNodeId(1))};
+        // Group 2: candidates without a running tablet.
+        THashSet<TString> g2Hosts = {ToString(env.GetNodeId(2)), ToString(env.GetNodeId(3))};
+        // Group 1: non-candidate nodes.
+        THashSet<TString> g1Hosts = {ToString(env.GetNodeId(10)), ToString(env.GetNodeId(11))};
+
+        // Interleaved request across the three groups.
+        auto resp = env.CheckPermissionRequest("user", true, true, false, true,
+                                               MODE_MAX_AVAILABILITY, TStatus::ALLOW,
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(0), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(10), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(11), 60000000, "storage"),
+                                               MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"));
+
+        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 6);
+        // Group 1 (non-candidate) first.
+        UNIT_ASSERT(g1Hosts.contains(resp.GetPermissions(0).GetAction().GetHost()));
+        UNIT_ASSERT(g1Hosts.contains(resp.GetPermissions(1).GetAction().GetHost()));
+        // Group 2 (candidate, no running tablet) next.
+        UNIT_ASSERT(g2Hosts.contains(resp.GetPermissions(2).GetAction().GetHost()));
+        UNIT_ASSERT(g2Hosts.contains(resp.GetPermissions(3).GetAction().GetHost()));
+        // Group 3 (running tablet) last.
+        UNIT_ASSERT(g3Hosts.contains(resp.GetPermissions(4).GetAction().GetHost()));
+        UNIT_ASSERT(g3Hosts.contains(resp.GetPermissions(5).GetAction().GetHost()));
+    }
+
+    Y_UNIT_TEST(SysTabletsNodeDeferredOnCheckRequestAfterMigration)
+    {
+        TCmsTestEnv env(TTestEnvOpts(16, 0));
+
+        // Nodes 0-9: sys tablet candidates. No running tablets initially.
+        NKikimrConfig::TBootstrap bootstrapConfig;
+        TVector<ui32> sysNodes;
+        for (ui32 i = 0; i < 10; ++i) {
+            sysNodes.push_back(env.GetNodeId(i));
+        }
+        auto addTablet = [&](NKikimrConfig::TBootstrap::ETabletType type) {
+            auto *tablet = bootstrapConfig.AddTablet();
+            tablet->SetType(type);
+            for (ui32 nodeId : sysNodes) {
+                tablet->AddNode(nodeId);
+            }
+        };
+        addTablet(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+
+        TFakeNodeWhiteboardService::BootstrapConfig = bootstrapConfig;
+        env.EnableSysNodeChecking();
+        env.RestartCms();
+
+        // Batch 1: cap of 1 permission. No running tablets yet, so order is kept:
+        // node1 is granted, [node2, node3, node4] are scheduled.
+        auto req = MakePermissionRequest("user", /* partial = */ true, /* dry = */ false,
+            /* schedule = */ true,
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(1), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(2), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(3), 60000000, "storage"),
+            MakeAction(TAction::RESTART_SERVICES, env.GetNodeId(4), 60000000, "storage"));
+        req->Record.SetMaxPermissionCount(1);
+
+        auto resp = env.CheckPermissionRequest(req, TStatus::ALLOW_PARTIAL);
+        UNIT_ASSERT_VALUES_EQUAL(resp.PermissionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resp.GetPermissions(0).GetAction().GetHost(),
+                                 ToString(env.GetNodeId(1)));
+        const TString requestId = resp.GetRequestId();
+        UNIT_ASSERT(!requestId.empty());
+
+        // Release the lock taken by the granted permission.
+        env.CheckDonePermission("user", resp.GetPermissions(0).GetId());
+
+        // A tablet migrates onto node2 (the first scheduled action).
+        SetRunningSysTablet(env.GetNodeId(2), true);
+        env.RestartCms();
+
+        auto resp2 = env.CheckRequest("user", requestId, false,
+                                      MODE_MAX_AVAILABILITY, TStatus::ALLOW_PARTIAL, 1);
+        UNIT_ASSERT_VALUES_EQUAL(resp2.PermissionsSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(resp2.GetPermissions(0).GetAction().GetHost(),
+                                 ToString(env.GetNodeId(3)));
     }
 }
 

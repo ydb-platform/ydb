@@ -1938,7 +1938,7 @@ void TNodeState::TerminateOutputDescriptor(const std::shared_ptr<TOutputDescript
     if (Limits.IdleDestroyPeriod == TDuration::Zero() && InputDescriptors.empty() && OutputDescriptors.empty()) {
         Terminating.store(true);
         ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
-            new TEvPrivate::TEvFreeNodeSession(NodeId)));
+            new TEvPrivate::TEvFreeNodeSession(NodeId, Salt)));
     }
 }
 
@@ -1954,7 +1954,7 @@ void TNodeState::TerminateInputDescriptor(const std::shared_ptr<TInputDescriptor
     if (Limits.IdleDestroyPeriod == TDuration::Zero() && InputDescriptors.empty() && OutputDescriptors.empty()) {
         Terminating.store(true);
         ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
-            new TEvPrivate::TEvFreeNodeSession(NodeId)));
+            new TEvPrivate::TEvFreeNodeSession(NodeId, Salt)));
     }
 }
 
@@ -2003,7 +2003,7 @@ void TNodeState::HandleCleanup() {
         if (idlePeriod > Limits.IdleDestroyPeriod) {
             Terminating.store(true);
             ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
-                new TEvPrivate::TEvFreeNodeSession(NodeId)));
+                new TEvPrivate::TEvFreeNodeSession(NodeId, Salt)));
         }
     } else {
         if (idlePeriod > Limits.IdlePingPeriod) {
@@ -2072,7 +2072,7 @@ void TNodeState::DoReconciliation(char logSymbol) {
         Terminating.store(true);
         FailDescriptors();
         ActorSystem->Send(new NActors::IEventHandle(MakeChannelServiceActorID(NodeActorId.NodeId()), NodeActorId,
-            new TEvPrivate::TEvFreeNodeSession(NodeId)));
+            new TEvPrivate::TEvFreeNodeSession(NodeId, Salt)));
         return;
     }
     ReconciliationCount++;
@@ -2134,6 +2134,7 @@ void TNodeState::SendDiscovery(NActors::TActorId actorId, ui64 seqNo) {
     evDiscovery->Record.SetGenMajor(GenMajor);
     evDiscovery->Record.SetGenMinor(GenMinor);
     evDiscovery->Record.SetSeqNo(seqNo);
+    evDiscovery->Record.SetSalt(Salt);
 
     ui32 flags = NActors::IEventHandle::FlagTrackDelivery;
     if (!Subscribed.exchange(true)) {
@@ -2269,8 +2270,9 @@ bool TDebugNodeState::IsNullMode() {
     return NullMode.load();
 }
 
-std::shared_ptr<TNodeState> TDqChannelService::GetOrCreateNodeState(ui32 nodeId) {
-    auto it = NodeStates.find(nodeId);
+std::shared_ptr<TNodeState> TDqChannelService::GetOrCreateNodeState(ui32 nodeId, ui32 salt) {
+    auto nodeKey = std::make_pair(nodeId, salt);
+    auto it = NodeStates.find(nodeKey);
     if (it != NodeStates.end()) {
         if (it->second->Terminating.load()) {
             ActorSystem->Send(it->second->NodeActorId, new NActors::TEvents::TEvPoison());
@@ -2280,11 +2282,11 @@ std::shared_ptr<TNodeState> TDqChannelService::GetOrCreateNodeState(ui32 nodeId)
         }
     }
 
-    auto nodeState = std::make_shared<TNodeState>(ActorSystem, nodeId, Counters, Limits);
+    auto nodeState = std::make_shared<TNodeState>(ActorSystem, nodeId, salt, Counters, Limits);
     nodeState->NodeActorId = ActorSystem->Register(new TNodeSessionActor(nodeState), NActors::TMailboxType::HTSwap, PoolId);
     nodeState->Self = nodeState;
     nodeState->LogPrefix = TStringBuilder() << '[' << nodeState->NodeActorId.NodeId() << "=>" << nodeId << "] ";
-    NodeStates.emplace(nodeId, nodeState);
+    NodeStates.emplace(nodeKey, nodeState);
     LOG_D(nodeState->LogPrefix << "CREATED, NodeActorId=" << nodeState->NodeActorId);
     ActorSystem->Send(new NActors::IEventHandle(nodeState->NodeActorId, nodeState->NodeActorId, new TEvPrivate::TEvReconciliation(nodeState->GenMajor, nodeState->GenMinor, nodeState->ReconciliationCount)));
     if (!CleanupScheduled.exchange(true)) { // we need no cleanup until very first node session
@@ -2293,23 +2295,25 @@ std::shared_ptr<TNodeState> TDqChannelService::GetOrCreateNodeState(ui32 nodeId)
     return nodeState;
 }
 
-std::shared_ptr<TDebugNodeState> TDqChannelService::CreateDebugNodeState(ui32 nodeId) {
+std::shared_ptr<TDebugNodeState> TDqChannelService::CreateDebugNodeState(ui32 nodeId, ui32 salt) {
     std::lock_guard lock(Mutex);
-    Y_ENSURE(NodeStates.find(nodeId) == NodeStates.end());
+    auto nodeKey = std::make_pair(nodeId, salt);
+    Y_ENSURE(NodeStates.find(nodeKey) == NodeStates.end());
 
-    auto nodeState = std::make_shared<TDebugNodeState>(ActorSystem, nodeId, Counters, Limits);
+    auto nodeState = std::make_shared<TDebugNodeState>(ActorSystem, nodeId, salt, Counters, Limits);
     nodeState->NodeActorId = ActorSystem->Register(new TDebugNodeSessionActor(nodeState));
     nodeState->Self = nodeState;
     nodeState->LogPrefix = TStringBuilder() << '[' << nodeState->NodeActorId.NodeId() << "=>" << nodeId << "] ";
-    NodeStates.emplace(nodeId, nodeState);
+    NodeStates.emplace(nodeKey, nodeState);
     LOG_N(nodeState->LogPrefix << "CREATED/DEBUG, NodeActorId=" << nodeState->NodeActorId);
     ActorSystem->Send(new NActors::IEventHandle(nodeState->NodeActorId, nodeState->NodeActorId, new TEvPrivate::TEvReconciliation(nodeState->GenMajor, nodeState->GenMinor, nodeState->ReconciliationCount)));
     return nodeState;
 }
 
-void TDqChannelService::FreeNodeSession(ui32 nodeId, NActors::TActorId sender) {
+void TDqChannelService::FreeNodeSession(ui32 nodeId, ui32 salt, NActors::TActorId sender) {
     std::lock_guard lock(Mutex);
-    if (auto it = NodeStates.find(nodeId); it != NodeStates.end()) {
+    auto nodeKey = std::make_pair(nodeId, salt);
+    if (auto it = NodeStates.find(nodeKey); it != NodeStates.end()) {
         auto& nodeState = it->second;
         if (nodeState->NodeActorId == sender && nodeState->Terminating.load()) {
             ActorSystem->Send(nodeState->NodeActorId, new NActors::TEvents::TEvPoison());
@@ -2347,7 +2351,8 @@ void TDqChannelService::SetServiceActorId(NActors::TActorId serviceActorId) {
 std::shared_ptr<TOutputBuffer> TDqChannelService::GetRemoteOutputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager, IDqChannelStorage::TPtr storage) {
     Y_ENSURE(info.InputActorId.NodeId() != NodeId);
     std::lock_guard lock(Mutex);
-    auto nodeState = GetOrCreateNodeState(info.InputActorId.NodeId());
+    auto salt = info.ChannelId & 3;
+    auto nodeState = GetOrCreateNodeState(info.InputActorId.NodeId(), salt);
     auto descriptor = nodeState->GetOrCreateOutputDescriptor(info, quotaManager, true, true);
     if (storage) {
         descriptor->BindStorage(descriptor, nodeState, storage);
@@ -2358,7 +2363,8 @@ std::shared_ptr<TOutputBuffer> TDqChannelService::GetRemoteOutputBuffer(const TC
 std::shared_ptr<TInputBuffer> TDqChannelService::GetRemoteInputBuffer(const TChannelFullInfo& info, IMemoryQuotaManager::TPtr quotaManager) {
     Y_ENSURE(info.OutputActorId.NodeId() != NodeId);
     std::lock_guard lock(Mutex);
-    auto nodeState = GetOrCreateNodeState(info.OutputActorId.NodeId());
+    auto salt = info.ChannelId & 3;
+    auto nodeState = GetOrCreateNodeState(info.OutputActorId.NodeId(), salt);
     return std::make_shared<TInputBuffer>(nodeState, nodeState->GetOrCreateInputDescriptor(info, quotaManager, true, true));
 }
 
@@ -2491,10 +2497,11 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
         if (TryFromString(node, nodeId)) {
             auto failure = cgiParams.Get("fail");
             if (failure) {
-                if (auto it = ChannelService->NodeStates.find(nodeId); it != ChannelService->NodeStates.end()) {
+                auto nodeKey = std::make_pair(nodeId, 0u);
+                if (auto it = ChannelService->NodeStates.find(nodeKey); it != ChannelService->NodeStates.end()) {
                     if (failure == "destroy") {
                         it->second->Terminating.store(true);
-                        Send(new NActors::IEventHandle(SelfId(), it->second->NodeActorId, new TEvPrivate::TEvFreeNodeSession(nodeId)));
+                        Send(new NActors::IEventHandle(SelfId(), it->second->NodeActorId, new TEvPrivate::TEvFreeNodeSession(nodeId, 0)));
 #if !defined(NDEBUG)
                     } else if (failure == "loss") {
                         it->second->FailureLossSend++;
@@ -2623,33 +2630,33 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                     }
                 }
                 TABLEBODY() {
-                    for (auto& [nodeId, state] : ChannelService->NodeStates) {
+                    for (auto& [_, state] : ChannelService->NodeStates) {
                         std::lock_guard lock(state->Mutex);
                         TABLER() {
                             TABLED() {
-                                HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", ToString(nodeId)}, {"fail", ""}})) {
-                                    str << nodeId;
+                                HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", state->Ident }, {"fail", ""}})) {
+                                    str << state->Ident;
                                 }
                             }
 #if !defined(NDEBUG)
                             TABLED() {
-                                HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", ToString(nodeId)}, {"fail", "loss"}})) {
+                                HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", state->Ident}, {"fail", "loss"}})) {
                                     str << state->FailureLossSend.load();
                                 }
                             }
                             TABLED() {
-                                HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", ToString(nodeId)}, {"fail", "double"}})) {
+                                HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", state->Ident}, {"fail", "double"}})) {
                                     str << state->FailureDoubleSend.load();
                                 }
                             }
                             TABLED() {
-                                HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", ToString(nodeId)}, {"fail", "recon"}})) {
+                                HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", state->Ident}, {"fail", "recon"}})) {
                                     str << state->FailureReconciliation.load();
                                 }
                             }
 #endif
                             TABLED() {
-                                HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", ToString(nodeId)}, {"fail", "destroy"}})) {
+                                HREF(NActors::NMon::BuildActorsLink("", cgiParams, {{"node", state->Ident}, {"fail", "destroy"}})) {
                                     str << "X";
                                 }
                             }
@@ -2706,13 +2713,13 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                     }
                 }
                 TABLEBODY() {
-                    for (auto& [nodeId, state] : ChannelService->NodeStates) {
+                    for (auto& [_, state] : ChannelService->NodeStates) {
                         for (auto& [info, descriptor] : state->OutputDescriptors) {
                             auto pushBytes = descriptor->PushBytes.load();
                             auto popBytes = descriptor->RemotePopBytes.load();
                             TABLER() {
                                 TABLED() {str << info.ChannelId;}
-                                TABLED() {str << nodeId;}
+                                TABLED() {str << state->Ident;}
                                 TABLED() {str << descriptor->Info.SrcStageId;}
                                 TABLED() {str << descriptor->Info.DstStageId;}
                                 TABLED() {
@@ -2777,11 +2784,11 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                     }
                 }
                 TABLEBODY() {
-                    for (auto& [nodeId, state] : ChannelService->NodeStates) {
+                    for (auto& [_, state] : ChannelService->NodeStates) {
                         for (auto& [info, descriptor] : state->InputDescriptors) {
                             TABLER() {
                                 TABLED() {str << info.ChannelId;}
-                                TABLED() {str << nodeId;}
+                                TABLED() {str << state->Ident;}
                                 TABLED() {str << descriptor->Info.SrcStageId;}
                                 TABLED() {str << descriptor->Info.DstStageId;}
                                 TABLED() {str << descriptor->PushStats.Bytes.load();}

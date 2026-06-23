@@ -244,6 +244,7 @@ message TEvChannelDiscoveryV2 {
     optional uint64 GenMajor = 1;
     optional uint64 GenMinor = 2;
     optional uint64 SeqNo = 3;
+    optional uint32 Salt = 4;
 }
 
 message TEvChannelDataV2 {

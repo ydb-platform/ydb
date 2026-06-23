@@ -66,7 +66,7 @@ RECURSE_FOR_TESTS(
     ut_secret
     ut_secret_reboots
     ut_set_column_constraint_reboots
-    ut_set_column_constraint_simple
+    ut_set_column_constraint
     ut_stats
     ut_streaming_query
     ut_streaming_query_reboots

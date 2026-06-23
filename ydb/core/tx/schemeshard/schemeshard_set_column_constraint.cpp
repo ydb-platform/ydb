@@ -7,12 +7,24 @@ namespace NKikimr {
 namespace NSchemeShard {
 
 TString SerializeSetColumnConstraintColumnNames(const std::vector<TString>& columns) {
-    return JoinSeq("$", columns);
+    NKikimrSetColumnConstraint::TSetColumnConstraintSettings data;
+    for (const auto& column : columns) {
+        data.AddNotNullColumns(column);
+    }
+
+    return data.SerializeAsString();
 }
 
 std::vector<TString> DeserializeSetColumnConstraintColumnNames(const TString& serialized) {
     std::vector<TString> result;
-    StringSplitter(serialized).Split('$').Collect(&result);
+
+    NKikimrSetColumnConstraint::TSetColumnConstraintSettings data;
+    if (data.ParseFromString(serialized)) {
+        for (const auto& column : data.GetNotNullColumns()) {
+            result.push_back(column);
+        }
+    }
+
     return result;
 }
 

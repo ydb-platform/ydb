@@ -95,6 +95,7 @@ ALTER TABLE `series`
   WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
 
+<<<<<<< HEAD
 [JSON-индекс](../../../../dev/json-indexes.md):
 
 ```yql
@@ -104,6 +105,9 @@ ALTER TABLE `series`
 ```
 
 [Блум-индекс](../../../../dev/bloom-skip-indexes.md):
+=======
+Блум-индекс:
+>>>>>>> 40b22cd2351 (added docs for bloom indexes (#38535))
 
 ```yql
 ALTER TABLE `/Root/Table`

@@ -9,6 +9,7 @@ Bloom skip indexes are [local](../concepts/glossary.md#local-index) auxiliary st
 * `bloom_filter`: a filter over exact values of the indexed column; use for equality and `IN` (see [when to use which](../concepts/query_execution/local_indexes.md#bloom-skip-indexes)).
 * `bloom_ngram_filter`: a filter over n-grams of a string column (`String`, `Utf8`); use for substring and `LIKE` pattern search on [column-oriented tables](../concepts/glossary.md#column-oriented-table).
 
+<<<<<<< HEAD
 ### Local bloom skip indexes {#row-vs-column}
 
 The `bloom_filter` type is supported on both [row-oriented](../concepts/glossary.md#row-oriented-table) (OLTP) and [column-oriented](../concepts/glossary.md#column-oriented-table) (OLAP) tables, but the underlying implementation differs:
@@ -18,6 +19,8 @@ The `bloom_filter` type is supported on both [row-oriented](../concepts/glossary
 
 `bloom_ngram_filter` is supported only on column-oriented tables.
 
+=======
+>>>>>>> 40b22cd2351 (added docs for bloom indexes (#38535))
 ## Parameters and defaults {#parameters}
 
 Full list of `WITH (...)` parameters and defaults:
@@ -57,6 +60,7 @@ ALTER TABLE events
   );
 ```
 
+<<<<<<< HEAD
 Create a row-oriented (OLTP) table with prefix bloom filters on primary-key prefixes. On row-oriented tables the indexed columns must be a left prefix of the primary key:
 
 ```yql
@@ -75,6 +79,8 @@ CREATE TABLE orders (
 );
 ```
 
+=======
+>>>>>>> 40b22cd2351 (added docs for bloom indexes (#38535))
 Alter index parameters:
 
 ```yql

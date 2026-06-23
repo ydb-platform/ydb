@@ -9,79 +9,6 @@ import sys
 from pathlib import Path
 from typing import Any
 
-# Used when checkout has no .github/config/ci_presets.json (e.g. PR into stable without backport).
-# Matches .github/config/ci_presets.json on main — update both when changing defaults.
-DEFAULT_PRESETS: dict[str, Any] = {
-    "relwithdebinfo": {
-        "ci": {
-            "test_threads": 52,
-            "test_size": "small,medium",
-            "link_threads": 12,
-            "test_type": "",
-            "timeout_minutes": 600,
-        },
-        "run_tests": {
-            "test_threads": 52,
-            "test_threads_base_ratio": 1.0,
-            "test_size": "small,medium,large",
-            "link_threads": 12,
-            "test_type": "",
-            "timeout_minutes": 1200,
-        },
-    },
-    "release-asan": {
-        "ci": {
-            "test_threads": 52,
-            "test_size": "small,medium",
-            "link_threads": 12,
-            "test_type": "",
-            "timeout_minutes": 600,
-        },
-        "run_tests": {
-            "test_threads": 20,
-            "test_threads_base_ratio": 0.38,
-            "test_size": "small,medium,large",
-            "link_threads": 12,
-            "test_type": "",
-            "timeout_minutes": 1200,
-        },
-    },
-    "release-tsan": {
-        "ci": {
-            "test_threads": 52,
-            "test_size": "small,medium",
-            "link_threads": 12,
-            "test_type": "",
-            "timeout_minutes": 600,
-        },
-        "run_tests": {
-            "test_threads": 18,
-            "test_threads_base_ratio": 0.35,
-            "test_size": "small,medium,large",
-            "link_threads": 12,
-            "test_type": "",
-            "timeout_minutes": 1200,
-        },
-    },
-    "release-msan": {
-        "ci": {
-            "test_threads": 52,
-            "test_size": "small,medium",
-            "link_threads": 12,
-            "test_type": "",
-            "timeout_minutes": 600,
-        },
-        "run_tests": {
-            "test_threads": 5,
-            "test_threads_base_ratio": 0.1,
-            "test_size": "small,medium,large",
-            "link_threads": 12,
-            "test_type": "",
-            "timeout_minutes": 1200,
-        },
-    },
-}
-
 
 def _write_output(name: str, value: str) -> None:
     out = os.environ.get("GITHUB_OUTPUT")
@@ -91,18 +18,11 @@ def _write_output(name: str, value: str) -> None:
         handle.write(f"{name}={value}\n")
 
 
-def _load_config(repo_root: Path) -> dict[str, Any]:
-    config_path = repo_root / ".github/config/ci_presets.json"
-    if config_path.is_file():
-        with config_path.open(encoding="utf-8") as handle:
-            return json.load(handle)
-
-    print(
-        "ci_presets.json not in checkout; using built-in defaults "
-        "(same as main .github/config/ci_presets.json)",
-        file=sys.stderr,
-    )
-    return DEFAULT_PRESETS
+def _load_config(config_path: Path) -> dict[str, Any]:
+    if not config_path.is_file():
+        raise FileNotFoundError(f"CI presets config not found: {config_path}")
+    with config_path.open(encoding="utf-8") as handle:
+        return json.load(handle)
 
 
 def _pick(config: dict[str, Any], build_preset: str, profile: str) -> dict[str, Any]:
@@ -167,7 +87,8 @@ def resolve(
 
 def main() -> None:
     repo_root = Path(os.environ.get("REPO_ROOT", ".")).resolve()
-    config = _load_config(repo_root)
+    config_path = repo_root / ".github/config/ci_presets.json"
+    config = _load_config(config_path)
 
     resolved = resolve(
         config,

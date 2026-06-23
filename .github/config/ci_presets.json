@@ -1,5 +1,5 @@
 {
-  "_comment": "Source of truth on main. Checkout uses this file when present; otherwise resolver built-in defaults (stable without backport).",
+  "_comment": "Single source of truth for CI preset defaults. Edit this file on main only.",
   "relwithdebinfo": {
     "ci": {
       "test_threads": 52,

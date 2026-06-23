@@ -1,8 +1,8 @@
 name: Ya CI core (build and test)
 description: >
   Shared checkout, preset resolution, optional blacklist, credentials, and build_and_test_ya.
-  Presets: .github/config/ci_presets.json from checkout when present, else built-in defaults
-  (same values as main config; for stable PRs without backport). Profiles ci | run_tests.
+  Presets: .github/config/ci_presets.json (checkout, or fetched from default branch if missing).
+  Profiles ci | run_tests.
 
 inputs:
   profile:
@@ -77,6 +77,20 @@ runs:
       with:
         ref: ${{ inputs.checkout_ref || github.sha }}
         fetch-depth: ${{ inputs.fetch_depth }}
+
+    - name: Ensure CI presets config
+      shell: bash
+      run: |
+        CONFIG=".github/config/ci_presets.json"
+        if [ -f "$CONFIG" ]; then
+          echo "Using ci_presets.json from checkout"
+          exit 0
+        fi
+        mkdir -p .github/config
+        curl -fsSL \
+          "https://raw.githubusercontent.com/${{ github.repository }}/${{ github.event.repository.default_branch }}/.github/config/ci_presets.json" \
+          -o "$CONFIG"
+        echo "Fetched ci_presets.json from ${{ github.event.repository.default_branch }}"
 
     - name: Resolve CI preset defaults
       id: preset

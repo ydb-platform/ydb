@@ -1,0 +1,190 @@
+---
+description: "Analytics skill: YDB QA data, SQL data marts, CI test results, GitHub Actions, mute/unmute workflows"
+globs:
+  - ".github/scripts/analytics/**/*.sql"
+  - ".github/scripts/analytics/**/*.py"
+  - ".github/config/ydb_qa_config.json"
+  - ".github/workflows/collect_analytics*.yml"
+  - ".github/workflows/update_muted_ya.yml"
+  - ".github/workflows/create_issues_for_muted_tests.yml"
+alwaysApply: false
+---
+
+# Analytics Skill
+
+## Stack
+
+YDB (YQL/SQL) + Python + GitHub Actions + MCP `user-ydb-qa`
+
+- SQL dialect: **YQL** (backtick-quoted paths: `` `test_results/test_runs_column` ``)
+- Config: `vars.YDB_QA_CONFIG` in CI; local dev uses `.github/config/ydb_qa_config.json`
+- Naming: snake_case for table aliases and columns
+
+## Where Analytics Lives
+
+| Location | Purpose |
+|----------|---------|
+| `.github/scripts/analytics/` | SQL queries, Python collectors, YDB wrapper |
+| `.github/scripts/analytics/data_mart_queries/` | Data mart SQL (PR failures, mute stats, GitHub issues) |
+| `.github/scripts/analytics/monitoring_queries/` | Monitoring / ad-hoc SQL |
+| `.github/config/ydb_qa_config.json` | **Canonical table registry** (aliases → YDB paths) |
+| `.github/workflows/collect_analytics_fast.yml` | Every 30 min: fast history, GitHub export, data marts |
+| `.github/workflows/update_muted_ya.yml` | Hourly: mute/unmute, flaky history, tests_monitor |
+| `.github/workflows/create_issues_for_muted_tests.yml` | After merge of mute-unmute PR: create GitHub issues |
+
+## Key Tables
+
+**Always read `.github/config/ydb_qa_config.json` first** — new tables are added there; do not rely on a hardcoded list.
+
+Current aliases in `databases.main.tables`:
+
+| Alias | Path | Description |
+|-------|------|-------------|
+| `test_results` | `test_results/test_runs_column` | Raw CI test run results (primary source) |
+| `test_history_fast` | `test_results/analytics/test_history_fast` | Fast daily test history |
+| `tests_monitor` | `test_results/analytics/tests_monitor` | Test state for mute/unmute decisions |
+| `testowners` | `test_results/analytics/testowners` | Test owners (codeowners) |
+| `flaky_tests_window` | `test_results/analytics/flaky_tests_window_1_days` | Flaky tests in 1-day window |
+| `all_tests_with_owner_and_mute` | `test_results/all_tests_with_owner_and_mute` | All tests + owner + mute status |
+| `pr_blocked_by_failed_tests_rich` | `test_results/analytics/pr_blocked_by_failed_tests_rich` | PRs blocked by test failures |
+| `pr_check_failures_by_attempt` | `test_results/analytics/pr_check_failures_by_attempt` | PR-check failures per attempt |
+| `issues` | `github_data/issues` | Exported GitHub issues |
+| `pull_requests` | `github_data/pull_requests` | Exported GitHub pull requests |
+| `mute_events` | `test_results/analytics/mute_events` | Mute/unmute events |
+| `mute_latency` | `test_results/analytics/mute_latency` | Delay between failure and mute |
+
+Additional data marts (see `collect_analytics_fast.yml` for full list): `test_results/analytics/github_issues_timeline`, `test_results/analytics/muted_tests_daily_by_team`, `perfomance/olap/fast_results`, `nemesis/aggregated_mart`, etc.
+
+### Column schemas (use these, do not invent)
+
+**`test_results/test_runs_column`** — raw CI results. Key columns:
+
+- `suite_folder`, `test_name` — separate fields; full test id = `suite_folder || '/' || test_name`
+- `status` — `passed` | `failure` | `mute` | `skipped`
+- `job_name` — e.g. `PR-check`, `Postcommit_relwithdebinfo`, `Postcommit_asan`, `Nightly-run`, `Regression-run`, `Regression-run_Small_and_Medium`, `Regression-run_stress`, `Regression-whitelist-run`
+- `branch`, `build_type` (usually `relwithdebinfo`), `run_timestamp`, `pull`, `job_id`, `commit`, `duration`
+
+**`test_results/analytics/test_history_fast`** — denormalized history (has `full_name`, logs, TTL 60d). Same status/job_name semantics; prefer for per-test timelines with `status_description`, `log`.
+
+**`test_results/analytics/mute_events`** — mute rule changes (NOT `event_timestamp`):
+
+- `branch`, `build_type`, `commit_time`, `commit_sha`, `event` (`added` | `removed`), `full_name`, `suite_folder`, `test_name`
+
+Schema source: `mute_latency_from_failure.py` → `create_mute_events_table`.
+
+## Querying YDB
+
+### MCP (preferred in Cursor)
+
+Use MCP server `user-ydb-qa`:
+
+- `ydb_query` — **primary tool** for all reads
+- `ydb_explain_query` — explain plan (optional, after query compiles)
+- `ydb_describe_path` / `ydb_list_directory` — **often fail** (`Root not found` on table paths). Do **not** rely on them; discover schema via `ydb_query` or repo scripts below.
+
+**Before writing a non-trivial query:** run a probe query first:
+
+```sql
+SELECT * FROM `test_results/test_runs_column` LIMIT 1
+```
+
+Or read the `CREATE TABLE` in the matching Python collector (see Helpers). Never guess column names from table names.
+
+### MCP pitfalls (avoid these errors)
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `Root not found` (400070) on `ydb_describe_path` | MCP describe/list expects a different path format than SQL table paths | Use `ydb_query` + `LIMIT 1`, or read schema from `.github/scripts/analytics/*.py` |
+| `Member not found: full_name` | `test_runs_column` has no `full_name` column | Compute it: `suite_folder \|\| '/' \|\| test_name AS full_name`. Filter with `suite_folder` + `test_name`, not `full_name` |
+| `Member not found: event_timestamp` / `event_type` / `reason` | Wrong schema for `mute_events` | Use columns below (actual schema) |
+| `Column X must either be a key column in GROUP BY or used in aggregation` in HAVING | YQL does not allow SELECT aliases in HAVING | Repeat the aggregate in HAVING, or wrap in a subquery/CTE and filter outside |
+| Empty/wrong results for test lookup | `test_name` format varies (`TPersQueueTest.TopicServiceCommitOffset` vs `TopicServiceCommitOffset`; Python: `TestViewer.test_topic_data_cdc` vs `test_topic_data_cdc`) | Prefer `String::Contains(test_name, 'TopicServiceCommitOffset')`; match `suite_folder` with `String::StartsWith` / `String::Contains` |
+| Empty results for stress tests | `suite_folder` is inconsistent (`ydb/tests/stress/topic/tests/test_workload_topic.py` vs `ydb/tests/stress/topic/tests`) | Filter with `String::Contains(suite_folder, 'stress/topic')`, not exact path |
+
+### Python (local / CI)
+
+```bash
+# Requires YDB_QA_CONFIG env or local .github/config/ydb_qa_config.json
+python3 .github/scripts/analytics/data_mart_executor.py \
+  --query_path .github/scripts/analytics/data_mart_queries/pr_check_stats.sql \
+  --table_path analytics/pr_check_stats \
+  --store_type column \
+  --partition_keys date \
+  --primary_keys date
+```
+
+`YDBWrapper` in `.github/scripts/analytics/ydb_wrapper.py` — shared client for all analytics scripts.
+
+## GitHub Integration
+
+- Repo: `ydb-platform/ydb`
+
+```bash
+gh run list --repo ydb-platform/ydb --limit 20
+gh run view <RUN_ID> --repo ydb-platform/ydb
+gh pr list --repo ydb-platform/ydb --state merged --search "merged:>=2026-01-01"
+gh pr view <PR_NUMBER> --repo ydb-platform/ydb
+gh pr diff <PR_NUMBER> --repo ydb-platform/ydb
+```
+
+Key workflows to inspect: `Collect-analytics-fast-run`, `Update Muted tests`, `Create issues for muted tests`, `PR-check`.
+
+## Investigating Test Regressions
+
+When finding problems after a merged PR (merge at `<MERGE_TS>`):
+
+1. Get merge time: `gh pr view <N> --repo ydb-platform/ydb --json mergedAt,mergeCommit,files`
+2. Query failures after merge — **working template** (adapt filters, never filter on alias `full_name` in WHERE):
+
+```sql
+SELECT
+    suite_folder || '/' || test_name AS full_name,
+    status,
+    job_name,
+    MIN(run_timestamp) AS first_seen,
+    COUNT(*) AS cnt
+FROM `test_results/test_runs_column`
+WHERE branch = 'main'
+  AND build_type = 'relwithdebinfo'
+  AND status IN ('failure', 'mute')
+  AND run_timestamp >= DateTime('<MERGE_TS>')   -- e.g. '2026-06-18T11:38:59Z'
+  AND String::Contains(suite_folder, '<path_fragment>')  -- e.g. 'topic', 'persqueue'
+GROUP BY suite_folder, test_name, status, job_name
+ORDER BY first_seen
+LIMIT 50
+```
+
+3. For postcommit-only signal, add: `AND job_name IN ('Postcommit_relwithdebinfo', 'Postcommit_asan')`
+4. List merged PRs around first failure: `gh pr list --repo ydb-platform/ydb --state merged --search "merged:>=<DATE>"`
+5. Inspect suspect PR: `gh pr diff <PR_NUMBER>` (one PR per command)
+6. Mute follow-ups: `mute_events` by `commit_time >= Timestamp('<MERGE_TS>')` and `event = 'added'`
+
+For mute-related regressions also check `tests_monitor`, `mute_events`, `flaky_tests_window`.
+
+## Helpers in Repo
+
+| Script | Usage |
+|--------|-------|
+| `.github/config/ydb_qa_config.json` | Table aliases and YDB endpoint — **source of truth** |
+| `.github/scripts/analytics/ydb_wrapper.py` | YDB client (`YDBWrapper` context manager) |
+| `.github/scripts/analytics/data_mart_executor.py` | Run SQL file → upsert into YDB table |
+| `.github/scripts/analytics/test_history_fast.py` | Upload fast test history |
+| `.github/scripts/analytics/tests_monitor.py` | Update tests_monitor table |
+| `.github/scripts/analytics/flaky_tests_history.py` | Collect flaky test history |
+| `.github/scripts/analytics/export_issues_to_ydb.py` | Export GitHub issues → YDB |
+| `.github/scripts/analytics/export_pull_requests_to_ydb.py` | Export GitHub PRs → YDB |
+
+## Conventions
+
+- SQL dialect: YQL (YDB Query Language); use backticks for table paths: `` `test_results/test_runs_column` ``
+- Table paths: relative to YDB database root (same as in `ydb_qa_config.json`)
+- Resolve alias → path via `ydb_qa_config.json` → `databases.main.tables.<alias>`
+- Copy patterns from `.github/scripts/analytics/data_mart_queries/` (CTEs as `$name = (SELECT ...)`, `PRAGMA AnsiInForEmptyOrNullableItemsCollections`)
+- Time filters: prefer `CurrentUtcDate() - N * Interval("P1D")` for rolling windows; use `DateTime('YYYY-MM-DDTHH:MM:SSZ')` for fixed merge timestamps; `mute_events` uses `commit_time` + `Timestamp('...')`
+- YQL rules:
+  - No SELECT alias in WHERE/HAVING of the same query — use subquery or repeat expression
+  - `full_name` exists only in marts like `test_history_fast`, not in `test_runs_column`
+  - Use `String::Contains` / `String::StartsWith`, not exact `test_name =` for C++/Python tests
+  - Always add `LIMIT` on exploratory queries
+- GitHub CLI: `gh pr view` / `gh issue view` accept **one** number per invocation; loop for multiple
+- CI sets `YDB_QA_CONFIG` from GitHub vars; locally use config file or export the same JSON

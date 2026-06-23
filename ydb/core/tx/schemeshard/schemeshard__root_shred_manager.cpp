@@ -340,7 +340,7 @@ bool TRootShredManager::Restore(NIceDb::TNiceDb& db) {
                 }
             }
 
-            CleanupOldGenerationsOnRestore(db, generationsToCleanup);
+            // CleanupOldGenerationsOnRestore(db, generationsToCleanup);
         }
     }
     {

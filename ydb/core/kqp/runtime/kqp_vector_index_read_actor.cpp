@@ -659,7 +659,7 @@ private:
         auto [readActorInput, readActor] = CreateKqpReadActor(src, arena, this->SelfId(),
             0, IngressStats.Level, TxId, TaskId, TypeEnv, HolderFactory, Alloc, TraceId, Counters);
         ReadActorInput = readActorInput;
-        ReadActorId = RegisterWithSameMailbox(readActor);
+        RegisterWithSameMailbox(readActor);
         HandleRead(nullptr);
     }
 
@@ -680,12 +680,14 @@ private:
     void StopInnerRead() {
         if (ReadActorInput) {
             AccumulateInnerReadStats();
+            // Tear down synchronously, like the compute actor tears down its own
+            // sources/transforms (AsyncInput->PassAway()). The inner actor's
+            // PassAway binds the allocator via the TaskRunner's TypeEnv, which the
+            // compute actor frees in the same Terminate turn — a queued poison
+            // would run too late, against a freed TypeEnv.
+            ReadActorInput->PassAway();
+            ReadActorInput = nullptr;
         }
-        if (ReadActorId) {
-            Send(ReadActorId, new TEvents::TEvPoison);
-            ReadActorId = {};
-        }
-        ReadActorInput = nullptr;
     }
 
     void HandleRead(TEvNewAsyncInputDataArrived::TPtr) {
@@ -975,7 +977,6 @@ private:
     NKikimr::NMiniKQL::TUnboxedValueDeque ResultRows;
 
     NYql::NDq::IDqComputeActorAsyncInput* ReadActorInput = nullptr;
-    TActorId ReadActorId = {};
 
     TVector<NKikimrDataEvents::TLock> Locks;
 

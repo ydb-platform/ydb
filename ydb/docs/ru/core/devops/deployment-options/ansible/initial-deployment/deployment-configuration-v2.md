@@ -97,8 +97,13 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
   # Настройки авторизации
     ydb_enforce_user_token_requirement: true
 
-  # Узлы
-    ydb_version: "версия_системы"
+  # YDB
+  ydb_version: "версия_системы"
+  ydb_archive: "&#123;&#123; ansible_config_file | dirname &#125;&#125;/files/ydbd.tar.gz"
+
+  # Дополнительные параметры
+  ydb_allow_format_drives: true
+  ydb_skip_data_loss_confirmation_prompt: false
    ```
 
 {% endlist %}

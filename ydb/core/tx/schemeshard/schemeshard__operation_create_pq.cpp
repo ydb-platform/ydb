@@ -144,7 +144,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
             }
         }
 
-        pqGroupInfo->PartitionsToAdd.emplace(i, i + 1, keyRange);
+        pqGroupInfo->PartitionsToAdd.emplace(pqGroupInfo->PartitionsToAdd.end(), i, i + 1, keyRange);
     }
 
     if (partsPerTablet == 0 || partsPerTablet > TSchemeShard::MaxPQTabletPartitionsCount) {

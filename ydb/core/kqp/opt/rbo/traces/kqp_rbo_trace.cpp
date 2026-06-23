@@ -7,6 +7,7 @@
 #include <sstream>
 #include <tuple>
 #include <util/string/builder.h>
+#include <util/string/cast.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -624,6 +625,84 @@ optimizer_trace::Widget BuildPlanOverviewWidget(const TTraceBuildState& state) {
     return optimizer_trace::Widget::graph("Plan overview", overview);
 }
 
+std::string FormatReadNameForJoinOrder(const TOpRead& read) {
+    if (read.TableCallable) {
+        const auto path = NYql::NNodes::TKqpTable(read.TableCallable).Path().StringValue();
+        const auto slash = path.rfind('/');
+        return ToStdString((slash == TString::npos) ? path : path.substr(slash + 1));
+    }
+
+    if (!read.Alias.empty()) {
+        return ToStdString(read.Alias);
+    }
+
+    return "TableFullScan";
+}
+
+struct TJoinOrderJson {
+    NJson::TJsonValue Json;
+    bool HasJoin = false;
+};
+
+TJoinOrderJson BuildJoinOrderJson(const TIntrusivePtr<IOperator>& op) {
+    if (!op) {
+        return {NJson::TJsonValue("null"), false};
+    }
+
+    if (op->Kind == EOperator::Source) {
+        return {NJson::TJsonValue(FormatReadNameForJoinOrder(*static_cast<TOpRead*>(op.Get()))), false};
+    }
+
+    if (op->Kind == EOperator::CBOTree) {
+        const auto* cboTree = static_cast<const TOpCBOTree*>(op.Get());
+        return BuildJoinOrderJson(cboTree->TreeRoot);
+    }
+
+    if (op->Kind == EOperator::Join) {
+        NJson::TJsonValue children(NJson::EJsonValueType::JSON_ARRAY);
+        for (const auto& child : op->Children) {
+            children.AppendValue(BuildJoinOrderJson(child).Json);
+        }
+        return {std::move(children), true};
+    }
+
+    if (op->Children.size() == 1) {
+        return BuildJoinOrderJson(op->Children.front());
+    }
+
+    bool hasJoin = false;
+    NJson::TJsonValue children(NJson::EJsonValueType::JSON_ARRAY);
+    for (const auto& child : op->Children) {
+        auto childOrder = BuildJoinOrderJson(child);
+        hasJoin = hasJoin || childOrder.HasJoin;
+        children.AppendValue(std::move(childOrder.Json));
+    }
+
+    if (hasJoin) {
+        NJson::TJsonValue wrapper(NJson::EJsonValueType::JSON_MAP);
+        wrapper[op->GetExplainName()] = std::move(children);
+        return {std::move(wrapper), true};
+    }
+
+    return {NJson::TJsonValue(ToStdString(op->GetExplainName())), false};
+}
+
+std::optional<optimizer_trace::Widget> BuildJoinOrderWidget(const TOpRoot& root) {
+    if (root.Children.empty()) {
+        return std::nullopt;
+    }
+
+    auto joinOrder = BuildJoinOrderJson(root.Children.front());
+    if (!joinOrder.HasJoin) {
+        return std::nullopt;
+    }
+
+    return optimizer_trace::Widget::unwrappedText(
+        "Join order",
+        ToStdString(NJson::WriteJson(joinOrder.Json, true, false, true)),
+        true);
+}
+
 optimizer_trace::Widget BuildStageGraphWidget(const TStageGraph& graph, const TTraceBuildState& state) {
     optimizer_trace::Graph stageGraph;
     stageGraph.layout("LR", 70, 42);
@@ -685,8 +764,11 @@ std::vector<optimizer_trace::Widget> BuildPlanWidgets(const TOpRoot& root, const
 
 void AddPlanWidgets(optimizer_trace::Trace::Tile& tile, const TOpRoot& root, const TTraceBuildState& state) {
     if (!state.OverviewNodes.empty()) {
-        tile.info().tab("overview", "Overview")
+        auto& overview = tile.info().tab("overview", "Overview")
             .widget(BuildPlanOverviewWidget(state));
+        if (auto joinOrder = BuildJoinOrderWidget(root)) {
+            overview.widget(*joinOrder);
+        }
     }
 
     auto widgets = BuildPlanWidgets(root, state);

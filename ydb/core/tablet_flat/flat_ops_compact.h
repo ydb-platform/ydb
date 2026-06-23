@@ -112,9 +112,9 @@ namespace NTabletFlatExecutor {
 
         // Per-key buffer for fulltext compaction
         struct TFtKeyBuf {
-            // Deep-copied key cells
-            TString KeyBuf;
-            TVector<std::pair<ui32, ui32>> KeyRanges; // (offset, size)
+            // Part of the key (Gen + MaxId). Current token is stored outside
+            NTableIndex::NFulltext::TGen Gen = 0;
+            ui64 MaxId = 0;
 
             // Lock (if any)
             ELockMode LockMode = ELockMode::None;
@@ -124,7 +124,6 @@ namespace NTabletFlatExecutor {
             struct TDelta { ui64 TxId; TSavedRow Row; };
             TVector<TDelta> SavedDeltas;
             TVector<ui64> SavedDeltaOrder;
-            bool HasDeltas = false;
 
             // Committed versions (descending order)
             struct TVersion {
@@ -135,43 +134,13 @@ namespace NTabletFlatExecutor {
             };
             TVector<TVersion> Versions;
 
-            void SaveKey(TArrayRef<const TCell> key) {
-                KeyRanges.resize(key.size());
-                KeyBuf.clear();
-                for (size_t i = 0; i < key.size(); i++) {
-                    KeyRanges[i].first = KeyBuf.size();
-                    if (!key[i].IsNull()) {
-                        KeyRanges[i].second = key[i].Size();
-                        KeyBuf.append(key[i].Data(), key[i].Size());
-                    } else {
-                        KeyRanges[i].second = 0;
-                    }
-                }
-            }
-
-            TSmallVec<TCell> GetKeyCells() const {
-                TSmallVec<TCell> cells;
-                for (const auto& [off, sz] : KeyRanges) {
-                    cells.push_back(sz > 0 ? TCell(KeyBuf.data() + off, sz) : TCell());
-                }
-                return cells;
-            }
-
             bool IsMergeable(TRowVersion minVer) const {
-                if (HasDeltas || LockMode != ELockMode::None)
+                if (SavedDeltas.size() > 0 || LockMode != ELockMode::None)
                     return false;
-                if (Versions.empty())
-                    return false;
-                for (const auto& v : Versions) {
+                for (const auto& v : Versions)
                     if (v.Ver > minVer)
                         return false;
-                }
-                // Latest version (first) must not be an erase
-                return Versions[0].Row.Op != NTable::ERowOp::Erase;
-            }
-
-            bool IsErased() const {
-                return !Versions.empty() && Versions[0].Row.Op == NTable::ERowOp::Erase;
+                return true;
             }
         };
 
@@ -301,7 +270,10 @@ namespace NTabletFlatExecutor {
 
                 // Start buffering a new key (DON'T call Writer->BeginKey)
                 FtCurKey = {};
-                FtCurKey.SaveKey(key);
+                FtCurKey.Gen = key[1].AsValue<NTableIndex::NFulltext::TGen>();
+                FtCurKey.MaxId = Conf->FulltextKeySize == 8
+                    ? key[2].AsValue<ui64>()
+                    : key[2].AsValue<ui32>();
 
                 if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                     logl
@@ -328,10 +300,6 @@ namespace NTabletFlatExecutor {
 
         EScan BeginDeltas() override
         {
-            if (FtMode) {
-                FtCurKey.HasDeltas = true;
-            }
-
             if (auto logl = Logger->Log(ELnLev::Dbg03)) {
                 logl << NFmt::Do(*this) << " begin deltas";
             }
@@ -505,7 +473,10 @@ namespace NTabletFlatExecutor {
 
         // Replay a buffered key through Writer as-is (pass-through)
         void ReplayKey(const TFtKeyBuf& key) {
-            auto cells = key.GetKeyCells();
+            TSmallVec<TCell> cells;
+            cells.emplace_back(FtCurrentToken);
+            cells.emplace_back(TCell::Make(key.Gen));
+            cells.emplace_back((const char*)&key.MaxId, Conf->FulltextKeySize);
             Writer->BeginKey(cells);
 
             if (key.LockMode != ELockMode::None) {
@@ -576,22 +547,8 @@ namespace NTabletFlatExecutor {
             bool allMergeable = true;
             for (const auto& key : FtTokenBuf) {
                 if (!key.IsMergeable(FtMinRowVersion)) {
-                    // If it's an erased key at MinRowVersion, it's still "ok" for
-                    // the allMergeable flag (we'll just skip it)
-                    if (!key.IsErased() || key.HasDeltas || key.LockMode != ELockMode::None) {
-                        // Has versions above MinRowVersion or has deltas/locks
-                        bool hasHighVersion = false;
-                        for (const auto& v : key.Versions) {
-                            if (v.Ver > FtMinRowVersion) {
-                                hasHighVersion = true;
-                                break;
-                            }
-                        }
-                        if (hasHighVersion || key.HasDeltas || key.LockMode != ELockMode::None) {
-                            allMergeable = false;
-                            break;
-                        }
-                    }
+                    allMergeable = false;
+                    break;
                 }
             }
 
@@ -613,10 +570,12 @@ namespace NTabletFlatExecutor {
 
             bool hasAnySegment = false;
             for (const auto& key : FtTokenBuf) {
-                if (key.IsErased()) continue; // Skip erased keys
+                bool isErased = false;
                 for (const auto& ver : key.Versions) {
-                    if (ver.Row.Op != NTable::ERowOp::Erase && !ver.Segment.empty()) {
-                        merger.Add(ver.Added, TConstArrayRef<ui8>((const ui8*)ver.Segment.data(), ver.Segment.size()));
+                    if (ver.Row.Op == NTable::ERowOp::Erase) {
+                        isErased = true;
+                    } else if (!ver.Segment.empty()) {
+                        merger.Add(ver.Added ^ isErased, TConstArrayRef<ui8>((const ui8*)ver.Segment.data(), ver.Segment.size()));
                         hasAnySegment = true;
                     }
                 }

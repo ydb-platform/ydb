@@ -340,7 +340,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         }
     }
 
-    void SkipMessagesWithObsoleteTimestampImpl(TMaybe<TDuration> retentionPeriod) {
+    void SkipMessagesWithObsoleteTimestampImpl(TMaybe<TDuration> retentionPeriod, const ui32 dstTopicPrefillSize) {
         NKikimrConfig::TFeatureFlags ff;
         ff.SetEnableSkipMessagesWithObsoleteTimestamp(true);
 
@@ -381,25 +381,44 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
 
         auto driver = server.AnnoyingClient->GetDriver();
 
-
-        // Write nMsg messages to the source topic.
-        {
-            auto writer = CreateSimpleWriter(*driver, srcTopic, "src_writer", 1, "raw");
+        auto writeMessagesToTopic = [&driver](const TString& topicName, ui32 n) {
+            auto writer = CreateSimpleWriter(*driver, topicName, "src_writer", 1, "raw");
             ui64 seqNo = writer->GetInitSeqNo();
-            for (ui32 i = 0; i < nMsg; ++i) {
+            for (ui32 i = 0; i < n; ++i) {
                 UNIT_ASSERT(writer->Write(TString("payload-") + ToString(i) + TString(messageSize, '-'), ++seqNo));
             }
             UNIT_ASSERT(writer->Close(TDuration::Seconds(10)));
+        };
+        // Write nMsg messages to the source topic.
+        writeMessagesToTopic(srcTopicFullName, nMsg);
+
+        if (dstTopicPrefillSize) {
+            server.AnnoyingClient->CreateTopic(
+                dstTopicFullName,
+                /*partitionsCount =*/1,
+                /*lowWatermark =*/8_MB,
+                /*lifetimeS =*/86400,
+                /*writeSpeed =*/20000000,
+                /*user =*/"",
+                /*readSpeed =*/200000000,
+                /*rr =*/{"reader"},
+                /*important =*/{},
+                {}
+            );
+            writeMessagesToTopic(dstTopicFullName, dstTopicPrefillSize);
         }
 
+
+
         NYdb::NTopic::TTopicClient topicClient(*driver);
-        if (!retentionPeriod.Empty()) {
-            const TInstant describeDeadline = TDuration::Seconds(30).ToDeadLine();
+
+        auto waitForStartOffsetChange = [&topicClient](const TString& topicFullName, TDuration waitDuration = TDuration::Seconds(30)) {
+            const TInstant describeDeadline = waitDuration.ToDeadLine();
             bool shiftedStartOffset = false;
             while (TInstant::Now() < describeDeadline) {
                 Cerr << "Waiting for blobs cleanup\n";
                 auto descr = topicClient.DescribePartition(
-                                            "/Root/PQ/" + srcTopicFullName,
+                                            "/Root/PQ/" + topicFullName,
                                             0,
                                             NYdb::NTopic::TDescribePartitionSettings().IncludeStats(true))
                                  .GetValueSync();
@@ -419,7 +438,11 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
                 }
                 Sleep(TDuration::MilliSeconds(250));
             }
-            UNIT_ASSERT_C(shiftedStartOffset, "Start offset not changed");
+            UNIT_ASSERT_C(shiftedStartOffset, "Start offset not changed in topic " << topicFullName);
+        };
+
+        if (!retentionPeriod.Empty()) {
+            waitForStartOffsetChange(srcTopicFullName);
         }
 
         Sleep(TDuration::Seconds(2));
@@ -433,19 +456,29 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         mirrorFrom.SetSyncWriteTime(true);
         mirrorFrom.SetReadFromTimestampsMs(readFromTs.MilliSeconds());
 
-        server.AnnoyingClient->CreateTopic(
-            dstTopicFullName,
-            /*partitionsCount =*/ 1,
-            /*lowWatermark =*/ 8_MB,
-            /*lifetimeS =*/ 86400,
-            /*writeSpeed =*/ 20000000,
-            /*user =*/ "",
-            /*readSpeed =*/ 200000000,
-            /*rr =*/ {"reader"},
-            /*important =*/ {},
-            mirrorFrom
-        );
-
+        if (dstTopicPrefillSize) {
+            server.AnnoyingClient->AlterTopic(
+                dstTopicFullName,
+                1,
+                0,
+                86400,
+                true,
+                mirrorFrom
+            );
+        } else {
+            server.AnnoyingClient->CreateTopic(
+                dstTopicFullName,
+                /*partitionsCount =*/ 1,
+                /*lowWatermark =*/ 8_MB,
+                /*lifetimeS =*/ 86400,
+                /*writeSpeed =*/ 20000000,
+                /*user =*/ "",
+                /*readSpeed =*/ 200000000,
+                /*rr =*/ {"reader"},
+                /*important =*/ {},
+                mirrorFrom
+            );
+        }
         // Repeatedly Describe the source topic until the mirror_consumer commits all messages.
         const TInstant describeDeadline = TDuration::Seconds(180).ToDeadLine();
         bool committed = false;
@@ -475,7 +508,7 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
         }
         UNIT_ASSERT_C(committed, "mirror_consumer did not commit all skipped messages within timeout");
 
-        // Read from the destination topic; nothing must be there.
+        // Read from the destination topic; nothing must be there except the prefill messages
         auto dstReader = topicClient.CreateReadSession(
             NYdb::NTopic::TReadSessionSettings()
                 .AppendTopics(NYdb::NTopic::TTopicReadSettings(dstTopic).AppendPartitionIds(0))
@@ -504,15 +537,24 @@ Y_UNIT_TEST_SUITE(TPersQueueMirrorer) {
             }
         }
         dstReader->Close(TDuration::Zero());
-        UNIT_ASSERT_VALUES_EQUAL(messageCount, 0);
+        UNIT_ASSERT_VALUES_EQUAL(messageCount, dstTopicPrefillSize);
     }
 
     Y_UNIT_TEST(SkipMessagesWithObsoleteTimestamp) {
-        SkipMessagesWithObsoleteTimestampImpl(Nothing());
+        SkipMessagesWithObsoleteTimestampImpl(Nothing(), 0);
     }
 
     Y_UNIT_TEST(SkipMessagesWithObsoleteTimestampWithRetention) {
-        SkipMessagesWithObsoleteTimestampImpl(TDuration::Seconds(1));
+        SkipMessagesWithObsoleteTimestampImpl(TDuration::Seconds(1), 0);
     }
+
+    Y_UNIT_TEST(SkipMessagesWithObsoleteTimestampInNonEmptyDestinationTopic) {
+        SkipMessagesWithObsoleteTimestampImpl(Nothing(), 250);
+    }
+
+    Y_UNIT_TEST(SkipMessagesWithObsoleteTimestampWithRetentionInNonEmptyDestinationTopic) {
+        SkipMessagesWithObsoleteTimestampImpl(TDuration::Seconds(1), 250);
+    }
+
 }
 } // NKikimr::NPersQueueTests

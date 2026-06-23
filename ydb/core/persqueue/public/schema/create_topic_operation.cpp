@@ -8,6 +8,8 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/ydb_convert/tx_proxy_status.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NSchema {
 
 namespace {
@@ -42,13 +44,15 @@ public:
 
 private:
     void DoGetClustersList() {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "DoGetClustersList");
+        YDB_LOG_DEBUG("DoGetClustersList",
+             {"logPrefix", NPQ_LOG_PREFIX});
         Become(&TCreateTopicOperationActor::GetClustersListState);
         Send(NPQ::NClusterTracker::MakeClusterTrackerID(), new NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersList());
     }
 
     void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse::TPtr& ev) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse");
+        YDB_LOG_DEBUG("Handle NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse",
+             {"logPrefix", NPQ_LOG_PREFIX});
 
         auto& response = *ev->Get();
         if (response.Success) {
@@ -67,7 +71,9 @@ private:
 
 private:
     void DoCreate() {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "DoCreate IfNotExists: " << Settings.IfNotExists);
+        YDB_LOG_DEBUG("DoCreate",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"ifNotExists", Settings.IfNotExists});
         Become(&TCreateTopicOperationActor::CreateState);
 
         auto database = CanonizePath(Settings.Database);
@@ -117,7 +123,8 @@ private:
     }
 
     void Handle(TEvSchemaOperationResponse::TPtr& ev) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvSchemaOperationResponse");
+        YDB_LOG_DEBUG("Handle TEvSchemaOperationResponse",
+             {"logPrefix", NPQ_LOG_PREFIX});
         auto& response = *ev->Get();
         return ReplyAndDie(response.Status, std::move(response.ErrorMessage));
     }
@@ -131,7 +138,10 @@ private:
 
 private:
     void ReplyAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "ReplyAndDie " << errorCode << " '" << errorMessage << "'");
+        YDB_LOG_DEBUG("ReplyAndDie",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"errorCode", errorCode},
+            {"errorMessage", errorMessage});
         if ((errorCode == Ydb::StatusIds::SUCCESS || errorCode == Ydb::StatusIds::ALREADY_EXISTS) && !Settings.PrepareOnly) {
             ModifyScheme = {};
         }

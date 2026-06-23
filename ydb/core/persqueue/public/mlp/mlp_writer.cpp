@@ -5,6 +5,8 @@
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/codecs.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NMLP {
 
 TWriterActor::TWriterActor(const TActorId& parentId, const TWriterSettings& settings)
@@ -27,7 +29,8 @@ void TWriterActor::PassAway() {
 }
 
 void TWriterActor::DoDescribe() {
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Start describe");
+    YDB_LOG_DEBUG("Start describe",
+         {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TWriterActor::DescribeState);
 
     NDescriber::TDescribeSettings settings = {
@@ -38,7 +41,8 @@ void TWriterActor::DoDescribe() {
 }
 
 void TWriterActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle NDescriber::TEvDescribeTopicsResponse");
+    YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
+         {"logPrefix", NPQ_LOG_PREFIX});
 
     ChildActorId = {};
 
@@ -118,7 +122,8 @@ size_t SerializeTo(TWriterSettings::TMessage& item, ::NKikimrClient::TPersQueueP
 }
 
 void TWriterActor::DoWrite() {
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Start write");
+    YDB_LOG_DEBUG("Start write",
+         {"logPrefix", NPQ_LOG_PREFIX});
     Become(&TWriterActor::WriteState);
 
     struct TInfo {
@@ -177,7 +182,8 @@ void TWriterActor::DoWrite() {
 }
 
 void TWriterActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvPersQueue::TEvResponse");
+    YDB_LOG_DEBUG("Handle TEvPersQueue::TEvResponse",
+         {"logPrefix", NPQ_LOG_PREFIX});
 
     bool alreadyReceived = false;
     auto& record = ev->Get()->Record;
@@ -210,7 +216,8 @@ void TWriterActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 }
 
 void TWriterActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Handle TEvPipeCache::TEvDeliveryProblem");
+    YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
+         {"logPrefix", NPQ_LOG_PREFIX});
 
     const auto tabletId = ev->Get()->TabletId;
 
@@ -242,8 +249,12 @@ void TWriterActor::SendToTablet(ui64 tabletId, IEventBase *ev) {
 }
 
 bool TWriterActor::OnUnhandledException(const std::exception& exc) {
-    LOG_CRIT_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "unhandled exception " << TypeName(exc) << ": " << exc.what() << Endl
-        << TBackTrace::FromCurrentException().PrintToString());
+    YDB_LOG_CRIT("Unhandled exception",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"#_TypeName(exc)", TypeName(exc)},
+        {"#_exc.what", exc.what()},
+        {"endl", Endl},
+        {"#_TBackTrace::FromCurrentException().PrintToString", TBackTrace::FromCurrentException().PrintToString()});
 
     PendingRequests = 0;
     ReplyIfPossible();
@@ -253,11 +264,15 @@ bool TWriterActor::OnUnhandledException(const std::exception& exc) {
 
 bool TWriterActor::IsSuccess(const NKikimrClient::TResponse& record) {
     if (record.HasErrorCode() && record.GetErrorCode() != NPersQueue::NErrorCode::OK) {
-        LOG_WARN_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Write error: " << record.ShortDebugString());
+        YDB_LOG_WARN("Write",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"error", record});
         return false;
     }
     if (!record.HasPartitionResponse()) {
-        LOG_WARN_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Missing partition response: " << record.ShortDebugString());
+        YDB_LOG_WARN("Missing partition",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"response", record});
         return false;
     }
 

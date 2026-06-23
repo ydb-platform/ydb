@@ -4,6 +4,8 @@
 
 #include <google/protobuf/util/message_differencer.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 #define PQ_ENSURE(condition) AFL_ENSURE(condition)("topic", TopicName)
 
 using namespace NPersQueue;
@@ -34,7 +36,8 @@ void TMirrorDescriber::StartInit(const TActorContext& ctx) {
 }
 
 void TMirrorDescriber::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
-    LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "killed");
+    YDB_LOG_NOTICE("Killed",
+         {"logPrefix", NPQ_LOG_PREFIX});
     CredentialsProvider = nullptr;
     Die(ctx);
 }
@@ -44,10 +47,13 @@ void TMirrorDescriber::HandleChangeConfig(TEvPQ::TEvChangePartitionConfig::TPtr&
         Config,
         ev->Get()->Config.GetPartitionConfig().GetMirrorFrom()
     );
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "got new config, equal with previous: " << equalConfigs);
+    YDB_LOG_DEBUG("Got new config, equal with",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"previous", equalConfigs});
     if (!equalConfigs) {
         Config = ev->Get()->Config.GetPartitionConfig().GetMirrorFrom();
-        LOG_INFO_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "changing config");
+        YDB_LOG_INFO("Changing config",
+             {"logPrefix", NPQ_LOG_PREFIX});
         StartInit(ctx);
     }
 }
@@ -56,13 +62,17 @@ void TMirrorDescriber::HandleDescriptionResult(TEvPQ::TEvMirrorTopicDescription:
     DescribeTopicRequestInFlight = false;
     const auto& description = ev->Get()->Description;
     if (!description.has_value()) {
-        LOG_ERROR_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "cannot describe topic " << description.error());
+        YDB_LOG_ERROR("Cannot describe topic",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"#_description.error", description.error()});
         ScheduleWithIncreasingTimeout<TEvents::TEvWakeup>(SelfId(), DescribeRetryTimeout, DESCRIBE_RETRY_TIMEOUT_MAX, ctx);
         return;
     }
     const NYdb::NTopic::TDescribeTopicResult& result = description.value();
     if (!result.IsSuccess()) {
-        LOG_ERROR_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "cannot describe topic " << result.GetIssues().ToString());
+        YDB_LOG_ERROR("Cannot describe topic",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"#_result.GetIssues", result.GetIssues()});
         ScheduleWithIncreasingTimeout<TEvents::TEvWakeup>(SelfId(), DescribeRetryTimeout, DESCRIBE_RETRY_TIMEOUT_MAX, ctx);
         return;
     }
@@ -71,14 +81,17 @@ void TMirrorDescriber::HandleDescriptionResult(TEvPQ::TEvMirrorTopicDescription:
         descr.SerializeTo(req);
         return req.ShortUtf8DebugString();
     };
-    LOG_TRACE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "topic description: " << debugTopicDescriptionString(description.value().GetTopicDescription()));
+    YDB_LOG_TRACE("Topic",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"description", debugTopicDescriptionString(description.value().GetTopicDescription())});
     ctx.Send(TabletActorId, ev->Release());
     ctx.Schedule(DESCRIBE_RETRY_TIMEOUT_MAX, new TEvents::TEvWakeup());
 }
 
 void TMirrorDescriber::DescribeTopic(const TActorContext& ctx) {
     if (DescribeTopicRequestInFlight) {
-        LOG_INFO_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "description request already inflight.");
+        YDB_LOG_INFO("Description request already inflight",
+             {"logPrefix", NPQ_LOG_PREFIX});
         return;
     }
 
@@ -111,7 +124,8 @@ void TMirrorDescriber::DescribeTopic(const TActorContext& ctx) {
 
 void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*ev*/, const TActorContext& ctx) {
     if (CredentialsRequestInFlight) {
-        LOG_WARN_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "credentials request already inflight.");
+        YDB_LOG_WARN("Credentials request already inflight",
+             {"logPrefix", NPQ_LOG_PREFIX});
         return;
     }
     CredentialsProvider = nullptr;
@@ -145,13 +159,17 @@ void TMirrorDescriber::HandleInitCredentials(TEvPQ::TEvInitCredentials::TPtr& /*
 void TMirrorDescriber::HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TPtr& ev, const TActorContext& ctx) {
     CredentialsRequestInFlight = false;
     if (ev->Get()->Error) {
-        LOG_WARN_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "cannot initialize credentials provider: " << ev->Get()->Error.value());
+        YDB_LOG_WARN("Cannot initialize credentials",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"provider", ev->Get()->Error.value()});
         ScheduleWithIncreasingTimeout<TEvPQ::TEvInitCredentials>(SelfId(), CredentialsInitInterval, INIT_INTERVAL_MAX, ctx);
         return;
     }
 
     CredentialsProvider = ev->Get()->Credentials;
-    LOG_NOTICE_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "credentials provider created " << bool(CredentialsProvider));
+    YDB_LOG_NOTICE("Credentials provider created",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"#_bool(CredentialsProvider)", bool(CredentialsProvider)});
     CredentialsInitInterval = INIT_INTERVAL_START;
     ScheduleDescription(ctx);
 }

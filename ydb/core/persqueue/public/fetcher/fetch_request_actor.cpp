@@ -11,7 +11,9 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 
-#define LOG_PREFIX "[" << NActors::TlsActivationContext->AsActorContext().SelfID << "] "
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_FETCH_REQUEST
+
+#define LOG_PREFIX TStringBuilder() << "[" << NActors::TlsActivationContext->AsActorContext().SelfID << "] "
 
 namespace NKikimr::NPQ {
 
@@ -147,7 +149,9 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << "Fetch request actor boostrapped. Request is valid: " << (!Response));
+        YDB_LOG_INFO("Fetch request actor boostrapped. Request is",
+            {"logPrefix", LOG_PREFIX},
+            {"valid", (!Response)});
 
         // handle error from constructor
         if (Response) {
@@ -162,7 +166,8 @@ public:
     }
 
     void DescribeTopics(const TActorContext&) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << "DescribeTopics");
+        YDB_LOG_DEBUG("DescribeTopics",
+            {"logPrefix", LOG_PREFIX});
 
         std::unordered_set<TString> topics;
         for (const auto& part : Settings.Partitions) {
@@ -177,7 +182,8 @@ public:
     }
 
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << "Handle NDescriber::TEvDescribeTopicsResponse");
+        YDB_LOG_DEBUG("Handle NDescriber::TEvDescribeTopicsResponse",
+            {"logPrefix", LOG_PREFIX});
 
         for (auto& [topicPath, info] : ev->Get()->Topics) {
             switch (info.Status) {
@@ -240,7 +246,9 @@ public:
             auto& fetchInfo = topicInfo.HasDataRequests[partitionId];
             const auto partitionIndex = fetchInfo->Record.GetCookie();
             tabletInfo.PartitionIndexes.push_back(partitionIndex);
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << "Sending TEvPersQueue::TEvHasDataInfo " << fetchInfo->Record.ShortDebugString());
+            YDB_LOG_DEBUG("Sending TEvPersQueue::TEvHasDataInfo",
+                {"logPrefix", LOG_PREFIX},
+                {"#_fetchInfo->Record", fetchInfo->Record});
             NTabletPipe::SendData(ctx, tabletInfo.PipeClient, fetchInfo.Release());
             PartitionStatus[partitionIndex] = EPartitionStatus::HasDataRequested;
         }
@@ -255,8 +263,11 @@ public:
 
     void ProceedFetchRequest(const TActorContext& ctx) {
         if (FetchRequestCurrentReadTablet) { //already got active read request
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << "Fetch request is pending. TabletId=" << FetchRequestCurrentReadTablet
-                << " partitionIndex=" << FetchRequestCurrentPartitionIndex << "/" << Settings.Partitions.size());
+            YDB_LOG_DEBUG("Fetch request is pending. /",
+                {"logPrefix", LOG_PREFIX},
+                {"tabletId", FetchRequestCurrentReadTablet},
+                {"partitionIndex", FetchRequestCurrentPartitionIndex},
+                {"#_Settings.Partitions.size", Settings.Partitions.size()});
             return;
         }
 
@@ -265,7 +276,10 @@ public:
             ("r", Settings.Partitions.size());
 
         while (true) {
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << "Processing " << FetchRequestCurrentPartitionIndex << "/" << Settings.Partitions.size());
+            YDB_LOG_DEBUG("Processing /",
+                {"logPrefix", LOG_PREFIX},
+                {"fetchRequestCurrentPartitionIndex", FetchRequestCurrentPartitionIndex},
+                {"#_Settings.Partitions.size", Settings.Partitions.size()});
             if (FetchRequestCurrentPartitionIndex == Settings.Partitions.size()) {
                 CreateOkResponse();
                 return SendReplyAndDie(std::move(Response), ctx);
@@ -273,13 +287,19 @@ public:
 
             auto& status = PartitionStatus[FetchRequestCurrentPartitionIndex];
             if (status == EPartitionStatus::DataReceived) {
-                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << "Skip partition " << FetchRequestCurrentPartitionIndex << " because status is DataReceived");
+                YDB_LOG_DEBUG("Skip partition because status is DataReceived",
+                    {"logPrefix", LOG_PREFIX},
+                    {"fetchRequestCurrentPartitionIndex", FetchRequestCurrentPartitionIndex});
                 ++FetchRequestCurrentPartitionIndex;
                 continue;
             }
 
             if (FetchRequestBytesLeft == 0) {
-                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << "Partition " << FetchRequestCurrentPartitionIndex << " status is " << (int)status << " bytesLeft=" << FetchRequestBytesLeft);
+                YDB_LOG_DEBUG("Partition status is",
+                    {"logPrefix", LOG_PREFIX},
+                    {"fetchRequestCurrentPartitionIndex", FetchRequestCurrentPartitionIndex},
+                    {"#_(int)status", (int)status},
+                    {"bytesLeft", FetchRequestBytesLeft});
                 if (status == EPartitionStatus::HasDataReceived) {
                     ++FetchRequestCurrentPartitionIndex;
                     continue;
@@ -311,7 +331,9 @@ public:
 
             //Form read request
             auto request = CreateReadRequest(topic, req);
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << "Sending request: " << request->Record.ShortDebugString());
+            YDB_LOG_DEBUG("Sending",
+                {"logPrefix", LOG_PREFIX},
+                {"request", request->Record});
             NTabletPipe::SendData(ctx, tabletInfo.PipeClient, request.release());
 
             break;
@@ -321,13 +343,18 @@ public:
     void Handle(TEvPersQueue::TEvHasDataInfoResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
         auto partitionIndex = record.GetCookie();
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << "Handle TEvPersQueue::TEvHasDataInfoResponse " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvPersQueue::TEvHasDataInfoResponse",
+            {"logPrefix", LOG_PREFIX},
+            {"#_record", record});
         if (partitionIndex >= PartitionStatus.size()) {
             Y_VERIFY_DEBUG(partitionIndex < PartitionStatus.size());
             return;
         }
         auto& status = PartitionStatus[partitionIndex];
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << "Partition " << partitionIndex << " status is " << (int)status);
+        YDB_LOG_DEBUG("Partition status is",
+            {"logPrefix", LOG_PREFIX},
+            {"partitionIndex", partitionIndex},
+            {"#_(int)status", (int)status});
         if (status != EPartitionStatus::HasDataRequested) {
             // On timeout we resend send HasData
             return;
@@ -349,12 +376,17 @@ public:
 
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx) {
         auto& record = ev->Get()->Record;
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << "Handle TEvPersQueue::TEvResponse " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Handle TEvPersQueue::TEvResponse",
+            {"logPrefix", LOG_PREFIX},
+            {"#_record", record});
         AFL_ENSURE(record.HasPartitionResponse());
 
         if (record.GetPartitionResponse().GetCookie() != FetchRequestCurrentPartitionIndex || FetchRequestCurrentReadTablet == 0) {
-            LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << "proxy fetch error: got response from tablet " << record.GetPartitionResponse().GetCookie()
-                                << " while waiting from " << FetchRequestCurrentPartitionIndex << " and requested tablet is " << FetchRequestCurrentReadTablet);
+            YDB_LOG_WARN("Proxy fetch error: got response from tablet while waiting from and requested tablet is",
+                {"logPrefix", LOG_PREFIX},
+                {"#_record.GetPartitionResponse().GetCookie", record.GetPartitionResponse().GetCookie()},
+                {"fetchRequestCurrentPartitionIndex", FetchRequestCurrentPartitionIndex},
+                {"fetchRequestCurrentReadTablet", FetchRequestCurrentReadTablet});
             return;
         }
 
@@ -396,7 +428,9 @@ public:
             Response->Response.SetTimestampType(timestampType);
         }
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << "After processing result FetchRequestBytesLeft=" << FetchRequestBytesLeft);
+        YDB_LOG_DEBUG("After processing result",
+            {"logPrefix", LOG_PREFIX},
+            {"fetchRequestBytesLeft", FetchRequestBytesLeft});
         if (FetchRequestBytesLeft == 0) {
             FinishProcessing(ctx);
         } else if (IsQuotaRequired()) {
@@ -484,7 +518,9 @@ public:
                 fetchInfo->Record.SetDeadline(0);
 
                 auto tabletId = topicInfo.PartitionToTablet[p.Partition];
-                LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << "Sending TEvPersQueue::TEvHasDataInfo " << fetchInfo->Record.ShortDebugString());
+                YDB_LOG_DEBUG("Sending TEvPersQueue::TEvHasDataInfo",
+                    {"logPrefix", LOG_PREFIX},
+                    {"#_fetchInfo->Record", fetchInfo->Record});
                 NTabletPipe::SendData(ctx, TabletInfo[tabletId].PipeClient, fetchInfo.release());
             }
         }
@@ -536,7 +572,10 @@ public:
     }
 
     void SendReplyAndDie(THolder<TEvPQ::TEvFetchResponse> event, const TActorContext& ctx) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_FETCH_REQUEST, LOG_PREFIX << "Reply to " << RequesterId << ": " << event->Response.ShortDebugString());
+        YDB_LOG_DEBUG("Reply",
+            {"logPrefix", LOG_PREFIX},
+            {"requesterId", RequesterId},
+            {"#_event->Response", event->Response});
         ctx.Send(RequesterId, event.Release());
         Die(ctx);
     }

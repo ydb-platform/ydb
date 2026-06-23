@@ -47,9 +47,11 @@ public:
         UpdateQuery = GetUpdateSourceIdQueryFromPath(pqConfig.GetSourceIdTablePath(), TableGeneration);
         UpdateAccessTimeQuery = GetUpdateAccessTimeQueryFromPath(pqConfig.GetSourceIdTablePath(), TableGeneration);
 
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, "TTableHelper " << "SelectQuery: " << SelectQuery);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "TTableHelper",
+            {"selectQuery", SelectQuery});
         LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, "TTableHelper " << "UpdateQuery: " << UpdateQuery);
-        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_PARTITION_CHOOSER, "TTableHelper " << "UpdateAccessTimeQuery: " << UpdateAccessTimeQuery);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "TTableHelper",
+            {"updateAccessTimeQuery", UpdateAccessTimeQuery});
 
         return true;
     }
@@ -263,9 +265,5 @@ private:
 };
 
 #undef LOG_PREFIX
-#undef TRACE
-#undef DEBUG
-#undef INFO
-#undef ERROR
 
 } // namespace NKikimr::NPQ::NPartitionChooser

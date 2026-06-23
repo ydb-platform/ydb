@@ -3,6 +3,8 @@
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NBatching {
 
 TConsumerBatchProcessor::TConsumerBatchProcessor(ui64 tabletId, const NActors::TActorId& tabletActorId, TString user)
@@ -106,7 +108,10 @@ STFUNC(TConsumerBatchProcessor::StateWork) {
         HFunc(TEvProcessBatch, Handle);
         HFunc(NActors::TEvents::TEvPoisonPill, Handle);
     default:
-        LOG_WARN_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Unexpected event in TConsumerBatchProcessor for user " << User << ": " << ev->GetTypeRewrite());
+        YDB_LOG_WARN("Unexpected event in TConsumerBatchProcessor for user",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"user", User},
+            {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
         break;
     }
 }

@@ -441,7 +441,8 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
         const ui16 partNo = blobs[blobIdx].PartNo;
 
         if (blobs[blobIdx].Empty()) { // this is ok. Means that someone requested too much data or retention race
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE, LogPrefix() << "Not full answer here!");
+            YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "Not full answer here!",
+                {"logPrefix", LogPrefix()});
             const ui64 answerSize = answer->Response->ByteSize();
             if (userInfo && Destination != 0) {
                 userInfo->ReadDone(ctx, ctx.Now(), answerSize, cnt, ClientDC,
@@ -501,8 +502,14 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
                 continue;
             }
 
-            LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE, LogPrefix() << "FormAnswer processing batch offset " << (offset - header.GetCount()) <<  " totakecount " << count << " count " << header.GetCount()
-                    << " size " << header.GetPayloadSize() << " from batchStartIdx " << batchStartIdx << " cbcount " << batch.Blobs.size());
+            YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "FormAnswer processing batch offset totakecount count size from batchStartIdx cbcount",
+                {"logPrefix", LogPrefix()},
+                {"#_(offset - header.GetCount())", (offset - header.GetCount())},
+                {"count", count},
+                {"#_header.GetCount", header.GetCount()},
+                {"#_header.GetPayloadSize", header.GetPayloadSize()},
+                {"batchStartIdx", batchStartIdx},
+                {"#_batch.Blobs.size", batch.Blobs.size()});
 
             for (size_t i = batchStartIdx; i < batch.Blobs.size(); ++i) {
                 const TClientBlob &res = batch.Blobs[i];
@@ -582,7 +589,9 @@ TReadAnswer TReadInfo::FormAnswer(
     readResult->SetReadFromTimestampMs(ReadTimestampMs);
 
     AFL_ENSURE(endOffset <= (ui64)Max<i64>())("Max offset is too big", endOffset);
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PERSQUEUE, LogPrefix() << "FormAnswer for " << Blobs.size() << " blobs");
+    YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "FormAnswer for blobs",
+        {"logPrefix", LogPrefix()},
+        {"#_Blobs.size", Blobs.size()});
 
     if (!isActive && response->GetBlobs().empty()) {
         postProcessor(true, *readResult);
@@ -731,8 +740,12 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     );
 
     ctx.Send(ReplyTo(res->Destination, answer.ReplyTo), answer.Event.Release());
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << " waiting read cookie " << ev->Get()->Cookie
-        << " partition " << Partition << " read timeout for " << res->User << " offset " << res->Offset);
+    YDB_LOG_DEBUG_COMP(Service, "Waiting read cookie partition read timeout for offset",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"#_ev->Get()->Cookie", ev->Get()->Cookie},
+        {"partition", Partition},
+        {"#_res->User", res->User},
+        {"#_res->Offset", res->Offset});
     auto& userInfo = UsersInfoStorage->GetOrCreate(res->User, ctx);
 
     userInfo.ForgetSubscription(GetEndOffset(), ctx.Now());
@@ -820,11 +833,13 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
         if (read->PartNo > 0) {
         TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(
             0);
-        LOG_ERROR_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << 
-            "I was right, there could be rewinds and deletions at once! Topic "
-            << TopicConverter->GetClientsideName() << " partition " << Partition
-            << " readOffset " << read->Offset << " readPartNo " << read->PartNo
-            << " startOffset " << GetStartOffset());
+        YDB_LOG_ERROR_COMP(Service, "I was right, there could be rewinds and deletions at once! Topic partition readOffset readPartNo startOffset",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+            {"partition", Partition},
+            {"#_read->Offset", read->Offset},
+            {"#_read->PartNo", read->PartNo},
+            {"startOffset", GetStartOffset()});
         ReplyError(
             ctx, read->Cookie,
             NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET,
@@ -836,12 +851,13 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
     if (read->Offset > GetEndOffset() || read->Offset == GetEndOffset() && read->PartNo > 0) {
         TabletCounters.Cumulative()[COUNTER_PQ_READ_ERROR_BIG_OFFSET].Increment(1);
         TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
-        LOG_ERROR_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << 
-                    "reading from too big offset - topic " << TopicConverter->GetClientsideName() <<
-                    " partition " << Partition <<
-                    " client " << read->ClientId <<
-                    " EndOffset " << GetEndOffset() <<
-                    " offset " << read->Offset);
+        YDB_LOG_ERROR_COMP(Service, "Reading from too big offset - topic partition client EndOffset offset",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+            {"partition", Partition},
+            {"#_read->ClientId", read->ClientId},
+            {"endOffset", GetEndOffset()},
+            {"#_read->Offset", read->Offset});
         ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET,
                                       TStringBuilder() << "trying to read from future. ReadOffset " <<
                                       read->Offset << ", " << read->PartNo << " EndOffset " << GetEndOffset(),
@@ -901,20 +917,35 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
 
     ui64 cookie = NextReadCookie();
 
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "read cookie " << cookie << " Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
-                << " user " << user
-                << " offset " << read->Offset << " partno " << read->PartNo << " count " << read->Count << " size " << read->Size << " endOffset " << GetEndOffset()
-                << " max time lag " << read->MaxTimeLagMs << "ms effective offset " << offset);
+    YDB_LOG_DEBUG_COMP(Service, "Read cookie Topic partition user offset partno count size endOffset max time lag ms effective offset",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"cookie", cookie},
+        {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+        {"partition", Partition},
+        {"user", user},
+        {"#_read->Offset", read->Offset},
+        {"#_read->PartNo", read->PartNo},
+        {"#_read->Count", read->Count},
+        {"#_read->Size", read->Size},
+        {"endOffset", GetEndOffset()},
+        {"#_read->MaxTimeLagMs", read->MaxTimeLagMs},
+        {"offset", offset});
 
     if (offset == GetEndOffset() && !(read->Timeout == 0 && read->IsInternal())) { // Why? If read timeout = 0 we wait?
         const ui32 maxTimeout = IsActive() ? 30000 : 1000;
         if (read->Timeout > maxTimeout) {
             if (IsActive()) {
-                LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "too big read timeout " << " Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
-                            << " user " << read->ClientId << " offset " << read->Offset << " count " << read->Count
-                            << " size " << read->Size << " endOffset " << GetEndOffset() << " max time lag " << read->MaxTimeLagMs
-                            << "ms effective offset " << offset
-                );
+                YDB_LOG_DEBUG_COMP(Service, "Too big read timeout Topic partition user offset count size endOffset max time lag ms effective offset",
+                    {"logPrefix", NPQ_LOG_PREFIX},
+                    {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+                    {"partition", Partition},
+                    {"#_read->ClientId", read->ClientId},
+                    {"#_read->Offset", read->Offset},
+                    {"#_read->Count", read->Count},
+                    {"#_read->Size", read->Size},
+                    {"endOffset", GetEndOffset()},
+                    {"#_read->MaxTimeLagMs", read->MaxTimeLagMs},
+                    {"offset", offset});
             }
             read->Timeout = maxTimeout;
         }
@@ -945,11 +976,16 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
     if (userInfo.ReadScheduled)
         return;
     userInfo.ReadScheduled = true;
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition <<
-            " user " << user << " readTimeStamp for offset " << userInfo.Offset << " initiated " <<
-            " queuesize " << UpdateUserInfoTimestamp.size() << " startOffset " << GetStartOffset() <<
-            " ReadingTimestamp " << ReadingTimestamp << " rrg " << userInfo.ReadRuleGeneration
-    );
+    YDB_LOG_DEBUG_COMP(Service, "Topic partition user readTimeStamp for offset initiated queuesize startOffset ReadingTimestamp rrg",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+        {"partition", Partition},
+        {"user", user},
+        {"#_userInfo.Offset", userInfo.Offset},
+        {"#_UpdateUserInfoTimestamp.size", UpdateUserInfoTimestamp.size()},
+        {"startOffset", GetStartOffset()},
+        {"readingTimestamp", ReadingTimestamp},
+        {"#_userInfo.ReadRuleGeneration", userInfo.ReadRuleGeneration});
 
     if (ReadingTimestamp) {
         UpdateUserInfoTimestamp.push_back(std::make_pair(user, userInfo.ReadRuleGeneration));
@@ -987,11 +1023,16 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
         PQ_ENSURE(user.first != ReadingForUser || user.second != ReadingForUserReadRuleGeneration);
     }
 
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Topic '" << TopicConverter->GetClientsideName() << "' partition " << Partition
-            << " user " << user << " send read request for offset " << userInfo.Offset << " initiated "
-            << " queuesize " << UpdateUserInfoTimestamp.size() << " startOffset " << GetStartOffset()
-            << " ReadingTimestamp " << ReadingTimestamp << " rrg " << ReadingForUserReadRuleGeneration
-    );
+    YDB_LOG_DEBUG_COMP(Service, "Topic partition user send read request for offset initiated queuesize startOffset ReadingTimestamp rrg",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+        {"partition", Partition},
+        {"user", user},
+        {"#_userInfo.Offset", userInfo.Offset},
+        {"#_UpdateUserInfoTimestamp.size", UpdateUserInfoTimestamp.size()},
+        {"startOffset", GetStartOffset()},
+        {"readingTimestamp", ReadingTimestamp},
+        {"readingForUserReadRuleGeneration", ReadingForUserReadRuleGeneration});
 
     THolder<TEvPQ::TEvRead> event = MakeHolder<TEvPQ::TEvRead>(0, userInfo.Offset, 0, 0, 1, "",
                                                                user, 0, MAX_BLOB_PART_SIZE * 2, false, 0, 0, "",
@@ -1011,8 +1052,10 @@ void TPartition::ProcessTimestampsForNewData(const ui64 prevEndOffset, const TAc
 
 void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& ctx) {
     if (ev->Get()->IsInternal) {
-        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Topic '" << TopicConverter->GetClientsideName() << "'" <<
-            " partition " << Partition << ": Got internal ProxyResponse");
+        YDB_LOG_DEBUG_COMP(Service, "Topic partition Got internal ProxyResponse",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+            {"partition", Partition});
         CompacterPartitionRequestInflight = false;
         if (Compacter) {
             Compacter->ProcessResponse(ev);
@@ -1023,36 +1066,32 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
     ReadingTimestamp = false;
     auto userInfo = UsersInfoStorage->GetIfExists(ReadingForUser);
     if (!userInfo || userInfo->ReadRuleGeneration != ReadingForUserReadRuleGeneration) {
-        LOG_INFO_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Topic '" << TopicConverter->GetClientsideName() << "'" <<
-            " partition " << Partition <<
-            " user " << ReadingForUser <<
-            " readTimeStamp for other generation or no client info at all"
-        );
+        YDB_LOG_INFO_COMP(Service, "Topic partition user readTimeStamp for other generation or no client info at all",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+            {"partition", Partition},
+            {"readingForUser", ReadingForUser});
 
         ProcessTimestampRead(ctx);
         return;
     }
 
-    LOG_DEBUG_S(
-            ctx, NKikimrServices::PERSQUEUE,
-            "Topic '" << TopicConverter->GetClientsideName() << "'" <<
-            " partition " << Partition <<
-            " user " << ReadingForUser <<
-            " readTimeStamp done, result " << userInfo->WriteTimestamp.MilliSeconds() <<
-            " queuesize " << UpdateUserInfoTimestamp.size() <<
-            " startOffset " << GetStartOffset()
-    );
+    YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "Topic partition user readTimeStamp done, result queuesize startOffset",
+        {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+        {"partition", Partition},
+        {"readingForUser", ReadingForUser},
+        {"#_userInfo->WriteTimestamp.MilliSeconds", userInfo->WriteTimestamp.MilliSeconds()},
+        {"#_UpdateUserInfoTimestamp.size", UpdateUserInfoTimestamp.size()},
+        {"startOffset", GetStartOffset()});
     PQ_ENSURE(userInfo->ReadScheduled);
     userInfo->ReadScheduled = false;
     PQ_ENSURE(ReadingForUser != "");
 
     if (!userInfo->ActualTimestamps) {
-        LOG_INFO_S(
-            ctx,
-            NKikimrServices::PERSQUEUE,
-            "Reading Timestamp failed for offset " << ReadingForOffset << " ( "<< userInfo->Offset << " ) "
-                                                   << ev->Get()->Response->DebugString()
-        );
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "Reading Timestamp failed for offset",
+            {"readingForOffset", ReadingForOffset},
+            {"#_userInfo->Offset", userInfo->Offset},
+            {"#_ev->Get()->Response->DebugString", ev->Get()->Response->DebugString()});
         if (ev->Get()->Response->GetStatus() == NMsgBusProxy::MSTATUS_OK &&
             ev->Get()->Response->GetErrorCode() == NPersQueue::NErrorCode::OK &&
             ev->Get()->Response->GetPartitionResponse().HasCmdReadResult() &&
@@ -1130,8 +1169,14 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     info.Blobs = blobs;
     ui64 lastOffset = blobs.empty() ? info.Offset : blobs.back().Key.GetOffset();
 
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "read cookie " << cookie << " added " << info.Blobs.size()
-                << " blobs, size " << size << " count " << count << " last offset " << lastOffset << ", current partition end offset: " << GetEndOffset());
+    YDB_LOG_DEBUG_COMP(Service, "Read cookie added blobs, size count last offset current partition end",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"cookie", cookie},
+        {"#_info.Blobs.size", info.Blobs.size()},
+        {"size", size},
+        {"count", count},
+        {"lastOffset", lastOffset},
+        {"offset", GetEndOffset()});
 
     PQ_ENSURE(info.BlobKeyTokens.Size() == info.Blobs.size());
     if (info.Destination != 0) {
@@ -1140,14 +1185,18 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     }
 
     if (info.Blobs.empty()) { //all from head, answer right now
-        LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Reading cookie " << cookie << ". All data is from uncompacted head.");
+        YDB_LOG_DEBUG_COMP(Service, "Reading cookie All data is from uncompacted head",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"cookie", cookie});
 
         OnReadComplete(info, &UsersInfoStorage->GetOrCreate(info.User, ctx), nullptr, ctx);
         return;
     }
 
     bool res = ReadInfo.emplace(cookie, std::move(info)).second;
-    LOG_DEBUG_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Reading cookie " << cookie << ". Send blob request.");
+    YDB_LOG_DEBUG_COMP(Service, "Reading cookie Send blob request",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"cookie", cookie});
     PQ_ENSURE(res);
 
     auto request = MakeHolder<TEvPQ::TEvBlobRequest>(cookie, Partition,

@@ -610,7 +610,8 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateInit", ev));
+        YDB_LOG_TRACE_COMP(NKikimrServices::PERSQUEUE, "Dump #_num_0",
+            {"#_num_0", EventStr("StateInit", ev)});
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
@@ -655,7 +656,8 @@ private:
             hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
             if (!Initializer.Handle(ev)) {
-                ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateInit", ev));
+                YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Unexpected",
+                    {"#_num_0", EventStr("StateInit", ev)});
             }
             break;
         };
@@ -665,7 +667,8 @@ private:
     {
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
-        ALOG_TRACE(NKikimrServices::PERSQUEUE, EventStr("StateIdle", ev));
+        YDB_LOG_TRACE_COMP(NKikimrServices::PERSQUEUE, "Dump #_num_0",
+            {"#_num_0", EventStr("StateIdle", ev)});
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
@@ -735,7 +738,8 @@ private:
             hFuncTraced(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId, Handle);
             hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
-            ALOG_ERROR(NKikimrServices::PERSQUEUE, "Unexpected " << EventStr("StateIdle", ev));
+            YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Unexpected",
+                {"#_num_0", EventStr("StateIdle", ev)});
             break;
         };
     }

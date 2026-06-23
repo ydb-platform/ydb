@@ -2,6 +2,8 @@
 
 #include <ydb/core/persqueue/public/constants.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 
 namespace NKikimr::NPQ {
 
@@ -152,9 +154,11 @@ void TPartitionQuoterBase::HandleConsumed(TEvPQ::TEvConsumed::TPtr& ev, const TA
         RequestsInflight--;
         ProcessInflightQueue();
     } else {
-        LOG_ERROR_S(*NActors::TlsActivationContext, Service, NPQ_LOG_PREFIX << "Attempt to make the inflight counter below zero. Topic " << TopicConverter->GetClientsideName() <<
-              " partition " << Partition <<
-              " readCookie " << ev->Get()->RequestCookie);
+        YDB_LOG_ERROR("Attempt to make the inflight counter below zero. Topic partition readCookie",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+            {"partition", Partition},
+            {"#_ev->Get()->RequestCookie", ev->Get()->RequestCookie});
     }
 
     if (!RequestsInflight && (ExclusiveLockState == EExclusiveLockState::EAcquiring)) {

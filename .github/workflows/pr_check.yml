@@ -228,17 +228,6 @@ jobs:
     name: Build and test ${{ matrix.build_preset }}
     steps:
       - uses: ./.github/actions/ya_ci_core_build_test
-        if: |
-          (matrix.build_preset == 'release-asan') ||
-          (matrix.build_preset == 'relwithdebinfo') ||
-
-            (matrix.build_preset == 'release-tsan' &&
-            contains(github.event.pull_request.labels.*.name, 'run-tsan-tests') ||
-            contains(github.event.pull_request.labels.*.name, 'run-sanitizer-tests')) ||
-
-            (matrix.build_preset == 'release-msan' &&
-            contains(github.event.pull_request.labels.*.name, 'run-msan-tests') ||
-            contains(github.event.pull_request.labels.*.name, 'run-sanitizer-tests'))
         with:
           build_preset: ${{ matrix.build_preset }}
           build_target: ${{ matrix.build_target }}

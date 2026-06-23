@@ -40,25 +40,23 @@ Composite actions (`build_and_test_ya`, `ya_ci_core_build_test`, …) may differ
 **Docs:** CI_PIPELINE.md | CI_PLATFORM.md | ARCHITECTURE.md (if job_name)
 ```
 
-## Supply-chain & security
+## Security at development & review
 
-### Docs / build hooks
+`.github/` changes run on shared infrastructure with elevated tokens. **Do not introduce execution paths for untrusted or unreviewed code.**
 
-`.yfm` `extensions:` run Node at docs build time (CI or local). Block unreviewed:
+Principles (apply to workflows, composite actions, CI scripts, and build hooks — docs, release, etc.):
 
-| Red flag | Example |
-|---------|---------|
-| New `extensions:` loading unknown `.cjs` | [PR #43915](https://github.com/ydb-platform/ydb/pull/43915) — `curl \| sh` in `loader.cjs` |
-| `exec` / `execSync` / fetch remote script in build assets | Human review required |
-| Whitespace-only diff hiding config block | Read full file |
+- **Least privilege:** minimal `permissions`, no broad secrets in fork-exposed jobs.
+- **No untrusted execution:** under `pull_request_target`, do not run PR head code without the same guards as `rebase.yml` (collaborator checks, no arbitrary build of fork code).
+- **No remote code at runtime:** avoid `curl | sh`, unpinned downloads, `exec`/`eval` on external input in CI and build pipelines.
+- **Pin dependencies:** action versions (`actions/checkout@v5`), pip/npm packages in CI scripts.
+- **Review the whole diff:** cosmetic-only changes can hide new steps, hooks, or config blocks — read full files for security-sensitive paths.
+- **Question new side effects:** anything that runs on schedule, on every PR, or at build time affects all maintainers — treat as high scrutiny.
 
-### `.github/` workflows
-
-- No untrusted PR head execution in `pull_request_target` without guards (see `rebase.yml` header).
-- Pin actions (`actions/checkout@v5`) and pip deps in CI scripts.
+When in doubt, ask for a second human review before merge.
 
 ## Maintenance
 
-Update this file when changing: platform workarounds (#36673, #44180), multi-branch policy, or security review rules.
+Update this file when changing: platform workarounds (#36673, #44180), multi-branch policy, or security review expectations.
 
 Skill router: `.cursor/rules/ci-testing.mdc` (points here for platform topics).

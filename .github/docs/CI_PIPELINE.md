@@ -183,7 +183,7 @@ Update: diagram edge, workflow table row, PR-check table if gate logic changed.
 - [ ] New GitHub status context → update `update_integrated_status` in pr_check if needed
 - [ ] New job_name in YDB upload → analytics ARCHITECTURE.md
 - [ ] Fork/external PR flow if changing pull_request_target gate
-- [ ] No unreviewed docs extensions or remote curl|sh ([CI_PLATFORM.md](CI_PLATFORM.md))
+- [ ] Security: no new untrusted execution / remote code paths ([CI_PLATFORM.md](CI_PLATFORM.md))
 ```
 
 ### For Cursor agents

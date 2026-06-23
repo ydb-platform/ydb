@@ -1,0 +1,216 @@
+name: Run-tests core
+
+on:
+  workflow_call:
+    inputs:
+      test_targets:
+        required: true
+        type: string
+      test_type:
+        required: false
+        type: string
+        default: ''
+      test_size:
+        required: false
+        type: string
+        default: small,medium,large
+      additional_ya_make_args:
+        required: false
+        type: string
+        default: ''
+      build_preset:
+        required: true
+        type: string
+      branches:
+        required: false
+        type: string
+        default: '["main"]'
+      branches_config_path:
+        required: false
+        type: string
+        default: ''
+      blacklist_paths:
+        required: false
+        type: string
+        default: ''
+      test_threads:
+        required: false
+        type: string
+        default: '52'
+      pull_number:
+        required: false
+        type: string
+        default: ''
+      collect_coredumps:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    outputs:
+      branch_array: ${{ steps.set-branches.outputs.branch_array }}
+      branch_name_map: ${{ steps.set-branches.outputs.branch_name_map }}
+      pr_number_map: ${{ steps.set-branches.outputs.pr_number_map }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/config
+            .github/scripts/tests
+
+      - name: Set branches
+        id: set-branches
+        env:
+          CALLED_BRANCHES: '${{ inputs.branches }}'
+          BRANCHES_CONFIG_PATH: '${{ inputs.branches_config_path }}'
+          PULL_REQUEST_NUMBER: '${{ inputs.pull_number }}'
+          GITHUB_TOKEN: '${{ github.token }}'
+        run: |
+          if [[ -n "$CALLED_BRANCHES" ]]; then
+            echo "Branches parameter provided from calling workflow: $CALLED_BRANCHES"
+
+            if [[ $CALLED_BRANCHES == \[* ]]; then
+              branches=($(echo "$CALLED_BRANCHES" | jq -r '.[]'))
+            else
+              branches=("$CALLED_BRANCHES")
+            fi
+
+            processed_branches=()
+            branch_name_map="{}"
+            pr_number_map="{}"
+            for branch in "${branches[@]}"; do
+              if [[ $branch =~ ^pull/([0-9]+)$ ]]; then
+                PULL_REQUEST_NUMBER=${BASH_REMATCH[1]}
+                echo "Processing pull request: $PULL_REQUEST_NUMBER"
+
+                PR_DATA=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s -H "Authorization: token $GITHUB_TOKEN" \
+                  "https://api.github.com/repos/ydb-platform/ydb/pulls/$PULL_REQUEST_NUMBER")
+                MERGE_SHA=$(echo "$PR_DATA" | jq -r '.merge_commit_sha')
+                BASE_BRANCH=$(echo "$PR_DATA" | jq -r '.base.ref')
+
+                if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
+                  echo "Replaced pull/$PULL_REQUEST_NUMBER with merge commit: $MERGE_SHA (base: $BASE_BRANCH)"
+                  processed_branches+=("\"$MERGE_SHA\"")
+                  branch_name_map=$(echo "$branch_name_map" | jq -c --arg sha "$MERGE_SHA" --arg base "$BASE_BRANCH" '. + {($sha): $base}')
+                  pr_number_map=$(echo "$pr_number_map" | jq -c --arg sha "$MERGE_SHA" --arg pr "$PULL_REQUEST_NUMBER" '. + {($sha): $pr}')
+                  if [ -z "$COMMIT_SHA" ]; then
+                    echo "COMMIT_SHA=$MERGE_SHA" >> $GITHUB_ENV
+                    echo "PR_BASE_BRANCH=$BASE_BRANCH" >> $GITHUB_ENV
+                    echo "PR_NUMBER=$PULL_REQUEST_NUMBER" >> $GITHUB_ENV
+                  fi
+                else
+                  echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER, discarding"
+                fi
+              else
+                processed_branches+=("\"$branch\"")
+              fi
+            done
+
+            branch_array=$(IFS=, ; echo "[${processed_branches[*]}]")
+            echo "branch_array=$branch_array" >> $GITHUB_OUTPUT
+            branch_name_map_compact=$(echo "$branch_name_map" | jq -c .)
+            echo "branch_name_map=$branch_name_map_compact" >> $GITHUB_OUTPUT
+            pr_number_map_compact=$(echo "$pr_number_map" | jq -c .)
+            echo "pr_number_map=$pr_number_map_compact" >> $GITHUB_OUTPUT
+          elif [[ -n "$BRANCHES_CONFIG_PATH" ]]; then
+            echo "branch_array=$(jq -c "." "$BRANCHES_CONFIG_PATH")" >> $GITHUB_OUTPUT
+            echo "branch_name_map={}" >> $GITHUB_OUTPUT
+            echo "pr_number_map={}" >> $GITHUB_OUTPUT
+          elif [[ -n "$PULL_REQUEST_NUMBER" ]] && [[ $PULL_REQUEST_NUMBER =~ ^[0-9]+$ ]]; then
+            PR_DATA=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s -H "Authorization: token $GITHUB_TOKEN" \
+                  "https://api.github.com/repos/ydb-platform/ydb/pulls/$PULL_REQUEST_NUMBER")
+            MERGE_SHA=$(echo "$PR_DATA" | jq -r '.merge_commit_sha')
+            BASE_BRANCH=$(echo "$PR_DATA" | jq -r '.base.ref')
+            if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
+              echo "branch_array=[\"$MERGE_SHA\"]" >> $GITHUB_OUTPUT
+              echo "COMMIT_SHA=$MERGE_SHA" >> $GITHUB_ENV
+              echo "PR_BASE_BRANCH=$BASE_BRANCH" >> $GITHUB_ENV
+              echo "PR_NUMBER=$PULL_REQUEST_NUMBER" >> $GITHUB_ENV
+              branch_name_map=$(jq -c -n --arg sha "$MERGE_SHA" --arg base "$BASE_BRANCH" '{($sha): $base}')
+              echo "branch_name_map=$branch_name_map" >> $GITHUB_OUTPUT
+              pr_number_map=$(jq -c -n --arg sha "$MERGE_SHA" --arg pr "$PULL_REQUEST_NUMBER" '{($sha): $pr}')
+              echo "pr_number_map=$pr_number_map" >> $GITHUB_OUTPUT
+            else
+              echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER"
+              exit 1
+            fi
+          else
+            echo "No branches specified, using current branch: ${{ github.ref_name }}"
+            echo "branch_array=[\"${{ github.ref_name }}\"]" >> $GITHUB_OUTPUT
+            echo "branch_name_map={}" >> $GITHUB_OUTPUT
+            echo "pr_number_map={}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Install dependencies
+        if: always()
+        run: |
+          if [ -n "$COMMIT_SHA" ]; then
+            pip install PyGithub
+          fi
+
+      - name: Post run tests start comment
+        if: always()
+        shell: bash
+        env:
+          BUILD_PRESET: ${{ inputs.build_preset }}
+          GITHUB_TOKEN: ${{ github.token }}
+          TEST_SIZE: ${{ inputs.test_size }}
+          BUILD_TARGET: ${{ inputs.test_targets }}
+          COLLECT_COREDUMPS: ${{ inputs.collect_coredumps }}
+        run: |
+          if [ -z "$COMMIT_SHA" ]; then
+            echo "No PR detected (COMMIT_SHA is not set), skipping comment"
+            exit 0
+          fi
+          commit_sha="$COMMIT_SHA"
+
+          commit_short=$(echo "$commit_sha" | cut -c1-7)
+          commit_url="https://github.com/${GITHUB_REPOSITORY}/commit/${commit_sha}"
+          check_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+
+          workflow_name="${{ github.workflow }}"
+
+          {
+            echo "### $workflow_name started"
+            echo ""
+            echo "- **Build Preset:** \`$BUILD_PRESET\`"
+            echo "- **Test Size:** \`$TEST_SIZE\`"
+            echo "- **Test Targets:** \`$BUILD_TARGET\`"
+            if [ "$COLLECT_COREDUMPS" = "true" ]; then
+              echo "- **Collect Coredumps:** \`true\`"
+            fi
+            echo "- **Commit:** [${commit_short}](${commit_url})"
+            echo "- **Workflow run:** [link](${check_url})"
+            echo ""
+          } | .github/scripts/tests/comment-pr.py --rewrite --no-timestamp
+
+  run_tests:
+    needs: prepare
+    name: ${{ matrix.branch }}:${{ inputs.build_preset }}
+    timeout-minutes: 1200
+    runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', inputs.build_preset) }}" ]
+    strategy:
+      fail-fast: false
+      matrix:
+        branch: ${{ fromJson(needs.prepare.outputs.branch_array) }}
+    steps:
+      - uses: ./.github/actions/ya_ci_core_build_test
+        with:
+          build_preset: ${{ inputs.build_preset }}
+          checkout_ref: ${{ matrix.branch }}
+          test_threads: ${{ inputs.test_threads }}
+          scale_test_threads_by_preset: 'true'
+          test_size: ${{ inputs.test_size }}
+          test_type: ${{ inputs.test_type }}
+          increment: 'false'
+          build_target: ${{ inputs.test_targets }}
+          additional_ya_make_args_append: ${{ inputs.additional_ya_make_args }}
+          blacklist_paths: ${{ inputs.blacklist_paths }}
+          test_retry_count: '3'
+          branch_name_map: ${{ needs.prepare.outputs.branch_name_map }}
+          pr_number_map: ${{ needs.prepare.outputs.pr_number_map }}
+          pull_number: ${{ inputs.pull_number }}
+          collect_coredumps: ${{ inputs.collect_coredumps }}

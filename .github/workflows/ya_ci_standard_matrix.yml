@@ -1,0 +1,83 @@
+# Shared relwithdebinfo + release-asan matrix for PR-check and Postmerge.
+name: Ya CI standard matrix
+
+on:
+  workflow_call:
+    inputs:
+      checkout_ref:
+        description: 'Git ref to checkout (empty = github.sha)'
+        type: string
+        default: ''
+      include_postcommit_runner:
+        description: 'Add postcommit runner label (Postmerge)'
+        type: boolean
+        default: false
+      enable_pr_sanitizer_label_gating:
+        description: 'Apply label if for tsan/msan presets (PR-check)'
+        type: boolean
+        default: false
+      checks_switch_mode:
+        description: 'none = always run; postmerge = CHECKS_SWITCH gating per preset'
+        type: string
+        default: 'none'
+
+jobs:
+  build_and_test:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - build_preset: relwithdebinfo
+            threads_count: 52
+            build_target: "ydb/"
+            test_size: small,medium
+          - build_preset: release-asan
+            threads_count: 52
+            build_target: "ydb/"
+            test_size: small,medium
+    if: >-
+      ${{
+        inputs.checks_switch_mode != 'postmerge' || (
+          vars.CHECKS_SWITCH != '' && (
+            fromJSON(vars.CHECKS_SWITCH).postmerge == true
+            || (matrix.build_preset == 'relwithdebinfo' && fromJSON(vars.CHECKS_SWITCH).postcommit_relwithdebinfo == true)
+            || (matrix.build_preset == 'release-asan' && fromJSON(vars.CHECKS_SWITCH).postcommit_asan == true)
+          )
+        )
+      }}
+    name: Build and test ${{ matrix.build_preset }}
+    runs-on: >-
+      ${{
+        inputs.include_postcommit_runner
+        && fromJSON(format('["self-hosted","auto-provisioned","build-preset-{0}","postcommit"]', matrix.build_preset))
+        || fromJSON(format('["self-hosted","auto-provisioned","build-preset-{0}"]', matrix.build_preset))
+      }}
+    steps:
+      - uses: ./.github/actions/ya_ci_core_build_test
+        if: >-
+          ${{
+            !inputs.enable_pr_sanitizer_label_gating || (
+              matrix.build_preset == 'release-asan'
+              || matrix.build_preset == 'relwithdebinfo'
+              || (
+                matrix.build_preset == 'release-tsan'
+                && (
+                  contains(github.event.pull_request.labels.*.name, 'run-tsan-tests')
+                  || contains(github.event.pull_request.labels.*.name, 'run-sanitizer-tests')
+                )
+              )
+              || (
+                matrix.build_preset == 'release-msan'
+                && (
+                  contains(github.event.pull_request.labels.*.name, 'run-msan-tests')
+                  || contains(github.event.pull_request.labels.*.name, 'run-sanitizer-tests')
+                )
+              )
+            )
+          }}
+        with:
+          build_preset: ${{ matrix.build_preset }}
+          build_target: ${{ matrix.build_target }}
+          checkout_ref: ${{ inputs.checkout_ref }}
+          test_threads: ${{ matrix.threads_count }}
+          test_size: ${{ matrix.test_size }}

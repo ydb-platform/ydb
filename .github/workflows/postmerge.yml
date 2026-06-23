@@ -1,5 +1,4 @@
 # Mainline checks when main, stable-*, or stream-nb-* advance (e.g. after merge).
-# Kill switch: CHECKS_SWITCH.postmerge, or legacy postcommit_<preset> keys per matrix entry.
 name: Postmerge
 
 on:
@@ -13,30 +12,8 @@ on:
 
 jobs:
   build_and_test:
-    strategy:
-      fail-fast: false
-      matrix:
-        build_preset:
-          - relwithdebinfo
-          - release-asan
-    if: >-
-      ${{
-        vars.CHECKS_SWITCH != '' && (
-          fromJSON(vars.CHECKS_SWITCH).postmerge == true
-          || (matrix.build_preset == 'relwithdebinfo' && fromJSON(vars.CHECKS_SWITCH).postcommit_relwithdebinfo == true)
-          || (matrix.build_preset == 'release-asan' && fromJSON(vars.CHECKS_SWITCH).postcommit_asan == true)
-        )
-      }}
-    name: Build and test ${{ matrix.build_preset }}
-    runs-on:
-      - self-hosted
-      - auto-provisioned
-      - "${{ format('build-preset-{0}', matrix.build_preset) }}"
-      - postcommit
-    steps:
-      - uses: ./.github/actions/ya_ci_core_build_test
-        with:
-          build_preset: ${{ matrix.build_preset }}
-          build_target: "ydb/"
-          test_threads: '52'
-          test_size: small,medium
+    uses: ./.github/workflows/ya_ci_standard_matrix.yml
+    with:
+      include_postcommit_runner: true
+      checks_switch_mode: postmerge
+    secrets: inherit

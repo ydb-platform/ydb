@@ -1,7 +1,7 @@
 name: Ya CI core (build and test)
 description: >
-  Shared checkout, optional blacklist, credentials, and build_and_test_ya.
-  Run parameters (threads, size) are set by the calling workflow.
+  Shared checkout, optional blacklist, credentials, thread scaling,
+  branch mapping, and build_and_test_ya.
 
 inputs:
   build_preset:
@@ -15,6 +15,9 @@ inputs:
   test_threads:
     required: false
     default: '52'
+  scale_test_threads_by_preset:
+    required: false
+    default: 'false'
   test_size:
     required: false
     default: 'small,medium'
@@ -52,6 +55,12 @@ inputs:
     required: false
     default: ''
   pull_number:
+    required: false
+    default: ''
+  branch_name_map:
+    required: false
+    default: ''
+  pr_number_map:
     required: false
     default: ''
   collect_coredumps:
@@ -98,6 +107,61 @@ runs:
         [ -n "${BL// }" ] && out="${out} ${BL}"
         echo "args=${out}" >> "$GITHUB_OUTPUT"
 
+    - name: Scale test threads by preset
+      id: threads
+      shell: bash
+      env:
+        SCALE: ${{ inputs.scale_test_threads_by_preset }}
+        TEST_THREADS: ${{ inputs.test_threads }}
+        BUILD_PRESET: ${{ inputs.build_preset }}
+      run: |
+        threads="$TEST_THREADS"
+        if [ "$SCALE" = "true" ]; then
+          case "$BUILD_PRESET" in
+            relwithdebinfo) ;;
+            release-asan) threads=$(awk "BEGIN {x=$TEST_THREADS * 0.38; printf \"%.0f\", (x < 1 ? 1 : x)}") ;;
+            release-msan) threads=$(awk "BEGIN {x=$TEST_THREADS * 0.1; printf \"%.0f\", (x < 1 ? 1 : x)}") ;;
+            release-tsan) threads=$(awk "BEGIN {x=$TEST_THREADS * 0.35; printf \"%.0f\", (x < 1 ? 1 : x)}") ;;
+            *)
+              echo "Unknown build_preset value: $BUILD_PRESET"
+              exit 1
+              ;;
+          esac
+        fi
+        echo "count=${threads}" >> "$GITHUB_OUTPUT"
+
+    - name: Resolve test history branch
+      id: branch
+      shell: bash
+      env:
+        BRANCH_NAME_MAP: ${{ inputs.branch_name_map }}
+        PR_NUMBER_MAP: ${{ inputs.pr_number_map }}
+        CHECKOUT_REF: ${{ inputs.checkout_ref || github.sha }}
+        CUSTOM_BRANCH_NAME: ${{ inputs.custom_branch_name }}
+        PULL_NUMBER: ${{ inputs.pull_number }}
+      run: |
+        branch_name="$CUSTOM_BRANCH_NAME"
+        pr_number="$PULL_NUMBER"
+
+        if [ -n "$BRANCH_NAME_MAP" ] && [ "$BRANCH_NAME_MAP" != "{}" ]; then
+          mapped=$(echo "$BRANCH_NAME_MAP" | jq -r --arg branch "$CHECKOUT_REF" '.[$branch] // empty')
+          if [ -n "$mapped" ] && [ "$mapped" != "null" ]; then
+            branch_name="$mapped"
+          elif [ -z "$branch_name" ]; then
+            branch_name="$CHECKOUT_REF"
+          fi
+        fi
+
+        if [ -n "$PR_NUMBER_MAP" ] && [ "$PR_NUMBER_MAP" != "{}" ]; then
+          mapped_pr=$(echo "$PR_NUMBER_MAP" | jq -r --arg branch "$CHECKOUT_REF" '.[$branch] // empty')
+          if [ -n "$mapped_pr" ] && [ "$mapped_pr" != "null" ]; then
+            pr_number="$mapped_pr"
+          fi
+        fi
+
+        echo "branch_name=${branch_name}" >> "$GITHUB_OUTPUT"
+        echo "pr_number=${pr_number}" >> "$GITHUB_OUTPUT"
+
     - name: Setup ydb access
       uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
       with:
@@ -114,11 +178,11 @@ runs:
         run_tests: ${{ inputs.run_tests == true || inputs.run_tests == 'true' }}
         test_size: ${{ inputs.test_size }}
         test_type: ${{ inputs.test_type }}
-        test_threads: ${{ inputs.test_threads }}
+        test_threads: ${{ steps.threads.outputs.count }}
         link_threads: ${{ inputs.link_threads }}
         test_retry_count: ${{ inputs.test_retry_count }}
-        custom_branch_name: ${{ inputs.custom_branch_name }}
-        pull_number: ${{ inputs.pull_number }}
+        custom_branch_name: ${{ steps.branch.outputs.branch_name }}
+        pull_number: ${{ steps.branch.outputs.pr_number }}
         collect_coredumps: ${{ inputs.collect_coredumps == true || inputs.collect_coredumps == 'true' }}
         put_build_results_to_cache: true
         additional_ya_make_args: ${{ steps.merged_ya.outputs.args }}

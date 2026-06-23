@@ -1,0 +1,191 @@
+name: PR-check gate
+
+on:
+  workflow_call:
+    outputs:
+      result:
+        description: Whether PR-check build is allowed
+        value: ${{ jobs.check-running-allowed.outputs.result }}
+      commit_sha:
+        description: Merge commit SHA for checkout
+        value: ${{ jobs.check-running-allowed.outputs.commit_sha }}
+
+jobs:
+  check-running-allowed:
+    runs-on: [self-hosted, tiny-worker]
+    timeout-minutes: 600
+    outputs:
+      result: ${{ steps.check-ownership-membership.outputs.result == 'true' && steps.check-is-mergeable.outputs.result == 'true' }}
+      commit_sha: ${{ steps.check-is-mergeable.outputs.commit_sha }}
+    steps:
+      - name: Reset integrated status
+        run: |
+          curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+            -d '{"state":"pending","description":"Waiting for relevant checks to complete","context":"checks_integrated","target_url":"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
+
+      - name: Check if running tests is allowed
+        id: check-ownership-membership
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const labels = context.payload.pull_request.labels;
+            const okToTestLabel = labels.find(
+              label => label.name == 'ok-to-test'
+            );
+
+            console.log("okToTestLabel=%o", okToTestLabel !== undefined);
+
+            if (okToTestLabel !== undefined) {
+              return true;
+            }
+
+            const userLogin = context.payload.pull_request.user.login;
+
+            const isRepoCollaborator = async function () {
+              try {
+                const response = await github.rest.repos.checkCollaborator({
+                  owner: context.payload.repository.owner.login,
+                  repo: context.payload.repository.name,
+                  username: userLogin,
+                });
+                return response.status == 204;
+              } catch (error) {
+                if (error.status && error.status == 404) {
+                  return false;
+                }
+                throw error;
+              }
+            }
+
+            if (context.payload.repository.owner.login == userLogin) {
+              console.log("You are the repository owner!");
+              return true;
+            }
+
+            if (await isRepoCollaborator()) {
+              console.log("You are a collaborator!");
+              return true;
+            }
+
+            return false;
+
+      - name: comment-if-waiting-on-ok
+        if: steps.check-ownership-membership.outputs.result == 'false' &&
+            github.event.action == 'opened'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            let externalContributorLabel = 'external';
+
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: 'Hi! Thank you for contributing!\nThe tests on this PR will run after a maintainer adds an `ok-to-test` label to this PR manually. Thank you for your patience!'
+            });
+
+            github.rest.issues.addLabels({
+                ...context.repo,
+                issue_number: context.issue.number,
+                labels: [externalContributorLabel]
+            });
+
+      - name: cleanup-test-label
+        uses: actions/github-script@v8
+        with:
+          script: |
+            let labelsToRemove = ['ok-to-test', 'rebase-and-check'];
+            const prNumber = context.payload.pull_request.number;
+            const prLabels = new Set(context.payload.pull_request.labels.map(l => l.name));
+            for await (const label of labelsToRemove.filter(l => prLabels.has(l))) {
+              core.info(`remove label=${label} for pr=${prNumber}`);
+              try {
+                await github.rest.issues.removeLabel({
+                  ...context.repo,
+                  issue_number: prNumber,
+                  name: label
+                });
+              } catch(error) {
+                if (error.status && error.status != 404) {
+                  throw error;
+                }
+              }
+            }
+
+      - name: check is mergeable
+        id: check-is-mergeable
+        if: steps.check-ownership-membership.outputs.result == 'true'
+        uses: actions/github-script@v8
+        with:
+          result-encoding: string
+          script: |
+            let pr = context.payload.pull_request;
+            const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+            const header = `<!-- merge pr=${pr.number} -->\n`;
+
+            const fail_msg = header + ':red_circle: Unable to merge your PR into the base branch. '
+                + 'Please rebase or merge it with the base branch.'
+
+            let i = 0;
+
+            while (pr.mergeable == null && i < 60) {
+                console.log("get pull-request status");
+
+                let result = await github.rest.pulls.get({
+                    ...context.repo,
+                    pull_number: pr.number
+                })
+
+                pr = result.data;
+
+                if (pr.mergeable == null) {
+                  await delay(5000);
+                }
+
+                i += 1;
+            }
+
+            console.log("pr.mergeable=%o", pr.mergeable);
+
+            if (pr.mergeable === null) {
+                core.setFailed("Unable to check if the PR is mergeable, please re-run the check.");
+                return false;
+            }
+
+            const { data: comments } = await github.rest.issues.listComments({
+                issue_number: context.issue.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo
+            });
+
+            const commentToUpdate = comments.find(comment => comment.body.startsWith(header));
+
+            if (!pr.mergeable) {
+                let commentParams = {
+                    ...context.repo,
+                    issue_number: context.issue.number,
+                    body: fail_msg
+                };
+
+                if (commentToUpdate) {
+                    await github.rest.issues.updateComment({
+                        ...commentParams,
+                        comment_id: commentToUpdate.id,
+                    });
+                } else {
+                    await github.rest.issues.createComment({...commentParams});
+                }
+                core.setFailed("Merge conflict detected");
+                return false;
+            } else if (commentToUpdate) {
+                await github.rest.issues.deleteComment({
+                    ...context.repo,
+                    issue_number: context.issue.number,
+                    comment_id: commentToUpdate.id,
+                });
+            }
+            core.info(`commit_sha=${pr.commit_sha}`);
+            core.setOutput('commit_sha', pr.merge_commit_sha);
+            return true;

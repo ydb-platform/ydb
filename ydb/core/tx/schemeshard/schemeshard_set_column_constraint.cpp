@@ -130,11 +130,11 @@ void TSchemeShard::PersistSetColumnConstraintShardDone(
     const TSetColumnConstraintOperationInfo& operationInfo)
 {
     auto status = operationInfo.ValidationShards.at(shardIdx);
-    db.Table<Schema::SetColumnConstraintDatashardStatuses>()
+    db.Table<Schema::SetColumnConstraintShardStatus>()
         .Key(operationId, shardIdx.GetOwnerId(), shardIdx.GetLocalId())
         .Update(
-            NIceDb::TUpdate<Schema::SetColumnConstraintDatashardStatuses::Status>(status.ValidateStatus),
-            NIceDb::TUpdate<Schema::SetColumnConstraintDatashardStatuses::Issue>(status.DebugMessage)
+            NIceDb::TUpdate<Schema::SetColumnConstraintShardStatus::Status>(status.ValidateStatus),
+            NIceDb::TUpdate<Schema::SetColumnConstraintShardStatus::Issue>(status.DebugMessage)
         );
 }
 

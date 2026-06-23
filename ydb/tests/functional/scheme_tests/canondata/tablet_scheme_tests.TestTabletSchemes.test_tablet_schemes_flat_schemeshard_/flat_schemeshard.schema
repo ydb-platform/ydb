@@ -10407,7 +10407,7 @@
     },
     {
         "TableId": 139,
-        "TableName": "SetColumnConstraintDatashardStatuses",
+        "TableName": "SetColumnConstraintShardStatus",
         "TableKey": [
             1,
             2,

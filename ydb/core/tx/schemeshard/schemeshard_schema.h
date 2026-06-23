@@ -2644,7 +2644,7 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
-    struct SetColumnConstraintDatashardStatuses : Table<139> {
+    struct SetColumnConstraintShardStatus : Table<139> {
         struct OperationId :            Column<1, NScheme::NTypeIds::Uint64>  { using Type = TIndexBuildId; };
         struct OwnerShardIdx :          Column<2, NScheme::NTypeIds::Uint64>  { using Type = TOwnerId; };
         struct LocalShardIdx :          Column<3, NScheme::NTypeIds::Uint64>  { using Type = TLocalShardIdx; };
@@ -2798,7 +2798,7 @@ struct Schema : NIceDb::Schema {
         FullBackups,
         FullBackupItems,
         SetColumnConstraint,
-        SetColumnConstraintDatashardStatuses
+        SetColumnConstraintShardStatus
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

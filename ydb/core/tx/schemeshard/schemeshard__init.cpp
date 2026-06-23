@@ -5410,19 +5410,19 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
 
             // Read per-shard validation statuses in SetColumnConstraint
             {
-                auto rowset = db.Table<Schema::SetColumnConstraintDatashardStatuses>().Range().Select();
+                auto rowset = db.Table<Schema::SetColumnConstraintShardStatus>().Range().Select();
                 if (!rowset.IsReady()) {
                     return false;
                 }
 
                 while (!rowset.EndOfSet()) {
-                    TIndexBuildId operationId = TIndexBuildId(rowset.GetValue<Schema::SetColumnConstraintDatashardStatuses::OperationId>());
+                    TIndexBuildId operationId = TIndexBuildId(rowset.GetValue<Schema::SetColumnConstraintShardStatus::OperationId>());
                     TShardIdx shardIdx(
-                        rowset.GetValue<Schema::SetColumnConstraintDatashardStatuses::OwnerShardIdx>(),
-                        rowset.GetValue<Schema::SetColumnConstraintDatashardStatuses::LocalShardIdx>()
+                        rowset.GetValue<Schema::SetColumnConstraintShardStatus::OwnerShardIdx>(),
+                        rowset.GetValue<Schema::SetColumnConstraintShardStatus::LocalShardIdx>()
                     );
-                    auto validateStatus = rowset.GetValue<Schema::SetColumnConstraintDatashardStatuses::Status>();
-                    TString issue = rowset.GetValueOrDefault<Schema::SetColumnConstraintDatashardStatuses::Issue>(TString{});
+                    auto validateStatus = rowset.GetValue<Schema::SetColumnConstraintShardStatus::Status>();
+                    TString issue = rowset.GetValueOrDefault<Schema::SetColumnConstraintShardStatus::Issue>(TString{});
 
                     auto* opPtr = loadedOperations.FindPtr(operationId);
                     if (!opPtr) {

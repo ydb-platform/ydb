@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "ydb-qa": {
+      "command": "uvx",
+      "args": [
+        "ydb-mcp",
+        "--ydb-endpoint",
+        "grpcs://lb.etnvsjbk7kh1jc6bbfi8.ydb.mdb.yandexcloud.net:2135/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8"
+      ],
+      "env": {
+        "YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS": "/absolute/path/to/ydb-qa-service-account.json"
+      }
+    }
+  }
+}

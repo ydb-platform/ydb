@@ -3,6 +3,7 @@ description: "Analytics skill: YDB QA data, SQL data marts, CI test results, Git
 globs:
   - ".github/scripts/analytics/**/*.sql"
   - ".github/scripts/analytics/**/*.py"
+  - ".github/scripts/analytics/ARCHITECTURE.md"
   - ".github/config/ydb_qa_config.json"
   - ".github/workflows/collect_analytics*.yml"
   - ".github/workflows/update_muted_ya.yml"
@@ -25,6 +26,7 @@ YDB (YQL/SQL) + Python + GitHub Actions + MCP `user-ydb-qa`
 | Location | Purpose |
 |----------|---------|
 | `.github/scripts/analytics/` | SQL queries, Python collectors, YDB wrapper |
+| `.github/scripts/analytics/ARCHITECTURE.md` | **Pipeline map** (layers, colors, workflow→table→consumer) — update with every analytics change |
 | `.github/scripts/analytics/data_mart_queries/` | Data mart SQL (PR failures, mute stats, GitHub issues) |
 | `.github/scripts/analytics/monitoring_queries/` | Monitoring / ad-hoc SQL |
 | `.github/config/ydb_qa_config.json` | **Canonical table registry** (aliases → YDB paths) |
@@ -74,9 +76,55 @@ Schema source: `mute_latency_from_failure.py` → `create_mute_events_table`.
 
 ## Querying YDB
 
-### MCP (preferred in Cursor)
+### YDB MCP (strongly recommended)
 
-Use MCP server `user-ydb-qa`:
+Live CI analytics (test failures, marts, mute events) **requires** querying YDB. In Cursor this should be done via MCP — much faster and fewer YQL mistakes than guessing from repo SQL alone.
+
+**If MCP is not available:** tell the user to configure it before investigations that need live data. Fallback without MCP: `gh` CLI for Actions/PRs only; local Python scripts only if the user has `CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS` set.
+
+**Check MCP is working** (first step of any data task):
+
+```
+CallMcpTool server=user-ydb-qa tool=ydb_query arguments={"sql": "SELECT 1 AS ok"}
+```
+
+Expected: `ok = 1`. If tools are missing or auth fails, stop and help with setup below.
+
+#### How to get YDB MCP in Cursor
+
+1. **Credentials** — service account JSON with read access to the QA YDB cluster (same class of access as CI `CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS`; ask the CI/analytics team if you don't have a key).
+2. **Endpoint** — from `.github/config/ydb_qa_config.json` → `databases.main.endpoint` + `databases.main.path` (see example).
+3. **Install** [ydb-mcp](https://github.com/ydb-platform/ydb-mcp) (`pip install ydb-mcp` or `uvx ydb-mcp`). Docs: `ydb/docs/en/core/reference/languages-and-apis/mcp/index.md`.
+4. **Cursor MCP config** — create `.cursor/mcp.json` locally (**gitignored**, do not commit secrets):
+
+```json
+{
+  "mcpServers": {
+    "ydb-qa": {
+      "command": "uvx",
+      "args": [
+        "ydb-mcp",
+        "--ydb-endpoint",
+        "grpcs://<host>:2135/ru-central1/<folder>/<database-id>"
+      ],
+      "env": {
+        "YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS": "/absolute/path/to/ydb-qa-sa-key.json"
+      }
+    }
+  }
+}
+```
+
+Build `--ydb-endpoint` from config: `{endpoint without trailing slash}{path}` — e.g. `grpcs://lb….ydb.mdb.yandexcloud.net:2135` + `/ru-central1/b1ggceeul2pkher8vhb6/etnvsjbk7kh1jc6bbfi8`.
+
+5. **Enable in Cursor:** Settings → MCP → ensure the server is on; restart Cursor if tools don't appear.
+6. **Verify:** `ydb_query` with `SELECT 1`. Server name in UI may differ (e.g. `user-ydb-qa`); tool names are `ydb_query`, `ydb_explain_query`, etc.
+
+Tracked template (no secrets): `.github/scripts/analytics/mcp.ydb-qa.example.json`.
+
+### MCP tools (preferred in Cursor)
+
+Use MCP server `user-ydb-qa` (or your local name for the same ydb-mcp config):
 
 - `ydb_query` — **primary tool** for all reads
 - `ydb_explain_query` — explain plan (optional, after query compiles)
@@ -161,6 +209,28 @@ LIMIT 50
 
 For mute-related regressions also check `tests_monitor`, `mute_events`, `flaky_tests_window`.
 
+## Architecture doc (keep in sync)
+
+**Source of truth for pipeline mental model:** `.github/scripts/analytics/ARCHITECTURE.md`
+
+- Layered diagram with **color legend** (L0 sources → L6 consumers; legacy in gray)
+- Tables: workflow → script → YDB table → consumer
+- Mart dependency subgraph for ordering inside `collect_analytics_fast`
+
+### When to update ARCHITECTURE.md (same PR)
+
+Any change to: analytics scripts/SQL, analytics workflows, `ydb_qa_config.json` tables, or new consumers (DataLens, Telegram, mute).
+
+Agents: after editing analytics code, update diagram and/or table in `ARCHITECTURE.md` before finishing the task.
+
+### Verify doc was updated
+
+```bash
+python3 .github/scripts/analytics/check_architecture_sync.py --base origin/main
+```
+
+Optional CI hook: run the same command on PRs that touch watched paths.
+
 ## Helpers in Repo
 
 | Script | Usage |
@@ -173,6 +243,9 @@ For mute-related regressions also check `tests_monitor`, `mute_events`, `flaky_t
 | `.github/scripts/analytics/flaky_tests_history.py` | Collect flaky test history |
 | `.github/scripts/analytics/export_issues_to_ydb.py` | Export GitHub issues → YDB |
 | `.github/scripts/analytics/export_pull_requests_to_ydb.py` | Export GitHub PRs → YDB |
+| `.github/scripts/analytics/check_architecture_sync.py` | Ensures ARCHITECTURE.md updated when analytics paths change |
+| `.github/scripts/analytics/ARCHITECTURE.md` | Colored pipeline map — maintain with every analytics change |
+| `.github/scripts/analytics/mcp.ydb-qa.example.json` | Cursor MCP config template (copy to `.cursor/mcp.json`, add SA key path) |
 
 ## Conventions
 

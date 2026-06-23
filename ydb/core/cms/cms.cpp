@@ -404,11 +404,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         response.SetDeadline((TActivationContext::Now() + State->Config.DefaultRetryTime).GetValue());
     }
 
-    for (const auto &action : request.GetActions()) {
-        if (capHit) {
-            break;
-        }
-
+    auto buildOpts = [&](const TAction &action) {
         TDuration permissionDuration = State->Config.DefaultPermissionDuration;
         if (request.HasDuration())
             permissionDuration = TDuration::MicroSeconds(request.GetDuration());
@@ -421,6 +417,18 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         opts.PartialPermissionAllowed = allowPartial;
         opts.Priority = request.GetPriority();
         opts.RequestId = requestId;
+        opts.CapEnabled = capEnabled;
+        return opts;
+    };
+
+    std::deque<const TAction*> sysTabletDeferredActions;
+
+    for (const auto &action : request.GetActions()) {
+        if (capHit) {
+            break;
+        }
+
+        TActionOptions opts = buildOpts(action);
 
         TErrorInfo error;
 
@@ -448,6 +456,11 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
                           maxPermissions);
                 capHit = true;
             }
+        } else if (error.Code == TStatus::DISALLOW_TEMP_SYS_TABLET) {
+            LOG_DEBUG(ctx, NKikimrServices::CMS,
+                      "Result: DISALLOW_TEMP_SYS_TABLET, deferring action: %s",
+                      action.ShortDebugString().data());
+            sysTabletDeferredActions.push_back(&action);
         } else {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: %s (reason: %s)",
                       ToString(error.Code).data(), error.Reason.GetMessage().data());
@@ -478,6 +491,44 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         }
         ++processedActions;
     }
+
+    while (capEnabled && !sysTabletDeferredActions.empty()) {
+        const TAction *deferredAction = sysTabletDeferredActions.back();
+        if (static_cast<ui32>(response.PermissionsSize()) < maxPermissions) {
+            LOG_DEBUG(ctx, NKikimrServices::CMS,
+                "Granting deferred sys-tablet action to fill the batch: %s",
+                deferredAction->ShortDebugString().data());
+
+            auto *permission = response.AddPermissions();
+            permission->MutableAction()->CopyFrom(*deferredAction);
+            permission->MutableAction()->ClearIssue();
+            permission->SetDeadline(error.Deadline.GetValue());
+            AddPermissionExtensions(*deferredAction, *permission);
+
+            ClusterInfo->AddTempLocks(*deferredAction, request.GetPriority(), requestId, &ctx);
+        } else {
+            if (CodesRate[response.GetStatus().GetCode()] > CodesRate[TStatus::DISALLOW_TEMP]) {
+                response.MutableStatus()->SetCode(TStatus::DISALLOW_TEMP);
+                response.SetDeadline(error.Deadline.GetValue());
+            }
+
+            if (schedule) {
+                auto *scheduledAction = scheduled.AddActions();
+                scheduledAction->CopyFrom(action);
+
+                // Limit stored issues to avoid overloading the local database
+                if (storedIssues < MAX_ISSUES_TO_STORE) {
+                    *scheduledAction->MutableIssue() = ConvertIssue(error.Reason);
+                    ++storedIssues;
+                } else {
+                    scheduledAction->ClearIssue();
+                }
+            }
+        }
+
+        sysTabletDeferredActions.pop_back();
+    }
+
     ClusterInfo->RollbackLocks(point);
 
     if (capHit && schedule && processedActions < static_cast<size_t>(request.ActionsSize())) {
@@ -708,6 +759,19 @@ bool TCms::CheckActionShutdownNode(const NKikimrCms::TAction &action,
 
     if (!AppData(ctx)->DisableCheckingSysNodesCms &&
         !CheckSysTabletsNode(opts, node, error)) {
+        return false;
+    }
+
+    // Keep this check last so that NodeHasRunningSystemTablet is the only reason
+    // the lock was not taken: all other checks above have already passed, meaning
+    // the lock would be granted if not for the running system tablet.
+    // поэтому мы в дальнейшем можем взять лок без лишних проверок
+    if (opts.CapEnabled && ClusterInfo->NodeHasRunningSystemTablet(node.NodeId)) {
+        error.Code = TStatus::DISALLOW_TEMP_SYS_TABLET;
+        error.Reason = TReason(
+            TStringBuilder() << "Node " << node.NodeId
+                << " has a running tablet");
+        error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
         return false;
     }
 
@@ -959,7 +1023,7 @@ void TCms::SortActionsBySysTabletPriority(
         });
     std::partition(pivot, actions->end(),
         [this](const TAction &action) {
-            return !ClusterInfo->NodeHasRunningSystemTablet(action.GetNodeId());
+            return !ClusterInfo->HostHasRunningSystemTablet(action.GetHost());
         });
 }
 

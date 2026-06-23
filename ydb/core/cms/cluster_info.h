@@ -841,6 +841,8 @@ public:
 
     bool NodeHasRunningSystemTablet(ui32 nodeId) const;
 
+    bool HostHasRunningSystemTablet(const TString &hostName) const;
+
     bool HasPDisk(TPDiskID pdId) const {
         return PDisks.contains(pdId);
     }

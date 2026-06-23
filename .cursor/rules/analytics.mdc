@@ -27,6 +27,7 @@ YDB (YQL/SQL) + Python + GitHub Actions + MCP `user-ydb-qa`
 |----------|---------|
 | `.github/scripts/analytics/` | SQL queries, Python collectors, YDB wrapper |
 | `.github/scripts/analytics/ARCHITECTURE.md` | **Pipeline map** (layers, colors, workflow→table→consumer) — update with every analytics change |
+| `.github/docs/CI_PIPELINE.md` | **Test CI map** (PR-check, test_ya, statuses) — see `.cursor/rules/ci-testing.mdc` |
 | `.github/scripts/analytics/data_mart_queries/` | Data mart SQL (PR failures, mute stats, GitHub issues) |
 | `.github/scripts/analytics/monitoring_queries/` | Monitoring / ad-hoc SQL |
 | `.github/config/ydb_qa_config.json` | **Canonical table registry** (aliases → YDB paths) |
@@ -297,6 +298,14 @@ Optional CI hook: run the same command on PRs that touch watched paths.
 | `.github/scripts/analytics/check_architecture_sync.py` | Ensures ARCHITECTURE.md updated when analytics paths change |
 | `.github/scripts/analytics/ARCHITECTURE.md` | Colored pipeline map — maintain with every analytics change |
 | `.github/scripts/analytics/mcp.ydb-qa.example.json` | Cursor MCP config template (copy to `.cursor/mcp.json`, add SA key path) |
+
+## Cross-links
+
+| Topic | Doc / skill |
+|-------|-------------|
+| PR-check, test_ya, GitHub statuses | `.cursor/rules/ci-testing.mdc`, `.github/docs/CI_PIPELINE.md` |
+| Mute/unmute rules | `.github/config/mute_rules.md` |
+| Raw data ingestion | `upload_tests_results.py` in `test_ya` action (CI skill) |
 
 ## Conventions
 

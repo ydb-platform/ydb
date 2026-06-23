@@ -196,9 +196,12 @@ public:
     void SetIsolationLevel(const Ydb::Table::TransactionSettings& settings) {
         switch (settings.tx_mode_case()) {
             case Ydb::Table::TransactionSettings::kSerializableReadWrite:
-                EffectiveIsolationLevel = settings.serializable_read_write().strict()
-                    ? NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE
-                    : NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
+                EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
+                Readonly = false;
+                break;
+
+            case Ydb::Table::TransactionSettings::kStrictSerializableReadWrite:
+                EffectiveIsolationLevel = NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE;
                 Readonly = false;
                 break;
 

@@ -687,15 +687,13 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
         auto result = session.ExecuteQuery(R"(
             UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (100u, "Strict");
-        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW(
-            NYdb::NQuery::TTxSerializableSettings().Strict(true))).CommitTx()).ExtractValueSync();
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         result = session.ExecuteQuery(R"(
             SELECT * FROM `/Root/KeyValue` WHERE Key = 100u;
-        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW(
-            NYdb::NQuery::TTxSerializableSettings().Strict(true))).CommitTx()).ExtractValueSync();
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
         CompareYson(R"([[[100u];["Strict"]]])", FormatResultSetYson(result.GetResultSet(0)));
@@ -709,8 +707,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
         auto result = session.ExecuteQuery(R"(
             UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (100u, "Strict");
-        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW(
-            NYdb::NQuery::TTxSerializableSettings().Strict(true))).CommitTx()).ExtractValueSync();
+        )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
         UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Strict Serializable mode is disabled");
@@ -745,8 +742,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
         auto result = kikimr.RunCall([&] { return session.ExecuteQuery(R"(
                 UPSERT INTO `/Root/KeyValue` (Key, Value) VALUES (100u, "Strict");
-            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW(
-                NYdb::NQuery::TTxSerializableSettings().Strict(true))).CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
         });
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -782,8 +778,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
         auto result = kikimr.RunCall([&] { return session.ExecuteQuery(R"(
                 SELECT * FROM `/Root/KeyValue` WHERE Key = 100u;
-            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW(
-                NYdb::NQuery::TTxSerializableSettings().Strict(true))).CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
         });
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -822,8 +817,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
         auto result = kikimr.RunCall([&] { return session.ExecuteQuery(R"(
                 UPDATE `/Root/KeyValue` ON (Key, Value) VALUES (100u, "Updated");
-            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW(
-                NYdb::NQuery::TTxSerializableSettings().Strict(true))).CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
         });
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -867,8 +861,7 @@ Y_UNIT_TEST_SUITE(KqpTx) {
 
         auto result = kikimr.RunCall([&] { return session.ExecuteQuery(R"(
                 INSERT INTO `/Root/KeyValue` (Key, Value) VALUES (200u, "Inserted");
-            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW(
-                NYdb::NQuery::TTxSerializableSettings().Strict(true))).CommitTx()).ExtractValueSync();
+            )", NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::StrictSerializableRW()).CommitTx()).ExtractValueSync();
         });
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());

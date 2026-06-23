@@ -30,7 +30,6 @@ struct TBulkUpsertSettings;
 struct TReadRowsSettings;
 struct TStreamExecScanQuerySettings;
 struct TTxOnlineSettings;
-struct TTxSerializableSettings;
 struct TCreateTableSettings;
 struct TDropTableSettings;
 struct TAlterTableSettings;

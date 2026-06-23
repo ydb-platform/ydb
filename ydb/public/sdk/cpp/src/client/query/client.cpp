@@ -41,8 +41,7 @@ static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::Transaction
 {
     switch (txSettings.GetMode()) {
         case TTxSettings::TS_SERIALIZABLE_RW:
-            proto->mutable_serializable_read_write()->set_strict(
-                txSettings.SerializableSettings_.Strict_);
+            proto->mutable_serializable_read_write();
             break;
         case TTxSettings::TS_ONLINE_RO:
             proto->mutable_online_read_only()->set_allow_inconsistent_reads(
@@ -59,6 +58,9 @@ static void SetTxSettings(const TTxSettings& txSettings, Ydb::Query::Transaction
             break;
         case TTxSettings::TS_READ_COMMITTED_RW:
             proto->mutable_read_committed_read_write();
+            break;
+        case TTxSettings::TS_STRICT_SERIALIZABLE_RW:
+            proto->mutable_strict_serializable_read_write();
             break;
         default:
             throw TContractViolation("Unexpected transaction mode.");

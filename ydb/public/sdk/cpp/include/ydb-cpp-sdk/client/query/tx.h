@@ -14,22 +14,14 @@ struct TTxOnlineSettings {
     TTxOnlineSettings() {}
 };
 
-struct TTxSerializableSettings {
-    using TSelf = TTxSerializableSettings;
-
-    TTxSerializableSettings() {}
-
-    FLUENT_SETTING_DEFAULT(bool, Strict, false);
-};
-
 struct TTxSettings {
     using TSelf = TTxSettings;
 
     TTxSettings()
         : Mode_(TS_SERIALIZABLE_RW) {}
 
-    static TTxSettings SerializableRW(const TTxSerializableSettings& settings = TTxSerializableSettings()) {
-        return TTxSettings(TS_SERIALIZABLE_RW).SerializableSettings(settings);
+    static TTxSettings SerializableRW() {
+        return TTxSettings(TS_SERIALIZABLE_RW);
     }
 
     static TTxSettings OnlineRO(const TTxOnlineSettings& settings = TTxOnlineSettings()) {
@@ -52,6 +44,10 @@ struct TTxSettings {
         return TTxSettings(TS_READ_COMMITTED_RW);
     }
 
+    static TTxSettings StrictSerializableRW() {
+        return TTxSettings(TS_STRICT_SERIALIZABLE_RW);
+    }
+
     void Out(IOutputStream& out) const {
         switch (Mode_) {
         case TS_SERIALIZABLE_RW:
@@ -72,6 +68,9 @@ struct TTxSettings {
         case TS_READ_COMMITTED_RW:
             out << "ReadCommittedRW";
             break;
+        case TS_STRICT_SERIALIZABLE_RW:
+            out << "StrictSerializableRW";
+            break;
         default:
             out << "Unknown";
             break;
@@ -85,9 +84,8 @@ struct TTxSettings {
         TS_SNAPSHOT_RO,
         TS_SNAPSHOT_RW,
         TS_READ_COMMITTED_RW,
+        TS_STRICT_SERIALIZABLE_RW,
     };
-
-    FLUENT_SETTING(TTxSerializableSettings, SerializableSettings);
 
     FLUENT_SETTING(TTxOnlineSettings, OnlineSettings);
 

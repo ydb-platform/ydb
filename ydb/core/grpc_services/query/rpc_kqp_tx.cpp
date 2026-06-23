@@ -23,6 +23,8 @@ using TEvRollbackTransactionRequest = TGrpcRequestOperationCall<Ydb::Query::Roll
 
 TString GetTransactionModeName(const Ydb::Query::TransactionSettings& settings) {
     switch (settings.tx_mode_case()) {
+        case Ydb::Query::TransactionSettings::kStrictSerializableReadWrite:
+            return "StrictSerializableReadWrite";
         case Ydb::Query::TransactionSettings::kSerializableReadWrite:
             return "SerializableReadWrite";
         case Ydb::Query::TransactionSettings::kOnlineReadOnly:
@@ -98,11 +100,9 @@ private:
                 Request->RaiseIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, TStringBuilder()
                     << "Failed to begin transaction: tx mode was not set"));
                 return Reply(Ydb::StatusIds::BAD_REQUEST);
-            case Ydb::Query::TransactionSettings::kSerializableReadWrite: {
-                auto* settings = ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
-                settings->set_strict(req->tx_settings().serializable_read_write().strict());
+            case Ydb::Query::TransactionSettings::kSerializableReadWrite:
+                ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_serializable_read_write();
                 break;
-            }
             case Ydb::Query::TransactionSettings::kSnapshotReadOnly:
                 ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_snapshot_read_only();
                 break;
@@ -111,6 +111,9 @@ private:
                 break;
             case Ydb::Query::TransactionSettings::kReadCommittedReadWrite:
                 ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_read_committed_read_write();
+                break;
+            case Ydb::Query::TransactionSettings::kStrictSerializableReadWrite:
+                ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_strict_serializable_read_write();
                 break;
         }
 

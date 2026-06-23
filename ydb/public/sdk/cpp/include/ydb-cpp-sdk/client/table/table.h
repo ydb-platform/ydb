@@ -1700,13 +1700,6 @@ struct TTxOnlineSettings {
     FLUENT_SETTING_DEFAULT(bool, AllowInconsistentReads, false);
 };
 
-struct TTxSerializableSettings {
-    using TSelf = TTxSerializableSettings;
-
-    TTxSerializableSettings() {}
-
-    FLUENT_SETTING_DEFAULT(bool, Strict, false);
-};
 
 class TTxSettings {
     friend class TTableClient;
@@ -1717,8 +1710,8 @@ public:
     TTxSettings()
         : Mode_(TS_SERIALIZABLE_RW) {}
 
-    static TTxSettings SerializableRW(const TTxSerializableSettings& settings = TTxSerializableSettings()) {
-        return TTxSettings(TS_SERIALIZABLE_RW).SerializableSettings(settings);
+    static TTxSettings SerializableRW() {
+        return TTxSettings(TS_SERIALIZABLE_RW);
     }
 
     static TTxSettings OnlineRO(const TTxOnlineSettings& settings = TTxOnlineSettings()) {
@@ -1735,6 +1728,10 @@ public:
 
     static TTxSettings SnapshotRW() {
         return TTxSettings(TS_SNAPSHOT_RW);
+    }
+
+    static TTxSettings StrictSerializableRW() {
+        return TTxSettings(TS_STRICT_SERIALIZABLE_RW);
     }
 
     void Out(IOutputStream& out) const {
@@ -1754,6 +1751,9 @@ public:
         case TS_SNAPSHOT_RW:
             out << "SnapshotRW";
             break;
+        case TS_STRICT_SERIALIZABLE_RW:
+            out << "StrictSerializableRW";
+            break;
         default:
             out << "Unknown";
             break;
@@ -1767,10 +1767,10 @@ private:
         TS_STALE_RO,
         TS_SNAPSHOT_RO,
         TS_SNAPSHOT_RW,
+        TS_STRICT_SERIALIZABLE_RW,
     };
 
     FLUENT_SETTING(TTxOnlineSettings, OnlineSettings);
-    FLUENT_SETTING(TTxSerializableSettings, SerializableSettings);
 
 private:
     TTxSettings(ETransactionMode mode)

@@ -1202,7 +1202,7 @@ public:
                     settings.mutable_serializable_read_write();
                     break;
                 case NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE:
-                    settings.mutable_serializable_read_write()->set_strict(true);
+                    settings.mutable_strict_serializable_read_write();
                     break;
                 case NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RW:
                     settings.mutable_snapshot_read_write();

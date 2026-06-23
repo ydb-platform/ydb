@@ -1406,8 +1406,7 @@ void TTableClient::TImpl::SetTxSettings(const TTxSettings& txSettings, Ydb::Tabl
 {
     switch (txSettings.Mode_) {
         case TTxSettings::TS_SERIALIZABLE_RW:
-            proto->mutable_serializable_read_write()->set_strict(
-                txSettings.SerializableSettings_.Strict_);
+            proto->mutable_serializable_read_write();
             break;
         case TTxSettings::TS_ONLINE_RO:
             proto->mutable_online_read_only()->set_allow_inconsistent_reads(
@@ -1421,6 +1420,9 @@ void TTableClient::TImpl::SetTxSettings(const TTxSettings& txSettings, Ydb::Tabl
             break;
         case TTxSettings::TS_SNAPSHOT_RW:
             proto->mutable_snapshot_read_write();
+            break;
+        case TTxSettings::TS_STRICT_SERIALIZABLE_RW:
+            proto->mutable_strict_serializable_read_write();
             break;
         default:
             throw TContractViolation("Unexpected transaction mode.");

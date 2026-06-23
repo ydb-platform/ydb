@@ -123,10 +123,10 @@ void TRuleTraceAttempt::Submit(TOpRoot& root, TStringBuf stageName) {
 
     TTraceBuildState traceBuildState;
     Tile->setTree(BuildPlanNodeFromRoot(root, Ctx.ExprCtx, HtmlPlanOpts, &traceBuildState));
+    AddPlanWidgets(*Tile, root, traceBuildState);
     Ctx.TraceLog.ApplyPostBuildEnrichers(*Tile, traceBuildState);
 
     auto& submittedTile = Ctx.TraceLog.AddTile(std::move(*Tile));
-    AddPlanWidgets(submittedTile, root, traceBuildState);
     Ctx.TraceLog.Submit(submittedTile);
 }
 
@@ -153,8 +153,8 @@ void SubmitInitialPlanTrace(TOpRoot& root, TRBOContext& ctx) {
     auto& tile = htmlStage.tree(
         "Original plan",
         BuildPlanNodeFromRoot(root, ctx.ExprCtx, HtmlPlanOpts, &traceBuildState));
-    AddQueryTextInfo(tile, ctx.TraceLog.QueryText());
     AddPlanWidgets(tile, root, traceBuildState);
+    AddQueryTextInfo(tile, ctx.TraceLog.QueryText());
     ctx.TraceLog.Submit(tile);
 }
 

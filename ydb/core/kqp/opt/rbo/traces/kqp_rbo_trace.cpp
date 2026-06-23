@@ -541,6 +541,50 @@ void AttachOperatorTarget(TTraceBuildState* state, const IOperator& op, const st
     state->OperatorTargets[&op].push_back(optimizer_trace::Target::subtree(nodeId));
 }
 
+std::string EnsureOverviewNode(TTraceBuildState* state, const IOperator& op) {
+    if (!state) {
+        return {};
+    }
+
+    if (const auto it = state->OverviewNodeIds.find(&op); it != state->OverviewNodeIds.end()) {
+        return it->second;
+    }
+
+    const std::string overviewId = "op-" + std::to_string(state->NextOverviewNodeId++);
+    state->OverviewNodeIds[&op] = overviewId;
+    state->OverviewNodes.push_back({
+        &op,
+        overviewId,
+        ToStdString(op.GetExplainName())
+    });
+    return overviewId;
+}
+
+void AttachOverviewEdge(TTraceBuildState* state, const IOperator& parent, const IOperator& child) {
+    if (!state) {
+        return;
+    }
+
+    const std::string from = EnsureOverviewNode(state, parent);
+    const std::string to = EnsureOverviewNode(state, child);
+    if (from.empty() || to.empty()) {
+        return;
+    }
+
+    const std::string edgeKey = from + "->" + to;
+    if (state->OverviewEdgeIds.contains(edgeKey)) {
+        return;
+    }
+
+    state->OverviewEdgeIds[edgeKey] = true;
+    state->OverviewEdges.push_back({
+        "edge-" + std::to_string(state->NextOverviewEdgeId++),
+        from,
+        to,
+        &child
+    });
+}
+
 std::vector<optimizer_trace::Target> GetOperatorTargets(
     const TTraceBuildState& state,
     const IOperator& op)
@@ -550,6 +594,34 @@ std::vector<optimizer_trace::Target> GetOperatorTargets(
         return {};
     }
     return it->second;
+}
+
+optimizer_trace::Widget BuildPlanOverviewWidget(const TTraceBuildState& state) {
+    optimizer_trace::Graph overview;
+    overview.layout("TB", 70, 42);
+
+    for (const auto& node : state.OverviewNodes) {
+        auto& graphNode = overview.node(node.Id, node.Label);
+        if (node.Op) {
+            const auto targets = GetOperatorTargets(state, *node.Op);
+            if (!targets.empty()) {
+                graphNode.targets(targets).primaryTarget(targets.front());
+            }
+        }
+    }
+
+    for (const auto& edge : state.OverviewEdges) {
+        auto& graphEdge = overview.edge(edge.From, edge.To)
+            .setId(edge.Id);
+        if (edge.Child) {
+            const auto targets = GetOperatorTargets(state, *edge.Child);
+            if (!targets.empty()) {
+                graphEdge.targets(targets).primaryTarget(targets.front());
+            }
+        }
+    }
+
+    return optimizer_trace::Widget::graph("Plan overview", overview);
 }
 
 optimizer_trace::Widget BuildStageGraphWidget(const TStageGraph& graph, const TTraceBuildState& state) {
@@ -602,15 +674,21 @@ optimizer_trace::Widget BuildStageGraphSwitcher(const TStageGraph& graph, const 
 }
 
 std::vector<optimizer_trace::Widget> BuildPlanWidgets(const TOpRoot& root, const TTraceBuildState& state) {
+    std::vector<optimizer_trace::Widget> widgets;
     if (root.PlanProps.StageGraph.StageIds.empty()) {
-        return {};
+        return widgets;
     }
-    return {
-        BuildStageGraphSwitcher(root.PlanProps.StageGraph, state)
-    };
+
+    widgets.push_back(BuildStageGraphSwitcher(root.PlanProps.StageGraph, state));
+    return widgets;
 }
 
 void AddPlanWidgets(optimizer_trace::Trace::Tile& tile, const TOpRoot& root, const TTraceBuildState& state) {
+    if (!state.OverviewNodes.empty()) {
+        tile.info().tab("overview", "Overview")
+            .widget(BuildPlanOverviewWidget(state));
+    }
+
     auto widgets = BuildPlanWidgets(root, state);
     if (widgets.empty()) {
         return;
@@ -619,6 +697,17 @@ void AddPlanWidgets(optimizer_trace::Trace::Tile& tile, const TOpRoot& root, con
     auto& tab = tile.info().tab("Plan", "Plan");
     for (const auto& widget : widgets) {
         tab.widget(widget);
+    }
+}
+
+void AttachPlanOverview(TTraceBuildState* state, const TIntrusivePtr<IOperator>& op) {
+    if (!state) {
+        return;
+    }
+
+    EnsureOverviewNode(state, *op);
+    for (const auto& child : op->Children) {
+        AttachOverviewEdge(state, *op, *child);
     }
 }
 
@@ -633,6 +722,7 @@ optimizer_trace::Node BuildPlanNode(
     optimizer_trace::Node node(id, ToStdString(op->GetExplainName()), ToStdString(op->ToString(ctx)));
     AttachStageTarget(state, *op, id);
     AttachOperatorTarget(state, *op, id);
+    AttachPlanOverview(state, op);
 
     const auto outputIUs = op->GetOutputIUs();
     AddInfoUnitField(node, "OutputColumns", "Output columns", outputIUs, op.Get());

@@ -10,7 +10,8 @@
 #include <util/stream/output.h>
 #include <ydb/core/kqp/opt/cbo/bench/kqp_benches.h>
 #include <ydb/core/kqp/opt/cbo/bench/kqp_join_hypergraph_generator.h>
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/testlib/test_client.h>
+#include <library/cpp/testing/common/network.h>
 
 #include "kqp_aligner.h"
 #include "kqp_arg_parser.h"
@@ -285,25 +286,92 @@ void PrintUsage(IOutputStream& os) {
         return results;
     }
 
-    std::unique_ptr<TKikimrRunner> GetCBOTestsYDB(TString stats, TDuration compilationTimeout) {
-        TVector<NKikimrKqp::TKqpSetting> settings;
+    class TCboLocalKikimr {
+    public:
+        TCboLocalKikimr(TString stats, TDuration compilationTimeout)
+            : MbusPort_(NTesting::GetFreePort())
+            , GrpcPort_(NTesting::GetFreePort())
+        {
+            Y_ASSERT(!stats.empty());
 
-        Y_ASSERT(!stats.empty());
+            TVector<NKikimrKqp::TKqpSetting> kqpSettings;
 
-        NKikimrKqp::TKqpSetting setting;
-        setting.SetName("OptOverrideStatistics");
-        setting.SetValue(stats);
-        settings.push_back(setting);
+            NKikimrKqp::TKqpSetting setting;
+            setting.SetName("OptOverrideStatistics");
+            setting.SetValue(stats);
+            kqpSettings.push_back(setting);
 
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableOrderOptimizaionFSM(true);
-        appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(compilationTimeout.MilliSeconds());
+            NKikimrConfig::TAppConfig appConfig;
+            appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
+            appConfig.MutableTableServiceConfig()->SetEnableOrderOptimizaionFSM(true);
+            appConfig.MutableTableServiceConfig()->SetCompileTimeoutMs(compilationTimeout.MilliSeconds());
+            appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
+            if (!appConfig.GetQueryServiceConfig().HasAllExternalDataSourcesAreAvailable()) {
+                appConfig.MutableQueryServiceConfig()->SetAllExternalDataSourcesAreAvailable(true);
+            }
 
-        TKikimrSettings serverSettings(appConfig);
-        serverSettings.SetWithSampleTables(false);
-        serverSettings.SetKqpSettings(settings);
+            NKikimrProto::TAuthConfig authConfig;
+            authConfig.SetUseBuiltinDomain(true);
 
-        return std::make_unique<TKikimrRunner>(serverSettings);
+            ServerSettings_ = MakeHolder<Tests::TServerSettings>(static_cast<ui16>(MbusPort_), authConfig);
+            ServerSettings_->SetDomainName(DomainRoot_);
+            ServerSettings_->SetKqpSettings(kqpSettings);
+            ServerSettings_->SetAppConfig(appConfig);
+            ServerSettings_->SetNodeCount(1);
+            ServerSettings_->SetUseRealThreads(true);
+            ServerSettings_->SetEnableDataColumnForIndexTable(true);
+            ServerSettings_->SetEnableNotNullColumns(true);
+            ServerSettings_->SetEnableMoveIndex(true);
+            ServerSettings_->SetEnableTablePgTypes(true);
+            ServerSettings_->SetEnablePgSyntax(true);
+            ServerSettings_->SetEnableOlapCompression(true);
+
+            Server_ = MakeIntrusive<Tests::TServer>(*ServerSettings_);
+            Server_->EnableGRpc(static_cast<ui16>(GrpcPort_));
+            Server_->SetupDefaultProfiles();
+
+            Client_ = MakeHolder<Tests::TClient>(*ServerSettings_);
+            Client_->InitRootScheme(DomainRoot_);
+
+            Endpoint_ = "localhost:" + ToString(static_cast<ui16>(GrpcPort_));
+            DriverConfig_ = NYdb::TDriverConfig()
+                .SetEndpoint(Endpoint_)
+                .SetDatabase("/" + DomainRoot_)
+                .SetDiscoveryMode(NYdb::EDiscoveryMode::Async);
+            Driver_ = MakeHolder<NYdb::TDriver>(DriverConfig_);
+        }
+
+        ~TCboLocalKikimr() {
+            if (Driver_) {
+                Driver_->Stop(true);
+            }
+
+            if (Server_) {
+                Server_->ShutdownGRpc();
+            }
+        }
+
+        NYdb::NQuery::TQueryClient GetQueryClient(
+            NYdb::NQuery::TClientSettings settings = NYdb::NQuery::TClientSettings()) const
+        {
+            return NYdb::NQuery::TQueryClient(*Driver_, settings);
+        }
+
+    private:
+        static inline const TString DomainRoot_ = "Root";
+
+        NTesting::TPortHolder MbusPort_;
+        NTesting::TPortHolder GrpcPort_;
+        THolder<Tests::TServerSettings> ServerSettings_;
+        Tests::TServer::TPtr Server_;
+        THolder<Tests::TClient> Client_;
+        TString Endpoint_;
+        NYdb::TDriverConfig DriverConfig_;
+        THolder<NYdb::TDriver> Driver_;
+    };
+
+    std::unique_ptr<TCboLocalKikimr> GetCBOTestsYDB(TString stats, TDuration compilationTimeout) {
+        return std::make_unique<TCboLocalKikimr>(std::move(stats), compilationTimeout);
     }
 
     std::optional<std::map<std::string, TStatistics>>
@@ -399,7 +467,7 @@ void PrintUsage(IOutputStream& os) {
     }
 
     struct TTestContext {
-        std::unique_ptr<TKikimrRunner> Runner;
+        std::unique_ptr<TCboLocalKikimr> Runner;
         NYdb::NQuery::TQueryClient QueryClient;
         NYdb::NQuery::TSession Session;
 

@@ -61,6 +61,8 @@ namespace NYql::NGenericPushDown {
                 case NYql::NConnector::NApi::TExpression::kMaxOf:
                 case NYql::NConnector::NApi::TExpression::kCurrentUtcTimestamp:
                 case NYql::NConnector::NApi::TExpression::kPredicate:
+                case NYql::NConnector::NApi::TExpression::kStructMember:
+                case NYql::NConnector::NApi::TExpression::kTupleNth:
                 case NYql::NConnector::NApi::TExpression::PAYLOAD_NOT_SET:
                     return false;
             }
@@ -82,6 +84,8 @@ namespace NYql::NGenericPushDown {
                 case NYql::NConnector::NApi::TExpression::kMaxOf:
                 case NYql::NConnector::NApi::TExpression::kCurrentUtcTimestamp:
                 case NYql::NConnector::NApi::TExpression::kPredicate:
+                case NYql::NConnector::NApi::TExpression::kStructMember:
+                case NYql::NConnector::NApi::TExpression::kTupleNth:
                 case NYql::NConnector::NApi::TExpression::PAYLOAD_NOT_SET:
                     return false;
             }
@@ -305,6 +309,8 @@ namespace NYql::NGenericPushDown {
                 case NYql::NConnector::NApi::TExpression::kMaxOf:
                 case NYql::NConnector::NApi::TExpression::kCurrentUtcTimestamp:
                 case NYql::NConnector::NApi::TExpression::kPredicate:
+                case NYql::NConnector::NApi::TExpression::kStructMember:
+                case NYql::NConnector::NApi::TExpression::kTupleNth:
                 case NYql::NConnector::NApi::TExpression::PAYLOAD_NOT_SET:
                     return Triple::Unknown;
             }

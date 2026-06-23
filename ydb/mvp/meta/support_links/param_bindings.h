@@ -28,22 +28,24 @@ inline TResolvedParamBindings ResolveConfiguredParamMappings(const TSupportLinkE
             ythrow yexception() << "link_parameter_mappings.parameter is required for source=" << config.GetSource();
         }
 
-        if (!mapping.HasFromRequest() && !mapping.HasFromClusterInfo() && !mapping.HasStaticValue()) {
-            ythrow yexception()
-                << "link_parameter_mappings.parameter=" << mapping.GetParameter()
-                << " must set one of from_request, from_cluster_info or static_value for source="
-                << config.GetSource();
-        }
+        switch (mapping.GetSourceValueCase()) {
+            case TSupportLinkEntryConfig::TLinkParameterMapping::kFromRequest:
+                paramBindings.RequestMappings.emplace_back(mapping.GetFromRequest(), mapping.GetParameter());
+                break;
 
-        if (mapping.HasFromRequest()) {
-            paramBindings.RequestMappings.emplace_back(mapping.GetFromRequest(), mapping.GetParameter());
-            continue;
-        }
+            case TSupportLinkEntryConfig::TLinkParameterMapping::kFromClusterInfo:
+                paramBindings.ClusterInfoMappings.emplace_back(mapping.GetFromClusterInfo(), mapping.GetParameter());
+                break;
 
-        if (mapping.HasFromClusterInfo()) {
-            paramBindings.ClusterInfoMappings.emplace_back(mapping.GetFromClusterInfo(), mapping.GetParameter());
-        } else {
-            paramBindings.StaticMappings.emplace_back(mapping.GetStaticValue(), mapping.GetParameter());
+            case TSupportLinkEntryConfig::TLinkParameterMapping::kStaticValue:
+                paramBindings.StaticMappings.emplace_back(mapping.GetStaticValue(), mapping.GetParameter());
+                break;
+
+            case TSupportLinkEntryConfig::TLinkParameterMapping::SOURCEVALUE_NOT_SET:
+                ythrow yexception()
+                    << "link_parameter_mappings.parameter=" << mapping.GetParameter()
+                    << " must set one of from_request, from_cluster_info or static_value for source="
+                    << config.GetSource();
         }
     }
 

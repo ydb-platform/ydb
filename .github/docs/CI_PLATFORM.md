@@ -55,6 +55,51 @@ Principles (apply to workflows, composite actions, CI scripts, and build hooks �
 
 When in doubt, ask for a second human review before merge.
 
+## Secrets & tokens in workflows
+
+How we work with credentials in `.github/` — **avoid leaks, never publish tokens in logs or artifacts**.
+
+### Secrets vs vars vs `github.token`
+
+| Kind | Store | Typical use | Logged in Actions UI? |
+|------|--------|-------------|------------------------|
+| **Secrets** (`secrets.*`) | Encrypted repo/org secrets | PAT, YDB SA JSON, AWS keys, bot tokens | Masked if printed verbatim |
+| **Variables** (`vars.*`) | Plain repo variables | `CHECKS_SWITCH`, `YDB_QA_CONFIG`, bucket names | **Yes** — not for credentials |
+| **`github.token`** | Ephemeral per job | PR comments, statuses, API from trusted steps | Masked; scoped by job `permissions` |
+
+**Rule:** passwords, keys, SA JSON → **secrets only**. Config JSON without private keys may live in `vars` (e.g. `YDB_QA_CONFIG` table paths).
+
+### Do
+
+- Set **`permissions:`** at workflow/job level to the minimum needed (read vs write contents, pull-requests, etc.).
+- Pass secrets via **`env:`** or **file paths** (`mktemp` + write, then pass path) — pattern in `test_ya` (telegram token file) and `setup_ci_ydb_service_account_key_file_credentials` (SA JSON → `/tmp/...`, not stdout).
+- Use composite-action **`format('{{"KEY":"{0}"}}', secrets.X)`** JSON blobs for bundled secrets (see `build_and_test_ya` callers) — avoids echo in workflow YAML steps.
+- Keep **`pull_request_target`** jobs from running **PR head scripts** with access to secrets; gate fork PRs (`ok-to-test`, collaborator checks) before any step that uses `secrets.*`.
+- Use **`github.token`** for PR comments/statuses where enough; reserve PAT/`YDBOT_TOKEN` for operations default token cannot do.
+- Redact before debug: never `echo`, `print`, `curl -v`, or `set -x` on lines containing secrets; avoid logging full `env` in CI scripts.
+- Keep local credentials **gitignored** (`.cursor/mcp.json`, SA key files) — never commit.
+
+### Don't
+
+- **`echo ${{ secrets.* }}`** or interpolate secrets into run URLs, issue bodies, S3 public paths, or PR comments.
+- Put secrets in **`vars`**, workflow outputs, or **`GITHUB_ENV`** values that later get printed.
+- Rely on GitHub masking for **constructed** secrets (concat, base64, substring) — masking may not apply.
+- Pass secrets into steps that run **untrusted code** from PR head (fork) without the same model as `rebase.yml`.
+- Log **`YDB_QA_CONFIG`** / env dumps in analytics scripts in CI without checking for embedded credentials (config should be paths/endpoints only).
+- Commit **example** workflow files with real tokens (use placeholders; template: `mcp.ydb-qa.example.json`).
+
+### Review checklist (secrets)
+
+```markdown
+- [ ] No new secret in vars / plain text in repo
+- [ ] No echo/print/log of secrets or env containing secrets
+- [ ] pull_request_target: secrets only in trusted steps after fork/collaborator gate
+- [ ] Job permissions minimal for what the step needs
+- [ ] New PAT/bot token scoped narrowly; existing secret reused if possible
+```
+
+Ref: [GitHub encrypted secrets](https://docs.github.com/en/actions/security-for-github-actions/security-guides/using-secrets-in-github-actions) · [Workflow permissions](https://docs.github.com/en/actions/using-jobs/assigning-permissions-to-jobs)
+
 ## Maintenance
 
 Update this file when changing: platform workarounds (#36673, #44180), multi-branch policy, or security review expectations.

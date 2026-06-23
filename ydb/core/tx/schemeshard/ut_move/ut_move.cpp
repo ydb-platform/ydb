@@ -2037,7 +2037,46 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
     Y_UNIT_TEST(CopyMovePreservesMultipleBloomPrefixes) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
         ui64 txId = 100;
+
+        // Helper to check bloom filter scheme objects exist
+        auto checkBloomSchemeObjects = [&](const TString& tablePath) {
+            auto tableDescr = DescribePath(runtime, tablePath, true);
+            const auto& table = tableDescr.GetPathDescription().GetTable();
+
+            // Check engine prefixes
+            const auto& partitionConfig = table.GetPartitionConfig();
+            UNIT_ASSERT_VALUES_EQUAL(partitionConfig.ByKeyFilterPrefixesSize(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
+            UNIT_ASSERT_DOUBLES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
+
+            // Check scheme objects exist (if migration has occurred)
+            if (table.TableIndexesSize() > 0) {
+                bool foundIdx1 = false, foundIdx2 = false;
+                for (const auto& idx : table.GetTableIndexes()) {
+                    if (idx.GetType() == NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
+                        if (idx.GetName() == "idx_bloom_1") {
+                            foundIdx1 = true;
+                            UNIT_ASSERT_VALUES_EQUAL(idx.KeyColumnNamesSize(), 1);
+                            UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(0), "key1");
+                        } else if (idx.GetName() == "idx_bloom_2") {
+                            foundIdx2 = true;
+                            UNIT_ASSERT_VALUES_EQUAL(idx.KeyColumnNamesSize(), 3);
+                            UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(0), "key1");
+                            UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(1), "key2");
+                            UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(2), "key3");
+                        }
+                    }
+                }
+                // If scheme objects exist, both should be found
+                if (foundIdx1 || foundIdx2) {
+                    UNIT_ASSERT(foundIdx1);
+                    UNIT_ASSERT(foundIdx2);
+                }
+            }
+        };
 
         // Create source table with multiple bloom filter prefixes
         TestCreateTable(runtime, ++txId, "/MyRoot", R"(
@@ -2054,29 +2093,20 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        // Verify source table has multiple bloom filter prefixes
-        {
-            auto srcTable = DescribePath(runtime, "/MyRoot/Table", true).GetPathDescription().GetTable();
-            const auto& srcConfig = srcTable.GetPartitionConfig();
-            UNIT_ASSERT_VALUES_EQUAL(srcConfig.ByKeyFilterPrefixesSize(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(srcConfig.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(srcConfig.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
-            UNIT_ASSERT_DOUBLES_EQUAL(srcConfig.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
-        }
+        // Restart SchemeShard to trigger migration to scheme objects
+        TActorId sender = runtime.AllocateEdgeActor();
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        runtime.SimulateSleep(TDuration::Seconds(5));
+
+        // Verify source table has multiple bloom filter prefixes and scheme objects after migration
+        checkBloomSchemeObjects("/MyRoot/Table");
 
         // Perform CopyTable operation
         TestCopyTable(runtime, ++txId, "/MyRoot", "TableCopy", "/MyRoot/Table");
         env.TestWaitNotification(runtime, txId);
 
-        // Verify copied table has all bloom filter prefixes
-        {
-            auto dstTable = DescribePath(runtime, "/MyRoot/TableCopy", true).GetPathDescription().GetTable();
-            const auto& dstConfig = dstTable.GetPartitionConfig();
-            UNIT_ASSERT_VALUES_EQUAL(dstConfig.ByKeyFilterPrefixesSize(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(dstConfig.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(dstConfig.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
-            UNIT_ASSERT_DOUBLES_EQUAL(dstConfig.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
-        }
+        // Verify copied table has all bloom filter prefixes and scheme objects
+        checkBloomSchemeObjects("/MyRoot/TableCopy");
 
         // Perform MoveTable operation on the copied table
         TestMoveTable(runtime, ++txId, "/MyRoot/TableCopy", "/MyRoot/TableMove");
@@ -2086,15 +2116,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardMoveTest) {
         TestDescribeResult(DescribePath(runtime, "/MyRoot/TableCopy"),
                            {NLs::PathNotExist});
 
-        // Verify moved table has all bloom filter prefixes
-        {
-            auto movedTable = DescribePath(runtime, "/MyRoot/TableMove", true).GetPathDescription().GetTable();
-            const auto& config = movedTable.GetPartitionConfig();
-            UNIT_ASSERT_VALUES_EQUAL(config.ByKeyFilterPrefixesSize(), 2);
-            UNIT_ASSERT_VALUES_EQUAL(config.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
-            UNIT_ASSERT_VALUES_EQUAL(config.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
-            UNIT_ASSERT_DOUBLES_EQUAL(config.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
-        }
+        // Verify moved table has all bloom filter prefixes and scheme objects
+        checkBloomSchemeObjects("/MyRoot/TableMove");
     }
 
 

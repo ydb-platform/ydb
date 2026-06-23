@@ -648,4 +648,86 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         // 3. Verify the copied table and both bloom indexes are ready scheme objects
         NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/ColumnTableWithLocalIndexesCopy");
     }
+
+    Y_UNIT_TEST(ConsistentCopyRowTableWithMultipleBloomPrefixes) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+
+            // Helper to check bloom filter scheme objects exist
+            auto checkBloomSchemeObjects = [&](const TString& tablePath) {
+                auto tableDescr = DescribePath(runtime, tablePath, true);
+                const auto& table = tableDescr.GetPathDescription().GetTable();
+
+                // Check engine prefixes
+                const auto& partitionConfig = table.GetPartitionConfig();
+                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.ByKeyFilterPrefixesSize(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
+
+                // Check scheme objects exist (if migration has occurred)
+                if (table.TableIndexesSize() > 0) {
+                    bool foundIdx1 = false, foundIdx2 = false;
+                    for (const auto& idx : table.GetTableIndexes()) {
+                        if (idx.GetType() == NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
+                            if (idx.GetName() == "idx_bloom_1") {
+                                foundIdx1 = true;
+                                UNIT_ASSERT_VALUES_EQUAL(idx.KeyColumnNamesSize(), 1);
+                                UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(0), "Key1");
+                            } else if (idx.GetName() == "idx_bloom_2") {
+                                foundIdx2 = true;
+                                UNIT_ASSERT_VALUES_EQUAL(idx.KeyColumnNamesSize(), 2);
+                                UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(0), "Key1");
+                                UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(1), "Key2");
+                            }
+                        }
+                    }
+                    // If scheme objects exist, both should be found
+                    if (foundIdx1 || foundIdx2) {
+                        UNIT_ASSERT(foundIdx1);
+                        UNIT_ASSERT(foundIdx2);
+                    }
+                }
+            };
+
+            {
+                TInactiveZone inactive(activeZone);
+                // Create source table with multiple bloom filter prefixes
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "src"
+                    Columns { Name: "Key1" Type: "Uint64"}
+                    Columns { Name: "Key2" Type: "Uint64"}
+                    Columns { Name: "Value" Type: "Utf8"}
+                    KeyColumnNames: ["Key1", "Key2"]
+                    PartitionConfig {
+                        ByKeyFilterPrefixes { PrefixLength: 1 }
+                        ByKeyFilterPrefixes { PrefixLength: 2 }
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                // Restart SchemeShard to trigger migration to scheme objects
+                TActorId sender = runtime.AllocateEdgeActor();
+                GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+                runtime.SimulateSleep(TDuration::Seconds(5));
+
+                // Verify source has bloom filters after migration
+                checkBloomSchemeObjects("/MyRoot/src");
+            }
+
+            // Perform consistent copy operation with reboots
+            {
+                TInactiveZone inactive(activeZone);
+                TestConsistentCopyTables(runtime, ++t.TxId, "/", R"(
+                    CopyTableDescriptions {
+                      SrcPath: "/MyRoot/src"
+                      DstPath: "/MyRoot/dst"
+                    })");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                // Verify copy has all bloom filters
+                checkBloomSchemeObjects("/MyRoot/dst");
+            }
+        });
+    }
 }

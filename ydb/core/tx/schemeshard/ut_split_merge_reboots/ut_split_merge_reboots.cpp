@@ -1236,8 +1236,45 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
     }
 
     /* Test that multiple bloom filter prefixes are preserved during split and merge operations */
-    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(SplitMergePreservesMultipleBloomPrefixes, 2, 1, false) {
+    Y_UNIT_TEST(SplitMergePreservesMultipleBloomPrefixes) {
+        TTestWithReboots t;
         t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+
+            // Helper to check bloom filter scheme objects exist
+            auto checkBloomSchemeObjects = [&](const TString& tablePath) {
+                auto tableDescr = DescribePath(runtime, tablePath, true);
+                const auto& table = tableDescr.GetPathDescription().GetTable();
+
+                // Check engine prefixes
+                const auto& partitionConfig = table.GetPartitionConfig();
+                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.ByKeyFilterPrefixesSize(), 2);
+                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
+                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
+                UNIT_ASSERT_DOUBLES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
+
+                // Check scheme objects exist
+                UNIT_ASSERT_VALUES_EQUAL(table.TableIndexesSize(), 2);
+                bool foundIdx1 = false, foundIdx2 = false;
+                for (const auto& idx : table.GetTableIndexes()) {
+                    if (idx.GetName() == "idx_bloom_1") {
+                        foundIdx1 = true;
+                        UNIT_ASSERT_VALUES_EQUAL(idx.GetType(), NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+                        UNIT_ASSERT_VALUES_EQUAL(idx.KeyColumnNamesSize(), 1);
+                        UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(0), "key1");
+                    } else if (idx.GetName() == "idx_bloom_2") {
+                        foundIdx2 = true;
+                        UNIT_ASSERT_VALUES_EQUAL(idx.GetType(), NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+                        UNIT_ASSERT_VALUES_EQUAL(idx.KeyColumnNamesSize(), 3);
+                        UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(0), "key1");
+                        UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(1), "key2");
+                        UNIT_ASSERT_VALUES_EQUAL(idx.GetKeyColumnNames(2), "key3");
+                    }
+                }
+                UNIT_ASSERT(foundIdx1);
+                UNIT_ASSERT(foundIdx2);
+            };
+
             {
                 TInactiveZone inactive(activeZone);
                 // Create table with multiple bloom filter prefixes
@@ -1258,12 +1295,13 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                 )");
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
 
-                // Verify multiple bloom filters are configured
-                auto cfg = DescribePath(runtime, "/MyRoot/Table", true).GetPathDescription().GetTable().GetPartitionConfig();
-                UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
-                UNIT_ASSERT_DOUBLES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
+                // Restart SchemeShard to trigger migration to scheme objects
+                TActorId sender = runtime.AllocateEdgeActor();
+                GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+                runtime.SimulateSleep(TDuration::Seconds(5));
+
+                // Verify multiple bloom filters are configured with scheme objects after migration
+                checkBloomSchemeObjects("/MyRoot/Table");
             }
 
             // Perform split operation - split the single partition
@@ -1280,18 +1318,26 @@ Y_UNIT_TEST_SUITE(TSchemeShardSplitTestReboots) {
                 t.TestEnv->TestWaitNotification(runtime, t.TxId);
             }
 
-            // Verify all bloom filter prefixes are preserved after split
+            // Verify all bloom filter prefixes and scheme objects are preserved after split
             {
                 TInactiveZone inactive(activeZone);
-                auto tableDescr = DescribePath(runtime, "/MyRoot/Table", true);
-                const auto& table = tableDescr.GetPathDescription().GetTable();
+                checkBloomSchemeObjects("/MyRoot/Table");
+            }
 
-                // Check that all bloom filter configurations are preserved at table level
-                const auto& partitionConfig = table.GetPartitionConfig();
-                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.ByKeyFilterPrefixesSize(), 2);
-                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
-                UNIT_ASSERT_VALUES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(1).GetPrefixLength(), 3);
-                UNIT_ASSERT_DOUBLES_EQUAL(partitionConfig.GetByKeyFilterPrefixes(1).GetFalsePositiveProbability(), 0.001, 1e-9);
+            // Perform merge operation with reboots
+            {
+                TInactiveZone inactive(activeZone);
+                TestSplitTable(runtime, ++t.TxId, "/MyRoot/Table", R"(
+                    SourceTabletId: 72075186233409546
+                    SourceTabletId: 72075186233409547
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+            }
+
+            // Verify all bloom filter prefixes and scheme objects are preserved after merge
+            {
+                TInactiveZone inactive(activeZone);
+                checkBloomSchemeObjects("/MyRoot/Table");
             }
 
         });

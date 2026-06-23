@@ -209,7 +209,7 @@
 
 **JSON-индекс** или **JSON index** — это дополнительная структура данных, используемая для ускорения предикатов с функциями [JSON_EXISTS](../yql/reference/builtins/json.md#json_exists) и [JSON_VALUE](../yql/reference/builtins/json.md#json_value) по колонке типа `Json` или `JsonDocument`. В отличие от традиционных вторичных индексов, оптимизированных для поиска по равенству или диапазону отдельных колонок таблицы, JSON-индекс работает с произвольными путями [JsonPath](../yql/reference/builtins/json.md#jsonpath) внутри JSON-документа.
 
-JSON-индекс — это специализированный тип [полнотекстового индекса](#fulltext-index). Возможности поиска по JSON описаны в статьях [{#T}](../dev/json-indexes.md) и [{#T}](query_execution/json_search.md).
+JSON-индекс, как и [полнотекстовый индекс](#fulltext-index), реализован поверх [инвертированного индекса](https://ru.wikipedia.org/wiki/Инвертированный_индекс), но использует собственный токенизатор JSON-документов. Возможности поиска по JSON описаны в статьях [{#T}](../dev/json-indexes.md) и [{#T}](query_execution/json_search.md).
 
 #### Локальный индекс {#local-index}
 

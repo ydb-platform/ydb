@@ -243,12 +243,12 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
     }
 
     Y_UNIT_TEST(AlterIndexOnNotExistingTableResultsInError, EUseQueryService, ELocalIndexAsSchemeObject) {
-        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        const bool useQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool localIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         settings.FeatureFlags.SetEnableLocalMinMaxIndex(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(localIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         auto helper = TLocalHelper(kikimr);
@@ -263,7 +263,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
 
         auto runDDLQuery = [&](TString query) {
-            if (UseQueryService) {
+            if (useQueryService) {
                 auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
                 return *static_cast<NYdb::TStatus*>(&result);
             } else {
@@ -443,12 +443,12 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
     }
 
     Y_UNIT_TEST(MinMaxIndexStoredInBSForStringsAndInLocalDBOtherwise, EUseQueryService, ELocalIndexAsSchemeObject) {
-        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        const bool useQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool localIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         settings.FeatureFlags.SetEnableLocalMinMaxIndex(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(localIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         auto helper = TLocalHelper(kikimr);
@@ -464,7 +464,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
 
 
         auto assertDDLQueryOk = [&](TString query) {
-            if (UseQueryService) {
+            if (useQueryService) {
                 auto result = queryServiceClient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
                 UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
             } else {

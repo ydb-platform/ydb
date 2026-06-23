@@ -1,5 +1,6 @@
 #pragma once
 #include <ydb/library/actors/core/log.h>
+#include <ydb/public/lib/scheme_types/scheme_type_id.h>
 
 #include <util/string/builder.h>
 #include <util/string/vector.h>
@@ -36,6 +37,15 @@ inline const TString SchemeObjectFeatureFlagDisabledErrorMessage =
 
 inline const TString ProtoDescrptionLacksColumnIdErrorMessage = "Local min_max index description lacks required ColumnId field";
 
-void SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(google::protobuf::Message& index, std::string_view typeName);
+void SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(auto& index, std::string_view typeName) {
+    if (typeName == NKikimr::NScheme::TypeName(NKikimr::NScheme::NTypeIds::String) ||
+        typeName == NKikimr::NScheme::TypeName(NKikimr::NScheme::NTypeIds::Utf8)) {
+        index.SetInheritPortionStorage(true);
+        index.SetStorageId("__DEFAULT");
+    } else {
+        index.SetInheritPortionStorage(false);
+        index.SetStorageId("__LOCAL_METADATA");
+    }
+}
 
 }   // namespace NKikimr::NOlap::NIndexes::NMinMax

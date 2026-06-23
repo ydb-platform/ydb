@@ -32,6 +32,22 @@ message Node {
         string tenant = 1;
     }
 
+    // Role describes a function the node performs in the cluster.
+    // A node may have several roles at once.
+    enum NodeRole {
+        UNSPECIFIED = 0;
+        // Static storage node.
+        STORAGE = 1;
+        // Dynamic (compute) node.
+        COMPUTE = 2;
+        // Node hosts a state storage replica.
+        STATE_STORAGE = 3;
+        // Node hosts VDisks of a static blobstorage group.
+        STATIC_GROUP = 4;
+        // Node is configured to host system tablets.
+        SYSTEM_TABLET = 5;
+    }
+
     uint32 node_id = 1;
     string host = 2;
     uint32 port = 3;
@@ -46,6 +62,8 @@ message Node {
     // version defines YDB version for current Node.
     // For example, 'ydb-stable-24-1'.
     string version = 9;
+    // roles lists functions the node performs in the cluster.
+    repeated NodeRole roles = 10;
 }
 
 message ListClusterNodesRequest {

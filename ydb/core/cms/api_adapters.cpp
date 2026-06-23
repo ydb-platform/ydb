@@ -280,7 +280,7 @@ class TListClusterNodes: public TAdapterActor<
         }
     }
 
-    static void ConvertNode(const TNodeInfo& in, Ydb::Maintenance::Node& out) {
+    static void ConvertNode(const TNodeInfo& in, TClusterInfo& clusterInfo, Ydb::Maintenance::Node& out) {
         out.set_node_id(in.NodeId);
         out.set_host(in.Host);
         out.set_port(in.IcPort);
@@ -303,6 +303,8 @@ class TListClusterNodes: public TAdapterActor<
         } else {
             out.mutable_storage();
         }
+
+        clusterInfo.FillNodeRoles(in, out);
     }
 
 public:
@@ -330,7 +332,7 @@ public:
         response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
 
         for (const auto& [_, node] : clusterInfo->AllNodes()) {
-            ConvertNode(*node, *response->Record.MutableResult()->add_nodes());
+            ConvertNode(*node, *clusterInfo, *response->Record.MutableResult()->add_nodes());
         }
 
         Reply(std::move(response));

@@ -5,6 +5,7 @@
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/blobstorage_common.h>
 #include <ydb/library/services/services.pb.h>
+#include <ydb/public/api/protos/draft/ydb_maintenance.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
@@ -974,6 +975,29 @@ void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> i
 
             StateStorageRings[rGroupId].push_back(ringInfo);
         }
+    }
+}
+
+void TClusterInfo::FillNodeRoles(const TNodeInfo &node, Ydb::Maintenance::Node &out) {
+    if (node.Services & EService::DynamicNode) {
+        out.add_roles(Ydb::Maintenance::Node::COMPUTE);
+    } else {
+        out.add_roles(Ydb::Maintenance::Node::STORAGE);
+    }
+
+    if (IsStateStorageReplicaNode(node.NodeId)) {
+        out.add_roles(Ydb::Maintenance::Node::STATE_STORAGE);
+    }
+
+    for (const auto &vdiskId : node.VDisks) {
+        if (IsStaticGroupVDisk(vdiskId)) {
+            out.add_roles(Ydb::Maintenance::Node::STATIC_GROUP);
+            break;
+        }
+    }
+
+    if (NodeToTabletTypes.contains(node.NodeId)) {
+        out.add_roles(Ydb::Maintenance::Node::SYSTEM_TABLET);
     }
 }
 

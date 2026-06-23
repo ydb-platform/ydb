@@ -543,6 +543,83 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(2), 0);
         UNIT_ASSERT_VALUES_EQUAL(cluster->GetRingId(3), 1);
     }
+
+    void CheckNodeRoles(TClusterInfo &cluster, ui32 nodeId,
+                        const TSet<int> &expected)
+    {
+        Ydb::Maintenance::Node out;
+        cluster.FillNodeRoles(cluster.Node(nodeId), out);
+
+        TSet<int> actual;
+        for (int i = 0; i < out.roles_size(); ++i) {
+            const int role = out.roles(i);
+            const bool inserted = actual.insert(role).second;
+            UNIT_ASSERT_C(inserted, "node " << nodeId << " has duplicate role " << role);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(actual.size(), expected.size(),
+            "unexpected roles count for node " << nodeId);
+        for (int role : expected) {
+            UNIT_ASSERT_C(actual.contains(role),
+                "node " << nodeId << " is missing role " << role);
+        }
+    }
+
+    Y_UNIT_TEST(FillNodeRoles) {
+        TActorSystemStub stub;
+
+        TClusterInfoPtr cluster(new TClusterInfo);
+        for (ui32 nodeId = 1; nodeId <= 4; ++nodeId) {
+            cluster->AddNode({nodeId, "::1", "host" + ToString(nodeId), "host" + ToString(nodeId), 1, TNodeLocation()}, nullptr);
+        }
+
+        // Services are derived from whiteboard roles:
+        //   "Storage" -> EService::Storage, "Tenant" -> EService::DynamicNode.
+        cluster->SetNodeState(1, NKikimrCms::UP, MakeSystemStateInfo("1", {"Storage"}));
+        cluster->SetNodeState(2, NKikimrCms::UP, MakeSystemStateInfo("1", {"Tenant"}));
+        cluster->SetNodeState(3, NKikimrCms::UP, MakeSystemStateInfo("1", {"Storage"}));
+        cluster->SetNodeState(4, NKikimrCms::UP, MakeSystemStateInfo("1", {"Storage"}));
+
+        // Node 3 hosts a VDisk of a static group (group id with Static type bits).
+        const TVDiskID staticVDisk(0, 1, 0, 0, 0);
+        UNIT_ASSERT(TClusterInfo::IsStaticGroupVDisk(staticVDisk));
+        cluster->AddPDisk(MakePDiskConfig(3, 3));
+        cluster->AddVDisk(MakeVSlotConfig(3, staticVDisk, 3, 0));
+
+        // Node 4 hosts only a VDisk of a dynamic group; it must NOT get STATIC_GROUP.
+        const ui32 dynamicGroupId = TGroupID(EGroupConfigurationType::Dynamic, 1, 1).GetRaw();
+        const TVDiskID dynamicVDisk(dynamicGroupId, 1, 0, 0, 0);
+        UNIT_ASSERT(!TClusterInfo::IsStaticGroupVDisk(dynamicVDisk));
+        cluster->AddPDisk(MakePDiskConfig(4, 4));
+        cluster->AddVDisk(MakeVSlotConfig(4, dynamicVDisk, 4, 0));
+
+        // Node 3 is configured to host system tablets.
+        cluster->NodeToTabletTypes[3].push_back(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+
+        // Node 3 is a state storage replica.
+        auto ssInfo = MakeIntrusive<TStateStorageInfo>();
+        ssInfo->RingGroups.emplace_back();
+        auto &ssGroup = ssInfo->RingGroups.back();
+        ssGroup.NToSelect = 1;
+        ssGroup.Rings.resize(1);
+        ssGroup.Rings[0].Replicas.push_back(TActorId(3, 0, 0, 0));
+        cluster->ApplyStateStorageInfo(ssInfo);
+        UNIT_ASSERT(cluster->IsStateStorageReplicaNode(3));
+
+        // Node 1: minimal storage node.
+        CheckNodeRoles(*cluster, 1, {Ydb::Maintenance::Node::STORAGE});
+        // Node 2: minimal compute node.
+        CheckNodeRoles(*cluster, 2, {Ydb::Maintenance::Node::COMPUTE});
+        // Node 3: maximal set of co-occurring roles.
+        CheckNodeRoles(*cluster, 3, {
+            Ydb::Maintenance::Node::STORAGE,
+            Ydb::Maintenance::Node::STATE_STORAGE,
+            Ydb::Maintenance::Node::STATIC_GROUP,
+            Ydb::Maintenance::Node::SYSTEM_TABLET,
+        });
+        // Node 4: storage node with a dynamic-group VDisk only.
+        CheckNodeRoles(*cluster, 4, {Ydb::Maintenance::Node::STORAGE});
+    }
 }
 
 } // NCmsTest

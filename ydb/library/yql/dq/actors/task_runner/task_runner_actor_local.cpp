@@ -22,11 +22,12 @@
 #include <ydb/library/yql/dq/actors/spilling/spiller_factory.h>
 #include <yql/essentials/minikql/mkql_watermark.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
-#define LOG_W(stream) LOG_WARN_S (*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
-#define LOG_I(stream) LOG_INFO_S (*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
+#define LOG(priority, stream) LOG_LOG_S(*TlsActivationContext, static_cast<NActors::NLog::EPriority>(priority), NKikimrServices::DQ_TASK_RUNNER, "SelfId: " << SelfId() << ", TxId: " << TxId << ", task: " << TaskId << ". " << stream)
+#define LOG_E(stream) LOG(NActors::NLog::EPrio::Error, stream)
+#define LOG_W(stream) LOG(NActors::NLog::EPrio::Warn, stream)
+#define LOG_I(stream) LOG(NActors::NLog::EPrio::Info, stream)
+#define LOG_D(stream) LOG(NActors::NLog::EPrio::Debug, stream)
+#define LOG_T(stream) LOG(NActors::NLog::EPrio::Trace, stream)
 
 using namespace NActors;
 
@@ -416,8 +417,8 @@ private:
     void OnDqTask(TEvTaskRunnerCreate::TPtr& ev) {
         ParentId = ev->Sender;
         auto settings = NDq::TDqTaskSettings(&ev->Get()->Task);
-        TaskRunner = Factory(Alloc, settings, ev->Get()->StatsMode, [this](const TString& message) {
-            LOG_D(message);
+        TaskRunner = Factory(Alloc, settings, ev->Get()->StatsMode, [this](NActors::NLog::EPrio priority, const TString& message) {
+            LOG(priority, message);
         });
 
         auto& inputs = settings.GetInputs();

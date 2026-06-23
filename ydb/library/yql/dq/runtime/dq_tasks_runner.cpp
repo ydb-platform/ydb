@@ -1,4 +1,3 @@
-#include "dq_channel_service.h"
 #include "dq_tasks_counters.h"
 #include "dq_tasks_runner.h"
 
@@ -37,6 +36,7 @@
 using namespace NKikimr;
 using namespace NKikimr::NMiniKQL;
 using namespace NYql::NDqProto;
+using NActors::NLog::EPrio;
 
 namespace NYql::NDq {
 
@@ -153,7 +153,7 @@ void ValidateParamValue(std::string_view paramName, const TType* type, const NUd
 
 } // namespace
 
-#define LOG(...) do { if (Y_UNLIKELY(LogFunc)) { LogFunc(__VA_ARGS__); } } while (0)
+#define LOG(...) do { if (LogFunc) { LogFunc(__VA_ARGS__); } } while (0)
 
 NUdf::TUnboxedValue DqBuildInputValue(
     const NDqProto::TTaskInput& inputDesc,
@@ -299,7 +299,7 @@ public:
                     }
                 }
                 if (log) {
-                    log(logMessage);
+                    log(NActors::NLog::EPrio::Debug, logMessage);
                 }
             };
             ComputationLogProvider = NUdf::MakeLogProvider(std::move(logProviderFunc), NUdf::ELogLevel::Debug);
@@ -481,7 +481,7 @@ public:
         programExplorer.Walk(programRoot.GetNode(), patternEnv);
         auto programSize = programExplorer.GetNodes().size();
 
-        LOG(TStringBuilder() << "task: " << TaskId << ", program size: " << programSize
+        LOG(EPrio::Debug, TStringBuilder() << "task: " << TaskId << ", program size: " << programSize
             << ", llvm: `" << Settings.OptLLVM << "`.");
 
         auto opts = CreatePatternOpts(task, patternAlloc, patternEnv);
@@ -495,7 +495,7 @@ public:
     }
 
     std::shared_ptr<TPatternCacheEntry> BuildTask(const TDqTaskSettings& task) {
-        LOG(TStringBuilder() << "Build task: " << TaskId);
+        LOG(EPrio::Debug, TStringBuilder() << "Build task: " << TaskId);
         auto startTime = TInstant::Now();
 
         const NDqProto::TProgram& program = task.GetProgram();
@@ -573,7 +573,7 @@ public:
         if (Stats) {
             Stats->BuildCpuTime = buildTime;
         }
-        LOG(TStringBuilder() << "Build task: " << TaskId << " takes " << buildTime.MicroSeconds() << " us");
+        LOG(EPrio::Debug, TStringBuilder() << "Build task: " << TaskId << " takes " << buildTime.MicroSeconds() << " us");
         return entry;
     }
 
@@ -587,7 +587,7 @@ public:
         LangVer = task.GetProgram().GetLangVer();
         auto entry = BuildTask(task);
 
-        LOG(TStringBuilder() << "Prepare task: " << TaskId);
+        LOG(EPrio::Debug, TStringBuilder() << "Prepare task: " << TaskId);
         auto startTime = TInstant::Now();
 
         auto& holderFactory = AllocatedHolder->ProgramParsed.CompGraph->GetHolderFactory();
@@ -630,13 +630,13 @@ public:
                 auto typeCheckLog = [&] () {
                     TStringStream out;
                     out << *outputType << " != " << *entry->InputItemTypes[i];
-                    LOG(TStringBuilder() << "Task: " << TaskId << " types is not the same: " << out.Str() << " has NOT been transformed by "
+                    LOG(EPrio::Debug, TStringBuilder() << "Task: " << TaskId << " types is not the same: " << out.Str() << " has NOT been transformed by "
                         << transformDesc.GetType() << " with input type: " << *transform->TransformInputType
                         << " , output type: " << *outputType);
                     return out.Str();
                 };
                 YQL_ENSURE(outputTypeNodeRaw == entry->InputItemTypesRaw[i], "" << typeCheckLog());
-                LOG(TStringBuilder() << "Task: " << TaskId << " has transform by "
+                LOG(EPrio::Debug, TStringBuilder() << "Task: " << TaskId << " has transform by "
                     << transformDesc.GetType() << " with input type: " << *transform->TransformInputType
                     << " , output type: " << *outputType);
 
@@ -796,13 +796,13 @@ public:
                     auto typeCheckLog = [&] () {
                         TStringStream out;
                         out << *inputType << " != " << *entry->OutputItemTypes[i];
-                        LOG(TStringBuilder() << "Task: " << TaskId << " types is not the same: " << out.Str() << " has NOT been transformed by "
+                        LOG(EPrio::Debug, TStringBuilder() << "Task: " << TaskId << " types is not the same: " << out.Str() << " has NOT been transformed by "
                             << transformDesc.GetType() << " with output type: " << *transform->TransformOutputType
                             << " , input type: " << *inputType);
                         return out.Str();
                     };
                     YQL_ENSURE(inputType->IsSameType(*localOutputType),  "" << typeCheckLog());
-                    LOG(TStringBuilder() << "Task: " << TaskId << " has transform by "
+                    LOG(EPrio::Debug, TStringBuilder() << "Task: " << TaskId << " has transform by "
                         << transformDesc.GetType() << " with input type: " << *inputType
                         << " , output type: " << *transform->TransformOutputType);
                 }
@@ -891,7 +891,7 @@ public:
 
         auto prepareTime = TInstant::Now() - startTime;
 
-        LOG(TStringBuilder() << "Prepare task: " << TaskId << ", takes " << prepareTime.MicroSeconds() << " us");
+        LOG(EPrio::Debug, TStringBuilder() << "Prepare task: " << TaskId << ", takes " << prepareTime.MicroSeconds() << " us");
         if (Stats) {
             Stats->BuildCpuTime += prepareTime;
             for (auto& [channelId, inputChannel] : AllocatedHolder->InputChannels) {
@@ -905,7 +905,7 @@ public:
     }
 
     ERunStatus Run() final {
-        LOG(TStringBuilder() << "Run task: " << TaskId);
+        LOG(EPrio::Trace, TStringBuilder() << "Run task: " << TaskId);
         if (!AllocatedHolder->ResultStream && !AllocatedHolder->ResultStreamFinished) {
             auto guard = BindAllocator();
             TBindTerminator term(AllocatedHolder->ProgramParsed.CompGraph->GetTerminator());
@@ -1109,7 +1109,7 @@ private:
 
     ERunStatus FetchAndDispatch() {
         if (!AllocatedHolder->Output) {
-            LOG("no consumers, Finish execution");
+            LOG(EPrio::Debug, "no consumers, Finish execution");
             return ERunStatus::Finished;
         }
 
@@ -1166,7 +1166,7 @@ private:
                         AllocatedHolder->CheckForNotConsumedLinear();
                     }
 
-                    LOG(TStringBuilder() << "task " << TaskId << ", execution finished, finish consumers");
+                    LOG(EPrio::Debug, TStringBuilder() << "task " << TaskId << ", execution finished, finish consumers");
                     AllocatedHolder->Output->Finish();
                     return ERunStatus::Finished;
                 }

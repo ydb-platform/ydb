@@ -128,11 +128,11 @@ void Init(
     }
 
     if (protoConfig.GetCompute().GetYdb().GetEnable() && protoConfig.GetCompute().GetYdb().GetControlPlane().GetEnable()) {
-        auto computeDatabaseService = NFq::CreateComputeDatabaseControlPlaneServiceActor(protoConfig.GetCompute(), 
-                                                                                         NKikimr::CreateYdbCredentialsProviderFactory, 
-                                                                                         commonConfig, 
-                                                                                         signer, 
-                                                                                         yqSharedResources, 
+        auto computeDatabaseService = NFq::CreateComputeDatabaseControlPlaneServiceActor(protoConfig.GetCompute(),
+                                                                                         NKikimr::CreateYdbCredentialsProviderFactory,
+                                                                                         commonConfig,
+                                                                                         signer,
+                                                                                         yqSharedResources,
                                                                                          yqCounters->GetSubgroup("subsystem", "DatabaseControlPlane"));
         actorRegistrator(NFq::ComputeDatabaseControlPlaneServiceActorId(), computeDatabaseService.release());
     }
@@ -259,7 +259,7 @@ void Init(
             commonTopicClientSettings
         );
         auto pqGateway = pqGatewayFactory ? pqGatewayFactory->CreatePqGateway() : NYql::CreatePqNativeGateway(std::move(pqServices));
-        RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway, 
+        RegisterDqPqReadActorFactory(*asyncIoFactory, yqSharedResources->UserSpaceYdbDriver, credentialsFactory, pqGateway,
             yqCounters->GetSubgroup("subsystem", "DqSourceTracker"), commonConfig.GetPqReconnectPeriod(), true);
 
         s3ActorsFactory->RegisterS3ReadActorFactory(*asyncIoFactory, credentialsFactory, httpGateway, s3HttpRetryPolicy, readActorFactoryCfg,

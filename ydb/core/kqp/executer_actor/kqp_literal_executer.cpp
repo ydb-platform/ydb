@@ -204,8 +204,8 @@ public:
             YQL_ENSURE(resultChannel.DstTask == 0);
         }
 
-        auto log = [as = TlsActivationContext->ActorSystem(), txId = TxId, taskId = task.Id](const TString& message) {
-            LOG_DEBUG_S(*as, NKikimrServices::KQP_TASKS_RUNNER, "TxId: " << txId << ", task: " << taskId << ". "
+        TLogFunc log = [as = TlsActivationContext->ActorSystem(), txId = TxId, taskId = task.Id](NActors::NLog::EPrio priority, const TString& message) {
+            LOG_LOG_S(*as, static_cast<NActors::NLog::EPriority>(priority), NKikimrServices::KQP_TASKS_RUNNER, "TxId: " << txId << ", task: " << taskId << ". "
                 << message);
         };
 

@@ -41,8 +41,10 @@ namespace {
 static const bool TESTS_VERBOSE = getenv("TESTS_VERBOSE") != nullptr;
 static const bool TESTS_LARGE = getenv("TESTS_LARGE") != nullptr;
 
-#define LOG_D(stream) LOG_DEBUG_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream)
-#define LOG_E(stream) LOG_ERROR_S(*ActorSystem.SingleSys(), NKikimrServices::KQP_COMPUTE, LogPrefix << stream)
+#define LOG(priority, stream) LOG_LOG_S(*ActorSystem.SingleSys(), static_cast<NActors::NLog::EPriority>(priority), NKikimrServices::KQP_COMPUTE, LogPrefix << stream)
+
+#define LOG_D(stream) LOG(NActors::NLog::EPrio::Debug, stream)
+#define LOG_E(stream) LOG(NActors::NLog::EPrio::Error, stream)
 
 void SegmentationFaultHandler(int) {
     Cerr << "segmentation fault call stack:" << Endl;
@@ -420,8 +422,8 @@ struct TSyncComputeActorTestFixture: public NUnitTest::TBaseFixture {
         // DstEndpoint
         // IsPersistent
         // EnableSpilling
-        TLogFunc logFunc = [this](const TString& msg) {
-            LOG_D(msg);
+        TLogFunc logFunc = [this](NActors::NLog::EPrio priority, const TString& msg) {
+            LOG(priority, msg);
         };
         // DqOutputChannel is used for simulating input on CA under the test
         TDqChannelSettings settings = {

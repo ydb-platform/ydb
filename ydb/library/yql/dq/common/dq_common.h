@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/log_iface.h>
 
 #include <util/generic/variant.h>
 
@@ -9,7 +10,7 @@ namespace NYql::NDq {
 
 using TTxId = std::variant<ui64, TString>;
 
-using TLogFunc = std::function<void(const TString& message)>;
+using TLogFunc = std::function<void(NActors::NLog::EPrio priority, const TString& message)>;
 
 using TWakeUpCallback = std::function<void()>;
 using TErrorCallback = std::function<void(const TString& error)>;

@@ -10,12 +10,8 @@ namespace NDq {
 using namespace NActors;
 
 namespace {
-TDqExecutionSettings ExecutionSettings;
 
-bool IsDebugLogEnabled(const TActorSystem* actorSystem) {
-    auto* settings = actorSystem->LoggerSettings();
-    return settings && settings->Satisfies(NActors::NLog::EPriority::PRI_DEBUG, NKikimrServices::KQP_COMPUTE);
-}
+TDqExecutionSettings ExecutionSettings;
 
 } // anonymous namespace
 
@@ -50,13 +46,10 @@ public:
 
         MemoryQuota = InitMemoryQuota();
 
-        TLogFunc logger;
-        if (IsDebugLogEnabled(actorSystem)) {
-            logger = [actorSystem, txId = this->GetTxId(), taskId = GetTask().GetId()] (const TString& message) {
-                LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_COMPUTE, "TxId: " << txId
-                    << ", task: " << taskId << ": " << message);
-            };
-        }
+        TLogFunc logger = [actorSystem, txId = this->GetTxId(), taskId = GetTask().GetId()] (NActors::NLog::EPrio priority, const TString& message) {
+            LOG_LOG_S(*actorSystem, static_cast<NActors::NLog::EPriority>(priority), NKikimrServices::KQP_COMPUTE, "TxId: " << txId
+                << ", task: " << taskId << ": " << message);
+        };
 
         auto taskRunner = TaskRunnerFactory(GetAllocatorPtr(), Task, RuntimeSettings.StatsMode, logger);
         SetTaskRunner(taskRunner);

@@ -159,6 +159,7 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
     std::optional<TTransaction> Tx_;
     std::vector<std::string> ArrowSchemas_;
     std::vector<std::vector<std::string>> BytesData_;
+    std::vector<bool> ResultSetSeen_;
 
     void Next() {
         TPtr self(this);
@@ -213,29 +214,36 @@ struct TExecuteQueryBuffer : public TThrRefBase, TNonCopyable {
 
             if (part.HasResultSet()) {
                 auto inRs = part.ExtractResultSet();
-                auto& inRsProto = TProtoAccessor::GetProto(inRs);
+                auto& inRsProto = inRs.MutableProto();
 
                 // TODO: Use result sets metadata
                 if (self->ResultSets_.size() <= part.GetResultSetIndex()) {
                     self->ResultSets_.resize(part.GetResultSetIndex() + 1);
+                    self->ResultSetSeen_.resize(part.GetResultSetIndex() + 1);
                 }
 
                 auto& resultSet = self->ResultSets_[part.GetResultSetIndex()];
-                resultSet.set_format(inRsProto.format());
+                const auto resultSetIndex = part.GetResultSetIndex();
 
-                switch (resultSet.format()) {
+                switch (inRsProto.format()) {
                     case Ydb::ResultSet::FORMAT_UNSPECIFIED:
                     case Ydb::ResultSet::FORMAT_VALUE: {
-                        self->CollectYdbValues(resultSet, inRsProto);
+                        if (!self->ResultSetSeen_[resultSetIndex]) {
+                            resultSet = std::move(inRsProto);
+                        } else {
+                            self->CollectYdbValues(resultSet, inRsProto);
+                        }
                         break;
                     }
                     case Ydb::ResultSet::FORMAT_ARROW: {
-                        self->CollectArrowBytes(resultSet, inRs.MutableProto(), part.GetResultSetIndex());
+                        resultSet.set_format(inRsProto.format());
+                        self->CollectArrowBytes(resultSet, inRsProto, part.GetResultSetIndex());
                         break;
                     }
                     default:
                         break;
                 }
+                self->ResultSetSeen_[resultSetIndex] = true;
             }
 
             if (const auto& tx = part.GetTransaction()) {

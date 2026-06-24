@@ -607,18 +607,18 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT(cluster->IsStateStorageReplicaNode(3));
 
         // Node 1: minimal storage node.
-        CheckNodeRoles(*cluster, 1, {Ydb::Maintenance::Node::STORAGE});
+        CheckNodeRoles(*cluster, 1, {Ydb::Maintenance::NODE_ROLE_STORAGE});
         // Node 2: minimal compute node.
-        CheckNodeRoles(*cluster, 2, {Ydb::Maintenance::Node::COMPUTE});
+        CheckNodeRoles(*cluster, 2, {Ydb::Maintenance::NODE_ROLE_COMPUTE});
         // Node 3: maximal set of co-occurring roles.
         CheckNodeRoles(*cluster, 3, {
-            Ydb::Maintenance::Node::STORAGE,
-            Ydb::Maintenance::Node::STATE_STORAGE,
-            Ydb::Maintenance::Node::STATIC_GROUP,
-            Ydb::Maintenance::Node::SYSTEM_TABLET,
+            Ydb::Maintenance::NODE_ROLE_STORAGE,
+            Ydb::Maintenance::NODE_ROLE_STATE_STORAGE,
+            Ydb::Maintenance::NODE_ROLE_STATIC_GROUP,
+            Ydb::Maintenance::NODE_ROLE_SYSTEM_TABLET,
         });
         // Node 4: storage node with a dynamic-group VDisk only.
-        CheckNodeRoles(*cluster, 4, {Ydb::Maintenance::Node::STORAGE});
+        CheckNodeRoles(*cluster, 4, {Ydb::Maintenance::NODE_ROLE_STORAGE});
     }
 }
 

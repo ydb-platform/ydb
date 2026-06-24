@@ -33,6 +33,8 @@
 
 #include <library/cpp/yt/threading/atomic_object.h>
 
+#include <library/cpp/yt/string/stream.h>
+
 #include <util/stream/length.h>
 
 namespace NYT::NLogging {
@@ -146,7 +148,7 @@ private:
 
     //! Protects the fields below.
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, SpinLock_);
-    TString CurrentBuffer_;
+    std::string CurrentBuffer_;
     i64 CurrentRowCount_ = 0;
     //! This queue should typically contain no more than one element.
     //! We use it to limit the number of rows written within a single transaction.
@@ -204,7 +206,7 @@ private:
             RotateBuffer();
         }
 
-        TStringOutput outputStream(CurrentBuffer_);
+        TStdStringOutput outputStream(CurrentBuffer_);
         TCountingOutput countingOutputStream(&outputStream);
         Formatter_->WriteFormatted(&countingOutputStream, event);
 

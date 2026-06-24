@@ -31,7 +31,18 @@ jobs:
     outputs:
       result: ${{ steps.check-ownership-membership.outputs.result == 'true' && steps.check-is-mergeable.outputs.result == 'true' }}
       commit_sha: ${{ steps.check-is-mergeable.outputs.commit_sha }}
+      shard_count: ${{ steps.parse-checks-switch.outputs.shard_count }}
     steps:
+      - name: Parse CHECKS_SWITCH
+        id: parse-checks-switch
+        run: |
+          if [ -n "${{ vars.CHECKS_SWITCH }}" ]; then
+            count=$(jq -r '(.pr_check_shard_count | tonumber?) // 0' <<< '${{ vars.CHECKS_SWITCH }}')
+          else
+            count=0
+          fi
+          echo "shard_count=$count" >> $GITHUB_OUTPUT
+
       - name: Reset integrated status
         run: |
           curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
@@ -208,10 +219,428 @@ jobs:
             core.info(`commit_sha=${pr.commit_sha}`);
             core.setOutput('commit_sha', pr.merge_commit_sha);
             return true;
+  build_rwdi:
+    needs:
+      - check-running-allowed
+    if: needs.check-running-allowed.outputs.result == 'true' && needs.check-running-allowed.outputs.commit_sha != '' && fromJSON(needs.check-running-allowed.outputs.shard_count) >= 2
+    runs-on: [ self-hosted, auto-provisioned, build-preset-relwithdebinfo ]
+    name: Build relwithdebinfo (sharded)
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
+          fetch-depth: 2
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      - name: Build (no tests)
+        uses: ./.github/actions/build_and_test_ya
+        with:
+          build_preset: relwithdebinfo
+          build_target: "ydb/"
+          increment: true
+          run_tests: false
+          save_test_graph: true
+          s3_subdir: build
+          test_size: small,medium
+          test_threads: 52
+          put_build_results_to_cache: true
+          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
+          secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
+            secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
+          vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
+            vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+      - name: List tests for shard plan
+        env:
+          REMOTE_CACHE_URL: ${{ vars.REMOTE_CACHE_URL_YA }}
+          REMOTE_CACHE_USERNAME: ${{ secrets.REMOTE_CACHE_USERNAME }}
+        run: |
+          chmod +x .github/scripts/tests/sharding/list_tests_for_shard_plan.sh
+          .github/scripts/tests/sharding/list_tests_for_shard_plan.sh ydb/ test_list.log
+      - name: Upload test list log on list failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-check-rwdi-test-list-log-${{ github.run_id }}
+          path: test_list.log
+          retention-days: 3
+          if-no-files-found: ignore
+      - name: Upload increment build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-check-rwdi-graph
+          path: |
+            graph.json
+            context.json
+            test_list.log
+          retention-days: 3
+
+  plan_rwdi_shards:
+    needs:
+      - check-running-allowed
+      - build_rwdi
+    if: needs.check-running-allowed.outputs.result == 'true' && fromJSON(needs.check-running-allowed.outputs.shard_count) >= 2
+    runs-on: [self-hosted, tiny-worker]
+    name: Plan relwithdebinfo shards
+    outputs:
+      shard_ids: ${{ steps.plan.outputs.shard_ids }}
+      active_shard_count: ${{ steps.plan.outputs.active_shard_count }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/actions/setup_ci_ydb_service_account_key_file_credentials
+            .github/scripts/analytics/ydb_wrapper.py
+            .github/scripts/tests/get_test_duration_estimates.py
+            .github/scripts/tests/sharding
+      - name: Download increment build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-check-rwdi-graph
+          path: build
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      - name: Build shard plan
+        id: plan
+        env:
+          SHARD_COUNT: ${{ needs.check-running-allowed.outputs.shard_count }}
+          BUILD_PRESET: relwithdebinfo
+          HISTORY_BRANCH: ${{ github.base_ref }}
+          HISTORY_DAYS_BACK: "3"
+        run: |
+          set -eux
+          python3 -m pip install pyyaml ydb --quiet
+          chmod +x .github/scripts/tests/sharding/plan_shard_tests.sh
+          .github/scripts/tests/sharding/plan_shard_tests.sh \
+            build/test_list.log \
+            ydb/ \
+            "$SHARD_COUNT" \
+            shard_plan_out \
+            build/graph.json
+          plan_title="Shard plan (PR #${{ github.event.number }}, relwithdebinfo, increment)"
+          python3 .github/scripts/tests/sharding/render_shard_plan_summary.py \
+            shard_plan_out/shard_plan.json \
+            --title "$plan_title" \
+            -o shard_plan_out/shard_plan_summary.md
+          python3 .github/scripts/tests/sharding/render_shard_plan_summary.py \
+            shard_plan_out/shard_plan.json \
+            --title "$plan_title" \
+            >> "$GITHUB_STEP_SUMMARY"
+          if [ -f shard_plan_out/list_summary.json ]; then
+            jq -r '.weighting | "History weights: \(.history_suite_count // 0)/\(.history_suite_count + .size_fallback_suite_count) suites from p50 (\(.branch // "main"), \(.days_back // 3)d)"' \
+              shard_plan_out/list_summary.json >> "$GITHUB_STEP_SUMMARY" || true
+          fi
+          echo "shard_ids=$(jq -c '[.shards[].id]' shard_plan_out/shard_plan.json)" >> "$GITHUB_OUTPUT"
+          echo "active_shard_count=$(jq '.shard_count' shard_plan_out/shard_plan.json)" >> "$GITHUB_OUTPUT"
+      - name: Upload shard plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-check-rwdi-shard-plan
+          path: shard_plan_out
+          retention-days: 3
+
+  test_rwdi_shard:
+    needs:
+      - check-running-allowed
+      - build_rwdi
+      - plan_rwdi_shards
+    if: needs.check-running-allowed.outputs.result == 'true' && fromJSON(needs.check-running-allowed.outputs.shard_count) >= 2 && needs.plan_rwdi_shards.outputs.active_shard_count != '0'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard_id: ${{ fromJSON(needs.plan_rwdi_shards.outputs.shard_ids) }}
+    runs-on: [ self-hosted, auto-provisioned, build-preset-relwithdebinfo ]
+    name: Test relwithdebinfo shard ${{ matrix.shard_id }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
+          fetch-depth: 2
+      - name: Download shard plan
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-check-rwdi-shard-plan
+          path: shard_plan
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      - name: Resolve shard build targets
+        id: shard_targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t targets < <(jq -r --argjson id '${{ matrix.shard_id }}' '.shards[] | select(.id==$id) | .tests[]' shard_plan/shard_plan.json)
+          if [ "${#targets[@]}" -eq 0 ]; then
+            echo "No targets for shard ${{ matrix.shard_id }}"
+            exit 1
+          fi
+          echo "targets=${targets[*]}" >> "$GITHUB_OUTPUT"
+          echo "Shard ${{ matrix.shard_id }} targets (${#targets[@]}): ${targets[*]}"
+      - name: Run shard tests (attempt 1)
+        uses: ./.github/actions/build_and_test_ya
+        with:
+          build_preset: relwithdebinfo
+          build_target: ${{ steps.shard_targets.outputs.targets }}
+          increment: false
+          run_tests: true
+          test_size: small,medium
+          test_threads: 52
+          put_build_results_to_cache: true
+          skip_graph_compare: true
+          publish_github_status: false
+          publish_pr_comment: false
+          single_attempt: true
+          s3_subdir: shard_${{ matrix.shard_id }}
+          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
+          secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
+            secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
+          vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
+            vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+      - name: Stage shard report
+        if: always()
+        run: |
+          mkdir -p shard_artifact
+          cp tmp/results/try_1/report.json shard_artifact/shard_${{ matrix.shard_id }}.json
+      - name: Upload shard report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-check-rwdi-shard-${{ matrix.shard_id }}-report
+          path: shard_artifact/shard_${{ matrix.shard_id }}.json
+          retention-days: 3
+
+  merge_rwdi:
+    needs:
+      - check-running-allowed
+      - build_rwdi
+      - plan_rwdi_shards
+      - test_rwdi_shard
+    if: always() && needs.check-running-allowed.outputs.result == 'true' && fromJSON(needs.check-running-allowed.outputs.shard_count) >= 2 && needs.build_rwdi.result == 'success'
+    runs-on: [self-hosted, tiny-worker]
+    name: Merge relwithdebinfo shards
+    outputs:
+      failed_count: ${{ steps.merge.outputs.failed_count }}
+      shard_count: ${{ steps.merge.outputs.shard_count }}
+    steps:
+      - name: Checkout scripts
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
+          sparse-checkout: |
+            .github/actions
+            .github/config
+            .github/scripts/tests/sharding
+            .github/scripts/tests/fail-checker.py
+            .github/scripts/tests/generate-summary.py
+            .github/scripts/tests/get_test_history.py
+            .github/scripts/tests/error_type_utils.py
+            .github/scripts/tests/templates
+            .github/scripts/analytics/testowners_utils.py
+            .github/scripts/analytics/ydb_wrapper.py
+            .github/TESTOWNERS
+            .github/scripts/tests/comment-pr.py
+            .github/scripts/Indexer
+      - name: Download shard reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: pr-check-rwdi-shard-*-report
+          merge-multiple: true
+          path: shard_reports
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      - name: Merge shard reports
+        id: merge
+        env:
+          EXPECTED_SHARDS: ${{ needs.plan_rwdi_shards.outputs.active_shard_count }}
+        run: |
+          set -eux
+          mkdir -p merged
+          mapfile -t reports < <(find shard_reports -name 'shard_*.json' | sort)
+          if [ "$EXPECTED_SHARDS" = "0" ]; then
+            echo '{"results":[]}' > merged/try_1_report.json
+            echo "failed_count=0" >> "$GITHUB_OUTPUT"
+            echo "shard_count=0" >> "$GITHUB_OUTPUT"
+            echo "## Merged try 1" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Shards: 0 (increment had no runnable suites in scope)" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Failed tests: 0" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "${#reports[@]}" -eq 0 ]; then
+            echo "No shard reports found"
+            exit 1
+          fi
+          if [ "${#reports[@]}" -ne "$EXPECTED_SHARDS" ]; then
+            echo "Expected $EXPECTED_SHARDS shard reports, got ${#reports[@]}"
+            exit 1
+          fi
+          python3 .github/scripts/tests/sharding/merge_build_reports.py \
+            -o merged/try_1_report.json \
+            "${reports[@]}"
+          python3 .github/scripts/tests/fail-checker.py merged/try_1_report.json \
+            --output_path merged/failed_count.txt || true
+          failed_count=$(cat merged/failed_count.txt)
+          merged_test_count=$(jq '[.results[] | select(.type=="test")] | length' merged/try_1_report.json)
+          echo "failed_count=$failed_count" >> "$GITHUB_OUTPUT"
+          echo "shard_count=${#reports[@]}" >> "$GITHUB_OUTPUT"
+          {
+            echo "commit=${{ needs.check-running-allowed.outputs.commit_sha }}"
+            echo "shard_reports=${#reports[@]}"
+            echo "failed_tests=$failed_count"
+            echo "merged_test_rows=$merged_test_count"
+          } > merged/meta.txt
+          echo "## Merged try 1" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Shards: ${#reports[@]}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Failed tests: $failed_count" >> "$GITHUB_STEP_SUMMARY"
+      - name: Upload aggregate debug artifacts
+        if: always() && steps.merge.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-check-rwdi-aggregate-debug
+          path: merged/
+          retention-days: 3
+      - name: Upload merged report for retry
+        if: steps.merge.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: pr-check-rwdi-merged
+          path: merged/
+          retention-days: 3
+      - name: Install publish dependencies
+        if: steps.merge.outputs.failed_count == '0' || fromJSON(steps.merge.outputs.failed_count) >= 500
+        run: python3 -m pip install ydb ydb[yc] codeowners humanize plotly --quiet
+      - name: Prepare s3cmd
+        if: steps.merge.outputs.failed_count == '0' || fromJSON(steps.merge.outputs.failed_count) >= 500
+        uses: ./.github/actions/s3cmd
+        with:
+          s3_bucket: ${{ vars.AWS_BUCKET }}
+          s3_endpoint: ${{ vars.AWS_ENDPOINT }}
+          s3_key_id: ${{ secrets.AWS_KEY_ID }}
+          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+          folder_prefix: ya-aggregate-
+          build_preset: relwithdebinfo
+      - name: Publish merged try1 result
+        if: steps.merge.outputs.failed_count == '0' || fromJSON(steps.merge.outputs.failed_count) >= 500
+        env:
+          BUILD_PRESET: relwithdebinfo
+          BRANCH_NAME: ${{ github.base_ref }}
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          PUBLIC_DIR: tmp/results
+          PUBLIC_DIR_URL: ${{ env.S3_URL_PREFIX }}
+          S3_BUCKET_PATH: ${{ env.S3_BUCKET_PATH }}
+          PR_NUMBER: ${{ github.event.number }}
+          STATUS_SHA: ${{ github.event.pull_request.head.sha }}
+          ORIGINAL_HEAD: ${{ needs.check-running-allowed.outputs.commit_sha }}
+        run: |
+          set -eux
+          bash .github/scripts/tests/sharding/publish_merged_summary.sh merged/try_1_report.json
+
+  retry_rwdi:
+    needs:
+      - check-running-allowed
+      - build_rwdi
+      - merge_rwdi
+    if: |
+      always() &&
+      needs.check-running-allowed.outputs.result == 'true' &&
+      fromJSON(needs.check-running-allowed.outputs.shard_count) >= 2 &&
+      needs.merge_rwdi.result == 'success' &&
+      needs.merge_rwdi.outputs.failed_count != '0' &&
+      fromJSON(needs.merge_rwdi.outputs.failed_count) < 500
+    runs-on: [ self-hosted, auto-provisioned, build-preset-relwithdebinfo ]
+    name: Retry relwithdebinfo shards
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
+          fetch-depth: 2
+      - name: Download increment graph
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-check-rwdi-graph
+          path: .
+      - name: Download merged try1 report
+        uses: actions/download-artifact@v4
+        with:
+          name: pr-check-rwdi-merged
+          path: merged
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      - name: Retry failed tests (attempts 2-3)
+        uses: ./.github/actions/build_and_test_ya
+        with:
+          build_preset: relwithdebinfo
+          build_target: "ydb/"
+          increment: false
+          run_tests: true
+          test_size: small,medium
+          test_threads: 52
+          put_build_results_to_cache: true
+          skip_graph_compare: true
+          prebuilt_graph_path: graph.json
+          prebuilt_context_path: context.json
+          start_retry: "2"
+          previous_report_path: merged/try_1_report.json
+          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
+          secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
+            secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
+          vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
+            vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+
+  build_and_test_asan:
+    needs:
+      - check-running-allowed
+    if: needs.check-running-allowed.outputs.result == 'true' && needs.check-running-allowed.outputs.commit_sha != '' && fromJSON(needs.check-running-allowed.outputs.shard_count) >= 2
+    runs-on: [ self-hosted, auto-provisioned, build-preset-release-asan ]
+    name: Build and test release-asan
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
+          fetch-depth: 2
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      - name: Build and test
+        uses: ./.github/actions/build_and_test_ya
+        with:
+          build_preset: release-asan
+          build_target: "ydb/"
+          increment: true
+          run_tests: true
+          test_size: small,medium
+          test_threads: 52
+          put_build_results_to_cache: true
+          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
+          secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
+            secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
+          vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
+            vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+
   build_and_test:
     needs:
       - check-running-allowed
-    if: needs.check-running-allowed.outputs.result == 'true' && needs.check-running-allowed.outputs.commit_sha != ''
+    if: needs.check-running-allowed.outputs.result == 'true' && needs.check-running-allowed.outputs.commit_sha != '' && fromJSON(needs.check-running-allowed.outputs.shard_count) < 2
     strategy:
       fail-fast: false
       matrix:
@@ -267,8 +696,20 @@ jobs:
           vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
   update_integrated_status:
     runs-on: [self-hosted, tiny-worker]
-    needs: build_and_test
-    if: ${{github.event.pull_request.state == 'open'}}
+    needs:
+      - check-running-allowed
+      - build_and_test
+      - merge_rwdi
+      - retry_rwdi
+      - build_and_test_asan
+    if: |
+      always() &&
+      github.event.pull_request.state == 'open' &&
+      needs.check-running-allowed.outputs.result == 'true' &&
+      (needs.build_and_test.result == 'success' || needs.build_and_test.result == 'skipped') &&
+      (needs.merge_rwdi.result == 'success' || needs.merge_rwdi.result == 'skipped') &&
+      (needs.retry_rwdi.result == 'success' || needs.retry_rwdi.result == 'skipped') &&
+      (needs.build_and_test_asan.result == 'success' || needs.build_and_test_asan.result == 'skipped')
     steps:
       - name: Gather required checks results
         shell: bash

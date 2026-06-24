@@ -4,22 +4,37 @@ on:
   workflow_dispatch:
     inputs:
       test_targets:
-        description: 'Paths to tests (e.g., "ydb/tests/olap/" or "ydb/tests/olap/, ydb/tests/functional/")'
+        description: 'Paths to tests (e.g., "ydb/tests/olap/" or "ydb/")'
         required: false
         type: string
         default: 'ydb/tests/olap/'
       build_preset:
-        description: 'Build preset types (comma-separated: "relwithdebinfo, release-asan" or single: "relwithdebinfo")'
+        description: 'Build preset types (comma-separated). Sharding mode: first preset only (relwithdebinfo or release-asan).'
         required: false
         type: string
         default: 'relwithdebinfo, release-asan'
       branches:
-        description: 'Branches to test (comma-separated: "main, stable-25-3" or JSON array: ["main", "stable-25-3"], empty = use branches_config_path)'
+        description: 'Branches to test (comma-separated or JSON array). Sharding uses the first branch only.'
         required: false
         type: string
         default: ''
       use_branches_config:
         description: 'If true, use branches from .github/config/stable_tests_branches.json'
+        required: false
+        type: boolean
+        default: false
+      use_sharding:
+        description: 'PR-check sharding pilot: build once, N parallel test shards, aggregate retry'
+        required: false
+        type: boolean
+        default: false
+      shard_count:
+        description: 'Number of parallel test shards (use_sharding=true, min 2)'
+        required: false
+        type: number
+        default: 2
+      increment:
+        description: 'graph_compare increment (like PR-check) when use_sharding=true'
         required: false
         type: boolean
         default: false
@@ -30,23 +45,25 @@ jobs:
     outputs:
       branches_json: ${{ steps.format-branches.outputs.branches_json }}
       build_preset_array: ${{ steps.format-build-preset.outputs.build_preset_array }}
+      sharding_branch: ${{ steps.sharding-branch.outputs.branch }}
+      history_branch: ${{ steps.sharding-branch.outputs.history_branch }}
+      sharding_preset: ${{ steps.sharding-preset.outputs.preset }}
+      sharding_runner: ${{ steps.sharding-preset.outputs.runner }}
+      shard_ids: ${{ steps.shard-ids.outputs.shard_ids }}
     steps:
       - name: Format branches
         id: format-branches
         run: |
           if [ -z "${{ inputs.branches }}" ]; then
-            # Empty - will use branches_config_path or default
             echo "branches_json=" >> $GITHUB_OUTPUT
           elif [[ "${{ inputs.branches }}" == \[* ]]; then
-            # Already JSON array
             echo "branches_json=${{ inputs.branches }}" >> $GITHUB_OUTPUT
           else
-            # Comma-separated format: "main, stable-25-3" -> ["main", "stable-25-3"]
             IFS=',' read -ra BRANCHES <<< "${{ inputs.branches }}"
             JSON_BRANCHES="["
             FIRST=true
             for branch in "${BRANCHES[@]}"; do
-              branch=$(echo "$branch" | xargs)  # trim whitespace
+              branch=$(echo "$branch" | xargs)
               if [ -n "$branch" ]; then
                 if [ "$FIRST" = true ]; then
                   FIRST=false
@@ -58,7 +75,6 @@ jobs:
             done
             JSON_BRANCHES+="]"
             echo "branches_json=$JSON_BRANCHES" >> $GITHUB_OUTPUT
-            echo "Converted '${{ inputs.branches }}' to $JSON_BRANCHES"
           fi
 
       - name: Format build presets
@@ -68,17 +84,14 @@ jobs:
           if [ -z "$BUILD_PRESET_INPUT" ]; then
             BUILD_PRESET_INPUT="relwithdebinfo"
           fi
-          
-          # Check if already JSON array
           if [[ "$BUILD_PRESET_INPUT" == \[* ]]; then
             echo "build_preset_array=$BUILD_PRESET_INPUT" >> $GITHUB_OUTPUT
           else
-            # Comma-separated format: "relwithdebinfo, release-asan" -> ["relwithdebinfo", "release-asan"]
             IFS=',' read -ra PRESETS <<< "$BUILD_PRESET_INPUT"
             JSON_PRESETS="["
             FIRST=true
             for preset in "${PRESETS[@]}"; do
-              preset=$(echo "$preset" | xargs)  # trim whitespace
+              preset=$(echo "$preset" | xargs)
               if [ -n "$preset" ]; then
                 if [ "$FIRST" = true ]; then
                   FIRST=false
@@ -90,12 +103,69 @@ jobs:
             done
             JSON_PRESETS+="]"
             echo "build_preset_array=$JSON_PRESETS" >> $GITHUB_OUTPUT
-            echo "Converted '$BUILD_PRESET_INPUT' to $JSON_PRESETS"
           fi
+
+      - name: Resolve sharding preset
+        id: sharding-preset
+        if: inputs.use_sharding
+        run: |
+          PRESETS='${{ steps.format-build-preset.outputs.build_preset_array }}'
+          preset=$(echo "$PRESETS" | jq -r '.[0]')
+          case "$preset" in
+            relwithdebinfo)
+              label=build-preset-relwithdebinfo
+              ;;
+            release-asan)
+              label=build-preset-release-asan
+              ;;
+            *)
+              echo "Unsupported sharding preset: $preset (use relwithdebinfo or release-asan)" >&2
+              exit 1
+              ;;
+          esac
+          runner=$(jq -nc --arg label "$label" '["self-hosted","auto-provisioned",$label]')
+          echo "preset=$preset" >> "$GITHUB_OUTPUT"
+          echo "runner=$runner" >> "$GITHUB_OUTPUT"
+          echo "Sharding preset: $preset (runner label: $label)"
+
+      - name: Resolve sharding branch
+        id: sharding-branch
+        if: inputs.use_sharding
+        run: |
+          BJ='${{ steps.format-branches.outputs.branches_json }}'
+          if [ -n "$BJ" ]; then
+            branch=$(echo "$BJ" | jq -r '.[0]')
+          else
+            branch="${GITHUB_REF_NAME:-main}"
+          fi
+          case "$branch" in
+            main|stable-*|stream-*|prestable-*|release-*)
+              history_branch="$branch"
+              ;;
+            *)
+              history_branch=main
+              ;;
+          esac
+          echo "branch=$branch" >> $GITHUB_OUTPUT
+          echo "history_branch=$history_branch" >> $GITHUB_OUTPUT
+          echo "Sharding branch: $branch (history: $history_branch)"
+
+      - name: Build shard id list
+        id: shard-ids
+        if: inputs.use_sharding
+        run: |
+          count=${{ inputs.shard_count }}
+          if [ "$count" -lt 2 ]; then
+            echo "shard_count must be >= 2 when use_sharding=true" >&2
+            exit 1
+          fi
+          ids=$(seq 0 $((count - 1)) | jq -R 'tonumber' | jq -s -c .)
+          echo "shard_ids=$ids" >> $GITHUB_OUTPUT
 
   main:
     name: Run and debug tests
     needs: prepare
+    if: inputs.use_sharding != true
     uses: ./.github/workflows/run_tests.yml
     secrets: inherit
     strategy:
@@ -109,7 +179,414 @@ jobs:
       branches: ${{ needs.prepare.outputs.branches_json || '' }}
       branches_config_path: ${{ inputs.use_branches_config && '.github/config/stable_tests_branches.json' || '' }}
 
+  shard_build:
+    needs: prepare
+    if: inputs.use_sharding == true
+    runs-on: ${{ fromJSON(needs.prepare.outputs.sharding_runner) }}
+    name: Sharded build (${{ needs.prepare.outputs.sharding_preset }})
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.sharding_branch }}
+          fetch-depth: 2
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      - name: Build (no tests)
+        uses: ./.github/actions/build_and_test_ya
+        with:
+          build_preset: ${{ needs.prepare.outputs.sharding_preset }}
+          build_target: ${{ inputs.test_targets }}
+          increment: ${{ inputs.increment }}
+          run_tests: false
+          save_test_graph: true
+          s3_subdir: build
+          test_size: small,medium
+          test_threads: 52
+          custom_branch_name: ${{ needs.prepare.outputs.history_branch }}
+          put_build_results_to_cache: true
+          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
+          secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
+            secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
+          vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
+            vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+      - name: List tests for shard plan
+        env:
+          BUILD_PRESET: ${{ needs.prepare.outputs.sharding_preset }}
+          REMOTE_CACHE_URL: ${{ vars.REMOTE_CACHE_URL_YA }}
+          REMOTE_CACHE_USERNAME: ${{ secrets.REMOTE_CACHE_USERNAME }}
+        run: |
+          chmod +x .github/scripts/tests/sharding/list_tests_for_shard_plan.sh
+          .github/scripts/tests/sharding/list_tests_for_shard_plan.sh \
+            "${{ inputs.test_targets }}" test_list.log
+      - name: Upload test list log on list failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-shard-test-list-log-${{ github.run_id }}
+          path: test_list.log
+          retention-days: 3
+          if-no-files-found: ignore
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-shard-graph-${{ github.run_id }}
+          path: |
+            graph.json
+            context.json
+            test_list.log
+          retention-days: 3
+
+  shard_plan:
+    needs:
+      - prepare
+      - shard_build
+    if: inputs.use_sharding == true
+    runs-on: [self-hosted, tiny-worker]
+    name: Plan test shards
+    outputs:
+      shard_ids: ${{ steps.plan.outputs.shard_ids }}
+      active_shard_count: ${{ steps.plan.outputs.active_shard_count }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          sparse-checkout: |
+            .github/actions/setup_ci_ydb_service_account_key_file_credentials
+            .github/scripts/analytics/ydb_wrapper.py
+            .github/scripts/tests/get_test_duration_estimates.py
+            .github/scripts/tests/sharding
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: debug-shard-graph-${{ github.run_id }}
+          path: build
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      - name: Build shard plan
+        id: plan
+        env:
+          SHARD_COUNT: ${{ inputs.shard_count }}
+          BUILD_PRESET: ${{ needs.prepare.outputs.sharding_preset }}
+          HISTORY_BRANCH: ${{ needs.prepare.outputs.history_branch }}
+          HISTORY_DAYS_BACK: "3"
+        run: |
+          set -eux
+          python3 -m pip install pyyaml ydb --quiet
+          INCREMENT_GRAPH=""
+          if [ "${{ inputs.increment }}" = "true" ]; then
+            INCREMENT_GRAPH="build/graph.json"
+          fi
+          chmod +x .github/scripts/tests/sharding/plan_shard_tests.sh
+          .github/scripts/tests/sharding/plan_shard_tests.sh \
+            build/test_list.log \
+            "${{ inputs.test_targets }}" \
+            "$SHARD_COUNT" \
+            shard_plan_out \
+            "$INCREMENT_GRAPH"
+          plan_suffix="${{ inputs.test_targets }}"
+          if [ "${{ inputs.increment }}" = "true" ]; then
+            plan_suffix="$plan_suffix, increment"
+          fi
+          plan_title="Shard plan (${{ needs.prepare.outputs.sharding_branch }}, $plan_suffix)"
+          python3 .github/scripts/tests/sharding/render_shard_plan_summary.py \
+            shard_plan_out/shard_plan.json \
+            --title "$plan_title" \
+            -o shard_plan_out/shard_plan_summary.md
+          python3 .github/scripts/tests/sharding/render_shard_plan_summary.py \
+            shard_plan_out/shard_plan.json \
+            --title "$plan_title" \
+            >> "$GITHUB_STEP_SUMMARY"
+          if [ -f shard_plan_out/list_summary.json ]; then
+            jq -r '.weighting | "History weights: \(.history_suite_count // 0)/\(.history_suite_count + .size_fallback_suite_count) suites from p50 (\(.branch // "main"), \(.days_back // 3)d)"' \
+              shard_plan_out/list_summary.json >> "$GITHUB_STEP_SUMMARY" || true
+          fi
+          echo "shard_ids=$(jq -c '[.shards[].id]' shard_plan_out/shard_plan.json)" >> "$GITHUB_OUTPUT"
+          echo "active_shard_count=$(jq '.shard_count' shard_plan_out/shard_plan.json)" >> "$GITHUB_OUTPUT"
+      - name: Upload shard plan
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-shard-plan-${{ github.run_id }}
+          path: shard_plan_out
+          retention-days: 3
+
+  shard_test:
+    needs:
+      - prepare
+      - shard_build
+      - shard_plan
+    if: inputs.use_sharding == true && needs.shard_plan.outputs.active_shard_count != '0'
+    strategy:
+      fail-fast: false
+      matrix:
+        shard_id: ${{ fromJSON(needs.shard_plan.outputs.shard_ids) }}
+    runs-on: ${{ fromJSON(needs.prepare.outputs.sharding_runner) }}
+    name: Sharded test shard ${{ matrix.shard_id }} (${{ needs.prepare.outputs.sharding_preset }})
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.sharding_branch }}
+          fetch-depth: 2
+      - name: Download shard plan
+        uses: actions/download-artifact@v4
+        with:
+          name: debug-shard-plan-${{ github.run_id }}
+          path: shard_plan
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      - name: Resolve shard build targets
+        id: shard_targets
+        shell: bash
+        run: |
+          set -euo pipefail
+          mapfile -t targets < <(jq -r --argjson id '${{ matrix.shard_id }}' '.shards[] | select(.id==$id) | .tests[]' shard_plan/shard_plan.json)
+          if [ "${#targets[@]}" -eq 0 ]; then
+            echo "No targets for shard ${{ matrix.shard_id }}"
+            exit 1
+          fi
+          echo "targets=${targets[*]}" >> "$GITHUB_OUTPUT"
+          echo "Shard ${{ matrix.shard_id }} targets (${#targets[@]}): ${targets[*]}"
+      - name: Run shard tests (attempt 1)
+        uses: ./.github/actions/build_and_test_ya
+        with:
+          build_preset: ${{ needs.prepare.outputs.sharding_preset }}
+          build_target: ${{ steps.shard_targets.outputs.targets }}
+          increment: false
+          run_tests: true
+          test_size: small,medium
+          test_threads: 52
+          custom_branch_name: ${{ needs.prepare.outputs.history_branch }}
+          put_build_results_to_cache: true
+          skip_graph_compare: true
+          publish_github_status: false
+          publish_pr_comment: false
+          single_attempt: true
+          s3_subdir: shard_${{ matrix.shard_id }}
+          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
+          secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
+            secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
+          vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
+            vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+      - name: Stage shard report
+        if: always()
+        run: |
+          mkdir -p shard_artifact
+          cp tmp/results/try_1/report.json shard_artifact/shard_${{ matrix.shard_id }}.json
+      - name: Upload shard report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-shard-report-${{ matrix.shard_id }}-${{ github.run_id }}
+          path: shard_artifact/shard_${{ matrix.shard_id }}.json
+          retention-days: 3
+
+  shard_aggregate_merge:
+    needs:
+      - prepare
+      - shard_build
+      - shard_plan
+      - shard_test
+    if: always() && inputs.use_sharding == true && needs.shard_build.result == 'success'
+    runs-on: [self-hosted, tiny-worker]
+    name: Sharded merge
+    outputs:
+      failed_count: ${{ steps.merge.outputs.failed_count }}
+      shard_count: ${{ steps.merge.outputs.shard_count }}
+    steps:
+      - name: Checkout scripts
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.sharding_branch }}
+          sparse-checkout: |
+            .github/actions
+            .github/config
+            .github/scripts/tests/sharding
+            .github/scripts/tests/fail-checker.py
+            .github/scripts/tests/generate-summary.py
+            .github/scripts/tests/get_test_history.py
+            .github/scripts/tests/error_type_utils.py
+            .github/scripts/tests/templates
+            .github/scripts/analytics/testowners_utils.py
+            .github/scripts/analytics/ydb_wrapper.py
+            .github/TESTOWNERS
+            .github/scripts/Indexer
+      - name: Download shard reports
+        uses: actions/download-artifact@v4
+        with:
+          pattern: debug-shard-report-*-${{ github.run_id }}
+          merge-multiple: true
+          path: shard_reports
+      - name: Merge shard reports
+        id: merge
+        env:
+          EXPECTED_SHARDS: ${{ needs.shard_plan.outputs.active_shard_count }}
+        run: |
+          set -eux
+          mkdir -p merged
+          mapfile -t reports < <(find shard_reports -name 'shard_*.json' | sort)
+          if [ "$EXPECTED_SHARDS" = "0" ]; then
+            echo '{"results":[]}' > merged/try_1_report.json
+            echo "failed_count=0" >> "$GITHUB_OUTPUT"
+            echo "shard_count=0" >> "$GITHUB_OUTPUT"
+            echo "## Merged try 1" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Shards: 0 (increment had no runnable suites in scope)" >> "$GITHUB_STEP_SUMMARY"
+            echo "- Failed tests: 0" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          if [ "${#reports[@]}" -eq 0 ]; then
+            echo "No shard reports found"
+            exit 1
+          fi
+          if [ "${#reports[@]}" -ne "$EXPECTED_SHARDS" ]; then
+            echo "Expected $EXPECTED_SHARDS shard reports, got ${#reports[@]}"
+            exit 1
+          fi
+          python3 .github/scripts/tests/sharding/merge_build_reports.py \
+            -o merged/try_1_report.json \
+            "${reports[@]}"
+          python3 .github/scripts/tests/fail-checker.py merged/try_1_report.json \
+            --output_path merged/failed_count.txt || true
+          failed_count=$(cat merged/failed_count.txt)
+          merged_test_count=$(jq '[.results[] | select(.type=="test")] | length' merged/try_1_report.json)
+          echo "failed_count=$failed_count" >> "$GITHUB_OUTPUT"
+          echo "shard_count=${#reports[@]}" >> "$GITHUB_OUTPUT"
+          {
+            echo "branch=${{ needs.prepare.outputs.sharding_branch }}"
+            echo "test_targets=${{ inputs.test_targets }}"
+            echo "shard_reports=${#reports[@]}"
+            echo "failed_tests=$failed_count"
+            echo "merged_test_rows=$merged_test_count"
+          } > merged/meta.txt
+          echo "## Merged try 1" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Shards: ${#reports[@]}" >> "$GITHUB_STEP_SUMMARY"
+          echo "- Failed tests: $failed_count" >> "$GITHUB_STEP_SUMMARY"
+      - name: Setup ydb access
+        if: steps.merge.outcome == 'success'
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      - name: Prepare S3 folder prefix
+        if: steps.merge.outcome == 'success'
+        shell: bash
+        run: |
+          branch="${{ needs.prepare.outputs.sharding_branch }}"
+          sanitized="${branch//[^a-zA-Z0-9-]/-}"
+          echo "folder_prefix=ya-${sanitized:0:50}-" >> "$GITHUB_ENV"
+      - name: Prepare s3cmd
+        if: steps.merge.outcome == 'success'
+        uses: ./.github/actions/s3cmd
+        with:
+          s3_bucket: ${{ vars.AWS_BUCKET }}
+          s3_endpoint: ${{ vars.AWS_ENDPOINT }}
+          s3_key_id: ${{ secrets.AWS_KEY_ID }}
+          s3_key_secret: ${{ secrets.AWS_KEY_VALUE }}
+          folder_prefix: ${{ env.folder_prefix }}
+          build_preset: ${{ needs.prepare.outputs.sharding_preset }}
+      - name: Install publish dependencies
+        if: steps.merge.outcome == 'success'
+        run: python3 -m pip install ydb ydb[yc] codeowners humanize plotly jinja2 pyyaml --quiet
+      - name: Publish merged try1 report
+        if: steps.merge.outcome == 'success'
+        env:
+          BUILD_PRESET: ${{ needs.prepare.outputs.sharding_preset }}
+          BRANCH_NAME: ${{ needs.prepare.outputs.history_branch }}
+          PUBLIC_DIR: tmp/results
+          PUBLIC_DIR_URL: ${{ env.S3_URL_PREFIX }}
+          S3_BUCKET_PATH: ${{ env.S3_BUCKET_PATH }}
+          SKIP_GITHUB_PUBLISH: "1"
+          SKIP_FAIL_CHECK: "1"
+        run: |
+          set -eux
+          bash .github/scripts/tests/sharding/publish_merged_summary.sh merged/try_1_report.json
+      - name: Upload aggregate debug artifacts
+        if: always() && steps.merge.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-shard-aggregate-${{ github.run_id }}
+          path: merged/
+          retention-days: 3
+      - name: Upload merged report for retry
+        if: steps.merge.outcome == 'success'
+        uses: actions/upload-artifact@v4
+        with:
+          name: debug-shard-merged-${{ github.run_id }}
+          path: merged/
+          retention-days: 3
+
+  shard_aggregate_retry:
+    needs:
+      - prepare
+      - shard_build
+      - shard_aggregate_merge
+    if: |
+      always() &&
+      inputs.use_sharding == true &&
+      needs.shard_build.result == 'success' &&
+      needs.shard_aggregate_merge.result == 'success' &&
+      needs.shard_aggregate_merge.outputs.failed_count != '0' &&
+      fromJSON(needs.shard_aggregate_merge.outputs.failed_count) < 500
+    runs-on: ${{ fromJSON(needs.prepare.outputs.sharding_runner) }}
+    name: Sharded retry (${{ needs.prepare.outputs.sharding_preset }})
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.prepare.outputs.sharding_branch }}
+          fetch-depth: 2
+      - name: Download graph
+        uses: actions/download-artifact@v4
+        with:
+          name: debug-shard-graph-${{ github.run_id }}
+          path: .
+      - name: Download merged try1 report
+        uses: actions/download-artifact@v4
+        with:
+          name: debug-shard-merged-${{ github.run_id }}
+          path: merged
+      - name: Setup ydb access
+        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+        with:
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
+      - name: Retry failed tests (attempts 2-3)
+        uses: ./.github/actions/build_and_test_ya
+        with:
+          build_preset: ${{ needs.prepare.outputs.sharding_preset }}
+          build_target: ${{ inputs.test_targets }}
+          increment: false
+          run_tests: true
+          test_size: small,medium
+          test_threads: 52
+          custom_branch_name: ${{ needs.prepare.outputs.history_branch }}
+          put_build_results_to_cache: true
+          skip_graph_compare: true
+          prebuilt_graph_path: graph.json
+          prebuilt_context_path: context.json
+          start_retry: "2"
+          previous_report_path: merged/try_1_report.json
+          publish_github_status: false
+          publish_pr_comment: false
+          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
+          secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
+            secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
+          vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',
+            vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
+
   collect_combined_summary:
-    needs: main
-    if: always()
+    needs:
+      - main
+      - shard_aggregate_merge
+      - shard_aggregate_retry
+    if: always() && (needs.main.result != 'skipped' || needs.shard_aggregate_merge.result != 'skipped')
     uses: ./.github/workflows/collect_combined_summary.yml

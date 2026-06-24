@@ -19,6 +19,10 @@ inputs:
   build_preset:
     required: false
     description: "build preset like relwithdebinfo"
+  s3_subdir:
+    required: false
+    default: ""
+    description: "Optional subfolder under preset path (e.g. shard_0)"
 runs:
   using: "composite"
   steps:
@@ -68,7 +72,12 @@ runs:
             exit 1
             ;;
         esac
+        if [ -n "${{ inputs.s3_subdir }}" ]; then
+          folder="${folder}/${{ inputs.s3_subdir }}"
+        fi
+        WORKFLOW_URL="${{ github.workflow }}"
+        WORKFLOW_URL="${WORKFLOW_URL// /%20}"
         echo "S3_BUCKET_PATH=s3://${{ inputs.s3_bucket }}/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
-        echo "S3_URL_PREFIX=${{ inputs.s3_endpoint }}/${{ inputs.s3_bucket }}/${{ github.repository }}/${{ github.workflow }}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
+        echo "S3_URL_PREFIX=${{ inputs.s3_endpoint }}/${{ inputs.s3_bucket }}/${{ github.repository }}/${WORKFLOW_URL}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
         echo "S3_TEST_ARTIFACTS_BUCKET_PATH=s3://${{ inputs.s3_bucket }}/testing_out_stuff/${{ github.repository }}/${{github.workflow}}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
-        echo "S3_TEST_ARTIFACTS_URL_PREFIX=${{ inputs.s3_endpoint }}/${{ inputs.s3_bucket }}/testing_out_stuff/${{ github.repository }}/${{ github.workflow }}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV
+        echo "S3_TEST_ARTIFACTS_URL_PREFIX=${{ inputs.s3_endpoint }}/${{ inputs.s3_bucket }}/testing_out_stuff/${{ github.repository }}/${WORKFLOW_URL}/${{ github.run_id }}/${{ inputs.folder_prefix }}${folder}" >> $GITHUB_ENV

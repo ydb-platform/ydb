@@ -67,6 +67,38 @@ inputs:
     type: string
     required: false
     description: "Pull request number (for workflow_call events)"
+  skip_graph_compare:
+    type: boolean
+    default: false
+  prebuilt_graph_path:
+    type: string
+    default: ""
+  prebuilt_context_path:
+    type: string
+    default: ""
+  publish_github_status:
+    type: boolean
+    default: true
+  publish_pr_comment:
+    type: boolean
+    default: true
+  single_attempt:
+    type: boolean
+    default: false
+  start_retry:
+    type: string
+    default: "1"
+  previous_report_path:
+    type: string
+    default: ""
+  save_test_graph:
+    type: boolean
+    default: false
+    description: "Include test nodes in saved graph for sharded test jobs"
+  s3_subdir:
+    type: string
+    default: ""
+    description: "Optional S3 subfolder under preset path (e.g. shard_0)"
 defaults:
   run:
     shell: bash
@@ -93,6 +125,9 @@ runs:
         fi
         # Output the folder_prefix for use in subsequent steps
         echo "folder_prefix=${FOLDER_PREFIX}" >> $GITHUB_ENV
+        if [ -n "${{ inputs.s3_subdir }}" ]; then
+          echo "S3_SUBDIR=${{ inputs.s3_subdir }}" >> $GITHUB_ENV
+        fi
 
     - name: Prepare s3cmd
       uses: ./.github/actions/s3cmd
@@ -103,6 +138,7 @@ runs:
         s3_key_secret: ${{ fromJSON( inputs.secs ).AWS_KEY_VALUE }}
         folder_prefix: ${{ env.folder_prefix }}
         build_preset: ${{ inputs.build_preset }}
+        s3_subdir: ${{ inputs.s3_subdir }}
 
     - name: Run build and tests
       id: build
@@ -129,3 +165,12 @@ runs:
         telegram_alert_chat: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_CHAT || '' }}
         collect_coredumps: ${{ inputs.collect_coredumps }}
         pull_number: ${{ inputs.pull_number }}
+        skip_graph_compare: ${{ inputs.skip_graph_compare }}
+        prebuilt_graph_path: ${{ inputs.prebuilt_graph_path }}
+        prebuilt_context_path: ${{ inputs.prebuilt_context_path }}
+        publish_github_status: ${{ inputs.publish_github_status }}
+        publish_pr_comment: ${{ inputs.publish_pr_comment }}
+        single_attempt: ${{ inputs.single_attempt }}
+        start_retry: ${{ inputs.start_retry }}
+        previous_report_path: ${{ inputs.previous_report_path }}
+        save_test_graph: ${{ inputs.save_test_graph }}

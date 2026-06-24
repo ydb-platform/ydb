@@ -161,7 +161,7 @@ public:
         const auto& status = ev->Get()->Status;
         auto it = ModifyPermissionsRequests.find(ev->Cookie);
         if (it == ModifyPermissionsRequests.end()) {
-            LOG_E("Request doesn't exist (ModifyPermissionsResponse). Need to fix this bug urgently");
+            YDB_LOG_ERROR("Request doesn't exist (ModifyPermissionsResponse). Need to fix this bug urgently");
             return;
         }
         auto request = it->second;

@@ -33,6 +33,7 @@ Functions used in the queries:
 
 In this example the lookup is stored in a [table](../../concepts/datamodel/table.md) `services_dict` in the current database.
 
+Create a [streaming query](../../concepts/streaming-query.md) that performs enrichment:
 
 ```yql
 CREATE STREAMING QUERY query_with_table_join AS
@@ -77,11 +78,9 @@ END DO
 
 ### Enrichment from S3 {#enrichment-s3}
 
-The reference is stored in S3 and connected via an [external data source](../../concepts/query_execution/federated_query/s3/external_data_source.md).
+The lookup is stored in S3 and connected via an [external data source](../../concepts/query_execution/federated_query/s3/external_data_source.md).
 
-Create an additional [external data source](../../yql/reference/syntax/create-external-data-source.md) to read the reference from S3:
-
-Create another [external data source](../../yql/reference/syntax/create-external-data-source.md) for reading the lookup from S3:
+Create an additional [external data source](../../yql/reference/syntax/create-external-data-source.md) to read the lookup from S3:
 
 ```yql
 -- S3 data source for reading the lookup
@@ -97,6 +96,7 @@ Where:
 
 - `<s3_endpoint>` is the S3 endpoint URL, for example `https://storage.yandexcloud.net/<bucket>/` in Yandex Cloud.
 
+Create a [streaming query](../../concepts/streaming-query.md) that performs enrichment:
 
 ```yql
 CREATE STREAMING QUERY query_with_join AS

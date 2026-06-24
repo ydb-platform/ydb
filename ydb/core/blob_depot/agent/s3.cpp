@@ -48,6 +48,7 @@ namespace NKikimr::NBlobDepot {
                 (S3GetsInFlight, S3GetsInFlight), (CurrentMaxS3GetsInFlight, CurrentMaxS3GetsInFlight),
                 (QueueSize, PendingS3Reads.size()));
             PendingS3Reads.push_back(std::move(read));
+            *S3GetsPendingQueueSizeCounter = PendingS3Reads.size();
             if (timeThrottled && !S3GetWakeupScheduled) {
                 TActivationContext::Schedule(S3GetThrottleUntil, new IEventHandle(TEvPrivate::EvS3GetThrottleWakeup,
                     0, SelfId(), {}, nullptr, 0));
@@ -90,6 +91,7 @@ namespace NKikimr::NBlobDepot {
 
                 ++*Agent.S3GetsError;
                 const auto& error = msg.GetError();
+                Agent.IncS3HttpErrorCounter("Gets", static_cast<int>(error.GetResponseCode()));
 
                 if (IsSlowDown(error)) {
                     ++*Agent.S3GetsSlowDown;
@@ -138,6 +140,7 @@ namespace NKikimr::NBlobDepot {
         };
 
         ++S3GetsInFlight;
+        *S3GetsInFlightCounter = S3GetsInFlight;
 
         STLOG(PRI_DEBUG, BLOB_DEPOT_AGENT, BDA66, "starting S3 read", (AgentId, LogId), (ReadId, read.ReadId),
             (Key, read.Key), (Offset, read.Offset), (Len, read.Len), (SlowDownRetries, read.SlowDownRetries),
@@ -160,6 +163,7 @@ namespace NKikimr::NBlobDepot {
 
     void TBlobDepotAgent::NotifyS3GetSlowDown() {
         CurrentMaxS3GetsInFlight = 1;
+        *S3GetsMaxInFlightCounter = CurrentMaxS3GetsInFlight;
         ConsecutiveSuccessfulGetBatches = 0;
         const TDuration delay = S3GetBackoff.Next();
         S3GetThrottleUntil = TActivationContext::Monotonic() + delay;
@@ -181,6 +185,7 @@ namespace NKikimr::NBlobDepot {
         Y_UNUSED(bytes);
         Y_ABORT_UNLESS(S3GetsInFlight);
         --S3GetsInFlight;
+        *S3GetsInFlightCounter = S3GetsInFlight;
 
         if (success && CurrentMaxS3GetsInFlight < MaxS3GetsInFlight) {
             if (++ConsecutiveSuccessfulGetBatches >= SuccessesPerGetConcurrencyStepUp) {
@@ -190,6 +195,7 @@ namespace NKikimr::NBlobDepot {
                     CurrentMaxS3GetsInFlight = MaxS3GetsInFlight;
                     S3GetBackoff.Reset();
                 }
+                *S3GetsMaxInFlightCounter = CurrentMaxS3GetsInFlight;
             }
         }
 
@@ -212,6 +218,7 @@ namespace NKikimr::NBlobDepot {
             PendingS3Reads.pop_front();
             DispatchS3Read(std::move(read));
         }
+        *S3GetsPendingQueueSizeCounter = PendingS3Reads.size();
     }
 
     void TBlobDepotAgent::HandleS3GetThrottleWakeup() {
@@ -241,7 +248,8 @@ namespace NKikimr::NBlobDepot {
                     Finish(std::nullopt, false);
                 } else {
                     const auto& error = msg.GetError();
-                    Finish(std::make_optional<TString>(error.GetMessage()), IsSlowDown(error));
+                    Finish(std::make_optional<TString>(error.GetMessage()), IsSlowDown(error),
+                        static_cast<int>(error.GetResponseCode()));
                 }
             }
 
@@ -249,15 +257,36 @@ namespace NKikimr::NBlobDepot {
                 Finish("event undelivered", false);
             }
 
+<<<<<<< HEAD
             void Finish(std::optional<TString>&& error, bool slowDown) {
                 if (!LifetimeToken.expired()) {
                     InvokeOtherActor(Query->Agent, &TBlobDepotAgent::Invoke, [&] {
                         auto& Agent = Query->Agent;
                         const auto& QueryId = Query->QueryId;
                         BDEV_QUERY(BDEV37, "written_to_S3", (BlobId, Id), (Locator, Locator));
+=======
+            void Finish(std::optional<TString>&& error, bool slowDown, int httpCode = 0) {
+                InvokeOtherActor(Query->Agent, &TBlobDepotAgent::Invoke, [&] {
+                    auto& Agent = Query->Agent;
+                    const auto& QueryId = Query->QueryId;
+                    if (!LifetimeToken.expired()) {
+                        Agent.IncS3HttpErrorCounter("Puts", httpCode);
+
+                        YDB_LOG_TRACE_COMP(BLOB_DEPOT_EVENTS, "Written_to_S3",
+                            {"marker", "BDEV37"},
+                            {"VG", Agent.VirtualGroupId},
+                            {"BDT", Agent.TabletId},
+                            {"G", Agent.BlobDepotGeneration},
+                            {"Q", QueryId},
+                            {"blobId", Id},
+                            {"locator", Locator});
+>>>>>>> d1534a1ad08 ([KV] added sensor (#43996))
                         Query->OnPutS3ObjectResponse(std::move(error), slowDown);
-                    });
-                }
+                    }
+                    Y_ABORT_UNLESS(Agent.S3PutsInFlight);
+                    --Agent.S3PutsInFlight;
+                    *Agent.S3PutsInFlightCounter = Agent.S3PutsInFlight;
+                });
                 PassAway();
             }
 
@@ -271,6 +300,9 @@ namespace NKikimr::NBlobDepot {
         if (!LifetimeToken) {
             LifetimeToken = std::make_shared<TLifetimeToken>();
         }
+
+        ++Agent.S3PutsInFlight;
+        *Agent.S3PutsInFlightCounter = Agent.S3PutsInFlight;
 
         const TActorId writerActorId = Agent.RegisterWithSameMailbox(new TWriteActor(LifetimeToken, this, id, locator));
 

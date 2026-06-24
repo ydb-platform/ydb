@@ -26,7 +26,7 @@ public:
         return ReadStorages == item.ReadStorages && WriteStorages == item.WriteStorages;
     }
 
-    operator size_t() const { 
+    explicit operator size_t() const { 
         return Hash;
     }
 };

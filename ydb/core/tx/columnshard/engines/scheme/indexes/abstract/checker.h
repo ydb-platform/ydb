@@ -54,7 +54,7 @@ public:
         return std::tie(IndexId, Category) == std::tie(item.IndexId, item.Category);
     }
 
-    operator size_t() const {
+    explicit operator size_t() const {
         if (Category) {
             return CombineHashes<ui64>(IndexId, *Category);
         } else {

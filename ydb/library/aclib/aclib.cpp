@@ -211,9 +211,6 @@ bool TSecurityObject::CheckAnyAccess(ui32 access, const TUserToken& user) const 
     }
     if (HasOwnerSID() && user.IsExist(GetOwnerSID()))
         return true; // the owner always has access
-    if (access == NACLib::EAccessRights::NoAccess) {
-        return false;
-    }
     if (HasACL()) {
         for (const NACLibProto::TACE& ace : GetACL().GetACE()) {
             if ((ace.GetInheritanceType() & EInheritanceType::InheritOnly) == 0) {

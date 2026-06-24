@@ -89,7 +89,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     struct TPathToResolve {
         const NKikimrSchemeOp::TModifyScheme& ModifyScheme;
         ui32 RequireAccess = NACLib::EAccessRights::NoAccess;
-        ui32 RequireAnyAccess = NACLib::EAccessRights::NoAccess; // Allows you to check whether a user has at least one right to an object
+        bool RequireAnyAccess = false; // Allows you to check whether a user has at least one right to an object
 
         // Params for NSchemeCache::TSchemeCacheNavigate::TEntry
         TVector<TString> Path;
@@ -816,7 +816,8 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         for (const auto& dlqPath : dlqPaths) {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = SplitPath(dlqPath);
-            toResolve.RequireAnyAccess = NACLib::EAccessRights::AlterSchema | NACLib::EAccessRights::UpdateRow;
+            toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | NACLib::EAccessRights::UpdateRow;
+            toResolve.RequireAnyAccess = true;
             ResolveForACL.push_back(std::move(toResolve));
         }
     }
@@ -1559,7 +1560,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             }
 
             ui32 access = requestIt->RequireAccess;
-            const ui32 anyAccess = requestIt->RequireAnyAccess;
+            const bool anyAccess = requestIt->RequireAnyAccess;
 
             // request more rights if dst path is DB
             if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterUserAttributes) {
@@ -1574,10 +1575,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 continue;
             }
 
-            bool hasAnyAccess = entry.SecurityObject->CheckAnyAccess(anyAccess, *UserToken);
-            bool hasAccess = entry.SecurityObject->CheckAccess(access, *UserToken);
+            bool hasAccess = anyAccess ? entry.SecurityObject->CheckAnyAccess(access, *UserToken)
+                : entry.SecurityObject->CheckAccess(access, *UserToken);
 
-            if (!hasAnyAccess && !hasAccess) {
+            if (!hasAccess) {
                 const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
                     << "with access " << NACLib::AccessRightsToString(access)
                 );

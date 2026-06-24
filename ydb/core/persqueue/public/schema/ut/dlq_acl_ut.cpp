@@ -15,11 +15,11 @@ namespace {
 constexpr const char* USER_PASSWORD = "password";
 constexpr const char* MLP_CONSUMER_NAME = "mlp-consumer";
 
-void FillMlpConsumerWithDlq(
-    Ydb::Topic::Consumer& consumer,
+Ydb::Topic::Consumer MakeConsumerWithDlq(
     const TString& consumerName,
     const TString& dlqTopic
 ) {
+    Ydb::Topic::Consumer consumer;
     consumer.set_name(consumerName);
     auto* shared = consumer.mutable_shared_consumer_type();
     auto* deadLetterPolicy = shared->mutable_dead_letter_policy();
@@ -28,6 +28,7 @@ void FillMlpConsumerWithDlq(
     if (!dlqTopic.empty()) {
         deadLetterPolicy->mutable_move_action()->set_dead_letter_queue(dlqTopic);
     }
+    return consumer;
 }
 
 std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
@@ -59,13 +60,13 @@ Ydb::Topic::CreateTopicRequest MakeCreateTopicRequest(
     partitioning->set_min_active_partitions(1);
 
     if (!consumerName.empty()) {
-        FillMlpConsumerWithDlq(*request.add_consumers(), consumerName, dlqTopic);
+        *request.add_consumers() = MakeConsumerWithDlq(consumerName, dlqTopic);
     }
 
     return request;
 }
 
-THolder<TEvSchemaResponse> DoAlterRequest(
+THolder<TEvSchemaResponse> DoAlterTopicRequest(
     NActors::TTestActorRuntime& runtime,
     const Ydb::Topic::AlterTopicRequest& request,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr
@@ -83,7 +84,7 @@ THolder<TEvSchemaResponse> DoAlterRequest(
     return runtime.GrabEdgeEvent<TEvSchemaResponse>(TDuration::Seconds(10));
 }
 
-THolder<TEvSchemaResponse> DoRequest(
+THolder<TEvSchemaResponse> DoCreateTopicRequest(
     NActors::TTestActorRuntime& runtime,
     const Ydb::Topic::CreateTopicRequest& request,
     TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr
@@ -119,7 +120,7 @@ void CreateDLQTopic(const std::shared_ptr<TTopicSdkTestSetup>& setup, const char
     auto& runtime = setup->GetRuntime();
     const TString dlqTopicPath = TStringBuilder() << "/Root/" << dlqTopic;
     auto request = MakeCreateTopicRequest(dlqTopicPath);
-    auto result = DoRequest(runtime, request);
+    auto result = DoCreateTopicRequest(runtime, request);
     UNIT_ASSERT(result);
     UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->ErrorMessage);
     setup->GetServer().WaitInit(dlqTopicPath);
@@ -135,7 +136,7 @@ THolder<TEvSchemaResponse> CreateTopicWithDLQ(
     const auto userToken = MakeUserToken(userSid);
     const TString mainTopicPath = TStringBuilder() << "/Root/" << mainTopic;
     auto request = MakeCreateTopicRequest(mainTopicPath, MLP_CONSUMER_NAME, dlqTopic);
-    return DoRequest(runtime, request, userToken);
+    return DoCreateTopicRequest(runtime, request, userToken);
 }
 
 THolder<TEvSchemaResponse> CreateAndAlterTopicWithDLQ(
@@ -150,7 +151,7 @@ THolder<TEvSchemaResponse> CreateAndAlterTopicWithDLQ(
 
     {
         auto request = MakeCreateTopicRequest(mainTopicPath);
-        auto result = DoRequest(runtime, request, userToken);
+        auto result = DoCreateTopicRequest(runtime, request, userToken);
         UNIT_ASSERT(result);
         UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->ErrorMessage);
         setup->GetServer().WaitInit(mainTopicPath);
@@ -158,8 +159,8 @@ THolder<TEvSchemaResponse> CreateAndAlterTopicWithDLQ(
 
     Ydb::Topic::AlterTopicRequest request;
     request.set_path(mainTopicPath);
-    FillMlpConsumerWithDlq(*request.add_add_consumers(), MLP_CONSUMER_NAME, dlqTopic);
-    return DoAlterRequest(runtime, request, userToken);
+    *request.add_add_consumers() = MakeConsumerWithDlq(MLP_CONSUMER_NAME, dlqTopic);
+    return DoAlterTopicRequest(runtime, request, userToken);
 }
 
 void RevokeAllRightsOnTopic(TFlatMsgBusPQClient& client, const TString& topicName, const TString& userSid) {

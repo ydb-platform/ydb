@@ -89,7 +89,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     struct TPathToResolve {
         const NKikimrSchemeOp::TModifyScheme& ModifyScheme;
         ui32 RequireAccess = NACLib::EAccessRights::NoAccess;
-        ui32 RequireAnyAccess = NACLib::EAccessRights::NoAccess;
+        ui32 RequireAnyAccess = NACLib::EAccessRights::NoAccess; // Allows you to check whether a user has at least one right to an object
 
         // Params for NSchemeCache::TSchemeCacheNavigate::TEntry
         TVector<TString> Path;
@@ -1568,34 +1568,16 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 }
             }
 
-            if (anyAccess != NACLib::EAccessRights::NoAccess) {
-                if (!allowACLBypass && entry.SecurityObject) {
-                    const bool hasAccess =
-                        ((anyAccess & NACLib::EAccessRights::AlterSchema)
-                            && entry.SecurityObject->CheckAccess(NACLib::EAccessRights::AlterSchema, *UserToken))
-                        || ((anyAccess & NACLib::EAccessRights::UpdateRow)
-                            && entry.SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, *UserToken));
-                    if (!hasAccess) {
-                        const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
-                            << "with access " << NACLib::AccessRightsToString(anyAccess)
-                        );
-                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
-                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
-                        return false;
-                    }
-                }
-                ++resolveIt;
-                ++requestIt;
-                continue;
-            }
-
             if (allowACLBypass || access == NACLib::EAccessRights::NoAccess || !entry.SecurityObject) {
                 ++resolveIt;
                 ++requestIt;
                 continue;
             }
 
-            if (!entry.SecurityObject->CheckAccess(access, *UserToken)) {
+            bool hasAnyAccess = entry.SecurityObject->CheckAnyAccess(anyAccess, *UserToken);
+            bool hasAccess = entry.SecurityObject->CheckAccess(access, *UserToken);
+
+            if (!hasAnyAccess && !hasAccess) {
                 const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
                     << "with access " << NACLib::AccessRightsToString(access)
                 );

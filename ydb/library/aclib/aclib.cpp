@@ -205,6 +205,35 @@ bool TSecurityObject::CheckAccess(ui32 access, const TUserToken& user) const {
     return false; // empty ACL is always-deny ACL
 }
 
+bool TSecurityObject::CheckAnyAccess(ui32 access, const TUserToken& user) const {
+    if (user.IsSystemUser()) {
+        return true; // the system always has access
+    }
+    if (HasOwnerSID() && user.IsExist(GetOwnerSID()))
+        return true; // the owner always has access
+    if (access == NACLib::EAccessRights::NoAccess) {
+        return false;
+    }
+    if (HasACL()) {
+        for (const NACLibProto::TACE& ace : GetACL().GetACE()) {
+            if ((ace.GetInheritanceType() & EInheritanceType::InheritOnly) == 0) {
+                if (user.IsExist(ace.GetSID())) {
+                    switch(static_cast<EAccessType>(ace.GetAccessType())) {
+                    case EAccessType::Deny:
+                        break;
+                    case EAccessType::Allow:
+                        if (access & ace.GetAccessRight()) {
+                            return true;
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    return false; // empty ACL is always-deny ACL
+}
+
 bool TSecurityObject::CheckGrantAccess(const NACLibProto::TDiffACL& diffACL, const TUserToken& user) const Y_NO_SANITIZE("undefined") {
     ui32 effectiveAccess = GetEffectiveAccessRights(user);
     NACLibProto::TACL copyACL = GetACL();

@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/tx/columnshard
     ydb/core/tx/long_tx_service/public
     ydb/core/wrappers
+    ydb/library/yql/dq/actors/protos
 )
 
 SRCS(

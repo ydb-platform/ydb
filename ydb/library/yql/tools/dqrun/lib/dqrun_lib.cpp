@@ -82,7 +82,7 @@ const std::initializer_list<TString> SUPPORTED_GATEWAYS = {
 
 TDqRunTool::TDqRunTool()
     : TYtRunTool("dqrun")
-    , CredentialsFactory_(NYql::CreateStructuredTokenCredentialsFactory(nullptr))
+    , CredentialsFactory_(NYql::CreateStructuredTokenCredentialsFactory())
 {
     GetRunOptions().SetSupportedGateways(SUPPORTED_GATEWAYS);
     GetRunOptions().GatewayTypes.insert(SUPPORTED_GATEWAYS);

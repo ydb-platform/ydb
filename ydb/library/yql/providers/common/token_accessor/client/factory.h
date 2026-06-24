@@ -26,7 +26,7 @@ public:
 };
 
 IStructuredTokenCredentialsFactory::TPtr CreateStructuredTokenCredentialsFactory(
-    ISecuredServiceAccountCredentialsFactory::TPtr saFactory);
+    ISecuredServiceAccountCredentialsFactory::TPtr saFactory = {});
 
 IStructuredTokenCredentialsFactory::TPtr CreateStructuredTokenCredentialsOverTokenAccessorFactory(
     const TString& tokenAccessorEndpoint,

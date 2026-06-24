@@ -52,7 +52,7 @@ void InitAsyncOutput(
             secureParams,
             &actor.GetAsyncOutputCallbacks(),
             counters,
-            CreateStructuredTokenCredentialsFactory(nullptr),
+            CreateStructuredTokenCredentialsFactory(),
             freeSpace);
 
         actor.InitAsyncOutput(dqAsyncOutput, dqAsyncOutputAsActor);

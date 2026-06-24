@@ -90,7 +90,7 @@ public:
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
    
-        NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory;
+        NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory = NYql::CreateStructuredTokenCredentialsFactory();
         Coordinator1 = Runtime.AllocateEdgeActor();
         Coordinator2 = Runtime.AllocateEdgeActor();
         EdgeActor = Runtime.AllocateEdgeActor();

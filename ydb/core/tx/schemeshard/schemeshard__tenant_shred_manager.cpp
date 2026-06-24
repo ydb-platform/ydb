@@ -388,7 +388,7 @@ bool TTenantShredManager::StopWaitingShred(const TShardIdx& shardIdx) {
 void TTenantShredManager::CleanupOldGenerationsOnRestore(NIceDb::TNiceDb& db, const TVector<ui64>& generationsToCleanup) {
     for (ui64 generation : generationsToCleanup) {
         Y_ABORT_UNLESS(generation < Generation, "[TenantShredManager] CleanupOldGenerationsOnRestore: generation %" PRIu64 " >= Generation %" PRIu64, generation, Generation);
-        db.Table<Schema::TenantShredGenerations>().Key(generation).Delete();  
+        db.Table<Schema::TenantShredGenerations>().Key(generation).Delete();
     }
 }
 

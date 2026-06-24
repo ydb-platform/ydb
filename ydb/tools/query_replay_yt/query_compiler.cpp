@@ -31,6 +31,13 @@ using namespace NYql::NDq;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
+std::string NormalizePlanWriteType(TStringBuf type) {
+    std::string normalized(type);
+    if (normalized.size() > 5 && normalized.substr(0, 5) == "Multi") {
+        normalized = normalized.substr(5);
+    }
+    return normalized;
+}
 
 struct TMetadataInfoHolder {
     const THashMap<TString, NYql::TKikimrTableMetadataPtr> TableMetadata;
@@ -374,7 +381,7 @@ private:
                         }
 
                         const auto& type = write["type"].GetStringSafe();
-                        writes.push_back(TTableWriteInfo{type, columns});
+                        writes.push_back(TTableWriteInfo{NormalizePlanWriteType(type), columns});
                     }
 
                     std::sort(writes.begin(), writes.end());
@@ -440,6 +447,11 @@ private:
         for (size_t i = 0; i < oldEngineStats.Writes.size(); ++i) {
             if (oldEngineStats.Writes[i].WriteColumns != newEngineStats.Writes[i].WriteColumns) {
                 return {TQueryReplayEvents::WriteColumnsMismatch, TStringBuilder() << "Write columns mismatch"};
+            }
+
+            if (oldEngineStats.Writes[i].WriteType != newEngineStats.Writes[i].WriteType) {
+                return {TQueryReplayEvents::WriteTypesMismatch, TStringBuilder() << "Write types mismatch, old engine: "
+                    << oldEngineStats.Writes[i].WriteType << ", new engine: " << newEngineStats.Writes[i].WriteType};
             }
         }
 

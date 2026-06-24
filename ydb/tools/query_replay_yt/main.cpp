@@ -111,6 +111,8 @@ public:
                 return "extra_writing";
             case TQueryReplayEvents::WriteColumnsMismatch:
                 return "write_columns_mismatch";
+            case TQueryReplayEvents::WriteTypesMismatch:
+                return "write_types_mismatch";
             case TQueryReplayEvents::UncategorizedPlanMismatch:
                 return "uncategorized_plan_mismatch";
             case TQueryReplayEvents::MissingTableMetadata:

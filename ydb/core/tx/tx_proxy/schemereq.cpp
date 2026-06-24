@@ -9,6 +9,7 @@
 #include <ydb/core/docapi/traits.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
+#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/security/sasl/events.h>
@@ -25,16 +26,41 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
+#include <util/generic/hash_set.h>
 #include <util/string/cast.h>
 
 namespace {
+
+using TPQTabletConfig = NKikimrPQ::TPQTabletConfig;
+
+THashSet<TString> CollectDlqTopicPaths(const TPQTabletConfig& config, const TString& database) {
+    THashSet<TString> result;
+
+    for (const auto& consumer : config.GetConsumers()) {
+        if (consumer.GetType() != TPQTabletConfig::CONSUMER_TYPE_MLP) {
+            continue;
+        }
+        if (consumer.GetDeadLetterPolicy() != TPQTabletConfig::DEAD_LETTER_POLICY_MOVE) {
+            continue;
+        }
+
+        const auto& dlq = consumer.GetDeadLetterQueue();
+        if (dlq.empty() || dlq.StartsWith("sqs://"sv)) {
+            continue;
+        }
+
+        result.insert(NKikimr::NormalizePath(database, dlq));
+    }
+
+    return result;
+}
 
 const TVector<NLoginProto::EHashType::HashType> HASHES_TO_COMPUTE = {
     NLoginProto::EHashType::Argon,
     NLoginProto::EHashType::ScramSha256,
 };
 
-}
+} // namespace
 
 namespace NKikimr {
 namespace NTxProxy {
@@ -63,6 +89,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     struct TPathToResolve {
         const NKikimrSchemeOp::TModifyScheme& ModifyScheme;
         ui32 RequireAccess = NACLib::EAccessRights::NoAccess;
+        ui32 RequireAnyAccess = NACLib::EAccessRights::NoAccess;
 
         // Params for NSchemeCache::TSchemeCacheNavigate::TEntry
         TVector<TString> Path;
@@ -781,6 +808,19 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         return true;
     }
 
+    void AddDlqTopicsResolveForACL(
+        const NKikimrSchemeOp::TModifyScheme& pbModifyScheme,
+        const TPQTabletConfig& config
+    ) {
+        const auto dlqPaths = CollectDlqTopicPaths(config, GetRequestProto().GetDatabaseName());
+        for (const auto& dlqPath : dlqPaths) {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = SplitPath(dlqPath);
+            toResolve.RequireAnyAccess = NACLib::EAccessRights::AlterSchema | NACLib::EAccessRights::UpdateRow;
+            ResolveForACL.push_back(std::move(toResolve));
+        }
+    }
+
     bool ExtractResolveForACL(NKikimrSchemeOp::TModifyScheme& pbModifyScheme) {
         ui32 accessToUserAttrs = pbModifyScheme.HasAlterUserAttributes() ? NACLib::EAccessRights::WriteUserAttributes : NACLib::EAccessRights::NoAccess;
         auto workingDir = SplitPath(pbModifyScheme.GetWorkingDir());
@@ -833,7 +873,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         case NKikimrSchemeOp::ESchemeOpAlterCdcStream:
         case NKikimrSchemeOp::ESchemeOpDropCdcStream:
         case NKikimrSchemeOp::ESchemeOpRotateCdcStream:
-        case NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup:
         case NKikimrSchemeOp::ESchemeOpAlterBlockStoreVolume:
         case NKikimrSchemeOp::ESchemeOpAssignBlockStoreVolume:
         case NKikimrSchemeOp::ESchemeOpAlterFileStore:
@@ -859,6 +898,21 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
             toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
+            break;
+        }
+        case NKikimrSchemeOp::ESchemeOpAlterPersQueueGroup:
+        {
+            auto toResolve = TPathToResolve(pbModifyScheme);
+            toResolve.Path = Merge(workingDir, SplitPath(GetPathNameForScheme(pbModifyScheme)));
+            toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | accessToUserAttrs;
+            ResolveForACL.push_back(toResolve);
+
+            if (pbModifyScheme.GetAlterPersQueueGroup().HasPQTabletConfig()) {
+                AddDlqTopicsResolveForACL(
+                    pbModifyScheme,
+                    pbModifyScheme.GetAlterPersQueueGroup().GetPQTabletConfig()
+                );
+            }
             break;
         }
         case NKikimrSchemeOp::ESchemeOpCreateSecret:
@@ -1132,6 +1186,13 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             toResolve.Path = workingDir;
             toResolve.RequireAccess = NACLib::EAccessRights::CreateQueue | accessToUserAttrs;
             ResolveForACL.push_back(toResolve);
+
+            if (pbModifyScheme.GetCreatePersQueueGroup().HasPQTabletConfig()) {
+                AddDlqTopicsResolveForACL(
+                    pbModifyScheme,
+                    pbModifyScheme.GetCreatePersQueueGroup().GetPQTabletConfig()
+                );
+            }
             break;
         }
         case NKikimrSchemeOp::ESchemeOpAlterLogin:
@@ -1498,12 +1559,34 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             }
 
             ui32 access = requestIt->RequireAccess;
+            const ui32 anyAccess = requestIt->RequireAnyAccess;
 
             // request more rights if dst path is DB
             if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterUserAttributes) {
                 if (IsDB(entry)) {
                     access |= NACLib::EAccessRights::GenericManage;
                 }
+            }
+
+            if (anyAccess != NACLib::EAccessRights::NoAccess) {
+                if (!allowACLBypass && entry.SecurityObject) {
+                    const bool hasAccess =
+                        ((anyAccess & NACLib::EAccessRights::AlterSchema)
+                            && entry.SecurityObject->CheckAccess(NACLib::EAccessRights::AlterSchema, *UserToken))
+                        || ((anyAccess & NACLib::EAccessRights::UpdateRow)
+                            && entry.SecurityObject->CheckAccess(NACLib::EAccessRights::UpdateRow, *UserToken));
+                    if (!hasAccess) {
+                        const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
+                            << "with access " << NACLib::AccessRightsToString(anyAccess)
+                        );
+                        auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
+                        ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);
+                        return false;
+                    }
+                }
+                ++resolveIt;
+                ++requestIt;
+                continue;
             }
 
             if (allowACLBypass || access == NACLib::EAccessRights::NoAccess || !entry.SecurityObject) {

@@ -44,7 +44,7 @@ TClientBlob::TClientBlob()
 
 TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const TMaybe<TPartData>& partData,
         const TInstant writeTimestamp, const TInstant createTimestamp, const ui64 uncompressedSize,
-        TString&& partitionKey, TString&& explicitHashKey, ui32 messageCount, EMessageFormat messageFormat)
+        TString&& partitionKey, TString&& explicitHashKey, ui32 messageCount, bool isBatch)
         : SourceId(std::move(sourceId))
         , SeqNo(seqNo)
         , Data(std::move(data))
@@ -55,10 +55,9 @@ TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const T
         , PartitionKey(std::move(partitionKey))
         , ExplicitHashKey(std::move(explicitHashKey))
         , MessageCount(messageCount)
-        , MessageFormat(messageFormat) {
+        , IsBatch(isBatch) {
     Y_ENSURE(PartitionKey.size() <= 256);
     Y_ENSURE(MessageCount >= 1 && MessageCount <= MAX_MESSAGE_COUNT);
-    Y_ENSURE(static_cast<ui32>(MessageFormat) < (1u << MESSAGE_FORMAT_BITS));
 }
 
 
@@ -92,8 +91,7 @@ TString TClientBlob::DebugString() const {
         << ", UncompressedSize=" << UncompressedSize
         << ", PartitionKey='" << PartitionKey << "'"
         << ", ExplicitHashKey='" << ExplicitHashKey << "'"
-        << ", MessageCount=" << MessageCount
-        << ", MessageFormat=" << static_cast<ui32>(MessageFormat);
+        << ", MessageCount=" << MessageCount;
 
     if (PartData) {
         sb << ", PartNo=" << PartData->PartNo

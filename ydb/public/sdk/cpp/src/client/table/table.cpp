@@ -225,6 +225,24 @@ const TCompactionOperation::TMetadata& TCompactionOperation::Metadata() const {
     return Metadata_;
 }
 
+TAnalyzeOperation::TAnalyzeOperation(TStatus &&status, Ydb::Operations::Operation &&operation)
+    : TOperation(std::move(status), std::move(operation))
+{
+    Ydb::Table::AnalyzeMetadata metadata;
+    GetProto().metadata().UnpackTo(&metadata);
+    Metadata_.State = static_cast<EAnalyzeState>(metadata.state());
+    Metadata_.Progress = metadata.progress();
+    Metadata_.Paths.assign(metadata.paths().begin(), metadata.paths().end());
+    Metadata_.InProgressPaths.assign(metadata.in_progress_paths().begin(),
+                                     metadata.in_progress_paths().end());
+    Metadata_.DonePaths.assign(metadata.done_paths().begin(),
+                               metadata.done_paths().end());
+}
+
+const TAnalyzeOperation::TMetadata& TAnalyzeOperation::Metadata() const {
+    return Metadata_;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 class TPartitioningSettings::TImpl {

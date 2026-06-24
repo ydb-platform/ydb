@@ -90,6 +90,11 @@ THashSet<TString> CreateKeyColumnSetToRead(
         for (const auto& col : index.second->KeyColumns) {
             res.emplace(col);
         }
+        // A fulltext index keyed by __ydb_row_id must read the stored doc-id from the base table
+        // so old postings can be deleted by it (and an existing row keeps its stable doc-id).
+        if (FulltextUsesRowIdAsDocId(index.second)) {
+            res.emplace(NKikimr::NTableIndex::NFulltext::RowIdColumn);
+        }
     }
 
     return res;
@@ -772,6 +777,11 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
             }
         }
 
+        // Fulltext indexes using __ydb_row_id as doc-id need it projected into the index rows
+        // (both for upserting new postings and for deleting old ones). It must be part of the
+        // "without data" set so delete-old-postings keys carry the stored doc-id.
+        AddFulltextDocIdColumns(indexDesc, indexTableColumns, indexTableColumnsSet);
+
         auto indexTableColumnsWithoutData = indexTableColumns;
 
         bool indexDataColumnsUpdated = false;
@@ -1011,9 +1021,16 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                     if (withRelevance) {
                         fulltextDictDelta.push_back(deleteIndexKeys);
                         // Rows in deleteIndexKeys include __ydb_freq, but we don't need it for delete keys
-                        deleteIndexKeys = BuildFulltextPostingKeys(table, deleteIndexKeys, pos, ctx);
-                        // Delete document rows
-                        auto docsKeys = ProjectColumns(deleteKeysPrecompute, table.Metadata->KeyColumnNames, ctx);
+                        deleteIndexKeys = BuildFulltextPostingKeys(table, indexDesc, deleteIndexKeys, pos, ctx);
+                        // Delete document rows. The docs table is keyed by the doc-id: __ydb_row_id
+                        // when the index uses UseRowIdAsDocId, otherwise the main-table PK.
+                        TVector<TString> docsKeyColumns;
+                        if (FulltextUsesRowIdAsDocId(indexDesc)) {
+                            docsKeyColumns.emplace_back(NKikimr::NTableIndex::NFulltext::RowIdColumn);
+                        } else {
+                            docsKeyColumns.assign(table.Metadata->KeyColumnNames.begin(), table.Metadata->KeyColumnNames.end());
+                        }
+                        auto docsKeys = ProjectColumns(deleteKeysPrecompute, docsKeyColumns, ctx);
                         effects.emplace_back(Build<TKqlDeleteRows>(ctx, pos)
                             .Table(docsTableNode.Cast())
                             .Input(docsKeys)
@@ -1090,10 +1107,12 @@ TMaybeNode<TExprList> KqpPhyUpsertIndexEffectsImpl(TKqpPhyUpsertIndexMode mode, 
                         indexTableColumns, false /*forDelete*/, pos, ctx);
                     if (withRelevance) {
                         fulltextDictDelta.push_back(upsertIndexRows);
-                        // Insert document rows
+                        // Insert document rows. Use indexTableColumnsSet (the columns actually present
+                        // in upsertPrecompute) rather than inputColumnsSet: the doc-id (__ydb_row_id)
+                        // and un-updated covered columns come from the table lookup, not the input.
                         TVector<TStringBuf> docsColumns;
                         auto docsRows = BuildFulltextDocsRows(table, indexDesc, upsertPrecompute,
-                            inputColumnsSet, docsColumns, false /*forDelete*/, pos, ctx);
+                            indexTableColumnsSet, docsColumns, false /*forDelete*/, pos, ctx);
                         effects.emplace_back(Build<TKqlUpsertRows>(ctx, pos)
                             .Table(docsTableNode.Cast())
                             .Input(docsRows)

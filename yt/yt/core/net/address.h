@@ -193,7 +193,7 @@ public:
      *  Calls |getaddrinfo| and returns the first entry belonging to |AF_INET| or |AF_INET6| family.
      *  Caches successful resolutions.
      */
-    TFuture<TNetworkAddress> Resolve(const std::string& address);
+    TFuture<TNetworkAddress> Resolve(TStringBuf address);
 
     //! Returns the currently installed global DNS resolver.
     NDns::IDnsResolverPtr GetDnsResolver();

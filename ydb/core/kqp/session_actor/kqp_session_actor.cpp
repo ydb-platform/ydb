@@ -85,13 +85,13 @@ void FillColumnsMeta(const NKqpProto::TKqpPhyQuery& phyQuery, NKikimrKqp::TQuery
     }
 }
 
-bool FillTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings& settings, const NKqpProto::TKqpSink& sink) {
-    if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink
-        && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>())
+template<typename TSinkProto>
+bool FillTableSinkSettings(NKikimrKqp::TKqpTableSinkSettings& settings, const TSinkProto& sink) {
+    if (sink.GetTypeCase() == TSinkProto::kInternalSink
+        && sink.GetInternalSink().GetSettings().template Is<NKikimrKqp::TKqpTableSinkSettings>())
     {
         return sink.GetInternalSink().GetSettings().UnpackTo(&settings);
     }
-
     return false;
 }
 
@@ -100,9 +100,13 @@ bool IsBatchQuery(const NKqpProto::TKqpPhyQuery& physicalQuery) {
     for (const auto& tx : physicalQuery.GetTransactions()) {
         for (const auto& stage : tx.GetStages()) {
             for (auto& sink : stage.GetSinks()) {
-                auto isFilledSettings = FillTableSinkSettings(sinkSettings, sink);
-                if (isFilledSettings && sinkSettings.HasIsBatch() && sinkSettings.GetIsBatch()) {
+                if (FillTableSinkSettings(sinkSettings, sink) && sinkSettings.HasIsBatch() && sinkSettings.GetIsBatch()) {
                     return true;
+                }
+            }
+            for (auto& transform : stage.GetOutputTransforms()) {
+                if (FillTableSinkSettings(sinkSettings, transform) && sinkSettings.HasIsBatch() && sinkSettings.GetIsBatch()) {
+                    AFL_ENSURE(false);
                 }
             }
         }
@@ -446,7 +450,7 @@ public:
         }
     }
 
-    void HandleClientLost(NGRpcService::TEvClientLost::TPtr&) {
+    void ClientLost() {
         STLOG_D("Got ClientLost event, send AbortExecution to executer",
             (executer_id, ExecuterId),
             (trace_id, TraceId()));
@@ -458,6 +462,10 @@ public:
         } else {
             Cleanup();
         }
+    }
+
+    void HandleClientLost(NGRpcService::TEvClientLost::TPtr&) {
+        ClientLost();
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
@@ -583,6 +591,19 @@ public:
             STLOG_I("Failed to deliver request to workload service",
                 (trace_id, TraceId()));
             CompileQuery();
+            return;
+        }
+
+        if (ev->Get()->SourceType == NGRpcService::TEvSubscribeGrpcCancel::EventType) {
+            // The remote gRPC request actor we subscribed to for client-cancel
+            // notification is already gone: it raced ahead and died on its own
+            // client-lost before our cross-node subscription arrived. Treat it as
+            // client lost and tear down now, instead of hanging until the query
+            // deadline. See SubscribeRemoteCancel (FlagTrackDelivery).
+            STLOG_D("Grpc cancel subscription undelivered, treat as client lost",
+                (trace_id, TraceId()));
+            ClientLost();
+            return;
         }
     }
 
@@ -1616,7 +1637,7 @@ public:
             bool hasWrites = tx->GetHasEffects();
             if (!hasWrites) {
                 for (const auto& stage : tx->GetStages()) {
-                    if (stage.SinksSize()) {
+                    if (stage.SinksSize() || stage.OutputTransformsSize()) {
                         hasWrites = true;
                         break;
                     }
@@ -3577,6 +3598,11 @@ public:
                 hFunc(NWorkload::TEvContinueRequest, HandleNoop);
                 // message from KQP proxy in case of our reply just after kqp proxy timer tick
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
+                // A finished request's client may be lost after we already replied and
+                // returned to ReadyState. There is nothing to cancel anymore, so ignore it
+                // instead of treating it as an internal error (which would needlessly tear
+                // down an otherwise healthy long session). CleanupState ignores it likewise.
+                hFunc(NGRpcService::TEvClientLost, HandleNoop);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);
 

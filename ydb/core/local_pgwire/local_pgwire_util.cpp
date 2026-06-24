@@ -1,6 +1,7 @@
 #include "local_pgwire_util.h"
-#include "log_impl.h"
 #include <yql/essentials/parser/pg_wrapper/interface/type_desc.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_PGWIRE
 
 namespace NLocalPgWire {
 
@@ -142,7 +143,8 @@ NPG::TEvPGEvents::TRowValueField ColumnValueToRowValueField(NYdb::TValueParser& 
                         auto end(begin + result.Str.size());
                         return {.Value = std::vector<uint8_t>(begin, end)};
                     } else {
-                        BLOG_ERROR("Error converting value to binary format: " << result.Error.GetRef());
+                        YDB_LOG_ERROR("Error converting value to binary format",
+                            {"error", result.Error.GetRef()});
                     }
                     return {};
                 }

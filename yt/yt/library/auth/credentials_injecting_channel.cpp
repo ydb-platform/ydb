@@ -143,8 +143,8 @@ public:
         IChannelPtr underlyingChannel,
         const TAuthenticationOptions& options)
         : TUserInjectingChannel(std::move(underlyingChannel), options)
-        , SessionId_(options.SessionId.value_or(TString()))
-        , SslSessionId_(options.SslSessionId.value_or(TString()))
+        , SessionId_(options.SessionId.value_or(std::string()))
+        , SslSessionId_(options.SslSessionId.value_or(std::string()))
     { }
 
 protected:

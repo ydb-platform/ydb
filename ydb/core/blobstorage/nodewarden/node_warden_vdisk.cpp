@@ -296,6 +296,7 @@ namespace NKikimr::NStorage {
             vdiskConfig->EnablePhantomFlagStorage = EnablePhantomFlagStorage;
             vdiskConfig->EnablePersistentPhantomFlagStorage = EnablePersistentPhantomFlagStorage;
             vdiskConfig->PhantomFlagStorageLimit = PhantomFlagStorageLimitPerVDiskBytes;
+            vdiskConfig->VolatilePhantomFlagStorageBlobSizeLimit = VolatilePhantomFlagStorageBlobSizeLimitBytes;
             vdiskConfig->EnableChunkKeeper = EnableChunkKeeper;
 
             vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
@@ -329,6 +330,8 @@ namespace NKikimr::NStorage {
             vdiskConfig->GroupSizeInUnits = groupInfo->GroupSizeInUnits;
 
             vdiskConfig->EnableDeepScrubbing = EnableDeepScrubbing;
+
+            vdiskConfig->EnableFreshSyncDataThrottling = EnableFreshSyncDataThrottling;
 
             // debug options
             if (Cfg->TinySyncLog) {

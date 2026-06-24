@@ -34,11 +34,21 @@ void TOracleMock::OnRequestFailed(
 }
 
 THostIndex TOracleMock::SelectBestPBufferHost(
-    std::span<const THostIndex> hostIndexes,
+    THostMask hosts,
     EOperation operation) const
 {
     Y_UNUSED(operation);
-    return hostIndexes[0];
+    return *hosts.First();
+}
+
+TDuration TOracleMock::GetReadHedgingDelay() const
+{
+    return ReadHedgingDelay;
+}
+
+TDuration TOracleMock::GetReadRequestTimeout() const
+{
+    return ReadRequestTimeout;
 }
 
 TDuration TOracleMock::GetWriteHedgingDelay() const
@@ -158,9 +168,13 @@ std::shared_ptr<NWilson::TSpan> TDirectBlockGroupMock::CreateChildSpan(
     return nullptr;
 }
 
-void TDirectBlockGroupMock::Run(IPartitionDirectService* service)
+NThreading::TFuture<void> TDirectBlockGroupMock::Run(
+    IPartitionDirectService* service)
 {
     Y_UNUSED(service);
+    // The mock is considered ready immediately - tests that do not exercise
+    // session locking should not block on the initial-ready gate.
+    return NThreading::MakeFuture();
 }
 
 NThreading::TFuture<TDBGReadBlocksResponse>

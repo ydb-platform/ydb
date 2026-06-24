@@ -67,4 +67,22 @@ Y_UNIT_TEST(QueryText) {
     UNIT_ASSERT_C(formatted.Defined(), issues.ToString());
 }
 
+Y_UNIT_TEST(EffectiveSettings) {
+    TString query = NYql::TrimIndent(R"sql(
+        --!ansi_lexer
+        /* /* */ */ select 1 /* /* */ */
+    )sql");
+
+    google::protobuf::Arena arena;
+
+    NSQLTranslation::TTranslationSettings settings;
+    settings.Arena = &arena;
+
+    NYql::TIssues issues;
+    auto formatted = NSQLFormat::CheckedFormat(
+        query, Nothing(), settings, issues, NSQLFormat::EConvergenceRequirement::Double);
+
+    UNIT_ASSERT_C(formatted.Defined(), issues.ToString());
+}
+
 } // Y_UNIT_TEST_SUITE(CheckedFormat)

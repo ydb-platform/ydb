@@ -6,6 +6,10 @@ namespace NKqp {
 namespace {
 
 bool CanConvertRenameToAppend(const TIntrusivePtr<TOpMap>& map, size_t renameIdx, const TPlanProps& props) {
+    if (map->MapElements[renameIdx].GetRename() == map->MapElements[renameIdx].GetElementName()) {
+        return false;
+    }
+
     auto oldElements = map->MapElements;
     map->MapElements[renameIdx].SetIsRename(false);
     const bool valid = CanExposeToParents(map.get(), props);

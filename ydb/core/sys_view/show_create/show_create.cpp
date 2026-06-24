@@ -3,6 +3,7 @@
 #include "show_create.h"
 
 #include <ydb/core/base/tablet_pipe.h>
+#include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/sys_view/common/scan_actor_base_impl.h>
 #include <ydb/core/sys_view/common/registry.h>

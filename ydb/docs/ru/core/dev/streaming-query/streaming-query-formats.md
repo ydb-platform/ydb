@@ -18,7 +18,7 @@
 
 [Примеры парсинга данных в пользовательских форматах](#parsing).
 
-В примерах на этой странице `input_topic` и `output_topic` — [топики](../../concepts/datamodel/topic.md) в текущей базе данных, а `output_table` — таблица {{ ydb-short-name }}. Для топиков в другой базе см. [{#T}](../../concepts/query_execution/local-and-external-topics.md).
+В примерах на этой странице `input_topic` и `output_topic` — [топики](../../concepts/datamodel/topic.md) в текущей базе данных, а `output_table` — таблица {{ ydb-short-name }}. Для топиков в другой базе см. [локальные и внешние топики](../../concepts/query_execution/topics.md#local-external-topics).
 
 ## Форматы при записи данных {#write_formats}
 

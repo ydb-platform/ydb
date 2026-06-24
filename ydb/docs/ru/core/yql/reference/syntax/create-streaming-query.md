@@ -50,7 +50,7 @@ END DO
 
 {% note info %}
 
-Потоковые запросы могут работать с [локальными и внешними топиками](../../../concepts/query_execution/local-and-external-topics.md).
+Потоковые запросы могут работать с [локальными и внешними топиками](../../../concepts/query_execution/topics.md#local-external-topics).
 
 В примере:
 

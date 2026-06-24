@@ -6,6 +6,7 @@ SRCS(
     direct_block_group_impl_ut.cpp
     erase_request_ut.cpp
     flush_request_ut.cpp
+    mon_render_ut.cpp
     read_request_ut.cpp
     storage_transport_mock.cpp
     vchunk_ut.cpp

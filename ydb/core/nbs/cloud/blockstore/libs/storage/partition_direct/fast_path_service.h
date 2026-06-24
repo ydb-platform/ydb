@@ -1,6 +1,7 @@
 #pragma once
 
 #include "direct_block_group.h"
+#include "mon_model.h"
 #include "region.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
@@ -102,6 +103,9 @@ public:
     void UpdateVChunkConfig(const TVChunkConfig& cfg) override;
 
     ui64 GenerateLsn() override;
+
+    // Read-only info for the monitoring UI.
+    [[nodiscard]] TFastPathServiceInfo GetMonInfo() const;
 
 private:
     void ScheduleDirtyMapDebugPrint();

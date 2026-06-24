@@ -17,6 +17,8 @@ SRCS(
     part_storepartitionids.cpp
     part_storevolumeconfig.cpp
     part_updatevchunkconfig.cpp
+    mon_render.cpp
+    part_monitoring.cpp
     partition_direct_actor.cpp
     partition_direct.cpp
     range_translate.cpp
@@ -47,6 +49,8 @@ PEERDIR(
 
     ydb/core/mind/bscontroller
     contrib/libs/opentelemetry-proto
+
+    library/cpp/monlib/service/pages
 )
 
 END()

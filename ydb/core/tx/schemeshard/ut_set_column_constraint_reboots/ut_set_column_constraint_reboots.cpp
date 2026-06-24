@@ -80,6 +80,7 @@ Y_UNIT_TEST_SUITE(SetNotNullReboots) {
             }
 
             const ui64 setConstraintTxId = ++t.TxId;
+
             AsyncSetColumnConstraint(
                 runtime, setConstraintTxId,
                 TTestTxConfig::SchemeShard,

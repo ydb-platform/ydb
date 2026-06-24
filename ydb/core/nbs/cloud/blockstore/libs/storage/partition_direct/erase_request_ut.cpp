@@ -19,12 +19,8 @@ Y_UNIT_TEST_SUITE(TEraseRequestTest)
 
         THostIndex host = 1;
         TEraseHint hint;
-        hint.Segments.push_back(TPBufferSegment{
-            .Lsn = 42,
-            .Range = TBlockRange64::WithLength(10, 3)});
-        hint.Segments.push_back(TPBufferSegment{
-            .Lsn = 43,
-            .Range = TBlockRange64::WithLength(20, 3)});
+        hint.Segments.push_back(TEraseSegment{.Generation = 1, .Lsn = 42});
+        hint.Segments.push_back(TEraseSegment{.Generation = 1, .Lsn = 43});
 
         auto eraseRequest = std::make_shared<TEraseRequestExecutor>(
             Runtime->GetActorSystem(0),

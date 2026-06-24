@@ -15,6 +15,22 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+template <typename T>
+TVector<ui64> DoMakeLsnVector(std::span<const T> segments)
+{
+    TVector<ui64> result;
+    result.reserve(segments.size());
+    for (const auto& segment: segments) {
+        result.push_back(segment.Lsn);
+    }
+    return result;
+}
+
+}   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 TReadRangeHint::TReadRangeHint(
     THostMask hostMask,
     ui64 lsn,
@@ -77,11 +93,6 @@ TString TPBufferSegment::DebugPrint(bool brief) const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TVector<ui64> TFlushHint::MakeLsnVector() const
-{
-    return TPBufferSegment::MakeLsnVector(Segments);
-}
-
 TString TFlushHint::DebugPrint(bool brief) const
 {
     TStringBuilder builder;
@@ -136,9 +147,12 @@ TString TFlushHints::DebugPrint() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TVector<ui64> TEraseHint::MakeLsnVector() const
+TString TEraseSegment::DebugPrint(bool brief) const
 {
-    return TPBufferSegment::MakeLsnVector(Segments);
+    if (brief) {
+        return ToString(Lsn);
+    }
+    return TStringBuilder() << Generation << ":" << Lsn;
 }
 
 TString TEraseHint::DebugPrint(bool brief) const
@@ -155,9 +169,11 @@ TString TEraseHint::DebugPrint(bool brief) const
     return builder;
 }
 
-void TEraseHints::AddHint(THostIndex host, ui64 lsn, TBlockRange64 range)
+void TEraseHints::AddHint(THostIndex host, ui64 lsn)
 {
-    Hints[host].Segments.emplace_back(lsn, range);
+    Hints[host].Segments.emplace_back(
+        0,   // TODO(drbasic)
+        lsn);
 }
 
 bool TEraseHints::Empty() const
@@ -476,7 +492,7 @@ TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
                         rangeRemoved = true;
                     }
                 } else {
-                    result.AddHint(host, item->Key, item->Range);
+                    result.AddHint(host, item->Key);
                 }
             }
             Y_ABORT_IF(rangeRemoved && !result.Empty());
@@ -494,9 +510,8 @@ TEraseHints TBlocksDirtyMap::MakeEraseBelatedHint()
     readyToEraseBelated.swap(ReadyToEraseBelated);
     for (const auto& item: readyToEraseBelated) {
         auto hostMask = item.Hosts;
-        auto range = item.Range;
         for (auto host: hostMask) {
-            result.AddHint(host, item.Lsn, range);
+            result.AddHint(host, item.Lsn);
         }
     }
 
@@ -948,6 +963,18 @@ bool TBlocksDirtyMap::TInfoEraseBelated::operator<(
         return Hosts < other.Hosts;
     }
     return TBlockRangeComparator{}(Range, other.Range);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TVector<ui64> MakeLsnVector(std::span<const TPBufferSegment> segments)
+{
+    return DoMakeLsnVector<TPBufferSegment>(segments);
+}
+
+TVector<ui64> MakeLsnVector(std::span<const TEraseSegment> segments)
+{
+    return DoMakeLsnVector<TEraseSegment>(segments);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

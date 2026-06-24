@@ -2,9 +2,12 @@ LIBRARY()
 
 SRCS(
     json_index.cpp
+    json_corpus.cpp
+    json_predicate.cpp
 )
 
 PEERDIR(
+    contrib/libs/fmt
     library/cpp/json
     yql/essentials/public/issue
     yql/essentials/public/udf

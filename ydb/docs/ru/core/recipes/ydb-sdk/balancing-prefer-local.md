@@ -254,6 +254,9 @@
 
     public class JdbcPreferLocalExample {
         public static void main(String[] args) throws SQLException {
+            // JDBC-драйвер не поддерживает автоматическое определение ближайшего DC.
+            // Явно укажите зону доступности через параметр localDatacenter —
+            // см. рецепт [Балансировка нагрузки — Предпочитать зону доступности](./balancing-prefer-location.md).
             try (Connection connection = DriverManager.getConnection(
                          "jdbc:ydb:grpc://localhost:2136/local?localDatacenter=VLA");
                  Statement statement = connection.createStatement();

@@ -146,7 +146,7 @@
 
             String username = System.getenv("YDB_USER");
             String password = System.getenv("YDB_PASSWORD");
-            if (username == null || username.isEmpty() || password == null) {
+            if (username == null || username.isEmpty() || password == null || password.isEmpty()) {
                 throw new IllegalStateException("Задайте переменные окружения YDB_USER и YDB_PASSWORD");
             }
 

@@ -191,8 +191,13 @@
 
     public class JdbcPreferLocationExample {
         public static void main(String[] args) throws SQLException {
+            String jdbcUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+            // Имя предпочитаемой зоны доступности (например, VLA, SAS, MYT)
+            String zone = System.getenv().getOrDefault("YDB_PREFER_LOCATION", "VLA");
+
             try (Connection connection = DriverManager.getConnection(
-                         "jdbc:ydb:grpc://localhost:2136/local?localDatacenter=VLA");
+                         jdbcUrl + (jdbcUrl.contains("?") ? "&" : "?") + "localDatacenter=" + zone);
                  Statement statement = connection.createStatement();
                  ResultSet rs = statement.executeQuery("SELECT 1 AS value")) {
 

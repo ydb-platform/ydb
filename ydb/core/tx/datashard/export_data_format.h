@@ -74,7 +74,7 @@ struct TParquetExportSettings {
     }
 
     IExport::TTableColumns Columns;
-    ui64 RowGroupSize = 100000;
+    ui64 RowGroupSize = 10000;
     TMaybe<TCompressionSettings> CompressionSettings;
 };
 

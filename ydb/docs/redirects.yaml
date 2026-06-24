@@ -478,7 +478,7 @@ common:
     to: /analyst/datasets/$1
 
   # Redirects for query_execution
-  
+
   - from: /concepts/query_execution.md
     to: /concepts/query_execution/index.md
   - from: /concepts/mvcc.md
@@ -495,8 +495,6 @@ common:
     to: /concepts/query_execution/scan_query.md
   - from: /reference/ydb-cli/commands/scan-query.md
     to: /reference/ydb-cli/scan-query.md
-  - from: /yql/reference/syntax/analyze.md
-    to: /concepts/query_execution/optimizer.md
   - from: /concepts/federated_query/(.*)$
     to: /concepts/query_execution/federated_query/$1
 

@@ -280,7 +280,7 @@ class TListClusterNodes: public TAdapterActor<
         }
     }
 
-    static void ConvertNode(const TNodeInfo& in, TClusterInfo& clusterInfo, Ydb::Maintenance::Node& out) {
+    static void ConvertNode(const TNodeInfo& in, const TClusterInfo& clusterInfo, Ydb::Maintenance::Node& out) {
         out.set_node_id(in.NodeId);
         out.set_host(in.Host);
         out.set_port(in.IcPort);

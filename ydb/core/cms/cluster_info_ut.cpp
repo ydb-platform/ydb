@@ -557,8 +557,7 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
             UNIT_ASSERT_C(inserted, "node " << nodeId << " has duplicate role " << role);
         }
 
-        UNIT_ASSERT_VALUES_EQUAL_C(actual.size(), expected.size(),
-            "unexpected roles count for node " << nodeId);
+        UNIT_ASSERT_VALUES_EQUAL(actual.size(), expected.size());
         for (int role : expected) {
             UNIT_ASSERT_C(actual.contains(role),
                 "node " << nodeId << " is missing role " << role);

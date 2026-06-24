@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/blobstorage_common.h>
+#include <ydb/core/mind/configured_tablet_bootstrapper.h>
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/log.h>
@@ -1028,6 +1029,7 @@ void TClusterInfo::GenerateSysTabletsNodesCheckers() {
             NodeToTabletTypes[nodeId].push_back(tablet.GetType());
             NodeRef(nodeId).AddNodeGroup(sysNodesChecker);
         }
+        SystemTabletTypes.insert(BootstrapperTypeToTabletType(tablet.GetType()));
     }
 }
 
@@ -1048,7 +1050,9 @@ bool TClusterInfo::NodeHasRunningSystemTablet(ui32 nodeId) const {
         }
 
         const TTabletInfo &tablet = tabletIt->second;
-        if (tablet.Leader && tablet.State == NKikimrWhiteboard::TTabletStateInfo::Active) {
+        if (tablet.Leader
+            && tablet.State == NKikimrWhiteboard::TTabletStateInfo::Active
+            && SystemTabletTypes.contains(tablet.Type)) {
             return true;
         }
     }

@@ -656,7 +656,7 @@ class TBlockLayoutConverter : public IBlockLayoutConverter {
         for (size_t i = 0; i < columns.size(); ++i) {
             const auto& column = columns[i];
             MKQL_ENSURE(column.is_array(),
-                        Sprintf("Column %lu is not an array "
+                        Sprintf("Column %zu is not an array "
                                 "(scalar columns must be materialized)", i));
 
             auto data = Extractors_[i]->GetColumnsDataConst(column.array());

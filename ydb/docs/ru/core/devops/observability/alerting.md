@@ -49,8 +49,6 @@
 
 {% endnote %}
 
-{% raw %}
-
 ```yaml
 - alert: YDBExecPoolHighUtilization
   expr: |
@@ -81,8 +79,6 @@
       - Current utilization: {{ $value | humanizePercentage }}
 ```
 
-{% endraw %}
-
 **Пример сработавшего алерта:**
 
 ![](../_assets/prometheus_exec_pool.png)
@@ -91,8 +87,6 @@
 
 **Описание:** Правило отслеживает ошибки аутентификации в {{ ydb-short-name }}. Срабатывает при появлении более 2 ошибок за период `for`. Это может означать, что кто-то неправильно вводит пароль, есть проблемы с настройками безопасности или что-то не так с конфигурацией системы.
 **Что делать:** Искать в [логах](./logging.md) ошибки аутентификации и разбираться в причинах.
-
-{% raw %}
 
 ```yaml
 - alert: YDBAuthTicketErrors
@@ -113,8 +107,6 @@
       - Host: {{ $labels.host }}
 ```
 
-{% endraw %}
-
 **Пример сработавшего алерта:**
 
 ![](../_assets/prometheus_ticket_errors.png)
@@ -125,8 +117,6 @@
 **Что делать:** Найти причину превышения базой ожидаемого размера. Удалить ненужные записи (например, старые логи) или увеличить лимит на размер базы, если это требуется. Подробнее про диагностику проблем с дисковым пространством можно прочитать в [статье](../../troubleshooting/performance/hardware/disk-space.md)
 
 #### Warning Storage Usage (80%)
-
-{% raw %}
 
 ```yaml
 - alert: YDBStorageUsageWarning
@@ -150,11 +140,7 @@
       - Duration: more than 5 minutes
 ```
 
-{% endraw %}
-
 #### Critical Storage Usage (90%)
-
-{% raw %}
 
 ```yaml
 - alert: YDBStorageUsageCritical
@@ -177,8 +163,6 @@
       - Threshold: 90%
       - Duration: more than 5 minutes
 ```
-
-{% endraw %}
 
 **Пример сработавшего алерта:**
 

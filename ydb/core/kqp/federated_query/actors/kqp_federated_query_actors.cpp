@@ -447,11 +447,11 @@ bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& request
     auto requestIt = RequestsInFlight.find(requestId);
     Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " + ToString(requestId));
 
-    const auto& retryPolicy = requestIt->second.Request->Settings.RetryPolicy
-        ? requestIt->second.Request->Settings.RetryPolicy
-        : MakeShortRetryPolicy();
-
     if (!requestIt->second.SchemeCacheRetryState) {
+        static const auto defaultSchemeCacheRetryPolicy = MakeShortRetryPolicy();
+        const auto& retryPolicy = requestIt->second.Request->Settings.RetryPolicy
+            ? requestIt->second.Request->Settings.RetryPolicy
+            : defaultSchemeCacheRetryPolicy;
         requestIt->second.SchemeCacheRetryState = retryPolicy->CreateRetryState();
     }
 

@@ -113,6 +113,74 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         });
         TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
         UNIT_ASSERT(resultQueueUrl.EndsWith(queueName));
+<<<<<<< HEAD
+=======
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000301v0/v4/streamImpl").GetValueSync();
+        UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+        auto& description = describe.GetTopicDescription();
+        UNIT_ASSERT_VALUES_EQUAL(description.GetConsumers().size(), 1);
+        auto& consumer = description.GetConsumers()[0];
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetConsumerName(), "ydb-sqs-consumer");
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetConsumerType(), NYdb::NTopic::EConsumerType::Shared);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetKeepMessagesOrder(), true);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetDefaultProcessingTimeout(), TDuration::Seconds(3600));
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetDeadLetterPolicy().GetEnabled(), true);
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetDeadLetterPolicy().GetDeadLetterQueue(), "sqs://cloud4/folder4/queue-1.fifo");
+        UNIT_ASSERT_VALUES_EQUAL(consumer.GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 3);
+
+        driver.Stop(true);
+    }
+
+    Y_UNIT_TEST_F(TestCreateQueueWithAllAttributes_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
+        auto json1 = CreateQueue({{"QueueName", "queue-1.fifo"}, {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}});
+        auto attributes1 = GetQueueAttributes({
+            {"QueueUrl", GetByPath<TString>(json1, "QueueUrl")},
+            {"AttributeNames", NJson::TJsonArray{"QueueArn"}}
+        });
+        auto queueArn1 = GetByPath<TString>(attributes1, "Attributes.QueueArn");
+
+        auto queueName = "ExampleQueueName.fifo";
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{
+                {"DelaySeconds", "60"},
+                {"MaximumMessageSize", "1024"},
+                {"MessageRetentionPeriod", "60"},
+                {"ReceiveMessageWaitTimeSeconds", "10"},
+                {"VisibilityTimeout", "3600"},
+
+                {"RedrivePolicy", TStringBuilder() << "{\"deadLetterTargetArn\":\"" << queueArn1 << "\", \"maxReceiveCount\": 3}"},
+
+                // 2024-10-07: RedriveAllowPolicy not supported yet.
+                // {"RedriveAllowPolicy", TStringBuilder() << "{\"redrivePermission\":\"byQueue\", \"sourceQueueArns\": [\"" << queueArn2 << "\", \"" << queueArn3 << "\"]}"},
+
+                // FIFO queue
+                {"FifoQueue", "true"},
+                {"ContentBasedDeduplication", "true"}
+
+                // High throughput for FIFO queues not supported yet.
+                // {"DeduplicationScope", "messageGroup"},
+                // {"FifoThroughputLimit", "perMessageGroupId"}
+            }}
+        });
+        TString resultQueueUrl = GetByPath<TString>(json, "QueueUrl");
+        UNIT_ASSERT(resultQueueUrl.EndsWith(queueName));
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000301v0/v4/streamImpl").GetValueSync();
+        UNIT_ASSERT_C(!describe.IsSuccess(), "Topic should not be created because feature flag is disabled");
+        driver.Stop(true);
+>>>>>>> d1edfe07931 (Changed default values for SQS (#43818))
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithTags, THttpProxyTestMock) {
@@ -730,6 +798,69 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestDeleteMessage, THttpProxyTestMock) {
+<<<<<<< HEAD
+=======
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        DeleteMessage({}, 400);
+        DeleteMessage({{"QueueUrl", "wrong-queue-url"}}, 400);
+        DeleteMessage({{"QueueUrl", 123}}, 400);
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        DeleteMessage({{"QueueUrl", queueUrl}}, 400);
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", "unknown-receipt-handle"}}, 400);
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", ""}}, 400);
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", 123}}, 400);
+
+        auto body = "MessageBody-0";
+        SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", body}});
+        json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], body);
+
+        auto receiptHandle = json["Messages"][0]["ReceiptHandle"].GetString();
+        UNIT_ASSERT(!receiptHandle.empty());
+
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", receiptHandle}, {"UnknownParameter", 123}}, 400);
+
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", receiptHandle}});
+
+        {
+            NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+            NYdb::NTopic::TTopicClient topicClient(driver);
+
+            NYdb::NTopic::TDescribeConsumerSettings settings;
+            settings.IncludeStats(true);
+            auto describe = topicClient.DescribeConsumer("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl", "ydb-sqs-consumer", settings).GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions()[0].GetPartitionStats()->GetEndOffset(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions()[0].GetPartitionConsumerStats()->GetCommittedOffset(), 1);
+        }
+
+        WaitQueueAttributes(queueUrl, 10, {
+            {"ApproximateNumberOfMessages", "0"},
+            {"ApproximateNumberOfMessagesNotVisible", "0"}
+        });
+
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", receiptHandle}});
+
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        DeleteMessage({{"QueueUrl", queueUrl}, {"ReceiptHandle", receiptHandle}}, 500);
+    }
+
+    Y_UNIT_TEST_F(TestDeleteMessage_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
+>>>>>>> d1edfe07931 (Changed default values for SQS (#43818))
         DeleteMessage({}, 400);
         DeleteMessage({{"QueueUrl", "wrong-queue-url"}}, 400);
         DeleteMessage({{"QueueUrl", 123}}, 400);
@@ -816,6 +947,99 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestSetQueueAttributes, THttpProxyTestMock) {
+<<<<<<< HEAD
+=======
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        auto json = CreateQueue({
+            {"QueueName", "DLQ.fifo"},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
+        });
+        auto attributes1 = GetQueueAttributes({
+            {"QueueUrl", GetByPath<TString>(json, "QueueUrl")},
+            {"AttributeNames", NJson::TJsonArray{"QueueArn"}}
+        });
+        auto queueArn1 = GetByPath<TString>(attributes1, "Attributes.QueueArn");
+
+        json = CreateQueue({
+            {"QueueName", "ExampleQueueName.fifo"},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
+        });
+        TString queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        auto attributes = NJson::TJsonMap{
+            {"DelaySeconds", "2"},
+            {"MaximumMessageSize", "12345"},
+            {"MessageRetentionPeriod", "678"},
+            {"ReceiveMessageWaitTimeSeconds", "9"},
+            {"VisibilityTimeout", "1234"},
+
+            {"RedrivePolicy", TStringBuilder() << "{\"deadLetterTargetArn\":\"" << queueArn1 << "\",\"maxReceiveCount\":3}"},
+
+            // 2024-10-07: RedriveAllowPolicy not supported yet.
+            // {"RedriveAllowPolicy", TStringBuilder() << "{\"redrivePermission\":\"byQueue\", \"sourceQueueArns\": [\"" << queueArn2 << "\", \"" << queueArn3 << "\"]}"},
+
+            // High throughput for FIFO queues not supported yet.
+            // {"DeduplicationScope", "messageGroup"},
+            // {"FifoThroughputLimit", "perMessageGroupId"}
+        };
+
+        SetQueueAttributes({{"QueueUrl", queueUrl}, {"Attributes", attributes}});
+
+        WaitQueueAttributes(queueUrl, 10, [&attributes](NJson::TJsonMap json) {
+            for (auto& [k, v] : attributes.GetMapSafe()) {
+                if (json["Attributes"][k].GetStringSafe() != v) {
+                    return false;
+                }
+            }
+            return true;
+        });
+
+        NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+        NYdb::NTopic::TTopicClient topicClient(driver);
+        {
+            auto describe = topicClient.DescribeTopic("/Root/SQS/cloud4/000000000000000301v0/v4/streamImpl").GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetConsumerName(), "ydb-sqs-consumer");
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetConsumerType(), NYdb::NTopic::EConsumerType::Shared);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetKeepMessagesOrder(), true);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetDefaultProcessingTimeout(), TDuration::Seconds(1234));
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetDeadLetterPolicy().GetEnabled(), true);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetDeadLetterPolicy().GetDeadLetterQueue(), "sqs://cloud4/folder4/DLQ.fifo");
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetTopicDescription().GetConsumers()[0].GetDeadLetterPolicy().GetCondition().GetMaxProcessingAttempts(), 3);
+        }
+
+        driver.Stop(true);
+
+        SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"DelaySeconds", "-1"}}}
+        }, 400);
+
+        SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"DelaySeconds", "901"}}}
+        }, 400);
+
+        WaitQueueAttributes(queueUrl, 10, [](NJson::TJsonMap json) {
+            return json["Attributes"]["DelaySeconds"] == "2";
+        });
+
+        json = SetQueueAttributes({
+            {"QueueUrl", queueUrl},
+            {"Attributes", NJson::TJsonMap{{"UnknownAttribute", "value"}}}
+        }, 400);
+    }
+
+    Y_UNIT_TEST_F(TestSetQueueAttributes_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
+>>>>>>> d1edfe07931 (Changed default values for SQS (#43818))
         auto json = CreateQueue({
             {"QueueName", "DLQ.fifo"},
             {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}}}
@@ -922,6 +1146,120 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestDeleteMessageBatch, THttpProxyTestMock) {
+<<<<<<< HEAD
+=======
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        DeleteMessageBatch({}, 400);
+
+        auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});
+        auto queueUrl = GetByPath<TString>(json, "QueueUrl");
+
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl}
+        }, 400);
+
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", {}}
+        }, 400);
+
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{}}
+        }, 400);
+
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonMap{}}
+        }, 400);
+
+        DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", {""}}
+        }, 400);
+
+        json = SendMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-0"}, {"MessageBody", "MessageBody-0"}, {"MessageDeduplicationId", "MessageDeduplicationId-0"}},
+                NJson::TJsonMap{{"Id", "Id-1"}, {"MessageBody", "MessageBody-1"}, {"MessageDeduplicationId", "MessageDeduplicationId-1"}}
+            }}
+        });
+        UNIT_ASSERT(json["Successful"].GetArray().size() == 2);
+
+        TVector<NJson::TJsonValue> messages;
+        for (int i = 0; i < 20; ++i) {
+            auto json = ReceiveMessage({{"QueueUrl", queueUrl}, {"WaitTimeSeconds", 20}});
+            if (!json.GetMapSafe().empty()) {
+                for (auto& m : json["Messages"].GetArray()) {
+                    messages.push_back(m);
+                }
+            }
+            if (messages.size() >= 2) {
+                break;
+            }
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(messages.size(), 2);
+
+        auto receiptHandle0 = messages[0]["ReceiptHandle"].GetString();
+        UNIT_ASSERT(!receiptHandle0.empty());
+        auto receiptHandle1 = messages[1]["ReceiptHandle"].GetString();
+        UNIT_ASSERT(!receiptHandle1.empty());
+
+        json = DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-0"}, {"ReceiptHandle", receiptHandle0}},
+                NJson::TJsonMap{{"Id", "Id-1"}, {"ReceiptHandle", receiptHandle1}}
+            }}
+        });
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Successful"].GetArray().size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(json["Successful"][0]["Id"], "Id-0");
+        UNIT_ASSERT_VALUES_EQUAL(json["Successful"][1]["Id"], "Id-1");
+
+        {
+            NYdb::TDriver driver(CreateDriver(KikimrGrpcPort));
+            NYdb::NTopic::TTopicClient topicClient(driver);
+
+            NYdb::NTopic::TDescribeConsumerSettings settings;
+            settings.IncludeStats(true);
+            auto describe = topicClient.DescribeConsumer("/Root/SQS/cloud4/000000000000000101v0/v2/streamImpl", "ydb-sqs-consumer", settings).GetValueSync();
+            UNIT_ASSERT_C(describe.IsSuccess(), describe.GetIssues().ToString());
+
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions()[0].GetPartitionStats()->GetEndOffset(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(describe.GetConsumerDescription().GetPartitions()[0].GetPartitionConsumerStats()->GetCommittedOffset(), 2);
+        }
+
+        json = ReceiveMessage({{"QueueUrl", queueUrl}});
+
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 0);
+
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        json = DeleteMessageBatch({
+            {"QueueUrl", queueUrl},
+            {"Entries", NJson::TJsonArray{
+                NJson::TJsonMap{{"Id", "Id-0"}, {"ReceiptHandle", receiptHandle0}},
+                NJson::TJsonMap{{"Id", "Id-1"}, {"ReceiptHandle", receiptHandle1}}
+            }}
+        });
+        UNIT_ASSERT_VALUES_EQUAL_C(json["Failed"].GetArray().size(), 2, json.GetStringRobust());
+        UNIT_ASSERT_VALUES_EQUAL(json["Failed"][0]["Id"], "Id-0");
+        UNIT_ASSERT_VALUES_EQUAL(json["Failed"][1]["Id"], "Id-1");
+
+    }
+
+    Y_UNIT_TEST_F(TestDeleteMessageBatch_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
+>>>>>>> d1edfe07931 (Changed default values for SQS (#43818))
         DeleteMessageBatch({}, 400);
 
         auto json = CreateQueue({{"QueueName", "ExampleQueueName"}});

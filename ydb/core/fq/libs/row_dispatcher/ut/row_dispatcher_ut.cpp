@@ -102,7 +102,7 @@ public:
         NYql::TPqGatewayServices pqServices(
             yqSharedResources->UserSpaceYdbDriver,
             nullptr,
-            nullptr,
+            credentialsFactory,
             std::make_shared<NYql::TPqGatewayConfig>(),
             nullptr);
 

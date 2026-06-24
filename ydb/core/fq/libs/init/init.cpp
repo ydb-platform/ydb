@@ -189,8 +189,6 @@ void Init(
 
     auto asyncIoFactory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
 
-    NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory;
-
     const auto httpGateway = NYql::IHTTPGateway::Make(
         &protoConfig.GetGateways().GetHttpGateway(),
         yqCounters->GetSubgroup("subcomponent", "http_gateway"));
@@ -201,6 +199,7 @@ void Init(
         connectorClient = NYql::NConnector::MakeClientGRPC(protoConfig.GetGateways().GetGeneric());
     }
 
+    NYql::ISecuredServiceAccountCredentialsFactory::TPtr securedCredentialsFactory;
     if (protoConfig.GetTokenAccessor().GetEnabled()) {
         const auto& tokenAccessorConfig = protoConfig.GetTokenAccessor();
 
@@ -209,9 +208,10 @@ void Init(
             caContent = TUnbufferedFileInput(path).ReadAll();
         }
 
-        credentialsFactory = NYql::CreateStructuredTokenCredentialsOverTokenAccessorFactory(tokenAccessorConfig.GetEndpoint(), tokenAccessorConfig.GetUseSsl(), caContent, tokenAccessorConfig.GetConnectionPoolSize());
+        securedCredentialsFactory = NYql::CreateSecuredServiceAccountCredentialsOverTokenAccessorFactory(tokenAccessorConfig.GetEndpoint(), tokenAccessorConfig.GetUseSsl(), caContent, tokenAccessorConfig.GetConnectionPoolSize());
     }
 
+    const NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory = NYql::CreateStructuredTokenCredentialsFactory(securedCredentialsFactory);
     auto commonTopicClientSettings = NKqp::MakeCommonTopicClientSettings(commonConfig.GetTopicClientHandlersExecutorThreadsNum(), commonConfig.GetTopicClientCompressionExecutorThreadsNum());
 
     if (protoConfig.GetRowDispatcher().GetEnabled()) {

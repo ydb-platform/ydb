@@ -65,11 +65,11 @@ public:
 
         auto credFactory = NKikimr::CreateYdbCredentialsProviderFactory;
         auto yqSharedResources = NFq::TYqSharedResources::Cast(NFq::CreateYqSharedResourcesImpl({}, credFactory, MakeIntrusive<NMonitoring::TDynamicCounters>()));
-
+        NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory = NYql::CreateStructuredTokenCredentialsFactory();
         NYql::TPqGatewayServices pqServices(
             yqSharedResources->UserSpaceYdbDriver,
             nullptr,
-            nullptr,
+            credentialsFactory,
             std::make_shared<NYql::TPqGatewayConfig>(),
             nullptr);
 

@@ -35,6 +35,7 @@ select
     sum(ps_supplycost * ps_availqty) / 10000 / $scale_factor as threshold
 from
     $j2
+group by (ps_supplycost < $z0) as FAKE
 );
 
 $values = (

@@ -137,7 +137,7 @@ void CmdWriteKafkaBatch(
             TString serializedDataChunk;
             Y_ENSURE(dataChunk.SerializeToString(&serializedDataChunk));
             write->SetData(std::move(serializedDataChunk));
-            write->SetMessageCount(values.size());
+            write->SetLogicalMessageCount(values.size());
             write->SetIsBatch(true);
             write->SetMaxSeqNo(seqNo + values.size() - 1);
 
@@ -215,7 +215,7 @@ void CmdWriteBatchedPart(
             if (partNo == 0) {
                 write->SetTotalSize(totalSize);
             }
-            write->SetMessageCount(messageCount);
+            write->SetLogicalMessageCount(messageCount);
             write->SetMaxSeqNo(seqNo + messageCount - 1);
 
             tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
@@ -515,7 +515,7 @@ Y_UNIT_TEST(KafkaBatchReadWithoutBatchSupportIsCut) {
         const auto& msg = readResult.GetResult(i);
         UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), i);
         UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), 1u + i);
-        UNIT_ASSERT_VALUES_EQUAL(msg.GetMessageCount(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(msg.GetLogicalMessageCount(), 1u);
         NKikimrPQClient::TDataChunk dataChunk;
         Y_ENSURE(dataChunk.ParseFromString(msg.GetData()));
         UNIT_ASSERT_VALUES_EQUAL(static_cast<ui32>(dataChunk.GetChunkType()), static_cast<ui32>(NKikimrPQClient::TDataChunk::REGULAR));
@@ -533,7 +533,7 @@ void AssertKafkaBatchCutMessage(
 {
     UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), expectedOffset);
     UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), expectedSeqNo);
-    UNIT_ASSERT_VALUES_EQUAL(msg.GetMessageCount(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(msg.GetLogicalMessageCount(), 1u);
     UNIT_ASSERT(!msg.HasUncompressedSize());
 
     NKikimrPQClient::TDataChunk dataChunk;
@@ -724,7 +724,7 @@ Y_UNIT_TEST(BatchedMessageWithMultiplePartsWriteRead) {
     const auto& msg = readResult.GetResult(0);
     UNIT_ASSERT_VALUES_EQUAL(msg.GetOffset(), 0u);
     UNIT_ASSERT_VALUES_EQUAL(msg.GetSeqNo(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(msg.GetMessageCount(), messageCount);
+    UNIT_ASSERT_VALUES_EQUAL(msg.GetLogicalMessageCount(), messageCount);
     UNIT_ASSERT_VALUES_EQUAL(msg.GetData(), part0 + part1);
 
     readSettings.Offset = 3;
@@ -733,7 +733,7 @@ Y_UNIT_TEST(BatchedMessageWithMultiplePartsWriteRead) {
     const auto& middleMsg = readFromMiddleResult.GetResult(0);
     UNIT_ASSERT_VALUES_EQUAL(middleMsg.GetOffset(), 0u);
     UNIT_ASSERT_VALUES_EQUAL(middleMsg.GetSeqNo(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(middleMsg.GetMessageCount(), messageCount);
+    UNIT_ASSERT_VALUES_EQUAL(middleMsg.GetLogicalMessageCount(), messageCount);
     UNIT_ASSERT_VALUES_EQUAL(middleMsg.GetData(), part0 + part1);
 }
 

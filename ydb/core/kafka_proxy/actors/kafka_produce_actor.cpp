@@ -477,7 +477,7 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
 
         w->SetSeqNo(seqNo);
         w->SetMaxSeqNo(maxSeqNo);
-        w->SetMessageCount(batchHeader->RecordsCount);
+        w->SetLogicalMessageCount(batchHeader->RecordsCount);
         w->SetIsBatch(true);
         w->SetData(str);
         w->SetCreateTimeMS(batchHeader->BaseTimestamp > 0 ? batchHeader->BaseTimestamp : TInstant::Now().MilliSeconds());

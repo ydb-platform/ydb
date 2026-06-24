@@ -190,7 +190,7 @@ void FillBatchFieldsFromTopicWriteMessage(
 
     const i64 maxSeqNo = msg.seq_no();
     cmdWrite.SetSeqNo(header->BaseSequence);
-    cmdWrite.SetMessageCount(static_cast<size_t>(header->RecordsCount));
+    cmdWrite.SetLogicalMessageCount(static_cast<size_t>(header->RecordsCount));
     cmdWrite.SetIsBatch(true);
     cmdWrite.SetMaxSeqNo(maxSeqNo);
 }
@@ -1292,7 +1292,7 @@ void TWriteSessionActor<UseMigrationProtocol>::PrepareRequest(THolder<TEvWrite>&
         payloadSize += w->GetData().size() + w->GetSourceId().size();
 
         ui64 currMetadataSize = 0;
-        const bool isBatch = w->HasMessageCount() && w->GetMessageCount() > 1;
+        const bool isBatch = w->HasLogicalMessageCount() && w->GetLogicalMessageCount() > 1;
         for (const auto& metaItem : msg.metadata_items()) {
             if (metaItem.key() == PARTITION_KEY_META_KEY) {
                 if (isBatch) {

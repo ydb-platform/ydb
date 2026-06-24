@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 DEFINE SUBQUERY $dup($x) AS
     SELECT

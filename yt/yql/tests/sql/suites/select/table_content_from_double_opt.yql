@@ -1,5 +1,4 @@
 /* postgres can not */
-/* syntax version 1 */
 use plato;
 
 insert into @tmp with truncate

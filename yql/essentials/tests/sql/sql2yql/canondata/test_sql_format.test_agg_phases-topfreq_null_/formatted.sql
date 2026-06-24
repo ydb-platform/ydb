@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 /* custom error: Expected tuple type, but got: EmptyList */
 /* FIXME(YQL-20234): support Null type */

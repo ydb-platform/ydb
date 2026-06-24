@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 define subquery $a() as
 $_x = select 1;

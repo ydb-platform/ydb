@@ -1,5 +1,4 @@
 /* postgres can not */
-/* syntax version 1 */
 pragma OrderedColumns;
 
 values (1,2), (3,4);

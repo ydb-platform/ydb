@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 select count(*) as count, mod_sk + mod_k as mod_sum
 from plato.Input as a

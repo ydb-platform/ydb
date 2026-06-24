@@ -1,4 +1,3 @@
-/* syntax version 1 */
 
 $merge = ($_name, $l, $r) -> { return Coalesce($l, 0) + Coalesce($r, 0); };
 $left = <|a: 1, b: 2, c: 3|>;

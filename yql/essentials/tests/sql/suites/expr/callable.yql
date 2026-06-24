@@ -1,5 +1,4 @@
 /* postgres can not */
-/* syntax version 1 */
 $lambda = ($x) -> {
     return cast($x as String)
 };

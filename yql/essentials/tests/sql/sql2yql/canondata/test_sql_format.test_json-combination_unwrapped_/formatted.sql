@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 $json = Unwrap(CAST(@@{"x": 1}@@ AS Json));
 

@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 $f = AGGREGATION_FACTORY("sum");
 $g = AggregateTransformOutput($f, ($x)->(cast($x as String)));

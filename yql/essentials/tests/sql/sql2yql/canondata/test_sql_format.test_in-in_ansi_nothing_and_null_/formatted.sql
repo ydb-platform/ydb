@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 PRAGMA config.flags('OptimizerFlags', 'SqlInWithNothingOrNull');

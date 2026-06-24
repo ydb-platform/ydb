@@ -1,5 +1,4 @@
 /* postgres can not */
-/* syntax version 1 */
 /* kikimr can not - range not supported */
 select count(*) as count from plato.filter(``, Unicode::IsUtf);
 

@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 define action $action($b,$c) as
     $d = $b + $c;

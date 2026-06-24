@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 -- Check that Json2::Parse/Serialize calls fold
 $json = CAST(

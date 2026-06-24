@@ -1,5 +1,4 @@
 /* postgres can not */
-/* syntax version 1 */
 use plato;
 
 $zero = unwrap( cast(0 as Interval) );

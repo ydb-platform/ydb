@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 select sum(length(value)) as s, m0, m1, m2, 2u * (2u * grouping(m0) + grouping(m1)) + grouping(m2) as ggg3
 from plato.Input

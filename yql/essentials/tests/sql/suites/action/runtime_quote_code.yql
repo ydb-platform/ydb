@@ -1,5 +1,4 @@
 /* postgres can not */
-/* syntax version 1 */
 select
     FormatCode(QuoteCode(AsAtom("foo"))),
     FormatCode(QuoteCode(AsTuple())),

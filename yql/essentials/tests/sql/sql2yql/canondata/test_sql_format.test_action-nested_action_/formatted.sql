@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 DEFINE ACTION $action($b, $c) AS
     DEFINE ACTION $aaa() AS

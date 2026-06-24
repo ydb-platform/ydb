@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 $t = AsList(AsStruct(true as a),AsStruct(false as a));
 $f = AGGREGATION_FACTORY("boolor");

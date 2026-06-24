@@ -1,6 +1,4 @@
-/* syntax version 1 */
 /* postgres can not */
-/* syntax version 1 */
 
 $create = ($item, $_parent) -> { return AsList($item) };
 $add = ($state, $item, $_parent) -> { return Yql::Append($state, $item) };

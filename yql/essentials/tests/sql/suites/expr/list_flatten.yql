@@ -1,5 +1,4 @@
 /* postgres can not */
-/* syntax version 1 */
 select ListFlatten(null),ListFlatten([]),
     ListFlatten(Just([])),ListFlatten(Nothing(EmptyList?)),
     ListFlatten([[],[]]),ListFlatten([null,null]),

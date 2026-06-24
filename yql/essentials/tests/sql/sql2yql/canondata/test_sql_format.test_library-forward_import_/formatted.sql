@@ -1,5 +1,4 @@
 /* postgres can not */
-/* syntax version 1 */
 PRAGMA Library('agg.sql');
 PRAGMA Library('lib.sql');
 

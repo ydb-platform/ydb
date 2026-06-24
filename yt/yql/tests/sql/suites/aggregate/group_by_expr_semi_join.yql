@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 select ListSort(aggregate_list(b.uk)), ListSort(aggregate_list(b.uk)), bus 
 from 

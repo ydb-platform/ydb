@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 $hum_gr_kv = ($grouping) -> {
   return case $grouping

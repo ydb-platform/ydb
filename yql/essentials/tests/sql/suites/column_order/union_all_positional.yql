@@ -1,5 +1,4 @@
 /* postgres can not */
-/* syntax version 1 */
 pragma PositionalUnionAll;
 pragma warning("disable", "1107");
 

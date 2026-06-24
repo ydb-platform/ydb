@@ -1,5 +1,4 @@
 /* postgres can not */
-/* syntax version 1 */
 USE plato;
 
 $to_int = ($x) -> { return cast($x as Int32) };

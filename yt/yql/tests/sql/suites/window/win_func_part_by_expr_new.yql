@@ -1,5 +1,4 @@
 /* postgres can not */
-/* syntax version 1 */
 -- YQL-1977
 use plato;
 

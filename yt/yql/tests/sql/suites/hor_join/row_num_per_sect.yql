@@ -1,6 +1,5 @@
 /* postgres can not */
 /* kikimr can not */
-/* syntax version 1 */
 USE plato;
 
 $with_row1 = (SELECT t.*, ROW_NUMBER() OVER () as row_num FROM Input1 as t);

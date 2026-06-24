@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 /* dq can not */
 /* dqfile can not */

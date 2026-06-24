@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* kikimr can not */
 pragma yt.InferSchema;
 

@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 select 
     TypeKind(TypeHandle(TypeOf(1))),

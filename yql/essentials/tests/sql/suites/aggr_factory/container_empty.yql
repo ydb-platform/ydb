@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 select ListAggregate([],AGGREGATION_FACTORY("sum"));
 select ListAggregate([1,2],AGGREGATION_FACTORY("sum"));

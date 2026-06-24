@@ -1,5 +1,4 @@
 /* postgres can not */
-/* syntax version 1 */
 $a = Yql::ToList(()->(Yql::Iterator([1,2,3])));
 select ListExtend($a, $a), ListHasItems($a), ListLength($a);
 

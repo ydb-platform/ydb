@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 $f = AGGREGATION_FACTORY('sum');
 $g = AggregateTransformInput($f, ($x) -> (CAST($x AS Int32)));

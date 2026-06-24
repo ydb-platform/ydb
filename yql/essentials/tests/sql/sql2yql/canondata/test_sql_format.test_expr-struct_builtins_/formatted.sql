@@ -1,6 +1,5 @@
 /* postgres can not */
 /* kikimr can not */
-/* syntax version 1 */
 $ad = AsStruct(1 AS a, 4 AS d);
 $b = AsStruct(2 AS b);
 $c_name = 'c';

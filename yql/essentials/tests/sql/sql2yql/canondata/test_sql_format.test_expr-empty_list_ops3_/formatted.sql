@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 $pred = ($x) -> {
     RETURN $x > 0;

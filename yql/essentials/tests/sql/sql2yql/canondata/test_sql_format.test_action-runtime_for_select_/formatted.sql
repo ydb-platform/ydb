@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 FOR $i IN Just(AsList(1, 2, 3)) DO BEGIN
     SELECT

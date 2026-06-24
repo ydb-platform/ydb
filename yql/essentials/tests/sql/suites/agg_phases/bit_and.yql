@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 
 $t = SELECT * FROM AS_TABLE([<|key: 1, v: 1u|>,<|key: 1, v: 3u|>]);

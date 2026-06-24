@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 $parse = DateTime::Parse("%Y-%m-%d,%Z");
 

@@ -1,4 +1,3 @@
-/* syntax version 1 */
 /* postgres can not */
 
 $init = ($row) -> (AsStruct($row.ts ?? 0 as value, 1 as count));

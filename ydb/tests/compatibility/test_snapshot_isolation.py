@@ -261,8 +261,8 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
 
     def _int_range_aggregator(self, table_name, results_table, stop_event, exec_counter, lock):
         """
-        Reads `table_name` with an int value filter under snapshot isolation. For the datashard
-        table uses a secondary index.
+        Reads `table_name` with an int value filter under snapshot isolation. Queries over
+        the datashard table will use the secondary index.
         """
 
         with self.create_driver() as driver, ydb.QuerySessionPool(driver) as pool:

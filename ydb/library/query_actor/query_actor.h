@@ -269,7 +269,7 @@ public:
     explicit TQueryRetryActor(const NActors::TActorId& replyActorId, const TArgs&... args)
         : ReplyActorId(replyActorId)
         , RetryPolicy(IRetryPolicy::GetExponentialBackoffPolicy(
-            Retryable, TDuration::MilliSeconds(10), 
+            Retryable, TDuration::MilliSeconds(10),
             TDuration::MilliSeconds(200), TDuration::Seconds(1),
             std::numeric_limits<size_t>::max(), TDuration::Seconds(1)
         ))
@@ -293,7 +293,10 @@ public:
 
         RetryAttempts++;
         const auto& queryActorId = TBase::Register(queryActor.release());
-        LOG_DEBUG_S(*TlsActivationContext, LogComponent, LogPrefix() << "Starting query actor #" << RetryAttempts << " " << queryActorId);
+        YDB_LOG_DEBUG_COMP(LogComponent, "Starting query",
+            {"logPrefix", LogPrefix()},
+            {"actor", RetryAttempts},
+            {"queryActorId", queryActorId});
     }
 
     void Bootstrap() {
@@ -312,7 +315,10 @@ public:
 
     void Handle(const typename TResponse::TPtr& ev) {
         const Ydb::StatusIds::StatusCode status = ev->Get()->Status;
-        LOG_DEBUG_S(*TlsActivationContext, LogComponent, LogPrefix() << "Got response " << ev->Sender << " " << status);
+        YDB_LOG_DEBUG_COMP(LogComponent, "Got response",
+            {"logPrefix", LogPrefix()},
+            {"sender", ev->Sender},
+            {"status", status});
 
         if (Retryable(status) == ERetryErrorClass::NoRetry) {
             Reply(ev);
@@ -324,7 +330,10 @@ public:
         }
 
         if (auto delay = RetryState->GetNextRetryDelay(status)) {
-            LOG_NOTICE_S(*TlsActivationContext, LogComponent, LogPrefix() << "Retry status " << status << " after " << *delay);
+            YDB_LOG_NOTICE_COMP(LogComponent, "Retry status after",
+                {"logPrefix", LogPrefix()},
+                {"status", status},
+                {"delay", *delay});
             TBase::Schedule(*delay, new NActors::TEvents::TEvWakeup());
         } else {
             Reply(ev);

@@ -1931,11 +1931,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 select avg(distinct t1.a) as r0, avg(distinct t1.c) as r1 from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
-            /*
             R"(
-                select distinct t1.b from `/Root/t1` as t1 group by t1.a, t1.b;
+                PRAGMA YqlSelect = 'force';
+                select distinct coalesce(t1.a, 0) as a, coalesce(t1.b, 1) as b, unwrap(t1.c) as c from `/Root/t1` as t1 order by a, b, c;
             )",
-            */
         };
 
         std::vector<std::string> results = {
@@ -1991,6 +1990,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                                             R"([[2u;1u];[3u;1u]])",
                                             R"([[0;[2]];[1;[2]]])",
                                             R"([[2.;[2.]];[2.;[2.]]])",
+                                            R"([[0;2;2];[1;1;2];[2;2;2];[3;1;2];[4;2;2]])",
                                         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -2682,6 +2682,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             Y_ENSURE(result.IsSuccess());
         }
     }
+
+    /* For debug purpose, just uncomment and run.
+    Y_UNIT_TEST(TPCDS_Q1) {
+        RunTPC_YqlTest(EBenchType::TPCDS, 1, true, true);
+    }
+    */
 
     NKikimrKqp::TKqpSetting MakeTPCHStatsSetting() {
         NKikimrKqp::TKqpSetting statsSetting;

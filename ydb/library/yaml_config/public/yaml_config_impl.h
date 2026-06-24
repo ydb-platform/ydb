@@ -54,4 +54,12 @@ TSelector ParseSelector(const NFyaml::TNodeRef& selectors);
 
 TIncompatibilityRules ParseIncompatibilityRules(const NFyaml::TNodeRef& root);
 
+/**
+ * Apply all matching selectors for specific set of labels
+ *
+ *  - existing 'config' nodes tags are preserved (if any) at all nested levels
+ *  - tags (if any) of added nodes at any nested level are propagated from selectors into 'config'
+ */
+void ApplySelectors(NFyaml::TDocument& doc, const TSet<TNamedLabel>& labels);
+
 } // namespace NKikimr::NYamlConfig

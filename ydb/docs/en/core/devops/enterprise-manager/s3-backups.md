@@ -1,6 +1,6 @@
 # Configuring S3 backups for YDB EM
 
-This guide describes how to configure database backups to an S3-compatible storage through {{ ydb-short-name }} Enterprise Manager (YDB EM). Backups are configured in the Control Plane configuration file, for example `kikimr/ydbcp/configs/em/config.yaml`.
+This guide describes how to configure database backups to an S3-compatible storage through {{ ydb-short-name }} Enterprise Manager (YDB EM). Backups are configured in the Control Plane configuration file. In the examples below, the path to this file is shown as `<ydb-em-cp-config.yaml>`.
 
 S3 backup configuration consists of three parts:
 
@@ -53,7 +53,7 @@ At the top level of the configuration file, specify the path to the master key f
 secret_key: configs/em/secret_key
 ```
 
-This master key is used to encrypt and decrypt `settings.s3.access_key` and `settings.s3.secret_key` values. By default, Control Plane looks for the master key in `/Berkanavt/ydbcp/secrets/secret_key.txt`. The file must be available to Control Plane processes.
+This master key is used to encrypt and decrypt `settings.s3.access_key` and `settings.s3.secret_key` values. The master key file must be available to Control Plane processes at the path specified in the `secret_key` parameter.
 
 {% note warning %}
 
@@ -66,8 +66,8 @@ Do not store `access_key` and `secret_key` in the configuration as plaintext. YD
 Encrypt the S3 access keys with the same master key specified in the `secret_key` parameter. Use the Control Plane CLI:
 
 ```bash
-ydbcp admin crypto encrypt --body '<plaintext access key>' --cfg-file configs/em/config.yaml
-ydbcp admin crypto encrypt --body '<plaintext secret key>' --cfg-file configs/em/config.yaml
+ydbcp admin crypto encrypt --body '<plaintext access key>' --cfg-file <ydb-em-cp-config.yaml>
+ydbcp admin crypto encrypt --body '<plaintext secret key>' --cfg-file <ydb-em-cp-config.yaml>
 ```
 
 Copy the resulting encrypted strings to `settings.s3.access_key` and `settings.s3.secret_key`.
@@ -75,7 +75,7 @@ Copy the resulting encrypted strings to `settings.s3.access_key` and `settings.s
 To check that a value can be decrypted with the same master key, run:
 
 ```bash
-ydbcp admin crypto decrypt --body '<encrypted value>' --cfg-file configs/em/config.yaml
+ydbcp admin crypto decrypt --body '<encrypted value>' --cfg-file <ydb-em-cp-config.yaml>
 ```
 
 ## Configuring schedule and retention {#schedule-and-ttl}
@@ -107,7 +107,7 @@ Parameter | Description
 
 To apply the settings:
 
-1. Place the updated `config.yaml` in the Control Plane working directory. By default, Control Plane uses `/Berkanavt/ydbcp/cfg/config.yaml`, `/opt/ydbcp/config/config.yaml`, or `/opt/ydb-em/ydb-em-cp/cfg/config.yaml`.
+1. Place the updated configuration file in the Control Plane working directory. For example, for an installation under `/opt/ydb-em`, this can be `/opt/ydb-em/ydb-em-cp/cfg/config.yaml`.
 1. Make sure the master key file specified in `secret_key` is available to Control Plane processes.
 1. Check that `settings.s3.access_key` and `settings.s3.secret_key` are encrypted with the same master key.
 1. Restart the Control Plane processes: `server` and `worker`.

@@ -1,6 +1,6 @@
 # Настройка резервного копирования в S3 для YDB EM
 
-В этом руководстве описана настройка резервного копирования баз данных в S3-совместимое хранилище через {{ ydb-short-name }} Enterprise Manager (YDB EM). Резервное копирование настраивается в конфигурационном файле Control Plane, например `kikimr/ydbcp/configs/em/config.yaml`.
+В этом руководстве описана настройка резервного копирования баз данных в S3-совместимое хранилище через {{ ydb-short-name }} Enterprise Manager (YDB EM). Резервное копирование настраивается в конфигурационном файле Control Plane. В примерах ниже путь к этому файлу обозначен как `<ydb-em-cp-config.yaml>`.
 
 Для настройки S3-бэкапов нужны три блока конфигурации:
 
@@ -53,7 +53,7 @@ backup_targets:
 secret_key: configs/em/secret_key
 ```
 
-Этот мастер-ключ используется для шифрования и расшифровки значений `settings.s3.access_key` и `settings.s3.secret_key`. По умолчанию Control Plane ищет мастер-ключ в файле `/Berkanavt/ydbcp/secrets/secret_key.txt`. Файл должен быть доступен процессам Control Plane.
+Этот мастер-ключ используется для шифрования и расшифровки значений `settings.s3.access_key` и `settings.s3.secret_key`. Файл мастер-ключа должен быть доступен процессам Control Plane по пути, указанному в параметре `secret_key`.
 
 {% note warning %}
 
@@ -66,8 +66,8 @@ secret_key: configs/em/secret_key
 Зашифруйте ключи доступа к S3 тем же мастер-ключом, который указан в параметре `secret_key`. Для шифрования используйте CLI Control Plane:
 
 ```bash
-ydbcp admin crypto encrypt --body '<plaintext access key>' --cfg-file configs/em/config.yaml
-ydbcp admin crypto encrypt --body '<plaintext secret key>' --cfg-file configs/em/config.yaml
+ydbcp admin crypto encrypt --body '<plaintext access key>' --cfg-file <ydb-em-cp-config.yaml>
+ydbcp admin crypto encrypt --body '<plaintext secret key>' --cfg-file <ydb-em-cp-config.yaml>
 ```
 
 Скопируйте полученные зашифрованные строки в параметры `settings.s3.access_key` и `settings.s3.secret_key`.
@@ -75,7 +75,7 @@ ydbcp admin crypto encrypt --body '<plaintext secret key>' --cfg-file configs/em
 Чтобы проверить, что значение можно расшифровать тем же мастер-ключом, выполните:
 
 ```bash
-ydbcp admin crypto decrypt --body '<encrypted value>' --cfg-file configs/em/config.yaml
+ydbcp admin crypto decrypt --body '<encrypted value>' --cfg-file <ydb-em-cp-config.yaml>
 ```
 
 ## Настройка расписания и срока хранения {#schedule-and-ttl}
@@ -107,7 +107,7 @@ locations:
 
 Чтобы применить настройки:
 
-1. Разместите обновленный `config.yaml` в рабочей директории Control Plane. По умолчанию используются пути `/Berkanavt/ydbcp/cfg/config.yaml`, `/opt/ydbcp/config/config.yaml` или `/opt/ydb-em/ydb-em-cp/cfg/config.yaml`.
+1. Разместите обновленный конфигурационный файл в рабочей директории Control Plane. Например, для установки в `/opt/ydb-em` это может быть файл `/opt/ydb-em/ydb-em-cp/cfg/config.yaml`.
 1. Убедитесь, что файл мастер-ключа, указанный в `secret_key`, доступен процессам Control Plane.
 1. Проверьте, что `settings.s3.access_key` и `settings.s3.secret_key` зашифрованы тем же мастер-ключом.
 1. Перезапустите процессы Control Plane: `server` и `worker`.

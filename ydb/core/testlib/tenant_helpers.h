@@ -401,7 +401,7 @@ inline void CheckCreateTenant(TTenantTestRuntime &runtime,
     if (request.PlanResolution) {
         event->Record.MutableRequest()->mutable_options()->set_plan_resolution(request.PlanResolution);
     }
-    
+
     event->Record.MutableRequest()->mutable_database_quotas()->CopyFrom(request.DatabaseQuotas);
     event->Record.MutableRequest()->mutable_scale_recommender_policies()->CopyFrom(request.ScaleRecommenderPolicies);
 
@@ -531,6 +531,54 @@ inline void CheckRemoveTenant(TTenantTestRuntime &runtime,
                               Ydb::StatusIds::StatusCode code)
 {
     CheckRemoveTenant(runtime, path, "", code);
+}
+
+inline void CheckSetTenantAttribute(TTenantTestRuntime &runtime,
+                                    const TString &path,
+                                    const TString &token,
+                                    Ydb::StatusIds::StatusCode code,
+                                    const TString &attrName,
+                                    const TString &attrValue)
+{
+    auto *event = new NConsole::TEvConsole::TEvAlterTenantRequest;
+    event->Record.MutableRequest()->set_path(path);
+    (*event->Record.MutableRequest()->mutable_alter_attributes())[attrName] = attrValue;
+    if (token)
+        event->Record.SetUserToken(token);
+
+    TAutoPtr<IEventHandle> handle;
+    runtime.SendToConsole(event);
+    auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvAlterTenantResponse>(handle);
+    auto &operation = reply->Record.GetResponse().operation();
+
+    if (operation.ready()) {
+        UNIT_ASSERT_VALUES_EQUAL(operation.status(), code);
+    } else {
+        TString id = operation.id();
+        for (;;) {
+            auto check = new NConsole::TEvConsole::TEvGetOperationRequest;
+            check->Record.MutableRequest()->set_id(id);
+            runtime.SendToConsole(check);
+            auto checkReply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetOperationResponse>(handle);
+            auto &checkOperation = checkReply->Record.GetResponse().operation();
+            if (checkOperation.ready()) {
+                UNIT_ASSERT_VALUES_EQUAL(checkOperation.status(), code);
+                break;
+            }
+
+            TDispatchOptions options;
+            runtime.DispatchEvents(options, TDuration::MilliSeconds(100));
+        }
+    }
+}
+
+inline void CheckSetTenantAttribute(TTenantTestRuntime &runtime,
+                                    const TString &path,
+                                    Ydb::StatusIds::StatusCode code,
+                                    const TString &attrName,
+                                    const TString &attrValue)
+{
+    CheckSetTenantAttribute(runtime, path, "", code, attrName, attrValue);
 }
 
 inline void WaitTenantStatus(TTenantTestRuntime &runtime,

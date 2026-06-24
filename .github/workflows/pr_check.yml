@@ -31,6 +31,7 @@ jobs:
     outputs:
       result: ${{ steps.check-ownership-membership.outputs.result == 'true' && steps.check-is-mergeable.outputs.result == 'true' }}
       commit_sha: ${{ steps.check-is-mergeable.outputs.commit_sha }}
+      tests_required: ${{ steps.detect-test-scope.outputs.tests_required }}
     steps:
       - name: Reset integrated status
         run: |
@@ -208,10 +209,97 @@ jobs:
             core.info(`commit_sha=${pr.commit_sha}`);
             core.setOutput('commit_sha', pr.merge_commit_sha);
             return true;
+      - name: Detect whether tests are required
+        id: detect-test-scope
+        if: steps.check-is-mergeable.outputs.result == 'true'
+        uses: actions/github-script@v8
+        with:
+          result-encoding: string
+          script: |
+            const prNumber = context.payload.pull_request.number;
+            const files = await github.paginate(
+              github.rest.pulls.listFiles,
+              {
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                pull_number: prNumber,
+                per_page: 100,
+              },
+              (response) => response.data.map((f) => f.filename),
+            );
+
+            // "Safe" means infra/docs-only changes where full test run is not required.
+            const isSafeFile = (file) => {
+              return (
+                file.startsWith('ydb/docs/') ||
+                file.startsWith('yql/essentials/docs/') ||
+                file.startsWith('plans/') ||
+                file.endsWith('.md') ||
+                file.startsWith('.github/config/')
+              );
+            };
+
+            if (files.length === 0) {
+              core.warning('No changed files returned by GitHub API, keeping tests enabled');
+              core.setOutput('tests_required', 'true');
+              return 'true';
+            }
+
+            let hasNonSafeChanges = false;
+            let firstNonSafeFile = '';
+            for (const file of files) {
+              if (!isSafeFile(file)) {
+                hasNonSafeChanges = true;
+                firstNonSafeFile = file;
+                break;
+              }
+            }
+            core.info(`changed_files=${JSON.stringify(files)}`);
+            if (hasNonSafeChanges) {
+              core.info(`first_non_safe_file=${firstNonSafeFile}`);
+            }
+            core.info(`tests_required=${hasNonSafeChanges}`);
+            core.setOutput('tests_required', hasNonSafeChanges ? 'true' : 'false');
+            return hasNonSafeChanges ? 'true' : 'false';
+      - name: Mark required build/test statuses as skipped
+        if: steps.detect-test-scope.outputs.tests_required == 'false'
+        shell: bash
+        run: |
+          for context in build_relwithdebinfo build_release-asan test_relwithdebinfo test_release-asan; do
+            curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST -H "Accept: application/vnd.github+json" -H "Authorization: Bearer ${{github.token}}" -H "X-GitHub-Api-Version: 2022-11-28" \
+              https://api.github.com/repos/${{github.repository}}/statuses/${{github.event.pull_request.head.sha}} \
+              -d '{"state":"success","description":"Skipped: only safe paths changed","context":"'"$context"'"}'
+          done
+      - name: Report no tests to run
+        if: steps.detect-test-scope.outputs.tests_required == 'false'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const marker = '<!-- pr-check-safe-skip -->';
+            const body = `${marker}\nOnly safe paths were changed, so build and test jobs were skipped.`;
+            const comments = await github.paginate(github.rest.issues.listComments, {
+              ...context.repo,
+              issue_number: context.issue.number,
+              per_page: 100,
+            });
+            const existing = comments.find((comment) => comment.body && comment.body.startsWith(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({
+                ...context.repo,
+                comment_id: existing.id,
+                body,
+              });
+            } else {
+              await github.rest.issues.createComment({
+                ...context.repo,
+                issue_number: context.issue.number,
+                body,
+              });
+            }
   build_and_test:
     needs:
       - check-running-allowed
-    if: needs.check-running-allowed.outputs.result == 'true' && needs.check-running-allowed.outputs.commit_sha != ''
+    if: needs.check-running-allowed.outputs.result == 'true' && needs.check-running-allowed.outputs.commit_sha != '' && needs.check-running-allowed.outputs.tests_required == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -267,8 +355,10 @@ jobs:
           vars.AWS_BUCKET, vars.AWS_ENDPOINT, vars.REMOTE_CACHE_URL_YA, vars.GH_ALERTS_TG_LOGINS, vars.GH_ALERTS_TG_CHAT ) }}
   update_integrated_status:
     runs-on: [self-hosted, tiny-worker]
-    needs: build_and_test
-    if: ${{github.event.pull_request.state == 'open'}}
+    needs:
+      - check-running-allowed
+      - build_and_test
+    if: ${{github.event.pull_request.state == 'open' && needs.check-running-allowed.outputs.result == 'true' && (needs.check-running-allowed.outputs.tests_required == 'false' || needs.build_and_test.result == 'success')}}
     steps:
       - name: Gather required checks results
         shell: bash

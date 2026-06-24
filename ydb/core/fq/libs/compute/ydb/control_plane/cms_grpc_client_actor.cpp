@@ -99,6 +99,7 @@ public:
         const auto& request = *ev.Get()->Get();
 
         const TString folderId = request.SharedFolderId;
+        const TString cloudId = request.CloudId;
         const TString databaseId = GetPathLastComponent(request.Path);
 
         auto forwardRequest = std::make_unique<TEvPrivate::TEvCreateDatabaseRequest>();
@@ -106,6 +107,9 @@ public:
         forwardRequest->Request.mutable_serverless_resources()->set_shared_database_path(request.BasePath);
         if (!folderId.empty()) {
             forwardRequest->Request.mutable_attributes()->emplace("folder_id", folderId);
+        }
+        if (!cloudId.empty()) {
+            forwardRequest->Request.mutable_attributes()->emplace("cloud_id", cloudId);
         }
         if (!databaseId.empty()) {
             forwardRequest->Request.mutable_attributes()->emplace("database_id", databaseId);
@@ -161,7 +165,7 @@ public:
         const auto& status = ev->Get()->Status;
         auto it = ModifyPermissionsRequests.find(ev->Cookie);
         if (it == ModifyPermissionsRequests.end()) {
-            YDB_LOG_ERROR("Request doesn't exist (ModifyPermissionsResponse). Need to fix this bug urgently");
+            YDB_LOG_ERROR("[ydb] [CmsGrpcClient]: Request doesn't exist (ModifyPermissionsResponse). Need to fix this bug urgently");
             return;
         }
         auto request = it->second;

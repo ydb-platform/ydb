@@ -107,6 +107,10 @@ namespace NActors {
         return false;
     }
 
+    bool TInterconnectSessionTCP::HasRdmaState() const {
+        return Params.UseRdma || RdmaQp || RdmaInflightDataAmount;
+    }
+
     void TInterconnectSessionTCP::Handle(TEvTerminate::TPtr& ev) {
         Terminate(ev->Get()->Reason);
     }
@@ -551,6 +555,11 @@ namespace NActors {
 
     void TInterconnectSessionTCP::StartHandshake() {
         LOG_INFO_IC_SESSION("ICS15", "start handshake");
+        if (HasRdmaState()) {
+            LOG_NOTICE_IC_SESSION("ICRDMA", "start initial handshake instead of graceful reconnect for RDMA session");
+            IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::StartInitialHandshake);
+            return;
+        }
         IActor::InvokeOtherActor(*Proxy, &TInterconnectProxyTCP::StartResumeHandshake, ReceiveContext->LockLastPacketSerialToConfirm());
     }
 

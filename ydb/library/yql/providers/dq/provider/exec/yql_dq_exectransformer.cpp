@@ -3,7 +3,6 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_datasource.h>
 #include <ydb/library/yql/providers/dq/provider/yql_dq_state.h>
 
-#include <yql/essentials/minikql/runtime_settings/runtime_settings_serialization.h>
 #include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
@@ -112,7 +111,6 @@ public:
         program.SetRuntimeVersion(NYql::NDqProto::ERuntimeVersion::RUNTIME_VERSION_YQL_1_0);
         program.SetRaw(lambda);
         program.SetLangVer(State->TypeCtx->LangVer);
-        *program.MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*State->TypeCtx->RuntimeSettings);
 
         auto outputDesc = task.AddOutputs();
         outputDesc->MutableMap();
@@ -1027,8 +1025,7 @@ private:
                         lambda, NActors::TActorId(),
                         NActors::TActorId(1, 0, 1, 0),
                         result.Input().Ref().GetTypeAnn(),
-                        State->TypeCtx->LangVer,
-                        State->TypeCtx->RuntimeSettings));
+                        State->TypeCtx->LangVer));
                 auto& tasks = executionPlanner->GetTasks();
                 Yql::DqsProto::TTaskMeta taskMeta;
                 tasks[0].MutableMeta()->UnpackTo(&taskMeta);
@@ -1398,7 +1395,7 @@ private:
                 << maxTasksPerOperation, ctx, true));
         }
 
-        YQL_ENSURE(stagesCount <= maxTasksPerOperation, "Too many stages: " << stagesCount << " > " << maxTasksPerOperation);
+        YQL_ENSURE(stagesCount <= maxTasksPerOperation);
 
         try {
             while (!executionPlanner->PlanExecution(canFallback) && tasksPerStage > 1) {
@@ -1446,7 +1443,6 @@ private:
                 fallbackFlag |= BuildUploadList(&uploadList, localRun, &lambda, typeEnv, files);
                 t.MutableProgram()->SetRaw(lambda);
                 t.MutableProgram()->SetLangVer(State->TypeCtx->LangVer);
-                *t.MutableProgram()->MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*State->TypeCtx->RuntimeSettings);
 
                 Yql::DqsProto::TTaskMeta taskMeta;
                 t.MutableMeta()->UnpackTo(&taskMeta);
@@ -1999,7 +1995,6 @@ private:
                     fallbackFlag |= BuildUploadList(&uploadList, false, &lambda, typeEnv, files);
                     t.MutableProgram()->SetRaw(lambda);
                     t.MutableProgram()->SetLangVer(State->TypeCtx->LangVer);
-                    *t.MutableProgram()->MutableRuntimeSettings() = NYql::SerializeRuntimeSettingsToProto(*State->TypeCtx->RuntimeSettings);
 
                     Yql::DqsProto::TTaskMeta taskMeta;
                     t.MutableMeta()->UnpackTo(&taskMeta);

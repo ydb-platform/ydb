@@ -2075,20 +2075,20 @@ private:
         task.GetMeta().UnpackTo(&taskMeta);
 
         auto* files = taskMeta.MutableFiles();
-
+        YQL_CLOG(TRACE, ProviderDq) << "PrepareTask: files " << files->size();
         for (auto& file : *files) {
             if (file.GetObjectType() != Yql::DqsProto::TFile::EEXE_FILE) {
                 auto maybeFile = FileCache->AcquireFile(file.GetObjectId());
                 if (!maybeFile) {
-                    throw std::runtime_error("Cannot find object `" + file.GetObjectId() + "' in cache");
+                    throw std::runtime_error("Cannot find object `" + file.GetObjectId() + "` in cache");
                 }
                 filesHolder->Add(file.GetObjectId());
                 auto name = file.GetName();
-
                 switch (file.GetObjectType()) {
                     case Yql::DqsProto::TFile::EUDF_FILE:
                     case Yql::DqsProto::TFile::EUSER_FILE:
                         file.SetLocalPath(InitializeLocalFile(result->ExternalWorkDir(), *maybeFile, name));
+                        YQL_CLOG(TRACE, ProviderDq) << "PrepareTask: Add file.SetLocalPath: " << name << ", local path: " << file.GetLocalPath();
                         break;
                     default:
                         Y_ABORT_UNLESS(false);

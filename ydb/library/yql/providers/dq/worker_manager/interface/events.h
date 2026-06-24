@@ -157,4 +157,12 @@ using TDqResManEvents = NDq::TBaseDqResManEvents<NActors::TEvents::EEventSpace::
         memcpy(x + 7, &nodeId, sizeof(ui32));
         return NActors::TActorId(nodeId, TStringBuf(x, 12));
     }
+
+    // Separate ID for the GlobalWorkerManager when it co-exists with a
+    // LocalWorkerManager on the same node (e.g. in dq_service_process).
+    inline NActors::TActorId MakeGlobalWorkerManagerActorID(ui32 nodeId) {
+        char x[12] = {'g', 'w', 'm', 'r', 'e', 's'};
+        memcpy(x + 7, &nodeId, sizeof(ui32));
+        return NActors::TActorId(nodeId, TStringBuf(x, 12));
+    }
 }

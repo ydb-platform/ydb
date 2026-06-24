@@ -5,6 +5,7 @@ PEERDIR(
     yql/essentials/minikql
     yql/essentials/utils
     yql/essentials/core
+    yql/essentials/providers/common/proto
     yql/essentials/utils/log
     ydb/library/yql/dq/actors
     ydb/library/yql/dq/proto
@@ -15,6 +16,7 @@ GENERATE_ENUM_SERIALIZATION(yql_dq_settings.h)
 
 SRCS(
     attrs.cpp
+    yql_dq_clique.cpp
     yql_dq_common.cpp
     yql_dq_settings.cpp
 )

@@ -3013,6 +3013,91 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         Cerr << sizeof(NArrow::TReplaceKey) << Endl;
         Cerr << sizeof(NArrow::NMerger::TSortableBatchPosition) << Endl;
     }
+
+    Y_UNIT_TEST(InternalScanAfterDropColumn) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        ui64 writeId = 0;
+        ui64 tableId = 1;
+        ui64 txId = 100;
+
+        const std::vector<NArrow::NTest::TTestColumn> ydbSchema = {
+            NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)),
+            NArrow::NTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("level", TTypeInfo(NTypeIds::Int32)),
+            NArrow::NTest::TTestColumn("message", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("extra", TTypeInfo(NTypeIds::Int32)),
+        };
+
+        const std::vector<NArrow::NTest::TTestColumn> ydbPk = {
+            NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)),
+            NArrow::NTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)),
+        };
+
+        auto planStep = SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, ydbPk), ++txId);
+
+        // Cout << "la-la-la: " << planStep << Endl;
+        const auto testData = MakeTestBlob({ 0, 100 }, ydbSchema);
+        std::vector<ui64> writeIds;
+        UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds));
+        planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, planStep, txId);
+
+        const auto oldColumnIds = TTestSchema::ExtractIds(ydbSchema);
+
+        const std::vector<NArrow::NTest::TTestColumn> ydbSchemaV2 = {
+            NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)),
+            NArrow::NTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("level", TTypeInfo(NTypeIds::Int32)),
+            NArrow::NTest::TTestColumn("message", TTypeInfo(NTypeIds::Utf8)),
+        };
+
+        planStep = SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 2, ydbSchemaV2, ydbPk, {}), ++txId);
+
+        const NOlap::TSnapshot readSnapshot(planStep, Max<ui64>());
+
+        auto pathId = NColumnShard::TUnifiedPathId::BuildValid(
+            NColumnShard::TInternalPathId::FromRawValue(tableId), NColumnShard::TSchemeShardLocalPathId::FromRawValue(tableId));
+
+        auto ev = std::make_unique<TEvColumnShard::TEvInternalScan>(pathId, readSnapshot, std::nullopt, false);
+        ev->TaskIdentifier = "test-internal-scan";
+
+        for (auto id : oldColumnIds) {
+            ev->AddColumn(id);
+        }
+
+        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, ev.release());
+
+        TAutoPtr<IEventHandle> handle;
+        bool gotResponse = false;
+        const TInstant start = TInstant::Now();
+        while (!gotResponse && TInstant::Now() - start < TDuration::Seconds(10)) {
+            if (runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanInitActor>(handle, TDuration::MilliSeconds(100))) {
+                gotResponse = true;
+            } else if (runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanError>(handle, TDuration::MilliSeconds(100))) {
+                gotResponse = true;
+            }
+
+            // Cout << "la-la-la 239: " << gotResponse << Endl;
+        }
+
+        UNIT_ASSERT_C(gotResponse, "Tablet should respond to internal scan without crashing");
+    }
 }
 
 }   // namespace NKikimr

@@ -211,7 +211,14 @@ public:
 
     std::set<ui32> GetProcessingColumnIds() const {
         AFL_VERIFY(ResultIndexSchema);
-        std::set<ui32> result(GetProgram().GetProcessingColumns().begin(), GetProgram().GetProcessingColumns().end());
+        auto& indexInfo = ResultIndexSchema->GetIndexInfo();
+        std::set<ui32> result;
+        for (auto&& i : GetProgram().GetProcessingColumns()) {
+            if (indexInfo.HasColumnId(i)) {
+                result.emplace(i);
+            }
+        }
+
         return result;
     }
 

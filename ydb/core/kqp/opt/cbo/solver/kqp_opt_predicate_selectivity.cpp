@@ -501,7 +501,7 @@ TMaybe<TString> TPredicateSelectivityComputer::GetAttributeType(const TString& a
         if (mapping.contains(TInfoUnit(attributeName).GetFullName())) {
             const auto& entry = mapping.at(TInfoUnit(attributeName).GetFullName());
             auto infoUnit = TInfoUnit(entry.TableName, entry.ColumnName);
-            attributeName = infoUnit.GetFullName();
+            columnName = infoUnit.GetFullName();
         }
     }
 

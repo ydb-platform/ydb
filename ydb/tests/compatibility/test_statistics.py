@@ -362,33 +362,27 @@ class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
 
         def check_background_operations():
             """Check for background ANALYZE operations using operation client."""
-            try:
-                # Try to list operations - this tests the background operation functionality
-                # from commit 9b4503e which added long-running operation support for ANALYZE
-                request = ydb._apis.ydb_operation.ListOperationsRequest(kind="analyze")
-                list_result = self.driver(request, ydb._apis.OperationService.Stub, "ListOperations")
-                operations = getattr(list_result, "operations", [])
-                logger.info(f"Found {len(operations)} background operations")
+			# Try to list operations - this tests the background operation functionality
+			# from commit 9b4503e which added long-running operation support for ANALYZE
+			request = ydb._apis.ydb_operation.ListOperationsRequest(kind="analyze")
+			list_result = self.driver(request, ydb._apis.OperationService.Stub, "ListOperations")
+			operations = getattr(list_result, "operations", [])
+			logger.info(f"Found {len(operations)} background operations")
 
-                # Check if any analyze operations are present - they should be in the list
-                analyze_operations_found = False
-                for op in operations:
-                    if hasattr(op, 'metadata') and hasattr(op.metadata, 'state'):
-                        logger.info(f"Operation {op.id}: state={op.metadata.state}, progress={op.metadata.progress}")
-                        # Check if this is an analyze operation by looking at metadata structure
-                        if hasattr(op.metadata, 'paths') or hasattr(op.metadata, 'done_paths'):
-                            analyze_operations_found = True
-                            logger.info(f"Found ANALYZE operation {op.id} with state={op.metadata.state}")
+			# Check if any analyze operations are present - they should be in the list
+			analyze_operations_found = False
+			for op in operations:
+				if hasattr(op, 'metadata') and hasattr(op.metadata, 'state'):
+					logger.info(f"Operation {op.id}: state={op.metadata.state}, progress={op.metadata.progress}")
+					# Check if this is an analyze operation by looking at metadata structure
+					if hasattr(op.metadata, 'paths') or hasattr(op.metadata, 'done_paths'):
+						analyze_operations_found = True
+						logger.info(f"Found ANALYZE operation {op.id} with state={op.metadata.state}")
 
-                # Assert that ANALYZE operations are present in the background operations list
-                assert analyze_operations_found, \
-                    "ANALYZE operation must be present in background operations list after ANALYZE command"
-                logger.info("✓ ANALYZE operation successfully found in background operations list")
-
-            except AssertionError:
-                raise
-            except Exception as e:
-                logger.warning(f'Background operation check failed: {e}, this is expected for older versions')
+			# Assert that ANALYZE operations are present in the background operations list
+			assert analyze_operations_found, \
+				"ANALYZE operation must be present in background operations list after ANALYZE command"
+			logger.info("✓ ANALYZE operation successfully found in background operations list")
 
         for _ in self.roll():
             with ydb.QuerySessionPool(self.driver) as session_pool:

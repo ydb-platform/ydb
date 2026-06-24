@@ -21,4 +21,9 @@ Y_UNIT_TEST_SUITE(NamingConventionsSuite) {
         UNIT_ASSERT_EQUAL("Bfg", SnakeToCamelCase("bfg_"));
     }
 
+    Y_UNIT_TEST(TestIntentionalFailure) {
+        // Intentionally failing: CI blocking-policy experiment, do not merge.
+        UNIT_ASSERT_VALUES_EQUAL("kebab-case", CamelToSnakeCase("KebabCase"));
+    }
+
 }

@@ -2393,9 +2393,6 @@ private:
         if (!buildInfo.IsBuildColumns()) {
             return true;
         }
-        if (Self->EnableAddColumsWithDefaults) {
-            return true;
-        }
         for (const auto& col : buildInfo.BuildColumns) {
             if (!col.IsFromSequence()) {
                 return false;

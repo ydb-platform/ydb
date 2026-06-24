@@ -256,9 +256,6 @@ public:
                     break;
                 }
             }
-            if (!Self->EnableAddColumsWithDefaults && !allFromSequence) {
-                return Reply(Ydb::StatusIds::PRECONDITION_FAILED, "Adding columns with defaults is disabled");
-            }
 
             buildInfo->TargetName = tablePath.PathString();
             // put some validation here for the build operation

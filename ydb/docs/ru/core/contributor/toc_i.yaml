@@ -35,6 +35,8 @@ items:
     href: configuration-v2.md
   - name: Режим bridge
     href: bridge.md
+  - name: Рекомендации по безопасности Developer UI
+    href: developer-ui-security-guidelines.md
   - name: Spilling Service
     href: spilling-service.md
   - name: Тестирование с помощью нагружающих акторов

@@ -1,19 +1,15 @@
 ydb/core/blobstorage/ut_blobstorage BlobPatching.PatchBlock42
-ydb/core/blobstorage/ut_blobstorage Get.TestRdmaRegiseredMemory
 ydb/core/blobstorage/ut_blobstorage unittest.[*/*] chunk
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_Always
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_FirstOnly
 ydb/core/kqp/ut/arrow KqpResultSetFormats.ArrowFormat_SchemaInclusionMode_Unspecified
-ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.OffsetsAndStateRecoveryAfterQueryTextChange
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQueryWithMultipleWrites
 ydb/core/kqp/ut/olap KqpOlapSysView.StatsSysViewRanges
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-QueryService
 ydb/core/kqp/ut/olap/indexes KqpOlapIndexes.VerifyBloomFilterIndexSpeedsUpQueriesInAppropriateScenarios-SchemeQuery
-ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_1MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_1MB_Topic_offset+middle_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
-ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_6MB_Topic_offset+middle_WithRestart
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/tx_proxy/ut_base_tenant TModifyUserTest.ModifyUser
@@ -33,8 +29,6 @@ ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLoca
 ydb/tests/functional/bridge test_bridge.py.TestBridgeBasic.test_failover
 ydb/tests/functional/config test_config_with_metadata.py.TestKiKiMRStoreConfigDir.test_config_stored_in_config_store
 ydb/tests/functional/config test_distconf.py.TestKiKiMRDistConfBasic.test_cluster_expand_with_seed_nodes
-ydb/tests/functional/dstool test_canonical_requests.py.Test.test_pdisk_check_leaked_slots
-ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test[many_tables]
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk
 ydb/tests/stress/oltp_workload/tests test_workload.py.TestYdbWorkload.test
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test

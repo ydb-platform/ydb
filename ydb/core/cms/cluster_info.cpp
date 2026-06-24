@@ -980,24 +980,24 @@ void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> i
 
 void TClusterInfo::FillNodeRoles(const TNodeInfo &node, Ydb::Maintenance::Node &out) const {
     if (node.Services & EService::DynamicNode) {
-        out.add_roles(Ydb::Maintenance::NODE_ROLE_COMPUTE);
+        out.add_roles()->mutable_compute();
     } else {
-        out.add_roles(Ydb::Maintenance::NODE_ROLE_STORAGE);
+        out.add_roles()->mutable_storage();
     }
 
     if (IsStateStorageReplicaNode(node.NodeId)) {
-        out.add_roles(Ydb::Maintenance::NODE_ROLE_STATE_STORAGE);
+        out.add_roles()->mutable_state_storage();
     }
 
     for (const auto &vdiskId : node.VDisks) {
         if (IsStaticGroupVDisk(vdiskId)) {
-            out.add_roles(Ydb::Maintenance::NODE_ROLE_STATIC_GROUP);
+            out.add_roles()->mutable_static_group();
             break;
         }
     }
 
     if (NodeToTabletTypes.contains(node.NodeId)) {
-        out.add_roles(Ydb::Maintenance::NODE_ROLE_SYSTEM_TABLET);
+        out.add_roles()->mutable_system_tablet();
     }
 }
 

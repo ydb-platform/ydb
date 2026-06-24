@@ -551,10 +551,10 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         cluster.FillNodeRoles(cluster.Node(nodeId), out);
 
         TSet<int> actual;
-        for (int i = 0; i < out.roles_size(); ++i) {
-            const int role = out.roles(i);
-            const bool inserted = actual.insert(role).second;
-            UNIT_ASSERT_C(inserted, "node " << nodeId << " has duplicate role " << role);
+        for (const auto &role : out.roles()) {
+            const int roleCase = role.role_case();
+            const bool inserted = actual.insert(roleCase).second;
+            UNIT_ASSERT_C(inserted, "node " << nodeId << " has duplicate role " << roleCase);
         }
 
         UNIT_ASSERT_VALUES_EQUAL(actual.size(), expected.size());
@@ -606,18 +606,18 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
         UNIT_ASSERT(cluster->IsStateStorageReplicaNode(3));
 
         // Node 1: minimal storage node.
-        CheckNodeRoles(*cluster, 1, {Ydb::Maintenance::NODE_ROLE_STORAGE});
+        CheckNodeRoles(*cluster, 1, {Ydb::Maintenance::NodeRole::kStorage});
         // Node 2: minimal compute node.
-        CheckNodeRoles(*cluster, 2, {Ydb::Maintenance::NODE_ROLE_COMPUTE});
+        CheckNodeRoles(*cluster, 2, {Ydb::Maintenance::NodeRole::kCompute});
         // Node 3: maximal set of co-occurring roles.
         CheckNodeRoles(*cluster, 3, {
-            Ydb::Maintenance::NODE_ROLE_STORAGE,
-            Ydb::Maintenance::NODE_ROLE_STATE_STORAGE,
-            Ydb::Maintenance::NODE_ROLE_STATIC_GROUP,
-            Ydb::Maintenance::NODE_ROLE_SYSTEM_TABLET,
+            Ydb::Maintenance::NodeRole::kStorage,
+            Ydb::Maintenance::NodeRole::kStateStorage,
+            Ydb::Maintenance::NodeRole::kStaticGroup,
+            Ydb::Maintenance::NodeRole::kSystemTablet,
         });
         // Node 4: storage node with a dynamic-group VDisk only.
-        CheckNodeRoles(*cluster, 4, {Ydb::Maintenance::NODE_ROLE_STORAGE});
+        CheckNodeRoles(*cluster, 4, {Ydb::Maintenance::NodeRole::kStorage});
     }
 }
 

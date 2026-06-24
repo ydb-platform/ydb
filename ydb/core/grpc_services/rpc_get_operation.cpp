@@ -14,6 +14,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
+#include <ydb/core/statistics/events.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
 #include <ydb/core/tx/schemeshard/schemeshard_backup.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
@@ -67,6 +68,8 @@ class TGetOperationRPC
             return "[GetForcedCompaction]";
         case TOperationId::FULL_BACKUP:
             return "[GetFullBackup]";
+        case TOperationId::ANALYZE:
+            return "[GetAnalyze]";
         default:
             return "[Untagged]";
         }
@@ -93,12 +96,101 @@ class TGetOperationRPC
         }
     }
 
+    void HandleNavigateResult(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        if (OperationId_.GetKind() == TOperationId::ANALYZE) {
+            HandleSANavigateResult(ev);
+        } else {
+            TRpcOperationRequestActor::Handle(ev);
+        }
+    }
+
+    // SA-specific navigation (two-hop, mirrors TRpcAnalyzeOperationRequestActor)
+    void ResolveStatisticsAggregatorForAnalyze() {
+        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+        auto req = MakeHolder<TNavigate>();
+        req->DatabaseName = GetDatabaseName();
+        auto& entry = req->ResultSet.emplace_back();
+        entry.Operation = TNavigate::OpPath;
+        entry.Path = NKikimr::SplitPath(GetDatabaseName());
+        entry.RedirectRequired = false;
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(req.Release()),
+             0, SANav1Cookie);
+    }
+
+    void HandleSANavigateResult(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+        const auto& request = ev->Get()->Request;
+        if (request->ResultSet.empty() || request->ErrorCount > 0) {
+            return ReplyWithStatus(StatusIds::SCHEME_ERROR);
+        }
+        const auto& entry = request->ResultSet.front();
+        if (!entry.DomainInfo) {
+            return ReplyWithStatus(StatusIds::INTERNAL_ERROR);
+        }
+
+        if (!this->CheckAccess(CanonizePath(entry.Path), entry.SecurityObject, GetRequiredAccessRights())) {
+            return;
+        }
+
+        if (ev->Cookie == SANav2Cookie) {
+            // Second hop: got resources domain
+            if (!entry.DomainInfo->Params.HasStatisticsAggregator()) {
+                return ReplyWithStatus(StatusIds::INTERNAL_ERROR);
+            }
+            SendToSA(entry.DomainInfo->Params.GetStatisticsAggregator());
+            return;
+        }
+
+        // First hop
+        const auto& domainInfo = entry.DomainInfo;
+        if (!domainInfo->IsServerless()) {
+            if (domainInfo->Params.HasStatisticsAggregator()) {
+                SendToSA(domainInfo->Params.GetStatisticsAggregator());
+            } else {
+                NavigateDomainKeyForSA(domainInfo->DomainKey);
+            }
+        } else {
+            NavigateDomainKeyForSA(domainInfo->ResourcesDomainKey);
+        }
+    }
+
+    void NavigateDomainKeyForSA(const TPathId& domainKey) {
+        using TNavigate = NSchemeCache::TSchemeCacheNavigate;
+        auto nav = MakeHolder<TNavigate>();
+        nav->DatabaseName = GetDatabaseName();
+        auto& entry = nav->ResultSet.emplace_back();
+        entry.TableId = TTableId(domainKey.OwnerId, domainKey.LocalPathId);
+        entry.Operation = TNavigate::EOp::OpPath;
+        entry.RequestType = TNavigate::TEntry::ERequestType::ByTableId;
+        entry.RedirectRequired = false;
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(nav.Release()),
+             0, SANav2Cookie);
+    }
+
+    void SendToSA(ui64 saTabletId) {
+        NTabletPipe::TClientConfig config;
+        config.RetryPolicy = {.RetryLimitCount = 3};
+        SAPipeClient_ = RegisterWithSameMailbox(NTabletPipe::CreateClient(SelfId(), saTabletId, config));
+        NTabletPipe::SendData(SelfId(), SAPipeClient_,
+            new NStat::TEvStatistics::TEvAnalyzeOpGetRequest(GetDatabaseName(), AnalyzeOperationId_));
+    }
+
+    void Handle(NStat::TEvStatistics::TEvAnalyzeOpGetResponse::TPtr& ev, const TActorContext& ctx) {
+        const auto& record = ev->Get()->Record;
+        if (record.GetStatus() != Ydb::StatusIds::SUCCESS) {
+            ReplyGetOperationResponse(true, ctx, record.GetStatus());
+            return;
+        }
+        TEvGetOperationRequest::TResponse resp;
+        ::NKikimr::NGRpcService::ToOperation(record.GetAnalyzeOperation(), resp.mutable_operation());
+        Reply(resp, ctx);
+    }
+
     void PassAway() override {
         if (PipeActorId_) {
             NTabletPipe::CloseClient(SelfId(), PipeActorId_);
             PipeActorId_ = TActorId();
         }
-
+        NTabletPipe::CloseAndForgetClient(SelfId(), SAPipeClient_);
         TRpcOperationRequestActor::PassAway();
     }
 
@@ -127,6 +219,15 @@ public:
                 }
                 ResolveDatabase();
                 break;
+            case TOperationId::ANALYZE:
+                if (!AppData()->FeatureFlags.GetEnableAnalyzeLongRunningOperation()) {
+                    return ReplyWithStatus(StatusIds::UNSUPPORTED);
+                }
+                if (!TryGetUlidId(OperationId_, AnalyzeOperationId_)) {
+                    return ReplyWithStatus(StatusIds::BAD_REQUEST);
+                }
+                ResolveStatisticsAggregatorForAnalyze();
+                break;
             case TOperationId::SCRIPT_EXECUTION:
                 SendGetScriptExecutionOperation();
                 break;
@@ -154,6 +255,8 @@ public:
             HFunc(NSchemeShard::TEvBackup::TEvGetIncrementalBackupResponse, Handle);
             HFunc(NSchemeShard::TEvBackup::TEvGetBackupCollectionRestoreResponse, Handle);
             HFunc(NSchemeShard::TEvBackup::TEvGetFullBackupResponse, Handle);
+            HFunc(NStat::TEvStatistics::TEvAnalyzeOpGetResponse, Handle);
+            hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigateResult);
 
         default:
             return StateBase(ev);
@@ -396,7 +499,12 @@ private:
 
     TOperationId OperationId_;
     ui64 RawOperationId_ = 0;
+    TString AnalyzeOperationId_;   // 16-byte binary ULID for ANALYZE ops
     TActorId PipeActorId_;
+    TActorId SAPipeClient_;
+
+    static constexpr ui64 SANav1Cookie = 100;
+    static constexpr ui64 SANav2Cookie = 101;
 };
 
 void DoGetOperationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {

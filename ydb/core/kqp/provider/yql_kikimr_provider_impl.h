@@ -355,7 +355,7 @@ void FillLiteralProto(const NNodes::TCoPgConst& literal, Ydb::TypedValue& proto)
 
 // Optimizer rules
 TExprNode::TPtr KiBuildQuery(NNodes::TExprBase node, TExprContext& ctx, TStringBuf database, TIntrusivePtr<TKikimrTablesData> tablesData,
-    TTypeAnnotationContext& types, bool sequentialResults);
+    TTypeAnnotationContext& types, bool concurrentResults, bool isolateEffects = false);
 TExprNode::TPtr KiBuildResult(NNodes::TExprBase node,  const TString& cluster, TExprContext& ctx);
 
 const THashSet<TStringBuf>& KikimrDataSourceFunctions();

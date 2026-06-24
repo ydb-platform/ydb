@@ -499,18 +499,20 @@ private:
     }
 
     TMaybe<TNodePtr> BuildFromElement(TContext& ctx, const TYqlSource& source) const {
-        const auto build = [this](TNodePtr node, TString name) {
+        const auto build = [this](TNodePtr node, TString name, const TVector<TString>& columns) {
             YQL_ENSURE(!name.empty(), "An empty source name is unsupported");
 
+            TNodePtr columnList = Y();
+            for (const TString& column : columns) {
+                columnList = L(std::move(columnList), BuildQuotedAtom(Pos_, column));
+            }
+
             TNodePtr nameAtom = BuildQuotedAtom(Pos_, std::move(name));
-            return Q(Y(
-                std::move(node),
-                std::move(nameAtom),
-                Q(Y(/* Columns are passed through SetColumns */))));
+            return Q(Y(std::move(node), std::move(nameAtom), Q(std::move(columnList))));
         };
 
         if (!source.Alias) {
-            return build(source.Node, ctx.MakeName("_yql_source_"));
+            return build(source.Node, ctx.MakeName("_yql_source_"), /*columns=*/{});
         }
 
         if (auto& columns = source.Alias->Columns) {
@@ -518,14 +520,20 @@ private:
                 if (!values->SetColumns(std::move(columns), ctx)) {
                     return Nothing();
                 }
-            } else {
-                ctx.Error() << "Qualified by column names source alias "
-                            << "is viable only for VALUES statement";
-                return Nothing();
+
+                return build(source.Node, source.Alias->Name, /*columns=*/{});
             }
+
+            if (source.Alias->Kind == TYqlSourceAlias::EKind::CTE) {
+                return build(source.Node, source.Alias->Name, std::move(columns));
+            }
+
+            ctx.Error() << "Qualified by column names source alias "
+                        << "is viable only for VALUES statement";
+            return Nothing();
         }
 
-        return build(source.Node, source.Alias->Name);
+        return build(source.Node, source.Alias->Name, /*columns=*/{});
     }
 
     TNodePtr BuildJoinConstraint(const TYqlJoinConstraint& constraint) const {

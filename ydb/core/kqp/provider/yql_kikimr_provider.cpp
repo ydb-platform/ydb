@@ -174,6 +174,7 @@ void TKikimrQueryContext::Reset() {
     SuppressDdlChecks = false;
     StatsMode = EKikimrStatsMode::None;
     Type = EKikimrQueryType::Unspecified;
+    IsolateEffects = false;
     Deadlines = {};
     Limits = {};
 

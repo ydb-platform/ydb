@@ -3434,9 +3434,11 @@ Y_UNIT_TEST(WriteExplicitRowIdRejected) {
     assertRejected(R"sql( UPSERT INTO `/Root/RowIdTexts` (Pk, Text, __ydb_row_id) VALUES ("pk-a"u, "cats"u, 100); )sql");
     assertRejected(R"sql( REPLACE INTO `/Root/RowIdTexts` (Pk, Text, __ydb_row_id) VALUES ("pk-a"u, "cats"u, 100); )sql");
 
-    // Seed a row legitimately (no __ydb_row_id), then try to UPDATE the generated column.
+    // Seed a row legitimately (no __ydb_row_id), then try to set the generated column through both
+    // UPDATE forms: SET ... WHERE (KiUpdateTable) and ON (cols) VALUES (KiWriteTable / UpdateOn).
     UpsertRowIdData(db);
     assertRejected(R"sql( UPDATE `/Root/RowIdTexts` SET __ydb_row_id = 100 WHERE Pk = "pk-100"u; )sql");
+    assertRejected(R"sql( UPDATE `/Root/RowIdTexts` ON (Pk, __ydb_row_id) VALUES ("pk-100"u, 100); )sql");
 }
 
 Y_UNIT_TEST(RowIdHiddenFromSelectStarButExplicitlySelectable) {

@@ -26,7 +26,9 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
           {{"t", ToString(WriteMode)},
-           {"r", bundle->GetVChunkRange().Print()}}))
+           {"lsn", ToString(bundle->GetLsn())},
+           {"r", bundle->GetRange().Print()},
+           {"rv", bundle->GetVChunkRange().Print()}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , Bundle(std::move(bundle))

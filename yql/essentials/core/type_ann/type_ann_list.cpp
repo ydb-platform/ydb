@@ -5703,7 +5703,7 @@ namespace {
             return IGraphTransformer::TStatus::Error;
         }
 
-        if (!ctx.Types.OrderedColumns) {
+        if (!ctx.Types.DeriveColumnOrder) {
             output = input->HeadPtr();
             return IGraphTransformer::TStatus::Repeat;
         }

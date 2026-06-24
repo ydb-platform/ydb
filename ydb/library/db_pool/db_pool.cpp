@@ -104,7 +104,7 @@ public:
 private:
     void Handle(TEvents::TEvDbFunctionRequest::TPtr& ev) {
         Y_VALIDATE(!RequestInProgress, "Can not handle requests in parallel");
-        LOG_T("TEvDbFunctionRequest, has inflight: " << RequestInProgress);
+        LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::DB_POOL, LogPrefix() << "TEvDbFunctionRequest, has inflight: " << RequestInProgress);
 
         Request = TFunctionRequest{ev->Sender, ev->Cookie, std::move(ev->Get()->Handler)};
         RequestInProgress = true;
@@ -121,7 +121,7 @@ private:
 
     void Handle(TEvents::TEvDbFunctionResponse::TPtr& ev) {
         Y_VALIDATE(RequestInProgress, "Unexpected worker state");
-        LOG_T("TEvDbFunctionResponse, has inflight: " << RequestInProgress);
+        LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::DB_POOL, LogPrefix() << "TEvDbFunctionResponse, has inflight: " << RequestInProgress);
 
         Counters.RequestsTime->Collect((TInstant::Now() - Request.StartTime).MilliSeconds());
         Counters.GetStatus(ev->Get()->Status)->Inc();
@@ -228,7 +228,7 @@ public:
 private:
     void Handle(TEvents::TEvDbFunctionRequest::TPtr& ev) {
         const auto& sender = ev->Sender;
-        LOG_T("TEvDbFunctionRequest from " << sender << ", Queue size = " << Requests.size());
+        LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::DB_POOL, LogPrefix() << "TEvDbFunctionRequest from " << sender << ", Queue size = " << Requests.size());
 
         Counters.IncomingRate->Inc();
         Counters.QueueSize->Inc();
@@ -239,11 +239,11 @@ private:
 
     void Handle(TEvents::TEvDbFunctionResponse::TPtr& ev) {
         const auto sender = ev->Sender;
-        LOG_T("TEvDbFunctionResponse from " << sender << ", Queue size = " << Requests.size());
+        LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::DB_POOL, LogPrefix() << "TEvDbFunctionResponse from " << sender << ", Queue size = " << Requests.size());
 
         const auto it = InflightRequests.find(sender);
         if (it == InflightRequests.end()) {
-            LOG_I("TEvDbFunctionResponse from unknown sender " << sender);
+            LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::DB_POOL, LogPrefix() << "TEvDbFunctionResponse from unknown sender " << sender);
             return;
         }
 
@@ -256,11 +256,11 @@ private:
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         const auto sender = ev->Sender;
-        LOG_E("Undelivered from: " << ev->Sender << ", reason: " << ev->Get()->Reason << ", Queue size = " << Requests.size());
+        LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::DB_POOL, LogPrefix() << "Undelivered from: " << ev->Sender << ", reason: " << ev->Get()->Reason << ", Queue size = " << Requests.size());
 
         const auto it = InflightRequests.find(sender);
         if (it == InflightRequests.end()) {
-            LOG_I("Undelivered from unknown sender " << sender);
+            LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::DB_POOL, LogPrefix() << "Undelivered from unknown sender " << sender);
             return;
         }
 
@@ -292,7 +292,7 @@ private:
         Counters.QueuedTime->Collect((TInstant::Now() - request.StartTime).MilliSeconds());
         ReportStats();
 
-        LOG_T("ProcessQueue, Queue size = " << Requests.size());
+        LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::DB_POOL, LogPrefix() << "ProcessQueue, Queue size = " << Requests.size());
 
         const auto worker = *FreeWorkers.begin();
         FreeWorkers.erase(FreeWorkers.begin());
@@ -374,7 +374,7 @@ public:
 
     void Bootstrap() {
         const auto& proxyId = DbPool->GetProxyActorId();
-        LOG_T("Bootstrap, send request to: " << proxyId);
+        LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::DB_POOL, LogPrefix() << "Bootstrap, send request to: " << proxyId);
         Become(&TDbRequest::StateFunc);
         Send(proxyId, new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);
     }
@@ -382,14 +382,14 @@ public:
 private:
     void Handle(TEvents::TEvDbFunctionResponse::TPtr& ev) {
         const auto status = ev->Get()->Status;
-        LOG_T("DbRequest actor response from: " << ev->Sender << ", status: " << status);
+        LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::DB_POOL, LogPrefix() << "DbRequest actor response from: " << ev->Sender << ", status: " << status);
         Promise.SetValue(status);
         PassAway();
     }
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         const auto& proxyId = DbPool->GetProxyActorId();
-        LOG_E("Undelivered from: " << ev->Sender << ", reason: " << ev->Get()->Reason << ", resend request to: " << proxyId);
+        LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::DB_POOL, LogPrefix() << "Undelivered from: " << ev->Sender << ", reason: " << ev->Get()->Reason << ", resend request to: " << proxyId);
         Send(proxyId, new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);
     }
 

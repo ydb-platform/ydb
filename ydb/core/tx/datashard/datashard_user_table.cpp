@@ -328,8 +328,8 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
     IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
     UniqueIndexKeySize = descr.GetUniqueIndexKeySize();
-    if (descr.HasIndexImplType()) {
-        IndexImplType = descr.GetIndexImplType();
+    if (descr.HasTableType()) {
+        TableType = descr.GetTableType();
     }
 
     CheckSpecialColumns();

@@ -16,6 +16,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <util/system/hostname.h>
+#include <util/string/subst.h>
 
 namespace NKikimr {
 
@@ -5266,6 +5267,221 @@ Y_UNIT_TEST_SUITE(TConsoleConfigHelpersTests) {
         auto reply = runtime.GrabEdgeEventRethrow<TEvConsole::TEvRemoveConfigSubscriptionResponse>(handle);
         UNIT_ASSERT_VALUES_EQUAL(reply->Record.GetStatus().GetCode(), Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT_VALUES_EQUAL(handle->Cookie, 123);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TConsoleDatabaseConfigSelectorsTests) {
+
+    TTenantTestConfig DatabaseSelectorsTestConfig() {
+        TTenantTestConfig res = DefaultConsoleTestConfig();
+        res.FakeSchemeShard = false;
+        res.Domains[0].Subdomains.clear();
+        res.Nodes[0].TenantPoolConfig.StaticSlots.clear();
+        return res;
+    }
+
+    const TString MainConfigForSelectors = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  yaml_config_enabled: true
+  feature_flags:
+    database_yaml_config_allowed: true
+)";
+
+    const TString PermissiveTenantUserAttribute      = NConsole::TConfigsManager::GetPermissiveDatabaseConfigSelectorsTenantAttributeName();
+    const TString NotAllowedErrorSubstring           = "\\'selector_config\\' and \\'allowed_labels\\' are not allowed";
+    const TString ForbiddenTenantLabelErrorSubstring = "\\'tenant\\' label is forbidden";
+
+    Y_UNIT_TEST(TestAllowDatabaseConfigSelectorsOnlyWithPermissiveTenantUserAttribute) {
+        NKikimrConfig::TAppConfig appcfg;
+        appcfg.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+
+        TTenantTestRuntime runtime(DatabaseSelectorsTestConfig(), appcfg);
+        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, {{"hdd", 1}});
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, MainConfigForSelectors);
+
+        int dbVersion = 0;
+
+        const TString dbConfigWithSelector = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: VERSION
+config:
+  feature_flags: !inherit
+    enable_external_hive: false
+selector_config:
+- description: compute
+  selector:
+    node_type: compute
+  config:
+    feature_flags: !inherit
+      enable_external_hive: true
+)";
+
+        const TString dbConfigWithAllowedLabels = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: VERSION
+config:
+  feature_flags: !inherit
+    enable_external_hive: false
+allowed_labels:
+  some:
+    type: string
+)";
+
+        // Each check perfomed both with 'runtime apply' logic and 'survives Console restart' logic
+
+        // Database config selectors and allowed_labels must be forbidden without PermissiveTenantUserAttribute
+        for (int i = 0; i < 2; i++) {
+            CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST,
+                SubstGlobalCopy(dbConfigWithSelector, "VERSION", ToString(dbVersion).c_str()),
+                NotAllowedErrorSubstring);
+            CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST,
+                SubstGlobalCopy(dbConfigWithAllowedLabels, "VERSION", ToString(dbVersion).c_str()),
+                NotAllowedErrorSubstring);
+
+            GracefulRestartTablet(runtime, MakeConsoleID(), runtime.AllocateEdgeActor(0));
+        }
+
+        // Database config selectors and allowed_labels must be permitted with PermissiveTenantUserAttribute = true
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+            PermissiveTenantUserAttribute, "true");
+        for (int i = 0; i < 2; i++) {
+            CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS,
+                SubstGlobalCopy(dbConfigWithSelector, "VERSION", ToString(dbVersion++).c_str()));
+            CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS,
+                SubstGlobalCopy(dbConfigWithAllowedLabels, "VERSION", ToString(dbVersion++).c_str()));
+
+            GracefulRestartTablet(runtime, MakeConsoleID(), runtime.AllocateEdgeActor(0));
+        }
+
+
+        // Database config selectors and allowed_labels must be forbidden with PermissiveTenantUserAttribute = false
+        // Previous database config with selectors must still be active
+        auto stalledDbConfigWithSelector = SubstGlobalCopy(dbConfigWithSelector, "VERSION", ToString(dbVersion++).c_str());
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, stalledDbConfigWithSelector);
+
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+            PermissiveTenantUserAttribute, "false");
+        for (int i = 0; i < 2; i++) {
+            CheckDatabaseConfigReplacedWith(runtime, TENANT1_1_NAME, stalledDbConfigWithSelector);
+
+            CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST,
+                SubstGlobalCopy(dbConfigWithSelector, "VERSION", ToString(dbVersion).c_str()),
+                NotAllowedErrorSubstring);
+            CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST,
+                SubstGlobalCopy(dbConfigWithAllowedLabels, "VERSION", ToString(dbVersion).c_str()),
+                NotAllowedErrorSubstring);
+
+            GracefulRestartTablet(runtime, MakeConsoleID(), runtime.AllocateEdgeActor(0));
+        }
+
+        // Database config selectors and allowed_labels must be forbidden when PermissiveTenantUserAttribute deleted
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+            PermissiveTenantUserAttribute, "");
+        for (int i = 0; i < 2; i++) {
+            CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST,
+                SubstGlobalCopy(dbConfigWithSelector, "VERSION", ToString(dbVersion).c_str()),
+                NotAllowedErrorSubstring);
+            CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST,
+                SubstGlobalCopy(dbConfigWithAllowedLabels, "VERSION", ToString(dbVersion).c_str()),
+                NotAllowedErrorSubstring);
+
+            GracefulRestartTablet(runtime, MakeConsoleID(), runtime.AllocateEdgeActor(0));
+        }
+    }
+
+    Y_UNIT_TEST(TestRejectTenantLabelInSelectorsAndAllowedLabels) {
+        NKikimrConfig::TAppConfig appcfg;
+        appcfg.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+
+        TTenantTestRuntime runtime(DatabaseSelectorsTestConfig(), appcfg);
+        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, {{"hdd", 1}});
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+            PermissiveTenantUserAttribute, "true");
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, MainConfigForSelectors);
+
+        const TString dbConfigWithSelector = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: 0
+config:
+  feature_flags: !inherit
+    enable_external_hive: false
+selector_config:
+- description: tenant selector
+  selector:
+    tenant: /some/tenant
+  config:
+    feature_flags: !inherit
+      enable_external_hive: true
+)";
+
+        const TString dbConfigWithAllowedLabels = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: 0
+config:
+  feature_flags: !inherit
+    enable_external_hive: false
+allowed_labels:
+  tenant:
+    type: string
+)";
+
+        // 'tenant' label in selectors must be forbidden
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST, dbConfigWithSelector,
+            ForbiddenTenantLabelErrorSubstring);
+
+        // 'tenant' label in allowed_labels must be forbidden
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::BAD_REQUEST, dbConfigWithAllowedLabels,
+            ForbiddenTenantLabelErrorSubstring);
+    }
+
+    Y_UNIT_TEST(TestImplicitNodeTypeLabelAllowed) {
+        NKikimrConfig::TAppConfig appcfg;
+        appcfg.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+
+        TTenantTestRuntime runtime(DatabaseSelectorsTestConfig(), appcfg);
+        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, {{"hdd", 1}});
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+            PermissiveTenantUserAttribute, "true");
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, MainConfigForSelectors);
+
+        const TString dbConfig = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: 0
+
+config:
+  feature_flags: !inherit
+    enable_external_hive: false
+
+selector_config:
+
+- description: node_type selector
+  selector:
+    node_type: a
+  config:
+    feature_flags: !inherit
+      enable_external_hive: true
+)";
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, dbConfig);
     }
 }
 

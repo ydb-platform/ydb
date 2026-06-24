@@ -159,6 +159,7 @@ private:
     size_t InflightWritesCount = 0;
     size_t InflightFlushesCount = 0;
     bool CleaningUpScheduled = false;
+    bool Stopped = false;
 
     TVector<IRequestExecutorWeakPtr> Inflight;
 

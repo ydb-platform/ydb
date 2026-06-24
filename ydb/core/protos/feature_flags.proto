@@ -323,5 +323,6 @@ message TFeatureFlags {
     optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
     optional bool EnableFulltextIndexPrefix = 282 [default = false];
     optional bool EnableAccessServiceV2Interface = 283 [default = false, (RequireRestart) = true];
-    optional bool EnableParquetForExport = 284 [default = true];
+    optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
+    optional bool EnableParquetForExport = 285 [default = true];
 }

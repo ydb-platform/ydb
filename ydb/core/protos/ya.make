@@ -85,6 +85,7 @@ SRCS(
     feature_flags.proto
     filestore_config.proto
     flat_scheme_op.proto
+    analyze_operation.proto
     flat_tx_scheme.proto
     follower_group.proto
     forced_compaction.proto

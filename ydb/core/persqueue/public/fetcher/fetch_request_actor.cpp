@@ -345,7 +345,7 @@ public:
         auto partitionIndex = record.GetCookie();
         YDB_LOG_DEBUG("Handle TEvPersQueue::TEvHasDataInfoResponse",
             {"logPrefix", LOG_PREFIX},
-            {"#_record", record});
+            {"ev", record});
         if (partitionIndex >= PartitionStatus.size()) {
             Y_VERIFY_DEBUG(partitionIndex < PartitionStatus.size());
             return;
@@ -378,7 +378,7 @@ public:
         auto& record = ev->Get()->Record;
         YDB_LOG_DEBUG("Handle TEvPersQueue::TEvResponse",
             {"logPrefix", LOG_PREFIX},
-            {"#_record", record});
+            {"ev", record});
         AFL_ENSURE(record.HasPartitionResponse());
 
         if (record.GetPartitionResponse().GetCookie() != FetchRequestCurrentPartitionIndex || FetchRequestCurrentReadTablet == 0) {

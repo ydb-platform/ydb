@@ -78,7 +78,7 @@ void TReaderActor::DoSelectPartition() {
 void TReaderActor::Handle(TEvPQ::TEvMLPGetPartitionResponse::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPGetPartitionResponse",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->Record", ev->Get()->Record});
+        {"ev", ev->Get()->Record});
     auto* result = ev->Get();
     switch (result->GetStatus()) {
         case Ydb::StatusIds::SUCCESS: {
@@ -185,7 +185,7 @@ void TReaderActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
     // TODO MLP Retry
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPErrorResponse",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->Record", ev->Get()->Record});
+        {"ev", ev->Get()->Record});
     ReplyErrorAndDie(ev->Get()->GetStatus(), std::move(ev->Get()->GetErrorMessage()));
 }
 

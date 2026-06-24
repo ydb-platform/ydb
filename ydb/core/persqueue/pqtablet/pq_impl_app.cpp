@@ -156,7 +156,7 @@ private:
         YDB_LOG_DEBUG_COMP(Service, "Answer TEvRemoteHttpInfoRes: to self",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"sender", Sender},
-            {"#_ctx.SelfID", ctx.SelfID});
+            {"selfId", ctx.SelfID});
         ctx.Send(Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
         Die(ctx);
     }

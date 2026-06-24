@@ -1280,7 +1280,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         {"logPrefix", NPQ_LOG_PREFIX},
         {"topicName", TopicName()},
         {"partition", Partition},
-        {"#_EscapeC(p.Msg.SourceId)", EscapeC(p.Msg.SourceId)},
+        {"sourceId", EscapeC(p.Msg.SourceId)},
         {"disableDeduplication", p.Msg.DisableDeduplication},
         {"seqNo", p.Msg.SeqNo},
         {"localSeqNo", sourceId.SeqNo()},
@@ -1344,7 +1344,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                 {"logPrefix", NPQ_LOG_PREFIX},
                 {"topicName", TopicName()},
                 {"partition", Partition},
-                {"#_EscapeC(p.Msg.SourceId)", EscapeC(p.Msg.SourceId)},
+                {"sourceId", EscapeC(p.Msg.SourceId)},
                 {"seqNo", p.Msg.SeqNo},
                 {"initialSeqNo", p.InitialSeqNo},
                 {"#_seqNo", sourceId.CommittedSeqNo()},
@@ -1388,7 +1388,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             {"logPrefix", NPQ_LOG_PREFIX},
             {"topicName", TopicName()},
             {"partition", Partition},
-            {"#_EscapeC(p.Msg.SourceId)", EscapeC(p.Msg.SourceId)},
+            {"sourceId", EscapeC(p.Msg.SourceId)},
             {"#_*hbVersion", *hbVersion});
 
         sourceId.Update(THeartbeat{*hbVersion, p.Msg.Data});
@@ -1441,7 +1441,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     if (deduplicationResult) {
         YDB_LOG_DEBUG("Deduplicate message by MessageDeduplicationId",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_p.Msg.SeqNo", p.Msg.SeqNo});
+            {"seqNo", p.Msg.SeqNo});
         p.DeduplicatedByMessageId = true;
         p.Offset = deduplicationResult.value();
 
@@ -1487,9 +1487,9 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
         {"logPrefix", NPQ_LOG_PREFIX},
         {"topicName", TopicName()},
         {"partition", Partition},
-        {"#_EscapeC(p.Msg.SourceId)", EscapeC(p.Msg.SourceId)},
-        {"#_p.Msg.SeqNo", p.Msg.SeqNo},
-        {"#_p.Msg.PartNo", p.Msg.PartNo});
+        {"sourceId", EscapeC(p.Msg.SourceId)},
+        {"seqNo", p.Msg.SeqNo},
+        {"partNo", p.Msg.PartNo});
     TString s;
     if (!BlobEncoder.PartitionedBlob.IsNextPart(p.Msg.SourceId, p.Msg.SeqNo, p.Msg.PartNo, &s)) {
         //this must not be happen - client sends gaps, fail this client till the end
@@ -1549,9 +1549,9 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             {"logPrefix", NPQ_LOG_PREFIX},
             {"topicName", TopicName()},
             {"partition", Partition},
-            {"#_EscapeC(p.Msg.SourceId)", EscapeC(p.Msg.SourceId)},
-            {"#_p.Msg.SeqNo", p.Msg.SeqNo},
-            {"#_p.Msg.PartNo", p.Msg.PartNo},
+            {"sourceId", EscapeC(p.Msg.SourceId)},
+            {"seqNo", p.Msg.SeqNo},
+            {"partNo", p.Msg.PartNo},
             {"#_newWrite->Key", newWrite->Key},
             {"#_newWrite->Value.size", newWrite->Value.size()});
     }
@@ -1596,9 +1596,9 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             {"logPrefix", NPQ_LOG_PREFIX},
             {"topicName", TopicName()},
             {"partition", Partition},
-            {"#_EscapeC(p.Msg.SourceId)", EscapeC(p.Msg.SourceId)},
-            {"#_p.Msg.SeqNo", p.Msg.SeqNo},
-            {"#_p.Msg.PartNo", p.Msg.PartNo},
+            {"sourceId", EscapeC(p.Msg.SourceId)},
+            {"seqNo", p.Msg.SeqNo},
+            {"partNo", p.Msg.PartNo},
             {"#_BlobEncoder.PartitionedBlob.GetFormedBlobs().size", BlobEncoder.PartitionedBlob.GetFormedBlobs().size()},
             {"newHead", BlobEncoder.NewHead});
 
@@ -1868,7 +1868,7 @@ void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActor
         {"#_BlobEncoder.Head.Offset", BlobEncoder.Head.Offset},
         {"#_BlobEncoder.EndOffset", BlobEncoder.EndOffset},
         {"#_BlobEncoder.NewHead.GetNextOffset", BlobEncoder.NewHead.GetNextOffset()},
-        {"#_key", key},
+        {"key", key},
         {"#_res.second", res.second},
         {"#_ctx.Now().MilliSeconds", ctx.Now().MilliSeconds()});
     AddNewFastWriteBlob(res, request, ctx);

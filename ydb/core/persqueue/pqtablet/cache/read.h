@@ -66,8 +66,8 @@ namespace NPQ {
                 if (it != ReadsInProgress.end()) {
                     YDB_LOG_DEBUG_COMP(Service, "Read request is blocked. Partition offset",
                         {"logPrefix", NPQ_LOG_PREFIX},
-                        {"#_blob.Partition", blob.Partition},
-                        {"#_blob.Offset", blob.Offset});
+                        {"blobPartition", blob.Partition},
+                        {"blobOffset", blob.Offset});
                     // Save only first occured blocker, others (if any) would be checked later
                     BlockedReads[blob].emplace_back(std::move(kvRequest));
                     return true;
@@ -87,8 +87,8 @@ namespace NPQ {
                 if (it != BlockedReads.end()) {
                     YDB_LOG_DEBUG_COMP(Service, "Read requests are unblocked. Partition offset num unblocked",
                         {"logPrefix", NPQ_LOG_PREFIX},
-                        {"#_blob.Partition", blob.Partition},
-                        {"#_blob.Offset", blob.Offset},
+                        {"blobPartition", blob.Partition},
+                        {"blobOffset", blob.Offset},
                         {"#_it->second.size", it->second.size()});
                     for (TKvRequest& kvReq : it->second)
                         unblocked.emplace_back(std::move(kvReq));
@@ -336,9 +336,9 @@ namespace NPQ {
                     YDB_LOG_DEBUG_COMP(Service, "CacheProxy. Passthrough blob. Partition offset partNo count size",
                         {"logPrefix", NPQ_LOG_PREFIX},
                         {"#_kvReq.Partition", kvReq.Partition},
-                        {"#_blob.Offset", blob.Offset},
+                        {"blobOffset", blob.Offset},
                         {"#_blob.PartNo", blob.PartNo},
-                        {"#_blob.Count", blob.Count},
+                        {"blobCount", blob.Count},
                         {"#_value.size", value.size()});
                 } else {
                     kvReq.MetadataWritesCount++;

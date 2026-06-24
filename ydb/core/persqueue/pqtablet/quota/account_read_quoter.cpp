@@ -95,7 +95,7 @@ void TBasicAccountQuoter::HandleQuotaConsumed(NAccountQuoterEvents::TEvConsumed:
     ConsumedBytesInCredit += ev->Get()->BytesConsumed;
     YDB_LOG_DEBUG_COMP(Service, "Consumed quota bytes by consumed in credit /",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->BytesConsumed", ev->Get()->BytesConsumed},
+        {"BytesConsumed", ev->Get()->BytesConsumed},
         {"cookie", ev->Get()->RequestCookie},
         {"consumedBytesInCredit", ConsumedBytesInCredit},
         {"creditBytes", CreditBytes});

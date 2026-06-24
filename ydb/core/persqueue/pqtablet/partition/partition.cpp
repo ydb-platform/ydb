@@ -730,7 +730,7 @@ void TPartition::InitComplete(const TActorContext& ctx) {
         {"topicName", TopicName()},
         {"partition", Partition},
         {"tabletGeneration", TabletGeneration},
-        {"#_ctx.SelfID", ctx.SelfID});
+        {"selfId", ctx.SelfID});
 
     TStringBuilder ss;
     ss << "SYNC INIT topic " << TopicName() << " partitition " << Partition
@@ -1349,8 +1349,8 @@ void TPartition::Handle(TEvPQ::TEvProposePartitionConfig::TPtr& ev, const TActor
 {
     YDB_LOG_DEBUG_COMP(Service, "Handle TEvPQ::TEvProposePartitionConfig Step TxId",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->Step", ev->Get()->Step},
-        {"#_ev->Get()->TxId", ev->Get()->TxId});
+        {"Step", ev->Get()->Step},
+        {"TxId", ev->Get()->TxId});
 
     ProcessPendingEvent(ev, ctx);
 }
@@ -1449,8 +1449,8 @@ void TPartition::Handle(TEvPQ::TEvTxCalcPredicate::TPtr& ev, const TActorContext
 {
     YDB_LOG_DEBUG_COMP(Service, "Handle TEvPQ::TEvTxCalcPredicate Step TxId",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->Step", ev->Get()->Step},
-        {"#_ev->Get()->TxId", ev->Get()->TxId});
+        {"Step", ev->Get()->Step},
+        {"TxId", ev->Get()->TxId});
 
     ev->Get()->Span = NWilson::TSpan(TWilsonTopic::TopicTopLevel,
                                      std::move(ev->TraceId),
@@ -1503,8 +1503,8 @@ void TPartition::Handle(TEvPQ::TEvTxCommit::TPtr& ev, const TActorContext& ctx)
 {
     YDB_LOG_DEBUG_COMP(Service, "Handle TEvPQ::TEvTxCommit Step TxId",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->Step", ev->Get()->Step},
-        {"#_ev->Get()->TxId", ev->Get()->TxId});
+        {"Step", ev->Get()->Step},
+        {"TxId", ev->Get()->TxId});
 
     ev->Get()->Span = NWilson::TSpan(TWilsonTopic::TopicTopLevel,
                                      std::move(ev->TraceId),
@@ -1557,8 +1557,8 @@ void TPartition::Handle(TEvPQ::TEvTxRollback::TPtr& ev, const TActorContext& ctx
 {
     YDB_LOG_DEBUG_COMP(Service, "Handle TEvPQ::TEvTxRollback Step TxId",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->Step", ev->Get()->Step},
-        {"#_ev->Get()->TxId", ev->Get()->TxId});
+        {"Step", ev->Get()->Step},
+        {"TxId", ev->Get()->TxId});
 
     ProcessPendingEvent(ev, ctx);
 }
@@ -1644,7 +1644,7 @@ void TPartition::WriteInfoResponseHandler(
 
     YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Received TEvGetWriteInfoResponse for TxId",
         {"logPrefix", LogPrefix()},
-        {"#_tx.GetTxId", tx.GetTxId()});
+        {"txId", tx.GetTxId()});
 
     tx.GetWriteInfoSpan.End();
     tx.GetWriteInfoSpan = {};
@@ -1693,7 +1693,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx,
             YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "TxAffectedSourcesIds contains SourceId TxId",
                 {"logPrefix", LogPrefix()},
                 {"#_s.first", s.first},
-                {"#_tx.GetTxId", tx.GetTxId()});
+                {"txId", tx.GetTxId()});
             ret = EProcessResult::Blocked;
             break;
         }
@@ -1701,21 +1701,21 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx,
             txSourceIds.push_back(s.first);
             YDB_LOG_DEBUG_COMP(Service, "TxId affect SourceId",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_tx.GetTxId", tx.GetTxId()},
+                {"txId", tx.GetTxId()},
                 {"#_s.first", s.first});
         } else {
             if (WriteAffectedSourcesIds.contains(s.first)) {
                 YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "WriteAffectedSourcesIds contains SourceId TxId",
                     {"logPrefix", LogPrefix()},
                     {"#_s.first", s.first},
-                    {"#_tx.GetTxId", tx.GetTxId()});
+                    {"txId", tx.GetTxId()});
                 ret = EProcessResult::Blocked;
                 break;
             }
             txSourceIds.push_back(s.first);
             YDB_LOG_DEBUG_COMP(Service, "TxId affect SourceId",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_tx.GetTxId", tx.GetTxId()},
+                {"txId", tx.GetTxId()},
                 {"#_s.first", s.first});
         }
 
@@ -1792,8 +1792,8 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvGetWriteInfoError
 void TPartition::Handle(TEvPQ::TEvGetWriteInfoError::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_DEBUG_COMP(Service, "Handle TEvPQ::TEvGetWriteInfoError Cookie Message",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->Cookie", ev->Get()->Cookie},
-        {"#_ev->Get()->Message", ev->Get()->Message});
+        {"Cookie", ev->Get()->Cookie},
+        {"Message", ev->Get()->Message});
 
     ev->Get()->SupportivePartition = ev->Sender;
 
@@ -2316,7 +2316,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
         CompacterKvRequestInflight = false;
         YDB_LOG_DEBUG_COMP(Service, "Topic partition Got compacter KV response, release RW lock",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+            {"clientSideName", TopicConverter->GetClientsideName()},
             {"partition", Partition});
         Send(ReadQuotaTrackerActor, new TEvPQ::TEvReleaseExclusiveLock());
         if (Compacter) {
@@ -3263,14 +3263,14 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
             YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "TxAffectedConsumers contains consumer TxId",
                 {"logPrefix", LogPrefix()},
                 {"consumer", consumer},
-                {"#_tx.TxId", tx.TxId});
+                {"txId", tx.TxId});
             return EProcessResult::Blocked;
         }
         if (SetOffsetAffectedConsumers.contains(consumer)) {
             YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "SetOffsetAffectedConsumers contains consumer TxId",
                 {"logPrefix", LogPrefix()},
                 {"consumer", consumer},
-                {"#_tx.TxId", tx.TxId});
+                {"txId", tx.TxId});
             return EProcessResult::Blocked;
         }
 
@@ -3368,7 +3368,7 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
             consumers.push_back(consumer);
             YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "TxId affect consumer",
                 {"logPrefix", LogPrefix()},
-                {"#_tx.TxId", tx.TxId},
+                {"txId", tx.TxId},
                 {"consumer", consumer});
         }
     }
@@ -3442,7 +3442,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
         for (auto& k : t.WriteInfo->BodyKeys) {
             YDB_LOG_DEBUG_COMP(Service, "Add key",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_k.Key", k.Key});
+                {"key", k.Key});
             auto write = BlobEncoder.PartitionedBlob.Add(k.Key, k.Size, ctx.Now(), true);
             if (write && !write->Value.empty()) {
                 AddCmdWriteWithDeferredTimestamp(write, PersistRequest.Get(), ctx);
@@ -4326,7 +4326,7 @@ void TPartition::ScheduleReplyPropose(const NKikimrPQ::TEvProposeTransaction& ev
 {
     YDB_LOG_DEBUG_COMP(Service, "Schedule TEvPersQueue::TEvProposeTransactionResult(",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(statusCode)", NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(statusCode)},
+        {"status", NKikimrPQ::TEvProposeTransactionResult_EStatus_Name(statusCode)},
         {"reason", reason});
     Replies.emplace_back(ActorIdFromProto(event.GetSourceActor()),
                          MakeReplyPropose(event,
@@ -4913,7 +4913,7 @@ void TPartition::SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& re
     Y_ENSURE(!CompacterKvRequest);
     YDB_LOG_DEBUG_COMP(Service, "Topic partition Acquire RW Lock",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+        {"clientSideName", TopicConverter->GetClientsideName()},
         {"partition", Partition});
     Send(ReadQuotaTrackerActor, new TEvPQ::TEvAcquireExclusiveLock());
     CompacterKvRequestInflight = true;
@@ -4923,7 +4923,7 @@ void TPartition::SendCompacterWriteRequest(THolder<TEvKeyValue::TEvRequest>&& re
 void TPartition::Handle(TEvPQ::TEvExclusiveLockAcquired::TPtr&) {
     YDB_LOG_DEBUG_COMP(Service, "Topic partition Acquired RW Lock, send compacter KV request",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+        {"clientSideName", TopicConverter->GetClientsideName()},
         {"partition", Partition});
     Send(BlobCache, CompacterKvRequest.Release(), 0, 0, PersistRequestSpan.GetTraceId());
 }

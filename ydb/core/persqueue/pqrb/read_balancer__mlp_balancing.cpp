@@ -192,7 +192,7 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr& ev) {
 void TMLPBalancer::Handle(TEvPersQueue::TEvStatusResponse::TPtr& ev, const TActorContext&) {
     YDB_LOG_DEBUG("Handle TEvPersQueue::TEvStatusResponse",
         {"logPrefix", LogPrefix()},
-        {"#_ev->Get()->Record", ev->Get()->Record});
+        {"ev", ev->Get()->Record});
 
     absl::flat_hash_map<TString, bool> mlpConsumers;
     for (const auto& consumer : GetConfig().GetConsumers()) {
@@ -239,7 +239,7 @@ void TMLPBalancer::Handle(TEvPQ::TEvReadingPartitionStatusRequest::TPtr& ev, con
     auto& record = ev->Get()->Record;
     YDB_LOG_DEBUG("Handle TEvPQ::TEvReadingPartitionStatusRequest",
         {"logPrefix", LogPrefix()},
-        {"#_record", record});
+        {"ev", record});
     SetUseForReading(record.GetConsumer(),
                      record.GetPartitionId(),
                      true, // reading is finished
@@ -257,7 +257,7 @@ void TMLPBalancer::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
     auto& record = ev->Get()->Record;
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPConsumerStatus",
         {"logPrefix", LogPrefix()},
-        {"#_record", record});
+        {"ev", record});
     SetUseForReading(record.GetConsumer(),
                      record.GetPartitionId(),
                      std::nullopt, // reading is finished

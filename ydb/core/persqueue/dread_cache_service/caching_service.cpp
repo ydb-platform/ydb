@@ -62,12 +62,12 @@ private:
         const auto& ctx = ActorContext();
         auto key = MakeSessionKey(ev->Get());
         YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: client session connected with id",
-            {"#_key.SessionId", key.SessionId});
+            {"sessionId", key.SessionId});
         ChangeCounterValue("CreateClientSessionRate", 1, false, true);
         auto sessionIter = ServerSessions.find(key);
         if (sessionIter.IsEnd()) {
             YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: unknown session id close session",
-                {"#_key.SessionId", key.SessionId});
+                {"sessionId", key.SessionId});
             CloseSession(ev->Sender, key.SessionId, Ydb::PersQueue::ErrorCode::ErrorCode::BAD_REQUEST, "Unknown session");
             return;
         }
@@ -139,8 +139,8 @@ private:
         } else {
             YDB_LOG_WARN_CTX(ctx, "Direct read cache: attempted to deregister unknown server with generation ignored",
                 {"session", key.SessionId},
-                {"#_key.PartitionSessionId", key.PartitionSessionId},
-                {"#_ev->Get()->Generation", ev->Get()->Generation});
+                {"sessionId", key.PartitionSessionId},
+                {"Generation", ev->Get()->Generation});
             return;
         }
     }
@@ -158,7 +158,7 @@ private:
         if (sessionIter->second.Generation != ev->Get()->TabletGeneration) {
             YDB_LOG_ALERT_CTX(ctx, "Direct read cache: tried to stage direct read for session with generation previously had this session with generation Data ignored",
                 {"#_sessionKey.SessionId", sessionKey.SessionId},
-                {"#_ev->Get()->TabletGeneration", ev->Get()->TabletGeneration},
+                {"TabletGeneration", ev->Get()->TabletGeneration},
                 {"#_sessionIter->second.Generation", sessionIter->second.Generation});
             return;
         }
@@ -166,14 +166,14 @@ private:
         if (!ins.second) {
             YDB_LOG_WARN_CTX(ctx, "Direct read cache: tried to stage duplicate direct read for session with id new data ignored",
                 {"#_sessionKey.SessionId", sessionKey.SessionId},
-                {"#_ev->Get()->ReadKey.ReadId", ev->Get()->ReadKey.ReadId});
+                {"ReadKey.ReadId", ev->Get()->ReadKey.ReadId});
             return;
         }
         ChangeCounterValue("StagedReadDataSize", ins.first->second->ByteSize(), false);
         ChangeCounterValue("StagedReadsCount", 1, false);
         ChangeCounterValue("StagedReadsRate", 1, false, true);
         YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: staged direct read id",
-            {"#_ev->Get()->ReadKey.ReadId", ev->Get()->ReadKey.ReadId},
+            {"ReadKey.ReadId", ev->Get()->ReadKey.ReadId},
             {"session", sessionKey.SessionId});
     }
 
@@ -184,13 +184,13 @@ private:
         const auto& generation = ev->Get()->TabletGeneration;
         YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: publish for session",
             {"read", readId},
-            {"#_key.SessionId", key.SessionId},
+            {"sessionId", key.SessionId},
             {"generation", generation});
 
         auto iter = ServerSessions.find(key);
         if (iter.IsEnd()) {
             YDB_LOG_ERROR_CTX(ctx, "Direct read cache: attempt to publish read for unknow session ignored",
-                {"#_key.SessionId", key.SessionId});
+                {"sessionId", key.SessionId});
             return;
         }
 
@@ -229,7 +229,7 @@ private:
         }
         YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: forget for session",
             {"read", ev->Get()->ReadKey.ReadId},
-            {"#_key.SessionId", key.SessionId});
+            {"sessionId", key.SessionId});
 
         const auto& generation = ev->Get()->TabletGeneration;
         if (iter->second.Generation != generation) { // Stale generation in event, ignore it
@@ -295,26 +295,26 @@ private:
         if (sessionsIter.IsEnd()) {
             YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: registered server with generation",
                 {"session", key.SessionId},
-                {"#_key.PartitionSessionId", key.PartitionSessionId},
+                {"sessionId", key.PartitionSessionId},
                 {"generation", generation});
 
             ServerSessions.insert(std::make_pair(key, TCacheServiceData{generation}));
         } else if (sessionsIter->second.Generation == generation) {
             YDB_LOG_WARN_CTX(ctx, "Direct read cache: attempted to register duplicate server with same generation ignored",
                 {"session", key.SessionId},
-                {"#_key.PartitionSessionId", key.PartitionSessionId},
+                {"sessionId", key.PartitionSessionId},
                 {"generation", generation});
 
         } else if (DestroyServerSession(sessionsIter, generation)) {
             YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: registered server with generation killed existing session with older generation",
                 {"session", key.SessionId},
-                {"#_key.PartitionSessionId", key.PartitionSessionId},
+                {"sessionId", key.PartitionSessionId},
                 {"generation", generation});
             ServerSessions.insert(std::make_pair(key, TCacheServiceData{generation}));
         } else {
             YDB_LOG_INFO_CTX(ctx, "Direct read cache: attempted to register server with stale generation ignored",
                 {"session", key.SessionId},
-                {"#_key.PartitionSessionId", key.PartitionSessionId},
+                {"sessionId", key.PartitionSessionId},
                 {"generation", generation});
         }
         ChangeCounterValue("ActiveServerSessions", ServerSessions.size(), true);

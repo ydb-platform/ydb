@@ -216,7 +216,7 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
                 {"tabletID", TabletID()},
                 {"#_record.GetVersion", record.GetVersion()},
                 {"#_ev->Sender", ev->Sender},
-                {"#_record.GetTxId", record.GetTxId()});
+                {"txId", record.GetTxId()});
             THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
             res->Record.SetStatus(NKikimrPQ::OK);
             res->Record.SetTxId(record.GetTxId());
@@ -400,7 +400,7 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
 
         YDB_LOG_ERROR("TEvClientConnected Status TabletId",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Get()->Status", ev->Get()->Status},
+            {"Status", ev->Get()->Status},
             {"tabletId", tabletId});
         return;
     }
@@ -415,8 +415,8 @@ void TPersQueueReadBalancer::Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev,
         YDB_LOG_DEBUG("TEvClientConnected TabletId NodeId Generation",
             {"logPrefix", LogPrefix()},
             {"tabletId", tabletId},
-            {"#_ev->Get()->ServerId.NodeId", ev->Get()->ServerId.NodeId()},
-            {"#_ev->Get()->Generation", ev->Get()->Generation});
+            {"ServerId.NodeId", ev->Get()->ServerId.NodeId()},
+            {"Generation", ev->Get()->Generation});
     }
     else
         YDB_LOG_INFO("TEvClientConnected Pipe is not found, TabletId",
@@ -879,7 +879,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev)
 {
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPConsumerStatus",
         {"logPrefix", LogPrefix()},
-        {"#_ev->Get()->Record", ev->Get()->Record});
+        {"ev", ev->Get()->Record});
     MLPBalancer->Handle(ev);
 }
 

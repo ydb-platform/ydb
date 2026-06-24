@@ -121,7 +121,7 @@ private:
     void Handle(typename TResponse::TPtr& ev) {
         YDB_LOG_DEBUG_COMP(Service, "Handle response",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_ev->Get()->Record", ev->Get()->Record});
+            {"ev", ev->Get()->Record});
         auto partitionId = ev->Cookie;
 
         auto it = PendingPartitions.find(partitionId);
@@ -143,7 +143,7 @@ private:
     void Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
         YDB_LOG_DEBUG_COMP(Service, "Handle TEvPQ::TEvMLPErrorResponse",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_ev->Get()->Record", ev->Get()->Record});
+            {"ev", ev->Get()->Record});
 
         auto partitionId = ev->Cookie;
 
@@ -167,13 +167,13 @@ private:
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
         YDB_LOG_DEBUG_COMP(Service, "Handle TEvPipeCache::TEvDeliveryProblem",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_ev->Get()->TabletId", ev->Get()->TabletId});
+            {"TabletId", ev->Get()->TabletId});
 
         auto it = Pipes.find(ev->Get()->TabletId);
         if (it == Pipes.end()) {
             YDB_LOG_DEBUG_COMP(Service, "Received pipe error for unexpected tablet",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_ev->Get()->TabletId", ev->Get()->TabletId});
+                {"TabletId", ev->Get()->TabletId});
             return;
         }
 

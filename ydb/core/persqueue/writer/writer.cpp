@@ -878,7 +878,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         if (msg->Status != NKikimrProto::OK) {
             YDB_LOG_ERROR("Received TEvClientConnected with status",
                 {"logPrefix", LOG_PREFIX},
-                {"#_ev->Get()->Status", ev->Get()->Status});
+                {"Status", ev->Get()->Status});
             Disconnected(EErrorCode::InternalError);
             return;
         }

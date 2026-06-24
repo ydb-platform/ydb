@@ -19,7 +19,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
         {"logPrefix", NPQ_LOG_PREFIX},
         {"topicName", TopicName()},
         {"partition", Partition},
-        {"#_EscapeC(p.Msg.SourceId)", EscapeC(p.Msg.SourceId)},
+        {"sourceId", EscapeC(p.Msg.SourceId)},
         {"disableDeduplication", p.Msg.DisableDeduplication},
         {"seqNo", p.Msg.SeqNo},
         {"initialSeqNo", p.InitialSeqNo});
@@ -59,9 +59,9 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
         {"logPrefix", NPQ_LOG_PREFIX},
         {"topicName", TopicName()},
         {"partition", Partition},
-        {"#_EscapeC(p.Msg.SourceId)", EscapeC(p.Msg.SourceId)},
-        {"#_p.Msg.SeqNo", p.Msg.SeqNo},
-        {"#_p.Msg.PartNo", p.Msg.PartNo});
+        {"sourceId", EscapeC(p.Msg.SourceId)},
+        {"seqNo", p.Msg.SeqNo},
+        {"partNo", p.Msg.PartNo});
 
     TString s;
     if (!CompactionBlobEncoder.PartitionedBlob.IsNextPart(p.Msg.SourceId, p.Msg.SeqNo, p.Msg.PartNo, &s)) {
@@ -97,9 +97,9 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
             {"logPrefix", NPQ_LOG_PREFIX},
             {"topicName", TopicName()},
             {"partition", Partition},
-            {"#_EscapeC(p.Msg.SourceId)", EscapeC(p.Msg.SourceId)},
-            {"#_p.Msg.SeqNo", p.Msg.SeqNo},
-            {"#_p.Msg.PartNo", p.Msg.PartNo},
+            {"sourceId", EscapeC(p.Msg.SourceId)},
+            {"seqNo", p.Msg.SeqNo},
+            {"partNo", p.Msg.PartNo},
             {"#_newWrite->Key", newWrite->Key},
             {"#_newWrite->Value.size", newWrite->Value.size()});
 
@@ -144,9 +144,9 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
             {"logPrefix", NPQ_LOG_PREFIX},
             {"topicName", TopicName()},
             {"partition", Partition},
-            {"#_EscapeC(p.Msg.SourceId)", EscapeC(p.Msg.SourceId)},
-            {"#_p.Msg.SeqNo", p.Msg.SeqNo},
-            {"#_p.Msg.PartNo", p.Msg.PartNo},
+            {"sourceId", EscapeC(p.Msg.SourceId)},
+            {"seqNo", p.Msg.SeqNo},
+            {"partNo", p.Msg.PartNo},
             {"#_CompactionBlobEncoder.PartitionedBlob.GetFormedBlobs().size", CompactionBlobEncoder.PartitionedBlob.GetFormedBlobs().size()},
             {"newHead", CompactionBlobEncoder.NewHead});
 
@@ -181,7 +181,7 @@ void TPartition::DumpKeysForBlobsCompaction() const
         YDB_LOG_DEBUG_COMP(Service, "Dump NPQLOGPREFIX, #_((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' '*'), #_k.Key, #_k.Size",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"#_((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' : '*')", ((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' : '*')},
-            {"#_k.Key", k.Key},
+            {"key", k.Key},
             {"#_k.Size", k.Size});
     }
     YDB_LOG_DEBUG_COMP(Service, "===================================",
@@ -232,12 +232,12 @@ void TPartition::TryRunCompaction(bool force)
             }
             YDB_LOG_DEBUG_COMP(Service, "Blob key for append",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_k.Key", k.Key},
+                {"key", k.Key},
                 {"#_k.Size", k.Size});
         } else {
             YDB_LOG_DEBUG_COMP(Service, "Blob key for rename",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_k.Key", k.Key});
+                {"key", k.Key});
         }
     }
 
@@ -277,7 +277,7 @@ void TPartition::Handle(TEvPQ::TEvRunCompaction::TPtr& ev)
 
         YDB_LOG_DEBUG_COMP(Service, "Request blob key",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_k.Key", k.Key});
+            {"key", k.Key});
 
         KeysForCompaction.emplace_back(k, blobs.size());
 
@@ -537,13 +537,13 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
             {"logPrefix", NPQ_LOG_PREFIX},
             {"i", i},
             {"#_KeysForCompaction.size", KeysForCompaction.size()},
-            {"#_k.Key", k.Key});
+            {"key", k.Key});
 
         if (pos == Max<size_t>()) {
             // большой блоб надо переименовать
             YDB_LOG_INFO_COMP(NKikimrServices::PQ_KV_OPS, "Rename key",
                 {"LOGPREFIXINT", LOG_PREFIX_INT},
-                {"#_k.Key", k.Key});
+                {"key", k.Key});
 
             if (!WasTheLastBlobBig) {
                 needToCompactHead = true;
@@ -572,7 +572,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
             // маленький блоб надо дописать
             YDB_LOG_INFO_COMP(NKikimrServices::PQ_KV_OPS, "Append blob for key",
                 {"LOGPREFIXINT", LOG_PREFIX_INT},
-                {"#_k.Key", k.Key});
+                {"key", k.Key});
             YDB_LOG_DEBUG_COMP(Service, "Need to compact head",
                 {"logPrefix", NPQ_LOG_PREFIX},
                 {"needToCompactHead", needToCompactHead});
@@ -581,7 +581,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
             if (!CompactRequestedBlob(requestedBlob, parameters, needToCompactHead, compactionRequest.Get(), blobCreationUnixTime, WasTheLastBlobBig, newHeadIsInitialized)) {
                 YDB_LOG_DEBUG_COMP(Service, "Can't append blob for key",
                     {"logPrefix", NPQ_LOG_PREFIX},
-                    {"#_k.Key", k.Key});
+                    {"key", k.Key});
                 Y_FAIL("Something went wrong");
                 return;
             }
@@ -711,7 +711,7 @@ void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request,
         {"#_CompactionBlobEncoder.Head.Offset", CompactionBlobEncoder.Head.Offset},
         {"#_CompactionBlobEncoder.EndOffset", CompactionBlobEncoder.EndOffset},
         {"#_CompactionBlobEncoder.NewHead.GetNextOffset", CompactionBlobEncoder.NewHead.GetNextOffset()},
-        {"#_key", key},
+        {"key", key},
         {"#_res.second", res.second},
         {"#_ctx.Now().MilliSeconds", ctx.Now().MilliSeconds()});
     AddNewCompactionWriteBlob(res, request, blobCreationUnixTime, ctx);

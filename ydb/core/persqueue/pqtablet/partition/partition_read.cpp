@@ -742,7 +742,7 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
     ctx.Send(ReplyTo(res->Destination, answer.ReplyTo), answer.Event.Release());
     YDB_LOG_DEBUG_COMP(Service, "Waiting read cookie partition read timeout for offset",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->Cookie", ev->Get()->Cookie},
+        {"Cookie", ev->Get()->Cookie},
         {"partition", Partition},
         {"#_res->User", res->User},
         {"#_res->Offset", res->Offset});
@@ -835,7 +835,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
             0);
         YDB_LOG_ERROR_COMP(Service, "I was right, there could be rewinds and deletions at once! Topic partition readOffset readPartNo startOffset",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+            {"clientSideName", TopicConverter->GetClientsideName()},
             {"partition", Partition},
             {"#_read->Offset", read->Offset},
             {"#_read->PartNo", read->PartNo},
@@ -853,7 +853,7 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
         TabletCounters.Percentile()[COUNTER_LATENCY_PQ_READ_ERROR].IncrementFor(0);
         YDB_LOG_ERROR_COMP(Service, "Reading from too big offset - topic partition client EndOffset offset",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+            {"clientSideName", TopicConverter->GetClientsideName()},
             {"partition", Partition},
             {"#_read->ClientId", read->ClientId},
             {"endOffset", GetEndOffset()},
@@ -920,7 +920,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
     YDB_LOG_DEBUG_COMP(Service, "Read cookie Topic partition user offset partno count size endOffset max time lag ms effective offset",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"cookie", cookie},
-        {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+        {"clientSideName", TopicConverter->GetClientsideName()},
         {"partition", Partition},
         {"user", user},
         {"#_read->Offset", read->Offset},
@@ -937,7 +937,7 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
             if (IsActive()) {
                 YDB_LOG_DEBUG_COMP(Service, "Too big read timeout Topic partition user offset count size endOffset max time lag ms effective offset",
                     {"logPrefix", NPQ_LOG_PREFIX},
-                    {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+                    {"clientSideName", TopicConverter->GetClientsideName()},
                     {"partition", Partition},
                     {"#_read->ClientId", read->ClientId},
                     {"#_read->Offset", read->Offset},
@@ -978,7 +978,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
     userInfo.ReadScheduled = true;
     YDB_LOG_DEBUG_COMP(Service, "Topic partition user readTimeStamp for offset initiated queuesize startOffset ReadingTimestamp rrg",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+        {"clientSideName", TopicConverter->GetClientsideName()},
         {"partition", Partition},
         {"user", user},
         {"#_userInfo.Offset", userInfo.Offset},
@@ -1025,7 +1025,7 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
 
     YDB_LOG_DEBUG_COMP(Service, "Topic partition user send read request for offset initiated queuesize startOffset ReadingTimestamp rrg",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+        {"clientSideName", TopicConverter->GetClientsideName()},
         {"partition", Partition},
         {"user", user},
         {"#_userInfo.Offset", userInfo.Offset},
@@ -1054,7 +1054,7 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
     if (ev->Get()->IsInternal) {
         YDB_LOG_DEBUG_COMP(Service, "Topic partition Got internal ProxyResponse",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+            {"clientSideName", TopicConverter->GetClientsideName()},
             {"partition", Partition});
         CompacterPartitionRequestInflight = false;
         if (Compacter) {
@@ -1068,7 +1068,7 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
     if (!userInfo || userInfo->ReadRuleGeneration != ReadingForUserReadRuleGeneration) {
         YDB_LOG_INFO_COMP(Service, "Topic partition user readTimeStamp for other generation or no client info at all",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+            {"clientSideName", TopicConverter->GetClientsideName()},
             {"partition", Partition},
             {"readingForUser", ReadingForUser});
 
@@ -1077,7 +1077,7 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
     }
 
     YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "Topic partition user readTimeStamp done, result queuesize startOffset",
-        {"#_TopicConverter->GetClientsideName", TopicConverter->GetClientsideName()},
+        {"clientSideName", TopicConverter->GetClientsideName()},
         {"partition", Partition},
         {"readingForUser", ReadingForUser},
         {"#_userInfo->WriteTimestamp.MilliSeconds", userInfo->WriteTimestamp.MilliSeconds()},
@@ -1091,7 +1091,7 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "Reading Timestamp failed for offset",
             {"readingForOffset", ReadingForOffset},
             {"#_userInfo->Offset", userInfo->Offset},
-            {"#_ev->Get()->Response->DebugString", ev->Get()->Response->DebugString()});
+            {"Response->DebugString", ev->Get()->Response->DebugString()});
         if (ev->Get()->Response->GetStatus() == NMsgBusProxy::MSTATUS_OK &&
             ev->Get()->Response->GetErrorCode() == NPersQueue::NErrorCode::OK &&
             ev->Get()->Response->GetPartitionResponse().HasCmdReadResult() &&

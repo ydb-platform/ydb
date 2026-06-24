@@ -74,7 +74,7 @@ void TDescriberActor::DoRuntimeAttributes() {
 void TDescriberActor::Handle(TEvPQ::TEvMLPGetRuntimeAttributesResponse::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPGetRuntimeAttributesResponse",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->Record", ev->Get()->Record});
+        {"ev", ev->Get()->Record});
     auto* result = ev->Get();
 
     auto response = std::make_unique<TEvDescribeResponse>();
@@ -113,7 +113,7 @@ STFUNC(TDescriberActor::RuntimeAttributesState) {
 void TDescriberActor::Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPErrorResponse",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->Record", ev->Get()->Record});
+        {"ev", ev->Get()->Record});
     ReplyErrorAndDie(ev->Get()->GetStatus(), std::move(ev->Get()->GetErrorMessage()));
 }
 

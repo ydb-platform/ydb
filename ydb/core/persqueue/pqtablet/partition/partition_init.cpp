@@ -1250,7 +1250,7 @@ void TPartition::Initialize(const TActorContext& ctx) {
     YDB_LOG_INFO_COMP(Service, "Bootstrapping",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"partition", Partition},
-        {"#_ctx.SelfID", ctx.SelfID});
+        {"selfId", ctx.SelfID});
 
     if (AppData(ctx)->Counters) {
         if (AppData()->PQConfig.GetTopicsAreFirstClassCitizen()) {

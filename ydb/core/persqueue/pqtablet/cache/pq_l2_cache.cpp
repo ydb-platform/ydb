@@ -94,7 +94,7 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
         // PQ tablet could send some data twice (if it's restored after die)
         if (Cache.FindWithoutPromote(key) != Cache.End()) {
             YDB_LOG_WARN_CTX(ctx, "PQ Cache (L2). Same blob insertion. size",
-                {"#_key", key},
+                {"key", key},
                 {"#_blob.Value->GetDataSize", blob.Value->GetDataSize()});
             continue;
         }
@@ -133,7 +133,7 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
         }
 
         YDB_LOG_DEBUG_CTX(ctx, "PQ Cache (L2). Adding blob. size",
-            {"#_key", key},
+            {"key", key},
             {"#_blob.Value->GetDataSize", blob.Value->GetDataSize()});
 
         Cache.Insert(key, blob.Value);
@@ -161,12 +161,12 @@ void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, ui64 tabletId, con
             if ((*it)->GetAccessCount() == 0)
                 ++numUnused;
             YDB_LOG_DEBUG_CTX(ctx, "PQ Cache (L2). Removed. size",
-                {"#_key", key},
+                {"key", key},
                 {"#_(*it)->GetDataSize", (*it)->GetDataSize()});
             Cache.Erase(it);
         } else {
             YDB_LOG_DEBUG_CTX(ctx, "PQ Cache (L2). Miss in remove",
-                {"#_key", key});
+                {"key", key});
         }
     }
 
@@ -212,10 +212,10 @@ void TPersQueueCacheL2::TouchBlobs(const TActorContext& ctx, ui64 tabletId, cons
         if (it != Cache.End()) {
             (*it)->Touch(now);
             YDB_LOG_DEBUG_CTX(ctx, "PQ Cache (L2). Touched",
-                {"#_key", key});
+                {"key", key});
         } else {
             YDB_LOG_DEBUG_CTX(ctx, "PQ Cache (L2). Miss in touch",
-                {"#_key", key});
+                {"key", key});
         }
     }
 
@@ -235,10 +235,10 @@ void TPersQueueCacheL2::RegretBlobs(const TActorContext& ctx, ui64 tabletId, con
     for (const TCacheBlobL2& blob : blobs) {
         YDB_LOG_DEBUG_CTX(ctx, "PQ Cache (L2). Missed blob. tabletId partition offset partno count parts_count",
             {"tabletId", tabletId},
-            {"#_blob.Partition", blob.Partition},
-            {"#_blob.Offset", blob.Offset},
+            {"blobPartition", blob.Partition},
+            {"blobOffset", blob.Offset},
             {"#_blob.PartNo", blob.PartNo},
-            {"#_blob.Count", blob.Count},
+            {"blobCount", blob.Count},
             {"#_blob.InternalPartsCount", blob.InternalPartsCount});
     }
 

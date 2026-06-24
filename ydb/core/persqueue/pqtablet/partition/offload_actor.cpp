@@ -93,7 +93,7 @@ public:
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ToString", ev->Get()->ToString()});
         if (ev->Get()->Status == TEvWorker::TEvGone::DONE) {
             NotifySchemeShard();
         }
@@ -119,7 +119,7 @@ public:
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ToString", ev->Get()->ToString()});
         if (SchemeShardPipe == ev->Get()->ClientId) {
             OnPipeDestroyed();
         }
@@ -128,7 +128,7 @@ public:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_ev->Get()->ToString", ev->Get()->ToString()});
+            {"ToString", ev->Get()->ToString()});
 
         if (SchemeShardPipe == ev->Get()->ClientId && ev->Get()->Status != NKikimrProto::OK) {
             NTabletPipe::CloseClient(SelfId(), SchemeShardPipe);

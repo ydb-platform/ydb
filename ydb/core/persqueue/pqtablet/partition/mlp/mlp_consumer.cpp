@@ -207,42 +207,42 @@ TString TConsumerActor::BuildLogPrefix() const {
 void TConsumerActor::Queue(TEvPQ::TEvMLPReadRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Queue TEvPQ::TEvMLPReadRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->Record", ev->Get()->Record});
+        {"ev", ev->Get()->Record});
     ReadRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Queue(TEvPQ::TEvMLPCommitRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Queue TEvPQ::TEvMLPCommitRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->Record", ev->Get()->Record});
+        {"ev", ev->Get()->Record});
     CommitRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Queue(TEvPQ::TEvMLPUnlockRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Queue TEvPQ::TEvMLPUnlockRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->Record", ev->Get()->Record});
+        {"ev", ev->Get()->Record});
     UnlockRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Queue(TEvPQ::TEvMLPChangeMessageDeadlineRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Queue TEvPQ::TEvMLPChangeMessageDeadlineRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->Record", ev->Get()->Record});
+        {"ev", ev->Get()->Record});
     ChangeMessageDeadlineRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Queue(TEvPQ::TEvMLPPurgeRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Queue TEvPQ::TEvMLPPurgeRequest",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->Record", ev->Get()->Record});
+        {"ev", ev->Get()->Record});
     PurgeRequestsQueue.push_back(std::move(ev));
 }
 
 void TConsumerActor::Queue(TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId::TPtr& ev) {
     YDB_LOG_DEBUG("Queue TEvPQ::TEvMLPUpdateExternalLockedMessageGroupsId",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->Record", ev->Get()->Record});
+        {"ev", ev->Get()->Record});
     UpdateExternalLockedMessageGroupsIdRequestsQueue.push_back(std::move(ev));
 }
 
@@ -413,7 +413,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
 void TConsumerActor::Handle(TEvKeyValue::TEvResponse::TPtr& ev) {
     YDB_LOG_DEBUG("HandleOnWrite TEvKeyValue::TEvResponse",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->Record", ev->Get()->Record});
+        {"ev", ev->Get()->Record});
 
     auto& record = ev->Get()->Record;
 
@@ -1070,7 +1070,7 @@ void TConsumerActor::Handle(TEvPQ::TEvError::TPtr& ev) {
 void TConsumerActor::HandleOnWork(TEvents::TEvWakeup::TPtr& ev) {
     YDB_LOG_DEBUG("HandleOnWork TEvents::TEvWakeup",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->Tag", ev->Get()->Tag});
+        {"Tag", ev->Get()->Tag});
     switch (ev->Get()->Tag) {
         case EWakeUpTag::Regular: {
             FetchMessagesIfNeeded();
@@ -1162,7 +1162,7 @@ void TConsumerActor::Handle(TEvPQ::TEvMLPDLQMoverResponse::TPtr& ev) {
 void TConsumerActor::Handle(TEvents::TEvWakeup::TPtr& ev) {
     YDB_LOG_DEBUG("Handle TEvents::TEvWakeup",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_ev->Get()->Tag", ev->Get()->Tag});
+        {"Tag", ev->Get()->Tag});
     if (ev->Get()->Tag == EWakeUpTag::UpdateChildPartitions) {
         UpdateLockedGroupsIdInChildPartitions(false);
         return;

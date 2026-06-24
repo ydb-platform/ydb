@@ -703,7 +703,7 @@ TPartitionFamily* TConsumer::CreateFamily(std::vector<ui32>&& partitions, TParti
 
     YDB_LOG_DEBUG("Family created",
         {"logPrefix", LogPrefix()},
-        {"#_family->DebugStr", family->DebugStr()});
+        {"family", family->DebugStr()});
 
     return family;
 }
@@ -745,7 +745,7 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
     if (!family->IsLonely()) {
         YDB_LOG_DEBUG("Break up",
             {"logPrefix", LogPrefix()},
-            {"#_family->DebugStr", family->DebugStr()},
+            {"family", family->DebugStr()},
             {"partition", partitionId});
 
         std::unordered_set<ui32> partitions;
@@ -828,7 +828,7 @@ bool TConsumer::BreakUpFamily(TPartitionFamily* family, ui32 partitionId, bool d
         } else {
             YDB_LOG_DEBUG("Can't break up because is not root of family",
                 {"logPrefix", LogPrefix()},
-                {"#_family->DebugStr", family->DebugStr()},
+                {"family", family->DebugStr()},
                 {"partition", partitionId});
         }
     }
@@ -1084,7 +1084,7 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
         YDB_LOG_DEBUG("Attache partitions",
             {"logPrefix", LogPrefix()},
             {"#_num_0", JoinRange(", ", newPartitions.begin(), newPartitions.end())},
-            {"#_family->DebugStr", family->DebugStr()});
+            {"family", family->DebugStr()});
         for (auto id : newPartitions) {
             if (family->CanAttach(std::vector{id})) {
                 auto* node = GetPartitionGraph().GetPartition(id);
@@ -1119,7 +1119,7 @@ bool TConsumer::ProccessReadingFinished(ui32 partitionId, bool wasInactive, cons
                 YDB_LOG_DEBUG("Can't attache partition",
                     {"logPrefix", LogPrefix()},
                     {"id", id},
-                    {"#_family->DebugStr", family->DebugStr()});
+                    {"family", family->DebugStr()});
             }
         }
     } else {
@@ -1355,7 +1355,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
         if (!family->SpecialSessions.contains(family->Session->Pipe)) {
             YDB_LOG_DEBUG("Rebalance because exists the special session for it",
                 {"logPrefix", LogPrefix()},
-                {"#_family->DebugStr", family->DebugStr()});
+                {"family", family->DebugStr()});
             family->Release(ctx);
         }
     }
@@ -1380,7 +1380,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
             if (sit == sessions.end()) {
                 YDB_LOG_DEBUG("Balancing of the failed because there are no suitable reading sessions",
                     {"logPrefix", LogPrefix()},
-                    {"#_family->DebugStr", family->DebugStr()});
+                    {"family", family->DebugStr()});
 
                 continue;
             }
@@ -1392,7 +1392,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
 
             YDB_LOG_DEBUG("Balancing",
                 {"logPrefix", LogPrefix()},
-                {"#_family->DebugStr", family->DebugStr()},
+                {"family", family->DebugStr()},
                 {"#_session->DebugStr", session->DebugStr()});
             family->StartReading(*session, ctx);
 
@@ -1448,7 +1448,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
             if (!family->IsActive()) {
                 YDB_LOG_DEBUG("Skip balancing because it is not active",
                     {"logPrefix", LogPrefix()},
-                    {"#_family->DebugStr", family->DebugStr()});
+                    {"family", family->DebugStr()});
 
                 it = FamiliesRequireBalancing.erase(it);
                 continue;
@@ -1463,7 +1463,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
             if (family->Session->ActiveFamilyCount == 1) {
                 YDB_LOG_DEBUG("Skip balancing because it is considered a session that does not read anything else",
                     {"logPrefix", LogPrefix()},
-                    {"#_family->DebugStr", family->DebugStr()});
+                    {"family", family->DebugStr()});
 
                 it = FamiliesRequireBalancing.erase(it);
                 continue;
@@ -1472,7 +1472,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
             if (family->SpecialSessions.size() <= 1) {
                 YDB_LOG_DEBUG("Skip balancing because there are no other suitable reading sessions",
                     {"logPrefix", LogPrefix()},
-                    {"#_family->DebugStr", family->DebugStr()});
+                    {"family", family->DebugStr()});
 
                 it = FamiliesRequireBalancing.erase(it);
                 continue;
@@ -1496,7 +1496,7 @@ void TConsumer::Balance(const TActorContext& ctx) {
             } else {
                 YDB_LOG_DEBUG("Skip balancing because it is already being read by the best session",
                     {"logPrefix", LogPrefix()},
-                    {"#_family->DebugStr", family->DebugStr()});
+                    {"family", family->DebugStr()});
                 ++it;
             }
         }
@@ -1811,7 +1811,7 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev, const TActor
 void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TActorContext& ctx) {
     YDB_LOG_DEBUG("Pipe disconnected",
         {"logPrefix", LogPrefix()},
-        {"#_ev->Get()->ClientId", ev->Get()->ClientId});
+        {"ClientId", ev->Get()->ClientId});
     Subscriptions.erase(ev->Get()->ClientId);
 
     auto it = Sessions.find(ev->Get()->ClientId);
@@ -1819,13 +1819,13 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TAc
     if (it == Sessions.end()) {
         YDB_LOG_DEBUG("Pipe disconnected but there aren't sessions exists",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Get()->ClientId", ev->Get()->ClientId});
+            {"ClientId", ev->Get()->ClientId});
         return;
     }
 
     YDB_LOG_INFO("Pipe disconnected; active server",
         {"logPrefix", LogPrefix()},
-        {"#_ev->Get()->ClientId", ev->Get()->ClientId},
+        {"ClientId", ev->Get()->ClientId},
         {"actors", (it != Sessions.end() ? it->second->ServerActors : -1)});
 
     auto& session = it->second;
@@ -1836,7 +1836,7 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TAc
     if (!session->SessionName.empty()) {
         YDB_LOG_NOTICE("Pipe client disconnected session",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Get()->ClientId", ev->Get()->ClientId},
+            {"ClientId", ev->Get()->ClientId},
             {"#_session->ClientId", session->ClientId},
             {"#_session->SessionName", session->SessionName});
 
@@ -1856,7 +1856,7 @@ void TBalancer::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev, const TAc
     } else {
         YDB_LOG_INFO("Pipe disconnected no session",
             {"logPrefix", LogPrefix()},
-            {"#_ev->Get()->ClientId", ev->Get()->ClientId});
+            {"ClientId", ev->Get()->ClientId});
 
         Sessions.erase(it);
     }
@@ -2032,7 +2032,7 @@ void TBalancer::Handle(TEvPersQueue::TEvBalancingSubscribe::TPtr& ev, const TAct
     auto& record = ev->Get()->Record;
     YDB_LOG_DEBUG("Handle TEvPersQueue::TEvBalancingSubscribe",
         {"logPrefix", LogPrefix()},
-        {"#_record", record});
+        {"ev", record});
 
     auto sender = ActorIdFromProto(record.GetSourceActor());
     auto status = Consumers.contains(record.GetConsumer()) ?
@@ -2046,7 +2046,7 @@ void TBalancer::Handle(TEvPersQueue::TEvBalancingUnsubscribe::TPtr& ev, const TA
     auto& record = ev->Get()->Record;
     YDB_LOG_DEBUG("Handle TEvPersQueue::TEvBalancingUnsubscribe",
         {"logPrefix", LogPrefix()},
-        {"#_record", record});
+        {"ev", record});
 
     auto sender = ActorIdFromProto(record.GetSourceActor());
     auto& consumer = record.GetConsumer();

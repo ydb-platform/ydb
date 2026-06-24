@@ -1040,8 +1040,7 @@ bool TCms::TryToLockNode(const TAction& action,
         error.Code = TStatus::DISALLOW_TEMP_SYS_TABLET;
         error.Reason = TReason(
             TStringBuilder() << "Node " << node.NodeId
-                << " has a running tablet");
-        error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
+                << " has a running system tablet");
         return false;
     }
 

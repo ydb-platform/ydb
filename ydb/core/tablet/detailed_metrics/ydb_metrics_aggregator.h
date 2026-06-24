@@ -95,7 +95,8 @@ using TYdbMetricsAggregatorPtr = TIntrusivePtr<TYdbMetricsAggregator>;
  */
 TYdbMetricsAggregatorPtr CreateYdbMetricsAggregatorByTabletType(
     TTabletTypes::EType tabletType,
-    NMonitoring::TDynamicCounterPtr targetCounterGroup);
+    NMonitoring::TDynamicCounterPtr targetCounterGroup
+);
 
 
 } // namespace NKikimr

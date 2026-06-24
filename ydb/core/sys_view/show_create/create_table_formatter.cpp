@@ -1712,6 +1712,7 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
             paramsStr << "=";
             EscapeValue(columnDesc.GetDataAccessorConstructor().GetClassName(), paramsStr);
             del = ", ";
+
             if (dataAccessorConstructor.HasSubColumns()) {
                 const auto& subColumns = dataAccessorConstructor.GetSubColumns();
                 if (subColumns.HasSettings()) {
@@ -1775,6 +1776,22 @@ void TCreateTableFormatter::FormatAlterColumn(const TString& fullPath, const NKi
                             del = ", ";
                         }
                     }
+                }
+            }
+        } else if (columnDesc.GetDataAccessorConstructor().GetClassName() == NArrow::NAccessor::TGlobalConst::CompactKVDataAccessorName) {
+            paramsStr << del;
+            EscapeName("DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME", paramsStr);
+            paramsStr << "=";
+            EscapeValue(columnDesc.GetDataAccessorConstructor().GetClassName(), paramsStr);
+            del = ", ";
+            if (dataAccessorConstructor.HasCompactKV()) {
+                const auto& compactKV = dataAccessorConstructor.GetCompactKV();
+                if (compactKV.HasParseNested() && compactKV.GetParseNested()) {
+                    paramsStr << del;
+                    EscapeName("PARSE_NESTED", paramsStr);
+                    paramsStr << "=";
+                    EscapeValue(compactKV.GetParseNested(), paramsStr);
+                    del = ", ";
                 }
             }
         }

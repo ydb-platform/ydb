@@ -2874,6 +2874,44 @@ Y_UNIT_TEST(TableColumnLocalBloomNgramFilterIndex) {
     );
 }
 
+Y_UNIT_TEST(TableColumnAlterColumnCompactKV) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true, .AlterObjectEnabled = true});
+
+    TShowCreateChecker checker(env);
+
+    checker.CheckShowCreateTable(
+        R"(
+            CREATE TABLE `/Root/test_show_create` (
+                Col1 Uint64 NOT NULL,
+                Col2 JsonDocument,
+                Col3 JsonDocument,
+                PRIMARY KEY (Col1)
+            )
+            PARTITION BY HASH(Col1)
+            WITH (STORE = COLUMN, AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`COMPACT_KV`);
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION=ALTER_COLUMN, NAME=Col3, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME`=`COMPACT_KV`, `PARSE_NESTED`=`true`);
+        )", "test_show_create",
+        R"(
+            CREATE TABLE `test_show_create` (
+                `Col1` Uint64 NOT NULL,
+                `Col2` JsonDocument,
+                `Col3` JsonDocument,
+                PRIMARY KEY (`Col1`)
+            )
+            PARTITION BY HASH (`Col1`)
+            WITH (
+                STORE = COLUMN,
+                AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 2
+            );
+
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col2, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `COMPACT_KV`);
+
+            ALTER OBJECT `/Root/test_show_create` (TYPE TABLE) SET (ACTION = ALTER_COLUMN, NAME = Col3, `DATA_ACCESSOR_CONSTRUCTOR.CLASS_NAME` = `COMPACT_KV`, `PARSE_NESTED` = `true`);
+        )"
+    );
+}
+
 } // ShowCreateSystemView
 
 } // NSysView

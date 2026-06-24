@@ -7862,6 +7862,55 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
 
     }
 
+    Y_UNIT_TEST(TestCutTabletHistorySystemChannel) {
+        struct TTestStarter : NFake::TStarter {
+            NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) noexcept override {
+                auto *info = TStarter::MakeTabletInfo(tablet, channels);
+                info->Channels[0].History.emplace_back(1, 1);
+                info->Channels[0].History.emplace_back(2, 0);
+                return info;
+            }
+        };
+
+        TMyEnvBase env;
+        auto &appData = env->GetAppData();
+        appData.FeatureFlags.SetEnableCutHistory(true);
+        TRowsModel data;
+        bool wasCutHistory = false;
+        env.Env.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTablet::EvCutTabletHistory) {
+                auto* event = ev->Get<TEvTablet::TEvCutTabletHistory>();
+                UNIT_ASSERT_VALUES_EQUAL(event->Record.GetChannel(), 0);
+                UNIT_ASSERT_LE(event->Record.GetFromGeneration(), 1);
+                UNIT_ASSERT_LE(event->Record.GetGroupID(), 1);
+                wasCutHistory = true;
+                return TTestActorRuntime::EEventAction::DROP;
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        });
+
+        env.WaitForWakeUp();
+
+        TIntrusivePtr<TCompactionPolicy> policy = new TCompactionPolicy();
+
+        env.SendSync(data.MakeScheme(std::move(policy)));
+        env.SendSync(data.MakeRows(3000));
+
+        env.SendSync(new TEvents::TEvPoison, false, true);
+
+        TTestStarter starter;
+        env.FireTablet(env.Edge, env.Tablet, [&env](const TActorId &tablet, TTabletStorageInfo *info) {
+            return new TTestFlatTablet(env.Edge, tablet, info);
+        }, 0, &starter);
+
+        env->WaitFor("cutting history", [&] { return wasCutHistory; });
+
+    }
+
     Y_UNIT_TEST(TestDoNotCutBeforeGc) {
         struct TTestStarter : NFake::TStarter {
             NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) noexcept override {
@@ -7986,7 +8035,7 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_CutTabletHistory) {
         struct TTestStarter : NFake::TStarter {
             NFake::TStorageInfo* MakeTabletInfo(ui64 tablet, ui32 channels) noexcept override {
                 auto *info = TStarter::MakeTabletInfo(tablet, channels);
-                info->Channels[0].History.emplace_back(1, 0);
+                //info->Channels[0].History.emplace_back(1, 0);
                 //info->Channels[1].History.emplace_back(0, 1);
                 info->Channels[1].History.emplace_back(1, 1);
                 info->Channels[1].History.emplace_back(2, 1);

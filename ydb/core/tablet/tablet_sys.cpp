@@ -1,6 +1,7 @@
 #include "tablet_sys.h"
 #include "tablet_tracing_signals.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/library/services/services.pb.h>
@@ -13,6 +14,8 @@
 #include <util/generic/queue.h>
 #include <util/generic/set.h>
 #include <util/stream/str.h>
+
+#include <unordered_set>
 
 #if defined BLOG_D || defined BLOG_I || defined BLOG_ERROR || defined BLOG_LEVEL
 #error log macro definition clash
@@ -1036,6 +1039,7 @@ void TTablet::HandleRebuildGraphResult(TEvTabletBase::TEvRebuildGraphResult::TPt
     switch (msg->Status) {
     case NKikimrProto::OK:
     case NKikimrProto::NODATA:
+        FeedCutHistoryFromGraph(graph.Get());
         WriteZeroEntry(graph.Get());
         Send(UserTablet,
                  new TEvTablet::TEvBoot(TabletID(), StateStorageInfo.KnownGeneration,
@@ -1262,9 +1266,18 @@ bool TTablet::HandleNext(TEvTablet::TEvCommit::TPtr &ev) {
         const TLogoBlobID &id = it->Id;
         Y_ABORT_UNLESS(id.TabletID() == TabletID() && id.Generation() == StateStorageInfo.KnownGeneration);
         LogoBlobIDFromLogoBlobID(id, x->AddReferences());
+        SeenBlobForCutHistory(id);
 
         if (saveFollowerUpdate)
             entry->FollowerUpdate->References.push_back(std::make_pair(it->Id, it->Buffer));
+    }
+
+    for (const TLogoBlobID& id : msg->GcDiscovered) {
+        SeenBlobForCutHistory(id);
+    }
+
+    for (const TLogoBlobID& id : msg->GcLeft) {
+        SeenBlobForCutHistory(id);
     }
 
     if (!msg->GcDiscovered.empty()) {
@@ -1317,6 +1330,7 @@ bool TTablet::HandleNext(TEvTablet::TEvCommit::TPtr &ev) {
     }
 
     const TLogoBlobID logid(TabletID(), StateStorageInfo.KnownGeneration, entry->Step, 0, 0, 0);
+    SeenBlobForCutHistory(logid);
 
     entry->StateStorageConfirmed = true; // todo: do real query against state-storage (optionally?)
     entry->Task = Register(
@@ -1429,12 +1443,20 @@ void TTablet::Handle(TEvBlobStorage::TEvCollectGarbageResult::TPtr &ev) {
                         GcForStepAckRequest = nullptr;
                     }
                 }
+                if (CutHistoryStatus == ECutHistoryStatus::SentBarrier) {
+                    SendCutTabletHistory();
+                } else {
+                    TryCutHistoryAfterGc();
+                }
             }
             handleNextGcLogChannel();
         }
         return;
     default:
         ++GcFailCount;
+        if (CutHistoryStatus == ECutHistoryStatus::SentBarrier) {
+            CutHistoryStatus = ECutHistoryStatus::None;
+        }
         if (GcInFly == 0) {
             handleNextGcLogChannel();
         }
@@ -1452,6 +1474,99 @@ void TTablet::Handle(TEvTablet::TEvGcForStepAckRequest::TPtr& ev) {
     } else {
         GcForStepAckRequest = ev;
     }
+}
+
+void TTablet::SeenBlobForCutHistory(const TLogoBlobID& blob) {
+    HistoryCutter.SeenBlob(blob);
+}
+
+void TTablet::FeedCutHistoryFromGraph(const TEvTablet::TDependencyGraph* graph) {
+    if (!graph) {
+        return;
+    }
+    const ui64 tabletId = TabletID();
+    for (const auto& entry : graph->Entries) {
+        SeenBlobForCutHistory(TLogoBlobID(tabletId, entry.Id.first, entry.Id.second, 0, 0, 0));
+        for (const auto& ref : entry.References) {
+            SeenBlobForCutHistory(ref);
+        }
+        for (const auto& ref : entry.GcDiscovered) {
+            SeenBlobForCutHistory(ref);
+        }
+        for (const auto& ref : entry.GcLeft) {
+            SeenBlobForCutHistory(ref);
+        }
+    }
+}
+
+void TTablet::ConfirmCutHistory() {
+    if (!AppData()->FeatureFlags.GetEnableCutHistory()) {
+        return;
+    }
+    if (CutHistoryStatus != ECutHistoryStatus::None) {
+        return;
+    }
+
+    constexpr ui32 channelId = 0;
+    const auto historyToCut = HistoryCutter.GetHistoryToCut(channelId);
+    if (historyToCut.empty()) {
+        return;
+    }
+
+    const ui64 tabletId = TabletID();
+    const ui32 gen = StateStorageInfo.KnownGeneration;
+    const auto& channelHistory = Info->Channels[channelId].History;
+
+    std::unordered_set<ui32> seenGroups;
+    auto allHistoryIt = channelHistory.begin();
+    bool sentHardGc = false;
+    for (const auto* historyEntry : historyToCut) {
+        while (allHistoryIt->FromGeneration < historyEntry->FromGeneration) {
+            seenGroups.insert(allHistoryIt->GroupID);
+            ++allHistoryIt;
+        }
+        if (!seenGroups.contains(historyEntry->GroupID)) {
+            const auto nextFromGeneration = std::next(historyEntry)->FromGeneration;
+            ++GcInFly;
+            SendToBSProxy(SelfId(), historyEntry->GroupID,
+                new TEvBlobStorage::TEvCollectGarbage(
+                    tabletId, gen, ++GcCounter, channelId,
+                    true,
+                    nextFromGeneration - 1, Max<ui32>(),
+                    nullptr, nullptr, TInstant::Max(),
+                    false, true
+                )
+            );
+            sentHardGc = true;
+        }
+        CutHistoryStatus = ECutHistoryStatus::SentBarrier;
+        ++allHistoryIt;
+    }
+    if (CutHistoryStatus == ECutHistoryStatus::SentBarrier && !sentHardGc) {
+        SendCutTabletHistory();
+    }
+}
+
+void TTablet::SendCutTabletHistory() {
+    constexpr ui32 channelId = 0;
+    const auto historyToCut = HistoryCutter.GetHistoryToCut(channelId);
+    for (const auto* historyEntry : historyToCut) {
+        TAutoPtr<TEvTablet::TEvCutTabletHistory> ev(new TEvTablet::TEvCutTabletHistory);
+        auto& record = ev->Record;
+        record.SetTabletID(TabletID());
+        record.SetChannel(channelId);
+        record.SetFromGeneration(historyEntry->FromGeneration);
+        record.SetGroupID(historyEntry->GroupID);
+        Send(Launcher, ev.Release());
+    }
+    CutHistoryStatus = ECutHistoryStatus::Cut;
+}
+
+void TTablet::TryCutHistoryAfterGc() {
+    if (!WantCutHistoryAfterGc) {
+        return;
+    }
+    ConfirmCutHistory();
 }
 
 void TTablet::GcLogChannel(ui32 step) {
@@ -1551,6 +1666,7 @@ bool TTablet::ProgressCommitQueue() {
             Graph.Snapshot = std::pair<ui32, ui32>(StateStorageInfo.KnownGeneration, step);
             Graph.SnapshotSource = entry->Source;
             Graph.SnapshotCookie = entry->SourceCookie;
+            WantCutHistoryAfterGc = true;
             GcLogChannel(entry->ConfirmedOnSend);
         }
 
@@ -2306,6 +2422,7 @@ TTablet::TTablet(const TActorId &launcher, TTabletStorageInfo *info, TTabletSetu
     , GcBackoffTimer(GcErrorInitialBackoffMs, GcErrorMaxBackoffMs)
     , GcPendingRetry(false)
     , GcFailCount(0)
+    , HistoryCutter(info)
     , ResourceProfiles(profiles)
     , TxCacheQuota(txCacheQuota)
 {

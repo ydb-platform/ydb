@@ -402,20 +402,20 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         }
     }
 
-    void DoTestOrderByCosine(ui32 indexLevels, int flags, bool enableVectorIndexRead) {
+    void DoTestOrderByCosine(ui32 indexLevels, int flags, bool enableVectorSearch) {
         // The same scenario is run through both the legacy StreamLookup lowering and the new specialized
-        // vector index read actor (TableServiceConfig.EnableVectorIndexRead, off by default), selected via
-        // enableVectorIndexRead, so both read paths are verified identically against the same brute-force
+        // vector search actor (TableServiceConfig.EnableVectorSearch, off by default), selected via
+        // enableVectorSearch, so both read paths are verified identically against the same brute-force
         // ground truth.
         Cerr << "DoTestOrderByCosine: indexLevels=" << indexLevels << " flags=" << flags
-             << " enableVectorIndexRead=" << enableVectorIndexRead << Endl;
+             << " enableVectorSearch=" << enableVectorSearch << Endl;
 
         NKikimrConfig::TFeatureFlags featureFlags;
         auto setting = NKikimrKqp::TKqpSetting();
         auto serverSettings = TKikimrSettings()
             .SetFeatureFlags(featureFlags)
             .SetKqpSettings({setting});
-        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorIndexRead(enableVectorIndexRead);
+        serverSettings.AppConfig.MutableTableServiceConfig()->SetEnableVectorSearch(enableVectorSearch);
 
         TKikimrRunner kikimr(serverSettings);
         kikimr.GetTestServer().GetRuntime()->SetLogPriority(NKikimrServices::BUILD_INDEX, NActors::NLog::PRI_TRACE);
@@ -461,36 +461,36 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         }
     }
 
-    Y_UNIT_TEST_OCTO(OrderByCosineLevel1, Nullable, UseSimilarity, EnableVectorIndexRead) {
-        DoTestOrderByCosine(1, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0), EnableVectorIndexRead);
+    Y_UNIT_TEST_OCTO(OrderByCosineLevel1, Nullable, UseSimilarity, EnableVectorSearch) {
+        DoTestOrderByCosine(1, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0), EnableVectorSearch);
     }
 
-    Y_UNIT_TEST_OCTO(OrderByCosineLevel1WithOverlap, Nullable, Covered, EnableVectorIndexRead) {
-        DoTestOrderByCosine(1, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0), EnableVectorIndexRead);
+    Y_UNIT_TEST_OCTO(OrderByCosineLevel1WithOverlap, Nullable, Covered, EnableVectorSearch) {
+        DoTestOrderByCosine(1, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0), EnableVectorSearch);
     }
 
-    Y_UNIT_TEST_OCTO(OrderByCosineLevel2, Nullable, UseSimilarity, EnableVectorIndexRead) {
-        DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0), EnableVectorIndexRead);
+    Y_UNIT_TEST_OCTO(OrderByCosineLevel2, Nullable, UseSimilarity, EnableVectorSearch) {
+        DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | (UseSimilarity ? F_SIMILARITY : 0), EnableVectorSearch);
     }
 
-    Y_UNIT_TEST_OCTO(OrderByCosineLevel2WithOverlap, Nullable, Covered, EnableVectorIndexRead) {
-        DoTestOrderByCosine(2, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0), EnableVectorIndexRead);
+    Y_UNIT_TEST_OCTO(OrderByCosineLevel2WithOverlap, Nullable, Covered, EnableVectorSearch) {
+        DoTestOrderByCosine(2, F_OVERLAP | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0), EnableVectorSearch);
     }
 
-    Y_UNIT_TEST_TWIN(OrderByCosineDistanceNotNullableLevel3, EnableVectorIndexRead) {
-        DoTestOrderByCosine(3, 0, EnableVectorIndexRead);
+    Y_UNIT_TEST_TWIN(OrderByCosineDistanceNotNullableLevel3, EnableVectorSearch) {
+        DoTestOrderByCosine(3, 0, EnableVectorSearch);
     }
 
-    Y_UNIT_TEST_TWIN(OrderByCosineDistanceNotNullableLevel3WithOverlap, EnableVectorIndexRead) {
-        DoTestOrderByCosine(3, F_OVERLAP, EnableVectorIndexRead);
+    Y_UNIT_TEST_TWIN(OrderByCosineDistanceNotNullableLevel3WithOverlap, EnableVectorSearch) {
+        DoTestOrderByCosine(3, F_OVERLAP, EnableVectorSearch);
     }
 
-    Y_UNIT_TEST_TWIN(OrderByCosineDistanceNotNullableLevel4, EnableVectorIndexRead) {
-        DoTestOrderByCosine(4, 0, EnableVectorIndexRead);
+    Y_UNIT_TEST_TWIN(OrderByCosineDistanceNotNullableLevel4, EnableVectorSearch) {
+        DoTestOrderByCosine(4, 0, EnableVectorSearch);
     }
 
-    Y_UNIT_TEST_QUAD(OrderByCosineDistanceWithCover, Nullable, EnableVectorIndexRead) {
-        DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | F_COVERING, EnableVectorIndexRead);
+    Y_UNIT_TEST_QUAD(OrderByCosineDistanceWithCover, Nullable, EnableVectorSearch) {
+        DoTestOrderByCosine(2, (Nullable ? F_NULLABLE : 0) | F_COVERING, EnableVectorSearch);
     }
 
     Y_UNIT_TEST_QUAD(OrderByCosineOnlyVectorCovered, Nullable, Overlap) {
@@ -521,12 +521,12 @@ Y_UNIT_TEST_SUITE(KqpPrefixedVectorIndexes) {
         DoPositiveQueriesPrefixedVectorIndexOrderByCosine(session, 0);
     }
 
-    Y_UNIT_TEST_OCTO(CosineDistanceWithPkSuffix, Nullable, Covered, EnableVectorIndexRead) {
-        DoTestOrderByCosine(2, F_SUFFIX_PK | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0), EnableVectorIndexRead);
+    Y_UNIT_TEST_OCTO(CosineDistanceWithPkSuffix, Nullable, Covered, EnableVectorSearch) {
+        DoTestOrderByCosine(2, F_SUFFIX_PK | (Nullable ? F_NULLABLE : 0) | (Covered ? F_COVERING : 0), EnableVectorSearch);
     }
 
-    Y_UNIT_TEST_QUAD(CosineDistanceWithPkSuffixWithOverlap, Covered, EnableVectorIndexRead) {
-        DoTestOrderByCosine(2, F_SUFFIX_PK | F_OVERLAP | (Covered ? F_COVERING : 0), EnableVectorIndexRead);
+    Y_UNIT_TEST_QUAD(CosineDistanceWithPkSuffixWithOverlap, Covered, EnableVectorSearch) {
+        DoTestOrderByCosine(2, F_SUFFIX_PK | F_OVERLAP | (Covered ? F_COVERING : 0), EnableVectorSearch);
     }
 
     Y_UNIT_TEST(SubPrefix) {

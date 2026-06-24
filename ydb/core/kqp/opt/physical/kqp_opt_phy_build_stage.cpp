@@ -357,7 +357,7 @@ TExprBase KqpBuildReadTableVectorIndexStage(TExprBase node, TExprContext& ctx, c
 
     auto inputStage = inputStageMaybe.Cast();
 
-    auto connection = Build<TKqpCnVectorIndexRead>(ctx, pos)
+    auto connection = Build<TKqpCnVectorSearch>(ctx, pos)
         .Output<TDqOutput>()
             .Stage(inputStage)
             .Index().Build("0")

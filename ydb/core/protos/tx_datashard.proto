@@ -370,7 +370,7 @@ message TKqpVectorResolveSettings {
 // Takes a single target vector value as input and returns the top-K rows from the
 // main table (or posting table for covered queries) sorted by distance/similarity.
 // Replaces the StreamLookup chain produced by the logical optimizer.
-message TKqpVectorIndexReadSettings {
+message TKqpVectorSearchSettings {
     // Index settings (metric, overlap, etc.)
     optional Ydb.Table.VectorIndexSettings IndexSettings = 1;
     optional uint32 IndexLevels = 2;

@@ -1,4 +1,4 @@
-#include "kqp_vector_index_read_actor.h"
+#include "kqp_vector_search_actor.h"
 #include "kqp_read_actor.h"
 
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
@@ -38,7 +38,7 @@ using NTableIndex::NKMeans::TClusterId;
 //      rows by distance to the target and keeps the TopK nearest.
 // The TopK rows (with the requested output columns) are returned to the compute
 // actor, already sorted by distance.
-class TKqpVectorIndexReadActor : public NActors::TActorBootstrapped<TKqpVectorIndexReadActor>, public NYql::NDq::IDqComputeActorAsyncInput {
+class TKqpVectorSearchActor : public NActors::TActorBootstrapped<TKqpVectorSearchActor>, public NYql::NDq::IDqComputeActorAsyncInput {
 
     enum class EPhase {
         WaitInput,    // waiting for the target vector
@@ -49,8 +49,8 @@ class TKqpVectorIndexReadActor : public NActors::TActorBootstrapped<TKqpVectorIn
     };
 
 public:
-    TKqpVectorIndexReadActor(
-        NKikimrTxDataShard::TKqpVectorIndexReadSettings&& settings,
+    TKqpVectorSearchActor(
+        NKikimrTxDataShard::TKqpVectorSearchSettings&& settings,
         ui64 inputIndex,
         const NUdf::TUnboxedValue& input,
         NYql::NDq::TCollectStatsLevel statsLevel,
@@ -70,7 +70,7 @@ public:
         , OverlapRatio(Settings.GetOverlapRatio())
         , PostingCovers(Settings.GetPostingCovers())
         , HasPrefix(Settings.GetHasPrefix())
-        , LogPrefix(TStringBuilder() << "VectorIndexReadActor, inputIndex: " << inputIndex << ", CA Id " << computeActorId)
+        , LogPrefix(TStringBuilder() << "VectorSearchActor, inputIndex: " << inputIndex << ", CA Id " << computeActorId)
         , InputIndex(inputIndex)
         , Input(input)
         , TxId(txId)
@@ -82,7 +82,7 @@ public:
         , Counters(counters)
         , TraceId(traceId)
         , LevelsCache(std::move(levelsCache))
-        , MySpan(TWilsonKqp::VectorResolveActor, NWilson::TTraceId(traceId), "VectorIndexReadActor")
+        , MySpan(TWilsonKqp::VectorResolveActor, NWilson::TTraceId(traceId), "VectorSearchActor")
     {
         IngressStats.Level = statsLevel;
         Snapshot = IKqpGateway::TKqpSnapshot(Settings.GetSnapshot().GetStep(), Settings.GetSnapshot().GetTxId());
@@ -134,7 +134,7 @@ public:
         }
     }
 
-    virtual ~TKqpVectorIndexReadActor() {
+    virtual ~TKqpVectorSearchActor() {
         if (Alloc) {
             TGuard<NMiniKQL::TScopedAlloc> allocGuard(*Alloc);
             Input.Clear();
@@ -143,8 +143,8 @@ public:
     }
 
     void Bootstrap() {
-        CA_LOG_D("Start vector index read actor");
-        Become(&TKqpVectorIndexReadActor::StateFunc);
+        CA_LOG_D("Start vector search actor");
+        Become(&TKqpVectorSearchActor::StateFunc);
     }
 
 private:
@@ -179,7 +179,7 @@ private:
             ClearResults();
         }
         MySpan.End();
-        TActorBootstrapped<TKqpVectorIndexReadActor>::PassAway();
+        TActorBootstrapped<TKqpVectorSearchActor>::PassAway();
     }
 
     i64 GetAsyncInputData(NKikimr::NMiniKQL::TUnboxedValueBatch& batch, TMaybe<TInstant>&, bool& finished, i64 freeSpace) final {
@@ -938,7 +938,7 @@ private:
     };
 
     // Parameters
-    const NKikimrTxDataShard::TKqpVectorIndexReadSettings Settings;
+    const NKikimrTxDataShard::TKqpVectorSearchSettings Settings;
     const ui32 TopK;
     ui32 LevelTop;
     const ui32 OverlapClusters;
@@ -1017,8 +1017,8 @@ private:
     NWilson::TSpan MySpan;
 };
 
-std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpVectorIndexReadActor(
-    NKikimrTxDataShard::TKqpVectorIndexReadSettings&& settings,
+std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpVectorSearchActor(
+    NKikimrTxDataShard::TKqpVectorSearchSettings&& settings,
     ui64 inputIndex,
     const NUdf::TUnboxedValue& input,
     NYql::NDq::TCollectStatsLevel statsLevel,
@@ -1032,17 +1032,17 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpVectorIndexRe
     TIntrusivePtr<TKqpCounters> counters,
     TIntrusivePtr<TVectorIndexLevelsCache> levelsCache)
 {
-    auto actor = new TKqpVectorIndexReadActor(std::move(settings), inputIndex, input, statsLevel, txId,
+    auto actor = new TKqpVectorSearchActor(std::move(settings), inputIndex, input, statsLevel, txId,
         taskId, computeActorId, typeEnv, holderFactory, alloc, traceId, counters, std::move(levelsCache));
     return {actor, actor};
 }
 
-void RegisterKqpVectorIndexReadActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters,
+void RegisterKqpVectorSearchActor(NYql::NDq::TDqAsyncIoFactory& factory, TIntrusivePtr<TKqpCounters> counters,
     TIntrusivePtr<TVectorIndexLevelsCache> levelsCache) {
-    factory.RegisterInputTransform<NKikimrTxDataShard::TKqpVectorIndexReadSettings>(
-        "VectorIndexReadInputTransformer", [counters, levelsCache](NKikimrTxDataShard::TKqpVectorIndexReadSettings&& settings,
+    factory.RegisterInputTransform<NKikimrTxDataShard::TKqpVectorSearchSettings>(
+        "VectorSearchInputTransformer", [counters, levelsCache](NKikimrTxDataShard::TKqpVectorSearchSettings&& settings,
             NYql::NDq::TDqAsyncIoFactory::TInputTransformArguments&& args) -> std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> {
-            return CreateKqpVectorIndexReadActor(std::move(settings),
+            return CreateKqpVectorSearchActor(std::move(settings),
                 args.InputIndex, args.TransformInput, args.StatsLevel, args.TxId, args.TaskId, args.ComputeActorId,
                 args.TypeEnv, args.HolderFactory, args.Alloc, args.TraceId, counters, levelsCache);
         });

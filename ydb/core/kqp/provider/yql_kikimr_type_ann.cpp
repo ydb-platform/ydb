@@ -2415,6 +2415,7 @@ virtual TStatus HandleCreateTable(TKiCreateTable create, TExprContext& ctx) over
         static const THashSet<TString> supportedSettings = {
             "incremental_backup_enabled",
             "storage",
+            "omit_indexes",
         };
 
         if (!CheckBackupCollectionSettings(node.BackupCollectionSettings(), supportedSettings, ctx)) {

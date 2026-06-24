@@ -9,6 +9,8 @@
 
 #include <type_traits>
 
+#define YDB_LOG_THIS_FILE_COMPONENT HttpLog
+
 namespace NHttp {
 
 using namespace NActors;
@@ -137,7 +139,9 @@ protected:
     void Bootstrap() {
         InactivityTimer.Reset();
         Schedule(Endpoint->InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
-        ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") incoming connection opened");
+        YDB_LOG_DEBUG("Incoming connection opened",
+            {"socket", TSocketImpl::GetRawSocket()},
+            {"address", Address});
         OnAccept();
     }
 
@@ -152,7 +156,10 @@ protected:
                     }
                     return; // wait for further notifications
                 } else {
-                    ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - error in Accept: " << strerror(-res));
+                    YDB_LOG_ERROR("Connection closed - error",
+                        {"socket", TSocketImpl::GetRawSocket()},
+                        {"address", Address},
+                        {"inAccept", strerror(-res)});
                     return PassAway();
                 }
             }
@@ -162,7 +169,9 @@ protected:
         // Check for HTTP/2 via ALPN negotiation after TLS handshake
         if constexpr (std::is_same_v<TSocketImpl, TSecureSocketImpl>) {
             if (Endpoint->AllowHttp2 && this->GetAlpnProtocol() == "h2") {
-                ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") ALPN negotiated h2, switching to HTTP/2");
+                YDB_LOG_DEBUG("ALPN negotiated h2, switching to HTTP/2",
+                    {"socket", TSocketImpl::GetRawSocket()},
+                    {"address", Address});
                 SwitchToHttp2();
                 return;
             }
@@ -277,7 +286,9 @@ protected:
     }
 
     void SwitchToHttp2() {
-        ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") switching to HTTP/2");
+        YDB_LOG_DEBUG("Switching to HTTP/2",
+            {"socket", TSocketImpl::GetRawSocket()},
+            {"address", Address});
         InitHttp2Session();
         Become(&TIncomingConnectionActor::StateConnectedHttp2);
         Send(SelfId(), new TEvPollerReady(nullptr, true, true));
@@ -298,7 +309,9 @@ protected:
             return false;
         }
 
-        ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") HTTP/1.1 -> h2c upgrade");
+        YDB_LOG_DEBUG("HTTP/1.1 -> h2c upgrade",
+            {"socket", TSocketImpl::GetRawSocket()},
+            {"address", Address});
 
         // Clean up HTTP/1.1 request pipeline state
         THttpIncomingRequestPtr savedRequest = request;
@@ -330,7 +343,12 @@ protected:
         state.StreamId = upgradeStreamId;
         H2->StreamStates[upgradeStreamId] = std::move(state);
 
-        ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") HTTP/2 stream " << upgradeStreamId << " -> (" << savedRequest->Method << " " << savedRequest->URL << ") (upgrade)");
+        YDB_LOG_DEBUG("HTTP/2 stream -> (upgrade)",
+            {"socket", TSocketImpl::GetRawSocket()},
+            {"address", Address},
+            {"upgradeStreamId", upgradeStreamId},
+            {"method", savedRequest->Method},
+            {"url", savedRequest->URL});
         Send(Endpoint->Proxy, new TEvHttpProxy::TEvHttpIncomingRequest(savedRequest));
 
         Become(&TIncomingConnectionActor::StateConnectedHttp2);
@@ -348,11 +366,18 @@ protected:
             H2->OutputBuffer.append(data);
         };
         callbacks.OnError = [this](TString error) {
-            ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") HTTP/2 error: " << error);
+            YDB_LOG_ERROR("HTTP/2",
+                {"socket", TSocketImpl::GetRawSocket()},
+                {"address", Address},
+                {"error", error});
             H2->Error = true;
         };
         callbacks.OnGoaway = [this](uint32_t lastStreamId, NHttp2::EErrorCode errorCode) {
-            ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") GOAWAY received, lastStreamId=" << lastStreamId << " error=" << static_cast<uint32_t>(errorCode));
+            YDB_LOG_DEBUG("GOAWAY received,",
+                {"socket", TSocketImpl::GetRawSocket()},
+                {"address", Address},
+                {"lastStreamId", lastStreamId},
+                {"error", static_cast<uint32_t>(errorCode)});
         };
         H2->Session = std::make_unique<NHttp2::TSession>(NHttp2::TSession::ERole::Server, std::move(callbacks));
         H2->Session->Initialize();
@@ -368,7 +393,12 @@ protected:
         H2->StreamStates[streamId] = std::move(state);
 
         if (Endpoint->RateLimiter.Check(TActivationContext::Now())) {
-            ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") HTTP/2 stream " << streamId << " -> (" << request->Method << " " << request->URL << ")");
+            YDB_LOG_DEBUG("HTTP/2 stream ->",
+                {"socket", TSocketImpl::GetRawSocket()},
+                {"address", Address},
+                {"streamId", streamId},
+                {"method", request->Method},
+                {"url", request->URL});
             Send(Endpoint->Proxy, new TEvHttpProxy::TEvHttpIncomingRequest(request));
         } else {
             auto response = request->CreateResponseTooManyRequests();
@@ -415,10 +445,15 @@ protected:
             } else if (-res == EINTR) {
                 continue;
             } else if (!res) {
-                ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") HTTP/2 connection closed");
+                YDB_LOG_DEBUG("HTTP/2 connection closed",
+                    {"socket", TSocketImpl::GetRawSocket()},
+                    {"address", Address});
                 return PassAway();
             } else {
-                ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") HTTP/2 connection closed - error in Receive: " << strerror(-res));
+                YDB_LOG_ERROR("HTTP/2 connection closed - error",
+                    {"socket", TSocketImpl::GetRawSocket()},
+                    {"address", Address},
+                    {"inReceive", strerror(-res)});
                 return PassAway();
             }
         }
@@ -446,7 +481,10 @@ protected:
                 }
                 break;
             } else {
-                ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") HTTP/2 connection closed - error in FlushOutput: " << strerror(-res));
+                YDB_LOG_ERROR("HTTP/2 connection closed - error",
+                    {"socket", TSocketImpl::GetRawSocket()},
+                    {"address", Address},
+                    {"inFlushOutput", strerror(-res)});
                 H2->Error = true;
                 return false;
             }
@@ -465,7 +503,9 @@ protected:
         if (event->Get() == InactivityEvent) {
             const TDuration passed = TDuration::Seconds(std::abs(InactivityTimer.Passed()));
             if (passed >= Endpoint->InactivityTimeout) {
-                ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed by inactivity timeout during detection");
+                YDB_LOG_DEBUG("Connection closed by inactivity timeout during detection",
+                    {"socket", TSocketImpl::GetRawSocket()},
+                    {"address", Address});
                 return PassAway();
             } else {
                 Schedule(Endpoint->InactivityTimeout - passed, InactivityEvent = new TEvPollerReady(nullptr, false, false));
@@ -487,7 +527,9 @@ protected:
         if (event->Get() == InactivityEvent) {
             const TDuration passed = TDuration::Seconds(std::abs(InactivityTimer.Passed()));
             if (passed >= Endpoint->InactivityTimeout) {
-                ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") HTTP/2 connection closed by inactivity timeout");
+                YDB_LOG_DEBUG("HTTP/2 connection closed by inactivity timeout",
+                    {"socket", TSocketImpl::GetRawSocket()},
+                    {"address", Address});
                 if (H2 && H2->Session) {
                     H2->Session->SendGoaway();
                 }
@@ -522,12 +564,18 @@ protected:
         }
 
         if (streamId == 0) {
-            ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") HTTP/2 response for unknown request");
+            YDB_LOG_ERROR("HTTP/2 response for unknown request",
+                {"socket", TSocketImpl::GetRawSocket()},
+                {"address", Address});
             return;
         }
 
-        ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") HTTP/2 stream " << streamId
-            << " <- (" << response->Status << " " << response->Message << ")");
+        YDB_LOG_DEBUG("HTTP/2 stream <-",
+            {"socket", TSocketImpl::GetRawSocket()},
+            {"address", Address},
+            {"streamId", streamId},
+            {"status", response->Status},
+            {"message", response->Message});
 
         THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildIncomingRequestSensors(request, response));
         Send(Endpoint->Owner, sensors.Release());
@@ -545,7 +593,10 @@ protected:
 
     void HandleHttp2(TEvHttpProxy::TEvHttpOutgoingDataChunk::TPtr& event) {
         if (event->Get()->Error) {
-            ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") HTTP/2 DataChunk error: " << event->Get()->Error);
+            YDB_LOG_ERROR("HTTP/2 DataChunk",
+                {"socket", TSocketImpl::GetRawSocket()},
+                {"address", Address},
+                {"error", event->Get()->Error});
             return PassAway();
         }
 
@@ -561,7 +612,9 @@ protected:
         }
 
         if (streamId == 0) {
-            ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") HTTP/2 data chunk for unknown stream");
+            YDB_LOG_ERROR("HTTP/2 data chunk for unknown stream",
+                {"socket", TSocketImpl::GetRawSocket()},
+                {"address", Address});
             return;
         }
 
@@ -618,7 +671,9 @@ protected:
                     }
                 }
                 if (!CurrentRequest->EnsureEnoughSpaceAvailable()) {
-                    ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - not enough space available");
+                    YDB_LOG_DEBUG("Connection closed - not enough space available",
+                        {"socket", TSocketImpl::GetRawSocket()},
+                        {"address", Address});
                     return PassAway();
                 }
                 ssize_t need = CurrentRequest->Avail();
@@ -635,8 +690,14 @@ protected:
                                 return;
                             }
                             if (Endpoint->RateLimiter.Check(TActivationContext::Now())) {
-                                ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -> (" << GetRequestDebugText() << ")");
-                                ALOG_TRACE(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") Request:\n" << CurrentRequest->GetObfuscatedData());
+                                YDB_LOG_DEBUG("->",
+                                    {"socket", TSocketImpl::GetRawSocket()},
+                                    {"address", Address},
+                                    {"requestDebugText", GetRequestDebugText()});
+                                YDB_LOG_TRACE("Request:\n",
+                                    {"socket", TSocketImpl::GetRawSocket()},
+                                    {"address", Address},
+                                    {"obfuscatedData", CurrentRequest->GetObfuscatedData()});
                                 Send(Endpoint->Proxy, new TEvHttpProxy::TEvHttpIncomingRequest(CurrentRequest));
                                 CurrentRequest = nullptr;
                             } else {
@@ -649,7 +710,10 @@ protected:
                                 CleanupRequest(CurrentRequest);
                             }
                         } else if (CurrentRequest->IsError()) {
-                            ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") -! (" << GetRequestDebugText() << ")");
+                            YDB_LOG_DEBUG("-!",
+                                {"socket", TSocketImpl::GetRawSocket()},
+                                {"address", Address},
+                                {"requestDebugText", GetRequestDebugText()});
                             bool success = Respond({
                                 .Response = CurrentRequest->CreateResponseBadRequest()
                             });
@@ -673,10 +737,15 @@ protected:
                     continue;
                 } else if (!res) {
                     // connection closed
-                    ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed");
+                    YDB_LOG_DEBUG("Connection closed",
+                        {"socket", TSocketImpl::GetRawSocket()},
+                        {"address", Address});
                     return PassAway();
                 } else {
-                    ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - error in Receive: " << strerror(-res));
+                    YDB_LOG_ERROR("Connection closed - error",
+                        {"socket", TSocketImpl::GetRawSocket()},
+                        {"address", Address},
+                        {"inReceive", strerror(-res)});
                     return PassAway();
                 }
             }
@@ -684,7 +753,9 @@ protected:
         if (event->Get() == InactivityEvent) {
             const TDuration passed = TDuration::Seconds(std::abs(InactivityTimer.Passed()));
             if (passed >= Endpoint->InactivityTimeout) {
-                ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed by inactivity timeout");
+                YDB_LOG_DEBUG("Connection closed by inactivity timeout",
+                    {"socket", TSocketImpl::GetRawSocket()},
+                    {"address", Address});
                 return PassAway(); // timeout
             } else {
                 Schedule(Endpoint->InactivityTimeout - passed, InactivityEvent = new TEvPollerReady(nullptr, false, false));
@@ -739,7 +810,10 @@ protected:
 
     void HandleConnected(TEvHttpProxy::TEvHttpOutgoingDataChunk::TPtr& event) {
         if (event->Get()->Error) {
-            ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - DataChunk error: " << event->Get()->Error);
+            YDB_LOG_ERROR("Connection closed - DataChunk",
+                {"socket", TSocketImpl::GetRawSocket()},
+                {"address", Address},
+                {"error", event->Get()->Error});
             return PassAway();
         }
         if (CurrentResponse && CurrentResponse.Response == event->Get()->DataChunk->GetResponse()) {
@@ -749,15 +823,25 @@ protected:
             if (itResponse != Responses.end() && itResponse->second.Response == event->Get()->DataChunk->GetResponse()) {
                 itResponse->second.Response->AddDataChunk(event->Get()->DataChunk);
             } else {
-                ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - DataChunk request not found");
+                YDB_LOG_ERROR("Connection closed - DataChunk request not found",
+                    {"socket", TSocketImpl::GetRawSocket()},
+                    {"address", Address});
                 return PassAway();
             }
         }
-        ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") <- (" << GetChunkDebugText(event->Get()->DataChunk) << ")");
+        YDB_LOG_DEBUG("<-",
+            {"socket", TSocketImpl::GetRawSocket()},
+            {"address", Address},
+            {"dataChunk", GetChunkDebugText(event->Get()->DataChunk)});
         if (CurrentResponse.Response->CompressContext) {
-            ALOG_TRACE(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") DataChunk:\n(compressed data)");
+            YDB_LOG_TRACE("DataChunk:\n(compressed data)",
+                {"socket", TSocketImpl::GetRawSocket()},
+                {"address", Address});
         } else {
-            ALOG_TRACE(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") DataChunk:\n" << event->Get()->DataChunk->AsString());
+            YDB_LOG_TRACE("DataChunk:\n",
+                {"socket", TSocketImpl::GetRawSocket()},
+                {"address", Address},
+                {"dataChunk", event->Get()->DataChunk->AsString()});
         }
         if (event->Get()->DataChunk->IsEndOfData()) {
             CancelSubscriber = nullptr;
@@ -772,31 +856,33 @@ protected:
     bool Respond(TResponseState state) {
         THttpOutgoingResponsePtr response = state.Response;
         THttpIncomingRequestPtr request = response->GetRequest();
-        ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") <- ("
-            << GetResponseDebugText(response) << (response->IsDone() ? ")" : ") (incomplete)"));
+        YDB_LOG_DEBUG("<-",
+            {"socket", TSocketImpl::GetRawSocket()},
+            {"address", Address},
+            {"response", GetResponseDebugText(response)},
+            {"done", (response->IsDone() ? "done" : "incomplete")});
         if (!response->Status.StartsWith('2') && !response->Status.StartsWith('3') && response->Status != "404") {
             static constexpr size_t MAX_LOGGED_SIZE = 1024;
-            ALOG_DEBUG(HttpLog,
-                        "(#"
-                        << TSocketImpl::GetRawSocket()
-                        << ","
-                        << Address
-                        << ") Request: "
-                        << request->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
-            ALOG_DEBUG(HttpLog,
-                        "(#"
-                        << TSocketImpl::GetRawSocket()
-                        << ","
-                        << Address
-                        << ") Response: "
-                        << response->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE));
+            YDB_LOG_DEBUG("Dump #_(, address, request",
+                {"socket", TSocketImpl::GetRawSocket()},
+                {"address", Address},
+                {"request", request->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE)});
+            YDB_LOG_DEBUG("Dump #_(, address, response",
+                {"socket", TSocketImpl::GetRawSocket()},
+                {"address", Address},
+                {"response", response->GetObfuscatedData().substr(0, MAX_LOGGED_SIZE)});
         } else {
-            ALOG_TRACE(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") Response:\n" << response->GetObfuscatedData());
+            YDB_LOG_TRACE("Response:\n",
+                {"socket", TSocketImpl::GetRawSocket()},
+                {"address", Address},
+                {"obfuscatedData", response->GetObfuscatedData()});
         }
         THolder<TEvHttpProxy::TEvReportSensors> sensors(BuildIncomingRequestSensors(request, response));
         Send(Endpoint->Owner, sensors.Release());
         if (Requests.empty()) {
-            ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - no request found for response");
+            YDB_LOG_ERROR("Connection closed - no request found for response",
+                {"socket", TSocketImpl::GetRawSocket()},
+                {"address", Address});
             PassAway();
             return false; // no request to respond to
         }
@@ -828,13 +914,17 @@ protected:
                             Responses.erase(it);
                             continue;
                         } else {
-                            ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - FlushOutput request not found");
+                            YDB_LOG_ERROR("Connection closed - FlushOutput request not found",
+                                {"socket", TSocketImpl::GetRawSocket()},
+                                {"address", Address});
                             PassAway();
                             return false;
                         }
                     } else {
                         if (close) {
-                            ALOG_DEBUG(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed");
+                            YDB_LOG_DEBUG("Connection closed",
+                                {"socket", TSocketImpl::GetRawSocket()},
+                                {"address", Address});
                             PassAway();
                             return false;
                         } else {
@@ -888,7 +978,10 @@ protected:
                 break;
             } else {
                 CleanupResponse(response);
-                ALOG_ERROR(HttpLog, "(#" << TSocketImpl::GetRawSocket() << "," << Address << ") connection closed - error in FlushOutput: " << strerror(-res));
+                YDB_LOG_ERROR("Connection closed - error",
+                    {"socket", TSocketImpl::GetRawSocket()},
+                    {"address", Address},
+                    {"inFlushOutput", strerror(-res)});
                 PassAway();
                 return false;
             }

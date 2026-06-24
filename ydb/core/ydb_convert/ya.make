@@ -31,6 +31,7 @@ PEERDIR(
     yql/essentials/minikql/dom
     yql/essentials/public/udf
     ydb/public/api/protos
+    ydb/public/api/grpc/draft
 )
 
 GENERATE_ENUM_SERIALIZATION(table_description.h)

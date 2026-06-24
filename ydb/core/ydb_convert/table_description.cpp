@@ -4,13 +4,9 @@
 #include "ydb_convert.h"
 
 #include <ydb/core/base/appdata.h>
-<<<<<<< HEAD
-=======
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
->>>>>>> c1b26e59009 (use most appropriate storage type when creating min_max index through yql ddl (#43731))
 #include <ydb/core/tablet_flat/bloom_filter_defaults.h>
-#include <ydb/core/base/path.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>

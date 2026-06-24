@@ -32,13 +32,6 @@ inline TString UnknownIndexColumnNameErrorMessage(TStringBuf columnName, const a
 
 inline const TString FeatureFlagDisabledErrorMessage = "Local min_max index is disabled with EnableLocalMinMaxIndex feature flag";
 
-<<<<<<< HEAD
-=======
-inline const TString SchemeObjectFeatureFlagDisabledErrorMessage =
-    "Local min_max index is not treated as scheme object because feature flag EnableLocalIndexAsSchemeObject is disabled";
-
-inline const TString ProtoDescrptionLacksColumnIdErrorMessage = "Local min_max index description lacks required ColumnId field";
-
 void SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(auto& index, std::string_view typeName) {
     if (typeName == NKikimr::NScheme::TypeName(NKikimr::NScheme::NTypeIds::String) ||
         typeName == NKikimr::NScheme::TypeName(NKikimr::NScheme::NTypeIds::Utf8)) {
@@ -49,6 +42,4 @@ void SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(auto& index, std
         index.SetStorageId("__LOCAL_METADATA");
     }
 }
-
->>>>>>> c1b26e59009 (use most appropriate storage type when creating min_max index through yql ddl (#43731))
 }   // namespace NKikimr::NOlap::NIndexes::NMinMax

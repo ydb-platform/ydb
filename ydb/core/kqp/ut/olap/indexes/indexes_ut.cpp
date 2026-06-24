@@ -236,13 +236,11 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMaxWithBSStorage)).Execute(settings);
     }
 
-    Y_UNIT_TEST(AlterIndexOnNotExistingTableResultsInError, EUseQueryService, ELocalIndexAsSchemeObject) {
+    Y_UNIT_TEST(AlterIndexOnNotExistingTableResultsInError, EUseQueryService) {
         const bool useQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        const bool localIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         settings.FeatureFlags.SetEnableLocalMinMaxIndex(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(localIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         auto helper = TLocalHelper(kikimr);
@@ -438,16 +436,11 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         UNIT_ASSERT_C(!resDistinctFromNull.MinMaxIndexUsed, "query with 'IS DISCTINCT FROM NULL' filter over min_max-indexed column use min_max index, but it shouldn't(will use in future, see https://github.com/ydb-platform/ydb/issues/38574)");
     }
 
-<<<<<<< HEAD
-    Y_UNIT_TEST(MinMaxNulls, EUseQueryService) {
-=======
-    Y_UNIT_TEST(MinMaxIndexStoredInBSForStringsAndInLocalDBOtherwise, EUseQueryService, ELocalIndexAsSchemeObject) {
+    Y_UNIT_TEST(MinMaxIndexStoredInBSForStringsAndInLocalDBOtherwise, EUseQueryService) {
         const bool useQueryService = (Arg<0>() == EUseQueryService::QueryService);
-        const bool localIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         settings.FeatureFlags.SetEnableLocalMinMaxIndex(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(localIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         auto helper = TLocalHelper(kikimr);
@@ -585,8 +578,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         }
     }
 
-    Y_UNIT_TEST(MinMaxNulls, EUseQueryService, ELocalIndexAsSchemeObject) {
->>>>>>> c1b26e59009 (use most appropriate storage type when creating min_max index through yql ddl (#43731))
+    Y_UNIT_TEST(MinMaxNulls, EUseQueryService) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)

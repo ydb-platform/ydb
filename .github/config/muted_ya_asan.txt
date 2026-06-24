@@ -410,6 +410,7 @@ ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesDdl.StreamingQuer
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadPartOfSysViewColumns
 ydb/core/kqp/ut/federated_query/datastreams KqpStreamingQueriesSysView.ReadSysViewWithRowCountBackPressure
 ydb/core/kqp/ut/federated_query/s3 KqpFederatedQuery.TestRestartQueryAndCleanupWithGetOperation
+ydb/core/kqp/ut/indexes/prefixed_vector KqpPrefixedVectorIndexes.EmptyPrefixedVectorIndexInsertWithOverlap+Covered
 ydb/core/kqp/ut/indexes/prefixed_vector KqpPrefixedVectorIndexes.PrefixedVectorIndexInsertNewPrefix-Nullable+Covered
 ydb/core/kqp/ut/indexes/prefixed_vector KqpPrefixedVectorIndexes.PrefixedVectorIndexInsertNewPrefixWithOverlap+Covered
 ydb/core/kqp/ut/indexes/prefixed_vector unittest.[*/*] chunk

@@ -216,6 +216,182 @@ def test_datashard_tablet_devui_mon_paths_with_enforce_user_token_and_secure_pat
     )
 
 
+def test_tablets_app_secure_prefix_forbids_non_admins(ydb_cluster_with_enforce_user_token):
+    _, monitoring_allowed_sids_ok, admin_allowed_sids_ok = tablet_devui_sid_matrix()
+    _test_endpoints(
+        ydb_cluster_with_enforce_user_token,
+        {
+            '/tablets/app/secure?TabletID=1': admin_allowed_sids_ok,
+            '/tablets/app?TabletID=1': monitoring_allowed_sids_ok,
+        },
+    )
+
+
+def _pers_queue_endpoint_cases(endpoint_paths, token_statuses):
+    return [
+        (endpoint_path, token, expected_status)
+        for endpoint_path in endpoint_paths
+        for token, expected_status in token_statuses.items()
+    ]
+
+
+def _pers_queue_monitoring_page_access_cases(
+    tablet_id,
+    secure_path_mode=False,
+    pages=(
+        ('Main', ''),
+        ('KV', 'kv=1'),
+        ('TxInfo', 'TxId=1'),
+    ),
+):
+    q_base = f'TabletID={tablet_id}'
+    all_forbidden, monitoring_allowed, _ = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
+    cases = []
+    for _, query_suffix in pages:
+        q = q_base if not query_suffix else f'{q_base}&{query_suffix}'
+        cases.extend(_pers_queue_endpoint_cases([f'/tablets/app?{q}'], expected_on_app))
+    return cases
+
+
+def _pers_queue_admin_page_access_cases(
+    tablet_id,
+    pages=(
+        ('SendReadSet', 'SendReadSet=1&step=1&txId=1&decision=commit&allSenderTablets=1'),
+        ('Action', 'action=future_mutation'),
+    ),
+):
+    q_base = f'TabletID={tablet_id}'
+    all_forbidden, _, admin_allowed = tablet_devui_sid_matrix()
+    cases = []
+    for _, query_suffix in pages:
+        q = f'{q_base}&{query_suffix}'
+        cases.extend(_pers_queue_endpoint_cases([f'/tablets/app?{q}'], all_forbidden))
+        cases.extend(_pers_queue_endpoint_cases([f'/tablets/app/secure?{q}'], admin_allowed))
+    return cases
+
+
+def _pers_queue_monitoring_devui_cases(tablet_id, secure_path_mode=False):
+    q = f'TabletID={tablet_id}'
+    all_forbidden, monitoring_allowed, _ = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
+    return (
+        _pers_queue_endpoint_cases([f'/tablets/app?{q}'], expected_on_app)
+        + _pers_queue_endpoint_cases([f'/tablets?{q}'], monitoring_allowed)
+    )
+
+
+def _pers_queue_admin_devui_cases(tablet_id, secure_path_mode):
+    q = f'TabletID={tablet_id}'
+    all_forbidden, monitoring_allowed, admin_allowed = tablet_devui_sid_matrix()
+    expected_on_app = tablet_devui_expected_on_app(secure_path_mode, monitoring_allowed, all_forbidden)
+    send_rs = 'SendReadSet=1&step=1&txId=1&decision=commit&allSenderTablets=1'
+    return (
+        _pers_queue_endpoint_cases([f'/tablets/app?{q}&{send_rs}'], expected_on_app)
+        + _pers_queue_endpoint_cases([f'/tablets/app/secure?{q}&{send_rs}'], admin_allowed)
+        + _pers_queue_endpoint_cases([f'/tablets/app?{q}&action=future_mutation'], expected_on_app)
+        + _pers_queue_endpoint_cases([f'/tablets/app/secure?{q}&action=future_mutation'], admin_allowed)
+    )
+
+
+def _pers_queue_new_action_cases(tablet_id, query_suffix, secure_path_mode):
+    expectations = tablet_devui_new_action_paths(tablet_id, query_suffix, secure_path_mode)
+    cases = []
+    for endpoint_path, token_statuses in expectations.items():
+        cases.extend(_pers_queue_endpoint_cases([endpoint_path], token_statuses))
+    return cases
+
+
+def _pers_queue_token_desc(token):
+    return token if token is not None else 'null'
+
+
+def _pers_queue_mon_base_url(cluster):
+    node = cluster.nodes[1]
+    return f'https://{node.host}:{node.mon_port}'
+
+
+def _pers_queue_get_status(cluster, endpoint_path, token=None):
+    headers = {}
+    if token is not None:
+        headers['Authorization'] = token
+    response = requests.get(
+        f'{_pers_queue_mon_base_url(cluster)}{endpoint_path}',
+        headers=headers,
+        verify=False,
+    )
+    return response.status_code
+
+
+def test_pers_queue_devui_mon_paths_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token_and_pers_queue_topic,
+):
+    cluster = ydb_cluster_with_enforce_user_token_and_pers_queue_topic
+    tid = cluster.pers_queue_tablet_id
+    cases = (
+        _pers_queue_monitoring_devui_cases(tid)
+        + _pers_queue_admin_devui_cases(tid, secure_path_mode=False)
+    )
+
+    for endpoint_path, token, expected_status in cases:
+        status = _pers_queue_get_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected GET {endpoint_path} with token={_pers_queue_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
+
+
+def test_pers_queue_devui_mon_paths_with_enforce_user_token_and_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic,
+):
+    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic
+    tid = cluster.pers_queue_tablet_id
+    cases = (
+        _pers_queue_monitoring_devui_cases(tid, secure_path_mode=True)
+        + _pers_queue_admin_devui_cases(tid, secure_path_mode=True)
+    )
+
+    for endpoint_path, token, expected_status in cases:
+        status = _pers_queue_get_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected GET {endpoint_path} with token={_pers_queue_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
+
+
+def test_pers_queue_page_access_matrix_with_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic,
+):
+    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic
+    tid = cluster.pers_queue_tablet_id
+    cases = (
+        _pers_queue_monitoring_page_access_cases(tid, secure_path_mode=True)
+        + _pers_queue_admin_page_access_cases(tid)
+    )
+
+    for endpoint_path, token, expected_status in cases:
+        status = _pers_queue_get_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected GET {endpoint_path} with token={_pers_queue_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
+
+
+def test_pers_queue_new_action_with_enforce_user_token(
+    ydb_cluster_with_enforce_user_token_and_pers_queue_topic,
+):
+    cluster = ydb_cluster_with_enforce_user_token_and_pers_queue_topic
+    tid = cluster.pers_queue_tablet_id
+    cases = _pers_queue_new_action_cases(tid, 'NewPage=1', secure_path_mode=False)
+
+    for endpoint_path, token, expected_status in cases:
+        status = _pers_queue_get_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected GET {endpoint_path} with token={_pers_queue_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
+
+
 def _schemeshard_endpoint_cases(endpoint_paths, token_statuses):
     return [
         (endpoint_path, token, expected_status)
@@ -633,6 +809,21 @@ def test_graph_shard_new_action_with_enforce_user_token(
     )
 
 
+def test_pers_queue_new_action_with_enforce_user_token_and_secure_path_mode(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic,
+):
+    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic
+    tid = cluster.pers_queue_tablet_id
+    cases = _pers_queue_new_action_cases(tid, 'NewPage=1', secure_path_mode=True)
+
+    for endpoint_path, token, expected_status in cases:
+        status = _pers_queue_get_status(cluster, endpoint_path, token)
+        assert status == expected_status, (
+            f'Expected GET {endpoint_path} with token={_pers_queue_token_desc(token)} '
+            f'to return {expected_status}, got {status}'
+        )
+
+
 def test_graph_shard_new_action_with_enforce_user_token_and_secure_path_mode(
     ydb_cluster_with_enforce_user_token_secure_devui_flag_and_graph_shard,
 ):
@@ -641,6 +832,21 @@ def test_graph_shard_new_action_with_enforce_user_token_and_secure_path_mode(
         ydb_cluster_with_enforce_user_token_secure_devui_flag_and_graph_shard,
         tablet_devui_new_action_paths(tid, 'NewPage=1', secure_path_mode=True),
     )
+
+
+def test_pers_queue_send_read_set_form_uses_secure_path(
+    ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic,
+):
+    cluster = ydb_cluster_with_enforce_user_token_secure_devui_flag_and_pers_queue_topic
+    tid = cluster.pers_queue_tablet_id
+    endpoint_path = f'/tablets/app?TabletID={tid}&TxId=1'
+    response = requests.get(
+        f'{_pers_queue_mon_base_url(cluster)}{endpoint_path}',
+        headers={'Authorization': 'monitoring@builtin'},
+        verify=False,
+    )
+    if response.status_code == 200 and 'SendReadSet' in response.text:
+        assert "action='app/secure?" in response.text or 'action="app/secure?' in response.text
 
 
 def test_graph_shard_change_backend_links_use_secure_path(

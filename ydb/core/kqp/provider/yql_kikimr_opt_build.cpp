@@ -99,6 +99,7 @@ struct TKiExploreTxResults {
     };
 
     bool ConcurrentResults = true;
+    bool IsolateEffects = false;
 
     THashSet<const TExprNode*> Ops;
     TVector<TExprBase> Sync;
@@ -180,8 +181,10 @@ struct TKiExploreTxResults {
             uncommittedChangesRead = HasWriteOps(tableMeta->Name);
         }
 
-        if (uncommittedChangesRead) {
+        if (uncommittedChangesRead || IsolateEffects) {
             AddQueryBlock();
+        }
+        if (uncommittedChangesRead) {
             SetBlockHasUncommittedChangesRead();
         }
     }
@@ -269,7 +272,7 @@ struct TKiExploreTxResults {
             }
         }
 
-        if (QueryBlocks.empty() || uncommittedChangesRead) {
+        if (QueryBlocks.empty() || uncommittedChangesRead || IsolateEffects) {
             AddQueryBlock();
         }
 
@@ -931,7 +934,7 @@ TString GetShowCreateType(const TExprNode& settings) {
 } // anonymous namespace
 
 TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf database, TIntrusivePtr<TKikimrTablesData> tablesData,
-    TTypeAnnotationContext& types, bool concurrentResults) {
+    TTypeAnnotationContext& types, bool concurrentResults, bool isolateEffects) {
     if (!node.Maybe<TCoCommit>().DataSink().Maybe<TKiDataSink>()) {
         return node.Ptr();
     }
@@ -1200,6 +1203,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
 
     TKiExploreTxResults txExplore;
     txExplore.ConcurrentResults = concurrentResults;
+    txExplore.IsolateEffects = isolateEffects;
     if (!ExploreTx(commit.World(), ctx, kiDataSink, txExplore, tablesData, types) || txExplore.HasErrors) {
         if (txExplore.HasErrors) {
             ctx.AddError(TIssue(ctx.GetPosition(node.Pos()), "ExploreTx failed"));

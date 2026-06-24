@@ -61,16 +61,8 @@ TString TEraseRequestExecutor::Print()
 {
     TStringBuilder result;
     result << LogTitle.GetWithTime();
-    result << "{";
-    bool first = true;
-    for (const auto& segment: Hint.Segments) {
-        result << " " << segment.Lsn;
-        if (!first) {
-            result << ",";
-        }
-        first = false;
-    }
-    result << "}";
+    result << Hint.DebugPrint(true);
+    result << (Promise.IsReady() ? ",Replied" : ",NotReplied");
     return result;
 }
 
@@ -82,12 +74,6 @@ TEraseRequestExecutor::GetFuture() const
 
 void TEraseRequestExecutor::OnEraseResponse(const TDBGEraseResponse& response)
 {
-    TVector<ui64> lsns;
-    lsns.reserve(Hint.Segments.size());
-    for (const auto& segment: Hint.Segments) {
-        lsns.push_back(segment.Lsn);
-    }
-
     if (HasError(response.Error)) {
         LOG_ERROR(
             *ActorSystem,
@@ -96,11 +82,11 @@ void TEraseRequestExecutor::OnEraseResponse(const TDBGEraseResponse& response)
             LogTitle.GetWithTime().c_str(),
             FormatError(response.Error).c_str());
 
-        Reply({}, std::move(lsns));
+        Reply({}, Hint.MakeLsnVector());
         return;
     }
 
-    Reply(std::move(lsns), {});
+    Reply(Hint.MakeLsnVector(), {});
 }
 
 void TEraseRequestExecutor::Reply(

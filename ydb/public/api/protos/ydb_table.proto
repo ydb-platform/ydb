@@ -1098,6 +1098,27 @@ message CompactMetadata {
     optional uint32 shards_done = 7;
 }
 
+// State of an analyze operation
+message AnalyzeState {
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        STATE_ENQUEUED = 1;
+        STATE_IN_PROGRESS = 2;
+        STATE_DONE = 3;
+        STATE_CANCELLED = 4;
+        STATE_FAILED = 5;
+    }
+}
+
+message AnalyzeMetadata {
+
+    repeated string paths = 1;             // All table paths covered by this analyze operation.
+    repeated string in_progress_paths = 2; // Tables currently being traversed
+    repeated string done_paths = 3;        // Tables for which analysis is complete
+    optional AnalyzeState.State state = 4;
+    optional float progress = 5;
+}
+
 // Alter table with given path
 message AlterTableRequest {
     // Session identifier

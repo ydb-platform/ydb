@@ -1,6 +1,6 @@
 #include "read_metadata.h"
 
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/compute_actor/events/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/iterator.h>
 #include <ydb/core/tx/columnshard/engines/reader/trivial_reader/iterator/plain_read_data.h>

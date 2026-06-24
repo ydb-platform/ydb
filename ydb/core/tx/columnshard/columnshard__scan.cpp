@@ -6,7 +6,7 @@
 #include "engines/reader/transaction/tx_scan.h"
 
 #include <ydb/core/base/appdata_fwd.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/compute_actor/events/kqp_compute_events.h>
 #include <ydb/core/protos/kqp.pb.h>
 
 namespace NKikimr::NColumnShard {

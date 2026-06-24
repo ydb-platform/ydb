@@ -3,7 +3,7 @@
 #include "export_counters.h"
 
 #include <ydb/core/formats/arrow/serializer/abstract.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/compute_actor/events/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/backup/iscan/iscan.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/actor.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storage.h>

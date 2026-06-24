@@ -136,6 +136,7 @@ PEERDIR(
     ydb/core/health_check
     ydb/core/io_formats/ydb_dump
     ydb/core/kesus/tablet
+    ydb/core/kqp/compute_actor/events
     ydb/core/kqp/common
     ydb/core/kqp/opt
     ydb/core/local_indexes/bloom

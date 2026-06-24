@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/converter.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/compute_actor/events/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/column_fetching/manager.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>
@@ -14,6 +14,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/log.h>
 #include <ydb/library/chunks_limiter/chunks_limiter.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 
 #include <library/cpp/lwtrace/all.h>
 
@@ -57,7 +58,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScan);
             hFunc(NKqp::TEvKqpCompute::TEvScanPing, HandleScan);
-            hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleScan);
+            hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleScan);
             hFunc(NActors::TEvents::TEvPoison, HandleScan);
             hFunc(TEvents::TEvUndelivered, HandleScan);
             hFunc(TEvents::TEvWakeup, HandleScan);
@@ -78,7 +79,7 @@ private:
 
     void ContinueProcessing();
 
-    void HandleScan(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) noexcept;
+    void HandleScan(NYql::NDq::TEvDq::TEvAbortExecution::TPtr& ev) noexcept;
     void HandleScan(NActors::TEvents::TEvPoison::TPtr& ev) noexcept;
 
     void HandleScan(TEvents::TEvUndelivered::TPtr& ev);

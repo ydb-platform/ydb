@@ -53,8 +53,10 @@ PEERDIR(
     ydb/core/engine
     ydb/core/engine/minikql
     ydb/core/formats
+    ydb/core/kqp/compute_actor/events
     ydb/core/kqp/common
     ydb/core/kqp/common/buffer
+    ydb/core/kqp/runtime/compute_context
     ydb/core/mon
     ydb/core/persqueue/events
     ydb/core/protos

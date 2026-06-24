@@ -10,6 +10,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/compute_actor/events
     ydb/core/testlib
 )
 

@@ -1,6 +1,6 @@
 #pragma once
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/compute_actor/events/kqp_compute_events.h>
 #include <ydb/core/testlib/basics/runtime.h>
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/tx/columnshard/columnshard_private_events.h>

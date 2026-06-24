@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/events/script_executions.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
+#include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/gateway/behaviour/streaming_query/common/utils.h>
 #include <ydb/core/kqp/workload_service/actors/actors.h>
 #include <ydb/core/sys_view/common/registry.h>
@@ -620,7 +621,7 @@ public:
             hFunc(TEvPrivate::TEvFetchStreamingQueriesResult, Handle);
             hFunc(TEvPrivate::TEvDescribeStreamingQueriesResult, Handle);
             hFunc(NKqp::TEvGetScriptExecutionOperationResponse, Handle);
-            hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
+            hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:

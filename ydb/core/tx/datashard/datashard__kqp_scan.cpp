@@ -5,11 +5,12 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/formats/arrow/size_calcer.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/compute_actor/events/kqp_compute_events.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 #include <ydb/core/tablet_flat/flat_row_celled.h>
 
 #include <ydb/library/chunks_limiter/chunks_limiter.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 
 namespace NKikimr {
@@ -88,7 +89,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvKqpCompute::TEvScanDataAck, HandleScan);
             hFunc(TEvKqpCompute::TEvKillScanTablet, HandleScan);
-            hFunc(TEvKqp::TEvAbortExecution, HandleScan);
+            hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleScan);
             hFunc(TEvents::TEvUndelivered, HandleScan);
             hFunc(TEvents::TEvWakeup, HandleScan);
             default:
@@ -132,7 +133,7 @@ private:
         Send(DatashardActorId, new TEvents::TEvPoison);
     }
 
-    void HandleScan(TEvKqp::TEvAbortExecution::TPtr& ev) {
+    void HandleScan(NYql::NDq::TEvDq::TEvAbortExecution::TPtr& ev) {
         if (!Driver) {
             LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Got AbortExecution while driver not set");
             PassAway();
@@ -467,14 +468,14 @@ private:
             if (sendBytes >= 48_MB) {
                 LOG_ERROR_S(*TlsActivationContext, NKikimrServices::TX_DATASHARD, "Query size limit exceeded.");
                 if (finish) {
-                    bool sent = Send(ComputeActorId, new TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                    bool sent = Send(ComputeActorId, new NYql::NDq::TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                         "Query size limit exceeded."));
                     Y_ENSURE(sent);
 
                     ReportDatashardStats();
                     return true;
                 } else {
-                    bool sent = Send(SelfId(), new TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
+                    bool sent = Send(SelfId(), new NYql::NDq::TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::PRECONDITION_FAILED,
                         "Query size limit exceeded."));
                     Y_ENSURE(sent);
 
@@ -539,7 +540,7 @@ private:
     IDriver* Driver = nullptr;
     TActorId ScanActorId;
     TActorId TimeoutActorId;
-    TAutoPtr<TEvKqp::TEvAbortExecution> AbortEvent;
+    TAutoPtr<NYql::NDq::TEvDq::TEvAbortExecution> AbortEvent;
 
     THolder<NArrow::TArrowBatchBuilder> BatchBuilder;
     THolder<TEvKqpCompute::TEvScanData> Result;

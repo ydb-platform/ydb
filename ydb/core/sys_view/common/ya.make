@@ -15,6 +15,9 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/core/base
+    ydb/core/kqp/compute_actor/events
+    ydb/core/kqp/common/simple
+    ydb/core/kqp/runtime/compute_context
     ydb/core/protos
     ydb/core/tablet_flat
     library/cpp/deprecated/atomic

@@ -156,7 +156,7 @@ void TPgTablesScanBase::StateScan(TAutoPtr<IEventHandle>& ev) {
     switch (ev->GetTypeRewrite()) {
         sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleAck);
         HFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
-        hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
+        hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleAbortExecution);
         cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
         cFunc(TEvents::TEvPoison::EventType, PassAway);
         default:

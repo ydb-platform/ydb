@@ -6,8 +6,8 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/compute_actor/events
     ydb/core/tx/columnshard/engines/reader/abstract
-    ydb/core/kqp/compute_actor
 )
 
 END()

@@ -63,7 +63,7 @@ public:
             hFunc(TEvents::TEvUndelivered, Undelivered);
             hFunc(TEvInterconnect::TEvNodeConnected, Connected);
             hFunc(TEvInterconnect::TEvNodeDisconnected, Disconnected);
-            hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
+            hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:

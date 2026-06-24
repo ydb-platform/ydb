@@ -2,7 +2,7 @@
 
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/library/aclib/aclib.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/compute_actor/events/kqp_compute_events.h>
 #include <ydb/core/kqp/runtime/kqp_compute.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/sys_view/scan.h>

@@ -39,7 +39,7 @@ PEERDIR(
     ydb/core/base
     ydb/core/control/lib
     ydb/core/formats
-    ydb/core/kqp
+    ydb/core/kqp/compute_actor/events
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat

@@ -1,6 +1,6 @@
 #include "scan.h"
 
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/compute_actor/events/kqp_compute_events.h>
 
 #include <ydb/core/sys_view/auth/group_members.h>
 #include <ydb/core/sys_view/auth/groups.h>
@@ -31,6 +31,7 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 
 namespace NKikimr {
 namespace NSysView {
@@ -75,7 +76,7 @@ public:
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
             hFunc(NKikimr::NKqp::TEvKqpCompute::TEvScanData, Handle);
             hFunc(NKikimr::NKqp::TEvKqpCompute::TEvScanError, ResendToOwnerAndDie);
-            hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
+            hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleAbortExecution);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             hFunc(NActors::TEvInterconnect::TEvNodeDisconnected, ResendToOwnerAndDie);
             hFunc(TEvents::TEvUndelivered, ResendToOwnerAndDie);
@@ -125,7 +126,7 @@ public:
         TBase::Send(OwnerId, THolder(data->Release().Release()));
     }
 
-    void HandleAbortExecution(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) {
+    void HandleAbortExecution(NYql::NDq::TEvDq::TEvAbortExecution::TPtr& ev) {
         LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
             "Got abort execution event, actor: " << TBase::SelfId()
                 << ", owner: " << OwnerId

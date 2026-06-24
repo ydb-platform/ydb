@@ -30,6 +30,7 @@ PEERDIR(
     ydb/core/fq/libs/checkpointing
     ydb/core/kqp/common
     ydb/core/kqp/compute_actor
+    ydb/core/kqp/executer_actor/events
     ydb/core/kqp/executer_actor/shards_resolver
     ydb/core/kqp/federated_query/actors
     ydb/core/kqp/gateway/local_rpc

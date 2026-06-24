@@ -1,6 +1,7 @@
 #pragma once
 
 #include <library/cpp/lwtrace/shuttle.h>
+#include <ydb/core/kqp/executer_actor/events/kqp_executer_events.h>
 #include <ydb/core/kqp/common/kqp_batch_operations.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
@@ -19,10 +20,7 @@
 namespace NKikimr {
 namespace NKqp {
 
-struct TEvKqpExecuter {
-    struct TEvTxRequest : public TEventPB<TEvTxRequest, NKikimrKqp::TEvExecuterTxRequest,
-        TKqpExecuterEvents::EvTxRequest> {};
-
+struct TEvKqpExecuter : public TLightweightKqpExecuterEvents {
     struct TEvTxResponse : public TEventLocal<TEvTxResponse, TKqpExecuterEvents::EvTxResponse> {
         NKikimrKqp::TEvExecuterTxResponse Record;
         TTxAllocatorState::TPtr AllocState;

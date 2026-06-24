@@ -17,6 +17,10 @@
 
 #include <yql/essentials/public/purecalc/helpers/stream/stream_from_vector.h>
 
+#include <array>
+#include <cctype>
+#include <optional>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TRANSFER
 
 using namespace NActors::NStructuredLog;
@@ -33,6 +37,68 @@ enum class ETag {
     RetryFlush,
     LeaveOnBatchSizeExceed
 };
+
+bool IsIdentChar(char c) {
+    return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+}
+
+bool IsZeroArgCall(TStringBuf text, size_t openParenPos, size_t* callEndPos) {
+    if (openParenPos >= text.size() || text[openParenPos] != '(') {
+        return false;
+    }
+
+    size_t pos = openParenPos + 1;
+    while (pos < text.size() && std::isspace(static_cast<unsigned char>(text[pos]))) {
+        ++pos;
+    }
+
+    if (pos >= text.size() || text[pos] != ')') {
+        return false;
+    }
+
+    *callEndPos = pos + 1;
+    return true;
+}
+
+void ReplaceZeroArgNonDetTimeCall(TString& transformLambda, const TString& funcName) {
+    const TString callWithDeps = funcName + "(1)";
+
+    size_t searchFrom = 0;
+    while (searchFrom < transformLambda.size()) {
+        const size_t funcPos = transformLambda.find(funcName, searchFrom);
+        if (funcPos == TString::npos) {
+            break;
+        }
+
+        if (funcPos > 0 && IsIdentChar(transformLambda[funcPos - 1])) {
+            searchFrom = funcPos + funcName.size();
+            continue;
+        }
+
+        const size_t afterFunc = funcPos + funcName.size();
+        size_t callEnd = 0;
+        if (IsZeroArgCall(transformLambda, afterFunc, &callEnd)) {
+            transformLambda.replace(funcPos, callEnd - funcPos, callWithDeps);
+            searchFrom = funcPos + callWithDeps.size();
+        } else {
+            searchFrom = funcPos + funcName.size();
+        }
+    }
+}
+
+TString PreprocessTransformLambda(TStringBuf transformLambda) {
+    TString result(transformLambda);
+    static const std::array<const char*, 4> funcs = {
+        "CurrentUtcDatetime",
+        "CurrentUtcDate",
+        "CurrentUtcTimestamp",
+        "Now",
+    };
+    for (const auto* func : funcs) {
+        ReplaceZeroArgNonDetTimeCall(result, func);
+    }
+    return result;
+}
 
 } // anonymous namespace
 
@@ -182,7 +248,7 @@ private:
 
     TString GenerateSql() {
         TStringBuilder sb;
-        sb << TransformLambda;
+        sb << PreprocessTransformLambda(TransformLambda);
         sb << "SELECT * FROM (\n";
         sb << "  SELECT $__ydb_transfer_lambda(TableRow()) AS " << SystemColumns::Root << " FROM Input\n";
         sb << ") FLATTEN BY " << SystemColumns::Root << ";\n";

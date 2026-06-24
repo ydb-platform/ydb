@@ -6342,6 +6342,14 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         query = toDecimal + "\n" + toDecimalMax + "\n" +
             R"(PRAGMA ydb.CostBasedOptimizationLevel = "4";
 PRAGMA ydb.OptShuffleElimination = "true";
+PRAGMA ydb.OptimizerHints = '
+    JoinType(region nation Shuffle)
+    JoinType(region nation supplier Shuffle)
+    JoinType(region nation supplier customer Shuffle)
+    JoinType(region nation supplier customer orders Shuffle)
+    JoinType(region nation supplier customer orders lineitem Shuffle)
+    JoinOrder(((((region nation) supplier) customer) orders) lineitem)
+';
 )" + query;
 
         auto queryClient = kikimr.GetQueryClient();

@@ -350,6 +350,7 @@ void TInputSpecTraits<TMessageInputSpec>::PreparePullListWorker(
     THolder<IStream<TMessage*>> stream
 ) {
     with_lock(worker->GetScopedAlloc()) {
+        worker->GetGraph().Invalidate();
         worker->SetInput(
             worker->GetGraph().GetHolderFactory().Create<TMessageListValue>(inputSpec, std::move(stream), worker), 0);
     }

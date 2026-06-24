@@ -508,7 +508,9 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
     while (capEnabled && !capHit && !sysTabletDeferredActions.empty()) {
         const TAction *deferredAction = sysTabletDeferredActions.back();
         sysTabletDeferredActions.pop_back();
-        processAction(*deferredAction, /* allowDefer = */ false);
+        if (!processAction(*deferredAction, /* allowDefer = */ false)) {
+            break;
+        }
     }
 
     ClusterInfo->RollbackLocks(point);

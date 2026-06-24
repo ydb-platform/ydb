@@ -49,7 +49,7 @@ THashSet<TString> CollectDlqTopicPaths(const TPQTabletConfig& config, const TStr
             continue;
         }
 
-        result.insert(NKikimr::NormalizePath(database, dlq));
+        result.insert(NKikimr::NormalizePath(NKikimr::CanonizePath(database), NKikimr::CanonizePath(dlq)));
     }
 
     return result;

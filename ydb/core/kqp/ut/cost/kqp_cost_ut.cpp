@@ -307,9 +307,9 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         UNIT_ASSERT_VALUES_EQUAL(readsByTable.at("/Root/SecondaryKeys/Index/indexImplTable").second, 16);
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexLookup, EnableVectorIndexRead) {
+    Y_UNIT_TEST_TWIN(VectorIndexLookup, EnableVectorSearch) {
         auto appConfig = GetAppConfig(true, false);
-        appConfig.MutableTableServiceConfig()->SetEnableVectorIndexRead(EnableVectorIndexRead);
+        appConfig.MutableTableServiceConfig()->SetEnableVectorSearch(EnableVectorSearch);
         TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -441,7 +441,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
             });
         }
 
-        // The new vector read actor (EnableVectorIndexRead) produces identical per-table read
+        // The new vector search actor (EnableVectorSearch) produces identical per-table read
         // stats to the legacy StreamLookup path for these queries, so the expectations below are
         // shared across both TWIN variants.
         { // 5a. SELECT VIEW vector_idx
@@ -530,9 +530,9 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(VectorIndexAutoSearchTopSize, EnableVectorIndexRead) {
+    Y_UNIT_TEST_TWIN(VectorIndexAutoSearchTopSize, EnableVectorSearch) {
         auto appConfig = GetAppConfig(true, false);
-        appConfig.MutableTableServiceConfig()->SetEnableVectorIndexRead(EnableVectorIndexRead);
+        appConfig.MutableTableServiceConfig()->SetEnableVectorSearch(EnableVectorSearch);
         TKikimrRunner kikimr(appConfig);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();

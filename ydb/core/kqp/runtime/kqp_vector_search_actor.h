@@ -10,8 +10,8 @@
 namespace NKikimr {
 namespace NKqp {
 
-std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpVectorIndexReadActor(
-    NKikimrTxDataShard::TKqpVectorIndexReadSettings&& settings,
+std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpVectorSearchActor(
+    NKikimrTxDataShard::TKqpVectorSearchSettings&& settings,
     ui64 inputIndex,
     const NUdf::TUnboxedValue& input,
     NYql::NDq::TCollectStatsLevel statsLevel,
@@ -25,7 +25,7 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateKqpVectorIndexRe
     TIntrusivePtr<TKqpCounters> counters,
     TIntrusivePtr<TVectorIndexLevelsCache> levelsCache);
 
-void RegisterKqpVectorIndexReadActor(NYql::NDq::TDqAsyncIoFactory&, TIntrusivePtr<TKqpCounters>,
+void RegisterKqpVectorSearchActor(NYql::NDq::TDqAsyncIoFactory&, TIntrusivePtr<TKqpCounters>,
     TIntrusivePtr<TVectorIndexLevelsCache> levelsCache);
 
 } // namespace NKqp

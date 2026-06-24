@@ -2885,15 +2885,15 @@ private:
             return;
         }
 
-        if (auto maybeVectorIndexRead = connection.Maybe<TKqpCnVectorIndexRead>()) {
+        if (auto maybeVectorSearch = connection.Maybe<TKqpCnVectorSearch>()) {
             TProgramBuilder pgmBuilder(TypeEnv, FuncRegistry);
-            auto& proto = *connectionProto.MutableVectorIndexRead();
-            auto vectorIndexRead = maybeVectorIndexRead.Cast();
+            auto& proto = *connectionProto.MutableVectorSearch();
+            auto vectorSearch = maybeVectorSearch.Cast();
 
-            auto tableMeta = TablesData->ExistingTable(Cluster, vectorIndexRead.Table().Path()).Metadata;
+            auto tableMeta = TablesData->ExistingTable(Cluster, vectorSearch.Table().Path()).Metadata;
             YQL_ENSURE(tableMeta);
 
-            const auto* indexDesc = tableMeta->GetIndex(vectorIndexRead.Index().Value()).second;
+            const auto* indexDesc = tableMeta->GetIndex(vectorSearch.Index().Value()).second;
             YQL_ENSURE(indexDesc);
 
             // Index settings
@@ -2907,13 +2907,13 @@ private:
             proto.SetLevelTop(Config->KMeansTreeSearchTopSize.Get().GetOrElse(withOverlap ? 4 : 10));
 
             // Main table
-            FillTablesMap(vectorIndexRead.Table(), tablesMap);
-            FillTableId(vectorIndexRead.Table(), *proto.MutableTable());
+            FillTablesMap(vectorSearch.Table(), tablesMap);
+            FillTableId(vectorSearch.Table(), *proto.MutableTable());
 
             auto fillImplTable = [&](const char* implName, NKqpProto::TKqpPhyTableId& tableIdProto) {
                 TString path = TStringBuilder()
-                    << vectorIndexRead.Table().Path().Value()
-                    << "/" << vectorIndexRead.Index().Value()
+                    << vectorSearch.Table().Path().Value()
+                    << "/" << vectorSearch.Index().Value()
                     << "/" << implName;
                 auto implMeta = TablesData->ExistingTable(Cluster, path).Metadata;
                 YQL_ENSURE(implMeta);
@@ -2940,15 +2940,15 @@ private:
             }
 
             // Input and output types
-            const auto inputType = vectorIndexRead.InputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
-            YQL_ENSURE(inputType, "Empty vector index read input type");
-            YQL_ENSURE(inputType->GetKind() == ETypeAnnotationKind::List, "Unexpected vector index read input type");
+            const auto inputType = vectorSearch.InputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            YQL_ENSURE(inputType, "Empty vector search input type");
+            YQL_ENSURE(inputType->GetKind() == ETypeAnnotationKind::List, "Unexpected vector search input type");
             const auto inputItemType = inputType->Cast<TListExprType>()->GetItemType();
             proto.SetInputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *inputItemType), TypeEnv));
 
-            const auto outputType = vectorIndexRead.Ref().GetTypeAnn();
-            YQL_ENSURE(outputType, "Empty vector index read output type");
-            YQL_ENSURE(outputType->GetKind() == ETypeAnnotationKind::Stream, "Unexpected vector index read output type");
+            const auto outputType = vectorSearch.Ref().GetTypeAnn();
+            YQL_ENSURE(outputType, "Empty vector search output type");
+            YQL_ENSURE(outputType->GetKind() == ETypeAnnotationKind::Stream, "Unexpected vector search output type");
             const auto outputItemType = outputType->Cast<TStreamExprType>()->GetItemType();
             YQL_ENSURE(outputItemType->GetKind() == ETypeAnnotationKind::Struct);
             proto.SetOutputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *outputItemType), TypeEnv));
@@ -2963,7 +2963,7 @@ private:
             for (const auto& item : outputItemType->Cast<TStructExprType>()->GetItems()) {
                 const auto name = TString(item->GetName());
                 proto.AddColumns(name);
-                tablesMap[vectorIndexRead.Table().Path()].emplace(name);
+                tablesMap[vectorSearch.Table().Path()].emplace(name);
                 // Covered index: the actor reads output columns straight from the
                 // posting table, so register them there too (not just main table).
                 if (postingTableMeta->Columns.contains(name)) {
@@ -2975,17 +2975,17 @@ private:
                 }
                 ++columnIndex;
             }
-            YQL_ENSURE(hasEmbedding, "Vector index read output columns must contain the embedding column: " << embeddingColumn);
+            YQL_ENSURE(hasEmbedding, "Vector search output columns must contain the embedding column: " << embeddingColumn);
             proto.SetVectorColumnIndex(vectorColumnIndex);
 
             // Search parameters. TopK (LIMIT) may be a literal or a query parameter;
-            // resolve it to an actual value at execution time (see BuildVectorIndexReadChannels).
-            SetVectorTopKLimit(proto.MutableTopK(), vectorIndexRead.TopK().Ptr());
-            proto.SetIsDesc(vectorIndexRead.IsDesc().Value() == "true");
+            // resolve it to an actual value at execution time (see BuildVectorSearchChannels).
+            SetVectorTopKLimit(proto.MutableTopK(), vectorSearch.TopK().Ptr());
+            proto.SetIsDesc(vectorSearch.IsDesc().Value() == "true");
 
             // Prefixed index: the transform input carries the per-group root __ydb_parent.
-            if (vectorIndexRead.HasPrefix().IsValid()) {
-                proto.SetHasPrefix(vectorIndexRead.HasPrefix().Cast().Value() == "true");
+            if (vectorSearch.HasPrefix().IsValid()) {
+                proto.SetHasPrefix(vectorSearch.HasPrefix().Cast().Value() == "true");
             }
 
             return;

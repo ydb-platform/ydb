@@ -810,7 +810,7 @@ ui32 GetKMeansTreeSearchTopSize(const TKqpOptimizeContext& kqpCtx, const bool wi
 }
 
 // Legacy lowering: rewrites the kmeans-tree vector search into a StreamLookup chain
-// (level lookup -> posting scan -> main read). Used when TableServiceConfig.EnableVectorIndexRead
+// (level lookup -> posting scan -> main read). Used when TableServiceConfig.EnableVectorSearch
 // is off; the new read-actor lowering lives in DoRewriteTopSortOverKMeansTree.
 TExprBase DoRewriteTopSortOverKMeansTreeLegacy(
     const TReadMatch& match, const TMaybeNode<TCoFlatMap>& flatMap, const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
@@ -1000,7 +1000,7 @@ TExprBase FilterLeafRows(const TExprBase& read, TExprContext& ctx, TPositionHand
 }
 
 // Legacy lowering for prefixed kmeans-tree vector search into a StreamLookup chain.
-// Used when TableServiceConfig.EnableVectorIndexRead is off; the new read-actor
+// Used when TableServiceConfig.EnableVectorSearch is off; the new read-actor
 // lowering lives in DoRewriteTopSortOverPrefixedKMeansTree.
 TExprBase DoRewriteTopSortOverPrefixedKMeansTreeLegacy(
     const TReadMatch& match, const TCoFlatMap& flatMap, const TExprBase& lambdaArgs, const TExprBase& lambdaBody, const TCoTopBase& top,
@@ -2877,7 +2877,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             // is needed; linear re-materializes it below (its ListMin/ListMax are whole-list aggregates).
         } else {
             // Vector branch: top-N {pk, score} ordered best-first (distance ASC, similarity DESC). Emitted
-            // as a synthetic TopSort over the vector index read; RewriteTopSortOverIndexRead
+            // as a synthetic TopSort over the vector search; RewriteTopSortOverIndexRead
             // (DoRewriteTopSortOverKMeansTree) lowers it into the kmeans-tree lookup chain. CanUseVectorIndex
             // matches the function + this sort direction against the index metric (e.g. cosine accepts
             // CosineDistance ASC or CosineSimilarity DESC). Each vector branch carries a unique synthetic
@@ -3270,7 +3270,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
             if (!maybeFlatMap.Lambda().Body().Maybe<TCoOptionalIf>()) {
                 return reject("only simple conditions supported for now");
             }
-            if (kqpCtx.Config->GetEnableVectorIndexRead()) {
+            if (kqpCtx.Config->GetEnableVectorSearch()) {
                 return DoRewriteTopSortOverPrefixedKMeansTree(readTableIndex, maybeFlatMap.Cast(), lambdaArgs, lambdaBody, topBase,
                                                               ctx, kqpCtx, tableDesc, *indexDesc, *implTable);
             }
@@ -3318,7 +3318,7 @@ TExprBase KqpRewriteTopSortOverIndexRead(const TExprBase& node, TExprContext& ct
             }
             lambdaArgs = maybeFlatMap.Cast().Lambda().Args();
         }
-        if (kqpCtx.Config->GetEnableVectorIndexRead()) {
+        if (kqpCtx.Config->GetEnableVectorSearch()) {
             return DoRewriteTopSortOverKMeansTree(readTableIndex, maybeFlatMap, lambdaArgs, lambdaBody, topBase,
                                                   ctx, kqpCtx, tableDesc, *indexDesc, *implTable);
         }

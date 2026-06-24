@@ -162,7 +162,7 @@ public:
                     const auto& input = stage.GetInputs(inputIndex);
                     if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup ||
                         input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorResolve ||
-                        input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorIndexRead)
+                        input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorSearch)
                     {
                         unknownAffectedShardCount = true;
                     }

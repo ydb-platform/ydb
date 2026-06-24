@@ -537,9 +537,9 @@
             ]
         },
         {
-            "Name": "TKqpCnVectorIndexRead",
+            "Name": "TKqpCnVectorSearch",
             "Base": "TKqpConnection",
-            "Match": {"Type": "Callable", "Name": "KqpCnVectorIndexRead"},
+            "Match": {"Type": "Callable", "Name": "KqpCnVectorSearch"},
             "Children": [
                 {"Index": 1, "Name": "Table", "Type": "TKqpTable"},
                 {"Index": 2, "Name": "InputType", "Type": "TExprBase"},

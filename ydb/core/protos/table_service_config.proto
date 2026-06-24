@@ -538,9 +538,9 @@ message TTableServiceConfig {
     // invalidate the compile cache when toggled.
     optional bool EnableHybridSearch = 135 [default = true, (InvalidateCompileCache) = true];
 
-    // Opt-in switch for the specialized vector-index read actor (TKqpPhyCnVectorIndexRead). Off by
+    // Opt-in switch for the specialized vector search actor (TKqpPhyCnVectorSearch). Off by
     // default: vector ORDER BY ... LIMIT over a kmeans-tree index keeps using the legacy StreamLookup
     // chain. When enabled, DoRewriteTopSortOverKMeansTree lowers it into the new read actor instead,
     // so it changes the compiled plan shape and must invalidate the compile cache when toggled.
-    optional bool EnableVectorIndexRead = 136 [default = false, (InvalidateCompileCache) = true];
+    optional bool EnableVectorSearch = 136 [default = false, (InvalidateCompileCache) = true];
 };

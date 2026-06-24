@@ -341,7 +341,7 @@ message TKqpPhyCnVectorResolve {
     optional double OverlapRatio = 12;
 }
 
-message TKqpPhyCnVectorIndexRead {
+message TKqpPhyCnVectorSearch {
     optional Ydb.Table.VectorIndexSettings IndexSettings = 1;
     TKqpPhyTableId Table = 2;          // Main table
     TKqpPhyTableId LevelTable = 3;     // indexImplLevelTable
@@ -420,7 +420,7 @@ message TKqpPhyConnection {
         TKqpPhyCnParallelUnionAll ParallelUnionAll = 15;
         TKqpPhyCnVectorResolve VectorResolve = 16;
         TKqpPhyCnDqSourceStreamLookup DqSourceStreamLookup = 17;
-        TKqpPhyCnVectorIndexRead VectorIndexRead = 18;
+        TKqpPhyCnVectorSearch VectorSearch = 18;
     };
 }
 

@@ -1,11 +1,12 @@
 #include "db_pool.h"
 #include "events.h"
-#include "log.h"
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/db_pool/protos/config.pb.h>
+#include <ydb/library/services/services.pb.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 #include <util/stream/file.h>

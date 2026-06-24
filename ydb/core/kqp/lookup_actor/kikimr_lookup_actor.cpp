@@ -87,7 +87,6 @@ namespace NYql::NDq {
             EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
             EvYdbExecuteDataQueryResponse = EvBegin,
             EvYdbCreateSessionResponse,
-            EvYdbDeleteSessionResponse,
             EvError,
             EvRetry,
             EvEnd
@@ -120,7 +119,6 @@ namespace NYql::NDq {
 
         using TEvYdbExecuteDataQueryResponse = TEvYdbResponse<Ydb::Table::ExecuteDataQueryResponse, Ydb::Table::ExecuteQueryResult, EvYdbExecuteDataQueryResponse>;
         using TEvYdbCreateSessionResponse = TEvYdbResponse<Ydb::Table::CreateSessionResponse, Ydb::Table::CreateSessionResult, EvYdbCreateSessionResponse>;
-        //using TEvYdbDeleteSessionResponse = TEvYdbResponse<Ydb::Table::DeleteSessionResponse, Ydb::Table::DeleteSessionResult, EvYdbDeleteSessionResponse>;
 
     protected: // TODO move common logic here
         TString LogPrefix;
@@ -270,7 +268,6 @@ namespace NYql::NDq {
             hFunc(TEvLookupRequest, Handle)
             hFunc(TEvYdbExecuteDataQueryResponse, Handle)
             hFunc(TEvYdbCreateSessionResponse, Handle)
-            //hFunc(TEvYdbDeleteSessionResponse, Handle)
             hFunc(TEvLookupRetry, Handle)
             hFunc(NActors::TEvents::TEvPoison, Handle)
             , ExceptionFunc(std::exception, HandleException)
@@ -489,19 +486,9 @@ namespace NYql::NDq {
             auto selfId = SelfId();
             [[maybe_unused]]
             auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), /*database=*/AppData()->TenantName, /*token=*/Nothing(), actorSystem);
-#if 0 // don't wait for results
-            result.Subscribe([actorSystem, selfId, state = std::move(state)](const NThreading::TFuture<TResponse>& f) mutable {
-                //LOG_T_AS(*actorSystem, "Response: " << future.GetValueSync().DebugString());
-                actorSystem->Send(selfId, new TEvYdbDeleteSessionResponse(f));
-            });
-#endif
+            // don't wait for results
         }
         
-#if 0
-        void Handle(TEvYdbDeleteSessionResponse::TPtr /*ev*/) {
-        }
-#endif
-
         static NUdf::TUnboxedValue YdbValueToUnboxedValue(NYdb::TValueParser& columnParser, const NKikimr::NMiniKQL::TType *type) {
             NUdf::TUnboxedValue v;
             bool is_optional = type->IsOptional();

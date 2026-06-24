@@ -287,10 +287,11 @@ void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
     const THostMask added = vChunkConfig.GetDDisks().Exclude(DesiredDDisks);
     const THostMask removed = DesiredDDisks.Exclude(vChunkConfig.GetDDisks());
 
-    DesiredPBuffers = vChunkConfig.GetDesiredPBuffers();
     DesiredDDisks = vChunkConfig.GetDDisks();
     DisabledHosts = vChunkConfig.GetDisabledHosts();
 
+    // When a new disk appears, it doesn't have all the data. Need to set its
+    // watermark level.
     for (auto indx: added) {
         const auto watermark = vChunkConfig.GetWatermark(indx);
         DDiskStates[indx].Init(
@@ -410,17 +411,14 @@ TFlushHints TBlocksDirtyMap::MakeFlushHint(size_t batchSize)
         return result;
     }
 
+    if (!DesiredDDisks.LogicalAnd(DisabledHosts).Empty()) {
+        // We can't make a flush while DDisk is unavailable. Will wait until it
+        // becomes available or is excluded.
+        return result;
+    }
+
     TSet<ui64> readyToFlush;
     readyToFlush.swap(ReadyToFlush);
-
-    auto countReadyToFlush = [&](TBlockRange64 range)
-    {
-        size_t result = 0;
-        for (THostIndex destination: DesiredDDisks) {
-            result += DDiskStates[destination].NeedFlushToDDisk(range) ? 1 : 0;
-        }
-        return result;
-    };
 
     for (ui64 lsn: readyToFlush) {
         auto item = Inflight.GetValue(lsn);
@@ -429,12 +427,6 @@ TFlushHints TBlocksDirtyMap::MakeFlushHint(size_t batchSize)
 
         if (InflightDDiskReads.HasOverlaps(item->Range)) {
             // Can't flush to DDisk during reading from overlapped range.
-            ReadyToFlush.insert(lsn);
-            continue;
-        }
-
-        if (countReadyToFlush(item->Range) < QuorumDirectBlockGroupHostCount) {
-            // Can't flush to DDisk when disks to flush less then quorum.
             ReadyToFlush.insert(lsn);
             continue;
         }

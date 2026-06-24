@@ -326,7 +326,6 @@ private:
     const ui32 BlockSize;
     const ui64 BlockCount;
 
-    THostMask DesiredPBuffers;
     THostMask DesiredDDisks;
     THostMask DisabledHosts;
 

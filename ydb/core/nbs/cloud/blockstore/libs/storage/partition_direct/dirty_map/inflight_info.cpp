@@ -226,7 +226,9 @@ bool TInflightInfo::RequestErase(THostIndex host)
 {
     Y_ABORT_UNLESS(
         State == EState::PBufferFlushed || State == EState::PBufferErasing);
-    Y_ABORT_UNLESS(FlushConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
+    // When the DDisk is not fully filled, the flush is made into the filled
+    // area. Thus, the number of completed flushes may be less than the quorum.
+    Y_ABORT_UNLESS(!FlushConfirmed.Empty());
 
     if (WriteRequested.Get(host) && !EraseRequested.Get(host)) {
         State = EState::PBufferErasing;

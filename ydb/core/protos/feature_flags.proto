@@ -324,4 +324,5 @@ message TFeatureFlags {
     optional bool EnableFulltextIndexPrefix = 282 [default = false];
     optional bool EnableAccessServiceV2Interface = 283 [default = false, (RequireRestart) = true];
     optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
+    optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
 }

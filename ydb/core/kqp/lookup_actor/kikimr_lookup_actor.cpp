@@ -30,8 +30,6 @@
 #include <yql/essentials/public/udf/udf_type_printer.h>
 #include <yql/essentials/utils/yql_panic.h>
 
-#include <util/string/escape.h>
-
 #define LOG_T_AS(ctx, s) LOG_TRACE_S(ctx, NKikimrServices::KQP_COMPUTE, s)
 #define LOG_T(s) LOG_T_AS(*NActors::TlsActivationContext, this->LogPrefix << s)
 #define LOG_D_AS(ctx, s) LOG_DEBUG_S(ctx, NKikimrServices::KQP_COMPUTE, s)
@@ -62,6 +60,19 @@ NYql::TIssues IssuesFromProtoMessage(const TProto& message) {
     return issues;
 }
 
+void Backtick(IOutputStream& os, const std::string_view s) {
+    os << '`';
+    for (auto c: s) {
+        switch(c) {
+            case '`': case '\\':
+                os << '\\';
+                [[fallthrough]];
+            default:
+                os << c;
+        }
+    }
+    os << '`';
+}
 } // namespace {
 
 namespace NYql::NDq {
@@ -687,34 +698,37 @@ namespace NYql::NDq {
         }
 
         void MakeSelect(TStringBuilder& out) {
-            out << "SELECT ";
+            out << "SELECT";
+            char sep = ' ';
             for (ui32 i = 0; i != SelectResultType->GetMembersCount(); ++i) {
-                if (i) out << ',';
-                out << '`' << EscapeC(SelectResultType->GetMemberName(i)) << '`';
+                out << sep;
+                Backtick(out.Out, SelectResultType->GetMemberName(i));
+                sep = ',';
             }
             out << "\n  FROM ";
-            out << '`' << EscapeC(LookupSource.GetPath()) << '`';
+            Backtick(out.Out, LookupSource.GetPath());
         }
 
         void MakeSelectWithKeys(TStringBuilder& out) {
             auto columnsCount = KeyType->GetMembersCount();
+            Y_ENSURE(columnsCount > 0);
             out << "PRAGMA AnsiInForEmptyOrNullableItemsCollections;\n";
             out << "DECLARE "<< KeyTupleListName << " AS List<Tuple<";
+            char sep = ' ';
             for (ui32 c = 0; c != columnsCount; ++c) {
-                if (c != 0) {
-                    out << ",";
-                }
+                out << sep;
                 NUdf::TTypePrinter p(*TypeInfoHelper, KeyType->GetMemberType(c));
                 p.Out(out.Out);
+                sep = ',';
             }
             out << ">>;\n";
             MakeSelect(out);
             out << "\n WHERE AsTuple(";
+            sep = ' ';
             for (ui32 c = 0; c != columnsCount; ++c) {
-                if (c != 0) {
-                    out << ",";
-                }
-                out << '`' << EscapeC(KeyType->GetMemberName(c)) << '`';
+                out << sep;
+                Backtick(out.Out, KeyType->GetMemberName(c));
+                sep = ',';
             }
             out << ") IN " << KeyTupleListName;
         }

@@ -893,15 +893,13 @@ void THttpProxyTestMock::InitAccessServiceService(bool enableAccessServiceV2Inte
         asMock.AuthorizeData["proxy_sa@builtin-ydb.databases.list-database4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
     };
 
-    if (enableAccessServiceV2Interface) {
-        // V2 mock setup
-        setupAccessServiceMock(AccessServiceMockV2);
-        builder.AddListeningPort(AccessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&AccessServiceMockV2);
-    } else {
-        // V1 mock setup
+    if (!enableAccessServiceV2Interface) {
         setupAccessServiceMock(AccessServiceMock);
         builder.AddListeningPort(AccessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&AccessServiceMock);
     }
+    // We always should setup v2, because bulkAuthorization works only in v2 and EnableBulkAuthorization=true will call it
+    setupAccessServiceMock(AccessServiceMockV2);
+    builder.AddListeningPort(AccessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&AccessServiceMockV2);
 
     AccessServiceServer = builder.BuildAndStart();
 }

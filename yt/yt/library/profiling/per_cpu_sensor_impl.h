@@ -11,6 +11,11 @@ namespace NYT::NProfiling {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+// The sharded sensors below index a fixed per-processor array by TTscp::Get() and update
+// the shard with a plain atomic. They are the default hot implementation and the fallback
+// everywhere the rseq fast path is not enabled; the rseq-backed counterparts live in
+// yt/yt/library/profiling/rseq and are selected at construction time (see registry.cpp).
+
 class TPerCpuCounter
     : public ICounter
 {
@@ -49,7 +54,7 @@ private:
     std::array<TShard, TTscp::MaxProcessorId> Shards_;
 };
 
-static_assert(sizeof(TPerCpuCounter) == 64 + 64 * 64);
+static_assert(sizeof(TPerCpuTimeCounter) == 64 + 64 * 64);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -88,7 +93,8 @@ private:
     std::array<TShard, TTscp::MaxProcessorId> Shards_;
 };
 
-static_assert(sizeof(TPerCpuCounter) == 64 + 64 * 64);
+// One cache line larger than the counters: IGauge inherits TRefCounted virtually.
+static_assert(sizeof(TPerCpuGauge) == 2 * 64 + 64 * 64);
 
 ////////////////////////////////////////////////////////////////////////////////
 

@@ -1,4 +1,4 @@
-#include "sensor_impl.h"
+#include "simple_sensor_impl.h"
 
 #include <library/cpp/yt/assert/assert.h>
 

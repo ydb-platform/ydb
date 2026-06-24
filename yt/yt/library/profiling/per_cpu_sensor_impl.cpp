@@ -1,4 +1,4 @@
-#include "percpu.h"
+#include "per_cpu_sensor_impl.h"
 
 #include "summary.h"
 

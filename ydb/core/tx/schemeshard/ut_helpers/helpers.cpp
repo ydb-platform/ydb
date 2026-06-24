@@ -3489,7 +3489,7 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
-    void TestSetColumnConstraintWithoutResponse(
+    void AsyncSetColumnConstraintWithoutResponse(
         TTestActorRuntime& runtime,
         ui64 txId,
         ui64 schemeShard,
@@ -3508,7 +3508,7 @@ namespace NSchemeShardUT_Private {
         ForwardToTablet(runtime, schemeShard, sender, request.Release());
     }
 
-    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraintWithoutSettings(
+    NKikimrSetColumnConstraint::TEvCreateResponse AsyncSetColumnConstraintWithoutSettings(
         TTestActorRuntime& runtime,
         ui64 txId,
         ui64 schemeShard,

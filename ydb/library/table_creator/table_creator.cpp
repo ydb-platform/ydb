@@ -21,6 +21,8 @@
 #include <util/generic/utility.h>
 #include <util/random/random.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT LogService
+
 namespace NKikimr {
 
 namespace {
@@ -108,8 +110,11 @@ public:
         const auto getModifyScheme = [&](NKikimrSchemeOp::EOperationType operationType) {
             auto* modifyScheme = request->Record.MutableTransaction()->MutableModifyScheme();
             modifyScheme->SetWorkingDir(CanonizePath(pathComponents));
-            LOG_DEBUG_S(*TlsActivationContext, LogService, 
-                LogPrefix << "Created " << NKikimrSchemeOp::EOperationType_Name(OperationType) << " transaction for path: " << modifyScheme->GetWorkingDir() << "/" << TableName());
+            YDB_LOG_DEBUG("Created transaction",
+                {"logPrefix", LogPrefix},
+                {"operationType", NKikimrSchemeOp::EOperationType_Name(OperationType)},
+                {"path", modifyScheme->GetWorkingDir()},
+                {"tableName", TableName()});
 
             modifyScheme->SetOperationType(operationType);
             modifyScheme->SetInternal(true);
@@ -138,7 +143,9 @@ public:
                 break;
             }
             default: {
-                LOG_CRIT_S(*TlsActivationContext, LogService, LogPrefix << "Unexpected operation type: " << NKikimrSchemeOp::EOperationType_Name(OperationType));
+                YDB_LOG_CRIT("Unexpected operation",
+                    {"logPrefix", LogPrefix},
+                    {"type", NKikimrSchemeOp::EOperationType_Name(OperationType)});
                 Y_ABORT("Unexpected operation type");
             }
         }
@@ -187,8 +194,9 @@ public:
         Y_ABORT_UNLESS(request.ResultSet.size() == 1);
         const NSchemeCache::TSchemeCacheNavigate::TEntry& result  = request.ResultSet[0];
         if (result.Status != EStatus::Ok) {
-            LOG_DEBUG_S(*TlsActivationContext, LogService,
-                LogPrefix << "Describe result: " << result.Status);
+            YDB_LOG_DEBUG("Describe",
+                {"logPrefix", LogPrefix},
+                {"result", result.Status});
         }
 
         switch (result.Status) {
@@ -208,7 +216,8 @@ public:
             case EStatus::PathErrorUnknown:
                 Become(&TTableCreator::StateFuncUpgrade);
                 OperationType = NKikimrSchemeOp::ESchemeOpCreateTable;
-                LOG_NOTICE_S(*TlsActivationContext, LogService, LogPrefix << "Creating table");
+                YDB_LOG_NOTICE("Creating table",
+                    {"logPrefix", LogPrefix});
                 RunTableRequest();
                 break;
             case EStatus::LookupError:
@@ -217,16 +226,19 @@ public:
                 Retry();
                 break;
             case EStatus::Ok:
-                LOG_DEBUG_S(*TlsActivationContext, LogService,
-                    LogPrefix << "Table already exists, number of columns: " << result.Columns.size() << ", has SecurityObject: " << (result.SecurityObject ? "true" : "false"));
+                YDB_LOG_DEBUG("Table already exists, number of has",
+                    {"logPrefix", LogPrefix},
+                    {"columns", result.Columns.size()},
+                    {"securityObject", (result.SecurityObject ? "true" : "false")});
                 RunTableModification(result.Columns, result.SecurityObject);
                 break;
         }
     }
 
     void Handle(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, LogService,
-            LogPrefix << "TEvProposeTransactionStatus: " << ev->Get()->Record);
+        YDB_LOG_DEBUG("Dump logPrefix, TEvProposeTransactionStatus",
+            {"logPrefix", LogPrefix},
+            {"TEvProposeTransactionStatus", ev->Get()->Record});
         const auto ssStatus = ev->Get()->Record.GetSchemeShardStatus();
         switch (ev->Get()->Status()) {
             case NTxProxy::TResultStatus::ExecComplete:
@@ -289,8 +301,8 @@ public:
     void SubscribeOnTransactionOrFallback(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
         const ui64 txId = ev->Get()->Status() == NTxProxy::TResultStatus::ExecInProgress ? ev->Get()->Record.GetTxId() : ev->Get()->Record.GetPathCreateTxId();
         if (txId == 0) {
-            LOG_DEBUG_S(*TlsActivationContext, LogService,
-                LogPrefix << "Unable to subscribe to concurrent transaction, falling back");
+            YDB_LOG_DEBUG("Unable to subscribe to concurrent transaction, falling back",
+                {"logPrefix", LogPrefix});
             FallBack();
             return;
         }
@@ -301,13 +313,17 @@ public:
         auto request = MakeHolder<NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletion>();
         request->Record.SetTxId(txId);
         NTabletPipe::SendData(SelfId(), SchemePipeActorId, std::move(request));
-        LOG_DEBUG_S(*TlsActivationContext, LogService, LogPrefix << "Subscribe on create table tx: " << txId);
+        YDB_LOG_DEBUG("Subscribe on create table",
+            {"logPrefix", LogPrefix},
+            {"tx", txId});
     }
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr& ev) {
         if (ev->Get()->Status != NKikimrProto::OK) {
-            LOG_ERROR_S(*TlsActivationContext, LogService,
-                LogPrefix << "Request: " << GetOperationType() << ". Tablet to pipe not connected: " << NKikimrProto::EReplyStatus_Name(ev->Get()->Status) << ", retry");
+            YDB_LOG_ERROR("Tablet to pipe not retry",
+                {"logPrefix", LogPrefix},
+                {"request", GetOperationType()},
+                {"connected", NKikimrProto::EReplyStatus_Name(ev->Get()->Status)});
             PipeClientClosedByUs = true;
             NTabletPipe::CloseClient(SelfId(), SchemePipeActorId);
             SchemePipeActorId = {};
@@ -318,37 +334,49 @@ public:
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {
         SchemePipeActorId = {};
         if (!PipeClientClosedByUs) {
-            LOG_ERROR_S(*TlsActivationContext, LogService,
-                LogPrefix << "Request: " << GetOperationType() << ". Tablet to pipe destroyed, retry");
+            YDB_LOG_ERROR("Tablet to pipe destroyed, retry",
+                {"logPrefix", LogPrefix},
+                {"request", GetOperationType()});
             Retry();
         }
         PipeClientClosedByUs = false;
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionRegistered::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, LogService, LogPrefix << "Subscribe on tx: " << ev->Get()->Record.GetTxId() << " registered");
+        YDB_LOG_DEBUG("Subscribe registered",
+            {"logPrefix", LogPrefix},
+            {"onTx", ev->Get()->Record.GetTxId()});
     }
 
     void Handle(NSchemeShard::TEvSchemeShard::TEvNotifyTxCompletionResult::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, LogService,
-            LogPrefix << "Request: " << GetOperationType() << ". Transaction completed: " << ev->Get()->Record.GetTxId() << ". Doublechecking...");
+        YDB_LOG_DEBUG("Transaction Doublechecking...",
+            {"logPrefix", LogPrefix},
+            {"request", GetOperationType()},
+            {"completed", ev->Get()->Record.GetTxId()});
         FallBack();
     }
 
     void Fail(NSchemeCache::TSchemeCacheNavigate::EStatus status) {
         TString message = TStringBuilder() << "Failed to upgrade table: " << status;
-        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << message);
+        YDB_LOG_ERROR("Failed to upgrade table",
+            {"logPrefix", LogPrefix},
+            {"status", status});
         Reply(false, message);
     }
 
     void Fail(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
         TString message = TStringBuilder() << "Failed " << GetOperationType() << " request: " << ev->Get()->Status() << ". Response: " << ev->Get()->Record;
-        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << message);
+        YDB_LOG_ERROR("Faile operation",
+            {"logPrefix", LogPrefix},
+            {"operation", GetOperationType()},
+            {"request", ev->Get()->Status()},
+            {"response", ev->Get()->Record});
         Reply(false, message);
     }
 
     void Fail(const TString& message) {
-        LOG_ERROR_S(*TlsActivationContext, LogService, LogPrefix << message);
+        YDB_LOG_ERROR(message,
+            {"logPrefix", LogPrefix});
         Reply(false, message);
     }
 
@@ -357,8 +385,10 @@ public:
     }
 
     void Success(TEvTxUserProxy::TEvProposeTransactionStatus::TPtr& ev) {
-        LOG_INFO_S(*TlsActivationContext, LogService,
-            LogPrefix << "Successful " << GetOperationType() <<  " request: " << ev->Get()->Status());
+        YDB_LOG_INFO("Successful",
+            {"logPrefix", LogPrefix},
+            {"operationType", GetOperationType()},
+            {"request", ev->Get()->Status()});
         Reply(true);
     }
 
@@ -437,11 +467,13 @@ private:
             }
         }
         if (filteredColumns.empty()) {
-            LOG_DEBUG_S(*TlsActivationContext, LogService,
-                LogPrefix << "Column diff is empty, finishing");
+            YDB_LOG_DEBUG("Column diff is empty, finishing",
+                {"logPrefix", LogPrefix});
         } else {
-            LOG_NOTICE_S(*TlsActivationContext, LogService,
-                LogPrefix << "Adding columns. New columns: " << filtered << ". Existing columns: " << columns);
+            YDB_LOG_NOTICE("Adding columns",
+                {"logPrefix", LogPrefix},
+                {"new", filtered},
+                {"exists", columns});
         }
 
 

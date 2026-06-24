@@ -65,6 +65,7 @@ RECURSE_FOR_TESTS(
     ut_split_merge_reboots
     ut_secret
     ut_secret_reboots
+    ut_set_column_constraint_reboots
     ut_set_column_constraint
     ut_stats
     ut_streaming_query

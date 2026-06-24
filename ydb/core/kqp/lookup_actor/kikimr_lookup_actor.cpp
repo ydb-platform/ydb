@@ -79,54 +79,11 @@ namespace NYql::NDq {
 
     using namespace NActors;
 
-    template <typename TDerived, typename TEvState = std::monostate>
-    class TKikimrBaseActor: public NActors::TActorBootstrapped<TDerived> {
-    protected: // Events
-        // Event ids
-        enum EEventIds: ui32 {
-            EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
-            EvYdbExecuteDataQueryResponse = EvBegin,
-            EvYdbCreateSessionResponse,
-            EvError,
-            EvRetry,
-            EvEnd
-        };
-
-        static_assert(EEventIds::EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
-
-        // Beware: destroys future value
-        template <typename TResponse, typename TResult, enum EEventIds EvId>
-        struct TEvYdbResponse: NActors::TEventLocal<TEvYdbResponse<TResponse, TResult, EvId>, EvId> {
-            explicit TEvYdbResponse(const NThreading::TFuture<TResponse>& responseFuture, TEvState state)
-                : State(std::move(state))
-            {
-                try {
-                    auto response = ExtractFromConstFuture(responseFuture);
-                    Status = response.operation().status();
-                    Issues = IssuesFromProtoMessage(response.operation());
-                    response.operation().result().UnpackTo(&Result);
-                } catch(std::exception& ex) {
-                    Status = Ydb::StatusIds::INTERNAL_ERROR;
-                    Issues.AddIssue(TIssue(TStringBuilder() << "Got unexpected exception: " << ex.what()));
-                }
-            }
-
-            TEvState State;
-            TResult Result;
-            Ydb::StatusIds::StatusCode Status;
-            NYql::TIssues Issues;
-        };
-
-        using TEvYdbExecuteDataQueryResponse = TEvYdbResponse<Ydb::Table::ExecuteDataQueryResponse, Ydb::Table::ExecuteQueryResult, EvYdbExecuteDataQueryResponse>;
-        using TEvYdbCreateSessionResponse = TEvYdbResponse<Ydb::Table::CreateSessionResponse, Ydb::Table::CreateSessionResult, EvYdbCreateSessionResponse>;
-
-    protected: // TODO move common logic here
-        TString LogPrefix;
-    };
     namespace {
-        constexpr ui32 RetriesLimit = 20; // TODO lookup parameters or PRAGMA?
+        constexpr ui32 RetriesLimit = 15; // TODO lookup parameters or PRAGMA?
         constexpr TDuration MinRetryDelay = TDuration::MilliSeconds(10);
-        constexpr TDuration RetriesTimeout = TDuration::Minutes(3); // TODO lookup parameters or PRAGMA?
+        constexpr TDuration MaxRetryDelay = TDuration::Seconds(30); // TODO lookup parameters or PRAGMA?
+                                                                    // = at most 6 minutes
         constexpr ui64 TableServiceResultLimit = 1000;
 
         const NKikimr::NMiniKQL::TStructType* MergeStructTypes(const NKikimr::NMiniKQL::TTypeEnvironment& env, const NKikimr::NMiniKQL::TStructType* t1, const NKikimr::NMiniKQL::TStructType* t2) {
@@ -142,6 +99,12 @@ namespace NYql::NDq {
             return resultTypeBuilder.Build();
         }
 
+    } // namespace
+
+    class TKikimrLookupActor
+        : public NYql::NDq::IDqAsyncLookupSource,
+          public NActors::TActorBootstrapped<TKikimrLookupActor> {
+        using TBase = NActors::TActorBootstrapped<TKikimrLookupActor>;
         struct TLookupState {
             using TPtr = std::shared_ptr<TLookupState>;
             std::weak_ptr<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap> Request;
@@ -152,13 +115,47 @@ namespace NYql::NDq {
             size_t ResultRows = 0;
             TString SessionId;
         };
-    } // namespace
 
-    class TKikimrLookupActor
-        : public NYql::NDq::IDqAsyncLookupSource,
-          public TKikimrBaseActor<TKikimrLookupActor, TLookupState::TPtr> {
-        using TBase = TKikimrBaseActor<TKikimrLookupActor, TLookupState::TPtr>;
-        typedef TLookupState TEvState;
+        // Event ids
+        enum EEventIds: ui32 {
+            EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+            EvYdbExecuteDataQueryResponse = EvBegin,
+            EvYdbCreateSessionResponse,
+            EvError,
+            EvRetry,
+            EvEnd
+        };
+
+        static_assert(EEventIds::EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
+
+        // Beware: destroys future value
+        template <typename TResponse, typename TResult, enum EEventIds EvId>
+        struct TEvYdbResponse: NActors::TEventLocal<TEvYdbResponse<TResponse, TResult, EvId>, EvId> {
+            explicit TEvYdbResponse(const NThreading::TFuture<TResponse>& responseFuture, TLookupState::TPtr state)
+                : State(std::move(state))
+            {
+                try {
+                    auto response = ExtractFromConstFuture(responseFuture);
+                    Status = response.operation().status();
+                    Issues = IssuesFromProtoMessage(response.operation());
+                    response.operation().result().UnpackTo(&Result);
+                } catch(std::exception& ex) {
+                    Status = Ydb::StatusIds::INTERNAL_ERROR;
+                    Issues.AddIssue(TIssue(TStringBuilder() << "Got unexpected exception: " << ex.what()));
+                }
+            }
+
+            TLookupState::TPtr State;
+            TResult Result;
+            Ydb::StatusIds::StatusCode Status;
+            NYql::TIssues Issues;
+        };
+
+        using TEvYdbExecuteDataQueryResponse = TEvYdbResponse<Ydb::Table::ExecuteDataQueryResponse, Ydb::Table::ExecuteQueryResult, EvYdbExecuteDataQueryResponse>;
+        using TEvYdbCreateSessionResponse = TEvYdbResponse<Ydb::Table::CreateSessionResponse, Ydb::Table::CreateSessionResult, EvYdbCreateSessionResponse>;
+
+    private:
+        TString LogPrefix;
 
         struct TEvLookupRetry : NActors::TEventLocal<TEvLookupRetry, EvRetry> {
             explicit TEvLookupRetry(TLookupState::TPtr state)
@@ -235,7 +232,7 @@ namespace NYql::NDq {
         void Bootstrap() {
             auto path = LookupSource.GetPath();
             LogPrefix += TStringBuilder() << "ActorId=" << SelfId() << " Path=" << path << " ";
-            LOG_I("New kikimr provider lookup source actor");
+            LOG_I("New kikimr provider lookup actor, ParentId=" << ParentId);
             Become(&TKikimrLookupActor::StateFunc);
         }
 
@@ -375,7 +372,7 @@ namespace NYql::NDq {
 
             auto state = std::make_shared<TLookupState>(TLookupState {
                 .Request = request,
-                .Backoff = TBackoff(RetriesLimit, MinRetryDelay, RetriesTimeout),
+                .Backoff = TBackoff(RetriesLimit, MinRetryDelay, MaxRetryDelay),
                 .SentTime = TInstant::Now(),
                 .FullscanLimit = fullscanLimit
             });
@@ -478,7 +475,7 @@ namespace NYql::NDq {
             auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), /*database=*/AppData()->TenantName, /*token=*/Nothing(), actorSystem);
             // don't wait for results
         }
-        
+
         static NUdf::TUnboxedValue YdbValueToUnboxedValue(NYdb::TValueParser& columnParser, const NKikimr::NMiniKQL::TType *type) {
             NUdf::TUnboxedValue v;
             bool is_optional = type->IsOptional();

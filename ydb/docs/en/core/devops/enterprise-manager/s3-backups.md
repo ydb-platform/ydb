@@ -1,0 +1,127 @@
+# Configuring S3 backups for YDB EM
+
+This guide describes how to configure database backups to an S3-compatible storage through {{ ydb-short-name }} Enterprise Manager (YDB EM). Backups are configured in the Control Plane configuration file, for example `kikimr/ydbcp/configs/em/config.yaml`.
+
+S3 backup configuration consists of three parts:
+
+* `backup_targets` — where to store backups;
+* `secret_key` — which master key is used to encrypt S3 access keys;
+* `locations[].default_backup_config` — when to run backups and how long to retain them.
+
+## Configuring S3 storage {#backup-targets}
+
+Add the `backup_targets` block to the Control Plane configuration:
+
+```yaml
+backup_targets:
+  - target_id: "target-em"
+    tags:
+      locations:
+        - "em"
+    settings:
+      s3:
+        endpoint: s3.mds.yandex.net
+        bucket: enterprise-manager-backups-test
+        scheme: 1
+        access_key: "<encrypted access key>"
+        secret_key: "<encrypted secret key>"
+        compression: "zstd"
+```
+
+Parameter | Description
+--- | ---
+`target_id` | Unique backup target ID.
+`tags.locations` | List of `location_id` values this target applies to. A database is backed up to this target if its `location_id` is included in the list. For YDB EM, this is usually `em`, matching `locations[].database_location_id` and `meta_location_id`.
+`settings.s3.endpoint` | S3-compatible storage endpoint.
+`settings.s3.bucket` | Bucket name for backups.
+`settings.s3.scheme` | Connection protocol: `1` for HTTP, `2` for HTTPS. If omitted, HTTPS is used. Internal MDS storage at `s3.mds.yandex.net` typically uses HTTP.
+`settings.s3.access_key` | Encrypted S3 access key.
+`settings.s3.secret_key` | Encrypted S3 secret key.
+`settings.s3.compression` | Compression algorithm for exported data. The default is `zstd`. Remove this parameter if compression is not required.
+
+{% note info %}
+
+Instead of binding a target to `location_id`, you can use `explicit_backup_targets` with `by_database_path` or `by_cloud_id` rules if a specific database or cloud must be assigned to a specific target.
+
+{% endnote %}
+
+## Configuring the master key {#master-key}
+
+At the top level of the configuration file, specify the path to the master key file:
+
+```yaml
+secret_key: configs/em/secret_key
+```
+
+This master key is used to encrypt and decrypt `settings.s3.access_key` and `settings.s3.secret_key` values. By default, Control Plane looks for the master key in `/Berkanavt/ydbcp/secrets/secret_key.txt`. The file must be available to Control Plane processes.
+
+{% note warning %}
+
+Do not store `access_key` and `secret_key` in the configuration as plaintext. YDB EM expects encrypted values and decrypts them at runtime.
+
+{% endnote %}
+
+## Encrypting S3 access keys {#encrypt-s3-keys}
+
+Encrypt the S3 access keys with the same master key specified in the `secret_key` parameter. Use the Control Plane CLI:
+
+```bash
+ydbcp admin crypto encrypt --body '<plaintext access key>' --cfg-file configs/em/config.yaml
+ydbcp admin crypto encrypt --body '<plaintext secret key>' --cfg-file configs/em/config.yaml
+```
+
+Copy the resulting encrypted strings to `settings.s3.access_key` and `settings.s3.secret_key`.
+
+To check that a value can be decrypted with the same master key, run:
+
+```bash
+ydbcp admin crypto decrypt --body '<encrypted value>' --cfg-file configs/em/config.yaml
+```
+
+## Configuring schedule and retention {#schedule-and-ttl}
+
+The target defines where backups are stored. The schedule and retention period are configured separately in `locations[].default_backup_config`:
+
+```yaml
+locations:
+  - database_location_id: em
+    default_backup_config:
+      backup_settings:
+        - name: daily
+          type: SYSTEM
+          backup_schedule:
+            daily_backup_schedule:
+              execute_time:
+                hours: 20
+          backup_time_to_live: "604800s"
+```
+
+Parameter | Description
+--- | ---
+`backup_settings[].name` | Backup setting name.
+`backup_settings[].type` | Backup setting type. Use `SYSTEM` for a system schedule.
+`backup_schedule.daily_backup_schedule.execute_time.hours` | Hour of the daily backup start time in UTC.
+`backup_time_to_live` | Backup retention period in seconds. For example, `604800s` means 7 days.
+
+## Applying the configuration {#apply}
+
+To apply the settings:
+
+1. Place the updated `config.yaml` in the Control Plane working directory. By default, Control Plane uses `/Berkanavt/ydbcp/cfg/config.yaml`, `/opt/ydbcp/config/config.yaml`, or `/opt/ydb-em/ydb-em-cp/cfg/config.yaml`.
+1. Make sure the master key file specified in `secret_key` is available to Control Plane processes.
+1. Check that `settings.s3.access_key` and `settings.s3.secret_key` are encrypted with the same master key.
+1. Restart the Control Plane processes: `server` and `worker`.
+
+After restart, the worker resolves the target by `location_id` according to the schedule, configures the S3 storage, and starts data export to the specified bucket.
+
+## Checklist {#checklist}
+
+Before starting backups, check that:
+
+* `backup_targets[].tags.locations` contains the `location_id` values of the databases that require backups;
+* `endpoint`, `bucket`, and `scheme` point to the correct S3 storage;
+* `access_key` and `secret_key` are encrypted with `ydbcp admin crypto encrypt`;
+* the top-level `secret_key` parameter points to the correct master key file;
+* `locations[].default_backup_config` defines the schedule and retention period;
+* the updated configuration file is placed in the Control Plane working directory;
+* Control Plane processes are restarted after the configuration change.

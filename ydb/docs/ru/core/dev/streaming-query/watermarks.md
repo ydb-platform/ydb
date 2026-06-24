@@ -4,7 +4,7 @@
 
 ## Время события {#event-time}
 
-В потоковой обработке каждое событие имеет временную метку, по которой система отслеживает прогресс времени в потоке. В текущей реализации источником времени события может быть только время записи события в [топик](../../concepts/datamodel/topic.md), доступное через системную функцию `SystemMetadata("write_time")`.
+В потоковой обработке каждое событие имеет временную метку, по которой система отслеживает прогресс времени в потоке. В текущей реализации источником времени события может быть только время записи события в [топик](../../concepts/datamodel/topic.md), доступное через системную колонку `__ydb_write_time`.
 
 {% note info %}
 
@@ -61,7 +61,7 @@ sequenceDiagram
 
 {% note warning %}
 
-При использовании [HoppingWindow](../../yql/reference/syntax/select/group-by.md#group-by-hopping_window) первый параметр (time extractor) и источник времени в выражении WATERMARK должны совпадать. В текущей реализации оба должны использовать `SystemMetadata("write_time")`.
+При использовании [HoppingWindow](../../yql/reference/syntax/select/group-by.md#group-by-hopping_window) первый параметр (time extractor) и источник времени в выражении WATERMARK должны совпадать. В текущей реализации оба должны использовать `__ydb_write_time`.
 
 {% endnote %}
 
@@ -86,7 +86,7 @@ DO BEGIN
     $input = (
         SELECT
             t.*,
-            SystemMetadata("write_time") AS ts
+            __ydb_write_time AS ts
         FROM
             Input
         WITH (
@@ -95,7 +95,7 @@ DO BEGIN
                 pass Int64,
                 payload String
             ),
-            WATERMARK = SystemMetadata("write_time") - Interval("PT5S")
+            WATERMARK = __ydb_write_time - Interval("PT5S")
         ) AS t
     );
 
@@ -120,9 +120,9 @@ END DO;
 Где:
 
 - [`CREATE STREAMING QUERY`](../../yql/reference/syntax/create-streaming-query.md) - создаёт именованный потоковый запрос.
-- `SystemMetadata("write_time")` - системная функция, возвращающая время записи события в [топик](../../concepts/datamodel/topic.md).
+- `__ydb_write_time` - системная колонка, содержащая время записи события в [топик](../../concepts/datamodel/topic.md).
 - `FORMAT = json_each_row` - [формат данных](streaming-query-formats.md) в топике, каждая строка содержит отдельный JSON-объект.
-- `WATERMARK = SystemMetadata("write_time") - Interval("PT5S")` - водяной знак с отставанием 5 секунд. `Interval("PT5S")` задаёт интервал в формате [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601#Durations).
+- `WATERMARK = __ydb_write_time - Interval("PT5S")` - водяной знак с отставанием 5 секунд. `Interval("PT5S")` задаёт интервал в формате [ISO 8601](https://en.wikipedia.org/wiki/ISO_8601#Durations).
 - [`AGGREGATE_LIST`](../../yql/reference/builtins/aggregation.md#agg-list) - агрегатная функция, собирающая значения в список.
 - [`HOP_END()`](../../yql/reference/syntax/select/group-by.md#group-by-hop) - возвращает временную метку конца текущего окна.
 - [`HoppingWindow(ts, "PT5S", "PT10S")`](../../yql/reference/syntax/select/group-by.md#group-by-hopping_window) - оконная функция с шагом 5 секунд и размером окна 10 секунд.

@@ -328,6 +328,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 {
     static THashMap<EStatusCode, ui32> CodesRate = BuildCodesRateMap({
         TStatus::DISALLOW_TEMP,
+        TStatus::DISALLOW_TEMP_SYS_TABLET,
         TStatus::ERROR_TEMP,
         TStatus::DISALLOW,
         TStatus::WRONG_REQUEST,

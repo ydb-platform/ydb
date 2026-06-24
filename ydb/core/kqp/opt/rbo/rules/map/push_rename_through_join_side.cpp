@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/opt/rbo/rules/map/rename_common.h>
+#include <ydb/core/kqp/opt/rbo/rules/map/projection_pruning_helpers.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -13,6 +14,18 @@ TIntrusivePtr<IOperator> SelectJoinInputForRename(const TIntrusivePtr<TOpJoin>& 
     }
 
     return leftHas ? join->GetLeftInput() : join->GetRightInput();
+}
+
+TVector<TInfoUnit> BuildJoinOutput(const TString& joinKind, TVector<TInfoUnit> leftOutput, TVector<TInfoUnit> rightOutput) {
+    if (joinKind == "LeftOnly" || joinKind == "LeftSemi") {
+        rightOutput.clear();
+    }
+    if (joinKind == "RightOnly" || joinKind == "RightSemi") {
+        leftOutput.clear();
+    }
+
+    leftOutput.insert(leftOutput.end(), rightOutput.begin(), rightOutput.end());
+    return leftOutput;
 }
 
 } // anonymous namespace
@@ -44,34 +57,30 @@ bool TPushRenameThroughJoinSideRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
     }
 
     const bool pushLeft = selectedInput == join->GetLeftInput();
-    const auto oldLeftInput = join->GetLeftInput();
-    const auto oldRightInput = join->GetRightInput();
-    const auto oldKeys = join->JoinKeys;
-    const auto oldFilters = join->JoinFilters;
-    const auto oldJoinOutput = join->Props.OutputIUs;
-
-    auto pushedMap = MakeIntrusive<TOpMap>(selectedInput, topMap->Pos, TVector<TMapElement>{NMapRules::MakeRenameElement(*candidate, topMap)});
-    if (HasOutputConflicts(pushedMap->GetOutputIUs())) {
+    const TVector<TMapElement> pushedElements{NMapRules::MakeRenameElement(*candidate, topMap)};
+    const auto pushedOutput = BuildMapOutput(selectedInput->GetOutputIUs(), pushedElements);
+    if (HasOutputConflicts(pushedOutput)) {
         return false;
     }
 
+    const auto output = BuildJoinOutput(
+        join->JoinKind,
+        pushLeft ? pushedOutput : join->GetLeftInput()->GetOutputIUs(),
+        pushLeft ? join->GetRightInput()->GetOutputIUs() : pushedOutput);
+    if (HasOutputConflicts(output) || !NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
+        return false;
+    }
+
+    auto pushedMap = MakeIntrusive<TOpMap>(selectedInput, topMap->Pos, pushedElements);
+    pushedMap->Props.OutputIUs = pushedOutput;
     if (pushLeft) {
         join->SetLeftInput(pushedMap);
     } else {
         join->SetRightInput(pushedMap);
     }
     join->RenameIUs({{candidate->From, candidate->To}}, ctx.ExprCtx);
-    join->ComputeOutputIUs();
-    if (HasOutputConflicts(join->GetOutputIUs())) {
-        join->SetLeftInput(oldLeftInput);
-        join->SetRightInput(oldRightInput);
-        join->JoinKeys = oldKeys;
-        join->JoinFilters = oldFilters;
-        join->Props.OutputIUs = oldJoinOutput;
-        return false;
-    }
-
-    return NMapRules::FinishRenamePush(input, topMap, *candidate, ctx, props);
+    join->Props.OutputIUs = output;
+    return NMapRules::FinishRenamePush(input, topMap, *candidate, output, ctx, props);
 }
 
 } // namespace NKqp

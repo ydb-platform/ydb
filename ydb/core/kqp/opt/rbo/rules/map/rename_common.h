@@ -23,8 +23,19 @@ bool CanStartLocalRenamePush(const TIntrusivePtr<TOpMap>& topMap, const TRenameC
 
 TMapElement MakeRenameElement(const TRenameCandidate& candidate, const TIntrusivePtr<TOpMap>& topMap);
 
-bool FinishRenamePush(TIntrusivePtr<IOperator>& input, const TIntrusivePtr<TOpMap>& topMap, const TRenameCandidate& candidate,
-                      TRBOContext& ctx, TPlanProps& props);
+bool CanFinishRenamePush(
+    const TIntrusivePtr<TOpMap>& topMap,
+    const TRenameCandidate& candidate,
+    const TVector<TInfoUnit>& pushedInputOutput,
+    const TPlanProps& props);
+
+bool FinishRenamePush(
+    TIntrusivePtr<IOperator>& input,
+    const TIntrusivePtr<TOpMap>& topMap,
+    const TRenameCandidate& candidate,
+    const TVector<TInfoUnit>& pushedInputOutput,
+    TRBOContext& ctx,
+    TPlanProps& props);
 
 } // namespace NMapRules
 } // namespace NKqp

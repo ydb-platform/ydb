@@ -6,23 +6,29 @@ namespace NKqp {
 
 namespace {
 
-bool TryAppendToBottomMap(const TIntrusivePtr<TOpMap>& bottomMap, const TMapElement& mapElement,
-                          const TVector<TInfoUnit>& bottomInputIUs, const TPlanProps& props) {
+bool TryAppendToBottomMap(
+    const TIntrusivePtr<TOpMap>& bottomMap,
+    const TMapElement& mapElement,
+    const TVector<TInfoUnit>& bottomInputIUs,
+    const TPlanProps& props,
+    TVector<TMapElement>& bottomElements,
+    TVector<TInfoUnit>& bottomOutput)
+{
     // Move an append into the bottom map only when it can be evaluated before that map.
     if (!mapElement.DependsOnlyOn(bottomInputIUs)) {
         return false;
     }
 
-    auto elements = bottomMap->MapElements;
+    auto elements = bottomElements;
     elements.push_back(mapElement);
 
-    auto output = BuildMapOutput(bottomMap, elements);
+    auto output = BuildMapOutput(bottomInputIUs, elements);
     if (!CanExposeOutput(bottomMap, output, props)) {
         return false;
     }
 
-    bottomMap->MapElements = std::move(elements);
-    bottomMap->Props.OutputIUs = std::move(output);
+    bottomElements = std::move(elements);
+    bottomOutput = std::move(output);
     return true;
 }
 
@@ -43,8 +49,8 @@ TPushAppendIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& inpu
 
     auto bottomMap = CastOperator<TOpMap>(topMap->GetInput());
     const auto bottomInputIUs = bottomMap->GetInput()->GetOutputIUs();
-    auto originalBottomElements = bottomMap->MapElements;
-    auto originalBottomOutput = bottomMap->Props.OutputIUs;
+    auto bottomElements = bottomMap->MapElements;
+    auto bottomOutput = bottomMap->GetOutputIUs();
 
     TVector<TMapElement> topElements;
     bool pushed = false;
@@ -52,7 +58,8 @@ TPushAppendIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& inpu
     // Map(Map(input, bottomElements), topElements) ->
     // Map(input, bottomElements + movable top appends), with non-movable top elements left above.
     for (const auto& mapElement : topMap->MapElements) {
-        if (topMap->IsExtractableAppend(mapElement) && TryAppendToBottomMap(bottomMap, mapElement, bottomInputIUs, props)) {
+        if (topMap->IsExtractableAppend(mapElement) &&
+            TryAppendToBottomMap(bottomMap, mapElement, bottomInputIUs, props, bottomElements, bottomOutput)) {
             pushed = true;
         } else {
             topElements.push_back(mapElement);
@@ -64,15 +71,24 @@ TPushAppendIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& inpu
     }
 
     if (topElements.empty()) {
-        if (!CanReplaceInParents(topMap, bottomMap, props)) {
-            bottomMap->MapElements = std::move(originalBottomElements);
-            bottomMap->Props.OutputIUs = std::move(originalBottomOutput);
+        if (!CanReplaceOutputInParents(topMap, bottomOutput, props)) {
             return input;
         }
+        bottomMap->MapElements = std::move(bottomElements);
+        bottomMap->Props.OutputIUs = bottomOutput;
         return bottomMap;
     }
 
-    return MakeIntrusive<TOpMap>(bottomMap, topMap->Pos, topElements, topMap->Ordered);
+    const auto newTopOutput = BuildMapOutput(bottomOutput, topElements);
+    if (!CanReplaceOutputInParents(topMap, newTopOutput, props)) {
+        return input;
+    }
+
+    bottomMap->MapElements = std::move(bottomElements);
+    bottomMap->Props.OutputIUs = bottomOutput;
+    auto newTopMap = MakeIntrusive<TOpMap>(bottomMap, topMap->Pos, topElements, topMap->Ordered);
+    newTopMap->Props.OutputIUs = newTopOutput;
+    return newTopMap;
 }
 
 } // namespace NKqp

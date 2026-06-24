@@ -4387,8 +4387,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                                                                       50, 52, 54, 55, 56, 58, 59, 60, 61, 62, 64, 65, 66, 68, 69, 71, 72, 73, 74, 75, 76, 77, 78, 79, 81, 82, 83,
                                                                       84, 85, 87, 88, 90, 91, 92, 93, 94, 95, 96, 97, 99},
                            /*rbo never finish*/{}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
-                           // Still explain these queries, but do not require the CBO stats invariant until the known gaps are fixed.
-                           /*queriesWithoutCboCheck=*/{15, 31, 58, 64, 72, 78, 85});
+                           // Still explain these queries, but do not require the CBO stats invariant when CBO is explicitly disabled
+                           // in the query or until the known gaps are fixed.
+                           /*queriesWithoutCboCheck=*/{4, 15, 31, 58, 64, 66, 72, 78, 85});
     }
 
     void InsertIntoSchema0(NYdb::NTable::TTableClient& db, std::string tableName, ui32 numRows) {

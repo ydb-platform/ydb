@@ -2,8 +2,6 @@
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 
-#include <tuple>
-
 namespace NKikimr {
 namespace NKqp {
 
@@ -65,6 +63,108 @@ bool CanExposeToParents(IOperator* op, const TPlanProps& props, THashSet<IOperat
     }
 
     return true;
+}
+
+TVector<TInfoUnit> BuildMapOutput(const TVector<TInfoUnit>& inputOutput, const TVector<TMapElement>& elements) {
+    TVector<TInfoUnit> output = inputOutput;
+    TInfoUnitSet renameSources;
+    for (const auto& element : elements) {
+        if (element.IsRename()) {
+            AddInfoUnit(renameSources, element.GetRename());
+        }
+    }
+
+    if (!renameSources.empty()) {
+        TVector<TInfoUnit> kept;
+        kept.reserve(output.size());
+        for (const auto& iu : output) {
+            if (!renameSources.contains(iu)) {
+                kept.push_back(iu);
+            }
+        }
+        output = std::move(kept);
+    }
+
+    for (const auto& element : elements) {
+        output.push_back(element.GetElementName());
+    }
+
+    return output;
+}
+
+TVector<TInfoUnit> BuildJoinOutput(
+    const TString& joinKind,
+    TVector<TInfoUnit> leftOutput,
+    TVector<TInfoUnit> rightOutput)
+{
+    if (joinKind == "LeftOnly" || joinKind == "LeftSemi") {
+        rightOutput.clear();
+    }
+    if (joinKind == "RightOnly" || joinKind == "RightSemi") {
+        leftOutput.clear();
+    }
+
+    leftOutput.insert(leftOutput.end(), rightOutput.begin(), rightOutput.end());
+    return leftOutput;
+}
+
+TVector<TInfoUnit> BuildAggregateOutput(const TOpAggregate& aggregate) {
+    TVector<TInfoUnit> output;
+    if (!aggregate.IsDistinctAll()) {
+        output = aggregate.KeyColumns;
+    }
+    for (const auto& traits : aggregate.AggregationTraitsList) {
+        output.push_back(traits.ResultColName);
+    }
+    return output;
+}
+
+const TVector<TInfoUnit>& GetChildOutput(
+    const TIntrusivePtr<IOperator>& child,
+    const THashMap<IOperator*, TVector<TInfoUnit>>& outputOverrides)
+{
+    const auto it = outputOverrides.find(child.get());
+    return it == outputOverrides.end() ? child->GetOutputIUs() : it->second;
+}
+
+TVector<TInfoUnit> ComputeOutputWithOverrides(
+    IOperator* op,
+    const THashMap<IOperator*, TVector<TInfoUnit>>& outputOverrides)
+{
+    switch (op->Kind) {
+        case EOperator::EmptySource:
+            return {};
+        case EOperator::Source:
+            return static_cast<TOpRead*>(op)->OutputIUs;
+        case EOperator::Map: {
+            auto* map = static_cast<TOpMap*>(op);
+            return BuildMapOutput(GetChildOutput(map->GetInput(), outputOverrides), map->MapElements);
+        }
+        case EOperator::AddDependencies: {
+            auto* addDependencies = static_cast<TOpAddDependencies*>(op);
+            TVector<TInfoUnit> output = GetChildOutput(addDependencies->GetInput(), outputOverrides);
+            output.insert(output.end(), addDependencies->Dependencies.begin(), addDependencies->Dependencies.end());
+            return output;
+        }
+        case EOperator::Filter:
+        case EOperator::Limit:
+        case EOperator::Sort:
+        case EOperator::Root:
+            return GetChildOutput(static_cast<IUnaryOperator*>(op)->GetInput(), outputOverrides);
+        case EOperator::Join: {
+            auto* join = static_cast<TOpJoin*>(op);
+            return BuildJoinOutput(
+                join->JoinKind,
+                GetChildOutput(join->GetLeftInput(), outputOverrides),
+                GetChildOutput(join->GetRightInput(), outputOverrides));
+        }
+        case EOperator::UnionAll:
+            return static_cast<TOpUnionAll*>(op)->Columns;
+        case EOperator::Aggregate:
+            return BuildAggregateOutput(*static_cast<TOpAggregate*>(op));
+        case EOperator::CBOTree:
+            return op->GetOutputIUs();
+    }
 }
 
 } // anonymous namespace
@@ -156,36 +256,47 @@ bool CanExposeToParents(IOperator* op, const TPlanProps& props) {
     return CanExposeToParents(op, props, visited);
 }
 
+bool CanReplaceOutputInParents(IOperator* oldOp, const TVector<TInfoUnit>& replacementOutput, const TPlanProps& props) {
+    THashMap<IOperator*, TVector<TInfoUnit>> outputOverrides;
+    TVector<IOperator*> queue;
+
+    auto addOverride = [&outputOverrides, &queue](IOperator* op, const TVector<TInfoUnit>& output) {
+        auto [it, inserted] = outputOverrides.emplace(op, output);
+        if (inserted || it->second != output) {
+            if (!inserted) {
+                it->second = output;
+            }
+            queue.push_back(op);
+        }
+    };
+
+    addOverride(oldOp, replacementOutput);
+
+    for (size_t pos = 0; pos < queue.size(); ++pos) {
+        auto* op = queue[pos];
+        const auto& output = outputOverrides.at(op);
+        if (!CanExposeOutput(op, output, props)) {
+            return false;
+        }
+
+        for (const auto& [parent, _] : op->Parents) {
+            addOverride(parent, ComputeOutputWithOverrides(parent, outputOverrides));
+        }
+    }
+
+    return true;
+}
+
+bool CanReplaceOutputInParents(const TIntrusivePtr<IOperator>& oldOp, const TVector<TInfoUnit>& replacementOutput, const TPlanProps& props) {
+    return CanReplaceOutputInParents(oldOp.get(), replacementOutput, props);
+}
+
 bool CanReplaceInParents(
     const TIntrusivePtr<IOperator>& oldOp,
     const TIntrusivePtr<IOperator>& replacement,
     const TPlanProps& props)
 {
-    if (!CanExposeOutput(oldOp, replacement->GetOutputIUs(), props)) {
-        return false;
-    }
-
-    TVector<std::tuple<IOperator*, ui32, TIntrusivePtr<IOperator>>> oldChildren;
-    oldChildren.reserve(oldOp->Parents.size());
-    for (const auto& [parent, childIdx] : oldOp->Parents) {
-        oldChildren.emplace_back(parent, childIdx, parent->Children[childIdx]);
-        parent->Children[childIdx] = replacement;
-    }
-
-    bool valid = true;
-    THashSet<IOperator*> visited;
-    for (const auto& [parent, _] : oldOp->Parents) {
-        if (!CanExposeToParents(parent, props, visited)) {
-            valid = false;
-            break;
-        }
-    }
-
-    for (const auto& [parent, childIdx, oldChild] : oldChildren) {
-        parent->Children[childIdx] = oldChild;
-    }
-
-    return valid;
+    return CanReplaceOutputInParents(oldOp, replacement->GetOutputIUs(), props);
 }
 
 bool IOperator::PropagateNameConstraints(INameConstraintsContext& ctx) {

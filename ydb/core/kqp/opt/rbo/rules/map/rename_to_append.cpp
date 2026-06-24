@@ -7,14 +7,15 @@ namespace NKqp {
 namespace {
 
 bool CanConvertRenameToAppend(const TIntrusivePtr<TOpMap>& map, size_t renameIdx, const TPlanProps& props, TVector<TInfoUnit>& output) {
-    if (map->MapElements[renameIdx].GetRename() == map->MapElements[renameIdx].GetElementName()) {
+    const auto& element = map->MapElements[renameIdx];
+    if (IsGeneratedIgnoreIU(element.GetElementName()) || element.GetRename() == element.GetElementName()) {
         return false;
     }
 
     auto elements = map->MapElements;
     elements[renameIdx].SetIsRename(false);
     output = BuildMapOutput(map, elements);
-    return CanExposeOutput(map, output, props);
+    return CanReplaceOutputInParents(map, output, props);
 }
 
 } // anonymous namespace

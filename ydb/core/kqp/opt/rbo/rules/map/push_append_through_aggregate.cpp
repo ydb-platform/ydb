@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/opt/rbo/rules/kqp_rules_include.h>
+#include <ydb/core/kqp/opt/rbo/rules/map/projection_pruning_helpers.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -38,18 +39,24 @@ void RewriteResidualTopMapInputs(TVector<TMapElement>& elements, const TInfoUnit
     }
 }
 
-void RenameAggregateKey(TOpAggregate& aggregate, const TInfoUnit& from, const TInfoUnit& to) {
-    for (auto& key : aggregate.KeyColumns) {
+void RenameAggregateKey(
+    TVector<TInfoUnit>& keyColumns,
+    TVector<TOpAggregationTraits>& traitsList,
+    bool distinctAll,
+    const TInfoUnit& from,
+    const TInfoUnit& to)
+{
+    for (auto& key : keyColumns) {
         if (key == from) {
             key = to;
         }
     }
 
-    if (!aggregate.IsDistinctAll()) {
+    if (!distinctAll) {
         return;
     }
 
-    for (auto& traits : aggregate.AggregationTraitsList) {
+    for (auto& traits : traitsList) {
         if (traits.OriginalColName == from) {
             traits.OriginalColName = to;
         }
@@ -57,6 +64,21 @@ void RenameAggregateKey(TOpAggregate& aggregate, const TInfoUnit& from, const TI
             traits.ResultColName = to;
         }
     }
+}
+
+TVector<TInfoUnit> BuildAggregateOutput(
+    const TVector<TInfoUnit>& keyColumns,
+    const TVector<TOpAggregationTraits>& traitsList,
+    bool distinctAll)
+{
+    TVector<TInfoUnit> output;
+    if (!distinctAll) {
+        output = keyColumns;
+    }
+    for (const auto& traits : traitsList) {
+        output.push_back(traits.ResultColName);
+    }
+    return output;
 }
 
 } // anonymous namespace
@@ -97,27 +119,21 @@ TIntrusivePtr<IOperator> TPushAppendThroughAggregateRule::SimpleMatchAndApply(co
         }
 
         const auto oldAggregateInput = aggregate->GetInput();
-        const auto oldKeys = aggregate->KeyColumns;
-        const auto oldTraits = aggregate->AggregationTraitsList;
-        const auto oldAggregateOutput = aggregate->Props.OutputIUs;
         const auto aggregateInputIUs = oldAggregateInput->GetOutputIUs();
         if (!mapElement.DependsOnlyOn(aggregateInputIUs) || ContainsInfoUnit(aggregateInputIUs, to)) {
             continue;
         }
 
-        auto pushedMap = MakeIntrusive<TOpMap>(oldAggregateInput, topMap->Pos, TVector<TMapElement>{mapElement});
-        if (HasOutputConflicts(pushedMap->GetOutputIUs())) {
+        const auto pushedOutput = BuildMapOutput(aggregateInputIUs, TVector<TMapElement>{mapElement});
+        if (HasOutputConflicts(pushedOutput)) {
             continue;
         }
 
-        aggregate->SetInput(pushedMap);
-        RenameAggregateKey(*aggregate, from, to);
-        aggregate->ComputeOutputIUs();
-        if (HasOutputConflicts(aggregate->GetOutputIUs())) {
-            aggregate->SetInput(oldAggregateInput);
-            aggregate->KeyColumns = oldKeys;
-            aggregate->AggregationTraitsList = oldTraits;
-            aggregate->Props.OutputIUs = oldAggregateOutput;
+        auto newKeys = aggregate->KeyColumns;
+        auto newTraits = aggregate->AggregationTraitsList;
+        RenameAggregateKey(newKeys, newTraits, aggregate->IsDistinctAll(), from, to);
+        const auto aggregateOutput = BuildAggregateOutput(newKeys, newTraits, aggregate->IsDistinctAll());
+        if (HasOutputConflicts(aggregateOutput)) {
             continue;
         }
 
@@ -131,25 +147,31 @@ TIntrusivePtr<IOperator> TPushAppendThroughAggregateRule::SimpleMatchAndApply(co
         RewriteResidualTopMapInputs(topElements, from, to);
 
         if (topElements.empty()) {
-            if (!CanReplaceInParents(topMap, aggregate, props)) {
-                aggregate->SetInput(oldAggregateInput);
-                aggregate->KeyColumns = oldKeys;
-                aggregate->AggregationTraitsList = oldTraits;
-                aggregate->Props.OutputIUs = oldAggregateOutput;
+            if (!CanReplaceOutputInParents(topMap, aggregateOutput, props)) {
                 return input;
             }
+            auto pushedMap = MakeIntrusive<TOpMap>(oldAggregateInput, topMap->Pos, TVector<TMapElement>{mapElement});
+            pushedMap->Props.OutputIUs = pushedOutput;
+            aggregate->SetInput(pushedMap);
+            aggregate->KeyColumns = std::move(newKeys);
+            aggregate->AggregationTraitsList = std::move(newTraits);
+            aggregate->Props.OutputIUs = aggregateOutput;
             return aggregate;
         }
 
-        auto newTopMap = MakeIntrusive<TOpMap>(aggregate, topMap->Pos, topElements, topMap->Ordered);
-        if (!CanExposeOutput(topMap, newTopMap->GetOutputIUs(), props)) {
-            aggregate->SetInput(oldAggregateInput);
-            aggregate->KeyColumns = oldKeys;
-            aggregate->AggregationTraitsList = oldTraits;
-            aggregate->Props.OutputIUs = oldAggregateOutput;
+        const auto newTopOutput = BuildMapOutput(aggregateOutput, topElements);
+        if (!CanReplaceOutputInParents(topMap, newTopOutput, props)) {
             return input;
         }
 
+        auto pushedMap = MakeIntrusive<TOpMap>(oldAggregateInput, topMap->Pos, TVector<TMapElement>{mapElement});
+        pushedMap->Props.OutputIUs = pushedOutput;
+        aggregate->SetInput(pushedMap);
+        aggregate->KeyColumns = std::move(newKeys);
+        aggregate->AggregationTraitsList = std::move(newTraits);
+        aggregate->Props.OutputIUs = aggregateOutput;
+        auto newTopMap = MakeIntrusive<TOpMap>(aggregate, topMap->Pos, topElements, topMap->Ordered);
+        newTopMap->Props.OutputIUs = newTopOutput;
         return newTopMap;
     }
 

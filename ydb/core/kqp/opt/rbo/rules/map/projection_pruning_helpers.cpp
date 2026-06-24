@@ -60,11 +60,24 @@ TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const
     TVector<TMapElement> newElements;
     newElements.reserve(map->MapElements.size());
 
+    auto isShadowedByKeptOutput = [&](const TInfoUnit& source) {
+        for (const auto& mapElement : map->MapElements) {
+            const auto output = mapElement.GetElementName();
+            if (output == source && (liveOut.contains(output) || keepKeyColumns.contains(output))) {
+                return true;
+            }
+        }
+        return false;
+    };
+
     for (const auto& mapElement : map->MapElements) {
         const auto to = mapElement.GetElementName();
         if (mapElement.IsRename()) {
             const auto from = mapElement.GetRename();
-            if (liveOut.contains(to) || keepKeyColumns.contains(to) || props.NameConstraints.IsForbiddenAtOutput(map.get(), from)) {
+            if (liveOut.contains(to) || keepKeyColumns.contains(to) ||
+                props.NameConstraints.IsForbiddenAtOutput(map.get(), from) ||
+                isShadowedByKeptOutput(from))
+            {
                 newElements.push_back(mapElement);
             }
         } else if (liveOut.contains(to) || keepKeyColumns.contains(to)) {

@@ -13,6 +13,17 @@ bool ProducesAggregateResult(const TIntrusivePtr<TOpAggregate>& aggregate, const
     });
 }
 
+TVector<TInfoUnit> BuildAggregateOutput(const TOpAggregate& aggregate, const TVector<TOpAggregationTraits>& traitsList) {
+    TVector<TInfoUnit> output;
+    if (!aggregate.IsDistinctAll()) {
+        output = aggregate.KeyColumns;
+    }
+    for (const auto& traits : traitsList) {
+        output.push_back(traits.ResultColName);
+    }
+    return output;
+}
+
 } // anonymous namespace
 
 bool TPushRenameIntoAggregateResultRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
@@ -36,23 +47,22 @@ bool TPushRenameIntoAggregateResultRule::MatchAndApply(TIntrusivePtr<IOperator>&
         return false;
     }
 
-    const auto oldTraits = aggregate->AggregationTraitsList;
-    const auto oldOutput = aggregate->Props.OutputIUs;
-    for (auto& traits : aggregate->AggregationTraitsList) {
+    auto newTraits = aggregate->AggregationTraitsList;
+    for (auto& traits : newTraits) {
         if (traits.ResultColName == candidate->From) {
             traits.ResultColName = candidate->To;
             break;
         }
     }
 
-    aggregate->ComputeOutputIUs();
-    if (HasOutputConflicts(aggregate->GetOutputIUs())) {
-        aggregate->AggregationTraitsList = oldTraits;
-        aggregate->Props.OutputIUs = oldOutput;
+    const auto output = BuildAggregateOutput(*aggregate, newTraits);
+    if (HasOutputConflicts(output) || !NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
         return false;
     }
 
-    return NMapRules::FinishRenamePush(input, topMap, *candidate, ctx, props);
+    aggregate->AggregationTraitsList = std::move(newTraits);
+    aggregate->Props.OutputIUs = output;
+    return NMapRules::FinishRenamePush(input, topMap, *candidate, output, ctx, props);
 }
 
 } // namespace NKqp

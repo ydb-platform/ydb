@@ -145,7 +145,7 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
         ui16 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered;
         TTestICCluster::TTrafficInterrupterSettings interrupterSettings{TDuration::Seconds(2), bandWidth, true};
 
-        TTestICCluster testCluster(numNodes, TChannelsConfig(), &interrupterSettings);
+        TTestICCluster testCluster(numNodes, TChannelsConfig(), &interrupterSettings, nullptr, TTestICCluster::DISABLE_RDMA);
 
         TReceiverActor* receiverActor = new TReceiverActor(testCluster.GetNode(1));
         const TActorId recipient = testCluster.RegisterActor(receiverActor, 2);
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
         ui16 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered;
         TTestICCluster::TTrafficInterrupterSettings interrupterSettings{TDuration::Seconds(2), bandWidth, true};
 
-        TTestICCluster testCluster(numNodes, TChannelsConfig(), &interrupterSettings);
+        TTestICCluster testCluster(numNodes, TChannelsConfig(), &interrupterSettings, nullptr, TTestICCluster::DISABLE_RDMA);
 
         TReceiverActor* receiverActor = new TReceiverActor(testCluster.GetNode(1));
         const TActorId recipient = testCluster.RegisterActor(receiverActor, 2);
@@ -177,7 +177,8 @@ Y_UNIT_TEST_SUITE(InterconnectUnstableConnection) {
         ui16 flags = IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered;
         TTestICCluster::TTrafficInterrupterSettings interrupterSettings{TDuration::Seconds(2), bandWidth, true};
 
-        TTestICCluster testCluster(numNodes, TChannelsConfig(), &interrupterSettings, nullptr, TTestICCluster::USE_TLS);
+        TTestICCluster testCluster(numNodes, TChannelsConfig(), &interrupterSettings, nullptr,
+            TTestICCluster::Flags(TTestICCluster::USE_TLS | TTestICCluster::DISABLE_RDMA));
 
         TReceiverActor* receiverActor = new TReceiverActor(testCluster.GetNode(1));
         const TActorId recipient = testCluster.RegisterActor(receiverActor, 2);

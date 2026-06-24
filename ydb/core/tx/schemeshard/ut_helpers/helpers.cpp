@@ -3464,23 +3464,31 @@ namespace NSchemeShardUT_Private {
         return ev->Record;
     }
 
-    NKikimrSetColumnConstraint::TEvCreateResponse AsyncSetColumnConstraint(
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(
         TTestActorRuntime& runtime,
         ui64 txId,
         ui64 schemeShard,
         const TString& dbName,
         const TString& tablePath,
-        const TVector<TString>& notNullColumns)
+        const TVector<TString>& notNullColumns,
+        bool skipSettings)
     {
         // We can't do `GetRequest`, because it is not implemented at the time of writing the test
-        NKikimrSetColumnConstraint::TSetColumnConstraintSettings settings;
-        settings.SetTablePath(tablePath);
-        for (const auto& col : notNullColumns) {
-            settings.AddNotNullColumns(col);
+        auto request = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>();
+        request->Record.SetTxId(txId);
+        request->Record.SetDatabaseName(dbName);
+
+        if (!skipSettings) {
+            NKikimrSetColumnConstraint::TSetColumnConstraintSettings settings;
+            settings.SetTablePath(tablePath);
+            for (const auto& col : notNullColumns) {
+                settings.AddNotNullColumns(col);
+            }
+
+            *request->Record.MutableSettings() = std::move(settings);
         }
 
         auto sender = runtime.AllocateEdgeActor();
-        auto request = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>(txId, dbName, std::move(settings));
         ForwardToTablet(runtime, schemeShard, sender, request.Release());
 
         TAutoPtr<IEventHandle> handle;
@@ -3506,24 +3514,6 @@ namespace NSchemeShardUT_Private {
         auto sender = runtime.AllocateEdgeActor();
         auto request = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>(txId, dbName, std::move(settings));
         ForwardToTablet(runtime, schemeShard, sender, request.Release());
-    }
-
-    NKikimrSetColumnConstraint::TEvCreateResponse AsyncSetColumnConstraintWithoutSettings(
-        TTestActorRuntime& runtime,
-        ui64 txId,
-        ui64 schemeShard,
-        const TString& dbName)
-    {
-        auto sender = runtime.AllocateEdgeActor();
-        auto request = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>();
-        request->Record.SetTxId(txId);
-        request->Record.SetDatabaseName(dbName);
-        ForwardToTablet(runtime, schemeShard, sender, request.Release());
-
-        TAutoPtr<IEventHandle> handle;
-        auto* event = runtime.GrabEdgeEvent<TEvSetColumnConstraint::TEvCreateResponse>(handle);
-        UNIT_ASSERT(event);
-        return event->Record;
     }
 
     void TestCheckColumnsNotNull(

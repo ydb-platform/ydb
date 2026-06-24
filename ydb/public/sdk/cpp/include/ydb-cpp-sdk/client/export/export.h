@@ -39,7 +39,7 @@ struct TYdbDumpFormat {
 struct TParquetFormat {
     using TSelf = TParquetFormat;
 
-    FLUENT_SETTING_DEFAULT(uint32_t, RowGroupSize, 1000);
+    FLUENT_SETTING_DEFAULT(uint32_t, RowGroupSize, 10000);
 };
 
 /// YT

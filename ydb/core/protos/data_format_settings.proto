@@ -6,5 +6,5 @@ message TYdbDumpFormat {
 }
 
 message TParquetFormat {
-    optional uint32 RowGroupSize = 1 [default = 1000];
+    optional uint32 RowGroupSize = 1 [default = 10000];
 }

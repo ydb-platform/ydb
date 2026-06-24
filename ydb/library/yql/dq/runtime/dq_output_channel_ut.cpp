@@ -1301,6 +1301,54 @@ Y_UNIT_TEST(LazyActivation) {
 }
 
 
+// Verify TDqScatterStats counters match observable router behaviour.
+// Scenario: 3 channels, each push HardLimits the current one, so after 3
+// pushes the router must have activated 2 extra channels (HardLimit triggers)
+// and routed every value into a freshly-promoted NoLimit channel.
+Y_UNIT_TEST(StatsCountersTrackActivations) {
+    TScopedAlloc alloc(__LOCATION__);
+    auto s = MakeScatter(/*channelCount=*/3, /*hardLimitBytes=*/100, /*bytesPerPush=*/200);
+
+    ConsumeOne(s.Consumer); // ch0 fills, ch0 stays active
+    ConsumeOne(s.Consumer); // ch0 in HardLimit -> activate ch1, push there
+    ConsumeOne(s.Consumer); // ch1 in HardLimit -> activate ch2, push there
+
+    TVector<NYql::NDq::TDqScatterStats> stats;
+    s.Consumer->CollectScatterStats(stats);
+    UNIT_ASSERT_VALUES_EQUAL(1u, stats.size());
+    const auto& st = stats[0];
+    UNIT_ASSERT_VALUES_EQUAL(3u, st.OutputsCount);
+    UNIT_ASSERT_VALUES_EQUAL(3u, st.ActiveCountMax);    // grew to full width
+    UNIT_ASSERT_VALUES_EQUAL(2u, st.ActivationsCount);  // ch1, ch2
+    UNIT_ASSERT_VALUES_EQUAL(2u, st.TriggersHard);      // both triggered by Hard
+    UNIT_ASSERT_VALUES_EQUAL(0u, st.TriggersSoft);
+    UNIT_ASSERT_VALUES_EQUAL(3u, st.PicksNoLimit);      // every pick chose a NoLimit chan
+    UNIT_ASSERT_VALUES_EQUAL(0u, st.PicksSoftLimit);
+    UNIT_ASSERT_VALUES_EQUAL(0u, st.PicksHardLimit);    // router never returned Hard
+}
+
+// Low-pressure scenario: no activations, no triggers, PicksNoLimit grows.
+Y_UNIT_TEST(StatsCountersQuietWhenNoBackpressure) {
+    TScopedAlloc alloc(__LOCATION__);
+    auto s = MakeScatter(/*channelCount=*/4, /*hardLimitBytes=*/1000, /*bytesPerPush=*/1);
+
+    for (ui32 i = 0; i < 25; ++i) {
+        ConsumeOne(s.Consumer);
+    }
+
+    TVector<NYql::NDq::TDqScatterStats> stats;
+    s.Consumer->CollectScatterStats(stats);
+    UNIT_ASSERT_VALUES_EQUAL(1u, stats.size());
+    const auto& st = stats[0];
+    UNIT_ASSERT_VALUES_EQUAL(4u, st.OutputsCount);
+    UNIT_ASSERT_VALUES_EQUAL(1u, st.ActiveCountMax);    // only the primary
+    UNIT_ASSERT_VALUES_EQUAL(0u, st.ActivationsCount);  // never widened
+    UNIT_ASSERT_VALUES_EQUAL(0u, st.TriggersHard);
+    UNIT_ASSERT_VALUES_EQUAL(0u, st.TriggersSoft);
+    UNIT_ASSERT_VALUES_EQUAL(25u, st.PicksNoLimit);
+    UNIT_ASSERT_VALUES_EQUAL(0u, st.PicksHardLimit);
+}
+
 Y_UNIT_TEST(ControlMessagesBroadcast) {
     TScopedAlloc alloc(__LOCATION__);
     auto s = MakeScatter(/*channelCount=*/3, /*hardLimitBytes=*/1000, /*bytesPerPush=*/1);

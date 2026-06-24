@@ -886,6 +886,15 @@ void TKqpTasksGraph::BuildChannelBetweenTasks(const TStageInfo& stageInfo, const
 void TKqpTasksGraph::BuildScatterChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo,
     ui32 outputIndex, bool enableSpilling, const TChannelLogFunc& logFunc)
 {
+    // Must be visible in default cluster logs (default_level=WARN) to prove scatter wiring is actually built.
+    LOG_W("[Scatter][probe] BuildScatterChannels srcStage=" << inputStageInfo.Id.StageId
+        << " srcTasks=" << inputStageInfo.Tasks.size()
+        << " dstStage=" << stageInfo.Id.StageId
+        << " dstTasks=" << stageInfo.Tasks.size()
+        << " inputIndex=" << inputIndex
+        << " outputIndex=" << outputIndex
+        << " enableSpilling=" << enableSpilling
+        << " totalChannels=" << inputStageInfo.Tasks.size() * stageInfo.Tasks.size());
     LOG_D("Scatter channels: srcStage=" << inputStageInfo.Id.StageId << " srcTasks=" << inputStageInfo.Tasks.size()
         << " dstStage=" << stageInfo.Id.StageId << " dstTasks=" << stageInfo.Tasks.size()
         << " totalChannels=" << inputStageInfo.Tasks.size() * stageInfo.Tasks.size());
@@ -1318,8 +1327,6 @@ void TKqpTasksGraph::BuildKqpStageChannels(TStageInfo& stageInfo, ui64 txId, boo
             case NKqpProto::TKqpPhyConnection::kParallelUnionAll: {
                 const bool enableScatter = GetMeta().EnableScatterConnection;
                 if (enableScatter && inputStageInfo.Tasks.size() > 1 && stageInfo.Tasks.size() > 1) {
-                    LOG_D("ParallelUnionAll upgraded to scatter wiring: srcTasks=" << inputStageInfo.Tasks.size()
-                        << " dstTasks=" << stageInfo.Tasks.size());
                     BuildScatterChannels(stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log);
                 } else {
                     BuildParallelUnionAllChannels(stageInfo, inputIdx, inputStageInfo, outputIdx, enableSpilling, log, nextOriginTaskId);

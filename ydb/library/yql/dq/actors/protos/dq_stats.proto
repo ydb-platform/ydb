@@ -45,6 +45,43 @@ message TDqStatsAggr {
     repeated TDqHistoryItem History = 5;
 }
 
+// Per-scatter-consumer telemetry surfaced through TDqTaskStats.Scatter.
+// Mirrors NYql::NDq::TDqScatterStats; see that header for field semantics.
+//
+// Backpressure observability rationale: the scatter router starts with one
+// active dst channel and only widens the active set when the current one is
+// backpressured. Without these counters, the only visible signal is the
+// final "PicksByLevel" — which can read as hardLimit=0 even when thousands
+// of activation events fired (since the router escapes Hard by promoting a
+// fresh channel). ActiveCountMax and ActivationsCount surface that.
+message TDqScatterStats {
+    uint32 DstStageId = 1;
+    uint32 OutputsCount = 2;        // dst channels the plan allocated
+    uint32 ActiveCountMax = 3;      // high-water mark of active channels
+    uint64 ActivationsCount = 4;    // total channel activations
+    uint64 TriggersHard = 5;        // activations triggered by HardLimit
+    uint64 TriggersSoft = 6;        // activations triggered by SoftLimit
+    uint64 PicksNoLimit = 7;        // routing decisions by chosen channel level
+    uint64 PicksSoftLimit = 8;
+    uint64 PicksHardLimit = 9;
+}
+
+// Per-stage aggregate of TDqScatterStats across all tasks in the source stage,
+// keyed by the dst stage on the receiving side. Aggregation:
+//   ActiveCountMax: Max/Avg over tasks (how widely did the widest task spread)
+//   Activations/Triggers/Picks*: Sum over tasks
+//   OutputsCount: scalar, same for every task in the stage (plan-time)
+message TDqScatterStatsAggr {
+    uint32 OutputsCount = 1;
+    TDqStatsAggr ActiveCountMax = 2;
+    TDqStatsAggr ActivationsCount = 3;
+    TDqStatsAggr TriggersHard = 4;
+    TDqStatsAggr TriggersSoft = 5;
+    TDqStatsAggr PicksNoLimit = 6;
+    TDqStatsAggr PicksSoftLimit = 7;
+    TDqStatsAggr PicksHardLimit = 8;
+}
+
 message TDqExternalAggrStats {
     TDqStatsAggr ExternalRows = 1;
     TDqStatsAggr ExternalBytes = 2;
@@ -261,6 +298,10 @@ message TDqTaskStats {
     repeated TDqAsyncOutputBufferStats Sinks = 152;
     repeated TDqOutputChannelStats OutputChannels = 153;
     repeated TDqAsyncInputBufferStats InputTransforms = 155;
+    // One entry per scatter consumer this task contains. Usually 0 or 1
+    // (a stage either has scatter on its output or it doesn't), but a
+    // multi-consumer with scatter children could produce several.
+    repeated TDqScatterStats Scatter = 170;
 
     uint64 SpillingComputeWriteBytes = 160;
     uint64 SpillingChannelWriteBytes = 161;
@@ -473,6 +514,11 @@ message TDqStageStats {
 
     TDqStatsAggr MaxMemoryUsage = 24;
     TDqStatsAggr MemoryUsageMB = 54;
+
+    // Per-stage scatter telemetry, keyed by DstStageId of the receiving stage
+    // (matches the key shape of Output above so they are easy to correlate).
+    // Only populated when the stage's output is a scatter connection.
+    map<uint32, TDqScatterStatsAggr> Scatter = 55;
 
     google.protobuf.Any Extra = 100;
 }

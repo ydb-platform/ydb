@@ -224,7 +224,14 @@ IDqOutputConsumer::TPtr DqBuildOutputConsumer(const NDqProto::TTaskOutput& outpu
         case NDqProto::TTaskOutput::kScatter: {
             const auto& scatter = outputDesc.GetScatter();
             const ui32 primaryIdx = scatter.primary_channel_idx();
-            return CreateOutputScatterConsumer(std::move(outputs), outputWidth, primaryIdx);
+            // All channels in a single scatter consumer go to the same dst
+            // stage by construction (BuildScatterChannels enforces this).
+            // Carry that id through so per-stage stats aggregation works on
+            // the KQP side.
+            const ui32 dstStageId = outputDesc.ChannelsSize() > 0
+                ? outputDesc.GetChannels(0).GetDstStageId()
+                : 0u;
+            return CreateOutputScatterConsumer(std::move(outputs), outputWidth, primaryIdx, dstStageId);
         }
 
         case NDqProto::TTaskOutput::kRangePartition: {
@@ -1169,6 +1176,9 @@ private:
 
                     LOG(TStringBuilder() << "task" << TaskId << ", execution finished, finish consumers");
                     AllocatedHolder->Output->Finish();
+                    if (Stats && AllocatedHolder->Output) {
+                        AllocatedHolder->Output->CollectScatterStats(Stats->ScatterStats);
+                    }
                     return ERunStatus::Finished;
                 }
                 case NUdf::EFetchStatus::Yield: {

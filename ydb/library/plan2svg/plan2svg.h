@@ -120,6 +120,7 @@ public:
     std::vector<std::string> SortColumns;
     TString HashFunc;
     bool Parallel = false;
+    bool Scatter = false;
     bool CteConnection = false;
     ui32 CteIndentX = 0;
     ui32 CteOffsetY = 0;

@@ -421,6 +421,16 @@ void TOperatorStats::Resize(ui32 taskCount) {
     Bytes.resize(taskCount);
 }
 
+void TScatterAggrStats::Resize(ui32 taskCount) {
+    ActiveCountMax.resize(taskCount);
+    ActivationsCount.resize(taskCount);
+    TriggersHard.resize(taskCount);
+    TriggersSoft.resize(taskCount);
+    PicksNoLimit.resize(taskCount);
+    PicksSoftLimit.resize(taskCount);
+    PicksHardLimit.resize(taskCount);
+}
+
 void TStageExecutionStats::Resize(ui32 taskCount) {
 
     AFL_ENSURE((taskCount & 3) == 0);
@@ -669,6 +679,22 @@ ui64 TStageExecutionStats::UpdateStats(const NYql::NDqProto::TDqTaskStats& taskS
         baseTimeMs = NonZeroMin(baseTimeMs, UpdateAsyncStats(index, asyncBufferStats.Push, outputChannelStat.GetPush()));
         baseTimeMs = NonZeroMin(baseTimeMs, UpdateAsyncStats(index, asyncBufferStats.Pop, outputChannelStat.GetPop()));
         SetNonZero(asyncBufferStats.LocalBytes, index, outputChannelStat.GetLocalBytes());
+    }
+
+    for (auto& scatterStat : taskStats.GetScatter()) {
+        auto dstStageId = scatterStat.GetDstStageId();
+        auto [it, _] = Scatter.try_emplace(dstStageId, TaskCount);
+        auto& aggr = it->second;
+        // OutputsCount is plan-time identical across tasks; keep the max in
+        // case races report partial state during shutdown.
+        aggr.OutputsCount = std::max<ui32>(aggr.OutputsCount, scatterStat.GetOutputsCount());
+        SetNonZero(aggr.ActiveCountMax, index, scatterStat.GetActiveCountMax());
+        SetNonZero(aggr.ActivationsCount, index, scatterStat.GetActivationsCount());
+        SetNonZero(aggr.TriggersHard, index, scatterStat.GetTriggersHard());
+        SetNonZero(aggr.TriggersSoft, index, scatterStat.GetTriggersSoft());
+        SetNonZero(aggr.PicksNoLimit, index, scatterStat.GetPicksNoLimit());
+        SetNonZero(aggr.PicksSoftLimit, index, scatterStat.GetPicksSoftLimit());
+        SetNonZero(aggr.PicksHardLimit, index, scatterStat.GetPicksHardLimit());
     }
 
     for (auto& sinkStat : taskStats.GetSinks()) {
@@ -1484,6 +1510,17 @@ void TQueryExecutionStats::ExportAggAsyncBufferStats(TAsyncBufferStats& data, NY
     stats.SetLocalBytes(ExportAggStats(data.LocalBytes));
 }
 
+void TQueryExecutionStats::ExportAggScatterStats(TScatterAggrStats& data, NYql::NDqProto::TDqScatterStatsAggr& stats) {
+    stats.SetOutputsCount(data.OutputsCount);
+    ExportAggStats(data.ActiveCountMax,   *stats.MutableActiveCountMax());
+    ExportAggStats(data.ActivationsCount, *stats.MutableActivationsCount());
+    ExportAggStats(data.TriggersHard,     *stats.MutableTriggersHard());
+    ExportAggStats(data.TriggersSoft,     *stats.MutableTriggersSoft());
+    ExportAggStats(data.PicksNoLimit,     *stats.MutablePicksNoLimit());
+    ExportAggStats(data.PicksSoftLimit,   *stats.MutablePicksSoftLimit());
+    ExportAggStats(data.PicksHardLimit,   *stats.MutablePicksHardLimit());
+}
+
 void TQueryExecutionStats::ExportAggExecStats(TAggExecStat* metrics) {
     if (!metrics) {
         return;
@@ -1584,6 +1621,9 @@ void TQueryExecutionStats::ExportExecStats(NYql::NDqProto::TDqExecutionStats& st
                 }
                 for (auto& [id, e] : stageStat.Egress) {
                     ExportAggAsyncBufferStats(e, (*stageStats.MutableEgress())[id]);
+                }
+                for (auto& [dstStageId, s] : stageStat.Scatter) {
+                    ExportAggScatterStats(s, (*stageStats.MutableScatter())[dstStageId]);
                 }
                 for (auto& [id, j] : stageStat.Joins) {
                     auto& joinStat = (*stageStats.MutableOperatorJoin())[id];

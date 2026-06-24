@@ -532,7 +532,11 @@ private:
             planNode.TypeName = "UnionAll";
         } else if (connection.Maybe<TDqCnParallelUnionAll>()) {
             planNode.TypeName = "UnionAll";
-            planNode.NodeInfo["Parallel"] = "True";
+            if (SerializerCtx.Config->GetEnableScatterConnection()) {
+                planNode.NodeInfo["Scatter"] = "True";
+            } else {
+                planNode.NodeInfo["Parallel"] = "True";
+            }
         } else if (connection.Maybe<TDqCnBroadcast>()) {
             planNode.TypeName = "Broadcast";
         } else if (connection.Maybe<TDqCnMap>()) {
@@ -3225,6 +3229,22 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
             auto& outputNode = node["OutputChannels"].AppendValue(NJson::TJsonValue());
             fillOutputStats(outputNode, outputStats);
         }
+
+        for (auto& s : taskStats.GetScatter()) {
+            // Per-task scatter telemetry. Profile clients render these to
+            // verify the per-stage aggregate; the same fields are also rolled
+            // up into Scatter[] under Stats above.
+            auto& scatterNode = node["Scatter"].AppendValue(NJson::TJsonValue());
+            scatterNode["DstStageId"]       = s.GetDstStageId();
+            scatterNode["OutputsCount"]     = s.GetOutputsCount();
+            scatterNode["ActiveCountMax"]   = s.GetActiveCountMax();
+            scatterNode["ActivationsCount"] = s.GetActivationsCount();
+            scatterNode["TriggersHard"]     = s.GetTriggersHard();
+            scatterNode["TriggersSoft"]     = s.GetTriggersSoft();
+            scatterNode["PicksNoLimit"]     = s.GetPicksNoLimit();
+            scatterNode["PicksSoftLimit"]   = s.GetPicksSoftLimit();
+            scatterNode["PicksHardLimit"]   = s.GetPicksHardLimit();
+        }
     };
 
     auto fillCaStats = [&](NJson::TJsonValue& node, const NYql::NDqProto::TDqComputeActorStats& caStats) {
@@ -3448,6 +3468,45 @@ TString AddExecStatsToTxPlan(const TString& txPlanJson, const NYql::NDqProto::TD
                         }
                         if (egress.second.HasEgress()) {
                             FillAsyncAggrStat(egressInfo.InsertValue("Egress", NJson::JSON_MAP), egress.second.GetEgress());
+                        }
+                    }
+                }
+                if (!(*stat)->GetScatter().empty()) {
+                    // Surface per-stage scatter telemetry. Same key shape as
+                    // "Output" above (dst stage id -> plan node id) so it can
+                    // be correlated 1:1 with the output channel block.
+                    auto& scatterStats = stats.InsertValue("Scatter", NJson::JSON_ARRAY);
+                    for (auto& [dstStageId, s] : (*stat)->GetScatter()) {
+                        auto& info = scatterStats.AppendValue(NJson::JSON_MAP);
+                        if (dstStageId == 0) {
+                            info["Name"] = "RESULT";
+                        } else if (auto guidIt = stageIdToGuid.find(dstStageId); guidIt != stageIdToGuid.end()
+                                   && guidToPlaneId.contains(guidIt->second)) {
+                            info["Name"] = ToString(guidToPlaneId.at(guidIt->second));
+                        } else {
+                            info["Name"] = ToString(dstStageId);
+                        }
+                        info["OutputsCount"] = s.GetOutputsCount();
+                        if (s.HasActiveCountMax()) {
+                            FillAggrStat(info, s.GetActiveCountMax(), "ActiveCountMax");
+                        }
+                        if (s.HasActivationsCount()) {
+                            FillAggrStat(info, s.GetActivationsCount(), "ActivationsCount");
+                        }
+                        if (s.HasTriggersHard()) {
+                            FillAggrStat(info, s.GetTriggersHard(), "TriggersHard");
+                        }
+                        if (s.HasTriggersSoft()) {
+                            FillAggrStat(info, s.GetTriggersSoft(), "TriggersSoft");
+                        }
+                        if (s.HasPicksNoLimit()) {
+                            FillAggrStat(info, s.GetPicksNoLimit(), "PicksNoLimit");
+                        }
+                        if (s.HasPicksSoftLimit()) {
+                            FillAggrStat(info, s.GetPicksSoftLimit(), "PicksSoftLimit");
+                        }
+                        if (s.HasPicksHardLimit()) {
+                            FillAggrStat(info, s.GetPicksHardLimit(), "PicksHardLimit");
                         }
                     }
                 }

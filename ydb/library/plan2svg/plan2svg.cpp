@@ -1521,6 +1521,9 @@ void TPlan::LoadStage(std::shared_ptr<TStage> stage, const NJson::TJsonValue& no
                     if (auto* parallelNode = plan.GetValueByPath("Parallel")) {
                         connection->Parallel = parallelNode->GetStringSafe() == "True";
                     }
+                    if (auto* scatterNode = plan.GetValueByPath("Scatter")) {
+                        connection->Scatter = scatterNode->GetStringSafe() == "True";
+                    }
                 }
             } else if (planNodeType == "") {
                 if (subNodeType == "Source") {
@@ -2587,7 +2590,9 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             if (c->HashFunc) {
                 c->_Builder << " HashFunc: " << c->HashFunc;
             }
-            if (c->Parallel) {
+            if (c->Scatter) {
+                c->_Builder << " Scatter: True";
+            } else if (c->Parallel) {
                 c->_Builder << " Parallel: True";
             }
             c->_Builder
@@ -2666,7 +2671,7 @@ void TPlan::PrepareSvg(ui64 maxTime, ui32 timelineDelta, ui32& offsetY) {
             if (c->NodeType == "HashShuffle")     mark = "H";
             else if (c->NodeType == "Merge")      mark = "Me";
             else if (c->NodeType == "Map")        mark = "Ma";
-            else if (c->NodeType == "UnionAll")   mark = "U";
+            else if (c->NodeType == "UnionAll")   mark = c->Scatter ? "S" : "U";
             else if (c->NodeType == "Broadcast")  mark = "B";
             else if (c->NodeType == "External")   mark = "E";
             else if (c->NodeType == "Table")      mark = "T";

@@ -3,6 +3,8 @@
 #include <yql/essentials/utils/log/log.h>
 
 #include <ydb/library/yql/dq/actors/protos/dq_events.pb.h>
+#include <ydb/library/actors/core/log.h>
+#include <ydb/library/services/services.pb.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
 #include <yql/essentials/minikql/computation/mkql_block_reader.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -17,7 +19,6 @@
 
 #include <atomic>
 #include <memory>
-#include <type_traits>
 #include <ydb/library/formats/arrow/hash/xx_hash.h>
 
 #include <util/string/builder.h>
@@ -380,6 +381,12 @@ public:
         }
         builder << ']';
         return builder;
+    }
+
+    void CollectScatterStats(TVector<TDqScatterStats>& out) const override {
+        for (const auto& consumer : Consumers) {
+            consumer->CollectScatterStats(out);
+        }
     }
 
 private:
@@ -1055,6 +1062,18 @@ public:
     ui32 ActiveCount() const { 
         return static_cast<ui32>(ActiveChannels_.size()); 
     }
+    ui32 ActiveCountMax() const {
+        return ActiveCountMax_;
+    }
+    ui64 ActivationsCount() const {
+        return ActivationsCount_;
+    }
+    ui64 TriggersHard() const {
+        return TriggersHard_;
+    }
+    ui64 TriggersSoft() const {
+        return TriggersSoft_;
+    }
 
     EDqFillLevel GetFillLevel() const {
         bool anySoft = false;
@@ -1078,13 +1097,15 @@ public:
             const ui32 idx = ActiveChannels_[0];
             const auto lvl = ChannelLevels_[idx].load(std::memory_order_acquire);
             if (lvl != NoLimit && HasPending()) {
-                // Scan inactive channels, skipping stubs (HardLimit), until we
-                // find one that is actually available. Stubs get activated into
-                // ActiveChannels_ so their callback can update the level later.
+                // Activation triggered: the only active channel is in {Soft,Hard}Limit
+                // and we have spare inactive channels — activate the next one.
+                RecordTrigger(lvl);
+                LogActivationTrigger("single", idx, lvl);
                 while (HasPending()) {
                     const ui32 nextIdx = InactiveChannels_[InactiveCursor_];
                     const auto nextLvl = ChannelLevels_[nextIdx].load(std::memory_order_acquire);
                     const ui32 activated = ActivateNext();
+                    LogActivated(activated, nextLvl);
                     if (nextLvl < HardLimit) {
                         return {activated, nextLvl};
                     }
@@ -1113,10 +1134,16 @@ public:
         }
 
         if (HasPending()) {
+            // No active channel is NoLimit and we have spare inactive channels:
+            // best remaining is `bestLevel` on `bestIdx`. This is the genuine
+            // "backpressure forced a new channel" event.
+            RecordTrigger(bestLevel);
+            LogActivationTrigger("multi", bestIdx, bestLevel);
             while (HasPending()) {
                 const ui32 nextIdx = InactiveChannels_[InactiveCursor_];
                 const auto nextLvl = ChannelLevels_[nextIdx].load(std::memory_order_acquire);
                 const ui32 activated = ActivateNext();
+                LogActivated(activated, nextLvl);
                 if (nextLvl < HardLimit) {
                     return {activated, nextLvl};
                 }
@@ -1136,7 +1163,47 @@ private:
         Y_ENSURE(HasPending());
         const ui32 idx = InactiveChannels_[InactiveCursor_++];
         ActiveChannels_.push_back(idx);
+        ++ActivationsCount_;
+        if (ActiveChannels_.size() > ActiveCountMax_) {
+            ActiveCountMax_ = static_cast<ui32>(ActiveChannels_.size());
+        }
         return idx;
+    }
+
+    void RecordTrigger(EDqFillLevel triggeringLvl) {
+        if (triggeringLvl == HardLimit) {
+            ++TriggersHard_;
+        } else if (triggeringLvl == SoftLimit) {
+            ++TriggersSoft_;
+        }
+    }
+
+    void LogActivationTrigger(const char* mode, ui32 triggeringIdx, EDqFillLevel triggeringLvl) const {
+        // Producer-thread context, fed via Outputs[i]->Push -> compute actor.
+        // Using KQP_TASKS_RUNNER to keep all [Scatter] lines in one component.
+        // Guard the dereference: unit tests instantiate scatter without an
+        // actor system, and the *real* observability path is TDqScatterStats
+        // — these debug lines are a nice-to-have.
+        if (Y_UNLIKELY(!NActors::TlsActivationContext)) {
+            return;
+        }
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_TASKS_RUNNER,
+            "[Scatter][activate] trigger mode=" << mode
+            << " activeBefore=" << ActiveChannels_.size()
+            << " inactiveLeft=" << (InactiveChannels_.size() - InactiveCursor_)
+            << " triggerIdx=" << triggeringIdx
+            << " triggerLevel=" << FillLevelToString(triggeringLvl));
+    }
+
+    void LogActivated(ui32 activatedIdx, EDqFillLevel activatedLvl) const {
+        if (Y_UNLIKELY(!NActors::TlsActivationContext)) {
+            return;
+        }
+        LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::KQP_TASKS_RUNNER,
+            "[Scatter][activate] activated channelIdx=" << activatedIdx
+            << " level=" << FillLevelToString(activatedLvl)
+            << " activeAfter=" << ActiveChannels_.size()
+            << " inactiveLeft=" << (InactiveChannels_.size() - InactiveCursor_));
     }
 
     const ui32 ChannelCount_;
@@ -1145,15 +1212,22 @@ private:
     TVector<ui32> InactiveChannels_;
     size_t InactiveCursor_ = 0;
     ui32 RoundRobinPos_ = 0;
+    // Backpressure / activation counters surfaced through TDqScatterStats.
+    // Updated only from the producer thread (same as ActiveChannels_).
+    ui32 ActiveCountMax_ = 1;
+    ui64 ActivationsCount_ = 0;
+    ui64 TriggersHard_ = 0;
+    ui64 TriggersSoft_ = 0;
 };
 
 class TDqOutputScatterConsumer : public IDqOutputConsumer {
 public:
     TDqOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth,
-                             ui32 primaryChannelIdx = 0)
+                             ui32 primaryChannelIdx = 0, ui32 dstStageId = 0)
         : Outputs(std::move(outputs))
         , OutputWidth(outputWidth)
         , Tmp(outputWidth.Defined() ? *outputWidth : 0u)
+        , DstStageId_(dstStageId)
     {
         Aggregator = std::make_shared<TDqFillAggregator>();
         Aggregator->InitScatterChannels(static_cast<ui32>(Outputs.size()));
@@ -1199,14 +1273,20 @@ public:
 
     void Finish() override {
         const ui64 total = PicksByLevel[0] + PicksByLevel[1] + PicksByLevel[2];
-        // Per-stage summary. DEBUG in the common case to keep prod logs quiet;
         // WARN when >10% of picks hit HardLimit — that means scatter was
-        // consistently back-pressured and upstream/downstream capacity is
-        // likely under-provisioned.
-        const bool backpressured = total > 0 && PicksByLevel[2] * 10 > total;
-        const auto level = backpressured ? NLog::ELevel::WARN : NLog::ELevel::DEBUG;
-        YQL_CVLOG(level, NLog::EComponent::ProviderDq) << "[Scatter] outputs=" << Outputs.size()
-            << " active=" << Router_->ActiveCount()
+        // consistently back-pressured AND failed to escape via activation
+        // (every available channel was Hard). DEBUG otherwise to keep prod
+        // logs quiet, but with enough info that grep'ing the line tells the
+        // whole story (the previous summary made hardLimit=0 look like "no
+        // backpressure" while activations could be in the thousands).
+        const bool hardPicksDominant = total > 0 && PicksByLevel[2] * 10 > total;
+        const auto level = hardPicksDominant ? NLog::ELevel::WARN : NLog::ELevel::DEBUG;
+        YQL_CVLOG(level, NLog::EComponent::ProviderDq) << "[Scatter] dstStage=" << DstStageId_
+            << " outputs=" << Outputs.size()
+            << " activeMax=" << Router_->ActiveCountMax()
+            << " activations=" << Router_->ActivationsCount()
+            << " triggers Hard=" << Router_->TriggersHard()
+            << " Soft=" << Router_->TriggersSoft()
             << " picks total=" << total
             << " noLimit=" << PicksByLevel[0]
             << " softLimit=" << PicksByLevel[1]
@@ -1214,6 +1294,20 @@ public:
         for (auto& output : Outputs) {
             output->Finish();
         }
+    }
+
+    void CollectScatterStats(TVector<TDqScatterStats>& out) const override {
+        TDqScatterStats s;
+        s.DstStageId = DstStageId_;
+        s.OutputsCount = static_cast<ui32>(Outputs.size());
+        s.ActiveCountMax = Router_->ActiveCountMax();
+        s.ActivationsCount = Router_->ActivationsCount();
+        s.TriggersHard = Router_->TriggersHard();
+        s.TriggersSoft = Router_->TriggersSoft();
+        s.PicksNoLimit = PicksByLevel[0];
+        s.PicksSoftLimit = PicksByLevel[1];
+        s.PicksHardLimit = PicksByLevel[2];
+        out.push_back(s);
     }
 
     void Flush() override {
@@ -1237,6 +1331,7 @@ private:
     std::shared_ptr<TDqFillAggregator> Aggregator;
     std::optional<TScatterRouter> Router_;
     std::array<ui64, TScatterRouter::kLevelCount> PicksByLevel = {};
+    const ui32 DstStageId_;
 };
 
 } // namespace
@@ -1356,8 +1451,8 @@ IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&&
     return MakeIntrusive<TDqOutputBroadcastConsumer>(std::move(outputs), outputWidth);
 }
 
-IDqOutputConsumer::TPtr CreateOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth, ui32 primaryChannelIdx) {
-    return MakeIntrusive<TDqOutputScatterConsumer>(std::move(outputs), outputWidth, primaryChannelIdx);
+IDqOutputConsumer::TPtr CreateOutputScatterConsumer(TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth, ui32 primaryChannelIdx, ui32 dstStageId) {
+    return MakeIntrusive<TDqOutputScatterConsumer>(std::move(outputs), outputWidth, primaryChannelIdx, dstStageId);
 }
 
 } // namespace NYql::NDq

@@ -89,6 +89,11 @@ struct TDqTaskRunnerStats {
     THashMap<ui64, IDqAsyncInputBuffer::TPtr> Sources;                     // InputIndex => Source
     THashMap<ui32, THashMap<ui64, IDqOutputChannel::TPtr>> OutputChannels; // DstStageId => {ChannelId => Channel}
 
+    // Snapshot collected at task shutdown from each scatter consumer (see
+    // IDqOutputConsumer::CollectScatterStats). Usually one entry per task,
+    // but a multi-consumer with several scatter children would yield several.
+    TVector<TDqScatterStats> ScatterStats;
+
     TVector<TMkqlStat> MkqlStats;
     TVector<TOperatorStat> OperatorStat;
 

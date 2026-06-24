@@ -14,6 +14,35 @@ namespace NKikimr::NMiniKQL {
 
 namespace NYql::NDq {
 
+// Per-scatter-consumer telemetry. Surfaces what the adaptive router actually did
+// (vs. what the plan promised): how many of the dst-channels got used, how often
+// backpressure forced widening the active set, and what fill-level routing
+// decisions looked like. Aggregated per task; KQP rolls up per stage.
+struct TDqScatterStats {
+    // The DstStageId of the channels this scatter writes into, used as the
+    // aggregation key on the KQP side. Zero if unknown (sinks).
+    ui32 DstStageId = 0;
+    // Total number of destination channels the plan allocated.
+    ui32 OutputsCount = 0;
+    // High-water mark of active channels at any single point in time.
+    // ActiveCountMax / OutputsCount is the underutilization signal.
+    ui32 ActiveCountMax = 0;
+    // How many times a new channel was promoted from inactive to active.
+    // Equals (ActiveCountMax - 1) in a single-task scatter run.
+    ui64 ActivationsCount = 0;
+    // Of those activations, how many were triggered by the active set hitting
+    // HardLimit on the current channel vs. SoftLimit. HardLimit dominance means
+    // downstream cannot keep up at all; Soft means it almost can.
+    ui64 TriggersHard = 0;
+    ui64 TriggersSoft = 0;
+    // Routing decisions by the fill level of the chosen channel (sanity check:
+    // PicksHardLimit should stay 0 — the router fails over to a fresh channel
+    // before returning a Hard one).
+    ui64 PicksNoLimit = 0;
+    ui64 PicksSoftLimit = 0;
+    ui64 PicksHardLimit = 0;
+};
+
 class IDqOutputConsumer : public TSimpleRefCount<IDqOutputConsumer>,
     public NKikimr::NMiniKQL::TWithDefaultMiniKQLAlloc {
 public:
@@ -34,6 +63,9 @@ public:
     virtual TString DebugString() {
         return "";
     }
+    // Default no-op; only scatter consumers (and multi-consumers that contain
+    // scatter children) append their stats. Called once per task at finish.
+    virtual void CollectScatterStats(TVector<TDqScatterStats>& /*out*/) const {}
 };
 
 IDqOutputConsumer::TPtr CreateOutputMultiConsumer(TVector<IDqOutputConsumer::TPtr>&& consumers);
@@ -53,6 +85,6 @@ IDqOutputConsumer::TPtr CreateOutputBroadcastConsumer(TVector<IDqOutput::TPtr>&&
 
 IDqOutputConsumer::TPtr CreateOutputScatterConsumer(
     TVector<IDqOutput::TPtr>&& outputs, TMaybe<ui32> outputWidth,
-    ui32 primaryChannelIdx = 0);
+    ui32 primaryChannelIdx = 0, ui32 dstStageId = 0);
 
 } // namespace NYql::NDq

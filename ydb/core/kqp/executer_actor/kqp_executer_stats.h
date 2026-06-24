@@ -216,6 +216,31 @@ struct TOperatorStats {
     }
 };
 
+// Per-task scatter counters, aggregated per DstStageId on the receiving side.
+// OutputsCount is a scalar (the plan allocates the same dst-channel count for
+// every task in the source stage); the rest are vectors indexed by task index
+// inside TStageExecutionStats, exported as TDqStatsAggr Min/Max/Sum/Cnt.
+struct TScatterAggrStats {
+    TScatterAggrStats() = default;
+    TScatterAggrStats(ui32 taskCount) {
+        Resize(taskCount);
+    }
+
+    ui32 OutputsCount = 0;
+    std::vector<ui64> ActiveCountMax;
+    std::vector<ui64> ActivationsCount;
+    std::vector<ui64> TriggersHard;
+    std::vector<ui64> TriggersSoft;
+    std::vector<ui64> PicksNoLimit;
+    std::vector<ui64> PicksSoftLimit;
+    std::vector<ui64> PicksHardLimit;
+
+    void Resize(ui32 taskCount);
+    static TMetricInfo EstimateMem() {
+        return TMetricInfo(7);
+    }
+};
+
 struct TStageExecutionStats {
 
     NYql::NDq::TStageId StageId;
@@ -260,6 +285,10 @@ struct TStageExecutionStats {
     std::map<TString, TOperatorStats> Joins;
     std::map<TString, TOperatorStats> Filters;
     std::map<TString, TOperatorStats> Aggregations;
+
+    // Keyed by DstStageId (same key shape as Output above so they line up).
+    // Empty unless the stage's outgoing connection is scatter.
+    std::unordered_map<ui32, TScatterAggrStats> Scatter;
 
     std::unordered_map<TString, std::vector<ui64>> Mkql;
 
@@ -409,6 +438,7 @@ private:
     std::unordered_map<ui32, TDuration> LongestTaskDurations;
     void ExportAggAsyncStats(TAsyncStats& data, NYql::NDqProto::TDqAsyncStatsAggr& stats);
     void ExportAggAsyncBufferStats(TAsyncBufferStats& data, NYql::NDqProto::TDqAsyncBufferStatsAggr& stats);
+    void ExportAggScatterStats(TScatterAggrStats& data, NYql::NDqProto::TDqScatterStatsAggr& stats);
 public:
     THashMap<NYql::NDq::TStageId, TStageExecutionStats> StageStats;
     const Ydb::Table::QueryStatsCollection::Mode StatsMode;

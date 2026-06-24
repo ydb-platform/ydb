@@ -7,6 +7,7 @@
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_actor.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
+#include <ydb/library/yql/utils/actor_log/log.h>
 
 #include <library/cpp/string_utils/quote/quote.h>
 
@@ -83,6 +84,9 @@ public:
     ~TKqpScanComputeActor();
 
     STFUNC(StateFunc) {
+        NYql::NDq::TYqlLogScope yqlLogScope(TlsActivationContext->ActorSystem(),
+            NKikimrServices::KQP_TASKS_RUNNER,
+            TStringBuilder() << GetTxId() << ":" << GetTask().GetId());
         try {
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvScanExchange::TEvSendData, Handle);

@@ -323,6 +323,25 @@ void FillTaskRunnerStats(ui64 taskId, ui32 stageId, const TDqTaskRunnerStats& ta
     protoTask->SetResultRows(resultStats.Rows);
     protoTask->SetResultBytes(resultStats.Bytes);
 
+    // Scatter telemetry is producer-side metadata, not an aggregate over
+    // channel buffers, so it lives outside the OutputChannels loop. Only
+    // emit when stats are at least Full — the structure is small (<= 64
+    // bytes per entry) but useless for Basic clients.
+    if (StatsLevelCollectFull(level)) {
+        for (const auto& s : taskStats.ScatterStats) {
+            auto& protoScatter = *protoTask->AddScatter();
+            protoScatter.SetDstStageId(s.DstStageId);
+            protoScatter.SetOutputsCount(s.OutputsCount);
+            protoScatter.SetActiveCountMax(s.ActiveCountMax);
+            protoScatter.SetActivationsCount(s.ActivationsCount);
+            protoScatter.SetTriggersHard(s.TriggersHard);
+            protoScatter.SetTriggersSoft(s.TriggersSoft);
+            protoScatter.SetPicksNoLimit(s.PicksNoLimit);
+            protoScatter.SetPicksSoftLimit(s.PicksSoftLimit);
+            protoScatter.SetPicksHardLimit(s.PicksHardLimit);
+        }
+    }
+
     protoTask->SetCreateTimeMs(taskStats.CreateTs.MilliSeconds());
     protoTask->SetStartTimeMs(startTime.MilliSeconds());
     protoTask->SetFinishTimeMs(finishTime.MilliSeconds());

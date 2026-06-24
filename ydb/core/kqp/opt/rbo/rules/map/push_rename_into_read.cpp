@@ -3,6 +3,19 @@
 namespace NKikimr {
 namespace NKqp {
 
+namespace {
+
+TVector<TInfoUnit> ReplaceOutputName(TVector<TInfoUnit> output, const TInfoUnit& from, const TInfoUnit& to) {
+    for (auto& iu : output) {
+        if (iu == from) {
+            iu = to;
+        }
+    }
+    return output;
+}
+
+} // anonymous namespace
+
 bool TPushRenameIntoReadRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     if (input->Kind != EOperator::Map) {
         return false;
@@ -23,17 +36,14 @@ bool TPushRenameIntoReadRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRB
         return false;
     }
 
-    const auto oldOutput = read->OutputIUs;
-    const auto oldCachedOutput = read->Props.OutputIUs;
-    read->RenameIUs({{candidate->From, candidate->To}}, ctx.ExprCtx);
-    read->Props.OutputIUs = read->OutputIUs;
-    if (HasOutputConflicts(read->OutputIUs)) {
-        read->OutputIUs = oldOutput;
-        read->Props.OutputIUs = oldCachedOutput;
+    const auto output = ReplaceOutputName(read->OutputIUs, candidate->From, candidate->To);
+    if (HasOutputConflicts(output) || !NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
         return false;
     }
 
-    return NMapRules::FinishRenamePush(input, topMap, *candidate, ctx, props);
+    read->OutputIUs = output;
+    read->Props.OutputIUs = output;
+    return NMapRules::FinishRenamePush(input, topMap, *candidate, output, ctx, props);
 }
 
 } // namespace NKqp

@@ -12,6 +12,14 @@ bool HasOutputConflicts(const TVector<TInfoUnit>& outputIUs);
 bool CanExposeOutput(IOperator* op, const TVector<TInfoUnit>& outputIUs, const TPlanProps& props);
 bool CanExposeOutput(const TIntrusivePtr<IOperator>& op, const TVector<TInfoUnit>& outputIUs, const TPlanProps& props);
 bool CanExposeToParents(IOperator* op, const TPlanProps& props);
+bool CanReplaceOutputInParents(
+    IOperator* oldOp,
+    const TVector<TInfoUnit>& replacementOutput,
+    const TPlanProps& props);
+bool CanReplaceOutputInParents(
+    const TIntrusivePtr<IOperator>& oldOp,
+    const TVector<TInfoUnit>& replacementOutput,
+    const TPlanProps& props);
 bool CanReplaceInParents(
     const TIntrusivePtr<IOperator>& oldOp,
     const TIntrusivePtr<IOperator>& replacement,

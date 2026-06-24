@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/opt/rbo/rules/map/rename_common.h>
+#include <ydb/core/kqp/opt/rbo/rules/map/projection_pruning_helpers.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -20,6 +21,17 @@ bool IsTransparentUnary(const TIntrusivePtr<IOperator>& op, const TInfoUnit& fro
         default:
             return false;
     }
+}
+
+TVector<TInfoUnit> BuildUnaryOutput(const TIntrusivePtr<IUnaryOperator>& unary, const TVector<TInfoUnit>& inputOutput) {
+    if (unary->Kind != EOperator::AddDependencies) {
+        return inputOutput;
+    }
+
+    auto output = inputOutput;
+    const auto addDependencies = CastOperator<TOpAddDependencies>(unary);
+    output.insert(output.end(), addDependencies->Dependencies.begin(), addDependencies->Dependencies.end());
+    return output;
 }
 
 } // anonymous namespace
@@ -56,23 +68,23 @@ bool TPushRenameThroughTransparentUnaryRule::MatchAndApply(TIntrusivePtr<IOperat
     }
 
     const auto oldInput = unary->GetInput();
-    const auto oldUnaryOutput = unary->Props.OutputIUs;
-    auto pushedMap = MakeIntrusive<TOpMap>(oldInput, topMap->Pos, TVector<TMapElement>{NMapRules::MakeRenameElement(*candidate, topMap)});
-    if (HasOutputConflicts(pushedMap->GetOutputIUs())) {
+    const TVector<TMapElement> pushedElements{NMapRules::MakeRenameElement(*candidate, topMap)};
+    const auto pushedOutput = BuildMapOutput(oldInput->GetOutputIUs(), pushedElements);
+    if (HasOutputConflicts(pushedOutput)) {
         return false;
     }
 
+    const auto output = BuildUnaryOutput(unary, pushedOutput);
+    if (HasOutputConflicts(output) || !NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
+        return false;
+    }
+
+    auto pushedMap = MakeIntrusive<TOpMap>(oldInput, topMap->Pos, pushedElements);
+    pushedMap->Props.OutputIUs = pushedOutput;
     unary->SetInput(pushedMap);
     unary->RenameIUs({{candidate->From, candidate->To}}, ctx.ExprCtx);
-    unary->ComputeOutputIUs();
-    if (HasOutputConflicts(unary->GetOutputIUs())) {
-        unary->RenameIUs({{candidate->To, candidate->From}}, ctx.ExprCtx);
-        unary->SetInput(oldInput);
-        unary->Props.OutputIUs = oldUnaryOutput;
-        return false;
-    }
-
-    return NMapRules::FinishRenamePush(input, topMap, *candidate, ctx, props);
+    unary->Props.OutputIUs = output;
+    return NMapRules::FinishRenamePush(input, topMap, *candidate, output, ctx, props);
 }
 
 } // namespace NKqp

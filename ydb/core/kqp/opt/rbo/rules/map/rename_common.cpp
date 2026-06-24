@@ -77,29 +77,7 @@ TVector<TInfoUnit> SimulateTopMapOutputAfterPush(const TIntrusivePtr<TOpMap>& to
     return result;
 }
 
-void RenameMapInputsOnly(TOpMap& map, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap) {
-    TVector<TMapElement> renamedElements;
-    renamedElements.reserve(map.MapElements.size());
-
-    for (const auto& element : map.MapElements) {
-        if (element.IsRename()) {
-            auto from = element.GetRename();
-            if (const auto it = renameMap.find(from); it != renameMap.end()) {
-                from = it->second;
-            }
-            const auto expr = element.GetExpression();
-            renamedElements.emplace_back(element.GetElementName(), from, map.Pos, expr.Ctx, expr.PlanProps, true);
-        } else {
-            auto renamed = element;
-            renamed.SetExpression(element.GetExpression().ApplyRenames(renameMap));
-            renamedElements.push_back(renamed);
-        }
-    }
-
-    map.MapElements = std::move(renamedElements);
-}
-
-void RemoveTopRenameAndRewriteResiduals(const TIntrusivePtr<TOpMap>& topMap, size_t renameIdx, const TInfoUnit& from, const TInfoUnit& to) {
+TVector<TMapElement> BuildResidualTopMapElements(const TIntrusivePtr<TOpMap>& topMap, size_t renameIdx, const TInfoUnit& from, const TInfoUnit& to) {
     THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> renameMap{{from, to}};
 
     TVector<TMapElement> residualElements;
@@ -110,8 +88,24 @@ void RemoveTopRenameAndRewriteResiduals(const TIntrusivePtr<TOpMap>& topMap, siz
         }
     }
 
-    topMap->MapElements = std::move(residualElements);
-    RenameMapInputsOnly(*topMap, renameMap);
+    for (auto& element : residualElements) {
+        if (element.IsRename()) {
+            auto from = element.GetRename();
+            if (const auto it = renameMap.find(from); it != renameMap.end()) {
+                from = it->second;
+            }
+            const auto expr = element.GetExpression();
+            element = TMapElement(element.GetElementName(), from, topMap->Pos, expr.Ctx, expr.PlanProps, true);
+        } else {
+            element.SetExpression(element.GetExpression().ApplyRenames(renameMap));
+        }
+    }
+
+    return residualElements;
+}
+
+void RemoveTopRenameAndRewriteResiduals(const TIntrusivePtr<TOpMap>& topMap, size_t renameIdx, const TInfoUnit& from, const TInfoUnit& to) {
+    topMap->MapElements = BuildResidualTopMapElements(topMap, renameIdx, from, to);
 }
 
 bool RenameNeedsPush(const TIntrusivePtr<TOpMap>& topMap, const TMapElement& element, const TInfoUnitSet& liveOut, const TPlanProps& props) {
@@ -171,21 +165,35 @@ TMapElement MakeRenameElement(const TRenameCandidate& candidate, const TIntrusiv
     return TMapElement(candidate.To, candidate.From, topMap->Pos, expr.Ctx, expr.PlanProps, true);
 }
 
+bool CanFinishRenamePush(
+    const TIntrusivePtr<TOpMap>& topMap,
+    const TRenameCandidate& candidate,
+    const TVector<TInfoUnit>& pushedInputOutput,
+    const TPlanProps& props)
+{
+    const auto residualElements = BuildResidualTopMapElements(topMap, candidate.Index, candidate.From, candidate.To);
+    if (residualElements.empty()) {
+        return CanReplaceOutputInParents(topMap, pushedInputOutput, props);
+    }
+
+    return CanReplaceOutputInParents(topMap, BuildMapOutput(pushedInputOutput, residualElements), props);
+}
+
 bool FinishRenamePush(
     TIntrusivePtr<IOperator>& input,
     const TIntrusivePtr<TOpMap>& topMap,
     const TRenameCandidate& candidate,
+    const TVector<TInfoUnit>& pushedInputOutput,
     TRBOContext& ctx,
     TPlanProps& props)
 {
     RemoveTopRenameAndRewriteResiduals(topMap, candidate.Index, candidate.From, candidate.To);
-    topMap->Props.OutputIUs = BuildMapOutput(topMap, topMap->MapElements);
     props.Subplans.RenameIUs({{candidate.From, candidate.To}}, ctx.ExprCtx);
 
     if (topMap->MapElements.empty()) {
-        if (CanReplaceInParents(topMap, topMap->GetInput(), props)) {
-            input = topMap->GetInput();
-        }
+        input = topMap->GetInput();
+    } else {
+        topMap->Props.OutputIUs = BuildMapOutput(pushedInputOutput, topMap->MapElements);
     }
 
     return true;

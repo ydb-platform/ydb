@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/opt/rbo/rules/kqp_rules_include.h>
+#include <ydb/core/kqp/opt/rbo/rules/map/projection_pruning_helpers.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -17,6 +18,18 @@ bool IsLeftPreserved(const TString& joinKind) {
 
 bool IsRightPreserved(const TString& joinKind) {
     return joinKind == "Inner" || joinKind == "Cross" || joinKind == "Right" || joinKind == "RightOnly" || joinKind == "RightSemi";
+}
+
+TVector<TInfoUnit> BuildJoinOutput(const TString& joinKind, TVector<TInfoUnit> leftOutput, TVector<TInfoUnit> rightOutput) {
+    if (joinKind == "LeftOnly" || joinKind == "LeftSemi") {
+        rightOutput.clear();
+    }
+    if (joinKind == "RightOnly" || joinKind == "RightSemi") {
+        leftOutput.clear();
+    }
+
+    leftOutput.insert(leftOutput.end(), rightOutput.begin(), rightOutput.end());
+    return leftOutput;
 }
 
 EPushTarget SelectAliasJoinPushTarget(
@@ -82,7 +95,6 @@ TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const T
     auto join = CastOperator<TOpJoin>(topMap->GetInput());
     const auto originalLeftInput = join->GetLeftInput();
     const auto originalRightInput = join->GetRightInput();
-    const auto oldJoinOutput = join->Props.OutputIUs;
     if (!join->IsSingleConsumer() || !originalLeftInput->IsSingleConsumer() || !originalRightInput->IsSingleConsumer()) {
         return input;
     }
@@ -115,23 +127,23 @@ TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const T
         return input;
     }
 
-    TIntrusivePtr<TOpMap> leftMap;
+    TVector<TInfoUnit> newLeftOutput = leftOutput;
     bool pushLeft = !leftMapElements.empty();
     if (!leftMapElements.empty()) {
-        leftMap = MakeIntrusive<TOpMap>(originalLeftInput, topMap->Pos, leftMapElements);
-        if (HasOutputConflicts(leftMap->GetOutputIUs())) {
+        newLeftOutput = BuildMapOutput(leftOutput, leftMapElements);
+        if (HasOutputConflicts(newLeftOutput)) {
             pushLeft = false;
-            leftMap = nullptr;
+            newLeftOutput = leftOutput;
         }
     }
 
-    TIntrusivePtr<TOpMap> rightMap;
+    TVector<TInfoUnit> newRightOutput = rightOutput;
     bool pushRight = !rightMapElements.empty();
     if (!rightMapElements.empty()) {
-        rightMap = MakeIntrusive<TOpMap>(originalRightInput, topMap->Pos, rightMapElements);
-        if (HasOutputConflicts(rightMap->GetOutputIUs())) {
+        newRightOutput = BuildMapOutput(rightOutput, rightMapElements);
+        if (HasOutputConflicts(newRightOutput)) {
             pushRight = false;
-            rightMap = nullptr;
+            newRightOutput = rightOutput;
         }
     }
 
@@ -139,18 +151,8 @@ TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const T
         return input;
     }
 
-    if (leftMap) {
-        join->SetLeftInput(leftMap);
-    }
-    if (rightMap) {
-        join->SetRightInput(rightMap);
-    }
-
-    join->ComputeOutputIUs();
-    if (HasOutputConflicts(join->GetOutputIUs())) {
-        join->SetLeftInput(originalLeftInput);
-        join->SetRightInput(originalRightInput);
-        join->Props.OutputIUs = oldJoinOutput;
+    const auto newJoinOutput = BuildJoinOutput(join->JoinKind, newLeftOutput, newRightOutput);
+    if (HasOutputConflicts(newJoinOutput)) {
         return input;
     }
 
@@ -164,16 +166,42 @@ TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const T
     }
 
     if (topMapElements.empty()) {
-        if (!CanReplaceInParents(topMap, join, props)) {
-            join->SetLeftInput(originalLeftInput);
-            join->SetRightInput(originalRightInput);
-            join->Props.OutputIUs = oldJoinOutput;
+        if (!CanReplaceOutputInParents(topMap, newJoinOutput, props)) {
             return input;
         }
+        if (pushLeft) {
+            auto leftMap = MakeIntrusive<TOpMap>(originalLeftInput, topMap->Pos, leftMapElements);
+            leftMap->Props.OutputIUs = newLeftOutput;
+            join->SetLeftInput(leftMap);
+        }
+        if (pushRight) {
+            auto rightMap = MakeIntrusive<TOpMap>(originalRightInput, topMap->Pos, rightMapElements);
+            rightMap->Props.OutputIUs = newRightOutput;
+            join->SetRightInput(rightMap);
+        }
+        join->Props.OutputIUs = newJoinOutput;
         return join;
     }
 
-    return MakeIntrusive<TOpMap>(join, topMap->Pos, topMapElements, topMap->Ordered);
+    const auto newTopOutput = BuildMapOutput(newJoinOutput, topMapElements);
+    if (!CanReplaceOutputInParents(topMap, newTopOutput, props)) {
+        return input;
+    }
+
+    if (pushLeft) {
+        auto leftMap = MakeIntrusive<TOpMap>(originalLeftInput, topMap->Pos, leftMapElements);
+        leftMap->Props.OutputIUs = newLeftOutput;
+        join->SetLeftInput(leftMap);
+    }
+    if (pushRight) {
+        auto rightMap = MakeIntrusive<TOpMap>(originalRightInput, topMap->Pos, rightMapElements);
+        rightMap->Props.OutputIUs = newRightOutput;
+        join->SetRightInput(rightMap);
+    }
+    join->Props.OutputIUs = newJoinOutput;
+    auto newTopMap = MakeIntrusive<TOpMap>(join, topMap->Pos, topMapElements, topMap->Ordered);
+    newTopMap->Props.OutputIUs = newTopOutput;
+    return newTopMap;
 }
 
 } // namespace NKqp

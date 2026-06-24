@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/opt/rbo/rules/kqp_rules_include.h>
+#include <ydb/core/kqp/opt/rbo/rules/map/projection_pruning_helpers.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -16,6 +17,17 @@ bool CanPushAliasAppendThroughUnary(EOperator kind, bool pushUnderFilter) {
         default:
             return false;
     }
+}
+
+TVector<TInfoUnit> BuildUnaryOutput(const TIntrusivePtr<IUnaryOperator>& unary, const TVector<TInfoUnit>& inputOutput) {
+    if (unary->Kind != EOperator::AddDependencies) {
+        return inputOutput;
+    }
+
+    auto output = inputOutput;
+    const auto addDependencies = CastOperator<TOpAddDependencies>(unary);
+    output.insert(output.end(), addDependencies->Dependencies.begin(), addDependencies->Dependencies.end());
+    return output;
 }
 
 } // anonymous namespace
@@ -43,28 +55,27 @@ TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
     }
 
     const auto unaryInput = unary->GetInput();
-    const auto oldUnaryOutput = unary->Props.OutputIUs;
     const auto inputIUs = unaryInput->GetOutputIUs();
+    TVector<TInfoUnit> pushedOutput = inputIUs;
+    TVector<TInfoUnit> unaryOutput = BuildUnaryOutput(unary, pushedOutput);
 
     TVector<TMapElement> pushedElements;
     TVector<TMapElement> topElements;
 
     // Greedily keep candidates that do not introduce conflicts at the lower boundary.
     auto canAcceptPushedElement = [&](const TMapElement& mapElement) {
-        pushedElements.push_back(mapElement);
+        auto candidateElements = pushedElements;
+        candidateElements.push_back(mapElement);
 
-        auto pushedMap = MakeIntrusive<TOpMap>(unaryInput, topMap->Pos, pushedElements);
-        bool valid = !HasOutputConflicts(pushedMap->GetOutputIUs());
+        auto candidatePushedOutput = BuildMapOutput(inputIUs, candidateElements);
+        bool valid = !HasOutputConflicts(candidatePushedOutput);
+        const auto candidateUnaryOutput = BuildUnaryOutput(unary, candidatePushedOutput);
+        valid = valid && !HasOutputConflicts(candidateUnaryOutput);
+
         if (valid) {
-            unary->SetInput(pushedMap);
-            unary->ComputeOutputIUs();
-            valid = !HasOutputConflicts(unary->GetOutputIUs());
-            unary->SetInput(unaryInput);
-            unary->Props.OutputIUs = oldUnaryOutput;
-        }
-
-        if (!valid) {
-            pushedElements.pop_back();
+            pushedElements = std::move(candidateElements);
+            pushedOutput = std::move(candidatePushedOutput);
+            unaryOutput = std::move(candidateUnaryOutput);
         }
         return valid;
     };
@@ -86,25 +97,27 @@ TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
     }
 
     auto pushedMap = MakeIntrusive<TOpMap>(unaryInput, topMap->Pos, pushedElements);
-    unary->SetInput(pushedMap);
-    unary->ComputeOutputIUs();
 
     if (topElements.empty()) {
-        if (!CanReplaceInParents(topMap, unary, props)) {
-            unary->SetInput(unaryInput);
-            unary->Props.OutputIUs = oldUnaryOutput;
+        if (!CanReplaceOutputInParents(topMap, unaryOutput, props)) {
             return input;
         }
+        pushedMap->Props.OutputIUs = pushedOutput;
+        unary->SetInput(pushedMap);
+        unary->Props.OutputIUs = unaryOutput;
         return unary;
     }
 
-    auto newTopMap = MakeIntrusive<TOpMap>(unary, topMap->Pos, topElements, topMap->Ordered);
-    if (!CanExposeOutput(topMap, newTopMap->GetOutputIUs(), props)) {
-        unary->SetInput(unaryInput);
-        unary->Props.OutputIUs = oldUnaryOutput;
+    const auto newTopOutput = BuildMapOutput(unaryOutput, topElements);
+    if (!CanReplaceOutputInParents(topMap, newTopOutput, props)) {
         return input;
     }
 
+    pushedMap->Props.OutputIUs = pushedOutput;
+    unary->SetInput(pushedMap);
+    unary->Props.OutputIUs = unaryOutput;
+    auto newTopMap = MakeIntrusive<TOpMap>(unary, topMap->Pos, topElements, topMap->Ordered);
+    newTopMap->Props.OutputIUs = newTopOutput;
     return newTopMap;
 }
 

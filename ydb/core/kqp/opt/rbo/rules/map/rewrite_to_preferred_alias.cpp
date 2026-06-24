@@ -1,4 +1,5 @@
 #include <ydb/core/kqp/opt/rbo/rules/kqp_rules_include.h>
+#include <ydb/core/kqp/opt/rbo/rules/map/projection_pruning_helpers.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -110,6 +111,67 @@ bool RenameExpression(TExpression& expr, const TRenameMap& renameMap) {
     return true;
 }
 
+bool ContainsAliasCandidate(const TCandidates& candidates, const TInfoUnit& iu) {
+    for (const auto& candidate : candidates) {
+        if (candidate.IU == iu) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool IsDirectInputAlias(const TIntrusivePtr<IOperator>& input, const TInfoUnit& source, const TInfoUnit& target) {
+    if (source == target) {
+        return true;
+    }
+
+    if (input->Kind != EOperator::Map) {
+        return false;
+    }
+
+    auto inputMap = CastOperator<TOpMap>(input);
+    const auto* element = inputMap->FindOutputElement(source);
+    if (!element || !element->IsColumnAccess()) {
+        return false;
+    }
+
+    return IsDirectInputAlias(inputMap->GetInput(), element->GetColumnAccess(), target);
+}
+
+bool IsRedundantAliasAppend(
+    TOpMap& map,
+    const TMapElement& mapElement,
+    const TVector<TInfoUnit>& inputOutput,
+    const TPlanProps& props)
+{
+    if (!mapElement.IsColumnAccess() || !ContainsInfoUnit(inputOutput, mapElement.GetElementName())) {
+        return false;
+    }
+
+    const auto source = mapElement.GetColumnAccess();
+    if (source == mapElement.GetElementName()) {
+        return true;
+    }
+
+    if (IsDirectInputAlias(map.GetInput(), source, mapElement.GetElementName())) {
+        return true;
+    }
+
+    if (const auto* candidates = props.Aliases.GetAliases(map.GetInput().get(), source)) {
+        if (ContainsAliasCandidate(*candidates, mapElement.GetElementName())) {
+            return true;
+        }
+    }
+
+    if (const auto* candidates = props.Aliases.GetAliases(map.GetInput().get(), mapElement.GetElementName())) {
+        if (ContainsAliasCandidate(*candidates, source)) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
 TVector<TInfoUnit> GetMapInputIUs(const TOpMap& map) {
     TVector<TInfoUnit> usedIUs;
     for (const auto& mapElement : map.MapElements) {
@@ -124,15 +186,32 @@ TVector<TInfoUnit> GetMapInputIUs(const TOpMap& map) {
 
 bool RewriteMapInputs(TOpMap& map, const TInfoUnitSet& liveOut, TRBOContext& ctx, TPlanProps& props) {
     const auto renameMap = BuildPreferredAliasRenameMap(props, map.GetInput(), GetMapInputIUs(map), liveOut);
-    if (renameMap.empty()) {
-        return false;
-    }
-
+    const auto inputOutput = map.GetInput()->GetOutputIUs();
     bool changed = false;
     TRenameMap mapRenameMap;
-    for (auto& mapElement : map.MapElements) {
+    TVector<TMapElement> elements;
+    elements.reserve(map.MapElements.size());
+
+    for (auto mapElement : map.MapElements) {
         if (mapElement.IsRename()) {
+            elements.push_back(std::move(mapElement));
             continue;
+        }
+
+        if (IsRedundantAliasAppend(map, mapElement, inputOutput, props)) {
+            changed = true;
+            continue;
+        }
+
+        if (mapElement.IsColumnAccess()) {
+            const auto source = mapElement.GetColumnAccess();
+            const auto it = renameMap.find(source);
+            if (it != renameMap.end() &&
+                it->second == mapElement.GetElementName() &&
+                ContainsInfoUnit(inputOutput, mapElement.GetElementName())) {
+                changed = true;
+                continue;
+            }
         }
 
         TRenameMap elementRenameMap;
@@ -145,8 +224,24 @@ bool RewriteMapInputs(TOpMap& map, const TInfoUnitSet& liveOut, TRBOContext& ctx
         }
 
         changed |= RenameExpression(mapElement.GetExpressionRef(), elementRenameMap);
+        elements.push_back(std::move(mapElement));
     }
+
+    if (!changed && mapRenameMap.empty()) {
+        return false;
+    }
+
+    const auto output = BuildMapOutput(inputOutput, elements);
+    if (HasOutputConflicts(output) || !CanReplaceOutputInParents(&map, output, props)) {
+        return false;
+    }
+
     const bool subplansChanged = props.Subplans.RenameIUs(mapRenameMap, ctx.ExprCtx);
+    if (changed) {
+        map.MapElements = std::move(elements);
+        map.Props.OutputIUs = output;
+    }
+
     return changed || subplansChanged;
 }
 
@@ -260,6 +355,21 @@ bool RewriteSortInputs(TOpSort& sort, const TInfoUnitSet& liveOut, TRBOContext& 
     return changed || subplansChanged;
 }
 
+TVector<TInfoUnit> BuildAggregateOutput(
+    bool distinctAll,
+    const TVector<TInfoUnit>& keyColumns,
+    const TVector<TOpAggregationTraits>& traitsList)
+{
+    TVector<TInfoUnit> output;
+    if (!distinctAll) {
+        output = keyColumns;
+    }
+    for (const auto& traits : traitsList) {
+        output.push_back(traits.ResultColName);
+    }
+    return output;
+}
+
 bool RewriteAggregateInputs(TOpAggregate& aggregate, const TInfoUnitSet& liveOut, TRBOContext& ctx, TPlanProps& props) {
     TVector<TInfoUnit> usedIUs = aggregate.KeyColumns;
     for (const auto& traits : aggregate.AggregationTraitsList) {
@@ -271,29 +381,28 @@ bool RewriteAggregateInputs(TOpAggregate& aggregate, const TInfoUnitSet& liveOut
         return false;
     }
 
-    const auto oldKeys = aggregate.KeyColumns;
-    const auto oldTraits = aggregate.AggregationTraitsList;
-    const auto oldOutput = aggregate.Props.OutputIUs;
+    auto newKeys = aggregate.KeyColumns;
+    auto newTraits = aggregate.AggregationTraitsList;
 
     bool changed = false;
-    for (auto& key : aggregate.KeyColumns) {
+    for (auto& key : newKeys) {
         changed |= RenameInfoUnit(key, renameMap);
     }
-    for (auto& traits : aggregate.AggregationTraitsList) {
+    for (auto& traits : newTraits) {
         changed |= RenameInfoUnit(traits.OriginalColName, renameMap);
         if (aggregate.IsDistinctAll()) {
             changed |= RenameInfoUnit(traits.ResultColName, renameMap);
         }
     }
 
-    aggregate.ComputeOutputIUs();
-    if (HasOutputConflicts(aggregate.GetOutputIUs()) || !CanExposeToParents(&aggregate, props)) {
-        aggregate.KeyColumns = oldKeys;
-        aggregate.AggregationTraitsList = oldTraits;
-        aggregate.Props.OutputIUs = oldOutput;
+    const auto output = BuildAggregateOutput(aggregate.IsDistinctAll(), newKeys, newTraits);
+    if (HasOutputConflicts(output) || !CanReplaceOutputInParents(&aggregate, output, props)) {
         return false;
     }
 
+    aggregate.KeyColumns = std::move(newKeys);
+    aggregate.AggregationTraitsList = std::move(newTraits);
+    aggregate.Props.OutputIUs = output;
     const bool subplansChanged = props.Subplans.RenameIUs(renameMap, ctx.ExprCtx);
     return changed || subplansChanged;
 }
@@ -303,6 +412,9 @@ bool RewriteAggregateInputs(TOpAggregate& aggregate, const TInfoUnitSet& liveOut
 bool TRewriteExpressionsToPreferredAliasesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     const auto liveIt = props.LiveOut.find(input.get());
     if (liveIt == props.LiveOut.end()) {
+        if (input->Kind == EOperator::Map) {
+            return RewriteMapInputs(*CastOperator<TOpMap>(input), EmptyInfoUnitSet(), ctx, props);
+        }
         return false;
     }
 

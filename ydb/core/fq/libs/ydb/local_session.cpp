@@ -115,7 +115,7 @@ struct TLocalSession : public ISession {
             execDataQuerySettings,
             promise));
 
-        if (txControl.Commit_) { // commit or begin-and-commit
+        if (txControl.Commit_) { // commit, or continue-and-commit, or begin-and-commit
             HasTransaction = false;
         } else if (txControl.Begin_) {
             HasTransaction = true;

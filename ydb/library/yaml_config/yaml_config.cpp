@@ -54,19 +54,20 @@ void ResolveAndParseYamlConfig(
             hasMetadata = true;
         }
 
+        TSet<NYamlConfig::TNamedLabel> namedLabels;
+        for (auto& [name, label] : labels) {
+            namedLabels.insert(NYamlConfig::TNamedLabel{name, label});
+        }
+
         if (databaseYamlConfig) {
             auto d = NFyaml::TDocument::Parse(*databaseYamlConfig);
+            NYamlConfig::ResolveDatabaseConfig(d, namedLabels);
             NYamlConfig::AppendDatabaseConfig(tree, d);
         }
 
         for (auto& [_, config] : volatileYamlConfigs) {
             auto d = NFyaml::TDocument::Parse(config);
             NYamlConfig::AppendVolatileConfigs(tree, d);
-        }
-
-        TSet<NYamlConfig::TNamedLabel> namedLabels;
-        for (auto& [name, label] : labels) {
-            namedLabels.insert(NYamlConfig::TNamedLabel{name, label});
         }
 
         auto config = NYamlConfig::Resolve(tree, namedLabels);

@@ -83,6 +83,14 @@ public:
     };
 
 public:
+
+    // Name of the tenant UserAttribute that enables the usage of database YAML config selectors.
+    // Values: (according to TryFromString<bool>() function logic - IsTrue()/IsFalse())
+    //  - "true", "yes", "on", "1"            - enabled
+    //  - "false", "no", "off", "0", (absent) - disabled
+    static const TString& GetPermissiveDatabaseConfigSelectorsTenantAttributeName();
+
+public:
     void ClearState();
     void SetConfig(const NKikimrConsole::TConfigsConfig &config);
     // Check if specified config may be applied to configs manager.
@@ -96,6 +104,7 @@ public:
 
     void ReplaceDatabaseConfigMetadata(const TString &config, bool force, TUpdateDatabaseConfigOpContext& opCtx);
     void ValidateDatabaseConfig(TUpdateDatabaseConfigOpContext& opCtx);
+    bool IsDatabaseConfigSelectorsAllowed(const TString& database) const;
 
     void SendInReply(const TActorId& sender, const TActorId& icSession, std::unique_ptr<IEventBase> ev, ui64 cookie = 0);
 
@@ -227,7 +236,7 @@ private:
         };
 
         constexpr bool HasBypassAuth = std::is_same_v<
-            std::decay_t<T>, 
+            std::decay_t<T>,
             typename TEvConsole::TEvGetAllConfigsRequest::TPtr
         > || std::is_same_v<
             std::decay_t<T>,
@@ -306,7 +315,7 @@ private:
             IgnoreFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
 
         default:
-            break; 
+            break;
         }
     }
 

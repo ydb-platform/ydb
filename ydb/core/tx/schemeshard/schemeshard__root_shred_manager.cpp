@@ -340,7 +340,7 @@ bool TRootShredManager::Restore(NIceDb::TNiceDb& db) {
                 }
             }
 
-            // CleanupOldGenerationsOnRestore(db, generationsToCleanup);
+            CleanupOldGenerationsOnRestore(db, generationsToCleanup);
         }
     }
     {
@@ -411,7 +411,7 @@ TRootShredManager::TQueue::TConfig TRootShredManager::ConvertConfig(const NKikim
 void TRootShredManager::CleanupOldGenerationsOnRestore(NIceDb::TNiceDb& db, const TVector<ui64>& generationsToCleanup) {
     for (ui64 generation : generationsToCleanup) {
         Y_ABORT_UNLESS(generation < Generation, "[RootShredManager] CleanupOldGenerationsOnRestore: generation %" PRIu64 " >= Generation %" PRIu64, generation, Generation);
-        db.Table<Schema::ShredGenerations>().Key(generation).Delete(); 
+        db.Table<Schema::ShredGenerations>().Key(generation).Delete();
     }
 }
 

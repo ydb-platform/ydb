@@ -3464,7 +3464,7 @@ namespace NSchemeShardUT_Private {
         return ev->Record;
     }
 
-    NKikimrSetColumnConstraint::TEvCreateResponse AsyncSetColumnConstraint(
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(
         TTestActorRuntime& runtime,
         ui64 txId,
         ui64 schemeShard,

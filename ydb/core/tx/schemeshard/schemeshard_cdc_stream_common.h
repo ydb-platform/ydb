@@ -10,6 +10,7 @@ struct TPathId;
 namespace NSchemeShard {
 
 struct TOperationContext;
+struct TTxState;
 
 } // namespace NSchemeShard
 
@@ -31,4 +32,23 @@ void CheckSrcDirOnPropose(
     bool isInsideTableIndexPath,
     TTxId op = InvalidTxId);
 
-} // namespace NKikimr::NSchemeShard::NCdc
+} // namespace NKikimr::NSchemeShard::NCdcStreamAtTable
+
+namespace NKikimr::NSchemeShard::NCdcStreamState {
+
+// Synchronize child index versions when parent table version is updated for continuous backup
+void SyncIndexEntityVersion(
+    const TPathId& indexPathId,
+    ui64 targetVersion,
+    TOperationId operationId,
+    TOperationContext& context,
+    NIceDb::TNiceDb& db);
+
+void SyncChildIndexes(
+    TPathElement::TPtr parentPath,
+    ui64 targetVersion,
+    TOperationId operationId,
+    TOperationContext& context,
+    NIceDb::TNiceDb& db);
+
+} // namespace NKikimr::NSchemeShard::NCdcStreamState

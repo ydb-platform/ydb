@@ -3673,6 +3673,18 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                         Y_ABORT_UNLESS(deserializeRes);
                         txState.CdcPathId = TPathId::FromProto(proto.GetTxCopyTableExtraData().GetCdcPathId());
                     }
+                } else if (txState.TxType == TTxState::TxCreateCdcStreamAtTable ||
+                           txState.TxType == TTxState::TxCreateCdcStreamAtTableWithInitialScan ||
+                           txState.TxType == TTxState::TxAlterCdcStreamAtTable ||
+                           txState.TxType == TTxState::TxAlterCdcStreamAtTableDropSnapshot ||
+                           txState.TxType == TTxState::TxDropCdcStreamAtTable ||
+                           txState.TxType == TTxState::TxDropCdcStreamAtTableDropSnapshot) {
+                    if (!extraData.empty()) {
+                        NKikimrSchemeOp::TGenericTxInFlyExtraData proto;
+                        bool deserializeRes = ParseFromStringNoSizeLimit(proto, extraData);
+                        Y_ABORT_UNLESS(deserializeRes);
+                        txState.CdcPathId = TPathId::FromProto(proto.GetTxCopyTableExtraData().GetCdcPathId());
+                    }
                 }
 
                 Y_ABORT_UNLESS(txState.TxType != TTxState::TxInvalid);

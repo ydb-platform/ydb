@@ -65,6 +65,12 @@ protected:
         TPathId dstTablePathId = TPathId::FromProto(incrBackup.GetDstPathId());
         const ui64 tableId = incrBackup.GetSrcPathId().GetLocalId();
 
+        auto* appData = AppData();
+        NStreamScan::TLimits limits;
+        limits.BatchMaxBytes = appData->DataShardConfig.GetIncrementalRestoreScanBatchMaxBytes();
+        limits.BatchMinRows = appData->DataShardConfig.GetIncrementalRestoreScanBatchMinRows();
+        limits.BatchMaxRows = appData->DataShardConfig.GetIncrementalRestoreScanBatchMaxRows();
+
         return CreateIncrementalRestoreScan(
                 DataShard.SelfId(),
                 [=, tabletID = DataShard.TabletID(), generation = DataShard.Generation(), tabletActor = DataShard.SelfId()](const TActorContext& ctx, TActorId parent) {
@@ -83,7 +89,7 @@ protected:
                 DataShard.GetUserTables().at(tableId),
                 dstTablePathId,
                 txId,
-                {});
+                limits);
     }
 
     bool Run(TOperation::TPtr op, TTransactionContext& txc, const TActorContext& ctx) {
@@ -113,7 +119,7 @@ protected:
 
         THolder<NTable::IScan> scan{CreateScan(restoreSrc, op->GetTxId())};
 
-        auto* appData = AppData(ctx);
+        auto* appData = AppData();
         const auto& taskName = appData->DataShardConfig.GetRestoreTaskName();
         const auto taskPrio = appData->DataShardConfig.GetRestoreTaskPriority();
 

@@ -523,11 +523,15 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 
     if (capHit && schedule && processedActions < static_cast<size_t>(request.ActionsSize())) {
         const auto& allActions = request.GetActions();
+        auto* mutableActions = scheduled.MutableActions();
+        mutableActions->Reserve(mutableActions->size() + (allActions.size() - processedActions));
         std::for_each(allActions.begin() + processedActions, allActions.end(), scheduleTail);
         processedActions = allActions.size();
     }
 
     if (schedule && !sysTabletDeferredActions.empty()) {
+        auto* mutableActions = scheduled.MutableActions();
+        mutableActions->Reserve(mutableActions->size() + sysTabletDeferredActions.size());
         std::for_each(sysTabletDeferredActions.begin(), sysTabletDeferredActions.end(),
             [&scheduleTail](const TAction *deferredAction) {
                 scheduleTail(*deferredAction);

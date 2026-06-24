@@ -3,6 +3,7 @@ import random
 import threading
 import time
 from enum import Enum
+from dataclasses import dataclass
 
 import pytest
 
@@ -181,7 +182,12 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
     # Worker threads
     # -------------------------------------------------------------------------
 
-    def _updater(self, table_name, stop_event, exec_counter, lock):
+    @dataclass
+    class ExecState:
+        successes: int = 0
+        error: Exception = None
+
+    def _updater(self, table_name, stop_event, exec_state, lock):
         """
         Repeatedly picks a random group and redistributes its int_val values
         while preserving the group sum invariant (SUM == FIXED_GROUP_SUM).
@@ -205,11 +211,15 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     )
 
                     with lock:
-                        exec_counter[0] += 1
+                        exec_state.successes += 1
+                except ydb.issues.Error as e:
+                    # ignore YDB errors such as Aborted or Unavailable
+                    logger.warning("Updater [%s] YDB error: %s", table_name, e)
                 except Exception as e:
-                    logger.warning("Updater [%s] error: %s", table_name, e)
+                    exec_state.error = e
+                    break
 
-    def _pk_aggregator(self, table_name, results_table, stop_event, exec_counter, lock):
+    def _pk_aggregator(self, table_name, results_table, stop_event, exec_state, lock):
         """
         Reads a group-aligned PK range under snapshot isolation, computes the
         aggregate, and writes it to the result table (generating write conflicts
@@ -225,9 +235,15 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     hi = hi_group * GROUP_SIZE - 1
 
                     def callee(tx, lo=lo, hi=hi):
+                        agg_query = f"""
+                            SELECT
+                                count(*) as rc,
+                                sum(int_val) as sum,
+                                count(distinct str_val) as cd,
+                                sum(key * int_val) as product_sum
+                            FROM `{table_name}` WHERE key BETWEEN $lo AND $hi"""
                         with tx.execute(
-                            f"SELECT count(*) as rc, sum(int_val) as sum, count(distinct str_val) as cd "
-                            f"FROM `{table_name}` WHERE key BETWEEN $lo AND $hi",
+                            agg_query,
                             parameters={
                                 '$lo': lo,
                                 '$hi': hi,
@@ -248,18 +264,22 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                                 '$int_sum': (res.sum, ydb.PrimitiveType.Int64),
                                 '$cd': (res.cd, ydb.PrimitiveType.Int32),
                             },
-                            commit_tx=True,
                         ):
                             pass
+                        tx.commit()
 
                     pool.retry_tx_sync(callee, ydb.QuerySnapshotReadWrite())
 
                     with lock:
-                        exec_counter[0] += 1
+                        exec_state.successes += 1
+                except ydb.issues.Error as e:
+                    # ignore YDB errors such as Aborted or Unavailable
+                    logger.warning("PK aggregator [%s] YDB error: %s", table_name, e)
                 except Exception as e:
-                    logger.warning("PK aggregator [%s] error: %s", table_name, e)
+                    exec_state.error = e
+                    break
 
-    def _int_range_aggregator(self, table_name, results_table, stop_event, exec_counter, lock):
+    def _int_range_aggregator(self, table_name, results_table, stop_event, exec_state, lock):
         """
         Reads `table_name` with an int value filter under snapshot isolation. Queries over
         the datashard table will use the secondary index.
@@ -308,11 +328,15 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     pool.retry_tx_sync(callee, ydb.QuerySnapshotReadWrite())
 
                     with lock:
-                        exec_counter[0] += 1
+                        exec_state.successes += 1
+                except ydb.issues.Error as e:
+                    # ignore YDB errors such as Aborted or Unavailable
+                    logger.warning("Int range aggregator [%s] YDB error: %s", table_name, e)
                 except Exception as e:
-                    logger.warning("Int range aggregator [%s] error: %s", table_name, e)
+                    exec_state.error = e
+                    break
 
-    def _str_range_aggregator(self, table_name, results_table, stop_event, exec_counter, lock):
+    def _str_range_aggregator(self, table_name, results_table, stop_event, exec_state, lock):
         """
         Reads `table_name` with a string-range filter under snapshot isolation.
         """
@@ -357,9 +381,13 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     pool.retry_tx_sync(callee, ydb.QuerySnapshotReadWrite())
 
                     with lock:
-                        exec_counter[0] += 1
+                        exec_state.successes += 1
+                except ydb.issues.Error as e:
+                    # ignore YDB errors such as Aborted or Unavailable
+                    logger.warning("String range aggregator [%s] YDB error: %s", table_name, e)
                 except Exception as e:
-                    logger.warning("String range aggregator [%s] error: %s", table_name, e)
+                    exec_state.error = e
+                    break
 
     # -------------------------------------------------------------------------
     # Checker (runs in the main thread)
@@ -399,19 +427,26 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
     # Progress tracking
     # -------------------------------------------------------------------------
 
-    def _wait_for_progress(self, exec_counters, lock, min_per_counter, timeout=300):
-        baseline = {}
-        with lock:
-            for name, c in exec_counters.items():
-                baseline[name] = c[0]
+    def _wait_for_progress(self, exec_states, lock, min_per_counter, timeout=300):
+        def get_success_counters():
+            ret = {}
+            with lock:
+                for name, st in exec_states.items():
+                    if st.error is not None:
+                        raise st.error
+                    ret[name] = st.successes
+            return ret
+
+        baseline = get_success_counters()
+
         deadline = time.time() + timeout
         while time.time() < deadline:
-            with lock:
-                logger.debug(f"worker exec counters: {exec_counters}")
-                done = all(
-                    exec_counters[name][0] - baseline[name] >= min_per_counter
-                    for name in exec_counters
-                )
+            current = get_success_counters()
+            logger.debug(f"worker success counters: {current}")
+            done = all(
+                current[name] - baseline[name] >= min_per_counter
+                for name in current
+            )
             if done:
                 return
             time.sleep(1)
@@ -439,14 +474,14 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
 
         stop_event = threading.Event()
         lock = threading.Lock()
-        exec_counters = {}
+        exec_states = {}
         threads = []
 
         def start(name, target, *args):
-            exec_counters[name] = [0]
+            exec_states[name] = self.ExecState()
             t = threading.Thread(
                 target=target,
-                args=(*args, stop_event, exec_counters[name], lock),
+                args=(*args, stop_event, exec_states[name], lock),
                 daemon=True,
             )
             threads.append(t)
@@ -470,7 +505,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         # --- Rolling upgrade and checks ---
         try:
             for _ in self.roll():
-                self._wait_for_progress(exec_counters, lock, min_per_counter=5)
+                self._wait_for_progress(exec_states, lock, min_per_counter=5)
                 self.check_results(results_table)
         finally:
             stop_event.set()

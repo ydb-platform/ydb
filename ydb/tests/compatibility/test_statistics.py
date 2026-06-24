@@ -365,13 +365,14 @@ class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
             try:
                 # Try to list operations - this tests the background operation functionality
                 # from commit 9b4503e which added long-running operation support for ANALYZE
-                operation_client = ydb.OperationClient(self.driver)
-                list_result = operation_client.list_operations()
-                logger.info(f"Found {len(list_result.operations)} background operations")
+                request = ydb._apis.ydb_operation.ListOperationsRequest(kind="analyze")
+                list_result = self.driver(request, ydb._apis.OperationService.Stub, "ListOperations")
+                operations = getattr(list_result, "operations", [])
+                logger.info(f"Found {len(operations)} background operations")
 
                 # Check if any analyze operations are present - they should be in the list
                 analyze_operations_found = False
-                for op in list_result.operations:
+                for op in operations:
                     if hasattr(op, 'metadata') and hasattr(op.metadata, 'state'):
                         logger.info(f"Operation {op.id}: state={op.metadata.state}, progress={op.metadata.progress}")
                         # Check if this is an analyze operation by looking at metadata structure
@@ -384,6 +385,8 @@ class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
                     "ANALYZE operation must be present in background operations list after ANALYZE command"
                 logger.info("✓ ANALYZE operation successfully found in background operations list")
 
+            except AssertionError:
+                raise
             except Exception as e:
                 logger.warning(f'Background operation check failed: {e}, this is expected for older versions')
 

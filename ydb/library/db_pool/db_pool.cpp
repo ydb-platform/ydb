@@ -14,6 +14,8 @@
 #include <unordered_map>
 #include <unordered_set>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::DB_POOL
+
 namespace NDbPool {
 
 namespace {
@@ -104,7 +106,9 @@ public:
 private:
     void Handle(TEvents::TEvDbFunctionRequest::TPtr& ev) {
         Y_VALIDATE(!RequestInProgress, "Can not handle requests in parallel");
-        LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::DB_POOL, LogPrefix() << "TEvDbFunctionRequest, has inflight: " << RequestInProgress);
+        YDB_LOG_TRACE_CTX(*::NActors::TActivationContext::ActorSystem(), "TEvDbFunctionRequest, has",
+            {"logPrefix", LogPrefix()},
+            {"inflight", RequestInProgress});
 
         Request = TFunctionRequest{ev->Sender, ev->Cookie, std::move(ev->Get()->Handler)};
         RequestInProgress = true;
@@ -121,7 +125,9 @@ private:
 
     void Handle(TEvents::TEvDbFunctionResponse::TPtr& ev) {
         Y_VALIDATE(RequestInProgress, "Unexpected worker state");
-        LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::DB_POOL, LogPrefix() << "TEvDbFunctionResponse, has inflight: " << RequestInProgress);
+        YDB_LOG_TRACE_CTX(*::NActors::TActivationContext::ActorSystem(), "TEvDbFunctionResponse, has",
+            {"logPrefix", LogPrefix()},
+            {"inflight", RequestInProgress});
 
         Counters.RequestsTime->Collect((TInstant::Now() - Request.StartTime).MilliSeconds());
         Counters.GetStatus(ev->Get()->Status)->Inc();
@@ -228,7 +234,10 @@ public:
 private:
     void Handle(TEvents::TEvDbFunctionRequest::TPtr& ev) {
         const auto& sender = ev->Sender;
-        LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::DB_POOL, LogPrefix() << "TEvDbFunctionRequest from " << sender << ", Queue size = " << Requests.size());
+        YDB_LOG_TRACE_CTX(*::NActors::TActivationContext::ActorSystem(), "TEvDbFunctionRequest from Queue",
+            {"logPrefix", LogPrefix()},
+            {"sender", sender},
+            {"size", Requests.size()});
 
         Counters.IncomingRate->Inc();
         Counters.QueueSize->Inc();
@@ -239,11 +248,16 @@ private:
 
     void Handle(TEvents::TEvDbFunctionResponse::TPtr& ev) {
         const auto sender = ev->Sender;
-        LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::DB_POOL, LogPrefix() << "TEvDbFunctionResponse from " << sender << ", Queue size = " << Requests.size());
+        YDB_LOG_TRACE_CTX(*::NActors::TActivationContext::ActorSystem(), "TEvDbFunctionResponse from Queue",
+            {"logPrefix", LogPrefix()},
+            {"sender", sender},
+            {"size", Requests.size()});
 
         const auto it = InflightRequests.find(sender);
         if (it == InflightRequests.end()) {
-            LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::DB_POOL, LogPrefix() << "TEvDbFunctionResponse from unknown sender " << sender);
+            YDB_LOG_INFO_CTX(*::NActors::TActivationContext::ActorSystem(), "TEvDbFunctionResponse from unknown sender",
+                {"logPrefix", LogPrefix()},
+                {"sender", sender});
             return;
         }
 
@@ -256,11 +270,17 @@ private:
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         const auto sender = ev->Sender;
-        LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::DB_POOL, LogPrefix() << "Undelivered from: " << ev->Sender << ", reason: " << ev->Get()->Reason << ", Queue size = " << Requests.size());
+        YDB_LOG_ERROR_CTX(*::NActors::TActivationContext::ActorSystem(), "Undelivered Queue",
+            {"logPrefix", LogPrefix()},
+            {"from", ev->Sender},
+            {"reason", ev->Get()->Reason},
+            {"size", Requests.size()});
 
         const auto it = InflightRequests.find(sender);
         if (it == InflightRequests.end()) {
-            LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::DB_POOL, LogPrefix() << "Undelivered from unknown sender " << sender);
+            YDB_LOG_INFO_CTX(*::NActors::TActivationContext::ActorSystem(), "Undelivered from unknown sender",
+                {"logPrefix", LogPrefix()},
+                {"sender", sender});
             return;
         }
 
@@ -292,7 +312,9 @@ private:
         Counters.QueuedTime->Collect((TInstant::Now() - request.StartTime).MilliSeconds());
         ReportStats();
 
-        LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::DB_POOL, LogPrefix() << "ProcessQueue, Queue size = " << Requests.size());
+        YDB_LOG_TRACE_CTX(*::NActors::TActivationContext::ActorSystem(), "ProcessQueue, Queue",
+            {"logPrefix", LogPrefix()},
+            {"size", Requests.size()});
 
         const auto worker = *FreeWorkers.begin();
         FreeWorkers.erase(FreeWorkers.begin());
@@ -374,7 +396,9 @@ public:
 
     void Bootstrap() {
         const auto& proxyId = DbPool->GetProxyActorId();
-        LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::DB_POOL, LogPrefix() << "Bootstrap, send request to: " << proxyId);
+        YDB_LOG_TRACE_CTX(*::NActors::TActivationContext::ActorSystem(), "Bootstrap, send request",
+            {"logPrefix", LogPrefix()},
+            {"to", proxyId});
         Become(&TDbRequest::StateFunc);
         Send(proxyId, new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);
     }
@@ -382,14 +406,21 @@ public:
 private:
     void Handle(TEvents::TEvDbFunctionResponse::TPtr& ev) {
         const auto status = ev->Get()->Status;
-        LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::DB_POOL, LogPrefix() << "DbRequest actor response from: " << ev->Sender << ", status: " << status);
+        YDB_LOG_TRACE_CTX(*::NActors::TActivationContext::ActorSystem(), "DbRequest actor response",
+            {"logPrefix", LogPrefix()},
+            {"from", ev->Sender},
+            {"status", status});
         Promise.SetValue(status);
         PassAway();
     }
 
     void Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         const auto& proxyId = DbPool->GetProxyActorId();
-        LOG_LOG_S(*::NActors::TActivationContext::ActorSystem(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::DB_POOL, LogPrefix() << "Undelivered from: " << ev->Sender << ", reason: " << ev->Get()->Reason << ", resend request to: " << proxyId);
+        YDB_LOG_ERROR_CTX(*::NActors::TActivationContext::ActorSystem(), "Undelivered resend request",
+            {"logPrefix", LogPrefix()},
+            {"from", ev->Sender},
+            {"reason", ev->Get()->Reason},
+            {"to", proxyId});
         Send(proxyId, new TEvents::TEvDbFunctionRequest(Handler), IEventHandle::FlagTrackDelivery);
     }
 

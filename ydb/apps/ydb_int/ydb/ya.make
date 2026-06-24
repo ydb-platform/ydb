@@ -16,7 +16,7 @@ SRCS(
 )
 
 PEERDIR(
-    ydb/apps/ydb/experimental/ydb/commands
+    ydb/apps/ydb_int/ydb/commands
 )
 
 IF (NOT USE_SSE4 AND NOT OPENSOURCE)

@@ -11,7 +11,7 @@ any time without prior notice.
 
 ## Relationship with the official `ydb` client
 
-| Aspect                      | `ydb/apps/ydb`                  | `ydb/apps/ydb/experimental/ydb`   |
+| Aspect                      | `ydb/apps/ydb`                  | `ydb/apps/ydb_int/ydb`   |
 |-----------------------------|---------------------------------|-----------------------------------|
 | Audience                    | End users                       | YDB developers, contributors      |
 | Distribution                | Official releases, packages     | Built locally from source         |
@@ -27,10 +27,10 @@ largely matches the official `ydb` client.
 ## Building
 
 ```bash
-./ya make --build relwithdebinfo ydb/apps/ydb/experimental/ydb
+./ya make --build relwithdebinfo ydb/apps/ydb_int/ydb
 ```
 
-The resulting binary is placed at `ydb/apps/ydb/experimental/ydb/ydb`.
+The resulting binary is placed at `ydb/apps/ydb_int/ydb/ydb`.
 
 ## Running
 
@@ -38,7 +38,7 @@ The invocation mirrors the official `ydb` client; the only difference is the
 extra `experimental` command tree:
 
 ```bash
-./ydb/apps/ydb/experimental/ydb/ydb experimental --help
+./ydb/apps/ydb_int/ydb/ydb experimental --help
 ```
 
 ### Interactive transactions (draft)
@@ -177,8 +177,8 @@ a library that is not already pulled in transitively, add it to `PEERDIR`.
 ### 5. Build and verify
 
 ```bash
-./ya make --build relwithdebinfo ydb/apps/ydb/experimental/ydb
-./ydb/apps/ydb/experimental/ydb/ydb experimental my-feature --help
+./ya make --build relwithdebinfo ydb/apps/ydb_int/ydb
+./ydb/apps/ydb_int/ydb/ydb experimental my-feature --help
 ```
 
 ## Requirements and conventions
@@ -207,5 +207,5 @@ The experimental client is the proving ground for new functionality, not its
 permanent home. Once a command has stabilised, its options have been agreed
 upon, and it provides value to end users, move the corresponding sources to
 [`ydb/public/lib/ydb_cli/commands`](../../../../public/lib/ydb_cli/commands),
-register it in [`ydb/apps/ydb`](../..), and remove the experimental version
+register it in [`ydb/apps/ydb`](../../ydb), and remove the experimental version
 from this build.

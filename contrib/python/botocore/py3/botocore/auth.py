@@ -35,7 +35,12 @@ from botocore.compat import (
     urlsplit,
     urlunsplit,
 )
-from botocore.exceptions import NoAuthTokenError, NoCredentialsError
+from botocore.exceptions import (
+    NoAuthTokenError,
+    NoCredentialsError,
+    UnknownSignatureVersionError,
+    UnsupportedSignatureVersionError,
+)
 from botocore.utils import (
     is_valid_ipv6_endpoint_url,
     normalize_url_path,
@@ -432,12 +437,12 @@ class SigV4Auth(BaseSigner):
         self._inject_signature_to_request(request, signature)
 
     def _inject_signature_to_request(self, request, signature):
-        auth_str = ['AWS4-HMAC-SHA256 Credential=%s' % self.scope(request)]
+        auth_str = [f'AWS4-HMAC-SHA256 Credential={self.scope(request)}']
         headers_to_sign = self.headers_to_sign(request)
         auth_str.append(
             f"SignedHeaders={self.signed_headers(headers_to_sign)}"
         )
-        auth_str.append('Signature=%s' % signature)
+        auth_str.append(f'Signature={signature}')
         request.headers['Authorization'] = ', '.join(auth_str)
         return request
 
@@ -685,7 +690,7 @@ class S3ExpressQueryAuth(S3ExpressAuth):
         # Rather than calculating an "Authorization" header, for the query
         # param quth, we just append an 'X-Amz-Signature' param to the end
         # of the query string.
-        request.url += '&X-Amz-Signature=%s' % signature
+        request.url += f'&X-Amz-Signature={signature}'
 
     def _normalize_url_path(self, path):
         # For S3, we do not normalize the path.
@@ -777,7 +782,7 @@ class SigV4QueryAuth(SigV4Auth):
         # Rather than calculating an "Authorization" header, for the query
         # param quth, we just append an 'X-Amz-Signature' param to the end
         # of the query string.
-        request.url += '&X-Amz-Signature=%s' % signature
+        request.url += f'&X-Amz-Signature={signature}'
 
 
 class S3SigV4QueryAuth(SigV4QueryAuth):
@@ -990,7 +995,7 @@ class HmacV1Auth(BaseSigner):
         string_to_sign = self.canonical_string(
             method, split, headers, auth_path=auth_path
         )
-        logger.debug('StringToSign:\n%s', string_to_sign)
+        logger.debug(f'StringToSign:\n{string_to_sign}')
         return self.sign_string(string_to_sign)
 
     def add_auth(self, request):
@@ -998,7 +1003,7 @@ class HmacV1Auth(BaseSigner):
             raise NoCredentialsError
         logger.debug("Calculating signature using hmacv1 auth.")
         split = urlsplit(request.url)
-        logger.debug('HTTP request method: %s', request.method)
+        logger.debug(f'HTTP request method: {request.method}')
         signature = self.get_signature(
             request.method, split, request.headers, auth_path=request.auth_path
         )
@@ -1132,6 +1137,19 @@ class BearerAuth(TokenSigner):
         request.headers['Authorization'] = auth_header
 
 
+def resolve_auth_type(auth_trait):
+    for auth_type in auth_trait:
+        if auth_type == 'smithy.api#noAuth':
+            return AUTH_TYPE_TO_SIGNATURE_VERSION[auth_type]
+        elif auth_type in AUTH_TYPE_TO_SIGNATURE_VERSION:
+            signature_version = AUTH_TYPE_TO_SIGNATURE_VERSION[auth_type]
+            if signature_version in AUTH_TYPE_MAPS:
+                return signature_version
+        else:
+            raise UnknownSignatureVersionError(signature_version=auth_type)
+    raise UnsupportedSignatureVersionError(signature_version=auth_trait)
+
+
 AUTH_TYPE_MAPS = {
     'v2': SigV2Auth,
     'v3': SigV3Auth,
@@ -1160,3 +1178,10 @@ else:
             's3v4-query': S3SigV4QueryAuth,
         }
     )
+
+AUTH_TYPE_TO_SIGNATURE_VERSION = {
+    'aws.auth#sigv4': 'v4',
+    'aws.auth#sigv4a': 'v4a',
+    'smithy.api#httpBearerAuth': 'bearer',
+    'smithy.api#noAuth': 'none',
+}

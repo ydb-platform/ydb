@@ -67,6 +67,7 @@ jobs:
             ${{ inputs.allow_unmerged == true && '--allow-unmerged' || '' }}
 
       - name: Upload Artifact
+        if: success() && hashFiles('created_pulls.json') != ''
         uses: actions/upload-artifact@v7
         with:
           name: created-pulls

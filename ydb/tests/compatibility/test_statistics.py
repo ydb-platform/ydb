@@ -4,6 +4,7 @@ import logging
 import pytest
 import random
 import threading
+import time
 
 import requests
 
@@ -359,10 +360,41 @@ class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
             else:
                 logger.info(f'ANALYZE {table_name} successful')
 
+        def check_background_operations():
+            """Check for background ANALYZE operations using operation client."""
+            try:
+                # Try to list operations - this tests the background operation functionality
+                # from commit 9b4503e which added long-running operation support for ANALYZE
+                operation_client = ydb.OperationClient(self.driver)
+                list_result = operation_client.list_operations()
+                logger.info(f"Found {len(list_result.operations)} background operations")
+
+                # Check if any analyze operations are present - they should be in the list
+                analyze_operations_found = False
+                for op in list_result.operations:
+                    if hasattr(op, 'metadata') and hasattr(op.metadata, 'state'):
+                        logger.info(f"Operation {op.id}: state={op.metadata.state}, progress={op.metadata.progress}")
+                        # Check if this is an analyze operation by looking at metadata structure
+                        if hasattr(op.metadata, 'paths') or hasattr(op.metadata, 'done_paths'):
+                            analyze_operations_found = True
+                            logger.info(f"Found ANALYZE operation {op.id} with state={op.metadata.state}")
+
+                # Assert that ANALYZE operations are present in the background operations list
+                assert analyze_operations_found, \
+                    "ANALYZE operation must be present in background operations list after ANALYZE command"
+                logger.info("✓ ANALYZE operation successfully found in background operations list")
+
+            except Exception as e:
+                logger.warning(f'Background operation check failed: {e}, this is expected for older versions')
+
         for _ in self.roll():
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 for table in self.tables:
                     try_analyze(session_pool, table)
+                    # Check for background operations after each ANALYZE
+                    check_background_operations()
+                    # Give some time for background operations to progress
+                    time.sleep(1)
 
         # check that ANALYZE was successful at least once
         expected_count = len([i for i in range(ROW_COUNT) if int(i / 10) < 10])

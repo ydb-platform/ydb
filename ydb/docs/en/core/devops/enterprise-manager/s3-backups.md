@@ -69,11 +69,11 @@ Do not store `access_key` and `secret_key` in the configuration as plaintext. YD
 
 ## Encrypting S3 access keys {#encrypt-s3-keys}
 
-Encrypt the S3 access keys with the same master key specified in the `secret_key` parameter. Use the Control Plane CLI:
+Encrypt the S3 access keys with the same master key specified in the `secret_key` parameter. Use the `ydb-em-cp` Control Plane binary, which is included in the YDB EM package as `bin/ydb-em-cp` and is placed on the Control Plane host during [initial deployment](initial-deployment.md#download):
 
 ```bash
-ydbcp admin crypto encrypt --body '<plaintext access key>' --cfg-file <ydb-em-cp-config.yaml>
-ydbcp admin crypto encrypt --body '<plaintext secret key>' --cfg-file <ydb-em-cp-config.yaml>
+ydb-em-cp admin crypto encrypt --body '<plaintext access key>' --cfg-file <ydb-em-cp-config.yaml>
+ydb-em-cp admin crypto encrypt --body '<plaintext secret key>' --cfg-file <ydb-em-cp-config.yaml>
 ```
 
 Copy the resulting encrypted strings to `settings.s3.access_key` and `settings.s3.secret_key`.
@@ -81,7 +81,7 @@ Copy the resulting encrypted strings to `settings.s3.access_key` and `settings.s
 To check that a value can be decrypted with the same master key, run:
 
 ```bash
-ydbcp admin crypto decrypt --body '<encrypted value>' --cfg-file <ydb-em-cp-config.yaml>
+ydb-em-cp admin crypto decrypt --body '<encrypted value>' --cfg-file <ydb-em-cp-config.yaml>
 ```
 
 ## Configuring schedule and retention {#schedule-and-ttl}
@@ -116,9 +116,13 @@ To apply the settings:
 1. Place the updated configuration file in the Control Plane working directory. For example, for an installation under `/opt/ydb-em`, this can be `/opt/ydb-em/ydb-em-cp/cfg/config.yaml`.
 1. Make sure the master key file specified in `secret_key` is available to Control Plane processes.
 1. Check that `settings.s3.access_key` and `settings.s3.secret_key` are encrypted with the same master key.
-1. Restart the Control Plane processes: `server` and `worker`.
+1. Restart the Control Plane service:
 
-After restart, the worker resolves the target by `location_id` according to the schedule, configures the S3 storage, and starts data export to the specified bucket.
+    ```bash
+    sudo systemctl restart ydb-em-cp
+    ```
+
+After restart, Control Plane resolves the target by `location_id` according to the schedule, configures the S3 storage, and starts data export to the specified bucket.
 
 ## Checklist {#checklist}
 
@@ -126,8 +130,8 @@ Before starting backups, check that:
 
 * `backup_targets[].tags.locations` contains the `location_id` values of the databases that require backups;
 * `endpoint`, `bucket`, and `scheme` point to the correct S3 storage;
-* `access_key` and `secret_key` are encrypted with `ydbcp admin crypto encrypt`;
+* `access_key` and `secret_key` are encrypted with `ydb-em-cp admin crypto encrypt`;
 * the top-level `secret_key` parameter points to the correct master key file;
 * `locations[].default_backup_config` defines the schedule and retention period;
 * the updated configuration file is placed in the Control Plane working directory;
-* Control Plane processes are restarted after the configuration change.
+* the Control Plane service is restarted after the configuration change.

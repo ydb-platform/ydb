@@ -69,11 +69,11 @@ secret_key: configs/em/secret_key
 
 ## Шифрование ключей доступа к S3 {#encrypt-s3-keys}
 
-Зашифруйте ключи доступа к S3 тем же мастер-ключом, который указан в параметре `secret_key`. Для шифрования используйте CLI Control Plane:
+Зашифруйте ключи доступа к S3 тем же мастер-ключом, который указан в параметре `secret_key`. Для шифрования используйте бинарный файл Control Plane `ydb-em-cp`, который входит в пакет YDB EM как `bin/ydb-em-cp` и размещается на хосте Control Plane при [первоначальном развёртывании](initial-deployment.md#download):
 
 ```bash
-ydbcp admin crypto encrypt --body '<plaintext access key>' --cfg-file <ydb-em-cp-config.yaml>
-ydbcp admin crypto encrypt --body '<plaintext secret key>' --cfg-file <ydb-em-cp-config.yaml>
+ydb-em-cp admin crypto encrypt --body '<plaintext access key>' --cfg-file <ydb-em-cp-config.yaml>
+ydb-em-cp admin crypto encrypt --body '<plaintext secret key>' --cfg-file <ydb-em-cp-config.yaml>
 ```
 
 Скопируйте полученные зашифрованные строки в параметры `settings.s3.access_key` и `settings.s3.secret_key`.
@@ -81,7 +81,7 @@ ydbcp admin crypto encrypt --body '<plaintext secret key>' --cfg-file <ydb-em-cp
 Чтобы проверить, что значение можно расшифровать тем же мастер-ключом, выполните:
 
 ```bash
-ydbcp admin crypto decrypt --body '<encrypted value>' --cfg-file <ydb-em-cp-config.yaml>
+ydb-em-cp admin crypto decrypt --body '<encrypted value>' --cfg-file <ydb-em-cp-config.yaml>
 ```
 
 ## Настройка расписания и срока хранения {#schedule-and-ttl}
@@ -116,9 +116,13 @@ locations:
 1. Разместите обновленный конфигурационный файл в рабочей директории Control Plane. Например, для установки в `/opt/ydb-em` это может быть файл `/opt/ydb-em/ydb-em-cp/cfg/config.yaml`.
 1. Убедитесь, что файл мастер-ключа, указанный в `secret_key`, доступен процессам Control Plane.
 1. Проверьте, что `settings.s3.access_key` и `settings.s3.secret_key` зашифрованы тем же мастер-ключом.
-1. Перезапустите процессы Control Plane: `server` и `worker`.
+1. Перезапустите сервис Control Plane:
 
-После перезапуска worker по расписанию определяет target по `location_id`, настраивает S3-хранилище и запускает экспорт данных в указанный бакет.
+    ```bash
+    sudo systemctl restart ydb-em-cp
+    ```
+
+После перезапуска Control Plane по расписанию определяет target по `location_id`, настраивает S3-хранилище и запускает экспорт данных в указанный бакет.
 
 ## Проверочный список {#checklist}
 
@@ -126,8 +130,8 @@ locations:
 
 * `backup_targets[].tags.locations` содержит `location_id` баз данных, для которых нужно включить резервное копирование;
 * `endpoint`, `bucket` и `scheme` указывают на нужное S3-хранилище;
-* `access_key` и `secret_key` зашифрованы командой `ydbcp admin crypto encrypt`;
+* `access_key` и `secret_key` зашифрованы командой `ydb-em-cp admin crypto encrypt`;
 * верхнеуровневый параметр `secret_key` указывает на корректный файл мастер-ключа;
 * в `locations[].default_backup_config` задано расписание и срок хранения;
 * обновленный конфигурационный файл размещен в рабочей директории Control Plane;
-* процессы Control Plane перезапущены после изменения конфигурации.
+* сервис Control Plane перезапущен после изменения конфигурации.

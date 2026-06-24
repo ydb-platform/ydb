@@ -19,9 +19,9 @@ logger = logging.getLogger(__name__)
 # The test checks snapshot-isolation correctness under concurrent writes and
 # during a rolling cluster upgrade/downgrade.
 #
-# Two source tables are maintained in parallel — one row-oriented
-# (datashard_table) and one column-oriented (column_table) — each holding
-# N_ROWS=10 000 rows with the schema (key, int_val, str_val):
+# The test is split into two cases - one for row tables and one for column tables.
+# In each test case a source table and a result table are maintained.
+# The source table holds N_ROWS=10 000 rows with the schema (key, int_val, str_val):
 #
 #   key      : 0 .. 9_999  (unique row identifier)
 #   int_val  : key % GROUP_SIZE   (cycles 0-9 within every group of 10 rows)
@@ -30,7 +30,7 @@ logger = logging.getLogger(__name__)
 # Rows are divided into N_GROUPS=1000 consecutive groups of GROUP_SIZE=10
 # rows each.  Within every group, int_val takes each value in 0..9 exactly
 # once, so the group sum is always FIXED_GROUP_SUM = 0+1+…+9 = 45.
-# Updater threads continuously shuffle int_val values within a randomly
+# The updater thread continuously shuffles int_val values within a randomly
 # chosen group (preserving the group sum).
 #
 # ---------------------------------------------------------------------------
@@ -53,10 +53,17 @@ logger = logging.getLogger(__name__)
 #   2. Sleep a random short interval (to widen the window for conflicts).
 #   3. UPSERT the result row — overwriting whichever bounds/values were there
 #      before.
+#   4. Sleep a random short interval.
+#   5. READ the same aggregate again.
 #
 # Because filter_type is the only PK column, all concurrent aggregators of
 # the same type write to the same single row, which generates write conflicts
 # that the SDK retries automatically.
+#
+# Additionally, each aggregate query computes product_sum - SUM(key * int_val).
+# This field is not saved to the result table, but is used to check snapshot stability
+# between two read queries in steps 1 and 5 - if they use different snapshots,
+# product_sum would not match due to concurrent value shuffles.
 #
 # ---------------------------------------------------------------------------
 # Invariants verified by check_results()
@@ -266,16 +273,30 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                             },
                         ):
                             pass
+
+                        time.sleep(random.uniform(0, 0.1))
+
+                        # check snapshot stability
+                        with tx.execute(
+                            agg_query,
+                            parameters={
+                                '$lo': lo,
+                                '$hi': hi,
+                            },
+                        ) as results:
+                            res2 = list(results)[0].rows[0]
+                        assert res2.product_sum == res.product_sum
+
                         tx.commit()
 
                     pool.retry_tx_sync(callee, ydb.QuerySnapshotReadWrite())
 
                     with lock:
                         exec_state.successes += 1
-                except ydb.issues.Error as e:
-                    # ignore YDB errors such as Aborted or Unavailable
-                    logger.warning("PK aggregator [%s] YDB error: %s", table_name, e)
+                except (ydb.Unavailable, ydb.Aborted, ydb.Undetermined) as e:
+                    logger.warning("PK aggregator [%s] retriable error: %s", table_name, e)
                 except Exception as e:
+                    logger.error("PK aggregator [%s] error: %s", table_name, e)
                     exec_state.error = e
                     break
 
@@ -294,7 +315,11 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     def callee(tx, lo=lo, hi=hi):
                         view_clause = "VIEW int_val_index" if table_name == "datashard_table" else ""
                         agg_query = f"""
-                        SELECT count(*) as rc, sum(int_val) as sum, count(distinct str_val) as cd
+                        SELECT
+                            count(*) as rc,
+                            sum(int_val) as sum,
+                            count(distinct str_val) as cd,
+                            sum(key * int_val) as product_sum
                         FROM `{table_name}` {view_clause}
                         WHERE int_val BETWEEN $lo AND $hi
                         """
@@ -321,18 +346,32 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                                 '$int_sum': (res.sum, ydb.PrimitiveType.Int64),
                                 '$cd': (res.cd, ydb.PrimitiveType.Int32),
                             },
-                            commit_tx=True,
                         ):
                             pass
+
+                        time.sleep(random.uniform(0, 0.1))
+
+                        # check snapshot stability
+                        with tx.execute(
+                            agg_query,
+                            parameters={
+                                '$lo': lo,
+                                '$hi': hi,
+                            },
+                        ) as results:
+                            res2 = list(results)[0].rows[0]
+                        assert res2.product_sum == res.product_sum
+
+                        tx.commit()
 
                     pool.retry_tx_sync(callee, ydb.QuerySnapshotReadWrite())
 
                     with lock:
                         exec_state.successes += 1
-                except ydb.issues.Error as e:
-                    # ignore YDB errors such as Aborted or Unavailable
-                    logger.warning("Int range aggregator [%s] YDB error: %s", table_name, e)
+                except (ydb.Unavailable, ydb.Aborted, ydb.Undetermined) as e:
+                    logger.warning("Int range aggregator [%s] retriable error: %s", table_name, e)
                 except Exception as e:
+                    logger.error("Int range aggregator [%s] error: %s", table_name, e)
                     exec_state.error = e
                     break
 
@@ -350,10 +389,17 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     str_hi = f"{hi:05d}"
 
                     def callee(tx, lo=lo, hi=hi, str_lo=str_lo, str_hi=str_hi):
+                        agg_query = f"""
+                        SELECT
+                            count(*) as rc,
+                            sum(int_val) as sum,
+                            count(distinct str_val) as cd,
+                            sum(key * int_val) as product_sum
+                        FROM `{table_name}`
+                        WHERE str_val BETWEEN $str_lo AND $str_hi"""
+
                         with tx.execute(
-                            f"SELECT count(*) as rc, sum(int_val) as sum, count(distinct str_val) as cd "
-                            f"FROM `{table_name}` "
-                            f"WHERE str_val BETWEEN $str_lo AND $str_hi",
+                            agg_query,
                             parameters={
                                 '$str_lo': str_lo,
                                 '$str_hi': str_hi,
@@ -374,18 +420,32 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                                 '$int_sum': (res.sum, ydb.PrimitiveType.Int64),
                                 '$cd': (res.cd, ydb.PrimitiveType.Int32),
                             },
-                            commit_tx=True,
                         ):
                             pass
+
+                        time.sleep(random.uniform(0, 0.1))
+
+                        # check snapshot stability
+                        with tx.execute(
+                            agg_query,
+                            parameters={
+                                '$str_lo': str_lo,
+                                '$str_hi': str_hi,
+                            },
+                        ) as results:
+                            res2 = list(results)[0].rows[0]
+                        assert res2.product_sum == res.product_sum
+
+                        tx.commit()
 
                     pool.retry_tx_sync(callee, ydb.QuerySnapshotReadWrite())
 
                     with lock:
                         exec_state.successes += 1
-                except ydb.issues.Error as e:
-                    # ignore YDB errors such as Aborted or Unavailable
-                    logger.warning("String range aggregator [%s] YDB error: %s", table_name, e)
+                except (ydb.Unavailable, ydb.Aborted, ydb.Undetermined) as e:
+                    logger.warning("String range aggregator [%s] retriable error: %s", table_name, e)
                 except Exception as e:
+                    logger.error("String range aggregator [%s] error: %s", table_name, e)
                     exec_state.error = e
                     break
 

@@ -139,6 +139,7 @@ private:
     bool LocalCacheHasActualVersion(const TVersionedSecret& secret, const ui64& cacheSecretVersion);
     bool LocalCacheHasActualObject(const TVersionedSecret& secret, const ui64& cacheSecretPathId);
     bool HandleSchemeCacheErrorsIfAny(const ui64& requestId, NSchemeCache::TSchemeCacheNavigate& result);
+    bool HandleSchemeShardErrorsIfAny(const ui64& requestId, const NKikimrScheme::TEvDescribeSchemeResult& record);
     void FillResponseIfFinished(const ui64& requestId, const TResponseContext& responseCtx);
     bool ScheduleSchemeCacheRetry(const ui64& requestId, const TString& unresolvedSecretPath);
     bool ScheduleSchemeShardRetry(const ui64& requestId, const TString& secretPath);

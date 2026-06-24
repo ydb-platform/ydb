@@ -144,8 +144,6 @@ Ydb::StatusIds::StatusCode MapSchemeShardStatus(NKikimrScheme::EStatus status) {
     switch (status) {
         case NKikimrScheme::EStatus::StatusNotAvailable:
             return Ydb::StatusIds::UNAVAILABLE;
-        case NKikimrScheme::EStatus::StatusAccessDenied:
-            return Ydb::StatusIds::UNAUTHORIZED;
         default:
             return Ydb::StatusIds::BAD_REQUEST;
     }
@@ -282,22 +280,11 @@ void TDescribeSchemaSecretsService::HandleSchemeShardResponse(NSchemeShard::TEvS
     }
 
     const auto& rec = ev->Get()->GetRecord();
-    const auto& secretName = CanonizePath(rec.GetPath());
-    const auto status = GetSchemeShardPathStatus(SchemeShardStatusGetter, rec);
-    if (status != NKikimrScheme::EStatus::StatusSuccess) {
-        LOG_N(GetLogLabel("TEvDescribeSchemeResult", requestId) << "SchemeShard error: " << EStatus_Name(status));
-        if (IsRetryableSchemeShardStatus(status) && ScheduleSchemeShardRetry(requestId, secretName)) {
-            return;
-        }
-
-        const auto errorStatus = MapSchemeShardStatus(status);
-        FillResponse(
-            requestId,
-            TEvDescribeSecretsResponse::TDescription(
-                errorStatus,
-                { NYql::TIssue(MakeSchemeShardErrorMessage(status, secretName)) }));
+    if (HandleSchemeShardErrorsIfAny(requestId, rec)) {
         return;
     }
+
+    const auto& secretName = CanonizePath(rec.GetPath());
 
     if (const auto it = SchemeBoardSubscribers.find(secretName); it == SchemeBoardSubscribers.end()) {
         SchemeBoardSubscribers[secretName] = Register(CreateSchemeBoardSubscriber(SelfId(), secretName));
@@ -319,6 +306,7 @@ void TDescribeSchemaSecretsService::HandleSchemeShardResponse(NSchemeShard::TEvS
 
 void TDescribeSchemaSecretsService::FillResponse(const ui64& requestId, const TEvDescribeSecretsResponse::TDescription& response) {
     auto respIt = ResolveInFlight.find(requestId);
+    Y_ENSURE(respIt != ResolveInFlight.end(), "Unregistered requestId: " + ToString(requestId));
     respIt->second.Result.SetValue(response);
     ResolveInFlight.erase(respIt);
     RequestsInFlight.erase(requestId);
@@ -443,6 +431,46 @@ bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& req
     return false; // no Scheme Cache errors
 }
 
+bool TDescribeSchemaSecretsService::HandleSchemeShardErrorsIfAny(
+    const ui64& requestId,
+    const NKikimrScheme::TEvDescribeSchemeResult& record)
+{
+    const auto status = GetSchemeShardPathStatus(SchemeShardStatusGetter, record);
+    if (status == NKikimrScheme::EStatus::StatusSuccess) {
+        return false;
+    }
+
+    const auto secretName = CanonizePath(record.GetPath());
+
+    LOG_N(GetLogLabel("TEvDescribeSchemeResult", requestId) << "SchemeShard error: " << EStatus_Name(status));
+    if (IsRetryableSchemeShardStatus(status)) {
+        const auto requestIt = RequestsInFlight.find(requestId);
+        Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " + ToString(requestId));
+        if (requestIt->second.Request->Settings.RetryPolicy) {
+            if (ScheduleSchemeShardRetry(requestId, secretName)) {
+                return true;
+            }
+
+            LOG_N(GetLogLabel("TEvDescribeSchemeResult", requestId)
+                << "retry limit exceeded for secret `" << secretName << "`");
+            FillResponse(
+                requestId,
+                TEvDescribeSecretsResponse::TDescription(
+                    Ydb::StatusIds::UNAVAILABLE,
+                    { NYql::TIssue("Retry limit exceeded for secret `" + secretName + "`") }));
+            return true;
+        }
+    }
+
+    const auto errorStatus = MapSchemeShardStatus(status);
+    FillResponse(
+        requestId,
+        TEvDescribeSecretsResponse::TDescription(
+            errorStatus,
+            { NYql::TIssue(MakeSchemeShardErrorMessage(status, secretName)) }));
+    return true;
+}
+
 bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& requestId, const TString& unresolvedSecretPath) {
     auto requestIt = RequestsInFlight.find(requestId);
     Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " + ToString(requestId));
@@ -486,14 +514,7 @@ bool TDescribeSchemaSecretsService::ScheduleSchemeShardRetry(const ui64& request
         return true;
     }
 
-    LOG_N(GetLogLabel("TEvDescribeSchemeResult", requestId)
-        << "retry limit exceeded for secret `" << secretPath << "`");
-    FillResponse(
-        requestId,
-        TEvDescribeSecretsResponse::TDescription(
-            Ydb::StatusIds::UNAVAILABLE,
-            { NYql::TIssue("Retry limit exceeded for secret `" + secretPath + "`") }));
-    return true;
+    return false;
 }
 
 IRetryPolicy<>::TPtr MakeShortRetryPolicy() {

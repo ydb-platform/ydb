@@ -450,9 +450,9 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
     Y_UNIT_TEST(SchemeShardRetryManySecrets) {
         TKikimrSettings settings;
         static const auto SECRETS_CNT = 20;
-        static const auto FAILS_PER_SECRET = 2;
+        static const auto FAILS_BUDGET_PER_SECRET = 2;
         auto schemeShardStatusGetter = MakeHolder<TTestSchemeShardStatusGetter>(
-            /* statusOverwriteRemainingCount */ SECRETS_CNT * FAILS_PER_SECRET,
+            /* statusOverwriteRemainingCount */ SECRETS_CNT * FAILS_BUDGET_PER_SECRET,
             NKikimrScheme::EStatus::StatusNotAvailable);
         auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(
             /* secretUpdateListener */ nullptr,

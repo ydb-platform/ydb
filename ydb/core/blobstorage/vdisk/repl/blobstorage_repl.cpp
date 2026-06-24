@@ -172,7 +172,7 @@ namespace NKikimr {
         TInstant LastReplQuantumEnd;
         TQueueActorMapPtr QueueActorMapPtr;
         TBlobIdQueuePtr BlobsToReplicatePtr;
-        TBlobIdQueuePtr UnreplicatedBlobsPtr = std::make_shared<TBlobIdQueue>();
+        TBlobIdQueuePtr UnreplicatedBlobsPtr;
         TUnreplicatedBlobRecords UnreplicatedBlobRecords;
         TMilestoneQueue MilestoneQueue;
         TActorId ReplJobActorId;
@@ -434,13 +434,14 @@ namespace NKikimr {
             bool finished = false;
 
             if (info->Eof) { // when it is the last quantum for some donor, rotate the blob sets
-                BlobsToReplicatePtr = std::exchange(UnreplicatedBlobsPtr, std::make_shared<TBlobIdQueue>());
+                BlobsToReplicatePtr = std::exchange(UnreplicatedBlobsPtr,
+                    std::make_shared<TBlobIdQueue>(TMemoryConsumer(ReplCtx->VCtx->Replication.GetCounter())));
 
 #ifndef NDEBUG
                 Y_VERIFY_DEBUG_S(BlobsToReplicatePtr->GetNumItems() == UnreplicatedBlobRecords.size(),
                     "BlobsToReplicatePtr->size# " << BlobsToReplicatePtr->GetNumItems()
                     << " UnreplicatedBlobRecords.size# " << UnreplicatedBlobRecords.size());
-                for (const TLogoBlobID& id : BlobsToReplicatePtr->Queue) {
+                for (const TLogoBlobID& id : *BlobsToReplicatePtr) {
                     Y_DEBUG_ABORT_UNLESS(UnreplicatedBlobRecords.contains(id));
                 }
 #endif
@@ -769,6 +770,8 @@ namespace NKikimr {
             , NextMinHugeBlobInBytes(ReplCtx->MinHugeBlobInBytes)
             , History(HistorySize)
             , State(Relaxation)
+            , UnreplicatedBlobsPtr(std::make_shared<TBlobIdQueue>(TMemoryConsumer(ReplCtx->VCtx->Replication.GetCounter())))
+            , UnreplicatedBlobRecords(TMemoryConsumer(ReplCtx->VCtx->Replication.GetCounter()))
             , ReplProgressWatchdog(
                 ReplCtx->VDiskCfg->ReplMaxTimeToMakeProgress,
                 std::bind(&TThis::ReplStuck, this)

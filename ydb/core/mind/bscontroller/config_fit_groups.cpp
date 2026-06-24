@@ -24,6 +24,7 @@ namespace NKikimr {
             const TBoxStoragePoolId StoragePoolId;
             const TStoragePoolInfo& StoragePool;
             std::optional<TGroupMapper> Mapper;
+            bool AllowSlotCreationOnInactive = false;
             NKikimrBlobStorage::TConfigResponse::TStatus& Status;
             TVSlotReadyTimestampQ& VSlotReadyTimestampQ;
 
@@ -56,8 +57,7 @@ namespace NKikimr {
                 for (ui64 reserve = 0; reserve < min || (reserve - min) * 1000000 / Max<ui64>(1, total) < part; ++reserve, ++total) {
                     TGroupMapper::TGroupDefinition group;
                     try {
-                        AllocateOrSanitizeGroup(TGroupId::Zero(), group, {}, {}, 1u, 0, false, {},
-                            &TGroupGeometryInfo::AllocateGroup);
+                        AllocateGroupWithFallbackToInactive(TGroupId::Zero(), group, 1u, 0, {});
                     } catch (const TExFitGroupError&) {
                         throw TExError() << "group reserve constraint hit";
                     }
@@ -140,6 +140,37 @@ namespace NKikimr {
                 }
             }
 
+            void AllocateGroupWithFallbackToInactive(TGroupId groupId, TGroupMapper::TGroupDefinition& group,
+                    ui32 groupSizeInUnits, i64 requiredSpace, TBridgePileId bridgePileId) {
+                try {
+                    AllocateOrSanitizeGroup(groupId, group, {}, {}, groupSizeInUnits, requiredSpace, false, bridgePileId,
+                        &TGroupGeometryInfo::AllocateGroup);
+                } catch (const TExFitGroupError&) {
+                    if (AllowSlotCreationOnInactive || !HasInactivePDiskInPool()) {
+                        throw;
+                    }
+
+                    struct TResetGuard {
+                        ~TResetGuard() {
+                            Self->RecreateMapper(false);
+                        }
+
+                        TGroupFitter* Self;
+                    } resetGuard{this};
+
+                    STLOG(PRI_WARN, BS_CONTROLLER, BSCFG02,
+                        "Falling back to allocation allowing INACTIVE PDisks",
+                        (GroupId, groupId), (StoragePoolId, StoragePoolId));
+                    RecreateMapper(true);
+                    try {
+                        AllocateOrSanitizeGroup(groupId, group, {}, {}, groupSizeInUnits, requiredSpace, false, bridgePileId,
+                            &TGroupGeometryInfo::AllocateGroup);
+                    } catch (...) {
+                        throw;
+                    }
+                }
+            }
+
             TGroupId CreateGroup(TBridgePileId bridgePileId, std::optional<TGroupId> bridgeProxyGroupId) {
                 ////////////////////////////////////////////////////////////////////////////////////////////
                 // ALLOCATE GROUP ID FOR THE NEW GROUP
@@ -156,8 +187,7 @@ namespace NKikimr {
                     ExpectedSlotSize.pop_front();
                 }
                 ui32 groupSizeInUnits = StoragePool.DefaultGroupSizeInUnits;
-                AllocateOrSanitizeGroup(groupId, group, {}, {}, groupSizeInUnits, requiredSpace, false, bridgePileId,
-                    &TGroupGeometryInfo::AllocateGroup);
+                AllocateGroupWithFallbackToInactive(groupId, group, groupSizeInUnits, requiredSpace, bridgePileId);
 
                 // scan all comprising PDisks for PDiskCategory
                 TMaybe<TPDiskCategory> desiredPDiskCategory;
@@ -233,8 +263,8 @@ namespace NKikimr {
 
                     // TODO(alexvru): calculate required space
                     Geometry.ResizeGroup(group);
-                    AllocateOrSanitizeGroup(groupId, group, {}, {}, groupInfo->GroupSizeInUnits, Min<i64>(), false,
-                        groupInfo->BridgePileId, &TGroupGeometryInfo::AllocateGroup);
+                    AllocateGroupWithFallbackToInactive(groupId, group, groupInfo->GroupSizeInUnits, Min<i64>(),
+                            groupInfo->BridgePileId);
 
                     CreateVSlotsForGroup(groupInfo, group, {});
                     return;
@@ -576,8 +606,7 @@ namespace NKikimr {
                     TBridgePileId bridgePileId,
                     T&& func) {
                 if (!Mapper) {
-                    Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping, State.Fit.PreferLessOccupiedRack, State.Fit.WithAttentionToReplication);
-                    PopulateGroupMapper();
+                    RecreateMapper(false);
                 }
                 TPDiskSlotTracker& pdiskSlotTracker= Mapper->GetPDiskSlotTracker();
                 TStackVec<TPDiskId, 32> removeQ;
@@ -663,6 +692,38 @@ namespace NKikimr {
                 Mapper->SetPDiskSlotTracker(std::move(pdiskSlotTracker));
             }
 
+            void RecreateMapper(bool allowSlotCreationOnInactive) {
+                AllowSlotCreationOnInactive = allowSlotCreationOnInactive;
+                Mapper.emplace(Geometry, StoragePool.RandomizeGroupMapping, State.Fit.PreferLessOccupiedRack, State.Fit.WithAttentionToReplication);
+                PopulateGroupMapper();
+            }
+
+            bool HasInactivePDiskInPool() const {
+                const TBoxId boxId = std::get<0>(StoragePoolId);
+                bool found = false;
+                State.PDisks.ForEach([&](const TPDiskId& id, const TPDiskInfo& info) {
+                    if (found) {
+                        return;
+                    }
+                    if (info.BoxId != boxId) {
+                        return;
+                    }
+                    if (State.PDisksToRemove.count(id)) {
+                        return;
+                    }
+                    if (info.Status != NKikimrBlobStorage::EDriveStatus::INACTIVE) {
+                        return;
+                    }
+                    for (const auto& filter : StoragePool.PDiskFilters) {
+                        if (filter.MatchPDisk(info)) {
+                            found = true;
+                            return;
+                        }
+                    }
+                });
+                return found;
+            }
+
             bool RegisterPDisk(TPDiskId id, const TPDiskInfo& info, bool usable, TPDiskSlotTracker& pdiskSlotTracker, TString whyUnusable = {}) {
                 // calculate number of used slots on this PDisk, also counting the static ones
                 ui32 numSlots = info.NumActiveSlots + info.StaticSlotUsage;
@@ -703,7 +764,7 @@ namespace NKikimr {
                     }
                 }
 
-                if (!info.AcceptsNewSlots()) {
+                if (!info.AcceptsNewSlots(AllowSlotCreationOnInactive)) {
                     usable = false;
                     whyUnusable.append('S');
                 }

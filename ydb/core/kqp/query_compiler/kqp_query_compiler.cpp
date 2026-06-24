@@ -1414,40 +1414,42 @@ private:
             auto [indexMeta, index] = tableMeta->GetIndex(indexName);
 
             NKqpProto::EKqpFullTextIndexType kqpType;
-            bool hasDesc = false;
+            bool isDescriptionRequired = true;
+
             switch (index->Type) {
             case TIndexDescription::EType::GlobalFulltextRelevance:
                 kqpType = NKqpProto::EKqpFullTextIndexType::EKqpFullTextRelevance;
-                hasDesc = true;
                 break;
             case TIndexDescription::EType::GlobalFulltextPlain:
                 kqpType = NKqpProto::EKqpFullTextIndexType::EKqpFullTextPlain;
-                hasDesc = true;
                 break;
             case TIndexDescription::EType::GlobalJson:
                 kqpType = NKqpProto::EKqpFullTextIndexType::EKqpFullTextJson;
+                isDescriptionRequired = false;
                 break;
             case TIndexDescription::EType::GlobalFulltextCompactRelevance:
                 kqpType = NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance;
-                hasDesc = true;
                 break;
             case TIndexDescription::EType::GlobalFulltextCompact:
                 kqpType = NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact;
-                hasDesc = true;
                 break;
             case TIndexDescription::EType::GlobalJsonCompact:
                 kqpType = NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact;
+                isDescriptionRequired = false;
                 break;
             default:
                 YQL_ENSURE(false, "Index type " << index->Type << " is not supported");
             }
+
             fullTextProto.SetIndexType(kqpType);
-            if (hasDesc) {
-                auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index->SpecializedIndexDescription);
-                YQL_ENSURE(desc, "unexpected index description type");
+
+            // JSON indexes carry a fulltext description only when rowid mode (__ydb_row_id as doc_id) is enabled.
+            if (auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index->SpecializedIndexDescription)) {
                 // Copy the whole description (incl. UseRowIdAsDocId), not just Settings; the
                 // index type was already set from the switch above (handles Compact variants too).
                 fullTextProto.MutableIndexDescription()->CopyFrom(*desc);
+            } else if (isDescriptionRequired) {
+                YQL_ENSURE(false, "Index description is required for index type " << index->Type);
             }
 
             auto fillCol = [&](const NYql::TKikimrColumnMetadata* columnMeta, NKikimrKqp::TKqpColumnMetadataProto* columnProto) {
@@ -1485,52 +1487,54 @@ private:
                 }
             }
 
-            if (index->Type != TIndexDescription::EType::GlobalJson) {
-                auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index->SpecializedIndexDescription);
-                if (desc && desc->GetUseRowIdAsDocId()) {
-                    const TIndexDescription* uniqueIdx = nullptr;
-                    TIntrusivePtr<TKikimrTableMetadata> uniqueImplMeta;
-                    TString uniqueIdxName;
-                    YQL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
-                    for (size_t i = 0; i < tableMeta->Indexes.size(); ++i) {
-                        const auto& candidate = tableMeta->Indexes[i];
-                        if (candidate.Type == TIndexDescription::EType::GlobalSyncUnique
-                            && candidate.State == TIndexDescription::EIndexState::Ready
-                            && candidate.KeyColumns.size() == 1
-                            && candidate.KeyColumns[0] == NKikimr::NTableIndex::NFulltext::RowIdColumn)
-                        {
-                            uniqueIdx = &candidate;
-                            uniqueImplMeta = tableMeta->ImplTables[i];
-                            uniqueIdxName = candidate.Name;
-                            break;
-                        }
+            // Resolve the unique secondary index over __ydb_row_id used to map doc_id back to the
+            // main-table PK. Applies to both fulltext and JSON indexes in rowid mode (the
+            // GetUseRowIdAsDocId() check below is false for legacy indexes, so this is a no-op there).
+            auto* desc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&index->SpecializedIndexDescription);
+            if (desc && desc->GetUseRowIdAsDocId()) {
+                const TIndexDescription* uniqueIdx = nullptr;
+                TIntrusivePtr<TKikimrTableMetadata> uniqueImplMeta;
+                TString uniqueIdxName;
+                YQL_ENSURE(tableMeta->Indexes.size() == tableMeta->ImplTables.size());
+                for (size_t i = 0; i < tableMeta->Indexes.size(); ++i) {
+                    const auto& candidate = tableMeta->Indexes[i];
+                    if (candidate.Type == TIndexDescription::EType::GlobalSyncUnique
+                        && candidate.State == TIndexDescription::EIndexState::Ready
+                        && candidate.KeyColumns.size() == 1
+                        && candidate.KeyColumns[0] == NKikimr::NTableIndex::NFulltext::RowIdColumn)
+                    {
+                        uniqueIdx = &candidate;
+                        uniqueImplMeta = tableMeta->ImplTables[i];
+                        uniqueIdxName = candidate.Name;
+                        break;
                     }
-                    YQL_ENSURE(uniqueIdx, "fulltext index has UseRowIdAsDocId=true but no Ready unique index on " << NKikimr::NTableIndex::NFulltext::RowIdColumn << " was found");
-                    YQL_ENSURE(uniqueImplMeta);
+                }
+                YQL_ENSURE(uniqueIdx, "Index '" << indexName << "' has UseRowIdAsDocId=true but no Ready unique index on '"
+                    << NKikimr::NTableIndex::NFulltext::RowIdColumn << "' was found");
+                YQL_ENSURE(uniqueImplMeta);
 
-                    TVector<TString> uniquePathParts = {
-                        TString(settings.Table().Cast().Path()),
-                        uniqueIdxName,
-                        TString(NKikimr::NTableIndex::ImplTable),
-                    };
-                    TString uniqueImplPath = NKikimr::JoinPath(uniquePathParts);
-                    FillTablesMap(uniqueImplPath, tablesMap);
+                TVector<TString> uniquePathParts = {
+                    TString(settings.Table().Cast().Path()),
+                    uniqueIdxName,
+                    TString(NKikimr::NTableIndex::ImplTable),
+                };
+                TString uniqueImplPath = NKikimr::JoinPath(uniquePathParts);
+                FillTablesMap(uniqueImplPath, tablesMap);
 
-                    auto* uniqueProto = fullTextProto.MutableUniqueIndexImplTable();
-                    uniqueProto->MutableTable()->SetOwnerId(uniqueImplMeta->PathId.OwnerId());
-                    uniqueProto->MutableTable()->SetTableId(uniqueImplMeta->PathId.TableId());
-                    uniqueProto->MutableTable()->SetPath(uniqueImplPath);
-                    uniqueProto->MutableTable()->SetSysView(uniqueImplMeta->SysView);
-                    uniqueProto->MutableTable()->SetVersion(uniqueImplMeta->SchemaVersion);
+                auto* uniqueProto = fullTextProto.MutableUniqueIndexImplTable();
+                uniqueProto->MutableTable()->SetOwnerId(uniqueImplMeta->PathId.OwnerId());
+                uniqueProto->MutableTable()->SetTableId(uniqueImplMeta->PathId.TableId());
+                uniqueProto->MutableTable()->SetPath(uniqueImplPath);
+                uniqueProto->MutableTable()->SetSysView(uniqueImplMeta->SysView);
+                uniqueProto->MutableTable()->SetVersion(uniqueImplMeta->SchemaVersion);
 
-                    // Only KeyColumns are consumed by the runtime reader (see TUniqueIndexReader in
-                    // kqp_full_text_source.cpp); it never reads UniqueIndexImplTable.Columns. Filling
-                    // the full column list here would just bloat the protobuf with unused data.
-                    for (auto& keyColumn : uniqueImplMeta->KeyColumnNames) {
-                        auto* columnPtr = uniqueImplMeta->Columns.FindPtr(keyColumn);
-                        YQL_ENSURE(columnPtr);
-                        fillCol(columnPtr, uniqueProto->AddKeyColumns());
-                    }
+                // Only KeyColumns are consumed by the runtime reader (see TUniqueIndexReader in
+                // kqp_full_text_source.cpp); it never reads UniqueIndexImplTable.Columns. Filling
+                // the full column list here would just bloat the protobuf with unused data.
+                for (auto& keyColumn : uniqueImplMeta->KeyColumnNames) {
+                    auto* columnPtr = uniqueImplMeta->Columns.FindPtr(keyColumn);
+                    YQL_ENSURE(columnPtr);
+                    fillCol(columnPtr, uniqueProto->AddKeyColumns());
                 }
             }
 
@@ -1628,6 +1632,20 @@ private:
                     auto* protoToken = fullTextProto.MutableQuerySettings()->AddTokens();
                     protoToken->SetToken(std::move(path));
                     protoToken->SetParamName(std::move(paramName));
+                }
+            }
+
+            for (const auto& [colName, valuePtr] : settingsObj.PrefixColumns) {
+                auto* prefixProto = fullTextProto.MutableQuerySettings()->AddPrefixColumns();
+                auto* columnPtr = tableMeta->Columns.FindPtr(colName);
+                YQL_ENSURE(columnPtr, "Prefix column " << colName << " not found in table");
+                fillCol(columnPtr, prefixProto->MutableColumn());
+                auto value = TExprBase(valuePtr);
+                auto inner = value.Maybe<TCoJust>() ? value.Cast<TCoJust>().Input() : value;
+                if (inner.Maybe<TCoParameter>()) {
+                    prefixProto->MutableValue()->MutableParamValue()->SetParamName(inner.Cast<TCoParameter>().Name().StringValue());
+                } else {
+                    FillLiteralProto(inner.Cast<TCoDataCtor>(), *prefixProto->MutableValue()->MutableLiteralValue());
                 }
             }
 
@@ -2617,7 +2635,8 @@ private:
             bool hasFulltextRowIdMode = false;
             for (const auto& idx : tableMeta->Indexes) {
                 if (idx.Type != TIndexDescription::EType::GlobalFulltextPlain
-                    && idx.Type != TIndexDescription::EType::GlobalFulltextRelevance)
+                    && idx.Type != TIndexDescription::EType::GlobalFulltextRelevance
+                    && idx.Type != TIndexDescription::EType::GlobalJson)
                 {
                     continue;
                 }

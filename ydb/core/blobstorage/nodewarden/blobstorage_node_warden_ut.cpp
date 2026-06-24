@@ -479,7 +479,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         auto request = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tabletId, Max<ui32>(), Max<ui32>(), ui32(0),
                                                                      true, Max<ui32>(), Max<ui32>(),
                                                                      nullptr, nullptr, TInstant::Max(),
-                                                                     true, true);
+                                                                     true, TWriteSource::Unknown, true);
         request->IsMonitored = isMonitored;
         SendToBsProxy(runtime, sender, groupId, request.release());
         auto reply = runtime.GrabEdgeEventRethrow<TEvBlobStorage::TEvCollectGarbageResult>(sender);

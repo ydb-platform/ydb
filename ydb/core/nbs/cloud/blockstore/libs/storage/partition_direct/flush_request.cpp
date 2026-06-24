@@ -11,12 +11,18 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 TFlushRequestExecutor::TFlushRequestExecutor(
     NActors::TActorSystem* actorSystem,
+    const TLogTitle& logTitle,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
     THostRoute route,
     TFlushHint hint,
     NWilson::TSpan span)
     : ActorSystem(actorSystem)
+    , LogTitle(logTitle.GetChildWithTags(
+          GetCycleCount(),
+          {{"t", "Flush"},
+           {"src", PrintHostIndex(route.SourceHostIndex)},
+           {"dst", PrintHostIndex(route.DestinationHostIndex)}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , Span(std::move(span))
@@ -33,7 +39,8 @@ TFlushRequestExecutor::~TFlushRequestExecutor()
         LOG_ERROR(
             *ActorSystem,
             NKikimrServices::NBS_PARTITION,
-            "TFlushRequestExecutor. Reply not sent");
+            "%s Reply not sent",
+            LogTitle.GetWithTime().c_str());
 
         Y_ABORT_UNLESS(false);
     }
@@ -59,7 +66,9 @@ void TFlushRequestExecutor::Run()
 TString TFlushRequestExecutor::Print()
 {
     TStringBuilder result;
-    result << "TFlushRequestExecutor";
+    result << LogTitle.GetWithTime();
+    result << Hint.DebugPrint(true);
+    result << (Promise.IsReady() ? ",Replied" : ",NotReplied");
     return result;
 }
 
@@ -81,7 +90,8 @@ void TFlushRequestExecutor::OnFlushResponse(const TDBGFlushResponse& response)
             LOG_ERROR(
                 *ActorSystem,
                 NKikimrServices::NBS_PARTITION,
-                "TFlushRequestExecutor. Flush failed: %lu %s %s",
+                "%s Flush failed: %lu %s %s",
+                LogTitle.GetWithTime().c_str(),
                 Hint.Segments[i].Lsn,
                 Hint.Segments[i].Range.Print().c_str(),
                 FormatError(response.Errors[i]).c_str());

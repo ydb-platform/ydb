@@ -3,6 +3,7 @@
 #include "direct_block_group.h"
 #include "request_executor.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map/dirty_map.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 
@@ -26,6 +27,7 @@ public:
 
     TFlushRequestExecutor(
         NActors::TActorSystem* actorSystem,
+        const TLogTitle& logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
         THostRoute route,
@@ -46,6 +48,7 @@ private:
     void Reply(TVector<ui64> flushOk, TVector<ui64> flushFailed);
 
     NActors::TActorSystem const* ActorSystem;
+    const TChildLogTitle LogTitle;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
     const NWilson::TSpan Span;

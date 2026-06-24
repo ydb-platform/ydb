@@ -293,6 +293,10 @@ public:
         return TStatus::Ok;
     }
 
+    TStatus ValidateProviderMaterializeResult(const TExprNode::TPtr&, TExprContext&) {
+        return TStatus::Ok;
+    }
+
     TStatus ValidateProviderConfigureResult(const TExprNode::TPtr&, TExprContext&) {
         return TStatus::Ok;
     }

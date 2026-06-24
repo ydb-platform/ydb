@@ -323,7 +323,8 @@ namespace NKikimr {
             auto writeMsg = std::make_unique<NPDisk::TEvChunkWrite>(Keeper.State.PDiskParams->Owner,
                     Keeper.State.PDiskParams->OwnerRound, item.ChunkIdx, offset,
                     new NPDisk::TEvChunkWrite::TNonOwningParts(item.Parts.data(), numParts), Keeper.RegisterYardCallback(
-                    MakeCallback(std::move(callback))), true, NPriWrite::HullHugeUserData, true);
+                    MakeCallback(std::move(callback))), true, NPriWrite::HullHugeUserData, TWriteSource::IncrHugeWrite,
+                    true);
             ctx.Send(Keeper.State.Settings.PDiskActorId, writeMsg.release());
             ++CurrentChunkWritesInFlight;
 
@@ -572,7 +573,7 @@ namespace NKikimr {
                     Keeper.State.PDiskParams->OwnerRound, item.ChunkIdx, offset,
                     new NPDisk::TEvChunkWrite::TNonOwningParts(item.Parts.data(), numParts),
                     Keeper.RegisterYardCallback(MakeCallback(std::move(callback))), true, NPriWrite::HullHugeUserData,
-                    true));
+                    TWriteSource::IncrHugeIndexWrite, true));
 
             // clear current chunk state
             Keeper.State.CurrentChunk = 0;

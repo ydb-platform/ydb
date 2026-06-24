@@ -75,6 +75,7 @@ public:
         bool EnforceUserTokenRequirement : 1 = false;
         bool EnableTopicPartitionSplitBasedOnKllSketch : 1 = false;
         bool EnableTopicPartitionSplitBasedOnMessages : 1 = false;
+        bool EnableAccessServiceV2Interface : 1 = false;
     };
 
     void InitAll(const TInitParameters initParameters);
@@ -114,6 +115,10 @@ public:
                                    const IOutputStream::TPart& body, const TString& authorizationStr,
                                    const TString& contentType = "application/json",
                                    const TString& securityToken = "");
+
+    THttpResult SendHttpRequestXmlRaw(const TString& handler, const IOutputStream::TPart& body,
+                                      const TString& authorizationStr,
+                                      const TString& securityToken = "");
 
     THttpResult SendHttpRequestRawSpecified(const TString& handler, const TString& target,
                                    const TString& host, const TString& date, const TString& userAgent,
@@ -157,7 +162,26 @@ public:
         return json;
     }
 
+    NJson::TJsonMap CreateQueueXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto json = SendXmlRequest("CreateQueue", request, expectedHttpCode);
+        if (expectedHttpCode == 200) {
+            const TString url = GetByPath<TString>(json, "QueueUrl");
+            const TString queue = GetByPath<TString>(request, "QueueName");
+            if (SqsTopicMode) {
+                TStringBuf topic, consumer;
+                TStringBuf{queue}.RSplit('@', topic, consumer);
+                UNIT_ASSERT_C(url.contains(topic), LabeledOutput(url, queue, topic));
+                UNIT_ASSERT_C(url.contains(consumer), LabeledOutput(url, queue, consumer));
+            } else {
+                UNIT_ASSERT_C(url.EndsWith(queue), LabeledOutput(url, queue));
+            }
+        }
+        return json;
+    }
+
     NJson::TJsonMap SendJsonRequest(TString method, NJson::TJsonMap request, ui32 expectedHttpCode = 200);
+
+    NJson::TJsonMap SendXmlRequest(TString method, NJson::TJsonMap request, ui32 expectedHttpCode = 200);
 
     NJson::TJsonMap SendJsonRequestWithRetries(TString method, NJson::TJsonMap request, ui32 expectedHttpCode, ui32 retries = 10);
 
@@ -165,12 +189,28 @@ public:
         return SendJsonRequest("DeleteQueue", request, expectedHttpCode);
     }
 
+    NJson::TJsonMap DeleteQueueXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("DeleteQueue", request, expectedHttpCode);
+    }
+
     NJson::TJsonMap GetQueueAttributes(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("GetQueueAttributes", request, expectedHttpCode);
     }
 
+    NJson::TJsonMap GetQueueAttributesXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("GetQueueAttributes", request, expectedHttpCode);
+    }
+
     NJson::TJsonMap SendMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         auto json = SendJsonRequest("SendMessage", request, expectedHttpCode);
+        if (expectedHttpCode == 200) {
+            UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
+        }
+        return json;
+    }
+
+    NJson::TJsonMap SendMessageXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        auto json = SendXmlRequest("SendMessage", request, expectedHttpCode);
         if (expectedHttpCode == 200) {
             UNIT_ASSERT(!GetByPath<TString>(json, "MD5OfMessageBody").empty());
         }
@@ -185,44 +225,88 @@ public:
         return SendJsonRequest("SendMessageBatch", request, expectedHttpCode);
     }
 
+    NJson::TJsonMap SendMessageBatchXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("SendMessageBatch", request, expectedHttpCode);
+    }
+
     NJson::TJsonMap ReceiveMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("ReceiveMessage", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap ReceiveMessageXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("ReceiveMessage", request, expectedHttpCode);
     }
 
     NJson::TJsonMap DeleteMessage(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("DeleteMessage", request, expectedHttpCode);
     }
 
+    NJson::TJsonMap DeleteMessageXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("DeleteMessage", request, expectedHttpCode);
+    }
+
     NJson::TJsonMap DeleteMessageBatch(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("DeleteMessageBatch", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap DeleteMessageBatchXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("DeleteMessageBatch", request, expectedHttpCode);
     }
 
     NJson::TJsonMap GetQueueUrl(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("GetQueueUrl", request, expectedHttpCode);
     }
 
+    NJson::TJsonMap GetQueueUrlXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("GetQueueUrl", request, expectedHttpCode);
+    }
+
     NJson::TJsonMap ListQueues(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("ListQueues", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap ListQueuesXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("ListQueues", request, expectedHttpCode);
     }
 
     NJson::TJsonMap PurgeQueue(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("PurgeQueue", request, expectedHttpCode);
     }
 
+    NJson::TJsonMap PurgeQueueXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("PurgeQueue", request, expectedHttpCode);
+    }
+
     NJson::TJsonMap SetQueueAttributes(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("SetQueueAttributes", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap SetQueueAttributesXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("SetQueueAttributes", request, expectedHttpCode);
     }
 
     NJson::TJsonMap ListQueueTags(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("ListQueueTags", request, expectedHttpCode);
     }
 
+    NJson::TJsonMap ListQueueTagsXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("ListQueueTags", request, expectedHttpCode);
+    }
+
     NJson::TJsonMap TagQueue(NJson::TJsonMap request = {}, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("TagQueue", request, expectedHttpCode);
     }
 
+    NJson::TJsonMap TagQueueXml(NJson::TJsonMap request = {}, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("TagQueue", request, expectedHttpCode);
+    }
+
     NJson::TJsonMap UntagQueue(NJson::TJsonMap request = {}, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("UntagQueue", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap UntagQueueXml(NJson::TJsonMap request = {}, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("UntagQueue", request, expectedHttpCode);
     }
 
     void WaitQueueAttributes(TString queueUrl, size_t retries, NJson::TJsonMap attributes);
@@ -233,8 +317,16 @@ public:
         return SendJsonRequest("ChangeMessageVisibility", request, expectedHttpCode);
     }
 
+    NJson::TJsonMap ChangeMessageVisibilityXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("ChangeMessageVisibility", request, expectedHttpCode);
+    }
+
     NJson::TJsonMap ChangeMessageVisibilityBatch(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
         return SendJsonRequest("ChangeMessageVisibilityBatch", request, expectedHttpCode);
+    }
+
+    NJson::TJsonMap ChangeMessageVisibilityBatchXml(NJson::TJsonMap request, ui32 expectedHttpCode = 200) {
+        return SendXmlRequest("ChangeMessageVisibilityBatch", request, expectedHttpCode);
     }
 
 private:
@@ -242,9 +334,9 @@ private:
 
     void InitKikimr(const TInitParameters& initParameters);
 
-    void InitAccessServiceService();
+    void InitAccessServiceService(bool enableAccessServiceV2Interface);
 
-    void InitHttpServer(bool yandexCloudMode, bool enableSqsTopic);
+    void InitHttpServer(bool yandexCloudMode, bool enableSqsTopic, bool enableAccessServiceV2Interface);
 
 public:
     std::shared_ptr<NKikimr::NHttpProxy::IAuthFactory> AuthFactory;
@@ -252,6 +344,7 @@ public:
     TPortManager PortManager;
     TTestActorRuntime* ActorRuntime = nullptr;
     TAccessServiceMock AccessServiceMock;
+    TAccessServiceMockV2 AccessServiceMockV2;
     TString AccessServiceEndpoint;
     std::unique_ptr<grpc::Server> AccessServiceServer;
     std::unique_ptr<grpc::Server> IamTokenServer;
@@ -313,6 +406,15 @@ public:
     void SetUp(NUnitTest::TTestContext&) override {
         InitAll(TInitParameters{
             .EnableTopicPartitionSplitBasedOnKllSketch = true,
+        });
+    }
+};
+
+class THttpProxyTestMockForAccessServiceV2 : public THttpProxyTestMock {
+public:
+    void SetUp(NUnitTest::TTestContext&) override {
+        InitAll(TInitParameters{
+            .EnableAccessServiceV2Interface = true,
         });
     }
 };

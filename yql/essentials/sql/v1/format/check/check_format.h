@@ -15,7 +15,7 @@ enum class EConvergenceRequirement: ui8 {
 TMaybe<TString> CheckedFormat(
     const TString& query,
     TMaybe<const NYql::TAstNode*> ast,
-    const NSQLTranslation::TTranslationSettings& settings,
+    NSQLTranslation::TTranslationSettings settings,
     NYql::TIssues& issues,
     EConvergenceRequirement convergence = EConvergenceRequirement::Double);
 

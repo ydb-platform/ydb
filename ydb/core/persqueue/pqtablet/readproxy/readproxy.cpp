@@ -21,7 +21,7 @@ namespace {
 
 bool HasBatchMessages(const NKikimrClient::TCmdReadResult& readResult) {
     return AnyOf(readResult.GetResult(), [](const auto& result) {
-        return result.GetMessageFormat() != NKikimrClient::STANDARD;
+        return result.GetIsBatch();
     });
 }
 

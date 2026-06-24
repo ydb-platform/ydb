@@ -517,14 +517,14 @@ ISubOperation::TPtr CreateDropColumnTable(TOperationId id, TTxState::ETxState st
 ISubOperation::TPtr CreateReadOnlyCopyColumnTable(TOperationId id, const TTxTransaction& tx);
 ISubOperation::TPtr CreateReadOnlyCopyColumnTable(TOperationId id, TTxState::ETxState state);
 
-ISubOperation::TPtr CreateNewLocalIndex(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateNewLocalIndex(TOperationId id, TTxState::ETxState state);
-ISubOperation::TPtr CreateDropLocalIndex(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateDropLocalIndex(TOperationId id, TTxState::ETxState state);
-ISubOperation::TPtr CreateAlterLocalIndex(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateAlterLocalIndex(TOperationId id, TTxState::ETxState state);
-ISubOperation::TPtr CreateMoveLocalIndex(TOperationId id, const TTxTransaction& tx);
-ISubOperation::TPtr CreateMoveLocalIndex(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateNewColumnTableLocalIndex(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateNewColumnTableLocalIndex(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateDropColumnTableLocalIndex(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateDropColumnTableLocalIndex(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateAlterColumnTableLocalIndex(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateAlterColumnTableLocalIndex(TOperationId id, TTxState::ETxState state);
+ISubOperation::TPtr CreateMoveColumnTableLocalIndex(TOperationId id, const TTxTransaction& tx);
+ISubOperation::TPtr CreateMoveColumnTableLocalIndex(TOperationId id, TTxState::ETxState state);
 
 TVector<ISubOperation::TPtr> CreateColumnTableWithLocalIndexes(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);
 TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextId, const TTxTransaction& tx, TOperationContext& context);

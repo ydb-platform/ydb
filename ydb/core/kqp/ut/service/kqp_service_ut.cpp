@@ -317,7 +317,6 @@ Y_UNIT_TEST_SUITE(KqpService) {
                 << ", aborted=" << abortedComputeActors.size() << ")");
     }
 
->>>>>>> 28ea4689dcc (fixes for quick remote cancel in the query service (#44340))
     TVector<TAsyncDataQueryResult> simulateSessionBusy(ui32 count, TSession& session) {
         TVector<TAsyncDataQueryResult> futures;
         for (ui32 i = 0; i < count; ++i) {

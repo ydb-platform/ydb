@@ -10,6 +10,9 @@ namespace NKikimr::NBlobDepot {
 
     class TBlobDepot::TS3Manager {
         TBlobDepot* const Self;
+        // WrapperId is always the per-node router service id managed by NodeWarden
+        // (acquired via TEvNodeWardenAcquireBlobDepotS3Router on Init, released on
+        // TerminateAllActors). All S3 traffic is forwarded through the router.
         TActorId WrapperId;
         TActorId UploaderId;
         TString BasePath;

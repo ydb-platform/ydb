@@ -153,15 +153,7 @@ Y_UNIT_TEST_SUITE(SetNotNullReboots) {
 
             const ui64 setConstraintTxId = ++t.TxId;
 
-<<<<<<< HEAD
-<<<<<<< HEAD
             AsyncSetColumnConstraint(
-=======
-            AsyncSetColumnConstraintWithoutResponse(
->>>>>>> c273a4d1e25 (fix issues)
-=======
-            AsyncSetColumnConstraint(
->>>>>>> 3494fc48cd1 (fix one more issue)
                 runtime, setConstraintTxId,
                 TTestTxConfig::SchemeShard,
                 root,

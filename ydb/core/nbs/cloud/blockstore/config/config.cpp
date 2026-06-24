@@ -213,6 +213,4 @@ TDuration TStorageConfig::GetEraseRequestTimeout() const
                : DefaultEraseRequestTimeout;
 }
 
-
-
 }   // namespace NYdb::NBS::NBlockStore

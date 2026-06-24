@@ -30,7 +30,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         env.TestWaitNotification(runtime, txId);
 
         ui64 setConstraintTxId = ++txId;
-        auto response = AsyncSetColumnConstraint(
+        auto response = TestSetColumnConstraint(
             runtime, setConstraintTxId,
             TTestTxConfig::SchemeShard,
             root,
@@ -96,7 +96,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         env.TestWaitNotification(runtime, txId);
 
         ui64 setConstraintTxId = ++txId;
-        auto response = AsyncSetColumnConstraint(
+        auto response = TestSetColumnConstraint(
             runtime, setConstraintTxId,
             TTestTxConfig::SchemeShard,
             root,
@@ -176,7 +176,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         }
 
         ui64 setConstraintTxId = ++txId;
-        auto response = AsyncSetColumnConstraint(
+        auto response = TestSetColumnConstraint(
             runtime, setConstraintTxId,
             TTestTxConfig::SchemeShard,
             root,
@@ -213,7 +213,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         ui64 txId = 100;
 
-        auto response = AsyncSetColumnConstraint(
+        auto response = TestSetColumnConstraint(
             runtime, ++txId,
             TTestTxConfig::SchemeShard,
             "/NonExistentDB",
@@ -242,7 +242,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         ui64 txId = 100;
 
-        auto response = AsyncSetColumnConstraint(
+        auto response = TestSetColumnConstraint(
             runtime, ++txId,
             TTestTxConfig::SchemeShard,
             "/MyRoot",
@@ -312,7 +312,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        auto response = AsyncSetColumnConstraint(
+        auto response = TestSetColumnConstraint(
             runtime, ++txId,
             TTestTxConfig::SchemeShard,
             "/MyRoot",
@@ -354,7 +354,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        auto response = AsyncSetColumnConstraint(
+        auto response = TestSetColumnConstraint(
             runtime, ++txId,
             TTestTxConfig::SchemeShard,
             "/MyRoot",
@@ -396,7 +396,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         )");
         env.TestWaitNotification(runtime, txId);
 
-        auto response = AsyncSetColumnConstraint(
+        auto response = TestSetColumnConstraint(
             runtime, ++txId,
             TTestTxConfig::SchemeShard,
             "/MyRoot",
@@ -449,7 +449,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             {"value"});
         env.TestWaitNotification(runtime, txId);
 
-        auto response = AsyncSetColumnConstraint(
+        auto response = TestSetColumnConstraint(
             runtime, ++txId,
             TTestTxConfig::SchemeShard,
             root,
@@ -505,7 +505,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         }
 
         ui64 setConstraintTxId = ++txId;
-        auto response = AsyncSetColumnConstraint(
+        auto response = TestSetColumnConstraint(
             runtime, setConstraintTxId,
             TTestTxConfig::SchemeShard,
             root,
@@ -565,7 +565,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         });
 
         ui64 setConstraintTxId = ++txId;
-        auto response = AsyncSetColumnConstraint(
+        auto response = TestSetColumnConstraint(
             runtime, setConstraintTxId,
             TTestTxConfig::SchemeShard,
             root,
@@ -648,7 +648,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         }
 
         ui64 setConstraintTxId = ++txId;
-        auto response = AsyncSetColumnConstraint(
+        auto response = TestSetColumnConstraint(
             runtime, setConstraintTxId,
             TTestTxConfig::SchemeShard,
             root,
@@ -708,7 +708,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         env.TestWaitNotification(runtime, txId);
 
         ui64 setConstraintTxId = ++txId;
-        auto firstResponse = AsyncSetColumnConstraint(
+        auto firstResponse = TestSetColumnConstraint(
             runtime, setConstraintTxId,
             TTestTxConfig::SchemeShard,
             root,
@@ -722,7 +722,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             Ydb::StatusIds::SUCCESS,
             firstResponse.ShortDebugString());
 
-        auto secondResponse = AsyncSetColumnConstraint(
+        auto secondResponse = TestSetColumnConstraint(
             runtime, setConstraintTxId,
             TTestTxConfig::SchemeShard,
             root,
@@ -789,7 +789,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         }
 
         ui64 setConstraintTxId = ++txId;
-        auto response = AsyncSetColumnConstraint(
+        auto response = TestSetColumnConstraint(
             runtime, setConstraintTxId,
             TTestTxConfig::SchemeShard,
             root,
@@ -842,7 +842,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         });
 
         ui64 setConstraintTxId = ++txId;
-        auto response = AsyncSetColumnConstraint(
+        auto response = TestSetColumnConstraint(
             runtime, setConstraintTxId,
             TTestTxConfig::SchemeShard,
             root,

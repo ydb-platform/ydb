@@ -67,12 +67,11 @@ using TNodeWardenConfigPreprocessor = std::function<void(ui32, TNodeWardenConfig
 
 using namespace NActors;
 
-void RegisterSharedControl(TControlBoard& icb, const TString& name, TAtomicBase defaultValue,
+void RegisterSharedControl(THotSwap<TControl>& icbControl, TAtomicBase defaultValue,
         TAtomicBase lowerBound, TAtomicBase upperBound, TAtomicBase currentValue) {
     TControlWrapper control(defaultValue, lowerBound, upperBound);
-    icb.RegisterSharedControl(control, name);
-    TAtomic previousValue = 0;
-    icb.SetValue(name, currentValue, previousValue);
+    TControlBoard::RegisterSharedControl(control, icbControl);
+    TControlBoard::SetValue(currentValue, icbControl);
 }
 
 void FormatPDiskRandomKeys(TString path, ui32 diskSize, ui32 chunkSize, ui64 guid, bool isGuidValid,
@@ -501,9 +500,9 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
         auto appPreprocessor = [&](TAppPrepare& app) {
             app.InitIcb(runtime.GetNodeCount());
             for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
-                RegisterSharedControl(*app.Icb[nodeIndex], "VDiskControls.SyncLogMaxDiskAmount",
+                RegisterSharedControl(app.Icb[nodeIndex]->VDiskControls.SyncLogMaxDiskAmount,
                     0, 0, 1ull << 40, expectedSyncLogMaxDiskAmount);
-                RegisterSharedControl(*app.Icb[nodeIndex], "VDiskControls.SyncLogMaxMemAmount",
+                RegisterSharedControl(app.Icb[nodeIndex]->VDiskControls.SyncLogMaxMemAmount,
                     64ull << 20, 0, 1ull << 30, expectedSyncLogMaxMemAmount);
             }
         };

@@ -617,14 +617,15 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         /*
         * This test intentionally goes through a real VDisk and a real PDisk instead of sending
         * synthetic TEvSyncLogPut events directly to SyncLog. The point is to verify that the configured
-        * SyncLog memory and disk limits are honored on the production VDisk path.
+        * SyncLog memory and disk limits are honored on the production VDisk path. The group must use a
+        * real replicated erasure species because SyncLog ignores ordinary put records for ErasureNone.
         *
-        * VMultiPut with one-byte payloads is used to generate many ordinary SyncLog records without
-        * depending on large blob payloads. The observer tracks real PDisk log commits and requires a
-        * SyncLog commit with deleted chunks, so the final footprint check cannot pass without exercising
-        * disk pressure. The final settling loop accounts for SyncLog's async cleanup: after disk overflow
-        * has removed old chunks, the memory snapshot can still contain the tail of the last batch until
-        * the next SyncLog action.
+        * VCollectGarbage with a large DoNotKeep list is used as a compact way to generate many ordinary
+        * SyncLog records without depending on large blob payloads. The observer tracks real PDisk log
+        * commits and requires a SyncLog commit with deleted chunks, so the final footprint check cannot
+        * pass without exercising disk pressure. The final settling loop accounts for SyncLog's async
+        * cleanup: after disk overflow has removed old chunks, the memory snapshot can still contain the
+        * tail of the last batch until the next SyncLog action.
         */
         TTestActorRuntime runtime(1, false);
         TRealPDiskTestConfig testConfig;
@@ -640,7 +641,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         testConfig.RecoveryLogCutterRegularDuration = TDuration::Hours(1);
         testConfig.PDiskPathSuffix = "synclog_real_limits.dat";
 
-        auto storage = SetupRealPDiskAndRealVDisk(runtime, TBlobStorageGroupType::ErasureNone, testConfig);
+        auto storage = SetupRealPDiskAndRealVDisk(runtime, TBlobStorageGroupType::ErasureMirror3of4, testConfig);
         const auto& info = storage.Info;
         const TActorId edge = storage.Edge;
         const TActorId putQueue = storage.PutQueue;
@@ -768,7 +769,7 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         const TString data = MakeData(1);
 
         auto writeTargetRecords = [&](ui64 tabletId, ui32 records, const TString& phase) {
-            const ui32 batchSize = 4'096;
+            const ui32 batchSize = 64;
             for (ui32 firstRecord = 0; firstRecord < records; firstRecord += batchSize) {
                 const ui32 batch = Min(batchSize, records - firstRecord);
                 auto multiPut = std::make_unique<TEvBlobStorage::TEvVMultiPut>(vdiskId, TInstant::Max(),
@@ -820,6 +821,36 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         }, 200, TDuration::MilliSeconds(10)),
             "failed to discover SyncLog actor, SyncLogKeeper actor, PDisk owner, or data LSN");
 
+        ui32 nextCollectCounter = 1;
+        auto collectDoNotKeep = [&](ui64 tabletId, ui32 records, const TString& phase) {
+            const ui32 batchSize = 2048;
+            for (ui32 firstRecord = 0; firstRecord < records; firstRecord += batchSize) {
+                const ui32 batch = Min(batchSize, records - firstRecord);
+                UNIT_ASSERT_C(batch, "empty collect batch during " << phase);
+                TVector<TLogoBlobID> doNotKeep;
+                doNotKeep.reserve(batch);
+                for (ui32 i = 0; i < batch; ++i) {
+                    doNotKeep.emplace_back(tabletId, 1, nextStep++, 0, 1, nextCookie++);
+                }
+
+                auto collect = std::make_unique<TEvBlobStorage::TEvVCollectGarbage>(tabletId, 1,
+                    nextCollectCounter++, 0, false, 0, 0, false, nullptr, &doNotKeep, vdiskId,
+                    TInstant::Max());
+                runtime.Send(new IEventHandle(putQueue, edge, collect.release()), NodeIndex);
+                auto collectResult = runtime.GrabEdgeEvent<TEvBlobStorage::TEvVCollectGarbageResult>(edge,
+                    TDuration::Seconds(120));
+                UNIT_ASSERT_C(collectResult,
+                    "timed out waiting for TEvVCollectGarbageResult during " << phase);
+                UNIT_ASSERT_C(collectResult->Get()->Record.GetStatus() == NKikimrProto::OK,
+                    "TEvVCollectGarbage failed during " << phase
+                    << " firstRecord# " << firstRecord
+                    << " status# "
+                    << NKikimrProto::EReplyStatus_Name(collectResult->Get()->Record.GetStatus())
+                    << " lastPDiskError# " << lastPDiskErrorReason);
+                dispatchFor(TDuration::MilliSeconds(1));
+            }
+        };
+
         auto waitForSyncLogCommit = [&](ui32 previousDataCommits, const TString& phase) {
             UNIT_ASSERT_C(pumpUntil([&] {
                 return syncLogDataCommits > previousDataCommits &&
@@ -839,10 +870,10 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             dispatchFor(TDuration::MilliSeconds(1));
         };
 
-        for (ui32 pressureIterations = 0; syncLogDeleteCommits < 1 && pressureIterations < 8;
+        for (ui32 pressureIterations = 0; syncLogDeleteCommits < 1 && pressureIterations < 96;
                 ++pressureIterations) {
             const ui32 previousDataCommits = syncLogDataCommits;
-            writeTargetRecords(43, 50'000, "sync-log pressure");
+            collectDoNotKeep(43, 2048, "sync-log pressure");
             requestSyncLogCut();
             waitForSyncLogCommit(previousDataCommits, "sync-log pressure");
         }
@@ -882,11 +913,11 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
             footprintWithinLimits = memWithinLimits && diskWithinLimits;
             if (!footprintWithinLimits) {
                 if (diskWithinLimits && !memWithinLimits) {
-                    writeTargetRecords(44, 1, "sync-log memory settling");
+                    collectDoNotKeep(44, 1, "sync-log memory settling");
                     dispatchFor(TDuration::MilliSeconds(10));
                 } else {
                     const ui32 previousDataCommits = syncLogDataCommits;
-                    writeTargetRecords(44, 8'192, "sync-log limit settling");
+                    collectDoNotKeep(44, 512, "sync-log limit settling");
                     requestSyncLogCut();
                     waitForSyncLogCommit(previousDataCommits, "sync-log limit settling");
                 }

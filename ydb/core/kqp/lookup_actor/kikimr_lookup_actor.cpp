@@ -224,9 +224,7 @@ namespace NYql::NDq {
             Count = component->GetCounter("Reqs", true);
             Fullscans = component->GetCounter("Fullscans", true);
             Keys = component->GetCounter("Keys", true);
-            ResultChunks = component->GetCounter("Chunks", true);
             ResultRows = component->GetCounter("Rows", true);
-            ResultBytes = component->GetCounter("Bytes", true);
             AnswerTime = component->GetCounter("AnswerUs", true);
             CpuTime = component->GetCounter("CpuUs", true);
             InFlight = component->GetCounter("InFlight");
@@ -402,7 +400,6 @@ namespace NYql::NDq {
             auto selfId = SelfId();
             auto result = NRpcService::DoLocalRpc<TRpcRequest>(FillSelect(state), AppData()->TenantName, /*token=*/Nothing(), actorSystem);
             result.Subscribe([actorSystem, selfId, state = std::move(state)](const NThreading::TFuture<TResponse>& future) mutable {
-                //LOG_T_AS(*actorSystem, "Response: " << future.GetValueSync().DebugString());
                 actorSystem->Send(selfId, new TEvYdbExecuteDataQueryResponse(future, std::move(state)));
             });
             auto cputime = GetCpuTimeDelta(startCycleCount).MicroSeconds();
@@ -419,14 +416,6 @@ namespace NYql::NDq {
                     break;
 
                 case Ydb::StatusIds::SESSION_EXPIRED:
-#if 0 // is it needed?
-                    if (!state->SessionId.empty()) {
-                        SendDeleteSession(state->SessionId);
-                        state->SessionId.clear();
-                    }
-                    [[fallthrough]];
-#endif
-
                 case Ydb::StatusIds::BAD_SESSION:
                     if (Sessions && !state->SessionId.empty()) {
                         Sessions->Dec();
@@ -451,7 +440,6 @@ namespace NYql::NDq {
             auto selfId = SelfId();
             auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), /*database=*/AppData()->TenantName, /*token=*/Nothing(), actorSystem);
             result.Subscribe([actorSystem, selfId, state] (const NThreading::TFuture<TResponse>& future) mutable {
-                //LOG_T_AS(*actorSystem, "Response: " << future.GetValueSync().DebugString());
                 actorSystem->Send(selfId, new TEvYdbCreateSessionResponse(future, std::move(state)));
             });
         }
@@ -796,8 +784,6 @@ namespace NYql::NDq {
         ::NMonitoring::TDynamicCounters::TCounterPtr Fullscans;
         ::NMonitoring::TDynamicCounters::TCounterPtr Keys;
         ::NMonitoring::TDynamicCounters::TCounterPtr ResultRows;
-        ::NMonitoring::TDynamicCounters::TCounterPtr ResultBytes;
-        ::NMonitoring::TDynamicCounters::TCounterPtr ResultChunks;
         ::NMonitoring::TDynamicCounters::TCounterPtr AnswerTime;
         ::NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlight;

@@ -2,6 +2,8 @@
 
 <!-- markdownlint-disable blanks-around-fences -->
 
+Аутентификация с токеном доступа передаёт заранее полученный IAM-токен в каждый запрос к {{ ydb-short-name }}. Этот способ подходит, когда токен уже есть в приложении — например, получен через OAuth или утилиту `yc`. Типичные шаги: получить токен, создать провайдер аутентификации, открыть транспорт и выполнить запрос. Подробности о режимах аутентификации — в разделе [Аутентификация](../../reference/ydb-sdk/auth.md); базовое подключение — в рецепте [инициализации драйвера](./init.md). Альтернативы: [анонимная](./auth-anonymous.md), [через переменные окружения](./auth-env.md), [метаданные](./auth-metadata.md), [сервисный аккаунт](./auth-service-account.md), [логин и пароль](./auth-static.md).
+
 Ниже приведены примеры кода аутентификации при помощи токена в разных {{ ydb-short-name }} SDK.
 
 {% list tabs %}
@@ -146,15 +148,42 @@
   - Native SDK
 
     ```java
-    public void work(String accessToken) {
-        AuthProvider authProvider = new TokenAuthProvider(accessToken);
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.auth.TokenAuthProvider;
+    import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
 
-        try (GrpcTransport transport = GrpcTransport.forConnectionString("grpcs://localhost:2135/local")
-                .withAuthProvider(authProvider)
-                .build();
-             QueryClient queryClient = QueryClient.newClient(transport).build()) {
+    public class AccessTokenExample {
+        public static void main(String[] args) throws Exception {
+            // Строка подключения из переменной окружения или локальный {{ ydb-short-name }} по умолчанию
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
 
-            doWork(queryClient);
+            // IAM-токен из переменной окружения YDB_ACCESS_TOKEN_CREDENTIALS
+            String token = System.getenv("YDB_ACCESS_TOKEN_CREDENTIALS");
+            if (token == null || token.isEmpty()) {
+                throw new IllegalStateException("Задайте переменную окружения YDB_ACCESS_TOKEN_CREDENTIALS");
+            }
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                    .withAuthProvider(new TokenAuthProvider(token))
+                    .build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+                QueryReader reader = retryCtx.supplyResult(
+                        session -> QueryReader.readFrom(session.createQuery("SELECT 1", TxMode.NONE))
+                ).join().getValue();
+
+                // Проверка подключения: выводим результат SELECT 1
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getColumn(0).getInt32());
+                }
+            }
         }
     }
     ```
@@ -162,19 +191,45 @@
   - JDBC
 
     ```java
-    public void work() throws SQLException {
-        // Подключение с указанием значения токена аутентификации
-        Properties props1 = new Properties();
-        props1.setProperty("token", "AQAD-XXXXXXXXXXXXXXXXXXXX");
-        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props1)) {
-            doWork(connection);
-        }
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.Properties;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
 
-        // Подключение с чтением токена аутентификации из указанного файла
-        Properties props2 = new Properties();
-        props2.setProperty("tokenFile", "~/.ydb_token");
-        try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local", props2)) {
-            doWork(connection);
+    public class AccessTokenJdbcExample {
+        public static void main(String[] args) throws SQLException {
+            String jdbcUrl = System.getenv().getOrDefault(
+                    "YDB_JDBC_URL", "jdbc:ydb:grpc://localhost:2136/local");
+
+            // Вариант 1: токен задаётся свойством token
+            Properties propsWithToken = new Properties();
+            String token = System.getenv("YDB_ACCESS_TOKEN_CREDENTIALS");
+            if (token == null || token.isEmpty()) {
+                throw new IllegalStateException("Задайте переменную окружения YDB_ACCESS_TOKEN_CREDENTIALS");
+            }
+            propsWithToken.setProperty("token", token);
+
+            try (Connection connection = DriverManager.getConnection(jdbcUrl, propsWithToken);
+                 Statement statement = connection.createStatement();
+                 ResultSet rs = statement.executeQuery("SELECT 1")) {
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getInt(1));
+                }
+            }
+
+            // Вариант 2: токен читается из файла — свойство tokenFile
+            Properties propsWithTokenFile = new Properties();
+            propsWithTokenFile.setProperty("tokenFile", System.getenv().getOrDefault("YDB_TOKEN_FILE", "~/.ydb_token"));
+
+            try (Connection connection = DriverManager.getConnection(jdbcUrl, propsWithTokenFile);
+                 Statement statement = connection.createStatement();
+                 ResultSet rs = statement.executeQuery("SELECT 1")) {
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getInt(1));
+                }
+            }
         }
     }
     ```

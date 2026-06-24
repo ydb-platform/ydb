@@ -142,19 +142,67 @@
   - Native SDK
 
     ```java
+    import tech.ydb.common.transaction.TxMode;
     import tech.ydb.core.grpc.BalancingSettings;
     import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-    try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
-            .withBalancingSettings(BalancingSettings.fromLocation("a")) // предпочитаемая зона доступности
-            .build()) {
-        // ...
+    public class PreferLocationExample {
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+            // Имя предпочитаемой зоны доступности (например, VLA, SAS, MYT)
+            String zone = System.getenv().getOrDefault("YDB_PREFER_LOCATION", "VLA");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                    .withBalancingSettings(BalancingSettings.fromLocation(zone))
+                    .build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.NONE, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
+        }
     }
     ```
 
   - JDBC
 
-    Уточните поддерживаемые параметры зоны доступности в [свойствах JDBC-драйвера](../../reference/languages-and-apis/jdbc-driver/properties.md) или задайте балансировку через нативный API при встраивании драйвера.
+    Аналог `BalancingSettings.fromLocation()` — свойство `localDatacenter` в JDBC URL (см. [свойства JDBC-драйвера](../../reference/languages-and-apis/jdbc-driver/properties.md)).
+
+    ```java
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+
+    public class JdbcPreferLocationExample {
+        public static void main(String[] args) throws SQLException {
+            try (Connection connection = DriverManager.getConnection(
+                         "jdbc:ydb:grpc://localhost:2136/local?localDatacenter=VLA");
+                 Statement statement = connection.createStatement();
+                 ResultSet rs = statement.executeQuery("SELECT 1 AS value")) {
+
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getInt("value"));
+                }
+            }
+        }
+    }
+    ```
 
     В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC передайте те же JDBC URL и параметры зоны доступности, что и при прямом подключении (например, в `spring.datasource.url` или свойствах пула).
 

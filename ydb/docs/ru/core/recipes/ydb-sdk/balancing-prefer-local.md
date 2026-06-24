@@ -206,19 +206,66 @@
   - Native SDK
 
     ```java
+    import tech.ydb.common.transaction.TxMode;
     import tech.ydb.core.grpc.BalancingSettings;
     import tech.ydb.core.grpc.GrpcTransport;
+    import tech.ydb.query.QueryClient;
+    import tech.ydb.query.result.ResultSetReader;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-    try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
-            .withBalancingSettings(BalancingSettings.detectLocalDs())
-            .build()) {
-        // ...
+    public class PreferLocalExample {
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString)
+                    // Автоопределение ближайшего дата-центра по задержке до нод
+                    .withBalancingSettings(BalancingSettings.detectLocalDs())
+                    .build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1 AS value", TxMode.NONE, Params.empty())
+                )).join().getValue();
+
+                ResultSetReader rs = reader.getResultSet(0);
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getColumn("value").getInt32());
+                }
+            }
+        }
     }
     ```
 
   - JDBC
 
-    См. [свойства JDBC-драйвера](../../reference/languages-and-apis/jdbc-driver/properties.md); при необходимости задайте политику балансировки через нативный транспорт.
+    Укажите локальный дата-центр через `localDatacenter` в JDBC URL — см. [свойства JDBC-драйвера](../../reference/languages-and-apis/jdbc-driver/properties.md).
+
+    ```java
+    import java.sql.Connection;
+    import java.sql.DriverManager;
+    import java.sql.ResultSet;
+    import java.sql.SQLException;
+    import java.sql.Statement;
+
+    public class JdbcPreferLocalExample {
+        public static void main(String[] args) throws SQLException {
+            try (Connection connection = DriverManager.getConnection(
+                         "jdbc:ydb:grpc://localhost:2136/local?localDatacenter=VLA");
+                 Statement statement = connection.createStatement();
+                 ResultSet rs = statement.executeQuery("SELECT 1 AS value")) {
+
+                if (rs.next()) {
+                    System.out.println("SELECT 1 = " + rs.getInt("value"));
+                }
+            }
+        }
+    }
+    ```
 
     В Spring Boot, ORM и прочих сторонних фреймворках вокруг JDBC укажите ту же JDBC-строку подключения и параметры балансировки, что и при прямом использовании драйвера (например, `spring.datasource.url` или свойства `DataSource`).
 

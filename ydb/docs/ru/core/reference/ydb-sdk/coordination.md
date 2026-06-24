@@ -43,36 +43,46 @@
 
 - Java
 
-  ```java
-  CoordinationClient client = CoordinationClient.newClient(transport);
-  ```
+  Для работы с узлами координации подключите артефакт Maven `ydb-sdk-coordination` (модуль `tech.ydb.coordination.*`). Узлы координации нужны, когда несколько экземпляров приложения должны согласовывать доступ к ресурсам — подробнее в разделе [Узел координации](../../concepts/datamodel/coordination-node.md).
 
-  Узел создаётся вызовом `createNode` с полным путём к узлу в базе. Префикс пути к базе можно взять из `client.getDatabase()`.
-
-  При необходимости задайте конфигурацию узла через [NodeConfig](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/NodeConfig.java), используя цепочку `NodeConfig.create().with…`. Доступные параметры: периоды `SelfCheckPeriod` и `SessionGracePeriod`, режимы согласованности чтения и подключения сессии (`readConsistencyMode`, `attachConsistencyMode`), режим счётчиков ограничителя скорости (`rateLimiterCountersMode`). Значения по умолчанию совпадают с описанием для C++ (см. выше). Готовый `NodeConfig` передаётся в `CoordinationNodeSettings`.
+  Ниже — полный пример: подключение через `GrpcTransport`, создание узла и проверка через `describeNode`.
 
   ```java
-  import java.time.Duration;
-
   import tech.ydb.coordination.CoordinationClient;
   import tech.ydb.coordination.description.NodeConfig;
-  import tech.ydb.coordination.settings.CoordinationNodeSettings;
+  import tech.ydb.core.grpc.GrpcTransport;
 
-  String nodePath = client.getDatabase() + "/path/to/mynode";
+  public class CreateCoordinationNodeExample {
 
-  NodeConfig config = NodeConfig.create()
-      .withDurationsConfig(Duration.ofSeconds(1), Duration.ofSeconds(10))
-      .withReadConsistencyMode(NodeConfig.ConsistencyMode.RELAXED)
-      .withAttachConsistencyMode(NodeConfig.ConsistencyMode.STRICT);
+      private static final String NODE_PATH_SUFFIX = "/path/to/mynode";
 
-  CoordinationNodeSettings settings = CoordinationNodeSettings.newBuilder()
-      .withNodeConfig(config)
-      .build();
+      public static void main(String[] args) {
+          // Строка подключения из переменной окружения или локальный YDB по умолчанию
+          String connectionString = System.getenv().getOrDefault(
+                  "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
 
-  client.createNode(nodePath, settings).join().expectSuccess("create node failed");
+          try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+               CoordinationClient client = CoordinationClient.newClient(transport).build()) {
+
+              // Полный путь к узлу = путь базы + имя узла в пространстве имён
+              String nodePath = client.getDatabase() + NODE_PATH_SUFFIX;
+
+              // Создаём узел координации с настройками по умолчанию
+              client.createNode(nodePath).join().expectSuccess("не удалось создать узел");
+
+              // Проверяем, что узел создан: читаем его конфигурацию
+              NodeConfig config = client.describeNode(nodePath).join().getValue();
+              System.out.println("Узел создан: " + nodePath);
+              System.out.println("SelfCheckPeriod: " + config.getSelfCheckPeriod());
+              System.out.println("SessionGracePeriod: " + config.getSessionGracePeriod());
+          }
+      }
+  }
   ```
 
-  Дополнительно доступны `alterNode` (изменение конфигурации), `dropNode` (удаление узла) и `describeNode` (чтение текущей конфигурации).
+  При необходимости задайте конфигурацию узла через [NodeConfig](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/description/NodeConfig.java), используя цепочку `NodeConfig.create().with…`. Доступные параметры: периоды `SelfCheckPeriod` и `SessionGracePeriod`, режимы согласованности чтения и подключения сессии (`readConsistencyMode`, `attachConsistencyMode`), режим счётчиков ограничителя скорости (`rateLimiterCountersMode`). Значения по умолчанию совпадают с описанием для C++ (см. выше). Готовый `NodeConfig` передаётся в `CoordinationNodeSettings` и в `createNode(nodePath, settings)`.
+
+  Дополнительно доступны `alterNode` (изменение конфигурации) и `dropNode` (удаление узла).
 
 - Python
 
@@ -173,21 +183,46 @@
 
 - Java
 
-  Сессия (см. [CoordinationSession](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/CoordinationSession.java)) создаётся через `createSession`; для установления двунаправленного gRPC-потока с узлом нужно вызвать `connect()` (асинхронно, возвращает `CompletableFuture<Status>`). Параметры повторных попыток и таймаут подключения задаются в [CoordinationSessionSettings](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/CoordinationSessionSettings.java) (`withConnectTimeout`, `withRetryPolicy`, `withExecutor`).
+  Перед работой с [семафорами](../../concepts/datamodel/coordination-node.md#semaphore) клиент открывает сессию (см. [CoordinationSession](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/CoordinationSession.java)): вызов `createSession` создаёт объект сессии, а `connect()` устанавливает двунаправленный gRPC-поток с узлом. Параметры повторных попыток и таймаут подключения задаются в [CoordinationSessionSettings](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/CoordinationSessionSettings.java) (`withConnectTimeout`, `withRetryPolicy`, `withExecutor`).
+
+  Типичный сценарий: после успешного `connect()` выполняете операции с семафорами, затем закрываете сессию через `close()` (удобно — try-with-resources). Пока сессия активна, SDK при сбоях сети сам повторяет подключение согласно настройкам.
 
   ```java
+  import tech.ydb.coordination.CoordinationClient;
   import tech.ydb.coordination.CoordinationSession;
   import tech.ydb.coordination.settings.CoordinationSessionSettings;
+  import tech.ydb.core.grpc.GrpcTransport;
 
-  CoordinationSession session = client.createSession(
-      "/path/to/mynode",
-      CoordinationSessionSettings.newBuilder().build()
-  );
+  public class CoordinationSessionExample {
 
-  session.connect().join().expectSuccess("connect failed");
+      private static final String NODE_PATH_SUFFIX = "/path/to/mynode";
+
+      public static void main(String[] args) {
+          String connectionString = System.getenv().getOrDefault(
+                  "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+          try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+               CoordinationClient client = CoordinationClient.newClient(transport).build()) {
+
+              String nodePath = client.getDatabase() + NODE_PATH_SUFFIX;
+              client.createNode(nodePath).join().expectSuccess("не удалось создать узел");
+
+              // try-with-resources гарантирует вызов close() и остановку потока с узлом
+              try (CoordinationSession session = client.createSession(
+                      nodePath,
+                      CoordinationSessionSettings.newBuilder().build())) {
+
+                  // Устанавливаем соединение с узлом координации
+                  session.connect().join().expectSuccess("не удалось подключить сессию");
+                  System.out.println("Сессия подключена, id=" + session.getId());
+
+                  // ... операции с семафорами (см. раздел «Работа с семафорами») ...
+
+              } // session.close() — явное завершение сессии
+          }
+      }
+  }
   ```
-
-  Обычный сценарий: после успешного `connect()` выполняете операции с семафорами под свою задачу (блокировка, лидерство и т.д.), затем закрываете сессию. Удобно использовать try-with-resources, чтобы по завершении работы вызвать `close()` и корректно остановить поток с узлом.
 
 - Python
 
@@ -379,13 +414,78 @@
 
 - Java
 
-  Семафор создаётся явно методом `createSemaphore` у подключённой сессии. Можно передать пользовательские двоичные данные, хранящиеся вместе с семафором (`byte[] data`); вариант метода без параметра `data` эквивалентен передаче `null`. Если семафор с таким именем уже есть, операция завершится статусом «уже существует».
+  Ниже — один полный пример жизненного цикла [семафора](../../concepts/datamodel/coordination-node.md#semaphore): создание узла и сессии, создание семафора, захват, обновление и чтение данных, освобождение. Персистентный семафор нужно создать явно (`createSemaphore`); эфемерные семафоры создаются при первом захвате (см. раздел «Захват семафора»).
 
   ```java
-  session.createSemaphore("my-semaphore", 10, new byte[] {0x00, 0x12})
-      .join()
-      .expectSuccess("create semaphore failed");
+  import java.nio.charset.StandardCharsets;
+  import java.time.Duration;
+
+  import tech.ydb.coordination.CoordinationClient;
+  import tech.ydb.coordination.CoordinationSession;
+  import tech.ydb.coordination.SemaphoreLease;
+  import tech.ydb.coordination.description.SemaphoreDescription;
+  import tech.ydb.coordination.settings.DescribeSemaphoreMode;
+  import tech.ydb.core.grpc.GrpcTransport;
+
+  public class CoordinationSemaphoreExample {
+
+      private static final String NODE_PATH_SUFFIX = "/path/to/mynode";
+      private static final String SEMAPHORE_NAME = "my-semaphore";
+
+      public static void main(String[] args) {
+          String connectionString = System.getenv().getOrDefault(
+                  "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+          try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+               CoordinationClient client = CoordinationClient.newClient(transport).build()) {
+
+              String nodePath = client.getDatabase() + NODE_PATH_SUFFIX;
+
+              // 1. Создаём узел координации
+              client.createNode(nodePath).join().expectSuccess("не удалось создать узел");
+
+              try (CoordinationSession session = client.createSession(nodePath)) {
+                  session.connect().join().expectSuccess("не удалось подключить сессию");
+
+                  byte[] initialData = "my-data".getBytes(StandardCharsets.UTF_8);
+
+                  // 2. Создаём семафор с лимитом 10 и начальными данными
+                  session.createSemaphore(SEMAPHORE_NAME, 10, initialData)
+                          .join().expectSuccess("не удалось создать семафор");
+
+                  // 3. Захватываем 5 токенов; ждём в очереди не более 30 секунд
+                  SemaphoreLease lease = session
+                          .acquireSemaphore(SEMAPHORE_NAME, 5, Duration.ofSeconds(30))
+                          .join().getValue();
+
+                  try {
+                      // 4. Обновляем данные, прикреплённые к семафору
+                      byte[] updatedData = "updated-data".getBytes(StandardCharsets.UTF_8);
+                      session.updateSemaphore(SEMAPHORE_NAME, updatedData)
+                              .join().expectSuccess("не удалось обновить данные семафора");
+
+                      // 5. Читаем текущее состояние семафора
+                      SemaphoreDescription description = session
+                              .describeSemaphore(SEMAPHORE_NAME, DescribeSemaphoreMode.DATA_ONLY)
+                              .join().getValue();
+
+                      System.out.println("Имя: " + description.getName());
+                      System.out.println("Лимит: " + description.getLimit());
+                      System.out.println("Захвачено: " + description.getCount());
+                      System.out.println("Данные: "
+                              + new String(description.getData(), StandardCharsets.UTF_8));
+
+                  } finally {
+                      // 6. Освобождаем захваченные токены
+                      lease.release().join().expectSuccess("не удалось освободить семафор");
+                  }
+              }
+          }
+      }
+  }
   ```
+
+  Если семафор с таким именем уже существует, `createSemaphore` вернёт статус «уже существует». Вариант без параметра `data` эквивалентен передаче `null`.
 
 - Rust
 
@@ -509,25 +609,11 @@
 
 - Java
 
-  Захват выполняется через `acquireSemaphore` с именем семафора, числом токенов `count`, опциональными данными операции и таймаутом ожидания в очереди [java.time.Duration](https://docs.oracle.com/javase/8/docs/api/java/time/Duration.html). Метод возвращает `CompletableFuture<Result<SemaphoreLease>>` (см. [Result](https://github.com/ydb-platform/ydb-java-sdk/blob/master/core/src/main/java/tech/ydb/core/Result.java) и [SemaphoreLease](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/SemaphoreLease.java)). Если семафор с указанным именем не существует, операция завершится исключением (см. javadoc метода).
-
-  ```java
-  import java.time.Duration;
-
-  import tech.ydb.coordination.SemaphoreLease;
-  import tech.ydb.core.Result;
-
-  Result<SemaphoreLease> result = session
-      .acquireSemaphore("my-semaphore", 5, Duration.ofSeconds(30))
-      .join();
-
-  result.getStatus().expectSuccess("cannot acquire semaphore");
-  SemaphoreLease lease = result.getValue();
-  ```
+  Захват выполняется через `acquireSemaphore` (полный пример — в разделе «Создание семафора»). Метод принимает имя семафора, число токенов `count`, опциональные данные операции и таймаут ожидания в очереди [java.time.Duration](https://docs.oracle.com/javase/8/docs/api/java/time/Duration.html). Возвращает `CompletableFuture<Result<SemaphoreLease>>` (см. [Result](https://github.com/ydb-platform/ydb-java-sdk/blob/master/core/src/main/java/tech/ydb/core/Result.java) и [SemaphoreLease](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/SemaphoreLease.java)). Если семафор с указанным именем не существует, операция завершится исключением.
 
   Для **эфемерных** семафоров используйте `acquireEphemeralSemaphore` (флаг `exclusive` задаёт режим захвата); такие семафоры создаются при первом захвате и удаляются после последнего освобождения.
 
-  В документации API указано: в один момент времени сессия может удерживать **только один** семафор; повторные вызовы для того же имени **заменяют** предыдущую операцию (например, чтобы уменьшить `count` или сменить таймаут).
+  В один момент времени сессия может удерживать **только один** семафор; повторные вызовы для того же имени **заменяют** предыдущую операцию (например, чтобы уменьшить `count` или сменить таймаут).
 
 - Rust
 
@@ -625,11 +711,7 @@
 
 - Java
 
-  ```java
-  session.updateSemaphore("my-semaphore", "updated-data".getBytes(java.nio.charset.StandardCharsets.UTF_8))
-      .join()
-      .expectSuccess("update semaphore failed");
-  ```
+  Обновление данных — метод `updateSemaphore` (шаг 4 в примере раздела «Создание семафора»). Вызов не требует захвата семафора и не приводит к нему.
 
 - Rust
 
@@ -743,17 +825,7 @@
 
 - Java
 
-  Метод `describeSemaphore` принимает имя семафора и режим [DescribeSemaphoreMode](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/DescribeSemaphoreMode.java): только данные, со списком владельцев, со списком ожидающих или оба списка.
-
-  ```java
-  import tech.ydb.coordination.description.SemaphoreDescription;
-  import tech.ydb.coordination.settings.DescribeSemaphoreMode;
-
-  SemaphoreDescription description = session
-      .describeSemaphore("my-semaphore", DescribeSemaphoreMode.WITH_OWNERS_AND_WAITERS)
-      .join()
-      .getValue();
-  ```
+  Чтение состояния семафора — метод `describeSemaphore` (шаг 5 в примере раздела «Создание семафора»). Принимает имя семафора и режим [DescribeSemaphoreMode](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/settings/DescribeSemaphoreMode.java): только данные, со списком владельцев, со списком ожидающих или оба списка.
 
   У элементов списков владельцев и ожидающих (`getOwnersList`, `getWaitersList`) доступны идентификатор сессии, таймаут, запрошенный `count`, данные операции и `orderId` (см. вложенный тип `SemaphoreDescription.Session` в исходниках).
 
@@ -843,11 +915,7 @@
 
 - Java
 
-  Освобождение — через [SemaphoreLease.release()](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/SemaphoreLease.java) (асинхронно, `CompletableFuture<Status>`).
-
-  ```java
-  lease.release().join().expectSuccess("release failed");
-  ```
+  Освобождение — через [SemaphoreLease.release()](https://github.com/ydb-platform/ydb-java-sdk/blob/master/coordination/src/main/java/tech/ydb/coordination/SemaphoreLease.java) (шаг 6 в примере раздела «Создание семафора»). Метод асинхронный, возвращает `CompletableFuture<Status>`.
 
 - Rust
 

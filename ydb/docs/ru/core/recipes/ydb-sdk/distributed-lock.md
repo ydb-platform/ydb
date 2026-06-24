@@ -160,17 +160,58 @@
 - Java
 
   ```java
-  CoordinationClient client = CoordinationClient.newClient(transport);
-  client.createNode(nodePath).join().expectSuccess();
+  import java.time.Duration;
 
-  try (CoordinationSession session = client.createSession(nodePath)) {
-      session.connect().join().expectSuccess();
-      SemaphoreLease lease = session.acquireEphemeralSemaphore(semaphoreName, true, Duration.ofMinutes(5))
-              .join().getValue();
-      try {
-          // монопольная работа с ресурсом
-      } finally {
-          lease.release().join();
+  import tech.ydb.common.transaction.TxMode;
+  import tech.ydb.coordination.CoordinationClient;
+  import tech.ydb.coordination.CoordinationSession;
+  import tech.ydb.coordination.SemaphoreLease;
+  import tech.ydb.core.grpc.GrpcTransport;
+  import tech.ydb.query.QueryClient;
+  import tech.ydb.query.result.ResultSetReader;
+  import tech.ydb.query.tools.QueryReader;
+  import tech.ydb.query.tools.SessionRetryContext;
+  import tech.ydb.table.query.Params;
+
+  public class DistributedLockExample {
+
+      private static final String NODE_PATH_SUFFIX = "/my-app-lock";
+      private static final String SEMAPHORE_NAME = "job-lock";
+
+      public static void main(String[] args) {
+          String connectionString = System.getenv().getOrDefault(
+                  "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+
+          try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+               CoordinationClient coordinationClient = CoordinationClient.newClient(transport).build();
+               QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+              String nodePath = transport.getDatabase() + NODE_PATH_SUFFIX;
+              coordinationClient.createNode(nodePath).join().expectSuccess("create node failed");
+
+              try (CoordinationSession session = coordinationClient.createSession(nodePath)) {
+                  session.connect().join().expectSuccess("connect failed");
+
+                  SemaphoreLease lease = session.acquireEphemeralSemaphore(
+                          SEMAPHORE_NAME, true, Duration.ofMinutes(5)
+                  ).join().getValue();
+
+                  try {
+                      // монопольная работа с ресурсом
+                      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+                      QueryReader reader = retryCtx.supplyResult(s -> QueryReader.readFrom(
+                              s.createQuery("SELECT 1 AS value", TxMode.NONE, Params.empty())
+                      )).join().getValue();
+
+                      ResultSetReader rs = reader.getResultSet(0);
+                      if (rs.next()) {
+                          System.out.println("Lock acquired, SELECT 1 = " + rs.getColumn("value").getInt32());
+                      }
+                  } finally {
+                      lease.release().join();
+                  }
+              }
+          }
       }
   }
   ```

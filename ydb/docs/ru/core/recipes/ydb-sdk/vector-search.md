@@ -129,20 +129,36 @@
 
 - Java
 
-    Для запросов используйте `QueryClient` и `SessionRetryContext` (см. [инициализацию драйвера](./init.md)). Ниже — минимальное подключение и создание клиента для YQL Query Service:
+    Для выполнения YQL-запросов используйте `QueryClient` — клиент YQL Query Service. Повторные попытки при временных ошибках обеспечивает `SessionRetryContext`, который создаётся на базе `QueryClient`. Подробнее о настройке транспорта и клиентов — в статье [Инициализация драйвера](./init.md).
+
+    Ниже — минимальный запускаемый пример: подключение, создание `SessionRetryContext` и проверка соединения запросом `SELECT 1`. Объект `retryCtx` понадобится на следующих шагах рецепта.
 
     ```java
+    import tech.ydb.common.transaction.TxMode;
     import tech.ydb.core.grpc.GrpcTransport;
     import tech.ydb.query.QueryClient;
+    import tech.ydb.query.tools.QueryReader;
     import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-    String connectionString = System.getenv().getOrDefault("YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
+    public class VectorSearchConnectExample {
 
-    try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
-       QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        public static void main(String[] args) {
+            String connectionString = System.getenv().getOrDefault(
+                    "YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
 
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      // retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery(...)))
+            try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
+                 QueryClient queryClient = QueryClient.newClient(transport).build()) {
+
+                // SessionRetryContext автоматически повторяет запрос при временных сбоях.
+                SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+
+                // Проверка подключения — в следующих шагах используется тот же retryCtx.
+                retryCtx.supplyResult(session -> QueryReader.readFrom(
+                        session.createQuery("SELECT 1", TxMode.NONE, Params.empty())
+                )).join().getValue();
+            }
+        }
     }
     ```
 
@@ -276,28 +292,31 @@
 
 - Java
 
-  ```java
-  import tech.ydb.common.transaction.TxMode;
-  import tech.ydb.query.tools.QueryReader;
-  import tech.ydb.query.tools.SessionRetryContext;
-  import tech.ydb.table.query.Params;
+    Создайте таблицу для документов и их векторных представлений. Используйте `SessionRetryContext` из раздела [Подключение к {{ ydb-short-name }}](#connect-ydb).
 
-  void createVectorTable(SessionRetryContext retryCtx, String tableName) {
-      String query = String.format("""
-              CREATE TABLE IF NOT EXISTS `%s` (
-                  id Utf8,
-                  document Utf8,
-                  embedding String,
-                  PRIMARY KEY (id)
-              );""", tableName);
+    ```java
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
 
-      retryCtx.supplyResult(session -> QueryReader.readFrom(
-              session.createQuery(query, TxMode.NONE, Params.empty())
-      )).join().getValue();
+    static void createVectorTable(SessionRetryContext retryCtx, String tableName) {
+        // DDL выполняется без транзакции (TxMode.NONE).
+        String query = String.format("""
+                CREATE TABLE IF NOT EXISTS `%s` (
+                    id Utf8,
+                    document Utf8,
+                    embedding String,
+                    PRIMARY KEY (id)
+                );""", tableName);
 
-      System.out.println("Vector table created: " + tableName);
-  }
-  ```
+        retryCtx.supplyResult(session -> QueryReader.readFrom(
+                session.createQuery(query, TxMode.NONE, Params.empty())
+        )).join().getValue();
+
+        System.out.println("Vector table created: " + tableName);
+    }
+    ```
 
 - Rust
 
@@ -580,6 +599,8 @@
 
 - Java
 
+    Вставьте документы в таблицу, созданную на предыдущем шаге. Векторы сериализуются в байты на клиенте функцией `convertVectorToBytes`; для запроса используется тот же `retryCtx`, что и при подключении.
+
     ```java
     import java.nio.ByteBuffer;
     import java.nio.ByteOrder;
@@ -597,7 +618,8 @@
     import tech.ydb.table.values.StructType;
     import tech.ydb.table.values.Value;
 
-    byte[] convertVectorToBytes(float[] vector) {
+    static byte[] convertVectorToBytes(float[] vector) {
+        // Сериализация float[] в бинарное представление FloatVector (little-endian).
         ByteBuffer bb = ByteBuffer.allocate(vector.length * Float.BYTES + 1).order(ByteOrder.LITTLE_ENDIAN);
         for (float v : vector) {
             bb.putFloat(v);
@@ -606,7 +628,7 @@
         return bb.array();
     }
 
-    void insertItemsAsBytes(SessionRetryContext retryCtx, String tableName, List<Item> items) {
+    static void insertItemsAsBytes(SessionRetryContext retryCtx, String tableName, List<Item> items) {
         String query = String.format("""
                 DECLARE $items AS List<Struct<
                     id: Utf8,
@@ -1135,6 +1157,8 @@
 
 - Java
 
+    Создайте векторный индекс для таблицы из предыдущих шагов. YQL-запрос `ALTER TABLE ... ADD INDEX` выполняется через `queryRetry`; переименование временного индекса — через `TableClient` и `tableRetry` (см. [Подключение](#connect-ydb)). Параметры `dimension`, `levels` и `clusters` задают геометрию индекса `vector_kmeans_tree` — как в [итоговом примере на Python](#full-example).
+
     ```java
     import tech.ydb.core.grpc.GrpcTransport;
     import tech.ydb.common.transaction.TxMode;
@@ -1143,13 +1167,16 @@
     import tech.ydb.table.query.Params;
     import tech.ydb.table.settings.AlterTableSettings;
 
-    void addVectorIndex(
+    static void addVectorIndex(
             GrpcTransport transport,
             SessionRetryContext queryRetry,
             SessionRetryContext tableRetry,
             String tableName,
             String indexName,
-            String strategy) {
+            String strategy,
+            int dimension,
+            int levels,
+            int clusters) {
 
         String tempIndexName = indexName + "__temp";
         String query = String.format("""
@@ -1158,14 +1185,20 @@
                 GLOBAL USING vector_kmeans_tree
                 ON (embedding)
                 WITH (
-                    %s
+                    %s,
+                    vector_type="Float",
+                    vector_dimension=%d,
+                    levels=%d,
+                    clusters=%d
                 );
-                """, tableName, tempIndexName, strategy);
+                """, tableName, tempIndexName, strategy, dimension, levels, clusters);
 
+        // Шаг 1: создать временный индекс через YQL Query Service.
         queryRetry.supplyResult(session -> QueryReader.readFrom(
                 session.createQuery(query, TxMode.NONE, Params.empty())
         )).join().getValue();
 
+        // Шаг 2: переименовать временный индекс в постоянный через Table API.
         String tablePath = transport.getDatabase() + "/" + tableName;
         AlterTableSettings settings = new AlterTableSettings()
                 .addRenameIndex(tempIndexName, indexName, true);
@@ -1462,6 +1495,8 @@
 
 - Java
 
+    Найдите ближайшие документы к запросному вектору в таблице, заполненной на шаге [Вставка векторов](#insert-vectors). Передайте имя индекса в `indexName`, чтобы использовать `VIEW` (после шага [Добавление индекса](#add-vector-index)). Параметр `topClusters` задаёт `PRAGMA ydb.KMeansTreeSearchTopSize` — как `top_clusters` в Python-примере.
+
     ```java
     import java.nio.ByteBuffer;
     import java.nio.ByteOrder;
@@ -1476,7 +1511,7 @@
     import tech.ydb.table.result.ResultSetReader;
     import tech.ydb.table.values.PrimitiveValue;
 
-    byte[] convertVectorToBytes(float[] vector) {
+    static byte[] convertVectorToBytes(float[] vector) {
         ByteBuffer bb = ByteBuffer.allocate(vector.length * Float.BYTES + 1).order(ByteOrder.LITTLE_ENDIAN);
         for (float v : vector) {
             bb.putFloat(v);
@@ -1485,18 +1520,20 @@
         return bb.array();
     }
 
-    List<ResultItem> searchItemsAsBytes(
+    static List<ResultItem> searchItemsAsBytes(
             SessionRetryContext retryCtx,
             String tableName,
             float[] embedding,
             String strategy,
             long limit,
-            Optional<String> indexName) {
+            Optional<String> indexName,
+            long topClusters) {
 
         String viewIndex = indexName.map(n -> "VIEW " + n).orElse("");
         String sortOrder = strategy.endsWith("Similarity") ? "DESC" : "ASC";
 
         String query = String.format("""
+                PRAGMA ydb.KMeansTreeSearchTopSize = "%d";
                 DECLARE $embedding as String;
                 SELECT
                     id,
@@ -1505,7 +1542,7 @@
                 FROM %s %s
                 ORDER BY score %s
                 LIMIT %d;
-                """, strategy, tableName, viewIndex, sortOrder, limit);
+                """, topClusters, strategy, tableName, viewIndex, sortOrder, limit);
 
         Params params = Params.of("$embedding", PrimitiveValue.newBytes(convertVectorToBytes(embedding)));
 
@@ -2098,9 +2135,12 @@
 
 - Java
 
-    Пример объединяет шаги из разделов выше: `QueryClient` + `SessionRetryContext` для YQL и `TableClient` + `SessionRetryContext` для `ALTER TABLE` с переименованием индекса. Методы `createVectorTable`, `insertItemsAsBytes`, `searchItemsAsBytes`, `addVectorIndex` и тип `Item` / `ResultItem` — как в соответствующих фрагментах этой страницы.
+    Пример объединяет шаги из разделов выше: `QueryClient` + `SessionRetryContext` для YQL и `TableClient` + `SessionRetryContext` для `ALTER TABLE` с переименованием индекса.
 
     ```java
+    import java.nio.ByteBuffer;
+    import java.nio.ByteOrder;
+    import java.util.ArrayList;
     import java.util.List;
     import java.util.Optional;
 
@@ -2111,6 +2151,14 @@
     import tech.ydb.query.tools.SessionRetryContext;
     import tech.ydb.table.TableClient;
     import tech.ydb.table.query.Params;
+    import tech.ydb.table.result.ResultSetReader;
+    import tech.ydb.table.settings.AlterTableSettings;
+    import tech.ydb.table.values.ListType;
+    import tech.ydb.table.values.ListValue;
+    import tech.ydb.table.values.PrimitiveType;
+    import tech.ydb.table.values.PrimitiveValue;
+    import tech.ydb.table.values.StructType;
+    import tech.ydb.table.values.Value;
 
     public class VectorSearchJavaExample {
 
@@ -2129,7 +2177,9 @@
                 SessionRetryContext queryRetry = SessionRetryContext.create(queryClient).build();
                 SessionRetryContext tableRetry = SessionRetryContext.create(tableClient).build();
 
+                // 1. Удаление существующей таблицы
                 dropVectorTableIfExists(queryRetry, tableName);
+                // 2. Создание таблицы
                 createVectorTable(queryRetry, tableName);
 
                 List<Item> items = List.of(
@@ -2144,15 +2194,19 @@
                         new Item("9", "vector 9", new float[]{0.0f, 1.0f, 0.05f})
                 );
 
+                // 3. Вставка документов
                 insertItemsAsBytes(queryRetry, tableName, items);
+                // 4. Поиск без индекса
                 printResults(searchItemsAsBytes(queryRetry, tableName, new float[]{1, 0, 0},
-                        "CosineSimilarity", 3, Optional.empty()));
+                        "CosineSimilarity", 3, Optional.empty(), 10));
 
+                // 5. Добавление векторного индекса
                 addVectorIndex(transport, queryRetry, tableRetry, tableName, indexName,
                         "similarity=cosine", 3, 1, 3);
 
+                // 6. Поиск с использованием индекса
                 printResults(searchItemsAsBytes(queryRetry, tableName, new float[]{1, 0, 0},
-                        "CosineSimilarity", 3, Optional.of(indexName)));
+                        "CosineSimilarity", 3, Optional.of(indexName), 10));
             }
         }
 
@@ -2162,6 +2216,159 @@
                     s.createQuery(ddl, TxMode.NONE, Params.empty())
             )).join().getValue();
             System.out.println("Vector table dropped");
+        }
+
+        static void createVectorTable(SessionRetryContext retryCtx, String tableName) {
+            String query = String.format("""
+                    CREATE TABLE IF NOT EXISTS `%s` (
+                        id Utf8,
+                        document Utf8,
+                        embedding String,
+                        PRIMARY KEY (id)
+                    );""", tableName);
+
+            retryCtx.supplyResult(session -> QueryReader.readFrom(
+                    session.createQuery(query, TxMode.NONE, Params.empty())
+            )).join().getValue();
+
+            System.out.println("Vector table created: " + tableName);
+        }
+
+        static byte[] convertVectorToBytes(float[] vector) {
+            ByteBuffer bb = ByteBuffer.allocate(vector.length * Float.BYTES + 1).order(ByteOrder.LITTLE_ENDIAN);
+            for (float v : vector) {
+                bb.putFloat(v);
+            }
+            bb.put((byte) 0x01);
+            return bb.array();
+        }
+
+        static void insertItemsAsBytes(SessionRetryContext retryCtx, String tableName, List<Item> items) {
+            String query = String.format("""
+                    DECLARE $items AS List<Struct<
+                        id: Utf8,
+                        document: Utf8,
+                        embedding: String
+                    >>;
+
+                    UPSERT INTO `%s`
+                    (
+                        id,
+                        document,
+                        embedding
+                    )
+                    SELECT
+                        id,
+                        document,
+                        embedding,
+                    FROM AS_TABLE($items);""", tableName);
+
+            StructType rowType = StructType.of(
+                    "id", PrimitiveType.Text,
+                    "document", PrimitiveType.Text,
+                    "embedding", PrimitiveType.Bytes
+            );
+
+            List<Value<?>> rows = new ArrayList<>(items.size());
+            for (Item item : items) {
+                rows.add(rowType.newValue(
+                        "id", PrimitiveValue.newText(item.id()),
+                        "document", PrimitiveValue.newText(item.document()),
+                        "embedding", PrimitiveValue.newBytes(convertVectorToBytes(item.embedding()))
+                ));
+            }
+
+            ListValue itemsParam = ListType.of(rowType).newValue(rows);
+            Params params = Params.of("$items", itemsParam);
+
+            retryCtx.supplyResult(session -> QueryReader.readFrom(
+                    session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
+            )).join().getValue();
+
+            System.out.println(items.size() + " items inserted");
+        }
+
+        static void addVectorIndex(
+                GrpcTransport transport,
+                SessionRetryContext queryRetry,
+                SessionRetryContext tableRetry,
+                String tableName,
+                String indexName,
+                String strategy,
+                int dimension,
+                int levels,
+                int clusters) {
+
+            String tempIndexName = indexName + "__temp";
+            String query = String.format("""
+                    ALTER TABLE `%s`
+                    ADD INDEX %s
+                    GLOBAL USING vector_kmeans_tree
+                    ON (embedding)
+                    WITH (
+                        %s,
+                        vector_type="Float",
+                        vector_dimension=%d,
+                        levels=%d,
+                        clusters=%d
+                    );
+                    """, tableName, tempIndexName, strategy, dimension, levels, clusters);
+
+            queryRetry.supplyResult(session -> QueryReader.readFrom(
+                    session.createQuery(query, TxMode.NONE, Params.empty())
+            )).join().getValue();
+
+            String tablePath = transport.getDatabase() + "/" + tableName;
+            AlterTableSettings settings = new AlterTableSettings()
+                    .addRenameIndex(tempIndexName, indexName, true);
+
+            tableRetry.supplyStatus(session -> session.alterTable(tablePath, settings))
+                    .join()
+                    .expectSuccess("alter table rename index");
+
+            System.out.println("Table index `" + indexName + "` for table `" + tableName + "` added");
+        }
+
+        static List<ResultItem> searchItemsAsBytes(
+                SessionRetryContext retryCtx,
+                String tableName,
+                float[] embedding,
+                String strategy,
+                long limit,
+                Optional<String> indexName,
+                long topClusters) {
+
+            String viewIndex = indexName.map(n -> "VIEW " + n).orElse("");
+            String sortOrder = strategy.endsWith("Similarity") ? "DESC" : "ASC";
+
+            String query = String.format("""
+                    PRAGMA ydb.KMeansTreeSearchTopSize = "%d";
+                    DECLARE $embedding as String;
+                    SELECT
+                        id,
+                        document,
+                        Knn::%s(embedding, $embedding) as score
+                    FROM %s %s
+                    ORDER BY score %s
+                    LIMIT %d;
+                    """, topClusters, strategy, tableName, viewIndex, sortOrder, limit);
+
+            Params params = Params.of("$embedding", PrimitiveValue.newBytes(convertVectorToBytes(embedding)));
+
+            QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                    session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
+            )).join().getValue();
+
+            List<ResultItem> result = new ArrayList<>();
+            ResultSetReader rs = reader.getResultSet(0);
+            while (rs.next()) {
+                result.add(new ResultItem(
+                        rs.getColumn("id").getText(),
+                        rs.getColumn("document").getText(),
+                        rs.getColumn("score").getFloat()
+                ));
+            }
+            return result;
         }
 
         static void printResults(List<ResultItem> items) {

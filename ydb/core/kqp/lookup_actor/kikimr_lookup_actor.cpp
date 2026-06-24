@@ -283,6 +283,7 @@ namespace NYql::NDq {
                     request->erase(request->begin(), request->end());
                 } else {
                     LOG_D("Retry: parent MIA");
+                    return;
                 }
             } else if (IsMultiMatches) {
                 if (auto request = state->Request.lock()) {
@@ -291,6 +292,7 @@ namespace NYql::NDq {
                     }
                 } else {
                     LOG_D("Retry: parent MIA");
+                    return;
                 }
             }
             state->ResultRows = 0;

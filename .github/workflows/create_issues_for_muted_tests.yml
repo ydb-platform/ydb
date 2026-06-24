@@ -30,6 +30,11 @@ env:
 jobs:
   resolve-build-types:
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.merged == true &&
+       contains(github.event.pull_request.labels.*.name, 'mute-create-issues'))
     outputs:
       base_branch: ${{ steps.resolve.outputs.base_branch }}
       matrix_build_types: ${{ steps.resolve.outputs.matrix_build_types }}
@@ -66,10 +71,6 @@ jobs:
   create-issues-for-muted-tests:
     needs: resolve-build-types
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
-    if: |
-      ((github.event_name == 'pull_request' &&
-        contains(github.event.pull_request.labels.*.name, 'mute-unmute')) ||
-       github.event_name == 'workflow_dispatch')
     strategy:
       fail-fast: false
       matrix:
@@ -124,7 +125,6 @@ jobs:
           github-token: ${{ env.GH_TOKEN }}
           script: |
             const fs = require('fs');
-            const path = require('path');
 
             const workflowUrl = `https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}`;
             const filePath = '${{ steps.create_issues.outputs.created_issues_file }}';
@@ -149,17 +149,22 @@ jobs:
 
       # Issue export, mapping, and muted mart are handled by collect_analytics_fast (every 30 min)
 
+  # Fast-unmute on all merged mute-unmute PRs (including asan/msan without mute-create-issues).
   sync-manual-fast-unmute:
-    needs: [resolve-build-types, create-issues-for-muted-tests]
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     if: |
-      ((github.event_name == 'pull_request' &&
-        contains(github.event.pull_request.labels.*.name, 'mute-unmute')) ||
-       github.event_name == 'workflow_dispatch')
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.merged == true &&
+       contains(github.event.pull_request.labels.*.name, 'mute-unmute'))
     steps:
       - name: Set environment variables for branches
         run: |
-          echo "BASE_BRANCH=${{ needs.resolve-build-types.outputs.base_branch }}" >> "$GITHUB_ENV"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "BASE_BRANCH=${{ github.event.inputs.base_branch }}" >> "$GITHUB_ENV"
+          else
+            echo "BASE_BRANCH=${{ github.event.pull_request.base.ref }}" >> "$GITHUB_ENV"
+          fi
 
       - name: Checkout repository
         uses: actions/checkout@v5

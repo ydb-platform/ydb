@@ -316,11 +316,26 @@ jobs:
           echo "$COMPLETE_BODY" > pr_comment_final.txt
           echo "PR_COMMENT_FILE=pr_comment_final.txt" >> $GITHUB_OUTPUT
 
+      - name: Resolve PR labels
+        if: steps.changes_check.outputs.changes == 'true'
+        id: pr_labels
+        run: |
+          set -euo pipefail
+          LABELS="${{ env.LABELS }}"
+          if python3 .github/scripts/tests/mute/mute_helper.py profile-has-issues \
+              --profiles-config .github/config/mute_issue_and_digest_config.json \
+              --branch "${{ env.BASE_BRANCH }}" \
+              --build-type "${{ env.BUILD_TYPE }}"; then
+            LABELS="${LABELS},mute-create-issues"
+            echo "Adding mute-create-issues for profile ${{ env.BASE_BRANCH }}:${{ env.BUILD_TYPE }}"
+          fi
+          echo "labels=${LABELS}" >> "$GITHUB_OUTPUT"
+
       - name: Add comment, reviewers and labels
         if: steps.changes_check.outputs.changes == 'true'
         uses: actions/github-script@v8
         env:
-          LABELS: ${{ env.LABELS }}
+          LABELS: ${{ steps.pr_labels.outputs.labels }}
           REVIEWERS: ${{ env.REVIEWERS }}
         with:
           github-token: ${{ secrets.YDBOT_TOKEN }}

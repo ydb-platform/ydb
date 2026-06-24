@@ -8,6 +8,12 @@ S3 backup configuration consists of three parts:
 * `secret_key` — which master key is used to encrypt S3 access keys;
 * `locations[].default_backup_config` — when to run backups and how long to retain them.
 
+{% note info %}
+
+This article describes automated backup configuration through YDB EM. For general information about backup options in {{ ydb-short-name }}, see [{#T}](../../concepts/backup.md) and [{#T}](../backup-and-recovery.md).
+
+{% endnote %}
+
 ## Configuring S3 storage {#backup-targets}
 
 Add the `backup_targets` block to the Control Plane configuration:

@@ -1166,6 +1166,15 @@ public:
         return nullptr;
     }
 
+    void SetNodeDisconnected(TNodeId nodeId) {
+        if (TNode* node = FindNode(nodeId)) {
+            node->DisconnectNode();
+            if (FieldsRequired.test(+ENodeFields::PDisks) || FieldsRequired.test(+ENodeFields::VDisks)) {
+                node->RemapDisks();
+            }
+        }
+    }
+
     bool PreFilterDone() const {
         return (!PDisksResponse || PDisksProcessed) && !FilterDatabase && FilterPeerRole != EPeerRole::Static && FilterPeerRole != EPeerRole::Other;
     }
@@ -2408,16 +2417,10 @@ public:
                         hasMemoryDetailed |= systemInfo.HasMemoryStats();
                     }
                     for (auto nodeId : nodesWithoutData) {
-                        TNode* node = FindNode(nodeId);
-                        if (node) {
-                            node->DisconnectNode();
-                        }
+                        SetNodeDisconnected(nodeId);
                     }
                 } else {
-                    TNode* node = FindNode(responseNodeId);
-                    if (node) {
-                        node->DisconnectNode();
-                    }
+                    SetNodeDisconnected(responseNodeId);
                 }
             }
             for (const auto& [nodeId, response] : SystemStateResponse) {
@@ -2439,10 +2442,7 @@ public:
                         hasMemoryDetailed |= systemState.GetSystemStateInfo(0).HasMemoryStats();
                     }
                 } else {
-                    TNode* node = FindNode(nodeId);
-                    if (node) {
-                        node->DisconnectNode();
-                    }
+                    SetNodeDisconnected(nodeId);
                 }
             }
             if (!removeNodes.empty()) {
@@ -2890,13 +2890,7 @@ public:
 
     void Disconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
         TNodeId nodeId = ev->Get()->NodeId;
-        TNode* node = FindNode(nodeId);
-        if (node) {
-            node->DisconnectNode();
-            if (FieldsRequired.test(+ENodeFields::PDisks) || FieldsRequired.test(+ENodeFields::VDisks)) {
-                node->RemapDisks();
-            }
-        }
+        SetNodeDisconnected(nodeId);
         TString error("NodeDisconnected");
         {
             auto itSystemStateResponse = SystemStateResponse.find(nodeId);

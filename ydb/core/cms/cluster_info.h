@@ -1101,6 +1101,9 @@ public:
     bool IsLocalBootConfDiffersFromConsole = false;
     NKikimrConfig::TBootstrap BootstrapConfig;
     THashMap<ui32, TVector<NKikimrConfig::TBootstrap::ETabletType>> NodeToTabletTypes;
+    // All tablet types that may be configured as system tablets (derived from
+    // BootstrapConfig), precomputed once for runtime running-tablet checks.
+    THashSet<TTabletTypes::EType> SystemTabletTypes;
 
     THashMap<TPileId, TSysNodesCheckers> SysNodesCheckers;
 

@@ -1079,7 +1079,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
         shredConfig.SetBlobStorageControllerRequestIntervalSeconds(1);
 
         auto sender = runtime.AllocateEdgeActor();
-        // Rebot SchemaShard is required in order to apply config.
+        // Reboot SchemaShard is required in order to apply config.
         RebootTablet(runtime, TTestTxConfig::SchemeShard, sender);
 
         ui64 txId = 100;
@@ -1320,7 +1320,7 @@ Y_UNIT_TEST_SUITE(TestShred) {
         {
             auto result = LocalMiniKQL(runtime, TTestTxConfig::SchemeShard, rootQueryRead);
             const auto& list = result.GetValue().GetStruct(0).GetOptional().GetStruct(0);
-            UNIT_ASSERT_VALUES_EQUAL_C(list.ListSize(), 5u,
+            UNIT_ASSERT_VALUES_EQUAL_C(list.ListSize(), 1u,
                 "After reboot: expected exactly 1 row in DataErasureGenerations, got " << list.ListSize());
             // TODO https://github.com/ydb-platform/ydb/issues/44326 it's very suspicious that generation is set to 0 after reboot.    
             // ui64 survivingGen = list.GetList(0).GetStruct(0).GetUint64();

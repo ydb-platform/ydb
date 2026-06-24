@@ -4,7 +4,7 @@
 #include <ydb/core/audit/audit_log.h>
 #include <ydb/core/audit/audit_config/audit_config.h>
 #include <ydb/core/base/appdata.h>
-#include <ydb/core/util/address_classifier.h>
+#include <ydb/core/util/address_classifier/address_classifier.h>
 #include <ydb/library/aclib/aclib.h>
 
 #include <util/generic/is_in.h>

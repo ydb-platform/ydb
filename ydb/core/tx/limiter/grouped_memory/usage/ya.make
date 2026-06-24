@@ -10,6 +10,7 @@ SRCS(
 
 PEERDIR(
     ydb/library/actors/core
+    ydb/library/accessor
     ydb/services/metadata/request
     ydb/core/tx/limiter/grouped_memory/service
 )

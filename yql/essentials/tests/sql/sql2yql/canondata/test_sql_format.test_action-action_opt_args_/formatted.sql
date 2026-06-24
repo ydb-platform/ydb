@@ -1,4 +1,3 @@
-/* postgres can not */
 DEFINE ACTION $action($a, $b?) AS
     SELECT
         $a + ($b ?? 0)

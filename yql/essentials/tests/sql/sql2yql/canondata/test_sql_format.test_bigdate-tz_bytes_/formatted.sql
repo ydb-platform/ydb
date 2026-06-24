@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     ToBytes(TzDate32('1901-01-01,Europe/Moscow'))
 ;

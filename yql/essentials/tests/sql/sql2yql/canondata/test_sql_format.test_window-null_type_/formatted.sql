@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     min(x) OVER w,
     count(x) OVER w,

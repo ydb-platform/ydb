@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     Enum('foo', Enum<'foo', 'bar'>) == AsEnum('foo'),
     Enum('foo', Enum<'foo', 'bar'>) == AsEnum('bar'),

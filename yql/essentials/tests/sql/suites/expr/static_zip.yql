@@ -1,4 +1,3 @@
-/* postgres can not */
 
 $s1 = AsStruct(1 as k1, "2" as k2, ["3", "4"] as k3);
 $s2 = AsStruct("10" as k1, [20, 30] as k2, 40 as k3);

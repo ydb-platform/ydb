@@ -1,4 +1,3 @@
-/* postgres can not */
 $f = AggregationFactory(
     'UDAF',
     ($item, $_) -> ($item),

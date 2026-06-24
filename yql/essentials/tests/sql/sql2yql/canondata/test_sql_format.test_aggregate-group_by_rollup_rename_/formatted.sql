@@ -1,4 +1,3 @@
-/* postgres can not */
 $s = (
     SELECT
         1 AS x,

@@ -1,4 +1,3 @@
-/* postgres can not */
 $a = AsEnum('a');
 $b = AsEnum('b');
 $c = AsEnum('c');

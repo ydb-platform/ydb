@@ -1,4 +1,3 @@
-/* postgres can not */
 $vt = ParseType('Variant<One:Int32,Two:String>');
 
 SELECT

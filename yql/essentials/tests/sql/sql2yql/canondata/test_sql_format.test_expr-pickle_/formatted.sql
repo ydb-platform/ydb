@@ -1,4 +1,3 @@
-/* postgres can not */
 $lst = AsList(AsTuple(13, 4), AsTuple(11, 2), AsTuple(17, 8), AsTuple(5, 6));
 
 $p1 = Pickle(ToDict($lst));

@@ -1,4 +1,3 @@
-/* postgres can not */
 /* yt can not */
 $s = <|a: 1, b: 2u / 1u, c: Just(Just(1))|>;
 $js = Just($s);

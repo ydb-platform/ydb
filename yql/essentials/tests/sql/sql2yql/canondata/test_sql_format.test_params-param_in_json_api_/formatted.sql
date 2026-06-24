@@ -1,4 +1,3 @@
-/* postgres can not */
 DECLARE $input_json AS Json;
 DECLARE $int64_param AS Int64;
 DECLARE $double_param AS Double;

@@ -1,4 +1,3 @@
-/* postgres can not */
 DEFINE SUBQUERY $sub() AS
     SELECT
         *

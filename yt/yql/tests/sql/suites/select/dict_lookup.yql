@@ -1,4 +1,3 @@
-/* postgres can not */
 use plato;
 $dictList = (select
     AsDict(AsTuple(value, CAST(subkey AS Int32))) as `dict`,

@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     Yson::ConvertTo("[1,2]"j, ParseType('List<Int32>')) AS x
 FROM

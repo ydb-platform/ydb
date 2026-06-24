@@ -1,4 +1,3 @@
-/* postgres can not */
 PRAGMA DistinctOverWindow;
 
 $input = AsList(

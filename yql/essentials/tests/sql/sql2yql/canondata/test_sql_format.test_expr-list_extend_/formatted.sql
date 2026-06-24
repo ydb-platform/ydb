@@ -1,4 +1,3 @@
-/* postgres can not */
 PRAGMA warning('disable', '1107');
 
 SELECT

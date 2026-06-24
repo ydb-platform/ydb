@@ -1,4 +1,3 @@
-/* postgres can not */
 $data = AsList((1 AS a, 1 AS b));
 
 SELECT

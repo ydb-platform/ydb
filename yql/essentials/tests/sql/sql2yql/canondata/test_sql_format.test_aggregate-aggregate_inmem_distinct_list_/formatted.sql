@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     listlength(aggregate_list(DISTINCT x)) AS c
 FROM (

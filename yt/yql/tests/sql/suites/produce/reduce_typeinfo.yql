@@ -1,4 +1,3 @@
-/* postgres can not */
 /* ignore runonopt plan diff */
 use plato;
 

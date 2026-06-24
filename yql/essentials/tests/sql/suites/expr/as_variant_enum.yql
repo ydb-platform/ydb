@@ -1,2 +1,1 @@
-/* postgres can not */
 select AsVariant(1,"int"),AsEnum("monday");

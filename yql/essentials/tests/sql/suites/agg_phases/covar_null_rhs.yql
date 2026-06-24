@@ -1,4 +1,3 @@
-/* postgres can not */
 /* custom error: Expected data or optional of data, but got: Null */
 
 $t = SELECT * FROM AS_TABLE([

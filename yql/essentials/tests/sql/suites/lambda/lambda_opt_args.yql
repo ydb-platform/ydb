@@ -1,3 +1,2 @@
-/* postgres can not */
 $f = ($x,$y?)->($x + ($y ?? 0));
 select $f(1), $f(2, 3);

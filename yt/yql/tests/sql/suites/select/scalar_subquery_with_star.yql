@@ -1,4 +1,3 @@
-/* postgres can not */
 
 $single = (select key from plato.Input);
 $all = (select * from $single order by key limit 100);

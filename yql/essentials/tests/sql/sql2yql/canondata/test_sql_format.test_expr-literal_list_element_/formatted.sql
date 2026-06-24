@@ -1,4 +1,3 @@
-/* postgres can not */
 $list = YQL::@@(AsList (String 'z) (String 'a))@@;
 
 SELECT

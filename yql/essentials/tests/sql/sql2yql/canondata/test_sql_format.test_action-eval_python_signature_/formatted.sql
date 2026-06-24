@@ -1,4 +1,3 @@
-/* postgres can not */
 $script = @@ 
 def f(x, y):
     """

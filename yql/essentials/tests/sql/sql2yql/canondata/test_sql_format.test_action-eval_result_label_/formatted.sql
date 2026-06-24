@@ -1,4 +1,3 @@
-/* postgres can not */
 $x = CAST(Unicode::ToUpper("foo"u) AS String);
 
 SELECT

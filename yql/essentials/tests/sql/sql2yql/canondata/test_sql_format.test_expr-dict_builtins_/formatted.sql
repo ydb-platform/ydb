@@ -1,4 +1,3 @@
-/* postgres can not */
 $dict = AsDict(AsTuple('foo', 3), AsTuple('bar', 4));
 
 SELECT

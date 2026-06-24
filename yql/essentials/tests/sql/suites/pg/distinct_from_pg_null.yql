@@ -1,4 +1,3 @@
-/* postgres can not */
 
 select
     Nothing(pgint8) IS DISTINCT FROM NULL,

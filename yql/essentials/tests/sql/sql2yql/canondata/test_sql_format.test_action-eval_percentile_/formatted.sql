@@ -1,4 +1,3 @@
-/* postgres can not */
 $x = 1.0 / length(CAST(Unicode::ToUpper("ab"u) AS String));
 
 SELECT

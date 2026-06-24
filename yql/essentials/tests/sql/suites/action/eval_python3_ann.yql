@@ -1,4 +1,3 @@
-/* postgres can not */
 $script = @@ 
 from yql.typing import *
 

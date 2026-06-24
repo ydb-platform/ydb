@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     StructMembers(<|a: 1|>),
     StructMembers(Just(<|a: 1|>)),

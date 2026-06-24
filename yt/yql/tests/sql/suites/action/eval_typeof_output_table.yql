@@ -1,4 +1,3 @@
-/* postgres can not */
 /* custom error: Table "Output" does not exist */
 USE plato;
 

@@ -1,4 +1,3 @@
-/* postgres can not */
 $t = (
     SELECT
         'john' AS name,

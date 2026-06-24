@@ -1,4 +1,3 @@
-/* postgres can not */
 select ListNotNull(null),ListNotNull([]),ListNotNull([null]),ListNotNull(Just([])),
 ListNotNull([1,2]),ListNotNull([1,null,2]),
 ListNotNull(Just([1,2])),ListNotNull(Just([1,null,2])),

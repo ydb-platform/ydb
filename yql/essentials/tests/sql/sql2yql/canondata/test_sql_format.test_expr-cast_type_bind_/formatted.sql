@@ -1,4 +1,3 @@
-/* postgres can not */
 $t = List<Uint32>;
 
 SELECT

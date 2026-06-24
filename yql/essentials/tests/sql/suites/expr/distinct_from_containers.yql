@@ -1,4 +1,3 @@
-/* postgres can not */
 
 $vt1 = ParseType("Variant<Int32,Int32?>");
 $vt2 = ParseType("Variant<Int64,Null>");

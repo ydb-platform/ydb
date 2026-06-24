@@ -1,5 +1,4 @@
 PRAGMA DisableSimpleColumns;
-/* postgres can not */
 use plato;
 SELECT a.v, b.value
 FROM `Input1` VIEW `ksv` AS a

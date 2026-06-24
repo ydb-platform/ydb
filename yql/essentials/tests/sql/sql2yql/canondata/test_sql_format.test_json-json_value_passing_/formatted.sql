@@ -1,4 +1,3 @@
-/* postgres can not */
 $json = CAST(
     @@{
     "key": 123

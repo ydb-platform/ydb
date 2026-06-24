@@ -1,4 +1,3 @@
-/* postgres can not */
 DEFINE ACTION $dup($x) AS
     DO
         $x()

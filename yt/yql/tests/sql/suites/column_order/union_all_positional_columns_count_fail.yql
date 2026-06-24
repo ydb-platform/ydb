@@ -1,4 +1,3 @@
-/* postgres can not */
 /* custom error:Different column counts in UNION ALL inputs: input #0 has 3 column, input #1 has 2 columns*/
 pragma PositionalUnionAll;
 

@@ -1,4 +1,3 @@
-/* postgres can not */
 -- Accessing absent object member will cause empty result in lax mode
 $json = CAST('{}' AS Json);
 

@@ -1,5 +1,4 @@
 -- not supported on windows
-/* postgres can not */
 $udfScript = @@
 
 import collections;

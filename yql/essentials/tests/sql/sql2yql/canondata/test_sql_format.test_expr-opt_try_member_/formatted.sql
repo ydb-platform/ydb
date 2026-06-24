@@ -1,4 +1,3 @@
-/* postgres can not */
 /* kikimr can not */
 SELECT
     TryMember(Just(<|x: 1|>), 'x', 0),

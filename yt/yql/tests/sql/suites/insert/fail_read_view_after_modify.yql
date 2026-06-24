@@ -1,4 +1,3 @@
-/* postgres can not */
 /* custom error:Table "Output" cannot have any view after replacing its content*/
 insert into plato.Output with truncate
 select * from plato.Input;

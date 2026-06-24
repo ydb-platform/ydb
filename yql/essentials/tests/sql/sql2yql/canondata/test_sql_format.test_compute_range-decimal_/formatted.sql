@@ -1,4 +1,3 @@
-/* postgres can not */
 /* yt can not */
 PRAGMA warning('disable', '4510');
 

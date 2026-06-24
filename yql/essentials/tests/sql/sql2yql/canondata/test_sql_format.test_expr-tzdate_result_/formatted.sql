@@ -1,4 +1,3 @@
-/* postgres can not */
 $parse = DateTime::Parse('%Y-%m-%d,%Z');
 
 $date_string = '2020-05-30,Europe/Moscow';

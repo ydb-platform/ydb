@@ -1,2 +1,1 @@
-/* postgres can not */ 
 select count(*) as count from plato.range(``, ``, ``, ``, ksv);

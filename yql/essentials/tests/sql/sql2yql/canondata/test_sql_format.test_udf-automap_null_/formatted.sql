@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     String::CollapseText('abc', 1)
 ;

@@ -1,4 +1,3 @@
-/* postgres can not */
 
 SELECT count(DISTINCT subkey) AS subkey
 FROM plato.CONCAT(Input0, Input1)

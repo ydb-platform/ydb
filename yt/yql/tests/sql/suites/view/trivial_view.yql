@@ -1,3 +1,2 @@
-/* postgres can not */
 USE plato;
 SELECT k, s, v FROM Input VIEW ksv;

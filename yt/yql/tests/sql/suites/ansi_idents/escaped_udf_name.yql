@@ -1,5 +1,4 @@
 --!ansi_lexer
-/* postgres can not */
 use plato;
 
 select `key` from Input where "String"::Contains("key", '7') order by key;

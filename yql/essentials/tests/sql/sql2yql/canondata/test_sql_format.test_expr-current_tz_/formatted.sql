@@ -1,4 +1,3 @@
-/* postgres can not */
 SELECT
     CurrentTzDate('Europe/Moscow'),
     CurrentTzDatetime('Europe/Moscow'),

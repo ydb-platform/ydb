@@ -1,4 +1,3 @@
-/* postgres can not */
 -- in v1 substring returns Null as a result for missing value
 select
     substring(key, 1, 1) as char,

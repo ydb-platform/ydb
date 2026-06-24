@@ -1,4 +1,3 @@
-/* postgres can not */
 /* kikimr can not */
 $ad = AsStruct(1 AS a, 4 AS d);
 $b = AsStruct(2 AS b);

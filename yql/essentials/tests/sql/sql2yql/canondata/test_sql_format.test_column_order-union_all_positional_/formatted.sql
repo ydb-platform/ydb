@@ -1,4 +1,3 @@
-/* postgres can not */
 PRAGMA PositionalUnionAll;
 PRAGMA warning('disable', '1107');
 

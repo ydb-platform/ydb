@@ -1,4 +1,3 @@
-/* postgres can not */
 -- Null handling
 SELECT
     JSON_QUERY (NULL, 'strict $.key'),

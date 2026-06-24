@@ -1,4 +1,3 @@
-/* postgres can not */
 DEFINE ACTION $f($x) AS
     SELECT
         $x

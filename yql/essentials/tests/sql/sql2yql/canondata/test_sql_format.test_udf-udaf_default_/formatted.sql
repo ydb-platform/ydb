@@ -1,4 +1,3 @@
-/* postgres can not */
 $create = ($item, $_parent) -> {
     RETURN AsList($item);
 };

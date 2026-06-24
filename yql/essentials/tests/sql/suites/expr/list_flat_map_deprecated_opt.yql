@@ -1,2 +1,1 @@
-/* postgres can not */
 select ListFlatMap([1,2,null],($x)->(10 + $x));

@@ -1,4 +1,3 @@
-/* postgres can not */
 $makeOpt = Python::makeOpt(Callable<(String, Bool)->String?>,
 @@
 def makeOpt(arg, flag):

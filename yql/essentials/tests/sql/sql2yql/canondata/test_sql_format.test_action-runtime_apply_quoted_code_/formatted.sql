@@ -1,4 +1,3 @@
-/* postgres can not */
 $func = ($x) -> {
     RETURN $x == 1;
 };

@@ -85,6 +85,14 @@ Y_UNIT_TEST_SUITE(ACLib) {
         UNIT_ASSERT(rootACL.CheckAnyAccess(EAccessRights::SelectRow | EAccessRights::UpdateRow, catToken) == true);
         UNIT_ASSERT(rootACL.CheckAnyAccess(EAccessRights::SelectRow | EAccessRights::CreateDatabase, catToken) == true);
         UNIT_ASSERT(rootACL.CheckAnyAccess(EAccessRights::CreateQueue | EAccessRights::CreateDatabase, catToken) == false);
+
+        TSecurityObject dogFilesACL(Dog, true);
+        TSecurityObject effectiveDogFilesACL(dogFilesACL.MergeWithParent(rootACL));
+
+        effectiveDogFilesACL.AddAccess(EAccessType::Deny, EAccessRights::SelectRow, Cat, EInheritanceType::InheritContainer);
+
+        UNIT_ASSERT(effectiveDogFilesACL.CheckAnyAccess(EAccessRights::SelectRow, catToken) == false);
+        UNIT_ASSERT(effectiveDogFilesACL.CheckAnyAccess(EAccessRights::SelectRow | EAccessRights::UpdateRow, catToken) == true);
     }
 
     Y_UNIT_TEST(TestGroups) {

@@ -40,7 +40,7 @@ THashSet<TString> CollectDlqTopicPaths(const TPQTabletConfig& config, const TStr
         if (consumer.GetType() != TPQTabletConfig::CONSUMER_TYPE_MLP) {
             continue;
         }
-        if (consumer.GetDeadLetterPolicy() != TPQTabletConfig::DEAD_LETTER_POLICY_MOVE) {
+        if (consumer.GetDeadLetterPolicy() != TPQTabletConfig::DEAD_LETTER_POLICY_MOVE || !consumer.GetDeadLetterPolicyEnabled()) {
             continue;
         }
 

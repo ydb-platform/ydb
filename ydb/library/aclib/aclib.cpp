@@ -209,26 +209,12 @@ bool TSecurityObject::CheckAnyAccess(ui32 access, const TUserToken& user) const 
     if (user.IsSystemUser()) {
         return true; // the system always has access
     }
-    if (HasOwnerSID() && user.IsExist(GetOwnerSID()))
+    if (HasOwnerSID() && user.IsExist(GetOwnerSID())) {
         return true; // the owner always has access
-    if (HasACL()) {
-        for (const NACLibProto::TACE& ace : GetACL().GetACE()) {
-            if ((ace.GetInheritanceType() & EInheritanceType::InheritOnly) == 0) {
-                if (user.IsExist(ace.GetSID())) {
-                    switch(static_cast<EAccessType>(ace.GetAccessType())) {
-                    case EAccessType::Deny:
-                        break;
-                    case EAccessType::Allow:
-                        if (access & ace.GetAccessRight()) {
-                            return true;
-                        }
-                        break;
-                    }
-                }
-            }
-        }
     }
-    return false; // empty ACL is always-deny ACL
+
+    const ui32 effectiveAccess = GetEffectiveAccessRights(user);
+    return (effectiveAccess & access) != 0;
 }
 
 bool TSecurityObject::CheckGrantAccess(const NACLibProto::TDiffACL& diffACL, const TUserToken& user) const Y_NO_SANITIZE("undefined") {

@@ -63,8 +63,6 @@ When choosing a name for the column, consider the common [column naming rules](.
 
 The data type of the column. The complete list of data types supported by {{ ydb-short-name }} is available in the [{#T}](../../types/index.md) section.
 
-{% include [column_option_list.md](../_includes/column_option_list.md) %}
-
 ### INDEX
 
 Definition of an index on the table. [Secondary indexes](secondary_index.md), [vector indexes](vector_index.md), and [fulltext indexes](fulltext_index.md) are supported.

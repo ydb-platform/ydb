@@ -72,7 +72,7 @@ WITH (
     SCHEMA = (
         ts String
     ),
-    WATERMARK = SystemMetadata("write_time") - Interval("PT5S"),
+    WATERMARK = __ydb_write_time - Interval("PT5S"),
     WATERMARK_GRANULARITY = "PT1S",
     WATERMARK_IDLE_TIMEOUT = "PT5S"
 );

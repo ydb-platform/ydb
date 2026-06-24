@@ -402,11 +402,11 @@ WITH (
         key String,
         event_time String
     ),
-    WATERMARK = SystemMetadata("write_time") - Interval("PT5S")
+    WATERMARK = __ydb_write_time - Interval("PT5S")
 )
 GROUP BY
     key,
-    HoppingWindow(SystemMetadata("write_time"), "PT10S", "PT1M");
+    HoppingWindow(__ydb_write_time, "PT10S", "PT1M");
 ```
 
 ## HAVING {#having}

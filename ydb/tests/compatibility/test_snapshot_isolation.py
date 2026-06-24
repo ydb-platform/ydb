@@ -2,6 +2,7 @@ import logging
 import random
 import threading
 import time
+from enum import Enum
 
 import pytest
 
@@ -81,6 +82,11 @@ N_GROUPS = N_ROWS // GROUP_SIZE  # 1000
 FIXED_GROUP_SUM = GROUP_SIZE * (GROUP_SIZE - 1) // 2  # 45 = 0+1+...+9
 
 
+class TableType(Enum):
+    ROW = 1
+    COLUMN = 2
+
+
 class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
@@ -101,7 +107,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         with ydb.QuerySessionPool(self.driver) as pool:
             return pool.execute_with_retries(query)
 
-    def setup_tables(self):
+    def setup_row_tables(self):
         # 13 approximately uniformly partitioned shards in PK range [0, 10000)
         self._execute("""
             CREATE TABLE `datashard_table` (
@@ -115,6 +121,19 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
             )
         """)
         self._execute("""
+            CREATE TABLE `datashard_results` (
+                filter_type        String NOT NULL,
+                filter_lo          Int32,
+                filter_hi          Int32,
+                row_count          Int32,
+                int_sum            Int64,
+                count_distinct     Int32,
+                PRIMARY KEY (filter_type)
+            )
+        """)
+
+    def setup_column_tables(self):
+        self._execute("""
             CREATE TABLE `column_table` (
                 key     Int32 NOT NULL,
                 int_val Int32,
@@ -125,27 +144,22 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                 PARTITION_COUNT = 10
             )
         """)
-        for name in ('datashard_results', 'column_results'):
-            query = f"""
-                CREATE TABLE `{name}` (
-                    filter_type        String NOT NULL,
-                    filter_lo          Int32,
-                    filter_hi          Int32,
-                    row_count          Int32,
-                    int_sum            Int64,
-                    count_distinct     Int32,
-                    PRIMARY KEY (filter_type)
-                )
-            """
-            if name == 'column_results':
-                query += """
-                WITH (
-                    STORE = COLUMN,
-                    PARTITION_COUNT = 1
-                )"""
-            self._execute(query)
+        self._execute("""
+            CREATE TABLE `column_results` (
+                filter_type        String NOT NULL,
+                filter_lo          Int32,
+                filter_hi          Int32,
+                row_count          Int32,
+                int_sum            Int64,
+                count_distinct     Int32,
+                PRIMARY KEY (filter_type)
+            ) WITH (
+                STORE = COLUMN,
+                PARTITION_COUNT = 1
+            )
+        """)
 
-    def populate_tables(self):
+    def populate_table(self, table):
         # Use ListMap/AS_TABLE to generate 10k rows in a single YQL query.
         # int_val = key % GROUP_SIZE, so every group of GROUP_SIZE consecutive rows
         # sums to FIXED_GROUP_SUM = 0+1+...+(GROUP_SIZE-1) = 45.
@@ -161,8 +175,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
             }});
             UPSERT INTO `{table}` SELECT * FROM AS_TABLE($data)
         """
-        self._execute(query.format(table='datashard_table', n_rows=N_ROWS))
-        self._execute(query.format(table='column_table', n_rows=N_ROWS))
+        self._execute(query.format(table=table, n_rows=N_ROWS))
 
     # -------------------------------------------------------------------------
     # Worker threads
@@ -196,7 +209,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                 except Exception as e:
                     logger.warning("Updater [%s] error: %s", table_name, e)
 
-    def _pk_aggregator(self, table_name, result_table, stop_event, exec_counter, lock):
+    def _pk_aggregator(self, table_name, results_table, stop_event, exec_counter, lock):
         """
         Reads a group-aligned PK range under snapshot isolation, computes the
         aggregate, and writes it to the result table (generating write conflicts
@@ -225,7 +238,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                         time.sleep(random.uniform(0, 0.1))
 
                         with tx.execute(
-                            f"UPSERT INTO `{result_table}` "
+                            f"UPSERT INTO `{results_table}` "
                             "(filter_type, filter_lo, filter_hi, row_count, int_sum, count_distinct) "
                             f"VALUES (\"pk_range\", $lo, $hi, $row_count, $int_sum, $cd)",
                             parameters={
@@ -246,7 +259,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                 except Exception as e:
                     logger.warning("PK aggregator [%s] error: %s", table_name, e)
 
-    def _int_range_aggregator(self, table_name, result_table, stop_event, exec_counter, lock):
+    def _int_range_aggregator(self, table_name, results_table, stop_event, exec_counter, lock):
         """
         Reads `table_name` with an int value filter under snapshot isolation. For the datashard
         table uses a secondary index.
@@ -278,7 +291,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                         time.sleep(random.uniform(0, 0.1))
 
                         with tx.execute(
-                            f"UPSERT INTO `{result_table}` "
+                            f"UPSERT INTO `{results_table}` "
                             "(filter_type, filter_lo, filter_hi, row_count, int_sum, count_distinct) "
                             "VALUES (\"int_range\", $lo, $hi, $row_count, $int_sum, $cd)",
                             parameters={
@@ -299,7 +312,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                 except Exception as e:
                     logger.warning("Int range aggregator [%s] error: %s", table_name, e)
 
-    def _str_range_aggregator(self, table_name, result_table, stop_event, exec_counter, lock):
+    def _str_range_aggregator(self, table_name, results_table, stop_event, exec_counter, lock):
         """
         Reads `table_name` with a string-range filter under snapshot isolation.
         """
@@ -327,7 +340,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                         time.sleep(random.uniform(0, 0.1))
 
                         with tx.execute(
-                            f"UPSERT INTO `{result_table}` "
+                            f"UPSERT INTO `{results_table}` "
                             "(filter_type, filter_lo, filter_hi, row_count, int_sum, count_distinct) "
                             "VALUES (\"str_range\", $lo, $hi, $row_count, $int_sum, $cd)",
                             parameters={
@@ -352,14 +365,14 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
     # Checker (runs in the main thread)
     # -------------------------------------------------------------------------
 
-    def check_results(self, result_table):
+    def check_results(self, results_table):
         rows = []
-        for rs in self._execute(f"SELECT * FROM `{result_table}`"):
+        for rs in self._execute(f"SELECT * FROM `{results_table}`"):
             rows += rs.rows
 
         filter_types = set()
         for row in rows:
-            logger.info(f"Result row from {result_table}: {row}")
+            logger.info(f"Result row from {results_table}: {row}")
             filter_type = row.filter_type
             if isinstance(filter_type, bytes):
                 filter_type = filter_type.decode()
@@ -410,9 +423,19 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
     # Test entry point
     # -------------------------------------------------------------------------
 
-    def test_basic(self):
-        self.setup_tables()
-        self.populate_tables()
+    def run_basic(self, table_type):
+        if table_type == TableType.ROW:
+            data_table = "datashard_table"
+            results_table = "datashard_results"
+            self.setup_row_tables()
+        elif table_type == TableType.COLUMN:
+            data_table = "column_table"
+            results_table = "column_results"
+            self.setup_column_tables()
+        else:
+            assert False, f"unknown table type: {table_type}"
+
+        self.populate_table(data_table)
 
         stop_event = threading.Event()
         lock = threading.Lock()
@@ -429,35 +452,33 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
             threads.append(t)
             t.start()
 
-        # --- Updaters (1 per table) ---
-        start('ds_upd',  self._updater, 'datashard_table')
-        start('col_upd', self._updater, 'column_table')
+        # --- Updater (1 per table) ---
+        start('updater',  self._updater, data_table)
 
         # --- Aggregators ---
         for i in range(2):
-            start(f'ds_pk_{i}', self._pk_aggregator,
-                  'datashard_table', 'datashard_results')
-            start(f'col_pk_{i}', self._pk_aggregator,
-                  'column_table', 'column_results')
+            start(f'pk_agg_{i}', self._pk_aggregator,
+                  data_table, results_table)
 
         for i in range(2):
-            start(f'ds_int_{i}', self._int_range_aggregator,
-                  'datashard_table', 'datashard_results')
-        start('col_int', self._int_range_aggregator,
-              'column_table', 'column_results')
+            start(f'int_agg_{i}', self._int_range_aggregator,
+                  data_table, results_table)
 
-        start('ds_str', self._str_range_aggregator,
-              'datashard_table', 'datashard_results')
-        start('col_str', self._str_range_aggregator,
-              'column_table', 'column_results')
+        start('str_agg', self._str_range_aggregator,
+              data_table, results_table)
 
         # --- Rolling upgrade and checks ---
         try:
             for _ in self.roll():
                 self._wait_for_progress(exec_counters, lock, min_per_counter=5)
-                self.check_results('datashard_results')
-                self.check_results('column_results')
+                self.check_results(results_table)
         finally:
             stop_event.set()
             for t in threads:
                 t.join(timeout=60)
+
+    def test_row_tables(self):
+        self.run_basic(TableType.ROW)
+
+    def test_column_tables(self):
+        self.run_basic(TableType.COLUMN)

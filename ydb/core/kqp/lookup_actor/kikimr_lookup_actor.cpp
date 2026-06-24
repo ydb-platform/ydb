@@ -328,7 +328,7 @@ namespace NYql::NDq {
         void SendRetryOrError(TLookupState::TPtr state, Ydb::StatusIds::StatusCode status, NYql::TIssues issues) {
             if (IsRetryableError(status) && state->Backoff.HasMore()) {
                 auto delay = state->Backoff.Next();
-                LOG_W("Retriable error " << issues.ToOneLineString() << ", schedule retry in " << delay);
+                LOG_W("Retrievable error " << issues.ToOneLineString() << ", schedule retry in " << delay);
                 Schedule(delay, new TEvLookupRetry(std::move(state)));
                 return;
             }
@@ -608,7 +608,7 @@ namespace NYql::NDq {
                     v = &(it->second);
                 } else {
                     // Different from generic provider; connector may return unwanted keys (and we filter out them locally); for kikimr lookups this is a hard failure
-                    Y_VALIDATE(false, "SELECT returned unrequested keys, should not have happpend");
+                    Y_VALIDATE(false, "SELECT returned unrequested keys, should not have happened");
                     continue;
                 }
                 if (IsMultiMatches) {
@@ -758,8 +758,8 @@ namespace NYql::NDq {
                 tx_control.set_commit_tx(true);
             }
             request.mutable_query_cache_policy()->set_keep_in_cache(true);
-            LOG_D("QueryStatsCollection : " << (request.set_collect_stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC), "BASIC")); // for side effects
-            LOG_T("QueryStatsCollection : " << (request.set_collect_stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL), "FULL")); // for side effects
+            LOG_D("QueryStatsCollection : " << (request.set_collect_stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC), "BASIC")); // intentional side effects
+            LOG_T("QueryStatsCollection : " << (request.set_collect_stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL), "FULL")); // intentional side effects
             LOG_T("Query: <<<" << request.DebugString() << ">>>");
             return request;
         }

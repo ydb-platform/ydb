@@ -194,6 +194,15 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         successes: int = 0
         error: Exception = None
 
+    RETRIABLE_ERRORS = (
+        ydb.Unavailable,
+        ydb.Aborted,
+        ydb.Undetermined,
+        ydb.ConnectionLost,
+        ydb.NotFound,
+        ydb.BadSession,
+    )
+
     def _updater(self, table_name, stop_event, exec_state, lock):
         """
         Repeatedly picks a random group and redistributes its int_val values
@@ -219,10 +228,10 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
 
                     with lock:
                         exec_state.successes += 1
-                except ydb.issues.Error as e:
-                    # ignore YDB errors such as Aborted or Unavailable
-                    logger.warning("Updater [%s] YDB error: %s", table_name, e)
+                except self.RETRIABLE_ERRORS as e:
+                    logger.warning("Updater [%s] retriable error: %s", table_name, e)
                 except Exception as e:
+                    logger.error("Updater [%s] error: %s", table_name, e)
                     exec_state.error = e
                     break
 
@@ -293,7 +302,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
 
                     with lock:
                         exec_state.successes += 1
-                except (ydb.Unavailable, ydb.Aborted, ydb.Undetermined) as e:
+                except self.RETRIABLE_ERRORS as e:
                     logger.warning("PK aggregator [%s] retriable error: %s", table_name, e)
                 except Exception as e:
                     logger.error("PK aggregator [%s] error: %s", table_name, e)
@@ -368,7 +377,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
 
                     with lock:
                         exec_state.successes += 1
-                except (ydb.Unavailable, ydb.Aborted, ydb.Undetermined) as e:
+                except self.RETRIABLE_ERRORS as e:
                     logger.warning("Int range aggregator [%s] retriable error: %s", table_name, e)
                 except Exception as e:
                     logger.error("Int range aggregator [%s] error: %s", table_name, e)
@@ -442,7 +451,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
 
                     with lock:
                         exec_state.successes += 1
-                except (ydb.Unavailable, ydb.Aborted, ydb.Undetermined) as e:
+                except self.RETRIABLE_ERRORS as e:
                     logger.warning("String range aggregator [%s] retriable error: %s", table_name, e)
                 except Exception as e:
                     logger.error("String range aggregator [%s] error: %s", table_name, e)

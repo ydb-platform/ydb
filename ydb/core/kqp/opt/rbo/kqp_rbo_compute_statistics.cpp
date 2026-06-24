@@ -154,7 +154,7 @@ void TOpRead::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Metadata = TRBOMetadata();
 
     const auto& tableData = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, path.Value());
-    Props.Metadata->ColumnsCount = Props.Metadata->ColumnsCount = Columns.size();
+    Props.Metadata->ColumnsCount = Columns.size();
 
     // Record lineage: source can rename its columns, so already we need to record that
     auto outputIUs = GetOutputIUs();

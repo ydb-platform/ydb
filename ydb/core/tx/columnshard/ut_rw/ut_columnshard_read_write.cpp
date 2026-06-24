@@ -2,6 +2,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
@@ -3047,17 +3048,6 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)),
         };
 
-        auto planStep = SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, ydbPk), ++txId);
-
-        // Cout << "la-la-la: " << planStep << Endl;
-        const auto testData = MakeTestBlob({ 0, 100 }, ydbSchema);
-        std::vector<ui64> writeIds;
-        UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds));
-        planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
-        PlanCommit(runtime, sender, planStep, txId);
-
-        const auto oldColumnIds = TTestSchema::ExtractIds(ydbSchema);
-
         const std::vector<NArrow::NTest::TTestColumn> ydbSchemaV2 = {
             NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)),
             NArrow::NTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)),
@@ -3067,36 +3057,77 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             NArrow::NTest::TTestColumn("message", TTypeInfo(NTypeIds::Utf8)),
         };
 
-        planStep = SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 2, ydbSchemaV2, ydbPk, {}), ++txId);
+        auto planStep = SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, ydbPk), ++txId);
 
-        const NOlap::TSnapshot readSnapshot(planStep, Max<ui64>());
+        const auto testData = MakeTestBlob({ 0, 100 }, ydbSchema);
+        std::vector<ui64> writeIds;
+        UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds));
+        planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, planStep, txId);
 
-        auto pathId = NColumnShard::TUnifiedPathId::BuildValid(
-            NColumnShard::TInternalPathId::FromRawValue(tableId), NColumnShard::TSchemeShardLocalPathId::FromRawValue(tableId));
-
-        auto ev = std::make_unique<TEvColumnShard::TEvInternalScan>(pathId, readSnapshot, std::nullopt, false);
-        ev->TaskIdentifier = "test-internal-scan";
-
-        for (auto id : oldColumnIds) {
-            ev->AddColumn(id);
-        }
-
-        ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, ev.release());
-
-        TAutoPtr<IEventHandle> handle;
-        bool gotResponse = false;
-        const TInstant start = TInstant::Now();
-        while (!gotResponse && TInstant::Now() - start < TDuration::Seconds(10)) {
-            if (runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanInitActor>(handle, TDuration::MilliSeconds(100))) {
-                gotResponse = true;
-            } else if (runtime.GrabEdgeEvent<NKqp::TEvKqpCompute::TEvScanError>(handle, TDuration::MilliSeconds(100))) {
-                gotResponse = true;
+        TDeque<TAutoPtr<IEventHandle>> capturedInternalScans;
+        const auto captureInternalScan = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (!capturedInternalScans.empty()) {
+                return false;
             }
 
-            // Cout << "la-la-la 239: " << gotResponse << Endl;
+            if (TryGetPrivateEvent<TEvColumnShard::TEvInternalScan>(ev)) {
+                capturedInternalScans.push_back(ev.Release());
+                return true;
+            }
+
+            return false;
+        };
+
+        runtime.SetEventFilter(captureInternalScan);
+
+        UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, false, nullptr, NEvWrite::EModificationType::Update));
+
+        const TInstant waitStart = TInstant::Now();
+        while (capturedInternalScans.empty() && TInstant::Now() - waitStart < TDuration::Seconds(30)) {
+            runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
         }
 
-        UNIT_ASSERT_C(gotResponse, "Tablet should respond to internal scan without crashing");
+        UNIT_ASSERT_C(!capturedInternalScans.empty(), "Update write should trigger internal scan from restore actor");
+
+        runtime.SetEventFilter([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+            return false;
+        });
+
+        planStep = SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 2, ydbSchemaV2, ydbPk, {}), ++txId);
+
+        while (!capturedInternalScans.empty()) {
+            runtime.Send(capturedInternalScans.front().Release());
+            capturedInternalScans.pop_front();
+        }
+
+        TDeque<TAutoPtr<IEventHandle>> capturedScanInit;
+        const auto captureScanInit = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (TryGetPrivateEvent<NKqp::TEvKqpCompute::TEvScanInitActor>(ev)) {
+                capturedScanInit.push_back(ev.Release());
+                return true;
+            }
+
+            return false;
+        };
+
+        runtime.SetEventFilter(captureScanInit);
+
+        const TInstant scanWaitStart = TInstant::Now();
+        while (capturedScanInit.empty() && TInstant::Now() - scanWaitStart < TDuration::Seconds(30)) {
+            runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+        }
+
+        UNIT_ASSERT_C(!capturedScanInit.empty(), "Restore internal scan should start on tablet after schema drop (no index_info crash)");
+
+        runtime.SetEventFilter([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+            return false;
+        });
+
+        while (!capturedScanInit.empty()) {
+            runtime.Send(capturedScanInit.front().Release());
+            capturedScanInit.pop_front();
+        }
     }
 }
 

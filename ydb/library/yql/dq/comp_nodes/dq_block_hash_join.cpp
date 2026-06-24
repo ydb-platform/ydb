@@ -1,4 +1,5 @@
 #include "dq_block_hash_join.h"
+#include "dq_block_hash_join_log.h"
 
 #include <yql/essentials/minikql/comp_nodes/mkql_blocks.h>
 #include <yql/essentials/minikql/computation/mkql_block_builder.h>
@@ -239,6 +240,16 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             }
             layouts.SelectSide(side) = MakeBlockLayoutConverter(helper, userTypes.SelectSide(side), roles, &ctx.ArrowMemoryPool);
         }
+
+        {
+            auto logger = ctx.MakeLogger();
+            auto logComponent = logger->RegisterComponent("BlockHashJoin");
+            LogBlockHashJoinStructure(logger, logComponent,
+                Meta_->Kind, Meta_->Settings.LeftIsBuild(),
+                Meta_->UserTypes, Meta_->KeyColumns, Meta_->Renames,
+                {.Build = layouts.Build->GetTupleLayout(), .Probe = layouts.Probe->GetTupleLayout()});
+        }
+
         const auto& userNullTypes = (Kind == EJoinKind::Left && Meta_->Settings.LeftIsBuild()) ? userTypes.Probe : userTypes.Build;
         return ctx.HolderFactory.Create<TStreamValue>(ctx, Streams_,
             std::move(layouts), Meta_.get(), userNullTypes);

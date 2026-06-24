@@ -81,13 +81,31 @@ void TPartitionSourceManager::TModificationBatch::Cancel() {
     return SourceIdWriter.Clear();
 }
 
+bool TPartitionSourceManager::TModificationBatch::HasHeartbeatWrites() const {
+    return SourceIdWriter.HasHeartbeatWrites();
+}
+
+TString TPartitionSourceManager::TModificationBatch::DescribeHeartbeatWrites(size_t maxSourceIds) const {
+    return SourceIdWriter.DescribeHeartbeatWrites(maxSourceIds);
+}
+
 bool TPartitionSourceManager::TModificationBatch::HasModifications() const {
     return !SourceIdWriter.GetSourceIdsToWrite().empty()
         || !SourceIdWriter.GetSourceIdsToDelete().empty();
 }
 
 void TPartitionSourceManager::TModificationBatch::FillRequest(TEvKeyValue::TEvRequest* request) {
+    const auto cmdWritesBefore = request->Record.CmdWriteSize();
     SourceIdWriter.FillRequest(request, Manager.Partition.Partition);
+    if (SourceIdWriter.HasHeartbeatWrites()) {
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::PERSQUEUE,
+            "SOURCE_ID_KV_HEARTBEAT_WRITE_PREPARE topic '" << Manager.Partition.TopicName()
+            << "' partition " << Manager.Partition.Partition
+            << " cmdWritesBefore# " << cmdWritesBefore
+            << " cmdWritesAfter# " << request->Record.CmdWriteSize()
+            << " expected# " << SourceIdWriter.DescribeHeartbeatWrites(64)
+            << " currentSourceIdStorage# " << Manager.Partition.SourceIdStorage.DescribeHeartbeatState(0));
+    }
 }
 
 void TPartitionSourceManager::TModificationBatch::DeregisterSourceId(const TString& sourceId) {

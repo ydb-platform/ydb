@@ -2118,6 +2118,67 @@ Y_UNIT_TEST_SUITE(Cdc) {
         return 0;
     }
 
+    struct TPqRecord {
+        ui32 PartitionId = 0;
+        ui64 Offset = 0;
+        TString SourceId;
+        ui64 SeqNo = 0;
+        TString PartitionKey;
+        TString Body;
+    };
+
+    auto GetDetailedRecords(TTestActorRuntime& runtime, const TActorId& sender, const TString& path, ui32 partitionId) {
+        NKikimrClient::TPersQueueRequest request;
+        request.MutablePartitionRequest()->SetTopic(path);
+        request.MutablePartitionRequest()->SetPartition(partitionId);
+
+        auto& cmd = *request.MutablePartitionRequest()->MutableCmdRead();
+        cmd.SetClientId(NKikimr::NPQ::CLIENTID_WITHOUT_CONSUMER);
+        cmd.SetCount(10000);
+        cmd.SetOffset(0);
+        cmd.SetReadTimestampMs(0);
+        cmd.SetExternalOperation(true);
+
+        auto req = MakeHolder<TEvPersQueue::TEvRequest>();
+        req->Record = std::move(request);
+        ForwardToTablet(runtime, ResolvePqTablet(runtime, sender, path, partitionId), sender, req.Release());
+
+        auto resp = runtime.GrabEdgeEventRethrow<TEvPersQueue::TEvResponse>(sender);
+        UNIT_ASSERT(resp);
+
+        TVector<TPqRecord> result;
+        for (const auto& r : resp->Get()->Record.GetPartitionResponse().GetCmdReadResult().GetResult()) {
+            const auto data = NKikimr::GetDeserializedData(r.GetData());
+            result.push_back({
+                .PartitionId = partitionId,
+                .Offset = r.GetOffset(),
+                .SourceId = r.GetSourceId(),
+                .SeqNo = r.GetSeqNo(),
+                .PartitionKey = r.GetPartitionKey(),
+                .Body = data.GetData(),
+            });
+        }
+
+        return result;
+    }
+
+    auto GetAllDetailedRecords(TTestActorRuntime& runtime, const TActorId& sender, const TString& path) {
+        const auto& pqDesc = GetTopicDescription(runtime, sender, path);
+
+        TVector<TPqRecord> result;
+        for (const auto& partition : pqDesc.GetPartitions()) {
+            const auto records = GetDetailedRecords(runtime, sender, path, partition.GetPartitionId());
+            result.insert(result.end(), records.begin(), records.end());
+        }
+
+        Sort(result, [](const auto& lhs, const auto& rhs) {
+            return std::tie(lhs.PartitionId, lhs.Offset, lhs.SeqNo)
+                < std::tie(rhs.PartitionId, rhs.Offset, rhs.SeqNo);
+        });
+
+        return result;
+    }
+
     auto GetRecords(TTestActorRuntime& runtime, const TActorId& sender, const TString& path, ui32 partitionId) {
         Cerr << ">>>>> GetRecords path=" << path << " partitionId=" << partitionId << Endl << Flush;
         NKikimrClient::TPersQueueRequest request;
@@ -4093,6 +4154,201 @@ Y_UNIT_TEST_SUITE(Cdc) {
             R"({"resolved":"***"})",
             R"({"resolved":"***"})",
         });
+    }
+
+    Y_UNIT_TEST(ResolvedTimestampsDoNotGoBackAfterPqTabletRestartWithStaleSourceHeartbeats) {
+        TPortManager portManager;
+        TServer::TPtr server = new TServer(TServerSettings(portManager.GetPort(2134), {}, DefaultPQConfig())
+            .SetUseRealThreads(false)
+            .SetDomainName("Root")
+            .SetEnableTopicSplitMerge(true)
+            .SetEnableTopicAutopartitioningForCDC(true)
+        );
+
+        auto& runtime = *server->GetRuntime();
+        const auto edgeActor = runtime.AllocateEdgeActor();
+
+        SetupLogging(runtime);
+        InitRoot(server, edgeActor);
+        CreateShardedTable(server, edgeActor, "/Root", "Table", SimpleTable().Shards(3));
+
+        WaitTxNotification(server, edgeActor, AsyncAlterAddStream(server, "/Root", "Table",
+            WithTopicAutoPartitioning(true,
+                WithResolvedTimestamps(TDuration::Seconds(1), Updates(NKikimrSchemeOp::ECdcStreamFormatJson)))));
+
+        auto parseResolved = [](const TPqRecord& record) -> TMaybe<TRowVersion> {
+            NJson::TJsonValue json;
+            UNIT_ASSERT_C(NJson::ReadJsonTree(record.Body, &json),
+                "Failed to parse CDC record json: " << record.Body);
+
+            if (!json.Has("resolved")) {
+                return Nothing();
+            }
+
+            const auto& resolved = json["resolved"];
+            UNIT_ASSERT_C(resolved.IsArray() && resolved.GetArraySafe().size() == 2,
+                "Unexpected resolved format: " << record.Body);
+
+            return TRowVersion(
+                resolved[0].GetUInteger(),
+                resolved[1].GetUInteger());
+        };
+
+        auto countResolved = [&](const TVector<TPqRecord>& records) {
+            ui32 count = 0;
+            for (const auto& record : records) {
+                if (parseResolved(record)) {
+                    ++count;
+                }
+            }
+            return count;
+        };
+
+        auto maxResolved = [&](const TVector<TPqRecord>& records) {
+            TRowVersion max = TRowVersion::Min();
+            for (const auto& record : records) {
+                if (const auto resolved = parseResolved(record)) {
+                    max = Max(max, *resolved);
+                }
+            }
+            return max;
+        };
+
+        auto assertResolvedMonotonic = [&](const TVector<TPqRecord>& records) {
+            THashMap<TString, TRowVersion> lastResolvedBySource;
+            for (const auto& record : records) {
+                const auto resolved = parseResolved(record);
+                if (!resolved) {
+                    continue;
+                }
+
+                const auto sourceKey = TStringBuilder() << record.PartitionId << '\0' << record.SourceId;
+                auto it = lastResolvedBySource.find(sourceKey);
+                if (it != lastResolvedBySource.end()) {
+                    UNIT_ASSERT_C(it->second <= *resolved,
+                        "Resolved timestamp went backwards for partition# " << record.PartitionId
+                        << ", sourceId# " << EscapeC(record.SourceId)
+                        << ": previous# " << it->second
+                        << ", current# " << *resolved
+                        << ", offset# " << record.Offset
+                        << ", seqNo# " << record.SeqNo
+                        << ", body# " << record.Body);
+                }
+
+                lastResolvedBySource[sourceKey] = *resolved;
+            }
+        };
+
+        auto waitForResolvedGreaterThan = [&](TRowVersion previous) {
+            TVector<TPqRecord> records;
+            for (ui32 attempt = 0; attempt < 30; ++attempt) {
+                records = GetAllDetailedRecords(runtime, edgeActor, "/Root/Table/Stream");
+                if (maxResolved(records) > previous) {
+                    assertResolvedMonotonic(records);
+                    return records;
+                }
+
+                SimulateSleep(server, TDuration::Seconds(1));
+            }
+
+            UNIT_ASSERT_C(false, "Didn't observe resolved timestamp greater than " << previous
+                << ", current# " << maxResolved(records)
+                << ", count# " << countResolved(records));
+            return records;
+        };
+
+        auto waitForMoreResolved = [&](ui32 previousCount) {
+            TVector<TPqRecord> records;
+            for (ui32 attempt = 0; attempt < 30; ++attempt) {
+                records = GetAllDetailedRecords(runtime, edgeActor, "/Root/Table/Stream");
+                if (countResolved(records) > previousCount) {
+                    return records;
+                }
+
+                SimulateSleep(server, TDuration::Seconds(1));
+            }
+
+            UNIT_ASSERT_C(false, "Didn't observe a new resolved timestamp"
+                << ": previous count# " << previousCount
+                << ", current count# " << countResolved(records));
+            return records;
+        };
+
+        auto upsert = [&](ui32 key, ui32 value) {
+            ExecSQL(server, edgeActor, Sprintf(R"(
+                UPSERT INTO `/Root/Table` (key, value) VALUES (%u, %u);
+            )", key, value));
+        };
+
+        auto waitForUpdate = [&](ui32 key, ui32 value) {
+            const auto expected = Sprintf(R"({"update":{"value":%u},"key":[%u]})", value, key);
+            TVector<TPqRecord> records;
+
+            for (ui32 attempt = 0; attempt < 30; ++attempt) {
+                records = GetAllDetailedRecords(runtime, edgeActor, "/Root/Table/Stream");
+                for (const auto& record : records) {
+                    if (CheckJsonsEqual(record.Body, expected)) {
+                        assertResolvedMonotonic(records);
+                        return record.SourceId;
+                    }
+                }
+
+                SimulateSleep(server, TDuration::Seconds(1));
+            }
+
+            UNIT_ASSERT_C(false, "Didn't observe CDC update"
+                << ": key# " << key
+                << ", value# " << value
+                << ", expected# " << expected);
+            return TString{};
+        };
+
+        Cerr << "... wait for initial resolved heartbeat" << Endl;
+        auto records = waitForResolvedGreaterThan(TRowVersion::Min());
+        auto lastResolved = maxResolved(records);
+
+        const TVector<std::pair<ui32, ui32>> writes = {
+            {1, 10},
+            {2000000000u, 20},
+            {4000000000u, 30},
+        };
+
+        THashSet<TString> dataShardSourceIds;
+        for (const auto& [key, value] : writes) {
+            Cerr << "... persist stale source heartbeat via ordinary update: key# " << key << Endl;
+            upsert(key, value);
+            dataShardSourceIds.insert(waitForUpdate(key, value));
+
+            Cerr << "... advance visible resolved after update: previous# " << lastResolved << Endl;
+            SimulateSleep(server, TDuration::Seconds(2));
+            records = waitForResolvedGreaterThan(lastResolved);
+            lastResolved = maxResolved(records);
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL_C(dataShardSourceIds.size(), writes.size(),
+            "Expected writes to come from different datashards");
+
+        Cerr << "... advance pq emitted heartbeat beyond persisted source heartbeats" << Endl;
+        SimulateSleep(server, TDuration::Seconds(2));
+        records = waitForResolvedGreaterThan(lastResolved);
+        const auto resolvedCountBeforeRestart = countResolved(records);
+        lastResolved = maxResolved(records);
+
+        Cerr << "... reboot pq tablets after resolved# " << lastResolved << Endl;
+        {
+            THashSet<ui64> pqTablets;
+            const auto& pqDesc = GetTopicDescription(runtime, edgeActor, "/Root/Table/Stream");
+            for (const auto& partition : pqDesc.GetPartitions()) {
+                pqTablets.insert(partition.GetTabletId());
+            }
+            for (const ui64 tabletId : pqTablets) {
+                RebootTablet(runtime, tabletId, edgeActor);
+            }
+        }
+
+        Cerr << "... wait for heartbeat after pq tablet restart" << Endl;
+        records = waitForMoreResolved(resolvedCountBeforeRestart);
+        assertResolvedMonotonic(records);
     }
 
     Y_UNIT_TEST(ResolvedTimestampForDisplacedUpsert) {

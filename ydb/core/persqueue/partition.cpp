@@ -613,6 +613,40 @@ void TPartition::DestroyActor(const TActorContext& ctx)
         ss << "Tablet is restarting, topic '" << TopicName() << "'";
     }
 
+    {
+        TStringBuilder destroyLog;
+        destroyLog << "DestroyActor topic '" << TopicName() << "' partition " << Partition
+            << "; LastEmittedHeartbeat=" << LastEmittedHeartbeat
+            << " (in-memory only, will be lost on restart)";
+        destroyLog << "; sourceIdStorageBeforeRestart# " << SourceIdStorage.DescribeHeartbeatState(64);
+
+        const auto& byHb = SourceIdStorage.GetSourceIdsByHeartbeat();
+
+        if (!byHb.empty()) {
+            const auto& maxSourceIdStorageVersion = byHb.rbegin()->first;
+            destroyLog << ", maxSourceIdStorageHeartbeatVersion# " << maxSourceIdStorageVersion;
+            if (LastEmittedHeartbeat > maxSourceIdStorageVersion) {
+                destroyLog << " *** IN-MEMORY AHEAD OF KV by ("
+                           << LastEmittedHeartbeat.Step - maxSourceIdStorageVersion.Step
+                           << "," << LastEmittedHeartbeat.TxId - maxSourceIdStorageVersion.TxId
+                           << ") - this delta will be LOST on restart and may cause heartbeats to go backwards ***";
+            } else if (LastEmittedHeartbeat == maxSourceIdStorageVersion) {
+                destroyLog << " (LastEmittedHeartbeat matches SourceIdStorage max)";
+            } else {
+                // LastEmittedHeartbeat < SourceIdStorage max - unusual but possible if emit was skipped.
+                destroyLog << " (LastEmittedHeartbeat is behind SourceIdStorage max)";
+            }
+        } else {
+            destroyLog << ", noSourceIdStorageHeartbeats";
+            if (LastEmittedHeartbeat > TRowVersion::Min()) {
+                destroyLog << " *** LastEmittedHeartbeat=" << LastEmittedHeartbeat
+                           << " is in-memory only with NO KV backup - will be fully LOST on restart ***";
+            }
+        }
+
+        PQ_LOG_NOTICE(destroyLog);
+    }
+
     for (const auto& ev : WaitToChangeOwner) {
         ReplyError(ctx, ev->Cookie, errorCode, ss);
     }
@@ -669,7 +703,9 @@ void TPartition::InitComplete(const TActorContext& ctx) {
         }
     }
 
-    PQ_LOG_I("init complete for topic '" << TopicName() << "' partition " << Partition << " generation " << TabletGeneration << " " << ctx.SelfID);
+    PQ_LOG_NOTICE("init complete for topic '" << TopicName() << "' partition " << Partition << " generation " << TabletGeneration << " " << ctx.SelfID.ToString()
+             << "; LastEmittedHeartbeat reset to Min() (not persisted, CDC resolved timestamps may go backwards if heartbeats were emitted before restart)"
+             << "; restoredSourceIdStorage# " << SourceIdStorage.DescribeHeartbeatState(0));
 
     TStringBuilder ss;
     ss << "SYNC INIT topic " << TopicName() << " partitition " << Partition

@@ -4,6 +4,7 @@
 #include <ydb/core/persqueue/partition.h>
 
 #include <util/generic/size_literals.h>
+#include <util/string/escape.h>
 
 #include <algorithm>
 
@@ -11,6 +12,20 @@ namespace NKikimr::NPQ {
 
 static constexpr ui64 MAX_DELETE_COMMAND_SIZE = 10_MB;
 static constexpr ui64 MAX_DELETE_COMMAND_COUNT = 1000;
+
+static const char* BoolName(bool value) {
+    return value ? "true" : "false";
+}
+
+static const char* SourceIdFormatName(ESourceIdFormat format) {
+    switch (format) {
+    case ESourceIdFormat::Raw:
+        return "raw";
+    case ESourceIdFormat::Proto:
+        return "proto";
+    }
+    return "unknown";
+}
 
 template <typename T>
 T ReadAs(const TString& data, ui32& pos) {
@@ -454,6 +469,95 @@ TInstant TSourceIdStorage::MinAvailableTimestamp(TInstant now) const {
     return ds;
 }
 
+TString TSourceIdStorage::DescribeSourceIdInfo(const TString& sourceId, const TSourceIdInfo& sourceIdInfo) {
+    TStringBuilder ss;
+    ss << "sourceId# " << EscapeC(sourceId)
+       << " seqNo# " << sourceIdInfo.SeqNo
+       << " minSeqNo# " << sourceIdInfo.MinSeqNo
+       << " offset# " << sourceIdInfo.Offset
+       << " explicit# " << BoolName(sourceIdInfo.Explicit)
+       << " state# " << static_cast<int>(sourceIdInfo.State)
+       << " writeTimestamp# " << sourceIdInfo.WriteTimestamp.GetValue()
+       << " createTimestamp# " << sourceIdInfo.CreateTimestamp.GetValue()
+       << " producerEpoch# " << sourceIdInfo.ProducerEpoch
+       << " hasLastHeartbeat# " << BoolName(sourceIdInfo.LastHeartbeat.Defined());
+    if (sourceIdInfo.LastHeartbeat) {
+        ss << " lastHeartbeat# " << sourceIdInfo.LastHeartbeat->Version
+           << " lastHeartbeatDataSize# " << sourceIdInfo.LastHeartbeat->Data.size();
+    }
+    return ss;
+}
+
+TString TSourceIdStorage::DescribeHeartbeatState(size_t maxSourceIds) const {
+    ui64 explicitWithoutHeartbeat = 0;
+    ui64 explicitMissingFromMemory = 0;
+    for (const auto& sourceId : ExplicitSourceIds) {
+        auto it = InMemorySourceIds.find(sourceId);
+        if (it == InMemorySourceIds.end()) {
+            ++explicitMissingFromMemory;
+        } else if (!it->second.LastHeartbeat) {
+            ++explicitWithoutHeartbeat;
+        }
+    }
+
+    TStringBuilder ss;
+    ss << "sourceIds# " << InMemorySourceIds.size()
+       << " explicitSourceIds# " << ExplicitSourceIds.size()
+       << " sourceIdsWithHeartbeat# " << SourceIdsWithHeartbeat.size()
+       << " explicitWithoutHeartbeat# " << explicitWithoutHeartbeat
+       << " explicitMissingFromMemory# " << explicitMissingFromMemory
+       << " heartbeatVersions# " << SourceIdsByHeartbeat.size();
+
+    if (!SourceIdsByHeartbeat.empty()) {
+        ss << " minHeartbeat# " << SourceIdsByHeartbeat.begin()->first
+           << " minHeartbeatSourceIds# " << SourceIdsByHeartbeat.begin()->second.size()
+           << " maxHeartbeat# " << SourceIdsByHeartbeat.rbegin()->first
+           << " maxHeartbeatSourceIds# " << SourceIdsByHeartbeat.rbegin()->second.size();
+    }
+
+    size_t logged = 0;
+    for (const auto& [sourceId, sourceIdInfo] : InMemorySourceIds) {
+        if (logged >= maxSourceIds) {
+            ss << "; sourceIdsLogTruncated# " << (InMemorySourceIds.size() - logged);
+            break;
+        }
+        ss << "; " << TSourceIdStorage::DescribeSourceIdInfo(sourceId, sourceIdInfo);
+        ++logged;
+    }
+
+    return ss;
+}
+
+TString TSourceIdStorage::DescribeMinHeartbeatSourceIds(size_t maxSourceIds) const {
+    if (SourceIdsByHeartbeat.empty()) {
+        return "none";
+    }
+
+    const auto& [version, sourceIds] = *SourceIdsByHeartbeat.begin();
+
+    TStringBuilder ss;
+    ss << "minHeartbeat# " << version
+       << " minHeartbeatSourceIds# " << sourceIds.size();
+
+    size_t logged = 0;
+    for (const auto& sourceId : sourceIds) {
+        if (logged >= maxSourceIds) {
+            ss << "; minHeartbeatSourceIdsLogTruncated# " << (sourceIds.size() - logged);
+            break;
+        }
+
+        auto it = InMemorySourceIds.find(sourceId);
+        if (it == InMemorySourceIds.end()) {
+            ss << "; sourceId# " << EscapeC(sourceId) << " missingFromMemory# true";
+        } else {
+            ss << "; " << TSourceIdStorage::DescribeSourceIdInfo(sourceId, it->second);
+        }
+        ++logged;
+    }
+
+    return ss;
+}
+
 /// TSourceIdWriter
 TSourceIdWriter::TSourceIdWriter(ESourceIdFormat format)
     : Format(format)
@@ -467,6 +571,59 @@ void TSourceIdWriter::DeregisterSourceId(const TString& sourceId) {
 void TSourceIdWriter::Clear() {
     Registrations.clear();
     Deregistrations.clear();
+}
+
+bool TSourceIdWriter::HasHeartbeatWrites() const {
+    for (const auto& [_, sourceIdInfo] : Registrations) {
+        if (sourceIdInfo.LastHeartbeat) {
+            return true;
+        }
+    }
+    return false;
+}
+
+TString TSourceIdWriter::DescribeHeartbeatWrites(size_t maxSourceIds) const {
+    ui64 heartbeatWrites = 0;
+    TMaybe<TRowVersion> minHeartbeat;
+    TMaybe<TRowVersion> maxHeartbeat;
+    for (const auto& [_, sourceIdInfo] : Registrations) {
+        if (const auto& heartbeat = sourceIdInfo.LastHeartbeat) {
+            ++heartbeatWrites;
+            if (!minHeartbeat || heartbeat->Version < *minHeartbeat) {
+                minHeartbeat = heartbeat->Version;
+            }
+            if (!maxHeartbeat || *maxHeartbeat < heartbeat->Version) {
+                maxHeartbeat = heartbeat->Version;
+            }
+        }
+    }
+
+    TStringBuilder ss;
+    ss << "format# " << SourceIdFormatName(Format)
+       << " formatPersistsHeartbeat# " << BoolName(Format == ESourceIdFormat::Proto)
+       << " sourceIdWrites# " << Registrations.size()
+       << " heartbeatWrites# " << heartbeatWrites
+       << " sourceIdDeletes# " << Deregistrations.size();
+
+    if (minHeartbeat) {
+        ss << " minHeartbeat# " << *minHeartbeat
+           << " maxHeartbeat# " << *maxHeartbeat;
+    }
+
+    size_t logged = 0;
+    for (const auto& [sourceId, sourceIdInfo] : Registrations) {
+        if (!sourceIdInfo.LastHeartbeat) {
+            continue;
+        }
+        if (logged >= maxSourceIds) {
+            ss << "; heartbeatWritesLogTruncated# " << (heartbeatWrites - logged);
+            break;
+        }
+        ss << "; " << TSourceIdStorage::DescribeSourceIdInfo(sourceId, sourceIdInfo);
+        ++logged;
+    }
+
+    return ss;
 }
 
 void TSourceIdWriter::FillKeyAndData(ESourceIdFormat format, const TString& sourceId, const TSourceIdInfo& sourceIdInfo, TKeyPrefix& key, TBuffer& data) {

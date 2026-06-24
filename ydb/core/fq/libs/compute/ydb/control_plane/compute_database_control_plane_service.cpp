@@ -194,7 +194,7 @@ public:
             return;
         }
         FillRequest(Request, client->Config);
-        Send(client->ActorId, new TEvYdbCompute::TEvCreateDatabaseRequest{Request->Get()->CloudId, Scope, Request->Get()->BasePath, Request->Get()->Path, client->Config.GetExecutionConnection(), client->Config.GetFolderId()}, 0, ev->Cookie);
+        Send(client->ActorId, new TEvYdbCompute::TEvCreateDatabaseRequest{Request->Get()->CloudId, Scope, Request->Get()->BasePath, Request->Get()->Path, client->Config.GetExecutionConnection()}, 0, ev->Cookie);
     }
 
     void Handle(TEvYdbCompute::TEvAddDatabaseResponse::TPtr& ev) {

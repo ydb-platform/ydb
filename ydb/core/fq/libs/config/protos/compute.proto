@@ -56,7 +56,6 @@ message TComputeDatabaseConfig {
     TLoadControlConfig LoadControlConfig = 4;
     TWorkloadManagerConfig WorkloadManagerConfig = 5;
     TAccessConfig AccessConfig = 8;
-    string FolderId = 9;
 }
 
 message TDatabaseMapping {

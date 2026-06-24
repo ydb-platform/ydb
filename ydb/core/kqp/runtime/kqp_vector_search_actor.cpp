@@ -7,6 +7,8 @@
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/engine/mkql_keys.h>
 #include <ydb/core/scheme/scheme_tablecell.h>
+#include <ydb/core/scheme/scheme_tabledefs.h>
+#include <ydb/core/tx/scheme_cache/scheme_cache.h>
 
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
 #include <ydb/core/kqp/common/kqp_yql.h>
@@ -42,6 +44,7 @@ class TKqpVectorSearchActor : public NActors::TActorBootstrapped<TKqpVectorSearc
 
     enum class EPhase {
         WaitInput,    // waiting for the target vector
+        Resolve,      // resolving shard partitionings of the index/main tables
         Level,        // traversing the KMeans tree level table
         Posting,      // scanning posting table for candidate PKs
         Main,         // reading main table rows for candidate PKs
@@ -157,6 +160,7 @@ private:
             switch (ev->GetTypeRewrite()) {
                 hFunc(TEvNewAsyncInputDataArrived, HandleRead);
                 hFunc(IDqComputeActorAsyncInput::TEvAsyncInputError, OnAsyncInputError);
+                hFunc(TEvTxProxySchemeCache::TEvResolveKeySetResult, HandleResolvePartitioning);
             }
         } catch (const yexception& e) {
             RuntimeError(e.what(), NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -172,7 +176,7 @@ private:
     }
 
     void PassAway() final {
-        StopInnerRead();
+        StopAllReads();
         {
             auto guard = BindAllocator();
             Input.Clear();
@@ -266,11 +270,85 @@ private:
             << " levelTop=" << LevelTop << " topK=" << TopK << " hasPrefix=" << HasPrefix
             << " levelRoots=" << CurrentParents.size() << " directPosting=" << DirectPostingParents.size());
 
+        // Pre-resolve the shard partitioning of the level/posting/main tables once,
+        // concurrently. The maps are data-independent, so resolving them up front lets
+        // every per-phase read target shards directly (ShardIdHint) and skip its own
+        // scheme-cache resolve round-trip -- which otherwise sits serially on the
+        // critical path before each phase. Traversal begins once all maps arrive.
+        StartResolve();
+    }
+
+    void BeginTraversal() {
         if (CurrentParents.empty()) {
             // All roots are direct posting partitions: skip level traversal.
             StartPosting();
         } else {
             StartLevelRound();
+        }
+    }
+
+    // ---- Partitioning pre-resolve -----------------------------------------
+
+    void StartResolve() {
+        Phase = EPhase::Resolve;
+        PendingResolves = 0;
+        const NScheme::TTypeInfo u64(NScheme::NTypeIds::Uint64);
+        // Level table key is (parent, id), both Uint64.
+        SendPartitioningResolve(Settings.GetLevelTable(), {u64, u64});
+        // Posting key is (__ydb_parent, <main PK columns>).
+        TVector<NScheme::TTypeInfo> postingKeyTypes;
+        postingKeyTypes.reserve(1 + MainKeyTypeInfos.size());
+        postingKeyTypes.push_back(u64);
+        postingKeyTypes.insert(postingKeyTypes.end(), MainKeyTypeInfos.begin(), MainKeyTypeInfos.end());
+        SendPartitioningResolve(Settings.GetPostingTable(), postingKeyTypes);
+        if (!PostingCovers) {
+            // Covered index ranks on the posting table and never reads the main table.
+            SendPartitioningResolve(Settings.GetMainTable(), MainKeyTypeInfos);
+        }
+    }
+
+    void SendPartitioningResolve(const NKikimrTxDataShard::TKqpTransaction::TTableMeta& table,
+        const TVector<NScheme::TTypeInfo>& keyTypes)
+    {
+        const auto& t = table.GetTableId();
+        TTableId tableId(t.GetOwnerId(), t.GetTableId(), table.GetSysViewInfo(), t.GetSchemaVersion());
+
+        TVector<TCell> minusInf(keyTypes.size());
+        TVector<TCell> plusInf;
+        TTableRange range(minusInf, true, plusInf, true, false);
+
+        auto request = MakeHolder<NSchemeCache::TSchemeCacheRequest>();
+        request->DatabaseName = Settings.GetDatabase();
+        request->ResultSet.emplace_back(MakeHolder<TKeyDesc>(tableId, range, TKeyDesc::ERowOperation::Read,
+            keyTypes, TVector<TKeyDesc::TColumnOp>{}));
+
+        ++PendingResolves;
+        Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvResolveKeySet(request));
+    }
+
+    static bool SameTable(const TTableId& id, const NKikimrTxDataShard::TKqpTransaction::TTableMeta& table) {
+        const auto& t = table.GetTableId();
+        return id.PathId.OwnerId == t.GetOwnerId() && id.PathId.LocalPathId == t.GetTableId();
+    }
+
+    void HandleResolvePartitioning(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
+        auto* request = ev->Get()->Request.Get();
+        if (!request->ResultSet.empty() && request->ErrorCount == 0) {
+            const auto& entry = request->ResultSet[0];
+            auto partitioning = entry.KeyDescription->Partitioning;
+            const auto& id = entry.KeyDescription->TableId;
+            // Leave a partitioning null on any mismatch/failure: the per-phase read then
+            // falls back to a normal resolving read, preserving correctness.
+            if (SameTable(id, Settings.GetLevelTable())) {
+                LevelPartitioning = partitioning;
+            } else if (SameTable(id, Settings.GetPostingTable())) {
+                PostingPartitioning = partitioning;
+            } else if (SameTable(id, Settings.GetMainTable())) {
+                MainPartitioning = partitioning;
+            }
+        }
+        if (--PendingResolves == 0 && !Failed) {
+            BeginTraversal();
         }
     }
 
@@ -586,7 +664,7 @@ private:
         AddColumn(src, Settings.GetLevelTableClusterColumnId(), NTableIndex::NKMeans::IdColumn, NScheme::NTypeIds::Uint64, nullptr, true);
         AddColumn(src, Settings.GetLevelTableCentroidColumnId(), NTableIndex::NKMeans::CentroidColumn, NScheme::NTypeIds::String, nullptr, true);
 
-        LaunchInnerRead(src, arena);
+        LaunchPhaseReads(src, arena, LevelPartitioning);
     }
 
     void StartPostingRead(TVector<TClusterId>& parents) {
@@ -634,7 +712,7 @@ private:
             }
         }
 
-        LaunchInnerRead(src, arena);
+        LaunchPhaseReads(src, arena, PostingPartitioning);
     }
 
     void StartMainRead() {
@@ -679,24 +757,103 @@ private:
         // datashard returns only the K nearest of the gathered candidate PKs.
         SetVectorTopK(src);
 
-        LaunchInnerRead(src, arena);
+        LaunchPhaseReads(src, arena, MainPartitioning);
     }
 
-    void LaunchInnerRead(NKikimrTxDataShard::TKqpReadRangesSourceSettings* src, TIntrusivePtr<NActors::TProtoArenaHolder>& arena) {
-        auto [readActorInput, readActor] = CreateKqpReadActor(src, arena, this->SelfId(),
-            0, IngressStats.Level, TxId, TaskId, TypeEnv, HolderFactory, Alloc, TraceId, Counters);
-        ReadActorInput = readActorInput;
-        RegisterWithSameMailbox(readActor);
+    // Launch the reads for one phase. With a pre-resolved partitioning, each read is
+    // pinned to a single shard via ShardIdHint, so the inner read actor skips its own
+    // scheme-cache resolve (one less serial round-trip per phase). Without it (resolve
+    // failed), a single read is launched that resolves itself -- the legacy behaviour.
+    void LaunchPhaseReads(NKikimrTxDataShard::TKqpReadRangesSourceSettings* src,
+        TIntrusivePtr<NActors::TProtoArenaHolder>& arena,
+        const TPartitioning::TCPtr& partitioning)
+    {
+        TVector<std::pair<NKikimrTxDataShard::TKqpReadRangesSourceSettings*, TIntrusivePtr<NActors::TProtoArenaHolder>>> reads;
+        if (partitioning && partitioning->Size() == 1) {
+            // Single-shard table: hint the shard directly to skip the resolve.
+            src->SetShardIdHint(partitioning->GetTablePartitioning()[0].ShardId);
+            reads.emplace_back(src, arena);
+        } else if (partitioning && partitioning->Size() > 1) {
+            // Multi-shard table: fan out one read per shard, each pinned via ShardIdHint.
+            SplitByShards(src, partitioning, reads);
+        } else {
+            // No partitioning (resolve failed): leave the read to resolve itself.
+            reads.emplace_back(src, arena);
+        }
+
+        for (auto& [shardSrc, shardArena] : reads) {
+            auto [readActorInput, readActor] = CreateKqpReadActor(shardSrc, shardArena, this->SelfId(),
+                0, IngressStats.Level, TxId, TaskId, TypeEnv, HolderFactory, Alloc, TraceId, Counters);
+            ActiveReads.push_back(readActorInput);
+            RegisterWithSameMailbox(readActor);
+        }
         HandleRead(nullptr);
+    }
+
+    // Partition the phase read's ranges/points across shards by the pre-resolved map,
+    // cloning the read settings per shard with that shard's subset and a ShardIdHint.
+    void SplitByShards(const NKikimrTxDataShard::TKqpReadRangesSourceSettings* src,
+        const TPartitioning::TCPtr& partitioning,
+        TVector<std::pair<NKikimrTxDataShard::TKqpReadRangesSourceSettings*, TIntrusivePtr<NActors::TProtoArenaHolder>>>& out)
+    {
+        // Key types describe the read's own ranges; take them straight from the source
+        // settings (single source of truth) rather than tracking a parallel copy.
+        TVector<NScheme::TTypeInfo> keyTypes;
+        keyTypes.reserve(src->KeyColumnTypesSize());
+        for (size_t i = 0; i < src->KeyColumnTypesSize(); ++i) {
+            keyTypes.push_back(NScheme::TypeInfoFromProto(src->GetKeyColumnTypes(i), src->GetKeyColumnTypeInfos(i)));
+        }
+        const bool hasPoints = src->GetRanges().KeyPointsSize() > 0;
+
+        // shardId -> indices into the source's KeyRanges/KeyPoints list.
+        TMap<ui64, TVector<ui32>> byShard;
+        if (hasPoints) {
+            for (ui32 i = 0; i < src->GetRanges().KeyPointsSize(); ++i) {
+                TSerializedCellVec point(src->GetRanges().GetKeyPoints(i));
+                TTableRange r(point.GetCells(), true, point.GetCells(), true, /* point */ true);
+                for (const auto& it : partitioning->GetIntersectionWithRange(keyTypes, r)) {
+                    byShard[it.ShardId].push_back(i);
+                }
+            }
+        } else {
+            for (ui32 i = 0; i < src->GetRanges().KeyRangesSize(); ++i) {
+                TSerializedTableRange range(src->GetRanges().GetKeyRanges(i));
+                for (const auto& it : partitioning->GetIntersectionWithRange(keyTypes, range.ToTableRange())) {
+                    byShard[it.ShardId].push_back(i);
+                }
+            }
+        }
+
+        // Copy the source settings once without ranges; each shard read reuses this
+        // ranges-free template and appends only its own subset, so the (potentially
+        // large) range list isn't deep-copied once per shard.
+        NKikimrTxDataShard::TKqpReadRangesSourceSettings base;
+        base.CopyFrom(*src);
+        base.ClearRanges();
+        for (const auto& [shardId, indices] : byShard) {
+            auto shardArena = MakeIntrusive<NActors::TProtoArenaHolder>();
+            auto* shardSrc = shardArena->Allocate<NKikimrTxDataShard::TKqpReadRangesSourceSettings>();
+            shardSrc->CopyFrom(base);
+            shardSrc->SetShardIdHint(shardId);
+            auto* ranges = shardSrc->MutableRanges();
+            for (ui32 i : indices) {
+                if (hasPoints) {
+                    ranges->AddKeyPoints(src->GetRanges().GetKeyPoints(i));
+                } else {
+                    *ranges->AddKeyRanges() = src->GetRanges().GetKeyRanges(i);
+                }
+            }
+            out.emplace_back(shardSrc, shardArena);
+        }
     }
 
     // The inner read actors are not async inputs of the compute actor, so the
     // framework never collects their stats. Drain them here, before the inner
     // read actor is dropped: each inner read actor reports rows/bytes read from
     // datashards against its own table path (level / posting / main).
-    void AccumulateInnerReadStats() {
+    void AccumulateInnerReadStats(NYql::NDq::IDqComputeActorAsyncInput* read) {
         NDqProto::TDqTaskStats innerStats;
-        ReadActorInput->FillExtraStats(&innerStats, /* last */ true, /* mstats */ nullptr);
+        read->FillExtraStats(&innerStats, /* last */ true, /* mstats */ nullptr);
         for (const auto& table : innerStats.GetTables()) {
             auto& acc = ReadStatsByTable[table.GetTablePath()];
             acc.Rows += table.GetReadRows();
@@ -704,63 +861,85 @@ private:
         }
     }
 
-    void StopInnerRead() {
-        if (ReadActorInput) {
-            AccumulateInnerReadStats();
-            // Tear down synchronously, like the compute actor tears down its own
-            // sources/transforms (AsyncInput->PassAway()). The inner actor's
-            // PassAway binds the allocator via the TaskRunner's TypeEnv, which the
-            // compute actor frees in the same Terminate turn — a queued poison
-            // would run too late, against a freed TypeEnv.
-            ReadActorInput->PassAway();
-            ReadActorInput = nullptr;
+    // Tear down a finished inner read synchronously, like the compute actor tears down
+    // its own sources/transforms (AsyncInput->PassAway()). The inner actor's PassAway
+    // binds the allocator via the TaskRunner's TypeEnv, which the compute actor frees
+    // in the same Terminate turn — a queued poison would run too late, against a freed
+    // TypeEnv. Must be called without holding our own allocator guard.
+    void StopRead(NYql::NDq::IDqComputeActorAsyncInput* read) {
+        AccumulateInnerReadStats(read);
+        read->PassAway();
+    }
+
+    void StopAllReads() {
+        for (auto* read : ActiveReads) {
+            StopRead(read);
+        }
+        ActiveReads.clear();
+    }
+
+    // Drain every active inner read of the current phase, collecting their rows. A
+    // phase fans out into one read per shard; the phase completes only once all of
+    // them finish. Inner reads notify via TEvNewAsyncInputDataArrived (all with the
+    // same input index), so each wake-up polls all of them.
+    void HandleRead(TEvNewAsyncInputDataArrived::TPtr) {
+        if (ActiveReads.empty()) {
+            return;
+        }
+        TVector<NYql::NDq::IDqComputeActorAsyncInput*> finishedReads;
+        {
+            auto guard = BindAllocator();
+            for (auto* read : ActiveReads) {
+                TMaybe<TInstant> watermark;
+                ui64 freeSpace = 32 * 1024 * 1024;
+                bool finished = false;
+                NKikimr::NMiniKQL::TUnboxedValueBatch rows;
+                read->GetAsyncInputData(rows, watermark, finished, freeSpace);
+                rows.ForEachRow([&](NUdf::TUnboxedValue& value) {
+                    ProcessReadRow(value);
+                });
+                rows.clear();
+                if (finished) {
+                    CollectLocks(read);
+                    finishedReads.push_back(read);
+                }
+                if (Failed) {
+                    break;
+                }
+            }
+        }
+        // Drop finished reads from the active set; any left unpolled after a Failed
+        // break stay active and are torn down later in PassAway.
+        ActiveReads.erase(
+            std::remove_if(ActiveReads.begin(), ActiveReads.end(), [&](auto* read) {
+                return std::find(finishedReads.begin(), finishedReads.end(), read) != finishedReads.end();
+            }),
+            ActiveReads.end());
+        // Tear down finished reads outside our allocator guard (their PassAway binds
+        // the allocator itself).
+        for (auto* read : finishedReads) {
+            StopRead(read);
+        }
+        if (!Failed && ActiveReads.empty() && !finishedReads.empty()) {
+            OnPhaseReadsDone();
         }
     }
 
-    void HandleRead(TEvNewAsyncInputDataArrived::TPtr) {
-        if (!ReadActorInput) {
-            return;
+    void OnPhaseReadsDone() {
+        switch (Phase) {
+            case EPhase::Level:
+                FlushLevelCache();
+                OnLevelRoundDone();
+                break;
+            case EPhase::Posting:
+                OnPostingDone();
+                break;
+            case EPhase::Main:
+                OnMainDone();
+                break;
+            default:
+                break;
         }
-        TMaybe<TInstant> watermark;
-        ui64 freeSpace = 32 * 1024 * 1024;
-        NKikimr::NMiniKQL::TUnboxedValueBatch rows;
-        bool finished = false;
-        {
-            auto guard = BindAllocator();
-            ReadActorInput->GetAsyncInputData(rows, watermark, finished, freeSpace);
-            rows.ForEachRow([&](NUdf::TUnboxedValue& value) {
-                ProcessReadRow(value);
-            });
-        }
-        if (finished) {
-            CollectLocks();
-            StopInnerRead();
-            {
-                auto guard = BindAllocator();
-                rows.clear();
-            }
-            if (!Failed) {
-                switch (Phase) {
-                    case EPhase::Level:
-                        FlushLevelCache();
-                        OnLevelRoundDone();
-                        break;
-                    case EPhase::Posting:
-                        OnPostingDone();
-                        break;
-                    case EPhase::Main:
-                        // The main read is a single read, so finishing it means all
-                        // candidate rows have been collected.
-                        OnMainDone();
-                        break;
-                    default:
-                        break;
-                }
-            }
-            return;
-        }
-        auto guard = BindAllocator();
-        rows.clear();
     }
 
     void ProcessReadRow(NUdf::TUnboxedValue& value) {
@@ -839,8 +1018,8 @@ private:
         Candidates.push_back(TCandidate{distance, std::move(row)});
     }
 
-    void CollectLocks() {
-        auto extra = ReadActorInput->ExtraData();
+    void CollectLocks(NYql::NDq::IDqComputeActorAsyncInput* read) {
+        auto extra = read->ExtraData();
         if (extra) {
             NKikimrTxDataShard::TEvKqpInputActorResultInfo resultInfo;
             YQL_ENSURE(extra->UnpackTo(&resultInfo));
@@ -1006,7 +1185,17 @@ private:
     TVector<TCandidate> Candidates;
     NKikimr::NMiniKQL::TUnboxedValueDeque ResultRows;
 
-    NYql::NDq::IDqComputeActorAsyncInput* ReadActorInput = nullptr;
+    // Active inner read actors of the current phase (one per shard). The phase
+    // completes when all of them have finished.
+    TVector<NYql::NDq::IDqComputeActorAsyncInput*> ActiveReads;
+
+    // Pre-resolved shard partitionings of the index/main tables, used to pin each
+    // per-phase read to its shards via ShardIdHint and skip per-read resolves. A null
+    // map (resolve failed) falls back to a normal resolving read for that table.
+    TPartitioning::TCPtr LevelPartitioning;
+    TPartitioning::TCPtr PostingPartitioning;
+    TPartitioning::TCPtr MainPartitioning;
+    ui32 PendingResolves = 0;
 
     TVector<NKikimrDataEvents::TLock> Locks;
 

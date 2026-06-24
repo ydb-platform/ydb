@@ -22,14 +22,27 @@ jobs:
       - name: Add documentation label
         uses: actions/github-script@v8
         with:
+          retries: 3
+          # 401/403 are retry-exempt by default, but the original failure was a transient 401
+          retry-exempt-status-codes: 400,404,422
           script: |
-            github.rest.issues.addLabels({
-              issue_number: context.payload.pull_request.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              labels: ['documentation']
-            })
-            
+            const labels = context.payload.pull_request.labels.map((label) => label.name);
+            if (labels.includes('documentation')) {
+              core.info('Label "documentation" is already present, skipping');
+              return;
+            }
+
+            try {
+              await github.rest.issues.addLabels({
+                issue_number: context.payload.pull_request.number,
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                labels: ['documentation']
+              });
+            } catch (error) {
+              core.warning(`Failed to add "documentation" label: ${error.message}`);
+            }
+
   build-docs:
     if: |
       github.event_name == 'workflow_dispatch' || 

@@ -156,6 +156,7 @@ private:
     const bool IsLocalDC;
     ui64 EndOffset;
     ui64 OffsetToRead;
+    TMaybe<ui64> LastReadOffset;
     NKikimrPQ::TMirrorPartitionConfig Config;
 
     TDeque<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TCompressedMessage> Queue;

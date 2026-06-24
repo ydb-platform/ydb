@@ -25,10 +25,24 @@ TStorageTransportMock::TConnectPromise TStorageTransportMock::SetPendingConnect(
     return promise;
 }
 
+TVector<NKikimr::NDDisk::TQueryCredentials>
+TStorageTransportMock::GetConnectCredentials(
+    EConnectionType type,
+    const TDDiskId& ddiskId) const
+{
+    const auto key = MakeKey(type, ddiskId);
+    if (auto it = ConnectCredentials.find(key); it != ConnectCredentials.end())
+    {
+        return it->second;
+    }
+    return {};
+}
+
 NThreading::TFuture<TEvConnectResult> TStorageTransportMock::Connect(
     const THostConnection& connection)
 {
     const auto key = MakeKey(connection);
+    ConnectCredentials[key].push_back(connection.Credentials);
     if (auto it = PendingConnects.find(key); it != PendingConnects.end()) {
         return it->second.GetFuture();
     }

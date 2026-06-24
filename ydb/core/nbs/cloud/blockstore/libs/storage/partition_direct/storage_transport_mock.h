@@ -59,6 +59,9 @@ public:
         EConnectionType type,
         const TDDiskId& ddiskId);
 
+    [[nodiscard]] TVector<NKikimr::NDDisk::TQueryCredentials>
+    GetConnectCredentials(EConnectionType type, const TDDiskId& ddiskId) const;
+
     NThreading::TFuture<TEvConnectResult> Connect(
         const THostConnection& connection) override;
 
@@ -143,6 +146,10 @@ private:
     [[nodiscard]] static TKey MakeKey(const THostConnection& connection);
 
     std::map<TKey, TConnectPromise> PendingConnects;
+    // ConnectCredentials stores the credentials of every Connect() call
+    // observed for the given (type, ddiskId), ordered by call.
+    std::map<TKey, TVector<NKikimr::NDDisk::TQueryCredentials>>
+        ConnectCredentials;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -50,7 +50,6 @@ Y_UNIT_TEST_SUITE(TEraseRequestTest)
         UNIT_ASSERT_VALUES_EQUAL(43, response.EraseOk[1]);
         UNIT_ASSERT_VALUES_EQUAL(0, response.EraseFailed.size());
     }
-
 }
 
 ////////////////////////////////////////////////////////////////////////////////

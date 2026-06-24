@@ -1008,33 +1008,37 @@ void TClusterInfo::GenerateSysTabletsNodesCheckers() {
         }
         SystemTabletTypes.insert(BootstrapperTypeToTabletType(tablet.GetType()));
     }
+
+    GenerateNodesWithRunningSystemTablet();
 }
 
-bool TClusterInfo::NodeHasRunningSystemTablet(ui32 nodeId) const {
-    if (!NodeToTabletTypes.contains(nodeId)) {
-        return false;
-    }
-
-    auto nodeIt = Nodes.find(nodeId);
-    if (nodeIt == Nodes.end()) {
-        return false;
-    }
-
-    for (const ui64 tabletId : nodeIt->second->Tablets) {
-        auto tabletIt = Tablets.find(tabletId);
-        if (tabletIt == Tablets.end()) {
+void TClusterInfo::GenerateNodesWithRunningSystemTablet() {
+    for (const auto &kv : NodeToTabletTypes) {
+        const ui32 nodeId = kv.first;
+        auto nodeIt = Nodes.find(nodeId);
+        if (nodeIt == Nodes.end()) {
             continue;
         }
 
-        const TTabletInfo &tablet = tabletIt->second;
-        if (tablet.Leader
-            && tablet.State == NKikimrWhiteboard::TTabletStateInfo::Active
-            && SystemTabletTypes.contains(tablet.Type)) {
-            return true;
+        for (const ui64 tabletId : nodeIt->second->Tablets) {
+            auto tabletIt = Tablets.find(tabletId);
+            if (tabletIt == Tablets.end()) {
+                continue;
+            }
+
+            const TTabletInfo &tablet = tabletIt->second;
+            if (tablet.Leader
+                && tablet.State == NKikimrWhiteboard::TTabletStateInfo::Active
+                && SystemTabletTypes.contains(tablet.Type)) {
+                NodesWithRunningSystemTablet.insert(nodeId);
+                break;
+            }
         }
     }
+}
 
-    return false;
+bool TClusterInfo::NodeHasRunningSystemTablet(ui32 nodeId) const {
+    return NodesWithRunningSystemTablet.contains(nodeId);
 }
 
 bool TClusterInfo::HostHasRunningSystemTablet(const TString &hostName) const {

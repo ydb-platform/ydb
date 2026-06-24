@@ -720,6 +720,7 @@ public:
 
     void GenerateTenantNodesCheckers();
     void GenerateSysTabletsNodesCheckers();
+    void GenerateNodesWithRunningSystemTablet();
     void GenerateClusterNodesCheckers();
 
     bool IsStateStorageReplicaNode(ui32 nodeId) {
@@ -1104,6 +1105,9 @@ public:
     // All tablet types that may be configured as system tablets (derived from
     // BootstrapConfig), precomputed once for runtime running-tablet checks.
     THashSet<TTabletTypes::EType> SystemTabletTypes;
+    // Candidate nodes that currently host a running (leader + active) system
+    // tablet, precomputed once to keep NodeHasRunningSystemTablet O(1).
+    THashSet<ui32> NodesWithRunningSystemTablet;
 
     THashMap<TPileId, TSysNodesCheckers> SysNodesCheckers;
 

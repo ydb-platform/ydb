@@ -130,6 +130,7 @@ namespace NKikimr::NBlobDepot {
         if (msg.HasGivenIdRange()) {
             kind.IssueGivenIdRange(msg.GetGivenIdRange());
         } else {
+            ++*AllocateIdFailures;
             kind.ProcessQueriesWaitingForId(false);
         }
 

@@ -530,6 +530,13 @@ public:
 
         auto rowSchema = rowSpec->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
         for (const auto& rowSchemaItem : rowSchema->GetItems()) {
+            const TString columnName(rowSchemaItem->GetName());
+            if (SkipYdbSystemPrefix(columnName)) {
+                ctx.AddError(TIssue(ctx.GetPosition(rowSpec->Pos()), TStringBuilder()
+                    << "Schema column name '" << columnName
+                    << "' is not allowed: names starting with '__ydb_' are reserved for system columns"));
+                return TStatus::Error;
+            }
             items.push_back(rowSchemaItem);
         }
 

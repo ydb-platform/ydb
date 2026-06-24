@@ -190,7 +190,7 @@ TAccountReadQuoter::TAccountReadQuoter(
             AppData()->PQConfig.GetQuotingConfig().GetReadCreditBytes(), counters, DO_NOT_QUOTE_AFTER_ERROR_PERIOD)
     , User(user)
 {
-    YDB_LOG_INFO_COMP(Service, "",
+    YDB_LOG_INFO_COMP(Service, "Create account quoter",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"kesus", KesusPath},
         {"resourcePath", ResourcePath});

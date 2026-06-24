@@ -664,9 +664,8 @@ STFUNC(TConsumerActor::StateWrite) {
 }
 
 void TConsumerActor::Restart(TString&& error) {
-    YDB_LOG_ERROR("",
-        {"logPrefix", NPQ_LOG_PREFIX},
-        {"error", error});
+    YDB_LOG_ERROR(error,
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     Send(TabletActorId, new TEvents::TEvPoison());
 

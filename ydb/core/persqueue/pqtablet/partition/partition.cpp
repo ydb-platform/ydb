@@ -1206,8 +1206,7 @@ void TPartition::LogAndCollectError(const NKikimrPQ::TStatusResponse::TErrorMess
         Errors.pop_front();
     }
     Errors.push_back(error);
-    YDB_LOG_ERROR_CTX_COMP(ctx, error.GetService(), "",
-        {"errorMessage", error.GetMessage()});
+    YDB_LOG_ERROR_CTX_COMP(ctx, error.GetService(), error.GetMessage());
 }
 
 void TPartition::LogAndCollectError(NKikimrServices::EServiceKikimr service, const TString& msg, const TActorContext& ctx) {

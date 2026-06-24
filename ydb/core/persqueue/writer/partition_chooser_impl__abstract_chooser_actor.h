@@ -320,7 +320,7 @@ protected:
     }
 
     void ReplyError(ErrorCode code, TString&& errorMessage, const NActors::TActorContext& ctx) {
-        YDB_LOG_INFO_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "",
+        YDB_LOG_INFO_COMP(NKikimrServices::PQ_PARTITION_CHOOSER, "Reply error",
             {"logPrefix", LOG_PREFIX},
             {"replyError", errorMessage});
         Span.EndError(errorMessage);

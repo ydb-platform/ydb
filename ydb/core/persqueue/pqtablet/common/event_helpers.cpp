@@ -42,8 +42,7 @@ void ReplyPersQueueError(
         YDB_LOG_DEBUG_CTX(ctx, "Dump logStr",
             {"logStr", logStr});
     } else {
-        YDB_LOG_WARN_CTX(ctx, "",
-            {"logStr", logStr});
+        YDB_LOG_WARN_CTX(ctx, logStr);
     }
     ctx.Send(dstActor, new TEvPQ::TEvError(errorCode, error, responseCookie, isInternal));
 }

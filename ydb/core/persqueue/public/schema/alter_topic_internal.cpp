@@ -32,7 +32,7 @@ public:
     }
 
     void OnException(const std::exception& exc) override {
-        YDB_LOG_ERROR("",
+        YDB_LOG_ERROR("Catch exception",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"onException", exc.what()});
 

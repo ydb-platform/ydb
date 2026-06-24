@@ -171,9 +171,10 @@ TPartitionScaleManager::TRequests<TPartitionScaleManager::TPartitionBoundary> TP
                 allowedSplitsCount -= cost;
                 boundsToApply.push_back(std::move(part));
             } else {
-                YDB_LOG_WARN("",
+                YDB_LOG_WARN("MaxActivePartitions is too low to recreate root partitions from the mirror source topic",
                     {"logPrefix", LogPrefix()},
-                    {"warning", fmt::format("MaxActivePartitions ({}) is too low to recreate {} root partitions from the mirror source topic",                                      BalancerConfig.MaxActivePartitions,                                      RootPartitionsToCreate->size())});
+                    {"maxActivePartitions", BalancerConfig.MaxActivePartitions},
+                    {"createPartitions", RootPartitionsToCreate->size()});
                 // don't send request at all, if there is not enough quota
                 return {
                     .Unprocessed = RootPartitionsToCreate->size(),
@@ -284,9 +285,10 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
             for (const auto& childPartitionId : splitParameters.PartitionScaleParticipants->GetChildPartitionIds()) {
                 split.add_childpartitionids(childPartitionId);
                 if (const auto* childNode = PartitionGraph.GetPartition(childPartitionId); childNode != nullptr) {
-                    YDB_LOG_NOTICE("",
+                    YDB_LOG_NOTICE("Child partition already exists. Performing unordered split",
                         {"logPrefix", LogPrefix()},
-                        {"notice", fmt::format("Child partition# {} already exists. Performing unordered split. Partition# {}", childPartitionId, partitionId)});
+                        {"childPartition", childPartitionId},
+                        {"partition", partitionId});
                     split.set_createrootlevelsibling(true);
                 }
             }
@@ -347,19 +349,19 @@ void TPartitionScaleManager::UpdateMirrorRootPartitionsSet() {
     }
     auto& rootPartitionsMismatch = cmp.RootPartitionsMismatch.value();
     if (rootPartitionsMismatch.Error.has_value()) {
-        std::string msg = TStringBuilder() << "Incompatable configuration of root partitions between source and target topics:" << rootPartitionsMismatch.Error.value();
-        YDB_LOG_ERROR("",
+        YDB_LOG_ERROR("Incompatable configuration of root partitions between source and target topics",
             {"logPrefix", LogPrefix()},
-            {"msg", msg});
+            {"topics", rootPartitionsMismatch.Error.value()});
         RootPartitionsToCreate.reset();
         MirrorTopicError = std::move(*rootPartitionsMismatch.Error);
         return;
     }
     const size_t existingPartitions = std::ranges::count(rootPartitionsMismatch.AlterRootPartitions, NMirror::EPartitionAction::Modify, &NMirror::TPartitionWithBounds::Action);
     const size_t newPartitions = std::ranges::count(rootPartitionsMismatch.AlterRootPartitions, NMirror::EPartitionAction::Create, &NMirror::TPartitionWithBounds::Action);
-    YDB_LOG_INFO("",
+    YDB_LOG_INFO("Topic has less root partitions than the mirror source",
         {"logPrefix", LogPrefix()},
-        {"partitionConfiguration", fmt::format("Topic has less root partitions than the mirror source. New configuration has {}+{} partitions.",                          existingPartitions,                          newPartitions)});
+        {"existing", existingPartitions},
+        {"new", newPartitions});
 
     RootPartitionsToCreate = std::move(rootPartitionsMismatch.AlterRootPartitions);
     MirrorTopicError.reset();

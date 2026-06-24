@@ -193,7 +193,7 @@ namespace NTypeAnnImpl {
             container->Child(rhsIndex)->Pos(ctx),
             TStringBuilder() << "Type at " << rhsIndex << " is " << *rhsType));
 
-        ctx.AddError(std::move(issue));
+        ctx.AddError(issue);
         return false;
     }
 
@@ -1427,7 +1427,7 @@ namespace NTypeAnnImpl {
         }
         output = ctx.Expr.Builder(input->Pos())
             .Callable("Member")
-                .Add(0, std::move(rowNode))
+                .Add(0, rowNode)
                 .Atom(1, structType->GetItems()[*pos]->GetName())
             .Seal().Build();
         return IGraphTransformer::TStatus::Repeat;

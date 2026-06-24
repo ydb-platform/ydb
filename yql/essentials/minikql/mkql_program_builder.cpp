@@ -4536,31 +4536,31 @@ TRuntimeNode TProgramBuilder::BuildNth(const std::string_view& callableName, TRu
 }
 
 TRuntimeNode TProgramBuilder::MakeHeap(TRuntimeNode list, const TBinaryLambda& comparator) {
-    return BuildHeap(__func__, list, std::move(comparator));
+    return BuildHeap(__func__, list, comparator);
 }
 
 TRuntimeNode TProgramBuilder::PushHeap(TRuntimeNode list, const TBinaryLambda& comparator) {
-    return BuildHeap(__func__, list, std::move(comparator));
+    return BuildHeap(__func__, list, comparator);
 }
 
 TRuntimeNode TProgramBuilder::PopHeap(TRuntimeNode list, const TBinaryLambda& comparator) {
-    return BuildHeap(__func__, list, std::move(comparator));
+    return BuildHeap(__func__, list, comparator);
 }
 
 TRuntimeNode TProgramBuilder::SortHeap(TRuntimeNode list, const TBinaryLambda& comparator) {
-    return BuildHeap(__func__, list, std::move(comparator));
+    return BuildHeap(__func__, list, comparator);
 }
 
 TRuntimeNode TProgramBuilder::StableSort(TRuntimeNode list, const TBinaryLambda& comparator) {
-    return BuildHeap(__func__, list, std::move(comparator));
+    return BuildHeap(__func__, list, comparator);
 }
 
 TRuntimeNode TProgramBuilder::NthElement(TRuntimeNode list, TRuntimeNode n, const TBinaryLambda& comparator) {
-    return BuildNth(__func__, list, n, std::move(comparator));
+    return BuildNth(__func__, list, n, comparator);
 }
 
 TRuntimeNode TProgramBuilder::PartialSort(TRuntimeNode list, TRuntimeNode n, const TBinaryLambda& comparator) {
-    return BuildNth(__func__, list, n, std::move(comparator));
+    return BuildNth(__func__, list, n, comparator);
 }
 
 TRuntimeNode TProgramBuilder::BuildMap(const std::string_view& callableName, TRuntimeNode list, const TUnaryLambda& handler)

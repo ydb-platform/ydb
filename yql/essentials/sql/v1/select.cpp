@@ -792,7 +792,7 @@ protected:
 };
 
 TNodePtr BuildSubqueryRef(TNodePtr subquery, const TString& alias, int tupleIndex) {
-    return new TSubqueryRefNode(std::move(subquery), alias, tupleIndex);
+    return new TSubqueryRefNode(subquery, alias, tupleIndex);
 }
 
 bool IsSubqueryRef(const TSourcePtr& source) {
@@ -3910,7 +3910,7 @@ TSourcePtr BuildCombine(TPosition pos, TSourcePtr leftSource, TVector<TSortSpeci
 {
     const auto leftInput = BuildCombineInput(pos, std::move(leftSource), std::move(leftPresort));
     const auto rightInput = BuildCombineInput(pos, std::move(rightSource), std::move(rightPresort));
-    return new TCombineSource(pos, std::move(leftInput), std::move(rightInput),
+    return new TCombineSource(pos, leftInput, rightInput,
                               std::move(combineKeyExpr), udf, std::move(args), settings);
 }
 

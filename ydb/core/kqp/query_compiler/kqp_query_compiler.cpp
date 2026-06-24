@@ -2967,6 +2967,7 @@ private:
                         static_assert(static_cast<ui32>(NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_##PROTO) == static_cast<ui32>(NDq::EShuffleMode::Id)); \
                         dqSourceLookupCn.SetShuffleMode(NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_##PROTO); \
                         break
+                    TRANSLATE(Default, DEFAULT);
                     TRANSLATE(Off, OFF);
                     TRANSLATE(Map, MAP);
                     TRANSLATE(Hash, HASH);

@@ -107,9 +107,10 @@ enum class EHashShuffleFuncType {
 };
 
 enum class EShuffleMode {
-    Off = 0,
-    Map = 1,
-    Hash = 2,
+    Default = 0,
+    Off = 1,
+    Map = 2,
+    Hash = 3,
 };
 
 class TSpillingSettings {

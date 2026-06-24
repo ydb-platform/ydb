@@ -382,9 +382,10 @@ message TKqpPhyCnDqSourceStreamLookup {
     optional uint64 FullscanLimit = 17;
 
     enum EShuffleMode {
-        OFF = 0;
-        MAP = 1;
-        HASH = 2;
+        DEFAULT = 0;
+        OFF = 1;
+        MAP = 2;
+        HASH = 3;
     }
     EShuffleMode ShuffleMode = 18;
 }

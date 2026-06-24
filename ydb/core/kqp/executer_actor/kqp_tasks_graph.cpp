@@ -1140,6 +1140,7 @@ void TKqpTasksGraph::BuildDqSourceStreamLookupChannels(const TStageInfo& stageIn
         }
     }
     switch (dqSourceStreamLookup.GetShuffleMode()) {
+        case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_DEFAULT:
         case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_OFF:
             BuildUnionAllChannels(*this, stageInfo, inputIndex, inputStageInfo, outputIndex, /* enableSpilling */ false, logFunc);
             break;
@@ -3767,6 +3768,7 @@ void TKqpTasksGraph::CountComputeTasks(const TStageInfo& stageInfo, const ui32 n
         if (inputTypeCase == NKqpProto::TKqpPhyConnection::kDqSourceStreamLookup) {
             auto& dqSourceStreamLookup = input.GetDqSourceStreamLookup();
             switch (dqSourceStreamLookup.GetShuffleMode()) {
+                case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_DEFAULT:
                 case NKqpProto::TKqpPhyCnDqSourceStreamLookup_EShuffleMode_OFF:
                     inputTypeCase = NKqpProto::TKqpPhyConnection::kUnionAll;
                     break;

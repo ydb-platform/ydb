@@ -159,7 +159,7 @@ TConsumerActor::TConsumerActor(
 void TConsumerActor::Bootstrap() {
     YDB_LOG_DEBUG("Start MLP consumer",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_Config.GetName", Config.GetName()});
+        {"configName", Config.GetName()});
     Become(&TConsumerActor::StateInit);
 
     UpdateStorageConfig();
@@ -316,7 +316,7 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
                         YDB_LOG_WARN("Received snapshot from old consumer vs",
                             {"logPrefix", NPQ_LOG_PREFIX},
                             {"generation", Config.GetGeneration()},
-                            {"#_snapshot.GetConfiguration().GetGeneration", snapshot.GetConfiguration().GetGeneration()});
+                            {"snapshotConfigurationGeneration", snapshot.GetConfiguration().GetGeneration()});
                     }
 
                     break;
@@ -351,14 +351,14 @@ void TConsumerActor::HandleOnInit(TEvKeyValue::TEvResponse::TPtr& ev) {
                         if (Config.GetGeneration() == wal.GetGeneration()) {
                             YDB_LOG_DEBUG("Read WAL",
                                 {"logPrefix", NPQ_LOG_PREFIX},
-                                {"#_w.key", w.key()});
+                                {"wKey", w.key()});
                             LastWALIndex = wal.GetWALIndex();
                             Storage->ApplyWAL(wal);
                         } else {
                             YDB_LOG_WARN("Received WAL from old consumer vs",
                                 {"logPrefix", NPQ_LOG_PREFIX},
                                 {"generation", Config.GetGeneration()},
-                                {"#_wal.GetGeneration", wal.GetGeneration()},
+                                {"walGeneration", wal.GetGeneration()},
                                 {"key", w.key()});
                         }
                     }
@@ -494,7 +494,7 @@ void TConsumerActor::UpdateStorageConfig() {
     YDB_LOG_DEBUG("Update config",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"retentionPeriod", (RetentionPeriod.has_value() ? RetentionPeriod->ToString() : "infinity")},
-        {"#_Config", Config});
+        {"config", Config});
 
     AFL_ENSURE(Storage->GetKeepMessageOrder() == Config.GetKeepMessageOrder())("initial", Storage->GetKeepMessageOrder())("new", Config.GetKeepMessageOrder());
     Storage->SetMaxMessageProcessingCount(Config.GetMaxProcessingAttempts());
@@ -598,7 +598,7 @@ STFUNC(TConsumerActor::StateInit) {
         default:
             YDB_LOG_ERROR("Unexpected",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_num_0", EventStr("StateInit", ev)});
+                {"event", EventStr("StateInit", ev)});
             AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateInit", ev));
     }
 }
@@ -628,7 +628,7 @@ STFUNC(TConsumerActor::StateWork) {
         default:
             YDB_LOG_ERROR("Unexpected",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_num_0", EventStr("StateWork", ev)});
+                {"event", EventStr("StateWork", ev)});
             AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateWork", ev));
     }
 }
@@ -658,7 +658,7 @@ STFUNC(TConsumerActor::StateWrite) {
         default:
             YDB_LOG_ERROR("Unexpected",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_num_0", EventStr("StateWrite", ev)});
+                {"event", EventStr("StateWrite", ev)});
             AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateWrite", ev));
     }
 }
@@ -759,7 +759,7 @@ void TConsumerActor::ProcessEventQueue() {
             {"modeChanged", updateResult.ModeChanged},
             {"setChanged", updateResult.SetChanged},
             {"versionChanged", updateResult.VersionChanged},
-            {"#_ShortDebugString(record.GetUpdate())", ShortDebugString(record.GetUpdate())});
+            {"shortDebugStringRecordUpdate", ShortDebugString(record.GetUpdate())});
         if (updateResult.Applied) {
             ChildPartitionsOrderManager.SetSendFullStateToAll(updateResult.ModeChanged ? TChildPartitionsOrderManager::ESendReasons::ParentChange : TChildPartitionsOrderManager::ESendReasons::Commit, Storage->GetEstimatedLockedMessageGroupsIdSizeFromSelfAndParents());
         }
@@ -943,7 +943,7 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
         YDB_LOG_DEBUG("Skip fetch: partition end offset is vs",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"reached", PartitionEndOffset},
-            {"#_Storage->GetLastOffset", Storage->GetLastOffset()});
+            {"storageLastOffset", Storage->GetLastOffset()});
         return false;
     }
 
@@ -972,7 +972,7 @@ bool TConsumerActor::FetchMessagesIfNeeded() {
     YDB_LOG_DEBUG("Fetching messages from offset",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"maxMessages", maxMessages},
-        {"#_Storage->GetLastOffset", Storage->GetLastOffset()},
+        {"storageLastOffset", Storage->GetLastOffset()},
         {"partitionActorId", PartitionActorId});
     Send(TabletActorId, MakeEvPQRead(Config.GetName(), PartitionId, Storage->GetLastOffset(), maxMessages));
 

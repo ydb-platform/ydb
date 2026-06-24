@@ -226,7 +226,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         if (auto delay = RetryState->GetNextRetryDelay(code); delay.Defined()) {
             YDB_LOG_DEBUG("Repeat the request to KQP",
                 {"logPrefix", LOG_PREFIX},
-                {"#_*delay", *delay});
+                {"delay", *delay});
             Schedule(*delay, new TEvents::TEvWakeup());
         }
     }
@@ -869,9 +869,9 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
         auto msg = ev->Get();
         YDB_LOG_DEBUG("TEvClientConnected Status NodeId",
             {"logPrefix", LOG_PREFIX},
-            {"#_msg->Status", msg->Status},
+            {"status", msg->Status},
             {"tabletId", msg->TabletId},
-            {"#_msg->ServerId.NodeId", msg->ServerId.NodeId()},
+            {"serverIdNodeId", msg->ServerId.NodeId()},
             {"generation", msg->Generation});
         Y_DEBUG_ABORT_UNLESS(msg->TabletId == TabletId);
 
@@ -892,7 +892,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
                 YDB_LOG_INFO("Received TEvClientConnected with wrong generation. received",
                     {"logPrefix", LOG_PREFIX},
                     {"expected", *ExpectedGeneration},
-                    {"#_msg->Generation", msg->Generation});
+                    {"generation", msg->Generation});
                 Disconnected(EErrorCode::PartitionNotLocal);
                 return;
             }
@@ -901,7 +901,7 @@ class TPartitionWriter : public TActorBootstrapped<TPartitionWriter>, public TPa
                 YDB_LOG_INFO("Received TEvClientConnected with wrong NodeId. received",
                     {"logPrefix", LOG_PREFIX},
                     {"expected", NActors::TActivationContext::ActorSystem()->NodeId},
-                    {"#_msg->ServerId.NodeId", msg->ServerId.NodeId()});
+                    {"serverIdNodeId", msg->ServerId.NodeId()});
                 Disconnected(EErrorCode::PartitionNotLocal);
                 return;
             }

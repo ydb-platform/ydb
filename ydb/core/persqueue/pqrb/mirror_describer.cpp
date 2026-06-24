@@ -64,7 +64,7 @@ void TMirrorDescriber::HandleDescriptionResult(TEvPQ::TEvMirrorTopicDescription:
     if (!description.has_value()) {
         YDB_LOG_ERROR("Cannot describe topic",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_description.error", description.error()});
+            {"error", description.error()});
         ScheduleWithIncreasingTimeout<TEvents::TEvWakeup>(SelfId(), DescribeRetryTimeout, DESCRIBE_RETRY_TIMEOUT_MAX, ctx);
         return;
     }
@@ -72,7 +72,7 @@ void TMirrorDescriber::HandleDescriptionResult(TEvPQ::TEvMirrorTopicDescription:
     if (!result.IsSuccess()) {
         YDB_LOG_ERROR("Cannot describe topic",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_result.GetIssues", result.GetIssues()});
+            {"issues", result.GetIssues()});
         ScheduleWithIncreasingTimeout<TEvents::TEvWakeup>(SelfId(), DescribeRetryTimeout, DESCRIBE_RETRY_TIMEOUT_MAX, ctx);
         return;
     }
@@ -169,7 +169,7 @@ void TMirrorDescriber::HandleCredentialsCreated(TEvPQ::TEvCredentialsCreated::TP
     CredentialsProvider = ev->Get()->Credentials;
     YDB_LOG_NOTICE("Credentials provider created",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_bool(CredentialsProvider)", bool(CredentialsProvider)});
+        {"hasCredentialsProvider", bool(CredentialsProvider)});
     CredentialsInitInterval = INIT_INTERVAL_START;
     ScheduleDescription(ctx);
 }

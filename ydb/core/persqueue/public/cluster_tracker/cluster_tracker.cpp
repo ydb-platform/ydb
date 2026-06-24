@@ -71,7 +71,7 @@ public:
 private:
     void AddSubscriber(const TActorId subscriberId) {
         YDB_LOG_DEBUG_CTX(Ctx(), "AddSubscriber",
-            {"#_Subscribers.size", Subscribers.size()});
+            {"subscribersSize", Subscribers.size()});
 
         Subscribers.insert(subscriberId);
     }
@@ -149,7 +149,7 @@ private:
 
     void HandleWhileWorking(TEvClusterTracker::TEvSubscribe::TPtr& ev) {
         YDB_LOG_DEBUG_CTX(Ctx(), "HandleWhileWorking TEvSubscribe",
-            {"#_Subscribers.size", Subscribers.size()},
+            {"subscribersSize", Subscribers.size()},
             {"clustersList", (ClustersList == nullptr ? "null" : std::to_string(ClustersList->Clusters.size()))});
 
         AddSubscriber(ev->Sender);
@@ -183,7 +183,7 @@ private:
 
     void BroadcastClustersUpdate() {
         YDB_LOG_DEBUG_CTX(Ctx(), "BroadcastClustersUpdate",
-            {"#_Subscribers.size", Subscribers.size()});
+            {"subscribersSize", Subscribers.size()});
 
         for (const auto& subscriberId : Subscribers) {
             YDB_LOG_DEBUG_CTX(Ctx(), "BroadcastClustersUpdate",
@@ -194,7 +194,7 @@ private:
 
     void ReplyAllGetClustersListRequests(bool success = true) {
         YDB_LOG_DEBUG_CTX(Ctx(), "ReplyAllGetClustersListRequests",
-            {"#_GetClustersListRequests.size", GetClustersListRequests.size()});
+            {"clustersListRequestsSize", GetClustersListRequests.size()});
 
         for (const auto& requestId : GetClustersListRequests) {
             SendGetClustersListResponse(requestId, success);

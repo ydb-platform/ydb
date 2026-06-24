@@ -35,7 +35,7 @@ namespace NPQ {
             {"s", s},
             {"partition", partition},
             {"topicName", topicName},
-            {"#_EscapeC(owner)", EscapeC(owner)});
+            {"escapeCOwner", EscapeC(owner)});
     }
 
     TStringBuf TOwnerInfo::GetOwnerFromOwnerCookie(const TString& cookie) {

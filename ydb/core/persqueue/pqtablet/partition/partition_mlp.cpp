@@ -126,7 +126,7 @@ void TPartition::Handle(TEvPQ::TEvMLPConsumerState::TPtr& ev) {
 
     YDB_LOG_DEBUG("Handle TEvPQ::TEvMLPConsumerState",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_metrics", metrics});
+        {"metrics", metrics});
     auto it = MLPConsumers.find(metrics.GetConsumer());
     if (it == MLPConsumers.end()) {
         return;
@@ -164,7 +164,7 @@ void TPartition::Handle(TEvPQ::TEvMLPConsumerStatus::TPtr& ev) {
 void TPartition::ProcessMLPPendingEvents() {
     YDB_LOG_DEBUG("Process MLP pending events. Count",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_MLPPendingEvents.size", MLPPendingEvents.size()});
+        {"mLPPendingEventsSize", MLPPendingEvents.size()});
 
     auto visitor = [this](auto& v) {
         Handle(v);

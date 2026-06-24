@@ -68,10 +68,10 @@ void TSubscriber::AddSubscription(TReadInfo&& info, const ui32 timeout, const ui
     YDB_LOG_DEBUG_CTX(ctx, "Waiting read cookie partition user offset count size timeout",
         {"cookie", cookie},
         {"partition", Partition},
-        {"#_info.User", info.User},
-        {"#_info.Offset", info.Offset},
-        {"#_info.Count", info.Count},
-        {"#_info.Size", info.Size},
+        {"user", info.User},
+        {"offset", info.Offset},
+        {"count", info.Count},
+        {"size", info.Size},
         {"timeout", timeout});
     Subscriber.AddSubscription(std::move(info), cookie);
     if (timeout == 0)

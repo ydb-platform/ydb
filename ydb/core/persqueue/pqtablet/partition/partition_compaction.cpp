@@ -100,8 +100,8 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
             {"sourceId", EscapeC(p.Msg.SourceId)},
             {"seqNo", p.Msg.SeqNo},
             {"partNo", p.Msg.PartNo},
-            {"#_newWrite->Key", newWrite->Key},
-            {"#_newWrite->Value.size", newWrite->Value.size()});
+            {"key", newWrite->Key},
+            {"valueSize", newWrite->Value.size()});
 
         parameters.HeadCleared = true;
     }
@@ -147,7 +147,7 @@ bool TPartition::ExecRequestForCompaction(TWriteMsg& p, TProcessParametersBase& 
             {"sourceId", EscapeC(p.Msg.SourceId)},
             {"seqNo", p.Msg.SeqNo},
             {"partNo", p.Msg.PartNo},
-            {"#_CompactionBlobEncoder.PartitionedBlob.GetFormedBlobs().size", CompactionBlobEncoder.PartitionedBlob.GetFormedBlobs().size()},
+            {"compactionBlobEncoderPartitionedBlobFormedBlobsSize", CompactionBlobEncoder.PartitionedBlob.GetFormedBlobs().size()},
             {"newHead", CompactionBlobEncoder.NewHead});
 
         curOffset += p.Msg.MessageCount;
@@ -180,9 +180,9 @@ void TPartition::DumpKeysForBlobsCompaction() const
         const auto& k = BlobEncoder.DataKeysBody[i];
         YDB_LOG_DEBUG_COMP(Service, "Dump NPQLOGPREFIX, #_((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' '*'), #_k.Key, #_k.Size",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' : '*')", ((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' : '*')},
+            {"kSizeCompactedBlobSizeLowerBoundR", ((k.Size >= GetCompactedBlobSizeLowerBound()) ? 'R' : '*')},
             {"key", k.Key},
-            {"#_k.Size", k.Size});
+            {"kSize", k.Size});
     }
     YDB_LOG_DEBUG_COMP(Service, "===================================",
         {"logPrefix", NPQ_LOG_PREFIX});
@@ -233,7 +233,7 @@ void TPartition::TryRunCompaction(bool force)
             YDB_LOG_DEBUG_COMP(Service, "Blob key for append",
                 {"logPrefix", NPQ_LOG_PREFIX},
                 {"key", k.Key},
-                {"#_k.Size", k.Size});
+                {"kSize", k.Size});
         } else {
             YDB_LOG_DEBUG_COMP(Service, "Blob key for rename",
                 {"logPrefix", NPQ_LOG_PREFIX},
@@ -316,8 +316,8 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
 {
     YDB_LOG_DEBUG_COMP(Service, "Dump NPQLOGPREFIX, #_requestedBlob.Key, #_parameters.CurOffset",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_requestedBlob.Key", requestedBlob.Key},
-        {"#_parameters.CurOffset", parameters.CurOffset});
+        {"requestedBlobKey", requestedBlob.Key},
+        {"parametersCurOffset", parameters.CurOffset});
 
     ui64 offset = requestedBlob.Key.GetOffset();
 
@@ -328,8 +328,8 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
             YDB_LOG_DEBUG_COMP(Service, "Try append part /",
                 {"logPrefix", NPQ_LOG_PREFIX},
                 {"offset", offset},
-                {"#_blob.GetPartNo", blob.GetPartNo()},
-                {"#_blob.GetTotalParts", blob.GetTotalParts()});
+                {"partNo", blob.GetPartNo()},
+                {"totalParts", blob.GetTotalParts()});
 
             ui16 partNo = blob.GetPartNo();
             const auto offsetPartNo = std::make_pair(offset, partNo);
@@ -340,10 +340,10 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
             if (FirstCompactionPart && (offsetPartNo <= *FirstCompactionPart)) {
                 YDB_LOG_DEBUG_COMP(Service, "Part skipped",
                     {"logPrefix", NPQ_LOG_PREFIX},
-                    {"#_offsetPartNo.first", offsetPartNo.first},
-                    {"#_offsetPartNo.second", offsetPartNo.second},
-                    {"#_FirstCompactionPart->first", FirstCompactionPart->first},
-                    {"#_FirstCompactionPart->second", FirstCompactionPart->second});
+                    {"offsetPartNoFirst", offsetPartNo.first},
+                    {"offsetPartNoSecond", offsetPartNo.second},
+                    {"firstCompactionPartFirst", FirstCompactionPart->first},
+                    {"firstCompactionPartSecond", FirstCompactionPart->second});
                 continue;
             }
 
@@ -413,15 +413,15 @@ bool TPartition::CompactRequestedBlob(const TRequestedBlob& requestedBlob,
             if (!ExecRequestForCompaction(msg, parameters, compactionRequest, blobCreationUnixTime)) {
                 YDB_LOG_DEBUG_COMP(Service, "Part not appended",
                     {"logPrefix", NPQ_LOG_PREFIX},
-                    {"#_offsetPartNo.first", offsetPartNo.first},
-                    {"#_offsetPartNo.second", offsetPartNo.second});
+                    {"offsetPartNoFirst", offsetPartNo.first},
+                    {"offsetPartNoSecond", offsetPartNo.second});
                 return false;
             }
 
             YDB_LOG_DEBUG_COMP(Service, "Part appended",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_offsetPartNo.first", offsetPartNo.first},
-                {"#_offsetPartNo.second", offsetPartNo.second});
+                {"offsetPartNoFirst", offsetPartNo.first},
+                {"offsetPartNoSecond", offsetPartNo.second});
         }
     }
 
@@ -536,7 +536,7 @@ void TPartition::BlobsForCompactionWereRead(const TVector<NPQ::TRequestedBlob>& 
         YDB_LOG_DEBUG_COMP(Service, "Key[ /",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"i", i},
-            {"#_KeysForCompaction.size", KeysForCompaction.size()},
+            {"keysForCompactionSize", KeysForCompaction.size()},
             {"key", k.Key});
 
         if (pos == Max<size_t>()) {
@@ -706,14 +706,14 @@ void TPartition::EndProcessWritesForCompaction(TEvKeyValue::TEvRequest* request,
         {"logPrefix", NPQ_LOG_PREFIX},
         {"topicName", TopicName()},
         {"partition", Partition},
-        {"#_key.GetOffset", key.GetOffset()},
-        {"#_key.GetCount", key.GetCount()},
-        {"#_CompactionBlobEncoder.Head.Offset", CompactionBlobEncoder.Head.Offset},
-        {"#_CompactionBlobEncoder.EndOffset", CompactionBlobEncoder.EndOffset},
-        {"#_CompactionBlobEncoder.NewHead.GetNextOffset", CompactionBlobEncoder.NewHead.GetNextOffset()},
+        {"offset", key.GetOffset()},
+        {"count", key.GetCount()},
+        {"compactionBlobEncoderHeadOffset", CompactionBlobEncoder.Head.Offset},
+        {"compactionBlobEncoderEndOffset", CompactionBlobEncoder.EndOffset},
+        {"compactionBlobEncoderNewHeadNextOffset", CompactionBlobEncoder.NewHead.GetNextOffset()},
         {"key", key},
-        {"#_res.second", res.second},
-        {"#_ctx.Now().MilliSeconds", ctx.Now().MilliSeconds()});
+        {"second", res.second},
+        {"ctxNowMilliSeconds", ctx.Now().MilliSeconds()});
     AddNewCompactionWriteBlob(res, request, blobCreationUnixTime, ctx);
 
     CompactionBlobEncoder.HaveData = true;

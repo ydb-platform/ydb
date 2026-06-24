@@ -29,7 +29,7 @@ public:
     void DoRequest(const std::unordered_set<TString>& topicPath) {
         YDB_LOG_DEBUG("Create request with",
             {"logPrefix", LOG_PREFIX},
-            {"#_num_0", JoinRange(", ", topicPath.begin(), topicPath.end())},
+            {"topicPaths", JoinRange(", ", topicPath.begin(), topicPath.end())},
             {"syncVersion", RetryWithSyncVersion});
 
         auto schemeRequest = std::make_unique<TSchemeCacheNavigate>(1);

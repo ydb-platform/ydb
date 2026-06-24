@@ -248,7 +248,7 @@ public:
             tabletInfo.PartitionIndexes.push_back(partitionIndex);
             YDB_LOG_DEBUG("Sending TEvPersQueue::TEvHasDataInfo",
                 {"logPrefix", LOG_PREFIX},
-                {"#_fetchInfo->Record", fetchInfo->Record});
+                {"fetchInfoRecord", fetchInfo->Record});
             NTabletPipe::SendData(ctx, tabletInfo.PipeClient, fetchInfo.Release());
             PartitionStatus[partitionIndex] = EPartitionStatus::HasDataRequested;
         }
@@ -267,7 +267,7 @@ public:
                 {"logPrefix", LOG_PREFIX},
                 {"tabletId", FetchRequestCurrentReadTablet},
                 {"partitionIndex", FetchRequestCurrentPartitionIndex},
-                {"#_Settings.Partitions.size", Settings.Partitions.size()});
+                {"settingsPartitionsSize", Settings.Partitions.size()});
             return;
         }
 
@@ -279,7 +279,7 @@ public:
             YDB_LOG_DEBUG("Processing /",
                 {"logPrefix", LOG_PREFIX},
                 {"fetchRequestCurrentPartitionIndex", FetchRequestCurrentPartitionIndex},
-                {"#_Settings.Partitions.size", Settings.Partitions.size()});
+                {"settingsPartitionsSize", Settings.Partitions.size()});
             if (FetchRequestCurrentPartitionIndex == Settings.Partitions.size()) {
                 CreateOkResponse();
                 return SendReplyAndDie(std::move(Response), ctx);
@@ -298,7 +298,7 @@ public:
                 YDB_LOG_DEBUG("Partition status is",
                     {"logPrefix", LOG_PREFIX},
                     {"fetchRequestCurrentPartitionIndex", FetchRequestCurrentPartitionIndex},
-                    {"#_(int)status", (int)status},
+                    {"status", (int)status},
                     {"bytesLeft", FetchRequestBytesLeft});
                 if (status == EPartitionStatus::HasDataReceived) {
                     ++FetchRequestCurrentPartitionIndex;
@@ -354,7 +354,7 @@ public:
         YDB_LOG_DEBUG("Partition status is",
             {"logPrefix", LOG_PREFIX},
             {"partitionIndex", partitionIndex},
-            {"#_(int)status", (int)status});
+            {"status", (int)status});
         if (status != EPartitionStatus::HasDataRequested) {
             // On timeout we resend send HasData
             return;
@@ -384,7 +384,7 @@ public:
         if (record.GetPartitionResponse().GetCookie() != FetchRequestCurrentPartitionIndex || FetchRequestCurrentReadTablet == 0) {
             YDB_LOG_WARN("Proxy fetch error: got response from tablet while waiting from and requested tablet is",
                 {"logPrefix", LOG_PREFIX},
-                {"#_record.GetPartitionResponse().GetCookie", record.GetPartitionResponse().GetCookie()},
+                {"partitionResponseCookie", record.GetPartitionResponse().GetCookie()},
                 {"fetchRequestCurrentPartitionIndex", FetchRequestCurrentPartitionIndex},
                 {"fetchRequestCurrentReadTablet", FetchRequestCurrentReadTablet});
             return;
@@ -520,7 +520,7 @@ public:
                 auto tabletId = topicInfo.PartitionToTablet[p.Partition];
                 YDB_LOG_DEBUG("Sending TEvPersQueue::TEvHasDataInfo",
                     {"logPrefix", LOG_PREFIX},
-                    {"#_fetchInfo->Record", fetchInfo->Record});
+                    {"fetchInfoRecord", fetchInfo->Record});
                 NTabletPipe::SendData(ctx, TabletInfo[tabletId].PipeClient, fetchInfo.release());
             }
         }
@@ -575,7 +575,7 @@ public:
         YDB_LOG_DEBUG("Reply",
             {"logPrefix", LOG_PREFIX},
             {"requesterId", RequesterId},
-            {"#_event->Response", event->Response});
+            {"response", event->Response});
         ctx.Send(RequesterId, event.Release());
         Die(ctx);
     }

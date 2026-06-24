@@ -611,7 +611,7 @@ private:
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
         YDB_LOG_TRACE_COMP(NKikimrServices::PERSQUEUE, "Dump #_num_0",
-            {"#_num_0", EventStr("StateInit", ev)});
+            {"event", EventStr("StateInit", ev)});
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
@@ -657,7 +657,7 @@ private:
         default:
             if (!Initializer.Handle(ev)) {
                 YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Unexpected",
-                    {"#_num_0", EventStr("StateInit", ev)});
+                    {"event", EventStr("StateInit", ev)});
             }
             break;
         };
@@ -668,7 +668,7 @@ private:
         NPersQueue::TCounterTimeKeeper keeper(TabletCounters.Cumulative()[COUNTER_PQ_TABLET_CPU_USAGE]);
 
         YDB_LOG_TRACE_COMP(NKikimrServices::PERSQUEUE, "Dump #_num_0",
-            {"#_num_0", EventStr("StateIdle", ev)});
+            {"event", EventStr("StateIdle", ev)});
 
         TRACE_EVENT(NKikimrServices::PERSQUEUE);
         switch (ev->GetTypeRewrite()) {
@@ -739,7 +739,7 @@ private:
             hFuncTraced(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationRequest, Handle);
         default:
             YDB_LOG_ERROR_COMP(NKikimrServices::PERSQUEUE, "Unexpected",
-                {"#_num_0", EventStr("StateIdle", ev)});
+                {"event", EventStr("StateIdle", ev)});
             break;
         };
     }

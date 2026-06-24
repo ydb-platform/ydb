@@ -141,7 +141,7 @@ void TReaderActor::Handle(TEvPQ::TEvMLPReadResponse::TPtr& ev) {
         if (!res) {
             YDB_LOG_WARN("Error parsing data. Offset",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_message.GetId().GetOffset", message.GetId().GetOffset()});
+                {"messageIdOffset", message.GetId().GetOffset()});
             // Skip message
             continue;
         }
@@ -220,7 +220,7 @@ void TReaderActor::SendToTablet(ui64 tabletId, IEventBase *ev) {
 void TReaderActor::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
     YDB_LOG_INFO("Reply error",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_Ydb::StatusIds::StatusCode_Name(errorCode)", Ydb::StatusIds::StatusCode_Name(errorCode)});
+        {"statusCodeName", Ydb::StatusIds::StatusCode_Name(errorCode)});
     Send(ParentId, new TEvReadResponse(errorCode, std::move(errorMessage)));
     PassAway();
 }

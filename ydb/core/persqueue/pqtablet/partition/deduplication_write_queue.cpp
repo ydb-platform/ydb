@@ -60,7 +60,7 @@ public:
         YDB_LOG_DEBUG("OldPartitions DisableTimestamp",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"partitions", JoinRange(", ", ParentPartitions.begin(), recentPartitionsIt)},
-            {"#_num_0", JoinRange(", ", recentPartitionsIt, ParentPartitions.end())},
+            {"recentPartitions", JoinRange(", ", recentPartitionsIt, ParentPartitions.end())},
             {"disableTimestamp", DisableTimestamp},
             {"inNSeconds", (DisableTimestamp - now).Seconds()});
         ParentPartitions.erase(recentPartitionsIt, ParentPartitions.end());
@@ -366,7 +366,7 @@ private:
         bool update = SetChecked(ev->Get()->ExternalDeduplicationStatus);
         YDB_LOG_DEBUG("Forward event",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()},
+            {"typeRewrite", ev->GetTypeRewrite()},
             {"partitionActorId", PartitionActorId},
             {"update", update});
         Forward(ev, PartitionActorId);
@@ -377,7 +377,7 @@ private:
         AFL_ENSURE(prevFromDeduplicatedQueue == false);
         YDB_LOG_DEBUG("Forward event",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()},
+            {"typeRewrite", ev->GetTypeRewrite()},
             {"partitionActorId", PartitionActorId},
             {"update", !prevFromDeduplicatedQueue});
         Forward(ev, PartitionActorId);
@@ -447,7 +447,7 @@ private:
         AFL_ENSURE(newMode != BypassMode)("BypassMode", BypassMode)("NewMode", newMode);
         YDB_LOG_DEBUG("SwitchToBypassMode",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_*newMode", *newMode},
+            {"newMode", *newMode},
             {"now", TAppData::TimeProvider->Now()},
             {"disableTimestamp", DisableTimestamp},
             {"passSeconds", (TAppData::TimeProvider->Now() - DisableTimestamp).Seconds()});
@@ -467,7 +467,7 @@ private:
             default:
                 YDB_LOG_ERROR("Unexpected",
                     {"logPrefix", NPQ_LOG_PREFIX},
-                    {"#_num_0", EventStr("StateWork", ev)});
+                    {"event", EventStr("StateWork", ev)});
                 AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateInit", ev));
         }
     }

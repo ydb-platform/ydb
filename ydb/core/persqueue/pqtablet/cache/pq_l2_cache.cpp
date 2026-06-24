@@ -95,7 +95,7 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
         if (Cache.FindWithoutPromote(key) != Cache.End()) {
             YDB_LOG_WARN_CTX(ctx, "PQ Cache (L2). Same blob insertion. size",
                 {"key", key},
-                {"#_blob.Value->GetDataSize", blob.Value->GetDataSize()});
+                {"valueDataSize", blob.Value->GetDataSize()});
             continue;
         }
 
@@ -125,8 +125,8 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
                 ++numUnused;
 
             YDB_LOG_DEBUG_CTX(ctx, "PQ Cache (L2). Evicting blob. size",
-                {"#_oldest.Key", oldest.Key()},
-                {"#_value->GetDataSize", value->GetDataSize()});
+                {"key", oldest.Key()},
+                {"dataSize", value->GetDataSize()});
 
             CurrentSize -= value->GetDataSize();
             Cache.Erase(oldest);
@@ -134,7 +134,7 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
 
         YDB_LOG_DEBUG_CTX(ctx, "PQ Cache (L2). Adding blob. size",
             {"key", key},
-            {"#_blob.Value->GetDataSize", blob.Value->GetDataSize()});
+            {"valueDataSize", blob.Value->GetDataSize()});
 
         Cache.Insert(key, blob.Value);
     }
@@ -162,7 +162,7 @@ void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, ui64 tabletId, con
                 ++numUnused;
             YDB_LOG_DEBUG_CTX(ctx, "PQ Cache (L2). Removed. size",
                 {"key", key},
-                {"#_(*it)->GetDataSize", (*it)->GetDataSize()});
+                {"dataSize", (*it)->GetDataSize()});
             Cache.Erase(it);
         } else {
             YDB_LOG_DEBUG_CTX(ctx, "PQ Cache (L2). Miss in remove",
@@ -197,8 +197,8 @@ void TPersQueueCacheL2::RenameBlobs(const TActorContext& ctx, ui64 tabletId,
         Cache.Erase(it);
 
         YDB_LOG_DEBUG_CTX(ctx, "PQ Cache (L2). Renamed. old new",
-            {"#_oldKey", oldKey},
-            {"#_newKey", newKey});
+            {"oldKey", oldKey},
+            {"newKey", newKey});
     }
 }
 
@@ -237,9 +237,9 @@ void TPersQueueCacheL2::RegretBlobs(const TActorContext& ctx, ui64 tabletId, con
             {"tabletId", tabletId},
             {"blobPartition", blob.Partition},
             {"blobOffset", blob.Offset},
-            {"#_blob.PartNo", blob.PartNo},
+            {"partNo", blob.PartNo},
             {"blobCount", blob.Count},
-            {"#_blob.InternalPartsCount", blob.InternalPartsCount});
+            {"internalPartsCount", blob.InternalPartsCount});
     }
 
     { // counters

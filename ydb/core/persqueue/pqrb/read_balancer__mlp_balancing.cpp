@@ -98,7 +98,7 @@ void TMLPConsumer::Rebuild() {
 
     YDB_LOG_DEBUG("Rebuild partitions for balancing",
         {"logPrefix", LogPrefix()},
-        {"#_num_0", JoinSeq(",", PartitionsForBalancing)});
+        {"partitionsForBalancing", JoinSeq(",", PartitionsForBalancing)});
 }
 
 const TMLPConsumer::TMetrics& TMLPConsumer::GetMetrics() const {

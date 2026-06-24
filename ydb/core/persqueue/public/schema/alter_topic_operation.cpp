@@ -103,7 +103,7 @@ private:
     void Handle(NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse::TPtr& ev) {
         YDB_LOG_DEBUG("Handle",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_NPQ::NClusterTracker::TEvClusterTracker::TEvGetClustersListResponse", (ev->Get()->Success ? ev->Get()->ClustersList->DebugString() : "error")});
+            {"getClustersListResponse", (ev->Get()->Success ? ev->Get()->ClustersList->DebugString() : "error")});
 
         auto& response = *ev->Get();
         if (response.Success) {

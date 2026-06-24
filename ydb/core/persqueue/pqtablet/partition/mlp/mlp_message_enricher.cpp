@@ -105,7 +105,7 @@ STFUNC(TMessageEnricherActor::StateWork) {
         default:
             YDB_LOG_ERROR("Unexpected",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_num_0", EventStr("StateWork", ev)});
+                {"event", EventStr("StateWork", ev)});
     }
 }
 

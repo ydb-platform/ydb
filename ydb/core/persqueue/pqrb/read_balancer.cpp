@@ -214,8 +214,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvUpdateBalancerConfig::TPtr 
                 {"logPrefix", LogPrefix()},
                 {"topic", Topic},
                 {"tabletID", TabletID()},
-                {"#_record.GetVersion", record.GetVersion()},
-                {"#_ev->Sender", ev->Sender},
+                {"version", record.GetVersion()},
+                {"sender", ev->Sender},
                 {"txId", record.GetTxId()});
             THolder<TEvPersQueue::TEvUpdateConfigResponse> res{new TEvPersQueue::TEvUpdateConfigResponse};
             res->Record.SetStatus(NKikimrPQ::OK);
@@ -647,8 +647,8 @@ void TPersQueueReadBalancer::Handle(TEvPersQueue::TEvGetPartitionsLocation::TPtr
             {"logPrefix", LogPrefix()},
             {"tabletId", tabletId},
             {"partitionId", partitionId},
-            {"#_pResponse->GetNodeId", pResponse->GetNodeId()},
-            {"#_pResponse->GetGeneration", pResponse->GetGeneration()});
+            {"pResponseNodeId", pResponse->GetNodeId()},
+            {"pResponseGeneration", pResponse->GetGeneration()});
 
         return true;
     };
@@ -740,7 +740,7 @@ void TPersQueueReadBalancer::Handle(NSchemeShard::TEvSchemeShard::TEvSubDomainPa
     {
         YDB_LOG_DEBUG("Discovered subdomain at RB",
             {"logPrefix", LogPrefix()},
-            {"#_msg->LocalPathId", msg->LocalPathId},
+            {"localPathId", msg->LocalPathId},
             {"tabletID", TabletID()});
 
         SubDomainPathId.emplace(msg->SchemeShardId, msg->LocalPathId);
@@ -797,7 +797,7 @@ void TPersQueueReadBalancer::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated
 
         YDB_LOG_DEBUG("Discovered subdomain state, at RB",
             {"logPrefix", LogPrefix()},
-            {"#_msg->PathId", msg->PathId},
+            {"pathId", msg->PathId},
             {"outOfSpace", outOfSpace},
             {"tabletID", TabletID()});
 
@@ -916,7 +916,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvPartitionScaleStatusChanged::TPtr&
     if (!node) {
         YDB_LOG_DEBUG("Skip TEvPartitionScaleStatusChanged: partition not found",
             {"logPrefix", LogPrefix()},
-            {"#_record.GetPartitionId", record.GetPartitionId()});
+            {"partitionId", record.GetPartitionId()});
         return;
     }
 
@@ -968,7 +968,7 @@ void TPersQueueReadBalancer::BroadcastPartitionError(const TString& message, con
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Handle",
         {"logPrefix", LogPrefix()},
-        {"#_TEvPQ::TEvMLPGetPartitionRequest", ev->Get()->Record});
+        {"mlpGetPartitionRequest", ev->Get()->Record});
     if (StatsRequestTracker.StatsReceived) {
         return MLPBalancer->Handle(ev);
     }
@@ -979,7 +979,7 @@ void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetPartitionRequest::TPtr& ev) 
 void TPersQueueReadBalancer::Handle(TEvPQ::TEvMLPGetRuntimeAttributesRequest::TPtr& ev) {
     YDB_LOG_DEBUG("Handle",
         {"logPrefix", LogPrefix()},
-        {"#_TEvPQ::TEvMLPGetRuntimeAttributesRequest", ev->Get()->Record});
+        {"mlpGetRuntimeAttributesRequest", ev->Get()->Record});
     if (StatsRequestTracker.StatsReceived) {
         return MLPBalancer->Handle(ev);
     }

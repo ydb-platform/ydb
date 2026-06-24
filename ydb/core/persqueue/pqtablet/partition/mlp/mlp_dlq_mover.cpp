@@ -50,7 +50,7 @@ void TDLQMoverActor::Bootstrap() {
     YDB_LOG_DEBUG("Dump NPQLOGPREFIX, QUEUE, #_num_0",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"QUEUE", Queue.size()},
-        {"#_num_0", JoinRange(", ", Queue.begin(), Queue.end())});
+        {"queueItems", JoinRange(", ", Queue.begin(), Queue.end())});
 }
 
 void TDLQMoverActor::PassAway() {
@@ -87,7 +87,7 @@ void TDLQMoverActor::Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
         default:
             YDB_LOG_DEBUG("Dump NPQLOGPREFIX, #_NDescriber::Description(Settings.DestinationTopic, topic.Status)",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_NDescriber::Description(Settings.DestinationTopic, topic.Status)", NDescriber::Description(Settings.DestinationTopic, topic.Status)});
+                {"nDescriberDescriptionSettingsDestinationTopicTopicStatus", NDescriber::Description(Settings.DestinationTopic, topic.Status)});
             return ReplyError(NDescriber::Convert(topic.Status), NDescriber::Description(Settings.DestinationTopic, topic.Status));
     }
 }
@@ -199,8 +199,8 @@ void TDLQMoverActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 
     YDB_LOG_DEBUG("Move message with offset seqNo",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_result->GetOffset", result->GetOffset()},
-        {"#_Queue.front().SeqNo", Queue.front().SeqNo});
+        {"offset", result->GetOffset()},
+        {"queueFrontSeqNo", Queue.front().SeqNo});
 
     auto writeRequest = std::make_unique<TEvPartitionWriter::TEvWriteRequest>(++WriteCookie);
     auto* request = writeRequest->Record.MutablePartitionRequest();
@@ -304,7 +304,7 @@ STFUNC(TDLQMoverActor::StateDescribe) {
         default:
             YDB_LOG_ERROR("Unexpected",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_num_0", EventStr("StateDescribe", ev)});
+                {"event", EventStr("StateDescribe", ev)});
             AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateDescribe", ev));
     }
 }
@@ -317,7 +317,7 @@ STFUNC(TDLQMoverActor::StateInit) {
         default:
             YDB_LOG_ERROR("Unexpected",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_num_0", EventStr("StateInit", ev)});
+                {"event", EventStr("StateInit", ev)});
             AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateInit", ev));
     }
 }
@@ -333,7 +333,7 @@ STFUNC(TDLQMoverActor::StateWork) {
         default:
             YDB_LOG_ERROR("Unexpected",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_num_0", EventStr("StateWork", ev)});
+                {"event", EventStr("StateWork", ev)});
             AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateWork", ev));
     }
 }

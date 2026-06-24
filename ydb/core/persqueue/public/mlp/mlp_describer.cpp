@@ -125,7 +125,7 @@ void TDescriberActor::SendToTablet(ui64 tabletId, IEventBase *ev) {
 void TDescriberActor::ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
     YDB_LOG_INFO("Reply error",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_Ydb::StatusIds::StatusCode_Name(errorCode)", Ydb::StatusIds::StatusCode_Name(errorCode)});
+        {"statusCodeName", Ydb::StatusIds::StatusCode_Name(errorCode)});
     Send(ParentId, new TEvDescribeResponse(errorCode, std::move(errorMessage)));
     PassAway();
 }

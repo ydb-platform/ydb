@@ -251,10 +251,10 @@ void TWriterActor::SendToTablet(ui64 tabletId, IEventBase *ev) {
 bool TWriterActor::OnUnhandledException(const std::exception& exc) {
     YDB_LOG_CRIT("Unhandled exception",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_TypeName(exc)", TypeName(exc)},
-        {"#_exc.what", exc.what()},
+        {"exceptionType", TypeName(exc)},
+        {"exceptionMessage", exc.what()},
         {"endl", Endl},
-        {"#_TBackTrace::FromCurrentException().PrintToString", TBackTrace::FromCurrentException().PrintToString()});
+        {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
 
     PendingRequests = 0;
     ReplyIfPossible();

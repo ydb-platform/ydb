@@ -89,7 +89,7 @@ namespace NPQ {
                         {"logPrefix", NPQ_LOG_PREFIX},
                         {"blobPartition", blob.Partition},
                         {"blobOffset", blob.Offset},
-                        {"#_it->second.size", it->second.size()});
+                        {"size", it->second.size()});
                     for (TKvRequest& kvReq : it->second)
                         unblocked.emplace_back(std::move(kvReq));
                     BlockedReads.erase(it);
@@ -129,7 +129,7 @@ namespace NPQ {
             if (fromCache == kvReq.Blobs.size()) { // all from cache
                 YDB_LOG_DEBUG_COMP(Service, "Reading cookie All blobs are from cache",
                     {"logPrefix", NPQ_LOG_PREFIX},
-                    {"#_kvReq.CookiePQ", kvReq.CookiePQ},
+                    {"cookiePQ", kvReq.CookiePQ},
                     {"fromCache", fromCache});
 
                 THolder<TEvPQ::TEvBlobResponse> response = kvReq.MakePQResponse(ctx);
@@ -142,15 +142,15 @@ namespace NPQ {
             if (CheckInProgress(ctx, kvReq)) {
                 YDB_LOG_DEBUG_COMP(Service, "Reading cookie There's another reading of the same blob. Waiting",
                     {"logPrefix", NPQ_LOG_PREFIX},
-                    {"#_kvReq.CookiePQ", kvReq.CookiePQ});
+                    {"cookiePQ", kvReq.CookiePQ});
                 return;
             }
 
             YDB_LOG_DEBUG_COMP(Service, "Reading cookie Have to read of from KV",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_kvReq.CookiePQ", kvReq.CookiePQ},
-                {"#_kvReq.Blobs.size() - fromCache", kvReq.Blobs.size() - fromCache},
-                {"#_kvReq.Blobs.size", kvReq.Blobs.size()});
+                {"cookiePQ", kvReq.CookiePQ},
+                {"blobsSizeFromCache", kvReq.Blobs.size() - fromCache},
+                {"blobsSize", kvReq.Blobs.size()});
 
             SaveInProgress(kvReq);
             THolder<TEvKeyValue::TEvRequest> request = kvReq.MakeKvRequest(); // before save
@@ -188,16 +188,16 @@ namespace NPQ {
                                                                                 });
             YDB_LOG_DEBUG_COMP(Service, "Got results. of from KV. Status",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_resp.ReadResultSize", resp.ReadResultSize()},
-                {"#_outBlobs.size", outBlobs.size()},
-                {"#_resp.GetStatus", resp.GetStatus()});
+                {"readResultSize", resp.ReadResultSize()},
+                {"outBlobsSize", outBlobs.size()},
+                {"status", resp.GetStatus()});
 
             TErrorInfo error;
             if (resp.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
                 YDB_LOG_ERROR_COMP(Service, "Got Error response for whole request status cookie",
                     {"logPrefix", NPQ_LOG_PREFIX},
-                    {"#_resp.GetStatus", resp.GetStatus()},
-                    {"#_kvReq.CookiePQ", kvReq.CookiePQ});
+                    {"status", resp.GetStatus()},
+                    {"cookiePQ", kvReq.CookiePQ});
                 error = TErrorInfo(NPersQueue::NErrorCode::ERROR, Sprintf("Got bad response: %s", resp.DebugString().c_str()));
             } else {
 
@@ -212,7 +212,7 @@ namespace NPQ {
                     YDB_LOG_DEBUG_COMP(Service, "Got results. result from KV. Status",
                         {"logPrefix", NPQ_LOG_PREFIX},
                         {"i", i},
-                        {"#_r->GetStatus", r->GetStatus()});
+                        {"status", r->GetStatus()});
                     if (r->GetStatus() == NKikimrProto::OVERRUN) { //this blob and next are not readed at all. Return as answer only previous blobs
                         AFL_ENSURE(i > 0)("description", "OVERRUN in first read request")("i", i);
                         break;
@@ -234,9 +234,9 @@ namespace NPQ {
                     } else {
                         YDB_LOG_ERROR_COMP(Service, "Got Error response for 's blob from blobs",
                             {"logPrefix", NPQ_LOG_PREFIX},
-                            {"#_r->GetStatus", r->GetStatus()},
+                            {"status", r->GetStatus()},
                             {"i", i},
-                            {"#_resp.ReadResultSize", resp.ReadResultSize()});
+                            {"readResultSize", resp.ReadResultSize()});
                         error = TErrorInfo(r->GetStatus() == NKikimrProto::NODATA ? NPersQueue::NErrorCode::READ_ERROR_TOO_SMALL_OFFSET
                                                                               : NPersQueue::NErrorCode::ERROR,
                                               Sprintf("Got bad response: %s", r->DebugString().c_str()));
@@ -335,11 +335,11 @@ namespace NPQ {
 
                     YDB_LOG_DEBUG_COMP(Service, "CacheProxy. Passthrough blob. Partition offset partNo count size",
                         {"logPrefix", NPQ_LOG_PREFIX},
-                        {"#_kvReq.Partition", kvReq.Partition},
+                        {"partition", kvReq.Partition},
                         {"blobOffset", blob.Offset},
-                        {"#_blob.PartNo", blob.PartNo},
+                        {"partNo", blob.PartNo},
                         {"blobCount", blob.Count},
-                        {"#_value.size", value.size()});
+                        {"size", value.size()});
                 } else {
                     kvReq.MetadataWritesCount++;
                 }
@@ -359,8 +359,8 @@ namespace NPQ {
 
                 YDB_LOG_DEBUG_COMP(Service, "CacheProxy. Rename blob",
                     {"logPrefix", NPQ_LOG_PREFIX},
-                    {"#_cmd.GetOldKey", cmd.GetOldKey()},
-                    {"#_cmd.GetNewKey", cmd.GetNewKey()});
+                    {"oldKey", cmd.GetOldKey()},
+                    {"newKey", cmd.GetNewKey()});
             }
         }
 
@@ -379,10 +379,10 @@ namespace NPQ {
 
                 YDB_LOG_DEBUG_COMP(Service, "CacheProxy. Delete blobs",
                     {"logPrefix", NPQ_LOG_PREFIX},
-                    {"#_range.GetFrom", range.GetFrom()},
-                    {"#_(range.GetIncludeFrom() ? '+' : '-')", (range.GetIncludeFrom() ? '+' : '-')},
-                    {"#_range.GetTo", range.GetTo()},
-                    {"#_(range.GetIncludeTo() ? '+' : '-')", (range.GetIncludeTo() ? '+' : '-')});
+                    {"from", range.GetFrom()},
+                    {"includeFrom", (range.GetIncludeFrom() ? '+' : '-')},
+                    {"to", range.GetTo()},
+                    {"includeTo", (range.GetIncludeTo() ? '+' : '-')});
             }
         }
 
@@ -406,7 +406,7 @@ namespace NPQ {
                 YDB_LOG_DEBUG_COMP(Service, "Have to remove new data from cache. Topic cookie",
                     {"logPrefix", NPQ_LOG_PREFIX},
                     {"topicName", TopicName},
-                    {"#_resp->Cookie", resp->Cookie});
+                    {"cookie", resp->Cookie});
             }
 
             UpdateCounters(ctx);

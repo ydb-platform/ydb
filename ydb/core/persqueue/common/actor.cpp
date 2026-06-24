@@ -9,10 +9,10 @@ namespace NKikimr::NPQ {
 void DoLogUnhandledException(NKikimrServices::EServiceKikimr service, const TStringBuf prefix, const std::exception& exc) {
     YDB_LOG_CRIT("Unhandled exception",
         {"prefix", prefix},
-        {"#_TypeName(exc)", TypeName(exc)},
-        {"#_exc.what", exc.what()},
+        {"exceptionType", TypeName(exc)},
+        {"exceptionMessage", exc.what()},
         {"endl", Endl},
-        {"#_TBackTrace::FromCurrentException().PrintToString", TBackTrace::FromCurrentException().PrintToString()});
+        {"backTrace", TBackTrace::FromCurrentException().PrintToString()});
 }
 
 const TString& TConstantLogPrefix::GetLogPrefix() const {

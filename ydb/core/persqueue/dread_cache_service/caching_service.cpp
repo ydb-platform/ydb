@@ -152,20 +152,20 @@ private:
         if (sessionIter.IsEnd()) {
             YDB_LOG_ERROR_CTX(ctx, "Direct read cache: tried to stage direct read for unregistered",
                 {"session", sessionKey.SessionId},
-                {"#_sessionKey.PartitionSessionId", sessionKey.PartitionSessionId});
+                {"partitionSessionId", sessionKey.PartitionSessionId});
             return;
         }
         if (sessionIter->second.Generation != ev->Get()->TabletGeneration) {
             YDB_LOG_ALERT_CTX(ctx, "Direct read cache: tried to stage direct read for session with generation previously had this session with generation Data ignored",
-                {"#_sessionKey.SessionId", sessionKey.SessionId},
+                {"sessionId", sessionKey.SessionId},
                 {"TabletGeneration", ev->Get()->TabletGeneration},
-                {"#_sessionIter->second.Generation", sessionIter->second.Generation});
+                {"generation", sessionIter->second.Generation});
             return;
         }
         auto ins = sessionIter->second.StagedReads.insert(std::make_pair(ev->Get()->ReadKey.ReadId, ev->Get()->Response));
         if (!ins.second) {
             YDB_LOG_WARN_CTX(ctx, "Direct read cache: tried to stage duplicate direct read for session with id new data ignored",
-                {"#_sessionKey.SessionId", sessionKey.SessionId},
+                {"sessionId", sessionKey.SessionId},
                 {"ReadKey.ReadId", ev->Get()->ReadKey.ReadId});
             return;
         }
@@ -407,7 +407,7 @@ private:
         const auto& ctx = ActorContext();
         ctx.Send(proxyId, new TEvPQProxy::TEvDirectReadCloseSession(code, reason));
         YDB_LOG_DEBUG_CTX(ctx, "Direct read cache: close session for proxy",
-            {"#_proxyId", proxyId},
+            {"proxyId", proxyId},
             {"sessionId", sessionId});
     }
 

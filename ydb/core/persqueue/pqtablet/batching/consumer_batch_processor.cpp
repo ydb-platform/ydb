@@ -111,7 +111,7 @@ STFUNC(TConsumerBatchProcessor::StateWork) {
         YDB_LOG_WARN("Unexpected event in TConsumerBatchProcessor for user",
             {"logPrefix", NPQ_LOG_PREFIX},
             {"user", User},
-            {"#_ev->GetTypeRewrite", ev->GetTypeRewrite()});
+            {"typeRewrite", ev->GetTypeRewrite()});
         break;
     }
 }

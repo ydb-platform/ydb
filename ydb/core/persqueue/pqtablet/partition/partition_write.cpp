@@ -305,7 +305,7 @@ ui64 CalculateReplyOffset(bool already, bool kafkaDeduplication, ui64 maxOffset,
 void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
     YDB_LOG_TRACE("TPartition::AnswerCurrentWrites",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_Responses.size", Responses.size()});
+        {"responsesSize", Responses.size()});
     const auto now = ctx.Now();
 
     ui64 offset = BlobEncoder.EndOffset;
@@ -383,13 +383,13 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
 
             YDB_LOG_DEBUG("Answering for message sourceid: Topic: is",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_EscapeC(s)", EscapeC(s)},
+                {"escapeCS", EscapeC(s)},
                 {"topicName", TopicName()},
                 {"partition", Partition},
                 {"seqNo", seqNo},
                 {"partNo", partNo},
                 {"offset", offset},
-                {"#_num_0", (already ? "already written" : "stored on disk")});
+                {"writeStatus", (already ? "already written" : "stored on disk")});
 
             if (PartitionWriteQuotaWaitCounter && !writeResponse.Internal) {
                 PartitionWriteQuotaWaitCounter->IncFor(PartitionQuotaWaitTimeForCurrentBlob.MilliSeconds());
@@ -774,8 +774,8 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
             YDB_LOG_ERROR("Request to write wrong SeqNo. Partition sourceId seqno",
                 {"logPrefix", NPQ_LOG_PREFIX},
                 {"partition", Partition},
-                {"#_EscapeC(msg.SourceId)", EscapeC(msg.SourceId)},
-                {"#_msg.SeqNo", msg.SeqNo});
+                {"escapeCMsgSourceId", EscapeC(msg.SourceId)},
+                {"seqNo", msg.SeqNo});
 
             ReplyError(ctx, ev->Get()->Cookie, NPersQueue::NErrorCode::BAD_REQUEST,
                 TStringBuilder() << "wrong SeqNo " << msg.SeqNo);
@@ -1171,10 +1171,10 @@ void TPartition::RenameFormedBlobs(const std::deque<TPartitionedBlob::TRenameFor
             {"logPrefix", NPQ_LOG_PREFIX},
             {"topicName", TopicName()},
             {"partition", Partition},
-            {"#_x.OldKey", x.OldKey},
-            {"#_x.NewKey", x.NewKey},
-            {"#_x.Size", x.Size},
-            {"#_ctx.Now().MilliSeconds", ctx.Now().MilliSeconds()});
+            {"oldKey", x.OldKey},
+            {"newKey", x.NewKey},
+            {"size", x.Size},
+            {"ctxNowMilliSeconds", ctx.Now().MilliSeconds()});
 
         zone.CompactedKeys.emplace_back(x.NewKey, x.Size);
     }
@@ -1347,8 +1347,8 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
                 {"sourceId", EscapeC(p.Msg.SourceId)},
                 {"seqNo", p.Msg.SeqNo},
                 {"initialSeqNo", p.InitialSeqNo},
-                {"#_seqNo", sourceId.CommittedSeqNo()},
-                {"#_#_seqNo", sourceId.UpdatedSeqNo()},
+                {"seqNo", sourceId.CommittedSeqNo()},
+                {"seqNo", sourceId.UpdatedSeqNo()},
                 {"endOffset", BlobEncoder.EndOffset},
                 {"curOffset", curOffset},
                 {"offset", poffset});
@@ -1389,7 +1389,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             {"topicName", TopicName()},
             {"partition", Partition},
             {"sourceId", EscapeC(p.Msg.SourceId)},
-            {"#_*hbVersion", *hbVersion});
+            {"hbVersion", *hbVersion});
 
         sourceId.Update(THeartbeat{*hbVersion, p.Msg.Data});
 
@@ -1552,8 +1552,8 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             {"sourceId", EscapeC(p.Msg.SourceId)},
             {"seqNo", p.Msg.SeqNo},
             {"partNo", p.Msg.PartNo},
-            {"#_newWrite->Key", newWrite->Key},
-            {"#_newWrite->Value.size", newWrite->Value.size()});
+            {"key", newWrite->Key},
+            {"valueSize", newWrite->Value.size()});
     }
 
     if (lastBlobPart) {
@@ -1599,7 +1599,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             {"sourceId", EscapeC(p.Msg.SourceId)},
             {"seqNo", p.Msg.SeqNo},
             {"partNo", p.Msg.PartNo},
-            {"#_BlobEncoder.PartitionedBlob.GetFormedBlobs().size", BlobEncoder.PartitionedBlob.GetFormedBlobs().size()},
+            {"blobEncoderPartitionedBlobFormedBlobsSize", BlobEncoder.PartitionedBlob.GetFormedBlobs().size()},
             {"newHead", BlobEncoder.NewHead});
 
         sourceId.Update(
@@ -1863,14 +1863,14 @@ void TPartition::EndProcessWrites(TEvKeyValue::TEvRequest* request, const TActor
         {"logPrefix", NPQ_LOG_PREFIX},
         {"topicName", TopicName()},
         {"partition", Partition},
-        {"#_key.GetOffset", key.GetOffset()},
-        {"#_key.GetCount", key.GetCount()},
-        {"#_BlobEncoder.Head.Offset", BlobEncoder.Head.Offset},
-        {"#_BlobEncoder.EndOffset", BlobEncoder.EndOffset},
-        {"#_BlobEncoder.NewHead.GetNextOffset", BlobEncoder.NewHead.GetNextOffset()},
+        {"offset", key.GetOffset()},
+        {"count", key.GetCount()},
+        {"blobEncoderHeadOffset", BlobEncoder.Head.Offset},
+        {"blobEncoderEndOffset", BlobEncoder.EndOffset},
+        {"blobEncoderNewHeadNextOffset", BlobEncoder.NewHead.GetNextOffset()},
         {"key", key},
-        {"#_res.second", res.second},
-        {"#_ctx.Now().MilliSeconds", ctx.Now().MilliSeconds()});
+        {"second", res.second},
+        {"ctxNowMilliSeconds", ctx.Now().MilliSeconds()});
     AddNewFastWriteBlob(res, request, ctx);
 
     BlobEncoder.HaveData = true;
@@ -1908,7 +1908,7 @@ void TPartition::EndAppendHeadWithNewWrites(const TActorContext& ctx)
                 {"logPrefix", NPQ_LOG_PREFIX},
                 {"topicName", TopicName()},
                 {"partition", Partition},
-                {"#_heartbeat->Version", heartbeat->Version});
+                {"version", heartbeat->Version});
 
             auto hbMsg = TWriteMsg{Max<ui64>() /* cookie */, Nothing(), TEvPQ::TEvWrite::TMsg{
                 .SourceId = NSourceIdEncoding::EncodeSimple(ToString(TabletId)),

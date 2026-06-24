@@ -504,12 +504,12 @@ TMaybe<TReadAnswer> TReadInfo::AddBlobsFromBody(const TVector<NPQ::TRequestedBlo
 
             YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "FormAnswer processing batch offset totakecount count size from batchStartIdx cbcount",
                 {"logPrefix", LogPrefix()},
-                {"#_(offset - header.GetCount())", (offset - header.GetCount())},
+                {"offsetHeaderCount", (offset - header.GetCount())},
                 {"count", count},
-                {"#_header.GetCount", header.GetCount()},
-                {"#_header.GetPayloadSize", header.GetPayloadSize()},
+                {"headerCount", header.GetCount()},
+                {"headerPayloadSize", header.GetPayloadSize()},
                 {"batchStartIdx", batchStartIdx},
-                {"#_batch.Blobs.size", batch.Blobs.size()});
+                {"batchBlobsSize", batch.Blobs.size()});
 
             for (size_t i = batchStartIdx; i < batch.Blobs.size(); ++i) {
                 const TClientBlob &res = batch.Blobs[i];
@@ -591,7 +591,7 @@ TReadAnswer TReadInfo::FormAnswer(
     AFL_ENSURE(endOffset <= (ui64)Max<i64>())("Max offset is too big", endOffset);
     YDB_LOG_DEBUG_COMP(NKikimrServices::PERSQUEUE, "FormAnswer for blobs",
         {"logPrefix", LogPrefix()},
-        {"#_Blobs.size", Blobs.size()});
+        {"blobsSize", Blobs.size()});
 
     if (!isActive && response->GetBlobs().empty()) {
         postProcessor(true, *readResult);
@@ -744,8 +744,8 @@ void TPartition::Handle(TEvPQ::TEvReadTimeout::TPtr& ev, const TActorContext& ct
         {"logPrefix", NPQ_LOG_PREFIX},
         {"Cookie", ev->Get()->Cookie},
         {"partition", Partition},
-        {"#_res->User", res->User},
-        {"#_res->Offset", res->Offset});
+        {"user", res->User},
+        {"offset", res->Offset});
     auto& userInfo = UsersInfoStorage->GetOrCreate(res->User, ctx);
 
     userInfo.ForgetSubscription(GetEndOffset(), ctx.Now());
@@ -837,8 +837,8 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
             {"logPrefix", NPQ_LOG_PREFIX},
             {"clientSideName", TopicConverter->GetClientsideName()},
             {"partition", Partition},
-            {"#_read->Offset", read->Offset},
-            {"#_read->PartNo", read->PartNo},
+            {"offset", read->Offset},
+            {"partNo", read->PartNo},
             {"startOffset", GetStartOffset()});
         ReplyError(
             ctx, read->Cookie,
@@ -855,9 +855,9 @@ void TPartition::Handle(TEvPQ::TEvRead::TPtr& ev, const TActorContext& ctx) {
             {"logPrefix", NPQ_LOG_PREFIX},
             {"clientSideName", TopicConverter->GetClientsideName()},
             {"partition", Partition},
-            {"#_read->ClientId", read->ClientId},
+            {"clientId", read->ClientId},
             {"endOffset", GetEndOffset()},
-            {"#_read->Offset", read->Offset});
+            {"offset", read->Offset});
         ReplyError(ctx, read->Cookie, NPersQueue::NErrorCode::READ_ERROR_TOO_BIG_OFFSET,
                                       TStringBuilder() << "trying to read from future. ReadOffset " <<
                                       read->Offset << ", " << read->PartNo << " EndOffset " << GetEndOffset(),
@@ -923,12 +923,12 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
         {"clientSideName", TopicConverter->GetClientsideName()},
         {"partition", Partition},
         {"user", user},
-        {"#_read->Offset", read->Offset},
-        {"#_read->PartNo", read->PartNo},
-        {"#_read->Count", read->Count},
-        {"#_read->Size", read->Size},
+        {"offset", read->Offset},
+        {"partNo", read->PartNo},
+        {"count", read->Count},
+        {"size", read->Size},
         {"endOffset", GetEndOffset()},
-        {"#_read->MaxTimeLagMs", read->MaxTimeLagMs},
+        {"maxTimeLagMs", read->MaxTimeLagMs},
         {"offset", offset});
 
     if (offset == GetEndOffset() && !(read->Timeout == 0 && read->IsInternal())) { // Why? If read timeout = 0 we wait?
@@ -939,12 +939,12 @@ void TPartition::DoRead(TEvPQ::TEvRead::TPtr&& readEvent, TDuration waitQuotaTim
                     {"logPrefix", NPQ_LOG_PREFIX},
                     {"clientSideName", TopicConverter->GetClientsideName()},
                     {"partition", Partition},
-                    {"#_read->ClientId", read->ClientId},
-                    {"#_read->Offset", read->Offset},
-                    {"#_read->Count", read->Count},
-                    {"#_read->Size", read->Size},
+                    {"clientId", read->ClientId},
+                    {"offset", read->Offset},
+                    {"count", read->Count},
+                    {"size", read->Size},
                     {"endOffset", GetEndOffset()},
-                    {"#_read->MaxTimeLagMs", read->MaxTimeLagMs},
+                    {"maxTimeLagMs", read->MaxTimeLagMs},
                     {"offset", offset});
             }
             read->Timeout = maxTimeout;
@@ -981,11 +981,11 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
         {"clientSideName", TopicConverter->GetClientsideName()},
         {"partition", Partition},
         {"user", user},
-        {"#_userInfo.Offset", userInfo.Offset},
-        {"#_UpdateUserInfoTimestamp.size", UpdateUserInfoTimestamp.size()},
+        {"userInfoOffset", userInfo.Offset},
+        {"updateUserInfoTimestampSize", UpdateUserInfoTimestamp.size()},
         {"startOffset", GetStartOffset()},
         {"readingTimestamp", ReadingTimestamp},
-        {"#_userInfo.ReadRuleGeneration", userInfo.ReadRuleGeneration});
+        {"userInfoReadRuleGeneration", userInfo.ReadRuleGeneration});
 
     if (ReadingTimestamp) {
         UpdateUserInfoTimestamp.push_back(std::make_pair(user, userInfo.ReadRuleGeneration));
@@ -1028,8 +1028,8 @@ void TPartition::ReadTimestampForOffset(const TString& user, TUserInfo& userInfo
         {"clientSideName", TopicConverter->GetClientsideName()},
         {"partition", Partition},
         {"user", user},
-        {"#_userInfo.Offset", userInfo.Offset},
-        {"#_UpdateUserInfoTimestamp.size", UpdateUserInfoTimestamp.size()},
+        {"userInfoOffset", userInfo.Offset},
+        {"updateUserInfoTimestampSize", UpdateUserInfoTimestamp.size()},
         {"startOffset", GetStartOffset()},
         {"readingTimestamp", ReadingTimestamp},
         {"readingForUserReadRuleGeneration", ReadingForUserReadRuleGeneration});
@@ -1080,8 +1080,8 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
         {"clientSideName", TopicConverter->GetClientsideName()},
         {"partition", Partition},
         {"readingForUser", ReadingForUser},
-        {"#_userInfo->WriteTimestamp.MilliSeconds", userInfo->WriteTimestamp.MilliSeconds()},
-        {"#_UpdateUserInfoTimestamp.size", UpdateUserInfoTimestamp.size()},
+        {"userInfoWriteTimestampMilliSeconds", userInfo->WriteTimestamp.MilliSeconds()},
+        {"updateUserInfoTimestampSize", UpdateUserInfoTimestamp.size()},
         {"startOffset", GetStartOffset()});
     PQ_ENSURE(userInfo->ReadScheduled);
     userInfo->ReadScheduled = false;
@@ -1090,7 +1090,7 @@ void TPartition::Handle(TEvPQ::TEvProxyResponse::TPtr& ev, const TActorContext& 
     if (!userInfo->ActualTimestamps) {
         YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "Reading Timestamp failed for offset",
             {"readingForOffset", ReadingForOffset},
-            {"#_userInfo->Offset", userInfo->Offset},
+            {"userInfoOffset", userInfo->Offset},
             {"Response->DebugString", ev->Get()->Response->DebugString()});
         if (ev->Get()->Response->GetStatus() == NMsgBusProxy::MSTATUS_OK &&
             ev->Get()->Response->GetErrorCode() == NPersQueue::NErrorCode::OK &&
@@ -1172,7 +1172,7 @@ void TPartition::ProcessRead(const TActorContext& ctx, TReadInfo&& info, const u
     YDB_LOG_DEBUG_COMP(Service, "Read cookie added blobs, size count last offset current partition end",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"cookie", cookie},
-        {"#_info.Blobs.size", info.Blobs.size()},
+        {"blobsSize", info.Blobs.size()},
         {"size", size},
         {"count", count},
         {"lastOffset", lastOffset},

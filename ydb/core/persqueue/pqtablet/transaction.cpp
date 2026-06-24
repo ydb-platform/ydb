@@ -335,7 +335,7 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
             YDB_LOG_DEBUG("Predicates /",
                 {"logPrefix", LogPrefix()},
                 {"readSetCount", ReadSetCount},
-                {"#_PredicatesReceived.size", PredicatesReceived.size()});
+                {"predicatesReceivedSize", PredicatesReceived.size()});
         }
 
         NKikimrPQ::TPartitions d;
@@ -373,7 +373,7 @@ void TDistributedTransaction::OnReadSetAck(ui64 tabletId)
         YDB_LOG_DEBUG("Predicate acks /",
             {"logPrefix", LogPrefix()},
             {"predicateAcksCount", PredicateAcksCount},
-            {"#_PredicateRecipients.size", PredicateRecipients.size()});
+            {"predicateRecipientsSize", PredicateRecipients.size()});
     }
 }
 
@@ -424,7 +424,7 @@ bool TDistributedTransaction::HaveAllRecipientsReceive() const
     YDB_LOG_DEBUG("/",
         {"logPrefix", LogPrefix()},
         {"predicateAcks", PredicateAcksCount},
-        {"#_PredicateRecipients.size", PredicateRecipients.size()});
+        {"predicateRecipientsSize", PredicateRecipients.size()});
     return PredicateRecipients.size() == PredicateAcksCount;
 }
 
@@ -434,7 +434,7 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
     auto tx = Serialize(state);
     YDB_LOG_DEBUG("Save tx",
         {"logPrefix", LogPrefix()},
-        {"#_tx", tx});
+        {"tx", tx});
 
     TString value;
     TX_ENSURE(tx.SerializeToString(&value));

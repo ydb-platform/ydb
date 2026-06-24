@@ -232,10 +232,10 @@ bool TPartitionCompaction::TReadState::ProcessResponse(TEvPQ::TEvProxyResponse::
             ) {
                 YDB_LOG_CRIT("Partition compaction: Handle TEvRead last read pos readed now",
                     {"logPrefix", LogPrefix()},
-                    {"#_(seqno/parno)", LastMessage->GetSeqNo()},
-                    {"#_LastMessage->GetPartNo", LastMessage->GetPartNo()},
-                    {"#_res.GetSeqNo", res.GetSeqNo()},
-                    {"#_res.GetPartNo", res.GetPartNo()});
+                    {"seqNoPartNo", LastMessage->GetSeqNo()},
+                    {"lastMessagePartNo", LastMessage->GetPartNo()},
+                    {"seqNo", res.GetSeqNo()},
+                    {"partNo", res.GetPartNo()});
             }
             AFL_ENSURE(LastMessage->GetSeqNo() == res.GetSeqNo());
             (*LastMessage->MutableData()) += res.GetData();
@@ -331,7 +331,7 @@ TPartitionCompaction::TCompactState::TCompactState(
         YDB_LOG_CRIT("Partition compaction state created with empty topic data",
             {"logPrefix", LogPrefix()},
             {"topic", PartitionActor->TopicName()},
-            {"#_PartitionActor->Partition.OriginalPartitionId", PartitionActor->Partition.OriginalPartitionId});
+            {"partitionActorPartitionOriginalPartitionId", PartitionActor->Partition.OriginalPartitionId});
         Failure = true;
     }
     for (const auto& [_, offset] : TopicData) {
@@ -339,9 +339,9 @@ TPartitionCompaction::TCompactState::TCompactState(
             YDB_LOG_CRIT("Partition compaction state - got less then uncompacted",
                 {"logPrefix", LogPrefix()},
                 {"offset", offset},
-                {"#_offset", firstUncompactedOffset},
+                {"offset", firstUncompactedOffset},
                 {"topic", PartitionActor->TopicName()},
-                {"#_PartitionActor->Partition.OriginalPartitionId", PartitionActor->Partition.OriginalPartitionId});
+                {"partitionActorPartitionOriginalPartitionId", PartitionActor->Partition.OriginalPartitionId});
             Failure = true;
         }
     }
@@ -382,7 +382,7 @@ TPartitionCompaction::EStep TPartitionCompaction::TCompactState::ContinueIfPossi
             {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
             {"partition", PartitionActor->Partition},
             {"fromOffset", currKey.GetOffset()},
-            {"#_currKey.GetPartNo", currKey.GetPartNo()});
+            {"currKeyPartNo", currKey.GetPartNo()});
         PartitionActor->CompacterPartitionRequestInflight = true;
         return EStep::COMPACTING;
     }
@@ -477,7 +477,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
         {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
         {"partition", PartitionActor->Partition},
         {"from", readResult.GetResult(0).GetOffset()},
-        {"#_readResult.GetResult(0).GetPartNo", readResult.GetResult(0).GetPartNo()},
+        {"readResultResult0PartNo", readResult.GetResult(0).GetPartNo()},
         {"isTruncatedBlob", isTruncatedBlob});
     for (ui32 i = 0; i < readResult.ResultSize(); ++i) {
         auto& res = *readResult.MutableResult(i);
@@ -547,10 +547,10 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
             ) {
                 YDB_LOG_CRIT("Partition compaction: Handle TEvRead last read pos readed now",
                     {"logPrefix", LogPrefix()},
-                    {"#_(seqno/parno)", CurrentMessage->GetSeqNo()},
-                    {"#_CurrentMessage->GetPartNo", CurrentMessage->GetPartNo()},
-                    {"#_res.GetSeqNo", res.GetSeqNo()},
-                    {"#_res.GetPartNo", res.GetPartNo()});
+                    {"seqNoPartNo", CurrentMessage->GetSeqNo()},
+                    {"currentMessagePartNo", CurrentMessage->GetPartNo()},
+                    {"seqNo", res.GetSeqNo()},
+                    {"partNo", res.GetPartNo()});
             }
             AFL_ENSURE(CurrentMessage->GetSeqNo() == res.GetSeqNo());
             (*CurrentMessage->MutableData()) += res.GetData();
@@ -586,12 +586,12 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
                 {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
                 {"partition", PartitionActor->Partition},
                 {"from", readResult.GetResult(0).GetOffset()},
-                {"#_readResult.GetResult(0).GetPartNo", readResult.GetResult(0).GetPartNo()},
-                {"#_res.GetOffset", res.GetOffset()},
+                {"readResultResult0PartNo", readResult.GetResult(0).GetPartNo()},
+                {"offset", res.GetOffset()},
                 {"isTruncatedBlob", isTruncatedBlob},
                 {"hasNonZeroParts", hasNonZeroParts},
                 {"keepMessage", keepMessage},
-                {"#_!!LastBatch", !!LastBatch});
+                {"lastBatch", !!LastBatch});
 
 
             if (LastBatch) {
@@ -626,7 +626,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
         {"clientSideName", PartitionActor->TopicConverter->GetClientsideName()},
         {"partition", PartitionActor->Partition},
         {"from", readResult.GetResult(0).GetOffset()},
-        {"#_readResult.GetResult(0).GetPartNo", readResult.GetResult(0).GetPartNo()},
+        {"readResultResult0PartNo", readResult.GetResult(0).GetPartNo()},
         {"isTruncatedBlob", isTruncatedBlob},
         {"hasNonZeroParts", hasNonZeroParts},
         {"isMiddlePartOfMessage", isMiddlePartOfMessage});

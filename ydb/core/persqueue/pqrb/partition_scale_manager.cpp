@@ -139,7 +139,7 @@ TPartitionScaleManager::TScaleRequest TPartitionScaleManager::BuildScaleRequest(
 
     YDB_LOG_DEBUG("Dump logPrefix, #_num_0",
         {"logPrefix", LogPrefix()},
-        {"#_num_0", fmt::format("Scale request: #splits={}, #unprocessed={}, splitsLimit={}, #merges={}",         splitsToApply.Requests.size(),         splitsToApply.Unprocessed,         allowedSplitsCountLimit,         mergesToApply.Requests.size()     )});
+        {"scaleRequest", fmt::format("Scale request: #splits={}, #unprocessed={}, splitsLimit={}, #merges={}",         splitsToApply.Requests.size(),         splitsToApply.Unprocessed,         allowedSplitsCountLimit,         mergesToApply.Requests.size()     )});
 
     return {
         .Split = std::move(splitsToApply.Requests),
@@ -173,7 +173,7 @@ TPartitionScaleManager::TRequests<TPartitionScaleManager::TPartitionBoundary> TP
             } else {
                 YDB_LOG_WARN("",
                     {"logPrefix", LogPrefix()},
-                    {"#_num_0", fmt::format("MaxActivePartitions ({}) is too low to recreate {} root partitions from the mirror source topic",                                      BalancerConfig.MaxActivePartitions,                                      RootPartitionsToCreate->size())});
+                    {"warning", fmt::format("MaxActivePartitions ({}) is too low to recreate {} root partitions from the mirror source topic",                                      BalancerConfig.MaxActivePartitions,                                      RootPartitionsToCreate->size())});
                 // don't send request at all, if there is not enough quota
                 return {
                     .Unprocessed = RootPartitionsToCreate->size(),
@@ -182,7 +182,7 @@ TPartitionScaleManager::TRequests<TPartitionScaleManager::TPartitionBoundary> TP
         }
         YDB_LOG_DEBUG("Dump logPrefix, #_num_0",
             {"logPrefix", LogPrefix()},
-            {"#_num_0", fmt::format("Set partition boundaries requsts: #modify={}, #create{}",             modifyPartitions,             createPartitions         )});
+            {"partitionBoundariesRequest", fmt::format("Set partition boundaries requsts: #modify={}, #create{}",             modifyPartitions,             createPartitions         )});
     }
     return {
         .Requests = std::move(boundsToApply),
@@ -271,9 +271,9 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
 
         YDB_LOG_DEBUG("Partition split ranges. Mid#",
             {"logPrefix", LogPrefix()},
-            {"#_ToHex(from)", ToHex(from)},
-            {"#_ToHex(to)", ToHex(to)},
-            {"#_ToHex(mid)", ToHex(mid)},
+            {"fromHex", ToHex(from)},
+            {"toHex", ToHex(to)},
+            {"midHex", ToHex(mid)},
             {"partition", partitionId},
             {"from", "To#"});
 
@@ -286,7 +286,7 @@ TPartitionScaleManager::TBuildSplitScaleRequestResult TPartitionScaleManager::Bu
                 if (const auto* childNode = PartitionGraph.GetPartition(childPartitionId); childNode != nullptr) {
                     YDB_LOG_NOTICE("",
                         {"logPrefix", LogPrefix()},
-                        {"#_num_0", fmt::format("Child partition# {} already exists. Performing unordered split. Partition# {}", childPartitionId, partitionId)});
+                        {"notice", fmt::format("Child partition# {} already exists. Performing unordered split. Partition# {}", childPartitionId, partitionId)});
                     split.set_createrootlevelsibling(true);
                 }
             }
@@ -359,7 +359,7 @@ void TPartitionScaleManager::UpdateMirrorRootPartitionsSet() {
     const size_t newPartitions = std::ranges::count(rootPartitionsMismatch.AlterRootPartitions, NMirror::EPartitionAction::Create, &NMirror::TPartitionWithBounds::Action);
     YDB_LOG_INFO("",
         {"logPrefix", LogPrefix()},
-        {"#_num_0", fmt::format("Topic has less root partitions than the mirror source. New configuration has {}+{} partitions.",                          existingPartitions,                          newPartitions)});
+        {"partitionConfiguration", fmt::format("Topic has less root partitions than the mirror source. New configuration has {}+{} partitions.",                          existingPartitions,                          newPartitions)});
 
     RootPartitionsToCreate = std::move(rootPartitionsMismatch.AlterRootPartitions);
     MirrorTopicError.reset();

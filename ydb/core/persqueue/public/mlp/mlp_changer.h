@@ -234,7 +234,7 @@ private:
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
         YDB_LOG_INFO_COMP(Service, "Reply error",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_Ydb::StatusIds::StatusCode_Name(errorCode)", Ydb::StatusIds::StatusCode_Name(errorCode)});
+            {"statusCodeName", Ydb::StatusIds::StatusCode_Name(errorCode)});
         TBase::Send(ParentId, new TEvChangeResponse(errorCode, std::move(errorMessage)));
         PassAway();
     }

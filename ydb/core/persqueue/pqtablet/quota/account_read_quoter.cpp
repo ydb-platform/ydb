@@ -243,7 +243,7 @@ TAccountWriteQuoter::TAccountWriteQuoter(
         {"logPrefix", NPQ_LOG_PREFIX},
         {"resourcePath", ResourcePath},
         {"kesusPath", KesusPath},
-        {"#_topicConverter->GetAccount", topicConverter->GetAccount()});
+        {"account", topicConverter->GetAccount()});
 }
 
 TQuoterParams TAccountWriteQuoter::CreateQuoterParams(

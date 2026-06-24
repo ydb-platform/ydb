@@ -556,7 +556,7 @@ bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& 
 
     YDB_LOG_TRACE_COMP(Service, "Have items to delete old stuff",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_request->Record.CmdDeleteRangeSize", request->Record.CmdDeleteRangeSize()});
+        {"recordCmdDeleteRangeSize", request->Record.CmdDeleteRangeSize()});
 
     haveChanges |= SourceIdStorage.DropOldSourceIds(request, ctx.Now(), GetStartOffset(), Partition,
                                                     Config.GetPartitionConfig());
@@ -566,8 +566,8 @@ bool TPartition::CleanUp(TEvKeyValue::TEvRequest* request, const TActorContext& 
 
     YDB_LOG_TRACE_COMP(Service, "Have items to delete all stuff. Delete command",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_request->Record.CmdDeleteRangeSize", request->Record.CmdDeleteRangeSize()},
-        {"#_request->ToString", request->ToString()});
+        {"recordCmdDeleteRangeSize", request->Record.CmdDeleteRangeSize()},
+        {"toString", request->ToString()});
 
     return haveChanges;
 }
@@ -1078,7 +1078,7 @@ void TPartition::Handle(TEvPQ::TEvPartitionStatus::TPtr& ev, const TActorContext
             {"partitionSize", result.GetPartitionSize()},
             {"usedReserveSize", result.GetUsedReserveSize()},
             {"reserveSize", ReserveSize()},
-            {"#_Config.GetPartitionConfig();", Config.GetPartitionConfig()});
+            {"configPartitionConfig", Config.GetPartitionConfig()});
     }
 
     UpdateCounters(ctx);
@@ -1207,7 +1207,7 @@ void TPartition::LogAndCollectError(const NKikimrPQ::TStatusResponse::TErrorMess
     }
     Errors.push_back(error);
     YDB_LOG_ERROR_CTX_COMP(ctx, error.GetService(), "",
-        {"#_error.GetMessage", error.GetMessage()});
+        {"errorMessage", error.GetMessage()});
 }
 
 void TPartition::LogAndCollectError(NKikimrServices::EServiceKikimr service, const TString& msg, const TActorContext& ctx) {
@@ -1470,8 +1470,8 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxCommit> ev, con
         if (GetStepAndTxId(*ev) < GetStepAndTxId(*PlanStep, *TxId)) {
             YDB_LOG_DEBUG_COMP(Service, "Stale TEvTxCommit: persist tx meta then TEvTxDone Step TxId",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_ev->Step", ev->Step},
-                {"#_ev->TxId", ev->TxId});
+                {"step", ev->Step},
+                {"txId", ev->TxId});
             EnqueueStaleTxMetaPersist(std::move(ev), ctx);
             return;
         }
@@ -1524,8 +1524,8 @@ void TPartition::ProcessPendingEvent(std::unique_ptr<TEvPQ::TEvTxRollback> ev, c
         if (GetStepAndTxId(*ev) < GetStepAndTxId(*PlanStep, *TxId)) {
             YDB_LOG_DEBUG_COMP(Service, "Send TEvTxDone (rollback) Step TxId",
                 {"logPrefix", NPQ_LOG_PREFIX},
-                {"#_ev->Step", ev->Step},
-                {"#_ev->TxId", ev->TxId});
+                {"step", ev->Step},
+                {"txId", ev->TxId});
             ctx.Send(TabletActorId, MakeTxDone(ev->Step, ev->TxId).Release());
             return;
         }
@@ -1692,7 +1692,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx,
         if (TxAffectedSourcesIds.contains(s.first)) {
             YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "TxAffectedSourcesIds contains SourceId TxId",
                 {"logPrefix", LogPrefix()},
-                {"#_s.first", s.first},
+                {"sFirst", s.first},
                 {"txId", tx.GetTxId()});
             ret = EProcessResult::Blocked;
             break;
@@ -1702,12 +1702,12 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx,
             YDB_LOG_DEBUG_COMP(Service, "TxId affect SourceId",
                 {"logPrefix", NPQ_LOG_PREFIX},
                 {"txId", tx.GetTxId()},
-                {"#_s.first", s.first});
+                {"sFirst", s.first});
         } else {
             if (WriteAffectedSourcesIds.contains(s.first)) {
                 YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "WriteAffectedSourcesIds contains SourceId TxId",
                     {"logPrefix", LogPrefix()},
-                    {"#_s.first", s.first},
+                    {"sFirst", s.first},
                     {"txId", tx.GetTxId()});
                 ret = EProcessResult::Blocked;
                 break;
@@ -1716,7 +1716,7 @@ TPartition::EProcessResult TPartition::ApplyWriteInfoResponse(TTransaction& tx,
             YDB_LOG_DEBUG_COMP(Service, "TxId affect SourceId",
                 {"logPrefix", NPQ_LOG_PREFIX},
                 {"txId", tx.GetTxId()},
-                {"#_s.first", s.first});
+                {"sFirst", s.first});
         }
 
         if (auto inFlightIter = TxInflightMaxSeqNoPerSourceId.find(s.first); !inFlightIter.IsEnd()) {
@@ -2376,7 +2376,7 @@ void TPartition::Handle(TEvKeyValue::TEvResponse::TPtr& ev, const TActorContext&
                 {"logPrefix", NPQ_LOG_PREFIX},
                 {"topicName", TopicName()},
                 {"partition", Partition},
-                {"#_res.GetStatus", res.GetStatus()});
+                {"status", res.GetStatus()});
             ctx.Send(TabletActorId, new TEvents::TEvPoisonPill());
             return;
         }
@@ -2415,7 +2415,7 @@ void TPartition::RequestWriteInfoIfRequired(bool skipSrcIdInfo)
     if (supportId) {
         YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "Send TEvGetWriteInfoRequest for TxId",
             {"logPrefix", LogPrefix()},
-            {"#_tx->GetTxId", tx->GetTxId()});
+            {"txTxId", tx->GetTxId()});
         Send(supportId, new TEvPQ::TEvGetWriteInfoRequest(skipSrcIdInfo),
              0, 0,
              tx->CalcPredicateSpan.GetTraceId());
@@ -2600,7 +2600,7 @@ auto TPartition::ProcessUserActionAndTxEvent(TSimpleSharedPtr<TTransaction>& tx,
 {
     YDB_LOG_DEBUG_COMP(Service, "TPartition::ProcessUserActionAndTxEvent(TTransaction[",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_GetTransactionType(*tx)", GetTransactionType(*tx)});
+        {"transactionTypeTx", GetTransactionType(*tx)});
     return PreProcessUserActionOrTransaction(tx, affectedSourceIdsAndConsumers);
 }
 
@@ -2668,7 +2668,7 @@ void TPartition::ProcessUserActionAndTxPendingCommit(TSimpleSharedPtr<TTransacti
 {
     YDB_LOG_DEBUG_COMP(Service, "TPartition::ProcessUserActionAndTxPendingCommit(TTransaction[",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_GetTransactionType(*tx)", GetTransactionType(*tx)});
+        {"transactionTypeTx", GetTransactionType(*tx)});
     ExecUserActionOrTransaction(tx, request);
 }
 
@@ -3018,7 +3018,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
     if (t->SupportivePartitionActor && !t->WriteInfo && !t->WriteInfoApplied) { // Pending for write info
         YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "The TxId is waiting for TEvGetWriteInfoResponse",
             {"logPrefix", LogPrefix()},
-            {"#_t->GetTxId", t->GetTxId()});
+            {"tTxId", t->GetTxId()});
         return EProcessResult::NotReady;
     }
     if (t->WriteInfo && !t->WriteInfoApplied) { //Received write info but not applied
@@ -3026,7 +3026,7 @@ TPartition::EProcessResult TPartition::PreProcessUserActionOrTransaction(TSimple
         if (!t->WriteInfoApplied) { // Tried to apply write info but couldn't - TX must be blocked.
             YDB_LOG_DEBUG_COMP(NKikimrServices::PQ_TX, "The TxId must be blocked",
                 {"logPrefix", LogPrefix()},
-                {"#_t->GetTxId", t->GetTxId()});
+                {"tTxId", t->GetTxId()});
             PQ_ENSURE(result != EProcessResult::Continue);
             return result;
         }
@@ -3307,8 +3307,8 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
                     {"logPrefix", NPQ_LOG_PREFIX},
                     {"partition", Partition},
                     {"consumer", consumer},
-                    {"#_operation.GetReadSessionId", operation.GetReadSessionId()},
-                    {"#_userInfo.Session", userInfo.Session});
+                    {"operationReadSessionId", operation.GetReadSessionId()},
+                    {"userInfoSession", userInfo.Session});
                 issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) << "Session already dead. " <<
                             "Request session id '" << operation.GetReadSessionId() << "'" <<
                             ", current session id '" << userInfo.Session << "'");
@@ -3320,8 +3320,8 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
                     {"logPrefix", NPQ_LOG_PREFIX},
                     {"partition", Partition},
                     {"consumer", consumer},
-                    {"#_operation.GetCommitOffsetsBegin", operation.GetCommitOffsetsBegin()},
-                    {"#_operation.GetCommitOffsetsEnd", operation.GetCommitOffsetsEnd()});
+                    {"operationCommitOffsetsBegin", operation.GetCommitOffsetsBegin()},
+                    {"operationCommitOffsetsEnd", operation.GetCommitOffsetsEnd()});
                 issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) << "Invalid range. " <<
                             "Range begin " << operation.GetCommitOffsetsBegin() <<
                             ", range end " << operation.GetCommitOffsetsEnd());
@@ -3331,8 +3331,8 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
                     {"logPrefix", NPQ_LOG_PREFIX},
                     {"partition", Partition},
                     {"consumer", consumer},
-                    {"#_userInfo.Offset", userInfo.Offset},
-                    {"#_operation.GetCommitOffsetsBegin", operation.GetCommitOffsetsBegin()});
+                    {"userInfoOffset", userInfo.Offset},
+                    {"operationCommitOffsetsBegin", operation.GetCommitOffsetsBegin()});
                 issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) << "Gap. " <<
                             "Offset " << userInfo.Offset <<
                             ", range begin " << operation.GetCommitOffsetsBegin());
@@ -3343,7 +3343,7 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
                     {"partition", Partition},
                     {"consumer", consumer},
                     {"endOffset", GetEndOffset()},
-                    {"#_operation.GetCommitOffsetsEnd", operation.GetCommitOffsetsEnd()});
+                    {"operationCommitOffsetsEnd", operation.GetCommitOffsetsEnd()});
                 issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) << "Behind the last offset. " <<
                             "Partition end offset " << GetEndOffset() <<
                             ", range end " << operation.GetCommitOffsetsBegin());
@@ -3354,7 +3354,7 @@ TPartition::EProcessResult TPartition::BeginTransactionData(TTransaction& t,
                     {"partition", Partition},
                     {"consumer", consumer},
                     {"endOffset", GetEndOffset()},
-                    {"#_operation.GetCommitOffsetsEnd", operation.GetCommitOffsetsEnd()});
+                    {"operationCommitOffsetsEnd", operation.GetCommitOffsetsEnd()});
                 issueMsg = (MakeTxReadErrorMessage(tx.TxId, TopicName(), Partition, consumer) << "Commit offset for MLP consumer.");
                 result = false;
             }
@@ -3455,7 +3455,7 @@ void TPartition::CommitWriteOperations(TTransaction& t)
 
         YDB_LOG_DEBUG_COMP(Service, "Dump NPQLOGPREFIX, #_PartitionedBlob.GetFormedBlobs().size",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_PartitionedBlob.GetFormedBlobs().size", BlobEncoder.PartitionedBlob.GetFormedBlobs().size()});
+            {"partitionedBlobFormedBlobsSize", BlobEncoder.PartitionedBlob.GetFormedBlobs().size()});
         if (const auto& formedBlobs = BlobEncoder.PartitionedBlob.GetFormedBlobs(); !formedBlobs.empty()) {
             ui32 curWrites = RenameTmpCmdWrites(PersistRequest.Get());
             RenameFormedBlobs(formedBlobs,
@@ -4129,7 +4129,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
             {"logPrefix", NPQ_LOG_PREFIX},
             {"topicName", TopicName()},
             {"partition", Partition},
-            {"#_act.ClientId", act.ClientId},
+            {"actClientId", act.ClientId},
             {"readRuleGeneration", readRuleGeneration});
     }
 
@@ -4148,7 +4148,7 @@ void TPartition::CommitUserAct(TEvPQ::TEvSetClientInfo& act) {
             {"logPrefix", NPQ_LOG_PREFIX},
             {"topicName", TopicName()},
             {"partition", Partition},
-            {"#_act.ClientId", act.ClientId},
+            {"actClientId", act.ClientId},
             {"endOffset", GetEndOffset()},
             {"offset", offset});
         act.Offset = GetEndOffset();
@@ -4256,7 +4256,7 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
             {"topicName", TopicName()},
             {"partition", Partition},
             {"user", user},
-            {"#_num_0", (createSession || dropSession ? " session" : " offset")},
+            {"operationType", (createSession || dropSession ? " session" : " offset")},
             {"offset", offset},
             {"startOffset", GetStartOffset()},
             {"session", session});
@@ -4738,7 +4738,7 @@ void TPartition::Handle(TEvPQ::TEvCheckPartitionStatusRequest::TPtr& ev, const T
     if (Partition.InternalPartitionId != record.GetPartition()) {
         YDB_LOG_INFO_COMP(Service, "TEvCheckPartitionStatusRequest for wrong partition Topic",
             {"logPrefix", NPQ_LOG_PREFIX},
-            {"#_record.GetPartition", record.GetPartition()},
+            {"partition", record.GetPartition()},
             {"topicName", TopicName()},
             {"partition", Partition});
         return;
@@ -4869,7 +4869,7 @@ void TPartition::ProcessPendingEvents(const TActorContext& ctx)
 {
     YDB_LOG_DEBUG_COMP(Service, "Process pending events. Count",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"#_PendingEvents.size", PendingEvents.size()});
+        {"pendingEventsSize", PendingEvents.size()});
 
     while (!PendingEvents.empty()) {
         auto ev = std::move(PendingEvents.front());

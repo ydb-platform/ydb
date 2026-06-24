@@ -23,7 +23,6 @@ ydb/core/kqp/ut/tx KqpSinkMvcc.ChangeFromTheFuture-IsOlap
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.ShouldRestorePartitionAfterRestart
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.ShouldWriteAndReadFromHandoffPersistentBuffers
-ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.WriteToManyPBuffersFallback
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut unittest.[*/*] chunk
 ydb/core/persqueue/ut/ut_with_sdk TPersQueueMirrorer.MirrorKafkaBatchesAsBatches
 ydb/core/quoter/ut QuoterWithKesusTest.PrefetchCoefficient
@@ -32,6 +31,8 @@ ydb/core/tx/columnshard/engines/ut TScanSnapshotGuardTests.RegistryGuardRespects
 ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobs
 ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobsMultipleColumns
 ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobsWithCompactingMiddleRows
+ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobsWithDeletesInTheEnd
+ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobsWithFirstRowPreloadedWithReboot
 ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobsWithSpecificKeys
 ydb/core/tx/schemeshard/ut_move_reboots TSchemeShardMoveRebootsTest.CopyMovePreservesMultipleBloomPrefixes
 ydb/core/tx/schemeshard/ut_shred TenantShredTest.SendPreviousGenerationUncompleted
@@ -46,6 +47,10 @@ ydb/library/actors/core/ut TestThreadContextQueueTimestamps.CurrentQueueTimestam
 ydb/services/datastreams/ut DataStreams.TestGetRecords1MBMessagesOneByOneByTS
 ydb/services/deprecated/persqueue_v0/ut TDeprecatedPQGrpcDeadTest.ProcessGlobalGrpcDeadDoesNotStopLiveDeprecatedPQWriteSession
 ydb/services/deprecated/persqueue_v0/ut TDeprecatedPQGrpcDeadTest.StoppingAnotherGrpcServerDoesNotStopLiveDeprecatedPQWriteSession
+ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-3_to_prestable-26-3]
+ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-3_to_stable-26-2-1]
+ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_stable-26-2-1_to_prestable-26-3]
+ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_stable-26-2-1_to_stable-26-2-1]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_prestable-26-3_to_prestable-26-3]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_prestable-26-3_to_stable-26-2-1]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_stable-26-1-1_to_stable-26-2-1]
@@ -141,10 +146,10 @@ ydb/tests/stress/reconfig_state_storage_workload/tests test_scheme_board_workloa
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_0
 ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_1
+ydb/tests/stress/topic/tests test_workload_topic.py.TestYdbTopicWorkload.test_2
 ydb/tests/stress/topic_kafka/tests test_workload_topic.py.TestYdbTopicWorkload.test
 ydb/tests/stress/topic_sqs/tests test_workload.py.TestYdbTopicSqsWorkload.test
 ydb/tools/mnc/viewer/ut py3test.sole chunk
 ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_operations_tab_shows_exception_traceback
-ydb/tools/mnc/viewer/ut test_cluster_config_validation.py.ClusterConfigSelectionStateTest.test_selecting_agents_overview_card_opens_agents_tab
 ydb/tools/mnc/viewer/ut test_navigation.py.ViewerTabNavigationTest.test_operation_tab_navigation_matches_state_machine
 ydb/tools/stress_tool/ut TDeviceTestTool.PDiskTestLogWrite

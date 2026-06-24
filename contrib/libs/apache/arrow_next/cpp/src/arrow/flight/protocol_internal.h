@@ -14,24 +14,11 @@
 // "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
 // KIND, either express or implied.  See the License for the
 // specific language governing permissions and limitations
-// under the License.
 
 #pragma once
 
-#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"  // IWYU pragma: export
+// This addresses platform-specific defines, e.g. on Windows
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/flight/platform.h"  // IWYU pragma: keep
 
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/filesystem.h"  // IWYU pragma: export
-#ifdef ARROW_AZURE
-#  error #include "arrow/filesystem/azurefs.h"  // IWYU pragma: export
-#endif
-#ifdef ARROW_GCS
-#  error #include "arrow/filesystem/gcsfs.h"  // IWYU pragma: export
-#endif
-#if USE_HDFS
-#error #include "arrow/filesystem/hdfs.h"     // IWYU pragma: export
-#endif
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/localfs.h"  // IWYU pragma: export
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/mockfs.h"   // IWYU pragma: export
-#ifdef ARROW_S3
-#  error #include "arrow/filesystem/s3fs.h"  // IWYU pragma: export
-#endif
+// This header holds the Flight Protobuf definitions.
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/flight/Flight.pb.h"  // IWYU pragma: export

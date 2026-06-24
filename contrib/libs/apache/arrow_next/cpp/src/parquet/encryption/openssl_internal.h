@@ -18,20 +18,12 @@
 
 #pragma once
 
-#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"  // IWYU pragma: export
+#include <memory>
+#include <string>
+#include <vector>
 
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/filesystem.h"  // IWYU pragma: export
-#ifdef ARROW_AZURE
-#  error #include "arrow/filesystem/azurefs.h"  // IWYU pragma: export
-#endif
-#ifdef ARROW_GCS
-#  error #include "arrow/filesystem/gcsfs.h"  // IWYU pragma: export
-#endif
-#if USE_HDFS
-#error #include "arrow/filesystem/hdfs.h"     // IWYU pragma: export
-#endif
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/localfs.h"  // IWYU pragma: export
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/mockfs.h"   // IWYU pragma: export
-#ifdef ARROW_S3
-#  error #include "arrow/filesystem/s3fs.h"  // IWYU pragma: export
-#endif
+namespace parquet20::encryption::openssl {
+
+void EnsureInitialized();
+
+}  // namespace parquet20::encryption::openssl

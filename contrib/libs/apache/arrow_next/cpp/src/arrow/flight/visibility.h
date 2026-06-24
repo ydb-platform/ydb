@@ -18,20 +18,32 @@
 
 #pragma once
 
-#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"  // IWYU pragma: export
+#if defined(_WIN32) || defined(__CYGWIN__)
+#  if defined(_MSC_VER)
+#    pragma warning(push)
+#    pragma warning(disable : 4251)
+#  else
+#    pragma GCC diagnostic ignored "-Wattributes"
+#  endif
 
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/filesystem.h"  // IWYU pragma: export
-#ifdef ARROW_AZURE
-#  error #include "arrow/filesystem/azurefs.h"  // IWYU pragma: export
-#endif
-#ifdef ARROW_GCS
-#  error #include "arrow/filesystem/gcsfs.h"  // IWYU pragma: export
-#endif
-#if USE_HDFS
-#error #include "arrow/filesystem/hdfs.h"     // IWYU pragma: export
-#endif
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/localfs.h"  // IWYU pragma: export
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/mockfs.h"   // IWYU pragma: export
-#ifdef ARROW_S3
-#  error #include "arrow/filesystem/s3fs.h"  // IWYU pragma: export
+#  ifdef ARROW_FLIGHT_STATIC
+#    define ARROW_FLIGHT_EXPORT
+#  elif defined(ARROW_FLIGHT_EXPORTING)
+#    define ARROW_FLIGHT_EXPORT __declspec(dllexport)
+#  else
+#    define ARROW_FLIGHT_EXPORT __declspec(dllimport)
+#  endif
+
+#  define ARROW_FLIGHT_NO_EXPORT
+#else  // Not Windows
+#  ifndef ARROW_FLIGHT_EXPORT
+#    define ARROW_FLIGHT_EXPORT __attribute__((visibility("default")))
+#  endif
+#  ifndef ARROW_FLIGHT_NO_EXPORT
+#    define ARROW_FLIGHT_NO_EXPORT __attribute__((visibility("hidden")))
+#  endif
+#endif  // Non-Windows
+
+#if defined(_MSC_VER)
+#  pragma warning(pop)
 #endif

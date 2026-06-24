@@ -16,22 +16,17 @@
 // specific language governing permissions and limitations
 // under the License.
 
+// Internal header. Platform-specific definitions for Flight.
+
 #pragma once
 
-#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"  // IWYU pragma: export
+#ifdef _MSC_VER
 
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/filesystem.h"  // IWYU pragma: export
-#ifdef ARROW_AZURE
-#  error #include "arrow/filesystem/azurefs.h"  // IWYU pragma: export
-#endif
-#ifdef ARROW_GCS
-#  error #include "arrow/filesystem/gcsfs.h"  // IWYU pragma: export
-#endif
-#if USE_HDFS
-#error #include "arrow/filesystem/hdfs.h"     // IWYU pragma: export
-#endif
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/localfs.h"  // IWYU pragma: export
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/mockfs.h"   // IWYU pragma: export
-#ifdef ARROW_S3
-#  error #include "arrow/filesystem/s3fs.h"  // IWYU pragma: export
-#endif
+// The protobuf documentation says that C4251 warnings when using the
+// library are spurious and suppressed when the build the library and
+// compiler, but must be also suppressed in downstream projects
+#  pragma warning(disable : 4251)
+
+#endif  // _MSC_VER
+
+#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"  // IWYU pragma: keep

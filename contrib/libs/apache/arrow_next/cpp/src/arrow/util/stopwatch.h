@@ -18,20 +18,32 @@
 
 #pragma once
 
-#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"  // IWYU pragma: export
+#include <cassert>
+#include <chrono>
 
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/filesystem.h"  // IWYU pragma: export
-#ifdef ARROW_AZURE
-#  error #include "arrow/filesystem/azurefs.h"  // IWYU pragma: export
-#endif
-#ifdef ARROW_GCS
-#  error #include "arrow/filesystem/gcsfs.h"  // IWYU pragma: export
-#endif
-#if USE_HDFS
-#error #include "arrow/filesystem/hdfs.h"     // IWYU pragma: export
-#endif
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/localfs.h"  // IWYU pragma: export
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/mockfs.h"   // IWYU pragma: export
-#ifdef ARROW_S3
-#  error #include "arrow/filesystem/s3fs.h"  // IWYU pragma: export
-#endif
+namespace arrow20 {
+namespace internal {
+
+class StopWatch {
+  // This clock should give us wall clock time
+  using ClockType = std::chrono::steady_clock;
+
+ public:
+  StopWatch() {}
+
+  void Start() { start_ = ClockType::now(); }
+
+  // Returns time in nanoseconds.
+  uint64_t Stop() {
+    auto stop = ClockType::now();
+    std::chrono::nanoseconds d = stop - start_;
+    assert(d.count() >= 0);
+    return static_cast<uint64_t>(d.count());
+  }
+
+ private:
+  std::chrono::time_point<ClockType> start_;
+};
+
+}  // namespace internal
+}  // namespace arrow20

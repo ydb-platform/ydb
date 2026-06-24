@@ -16,22 +16,12 @@
 // specific language governing permissions and limitations
 // under the License.
 
-#pragma once
+// Often-used headers, for precompiling.
+// If updating this header, please make sure you check compilation speed
+// before checking in.  Adding headers which are not used extremely often
+// may incur a slowdown, since it makes the precompiled header heavier to load.
 
-#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"  // IWYU pragma: export
-
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/filesystem.h"  // IWYU pragma: export
-#ifdef ARROW_AZURE
-#  error #include "arrow/filesystem/azurefs.h"  // IWYU pragma: export
-#endif
-#ifdef ARROW_GCS
-#  error #include "arrow/filesystem/gcsfs.h"  // IWYU pragma: export
-#endif
-#if USE_HDFS
-#error #include "arrow/filesystem/hdfs.h"     // IWYU pragma: export
-#endif
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/localfs.h"  // IWYU pragma: export
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/mockfs.h"   // IWYU pragma: export
-#ifdef ARROW_S3
-#  error #include "arrow/filesystem/s3fs.h"  // IWYU pragma: export
-#endif
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/flight/client.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/flight/server.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/flight/types.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/arrow/pch.h"

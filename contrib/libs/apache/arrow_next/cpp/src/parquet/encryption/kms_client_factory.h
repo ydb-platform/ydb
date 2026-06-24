@@ -18,20 +18,22 @@
 
 #pragma once
 
-#include "contrib/libs/apache/arrow_next/src/arrow/util/config.h"  // IWYU pragma: export
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/encryption/kms_client.h"
+#include "contrib/libs/apache/arrow_next/cpp/src/parquet/platform.h"
 
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/filesystem.h"  // IWYU pragma: export
-#ifdef ARROW_AZURE
-#  error #include "arrow/filesystem/azurefs.h"  // IWYU pragma: export
-#endif
-#ifdef ARROW_GCS
-#  error #include "arrow/filesystem/gcsfs.h"  // IWYU pragma: export
-#endif
-#if USE_HDFS
-#error #include "arrow/filesystem/hdfs.h"     // IWYU pragma: export
-#endif
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/localfs.h"  // IWYU pragma: export
-#include "contrib/libs/apache/arrow_next/cpp/src/arrow/filesystem/mockfs.h"   // IWYU pragma: export
-#ifdef ARROW_S3
-#  error #include "arrow/filesystem/s3fs.h"  // IWYU pragma: export
-#endif
+namespace parquet20::encryption {
+
+class PARQUET_EXPORT KmsClientFactory {
+ public:
+  explicit KmsClientFactory(bool wrap_locally = false) : wrap_locally_(wrap_locally) {}
+
+  virtual ~KmsClientFactory() = default;
+
+  virtual std::shared_ptr<KmsClient> CreateKmsClient(
+      const KmsConnectionConfig& kms_connection_config) = 0;
+
+ protected:
+  bool wrap_locally_;
+};
+
+}  // namespace parquet20::encryption

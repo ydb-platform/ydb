@@ -1243,12 +1243,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         {
             auto& setupAppConfig = SetupAppConfig();
             setupAppConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
-#if 0 // after adding feature-flag
             setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
-            setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinLocalLookups(WithFullscanFlag);
-#else
-            setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(WithFeatureFlag);
-#endif
+            setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinLocalLookups(WithFeatureFlag);
             setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinFullscan(WithFullscanFlag);
         }
 
@@ -1308,10 +1304,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "output_topic"_a = outputTopicName
         ),
         WithFeatureFlag ? EStatus::SUCCESS : EStatus::GENERIC_ERROR,
-        WithFeatureFlag ? "" : "Unsupported join strategy: streamlookup");
-#if 0 // after adding feature flag
-        // TODO: refine with exact message for failure to replace local lookup (it will be different error)
-#endif
+        WithFeatureFlag ? "" : "Error: DqCnStreamLookup: RightInput: Expected TDqLookupSourceWrap, but got");
         if (!WithFeatureFlag) {
             return;
         }

@@ -325,4 +325,5 @@ message TFeatureFlags {
     optional bool EnableAccessServiceV2Interface = 283 [default = false, (RequireRestart) = true];
     optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
     optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
+    optional bool EnableDqSourceStreamLookupJoinLocalLookups = 286 [default = false];
 }

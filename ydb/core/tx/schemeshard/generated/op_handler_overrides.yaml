@@ -1,0 +1,21 @@
+# Ops migrated to per-op handlers.
+#
+# For each entry below, codegen emits:
+#   - extern declarations for MakeOperationParts_<Op> and CollectChangingPaths_<Op>;
+#   - a dispatch case routing to those functions;
+#   - an `IsRegistered<Op>` predicate used by the YDB_DEFINE_OP_* macros.
+#
+# Ops NOT listed here continue to flow through the legacy central switches
+# in schemeshard__operation.cpp / schemeshard_audit_log_fragment.cpp.
+#
+# To migrate an op:
+#   1. Define handlers in the op's .cpp using YDB_DEFINE_OP_FACTORY and
+#      YDB_DEFINE_OP_AUDIT (declared in schemeshard__op_handlers.h).
+#   2. Add the op name to `ops` below.
+#   3. Delete the matching case from the central legacy switches.
+#
+# When this list covers every EOperationType value, delete this file, drop
+# the codegen's legacy-fallback path, and delete the central legacy switches.
+
+ops:
+  - ESchemeOpCreateTable

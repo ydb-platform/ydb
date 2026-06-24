@@ -14,6 +14,7 @@
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 #include <ydb/core/tablet_flat/tablet_flat_executor.h>
 #include <ydb/core/tx/schemeshard/generated/dispatch_op.h>
+#include <ydb/core/tx/schemeshard/generated/op_handlers.h>
 #include <ydb/core/tx/schemeshard/schemeshard_pq_helpers.h>
 
 #include <ydb/library/protobuf_printer/security_printer.h>
@@ -1362,6 +1363,9 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         TOperationContext& context) const
 {
     const auto& opType = tx.GetOperationType();
+    if (auto handled = NGenerated::NOpHandlers::TryMakeOperationParts(opType, op, tx, context)) {
+        return std::move(*handled);
+    }
     switch (opType) {
     case NKikimrSchemeOp::EOperationType::ESchemeOpMkDir:
         return {CreateMkDir(op.NextPartId(), tx)};
@@ -1373,11 +1377,6 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
         return {CreateAlterUserAttrs(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpForceDropUnsafe:
         return {CreateForceDropUnsafe(op.NextPartId(), tx)};
-    case NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable:
-        if (tx.GetCreateTable().HasCopyFromTable()) {
-            return CreateCopyTable(op.NextPartId(), tx, context); // Copy indexes table as well as common table
-        }
-        return {CreateNewTable(op.NextPartId(), tx)};
     case NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable:
         return CreateConsistentAlterTable(op.NextPartId(), tx, context);
     case NKikimrSchemeOp::EOperationType::ESchemeOpSplitMergeTablePartitions:
@@ -1697,6 +1696,7 @@ TVector<ISubOperation::TPtr> TDefaultOperationFactory::MakeOperationParts(
 
     case NKikimrSchemeOp::EOperationType::ESchemeOpTruncateTable:
         return CreateConsistentTruncateTable(op.NextPartId(), tx, context);
+    Y_SS_OP_HANDLERS_MIGRATED_CASES Y_ABORT("dispatched above by TryMakeOperationParts");
     }
 
     Y_UNREACHABLE();

@@ -32,7 +32,7 @@ Y_UNIT_TEST_SUITE(SetNotNullReboots) {
 
             const ui64 setConstraintTxId = ++t.TxId;
 
-            AsyncSetColumnConstraintWithoutResponse(
+            AsyncSetColumnConstraint(
                 runtime, setConstraintTxId,
                 TTestTxConfig::SchemeShard,
                 root,
@@ -81,7 +81,7 @@ Y_UNIT_TEST_SUITE(SetNotNullReboots) {
 
             const ui64 setConstraintTxId = ++t.TxId;
 
-            AsyncSetColumnConstraintWithoutResponse(
+            AsyncSetColumnConstraint(
                 runtime, setConstraintTxId,
                 TTestTxConfig::SchemeShard,
                 root,
@@ -154,7 +154,7 @@ Y_UNIT_TEST_SUITE(SetNotNullReboots) {
 
             const ui64 setConstraintTxId = ++t.TxId;
 
-            AsyncSetColumnConstraintWithoutResponse(
+            AsyncSetColumnConstraint(
                 runtime, setConstraintTxId,
                 TTestTxConfig::SchemeShard,
                 root,

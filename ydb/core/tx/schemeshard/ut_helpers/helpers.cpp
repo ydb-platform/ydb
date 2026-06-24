@@ -3497,7 +3497,7 @@ namespace NSchemeShardUT_Private {
         return event->Record;
     }
 
-    void AsyncSetColumnConstraintWithoutResponse(
+    void AsyncSetColumnConstraint(
         TTestActorRuntime& runtime,
         ui64 txId,
         ui64 schemeShard,

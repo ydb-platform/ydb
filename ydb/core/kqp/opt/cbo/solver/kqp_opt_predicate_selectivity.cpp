@@ -253,7 +253,7 @@ namespace {
             float l = FromString<float>(left);
             float r = FromString<float>(right);
             return (l < r) ? -1 : (l > r) ? 1 : 0;
-        } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
+        } else if (columnType == "Double" || columnType.StartsWith("Decimal")) {
             double l = FromString<double>(left);
             double r = FromString<double>(right);
             return (l < r) ? -1 : (l > r) ? 1 : 0;
@@ -318,7 +318,7 @@ namespace {
             } else if (columnType == "Int64") {
                 i64 val = FromString<i64>(value);
                 return EstimateInequalityPredicateByType<i64>(eqWidthHistogram, val, predicate);
-            } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
+            } else if (columnType == "Double" || columnType.StartsWith("Decimal")) {
                 double val = FromString<double>(value);
                 return EstimateInequalityPredicateByType<double>(eqWidthHistogram, val, predicate);
             } else if (columnType == "Date") {
@@ -382,7 +382,7 @@ namespace {
                 i64 leftVal = FromString<i64>(leftValue);
                 i64 rightVal = FromString<i64>(rightValue);
                 return EstimateRangePredicateByType<i64>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
-            } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
+            } else if (columnType == "Double" || columnType.StartsWith("Decimal")) {
                 double leftVal = FromString<double>(leftValue);
                 double rightVal = FromString<double>(rightValue);
                 return EstimateRangePredicateByType<double>(eqWidthHistogram, leftVal, rightVal, leftPredicate, rightPredicate);
@@ -437,7 +437,7 @@ namespace {
             } else if (columnType == "Float") {
                 float val = FromString<float>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
-            } else if (columnType == "Double" || columnType == "Decimal(12,2)") {
+            } else if (columnType == "Double" || columnType.StartsWith("Decimal")) {
                 double val = FromString<double>(value);
                 return countMinSketch->Probe(reinterpret_cast<const char*>(&val), sizeof(val));
             } else if (columnType == "Date") {
@@ -491,13 +491,25 @@ namespace NKikimr::NKqp {
 
 
 TMaybe<TString> TPredicateSelectivityComputer::GetAttributeType(const TString& attributeName) {
-    if (Stats && Stats->ColumnStatistics) {
-        auto it = Stats->ColumnStatistics->Data.find(attributeName);
-        if (it != Stats->ColumnStatistics->Data.end()) {
-            return it->second.Type;
-        }
+    if (!Stats || !Stats->ColumnStatistics) {
         return Nothing();
     }
+
+    TString columnName = attributeName;
+    if (Lineage) {
+        const auto& mapping = Lineage->Mapping;
+        if (mapping.contains(TInfoUnit(attributeName).GetFullName())) {
+            const auto& entry = mapping.at(TInfoUnit(attributeName).GetFullName());
+            auto infoUnit = TInfoUnit(entry.TableName, entry.ColumnName);
+            attributeName = infoUnit.GetFullName();
+        }
+    }
+
+    auto it = Stats->ColumnStatistics->Data.find(columnName);
+    if (it != Stats->ColumnStatistics->Data.end()) {
+        return it->second.Type;
+    }
+
     return Nothing();
 }
 
@@ -1281,8 +1293,10 @@ double TPredicateSelectivityComputer::Compute(const NNodes::TExprBase& input) {
 
     TSet<TString> tableAliases;
     double resSelectivity = ComputeSelectivity(rootNode, tableAliases);
-    if (tableAliases.size() != 1) {
-        YQL_CLOG(TRACE, CoreDq) << "No or multiple table aliases in computing selectivity.";
+    if (tableAliases.size() == 0) {
+        YQL_CLOG(TRACE, CoreDq) << "No table aliases in computing selectivity.";
+    } else if (tableAliases.size() != 1) {
+        YQL_CLOG(TRACE, CoreDq) << "Multiple table aliases in computing selectivity.";
     }
 
     return std::min(1.0, resSelectivity);

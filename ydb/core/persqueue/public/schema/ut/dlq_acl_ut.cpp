@@ -15,6 +15,21 @@ namespace {
 constexpr const char* USER_PASSWORD = "password";
 constexpr const char* MLP_CONSUMER_NAME = "mlp-consumer";
 
+void FillMlpConsumerWithDlq(
+    Ydb::Topic::Consumer& consumer,
+    const TString& consumerName,
+    const TString& dlqTopic
+) {
+    consumer.set_name(consumerName);
+    auto* shared = consumer.mutable_shared_consumer_type();
+    auto* deadLetterPolicy = shared->mutable_dead_letter_policy();
+    deadLetterPolicy->set_enabled(true);
+    deadLetterPolicy->mutable_condition()->set_max_processing_attempts(5);
+    if (!dlqTopic.empty()) {
+        deadLetterPolicy->mutable_move_action()->set_dead_letter_queue(dlqTopic);
+    }
+}
+
 std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
     auto setup = std::make_shared<TTopicSdkTestSetup>(
         "DlqAcl",
@@ -44,18 +59,28 @@ Ydb::Topic::CreateTopicRequest MakeCreateTopicRequest(
     partitioning->set_min_active_partitions(1);
 
     if (!consumerName.empty()) {
-        auto* consumer = request.add_consumers();
-        consumer->set_name(consumerName);
-        auto* shared = consumer->mutable_shared_consumer_type();
-        auto* deadLetterPolicy = shared->mutable_dead_letter_policy();
-        deadLetterPolicy->set_enabled(true);
-        deadLetterPolicy->mutable_condition()->set_max_processing_attempts(5);
-        if (!dlqTopic.empty()) {
-            deadLetterPolicy->mutable_move_action()->set_dead_letter_queue(dlqTopic);
-        }
+        FillMlpConsumerWithDlq(*request.add_consumers(), consumerName, dlqTopic);
     }
 
     return request;
+}
+
+THolder<TEvSchemaResponse> DoAlterRequest(
+    NActors::TTestActorRuntime& runtime,
+    const Ydb::Topic::AlterTopicRequest& request,
+    TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr
+) {
+    auto edge = runtime.AllocateEdgeActor();
+    runtime.Register(CreateAlterTopicActor(edge, {
+        .Database = "/Root",
+        .Request = request,
+        .UserToken = std::move(userToken),
+        .IfExists = false,
+        .PrepareOnly = false,
+        .Cookie = 0,
+    }));
+
+    return runtime.GrabEdgeEvent<TEvSchemaResponse>(TDuration::Seconds(10));
 }
 
 THolder<TEvSchemaResponse> DoRequest(
@@ -111,6 +136,30 @@ THolder<TEvSchemaResponse> CreateTopicWithDLQ(
     const TString mainTopicPath = TStringBuilder() << "/Root/" << mainTopic;
     auto request = MakeCreateTopicRequest(mainTopicPath, MLP_CONSUMER_NAME, dlqTopic);
     return DoRequest(runtime, request, userToken);
+}
+
+THolder<TEvSchemaResponse> CreateAndAlterTopicWithDLQ(
+    const std::shared_ptr<TTopicSdkTestSetup>& setup,
+    const TString& userSid,
+    const char* mainTopic,
+    const char* dlqTopic
+) {
+    auto& runtime = setup->GetRuntime();
+    const auto userToken = MakeUserToken(userSid);
+    const TString mainTopicPath = TStringBuilder() << "/Root/" << mainTopic;
+
+    {
+        auto request = MakeCreateTopicRequest(mainTopicPath);
+        auto result = DoRequest(runtime, request, userToken);
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->ErrorMessage);
+        setup->GetServer().WaitInit(mainTopicPath);
+    }
+
+    Ydb::Topic::AlterTopicRequest request;
+    request.set_path(mainTopicPath);
+    FillMlpConsumerWithDlq(*request.add_add_consumers(), MLP_CONSUMER_NAME, dlqTopic);
+    return DoAlterRequest(runtime, request, userToken);
 }
 
 void RevokeAllRightsOnTopic(TFlatMsgBusPQClient& client, const TString& topicName, const TString& userSid) {
@@ -244,6 +293,114 @@ Y_UNIT_TEST(CreateTopicWithMlpConsumerFailsWithOnlySelectRowOnDlqTopic) {
     GrantOnlyOnTopic(client, DLQ_TOPIC, userSid, {NACLib::EAccessRights::SelectRow});
 
     auto result = CreateTopicWithDLQ(setup, userSid, MAIN_TOPIC, DLQ_TOPIC);
+
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::UNAUTHORIZED, result->ErrorMessage);
+    UNIT_ASSERT(!result->ErrorMessage.empty());
+}
+
+Y_UNIT_TEST(AlterTopicWithMlpConsumerFailsWithoutDlqTopicAccess) {
+    constexpr const char* USER_NAME = "topicuser";
+    constexpr const char* DLQ_TOPIC = "dlq-topic-acl-alter-test";
+    constexpr const char* MAIN_TOPIC = "main-topic-acl-alter-test";
+
+    auto setup = CreateSetup();
+    auto& client = *setup->GetServer().AnnoyingClient;
+
+    const TString userSid = CreateUser(client, USER_NAME);
+
+    CreateDLQTopic(setup, DLQ_TOPIC);
+
+    RevokeAllRightsOnTopic(client, DLQ_TOPIC, userSid);
+
+    auto result = CreateAndAlterTopicWithDLQ(setup, userSid, MAIN_TOPIC, DLQ_TOPIC);
+
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::UNAUTHORIZED, result->ErrorMessage);
+    UNIT_ASSERT(!result->ErrorMessage.empty());
+}
+
+Y_UNIT_TEST(AlterTopicWithMlpConsumerSucceedsWithOnlyAlterSchemaOnDlqTopic) {
+    constexpr const char* USER_NAME = "topicuser2";
+    constexpr const char* DLQ_TOPIC = "dlq-topic-alterschema-alter-test";
+    constexpr const char* MAIN_TOPIC = "main-topic-alterschema-alter-test";
+
+    auto setup = CreateSetup();
+    auto& client = *setup->GetServer().AnnoyingClient;
+
+    const TString userSid = CreateUser(client, USER_NAME);
+
+    CreateDLQTopic(setup, DLQ_TOPIC);
+
+    GrantOnlyOnTopic(client, DLQ_TOPIC, userSid, {NACLib::EAccessRights::AlterSchema});
+
+    auto result = CreateAndAlterTopicWithDLQ(setup, userSid, MAIN_TOPIC, DLQ_TOPIC);
+
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->ErrorMessage);
+    setup->GetServer().WaitInit(TStringBuilder() << "/Root/" << MAIN_TOPIC);
+}
+
+Y_UNIT_TEST(AlterTopicWithMlpConsumerSucceedsWithOnlyUpdateRowOnDlqTopic) {
+    constexpr const char* USER_NAME = "topicuser3";
+    constexpr const char* DLQ_TOPIC = "dlq-topic-updaterow-alter-test";
+    constexpr const char* MAIN_TOPIC = "main-topic-updaterow-alter-test";
+
+    auto setup = CreateSetup();
+    auto& client = *setup->GetServer().AnnoyingClient;
+
+    const TString userSid = CreateUser(client, USER_NAME);
+
+    CreateDLQTopic(setup, DLQ_TOPIC);
+
+    GrantOnlyOnTopic(client, DLQ_TOPIC, userSid, {NACLib::EAccessRights::UpdateRow});
+
+    auto result = CreateAndAlterTopicWithDLQ(setup, userSid, MAIN_TOPIC, DLQ_TOPIC);
+
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->ErrorMessage);
+    setup->GetServer().WaitInit(TStringBuilder() << "/Root/" << MAIN_TOPIC);
+}
+
+Y_UNIT_TEST(AlterTopicWithMlpConsumerSucceedsWithAlterSchemaAndUpdateRowOnDlqTopic) {
+    constexpr const char* USER_NAME = "topicuser4";
+    constexpr const char* DLQ_TOPIC = "dlq-topic-both-rights-alter-test";
+    constexpr const char* MAIN_TOPIC = "main-topic-both-rights-alter-test";
+
+    auto setup = CreateSetup();
+    auto& client = *setup->GetServer().AnnoyingClient;
+
+    const TString userSid = CreateUser(client, USER_NAME);
+
+    CreateDLQTopic(setup, DLQ_TOPIC);
+
+    GrantOnlyOnTopic(client, DLQ_TOPIC, userSid, {
+        NACLib::EAccessRights::AlterSchema,
+        NACLib::EAccessRights::UpdateRow,
+    });
+
+    auto result = CreateAndAlterTopicWithDLQ(setup, userSid, MAIN_TOPIC, DLQ_TOPIC);
+
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->ErrorMessage);
+    setup->GetServer().WaitInit(TStringBuilder() << "/Root/" << MAIN_TOPIC);
+}
+
+Y_UNIT_TEST(AlterTopicWithMlpConsumerFailsWithOnlySelectRowOnDlqTopic) {
+    constexpr const char* USER_NAME = "topicuser5";
+    constexpr const char* DLQ_TOPIC = "dlq-topic-read-alter-test";
+    constexpr const char* MAIN_TOPIC = "main-topic-read-alter-test";
+
+    auto setup = CreateSetup();
+    auto& client = *setup->GetServer().AnnoyingClient;
+
+    const TString userSid = CreateUser(client, USER_NAME);
+
+    CreateDLQTopic(setup, DLQ_TOPIC);
+
+    GrantOnlyOnTopic(client, DLQ_TOPIC, userSid, {NACLib::EAccessRights::SelectRow});
+
+    auto result = CreateAndAlterTopicWithDLQ(setup, userSid, MAIN_TOPIC, DLQ_TOPIC);
 
     UNIT_ASSERT(result);
     UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::UNAUTHORIZED, result->ErrorMessage);

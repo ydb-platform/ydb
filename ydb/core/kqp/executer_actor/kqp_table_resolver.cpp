@@ -500,7 +500,7 @@ private:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, TIssue&& issue) {
-        auto replyEv = std::make_unique<TEvKqpExecuter::TEvTableResolveStatus>();
+        auto replyEv = std::make_unique<NEvKqpExecuter::TEvTableResolveStatus>();
         replyEv->Status = status;
         replyEv->Issues.AddIssue(std::move(issue));
         replyEv->CpuTime = CpuTime;
@@ -512,7 +512,7 @@ private:
         if (!NavigationFinished || !ResolvingFinished) {
             return;
         }
-        auto replyEv = std::make_unique<TEvKqpExecuter::TEvTableResolveStatus>();
+        auto replyEv = std::make_unique<NEvKqpExecuter::TEvTableResolveStatus>();
         replyEv->CpuTime = CpuTime;
 
         Send(Owner, replyEv.release());

@@ -331,13 +331,13 @@ Y_UNIT_TEST_SUITE(KqpSplit) {
 
     void CollectKeysTo(TVector<ui64>* collectedKeys, TTestActorRuntime* runtime, TActorId sender) {
         auto captureEvents = [=](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == NKqp::TEvKqpExecuter::TEvStreamData::EventType) {
-                auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
+            if (ev->GetTypeRewrite() == NKqp::NEvKqpExecuter::TEvStreamData::EventType) {
+                auto& record = ev->Get<NKqp::NEvKqpExecuter::TEvStreamData>()->Record;
                 for (auto& row : record.resultset().rows()) {
                     collectedKeys->push_back(row.items(0).uint64_value());
                 }
 
-                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                auto resp = MakeHolder<NKqp::NEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                 resp->Record.SetEnough(false);
                 runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                 return true;

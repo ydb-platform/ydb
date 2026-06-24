@@ -479,8 +479,8 @@ public:
             hFunc(NKqp::TEvKqp::TEvScriptResponse, HandleReply);
             hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleReply);
             hFunc(NKqp::TEvKqp::TEvPingSessionResponse, HandleReply);
-            hFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, HandleReply);
-            hFunc(NKqp::TEvKqpExecuter::TEvStreamData, HandleReply);
+            hFunc(NKqp::NEvKqpExecuter::TEvExecuterProgress, HandleReply);
+            hFunc(NKqp::NEvKqpExecuter::TEvStreamData, HandleReply);
             cFunc(NHttp::TEvHttpProxy::EvRequestCancelled, Cancelled);
             hFunc(NKqp::TEvGetScriptExecutionOperationResponse, HandleReply);
             hFunc(NKqp::TEvFetchScriptResultsResponse, HandleReply);
@@ -1011,7 +1011,7 @@ private:
         ReplyWithJsonAndPassAway("Aborted", std::move(jsonResponse));
     }
 
-    void HandleReply(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
+    void HandleReply(NKqp::NEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
         if (Streaming != EStreamingType::None) {
             NJson::TJsonValue json;
             auto& progress(ev->Get()->Record);
@@ -1029,7 +1029,7 @@ private:
         Y_UNUSED(ev);
     }
 
-    void HandleReply(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
+    void HandleReply(NKqp::NEvKqpExecuter::TEvStreamData::TPtr& ev) {
         NKikimrKqp::TEvExecuterStreamData& data(ev->Get()->Record);
         if (QueryResponse.Span) {
             QueryResponse.Span.Event("StreamData", {
@@ -1056,7 +1056,7 @@ private:
             }
         }
 
-        THolder<NKqp::TEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
+        THolder<NKqp::NEvKqpExecuter::TEvStreamDataAck> ack = MakeHolder<NKqp::NEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         if (TotalRows >= LimitRows) {
             if (QueryResponse.Span) {
                 QueryResponse.Span.Event("LimitReached", {

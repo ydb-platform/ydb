@@ -87,8 +87,8 @@ public:
         , LiteralExecuterSpan(TWilsonKqp::LiteralExecuter, std::move(Request.TraceId), "LiteralExecuter")
         , UserRequestContext(userRequestContext)
     {
-        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(
-            Request.TxAlloc, TEvKqpExecuter::TEvTxResponse::EExecutionType::Literal);
+        ResponseEv = std::make_unique<NEvKqpExecuter::TEvTxResponse>(
+            Request.TxAlloc, NEvKqpExecuter::TEvTxResponse::EExecutionType::Literal);
 
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
@@ -107,7 +107,7 @@ public:
             (trace_id, TraceId()));
     }
 
-    std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral() {
+    std::unique_ptr<NEvKqpExecuter::TEvTxResponse> ExecuteLiteral() {
         try {
             ExecuteLiteralImpl();
         } catch (const TMemoryLimitExceededException&) {
@@ -394,7 +394,7 @@ private:
     ui64 TxId = 0;
     TKqpTasksGraph TasksGraph;
     std::unordered_map<ui64, ui32> TaskId2StageId;
-    std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
+    std::unique_ptr<NEvKqpExecuter::TEvTxResponse> ResponseEv;
 
     TVector<TIntrusivePtr<NYql::NDq::IDqTaskRunner>> TaskRunners;
     std::unique_ptr<NKikimr::NMiniKQL::TKqpComputeContextBase> ComputeCtx;
@@ -406,7 +406,7 @@ private:
 
 } // anonymous namespace
 
-std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral(
+std::unique_ptr<NEvKqpExecuter::TEvTxResponse> ExecuteLiteral(
     IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner, const TIntrusivePtr<TUserRequestContext>& userRequestContext)
 {
     std::unique_ptr<TKqpLiteralExecuter> executer = std::make_unique<TKqpLiteralExecuter>(

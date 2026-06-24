@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    kqp_executer_events.h
+    kqp_executer_events_base.h
 )
 
 PEERDIR(

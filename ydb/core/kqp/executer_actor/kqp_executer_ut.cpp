@@ -35,8 +35,8 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
             Cerr << (TStringBuilder() << "Got " << ev->GetTypeName() << " " << ev->Recipient << " " << ev->Sender << Endl);
 
-            if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvTxRequest::EventType) {
-                targetId = ActorIdFromProto(ev->Get<TEvKqpExecuter::TEvTxRequest>()->Record.GetTarget());
+            if (ev->GetTypeRewrite() == NEvKqpExecuter::TEvTxRequest::EventType) {
+                targetId = ActorIdFromProto(ev->Get<NEvKqpExecuter::TEvTxRequest>()->Record.GetTarget());
             }
 
             if (ev->GetTypeRewrite() == NScheduler::TEvAddQuery::EventType) {
@@ -62,7 +62,7 @@ Y_UNIT_TEST_SUITE(KqpExecuter) {
             if (ev.GetTypeRewrite() == NScheduler::TEvRemoveQuery::EventType) {
                 --queries;
             }
-            return (ev.GetTypeRewrite() == TEvKqpExecuter::TEvTxResponse::EventType || ev.GetTypeRewrite() == NScheduler::TEvRemoveQuery::EventType) && !queries;
+            return (ev.GetTypeRewrite() == NEvKqpExecuter::TEvTxResponse::EventType || ev.GetTypeRewrite() == NScheduler::TEvRemoveQuery::EventType) && !queries;
         });
         runtime.DispatchEvents(opts);
 

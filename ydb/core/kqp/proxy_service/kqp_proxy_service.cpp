@@ -1007,7 +1007,7 @@ public:
         PendingRequests.Erase(requestId);
     }
 
-    void ForwardProgress(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
+    void ForwardProgress(NEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
         ui64 requestId = ev->Cookie;
 
         auto proxyRequest = PendingRequests.FindPtr(requestId);
@@ -1391,7 +1391,7 @@ public:
             hFunc(TEvKqp::TEvScriptRequest, Handle);
             hFunc(TEvKqp::TEvCloseSessionRequest, Handle);
             hFunc(TEvKqp::TEvQueryResponse, ForwardEvent);
-            hFunc(TEvKqpExecuter::TEvExecuterProgress, ForwardProgress);
+            hFunc(NEvKqpExecuter::TEvExecuterProgress, ForwardProgress);
             hFunc(TEvKqp::TEvCreateSessionRequest, Handle);
             hFunc(TEvKqp::TEvPingSessionRequest, Handle);
             hFunc(TEvKqp::TEvCancelQueryRequest, Handle);

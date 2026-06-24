@@ -147,7 +147,7 @@ public:
         Become(&TBuildTasksActor::WaitingForResolve);
     }
 
-    void HandleResolveStatus(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev, const NActors::TActorContext& ctx) {
+    void HandleResolveStatus(NEvKqpExecuter::TEvTableResolveStatus::TPtr& ev, const NActors::TActorContext& ctx) {
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             return ReplyError(ctx, TStringBuilder() << "Table resolver: " << ev->Get()->Issues.ToString());
         }
@@ -224,7 +224,7 @@ public:
 
     STFUNC(WaitingForResolve) {
         switch (ev->GetTypeRewrite()) {
-            HFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolveStatus);
+            HFunc(NEvKqpExecuter::TEvTableResolveStatus, HandleResolveStatus);
         default: break;
         }
     }

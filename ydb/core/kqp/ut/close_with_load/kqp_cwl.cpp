@@ -159,7 +159,7 @@ Y_UNIT_TEST_SUITE(KqpService) {
                         NYql::NDqProto::StatusIds::CANCELLED, NYql::TIssues()));
             }
             if (ev &&
-                ev->GetTypeRewrite() == TEvKqpExecuter::TEvTxResponse::EventType) {
+                ev->GetTypeRewrite() == NEvKqpExecuter::TEvTxResponse::EventType) {
                 ++txResponseCount;
                 if (txResponseCount == 1) {
                     // First TEvTxResponse = failed-query result → remember session actor.

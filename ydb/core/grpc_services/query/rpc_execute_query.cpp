@@ -32,7 +32,7 @@ struct TProducerState {
     ui64 ChannelId = 0;
 
     void SendAck(const NActors::TActorIdentity& actor) const {
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo, ChannelId);
+        auto resp = MakeHolder<NKqp::NEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo, ChannelId);
         resp->Record.SetFreeSpace(AckedFreeSpaceBytes);
 
         actor.Send(ActorId, resp.Release());
@@ -240,8 +240,8 @@ private:
             switch (ev->GetTypeRewrite()) {
                 HFunc(TEvents::TEvWakeup, Handle);
                 HFunc(TRpcServices::TEvGrpcNextReply, Handle);
-                HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
-                hFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress, Handle);
+                HFunc(NKqp::NEvKqpExecuter::TEvStreamData, Handle);
+                hFunc(NKqp::NEvKqpExecuter::TEvExecuterProgress, Handle);
                 HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
                 hFunc(NKikimr::NGRpcService::TEvSubscribeGrpcCancel, Handle);
                 default:
@@ -366,7 +366,7 @@ private:
         }
     }
 
-    void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NKqp::NEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
         Ydb::Query::ExecuteQueryResponsePart *response = ev->Get()->Arena->Allocate<Ydb::Query::ExecuteQueryResponsePart>();
         response->set_status(Ydb::StatusIds::SUCCESS);
         response->set_result_set_index(ev->Get()->Record.GetQueryResultIndex());
@@ -402,7 +402,7 @@ private:
         channel.SendAck(SelfId());
     }
 
-    void Handle(NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
+    void Handle(NKqp::NEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
         auto& record = ev->Get()->Record;
 
         Ydb::Query::ExecuteQueryResponsePart response;

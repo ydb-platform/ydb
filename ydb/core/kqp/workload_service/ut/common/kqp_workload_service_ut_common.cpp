@@ -80,14 +80,14 @@ public:
         Become(&TQueryRunnerActor::StateFunc);
     }
 
-    void Handle(TEvKqpExecuter::TEvStreamData::TPtr& ev) {
+    void Handle(NEvKqpExecuter::TEvStreamData::TPtr& ev) {
         UNIT_ASSERT_C(Settings_.ExecutionExpected_ || ExecutionContinued, "Unexpected stream data, execution is not expected and was not continued");
         if (!ExecutionStartReported) {
             ExecutionStartReported = true;
             SendNotification<TEvQueryRunner::TEvExecutionStarted>();
         }
 
-        auto response = std::make_unique<TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
+        auto response = std::make_unique<NEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         response->Record.SetFreeSpace(std::numeric_limits<i64>::max());
 
         auto resultSetIndex = ev->Get()->Record.GetQueryResultIndex();
@@ -127,7 +127,7 @@ public:
     }
 
     STRICT_STFUNC(StateFunc,
-        hFunc(TEvKqpExecuter::TEvStreamData, Handle);
+        hFunc(NEvKqpExecuter::TEvStreamData, Handle);
         hFunc(TEvKqp::TEvQueryResponse, Handle);
         hFunc(TEvQueryRunner::TEvContinueExecution, Handle);
     )

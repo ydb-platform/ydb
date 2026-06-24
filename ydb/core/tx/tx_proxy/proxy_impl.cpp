@@ -8,7 +8,7 @@
 #include <ydb/core/base/counters.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/base/tablet_pipe.h>
-#include <ydb/core/kqp/executer_actor/events/kqp_executer_events.h>
+#include <ydb/core/kqp/executer_actor/events/kqp_executer_events_base.h>
 #include <ydb/core/tablet/tablet_pipe_client_cache.h>
 #include <ydb/core/protos/counters_tx_proxy.pb.h>
 #include <ydb/core/util/queue_inplace.h>
@@ -342,7 +342,7 @@ class TTxProxy : public TActorBootstrapped<TTxProxy> {
                     " TxId# " << txid <<
                     " ProcessProposeKqpTransaction");
 
-        auto executerEv = MakeHolder<NKqp::TLightweightKqpExecuterEvents::TEvTxRequest>();
+        auto executerEv = MakeHolder<NKqp::NEvKqpExecuter::TEvTxRequest>();
         ActorIdToProto(ev->Sender, executerEv->Record.MutableTarget());
         executerEv->Record.MutableRequest()->SetTxId(txid);
         ctx.Send(ev->Get()->ExecuterId, executerEv.Release());

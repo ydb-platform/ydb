@@ -2438,7 +2438,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         });
 
         // Change status of TEvTxResponse to set retriable error status for first maxRetries responses
-        using TEvTestResponse = TEvKqpExecuter::TEvTxResponse;
+        using TEvTestResponse = NEvKqpExecuter::TEvTxResponse;
         const auto responseObserver = runtime.AddObserver<TEvTestResponse>([&](TEvTestResponse::TPtr& ev) {
             if (partitionedId.has_value() && ev->Recipient == *partitionedId) {
                 if (executerIds.find(ev->Sender) == executerIds.end()) {
@@ -2526,7 +2526,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
         });
 
         // On the third successful response, inject INTERNAL_ERROR
-        using TEvTestResponse = TEvKqpExecuter::TEvTxResponse;
+        using TEvTestResponse = NEvKqpExecuter::TEvTxResponse;
         const auto responseObserver = runtime.AddObserver<TEvTestResponse>([&](TEvTestResponse::TPtr& ev) {
             if (partitionedId.has_value() && ev->Recipient == *partitionedId) {
                 if (executerIds.find(ev->Sender) == executerIds.end()) {

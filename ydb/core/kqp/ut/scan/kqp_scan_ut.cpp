@@ -2703,11 +2703,11 @@ Y_UNIT_TEST_SUITE(KqpScan) {
                     captured.pop_back();
                     runtime->Send(resp.Release());
                 }
-            } else if (ev->GetTypeRewrite() == NKqp::TEvKqpExecuter::TEvStreamData::EventType) {
-                auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
+            } else if (ev->GetTypeRewrite() == NKqp::NEvKqpExecuter::TEvStreamData::EventType) {
+                auto& record = ev->Get<NKqp::NEvKqpExecuter::TEvStreamData>()->Record;
                 Y_ASSERT(record.GetResultSet().rows().size() == 0);
 
-                auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                auto resp = MakeHolder<NKqp::NEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                 resp->Record.SetEnough(false);
                 runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
                 return true;

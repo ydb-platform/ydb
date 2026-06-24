@@ -263,7 +263,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
             }
         });
 
-        using TEvTestCapture = TEvKqpExecuter::TEvTxRequest;
+        using TEvTestCapture = NEvKqpExecuter::TEvTxRequest;
         const auto captureObserver = runtime.AddObserver<TEvTestCapture>([&](TEvTestCapture::TPtr& ev) {
             if (partitionedId.has_value() && ActorIdFromProto(ev->Get()->Record.GetTarget()) == *partitionedId) {
                 UNIT_ASSERT_C(executerIds.find(ev->Recipient) != executerIds.end(), "Executer actor is not found");
@@ -327,7 +327,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
             }
         });
 
-        using TEvTestCapture = TEvKqpExecuter::TEvTxRequest;
+        using TEvTestCapture = NEvKqpExecuter::TEvTxRequest;
         const auto captureObserver = runtime.AddObserver<TEvTestCapture>([&](TEvTestCapture::TPtr& ev) {
             if (partitionedId.has_value() && ActorIdFromProto(ev->Get()->Record.GetTarget()) == *partitionedId) {
                 UNIT_ASSERT_C(executerIds.find(ev->Recipient) != executerIds.end(), "Executer actor is not found");
@@ -400,7 +400,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
             }
         });
 
-        using TEvTestCapture = TEvKqpExecuter::TEvTxRequest;
+        using TEvTestCapture = NEvKqpExecuter::TEvTxRequest;
         const auto captureObserver = runtime.AddObserver<TEvTestCapture>([&](TEvTestCapture::TPtr& ev) {
             if (partitionedId.has_value() && ActorIdFromProto(ev->Get()->Record.GetTarget()) == *partitionedId) {
                 UNIT_ASSERT_C(executerIds.find(ev->Recipient) != executerIds.end(), "Executer actor is not found");
@@ -476,7 +476,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         });
 
         // Capture TEvTxResponse from executers to partitioned executer
-        using TEvTestCapture = TEvKqpExecuter::TEvTxResponse;
+        using TEvTestCapture = NEvKqpExecuter::TEvTxResponse;
         const auto captureObserver = runtime.AddObserver<TEvTestCapture>([&](TEvTestCapture::TPtr& ev) {
             if (enableCapture && partitionedId.has_value() && ev->Recipient == *partitionedId) {
                 // Capture and drop the response to send them later
@@ -554,7 +554,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
             }
         });
 
-        using TEvTestCapture = TEvKqpExecuter::TEvTxRequest;
+        using TEvTestCapture = NEvKqpExecuter::TEvTxRequest;
         const auto captureObserver = runtime.AddObserver<TEvTestCapture>([&](TEvTestCapture::TPtr& ev) {
             if (partitionedId.has_value() && ActorIdFromProto(ev->Get()->Record.GetTarget()) == *partitionedId) {
                 UNIT_ASSERT_C(executerIds.find(ev->Recipient) != executerIds.end(), "Executer actor is not found");
@@ -573,7 +573,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         });
 
         // Change status of TEvTxResponse to set retriable error status
-        using TEvTestResponse = TEvKqpExecuter::TEvTxResponse;
+        using TEvTestResponse = NEvKqpExecuter::TEvTxResponse;
         const auto responseObserver = runtime.AddObserver<TEvTestResponse>([&](TEvTestResponse::TPtr& ev) {
             if (enableCapture && partitionedId.has_value() && ev->Recipient == *partitionedId) {
                 UNIT_ASSERT_C(executerIds.find(ev->Sender) != executerIds.end(), "Executer actor is not found");
@@ -636,7 +636,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         });
 
         // Change status of TEvTxResponse to set retriable error status
-        using TEvTestResponse = TEvKqpExecuter::TEvTxResponse;
+        using TEvTestResponse = NEvKqpExecuter::TEvTxResponse;
         const auto responseObserver = runtime.AddObserver<TEvTestResponse>([&](TEvTestResponse::TPtr& ev) {
             if (enableCapture && partitionedId.has_value() && ev->Recipient == *partitionedId) {
                 UNIT_ASSERT_C(executerIds.find(ev->Sender) != executerIds.end(), "Executer actor is not found");
@@ -646,7 +646,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         });
 
         // Capture TEvTxDelayedExecution to freeze the execution
-        using TEvTestCapture = TEvKqpExecuter::TEvTxDelayedExecution;
+        using TEvTestCapture = NEvKqpExecuter::TEvTxDelayedExecution;
         const auto captureObserver = runtime.AddObserver<TEvTestCapture>([&](TEvTestCapture::TPtr& ev) {
             if (enableCapture && partitionedId.has_value() && ev->Recipient == *partitionedId) {
                 // Capture and drop the response to send them later
@@ -722,7 +722,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
             }
         });
 
-        using TEvTestCapture = TEvKqpExecuter::TEvTxRequest;
+        using TEvTestCapture = NEvKqpExecuter::TEvTxRequest;
         const auto captureObserver = runtime.AddObserver<TEvTestCapture>([&](TEvTestCapture::TPtr& ev) {
             if (partitionedId.has_value() && ActorIdFromProto(ev->Get()->Record.GetTarget()) == *partitionedId) {
                 UNIT_ASSERT_C(executerIds.find(ev->Recipient) != executerIds.end(), "Executer actor is not found");
@@ -741,7 +741,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         });
 
         // Change status of TEvTxResponse to set non-retriable error status
-        using TEvTestResponse = TEvKqpExecuter::TEvTxResponse;
+        using TEvTestResponse = NEvKqpExecuter::TEvTxResponse;
         const auto responseObserver = runtime.AddObserver<TEvTestResponse>([&](TEvTestResponse::TPtr& ev) {
             if (partitionedId.has_value() && ev->Recipient == *partitionedId) {
                 UNIT_ASSERT_C(executerIds.find(ev->Sender) != executerIds.end(), "Executer actor is not found");
@@ -805,7 +805,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
             }
         });
 
-        using TEvTestCapture = TEvKqpExecuter::TEvTxRequest;
+        using TEvTestCapture = NEvKqpExecuter::TEvTxRequest;
         const auto captureObserver = runtime.AddObserver<TEvTestCapture>([&](TEvTestCapture::TPtr& ev) {
             if (partitionedId.has_value() && ActorIdFromProto(ev->Get()->Record.GetTarget()) == *partitionedId) {
                 UNIT_ASSERT_C(executerIds.find(ev->Recipient) != executerIds.end(), "Executer actor is not found");
@@ -821,7 +821,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         });
 
         // Change BatchOperationKeyIds and BatchOperationMaxKeys to trigger error issues
-        using TEvTestResponse = TEvKqpExecuter::TEvTxResponse;
+        using TEvTestResponse = NEvKqpExecuter::TEvTxResponse;
         const auto responseObserver = runtime.AddObserver<TEvTestResponse>([&](TEvTestResponse::TPtr& ev) {
             if (!targetExecuterId.has_value() || ev->Sender != *targetExecuterId) {
                 return;
@@ -939,7 +939,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         });
 
         // Capture TEvTxRequest to send unknown event during ExecuteState
-        using TEvTestCapture = TEvKqpExecuter::TEvTxRequest;
+        using TEvTestCapture = NEvKqpExecuter::TEvTxRequest;
         const auto captureObserver = runtime.AddObserver<TEvTestCapture>([&](TEvTestCapture::TPtr& ev) {
             if (partitionedId.has_value() && ActorIdFromProto(ev->Get()->Record.GetTarget()) == *partitionedId) {
                 UNIT_ASSERT_C(executerIds.find(ev->Recipient) != executerIds.end(), "Executer actor is not found");
@@ -1006,7 +1006,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         });
 
         // Send abort to the PartitionedExecuterActor to get AbortState
-        using TEvTestCapture = TEvKqpExecuter::TEvTxRequest;
+        using TEvTestCapture = NEvKqpExecuter::TEvTxRequest;
         const auto captureObserver = runtime.AddObserver<TEvTestCapture>([&](TEvTestCapture::TPtr& ev) {
             if (partitionedId.has_value() && ActorIdFromProto(ev->Get()->Record.GetTarget()) == *partitionedId) {
                 UNIT_ASSERT_C(executerIds.find(ev->Recipient) != executerIds.end(), "Executer actor is not found");
@@ -1104,7 +1104,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         });
 
         // Send abort to the PartitionedExecuterActor to get AbortState
-        using TEvTestCapture = TEvKqpExecuter::TEvTxRequest;
+        using TEvTestCapture = NEvKqpExecuter::TEvTxRequest;
         const auto captureObserver = runtime.AddObserver<TEvTestCapture>([&](TEvTestCapture::TPtr& ev) {
             if (partitionedId.has_value() && ActorIdFromProto(ev->Get()->Record.GetTarget()) == *partitionedId) {
                 UNIT_ASSERT_C(executerIds.find(ev->Recipient) != executerIds.end(), "Executer actor is not found");
@@ -1203,7 +1203,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         });
 
         // Send abort to the PartitionedExecuterActor to get AbortState
-        using TEvTestCapture = TEvKqpExecuter::TEvTxRequest;
+        using TEvTestCapture = NEvKqpExecuter::TEvTxRequest;
         const auto captureObserver = runtime.AddObserver<TEvTestCapture>([&](TEvTestCapture::TPtr& ev) {
             if (partitionedId.has_value() && ActorIdFromProto(ev->Get()->Record.GetTarget()) == *partitionedId) {
                 UNIT_ASSERT_C(executerIds.find(ev->Recipient) != executerIds.end(), "Executer actor is not found");

@@ -116,7 +116,7 @@ public:
         , QuerySpanId(settings.QuerySpanId)
         , UserCtx(settings.UserCtx)
     {
-        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, TEvKqpExecuter::TEvTxResponse::EExecutionType::Data);
+        ResponseEv = std::make_unique<NEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, NEvKqpExecuter::TEvTxResponse::EExecutionType::Data);
 
         if (TableServiceConfig.HasBatchOperationSettings()) {
             Settings = NBatchOperations::ImportSettingsFromProto(TableServiceConfig.GetBatchOperationSettings());
@@ -209,8 +209,8 @@ public:
     STFUNC(ExecuteState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvKqpExecuter::TEvTxResponse, HandleExecute);
-                hFunc(TEvKqpExecuter::TEvTxDelayedExecution, HandleExecute)
+                hFunc(NEvKqpExecuter::TEvTxResponse, HandleExecute);
+                hFunc(NEvKqpExecuter::TEvTxDelayedExecution, HandleExecute)
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbort);
                 hFunc(TEvKqpBuffer::TEvError, HandleExecute);
             default:
@@ -225,7 +225,7 @@ public:
         }
     }
 
-    void HandleExecute(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
+    void HandleExecute(NEvKqpExecuter::TEvTxResponse::TPtr& ev) {
         auto* response = ev->Get()->Record.MutableResponse();
 
         NYql::TIssues issues;
@@ -285,7 +285,7 @@ public:
         AbortWithError(response->GetStatus(), issues);
     }
 
-    void HandleExecute(TEvKqpExecuter::TEvTxDelayedExecution::TPtr& ev) {
+    void HandleExecute(NEvKqpExecuter::TEvTxDelayedExecution::TPtr& ev) {
         RequestCounters->Counters->BatchOperationRetries->Inc();
 
         PE_STLOG_D("Delayed execution timer fired",
@@ -352,8 +352,8 @@ public:
     STFUNC(AbortState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvKqpExecuter::TEvTxResponse, HandleAbort);
-                hFunc(TEvKqpExecuter::TEvTxDelayedExecution, HandleExecute)
+                hFunc(NEvKqpExecuter::TEvTxResponse, HandleAbort);
+                hFunc(NEvKqpExecuter::TEvTxDelayedExecution, HandleExecute)
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbort);
                 hFunc(TEvKqpBuffer::TEvError, HandleAbort);
             default:
@@ -369,7 +369,7 @@ public:
         }
     }
 
-    void HandleAbort(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
+    void HandleAbort(NEvKqpExecuter::TEvTxResponse::TPtr& ev) {
         const auto& response = ev->Get()->Record.MutableResponse();
 
         NYql::TIssues issues;
@@ -691,7 +691,7 @@ private:
         YQL_ENSURE(StartedPartitions.erase(partInfo->PartitionIndex) == 1);
     }
 
-    void OnSuccessResponse(TBatchPartitionInfo::TPtr& partInfo, TEvKqpExecuter::TEvTxResponse* ev) {
+    void OnSuccessResponse(TBatchPartitionInfo::TPtr& partInfo, NEvKqpExecuter::TEvTxResponse* ev) {
         Stats.TakeExecStats(std::move(*ev->Record.MutableResponse()->MutableResult()->MutableStats()));
         Stats.AffectedPartitions.insert(partInfo->PartitionIndex);
 
@@ -776,7 +776,7 @@ private:
             (OldLimit, oldLimit),
             (NewLimit, partInfo->LimitSize));
 
-        auto ev = std::make_unique<TEvKqpExecuter::TEvTxDelayedExecution>(partInfo->PartitionIndex);
+        auto ev = std::make_unique<NEvKqpExecuter::TEvTxDelayedExecution>(partInfo->PartitionIndex);
         Schedule(TDuration::MilliSeconds(partInfo->RetryDelayMs), ev.release());
     }
 
@@ -919,7 +919,7 @@ private:
 
 private:
     IKqpGateway::TExecPhysicalRequest Request;
-    std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
+    std::unique_ptr<NEvKqpExecuter::TEvTxResponse> ResponseEv;
     NBatchOperations::TSettings Settings;
 
     TBatchOperationExecutionStats Stats;

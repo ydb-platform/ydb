@@ -59,7 +59,7 @@ public:
     void StateWork(TAutoPtr<IEventHandle>& ev) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
-            IgnoreFunc(NKqp::TEvKqpExecuter::TEvExecuterProgress);
+            IgnoreFunc(NKqp::NEvKqpExecuter::TEvExecuterProgress);
             default: TBase::StateWork(ev);
         }
     }

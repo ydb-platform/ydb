@@ -1100,7 +1100,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                             new NKikimr::NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::UNSPECIFIED, NYql::TIssues()));
                     firstEvState = true;
                 }
-            } else if (ev->GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxResponse::EventType && ev->Sender == executerId) {
+            } else if (ev->GetTypeRewrite() == NKikimr::NKqp::NEvKqpExecuter::TEvTxResponse::EventType && ev->Sender == executerId) {
                 UNIT_ASSERT_C(totalEvState == actorCount*2, "Executer sent response before waiting for CAs");
             }
 
@@ -1112,7 +1112,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         TDispatchOptions opts;
         opts.FinalEvents.emplace_back([&](IEventHandle& ev) {
-            return ev.GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxResponse::EventType
+            return ev.GetTypeRewrite() == NKikimr::NKqp::NEvKqpExecuter::TEvTxResponse::EventType
                 && ev.Sender == executerId && totalEvState == actorCount*2;
         });
 
@@ -1161,7 +1161,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
                 ev->Sender == executerId && ev->Recipient == executerId)
             {
                 timeoutPoison = true;
-            } else if (ev->GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxResponse::EventType && ev->Sender == executerId) {
+            } else if (ev->GetTypeRewrite() == NKikimr::NKqp::NEvKqpExecuter::TEvTxResponse::EventType && ev->Sender == executerId) {
                 UNIT_ASSERT_C(timeoutPoison, "Executer sent response before waiting for CAs");
             }
 
@@ -1173,7 +1173,7 @@ Y_UNIT_TEST_SUITE(KqpLimits) {
 
         TDispatchOptions opts;
         opts.FinalEvents.emplace_back([&](IEventHandle& ev) {
-            return ev.GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxResponse::EventType
+            return ev.GetTypeRewrite() == NKikimr::NKqp::NEvKqpExecuter::TEvTxResponse::EventType
                 && ev.Sender == executerId && totalEvState == actorCount*2 && timeoutPoison;
         });
 

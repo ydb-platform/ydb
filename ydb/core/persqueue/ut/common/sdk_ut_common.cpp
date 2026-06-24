@@ -4,6 +4,7 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
 
 namespace NKikimr::NPQ::NTest {
@@ -51,9 +52,12 @@ void WriteKafkaBatchMessages(
         const ui64 lastSeqNo = firstSeqNo + messageCount - 1;
         ui64 nextSeqNo = firstSeqNo;
         THashSet<ui64> ackedSeqNos;
+        THashMap<ui64, TString> inFlightData;
         while (ackedSeqNos.size() < messageCount) {
             if (token.has_value() && nextSeqNo <= lastSeqNo) {
-                NYdb::NTopic::TWriteMessage message(TString(dataSize, fill));
+                const auto [it, inserted] = inFlightData.emplace(nextSeqNo, TString(dataSize, fill));
+                UNIT_ASSERT(inserted);
+                NYdb::NTopic::TWriteMessage message(it->second);
                 message.SeqNo(nextSeqNo);
                 message.CreateTimestamp(baseCreateTimestamp + TDuration::MilliSeconds(nextSeqNo - 1));
                 ++nextSeqNo;
@@ -74,6 +78,7 @@ void WriteKafkaBatchMessages(
                         item.SeqNo >= firstSeqNo && item.SeqNo <= lastSeqNo,
                         TStringBuilder() << "Unexpected ack seqNo: " << item.SeqNo);
                     ackedSeqNos.insert(item.SeqNo);
+                    inFlightData.erase(item.SeqNo);
                 }
             } else if (auto* closed = std::get_if<NYdb::NTopic::TSessionClosedEvent>(&*event)) {
                 UNIT_FAIL(TStringBuilder() << "Unexpected session close: " << closed->DebugString());

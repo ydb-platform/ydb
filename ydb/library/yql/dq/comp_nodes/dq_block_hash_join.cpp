@@ -421,6 +421,9 @@ IComputationNode* WrapDqBlockHashJoin(TCallable& callable, const TComputationNod
         if (settingsTuple->GetValuesCount() >= 1) {
             meta.Settings.BuildSide = static_cast<EBuildSide>(AS_VALUE(TDataLiteral, settingsTuple->GetValue(0))->AsValue().Get<ui32>());
         }
+        if (settingsTuple->GetValuesCount() >= 2) {
+            meta.Settings.Any = static_cast<EAnyJoinSide>(AS_VALUE(TDataLiteral, settingsTuple->GetValue(1))->AsValue().Get<ui32>());
+        }
     }
     if (meta.Settings.LeftIsBuild()) {
         std::swap(meta.InputTypes.Build, meta.InputTypes.Probe);

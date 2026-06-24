@@ -938,6 +938,165 @@ TJoinTestData OutputBufferBoundedTestData() {
     return td;
 }
 
+// RightAny Inner: right (build) side has duplicate keys {1,1,2,3},
+// but with RightAny only one build row per key is used.
+[[maybe_unused]] TJoinTestData InnerJoinRightAnyTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<TString> leftValues = {"a", "b", "c"};
+
+    TVector<ui64> rightKeys = {1, 1, 2, 3};
+    TVector<TString> rightValues = {"x1", "x2", "y1", "z1"};
+
+    // Without RightAny, key=1 would produce 2 rows (a,x1) and (a,x2).
+    // With RightAny, key=1 produces only 1 row — whichever the hash table stores first.
+    // We only check that we get exactly 3 result rows (one per left key).
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Kind = EJoinKind::Inner;
+    td.JoinSettings.Any = EAnyJoinSide::Right;
+    return td;
+}
+
+// Without RightAny, the same data produces 4 rows (key=1 matches twice).
+[[maybe_unused]] TJoinTestData InnerJoinNoDedupTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1, 2, 3};
+    TVector<TString> leftValues = {"a", "b", "c"};
+
+    TVector<ui64> rightKeys = {1, 1, 2, 3};
+    TVector<TString> rightValues = {"x1", "x2", "y1", "z1"};
+
+    TVector<ui64> expectedKeysLeft = {1, 1, 2, 3};
+    TVector<TString> expectedValuesLeft = {"a", "a", "b", "c"};
+    TVector<ui64> expectedKeysRight = {1, 1, 2, 3};
+    TVector<TString> expectedValuesRight = {"x1", "x2", "y1", "z1"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+    td.Kind = EJoinKind::Inner;
+    return td;
+}
+
+// LeftAny with LeftIsBuild: left (build) side has duplicate keys,
+// with LeftAny only one build row per key is used.
+[[maybe_unused]] TJoinTestData InnerJoinLeftAnyLeftIsBuildTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1, 1, 2, 3};
+    TVector<TString> leftValues = {"a1", "a2", "b1", "c1"};
+
+    TVector<ui64> rightKeys = {1, 2, 3};
+    TVector<TString> rightValues = {"x", "y", "z"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Kind = EJoinKind::Inner;
+    td.JoinSettings.BuildSide = EBuildSide::Left;
+    td.JoinSettings.Any = EAnyJoinSide::Left;
+    return td;
+}
+
+// Left join with RightAny: right (build) side has duplicate keys,
+// unmatched left rows still appear with nulls.
+[[maybe_unused]] TJoinTestData LeftJoinRightAnyTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1, 2, 3, 4};
+    TVector<TString> leftValues = {"a", "b", "c", "d"};
+
+    TVector<ui64> rightKeys = {1, 1, 3, 3};
+    TVector<TString> rightValues = {"x1", "x2", "z1", "z2"};
+
+    // With RightAny: each left key matches at most one right row.
+    // key=1 -> 1 row, key=2 -> unmatched (null), key=3 -> 1 row, key=4 -> unmatched (null)
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Kind = EJoinKind::Left;
+    td.JoinSettings.Any = EAnyJoinSide::Right;
+    return td;
+}
+
+// RightAny with unique keys — no behavioral change, same result as without ANY.
+[[maybe_unused]] TJoinTestData InnerJoinRightAnyUniqueKeysTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1, 2, 3, 4, 5};
+    TVector<TString> leftValues = {"a1", "b1", "c1", "d1", "e1"};
+
+    TVector<ui64> rightKeys = {2, 3, 4, 5, 6};
+    TVector<TString> rightValues = {"b2", "c2", "d2", "e2", "f2"};
+
+    TVector<ui64> expectedKeysLeft = {2, 3, 4, 5};
+    TVector<TString> expectedValuesLeft = {"b1", "c1", "d1", "e1"};
+    TVector<ui64> expectedKeysRight = {2, 3, 4, 5};
+    TVector<TString> expectedValuesRight = {"b2", "c2", "d2", "e2"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result =
+        ConvertVectorsToTuples(setup, expectedKeysLeft, expectedValuesLeft, expectedKeysRight, expectedValuesRight);
+    td.Kind = EJoinKind::Inner;
+    td.JoinSettings.Any = EAnyJoinSide::Right;
+    return td;
+}
+
+// LeftSemi with RightAny — semantically equivalent to LeftSemi without it,
+// but exercises the LookupOne path.
+[[maybe_unused]] TJoinTestData LeftSemiRightAnyTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1, 2, 3, 4};
+    TVector<TString> leftValues = {"a", "b", "c", "d"};
+
+    TVector<ui64> rightKeys = {2, 2, 3};
+    TVector<TString> rightValues = {"x1", "x2", "y1"};
+
+    TVector<ui64> expectedKeys = {2, 3};
+    TVector<TString> expectedValues = {"b", "c"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+    td.Kind = EJoinKind::LeftSemi;
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}};
+    td.JoinSettings.Any = EAnyJoinSide::Right;
+    return td;
+}
+
+// LeftOnly with RightAny — semantically equivalent to LeftOnly without it.
+[[maybe_unused]] TJoinTestData LeftOnlyRightAnyTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    TVector<ui64> leftKeys = {1, 2, 3, 4};
+    TVector<TString> leftValues = {"a", "b", "c", "d"};
+
+    TVector<ui64> rightKeys = {2, 2, 3};
+    TVector<TString> rightValues = {"x1", "x2", "y1"};
+
+    TVector<ui64> expectedKeys = {1, 4};
+    TVector<TString> expectedValues = {"a", "d"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+    td.Kind = EJoinKind::LeftOnly;
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}};
+    td.JoinSettings.Any = EAnyJoinSide::Right;
+    return td;
+}
+
 TJoinDescription MakeJoinDescription(TJoinTestData& td) {
     FilterRenamesForSemiAndOnlyJoins(td);
     TJoinDescription descr;
@@ -954,6 +1113,29 @@ TJoinDescription MakeJoinDescription(TJoinTestData& td) {
     descr.BlockSize = td.BlockSize;
     descr.SliceBlocks = td.SliceBlocks;
     return descr;
+}
+
+i64 CountBlockJoinRows(TJoinTestData& testData) {
+    auto descr = MakeJoinDescription(testData);
+    descr.Setup->Alloc.Ref().ForcefullySetMemoryYellowZone(false);
+    THolder<IComputationGraph> graph = ConstructJoinGraphStream(
+        testData.Kind, ETestedJoinAlgo::kBlockHash, descr, true, testData.JoinSettings);
+
+    const size_t tupleWidth = testData.Renames.size() + 1;
+    std::vector<NUdf::TUnboxedValue> buff(tupleWidth);
+    auto stream = graph->GetValue();
+    i64 totalRows = 0;
+    while (true) {
+        auto status = stream.WideFetch(buff.data(), tupleWidth);
+        if (status == NYql::NUdf::EFetchStatus::Finish) {
+            break;
+        }
+        if (status == NYql::NUdf::EFetchStatus::Yield) {
+            continue;
+        }
+        totalRows += ArrowScalarAsInt(TArrowBlock::From(buff[tupleWidth - 1]));
+    }
+    return totalRows;
 }
 
 void Test(TJoinTestData testData, bool blockJoin, bool withSpiller = true) {
@@ -1171,6 +1353,49 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
         UNIT_ASSERT_C(maxBlockRows <= maxOutputRows,
             TStringBuilder() << "Max block size " << maxBlockRows
                              << " should be at most " << maxOutputRows);
+    }
+
+    Y_UNIT_TEST(TestInnerJoinRightAnyDedup) {
+        // Right side has duplicate key=1, RightAny should produce exactly 3 rows (one per left key).
+        auto td = InnerJoinRightAnyTestData();
+        i64 rows = CountBlockJoinRows(td);
+        UNIT_ASSERT_VALUES_EQUAL_C(rows, 3,
+            TStringBuilder() << "RightAny inner join should produce 3 rows, got " << rows);
+    }
+
+    Y_UNIT_TEST(TestInnerJoinNoDedupBaseline) {
+        // Same data without RightAny should produce 4 rows (key=1 matches twice).
+        Test(InnerJoinNoDedupTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestInnerJoinRightAnyUniqueKeys) {
+        // RightAny with unique build keys — same result as without ANY.
+        Test(InnerJoinRightAnyUniqueKeysTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestInnerJoinLeftAnyLeftIsBuild) {
+        // Left side is build and has duplicate key=1, LeftAny should produce 3 rows.
+        auto td = InnerJoinLeftAnyLeftIsBuildTestData();
+        i64 rows = CountBlockJoinRows(td);
+        UNIT_ASSERT_VALUES_EQUAL_C(rows, 3,
+            TStringBuilder() << "LeftAny inner join (LeftIsBuild) should produce 3 rows, got " << rows);
+    }
+
+    Y_UNIT_TEST(TestLeftJoinRightAnyDedup) {
+        // Left join with RightAny: 4 left rows, right has dup keys {1,1,3,3}.
+        // Should produce exactly 4 rows (one per left key), 2 matched + 2 unmatched.
+        auto td = LeftJoinRightAnyTestData();
+        i64 rows = CountBlockJoinRows(td);
+        UNIT_ASSERT_VALUES_EQUAL_C(rows, 4,
+            TStringBuilder() << "RightAny left join should produce 4 rows, got " << rows);
+    }
+
+    Y_UNIT_TEST(TestLeftSemiRightAny) {
+        Test(LeftSemiRightAnyTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestLeftOnlyRightAny) {
+        Test(LeftOnlyRightAnyTestData(), true);
     }
 }
 } // namespace NKikimr::NMiniKQL

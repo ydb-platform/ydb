@@ -17,7 +17,6 @@
 #include <ydb/core/protos/forced_compaction.pb.h>
 #include <ydb/core/protos/analyze_operation.pb.h>
 #include <ydb/core/util/ulid.h>
-#include <ydb/core/protos/set_column_constraint.pb.h>
 
 #include <ydb/public/api/protos/ydb_table.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/operation_id/operation_id.h>

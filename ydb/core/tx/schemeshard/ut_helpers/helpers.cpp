@@ -3507,7 +3507,11 @@ namespace NSchemeShardUT_Private {
     {
         NKikimrSetColumnConstraint::TSetColumnConstraintSettings settings;
         settings.SetTablePath(tablePath);
+        for (const auto& col : notNullColumns) {
             settings.AddNotNullColumns(col);
+        }
+
+        auto sender = runtime.AllocateEdgeActor();
         auto request = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>(txId, dbName, std::move(settings));
         ForwardToTablet(runtime, schemeShard, sender, request.Release());
     }

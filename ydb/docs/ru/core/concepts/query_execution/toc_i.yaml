@@ -21,7 +21,5 @@ items:
     href: spilling.md
   - name: YQL-запросы к топикам
     href: topics.md
-  - name: Локальные и внешние топики
-    href: local-and-external-topics.md
   - name: Скан запросы
     href: scan_query.md

@@ -2,7 +2,7 @@
 
 В этом разделе собраны минимальные примеры [потоковых запросов](../../concepts/streaming-query.md) для наиболее распространённых сценариев. Сначала описан базовый шаблон чтения данных из топика, затем — варианты полноценной работы с данными: обработка данных и запись результатов в топик в формате JSON, в топик в виде строки и в таблицу. Каждый пример можно использовать как отправную точку для собственных задач.
 
-В примерах ниже используются [локальные и внешние топики](../../concepts/query_execution/local-and-external-topics.md). Обозначения:
+В примерах ниже используются [локальные и внешние топики](../../concepts/query_execution/topics.md#local-external-topics). Обозначения:
 
 - `ext_source` — заранее созданный [`external data source`](../../concepts/datamodel/external_data_source.md);
 - `input_topic` — топик, откуда читаются данные;
@@ -132,6 +132,6 @@ END DO
 
 ## См. также
 
-- [Локальные и внешние топики](../../concepts/query_execution/local-and-external-topics.md)
+- [Локальные и внешние топики](../../concepts/query_execution/topics.md#local-external-topics)
 - [{#T}](../../yql/reference/syntax/create-streaming-query.md)
 - [{#T}](../../recipes/streaming_queries/topics.md)

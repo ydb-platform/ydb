@@ -8,6 +8,8 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_CONTROLLER
+
 namespace NKikimr::NReplication::NController {
 
 class TResourceIdResolver: public TActorBootstrapped<TResourceIdResolver> {
@@ -16,12 +18,15 @@ class TResourceIdResolver: public TActorBootstrapped<TResourceIdResolver> {
     }
 
     void Handle(TEvYdbProxy::TEvDescribeTableResponse::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        YDB_LOG_TRACE("Handle",
+            {"logPrefix", LogPrefix},
+            {"ev", ev->Get()->ToString()});
 
         const auto& result = ev->Get()->Result;
         if (result.IsSuccess()) {
-            LOG_D("Describe succeeded"
-                << ": path# " << Database);
+            YDB_LOG_DEBUG("Describe succeeded",
+                {"logPrefix", LogPrefix},
+                {"path", Database});
 
             for (const auto& [k, v] : result.GetTableDescription().GetAttributes()) {
                 if (k == "cloud_id") {
@@ -31,11 +36,12 @@ class TResourceIdResolver: public TActorBootstrapped<TResourceIdResolver> {
 
             Reply(false, "Cannot resolve RESOURCE_ID");
         } else {
-            LOG_E("Describe failed"
-                << ": path# " << Database
-                << ", status# " << result.GetStatus()
-                << ", issues# " << result.GetIssues().ToOneLineString()
-                << ", iteration# " << Backoff.GetIteration());
+            YDB_LOG_ERROR("Describe failed",
+                {"logPrefix", LogPrefix},
+                {"path", Database},
+                {"status", result.GetStatus()},
+                {"issues", result.GetIssues().ToOneLineString()},
+                {"iteration", Backoff.GetIteration()});
 
             if (IsRetryableError(result) && Backoff.HasMore()) {
                 Schedule(Backoff.Next(), new TEvents::TEvWakeup);

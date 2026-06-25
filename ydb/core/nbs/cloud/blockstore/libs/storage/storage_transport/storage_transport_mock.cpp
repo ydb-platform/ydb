@@ -39,8 +39,11 @@ TStorageTransportMock::GetConnectCredentials(
 }
 
 NThreading::TFuture<TEvConnectResult> TStorageTransportMock::Connect(
-    const THostConnection& connection)
+    const THostConnection& connection,
+    TDisconnectCB disconnectCB)
 {
+    Y_UNUSED(disconnectCB);
+
     const auto key = MakeKey(connection);
     ConnectCredentials[key].push_back(connection.Credentials);
     if (auto it = PendingConnects.find(key); it != PendingConnects.end()) {

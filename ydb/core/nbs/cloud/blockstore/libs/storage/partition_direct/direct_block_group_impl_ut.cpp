@@ -1,11 +1,10 @@
 #include "direct_block_group_impl.h"
 
-#include "storage_transport_mock.h"
-
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport_mock.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_ut.h>

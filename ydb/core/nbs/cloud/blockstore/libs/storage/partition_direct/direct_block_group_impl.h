@@ -168,7 +168,7 @@ private:
     };
 
     void DoEstablishConnections();
-    void DoEstablishConnection(size_t index, TDDiskConnection& connection);
+    void DoEstablishConnection(size_t index, EConnectionType connectionType);
     void OnConnectionEstablished(
         EConnectionType connectionType,
         size_t index,

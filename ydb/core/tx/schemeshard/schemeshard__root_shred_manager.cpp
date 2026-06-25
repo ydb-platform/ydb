@@ -409,9 +409,20 @@ TRootShredManager::TQueue::TConfig TRootShredManager::ConvertConfig(const NKikim
 }
 
 void TRootShredManager::CleanupOldGenerationsOnRestore(NIceDb::TNiceDb& db, const TVector<ui64>& generationsToCleanup) {
+    auto ctx = SchemeShard->ActorContext();
+
     for (ui64 generation : generationsToCleanup) {
-        Y_ABORT_UNLESS(generation < Generation, "[RootShredManager] CleanupOldGenerationsOnRestore: generation %" PRIu64 " >= Generation %" PRIu64, generation, Generation);
-        db.Table<Schema::ShredGenerations>().Key(generation).Delete();
+        if (generation >= Generation) {
+            // This should never occur because of the way the collection is initialized. Nevertheless, throwing
+            // an assertion from non-core logic—which includes the obsolete record shredding mechanism—is risky,
+            // so only a warning is output.
+            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "[RootShredManager] Restore: Invalid element in collection: " << generation <<
+                " >= current shredding generation " << Generation <<
+                ". Element will be skipped. This should never occur.");
+        } else {
+            db.Table<Schema::ShredGenerations>().Key(generation).Delete();
+        }
     }
 }
 

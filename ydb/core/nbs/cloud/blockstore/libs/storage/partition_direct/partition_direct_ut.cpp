@@ -1037,7 +1037,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             env.Sim(TDuration::Seconds(1));
 
             scopedService = std::make_unique<TScopedNbsService>(
-                CreateNbsConfig(EWriteMode::PBufferReplication));
+                CreateNbsConfig(EWriteMode::IndirectWrite));
         }
 
         WaitForTabletBoot(env);

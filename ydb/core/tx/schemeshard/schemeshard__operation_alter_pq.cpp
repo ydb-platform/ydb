@@ -150,7 +150,7 @@ public:
             }
 
             ui32 totalGroupCount = alter.GetTotalGroupCount();
-            if (!totalGroupCount || totalGroupCount > TSchemeShard::MaxPQGroupPartitionsCount) {
+            if (!totalGroupCount) {
                 errStr = Sprintf("Invalid total groups count specified: %u", totalGroupCount);
                 return nullptr;
             }
@@ -951,14 +951,6 @@ public:
             shardsToCreate += alterData->ExpectedShardCount() - topic->ShardCount();
         }
         ui64 partitionsToCreate = alterData->PartitionsToAdd.size();
-
-        if (alterData->TotalGroupCount > TSchemeShard::MaxPQGroupPartitionsCount) {
-            errStr = TStringBuilder()
-                    << "Invalid partition count specified: " << alterData->TotalGroupCount
-                    << " vs " << TSchemeShard::MaxPQGroupPartitionsCount;
-            result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
-            return result;
-        }
 
         const auto& partConfig = newTabletConfig.GetPartitionConfig();
 

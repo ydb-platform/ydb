@@ -47,7 +47,7 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
         return nullptr;
     }
 
-    if (partitionCount == 0 || partitionCount > TSchemeShard::MaxPQGroupPartitionsCount) {
+    if (partitionCount == 0) {
         status = NKikimrScheme::StatusInvalidParameter;
         errStr = Sprintf("Invalid total partition count specified: %u", partitionCount);
         return nullptr;
@@ -159,13 +159,6 @@ TTopicInfo::TPtr CreatePersQueueGroup(TOperationContext& context,
     pqGroupInfo->TotalGroupCount = partitionCount;
     pqGroupInfo->TotalPartitionCount = partitionCount;
     pqGroupInfo->ActivePartitionCount = partitionCount;
-
-    ui32 tabletCount = pqGroupInfo->ExpectedShardCount();
-    if (tabletCount > TSchemeShard::MaxPQGroupTabletsCount) {
-        status = NKikimrScheme::StatusSchemeError;
-        errStr = Sprintf("Invalid tablet count specified: %u", tabletCount);
-        return nullptr;
-    }
 
     NKikimrPQ::TPQTabletConfig tabletConfig = op.GetPQTabletConfig();
     tabletConfig.ClearPartitionIds();

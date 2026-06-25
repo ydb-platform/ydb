@@ -168,4 +168,42 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
 
   {% endlist %}
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  {% include notitle [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Java
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```java
+    import tech.ydb.core.grpc.BalancingSettings;
+    import tech.ydb.core.grpc.GrpcTransport;
+
+    try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
+            .withBalancingSettings(BalancingSettings.detectLocalDs())
+            .build()) {
+        // ...
+    }
+    ```
+
+  - JDBC
+
+    See [JDBC driver properties](../../reference/languages-and-apis/jdbc-driver/properties.md); configure balancing via the native transport if needed.
+
+    In Spring Boot, ORMs, and other JDBC wrappers, use the same JDBC URL and balancing settings as with the driver directly (for example `spring.datasource.url` or `DataSource` properties).
+
+  {% endlist %}
+
+- Rust
+
+  {% include notitle [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#239](https://github.com/ydb-platform/ydb-rs-sdk/issues/239)
+
+>>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 {% endlist %}

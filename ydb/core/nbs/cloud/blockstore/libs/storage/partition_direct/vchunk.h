@@ -101,6 +101,7 @@ private:
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         std::shared_ptr<NWilson::TSpan> span);
+    void OnReadBlocksResponse(const IReadRequestExecutor::TResponse& response);
 
     void DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle);
     void DoFlush(bool force);
@@ -159,6 +160,7 @@ private:
     size_t InflightWritesCount = 0;
     size_t InflightFlushesCount = 0;
     bool CleaningUpScheduled = false;
+    bool Stopped = false;
 
     TVector<IRequestExecutorWeakPtr> Inflight;
 

@@ -5,6 +5,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/path.h>
+#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/local_indexes/bloom/const.h>
@@ -200,7 +201,11 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
         auto idIt = nameToId.find(colName);
         if (idIt == nameToId.end()) {
             if (index.type_case() == Ydb::Table::TableIndex::kLocalMinMaxIndex) {
-                return fail(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(colName));
+                TVector<TString> tableColumnNames;
+                for (const auto& col: nameToId) {
+                    tableColumnNames.push_back(col.first);
+                }
+                return fail(NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(colName, tableColumnNames));
             } else {
                 return fail(TStringBuilder() << "Unknown index column: " << colName);
             }
@@ -245,6 +250,14 @@ bool FillColumnTableIndexesFromCreateRequest(NKikimrSchemeOp::TColumnTableDescri
                 }
                 olapIndex->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
                 olapIndex->MutableMinMaxIndex()->SetColumnId(columnId);
+                const NKikimrSchemeOp::TOlapColumnDescription* columnDesc = nullptr;
+                for (auto& column: tableDesc.GetSchema().GetColumns()) {
+                    if (column.GetName() == colName) {
+                        columnDesc = &column;
+                        break;
+                    }
+                }
+                NKikimr::NOlap::NIndexes::NMinMax::SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(*olapIndex, columnDesc->GetType());
                 break;
             }
 
@@ -1382,7 +1395,7 @@ bool FillColumnFamily(
 }
 
 bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
-    NKikimrSchemeOp::TModifyScheme* modifyScheme, Ydb::StatusIds::StatusCode& status, TString& error) {
+    NKikimrSchemeOp::TModifyScheme* modifyScheme, const NYql::TKikimrTableMetadataPtr& alteredTable, Ydb::StatusIds::StatusCode& status, TString& error) {
     const auto ops = GetAlterOperationKinds(req);
     if (ops.empty()) {
         status = Ydb::StatusIds::BAD_REQUEST;
@@ -1513,6 +1526,16 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                 error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectIndexColumnsErrorMessage(index.index_columns());
                 return false;
             }
+            if (alteredTable->Columns.find(index.index_columns(0)) == alteredTable->Columns.end()) {
+                status = Ydb::StatusIds::BAD_REQUEST;
+                TVector<TString> tableColumnNames;
+                for(auto& col: alteredTable->Columns) {
+                    tableColumnNames.push_back(col.first);
+                }
+                error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.index_columns(0), tableColumnNames);
+                return false;
+            }
+
         }
 
         if (index.type_case() == Ydb::Table::TableIndex::kLocalBloomFilterIndex || index.type_case() == Ydb::Table::TableIndex::kLocalBloomNgramFilterIndex) {
@@ -1604,7 +1627,9 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
                     return false;
                 }
                 upsert->SetClassName(NOlap::NIndexes::NMinMax::kMinMaxClassName);
-                upsert->MutableMinMaxIndex()->SetColumnName(index.index_columns()[0]);
+                upsert->MutableMinMaxIndex()->SetColumnName(index.index_columns(0));
+                auto it = alteredTable->Columns.find(index.index_columns(0));
+                NKikimr::NOlap::NIndexes::NMinMax::SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(*upsert, TypeName(it->second.TypeInfo.GetTypeId()));
                 return true;
             }
             default:
@@ -1645,8 +1670,8 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
 }
 
 bool BuildAlterColumnTableModifyScheme(
-    const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme, Ydb::StatusIds::StatusCode& code, TString& error) {
-    return BuildAlterColumnTableModifyScheme(req->path(), req, modifyScheme, code, error);
+    const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme, const NYql::TKikimrTableMetadataPtr& alteredTable,  Ydb::StatusIds::StatusCode& code, TString& error) {
+    return BuildAlterColumnTableModifyScheme(req->path(), req, modifyScheme, alteredTable, code, error);
 }
 
 template <typename TYdbProto>

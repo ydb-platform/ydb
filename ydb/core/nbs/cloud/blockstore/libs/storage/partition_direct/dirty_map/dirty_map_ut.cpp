@@ -24,15 +24,6 @@ TVChunkConfig MakeTestVChunkConfig()
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TVector<ui64> GetLsns(const TVector<TPBufferSegment>& segments)
-{
-    TVector<ui64> lsns;
-    for (const auto& segment: segments) {
-        lsns.push_back(segment.Lsn);
-    }
-    return lsns;
-}
-
 THostMask MakePrimaryHosts()
 {
     return THostMask::MakeAll(3);
@@ -696,7 +687,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Finish flushes
         for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap.FlushFinished(route, GetLsns(hint.Segments), {});
+            dirtyMap.FlushFinished(route, hint.MakeLsnVector(), {});
         }
 
         // Erase hints
@@ -709,7 +700,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Finish erasing
         for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap.EraseFinished(host, GetLsns(hint.Segments), {});
+            dirtyMap.EraseFinished(host, hint.MakeLsnVector(), {});
         }
     }
 
@@ -750,7 +741,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Finish flushes
         for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap.FlushFinished(route, GetLsns(hint.Segments), {});
+            dirtyMap.FlushFinished(route, hint.MakeLsnVector(), {});
         }
 
         // Erase hints
@@ -763,7 +754,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Finish erasing
         for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap.EraseFinished(host, GetLsns(hint.Segments), {});
+            dirtyMap.EraseFinished(host, hint.MakeLsnVector(), {});
         }
     }
 
@@ -813,7 +804,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Finish flushes
         for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap.FlushFinished(route, GetLsns(hint.Segments), {});
+            dirtyMap.FlushFinished(route, hint.MakeLsnVector(), {});
         }
 
         // Erase hints
@@ -826,7 +817,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Finish erasing
         for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap.EraseFinished(host, GetLsns(hint.Segments), {});
+            dirtyMap.EraseFinished(host, hint.MakeLsnVector(), {});
         }
     }
 
@@ -871,7 +862,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Finish flushes
         for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap.FlushFinished(route, GetLsns(hint.Segments), {});
+            dirtyMap.FlushFinished(route, hint.MakeLsnVector(), {});
         }
 
         // Erase hints
@@ -883,7 +874,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Finish erasing
         for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap.EraseFinished(host, GetLsns(hint.Segments), {});
+            dirtyMap.EraseFinished(host, hint.MakeLsnVector(), {});
         }
 
         // Should remove inflight items
@@ -969,7 +960,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             TBlockRange64::WithLength(95, 10),
             requested,
             confirmed);
-        // Range over write watermark. Should not be flushed.
+        // Range over write watermark. Should be flushed only to healthy DDisks.
         dirtyMap.RegisterInflightWrite(125, TBlockRange64::WithLength(100, 10));
         dirtyMap.WriteFinished(
             125,
@@ -979,8 +970,8 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         auto flushHint = dirtyMap.MakeFlushHint(3);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0->H0:123[10..19],124[95..104];"
-            "H1->H1:123[10..19],124[95..104];"
+            "H0->H0:123[10..19],124[95..104],125[100..109];"
+            "H1->H1:123[10..19],124[95..104],125[100..109];"
             "H2->H2:123[10..19],124[95..104];",
             flushHint.DebugPrint());
     }
@@ -1003,7 +994,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto flushHint = dirtyMap.MakeFlushHint(1);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
         for (const auto& [route, flush]: flushHint.GetAllHints()) {
-            dirtyMap.FlushFinished(route, {GetLsns(flush.Segments)}, {});
+            dirtyMap.FlushFinished(route, {flush.MakeLsnVector()}, {});
         }
 
         // Lock pbuffer

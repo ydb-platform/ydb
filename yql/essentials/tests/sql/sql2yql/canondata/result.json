@@ -9981,6 +9981,13 @@
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_select_yql-select_op_union_all_/sql.yql"
         }
     ],
+    "test_sql2yql.test[select_yql-select_op_union_disjoint_columns]": [
+        {
+            "checksum": "663262604196d560045f7c2d39edc1c7",
+            "size": 3624,
+            "uri": "https://{canondata_backend}/1775319/8b9742feb1b7bf8a8f87db2d34dbc80bef9da2f9/resource.tar.gz#test_sql2yql.test_select_yql-select_op_union_disjoint_columns_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[select_yql-select_op_union_distinct]": [
         {
             "checksum": "d3e9afbc42a5c91687689637850ee649",
@@ -10413,6 +10420,34 @@
             "checksum": "1b57858a3e186ae9845734d8209a208f",
             "size": 1261,
             "uri": "https://{canondata_backend}/1916746/6b9156c4d83cd3e0e8f664baab711774deac1ac0/resource.tar.gz#test_sql2yql.test_select_yql-with_cte_agg_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-with_cte_column_order]": [
+        {
+            "checksum": "5f462197e5835b3e46c467231cbcd07e",
+            "size": 5020,
+            "uri": "https://{canondata_backend}/1600758/21871d7c036f105a5a9e6866b296e3810c413546/resource.tar.gz#test_sql2yql.test_select_yql-with_cte_column_order_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-with_cte_column_order_less]": [
+        {
+            "checksum": "57d802f8b763817384f670ba4827c256",
+            "size": 959,
+            "uri": "https://{canondata_backend}/1773845/ab27a09a23bc26dd2d124ed3b07eac965514031e/resource.tar.gz#test_sql2yql.test_select_yql-with_cte_column_order_less_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-with_cte_column_order_more]": [
+        {
+            "checksum": "b22843fb8e51e07ecce5644abeb92442",
+            "size": 1016,
+            "uri": "https://{canondata_backend}/1773845/ab27a09a23bc26dd2d124ed3b07eac965514031e/resource.tar.gz#test_sql2yql.test_select_yql-with_cte_column_order_more_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[select_yql-with_cte_column_order_union_ambiguity]": [
+        {
+            "checksum": "18676cba7debedc48528dbde2e224312",
+            "size": 1100,
+            "uri": "https://{canondata_backend}/1925821/ff1bc09757f515ab922cf538c355b7fbfc7e5d52/resource.tar.gz#test_sql2yql.test_select_yql-with_cte_column_order_union_ambiguity_/sql.yql"
         }
     ],
     "test_sql2yql.test[select_yql-with_cte_counter]": [
@@ -17939,6 +17974,11 @@
             "uri": "file://test_sql_format.test_select_yql-select_op_union_all_/formatted.sql"
         }
     ],
+    "test_sql_format.test[select_yql-select_op_union_disjoint_columns]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-select_op_union_disjoint_columns_/formatted.sql"
+        }
+    ],
     "test_sql_format.test[select_yql-select_op_union_distinct]": [
         {
             "uri": "file://test_sql_format.test_select_yql-select_op_union_distinct_/formatted.sql"
@@ -18242,6 +18282,26 @@
     "test_sql_format.test[select_yql-with_cte_agg]": [
         {
             "uri": "file://test_sql_format.test_select_yql-with_cte_agg_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-with_cte_column_order]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-with_cte_column_order_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-with_cte_column_order_less]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-with_cte_column_order_less_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-with_cte_column_order_more]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-with_cte_column_order_more_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[select_yql-with_cte_column_order_union_ambiguity]": [
+        {
+            "uri": "file://test_sql_format.test_select_yql-with_cte_column_order_union_ambiguity_/formatted.sql"
         }
     ],
     "test_sql_format.test[select_yql-with_cte_counter]": [

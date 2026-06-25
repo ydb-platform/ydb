@@ -28,7 +28,7 @@ public:
         const TLogTitle& logTitle,
         const TVChunkConfig& vChunkConfig,
         IDirectBlockGroupPtr directBlockGroup,
-        TReadHint readHint,
+        TReadRangeHint readHint,
         TCallContextPtr callContext,
         std::shared_ptr<TReadBlocksLocalRequest> request,
         NWilson::TTraceId traceId);
@@ -58,13 +58,13 @@ private:
     const TChildLogTitle LogTitle;
     const TVChunkConfig VChunkConfig;
     const IDirectBlockGroupPtr DirectBlockGroup;
-    const TReadHint ReadHint;
     const TCallContextPtr CallContext;
     const std::shared_ptr<TReadBlocksLocalRequest> Request;
     const NWilson::TTraceId TraceId;
     const TDuration HedgingDelay;
     const TDuration RequestTimeout;
 
+    TReadRangeHint ReadHint;
     THostMask Requested;
     THostMask Failed;
 

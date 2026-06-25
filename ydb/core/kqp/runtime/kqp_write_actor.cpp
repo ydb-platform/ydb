@@ -1750,7 +1750,6 @@ public:
     void Write(IDataBatchPtr data) {
         AFL_ENSURE(!Closed);
         AFL_ENSURE(!IsError());
-        AFL_ENSURE(BufferedBatches.empty());
 
         if (!data->IsEmpty()) {
             Memory += data->GetMemory();

@@ -177,6 +177,12 @@ namespace {
                 COUNTER(DirectIO, RunningCount, false)
                 HISTOGRAM(DirectIO, QueueTime, latencyHistBounds)
             },
+#if defined(__linux__)
+            .UringCounters = {
+                COUNTER(DirectIO, CompletionThreadCPU, true)
+                COUNTER(DirectIO, CompletionThreadBusyTimeNs, true)
+            },
+#endif
             .PersistentBuffer = {
                 COUNTER(PersistentBuffer, AllocatedChunks, false)
                 COUNTER(PersistentBuffer, TotalBytes, false)

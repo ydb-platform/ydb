@@ -36,6 +36,8 @@ items:
   href: backup.md
 - name: Асинхронная репликация
   href: async-replication.md
+- name: IAM-аутентификация с делегированием сервисному аккаунту
+  href: iam-service-account-auth.md
 - name: Режим bridge
   href: bridge.md
 - name: Трансфер данных

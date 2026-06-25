@@ -6,28 +6,98 @@
 
 Для подключения к внешней базе {{ ydb-short-name }} со стороны другой базы {{ ydb-short-name }}, выступающей в роли движка обработки федеративных запросов, на последней требуется выполнить следующие шаги:
 
-1. Подготовить аутентификационные данные для доступа к удалённой базе {{ ydb-short-name }}. В настоящее время в федеративных запросах к {{ ydb-short-name }} доступен метод аутентификации по [логину и паролю](../../../security/authentication.md#static-credentials) (остальные методы не поддерживаются). Пароль к внешней базе сохраняется в виде [секрета](../../datamodel/secrets.md):
+1. Выбрать метод аутентификации и создать [внешний источник данных](../../datamodel/external_data_source.md), описывающий стороннюю базу {{ ydb-short-name }}. Поддерживаются два метода:
 
-   ```yql
-    CREATE SECRET ydb_datasource_user_password WITH (value = "<password>");
-    ```
-
-1. Создать [внешний источник данных](../../datamodel/external_data_source.md), описывающий стороннюю базу {{ ydb-short-name }}. Параметр `LOCATION` содержит сетевой адрес экземпляра {{ ydb-short-name }}, к которому осуществляется сетевое подключение. В `DATABASE_NAME` указывается имя базы данных (например, `local`). Для аутентификации во внешнюю базу используются значения параметров `LOGIN` и `PASSWORD_SECRET_PATH`. Включить шифрование соединений к внешней базе данных можно с помощью параметра `USE_TLS="TRUE"`. Если шифрование включено, то в поле `<port>` параметра `LOCATION` необходимо указать порт gRPCs внешней {{ ydb-short-name }}, в противном случае - порт gRPC.
-
-    ```yql
-    CREATE EXTERNAL DATA SOURCE ydb_datasource WITH (
-        SOURCE_TYPE="Ydb",
-        LOCATION="<host>:<port>",
-        DATABASE_NAME="<database>",
-        AUTH_METHOD="BASIC",
-        LOGIN="user",
-        PASSWORD_SECRET_PATH="ydb_datasource_user_password",
-        USE_TLS="TRUE"
-    );
-    ```
+    - [Аутентификация по логину и паролю](#basic-auth) — статические учётные данные пользователя целевой базы.
+    - [IAM-аутентификация](#iam-auth) с делегированием сервисному аккаунту — для долгосрочных запросов в облачных установках.
 
 1. {% include [!](_includes/connector_deployment.md) %}
 1. [Выполнить запрос](#query) к внешнему источнику данных.
+
+## Общие параметры подключения {#parameters}
+
+Независимо от выбранного метода аутентификации, при создании внешнего источника указываются следующие параметры:
+
+- `SOURCE_TYPE` -- тип источника, для базы {{ ydb-short-name }} должен быть `"Ydb"`.
+- `LOCATION` -- сетевой адрес экземпляра {{ ydb-short-name }} в формате `<host>:<port>`.
+- `DATABASE_NAME` -- имя или полный путь к целевой базе данных, например `local`.
+- `USE_TLS` -- включает шифрование соединения (`"TRUE"`/`"FALSE"`). Если шифрование включено, в `<port>` указывается порт gRPCs внешней {{ ydb-short-name }}, в противном случае — порт gRPC.
+
+Параметры, специфичные для метода аутентификации, описаны в соответствующих разделах ниже.
+
+## Аутентификация по логину и паролю {#basic-auth}
+
+В федеративных запросах к {{ ydb-short-name }} поддерживается аутентификация по [статическому логину и паролю](../../../security/authentication.md#static-credentials).
+
+### Создание внешнего источника {#basic-create}
+
+Сохраните пароль к внешней базе в виде [секрета](../../datamodel/secrets.md):
+
+```yql
+CREATE SECRET ydb_datasource_user_password WITH (value = "<password>");
+```
+
+Затем создайте внешний источник данных:
+
+```yql
+CREATE EXTERNAL DATA SOURCE ydb_datasource WITH (
+    SOURCE_TYPE="Ydb",
+    LOCATION="<host>:<port>",
+    DATABASE_NAME="<database>",
+    AUTH_METHOD="BASIC",
+    LOGIN="user",
+    PASSWORD_SECRET_PATH="ydb_datasource_user_password",
+    USE_TLS="TRUE"
+);
+```
+
+Параметры, специфичные для этого метода аутентификации:
+
+- `AUTH_METHOD="BASIC"` -- выбирает аутентификацию по логину и паролю.
+- `LOGIN` -- имя пользователя целевой базы.
+- `PASSWORD_SECRET_PATH` -- имя секрета, содержащего пароль.
+
+Общие параметры подключения описаны в разделе [{#T}](#parameters).
+
+## IAM-аутентификация {#iam-auth}
+
+Для долгосрочных запросов к ресурсам, расположенным в других облачных базах, поддерживается [IAM-аутентификация с делегированием сервисному аккаунту](../../iam-service-account-auth.md). Описание схемы, параметров и подготовки сервисного аккаунта приведено в общем разделе; ниже описаны специфичные для внешнего источника детали.
+
+### Подготовка сервисного аккаунта {#service-account}
+
+Сервисному аккаунту необходимо назначить одну из ролей на целевой базе данных:
+
+- `ydb.viewer` — для чтения из таблиц и топиков.
+- `ydb.editor` — для чтения/записи в топики и чтения из таблиц.
+
+Далее [делегирование сервисного аккаунта](../../iam-service-account-auth.md#service-account) включается обычным образом.
+
+### Создание внешнего источника {#create}
+
+Сохраните начальный IAM-токен в виде [секрета](../../datamodel/secrets.md) и создайте внешний источник данных:
+
+```yql
+CREATE SECRET <token_secret_name> WITH (value = "<iam_token>");
+
+CREATE EXTERNAL DATA SOURCE <source_name> WITH (
+    SOURCE_TYPE="Ydb",
+    LOCATION="<host>:<port>",
+    DATABASE_NAME="<database>",
+    AUTH_METHOD="IAM",
+    SERVICE_ACCOUNT_ID="<service_account_id>",
+    INITIAL_TOKEN_SECRET_PATH="<token_secret_name>",
+    USE_TLS="TRUE"
+);
+```
+
+Параметры, специфичные для этого метода аутентификации:
+
+- `AUTH_METHOD="IAM"` -- выбирает IAM-аутентификацию с делегированием сервисному аккаунту.
+- `SERVICE_ACCOUNT_ID`, `INITIAL_TOKEN_SECRET_PATH` -- описаны в разделе [{#T}](../../iam-service-account-auth.md#parameters).
+
+Общие параметры подключения описаны в разделе [{#T}](#parameters).
+
+Тип ресурса (таблица или топик) определяется автоматически при использовании внешнего источника и не задаётся в DDL.
 
 ## Синтаксис запросов {#query}
 

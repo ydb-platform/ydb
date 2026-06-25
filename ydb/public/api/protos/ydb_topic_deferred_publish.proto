@@ -65,8 +65,16 @@ message ListPublicationsResponse {
     Ydb.Operations.Operation operation = 1;
 }
 
+message PublicationSummary {
+    uint64 int_publication_id = 1;
+
+    string ext_publication_id = 2 [(Ydb.length).le = 2048];
+
+    optional string writer_identity = 3 [(Ydb.length).le = 2048];
+}
+
 message ListPublicationsResult {
-    repeated string ext_publication_id = 1;
+    repeated PublicationSummary publications = 1;
 }
 
 message DescribePublicationRequest {

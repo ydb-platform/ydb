@@ -394,7 +394,7 @@ class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
                         try:
                             check_background_operations()
                             break
-                        except AssertionError as e:
+                        except AssertionError:
                             if attempt == max_retries - 1:
                                 # Last attempt failed, re-raise the error
                                 raise

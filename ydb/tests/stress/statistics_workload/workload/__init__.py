@@ -136,7 +136,7 @@ class Workload(object):
             try:
                 self.check_background_operations(table_path)
                 break
-            except AssertionError as e:
+            except AssertionError:
                 if attempt == max_retries - 1:
                     # Last attempt failed, re-raise the error
                     raise

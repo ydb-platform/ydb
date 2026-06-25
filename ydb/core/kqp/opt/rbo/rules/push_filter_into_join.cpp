@@ -5,9 +5,53 @@ using namespace NYql::NNodes;
 using namespace NKikimr;
 using namespace NKikimr::NKqp;
 
+bool IsSimpleConstant(const TExprBase& input) {
+    if (auto maybeData = input.Maybe<TCoDataCtor>()) {
+        auto data = maybeData.Cast();
+        return data.Maybe<TCoBool>() || data.Maybe<TCoFloat>() || data.Maybe<TCoDouble>() || data.Maybe<TCoInt8>() || data.Maybe<TCoInt16>() ||
+               data.Maybe<TCoInt32>() || data.Maybe<TCoInt64>() || data.Maybe<TCoUint8>() || data.Maybe<TCoUint16>() || data.Maybe<TCoUint32>() ||
+               data.Maybe<TCoUint64>() || data.Maybe<TCoUtf8>() || data.Maybe<TCoString>() || data.Maybe<TCoDate>() || data.Maybe<TCoDate32>() ||
+               data.Maybe<TCoDatetime>() || data.Maybe<TCoDatetime64>() || data.Maybe<TCoTimestamp64>() || data.Maybe<TCoInterval64>() ||
+               data.Maybe<TCoInterval>() || data.Maybe<TCoTimestamp>();
+    }
+    return false;
+}
+
+bool IsAllowedComparator(TExprNode::TPtr input) {
+    return input->IsCallable({"==", "<=", ">=", "<", ">", "!=", "StringContains", "StartsWith", "EndsWith", "StringContainsIgnoreCase", "StartsWithIgnoreCase",
+                              "EndsWithIgnoreCase"});
+}
+
+bool IsSimpleColumnAccess(const TExprBase& colAccess, const TExprBase& columnArg) {
+    if (auto maybeMember = colAccess.Maybe<TCoMember>()) {
+        return maybeMember.Cast().Struct().Ptr().Get() == columnArg.Ptr().Get();
+    }
+    return false;
+}
+
+template <typename T>
+bool IsNullRejecting(const TExprBase& input, const TExprBase& lambdaArg) {
+    auto compare = input.Cast<T>();
+    auto leftArg = compare.Left();
+    auto rightArg = compare.Right();
+    return (IsSimpleColumnAccess(leftArg, lambdaArg) && IsSimpleConstant(rightArg)) || (IsSimpleColumnAccess(rightArg, lambdaArg) && IsSimpleConstant(leftArg));
+}
+
+TExprBase PruneNot(const TExprBase& node) {
+    if (auto maybeNot = node.Maybe<TCoNot>()) {
+        return maybeNot.Cast().Value();
+    }
+    return node;
+}
+
 bool IsNullRejectingPredicate(const TExpression& filter) {
-    // FIXME: Add proper analysis.
-    Y_UNUSED(filter);
+    auto lambda = TCoLambda(filter.GetLambda());
+    auto arg = lambda.Args().Arg(0);
+
+    auto predicate = PruneNot(lambda.Body());
+    if (IsAllowedComparator(predicate.Ptr())) {
+        return IsNullRejecting<TCoCompare>(predicate, arg);
+    }
     return false;
 }
 }
@@ -16,7 +60,7 @@ namespace NKikimr {
 namespace NKqp {
 
 // FIXME: We currently support pushing filter into Inner, Cross and Left Join
-TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) {
+TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
     Y_UNUSED(props);
 
@@ -115,7 +159,7 @@ TIntrusivePtr<IOperator> TPushFilterIntoJoinRule::SimpleMatchAndApply(const TInt
                 }
             }
             if (!predicatesForRightSide.empty()) {
-                auto rightExpr = MakeConjunction(pushRight, props.PgSyntax);
+                auto rightExpr = MakeConjunction(predicatesForRightSide, props.PgSyntax);
                 rightInput = MakeIntrusive<TOpFilter>(rightInput, input->Pos, rightExpr);
                 join->JoinKind = "Inner";
             } else if (!pushLeft.size()) {

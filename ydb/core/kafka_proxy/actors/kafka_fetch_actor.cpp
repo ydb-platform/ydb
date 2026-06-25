@@ -249,7 +249,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
         KAFKA_LOG_D("Fetch actor: Kafka record candidate. ResultsCount=" << partPQResponse.GetReadResult().GetResult().size()
             << ", Offset=" << result.GetOffset()
             << ", IsBatch=" << result.GetIsBatch()
-            << ", MessageCount=" << result.GetMessageCount()
+            << ", MessageCount=" << result.GetLogicalMessageCount()
             << ", ChunkType=" << static_cast<int>(dataChunk.GetChunkType())
             << ", Codec=" << (dataChunk.HasCodec() ? static_cast<int>(dataChunk.GetCodec()) : -1)
             << ", KafkaBatchCodec=" << static_cast<int>(KafkaBatchCodec())
@@ -258,7 +258,7 @@ void TKafkaFetchActor::FillRecordsBatch(const NKikimrClient::TPersQueueFetchResp
 
         if (isKafkaBatch) {
             flushRecordsBatch();
-            addRawKafkaBatch(dataChunk, result.GetMessageCount());
+            addRawKafkaBatch(dataChunk, result.GetLogicalMessageCount());
             continue;
         }
 

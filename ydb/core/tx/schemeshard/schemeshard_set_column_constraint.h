@@ -7,6 +7,10 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+TString SerializeSetColumnConstraintColumnNames(const std::vector<TString>& columns);
+std::vector<TString> DeserializeSetColumnConstraintColumnNames(const TString& serialized);
+
+
 struct TEvSetColumnConstraint {
     enum EEv {
         EvCreateRequest = EventSpaceBegin(TKikimrEvents::ES_SET_COLUMN_CONSTRAINT),

@@ -1,5 +1,13 @@
 # {{ ydb-short-name }} CLI changelog
 
+## Version 2.33.0 {#2-33-0}
+
+Released on June 23, 2026. To update to version **2.33.0**, select the [Downloads](downloads/ydb-cli.md) section.
+
+### Features
+
+* The AI assistant in the `{{ ydb-cli }}` [interactive mode](./reference/ydb-cli/interactive-cli.md) can now search the {{ ydb-short-name }} documentation, providing more accurate and context-aware answers.
+
 ## Version 2.32.0 {#2-32-0}
 
 Released on June 22, 2026. To update to version **2.32.0**, select the [Downloads](downloads/ydb-cli.md) section.

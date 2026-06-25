@@ -280,6 +280,154 @@ order by SessionId;)", "%Y-%m-%d %H:%M:%S %Z", sessionsSet.front().GetId().data(
         }
     }
 
+    Y_UNIT_TEST(SessionsTraceId) {
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.SetAuthToken("root@builtin");
+        TKikimrRunner kikimr(settings);
+
+        auto client = kikimr.GetQueryClient();
+        auto execSession = client.GetSession().GetValueSync().GetSession();
+        auto idleSession = client.GetSession().GetValueSync().GetSession();
+
+        const TString traceId = "test-trace-id-42";
+
+        NYdb::NQuery::TExecuteQuerySettings execSettings;
+        execSettings.TraceId(std::string(traceId));
+
+        auto result = execSession.ExecuteQuery(Sprintf(R"(--!syntax_v1
+            SELECT SessionId, State, TraceId
+            FROM `/Root/.sys/query_sessions`
+            WHERE SessionId IN ("%s", "%s");
+        )", execSession.GetId().data(), idleSession.GetId().data()),
+            NYdb::NQuery::TTxControl::NoTx(), execSettings).GetValueSync();
+
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        bool execChecked = false;
+        bool idleChecked = false;
+        NYdb::TResultSetParser parser(result.GetResultSet(0));
+        while (parser.TryNextRow()) {
+            auto sessionId = parser.ColumnParser("SessionId").GetOptionalUtf8().value();
+            auto state = parser.ColumnParser("State").GetOptionalUtf8().value();
+            auto trace = parser.ColumnParser("TraceId").GetOptionalUtf8();
+
+            if (sessionId == execSession.GetId()) {
+                UNIT_ASSERT_VALUES_EQUAL(state, "EXECUTING");
+                UNIT_ASSERT_C(trace.has_value(), "TraceId must be set for the executing session");
+                UNIT_ASSERT_VALUES_EQUAL(*trace, std::string(traceId));
+                execChecked = true;
+            } else if (sessionId == idleSession.GetId()) {
+                UNIT_ASSERT_VALUES_EQUAL(state, "IDLE");
+                UNIT_ASSERT_C(!trace.has_value(), "TraceId must be NULL for an IDLE session");
+                idleChecked = true;
+            }
+        }
+
+        UNIT_ASSERT_C(execChecked, "Executing session row not found in query_sessions");
+        UNIT_ASSERT_C(idleChecked, "Idle session row not found in query_sessions");
+    }
+
+    Y_UNIT_TEST(SessionsTraceIdClearedAfterExecution) {
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.SetAuthToken("root@builtin");
+        TKikimrRunner kikimr(settings);
+
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        const TString traceId = "test-trace-id-clear";
+
+        {
+            NYdb::NQuery::TExecuteQuerySettings execSettings;
+            execSettings.TraceId(std::string(traceId));
+
+            auto result = session.ExecuteQuery(Sprintf(R"(--!syntax_v1
+                SELECT SessionId, State, TraceId
+                FROM `/Root/.sys/query_sessions`
+                WHERE SessionId = "%s";
+            )", session.GetId().data()),
+                NYdb::NQuery::TTxControl::NoTx(), execSettings).GetValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            NYdb::TResultSetParser parser(result.GetResultSet(0));
+            UNIT_ASSERT_C(parser.TryNextRow(), "Expected a row for the executing session");
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("State").GetOptionalUtf8().value(), "EXECUTING");
+            auto trace = parser.ColumnParser("TraceId").GetOptionalUtf8();
+            UNIT_ASSERT_C(trace.has_value(), "TraceId must be set for the executing session");
+            UNIT_ASSERT_VALUES_EQUAL(*trace, std::string(traceId));
+        }
+
+        // After the query completes session becomes IDLE and TraceId must be NULL.
+        // Sysview updates may be asynchronous, so retry a bit.
+        bool checked = false;
+        for (ui32 attempt = 0; attempt < 50; ++attempt) {
+            auto checkSession = client.GetSession().GetValueSync().GetSession();
+            auto result = checkSession.ExecuteQuery(Sprintf(R"(--!syntax_v1
+                SELECT State, TraceId
+                FROM `/Root/.sys/query_sessions`
+                WHERE SessionId = "%s";
+            )", session.GetId().data()),
+                NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            NYdb::TResultSetParser parser(result.GetResultSet(0));
+            if (!parser.TryNextRow()) {
+                ::Sleep(TDuration::MilliSeconds(100));
+                continue;
+            }
+
+            auto state = parser.ColumnParser("State").GetOptionalUtf8();
+            auto trace = parser.ColumnParser("TraceId").GetOptionalUtf8();
+            if (state && *state == "IDLE") {
+                UNIT_ASSERT_C(!trace.has_value(), "TraceId must be NULL for an IDLE session");
+                checked = true;
+                break;
+            }
+
+            ::Sleep(TDuration::MilliSeconds(100));
+        }
+
+        UNIT_ASSERT_C(checked, "Timeout waiting for IDLE state in query_sessions");
+    }
+
+    Y_UNIT_TEST(SessionsTraceIdOverwriteSameSession) {
+        TKikimrSettings settings;
+        settings.SetWithSampleTables(false);
+        settings.SetAuthToken("root@builtin");
+        TKikimrRunner kikimr(settings);
+
+        auto client = kikimr.GetQueryClient();
+        auto session = client.GetSession().GetValueSync().GetSession();
+
+        auto runAndCheck = [&](const TString& traceId) {
+            NYdb::NQuery::TExecuteQuerySettings execSettings;
+            execSettings.TraceId(std::string(traceId));
+
+            auto result = session.ExecuteQuery(Sprintf(R"(--!syntax_v1
+                SELECT State, TraceId
+                FROM `/Root/.sys/query_sessions`
+                WHERE SessionId = "%s";
+            )", session.GetId().data()),
+                NYdb::NQuery::TTxControl::NoTx(), execSettings).GetValueSync();
+
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            NYdb::TResultSetParser parser(result.GetResultSet(0));
+            UNIT_ASSERT_C(parser.TryNextRow(), "Expected a row for the executing session");
+            UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("State").GetOptionalUtf8().value(), "EXECUTING");
+            auto trace = parser.ColumnParser("TraceId").GetOptionalUtf8();
+            UNIT_ASSERT_C(trace.has_value(), "TraceId must be set for the executing session");
+            UNIT_ASSERT_VALUES_EQUAL(*trace, std::string(traceId));
+        };
+
+        runAndCheck("test-trace-id-1");
+        runAndCheck("test-trace-id-2");
+    }
+
     Y_UNIT_TEST(PartitionStatsSimple) {
         TKikimrRunner kikimr;
         auto client = kikimr.GetTableClient();

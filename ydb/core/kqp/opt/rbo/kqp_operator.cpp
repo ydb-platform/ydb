@@ -1016,6 +1016,9 @@ TString TOpAggregate::ToString(TExprContext& ctx) {
         }
     }
     strBuilder << "]] ";
+    if (DistinctAll) {
+        strBuilder << " (Distinct all) ";
+    }
     strBuilder << ToStringPhase(AggregationPhase);
     return strBuilder;
 }

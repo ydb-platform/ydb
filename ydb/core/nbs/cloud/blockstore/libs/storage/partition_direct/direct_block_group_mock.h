@@ -15,7 +15,9 @@ struct TOracleMock: public IOracle
     TDuration WriteHedgingDelay;
     TDuration WriteRequestTimeout;
     TDuration PBufferReplyTimeout;
-    EWriteMode WriteMode = EWriteMode::DirectPBuffersFilling;
+    EWriteMode WriteMode = EWriteMode::DirectWrite;
+    TDuration FlushRequestTimeout;
+    TDuration EraseRequestTimeout;
 
     void OnRequestStarted(
         THostIndex hostIndex,
@@ -39,7 +41,9 @@ struct TOracleMock: public IOracle
     [[nodiscard]] TDuration GetReadRequestTimeout() const override;
     [[nodiscard]] TDuration GetWriteHedgingDelay() const override;
     [[nodiscard]] TDuration GetWriteRequestTimeout() const override;
-    [[nodiscard]] TDuration GetPBufferReplyTimeout() const override;
+    [[nodiscard]] TDuration GetIndirectWriteReplyTimeout() const override;
+    [[nodiscard]] TDuration GetFlushRequestTimeout() const override;
+    [[nodiscard]] TDuration GetEraseRequestTimeout() const override;
     [[nodiscard]] EWriteMode GetWriteMode() const override;
 
     [[nodiscard]] TString Dump() const override;

@@ -75,7 +75,7 @@ bool TPruneDeadReadColumnsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
 bool TPruneDeadAggregateTraitsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
 
-    if (input->Kind != EOperator::Aggregate) {
+    if (input->Kind != EOperator::Aggregate || CastOperator<TOpAggregate>(input)->IsDistinctAll()) {
         return false;
     }
 

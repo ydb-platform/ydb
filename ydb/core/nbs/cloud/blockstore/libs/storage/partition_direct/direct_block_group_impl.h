@@ -127,8 +127,6 @@ public:
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
-    void ReEstablishDDiskConnection(size_t index);
-
     ui64 GetDDiskSessionSeqNo(size_t index) const;
 
     // IHostStateController implementation

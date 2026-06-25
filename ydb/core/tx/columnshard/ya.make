@@ -106,10 +106,7 @@ RECURSE(
 RECURSE_FOR_TESTS(
     ut_rw
     ut_schema
-<<<<<<< HEAD
-=======
     backup
     data_accessor
     export
->>>>>>> 60a0ebeccb3 (session logic have been fixed (#44107))
 )

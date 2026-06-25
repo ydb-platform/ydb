@@ -3487,6 +3487,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
     }
 
     if (auto session = parent->CbContext->LockShared()) {
+        const auto& log = session->GetLog();
         const i64 partition_id = [parent](){
             if constexpr (UseMigrationProtocol) {
                 return parent->ServerMessage.partition();
@@ -3494,9 +3495,9 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                 return parent->ServerMessage.partition_session_id();
             }
         }();
-        LOG_LAZY(session->GetLog(), TLOG_DEBUG, TStringBuilder() << "Decompression task done. Partition/PartitionSessionId: "
-                                                                 << partition_id << " (" << minOffset << "-"
-                                                                 << maxOffset << ")");
+        LOG_LAZY(log, TLOG_DEBUG, TStringBuilder() << "Decompression task done. Partition/PartitionSessionId: "
+                                                   << partition_id << " (" << minOffset << "-"
+                                                   << maxOffset << ")");
     }
 
     Y_ASSERT(dataProcessed == SourceDataSize);

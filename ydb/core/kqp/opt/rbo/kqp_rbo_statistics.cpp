@@ -109,8 +109,8 @@ TOptimizerStatistics BuildOptimizerStatistics(TPhysicalOpProps& props, bool with
     }
 
 
-    return TOptimizerStatistics(props.Metadata->Type, 
-        withStatsAndCosts ? props.Statistics->EBytes : 0.0,
+    return TOptimizerStatistics(props.Metadata->Type,
+        withStatsAndCosts ? props.Statistics->ERows : 0.0,
         props.Metadata->ColumnsCount,
         withStatsAndCosts ? props.Statistics->EBytes : 0.0,
         withStatsAndCosts ? cost : 0.0,

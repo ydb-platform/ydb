@@ -282,7 +282,7 @@ void TQueryBase::RunStreamQuery(TString sql, NYdb::TParamsBuilder* params, ui64 
 
     Table::ExecuteScanQueryRequest request;
     request.set_mode(Table::ExecuteScanQueryRequest::MODE_EXEC);
-    *request.mutable_query()->mutable_yql_text() = sql;
+    *request.mutable_query()->mutable_yql_text() = std::move(sql);
 
     if (params) {
         *request.mutable_parameters() = NYdb::TProtoAccessor::GetProtoMap(params->Build());

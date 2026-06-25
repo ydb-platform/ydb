@@ -281,7 +281,7 @@ public:
 
     TQueryRetryActor(const NActors::TActorId& replyActorId, IRetryPolicy::TPtr retryPolicy, TArgs... args)
         : ReplyActorId(replyActorId)
-        , RetryPolicy(retryPolicy)
+        , RetryPolicy(std::move(retryPolicy))
         , CreateQueryActor([...args = std::forward<TArgs>(args)]() {
             return std::make_unique<TQueryActor>(args...);
         })

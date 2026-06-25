@@ -29,6 +29,7 @@
 #include <arrow/io/memory.h>
 
 #include <util/string/builder.h>
+#include <util/string/strip.h>
 
 #include <array>
 
@@ -149,6 +150,10 @@ struct TObjectStorageExternalSource : public IExternalSource {
 
         if (!proto.GetProperties().GetProperties().empty()) {
             throw TExternalSourceException() << "ObjectStorage source doesn't support any properties";
+        }
+
+        if (StripString(proto.GetLocation()).empty()) {
+            throw TExternalSourceException() << "ObjectStorage source must specify a non-empty location pointing to a bucket";
         }
 
         ValidateHostname(HostnamePatterns, proto.GetLocation());

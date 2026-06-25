@@ -3,6 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <util/random/random.h>
 #include <ydb/core/protos/external_sources.pb.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 
 namespace NKikimr {
 
@@ -87,6 +88,33 @@ Y_UNIT_TEST_SUITE(ObjectStorageTest) {
             general.set_location("*");
             general.mutable_attributes()->insert({"partitioned_by", "[year]"});
             UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Location '*' contains wildcards");
+        }
+    }
+
+    Y_UNIT_TEST(EmptyLocationValidation) {
+        const auto source = NExternalSource::CreateObjectStorageExternalSource({}, nullptr, 1000, nullptr, false, false);
+
+        {  // empty location is rejected with a clear error
+            NKikimrSchemeOp::TExternalDataSourceDescription proto;
+            UNIT_ASSERT_EXCEPTION_CONTAINS(source->ValidateExternalDataSource(proto.SerializeAsString()), NExternalSource::TExternalSourceException, "ObjectStorage source must specify a non-empty location pointing to a bucket");
+        }
+
+        {  // whitespace-only location is rejected as well
+            NKikimrSchemeOp::TExternalDataSourceDescription proto;
+            proto.SetLocation("   ");
+            UNIT_ASSERT_EXCEPTION_CONTAINS(source->ValidateExternalDataSource(proto.SerializeAsString()), NExternalSource::TExternalSourceException, "ObjectStorage source must specify a non-empty location pointing to a bucket");
+        }
+
+        {  // bucket-only location is accepted
+            NKikimrSchemeOp::TExternalDataSourceDescription proto;
+            proto.SetLocation("my-bucket");
+            UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(proto.SerializeAsString()));
+        }
+
+        {  // url with a bucket is accepted
+            NKikimrSchemeOp::TExternalDataSourceDescription proto;
+            proto.SetLocation("https://storage.yandexcloud.net/my-bucket/");
+            UNIT_ASSERT_NO_EXCEPTION(source->ValidateExternalDataSource(proto.SerializeAsString()));
         }
     }
 

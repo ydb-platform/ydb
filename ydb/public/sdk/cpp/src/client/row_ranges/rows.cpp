@@ -78,7 +78,7 @@ private:
                 Parser_.reset();
                 return false;
             }
-            Parser_.emplace(*next);
+            Parser_.emplace(std::move(*next));
         }
         return true;
     }
@@ -257,7 +257,7 @@ TRowIterator TRowRange::begin() {
     return BeginIterator(Impl_);
 }
 
-TRowIterEnd TRowRange::end() noexcept {
+TRowIterEnd TRowRange::end() const noexcept {
     return TRowIterEnd{};
 }
 

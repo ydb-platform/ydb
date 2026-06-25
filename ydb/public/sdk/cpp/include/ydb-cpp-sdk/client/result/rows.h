@@ -129,7 +129,7 @@ public:
     ~TRowRange();
 
     TRowIterator begin();
-    TRowIterEnd end() noexcept;
+    TRowIterEnd end() const noexcept;
 
     //! Build a typed-tuple view over this range.
     //! Args... are the column C++ types (e.g. int32_t, std::optional<std::string>);

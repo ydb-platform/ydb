@@ -109,6 +109,54 @@ Y_UNIT_TEST_SUITE(ObjectStorageTest) {
             UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Failed to parse partitioned_by:");
         }
     }
+
+    Y_UNIT_TEST(FailedLz4CompressionWithRawFormat) {
+        auto source = NExternalSource::CreateObjectStorageExternalSource({}, nullptr, 1000, nullptr, false, false);
+        NKikimrExternalSources::TSchema schema;
+        auto col = schema.add_column();
+        col->set_name("data");
+        col->mutable_type()->set_type_id(Ydb::Type::STRING);
+        NKikimrExternalSources::TGeneral general;
+        general.mutable_attributes()->insert({"format", "raw"});
+        general.mutable_attributes()->insert({"compression", "lz4"});
+        UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Compression 'lz4' is not supported for format 'raw'");
+    }
+
+    Y_UNIT_TEST(FailedLz4CompressionWithJsonListFormat) {
+        auto source = NExternalSource::CreateObjectStorageExternalSource({}, nullptr, 1000, nullptr, false, false);
+        NKikimrExternalSources::TSchema schema;
+        auto col = schema.add_column();
+        col->set_name("key");
+        col->mutable_type()->set_type_id(Ydb::Type::UINT64);
+        NKikimrExternalSources::TGeneral general;
+        general.mutable_attributes()->insert({"format", "json_list"});
+        general.mutable_attributes()->insert({"compression", "lz4"});
+        UNIT_ASSERT_EXCEPTION_CONTAINS(source->Pack(schema, general), NExternalSource::TExternalSourceException, "Compression 'lz4' is not supported for format 'json_list'");
+    }
+
+    Y_UNIT_TEST(SuccessLz4CompressionWithJsonEachRowFormat) {
+        auto source = NExternalSource::CreateObjectStorageExternalSource({}, nullptr, 1000, nullptr, false, false);
+        NKikimrExternalSources::TSchema schema;
+        auto col = schema.add_column();
+        col->set_name("key");
+        col->mutable_type()->set_type_id(Ydb::Type::UINT64);
+        NKikimrExternalSources::TGeneral general;
+        general.mutable_attributes()->insert({"format", "json_each_row"});
+        general.mutable_attributes()->insert({"compression", "lz4"});
+        UNIT_ASSERT_NO_EXCEPTION(source->Pack(schema, general));
+    }
+
+    Y_UNIT_TEST(SuccessGzipCompressionWithRawFormat) {
+        auto source = NExternalSource::CreateObjectStorageExternalSource({}, nullptr, 1000, nullptr, false, false);
+        NKikimrExternalSources::TSchema schema;
+        auto col = schema.add_column();
+        col->set_name("data");
+        col->mutable_type()->set_type_id(Ydb::Type::STRING);
+        NKikimrExternalSources::TGeneral general;
+        general.mutable_attributes()->insert({"format", "raw"});
+        general.mutable_attributes()->insert({"compression", "gzip"});
+        UNIT_ASSERT_NO_EXCEPTION(source->Pack(schema, general));
+    }
 }
 
 } // NKikimr

@@ -44,7 +44,7 @@ TClientBlob::TClientBlob()
 
 TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const TMaybe<TPartData>& partData,
         const TInstant writeTimestamp, const TInstant createTimestamp, const ui64 uncompressedSize,
-        TString&& partitionKey, TString&& explicitHashKey, ui32 messageCount, bool isBatch)
+        TString&& partitionKey, TString&& explicitHashKey, ui32 logicalMessageCount, bool isBatch)
         : SourceId(std::move(sourceId))
         , SeqNo(seqNo)
         , Data(std::move(data))
@@ -54,10 +54,10 @@ TClientBlob::TClientBlob(TString&& sourceId, ui64 seqNo, TString&& data, const T
         , UncompressedSize(uncompressedSize)
         , PartitionKey(std::move(partitionKey))
         , ExplicitHashKey(std::move(explicitHashKey))
-        , MessageCount(messageCount)
+        , LogicalMessageCount(logicalMessageCount)
         , IsBatch(isBatch) {
     Y_ENSURE(PartitionKey.size() <= 256);
-    Y_ENSURE(MessageCount >= 1 && MessageCount <= MAX_MESSAGE_COUNT);
+    Y_ENSURE(LogicalMessageCount >= 1 && LogicalMessageCount <= MAX_LOGICAL_MESSAGE_COUNT);
 }
 
 
@@ -91,7 +91,7 @@ TString TClientBlob::DebugString() const {
         << ", UncompressedSize=" << UncompressedSize
         << ", PartitionKey='" << PartitionKey << "'"
         << ", ExplicitHashKey='" << ExplicitHashKey << "'"
-        << ", MessageCount=" << MessageCount;
+        << ", LogicalMessageCount=" << LogicalMessageCount;
 
     if (PartData) {
         sb << ", PartNo=" << PartData->PartNo
@@ -155,18 +155,18 @@ void TBatch::AddBlob(const TClientBlob &b) {
     ui32 i = Blobs.size();
 
     if (!b.PartData || b.PartData->PartNo == 0 || Blobs.empty()) {
-        offsetDelta += b.MessageCount;
+        offsetDelta += b.LogicalMessageCount;
     }
 
     Blobs.push_back(b);
     unpackedSize += b.GetSerializedSize();
     if (b.IsLastPart()) {
-        count += b.MessageCount;
+        count += b.LogicalMessageCount;
     } else {
         InternalPartsPos.push_back(i);
     }
 
-    if (Header.HasOffsetDelta() || b.MessageCount > 1) {
+    if (Header.HasOffsetDelta() || b.LogicalMessageCount > 1) {
         Header.SetOffsetDelta(offsetDelta);
     } else {
         Header.ClearOffsetDelta();
@@ -272,11 +272,11 @@ TPosition TBatch::FindPos(const ui64 offset, const ui16 partNo) const {
     ui64 curOffset = GetOffset();
     ui16 curPartNo = GetPartNo();
     for (size_t i = 0; i < Blobs.size(); ++i) {
-        if (curOffset <= offset && curOffset + Blobs[i].MessageCount > offset && curPartNo == partNo) {
+        if (curOffset <= offset && curOffset + Blobs[i].LogicalMessageCount > offset && curPartNo == partNo) {
             return TPosition{static_cast<ui32>(i), curOffset, curPartNo};
         }
         if (Blobs[i].IsLastPart()) {
-            curOffset += Blobs[i].MessageCount;
+            curOffset += Blobs[i].LogicalMessageCount;
             curPartNo = 0;
         } else {
             ++curPartNo;
@@ -626,7 +626,7 @@ ui64 TPartitionedBlob::GetOffsetDelta() const {
     if (!Blobs.empty()) {
         for (const auto& blob : Blobs) {
             if (!blob.PartData || blob.PartData->PartNo == 0) {
-                offsetDelta += blob.MessageCount;
+                offsetDelta += blob.LogicalMessageCount;
             }
         }
     }

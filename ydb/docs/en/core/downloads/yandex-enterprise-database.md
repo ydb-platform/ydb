@@ -8,7 +8,7 @@ Yandex Enterprise Database is distributed under the terms of the license agreeme
 
 ### Free Usage
 
-Yandex Enterprise Database (Product) can be used free of charge [under the terms of the license agreement](https://ясубд.рф/cond/) for the following purposes:
+Yandex Enterprise Database (Product) can be used free of charge [under the terms of the license agreement](https://yandex.ru/legal/ydb_nc_eula/) for the following purposes:
 
 - To evaluate and study the Product's features
 - As part of software development and testing processes that use or embed Product functions
@@ -17,7 +17,7 @@ Yandex Enterprise Database (Product) can be used free of charge [under the terms
 
 ### Commercial Usage
 
-For commercial use of Yandex Enterprise Database, a license purchase is required, [license agreement text](https://ясубд.рф/cond-commercial/). License prices are available [upon request](https://forms.yandex.ru/surveys/13735628.a5bd9c7417fe06c03f7130d8863bed569e373119/).
+For commercial use of Yandex Enterprise Database, a license purchase is required, [license agreement text](https://yandex.ru/legal/ydb_comm_eula/). License prices are available [upon request](https://ydb.yandex.ru/#form).
 
 ## Downloading Distributions
 
@@ -29,85 +29,97 @@ Yandex Enterprise Database distributions are available for download via the link
 
 #|
 || **Version** | **Release date** | **Download** | **Checksums** | **Changelog** ||
-|| **v25.3** |  |  |  |  ||
-|| v.25.3.1.ent.3 | 12.06.2026 |
+|| **v25.4** |  |  |  |  ||
+|| v.25.4.1.ent.2 | 17.06.2026 |
 
-[Distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.3.1.ent.3/ydbd-enterpise-25.3.1.ent.3-stable-linux-amd64.tar.xz)
-[Debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.3.1.ent.3/ydbd-enterpise-25.3.1.ent.3-stable-linux-amd64-debug.tar.xz)
+[Distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.4.1.ent.2/ydbd-enterpise-25.4.1.ent.2-stable-linux-amd64.tar.xz)
+[Debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.4.1.ent.2/ydbd-enterpise-25.4.1.ent.2-stable-linux-amd64-debug.tar.xz)
 
 |
 
-[For distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.3.1.ent.3/checksums.txt)
-[For debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.3.1.ent.3/checksums.debug.txt)
+[For distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.4.1.ent.2/checksums.txt)
+[For debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.4.1.ent.2/checksums.debug.txt)
+
+| [See list](../changelog-enterprise.md#25-4-1-ent-2) ||
+|| **v25.3** |  |  |  |  ||
+|| v.25.3.1.ent.3 | 11.06.2026 |
+
+[Distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.3.1.ent.3/ydbd-enterpise-25.3.1.ent.3-stable-linux-amd64.tar.xz)
+[Debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.3.1.ent.3/ydbd-enterpise-25.3.1.ent.3-stable-linux-amd64-debug.tar.xz)
+
+|
+
+[For distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.3.1.ent.3/checksums.txt)
+[For debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.3.1.ent.3/checksums.debug.txt)
 
 | [See list](../changelog-enterprise.md#25-3-1-ent-3) ||
 || **v25.2** |  |  |  |  ||
-|| v.25.2.1.ent.13 | 12.06.2026 |
+|| v.25.2.1.ent.13 | 11.06.2026 |
 
-[Distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.2.1.ent.13/ydbd-enterpise-25.2.1.ent.13-stable-linux-amd64.tar.xz)
-[Debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.2.1.ent.13/ydbd-enterpise-25.2.1.ent.13-stable-linux-amd64-debug.tar.xz)
+[Distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.2.1.ent.13/ydbd-enterpise-25.2.1.ent.13-stable-linux-amd64.tar.xz)
+[Debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.2.1.ent.13/ydbd-enterpise-25.2.1.ent.13-stable-linux-amd64-debug.tar.xz)
 
 |
 
-[For distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.2.1.ent.13/checksums.txt)
-[For debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.2.1.ent.13/checksums.debug.txt)
+[For distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.2.1.ent.13/checksums.txt)
+[For debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.2.1.ent.13/checksums.debug.txt)
 
 | [See list](../changelog-enterprise.md#25-2-1-ent-13) ||
 || v.25.2.1.ent.4 | 12.02.2026 |
 
-[Distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.2.1.ent.4/ydbd-enterpise-25.2.1.ent.4-stable-linux-amd64.tar.xz)
-[Debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.2.1.ent.4/ydbd-enterpise-25.2.1.ent.4-stable-linux-amd64-debug.tar.xz)
+[Distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.2.1.ent.4/ydbd-enterpise-25.2.1.ent.4-stable-linux-amd64.tar.xz)
+[Debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.2.1.ent.4/ydbd-enterpise-25.2.1.ent.4-stable-linux-amd64-debug.tar.xz)
 
 |
 
-[For distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.2.1.ent.4/checksums.txt)
-[For debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.2.1.ent.4/checksums.debug.txt)
+[For distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.2.1.ent.4/checksums.txt)
+[For debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.2.1.ent.4/checksums.debug.txt)
 
 | [See list](../changelog-enterprise.md#25-2-1-ent-4) ||
 || **v25.1** |  |  |  |  ||
 || v.25.1.4.ent.8 | 12.02.2026 |
 
-[Distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.8/ydbd-enterpise-25.1.4.ent.8-stable-linux-amd64.tar.xz)
-[Debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.8/ydbd-enterpise-25.1.4.ent.8-stable-linux-amd64-debug.tar.xz)
+[Distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.1.4.ent.8/ydbd-enterpise-25.1.4.ent.8-stable-linux-amd64.tar.xz)
+[Debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.1.4.ent.8/ydbd-enterpise-25.1.4.ent.8-stable-linux-amd64-debug.tar.xz)
 
 |
 
-[For distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.8/checksums.txt)
-[For debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.8/checksums.debug.txt)
+[For distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.1.4.ent.8/checksums.txt)
+[For debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.1.4.ent.8/checksums.debug.txt)
 
 | [See list](../changelog-enterprise.md#25-1-4-ent-8) ||
 || v.25.1.4.ent.3 | 25.11.2025 |
 
-[Distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.3/ydbd-enterpise-25.1.4.ent.3-stable-linux-amd64.tar.xz)
-[Debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.3/ydbd-enterpise-25.1.4.ent.3-stable-linux-amd64-debug.tar.xz)
+[Distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.1.4.ent.3/ydbd-enterpise-25.1.4.ent.3-stable-linux-amd64.tar.xz)
+[Debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.1.4.ent.3/ydbd-enterpise-25.1.4.ent.3-stable-linux-amd64-debug.tar.xz)
 
 |
 
-[For distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.3/checksums.txt)
-[For debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/25.1.4.ent.3/checksums.debug.txt)
+[For distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.1.4.ent.3/checksums.txt)
+[For debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/25.1.4.ent.3/checksums.debug.txt)
 
 | [See list](../changelog-enterprise.md#25-1-4-ent-3) ||
 || **v24.4** |  |  |  |  ||
 || v.24.4.4.20 | 01.11.2025 |
 
-[Distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.20/ydbd-enterpise-24.4.4.ent.20-stable-linux-amd64.tar.xz)
-[Debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.20/ydbd-enterpise-24.4.4.ent.20-stable-linux-amd64-debug.tar.xz)
+[Distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/24.4.4.ent.20/ydbd-enterpise-24.4.4.ent.20-stable-linux-amd64.tar.xz)
+[Debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/24.4.4.ent.20/ydbd-enterpise-24.4.4.ent.20-stable-linux-amd64-debug.tar.xz)
 
 |
 
-[For distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.20/checksums.txt)
-[For debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.20/checksums.debug.txt)
+[For distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/24.4.4.ent.20/checksums.txt)
+[For debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/24.4.4.ent.20/checksums.debug.txt)
 
 | [See list](../changelog-enterprise.md#24-4-4-20) ||
 || v.24.4.4.15 | 19.09.2025 |
 
-[Distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.15/ydbd-enterpise-24.4.4.ent.15-stable-linux-amd64.tar.xz)
-[Debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.15/ydbd-enterpise-24.4.4.ent.15-stable-linux-amd64-debug.tar.xz)
+[Distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/24.4.4.ent.15/ydbd-enterpise-24.4.4.ent.15-stable-linux-amd64.tar.xz)
+[Debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/24.4.4.ent.15/ydbd-enterpise-24.4.4.ent.15-stable-linux-amd64-debug.tar.xz)
 
 |
 
-[For distribution](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.15/checksums.txt)
-[For debug symbols](http://binaries.ydb.enterprise.website.yandexcloud.net/builds/24.4.4.ent.15/checksums.debug.txt)
+[For distribution](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/24.4.4.ent.15/checksums.txt)
+[For debug symbols](https://storage.yandexcloud.net/binaries.ydb.enterprise/builds/24.4.4.ent.15/checksums.debug.txt)
 
 | [See list](../changelog-enterprise.md#24-4-4-15) ||
 || v.24.4.4.13 | 29.07.2025 |
@@ -178,10 +190,12 @@ Yandex Enterprise Database distributions are available for download via the link
 
 #|
 || **Version** | **Release date** | **Download** | **Changelog** ||
+|| **v25.4** |  |  |  |  ||
+|| v.25.4.1.ent.2 | 17.06.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.4.1.ent.2` | [See list](../changelog-enterprise.md#25-4-1-ent-2) ||
 || **v25.3** |  |  |  |  ||
-|| v.25.3.1.ent.3 | 12.06.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.3.1.ent.3` | [See list](../changelog-enterprise.md#25-3-1-ent-3) ||
+|| v.25.3.1.ent.3 | 11.06.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.3.1.ent.3` | [See list](../changelog-enterprise.md#25-3-1-ent-3) ||
 || **v25.2** |  |  |  |  ||
-|| v.25.2.1.ent.13 | 12.06.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.2.1.ent.13` | [See list](../changelog-enterprise.md#25-2-1-ent-13) ||
+|| v.25.2.1.ent.13 | 11.06.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.2.1.ent.13` | [See list](../changelog-enterprise.md#25-2-1-ent-13) ||
 || v.25.2.1.ent.4 | 12.02.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.2.1.ent.4` | [See list](../changelog-enterprise.md#25-2-1-ent-4) ||
 || **v25.1** |  |  |  |  ||
 || v.25.1.4.ent.8 | 12.02.2026 | `cr.yandex/crptqonuodf51kdj7a7d/ydb-enterpise:25.1.4.ent.8` | [See list](../changelog-enterprise.md#25-1-4-ent-8) ||

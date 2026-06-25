@@ -7,14 +7,7 @@
 
 #include <ydb/library/services/services.pb.h>
 
-#define LOG_E(stream) \
-    LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::FQ_INTERNAL_SERVICE, stream)
-#define LOG_W(stream) \
-    LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::FQ_INTERNAL_SERVICE, stream)
-#define LOG_I(stream) \
-    LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::FQ_INTERNAL_SERVICE, stream)
-#define LOG_D(stream) \
-    LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::FQ_INTERNAL_SERVICE, stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FQ_INTERNAL_SERVICE
 
 namespace NFq {
 
@@ -47,7 +40,7 @@ public:
 
     void Bootstrap() {
         Become(&TInternalService::StateFunc);
-        LOG_I("STARTED");
+        YDB_LOG_INFO("STARTED");
     }
 
 private:

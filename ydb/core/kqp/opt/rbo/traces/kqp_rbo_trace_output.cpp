@@ -35,7 +35,6 @@ std::optional<TRboTraceMetadataOverride> RboTraceMetadataOverride;
 
 optimizer_trace::TracePageOptions MakeRboTracePageOptions() {
     optimizer_trace::TracePageOptions options;
-    options.compression = optimizer_trace::GenerateOptions::Compression::Brotli;
     options.maxBufferedRules = 20;
     options.maxBufferedPayloadBytes = 8 * 1024 * 1024;
     options.flushOnEverySubmit = false;

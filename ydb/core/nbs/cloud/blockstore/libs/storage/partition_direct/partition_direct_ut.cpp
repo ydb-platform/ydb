@@ -654,8 +654,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 NKikimrServices::NBS_PARTITION,
                 NActors::NLog::PRI_DEBUG);
 
-            auto scopedService =
-                SetupStorage(env, EWriteMode::DirectPBuffersFilling);
+            auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
         }
         {
             TEnvironmentSetup env{{
@@ -667,8 +666,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
                 NKikimrServices::NBS_PARTITION,
                 NActors::NLog::PRI_DEBUG);
 
-            auto scopedService =
-                SetupStorage(env, EWriteMode::DirectPBuffersFilling);
+            auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
         }
     }
 
@@ -683,8 +681,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             NKikimrServices::NBS_PARTITION,
             NActors::NLog::PRI_DEBUG);
 
-        auto scopedService =
-            SetupStorage(env, EWriteMode::DirectPBuffersFilling);
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
 
         runtime->FilterFunction = [&](ui32, std::unique_ptr<IEventHandle>& ev)
         {
@@ -722,47 +719,45 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
     Y_UNIT_TEST(BasicWriteReadPBufferReplication)
     {
-        BasicWriteRead(EWriteMode::PBufferReplication);
+        BasicWriteRead(EWriteMode::IndirectWrite);
     }
 
     Y_UNIT_TEST(BasicWriteReadDirectPBufferFilling)
     {
-        BasicWriteRead(EWriteMode::DirectPBuffersFilling);
+        BasicWriteRead(EWriteMode::DirectWrite);
     }
 
     Y_UNIT_TEST(ShouldWriteAndReadBlocksInDifferentRegionsPBufferReplication)
     {
-        ShouldWriteAndReadBlocksInDifferentRegions(
-            EWriteMode::PBufferReplication);
+        ShouldWriteAndReadBlocksInDifferentRegions(EWriteMode::IndirectWrite);
     }
 
     Y_UNIT_TEST(ShouldWriteAndReadBlocksInDifferentRegionsDirectPBufferFilling)
     {
-        ShouldWriteAndReadBlocksInDifferentRegions(
-            EWriteMode::DirectPBuffersFilling);
+        ShouldWriteAndReadBlocksInDifferentRegions(EWriteMode::DirectWrite);
     }
 
     Y_UNIT_TEST(RandomWritesPBufferReplication)
     {
-        RandomWrites(EWriteMode::PBufferReplication);
+        RandomWrites(EWriteMode::IndirectWrite);
     }
 
     Y_UNIT_TEST(RandomWritesDirectPBufferFilling)
     {
-        RandomWrites(EWriteMode::DirectPBuffersFilling);
+        RandomWrites(EWriteMode::DirectWrite);
     }
 
     Y_UNIT_TEST(ShouldWriteAndReadMultipleBlocksPBufferReplication)
     {
-        ShouldWriteAndReadMultipleBlocks(EWriteMode::PBufferReplication);
+        ShouldWriteAndReadMultipleBlocks(EWriteMode::IndirectWrite);
     }
 
     Y_UNIT_TEST(ShouldWriteAndReadMultipleBlocksDirectPBufferFilling)
     {
-        ShouldWriteAndReadMultipleBlocks(EWriteMode::DirectPBuffersFilling);
+        ShouldWriteAndReadMultipleBlocks(EWriteMode::DirectWrite);
     }
 
-    // Test implementation for PBufferReplication write mode
+    // Test implementation for IndirectWrite write mode
     Y_UNIT_TEST(WriteToManyPBuffersFallback)
     {
         TEnvironmentSetup env{{
@@ -774,7 +769,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             NKikimrServices::NBS_PARTITION,
             NActors::NLog::PRI_DEBUG);
 
-        auto scopedService = SetupStorage(env, EWriteMode::PBufferReplication);
+        auto scopedService = SetupStorage(env, EWriteMode::IndirectWrite);
 
         auto partition = CreatePartitionTablet(env);
 
@@ -892,8 +887,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             NKikimrServices::NBS_PARTITION,
             NActors::NLog::PRI_DEBUG);
 
-        auto scopedService =
-            SetupStorage(env, EWriteMode::DirectPBuffersFilling);
+        auto scopedService = SetupStorage(env, EWriteMode::DirectWrite);
 
         auto partition = CreatePartitionTablet(env);
 
@@ -1004,7 +998,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
             NKikimrServices::NBS_PARTITION,
             NActors::NLog::PRI_DEBUG);
 
-        auto scopedService = SetupStorage(env, EWriteMode::PBufferReplication);
+        auto scopedService = SetupStorage(env, EWriteMode::IndirectWrite);
 
         auto partition = CreatePartitionTablet(env);
 
@@ -1099,7 +1093,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         auto scopedService = SetupStorage(
             env,
-            EWriteMode::DirectPBuffersFilling,
+            EWriteMode::DirectWrite,
             TDuration::Seconds(1),
             /*pbufferCleanupLsnStep=*/4,
             /*syncRequestsBatchSize=*/1);
@@ -1186,7 +1180,7 @@ Y_UNIT_TEST_SUITE(TPartitionDirectTest)
 
         auto scopedService = SetupStorage(
             env,
-            EWriteMode::DirectPBuffersFilling,
+            EWriteMode::DirectWrite,
             TDuration::Seconds(1),
             /*pbufferCleanupLsnStep=*/2,
             /*syncRequestsBatchSize=*/1);

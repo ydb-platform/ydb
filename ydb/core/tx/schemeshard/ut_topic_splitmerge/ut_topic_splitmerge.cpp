@@ -908,6 +908,53 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
 
     } // Y_UNIT_TEST(SplitByMinPartitionCount)
 
+    Y_UNIT_TEST(SplitByMinPartitionCountWithTwoIter) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        // create topic with split-merge with 1 partitions
+        CreateTopic(runtime, env, ++txId, 1);
+
+        // increase min partition count to 5 - should cause double splitting loop inside
+        ModifyTopic(runtime, env, ++txId, [&](auto& scheme) {
+            {
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMaxPartitionCount(100);
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMinPartitionCount(5);
+                scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetPartitionStrategyType(::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+            }
+        });
+
+        auto topic = DescribeTopic(runtime);
+        Cerr << "====================== Topic Modified ======================" << Endl << topic.DebugString() << Endl << Flush;
+        // expect: total 9, active 5
+        UNIT_ASSERT_VALUES_EQUAL(9, topic.GetPartitions().size());
+        for (const auto& p : topic.GetPartitions()) {
+            Cerr <<  ">>>>> Verify partition " << p.GetPartitionId() << Endl << Flush;
+            switch(p.GetPartitionId()) {
+                case 0:
+                case 1:
+                case 2:
+                case 3:
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::ETopicPartitionStatus::Inactive), static_cast<int>(p.GetStatus()));
+                    UNIT_ASSERT(p.GetChildPartitionIds().size() == 2);
+                    break;
+                case 4:
+                case 5:
+                case 6:
+                case 7:
+                case 8:
+                    UNIT_ASSERT_VALUES_EQUAL(static_cast<int>(::NKikimrPQ::ETopicPartitionStatus::Active), static_cast<int>(p.GetStatus()));
+                    break;
+                default:
+                    UNIT_ASSERT_C(false, "Unexpected partition id " << p.GetPartitionId());
+            }
+        }
+
+    } // Y_UNIT_TEST(SplitByMinPartitionCountWithTwoIter)
+
 } // Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest)
 
 Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergePrescribedPartitionsTest) {

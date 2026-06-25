@@ -168,13 +168,9 @@ public:
                 errStr = Sprintf("Invalid min and max partition count specified: %u > %u", strategy.GetMinPartitionCount(), strategy.GetMaxPartitionCount());
                 return nullptr;
             }
-            if (strategy.GetMinPartitionCount() > topic->ActivePartitionCount) { // request to increase active partitions
+            if (splitMergeEnabled && (strategy.GetMinPartitionCount() > topic->ActivePartitionCount)) { // request will increase active partitions
                 if (alter.MergeSize() || alter.SplitSize() || alter.RootPartitionBoundariesSize()) {
-                    errStr = Sprintf("Can't icrease active partitions and Split/Merge or change root boundaries at the same time");
-                    return nullptr;
-                }
-                if (!NPQ::SplitMergeEnabled(*tabletConfig)) {
-                    errStr = Sprintf("Can't icrease active partitions and enable Split/Merge strategy at the same time");
+                    errStr = Sprintf("Can't increase active partitions and Split/Merge or change root boundaries at the same time");
                     return nullptr;
                 }
             }
@@ -938,6 +934,10 @@ public:
                     {
                         auto splitBoundary = NKikimr::NPQ::MiddleOf(keyRange.FromBound.GetOrElse(""), keyRange.ToBound.GetOrElse(""));
 
+                        if (!involvedPartitions.emplace(parentPartitionId).second) {
+                            return std::unexpected(TStringBuilder()
+                                    << "Partition can be involved only in one split/merge operation: " << parentPartitionId);
+                        }
                         const THashSet<ui32> parents{parentPartitionId};
                         const TTopicTabletInfo::TKeyRange childRange[2]{
                             {
@@ -967,9 +967,14 @@ public:
                     // start splitting
                     while(!partitionsToSplit.IsEmpty()) {
                         auto splittedPartition = partitionsToSplit.ExtractOne();
-                        const auto keyRange = splittedPartition->KeyRange;
+                        auto keyRange = splittedPartition->KeyRange;
                         if (!keyRange) {
-                            continue;
+                            // if there is only one partition then it may not have a key range
+                            if (topic->Partitions.size() == 1) {
+                                keyRange.ConstructInPlace();
+                            } else {
+                                continue;
+                            }
                         }
 
                         auto res = SplitPartition(*keyRange, splittedPartition->PqId, alterData->PartitionsToAdd);
@@ -987,9 +992,12 @@ public:
                     }
 
                     // repeat splitting
+                    size_t startIdx = 0;
                     while (requestedMinPartitionCount > alterData->ActivePartitionCount) {
                         TVector<NKikimr::NSchemeShard::TTopicInfo::TPartitionToAdd> partitionsToAdd;
-                        for (const auto& partition : alterData->PartitionsToAdd) {
+                        auto endIdx = alterData->PartitionsToAdd.size();
+                        for (size_t i = startIdx; i < endIdx; ++i) {
+                            const auto& partition = alterData->PartitionsToAdd[i];
                             if (!partition.KeyRange) {
                                 errStr = TStringBuilder() << "Split error: unexpected";
                                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
@@ -1011,6 +1019,7 @@ public:
                             result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                             return result;
                         }
+                        startIdx = endIdx;
                         alterData->PartitionsToAdd.insert(alterData->PartitionsToAdd.end(), partitionsToAdd.begin(), partitionsToAdd.end());
                     }
                 }

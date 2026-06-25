@@ -295,16 +295,11 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroupMock::SyncWithPBuffer(
 
 NThreading::TFuture<TDBGEraseResponse>
 TDirectBlockGroupMock::BatchEraseFromPBuffer(
-    ui32 vChunkIndex,
     THostIndex hostIndex,
-    const TVector<TPBufferSegment>& segments,
+    const TEraseSegments& segments,
     const NWilson::TTraceId& traceId)
 {
-    return BatchEraseFromPBufferHandler(
-        vChunkIndex,
-        hostIndex,
-        segments,
-        traceId);
+    return BatchEraseFromPBufferHandler(hostIndex, segments, traceId);
 }
 
 void TDirectBlockGroupMock::BarrierEraseFromPBuffer(ui64 lsn)

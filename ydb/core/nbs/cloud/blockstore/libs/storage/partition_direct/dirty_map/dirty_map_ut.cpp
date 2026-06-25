@@ -509,9 +509,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         // number of write operations.
         eraseHints = dirtyMap.MakeEraseHint(2);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0:123[10..19],124[20..29];"
-            "H1:123[10..19],124[20..29];"
-            "H2:123[10..19],124[20..29];",
+            "H0:0:123,0:124;"
+            "H1:0:123,0:124;"
+            "H2:0:123,0:124;",
             eraseHints.DebugPrint());
 
         // After getting erase hints, we should not get it once again
@@ -526,9 +526,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         dirtyMap.EraseFinished(THostIndex{2}, {}, {123, 124});
 
         eraseHints = dirtyMap.MakeEraseHint(2);
-        UNIT_ASSERT_VALUES_EQUAL(
-            "H2:123[10..19],124[20..29];",
-            eraseHints.DebugPrint());
+        UNIT_ASSERT_VALUES_EQUAL("H2:0:123,0:124;", eraseHints.DebugPrint());
 
         // Should still have two inflight items
         UNIT_ASSERT_VALUES_EQUAL(2, dirtyMap.GetInflightCount());
@@ -687,20 +685,20 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Finish flushes
         for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap.FlushFinished(route, hint.MakeLsnVector(), {});
+            dirtyMap.FlushFinished(route, MakeLsnVector(hint.Segments), {});
         }
 
         // Erase hints
         auto eraseHints = dirtyMap.MakeEraseHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H1:123[10..19];"
-            "H2:123[10..19];"
-            "H3:123[10..19];",
+            "H1:0:123;"
+            "H2:0:123;"
+            "H3:0:123;",
             eraseHints.DebugPrint());
 
         // Finish erasing
         for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap.EraseFinished(host, hint.MakeLsnVector(), {});
+            dirtyMap.EraseFinished(host, MakeLsnVector(hint.Segments), {});
         }
     }
 
@@ -741,20 +739,20 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Finish flushes
         for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap.FlushFinished(route, hint.MakeLsnVector(), {});
+            dirtyMap.FlushFinished(route, MakeLsnVector(hint.Segments), {});
         }
 
         // Erase hints
         auto eraseHints = dirtyMap.MakeEraseHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H1:123[10..19];"
-            "H2:123[10..19];"
-            "H3:123[10..19];",
+            "H1:0:123;"
+            "H2:0:123;"
+            "H3:0:123;",
             eraseHints.DebugPrint());
 
         // Finish erasing
         for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap.EraseFinished(host, hint.MakeLsnVector(), {});
+            dirtyMap.EraseFinished(host, MakeLsnVector(hint.Segments), {});
         }
     }
 
@@ -804,20 +802,20 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Finish flushes
         for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap.FlushFinished(route, hint.MakeLsnVector(), {});
+            dirtyMap.FlushFinished(route, MakeLsnVector(hint.Segments), {});
         }
 
         // Erase hints
         auto eraseHints = dirtyMap.MakeEraseHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H2:123[10..19];"
-            "H3:123[10..19];"
-            "H4:123[10..19];",
+            "H2:0:123;"
+            "H3:0:123;"
+            "H4:0:123;",
             eraseHints.DebugPrint());
 
         // Finish erasing
         for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap.EraseFinished(host, hint.MakeLsnVector(), {});
+            dirtyMap.EraseFinished(host, MakeLsnVector(hint.Segments), {});
         }
     }
 
@@ -862,19 +860,19 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         // Finish flushes
         for (const auto& [route, hint]: flushHint.GetAllHints()) {
-            dirtyMap.FlushFinished(route, hint.MakeLsnVector(), {});
+            dirtyMap.FlushFinished(route, MakeLsnVector(hint.Segments), {});
         }
 
         // Erase hints
         auto eraseHints = dirtyMap.MakeEraseHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H1:123[10..19];"
-            "H2:123[10..19];",
+            "H1:0:123;"
+            "H2:0:123;",
             eraseHints.DebugPrint());
 
         // Finish erasing
         for (const auto& [host, hint]: eraseHints.GetAllHints()) {
-            dirtyMap.EraseFinished(host, hint.MakeLsnVector(), {});
+            dirtyMap.EraseFinished(host, MakeLsnVector(hint.Segments), {});
         }
 
         // Should remove inflight items
@@ -994,7 +992,7 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
         auto flushHint = dirtyMap.MakeFlushHint(1);
         UNIT_ASSERT_EQUAL(false, flushHint.Empty());
         for (const auto& [route, flush]: flushHint.GetAllHints()) {
-            dirtyMap.FlushFinished(route, {flush.MakeLsnVector()}, {});
+            dirtyMap.FlushFinished(route, {MakeLsnVector(flush.Segments)}, {});
         }
 
         // Lock pbuffer
@@ -1206,9 +1204,9 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
 
         auto eraseHints = dirtyMap.MakeEraseHint(1);
         UNIT_ASSERT_VALUES_EQUAL(
-            "H0:123[0..99];"
-            "H1:123[0..99];"
-            "H2:123[0..99];",
+            "H0:0:123;"
+            "H1:0:123;"
+            "H2:0:123;",
             eraseHints.DebugPrint());
 
         dirtyMap.EraseFinished(THostIndex{0}, {123}, {});

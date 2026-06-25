@@ -345,6 +345,8 @@ private:
     bool CheckSysTabletsNode(const TActionOptions &opts,
         const TNodeInfo &node,
         TErrorInfo &error) const;
+    void SortActionsBySysTabletPriority(
+        NKikimrCms::TPermissionRequest &request) const;
     bool TryToLockNode(const NKikimrCms::TAction &action,
         const TActionOptions &options,
         const TNodeInfo &node,

@@ -114,7 +114,6 @@ public:
 
     NThreading::TFuture<TEvErasePersistentBufferResult> BatchEraseFromPBuffer(
         const THostConnection& connection,
-        TVector<NKikimr::NDDisk::TBlockSelector> selectors,
         TVector<ui64> lsns,
         NWilson::TSpan* span) override;
 

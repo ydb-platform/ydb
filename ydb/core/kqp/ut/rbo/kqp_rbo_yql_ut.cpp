@@ -1279,7 +1279,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         std::vector<std::string> queries = {
             R"(
                 $subselect = (select a, b from `/Root/t1`);
-                SELECT t1.a, t1.b FROM $subselect as t1 join $subselect as t2 on t1.a = t2.a WHERE t1.a == 1 and t1.b = 1 order by t1.a;
+                SELECT t1.a, t1.b FROM $subselect as t1 join $subselect as t2 on t1.a = t2.a WHERE t1.a == 1 and t1.b == 1 order by t1.a;
             )",
         };
 
@@ -1931,11 +1931,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 select avg(distinct t1.a) as r0, avg(distinct t1.c) as r1 from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
-            /*
             R"(
-                select distinct t1.b from `/Root/t1` as t1 group by t1.a, t1.b;
+                PRAGMA YqlSelect = 'force';
+                select distinct coalesce(t1.a, 0) as a, coalesce(t1.b, 1) as b, unwrap(t1.c) as c from `/Root/t1` as t1 order by a, b, c;
             )",
-            */
         };
 
         std::vector<std::string> results = {
@@ -1991,6 +1990,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                                             R"([[2u;1u];[3u;1u]])",
                                             R"([[0;[2]];[1;[2]]])",
                                             R"([[2.;[2.]];[2.;[2.]]])",
+                                            R"([[0;2;2];[1;1;2];[2;2;2];[3;1;2];[4;2;2]])",
                                         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -2682,6 +2682,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             Y_ENSURE(result.IsSuccess());
         }
     }
+
+    /* For debug purpose, just uncomment and run.
+    Y_UNIT_TEST(TPCDS_Q1) {
+        RunTPC_YqlTest(EBenchType::TPCDS, 1, true, true);
+    }
+    */
 
     NKikimrKqp::TKqpSetting MakeTPCHStatsSetting() {
         NKikimrKqp::TKqpSetting statsSetting;
@@ -5731,6 +5737,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 a Int64 NOT NULL,
                 b Int64,
                 c Int64,
+                d Utf8,
                 primary key(a)
             ) WITH (STORE = column);
         )";
@@ -5763,10 +5770,30 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 SELECT t1.a, t2.b FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where t2.b < 1;
             )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.b FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where t2.d like '%abcd%';
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.b FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where t2.d not like '%abcd%';
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.b FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where not(t2.b == 10);
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.b FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where t2.d like 'abcd%';
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.b FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where t2.d like '%abcd';
+            )",
         };
 
         auto queryClient = kikimr.GetQueryClient();
-        const std::unordered_set<ui32> rewriteLeftInnerQueries{2, 3, 4, 5};
+        const std::unordered_set<ui32> notRewriteLeftInnerQueries{0, 1};
         for (ui32 i = 0; i < queries.size(); ++i) {
             const auto& query = queries[i];
             auto session = queryClient.GetSession().GetValueSync().GetSession();
@@ -5776,7 +5803,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             auto ast = *result.GetStats()->GetAst();
             Y_ENSURE(ast.find("KqpOlapFilter") != std::string::npos, TStringBuilder() << "Filter not pushed down.");
-            Y_ENSURE(!rewriteLeftInnerQueries.contains(i) || (ast.find("Inner") != std::string::npos), TStringBuilder() << "Expected inner join");
+            Y_ENSURE(notRewriteLeftInnerQueries.contains(i) || (ast.find("Inner") != std::string::npos), TStringBuilder() << "Expected inner join");
 
             result =
                 session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))

@@ -11,7 +11,7 @@
 namespace NYql::NDq {
 
 template <typename TPartitionKey>
-struct TDqSourceWatermarkTracker {
+class TDqSourceWatermarkTracker {
 public:
     TDqSourceWatermarkTracker(
         TDuration granularity,
@@ -77,10 +77,10 @@ private:
     }
 
 private:
-    const TDuration Granularity_;
-    const bool IdlePartitionsEnabled_;
-    const TDuration LateArrivalDelay_;
-    const TDuration IdleTimeout_;
+    TDuration Granularity_;
+    bool IdlePartitionsEnabled_;
+    TDuration LateArrivalDelay_;
+    TDuration IdleTimeout_;
 
     TDqWatermarkTrackerImpl<TPartitionKey> Impl_;
 };

@@ -3,8 +3,6 @@
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/library/actors/protos/interconnect.pb.h>
 
-#include <util/generic/bitops.h>
-
 namespace NActors {
     TString EventPBBaseToString(const TString& header, const TString& dbgStr) {
         TString res;
@@ -463,7 +461,10 @@ namespace NActors {
     }
 
     TEventSerializationInfo CreateSerializationInfoImpl(size_t preserializedSize, bool allowExternalDataChannel,
-            const TVector<TRope> &payload, ssize_t recordSize, size_t payloadAlignment) {
+            const TVector<TRope> &payload, ssize_t recordSize, size_t payloadAlignment, size_t payloadHeaderSize) {
+        Y_DEBUG_ABORT_UNLESS(payloadAlignment == 0 || IsPowerOf2(payloadAlignment));
+        Y_DEBUG_ABORT_UNLESS(payloadAlignment == 0 || payloadHeaderSize % payloadAlignment == 0);
+
         TEventSerializationInfo info;
         info.IsExtendedFormat = static_cast<bool>(payload);
 
@@ -474,14 +475,15 @@ namespace NActors {
                 for (const TRope& rope : payload) {
                     headerLen += SerializeNumber(rope.size(), temp);
                 }
-                info.Sections.push_back(TEventSectionInfo{0, headerLen, 0, 0, true, false});
+                info.Sections.push_back(TEventSectionInfo{0, headerLen, 0, 0, true /*IsInline*/, false /*IsRdma*/});
+
                 for (const TRope& rope : payload) {
-                    info.Sections.push_back(TEventSectionInfo{0, rope.size(), 0, payloadAlignment, false, IsRdma(rope)});
+                    info.Sections.push_back(TEventSectionInfo{payloadHeaderSize, rope.size(), 0, payloadAlignment, false /*IsInline*/, IsRdma(rope)});
                 }
             }
 
             const size_t byteSize = Max<ssize_t>(0, recordSize) + preserializedSize;
-            info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true, false}); // protobuf itself
+            info.Sections.push_back(TEventSectionInfo{0, byteSize, 0, 0, true /*IsInline*/, false /*IsRdma*/}); // protobuf itself
 
 #ifndef NDEBUG
             size_t total = 0;
@@ -491,8 +493,6 @@ namespace NActors {
             size_t serialized = CalculateSerializedSizeImpl(payload, recordSize);
             Y_ENSURE(total == serialized, "total# " << total << " serialized# " << serialized
                 << " byteSize# " << byteSize << " payload.size# " << payload.size());
-
-            Y_ENSURE(payloadAlignment == 0 || IsPowerOf2(payloadAlignment));
 #endif
         }
 

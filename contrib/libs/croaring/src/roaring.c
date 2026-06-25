@@ -1872,12 +1872,37 @@ uint32_t roaring_uint32_iterator_read(roaring_uint32_iterator_t *it,
             it->has_value = true;
             it->current_value = it->highbits | low16;
             // If the container still has values, we must have stopped because
-            // we skipped enough values.
+            // we read enough values.
             assert(ret == count);
             return ret;
         }
         it->container_index++;
         it->has_value = loadfirstvalue(it);
+    }
+    return ret;
+}
+
+uint32_t roaring_uint32_iterator_read_backward(roaring_uint32_iterator_t *it,
+                                               uint32_t *buf, uint32_t count) {
+    uint32_t ret = 0;
+    while (it->has_value && ret < count) {
+        uint32_t consumed;
+        uint16_t low16 = (uint16_t)it->current_value;
+        bool has_value = container_iterator_read_backward_into_uint32(
+            it->container, it->typecode, &it->container_it, it->highbits, buf,
+            count - ret, &consumed, &low16);
+        ret += consumed;
+        buf += consumed;
+        if (has_value) {
+            it->has_value = true;
+            it->current_value = it->highbits | low16;
+            // If the container still has values, we must have stopped because
+            // we read enough values.
+            assert(ret == count);
+            return ret;
+        }
+        it->container_index--;
+        it->has_value = loadlastvalue(it);
     }
     return ret;
 }
@@ -1928,6 +1953,72 @@ uint32_t roaring_uint32_iterator_skip_backward(roaring_uint32_iterator_t *it,
         // Moving to the previous container counts as consuming one more skip.
         it->container_index--;
         it->has_value = loadlastvalue(it);
+    }
+    return ret;
+}
+
+size_t roaring_uint32_iterator_read_ranges(roaring_uint32_iterator_t *it,
+                                           roaring_uint32_range_closed_t *buf,
+                                           size_t count) {
+    size_t ret = 0;
+    while (it->has_value && ret < count) {
+        buf[ret].min = it->current_value;
+        for (;;) {
+            uint16_t low16 = (uint16_t)it->current_value;
+            bool container_has_more;
+            uint16_t run_end_low16 = container_iterator_find_run_end(
+                it->container, it->typecode, &it->container_it, &low16,
+                &container_has_more);
+            buf[ret].max = it->highbits | run_end_low16;
+
+            if (container_has_more) {
+                it->current_value = it->highbits | low16;
+                break;
+            }
+            // Move to next container
+            it->container_index++;
+            it->has_value = loadfirstvalue(it);
+            // Continue merging only if the run reached the container
+            // boundary and the next container starts exactly at max+1.
+            if (run_end_low16 != UINT16_MAX || !it->has_value ||
+                it->current_value != buf[ret].max + 1) {
+                break;
+            }
+        }
+        ret++;
+    }
+    return ret;
+}
+
+size_t roaring_uint32_iterator_read_prev_ranges(
+    roaring_uint32_iterator_t *it, roaring_uint32_range_closed_t *buf,
+    size_t count) {
+    size_t ret = 0;
+    while (it->has_value && ret < count) {
+        buf[ret].max = it->current_value;
+        for (;;) {
+            uint16_t low16 = (uint16_t)it->current_value;
+            bool container_has_more;
+            uint16_t run_start_low16 = container_iterator_find_run_start(
+                it->container, it->typecode, &it->container_it, &low16,
+                &container_has_more);
+            buf[ret].min = it->highbits | run_start_low16;
+
+            if (container_has_more) {
+                it->current_value = it->highbits | low16;
+                break;
+            }
+            // Move to previous container
+            it->container_index--;
+            it->has_value = loadlastvalue(it);
+            // Continue merging only if the run reached the container
+            // boundary and the previous container ends exactly at min-1.
+            if (run_start_low16 != 0 || !it->has_value ||
+                it->current_value != buf[ret].min - 1) {
+                break;
+            }
+        }
+        ret++;
     }
     return ret;
 }

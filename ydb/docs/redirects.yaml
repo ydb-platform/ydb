@@ -84,7 +84,7 @@ common:
   - from: /deploy/index.md
     to: /devops/index.md
   - from: /deploy/manual/deploy-ydb-on-premises.md
-    to: /devops/manual/initial-deployment.md
+    to: /devops/deployment-options/manual/initial-deployment/index.md
   - from: /deploy/configuration/config.md
     to: /reference/configuration/index.md
   - from: /deploy/manual/connector.md
@@ -121,6 +121,10 @@ common:
     to: /devops/configuration-management/configuration-v1/cms.md
   - from: /devops/manual/upgrade.md
     to: /devops/deployment-options/manual/update-executable.md
+  - from: /devops/manual/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.md
+  - from: /devops/backup-and-recovery.md
+    to: /devops/backup-and-recovery/index.md
 
   # Redirects for Deployment Options
   - from: /devops/(ansible|kubernetes|manual)/(.*)$
@@ -367,14 +371,6 @@ common:
     to: recipes/ydb-sdk/balancing.md
   - from: reference/ydb-sdk/recipes/bulk-upsert.md
     to: recipes/ydb-sdk/bulk-upsert.md
-  - from: reference/ydb-sdk/recipes/debug-jaeger.md
-    to: recipes/ydb-sdk/debug-jaeger.md
-  - from: reference/ydb-sdk/recipes/debug-logs.md
-    to: recipes/ydb-sdk/debug-logs.md
-  - from: reference/ydb-sdk/recipes/debug-prometheus.md
-    to: recipes/ydb-sdk/debug-prometheus.md
-  - from: reference/ydb-sdk/recipes/debug.md
-    to: recipes/ydb-sdk/debug.md
   - from: reference/ydb-sdk/recipes/index.md
     to: recipes/ydb-sdk/index.md
   - from: reference/ydb-sdk/recipes/init.md
@@ -481,6 +477,28 @@ common:
   - from: /olap/datasets/(.*)$
     to: /analyst/datasets/$1
 
+  # Redirects for query_execution
+  
+  - from: /concepts/query_execution.md
+    to: /concepts/query_execution/index.md
+  - from: /concepts/mvcc.md
+    to: /concepts/query_execution/mvcc.md
+  - from: /concepts/optimizer.md
+    to: /concepts/query_execution/optimizer.md
+  - from: /concepts/spilling.md
+    to: /concepts/query_execution/spilling.md
+  - from: /concepts/vector_search.md
+    to: /concepts/query_execution/vector_search.md
+  - from: /concepts/secondary_indexes.md
+    to: /concepts/query_execution/secondary_indexes.md
+  - from: /concepts/scan_query.md
+    to: /concepts/query_execution/scan_query.md
+  - from: /reference/ydb-cli/commands/scan-query.md
+    to: /reference/ydb-cli/scan-query.md
+  - from: /yql/reference/syntax/analyze.md
+    to: /concepts/query_execution/optimizer.md
+  - from: /concepts/federated_query/(.*)$
+    to: /concepts/query_execution/federated_query/$1
 
 ru:
   - from: /postgresql/index.md
@@ -495,27 +513,52 @@ ru:
     to: /devops/configuration-management/configuration-v1/cluster-expansion.md
   - from: /concepts/topic.md
     to: /concepts/datamodel/topic.md
+  - from: /reference/ydb-sdk/recipes/debug.md
+    to: /reference/ydb-sdk/observability/index.md
+  - from: /reference/ydb-sdk/recipes/debug-logs.md
+    to: /reference/ydb-sdk/observability/logging/logging.md
+  - from: /reference/ydb-sdk/recipes/debug-prometheus.md
+    to: /reference/ydb-sdk/observability/metrics/prometheus.md
+  - from: /reference/ydb-sdk/recipes/debug-jaeger.md
+    to: /reference/ydb-sdk/observability/tracing/jaeger.md
+  - from: /recipes/ydb-sdk/debug.md
+    to: /reference/ydb-sdk/observability/index.md
+  - from: /recipes/ydb-sdk/debug-logs.md
+    to: /reference/ydb-sdk/observability/logging/logging.md
+  - from: /recipes/ydb-sdk/debug-logs-otel.md
+    to: /reference/ydb-sdk/observability/logging/opentelemetry.md
+  - from: /recipes/ydb-sdk/debug-prometheus.md
+    to: /reference/ydb-sdk/observability/metrics/prometheus.md
+  - from: /recipes/ydb-sdk/debug-otel-metrics.md
+    to: /reference/ydb-sdk/observability/metrics/opentelemetry.md
+  - from: /recipes/ydb-sdk/debug-jaeger.md
+    to: /reference/ydb-sdk/observability/tracing/jaeger.md
+  - from: /recipes/ydb-sdk/debug-otel-tracing.md
+    to: /reference/ydb-sdk/observability/tracing/opentelemetry.md
 
 en:
-  - from: /concepts/query_execution.md
-    to: /concepts/query_execution/index.md
-  - from: /concepts/mvcc.md
-    to: /concepts/query_execution/mvcc.md
-  - from: /concepts/optimizer.md
-    to: /concepts/query_execution/optimizer.md
-  - from: /concepts/spilling.md
-    to: /concepts/query_execution/spilling.md
-  - from: /concepts/vector_search.md
-    to: /concepts/query_execution/vector_search.md
-  - from: /concepts/secondary_indexes.md
-    to: /concepts/query_execution/secondary_indexes.md
-  - from: /concepts/federated_query/(.*)$
-    to: /concepts/query_execution/federated_query/$1
+  - from: /reference/ydb-sdk/recipes/debug-jaeger.md
+    to: /recipes/ydb-sdk/debug-jaeger.md
+  - from: /reference/ydb-sdk/recipes/debug-logs.md
+    to: /recipes/ydb-sdk/debug-logs.md
+  - from: /reference/ydb-sdk/recipes/debug-prometheus.md
+    to: /recipes/ydb-sdk/debug-prometheus.md
+  - from: /reference/ydb-sdk/recipes/debug.md
+    to: /recipes/ydb-sdk/debug.md
+  - from: /devops/deployment-options/manual/initial-deployment.md
+    to: /devops/deployment-options/manual/initial-deployment/index.md
+  - from: /devops/manual/initial-deployment.md
+    to: /devops/deployment-options/manual/initial-deployment/index.md
 
   - from: /cluster/system-requirements.md
     to: /devops/system-requirements.md
   - from: /devops/observability/initial-deployment.md
-    to: /devops/deployment-options/manual/initial-deployment.md
+    to: /devops/deployment-options/manual/initial-deployment/index.md
+
+  - from: /devops/deployment-options/manual/initial-deployment.md
+    to: /devops/deployment-options/manual/initial-deployment/index.md
+  - from: /devops/manual/initial-deployment.md
+    to: /devops/deployment-options/manual/initial-deployment/index.md
 
   - from: /maintenance/manual/index.md
     to: /devops/deployment-options/manual/index.md

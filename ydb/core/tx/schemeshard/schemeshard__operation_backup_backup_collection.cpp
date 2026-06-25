@@ -64,12 +64,63 @@ TVector<ISubOperation::TPtr> CreateBackupBackupCollection(TOperationId opId, con
 
     Y_ABORT_UNLESS(context.SS->BackupCollections.contains(bcPath->PathId));
     const auto& bc = context.SS->BackupCollections[bcPath->PathId];
+
+    // Reject empty collection up-front so no FullBackups row is created.
+    if (bc->Description.GetExplicitEntryList().EntriesSize() == 0) {
+        return {CreateReject(opId, NKikimrScheme::StatusInvalidParameter,
+            "backup collection has no tables")};
+    }
+
     bool incrBackupEnabled = bc->Description.HasIncrementalBackupConfig();
-    
-    bool omitIndexes = bc->Description.GetOmitIndexes() || 
+
+    bool omitIndexes = bc->Description.GetOmitIndexes() ||
                        (incrBackupEnabled && bc->Description.GetIncrementalBackupConfig().GetOmitIndexes());
-    
+
     TString streamName = NBackup::ToX509String(TlsActivationContext->AsActorContext().Now()) + "_continuousBackupImpl";
+
+    // Count items (base tables + non-omitted index impl tables) to match what
+    // CCT will emit. The control op persists this count and uses it to detect
+    // completion: all items registered + all items terminal == done.
+    ui32 expectedItemCount = 0;
+    for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
+        ++expectedItemCount;
+
+        if (omitIndexes) {
+            continue;
+        }
+        const auto srcTablePath = TPath::Resolve(item.GetPath(), context.SS);
+        if (!srcTablePath.IsResolved() || srcTablePath.IsDeleted()) {
+            continue;
+        }
+        for (const auto& [childName, childPathId] : srcTablePath.Base()->GetChildren()) {
+            Y_UNUSED(childName);
+            auto childPath = context.SS->PathsById.at(childPathId);
+            if (childPath->PathType != NKikimrSchemeOp::EPathTypeTableIndex) {
+                continue;
+            }
+            if (childPath->Dropped()) {
+                continue;
+            }
+            if (!IsSupportedIndex(childPathId, context)) {
+                continue;
+            }
+            auto indexPath = TPath::Init(childPathId, context.SS);
+            for (const auto& [implTableName, implTablePathId] : indexPath.Base()->GetChildren()) {
+                Y_UNUSED(implTablePathId);
+                // Skip deleted impl tables to keep expectedItemCount in sync
+                // with CCT sub-ops -- a counted but not emitted impl table
+                // would permanently inflate the completion denominator.
+                if (indexPath.Child(implTableName).IsDeleted()) {
+                    continue;
+                }
+                ++expectedItemCount;
+            }
+        }
+    }
+
+    // Control op first: persists the FullBackups row atomically with the
+    // decomposition's TxStates. id == ui64(opId.GetTxId()).
+    AppendFullBackupOpToBackupBackupCollection(opId, bcPath, result, expectedItemCount);
 
     for (const auto& item : bc->Description.GetExplicitEntryList().GetEntries()) {
         auto& desc = *copyTables.Add();

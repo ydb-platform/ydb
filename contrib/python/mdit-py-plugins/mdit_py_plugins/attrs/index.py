@@ -209,7 +209,7 @@ def _attr_block_rule(
         return False
 
     try:
-        new_pos, attrs = parse(state.src[pos:maximum])
+        _new_pos, attrs = parse(state.src[pos:maximum])
     except ParseError:
         return False
 

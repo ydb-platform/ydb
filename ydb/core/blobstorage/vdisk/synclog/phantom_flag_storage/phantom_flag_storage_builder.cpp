@@ -17,20 +17,31 @@ namespace NSyncLog {
 class TPhantomFlagStorageBuilderActor : public TActorBootstrapped<TPhantomFlagStorageBuilderActor> {
 public:
     TPhantomFlagStorageBuilderActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
-            const TActorId& keeperId, TSyncLogSnapshotPtr snapshot)
+            const TActorId& requesterId, TSyncLogSnapshotPtr snapshot, bool buildThresholds)
         : TActorBootstrapped<TPhantomFlagStorageBuilderActor>()
         , SlCtx(slCtx)
-        , KeeperId(keeperId)
+        , RequesterId(requesterId)
         , SyncLogSnapshot(snapshot)
         , Thresholds(slCtx->VCtx->Top->GType)
+        , BuildThresholds(buildThresholds)
     {}
 
     void Bootstrap() {
+        if (!SyncLogSnapshot) {
+            Finish();
+            return;
+        }
+
         LastLsn = SyncLogSnapshot->LogStartLsn;
         DiskIt = TDiskRecLogSnapshot::TIndexRecIterator(SyncLogSnapshot->DiskSnapPtr);
         DiskIt.Seek(LastLsn);
-        Send(SlCtx->SkeletonId, new TEvTakeHullSnapshot(false));
-        Become(&TThis::StateWaitHullSnapshot);
+        if (BuildThresholds) {
+            Send(SlCtx->SkeletonId, new TEvTakeHullSnapshot(false));
+            Become(&TThis::StateWaitHullSnapshot);
+        } else {
+            Become(&TThis::StateFunc);
+            ReadNextChunk();
+        }
     }
 
 private:
@@ -130,7 +141,7 @@ private:
     }
 
     void Finish() {
-        Send(KeeperId, new TEvPhantomFlagStorageFinishBuilder(std::move(Flags), std::move(Thresholds)));
+        Send(RequesterId, new TEvPhantomFlagStorageFinishBuilder(std::move(Flags), std::move(Thresholds)));
         PassAway();
     }
 
@@ -144,18 +155,20 @@ private:
 
 private:
     TIntrusivePtr<TSyncLogCtx> SlCtx;
-    const TActorId KeeperId;
+    const TActorId RequesterId;
     TSyncLogSnapshotPtr SyncLogSnapshot;
     TDiskRecLogSnapshot::TIndexRecIterator DiskIt;
     TPhantomFlags Flags;
     TPhantomFlagThresholds Thresholds;
     ui64 LastLsn;
+
+    const bool BuildThresholds = true;
 };
 
 
 NActors::IActor* CreatePhantomFlagStorageBuilderActor(const TIntrusivePtr<TSyncLogCtx>& slCtx,
-    const TActorId& keeperId, TSyncLogSnapshotPtr snapshot) {
-    return new TPhantomFlagStorageBuilderActor(slCtx, keeperId, snapshot);
+        const TActorId& requesterId, TSyncLogSnapshotPtr snapshot, bool buildThresholds) {
+    return new TPhantomFlagStorageBuilderActor(slCtx, requesterId, snapshot, buildThresholds);
 }
 
 } // namespace NSyncLog

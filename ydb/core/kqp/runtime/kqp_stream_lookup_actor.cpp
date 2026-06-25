@@ -65,7 +65,7 @@ TKqpStreamLockSettings BuildStreamLockSettings(
 class TKqpStreamLookupActor : public NActors::TActorBootstrapped<TKqpStreamLookupActor>, public NYql::NDq::IDqComputeActorAsyncInput {
 public:
     TKqpStreamLookupActor(NYql::NDq::IDqAsyncIoFactory::TInputTransformArguments&& args, NKikimrKqp::TKqpStreamLookupSettings&& settings,
-        TIntrusivePtr<TKqpCounters> counters)
+        TIntrusivePtr<TKqpCounters> counters, TIntrusivePtr<TVectorIndexLevelsCache> vectorIndexLevelsCache)
         : LogPrefix(TStringBuilder() << "StreamLookupActor, inputIndex: " << args.InputIndex << ", CA Id " << args.ComputeActorId)
         , InputIndex(args.InputIndex)
         , Input(args.TransformInput)
@@ -97,12 +97,13 @@ public:
             args.TaskId,
             args.TypeEnv,
             args.HolderFactory,
-            args.InputDesc))
+            args.InputDesc, vectorIndexLevelsCache))
         , MaxTotalBytesQuota(MaxTotalBytesQuotaStreamLookup())
         , MaxRowsProcessing(MaxRowsProcessingStreamLookup())
         , MaxInFlightReads(MaxInFlightReadsStreamLookup())
         , MaxBytesPerFetch(MaxBytesPerFetchStreamLookup())
         , Counters(counters)
+        , VectorIndexLevelsCache(std::move(vectorIndexLevelsCache))
         , LookupActorSpan(TWilsonKqp::LookupActor, std::move(args.TraceId), "LookupActor")
     {
         IngressStats.Level = args.StatsLevel;
@@ -299,17 +300,17 @@ private:
             return result;
         }
 
-        bool CheckShardRetriesExeeded(TReadState& failedRead) {
-            return CheckShardRetriesExeededImpl(failedRead.ShardId);
+        bool CheckShardRetriesExceeded(TReadState& failedRead) {
+            return CheckShardRetriesExceededImpl(failedRead.ShardId);
         }
 
-        bool CheckShardRetriesExeededImpl(ui64 shardId) {
+        bool CheckShardRetriesExceededImpl(ui64 shardId) {
             const auto& shardState = ShardsState[shardId];
             return shardState.RetryAttempts + 1 > MaxShardRetries();
         }
 
-        bool CheckShardRetriesExeededLock(const TLockState& failedLock) {
-            return CheckShardRetriesExeededImpl(failedLock.ShardId);
+        bool CheckShardRetriesExceededLock(const TLockState& failedLock) {
+            return CheckShardRetriesExceededImpl(failedLock.ShardId);
         }
 
         TDuration CalcDelayForShardImpl(ui64 shardId, bool allowInstantRetry) {
@@ -435,7 +436,7 @@ private:
 
     void PassAway() final {
         Counters->StreamLookupActorsCount->Dec();
-        
+
         if (!LockSendTime.empty()) {
             TInstant now = AppData()->TimeProvider->Now();
             TDuration maxInFlightTime = TDuration::Zero();
@@ -447,7 +448,7 @@ private:
             }
             Counters->MaxInFlightLockTimeOnExit->Collect(maxInFlightTime.MilliSeconds());
         }
-        
+
         {
             auto alloc = BindAllocator();
             Input.Clear();
@@ -692,8 +693,10 @@ private:
                 return ResolveTableShards();
             }
             case Ydb::StatusIds::OVERLOADED: {
-                const bool isThrottled = record.HasThrottled() && record.GetThrottled();
-                if (!isThrottled && (CheckTotalRetriesExeeded() || Reads.CheckShardRetriesExeeded(read))) {
+                const std::optional<TDuration> throttleDelay = record.HasThrottleDelayMs()
+                    ? std::make_optional(TDuration::MilliSeconds(record.GetThrottleDelayMs()))
+                    : std::nullopt;
+                if (!throttleDelay && (CheckTotalRetriesExceeded() || Reads.CheckShardRetriesExceeded(read))) {
                     return replyError(
                         TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::OVERLOADED);
@@ -701,10 +704,10 @@ private:
                 CA_LOG_D("OVERLOADED was received from tablet: " << read.ShardId << "."
                     << getIssues().ToOneLineString());
                 read.SetBlocked();
-                return RetryTableRead(read, /*allowInstantRetry = */false, isThrottled);
+                return RetryTableRead(read, /*allowInstantRetry = */false, throttleDelay);
             }
             case Ydb::StatusIds::INTERNAL_ERROR: {
-                if (CheckTotalRetriesExeeded() || Reads.CheckShardRetriesExeeded(read)) {
+                if (CheckTotalRetriesExceeded() || Reads.CheckShardRetriesExceeded(read)) {
                     return replyError(
                         TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' retry limit exceeded.",
                         NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -947,7 +950,7 @@ private:
         auto lockState = TLockState(requestId, shardId);
         lockState.State = TLockState::EState::Running;
         Reads.insertLock(requestId, std::move(lockState));
-        
+
         LockSendTime[requestId] = AppData()->TimeProvider->Now();
     }
 
@@ -958,7 +961,7 @@ private:
             << ", status: " << record.GetStatus());
 
         ui64 requestId = record.GetRequestId();
-        
+
         if (auto it = LockSendTime.find(requestId); it != LockSendTime.end()) {
             Counters->LockLatencyHistogram->Collect((AppData()->TimeProvider->Now() - it->second).MilliSeconds());
             LockSendTime.erase(it);
@@ -1059,7 +1062,7 @@ private:
         if (hasModifiedRows) {
             ProcessInputRows();
         }
-        
+
         if (hasUnmodifiedRows) {
             Send(ComputeActorId, new TEvNewAsyncInputDataArrived(InputIndex));
         }
@@ -1154,37 +1157,42 @@ private:
         }
     }
 
-    bool CheckTotalRetriesExeeded() {
+    bool CheckTotalRetriesExceeded() {
         const auto limit = MaxTotalRetries();
         return limit && TotalRetryAttempts + 1 > *limit;
     }
 
-    void RetryTableRead(TReadState& failedRead, bool allowInstantRetry = true, bool isThrottled = false) {
+    void RetryTableRead(TReadState& failedRead, bool allowInstantRetry = true, std::optional<TDuration> throttleDelay = std::nullopt) {
         CA_LOG_D("Retry reading of table: " << StreamLookupWorker->GetTablePath() << ", readId: " << failedRead.Id
             << ", shardId: " << failedRead.ShardId);
 
-        if (!isThrottled) {
-            if (CheckTotalRetriesExeeded()) {
+        TDuration delay;
+        if (!throttleDelay) {
+            if (CheckTotalRetriesExceeded()) {
                 return RuntimeError(TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' retry limit exceeded",
                     NYql::NDqProto::StatusIds::UNAVAILABLE);
             }
             ++TotalRetryAttempts;
 
-            if (Reads.CheckShardRetriesExeeded(failedRead)) {
+            if (Reads.CheckShardRetriesExceeded(failedRead)) {
                 StreamLookupWorker->ResetRowsProcessing(failedRead.Id);
                 Reads.eraseRead(failedRead);
                 return ResolveTableShards();
             }
+
+            delay = Reads.CalcDelayForShard(failedRead, allowInstantRetry);
+        } else {
+            delay = *throttleDelay;
         }
 
-        auto delay = Reads.CalcDelayForShard(failedRead, allowInstantRetry);
+
         if (delay == TDuration::Zero()) {
             auto guard = BindAllocator();
             StreamLookupWorker->RebuildRequest(failedRead.ShardId, failedRead.Id, OperationId);
             Reads.eraseRead(failedRead);
             ScheduleNextReads();
         } else {
-            CA_LOG_D("Schedule retry atempt for readId: " << failedRead.Id << " after " << delay);
+            CA_LOG_D("Schedule retry attempt for readId: " << failedRead.Id << " after " << delay);
             TlsActivationContext->Schedule(
                 delay, new IEventHandle(SelfId(), SelfId(), new TEvPrivate::TEvRetryRead(failedRead.Id, failedRead.LastSeqNo, /*instantStart = */ true))
             );
@@ -1194,13 +1202,13 @@ private:
     void RetryLock(TLockState& failedLock, bool allowInstantRetry = true) {
         CA_LOG_D("Retry locking for shard: " << failedLock.ShardId << ", lockId: " << failedLock.Id);
 
-        if (CheckTotalRetriesExeeded()) {
+        if (CheckTotalRetriesExceeded()) {
             return RuntimeError(TStringBuilder() << "Table '" << StreamLookupWorker->GetTablePath() << "' lock retry limit exceeded",
                 NYql::NDqProto::StatusIds::UNAVAILABLE);
         }
         ++TotalRetryAttempts;
 
-        if (Reads.CheckShardRetriesExeededLock(failedLock)) {
+        if (Reads.CheckShardRetriesExceededLock(failedLock)) {
             Reads.eraseLock(failedLock);
             return ResolveTableShards();
         }
@@ -1302,6 +1310,7 @@ private:
     const ui64 QuerySpanId;
     TReads Reads;
     bool SentResultsAvailable = false;
+    THashMap<ui64, TString> CacheKeys;
     NUdf::EFetchStatus LastFetchStatus = NUdf::EFetchStatus::Yield;
     TPartitioning::TCPtr Partitioning;
     const TDuration SchemeCacheRequestTimeout;
@@ -1333,17 +1342,20 @@ private:
     size_t MaxRowsDefaultQuota = 0;
 
     TIntrusivePtr<TKqpCounters> Counters;
+    TIntrusivePtr<TVectorIndexLevelsCache> VectorIndexLevelsCache;
+
     NWilson::TSpan LookupActorSpan;
     NWilson::TSpan LookupActorStateSpan;
-    
+
     THashMap<ui64, TInstant> LockSendTime;
 };
 
 } // namespace
 
 std::pair<NYql::NDq::IDqComputeActorAsyncInput*, NActors::IActor*> CreateStreamLookupActor(NYql::NDq::IDqAsyncIoFactory::TInputTransformArguments&& args,
-    NKikimrKqp::TKqpStreamLookupSettings&& settings, TIntrusivePtr<TKqpCounters> counters) {
-    auto actor = new TKqpStreamLookupActor(std::move(args), std::move(settings), counters);
+    NKikimrKqp::TKqpStreamLookupSettings&& settings, TIntrusivePtr<TKqpCounters> counters,
+    TIntrusivePtr<TVectorIndexLevelsCache> vectorIndexLevelsCache) {
+    auto actor = new TKqpStreamLookupActor(std::move(args), std::move(settings), counters, std::move(vectorIndexLevelsCache));
     return {actor, actor};
 }
 

@@ -31,3 +31,15 @@ def test_strategy_append_unique_nested_dict(custom_merger):
     result = custom_merger.merge(base, nxt)
 
     assert result == [{"bar": ["bob"]}, {"bar": ["baz"]}]
+
+
+def test_strategy_append_similar_dict(custom_merger):
+    """append_unique should work for identical dicts,
+    regardless of insertion order.
+    """
+    base = [{"bar": "bob", "foo": "baz"}]
+    nxt = [{"x": "y"}, {"foo": "baz", "bar": "bob"}]
+
+    result = custom_merger.merge(base, nxt)
+
+    assert result == [{"bar": "bob", "foo": "baz"}, {"x": "y"}]

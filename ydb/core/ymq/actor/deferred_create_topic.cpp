@@ -101,7 +101,7 @@ private:
     STATEFN(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TSqsEvents::TEvExecuted, HandleExecuted);
-            hFunc(NPQ::NSchema::TEvCreateTopicResponse, Handle);
+            hFunc(NPQ::NSchema::TEvSchemaResponse, Handle);
             cFunc(TEvPoisonPill::EventType, PassAway);
         default:
             break;
@@ -215,7 +215,7 @@ private:
         }));
     }
 
-    void Handle(NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev) {
+    void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
         const auto& response = *ev->Get();
         if (response.Status == Ydb::StatusIds::SUCCESS) {
             RequestMarkTopicCreated();

@@ -60,7 +60,22 @@ class ToggleButton(Static, can_focus=True):
         background: $surface;
         text-wrap: nowrap;
         text-overflow: ellipsis;
+        pointer: pointer;
 
+        &:ansi {
+            background: ansi_default;
+            & > .toggle--button {
+                background: $ansi-background;
+                color: $ansi-foreground;
+                text-style: dim;
+            }
+            &.-on > .toggle--button {
+                color: $accent;
+                background: $ansi-background;
+                text-style: bold not dim;
+            }
+        }
+        
         &.-textual-compact {
             border: none !important;
             padding: 0;

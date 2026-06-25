@@ -169,6 +169,11 @@ public:
         return *this;
     }
 
+    TKqpTranslationSettingsBuilder& SetValidateViewStatement(bool value) {
+        ValidateViewStatement = value;
+        return *this;
+    }
+
 private:
     const NYql::EKikimrQueryType QueryType;
     ui16 KqpYqlSyntaxVersion = 1;
@@ -190,6 +195,7 @@ private:
     NYql::EBackportCompatibleFeaturesMode BackportMode = NYql::EBackportCompatibleFeaturesMode::Released;
     bool IsAmbiguityError = false;
     TMaybe<NSQLTranslation::EYqlSelect> YqlSelect = {};
+    bool ValidateViewStatement = true;
 };
 
 NYql::EKikimrQueryType ConvertType(NKikimrKqp::EQueryType type);

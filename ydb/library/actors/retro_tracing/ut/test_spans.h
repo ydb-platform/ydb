@@ -1,9 +1,10 @@
 #pragma once
 
-#include <ydb/library/actors/retro_tracing/typed_retro_span.h>
+#include <ydb/library/actors/retro_tracing/span/retro_span_namespace.h>
+#include <ydb/library/actors/retro_tracing/span/typed_retro_span.h>
 
 enum ETestRetroSpanType : ui32 {
-    Test1 = 11,
+    Test1 = NRetroTracing::TSpanTypeNamespace::Begin(NRetroTracing::TSpanTypeNamespace::USERSPACE),
     Test2
 };
 

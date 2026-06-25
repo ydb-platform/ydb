@@ -9,8 +9,8 @@ namespace NYT::NBus::NTests {
 ////////////////////////////////////////////////////////////////////////////////
 
 TSharedRefArray CreateMessage(int partCount, int partSize = 1);
-TSharedRefArray Serialize(TString str);
-TString Deserialize(TSharedRefArray message);
+TSharedRefArray Serialize(std::string str);
+std::string Deserialize(TSharedRefArray message);
 
 ////////////////////////////////////////////////////////////////////////////////
 

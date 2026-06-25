@@ -84,13 +84,25 @@ TFmrInitializationOptions GetFmrInitializationInfoFromConfig(
 }
 
 std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::TPtr slave, const TFmrServices::TPtr fmrServices) {
-    TFmrCoordinatorSettings coordinatorSettings{};
-    NYT::TNode fmrOperationSpec;
+    TMaybe<NYT::TNode> fmrOperationSpec;
     TString fmrOperationSpecFilePath = fmrServices->FmrOperationSpecFilePath;
     if (!fmrOperationSpecFilePath.empty()) {
         TFileInput input(fmrOperationSpecFilePath);
         fmrOperationSpec = NYT::NodeFromYsonStream(&input);
-        coordinatorSettings.DefaultFmrOperationSpec = fmrOperationSpec;
+    }
+    TMaybe<NYT::TNode> coordinatorConfig;
+    if (!fmrServices->CoordinatorYsonPath.empty()) {
+        TFileInput input(fmrServices->CoordinatorYsonPath);
+        coordinatorConfig = NYT::NodeFromYsonStream(&input);
+    }
+    TMaybe<NYT::TNode> workerConfig;
+    if (!fmrServices->WorkerYsonPath.empty()) {
+        TFileInput input(fmrServices->WorkerYsonPath);
+        workerConfig = NYT::NodeFromYsonStream(&input);
+    }
+    TFmrCoordinatorSettings coordinatorSettings = GetDefaultCoordinatorSettings(coordinatorConfig, fmrOperationSpec);
+    if (fmrServices->YtServerForUpload) {
+        coordinatorSettings.RequireFmrJob = true;
     }
 
     auto tvmSettings = fmrServices->TvmSettings;
@@ -147,11 +159,10 @@ std::pair<IYtGateway::TPtr, IFmrWorker::TPtr> InitializeFmrGateway(IYtGateway::T
             return RunJob(task, discovery, Nothing(), fmrYtJobSerivce, jobLauncher, cancelFlag);
         };
 
-        auto settings = NFmr::GetDefaultJobFactorySettings(fmrOperationSpec);
-        settings.Function = func;
-        auto jobFactory = MakeFmrJobFactory(settings);
-        NFmr::TFmrWorkerSettings workerSettings{.WorkerId = 0, .RandomProvider = CreateDefaultRandomProvider(),
-            .TimeToSleepBetweenRequests=TDuration::Seconds(1)};
+        auto workerSettings = NFmr::GetDefaultWorkerSettings(workerConfig);
+        workerSettings.WorkerId = 0;
+        workerSettings.JobFactorySettings.Function = func;
+        auto jobFactory = MakeFmrJobFactory(workerSettings.JobFactorySettings);
 
         worker = MakeFmrWorker(coordinator, jobFactory, fmrServices->JobPreparer, workerSettings);
         worker->Start();

@@ -42,13 +42,13 @@
  *                 0 = not found (*result = NULL)
  *                -1 = error (*result = NULL, exception set)
  *
- * On older Python (with GIL) this is equivalent to the existing
- * PyDict_GetItem() + Py_INCREF() pattern, with zero overhead.
+ * Uses PyDict_GetItemWithError() instead of PyDict_GetItem() to
+ * properly propagate exceptions from __hash__/__eq__.
  */
 static inline int
 _PyDict_GetItemRef(PyObject *p, PyObject *key, PyObject **result)
 {
-    PyObject *item = PyDict_GetItem(p, key);
+    PyObject *item = PyDict_GetItemWithError(p, key);
     if (item != NULL) {
         Py_INCREF(item);
         *result = item;
@@ -326,13 +326,17 @@ static PyObject*
 SB_extends(SB* self, PyObject* other)
 {
     PyObject* implied;
+    int contains;
 
     implied = self->_implied;
     if (implied == NULL) {
         return NULL;
     }
 
-    if (PyDict_GetItem(implied, other) != NULL)
+    contains = PyDict_Contains(implied, other);
+    if (contains < 0)
+        return NULL;
+    if (contains)
         Py_RETURN_TRUE;
     Py_RETURN_FALSE;
 }
@@ -792,8 +796,10 @@ IB__adapt__(PyObject* self, PyObject* obj)
             return NULL;
         }
 
-        implements = PyDict_GetItem(implied, self) != NULL;
+        implements = PyDict_Contains(implied, self);
         Py_DECREF(decl);
+        if (implements < 0)
+            return NULL;
     } else {
         /* decl is probably a security proxy.  We have to go the long way
            around.
@@ -863,6 +869,7 @@ static PyObject*
 IB__call__(PyObject* self, PyObject* args, PyObject* kwargs)
 {
     PyObject *conform, *obj, *alternate, *adapter;
+    int _has_custom;
     static char* kwlist[] = { "obj", "alternate", NULL };
     conform = obj = alternate = adapter = NULL;
 
@@ -900,10 +907,23 @@ IB__call__(PyObject* self, PyObject* args, PyObject* kwargs)
        will *never* be InterfaceBase, we're always subclassed by
        InterfaceClass). Instead, we cooperate with InterfaceClass in Python to
        set a flag in a new subclass when this is necessary. */
-    /* Use pre-interned string + Py_TYPE() instead of PyDict_GetItemString
-     * with a C literal (which creates a temporary Python string each call)
-     * and direct ob_type access (incompatible with free-threaded Python). */
-    if (PyDict_GetItem(Py_TYPE(self)->tp_dict, str_CALL_CUSTOM_ADAPT)) {
+    /* Check if the type has a _CALL_CUSTOM_ADAPT flag set by InterfaceClass.
+     * Use PyDict_Contains (error-safe) instead of PyDict_GetItem (which
+     * silently swallows exceptions).  On 3.13+ use PyType_GetDict() for a
+     * strong reference to the type dict, needed for free-threaded Python. */
+    {
+#if PY_VERSION_HEX >= 0x030d0000
+        PyObject* _tp_dict = PyType_GetDict(Py_TYPE(self));
+        _has_custom = PyDict_Contains(_tp_dict, str_CALL_CUSTOM_ADAPT);
+        Py_DECREF(_tp_dict);
+#else
+        _has_custom = PyDict_Contains(
+            Py_TYPE(self)->tp_dict, str_CALL_CUSTOM_ADAPT);
+#endif
+        if (_has_custom < 0)
+            return NULL;
+    }
+    if (_has_custom) {
         /* Doesn't matter what the value is. Simply being present is enough. */
         adapter = PyObject_CallMethodObjArgs(self, str__adapt__, obj, NULL);
     } else {

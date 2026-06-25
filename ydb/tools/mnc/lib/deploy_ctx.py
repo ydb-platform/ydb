@@ -83,7 +83,7 @@ def apply_cfg_multinode(cfg: multinode.scheme):
 
     global transit_bin_through_first_node, do_rebuild
     global do_strip, do_redeploy_bin, path_to_bin
-    for flag in cfg.get('deploy_flags', []):
+    for flag in cfg.get('deploy_flags') or []:
         if flag == 'do_rebuild':
             do_rebuild = True
         if flag == 'do_not_rebuild':

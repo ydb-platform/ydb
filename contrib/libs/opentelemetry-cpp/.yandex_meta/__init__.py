@@ -45,6 +45,7 @@ opentelemetry_cpp = CMakeNinjaNixProject(
     ],
     disable_includes={
         "gsl/gsl",
+        "utf8_validity.h",
     },
     put={
         "opentelemetry_common": ".",

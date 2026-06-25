@@ -88,6 +88,45 @@ Y_UNIT_TEST_SUITE(TSegmentManagerTest) {
         AssertPop(manager, requestId, 10, std::vector<TSegment>{{10, 20}});
     }
 
+    Y_UNIT_TEST(StartsFromSeededRequestId) {
+        constexpr ui64 firstRequestId = 123456789;
+        TSegmentManager manager(firstRequestId);
+        std::vector<TOutdatedRequest> outdated;
+        ui64 requestId1 = 0;
+        ui64 requestId2 = 0;
+
+        manager.PushRequest(1, 1, 10, TSegment{0, 10}, &requestId1, &outdated);
+        UNIT_ASSERT(outdated.empty());
+
+        outdated.clear();
+        manager.PushRequest(1, 1, 11, TSegment{10, 20}, &requestId2, &outdated);
+        UNIT_ASSERT(outdated.empty());
+
+        UNIT_ASSERT_VALUES_EQUAL(requestId1, firstRequestId);
+        UNIT_ASSERT_VALUES_EQUAL(requestId2, firstRequestId + 1);
+        AssertPop(manager, requestId1, 10, std::vector<TSegment>{{0, 10}});
+        AssertPop(manager, requestId2, 11, std::vector<TSegment>{{10, 20}});
+    }
+
+    Y_UNIT_TEST(InvalidSeedIsNormalized) {
+        TSegmentManager zeroSeed(0);
+        TSegmentManager maxSeed(Max<ui64>());
+        TSegmentManager nearMaxSeed(Max<ui64>() - 10);
+        std::vector<TOutdatedRequest> outdated;
+        ui64 requestId = 0;
+
+        zeroSeed.PushRequest(1, 1, 10, TSegment{0, 10}, &requestId, &outdated);
+        UNIT_ASSERT_VALUES_EQUAL(requestId, 1);
+
+        outdated.clear();
+        maxSeed.PushRequest(1, 1, 11, TSegment{0, 10}, &requestId, &outdated);
+        UNIT_ASSERT_VALUES_EQUAL(requestId, 1);
+
+        outdated.clear();
+        nearMaxSeed.PushRequest(1, 1, 12, TSegment{0, 10}, &requestId, &outdated);
+        UNIT_ASSERT_VALUES_EQUAL(requestId, Max<ui64>() - 10 - (1ull << 48));
+    }
+
     Y_UNIT_TEST(AdjacentRangesDoNotOverlap) {
         TSegmentManager manager;
         std::vector<TOutdatedRequest> outdated;

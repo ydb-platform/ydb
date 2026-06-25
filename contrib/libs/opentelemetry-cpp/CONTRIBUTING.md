@@ -127,6 +127,22 @@ bash ci/do_ci.sh cmake.exporter.otprotocol.test
 This command initiates the CI pipeline, executing tests specifically for the
 **cmake.exporter.otprotocol** module.
 
+To reproduce CI's `include-what-you-use` warnings locally, run from inside
+the dev container (where IWYU is preinstalled):
+
+```bash
+OTELCPP_CMAKE_CACHE_FILE=all-options-abiv1-preview.cmake \
+  bash ci/do_ci.sh cmake.iwyu.test
+```
+
+The target defaults to `clang-22`/`clang++-22` to match the LLVM version
+the dev container's IWYU was built against. Export `CC`/`CXX` to override
+if you need a different compiler.
+
+Set `OTELCPP_CMAKE_CACHE_FILE` to any of `all-options-abiv1.cmake`,
+`all-options-abiv1-preview.cmake`, or `all-options-abiv2-preview.cmake`
+to match each CI matrix entry.
+
 #### Troubleshooting
 
 If you encounter issues:

@@ -4,7 +4,7 @@
 
     Lexer for Tera Term macro files.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -84,6 +84,7 @@ class TeraTermLexer(RegexLexer):
                 r'crc32file|'
                 r'cygconnect|'
                 r'delpassword|'
+                r'delpassword2|'
                 r'dirname|'
                 r'dirnamebox|'
                 r'disconnect|'
@@ -139,10 +140,12 @@ class TeraTermLexer(RegexLexer):
                 r'getipv6addr|'
                 r'getmodemstatus|'
                 r'getpassword|'
+                r'getpassword2|'
                 r'getspecialfolder|'
                 r'gettime|'
                 r'gettitle|'
                 r'getttdir|'
+                r'getttpos|'
                 r'getver|'
                 # 'goto' is handled separately.
                 r'if|'
@@ -152,6 +155,7 @@ class TeraTermLexer(RegexLexer):
                 r'int2str|'
                 r'intdim|'
                 r'ispassword|'
+                r'ispassword2|'
                 r'kmtfinish|'
                 r'kmtget|'
                 r'kmtrecv|'
@@ -176,6 +180,7 @@ class TeraTermLexer(RegexLexer):
                 r'quickvanrecv|'
                 r'quickvansend|'
                 r'random|'
+                r'recvfile'
                 r'recvln|'
                 r'regexoption|'
                 r'restoresetup|'
@@ -185,6 +190,7 @@ class TeraTermLexer(RegexLexer):
                 r'scprecv|'
                 r'scpsend|'
                 r'send|'
+                r'sendbinary|'
                 r'sendbreak|'
                 r'sendbroadcast|'
                 r'sendfile|'
@@ -193,6 +199,7 @@ class TeraTermLexer(RegexLexer):
                 r'sendlnbroadcast|'
                 r'sendlnmulticast|'
                 r'sendmulticast|'
+                r'sendtext|'
                 r'setbaud|'
                 r'setdate|'
                 r'setdebug|'
@@ -206,7 +213,10 @@ class TeraTermLexer(RegexLexer):
                 r'setflowctrl|'
                 r'setmulticastname|'
                 r'setpassword|'
+                r'setpassword2|'
                 r'setrts|'
+                r'setserialdelaychar'
+                r'setserialdelayline'
                 r'setspeed|'
                 r'setsync|'
                 r'settime|'

@@ -108,6 +108,7 @@ private:
     const NYT::TNode MergeSpec;
     NYT::TNode TableAttrs;
     NYT::ITransactionPtr LockTx;
+    const bool FailOnRace;
 };
 
 } // NYql

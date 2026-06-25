@@ -1,7 +1,27 @@
+import sys
+
+# implementation of six.python_2_unicode_compatible method from:
+# https://github.com/benjaminp/six/blob/c8e394065cd541a16c040515dc0afb85cf22a7c3/six.py#L963
+def python_2_unicode_compatible(klass):
+    """
+    A class decorator that defines __unicode__ and __str__ methods under Python 2.
+    Under Python 3 it does nothing.
+
+    To support Python 2 and 3 with a single code base, define a __str__ method
+    returning text and apply this decorator to the class.
+    """
+    if sys.version_info[0] == 2:
+        if '__str__' not in klass.__dict__:
+            raise ValueError("@python_2_unicode_compatible cannot be applied "
+                             "to %s because it doesn't define __str__()." %
+                             klass.__name__)
+        klass.__unicode__ = klass.__str__
+        klass.__str__ = lambda self: self.__unicode__().encode('utf-8')
+    return klass
+
 def main():
     import importlib.abc
     import importlib.machinery
-    import sys
 
     class Finder(importlib.abc.MetaPathFinder):
         def find_spec(self, fullname, path, target=None):
@@ -16,7 +36,6 @@ def main():
     try:
         import yandex.type_info.type_base as ti_base
         import yandex.type_info.typing as ti_typing
-        import six
     except ImportError as e:
         raise ImportError(str(e) + ". Make sure that library/python/type_info is in your PEERDIR list")
 
@@ -37,7 +56,7 @@ def main():
 
     Stream = ti_typing._SingleArgumentGeneric("Stream")
 
-    @six.python_2_unicode_compatible
+    @python_2_unicode_compatible
     class GenericResourceAlias(ti_base.Type):
         REQUIRED_ATTRS = ti_base.Type.REQUIRED_ATTRS + ["tag"]
 
@@ -86,7 +105,7 @@ def main():
             ti_base.validate_type(arg_type)
         return (name, arg_type, flags)
 
-    @six.python_2_unicode_compatible
+    @python_2_unicode_compatible
     class GenericCallableAlias(ti_base.Type):
         def __str__(self):
             return (

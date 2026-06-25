@@ -1,5 +1,7 @@
 # Скан запросы (Scan Query) в {{ ydb-short-name }}
 
+{% include notitle [warning](../../_includes/scan_query_deprecated_warning.md) %}
+
 Скан запросы (Scan Queries) — это отдельный интерфейс доступа к данным, предназначенный в первую очередь для выполнения аналитических ad-hoc запросов над базой данных.
 
 Данный способ исполнения запросов обладает следующими отличительными свойствами:
@@ -34,7 +36,7 @@
 
 ## Как воспользоваться {#how-use}
 
-Как и другие виды запросов, *Scan Queries* доступны через {% if link-console-main %} [консоль управления]({{ link-console-main }}) (в запросе требуется указать прагму `PRAGMA Kikimr.ScanQuery = "true";`), {% endif %} [CLI](../../reference/ydb-cli/commands/scan-query.md) и [SDK](../../reference/ydb-sdk/index.md).
+Как и другие виды запросов, *Scan Queries* доступны через {% if link-console-main %} [консоль управления]({{ link-console-main }}) (в запросе требуется указать прагму `PRAGMA Kikimr.ScanQuery = "true";`), {% endif %} [CLI](../../reference/ydb-cli/scan-query.md) и [SDK](../../reference/ydb-sdk/index.md).
 
 {% if oss %}
 

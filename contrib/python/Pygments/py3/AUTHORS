@@ -119,6 +119,7 @@ Other contributors, listed alphabetically, are:
 * Hiroaki Itoh -- Shell console rewrite, Lexers for PowerShell session,
   MSDOS session, BC, WDiff
 * Brian R. Jackson -- Tea lexer
+* Alex Jeffery, ChromaWay AB -- Rell lexer
 * Christian Jann -- ShellSession lexer
 * Jonas Camillus Jeppesen -- Line numbers and line highlighting for 
   RTF-formatter
@@ -257,7 +258,7 @@ Other contributors, listed alphabetically, are:
 * Matthias Vallentin -- Bro lexer
 * Benoît Vinot -- AMPL lexer
 * Linh Vu Hong -- RSL lexer
-* Taavi Väänänen -- Debian control lexer
+* Taavi Väänänen -- Debian control, PHP lexers
 * Immanuel Washington -- Smithy lexer
 * Nathan Weizenbaum -- Haml and Sass lexers
 * Nathan Whetsell -- Csound lexers

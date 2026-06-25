@@ -1586,23 +1586,35 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         CreateAndAlterTableWithBloomFilter(true);
     }
 
+    // --- Helpers shared by the row-table prefix bloom filter tests below ---
+
+    // The table's persisted partition config (carries ByKeyFilterPrefixes and EnableFilterByKey).
+    static NKikimrSchemeOp::TPartitionConfig BloomFilterPartitionConfig(TKikimrRunner& kikimr, const TString& path = "/Root/T") {
+        return kikimr.GetTestClient().Ls(path)->Record.GetPathDescription().GetTable().GetPartitionConfig();
+    }
+
+    // Run a scheme query, asserting it succeeds.
+    static void BloomSchemeOk(NYdb::NTable::TSession& session, const TString& query) {
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    // Run a scheme query, asserting it fails. When `status` is given, the exact code must match.
+    static void BloomSchemeFails(NYdb::NTable::TSession& session, const TString& query, std::optional<EStatus> status = {}) {
+        auto result = session.ExecuteSchemeQuery(query).GetValueSync();
+        UNIT_ASSERT_VALUES_UNEQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        if (status) {
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), *status, result.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(DataShardBloomFilterIndex) {
         TKikimrRunner kikimr;
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
-        auto getPartitionConfig = [&]() {
-            return kikimr.GetTestClient().Ls("/Root/T")->Record
-                .GetPathDescription().GetTable().GetPartitionConfig();
-        };
-
-        auto execScheme = [&](const TString& q) {
-            auto result = session.ExecuteSchemeQuery(q).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        };
-
         // CREATE TABLE with two bloom filters at different prefix lengths
-        execScheme(R"(
+        BloomSchemeOk(session, R"(
             --!syntax_v1
             CREATE TABLE `/Root/T` (
                 Key1 Uint64,
@@ -1614,7 +1626,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             );
         )");
         {
-            auto cfg = getPartitionConfig();
+            auto cfg = BloomFilterPartitionConfig(kikimr);
             UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
             UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
             UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
@@ -1623,44 +1635,63 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // KEY_BLOOM_FILTER = DISABLED disables all bloom filters on the table
         AlterTableSetttings(session, "/Root/T", {{"KEY_BLOOM_FILTER", "DISABLED"}}, false);
         {
-            auto cfg = getPartitionConfig();
+            auto cfg = BloomFilterPartitionConfig(kikimr);
             UNIT_ASSERT_VALUES_EQUAL(cfg.GetEnableFilterByKey(), false);
             UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 0);
         }
 
         // ALTER TABLE ADD INDEX accumulates bloom filter prefixes one by one
-        execScheme(R"(
+        BloomSchemeOk(session, R"(
             --!syntax_v1
             ALTER TABLE `/Root/T`
             ADD INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1);
         )");
         {
-            auto cfg = getPartitionConfig();
+            auto cfg = BloomFilterPartitionConfig(kikimr);
             UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 1);
             UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
         }
 
-        execScheme(R"(
+        BloomSchemeOk(session, R"(
             --!syntax_v1
             ALTER TABLE `/Root/T`
             ADD INDEX idx_bloom2 LOCAL USING bloom_filter ON (Key1, Key2);
         )");
         {
-            auto cfg = getPartitionConfig();
+            auto cfg = BloomFilterPartitionConfig(kikimr);
             UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
             UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
             UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(1).GetPrefixLength(), 2);
         }
 
-        // ALTER TABLE ADD INDEX with custom false_positive_probability
-        execScheme(R"(
+        // Each bloom filter is now a named TTableIndex scheme object, so adding a second index
+        // over the same PK prefix as an existing one is rejected (duplicate column set).
+        BloomSchemeFails(session, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T`
+            ADD INDEX idx_bloom3 LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=0.05);
+        )");
+
+        // DROP INDEX by name removes both the scheme object and the engine ByKeyFilterPrefix.
+        BloomSchemeOk(session, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T` DROP INDEX idx_bloom1;
+        )");
+        {
+            auto cfg = BloomFilterPartitionConfig(kikimr);
+            // only prefix 2 (idx_bloom2) remains
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 2);
+        }
+
+        // After dropping the prefix-1 index, the same prefix can be re-added with a new FPP.
+        BloomSchemeOk(session, R"(
             --!syntax_v1
             ALTER TABLE `/Root/T`
             ADD INDEX idx_bloom3 LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=0.05);
         )");
         {
-            auto cfg = getPartitionConfig();
-            // prefix 1 already existed, FPP should be updated to 0.05
+            auto cfg = BloomFilterPartitionConfig(kikimr);
             UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 2);
             UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 1);
             UNIT_ASSERT_DOUBLES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetFalsePositiveProbability(), 0.05, 1e-9);
@@ -1670,56 +1701,270 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // KEY_BLOOM_FILTER = DISABLED clears all bloom filters including ByKeyFilterPrefixes
         AlterTableSetttings(session, "/Root/T", {{"KEY_BLOOM_FILTER", "DISABLED"}}, false);
         {
-            auto cfg = getPartitionConfig();
+            auto cfg = BloomFilterPartitionConfig(kikimr);
             UNIT_ASSERT_VALUES_EQUAL(cfg.GetEnableFilterByKey(), false);
             UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 0);
         }
 
-        // Non-prefix columns must be rejected
-        auto expectError = [&](const TString& q) {
-            auto result = session.ExecuteSchemeQuery(q).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-        };
+        // Non-prefix columns must be rejected.
         // Key2 alone is not a prefix of (Key1, Key2)
-        expectError(R"(
+        BloomSchemeFails(session, R"(
             --!syntax_v1
             ALTER TABLE `/Root/T`
             ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key2);
-        )");
+        )", EStatus::GENERIC_ERROR);
         // (Key2, Key1) is not a prefix of (Key1, Key2)
-        expectError(R"(
+        BloomSchemeFails(session, R"(
             --!syntax_v1
             ALTER TABLE `/Root/T`
             ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key2, Key1);
-        )");
+        )", EStatus::GENERIC_ERROR);
         // data_columns are not supported for local bloom filter index
-        expectError(R"(
+        BloomSchemeFails(session, R"(
             --!syntax_v1
             ALTER TABLE `/Root/T`
             ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key1) COVER (Value);
-        )");
+        )", EStatus::GENERIC_ERROR);
         // false_positive_probability must be in (0, 1)
-        auto expectBadRequest = [&](const TString& q) {
-            auto result = session.ExecuteSchemeQuery(q).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::BAD_REQUEST, result.GetIssues().ToString());
-        };
-        expectBadRequest(R"(
+        BloomSchemeFails(session, R"(
             --!syntax_v1
             ALTER TABLE `/Root/T`
             ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=0);
-        )");
-        expectBadRequest(R"(
+        )", EStatus::BAD_REQUEST);
+        BloomSchemeFails(session, R"(
             --!syntax_v1
             ALTER TABLE `/Root/T`
             ADD INDEX idx_bad LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=1);
-        )");
+        )", EStatus::BAD_REQUEST);
         // Mixing a LocalBloomFilter index with a regular secondary index in a single ALTER TABLE
         // The bloom path and the BuildOperation path are dispatched mutually exclusively.
-        expectBadRequest(R"(
+        BloomSchemeFails(session, R"(
             --!syntax_v1
             ALTER TABLE `/Root/T`
                 ADD INDEX idx_bloom_mix LOCAL USING bloom_filter ON (Key1),
                 ADD INDEX idx_global_mix GLOBAL ON (Value);
+        )", EStatus::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(DataShardBloomFilterIndexSchemeObject) {
+        // A row-table prefix bloom filter is mirrored as a named TTableIndex scheme object while the
+        // engine keeps its length-only ByKeyFilterPrefix. From a single CREATE, verify every
+        // observable of that mirror: schemeshard children, DescribeTable (no double-listing) and
+        // SHOW CREATE rendering; then that DROP INDEX by name removes both the object and the prefix.
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // idx_bloom1 carries an explicit FPP; idx_bloom2 leaves it default (unspecified).
+        BloomSchemeOk(session, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/T` (
+                Key1 Uint64,
+                Key2 Uint64,
+                Value String,
+                PRIMARY KEY (Key1, Key2),
+                INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1) WITH (false_positive_probability=0.03),
+                INDEX idx_bloom2 LOCAL USING bloom_filter ON (Key1, Key2)
+            );
+        )");
+
+        // (1) Both bloom filters are TTableIndex scheme objects (children of the table), and the
+        // engine artifact (ByKeyFilterPrefixes) is present.
+        auto pathType = [&](const TString& path) {
+            return kikimr.GetTestClient().Ls(path)->Record.GetPathDescription().GetSelf().GetPathType();
+        };
+        UNIT_ASSERT_VALUES_EQUAL(pathType("/Root/T/idx_bloom1"), NKikimrSchemeOp::EPathTypeTableIndex);
+        UNIT_ASSERT_VALUES_EQUAL(pathType("/Root/T/idx_bloom2"), NKikimrSchemeOp::EPathTypeTableIndex);
+        UNIT_ASSERT_VALUES_EQUAL(BloomFilterPartitionConfig(kikimr).ByKeyFilterPrefixesSize(), 2);
+
+        // (2) DescribeTable lists each named bloom filter exactly once (the per-index engine prefix
+        // must NOT also synthesize an "idx_bloom_<N>" entry for a prefix backed by a scheme object).
+        // The explicit FPP is preserved; the unspecified one is left unset, NOT surfaced as a default.
+        {
+            auto describe = session.DescribeTable("/Root/T").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(describe.GetStatus(), EStatus::SUCCESS, describe.GetIssues().ToString());
+            const auto indexes = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexes.size(), 2u);
+
+            THashSet<TString> seen;
+            for (const auto& index : indexes) {
+                UNIT_ASSERT_C(seen.emplace(index.GetIndexName()).second,
+                    "index listed more than once: " << index.GetIndexName());
+                UNIT_ASSERT_VALUES_EQUAL(index.GetIndexType(), EIndexType::LocalBloomFilter);
+                const auto& settings = std::get<TLocalBloomFilterSettings>(index.GetIndexSettings());
+                if (index.GetIndexName() == "idx_bloom1") {
+                    UNIT_ASSERT(settings.FalsePositiveProbability.has_value());
+                    UNIT_ASSERT_DOUBLES_EQUAL(*settings.FalsePositiveProbability, 0.03, 1e-9);
+                } else {
+                    UNIT_ASSERT_VALUES_EQUAL(index.GetIndexName(), "idx_bloom2");
+                    UNIT_ASSERT(!settings.FalsePositiveProbability.has_value());
+                }
+            }
+        }
+
+        // (3) SHOW CREATE TABLE renders each named bloom filter as a LOCAL index.
+        {
+            auto qSession = kikimr.GetQueryClient().GetSession().GetValueSync().GetSession();
+            auto showResult = qSession.ExecuteQuery(
+                "SHOW CREATE TABLE `/Root/T`;",
+                NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(showResult.GetStatus(), EStatus::SUCCESS, showResult.GetIssues().ToString());
+            UNIT_ASSERT(!showResult.GetResultSets().empty());
+
+            NYdb::TResultSetParser parser(showResult.GetResultSet(0));
+            UNIT_ASSERT_C(parser.TryNextRow(), "SHOW CREATE must return at least one row");
+            TString createText = parser.ColumnParser(0).GetOptionalUtf8().value_or("");
+            UNIT_ASSERT_C(createText.Contains("idx_bloom1") && createText.Contains("idx_bloom2"),
+                "SHOW CREATE should list both bloom indexes, got: " << createText);
+            UNIT_ASSERT_C(createText.Contains("LOCAL USING bloom_filter"),
+                "SHOW CREATE should render the bloom filter index clause, got: " << createText);
+        }
+
+        // (4) DROP INDEX by name removes both the scheme object and the engine prefix.
+        BloomSchemeOk(session, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T` DROP INDEX idx_bloom1;
+        )");
+        {
+            auto cfg = BloomFilterPartitionConfig(kikimr);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.ByKeyFilterPrefixesSize(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(cfg.GetByKeyFilterPrefixes(0).GetPrefixLength(), 2);
+        }
+    }
+
+    Y_UNIT_TEST(DataShardBloomFilterIndexDropLast) {
+        // Dropping the *last* prefix bloom index makes ByKeyFilterPrefixes empty. The schemeshard
+        // clears its config and the alter still reaches the datashard, which must drop its engine
+        // filter (previously it kept a stale filter because an empty prefix list looked like
+        // "no change"). The table must remain fully queryable, and a bloom index can be re-added.
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        BloomSchemeOk(session, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/T` (
+                Key1 Uint64,
+                Key2 Uint64,
+                Value String,
+                PRIMARY KEY (Key1, Key2),
+                INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1)
+            );
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(BloomFilterPartitionConfig(kikimr).ByKeyFilterPrefixesSize(), 1);
+
+        // Write data so the drop alter must actually be applied by the datashard engine.
+        {
+            auto r = queryClient.ExecuteQuery(R"(
+                UPSERT INTO `/Root/T` (Key1, Key2, Value) VALUES
+                    (1u, 1u, "a"), (2u, 2u, "b"), (3u, 3u, "c");
+            )", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::SUCCESS, r.GetIssues().ToString());
+        }
+
+        // Drop the only bloom index -> ByKeyFilterPrefixes becomes empty.
+        BloomSchemeOk(session, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T` DROP INDEX idx_bloom1;
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(BloomFilterPartitionConfig(kikimr).ByKeyFilterPrefixesSize(), 0);
+
+        // Table stays correct after the engine filter is cleared.
+        {
+            auto r = queryClient.ExecuteQuery(R"(
+                SELECT Value FROM `/Root/T` WHERE Key1 = 2u AND Key2 = 2u;
+            )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(r.GetStatus(), EStatus::SUCCESS, r.GetIssues().ToString());
+            CompareYson(R"([[["b"]]])", FormatResultSetYson(r.GetResultSet(0)));
+        }
+
+        // A bloom index can be re-added after the table had none (engine re-enables the filter).
+        BloomSchemeOk(session, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T` ADD INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1);
+        )");
+        UNIT_ASSERT_VALUES_EQUAL(BloomFilterPartitionConfig(kikimr).ByKeyFilterPrefixesSize(), 1);
+    }
+
+    Y_UNIT_TEST(DataShardBloomFilterIndexCreateBadPrefix) {
+        // CREATE-time validation: bloom filter columns must be a left prefix of the primary key,
+        // because the named scheme object stores the columns while the engine prefix is length-only.
+        TKikimrRunner kikimr;
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        // Key2 alone is not a left prefix of (Key1, Key2).
+        BloomSchemeFails(session, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/Bad1` (
+                Key1 Uint64,
+                Key2 Uint64,
+                Value String,
+                PRIMARY KEY (Key1, Key2),
+                INDEX idx_bad LOCAL USING bloom_filter ON (Key2)
+            );
+        )");
+
+        // (Key2, Key1) is not a left prefix of (Key1, Key2).
+        BloomSchemeFails(session, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/Bad2` (
+                Key1 Uint64,
+                Key2 Uint64,
+                Value String,
+                PRIMARY KEY (Key1, Key2),
+                INDEX idx_bad LOCAL USING bloom_filter ON (Key2, Key1)
+            );
+        )");
+
+        // Two bloom indexes over the same PK prefix collapse to one engine prefix -> rejected.
+        BloomSchemeFails(session, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/Bad3` (
+                Key1 Uint64,
+                Key2 Uint64,
+                Value String,
+                PRIMARY KEY (Key1, Key2),
+                INDEX idx_a LOCAL USING bloom_filter ON (Key1),
+                INDEX idx_b LOCAL USING bloom_filter ON (Key1)
+            );
+        )");
+    }
+
+    Y_UNIT_TEST(DataShardBloomFilterIndexFlagOff) {
+        // With EnableLocalIndexAsSchemeObject OFF, a row-table bloom filter index drives only the
+        // engine ByKeyFilterPrefixes (unchanged legacy behavior) and is NOT registered as a named
+        // TTableIndex scheme object, so DROP INDEX by name is rejected.
+        auto serverSettings = TKikimrSettings();
+        serverSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
+        TKikimrRunner kikimr(serverSettings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        BloomSchemeOk(session, R"(
+            --!syntax_v1
+            CREATE TABLE `/Root/T` (
+                Key1 Uint64,
+                Key2 Uint64,
+                Value String,
+                PRIMARY KEY (Key1, Key2),
+                INDEX idx_bloom1 LOCAL USING bloom_filter ON (Key1)
+            );
+        )");
+
+        // Engine prefix present, but no TTableIndex scheme object child on the schemeshard.
+        auto pathDescr = kikimr.GetTestClient().Ls("/Root/T")->Record.GetPathDescription();
+        UNIT_ASSERT_VALUES_EQUAL(pathDescr.GetTable().GetPartitionConfig().ByKeyFilterPrefixesSize(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(pathDescr.GetTable().TableIndexesSize(), 0);
+        for (const auto& child : pathDescr.GetChildren()) {
+            UNIT_ASSERT_VALUES_UNEQUAL(child.GetPathType(), NKikimrSchemeOp::EPathTypeTableIndex);
+        }
+
+        // No scheme object => DROP INDEX by name cannot resolve it.
+        BloomSchemeFails(session, R"(
+            --!syntax_v1
+            ALTER TABLE `/Root/T` DROP INDEX idx_bloom1;
         )");
     }
 
@@ -3676,12 +3921,17 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
     class TKikimrRunnerWithPauseIndexBuild : public TKikimrRunner {
     public:
-        static TKikimrSettings MakeSettings(bool onlineUnique = false) {
+        static TKikimrSettings MakeSettings(bool onlineUnique = false, std::optional<bool> enableIndexStreamWrite = std::nullopt) {
             NKikimrConfig::TFeatureFlags featureFlags;
             featureFlags.SetEnableAddUniqueIndex(true);
             featureFlags.SetEnableOnlineAddUniqueIndex(onlineUnique);
 
-            TKikimrSettings settings;
+            NKikimrConfig::TAppConfig app;
+            if (enableIndexStreamWrite) {
+                app.MutableTableServiceConfig()->SetEnableIndexStreamWrite(*enableIndexStreamWrite);
+            }
+
+            TKikimrSettings settings(app);
             settings
                 .SetFeatureFlags(featureFlags)
                 .SetUseRealThreads(false);
@@ -3689,8 +3939,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             return settings;
         }
 
-        TKikimrRunnerWithPauseIndexBuild(bool yqlDetailedLogging = false, bool onlineUnique = false)
-            : TKikimrRunner(MakeSettings(onlineUnique))
+        TKikimrRunnerWithPauseIndexBuild(bool yqlDetailedLogging = false, bool onlineUnique = false, std::optional<bool> enableIndexStreamWrite = std::nullopt)
+            : TKikimrRunner(MakeSettings(onlineUnique, enableIndexStreamWrite))
             , BuildIndexRequestPromise(NThreading::NewPromise<void>())
             , BuildIndexRequest(BuildIndexRequestPromise.GetFuture())
             , ValidateIndexRequestPromise(NThreading::NewPromise<void>())
@@ -3749,8 +3999,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         bool ValidateIndexEventIsIntercepted = false;
     };
 
-    void BuildingUniqIndexAllowsTableModifications(bool sqlInterface, bool onlineBuild) {
-        TKikimrRunnerWithPauseIndexBuild kikimr(false /* yqlDetailedLogging */, onlineBuild);
+    void BuildingUniqIndexAllowsTableModifications(bool sqlInterface, bool onlineBuild, std::optional<bool> enableIndexStreamWrite) {
+        TKikimrRunnerWithPauseIndexBuild kikimr(false /* yqlDetailedLogging */, onlineBuild, enableIndexStreamWrite);
         kikimr.RunCall([&]
         {
             auto db = kikimr.GetTableClient();
@@ -3898,20 +4148,20 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         });
     }
 
-    Y_UNIT_TEST(BuildingUniqIndexDeniesTableModificationsPublicApi) {
-        BuildingUniqIndexAllowsTableModifications(false, false);
+    Y_UNIT_TEST_TWIN(BuildingUniqIndexDeniesTableModificationsPublicApi, EnableIndexStreamWrite) {
+        BuildingUniqIndexAllowsTableModifications(false, false, EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST(BuildingUniqIndexDeniesTableModificationsSql) {
-        BuildingUniqIndexAllowsTableModifications(true, false);
+    Y_UNIT_TEST_TWIN(BuildingUniqIndexDeniesTableModificationsSql, EnableIndexStreamWrite) {
+        BuildingUniqIndexAllowsTableModifications(true, false, EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST(BuildingUniqIndexAllowsTableModificationsPublicApi) {
-        BuildingUniqIndexAllowsTableModifications(false, true);
+    Y_UNIT_TEST_TWIN(BuildingUniqIndexAllowsTableModificationsPublicApi, EnableIndexStreamWrite) {
+        BuildingUniqIndexAllowsTableModifications(false, true, EnableIndexStreamWrite);
     }
 
-    Y_UNIT_TEST(BuildingUniqIndexAllowsTableModificationsSql) {
-        BuildingUniqIndexAllowsTableModifications(true, true);
+    Y_UNIT_TEST_TWIN(BuildingUniqIndexAllowsTableModificationsSql, EnableIndexStreamWrite) {
+        BuildingUniqIndexAllowsTableModifications(true, true, EnableIndexStreamWrite);
     }
 
     void ValidatingUniqIndex(bool sqlInterface, bool isUnique) {
@@ -5981,7 +6231,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             )";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Path does not exist", result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Path `/UnknownPath` does not exist", result.GetIssues().ToString());
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Error for the path: /UnknownPath", result.GetIssues().ToString());
             CheckPermissions(session, {{.Path = "/Root", .Permissions = {{"user1", {"ydb.database.connect", "ydb.generic.list"}}}}});
         }
@@ -7431,6 +7681,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         auto runnerSettings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
+        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
         TKikimrRunner kikimr(runnerSettings);
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
@@ -8033,10 +8284,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "External data sources are disabled for serverless domains. Please contact your system administrator to enable it", result.GetIssues().ToString());
         };
 
-        auto checkNotFound = [](const auto& result, const TString& error) {
+        auto checkNotFound = [](const auto& result, const TString& path, const TString& error) {
             const auto& issuesString = result.GetIssues().ToString();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, issuesString);
-            UNIT_ASSERT_STRING_CONTAINS_C(issuesString, "Path does not exist", issuesString);
+            UNIT_ASSERT_STRING_CONTAINS_C(issuesString, TStringBuilder() << "Path `" << path << "` does not exist", issuesString);
             UNIT_ASSERT_STRING_CONTAINS_C(issuesString, error, issuesString);
         };
 
@@ -8080,8 +8331,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
         checkDisabled(ydb->ExecuteQuery(createSourceSql, settings));
         checkDisabled(ydb->ExecuteQuery(createTableSql, settings));
-        checkNotFound(ydb->ExecuteQuery(dropTableSql, settings), "Executing ESchemeOpDropExternalTable");
-        checkNotFound(ydb->ExecuteQuery(dropSourceSql, settings), "Executing operation with object \"EXTERNAL_DATA_SOURCE\"");
+        checkNotFound(ydb->ExecuteQuery(dropTableSql, settings), ydb->GetSettings().GetServerlessTenantName() + "/MyExternalTable", "Executing ESchemeOpDropExternalTable");
+        checkNotFound(ydb->ExecuteQuery(dropSourceSql, settings), ydb->GetSettings().GetServerlessTenantName() + "/MyExternalDataSource", "Executing operation with object \"EXTERNAL_DATA_SOURCE\"");
     }
 
     Y_UNIT_TEST(CreateExternalDataSource) {
@@ -10148,7 +10399,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Path does not exist");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Path `/Root/table_not_exists` does not exist");
         }
 
         // positive
@@ -10466,7 +10717,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
 
             const auto result = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Path does not exist");
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToOneLineString(), "Path `/Root/table_not_exists` does not exist");
         }
 
         // positive
@@ -11846,7 +12097,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // DROP RESOURCE POOL
         checkQuery("DROP RESOURCE POOL MyResourcePool;",
             EStatus::SCHEME_ERROR,
-            "Path does not exist");
+            "Path `/Root/.metadata/workload_manager/pools/MyResourcePool` does not exist");
     }
 
     Y_UNIT_TEST(DisableResourcePoolsOnServerless) {
@@ -11860,9 +12111,10 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Resource pools are disabled for serverless domains. Please contact your system administrator to enable it", result.GetIssues().ToString());
         };
 
-        auto checkNotFound = [](const auto& result) {
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Path does not exist", result.GetIssues().ToString());
+        auto checkNotFound = [](const auto& result, const TString& path) {
+            const auto& issuesString = result.GetIssues().ToString();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, issuesString);
+            UNIT_ASSERT_STRING_CONTAINS_C(issuesString, TStringBuilder() << "Path `" << path << "` does not exist", issuesString);
         };
 
         const auto& createSql = R"(
@@ -11896,8 +12148,8 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         // Serverless, disabled
         settings.Database(ydb->GetSettings().GetServerlessTenantName()).NodeIndex(ydb->GetServerlessTenantInfo().NodeIdx);
         checkDisabled(ydb->ExecuteQuery(createSql, settings));
-        checkNotFound(ydb->ExecuteQuery(alterSql, settings));
-        checkNotFound(ydb->ExecuteQuery(dropSql, settings));
+        checkNotFound(ydb->ExecuteQuery(alterSql, settings), ydb->GetSettings().GetServerlessTenantName() + "/.metadata/workload_manager/pools/MyResourcePool");
+        checkNotFound(ydb->ExecuteQuery(dropSql, settings), ydb->GetSettings().GetServerlessTenantName() + "/.metadata/workload_manager/pools/MyResourcePool");
     }
 
     Y_UNIT_TEST(ResourcePoolsValidation) {
@@ -11970,7 +12222,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             CREATE RESOURCE POOL MyResourcePool WITH (
                 CONCURRENT_QUERY_LIMIT=20,
                 QUEUE_SIZE=1000,
-                QUERY_MEMORY_LIMIT_PERCENT_PER_NODE=95
+                TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE=80
             );)";
         auto result = session.ExecuteSchemeQuery(query).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -11985,7 +12237,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         UNIT_ASSERT_VALUES_EQUAL(properties.size(), 3);
         UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
         UNIT_ASSERT_VALUES_EQUAL(properties.at("queue_size"), "1000");
-        UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_percent_per_node"), "95");
+        UNIT_ASSERT_VALUES_EQUAL(properties.at("total_memory_limit_percent_per_node"), "80");
     }
 
     Y_UNIT_TEST(DoubleCreateResourcePool) {
@@ -12014,7 +12266,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             auto query = R"(
                 CREATE RESOURCE POOL MyResourcePool WITH (
-                    QUERY_MEMORY_LIMIT_PERCENT_PER_NODE="0.5"
+                    TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE=50
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::GENERIC_ERROR);
@@ -12036,7 +12288,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             auto query = R"(
                 CREATE RESOURCE POOL MyResourcePool WITH (
                     CONCURRENT_QUERY_LIMIT=20,
-                    QUERY_MEMORY_LIMIT_PERCENT_PER_NODE=95
+                    TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE=70
                 );)";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -12046,14 +12298,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto& properties = resourcePoolDesc->ResultSet.at(0).ResourcePoolInfo->Description.GetProperties().GetProperties();
             UNIT_ASSERT_VALUES_EQUAL(properties.size(), 2);
             UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "20");
-            UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_percent_per_node"), "95");
+            UNIT_ASSERT_VALUES_EQUAL(properties.at("total_memory_limit_percent_per_node"), "70");
         }
 
         {
             auto query = R"(
                 ALTER RESOURCE POOL MyResourcePool
                     SET (CONCURRENT_QUERY_LIMIT = 30, QUEUE_SIZE = 100),
-                    RESET (QUERY_MEMORY_LIMIT_PERCENT_PER_NODE);
+                    RESET (TOTAL_MEMORY_LIMIT_PERCENT_PER_NODE);
                 )";
             auto result = session.ExecuteSchemeQuery(query).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -12064,7 +12316,7 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             UNIT_ASSERT_VALUES_EQUAL(properties.size(), 3);
             UNIT_ASSERT_VALUES_EQUAL(properties.at("concurrent_query_limit"), "30");
             UNIT_ASSERT_VALUES_EQUAL(properties.at("queue_size"), "100");
-            UNIT_ASSERT_VALUES_EQUAL(properties.at("query_memory_limit_percent_per_node"), "-1");
+            UNIT_ASSERT_VALUES_EQUAL(properties.at("total_memory_limit_percent_per_node"), "-1");
         }
     }
 
@@ -13657,7 +13909,7 @@ END DO)",
         for (ui64 i = 0; i < PARALLEL_QUERIES; ++i) {
             results.emplace_back(db.ExecuteQuery(R"(
                 DROP STREAMING QUERY `MyFolder/MyStreamingQuery`;)",
-                NQuery::TTxControl::NoTx()));
+                NQuery::TTxControl::NoTx(), NoRetryExecuteQuerySettings()));
         }
 
         ui64 successCount = 0;
@@ -13668,7 +13920,7 @@ END DO)",
             } else if (result.GetStatus() == EStatus::NOT_FOUND) {
                 const auto& issues = result.GetIssues().ToString();
                 if (!issues.contains("Streaming query /Root/MyFolder/MyStreamingQuery not found or you don't have access permissions") &&
-                    !issues.contains("Path does not exist")) {
+                    !issues.contains("Path `/Root/MyFolder/MyStreamingQuery` does not exist")) {
                     UNIT_FAIL(TStringBuilder() << "Unexpected NOT_FOUND error: " << issues);
                 }
             } else if (result.GetStatus() == EStatus::ABORTED) {
@@ -14463,7 +14715,6 @@ END DO)",
 
         {
             auto result = session.ExecuteSchemeQuery(R"(
-                --!syntax_v1
                 CREATE TABLE `/Root/SerialTable` (
                     Key   Serial,
                     Value String,
@@ -14475,7 +14726,6 @@ END DO)",
 
         {
             auto result = session.ExecuteDataQuery(R"(
-                --!syntax_v1
                 INSERT INTO `/Root/SerialTable` (Value) VALUES ("a"), ("b"), ("c");
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -14484,7 +14734,6 @@ END DO)",
         // Verify rows exist with keys 1, 2, 3
         {
             auto result = session.ExecuteDataQuery(R"(
-                --!syntax_v1
                 SELECT Key, Value FROM `/Root/SerialTable` ORDER BY Key;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -14503,7 +14752,6 @@ END DO)",
 
         {
             auto result = session.ExecuteDataQuery(R"(
-                --!syntax_v1
                 INSERT INTO `/Root/SerialTable` (Value) VALUES ("d"), ("e");
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -14511,7 +14759,6 @@ END DO)",
 
         {
             auto result = session.ExecuteDataQuery(R"(
-                --!syntax_v1
                 SELECT Key, Value FROM `/Root/SerialTable` ORDER BY Key;
             )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
@@ -14532,7 +14779,6 @@ END DO)",
 
         {
             auto result = session.ExecuteSchemeQuery(R"(
-                --!syntax_v1
                 CREATE TABLE `/Root/TtlTable` (
                     Key   Uint32,
                     Ts    Timestamp,
@@ -14547,7 +14793,6 @@ END DO)",
 
         {
             auto result = session.ExecuteDataQuery(R"(
-                --!syntax_v1
                 UPSERT INTO `/Root/TtlTable` (Key, Ts, Value) VALUES
                     (1, Timestamp("2020-01-01T00:00:00.000000Z"), "a"),
                     (2, Timestamp("2020-01-02T00:00:00.000000Z"), "b"),
@@ -14574,6 +14819,33 @@ END DO)",
             TResultSetParser parser(resultSet);
             UNIT_ASSERT(parser.TryNextRow());
             UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser(0).GetUint64(), 0u);
+        }
+    }
+
+    Y_UNIT_TEST(TruncateNonExistentTable) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableTruncateTable(true);
+        TKikimrRunner kikimr(featureFlags);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                CREATE TABLE `/Root/TestTable` (
+                    k Uint32,
+                    v String,
+                    PRIMARY KEY(k)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        {
+            auto result = session.ExecuteSchemeQuery(R"(
+                TRUNCATE TABLE `/Root/WrongTable`;
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Path `/Root/WrongTable` does not exist");
         }
     }
 
@@ -14675,6 +14947,107 @@ END DO)",
         }
         if (!op->Status().IsSuccess()) {
             ythrow yexception() << "Unexpected status of compaction operation: " << op->Status().GetStatus() << ": " << op->Status().GetIssues().ToString();
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(AlterTableCompactAccessDenied, UseQueryService) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableForcedCompactions(true);
+        TKikimrRunner kikimr(featureFlags);
+
+        auto rootSession = kikimr.GetTableClient().CreateSession().GetValueSync().GetSession();
+        auto rootQueryClient = kikimr.GetQueryClient();
+        {
+            auto result = ExecuteGeneric<UseQueryService>(rootQueryClient, rootSession, R"sql(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )sql");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            auto result = rootSession.ExecuteDataQuery(R"sql(
+                UPSERT INTO `/Root/TestTable` (Key, Value) VALUES (1, "a"), (2, "b");
+            )sql", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        kikimr.GetTestClient().GrantConnect("user@builtin");
+
+        // grant only read-only (describe) access, not ALTER
+        {
+            auto schemeClient = kikimr.GetSchemeClient();
+            auto result = schemeClient.ModifyPermissions("/Root/TestTable",
+                NYdb::NScheme::TModifyPermissionsSettings()
+                    .AddGrantPermissions(NYdb::NScheme::TPermissions(
+                        "user@builtin", {"ydb.granular.describe_schema"}))
+            ).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        auto userSession = kikimr.GetTableClient(
+            NYdb::NTable::TClientSettings().AuthToken("user@builtin"))
+            .CreateSession().GetValueSync().GetSession();
+        auto userQueryClient = kikimr.GetQueryClient(NQuery::TClientSettings().AuthToken("user@builtin"));
+        {
+            auto result = ExecuteGeneric<UseQueryService>(userQueryClient, userSession, R"sql(
+                ALTER TABLE `/Root/TestTable` COMPACT WITH (PARALLEL = 2, CASCADE = true);
+            )sql");
+            if constexpr (UseQueryService) {
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAUTHORIZED, result.GetIssues().ToString());
+            } else {
+                // TODO: should be UNAUTHORIZED?
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            }
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "Unauthorized", result.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(AlterTableCompactNotPositiveParallel, UseQueryService) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        featureFlags.SetEnableForcedCompactions(true);
+        TKikimrRunner kikimr(featureFlags);
+
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        auto queryClient = kikimr.GetQueryClient();
+
+        {
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, R"sql(
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Value String,
+                    PRIMARY KEY (Key)
+                );
+            )sql");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        // SQL level
+        {
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, R"sql(
+                ALTER TABLE `/Root/TestTable` COMPACT WITH (PARALLEL = -4);
+            )sql");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "extraneous input '-'", result.GetIssues().ToString());
+        }
+        {
+            auto result = ExecuteGeneric<UseQueryService>(queryClient, session, R"sql(
+                ALTER TABLE `/Root/TestTable` COMPACT WITH (PARALLEL = 0);
+            )sql");
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "positive", result.GetIssues().ToString());
+        }
+
+        // public API level
+        {
+            auto settings = NYdb::NTable::TAlterTableSettings().Compact(TCompact(false, 0));
+            auto result = session.AlterTableLong("/Root/TestTable", settings).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.Status().GetStatus(), EStatus::BAD_REQUEST, result.Status().GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.Status().GetIssues().ToString(), "MAX_SHARDS_IN_FLIGHT",
+                result.Status().GetIssues().ToString());
         }
     }
 }
@@ -14855,6 +15228,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
         TTestHelper testHelper(settings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -15529,6 +15903,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto runnerSettings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
+        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -15828,6 +16203,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto runnerSettings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
+        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {
@@ -15865,6 +16241,7 @@ Y_UNIT_TEST_SUITE(KqpOlapScheme) {
         auto runnerSettings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
+        runnerSettings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
         TTestHelper testHelper(runnerSettings);
 
         TVector<TTestHelper::TColumnSchema> schema = {

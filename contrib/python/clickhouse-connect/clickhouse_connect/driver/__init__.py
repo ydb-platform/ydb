@@ -1,34 +1,101 @@
-import asyncio
-import warnings
-from concurrent.futures import ThreadPoolExecutor
-from inspect import signature
-from typing import Optional, Union, Dict, Any
-from urllib.parse import urlparse, parse_qs
+from __future__ import annotations
 
-import clickhouse_connect.driver.ctypes
+from inspect import signature
+from typing import TYPE_CHECKING, Any
+from urllib.parse import parse_qs, urlparse
+
+import clickhouse_connect.driver.ctypes  # noqa: F401 -- side-effect import
 from clickhouse_connect.driver.client import Client
-from clickhouse_connect.driver.common import dict_copy
 from clickhouse_connect.driver.exceptions import ProgrammingError
 from clickhouse_connect.driver.httpclient import HttpClient
-from clickhouse_connect.driver.asyncclient import AsyncClient, DefaultThreadPoolExecutor, NEW_THREAD_POOL_EXECUTOR
 
-__all__ = ['Client', 'AsyncClient', 'create_client', 'create_async_client']
+if TYPE_CHECKING:
+    from clickhouse_connect.driver.asyncclient import AsyncClient
+
+__all__ = ["Client", "AsyncClient", "create_client", "create_async_client"]
 
 
-# pylint: disable=too-many-arguments,too-many-locals,too-many-branches
-def create_client(*,
-                  host: Optional[str] = None,
-                  username: Optional[str] = None,
-                  password: str = '',
-                  access_token: Optional[str] = None,
-                  database: str = '__default__',
-                  interface: Optional[str] = None,
-                  port: int = 0,
-                  secure: Union[bool, str] = False,
-                  dsn: Optional[str] = None,
-                  settings: Optional[Dict[str, Any]] = None,
-                  generic_args: Optional[Dict[str, Any]] = None,
-                  **kwargs) -> Client:
+def __getattr__(name):
+    if name == "AsyncClient":
+        try:
+            from clickhouse_connect.driver.asyncclient import AsyncClient
+        except ModuleNotFoundError as ex:
+            if ex.name == "aiohttp" or (ex.name and ex.name.startswith("aiohttp.")):
+                raise ImportError("Async support requires aiohttp. Install with: pip install clickhouse-connect[async]") from ex
+            raise
+        return AsyncClient
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
+
+
+def default_port(interface: str, secure: bool) -> int:
+    """Get default port for the given interface."""
+    if interface.startswith("http"):
+        return 8443 if secure else 8123
+    raise ValueError("Unrecognized ClickHouse interface")
+
+
+def _parse_connection_params(
+    host: str | None,
+    username: str | None,
+    password: str,
+    port: int,
+    database: str,
+    interface: str | None,
+    secure: bool | str,
+    dsn: str | None,
+    kwargs: dict[str, Any],
+) -> tuple[str, str | None, str, int, str, str]:
+    """Parse and normalize connection parameters including DSN parsing."""
+    if dsn:
+        parsed = urlparse(dsn)
+        username = username or parsed.username
+        password = password or parsed.password
+        host = host or parsed.hostname
+        port = port or parsed.port
+        if parsed.path and (not database or database == "__default__"):
+            database = parsed.path[1:].split("/")[0]
+        database = database or parsed.path
+        for k, v in parse_qs(parsed.query).items():
+            kwargs[k] = v[0]
+    use_tls = str(secure).lower() == "true" or interface == "https" or (not interface and str(port) in ("443", "8443"))
+    if not host:
+        host = "localhost"
+    if not interface:
+        interface = "https" if use_tls else "http"
+    port = port or default_port(interface, use_tls)
+    if username is None and "user" in kwargs:
+        username = kwargs.pop("user")
+    if username is None and "user_name" in kwargs:
+        username = kwargs.pop("user_name")
+    if password and username is None:
+        username = "default"
+    if "compression" in kwargs and "compress" not in kwargs:
+        kwargs["compress"] = kwargs.pop("compression")
+
+    return host, username, password, port, database, interface
+
+
+def _validate_access_token(access_token: str | None, username: str | None, password: str) -> None:
+    """Validate that access_token and username/password are not both provided."""
+    if access_token and (username or password != ""):
+        raise ProgrammingError("Cannot use both access_token and username/password")
+
+
+def create_client(
+    *,
+    host: str | None = None,
+    username: str | None = None,
+    password: str = "",
+    access_token: str | None = None,
+    database: str = "__default__",
+    interface: str | None = None,
+    port: int = 0,
+    secure: bool | str = False,
+    dsn: str | None = None,
+    settings: dict[str, Any] | None = None,
+    generic_args: dict[str, Any] | None = None,
+    **kwargs,
+) -> Client:
     """
     The preferred method to get a ClickHouse Connect Client instance
 
@@ -82,86 +149,61 @@ def create_client(*,
     :param tz_source Controls how the client determines the fallback timezone for DateTime columns without an
       explicit timezone. "auto" (default) auto-detects based on DST safety of server timezone. "server" always
       uses the server timezone. "local" always uses the local timezone.
-    :param apply_server_timezone Deprecated. Use tz_source instead.
     :param tz_mode Controls timezone-aware behavior for UTC DateTime columns. "naive_utc" (default) returns
       naive UTC timestamps. "aware" forces timezone-aware UTC datetimes. "schema" returns datetimes that
       match the server's column definition which means timezone-aware when the column defines a timezone and naive
       for bare DateTime columns.
-    :param utc_tz_aware Deprecated. Use tz_mode instead.
     :param autogenerate_session_id  If set, this will override the 'autogenerate_session_id' common setting.
     :param form_encode_query_params  If True, query parameters will be sent as form-encoded data in the request body
       instead of as URL parameters. This is useful for queries with large parameter sets that might exceed URL length
       limits. Only available for query operations (not inserts). Default: False
     :return: ClickHouse Connect Client instance
     """
-    if dsn:
-        parsed = urlparse(dsn)
-        username = username or parsed.username
-        password = password or parsed.password
-        host = host or parsed.hostname
-        port = port or parsed.port
-        if parsed.path and (not database or database == '__default__'):
-            database = parsed.path[1:].split('/')[0]
-        database = database or parsed.path
-        for k, v in parse_qs(parsed.query).items():
-            kwargs[k] = v[0]
-    use_tls = str(secure).lower() == 'true' or interface == 'https' or (not interface and str(port) in ('443', '8443'))
-    if not host:
-        host = 'localhost'
-    if not interface:
-        interface = 'https' if use_tls else 'http'
-    port = port or default_port(interface, use_tls)
-    if access_token and (username or password != ''):
-        raise ProgrammingError('Cannot use both access_token and username/password')
-    if username is None and 'user' in kwargs:
-        username = kwargs.pop('user')
-    if username is None and 'user_name' in kwargs:
-        username = kwargs.pop('user_name')
-    if password and username is None:
-        username = 'default'
-    if 'compression' in kwargs and 'compress' not in kwargs:
-        kwargs['compress'] = kwargs.pop('compression')
+    host, username, password, port, database, interface = _parse_connection_params(
+        host, username, password, port, database, interface, secure, dsn, kwargs
+    )
+    _validate_access_token(access_token, username, password)
+
     settings = settings or {}
-    if interface.startswith('http'):
+    if interface.startswith("http"):
         if generic_args:
             client_params = signature(HttpClient).parameters
             for name, value in generic_args.items():
                 if name in client_params:
                     kwargs[name] = value
-                elif name == 'compression':
-                    if 'compress' not in kwargs:
-                        kwargs['compress'] = value
+                elif name == "compression":
+                    if "compress" not in kwargs:
+                        kwargs["compress"] = value
                 else:
-                    if name.startswith('ch_'):
+                    if name.startswith("ch_"):
                         name = name[3:]
                     settings[name] = value
-        return HttpClient(interface, host, port, username, password, database, access_token,
-                          settings=settings, **kwargs)
-    raise ProgrammingError(f'Unrecognized client type {interface}')
+        return HttpClient(interface, host, port, username, password, database, access_token, settings=settings, **kwargs)
+    raise ProgrammingError(f"Unrecognized client type {interface}")
 
 
-def default_port(interface: str, secure: bool):
-    if interface.startswith('http'):
-        return 8443 if secure else 8123
-    raise ValueError('Unrecognized ClickHouse interface')
-
-
-async def create_async_client(*,
-                              host: Optional[str] = None,
-                              username: Optional[str] = None,
-                              password: str = '',
-                              database: str = '__default__',
-                              interface: Optional[str] = None,
-                              port: int = 0,
-                              secure: Union[bool, str] = False,
-                              dsn: Optional[str] = None,
-                              settings: Optional[Dict[str, Any]] = None,
-                              generic_args: Optional[Dict[str, Any]] = None,
-                              executor_threads: int = 0,
-                              executor: Union[ThreadPoolExecutor, None, DefaultThreadPoolExecutor] = NEW_THREAD_POOL_EXECUTOR,
-                              **kwargs) -> AsyncClient:
+async def create_async_client(
+    *,
+    host: str | None = None,
+    username: str | None = None,
+    password: str = "",
+    access_token: str | None = None,
+    database: str = "__default__",
+    interface: str | None = None,
+    port: int = 0,
+    secure: bool | str = False,
+    dsn: str | None = None,
+    settings: dict[str, Any] | None = None,
+    generic_args: dict[str, Any] | None = None,
+    connector_limit: int = 100,
+    connector_limit_per_host: int = 20,
+    keepalive_timeout: float = 30.0,
+    **kwargs,
+) -> AsyncClient:
     """
     The preferred method to get an async ClickHouse Connect Client instance.
+    Requires the async extra: pip install clickhouse-connect[async]
+
     For sync version, see create_client.
 
     Unlike sync version, the 'autogenerate_session_id' setting by default is False.
@@ -169,6 +211,7 @@ async def create_async_client(*,
     :param host: The hostname or IP address of the ClickHouse server. If not set, localhost will be used.
     :param username: The ClickHouse username. If not set, the default ClickHouse user will be used.
     :param password: The password for username.
+    :param access_token: JWT access token.
     :param database:  The default database for the connection. If not set, ClickHouse Connect will use the
      default database for username.
     :param interface: Must be http or https.  Defaults to http, or to https if port is set to 8443 or 443
@@ -180,12 +223,10 @@ async def create_async_client(*,
     :param settings: ClickHouse server settings to be used with the session/every request
     :param generic_args: Used internally to parse DBAPI connection strings into keyword arguments and ClickHouse settings.
       It is not recommended to use this parameter externally
-    :param executor_threads: 'max_worker' threads used by the client ThreadPoolExecutor.  If not set, the default
-      of 4 + detected CPU cores will be used
-    :param executor: Optional `ThreadPoolExecutor` to use for async operations.  If not set, a new `ThreadPoolExecutor`
-      will be created with the number of threads specified by `executor_threads`.  If set to `None` it will use the
-      default executor of the event loop.
-    :param kwargs -- Recognized keyword arguments (used by the HTTP client), see below
+    :param connector_limit: Maximum number of allowable connections to the server
+    :param connector_limit_per_host: Maximum number of connections per host
+    :param keepalive_timeout: Time limit on idle keepalive connections
+    :param kwargs -- Recognized keyword arguments (used by the async HTTP client), see below
 
     :param compress: Enable compression for ClickHouse HTTP inserts and query results.  True will select the preferred
       compression method (lz4).  A str of 'lz4', 'zstd', 'brotli', or 'gzip' can be used to use a specific compression type
@@ -194,7 +235,6 @@ async def create_async_client(*,
     :param send_receive_timeout: Read timeout in seconds for http connection
     :param client_name: client_name prepended to the HTTP User Agent header. Set this to track client queries
       in the ClickHouse system.query_log.
-    :param send_progress: Deprecated, has no effect.  Previous functionality is now automatically determined
     :param verify: Verify the server certificate in secure/https mode
     :param ca_cert: If verify is True, the file path to Certificate Authority root to validate ClickHouse server
      certificate, in .pem format.  Ignored if verify is False.  This is not necessary if the ClickHouse server
@@ -206,8 +246,6 @@ async def create_async_client(*,
       is not included the Client Certificate key file
     :param session_id ClickHouse session id.  If not specified and the common setting 'autogenerate_session_id'
       is True, the client will generate a UUID1 session id
-    :param pool_mgr Optional urllib3 PoolManager for this client.  Useful for creating separate connection
-      pools for multiple client endpoints for applications with many clients
     :param http_proxy  http proxy address.  Equivalent to setting the HTTP_PROXY environment variable
     :param https_proxy https proxy address.  Equivalent to setting the HTTPS_PROXY environment variable
     :param server_host_name  This is the server host name that will be checked against a TLS certificate for
@@ -216,37 +254,64 @@ async def create_async_client(*,
     :param tz_source Controls how the client determines the fallback timezone for DateTime columns without an
       explicit timezone. "auto" (default) auto-detects based on DST safety of server timezone. "server" always
       uses the server timezone. "local" always uses the local timezone.
-    :param apply_server_timezone Deprecated. Use tz_source instead.
     :param tz_mode Controls timezone-aware behavior for UTC DateTime columns. "naive_utc" (default) returns
       naive UTC timestamps. "aware" forces timezone-aware UTC datetimes. "schema" returns datetimes that
       match the server's column definition which means timezone-aware when the column defines a timezone and naive
       for bare DateTime columns.
-    :param utc_tz_aware Deprecated. Use tz_mode instead.
     :param autogenerate_session_id  If set, this will override the 'autogenerate_session_id' common setting.
     :param form_encode_query_params  If True, query parameters will be sent as form-encoded data in the request body
       instead of as URL parameters. This is useful for queries with large parameter sets that might exceed URL length
       limits. Only available for query operations (not inserts). Default: False
-    :return: ClickHouse Connect Client instance
+    :return: ClickHouse Connect AsyncClient instance
     """
+    try:
+        from clickhouse_connect.driver.asyncclient import AsyncClient as _AsyncClient
+    except ModuleNotFoundError as ex:
+        if ex.name == "aiohttp" or (ex.name and ex.name.startswith("aiohttp.")):
+            raise ImportError("Async support requires aiohttp. Install with: pip install clickhouse-connect[async]") from ex
+        raise
 
-    warnings.warn(
-        "The current async client is a thread-pool wrapper around the sync client. "
-        "A fully native async client is available for testing as a prerelease: "
-        "pip install 'clickhouse-connect[async]==0.12.0rc1'. "
-        "This prerelease branch is based on 0.11.0 and is gathering feedback ahead of 1.0.0, "
-        "where it will become the default async implementation. It is a drop-in replacement "
-        "with the same API surface. The main line includes additional updates that the native "
-        "client will receive when merged into 1.0.0.",
-        FutureWarning,
-        stacklevel=2,
+    if "pool_mgr" in kwargs:
+        raise ProgrammingError(
+            "pool_mgr is not supported by the async client. "
+            "Use connector_limit and connector_limit_per_host to configure connection pooling."
+        )
+
+    host, username, password, port, database, interface = _parse_connection_params(
+        host, username, password, port, database, interface, secure, dsn, kwargs
     )
+    _validate_access_token(access_token, username, password)
 
-    def _create_client():
-        if 'autogenerate_session_id' not in kwargs:
-            kwargs['autogenerate_session_id'] = False
-        return create_client(host=host, username=username, password=password, database=database, interface=interface,
-                             port=port, secure=secure, dsn=dsn, settings=settings, generic_args=generic_args, **kwargs)
+    settings = settings or {}
+    if generic_args:
+        client_params = signature(_AsyncClient).parameters
+        for name, value in generic_args.items():
+            if name in client_params:
+                kwargs[name] = value
+            elif name == "compression":
+                if "compress" not in kwargs:
+                    kwargs["compress"] = value
+            else:
+                if name.startswith("ch_"):
+                    name = name[3:]
+                settings[name] = value
 
-    loop = asyncio.get_running_loop()
-    _client = await loop.run_in_executor(None, _create_client)
-    return AsyncClient(client=_client, executor_threads=executor_threads, executor=executor)
+    if "autogenerate_session_id" not in kwargs:
+        kwargs["autogenerate_session_id"] = False
+
+    client = _AsyncClient(
+        interface=interface,
+        host=host,
+        port=port,
+        username=username,
+        password=password,
+        database=database,
+        access_token=access_token,
+        settings=settings,
+        connector_limit=connector_limit,
+        connector_limit_per_host=connector_limit_per_host,
+        keepalive_timeout=keepalive_timeout,
+        **kwargs,
+    )
+    await client._initialize()
+    return client

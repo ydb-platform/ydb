@@ -1,3 +1,4 @@
+import logging
 import pytest
 
 from ydb.tests.library.common.wait_for import wait_for
@@ -7,6 +8,8 @@ from ydb.tests.library.compatibility.fixtures import (
     RollingUpgradeAndDowngradeFixture,
 )
 from ydb.tests.oss.ydb_sdk_import import ydb
+
+logger = logging.getLogger(__name__)
 
 
 class WorkloadManagerWorkload:
@@ -115,7 +118,7 @@ class TestWorkloadManagerMixedCluster(MixedClusterFixture):
 
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        yield from self.setup_cluster(extra_feature_flags={"enable_resource_pools": True})
+        yield from self.setup_cluster(extra_feature_flags=["enable_resource_pools"])
 
     def test_workload_manager_mixed_cluster(self):
         if min(self.versions) < (25, 1, 4):
@@ -136,7 +139,7 @@ class TestWorkloadManagerRestartToAnotherVersion(RestartToAnotherVersionFixture)
 
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        yield from self.setup_cluster(extra_feature_flags={"enable_resource_pools": True})
+        yield from self.setup_cluster(extra_feature_flags=["enable_resource_pools"])
 
     def test_workload_manager_version_upgrade(self):
         if min(self.versions) < (25, 1, 4):
@@ -148,8 +151,19 @@ class TestWorkloadManagerRestartToAnotherVersion(RestartToAnotherVersionFixture)
         workload.create_resource_pool_classifier()
         workload.validate_resource_pool_classifier()
         self.change_cluster_version()
-        workload.validate_resource_pool()
-        workload.validate_resource_pool_classifier()
+
+        def validate_after_upgrade():
+            try:
+                workload.validate_resource_pool()
+                workload.validate_resource_pool_classifier()
+                return True
+            except Exception as e:
+                logger.warning("System views validation failed, retrying: %s", e)
+                return False
+
+        assert wait_for(validate_after_upgrade, timeout_seconds=240, step_seconds=5), \
+            "System views not available after version upgrade"
+
         workload.alter_resource_pool()
         workload.validate_altered_resource_pool()
         workload.alter_resource_pool_classifier()
@@ -160,7 +174,7 @@ class TestWorkloadManagerTabletTransfer(RollingUpgradeAndDowngradeFixture):
 
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        yield from self.setup_cluster(extra_feature_flags={"enable_resource_pools": True})
+        yield from self.setup_cluster(extra_feature_flags=["enable_resource_pools"])
 
     def test_workload_manager_tablet_transfer(self):
         if min(self.versions) < (25, 1, 4):

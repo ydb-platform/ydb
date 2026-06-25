@@ -58,8 +58,9 @@ public:
     }
 
 private:
+    // TODO(babenko): migrate to std::string
     TString Result_;
-    TStringOutput Output_ = TStringOutput(Result_);
+    TStringOutput Output_{Result_};
     TCheckedInDebugYsonTokenWriter Writer_ = TCheckedInDebugYsonTokenWriter(&Output_);
     TYPathStack Stack_;
     bool IsFirstStack_ = true;
@@ -345,9 +346,9 @@ TYsonString FilterYsonStringFallback(TYsonStringBuf yson)
     }
     switch (cursor->GetType()) {
         case EYsonItemType::BeginList:
-            return TYsonString(TString("[]"));
+            return TYsonString(std::string("[]"));
         case EYsonItemType::BeginMap:
-            return TYsonString(TString("{}"));
+            return TYsonString(std::string("{}"));
         case EYsonItemType::StringValue:
         case EYsonItemType::Int64Value:
         case EYsonItemType::Uint64Value:
@@ -355,6 +356,7 @@ TYsonString FilterYsonStringFallback(TYsonStringBuf yson)
         case EYsonItemType::BooleanValue:
         case EYsonItemType::EntityValue: {
             // Copy the value to a new YSON string and return it.
+            // TODO(babenko): migrate to std::string
             TString result;
             TStringOutput output(result);
             TCheckedInDebugYsonTokenWriter writer(&output);

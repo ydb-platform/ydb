@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kafka_proxy/kafka_events.h>
+#include <ydb/core/kafka_proxy/kafka_consumer_protocol.h>
 #include <ydb/core/kafka_proxy/kafka_messages.h>
 #include <ydb/core/kafka_proxy/kafka_topic_partition.h>
 #include <ydb/core/kafka_proxy/actors/actors.h>
@@ -81,6 +82,8 @@ class TKafkaTestClient {
         TMessagePtr<TProduceResponseData> Produce(const TString& topicName, ui32 partition, const TKafkaRecordBatch& batch);
 
         TMessagePtr<TProduceResponseData> Produce(const TString& topicName, const std::vector<std::pair<ui32, TKafkaRecordBatch>>& msgs, const std::optional<TString>& transactionalId = {});
+
+        TMessagePtr<TProduceResponseData> Produce(const TString& topicName, ui32 partition, const TKafkaBytes& records);
 
         TMessagePtr<TProduceResponseData> Produce(const TTopicPartition& topicPartition,
                                                   const std::vector<std::pair<TString, TString>>& keyValueMessages,

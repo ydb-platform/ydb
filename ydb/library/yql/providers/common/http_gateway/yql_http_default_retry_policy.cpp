@@ -2,20 +2,7 @@
 
 namespace NYql {
 
-std::unordered_set<CURLcode> YqlRetriedCurlCodes() {
-    return {
-        CURLE_COULDNT_CONNECT,
-        CURLE_WEIRD_SERVER_REPLY,
-        CURLE_WRITE_ERROR,
-        CURLE_READ_ERROR,
-        CURLE_OPERATION_TIMEDOUT,
-        CURLE_SSL_CONNECT_ERROR,
-        CURLE_BAD_DOWNLOAD_RESUME,
-        CURLE_SEND_ERROR,
-        CURLE_RECV_ERROR,
-        CURLE_NO_CONNECTION_AVAILABLE
-    };
-}
+namespace {
 
 std::unordered_set<CURLcode> FqRetriedCurlCodes() {
     return {
@@ -31,6 +18,23 @@ std::unordered_set<CURLcode> FqRetriedCurlCodes() {
         CURLE_NO_CONNECTION_AVAILABLE,
         CURLE_GOT_NOTHING,
         CURLE_COULDNT_RESOLVE_HOST
+    };
+}
+        
+}
+
+std::unordered_set<CURLcode> YqlRetriedCurlCodes() {
+    return {
+        CURLE_COULDNT_CONNECT,
+        CURLE_WEIRD_SERVER_REPLY,
+        CURLE_WRITE_ERROR,
+        CURLE_READ_ERROR,
+        CURLE_OPERATION_TIMEDOUT,
+        CURLE_SSL_CONNECT_ERROR,
+        CURLE_BAD_DOWNLOAD_RESUME,
+        CURLE_SEND_ERROR,
+        CURLE_RECV_ERROR,
+        CURLE_NO_CONNECTION_AVAILABLE
     };
 }
 
@@ -74,6 +78,13 @@ IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptio
 
 IHTTPGateway::TRetryPolicy::TPtr GetHTTPDefaultRetryPolicy(TDuration maxTime, size_t maxRetries) {
     return GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions{.MaxTime = maxTime, .MaxRetries = maxRetries});
+}
+
+IHTTPGateway::TRetryPolicy::TPtr GetFqHTTPRetryPolicy() {
+    return GetHTTPDefaultRetryPolicy(THttpRetryPolicyOptions{
+        .MaxTime = TDuration::MilliSeconds(1000),
+        .RetriedCurlCodes = FqRetriedCurlCodes(),
+    });
 }
 
 }

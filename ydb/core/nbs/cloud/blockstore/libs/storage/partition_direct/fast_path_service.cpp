@@ -21,8 +21,11 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
+#include <library/cpp/threading/future/wait/wait.h>
+
 #include <util/system/fs.h>
 
+#include <memory>
 #include <utility>
 
 using namespace NKikimr;
@@ -49,8 +52,10 @@ void DumpToFile(
     Sort(
         dumps,
         [](const TDBGDumpResponse::TVChunkDump& lhs,
-           const TDBGDumpResponse::TVChunkDump& rhs) {
-            return lhs.VChunkConfig.VChunkIndex < rhs.VChunkConfig.VChunkIndex;
+           const TDBGDumpResponse::TVChunkDump& rhs)
+        {
+            return lhs.VChunkConfig.GetVChunkIndex() <
+                   rhs.VChunkConfig.GetVChunkIndex();
         });
 
     auto dirPath = TString("/tmp/dirty_map/");
@@ -85,7 +90,12 @@ NMonitoring::TDynamicCounterPtr MakeCountersChain(
     return result;
 }
 
-TVector<std::shared_ptr<TRegion>> CreateRegions(
+size_t RegionCount(ui64 blockCount, ui32 blockSize)
+{
+    return AlignUp(blockCount * blockSize, RegionSize) / RegionSize;
+}
+
+TVector<TRegionPtr> CreateRegions(
     IPartitionDirectService* partitionDirectService,
     ui64 blockCount,
     ui32 blockSize,
@@ -94,10 +104,9 @@ TVector<std::shared_ptr<TRegion>> CreateRegions(
     const TStorageConfig& storageConfig,
     NMonitoring::TDynamicCounterPtr counters)
 {
-    const ui64 volumeSize = blockCount * blockSize;
-    const ui64 regionsCount = AlignUp(volumeSize, RegionSize) / RegionSize;
-    TVector<std::shared_ptr<TRegion>> regions(regionsCount);
-    for (size_t i = 0; i < regionsCount; i++) {
+    const size_t regionCount = RegionCount(blockCount, blockSize);
+    TVector<TRegionPtr> regions(regionCount);
+    for (size_t i = 0; i < regionCount; i++) {
         NMonitoring::TDynamicCounterPtr regionCounters =
             counters->GetSubgroup("region", ToString(i));
 
@@ -172,7 +181,7 @@ TFastPathService::~TFastPathService()
         DiskId.Quote().c_str());
 }
 
-void TFastPathService::Run()
+NThreading::TFuture<void> TFastPathService::Run()
 {
     LOG_INFO(
         *ActorSystem,
@@ -180,13 +189,33 @@ void TFastPathService::Run()
         "TFastPathService::Run %s",
         DiskId.Quote().c_str());
 
+    TVector<NThreading::TFuture<void>> initialReadyFutures;
+    initialReadyFutures.reserve(DirectBlockGroups.size());
     for (const auto& dbg: DirectBlockGroups) {
-        dbg->Run(this);
+        initialReadyFutures.push_back(dbg->Run(this));
     }
     for (const auto& region: Regions) {
         region->Run();
     }
     ScheduleDirtyMapDebugPrint();
+
+    return NThreading::WaitAll(initialReadyFutures);
+}
+
+NThreading::TFuture<void> TFastPathService::Stop()
+{
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "TFastPathService::Stop %s",
+        DiskId.Quote().c_str());
+
+    TVector<NThreading::TFuture<void>> stopFutures;
+    for (const auto& region: Regions) {
+        stopFutures.push_back(region->Stop());
+    }
+
+    return NThreading::WaitAll(stopFutures);
 }
 
 NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
@@ -206,6 +235,13 @@ NThreading::TFuture<TReadBlocksLocalResponse> TFastPathService::ReadBlocksLocal(
 
     const size_t regionIndex =
         GetRegionIndex(*request->Headers.VolumeConfig, request->Headers.Range);
+
+    Y_ABORT_UNLESS(
+        regionIndex < Regions.size(),
+        "Region index out of bound: %" PRISZT " >= %" PRISZT,
+        regionIndex,
+        Regions.size());
+
     auto result = Regions[regionIndex]->ReadBlocksLocal(
         std::move(callContext),
         std::move(request),
@@ -249,10 +285,15 @@ TFastPathService::WriteBlocksLocal(
     const size_t regionIndex =
         GetRegionIndex(*request->Headers.VolumeConfig, request->Headers.Range);
 
+    Y_ABORT_UNLESS(
+        regionIndex < Regions.size(),
+        "Region index out of bound: %" PRISZT " >= %" PRISZT,
+        regionIndex,
+        Regions.size());
+
     auto result = Regions[regionIndex]->WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
-        GenerateSequenceNumber(),
         span->GetTraceId());
 
     result.Subscribe(
@@ -325,14 +366,83 @@ void TFastPathService::ScheduleAfterDelay(
 
 void TFastPathService::UpdateVChunkConfig(const TVChunkConfig& cfg)
 {
-    ActorSystem->Send(
-        PartitionActorId,
-        new TEvPartitionDirectPrivate::TEvUpdateVChunkConfig(cfg));
+    auto event =
+        std::make_unique<TEvPartitionDirectPrivate::TEvUpdateVChunkConfig>(cfg);
+    ActorSystem->Send(PartitionActorId, event.release());
 }
 
-ui64 TFastPathService::GenerateSequenceNumber()
+ui64 TFastPathService::GenerateLsn()
 {
-    return ++SequenceGenerator;
+    const ui64 lsn = ++SequenceGenerator;
+    MaybeTriggerPBufferCleanup(lsn);
+    return lsn;
+}
+
+void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
+{
+    const ui64 step = StorageConfig->GetPBufferCleanupLsnStep();
+    if (!step || lsn % step != 0) {
+        return;
+    }
+    // lsn values are unique, so exactly one generator hits each multiple of
+    // step. Skip if a previous cleanup is still gathering, to avoid overlap.
+    bool expected = false;
+    if (!CleanupGather.Active.compare_exchange_strong(expected, true)) {
+        return;
+    }
+    PBufferCleanup();
+}
+
+void TFastPathService::PBufferCleanup()
+{
+    // Pull the smallest inflight lsn from every DirectBlockGroup. Each group
+    // writes its own result slot; the last responder computes the global
+    // minimum (see FinishPBufferCleanup).
+    const size_t dbgCount = DirectBlockGroups.size();
+    CleanupGather.SafeBarriers.assign(dbgCount, std::nullopt);
+    CleanupGather.PendingResponses.store(dbgCount);
+
+    for (size_t i = 0; i < dbgCount; ++i) {
+        DirectBlockGroups[i]->GatherSafeBarrierForErase().Subscribe(
+            [weakSelf = weak_from_this(), i]   //
+            (const NThreading::TFuture<std::optional<ui64>>& f)
+            {
+                if (auto self = weakSelf.lock()) {
+                    self->OnGatherSafeBarrierForErase(i, f.GetValue());
+                }
+            });
+    }
+}
+
+void TFastPathService::OnGatherSafeBarrierForErase(
+    size_t dbgIndex,
+    std::optional<ui64> safeBarrier)
+{
+    CleanupGather.SafeBarriers[dbgIndex] = safeBarrier;
+    if (CleanupGather.PendingResponses.fetch_sub(1) == 1) {
+        FinishPBufferCleanup();
+    }
+}
+
+void TFastPathService::FinishPBufferCleanup()
+{
+    std::optional<ui64> globalMin;
+    for (const auto& safeBarrier: CleanupGather.SafeBarriers) {
+        if (safeBarrier && (!globalMin || *safeBarrier < *globalMin)) {
+            globalMin = safeBarrier;
+        }
+    }
+
+    CleanupGather.Active.store(false);
+
+    if (!globalMin) {
+        return;
+    }
+
+    const ui64 cleanupBound = *globalMin - 1;
+    for (const auto& dbg: DirectBlockGroups) {
+        dbg->BarrierEraseFromPBuffer(cleanupBound);
+    }
 }
 
 void TFastPathService::ScheduleDirtyMapDebugPrint()

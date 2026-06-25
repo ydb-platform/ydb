@@ -13,7 +13,7 @@ namespace {
 TEST(TZeroCopyOutputStreamWriterTest, TestBasic)
 {
     constexpr int GrowthSize = 7;
-    TString string;
+    std::string string;
     auto buffer1 = TString("abcdef");
     auto buffer2 = TString("kinda long buffer");
 
@@ -43,7 +43,7 @@ TEST(TZeroCopyOutputStreamWriterTest, TestBasic)
 
 TEST(TZeroCopyOutputStreamWriterTest, TestStress)
 {
-    TString string;
+    std::string string;
     constexpr auto StringSize = 1000;
     TFastRng64 gen(42);
     for (int i = 0; i < StringSize; ++i) {
@@ -52,7 +52,7 @@ TEST(TZeroCopyOutputStreamWriterTest, TestStress)
 
     for (int growthSize = 1; growthSize < 20; ++growthSize) {
         auto writtenBytes = 0;
-        TString outputString;
+        std::string outputString;
         TFixedGrowthStringOutput stream(&outputString, growthSize);
         TZeroCopyOutputStreamWriter writer(&stream);
         while (true) {
@@ -80,7 +80,7 @@ TEST(TZeroCopyOutputStreamWriterTest, TestStress)
 TEST(TZeroCopyOutputStreamWriterTest, TestVarInt)
 {
     constexpr auto GrowthSize = 4;
-    TString outputString;
+    std::string outputString;
     TFixedGrowthStringOutput stream(&outputString, GrowthSize);
     TZeroCopyOutputStreamWriter writer(&stream);
 

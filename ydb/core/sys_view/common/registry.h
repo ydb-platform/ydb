@@ -305,6 +305,7 @@ struct Schema : NIceDb::Schema {
         struct Replicated      : Column<16, NScheme::NTypeIds::Bool> {};
         struct DiskSpace       : Column<17, NScheme::NTypeIds::Utf8> {};
         struct State           : Column<18, NScheme::NTypeIds::Utf8> {};
+        struct PhantomOnly     : Column<19, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<NodeId, PDiskId, VSlotId>;
         using TColumns = TableColumns<
@@ -322,7 +323,8 @@ struct Schema : NIceDb::Schema {
             Kind,
             FailRealm,
             Replicated,
-            DiskSpace>;
+            DiskSpace,
+            PhantomOnly>;
     };
 
     struct Groups : Table<6> {
@@ -598,6 +600,7 @@ struct Schema : NIceDb::Schema {
         struct WmState            : Column<18, NScheme::NTypeIds::Utf8> {};
         struct WmEnterTime        : Column<19, NScheme::NTypeIds::Timestamp> {};
         struct WmExitTime         : Column<20, NScheme::NTypeIds::Timestamp> {};
+        struct TraceId            : Column<21, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<SessionId>;
         using TColumns = TableColumns<
@@ -618,7 +621,8 @@ struct Schema : NIceDb::Schema {
             WmPoolId,
             WmState,
             WmEnterTime,
-            WmExitTime>;
+            WmExitTime,
+            TraceId>;
     };
 
     struct PrimaryIndexPortionStats : Table<14> {
@@ -819,6 +823,7 @@ struct Schema : NIceDb::Schema {
         struct TotalCpuLimitPercentPerNode    : Column<6, NScheme::NTypeIds::Double> {};
         struct QueryCpuLimitPercentPerNode    : Column<7, NScheme::NTypeIds::Double> {};
         struct QueryMemoryLimitPercentPerNode : Column<8, NScheme::NTypeIds::Double> {};
+        struct TotalMemoryLimitPercentPerNode : Column<9, NScheme::NTypeIds::Double> {};
 
         using TKey = TableKey<Name>;
         using TColumns = TableColumns<
@@ -829,7 +834,8 @@ struct Schema : NIceDb::Schema {
             ResourceWeight,
             TotalCpuLimitPercentPerNode,
             QueryCpuLimitPercentPerNode,
-            QueryMemoryLimitPercentPerNode>;
+            QueryMemoryLimitPercentPerNode,
+            TotalMemoryLimitPercentPerNode>;
     };
 
     struct TopPartitionsTli : Table<23> {

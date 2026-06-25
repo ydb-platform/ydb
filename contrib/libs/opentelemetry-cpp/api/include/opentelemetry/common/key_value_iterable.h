@@ -17,7 +17,12 @@ namespace common
 class KeyValueIterable
 {
 public:
-  virtual ~KeyValueIterable() = default;
+  KeyValueIterable()                                        = default;
+  KeyValueIterable(const KeyValueIterable &)                = default;
+  KeyValueIterable &operator=(const KeyValueIterable &)     = default;
+  KeyValueIterable(KeyValueIterable &&) noexcept            = default;
+  KeyValueIterable &operator=(KeyValueIterable &&) noexcept = default;
+  virtual ~KeyValueIterable()                               = default;
 
   /**
    * Iterate over key-value pairs
@@ -40,8 +45,6 @@ public:
 class NoopKeyValueIterable : public KeyValueIterable
 {
 public:
-  ~NoopKeyValueIterable() override = default;
-
   /**
    * No-op implementation: does not invoke the callback, even if key-value pairs are present.
    * @return true without iterating or invoking the callback

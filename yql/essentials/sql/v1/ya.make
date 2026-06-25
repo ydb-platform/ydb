@@ -9,6 +9,7 @@ PEERDIR(
     yql/essentials/public/udf
     yql/essentials/sql/settings
     yql/essentials/core/issue
+    yql/essentials/core/langver
     yql/essentials/public/issue/protos
     yql/essentials/core/sql_types
     yql/essentials/parser/lexer_common
@@ -29,6 +30,7 @@ SRCS(
     insert.cpp
     list_builtin.cpp
     match_recognize.cpp
+    namespace.cpp
     node.cpp
     result.cpp
     secret_settings.cpp
@@ -62,9 +64,9 @@ GENERATE_ENUM_SERIALIZATION(sql_call_param.h)
 END()
 
 RECURSE(
-    complete
     format
     highlight
+    ide
     lexer
     perf
     proto_parser

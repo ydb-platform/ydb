@@ -1,5 +1,7 @@
 #include "simple_core_facility.h"
 
+#include <util/generic/yexception.h>
+#include <util/stream/output.h>
 #include <util/system/yassert.h>
 
 namespace NYdb::inline Dev {
@@ -35,23 +37,24 @@ void TSimpleCoreFacility::AddPeriodicTask(TPeriodicCb&& cb, TDeadline::Duration 
     EnqueueTaskNoLock(
         TClock::now(),
         [this, periodicCb, period] {
-            NYdb::NIssue::TIssues issues;
-            const bool cont = (*periodicCb)(std::move(issues), EStatus::SUCCESS);
-            if (cont) {
-                SchedulePeriodic(periodicCb, period);
-            }
+            RunPeriodicTask(periodicCb, period);
         });
     Cv_.notify_one();
 }
 
 void TSimpleCoreFacility::PostToResponseQueue(TPostTaskCb&& f) {
-    std::lock_guard lock(Mutex_);
-    if (Stop_) {
+    if (!f) {
         return;
     }
-    EnqueueTaskNoLock(TClock::now(), std::move(f));
-
-    Cv_.notify_one();
+    {
+        std::lock_guard lock(Mutex_);
+        if (!Stop_) {
+            EnqueueTaskNoLock(TClock::now(), std::move(f));
+            Cv_.notify_one();
+            return;
+        }
+    }
+    f();
 }
 
 void TSimpleCoreFacility::EnqueueTaskNoLock(TTimePoint executeAt, TPostTaskCb&& task) {
@@ -62,6 +65,20 @@ void TSimpleCoreFacility::EnqueueTaskNoLock(TTimePoint executeAt, TPostTaskCb&& 
     });
 }
 
+void TSimpleCoreFacility::RunPeriodicTask(std::shared_ptr<TPeriodicCb> periodicCb, TDeadline::Duration period) {
+    bool cont = false;
+    try {
+        NYdb::NIssue::TIssues issues;
+        cont = (*periodicCb)(std::move(issues), EStatus::SUCCESS);
+    } catch (...) {
+        Cerr << "TSimpleCoreFacility periodic task failed: " << CurrentExceptionMessage() << Endl;
+        cont = true;
+    }
+    if (cont) {
+        SchedulePeriodic(periodicCb, period);
+    }
+}
+
 void TSimpleCoreFacility::SchedulePeriodic(std::shared_ptr<TPeriodicCb> periodicCb, TDeadline::Duration period) {
     std::lock_guard lock(Mutex_);
     if (Stop_) {
@@ -70,11 +87,7 @@ void TSimpleCoreFacility::SchedulePeriodic(std::shared_ptr<TPeriodicCb> periodic
     EnqueueTaskNoLock(
         TClock::now() + period,
         [this, periodicCb, period] {
-            NYdb::NIssue::TIssues issues;
-            const bool cont = (*periodicCb)(std::move(issues), EStatus::SUCCESS);
-            if (cont) {
-                SchedulePeriodic(periodicCb, period);
-            }
+            RunPeriodicTask(periodicCb, period);
         });
 
     Cv_.notify_one();
@@ -117,7 +130,11 @@ void TSimpleCoreFacility::WorkerLoop() {
 
         for (auto& task : ready) {
             if (task) {
-                task();
+                try {
+                    task();
+                } catch (...) {
+                    Cerr << "TSimpleCoreFacility task failed: " << CurrentExceptionMessage() << Endl;
+                }
             }
         }
     }

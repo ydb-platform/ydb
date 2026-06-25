@@ -4,7 +4,7 @@
 
     Lexers for the Lean theorem prover.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -136,7 +136,7 @@ class Lean4Lexer(RegexLexer):
     """
     For the Lean 4 theorem prover.
     """
-    
+
     name = 'Lean4'
     url = 'https://github.com/leanprover/lean4'
     aliases = ['lean4']
@@ -186,7 +186,7 @@ class Lean4Lexer(RegexLexer):
     )
 
     punctuation = ('(', ')', ':', '{', '}', '[', ']', '⦃', '⦄',
-                   ':=', ',')
+                   ':=', ',', ']\'', ']?', ']!')
 
     tokens = {
         'expression': [

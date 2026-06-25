@@ -293,7 +293,7 @@ namespace {
             else if (option.IsAtom("join_algo")) {
                 //do nothing
             }
-            else if (option.IsAtom("compact")) {
+            else if (option.IsAtom({"force_star", "compact"})) {
                 if (!EnsureTupleSize(*child, 1, ctx)) {
                     return IGraphTransformer::TStatus::Error;
                 }
@@ -1578,6 +1578,7 @@ TEquiJoinLinkSettings GetEquiJoinLinkSettings(const TExprNode& linkSettings) {
     }
 
     result.ForceSortedMerge = HasSetting(linkSettings, "forceSortedMerge");
+    result.ForceStar = HasSetting(linkSettings, "force_star");
 
     if (auto streamlookup = GetSetting(linkSettings, "forceStreamLookup")) {
         YQL_ENSURE(result.JoinAlgoOptions.empty());
@@ -1617,6 +1618,10 @@ TExprNode::TPtr BuildEquiJoinLinkSettings(const TEquiJoinLinkSettings& linkSetti
     if (linkSettings.ForceSortedMerge) {
         settings.push_back(ctx.NewList(linkSettings.Pos, { ctx.NewAtom(linkSettings.Pos, "forceSortedMerge", TNodeFlags::Default) }));
     }
+    if (linkSettings.ForceStar) {
+        settings.push_back(ctx.NewList(linkSettings.Pos, { ctx.NewAtom(linkSettings.Pos, "force_star", TNodeFlags::Default) }));
+    }
+
     if (linkSettings.LeftHints) {
         settings.push_back(builder("left"));
     }

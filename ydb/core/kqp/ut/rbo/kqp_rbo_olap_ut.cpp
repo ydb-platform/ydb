@@ -1871,7 +1871,7 @@ Y_UNIT_TEST_SUITE(KqpRboOlap) {
                     JoinType(T1 T2 Shuffle)
                 ';
 
-                SELECT T1.a
+                SELECT T1.a, T2.b
                     FROM (SELECT Just(a) as a FROM `/Root/ColumnShard`) as T1
                     LEFT JOIN `/Root/ColumnIsHard` as T2
                     ON T1.a = T2.a

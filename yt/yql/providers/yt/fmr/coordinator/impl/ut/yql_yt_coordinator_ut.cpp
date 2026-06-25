@@ -455,6 +455,74 @@ Y_UNIT_TEST_SUITE(FmrCoordinatorTests) {
         auto listResponse3 = coordinator->ListSessions({}).GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL(listResponse3.SessionIds.size(), 0);
     }
+
+    Y_UNIT_TEST(WaitForOperationsCompletedBeforeTimeout) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        auto startResponse = coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
+        TString operationId = startResponse.OperationId;
+
+        auto worker = setup.GetFmrWorker(coordinator);
+
+        auto waitResponse = coordinator->WaitForOperations({
+            .OperationIds = {operationId},
+            .Timeout = TDuration::Seconds(10),
+        }).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(waitResponse.FinalizedOperations.size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(waitResponse.FinalizedOperations[0].OperationId, operationId);
+        UNIT_ASSERT_VALUES_EQUAL(waitResponse.FinalizedOperations[0].Status, EOperationStatus::Completed);
+    }
+
+    Y_UNIT_TEST(WaitForOperationsTimeoutWithNoWorker) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        auto startResponse = coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
+        TString operationId = startResponse.OperationId;
+
+        // No worker started — operation stays in Accepted, timeout should elapse.
+        auto waitResponse = coordinator->WaitForOperations({
+            .OperationIds = {operationId},
+            .Timeout = TDuration::Seconds(1),
+        }).GetValueSync();
+
+        UNIT_ASSERT(waitResponse.FinalizedOperations.empty());
+    }
+
+    Y_UNIT_TEST(WaitForTasksResolvesImmediatelyWhenTasksAlreadyQueued) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+        // StartOperation enqueues a task in the coordinator before any worker picks it up.
+        coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
+
+        auto response = coordinator->WaitForTasks({.AvailableSlots = 1, .Timeout = TDuration::Seconds(10)}).GetValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(response.AvailableTasksCount, 1);
+    }
+
+    Y_UNIT_TEST(WaitForTasksResolvesWhenTaskArrivesLater) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+
+        // Subscribe before any task is enqueued.
+        auto waitFuture = coordinator->WaitForTasks({.AvailableSlots = 1, .Timeout = TDuration::Seconds(10)});
+        UNIT_ASSERT(!waitFuture.HasValue());
+
+        // Enqueue a task — this should resolve the future.
+        coordinator->StartOperation(setup.CreateOperationRequest()).GetValueSync();
+
+        auto response = waitFuture.GetValueSync();
+        UNIT_ASSERT(response.AvailableTasksCount > 0);
+    }
+
+    Y_UNIT_TEST(WaitForTasksTimeoutWithNoTasksQueued) {
+        TFmrTestSetup setup;
+        auto coordinator = setup.GetFmrCoordinator();
+
+        // No StartOperation called — no tasks ever arrive, timeout must fire.
+        auto response = coordinator->WaitForTasks({.AvailableSlots = 1, .Timeout = TDuration::Seconds(1)}).GetValueSync();
+
+        UNIT_ASSERT_VALUES_EQUAL(response.AvailableTasksCount, 0);
+    }
 }
 
 } // namespace NYql::NFmr

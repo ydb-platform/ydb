@@ -3,11 +3,14 @@ RECURSE(
     cdc
     common
     ctas
+    federated_queries
     kafka
     kafka_serverless
     kv
     kv_volume
+    kv_volume_tool
     log
+    min_max_workload
     mixedpy
     nfs_backups
     node_broker

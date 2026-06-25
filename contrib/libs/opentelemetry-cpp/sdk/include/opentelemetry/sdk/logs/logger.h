@@ -7,6 +7,7 @@
 #include <string>
 
 #include "logger_config.h"
+#include "opentelemetry/context/context.h"
 #include "opentelemetry/logs/log_record.h"
 #include "opentelemetry/logs/logger.h"
 #include "opentelemetry/logs/noop.h"
@@ -61,6 +62,20 @@ public:
   }
 
 private:
+  bool EnabledImplementation(opentelemetry::logs::Severity severity,
+                             const opentelemetry::logs::EventId &event_id) const noexcept override;
+
+  bool EnabledImplementation(opentelemetry::logs::Severity severity,
+                             int64_t event_id) const noexcept override;
+
+#if OPENTELEMETRY_ABI_VERSION_NO >= 2
+  bool EnabledImplementation(const opentelemetry::context::Context &context,
+                             opentelemetry::logs::Severity severity) const noexcept override;
+
+  bool EnabledImplementation(const opentelemetry::context::Context &context,
+                             opentelemetry::logs::Severity severity,
+                             const opentelemetry::logs::EventId &event_id) const noexcept override;
+#endif  // OPENTELEMETRY_ABI_VERSION_NO >= 2
   // The name of this logger
   std::string logger_name_;
 

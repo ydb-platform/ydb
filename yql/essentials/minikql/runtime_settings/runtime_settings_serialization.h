@@ -8,13 +8,16 @@
 #include <util/generic/ptr.h>
 #include <util/generic/string.h>
 
+#include <functional>
+
 namespace NYql {
 
 TRuntimeSettings::TPtr CreateRuntimeSettingsFromProto(
     const NProto::TRuntimeSettings& proto,
     const TString& userName,
     TCredentials::TPtr credentials,
-    const TQContext& qContext);
+    const TQContext& qContext,
+    std::function<void(const TString&)> onPartialFeatureActivation);
 
 TRuntimeSettings::TPtr DeserializeRuntimeSettingsFromProto(
     const NProto::TRuntimeSettings& proto);

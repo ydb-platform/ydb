@@ -6,10 +6,6 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
 
 {% list tabs group=lang %}
 
-- Go
-
-  This functionality is not currently supported in the Go SDK.
-
 - C++
 
   App code snippet for creating a client:
@@ -25,6 +21,10 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
   settings.ReturnVerboseStatus(true);
   auto result = client.SelfCheck(settings).GetValueSync();
   ```
+
+- Go
+
+  This functionality is not currently supported.
 
 - Java
 
@@ -75,10 +75,6 @@ The complete list of extra parameters is presented below:
 
 {% list tabs group=lang %}
 
-- Go
-
-  This functionality is not currently supported in the Go SDK.
-
 - C++
 
   ```c++
@@ -88,6 +84,10 @@ The complete list of extra parameters is presented below:
       FLUENT_SETTING_OPTIONAL(ui32, MaximumLevel);
   };
   ```
+
+- Go
+
+  This functionality is not currently supported.
 
 - Java
 

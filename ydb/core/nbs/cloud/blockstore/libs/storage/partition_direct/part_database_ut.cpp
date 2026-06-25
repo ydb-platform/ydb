@@ -1,5 +1,6 @@
 #include "part_database.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/testlib/test_executor.h>
 
@@ -156,7 +157,10 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                 TPartitionDatabase partitionDb(db);
                 partitionDb.InitSchema();
                 for (ui32 i = 0; i < 3; ++i) {
-                    partitionDb.StoreVChunkConfig(TVChunkConfig::Make(i));
+                    partitionDb.StoreVChunkConfig(TVChunkConfig::MakeDefault(
+                        i,
+                        DirectBlockGroupHostCount,
+                        DefaultPrimaryCount));
                 }
             });
 
@@ -177,11 +181,28 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                     UNIT_ASSERT(cfg.IsValid());
                     UNIT_ASSERT_VALUES_EQUAL(
                         static_cast<ui32>(i),
-                        cfg.VChunkIndex);
-                    const auto expected = TVChunkConfig::Make(i);
-                    UNIT_ASSERT(expected.PBufferHosts == cfg.PBufferHosts);
-                    UNIT_ASSERT(expected.DDiskHosts == cfg.DDiskHosts);
-                    UNIT_ASSERT(expected.EnabledHosts == cfg.EnabledHosts);
+                        cfg.GetVChunkIndex());
+                    const auto expected = TVChunkConfig::MakeDefault(
+                        i,
+                        DirectBlockGroupHostCount,
+                        DefaultPrimaryCount);
+                    UNIT_ASSERT(
+                        expected.GetDesiredPBuffers() ==
+                        cfg.GetDesiredPBuffers());
+                    UNIT_ASSERT(
+                        expected.GetSecondaryPBuffers() ==
+                        cfg.GetSecondaryPBuffers());
+                    UNIT_ASSERT(
+                        expected.GetTemporaryOfflinePBuffers() ==
+                        cfg.GetTemporaryOfflinePBuffers());
+                    UNIT_ASSERT(expected.GetDDisks() == cfg.GetDDisks());
+                    UNIT_ASSERT(
+                        expected.GetHealthyDDisks() == cfg.GetHealthyDDisks());
+                    UNIT_ASSERT(
+                        expected.GetDisabledHosts() == cfg.GetDisabledHosts());
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        expected.DebugPrint(),
+                        cfg.DebugPrint());
                 }
             });
     }
@@ -195,11 +216,17 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
             {
                 TPartitionDatabase partitionDb(db);
                 partitionDb.InitSchema();
-                partitionDb.StoreVChunkConfig(TVChunkConfig::Make(5));
+                partitionDb.StoreVChunkConfig(TVChunkConfig::MakeDefault(
+                    5,
+                    DirectBlockGroupHostCount,
+                    DefaultPrimaryCount));
             });
 
-        auto updated = TVChunkConfig::Make(5);
-        updated.PBufferHosts.SetRole(0, EHostRole::None);
+        auto updated = TVChunkConfig::MakeDefault(
+            5,
+            DirectBlockGroupHostCount,
+            DefaultPrimaryCount);
+        updated.EvacuateHost(0);
 
         executor.WriteTx(
             [&](NKikimr::NTable::TDatabase& db)
@@ -217,12 +244,23 @@ Y_UNIT_TEST_SUITE(TPartitionDatabaseTest)
                 UNIT_ASSERT_VALUES_EQUAL(1u, vChunkConfigs.size());
 
                 const auto& stored = vChunkConfigs[0];
+                UNIT_ASSERT(
+                    updated.GetDesiredPBuffers() ==
+                    stored.GetDesiredPBuffers());
+                UNIT_ASSERT(
+                    updated.GetSecondaryPBuffers() ==
+                    stored.GetSecondaryPBuffers());
+                UNIT_ASSERT(
+                    updated.GetTemporaryOfflinePBuffers() ==
+                    stored.GetTemporaryOfflinePBuffers());
+                UNIT_ASSERT(updated.GetDDisks() == stored.GetDDisks());
+                UNIT_ASSERT(
+                    updated.GetHealthyDDisks() == stored.GetHealthyDDisks());
+                UNIT_ASSERT(
+                    updated.GetDisabledHosts() == stored.GetDisabledHosts());
                 UNIT_ASSERT_VALUES_EQUAL(
-                    updated.VChunkIndex,
-                    stored.VChunkIndex);
-                UNIT_ASSERT(updated.PBufferHosts == stored.PBufferHosts);
-                UNIT_ASSERT(updated.DDiskHosts == stored.DDiskHosts);
-                UNIT_ASSERT(updated.EnabledHosts == stored.EnabledHosts);
+                    updated.DebugPrint(),
+                    stored.DebugPrint());
             });
     }
 

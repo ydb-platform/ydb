@@ -61,6 +61,28 @@ void TSchemeShard::Handle(TEvPrivate::TEvContinuousBackupCleanerResult::TPtr& ev
     Execute(CreateTxProgress(ev));
 }
 
+void TSchemeShard::Handle(TEvBackup::TEvGetFullBackupRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxGetFullBackup(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvBackup::TEvForgetFullBackupRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxForgetFullBackup(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvBackup::TEvListFullBackupsRequest::TPtr& ev, const TActorContext& ctx) {
+    Execute(CreateTxListFullBackups(ev), ctx);
+}
+
+void TSchemeShard::Handle(TEvPrivate::TEvFullBackupItemDone::TPtr& ev, const TActorContext& ctx) {
+    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+        "Handle(TEvFullBackupItemDone)"
+        << " fullBackupId#" << ev->Get()->FullBackupId
+        << " dstPathId#" << ev->Get()->DstPathId
+        << " success#" << ev->Get()->Success
+        << " tablet#" << TabletID());
+    Execute(CreateTxFullBackupProgress(ev), ctx);
+}
+
 void TSchemeShard::ResumeIncrementalBackups(const TVector<ui64>& incrementalBackupsIds, const TActorContext& ctx) {
     for (const ui64 id : incrementalBackupsIds) {
         Execute(CreateTxProgress(id), ctx);

@@ -78,12 +78,12 @@ struct IFileClient
     virtual ~IFileClient() = default;
 
     virtual TFuture<TGetFileFromCacheResult> GetFileFromCache(
-        const TString& md5,
+        const std::string& md5,
         const TGetFileFromCacheOptions& options = {}) = 0;
 
     virtual TFuture<TPutFileToCacheResult> PutFileToCache(
         const NYPath::TYPath& path,
-        const TString& expectedMD5,
+        const std::string& expectedMD5,
         const TPutFileToCacheOptions& options = {}) = 0;
 };
 

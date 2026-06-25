@@ -29,6 +29,7 @@ struct TReadInfo {
     ui16 PartNo;
     ui32 Count;
     ui32 Size;
+    bool ReadToBlobEnd;
     ui64 Destination; // It is cookie!!!
     TInstant Timestamp;
     ui64 ReadTimestampMs;
@@ -61,6 +62,7 @@ struct TReadInfo {
         const ui16 partNo,
         const ui64 count,
         const ui32 size,
+        const bool readToBlobEnd,
         const ui64 dst,
         ui64 readTimestampMs,
         TDuration waitQuotaTime,
@@ -75,6 +77,7 @@ struct TReadInfo {
         , PartNo(partNo)
         , Count(count)
         , Size(size)
+        , ReadToBlobEnd(readToBlobEnd)
         , Destination(dst)
         , Timestamp(TAppData::TimeProvider->Now())
         , ReadTimestampMs(readTimestampMs)

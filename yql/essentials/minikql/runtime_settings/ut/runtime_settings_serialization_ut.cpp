@@ -9,7 +9,7 @@ Y_UNIT_TEST_SUITE(TRuntimeSettingsSerializationTest) {
 
 Y_UNIT_TEST(Serialization) {
     auto config = MakeIntrusive<TRuntimeSettingsConfiguration>();
-    config->DatumValidation.Set(true);
+    config->DatumValidation.Set(NYql::EDatumValidationMode::Cheap);
     config->TestHostSetting.Set(true);
     config->SetUdfSetting("MyModule", "Key", "Val");
 
@@ -23,7 +23,7 @@ Y_UNIT_TEST(Serialization) {
         hostSettings[s.GetName()] = s.GetValue();
     }
     UNIT_ASSERT_VALUES_EQUAL(proto.HostSettingsSize(), 2);
-    UNIT_ASSERT_VALUES_EQUAL(hostSettings.at("DatumValidation"), "true");
+    UNIT_ASSERT_VALUES_EQUAL(hostSettings.at("DatumValidation"), "Cheap");
     UNIT_ASSERT_VALUES_EQUAL(hostSettings.at("TestHostSetting"), "true");
 
     UNIT_ASSERT_VALUES_EQUAL(proto.UdfSettingsSize(), 1);
@@ -37,7 +37,7 @@ Y_UNIT_TEST(Deserialization) {
     NProto::TRuntimeSettings proto;
     auto* datumValidation = proto.AddHostSettings();
     datumValidation->SetName("DatumValidation");
-    datumValidation->SetValue("true");
+    datumValidation->SetValue("Cheap");
     auto* testHostSetting = proto.AddHostSettings();
     testHostSetting->SetName("TestHostSetting");
     testHostSetting->SetValue("true");
@@ -53,7 +53,7 @@ Y_UNIT_TEST(Deserialization) {
 
     auto config = CreateRuntimeSettingsFromString(data);
 
-    UNIT_ASSERT_VALUES_EQUAL(config->DatumValidation.Get(), true);
+    UNIT_ASSERT_VALUES_EQUAL(config->DatumValidation.Get(), NYql::EDatumValidationMode::Cheap);
     UNIT_ASSERT_VALUES_EQUAL(config->TestHostSetting.Get(), true);
     UNIT_ASSERT_VALUES_EQUAL(config->GetUdfSetting("MyModule", "Key"), "Val");
     UNIT_ASSERT_VALUES_EQUAL(config->GetUdfSetting("MyModule", "Key2"), "");
@@ -64,15 +64,15 @@ Y_UNIT_TEST(Deserialization) {
 Y_UNIT_TEST(HostSettingActivation50Percent) {
     NProto::TRuntimeSettings proto;
     auto* hostSetting = proto.AddHostSettings();
-    hostSetting->SetName("DatumValidation");
+    hostSetting->SetName("TestHostSetting");
     hostSetting->SetValue("true");
     hostSetting->MutableActivation()->SetPercentage(50);
 
     constexpr int Iterations = 10000;
     int activatedCount = 0;
     for (int i = 0; i < Iterations; ++i) {
-        auto config = CreateRuntimeSettingsFromProto(proto, TString{}, nullptr, TQContext());
-        if (config->DatumValidation.Get()) {
+        auto config = CreateRuntimeSettingsFromProto(proto, TString{}, nullptr, TQContext(), {});
+        if (config->TestHostSetting.Get()) {
             ++activatedCount;
         }
     }
@@ -93,7 +93,7 @@ Y_UNIT_TEST(UdfSettingActivation50Percent) {
     constexpr int Iterations = 10000;
     int activatedCount = 0;
     for (int i = 0; i < Iterations; ++i) {
-        auto config = CreateRuntimeSettingsFromProto(proto, TString{}, nullptr, TQContext());
+        auto config = CreateRuntimeSettingsFromProto(proto, TString{}, nullptr, TQContext(), {});
         if (!config->GetUdfSetting("MyModule", "Key").empty()) {
             ++activatedCount;
         }
@@ -124,14 +124,14 @@ Y_UNIT_TEST(ActivationStatePreservedAfterQContextRoundTrip) {
 
         auto writer = qStorage->MakeWriter("op", {});
         auto capturedConfig = CreateRuntimeSettingsFromProto(
-            proto, TString{}, nullptr, TQContext(writer));
+            proto, TString{}, nullptr, TQContext(writer), {});
         writer->Commit().GetValueSync();
 
         const bool capturedHostActivated = capturedConfig->TestHostSetting.Get();
         const bool capturedUdfActivated = !capturedConfig->GetUdfSetting("MyModule", "Key").empty();
 
         auto replayedConfig = CreateRuntimeSettingsFromProto(
-            proto, TString{}, nullptr, TQContext(qStorage->MakeReader("op", {})));
+            proto, TString{}, nullptr, TQContext(qStorage->MakeReader("op", {})), {});
 
         UNIT_ASSERT_VALUES_EQUAL(capturedHostActivated, replayedConfig->TestHostSetting.Get());
         UNIT_ASSERT_VALUES_EQUAL(capturedUdfActivated, !replayedConfig->GetUdfSetting("MyModule", "Key").empty());

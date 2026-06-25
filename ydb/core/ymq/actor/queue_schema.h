@@ -74,7 +74,7 @@ public:
     void Step();
 
     void OnExecuted(TSqsEvents::TEvExecuted::TPtr& ev);
-    void Handle(NPQ::NSchema::TEvCreateTopicResponse::TPtr& ev);
+    void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev);
 
     void OnDescribeSchemeResult(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
 

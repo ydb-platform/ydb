@@ -4,7 +4,7 @@
 #include <ydb/core/kqp/ut/olap/helpers/query_executor.h>
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
 #include <ydb/core/tx/columnshard/test_helper/controllers.h>
-#include <ydb/core/util/aws.h>
+#include <ydb/library/aws_init/aws.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
 

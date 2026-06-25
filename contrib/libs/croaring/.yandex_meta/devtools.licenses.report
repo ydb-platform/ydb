@@ -40,6 +40,19 @@ BELONGS ya.make
     Files with this license:
         LICENSE [1:206]
 
+SKIP     LicenseRef-scancode-unknown-license-reference 1760995652c7e47a9f5d6ed7135ff480
+BELONGS ya.make
+    # Not a license, but a comment on project contributions
+    License text:
+        Contributions are licensed under the project’s license. Ensure your work complies and does not infringe on third-party rights.
+    Scancode info:
+        Original SPDX id: LicenseRef-scancode-unknown-license-reference
+        Score           : 16.00
+        Match type      : INTRO
+        Links           : https://github.com/nexB/scancode-toolkit/tree/develop/src/licensedcode/data/licenses/unknown-license-reference.LICENSE
+    Files with this license:
+        README.md [1185:1185]
+
 KEEP     BSD-3-Clause         1932361280194a7b208a1a5671cb21a2
 BELONGS ya.make
     Note: matched license text is too long. Read it in the source files.

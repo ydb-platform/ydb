@@ -1,4 +1,5 @@
 #include "fulltext.h"
+#include "fulltext_query.h"
 
 #include <contrib/libs/snowball/include/libstemmer.h>
 
@@ -367,6 +368,60 @@ TVector<TString> BuildSearchTerms(const TString& query, const Ydb::Table::Fullte
     return searchTerms;
 }
 
+namespace {
+    // True if the query uses the `+term` required-term syntax: a `+` that begins
+    // the query or follows ASCII whitespace (i.e. starts a term). A `+` inside a
+    // term (e.g. "c++") is not an operator and does not trigger the per-term path.
+    bool HasRequiredOperator(const TString& query) {
+        bool atTermStart = true;
+        for (const char c : query) {
+            const bool ws = (c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f' || c == '\v');
+            if (ws) {
+                atTermStart = true;
+                continue;
+            }
+            if (c == '+' && atTermStart) {
+                return true;
+            }
+            atTermStart = false;
+        }
+        return false;
+    }
+}
+
+TVector<TSearchTerm> BuildSearchTermsStructured(const TString& query, const Ydb::Table::FulltextIndexSettings::Analyzers& settings) {
+    // Fast path: no `+term` syntax -> tokenize exactly like BuildSearchTerms over
+    // the whole query, every term optional. Keeps full backward compatibility
+    // (e.g. keyword-tokenizer queries stay a single token).
+    if (!HasRequiredOperator(query)) {
+        TVector<TSearchTerm> result;
+        for (auto& token : BuildSearchTerms(query, settings)) {
+            result.push_back({std::move(token), /* required */ false});
+        }
+        return result;
+    }
+
+    // Query-parser layer: split into whitespace-delimited raw terms, strip a single
+    // leading `+` (required), then run the analyzer over each term body and tag every
+    // resulting token with the term's required flag.
+    TVector<TSearchTerm> result;
+    for (const auto& part : StringSplitter(query).SplitBySet(" \t\n\r\f\v").SkipEmpty()) {
+        TStringBuf raw = part.Token();
+        bool required = false;
+        if (raw.StartsWith('+')) {
+            required = true;
+            raw.Skip(1);
+        }
+        if (raw.empty()) {
+            continue; // bare `+`
+        }
+        for (auto& token : BuildSearchTerms(TString(raw), settings)) {
+            result.push_back({std::move(token), required});
+        }
+    }
+    return result;
+}
+
 bool ValidateColumnsMatches(const NProtoBuf::RepeatedPtrField<TString>& columns, const Ydb::Table::FulltextIndexSettings& settings, TString& error) {
     return ValidateColumnsMatches(TVector<TString>{columns.begin(), columns.end()}, settings, error);
 }
@@ -377,8 +432,12 @@ bool ValidateColumnsMatches(const TVector<TString>& columns, const Ydb::Table::F
         settingsColumns.push_back(column.column());
     }
 
-    if (columns != settingsColumns) {
-        error = TStringBuilder() << "columns " << settingsColumns << " should be " << columns;
+    // The indexed (text) columns must be the suffix of the index key columns;
+    // any leading key columns are prefix columns.
+    if (settingsColumns.size() > columns.size() ||
+        !std::equal(settingsColumns.begin(), settingsColumns.end(), columns.end() - settingsColumns.size()))
+    {
+        error = TStringBuilder() << "indexed columns " << settingsColumns << " should be the suffix of index columns " << columns;
         return false;
     }
 
@@ -459,6 +518,242 @@ bool FillSetting(Ydb::Table::FulltextIndexSettings& settings, const TString& nam
     return !error;
 }
 
+void AddVarint(TVector<ui8>& buf, ui64 num) {
+    while (true) {
+        if (num < 0x80) {
+            buf.push_back((ui8)num);
+            break;
+        } else {
+            buf.push_back(0x80 | (ui8)(num & 0x7F));
+            num >>= 7;
+        }
+    }
+}
+
+// regular varint but with an additional flag in the second most-significant bit
+void AddVarintWithFlag(TVector<ui8>& buf, ui64 num, bool flag) {
+    if (num < 0x40) {
+        buf.push_back(((ui8)num | (flag ? 0x40 : 0)));
+        return;
+    } else {
+        buf.push_back(0x80 | (flag ? 0x40 : 0) | (ui8)(num & 0x3F));
+        num >>= 6;
+        AddVarint(buf, num);
+    }
+}
+
+ui64 ReadVarint(TConstArrayRef<ui8> buf, size_t& pos) {
+    ui64 r = 0;
+    ui32 o = 0;
+    while (pos < buf.size()) {
+        ui64 c = buf[pos++];
+        r |= ((c & 0x7F) << o);
+        if (!(c & 0x80)) {
+            break;
+        }
+        o += 7;
+        Y_ENSURE(o < 64);
+    }
+    return r;
+}
+
+ui64 ReadVarintWithFlag(TConstArrayRef<ui8> buf, size_t& pos, bool& flag) {
+    flag = false;
+    if (pos >= buf.size()) {
+        return 0;
+    }
+    ui8 c = buf[pos++];
+    flag = !!(c & 0x40);
+    ui64 r = c & 0x3F;
+    if (c & 0x80) {
+        r |= ReadVarint(buf, pos) << 6;
+    }
+    return r;
+}
+
+TDeltaReader::TDeltaReader(TConstArrayRef<ui8> buf, bool withFreq, bool sign) {
+    Buf = buf;
+    Pos = 0;
+    LastId = 0;
+    WithFreq = withFreq;
+    Sign = sign;
+    MaxId = (sign ? INT64_MAX : UINT64_MAX);
+}
+
+bool TDeltaReader::Read(ui64& docId, ui32& freq) {
+    if (Pos >= Buf.size()) {
+        return false;
+    }
+    ui64 prevPos = Pos;
+    bool hasFreq = false;
+    if (WithFreq) {
+        docId = LastId + ReadVarintWithFlag(Buf, Pos, hasFreq);
+    } else {
+        docId = LastId + ReadVarint(Buf, Pos);
+    }
+    if (!prevPos && Sign) {
+        // Decode first item as zigzag
+        docId = (docId >> 1) ^ -(docId & 1);
+    }
+    freq = hasFreq ? ReadVarint(Buf, Pos) : 1;
+    if (Sign ? ((i64)docId > (i64)MaxId) : (docId > MaxId)) {
+        Pos = prevPos;
+        return false;
+    }
+    LastId = docId;
+    return true;
+}
+
+void TDeltaReader::Save() {
+    SavedPos = Pos;
+    SavedLastId = LastId;
+}
+
+void TDeltaReader::Restore() {
+    Pos = SavedPos;
+    LastId = SavedLastId;
+}
+
+void TDeltaReader::SetMaxId(ui64 maxId) {
+    MaxId = maxId;
+}
+
+void TDeltaWriter::Reset(bool withFreq, bool sign) {
+    Buf.clear();
+    MaxId = 0;
+    Count = 0;
+    WithFreq = withFreq;
+    Sign = sign;
+}
+
+void TDeltaWriter::Add(ui64 DocId, ui32 Freq) {
+    ui64 diff = DocId - MaxId;
+    Y_ENSURE(!Count || (Sign ? ((i64)DocId > (i64)MaxId) : (DocId > MaxId)));
+    if (!Count && Sign) {
+        // Encode first item as zigzag, same as in protobuf
+        i64 sdiff = (i64)diff;
+        diff = (sdiff << 1) ^ (sdiff >> 63);
+    }
+    if (WithFreq) {
+        AddVarintWithFlag(Buf, diff, Freq > 1);
+        if (Freq > 1) {
+            AddVarint(Buf, Freq);
+        }
+    } else {
+        AddVarint(Buf, diff);
+    }
+    MaxId = DocId;
+    Count++;
+}
+
+ui64 TDeltaWriter::GetMaxId() const {
+    return MaxId;
+}
+
+ui64 TDeltaWriter::GetCount() const {
+    return Count;
+}
+
+TConstArrayRef<ui8> TDeltaWriter::GetBuf() const {
+    return Buf;
+}
+
+void TMultiDeltaReader::Reset(bool withFreq, bool sign) {
+    Readers.clear();
+    OwnedReaders.clear();
+    Items.clear();
+    WithFreq = withFreq;
+    Sign = sign;
+    OneLeft = false;
+    Started = false;
+}
+
+void TMultiDeltaReader::Add(bool added, TDeltaReader* rdr) {
+    Y_ENSURE(!Started);
+    Readers.push_back({ rdr, added });
+}
+
+void TMultiDeltaReader::Add(bool added, TConstArrayRef<ui8> buf) {
+    Y_ENSURE(!Started);
+    if (!buf.size()) {
+        return;
+    }
+    auto rdr = std::make_unique<TDeltaReader>(buf, WithFreq, Sign);
+    Readers.push_back({ rdr.get(), added });
+    OwnedReaders.push_back(std::move(rdr));
+}
+
+void TMultiDeltaReader::Start() {
+    Started = true;
+    if (Readers.size() == 1) {
+        OneLeft = true;
+    } else {
+        for (size_t i = 0; i < Readers.size(); i++) {
+            Consume(i + 1, Readers[i]);
+        }
+        if (Items.size() > 0) {
+            SelectNext();
+        }
+    }
+}
+
+void TMultiDeltaReader::SelectNext() {
+    std::pop_heap(Items.begin(), Items.end(), Sign ? CompareSigned : CompareItems);
+    NextItem = Items.back();
+    Items.pop_back();
+    auto& rdr = Readers[NextItem.RdrId - 1];
+    Consume(NextItem.RdrId, rdr);
+}
+
+void TMultiDeltaReader::Consume(ui32 rdrId, TReaderRef& rdr) {
+    ui64 docId = 0;
+    ui32 freq = 1;
+    if (rdr.Reader->Read(docId, freq)) {
+        Items.push_back(TItem{docId, (rdr.Added ? (i32)freq : -(i32)freq), rdrId});
+        std::push_heap(Items.begin(), Items.end(), Sign ? CompareSigned : CompareItems);
+    }
+}
+
+bool TMultiDeltaReader::Read(ui64& docId, ui32& freq) {
+    Y_ENSURE(Started);
+    if (OneLeft) {
+        if (!Readers[0].Added) {
+            // Single deleted segment = should not happen, but empty
+            ui64 unusedDoc = 0;
+            ui32 unusedFreq = 1;
+            while (Readers[0].Reader->Read(unusedDoc, unusedFreq)) {
+            }
+        }
+        return Readers[0].Reader->Read(docId, freq);
+    }
+    TItem cur = NextItem;
+    while (Items.size() > 0) {
+        SelectNext();
+        if (cur.DocId == NextItem.DocId) {
+            // Add frequencies
+            cur.Freq += NextItem.Freq;
+        } else {
+            if (cur.Freq > 0) {
+                // Finished, item has positive frequency (not canceled by updates)
+                // Leave NextItem as is
+                docId = cur.DocId;
+                freq = cur.Freq;
+                return true;
+            } else {
+                // Scan the next item
+                cur = NextItem;
+            }
+        }
+    }
+    NextItem = {};
+    if (cur.Freq > 0) {
+        // Finished, item has positive frequency (not canceled by updates)
+        docId = cur.DocId;
+        freq = cur.Freq;
+        return true;
+    }
+    return false;
+}
 
 }
 

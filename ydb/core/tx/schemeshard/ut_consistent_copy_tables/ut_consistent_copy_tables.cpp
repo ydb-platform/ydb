@@ -1,5 +1,6 @@
 #include <ydb/core/base/table_index.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
+#include <ydb/core/tx/schemeshard/ut_helpers/local_indexes.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 
 using namespace NSchemeShardUT_Private;
@@ -29,6 +30,7 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
                 Columns { Name: "embedding" Type: "String" }
                 Columns { Name: "prefix" Type: "String" }
                 Columns { Name: "value" Type: "Utf8" }
+                Columns { Name: "json" Type: "Json" }
                 KeyColumnNames: ["key"]
             }
             %s
@@ -163,6 +165,185 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         )",
         NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain,
         {"value"});
+    }
+
+    Y_UNIT_TEST(ConsistentCopyTableWithGlobalJsonIndex) {
+        ConsistentCopyTableWithIndex(R"(
+            IndexDescription {
+                Name: "index"
+                KeyColumnNames: ["json"]
+                Type: EIndexTypeGlobalJson
+            }
+        )",
+        NKikimrSchemeOp::EIndexTypeGlobalJson,
+        {"json"});
+    }
+
+    Y_UNIT_TEST(ConsistentCopyTableWithGlobalJsonRowIdAutoProvisionIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        auto& ff = runtime.GetAppData().FeatureFlags;
+        ff.SetEnableJsonIndex(true);
+        ff.SetEnableFulltextIndex(true);
+        ff.SetEnableAddUniqueIndex(true);
+        ff.SetEnableUniqConstraint(true);
+
+        // Table with Utf8 PK - no __ydb_row_id yet; build will auto-provision it.
+        TestCreateTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "texts"
+            Columns { Name: "pk"   Type: "Utf8" NotNull: true }
+            Columns { Name: "data" Type: "Json" }
+            KeyColumnNames: ["pk"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            Ydb::Table::TableIndex index;
+            index.set_name("json_idx");
+            index.add_index_columns("data");
+            index.mutable_global_json_index();
+            TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
+        }
+        env.TestWaitNotification(runtime, txId);
+
+        TestConsistentCopyTables(runtime, ++txId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/texts"
+                DstPath: "/MyRoot/texts_copy"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // The copy must have 2 indexes: json_idx and the auto-provisioned unique index.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts_copy"), {
+            NLs::PathExist, NLs::IsTable, NLs::IndexesCount(2),
+        });
+
+        // json_idx must preserve UseRowIdAsDocId=true through the copy.
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_copy/json_idx"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalJson),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        {
+            const auto d = DescribePrivatePath(runtime, "/MyRoot/texts_copy/json_idx");
+            const auto& ti = d.GetPathDescription().GetTableIndex();
+            UNIT_ASSERT_C(ti.HasFulltextIndexDescription(),
+                "json_idx copy: FulltextIndexDescription must be set");
+            UNIT_ASSERT_C(ti.GetFulltextIndexDescription().GetUseRowIdAsDocId(),
+                "json_idx copy: UseRowIdAsDocId must be preserved through ConsistentCopyTables");
+        }
+
+        // Impl-table must be keyed by [__ydb_token, __ydb_row_id].
+        TestDescribeResult(DescribePrivatePath(runtime,
+                "/MyRoot/texts_copy/json_idx/" + TString(NTableIndex::ImplTable)), {
+            NLs::PathExist,
+            NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                /*strictCount=*/ true),
+        });
+
+        // Auto-provisioned unique index must have been copied.
+        TestDescribeResult(DescribePrivatePath(runtime,
+                TStringBuilder() << "/MyRoot/texts_copy/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+    }
+
+    Y_UNIT_TEST(ConsistentCopyTableWithGlobalJsonRowIdManualInfraIndex) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+        auto& ff = runtime.GetAppData().FeatureFlags;
+        ff.SetEnableJsonIndex(true);
+        ff.SetEnableFulltextIndex(true);
+        ff.SetEnableAddUniqueIndex(true);
+        ff.SetEnableUniqConstraint(true);
+
+        // Table with Utf8 PK + explicit __ydb_row_id + user-created unique index.
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", Sprintf(R"(
+            TableDescription {
+                Name: "texts"
+                Columns { Name: "pk"   Type: "Utf8"   NotNull: true }
+                Columns { Name: "data" Type: "Json" }
+                Columns { Name: "%s"   Type: "Uint64" NotNull: true }
+                KeyColumnNames: ["pk"]
+            }
+            IndexDescription {
+                Name: "uniq_rowid"
+                KeyColumnNames: ["%s"]
+                Type: EIndexTypeGlobalUnique
+            }
+        )", NTableIndex::NFulltext::RowIdColumn, NTableIndex::NFulltext::RowIdColumn));
+        env.TestWaitNotification(runtime, txId);
+
+        {
+            Ydb::Table::TableIndex index;
+            index.set_name("json_idx");
+            index.add_index_columns("data");
+            index.mutable_global_json_index();
+            TestBuildIndex(runtime, ++txId, TTestTxConfig::SchemeShard, "/MyRoot", "/MyRoot/texts", index);
+        }
+        env.TestWaitNotification(runtime, txId);
+
+        TestConsistentCopyTables(runtime, ++txId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/texts"
+                DstPath: "/MyRoot/texts_copy"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // The copy must have 2 indexes: json_idx and the user-created unique index.
+        TestDescribeResult(DescribePath(runtime, "/MyRoot/texts_copy"), {
+            NLs::PathExist, NLs::IsTable, NLs::IndexesCount(2),
+        });
+
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_copy/json_idx"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalJson),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+        {
+            const auto d = DescribePrivatePath(runtime, "/MyRoot/texts_copy/json_idx");
+            const auto& ti = d.GetPathDescription().GetTableIndex();
+            UNIT_ASSERT_C(ti.HasFulltextIndexDescription(),
+                "json_idx copy: FulltextIndexDescription must be set");
+            UNIT_ASSERT_C(ti.GetFulltextIndexDescription().GetUseRowIdAsDocId(),
+                "json_idx copy: UseRowIdAsDocId must be preserved through ConsistentCopyTables");
+        }
+
+        TestDescribeResult(DescribePrivatePath(runtime,
+                "/MyRoot/texts_copy/json_idx/" + TString(NTableIndex::ImplTable)), {
+            NLs::PathExist,
+            NLs::CheckColumns(TString(NTableIndex::ImplTable),
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                {},
+                { NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::RowIdColumn },
+                /*strictCount=*/ true),
+        });
+
+        // User-created unique index must have been copied.
+        TestDescribeResult(DescribePrivatePath(runtime, "/MyRoot/texts_copy/uniq_rowid"), {
+            NLs::PathExist,
+            NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalUnique),
+            NLs::IndexState(NKikimrSchemeOp::EIndexStateReady),
+        });
+
+        // Auto-provision index must NOT exist (user infra was reused).
+        TestDescribeResult(DescribePrivatePath(runtime,
+                TStringBuilder() << "/MyRoot/texts_copy/" << NTableIndex::NFulltext::RowIdUniqueIndexName), {
+            NLs::PathNotExist,
+        });
     }
 
     Y_UNIT_TEST(ConsistentCopyTableWithGlobalFulltextRelevanceIndex) {
@@ -435,6 +616,86 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
             NLs::PathExist,
             NLs::IndexType(NKikimrSchemeOp::EIndexTypeGlobalVectorKmeansTree),
             NLs::IndexState(NKikimrSchemeOp::EIndexState::EIndexStateReady),
+        });
+    }
+
+    // Priority 1 Test 3: Consistent copy of column table with local bloom indexes
+    Y_UNIT_TEST(ConsistentCopyColumnTableWithLocalBloomIndexes) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        SetupLogging(runtime);
+
+        runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+        runtime.GetAppData().FeatureFlags.SetEnableColumnTablesBackup(true);
+
+        // 1. Create column table with local bloom indexes
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot",
+            NLocalIndexes::OlapTableWithBloomAndNgramIndexes("ColumnTableWithLocalIndexes"));
+        env.TestWaitNotification(runtime, txId);
+
+        // 2. Perform consistent copy with backup flag (required for column tables)
+        TestConsistentCopyTables(runtime, ++txId, "/MyRoot", R"(
+            CopyTableDescriptions {
+                SrcPath: "/MyRoot/ColumnTableWithLocalIndexes"
+                DstPath: "/MyRoot/ColumnTableWithLocalIndexesCopy"
+                IsBackup: true
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        // 3. Verify the copied table and both bloom indexes are ready scheme objects
+        NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/ColumnTableWithLocalIndexesCopy");
+    }
+
+    Y_UNIT_TEST(ConsistentCopyRowTableWithMultipleBloomPrefixes) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+
+            {
+                TInactiveZone inactive(activeZone);
+                // Create source table with multiple bloom filter prefixes
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "src"
+                    Columns { Name: "Key1" Type: "Uint64"}
+                    Columns { Name: "Key2" Type: "Uint64"}
+                    Columns { Name: "Value" Type: "Utf8"}
+                    KeyColumnNames: ["Key1", "Key2"]
+                    PartitionConfig {
+                        ByKeyFilterPrefixes { PrefixLength: 1 }
+                        ByKeyFilterPrefixes { PrefixLength: 2 }
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                // Restart SchemeShard to trigger migration to scheme objects
+                TActorId sender = runtime.AllocateEdgeActor();
+                GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+                runtime.SimulateSleep(TDuration::Seconds(5));
+
+                // Verify source has bloom filters after migration
+                NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/src",
+                    {1, 2},
+                    {{"idx_bloom_1", {"Key1"}}, {"idx_bloom_2", {"Key1", "Key2"}}});
+            }
+
+            // Perform consistent copy operation with reboots
+            {
+                TInactiveZone inactive(activeZone);
+                TestConsistentCopyTables(runtime, ++t.TxId, "/", R"(
+                    CopyTableDescriptions {
+                      SrcPath: "/MyRoot/src"
+                      DstPath: "/MyRoot/dst"
+                    })");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                // Verify copy has all bloom filters
+                NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/dst",
+                    {1, 2},
+                    {{"idx_bloom_1", {"Key1"}}, {"idx_bloom_2", {"Key1", "Key2"}}});
+            }
         });
     }
 }

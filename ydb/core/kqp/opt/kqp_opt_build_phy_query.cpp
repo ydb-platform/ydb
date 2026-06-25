@@ -1,13 +1,17 @@
-#include "kqp_opt_impl.h"
+#include "kqp_opt.h"
+
+#include <ydb/core/kqp/common/kqp_user_request_context.h>
+#include <ydb/core/kqp/common/kqp_yql.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
 
 namespace NKikimr::NKqp::NOpt {
 
 using namespace NYql;
 using namespace NYql::NNodes;
 
-using TStatus = IGraphTransformer::TStatus;
-
 namespace {
+
+using TStatus = IGraphTransformer::TStatus;
 
 class TKqpBuildPhysicalQueryTransformer : public TSyncTransformerBase {
 public:
@@ -62,11 +66,13 @@ public:
 
     void Rewind() final {
     }
+
 private:
     TIntrusivePtr<TKqpOptimizeContext> KqpCtx;
     TIntrusivePtr<TKqpBuildQueryContext> BuildCtx;
 };
-} // namespace
+
+} // anonymous namespace
 
 TAutoPtr<IGraphTransformer> CreateKqpBuildPhysicalQueryTransformer(const TIntrusivePtr<TKqpOptimizeContext>& kqpCtx,
     const TIntrusivePtr<TKqpBuildQueryContext>& buildCtx)

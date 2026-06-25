@@ -273,6 +273,8 @@ TError::TErrorOr(const std::exception& ex)
         }
     } else if (const auto* errorEx = dynamic_cast<const TErrorException*>(&ex)) {
         *this = errorEx->Error();
+    } else if (const auto* sysError = dynamic_cast<const ::TSystemError*>(&ex)) {
+        *this = TError::FromSystem(*sysError);
     } else {
         *this = TError(NYT::EErrorCode::Generic, TRuntimeFormat{ex.what()});
         *this <<= TErrorAttribute("exception_type", TypeName(ex));

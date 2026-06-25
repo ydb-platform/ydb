@@ -31,7 +31,6 @@ TString SelectDatabaseForAlterLoginOperations(const TAppData* appData, const TSt
 
 void FillCreateExternalTableColumnDesc(NKikimrSchemeOp::TExternalTableDescription& externalTableDesc,
                                        const TString& name,
-                                       bool replaceIfExists,
                                        const NYql::TCreateExternalTableSettings& settings);
 
 bool Validate(const NYql::TAlterDatabaseSettings& settings, NYql::TIssue& error);

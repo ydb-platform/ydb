@@ -91,7 +91,7 @@ std::pair<EExpectedItem, std::optional<std::string>> NextToken(TTokenizer* token
     }
 }
 
-std::optional<TResult> TryParseImpl(TStringBuf yson, const TYPath& path, bool isAny)
+std::optional<TResult> TryParseImpl(TStringBuf yson, TYPathBuf path, bool isAny)
 {
     TTokenizer tokenizer(path);
     TMemoryInput input(yson);
@@ -265,7 +265,7 @@ struct TScalarTypeTraits<double>
 ////////////////////////////////////////////////////////////////////////////////
 
 template <typename T>
-std::optional<T> TryGetValueImpl(TStringBuf yson, const TYPath& ypath, bool isAny = false)
+std::optional<T> TryGetValueImpl(TStringBuf yson, TYPathBuf ypath, bool isAny = false)
 {
     auto result = NDetail::TryParseImpl(yson, ypath, isAny);
     if (!result.has_value()) {
@@ -277,46 +277,46 @@ std::optional<T> TryGetValueImpl(TStringBuf yson, const TYPath& ypath, bool isAn
 ////////////////////////////////////////////////////////////////////////////////
 
 template <typename T>
-std::optional<T> TryGetValue(TStringBuf yson, const TYPath& ypath)
+std::optional<T> TryGetValue(TStringBuf yson, TYPathBuf ypath)
 {
     return TryGetValueImpl<T>(yson, ypath, /*isAny*/ false);
 }
 
-template std::optional<i64> TryGetValue<i64>(TStringBuf yson, const TYPath& ypath);
-template std::optional<ui64> TryGetValue<ui64>(TStringBuf yson, const TYPath& ypath);
-template std::optional<bool> TryGetValue<bool>(TStringBuf yson, const TYPath& ypath);
-template std::optional<double> TryGetValue<double>(TStringBuf yson, const TYPath& ypath);
-template std::optional<std::string> TryGetValue<std::string>(TStringBuf yson, const TYPath& ypath);
-template std::optional<TString> TryGetValue<TString>(TStringBuf yson, const TYPath& ypath);
+template std::optional<i64> TryGetValue<i64>(TStringBuf yson, TYPathBuf ypath);
+template std::optional<ui64> TryGetValue<ui64>(TStringBuf yson, TYPathBuf ypath);
+template std::optional<bool> TryGetValue<bool>(TStringBuf yson, TYPathBuf ypath);
+template std::optional<double> TryGetValue<double>(TStringBuf yson, TYPathBuf ypath);
+template std::optional<std::string> TryGetValue<std::string>(TStringBuf yson, TYPathBuf ypath);
+template std::optional<TString> TryGetValue<TString>(TStringBuf yson, TYPathBuf ypath);
 
 ////////////////////////////////////////////////////////////////////////////////
 
-std::optional<i64> TryGetInt64(TStringBuf yson, const TYPath& ypath)
+std::optional<i64> TryGetInt64(TStringBuf yson, TYPathBuf ypath)
 {
     return TryGetValueImpl<i64>(yson, ypath);
 }
 
-std::optional<ui64> TryGetUint64(TStringBuf yson, const TYPath& ypath)
+std::optional<ui64> TryGetUint64(TStringBuf yson, TYPathBuf ypath)
 {
     return TryGetValueImpl<ui64>(yson, ypath);
 }
 
-std::optional<bool> TryGetBoolean(TStringBuf yson, const TYPath& ypath)
+std::optional<bool> TryGetBoolean(TStringBuf yson, TYPathBuf ypath)
 {
     return TryGetValueImpl<bool>(yson, ypath);
 }
 
-std::optional<double> TryGetDouble(TStringBuf yson, const TYPath& ypath)
+std::optional<double> TryGetDouble(TStringBuf yson, TYPathBuf ypath)
 {
     return TryGetValueImpl<double>(yson, ypath);
 }
 
-std::optional<std::string> TryGetString(TStringBuf yson, const TYPath& ypath)
+std::optional<std::string> TryGetString(TStringBuf yson, TYPathBuf ypath)
 {
     return TryGetValueImpl<std::string>(yson, ypath);
 }
 
-std::optional<std::string> TryGetAny(TStringBuf yson, const TYPath& ypath)
+std::optional<std::string> TryGetAny(TStringBuf yson, TYPathBuf ypath)
 {
     return TryGetValueImpl<std::string>(yson, ypath, /*isAny*/ true);
 }

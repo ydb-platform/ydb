@@ -97,7 +97,10 @@ TString ToString(const TLogTitle::TDirectBlockGroup& data)
 {
     TStringBuilder stream;
 
-    stream << "[dbg:" << data.DiskId;
+    stream << "[dbg:" << data.TabletId;
+    stream << " g:" << TOptional{data.Generation};
+    stream << " d:" << TOptional{data.DiskId};
+    stream << " indx:" << data.DirectBlockGroupIndex;
 
     return stream;
 }

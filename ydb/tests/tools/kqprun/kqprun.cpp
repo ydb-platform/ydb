@@ -21,6 +21,8 @@
 #include <yt/yql/providers/yt/gateway/file/yql_yt_file_comp_nodes.h>
 #include <yt/yql/providers/yt/lib/yt_download/yt_download.h>
 
+#include <ydb/apps/ydbd/export/export.h>
+
 #ifdef PROFILE_MEMORY_ALLOCATIONS
 #include <library/cpp/lfalloc/alloc_profiler/profiler.h>
 #include <library/cpp/monlib/dynamic_counters/counters.h>
@@ -1072,6 +1074,8 @@ protected:
             RunnerOptions.YdbSettings.YtGateway = NYql::CreateYtFileGateway(ytFileServices);
             RunnerOptions.YdbSettings.ComputationFactory = NYql::NFile::GetYtFileFactory(ytFileServices);
         }
+
+        RunnerOptions.YdbSettings.DataShardExportFactory = std::make_shared<TDataShardExportFactory>();
 
         if (!PqFilesMapping.empty()) {
             const auto fileGateway = MakeIntrusive<NYql::TDummyPqGateway>(true);

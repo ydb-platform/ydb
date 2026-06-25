@@ -9,6 +9,13 @@
 /CLAUDE.md @ydb-platform/ai-reviewers
 
 /.cursorindexingignore-personal @ydb-platform/ai-reviewers
+
+/.github/ @ydb-platform/ci
+/.github/workflows/docs_*
+/.github/workflows/ydbdoc-*
+/.github/config/muted_ya*
+/.github/CODEOWNERS
+/.github/TESTOWNERS
 /.github/docker @ydb-platform/appteam
 
 /build @ydb-platform/ci
@@ -27,7 +34,10 @@
 /ydb/core/kqp/ @ydb-platform/qp
 /ydb/core/kqp/ut/federated_query @ydb-platform/fq
 /ydb/core/kqp/ut/olap/ @ydb-platform/cs
-/ydb/core/kqp/ut/indexes/ @ydb-platform/qp @ydb-platform/datashard
+/ydb/core/kqp/ut/indexes/ @ydb-platform/qp
+/ydb/core/kqp/ut/indexes/vector @ydb-platform/datashard
+/ydb/core/kqp/ut/indexes/prefixed_vector @ydb-platform/datashard
+/ydb/core/kqp/ut/indexes/fulltext @ydb-platform/datashard
 /ydb/core/kqp/ut/knn/ @ydb-platform/datashard
 /ydb/core/kqp/ut/tli/ @ydb-platform/datashard
 /ydb/core/public_http/ @ydb-platform/fq
@@ -95,8 +105,10 @@
 /ydb/core/tx/datashard @ydb-platform/datashard
 /ydb/core/tx/coordinator @ydb-platform/datashard
 /ydb/core/tx/schemeshard/index @ydb-platform/datashard
+/ydb/core/tx/schemeshard/ut_index @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_index_build @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_index_build_reboots @ydb-platform/datashard
+/ydb/core/tx/schemeshard/ut_shred @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_shred_reboots @ydb-platform/datashard
 /ydb/core/tx/schemeshard/ut_vector_index_build_reboots @ydb-platform/datashard
 

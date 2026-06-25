@@ -85,7 +85,7 @@ private:
   std::unique_ptr<Recordable> recordable_;
   opentelemetry::common::SteadyTimestamp start_steady_time;
   std::unique_ptr<opentelemetry::trace::SpanContext> span_context_;
-  bool has_ended_;
+  bool has_ended_{false};
 };
 }  // namespace trace
 }  // namespace sdk

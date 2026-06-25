@@ -19,7 +19,12 @@ namespace plugin
 class TracerHandle
 {
 public:
-  virtual ~TracerHandle() = default;
+  TracerHandle()                                = default;
+  TracerHandle(const TracerHandle &)            = delete;
+  TracerHandle(TracerHandle &&)                 = delete;
+  TracerHandle &operator=(const TracerHandle &) = delete;
+  TracerHandle &operator=(TracerHandle &&)      = delete;
+  virtual ~TracerHandle()                       = default;
 
   virtual trace::Tracer &tracer() const noexcept = 0;
 };

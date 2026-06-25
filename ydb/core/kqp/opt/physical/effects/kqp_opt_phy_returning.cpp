@@ -1,12 +1,16 @@
 #include "kqp_opt_phy_effects_rules.h"
 #include "kqp_opt_phy_effects_impl.h"
 
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 
 using namespace NYql;
 using namespace NYql::NNodes;
 
 namespace NKikimr::NKqp::NOpt {
+
+namespace {
 
 template<typename Container>
 TCoAtomList MakeColumnsList(Container rows, TExprContext& ctx, TPositionHandle pos) {
@@ -44,16 +48,42 @@ TExprBase SelectFields(TExprBase node, Container fields, TExprContext& ctx, TPos
         .Done();
 }
 
+} // anonymous namespace
+
 TExprBase KqpBuildReturning(TExprBase node, TExprContext& ctx, const TTypeAnnotationContext& typeCtx, const TKqpOptimizeContext& kqpCtx) {
-    if (kqpCtx.Config->GetEnableIndexStreamWrite()) {
-        return node;
-    }
     auto maybeReturning = node.Maybe<TKqlReturningList>();
     if (!maybeReturning) {
         return node;
     }
 
     auto returning = maybeReturning.Cast();
+
+    if (kqpCtx.Config->GetEnableIndexStreamWrite()) {
+        if (auto maybeList = returning.Update().Maybe<TExprList>()) {
+            const auto list = maybeList.Cast();
+            AFL_ENSURE(list.Size() > 0);
+            const auto tablePath = returning.Table().Path().Value();
+            for (auto&& effect : list) {
+                if (auto upsert = effect.Maybe<TKqlUpsertRows>()) {
+                    if (upsert.Cast().Table().Path().Value() == tablePath
+                            && !upsert.Cast().ReturningColumns().Empty()) {
+                        return TExprBase(ctx.ChangeChild(*returning.Raw(),
+                            TKqlReturningList::idx_Update, effect.Ptr()));
+                    }
+                }
+                if (auto del = effect.Maybe<TKqlDeleteRows>()) {
+                    if (del.Cast().Table().Path().Value() == tablePath
+                            && !del.Cast().ReturningColumns().Empty()) {
+                        return TExprBase(ctx.ChangeChild(*returning.Raw(),
+                            TKqlReturningList::idx_Update, effect.Ptr()));
+                    }
+                }
+            }
+            AFL_ENSURE(false); // Must have returning effect
+        }
+        return node;
+    }
+
     const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, returning.Table().Path());
 
     auto buildReturningRows = [&](TExprBase rows, TCoAtomList columns, TCoAtomList returningColumns, const bool needToCheckIfExists) -> TExprBase {

@@ -2,6 +2,7 @@
 
 #include "cbo_interesting_orderings.h"
 
+#include <yql/essentials/core/yql_statistics.h>
 #include <yql/essentials/core/minsketch/count_min_sketch.h>
 #include <yql/essentials/core/histogram/eq_width_histogram.h>
 
@@ -47,6 +48,12 @@ struct TColumnStatistics {
     TString Type;
 
     TColumnStatistics() {}
+    TColumnStatistics(const NYql::TColumnStatistics& yqlStats) : NumUniqueVals(yqlStats.NumUniqueVals)
+        , HyperLogLog(yqlStats.HyperLogLog)
+        , CountMinSketch(yqlStats.CountMinSketch)
+        , EqWidthHistogramEstimator(yqlStats.EqWidthHistogramEstimator)
+        , Type(yqlStats.Type)
+    {}
 };
 
 class TShufflingOrderingsByJoinLabels {
@@ -127,6 +134,7 @@ struct TOptimizerStatistics {
     double ByteSize = 0;
     double Cost = 0;
     double Selectivity = 1.0;
+    ui32 JoinDepth = 1;
     TIntrusivePtr<TKeyColumns> KeyColumns;
     TIntrusivePtr<TColumnStatMap> ColumnStatistics;
 

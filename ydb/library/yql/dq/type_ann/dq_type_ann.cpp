@@ -5,6 +5,7 @@
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_type_helpers.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
+#include <yql/essentials/providers/common/transform/yql_visit.h>
 #include <yql/essentials/utils/log/log.h>
 
 #include <util/string/join.h>
@@ -666,7 +667,7 @@ public:
     TDqTypeAnnotationTransformer()
         : TVisitorTransformerBase(/* failOnUnknown */ true)
     {
-        AddHandler({"BlockHashJoinCore"}, Hndl(&AnnotateDqBlockHashJoinCore)); // Handle BlockHashJoinCore callable (from peephole)
+        AddHandler({TDqBlockHashJoinCore::CallableName()}, Hndl(&AnnotateDqBlockHashJoinCore)); // Handle BlockHashJoinCore callable (from peephole)
         AddHandler({TDqStage::CallableName()}, Hndl(&AnnotateDqStage));
         AddHandler({TDqPhyStage::CallableName()}, Hndl(&AnnotateDqPhyStage));
         AddHandler({TDqOutput::CallableName()}, Hndl(&AnnotateDqOutput));

@@ -9,7 +9,7 @@
 #include <util/string/split.h>
 #include <util/string/strip.h>
 
-#include <ydb/core/util/aws.h>
+#include <ydb/library/aws_init/aws.h>
 
 #include <yql/essentials/utils/url_builder.h>
 

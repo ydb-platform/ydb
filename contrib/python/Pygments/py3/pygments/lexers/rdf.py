@@ -4,7 +4,7 @@
 
     Lexers for semantic web and RDF query languages and markup.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
@@ -265,7 +265,7 @@ class TurtleLexer(RegexLexer):
              bygroups(Name.Namespace, Punctuation, Name.Tag)),
 
             # Comment
-            (r'#[^\n]+', Comment),
+            (r'#([^\n]+|$)', Comment),
 
             (r'\b(true|false)\b', Literal),
             (r'[+\-]?\d*\.\d+', Number.Float),

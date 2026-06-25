@@ -2,6 +2,7 @@
 
 #include <yql/essentials/sql/v1/proto_parser/reflection.h>
 
+#include <yql/essentials/core/langver/feature.gen.h>
 #include <yql/essentials/providers/common/provider/yql_provider_names.h>
 #include <yql/essentials/utils/yql_panic.h>
 #include <yql/essentials/utils/yql_paths.h>
@@ -117,24 +118,25 @@ TContext::TContext(TLexers lexers, TParsers parsers,
     , AnsiQuotedIdentifiers(settings.AnsiLexer)
     , WarningPolicy(settings.IsReplay)
     , BlockEngineEnable(Settings.BlockDefaultAuto->Allow())
-    , StrictWarningAsError(true)
 {
-    if (settings.LangVer >= MakeLangVersion(2025, 2)) {
+    if (settings.LangVer >= NYql::NFeature::GroupByExprAfterWhere.MinLangVer) {
         GroupByExprAfterWhere = true;
     }
 
-    if (settings.LangVer >= MakeLangVersion(2025, 3)) {
+    if (settings.LangVer >= NYql::NFeature::PersistableFlattenAndAggrExprs.MinLangVer) {
         FlattenAndAggrExprsPersistence = EFlattenAndAggrExprsPersistence::Auto;
     }
 
-    if (settings.LangVer >= MakeLangVersion(2025, 4)) {
+    if (settings.LangVer > NYql::NFeature::LegacyNotNull.MaxLangVer) {
         DisableLegacyNotNull = true;
     }
 
     SetYqlSelectMode(settings.YqlSelect);
-
     if (settings.Flags.contains("AutoYqlSelect")) {
         SetYqlSelectMode(EYqlSelect::Auto);
+    }
+    if (settings.Flags.contains("ForceYqlSelect")) {
+        SetYqlSelectMode(EYqlSelect::Force);
     }
 
     for (auto lib : settings.Libraries) {
@@ -227,7 +229,7 @@ bool TContext::Warning(NYql::TPosition pos, NYql::TIssueCode code, std::function
     bool isError;
     IOutputStream& out = MakeIssue(TSeverityIds::S_WARNING, code, pos, forceError, isError);
     message(out);
-    return !StrictWarningAsError || !isError;
+    return !isError;
 }
 
 IOutputStream& TContext::Info(NYql::TPosition pos) {
@@ -601,35 +603,13 @@ TScopedStatePtr TContext::CreateScopedState() const {
     return state;
 }
 
-bool TContext::EnsureBackwardCompatibleFeatureAvailable(
-    TPosition position,
-    TStringBuf feature,
-    NYql::TLangVersion version)
-{
-    if (!IsBackwardCompatibleFeatureAvailable(version)) {
-        Error(position)
-            << feature << " is not available before language version "
-            << NYql::FormatLangVersion(version);
-        return false;
-    }
-
-    return true;
+bool TContext::IsAvailable(const NYql::TFeature& feature) const {
+    return NYql::IsAvailableOn(Settings.LangVer, Settings.BackportMode, feature);
 }
 
-bool TContext::IsBackwardCompatibleFeatureAvailable(NYql::TLangVersion featureVer) const {
-    return NYql::IsBackwardCompatibleFeatureAvailable(
-        Settings.LangVer, featureVer, Settings.BackportMode);
-}
-
-bool TContext::EnsureFeatureNotExpired(
-    TPosition position,
-    TStringBuf feature,
-    NYql::TLangVersion version)
-{
-    if (!IsAvailableLangVersion(Settings.LangVer, version)) {
-        Error(position)
-            << feature << " is not available after language version "
-            << NYql::FormatLangVersion(version);
+bool TContext::EnsureAvailable(TPosition position, const NYql::TFeature& feature) {
+    if (auto r = NYql::EnsureIsAvailableOn(Settings.LangVer, Settings.BackportMode, feature); !r) {
+        Error(std::move(position)) << r.error();
         return false;
     }
 

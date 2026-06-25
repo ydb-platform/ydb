@@ -221,4 +221,20 @@ void CreateBuildPrefixTable(Tests::TServer::TPtr server, TActorId sender, TShard
     CreateShardedTable(server, sender, "/Root", name, options);
 }
 
+void CreateFulltextCompactTable(Tests::TServer::TPtr server, TActorId sender, const char* name, const char* keyType)
+{
+    TShardedTableOptions options;
+    options.EnableOutOfOrder(true);
+    options.Shards(1);
+    options.AllowSystemColumnNames(true);
+    options.Columns({
+        {NTableIndex::NFulltext::TokenColumn, "String", true, true},
+        {NTableIndex::NFulltext::MaxIdColumn, keyType, true, true},
+        {NTableIndex::NFulltext::GenColumn, "Uint32", true, true},
+        {NTableIndex::NFulltext::AddedColumn, "Bool", false, true},
+        {NTableIndex::NFulltext::SegmentColumn, "String", false, true},
+    });
+    CreateShardedTable(server, sender, "/Root", name, options);
+}
+
 } // namespace NKikimr

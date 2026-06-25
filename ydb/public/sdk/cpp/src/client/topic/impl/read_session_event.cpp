@@ -37,7 +37,7 @@ std::pair<uint64_t, uint64_t> GetMessageOffsetRange(const TDataReceivedEvent& da
 
 TMessageInformation::TMessageInformation(
     uint64_t offset,
-    std::string producerId,
+    std::string_view producerId,
     uint64_t seqNo,
     TInstant createTime,
     TInstant writeTime,
@@ -47,7 +47,7 @@ TMessageInformation::TMessageInformation(
     std::string messageGroupId
 )
     : Offset(offset)
-    , ProducerId(std::move(producerId))
+    , ProducerId(producerId)
     , SeqNo(seqNo)
     , CreateTime(createTime)
     , WriteTime(writeTime)
@@ -315,10 +315,10 @@ TStartPartitionSessionEvent::TStartPartitionSessionEvent(TPartitionSession::TPtr
     , EndOffset(endOffset) {
 }
 
-void TStartPartitionSessionEvent::Confirm(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) {
+void TStartPartitionSessionEvent::Confirm(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset, std::optional<uint64_t> maxOffset) {
     if (PartitionSession) {
         static_cast<TPartitionSessionControl*>(PartitionSession.Get())
-            ->ConfirmCreate(readOffset, commitOffset);
+            ->ConfirmCreate(readOffset, commitOffset, maxOffset);
     }
 }
 

@@ -107,6 +107,22 @@ private:
     const TVector<std::unique_ptr<IBlockItemHasher>> Children_;
 };
 
+class TVariantBlockItemHasher: public TBlockItemHasherBase<TVariantBlockItemHasher, false> {
+public:
+    explicit TVariantBlockItemHasher(TVector<std::unique_ptr<IBlockItemHasher>>&& children)
+        : Children_(std::move(children))
+    {
+    }
+
+    ui64 DoHash(TBlockItem value) const {
+        const ui64 idx = value.GetVariantIndex();
+        return CombineHashes(idx, Children_[idx]->Hash(value.GetVariantItem()));
+    }
+
+private:
+    const TVector<std::unique_ptr<IBlockItemHasher>> Children_;
+};
+
 class TExternalOptionalBlockItemHasher: public TBlockItemHasherBase<TExternalOptionalBlockItemHasher, true> {
 public:
     explicit TExternalOptionalBlockItemHasher(std::unique_ptr<IBlockItemHasher>&& inner)

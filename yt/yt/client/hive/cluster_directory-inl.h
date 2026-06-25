@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "cluster_directory.h"
 #endif
-#undef CLUSTER_DIRECTORY_INL_H_
 
 #include "private.h"
 #include "config.h"
@@ -86,27 +85,31 @@ std::vector<std::string> TClusterDirectoryBase<TConnection>::GetClusterNames() c
 template <std::derived_from<NApi::IConnection> TConnection>
 void TClusterDirectoryBase<TConnection>::RemoveCluster(const std::string& name)
 {
-    auto guard = Guard(Lock_);
-    auto nameIt = NameToCluster_.find(name);
-    if (nameIt == NameToCluster_.end()) {
-        return;
+    {
+        auto guard = Guard(Lock_);
+        auto nameIt = NameToCluster_.find(name);
+        if (nameIt == NameToCluster_.end()) {
+            return;
+        }
+        const auto& cluster = nameIt->second;
+        auto cellTags = GetCellTags(cluster);
+        cluster.Connection->Terminate();
+        if (auto tvmId = cluster.Connection->GetTvmId()) {
+            auto tvmIdsIt = ClusterTvmIds_.find(*tvmId);
+            YT_VERIFY(tvmIdsIt != ClusterTvmIds_.end());
+            ClusterTvmIds_.erase(tvmIdsIt);
+        }
+        NameToCluster_.erase(nameIt);
+        for (auto cellTag : cellTags) {
+            YT_VERIFY(CellTagToCluster_.erase(cellTag) == 1);
+        }
+        auto Logger = HiveClientLogger;
+        YT_LOG_DEBUG("Remote cluster unregistered (Name: %v, CellTags: %v)",
+            name,
+            cellTags);
     }
-    const auto& cluster = nameIt->second;
-    auto cellTags = GetCellTags(cluster);
-    cluster.Connection->Terminate();
-    if (auto tvmId = cluster.Connection->GetTvmId()) {
-        auto tvmIdsIt = ClusterTvmIds_.find(*tvmId);
-        YT_VERIFY(tvmIdsIt != ClusterTvmIds_.end());
-        ClusterTvmIds_.erase(tvmIdsIt);
-    }
-    NameToCluster_.erase(nameIt);
-    for (auto cellTag : cellTags) {
-        YT_VERIFY(CellTagToCluster_.erase(cellTag) == 1);
-    }
-    auto Logger = HiveClientLogger;
-    YT_LOG_DEBUG("Remote cluster unregistered (Name: %v, CellTags: %v)",
-        name,
-        cellTags);
+
+    OnClusterUnregistered_.Fire(name);
 }
 
 template <std::derived_from<NApi::IConnection> TConnection>

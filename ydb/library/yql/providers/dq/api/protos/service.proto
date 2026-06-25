@@ -309,6 +309,7 @@ message ClusterStatusResponse {
         repeated string File = 4;
         uint32 Pid = 5;
         string Address = 6;
+        string StartTime = 7;
     };
 
     repeated TServiceNode ServiceNode = 10;

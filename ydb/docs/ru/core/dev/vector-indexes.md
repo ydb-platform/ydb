@@ -18,7 +18,7 @@ ALTER TABLE my_table
   GLOBAL USING vector_kmeans_tree
   ON (embedding)
   COVER (embedding, data)
-  WITH (distance=cosine, vector_type="float", vector_dimension=512, levels=2, clusters=128, overlap_clusters=3);
+  WITH (distance=cosine, vector_type="float", vector_dimension=512, overlap_clusters=3);
 ```
 
 Пример запроса поиска к такому индексу:
@@ -44,6 +44,7 @@ LIMIT 10;
 - Поиск по векторному индексу всегда приближённый - его результаты отличаются от поиска полным перебором.
 - Увеличение параметра [`PRAGMA KMeansTreeSearchTopSize`](../yql/reference/syntax/select/vector_index.md#kmeanstreesearchtopsize) повышает качество (полноту) поиска, но снижает его скорость. Параметр задаёт число ближайших к запросу сканируемых кластеров индекса. Значение по умолчанию - 1 (минимальное качество, максимальная скорость).
 - Параметр `overlap_clusters=3` сильно повышает качество будущего поиска при индексации, задавая число кластеров, в которые добавляется каждый вектор, но увеличивает размер индекса.
+- Параметры `vector_type` и `vector_dimension` можно не указывать, если таблица не пуста — они будут автоматически определены из содержимого строк.
 
 ### Векторный индекс с фильтрацией {#filtered}
 
@@ -57,7 +58,7 @@ ALTER TABLE my_table
   GLOBAL USING vector_kmeans_tree
   ON (user, embedding)
   COVER (embedding, data)
-  WITH (distance=cosine, vector_type="float", vector_dimension=512, levels=2, clusters=128, overlap_clusters=3);
+  WITH (distance=cosine);
 ```
 
 Запросы поиска к такому индексу с фильтрацией должны включать условия по колонке `user`:
@@ -90,7 +91,7 @@ ALTER TABLE my_table
   GLOBAL USING vector_kmeans_tree
   ON (embedding)
   COVER (embedding, data)
-  WITH (distance=cosine, vector_type="float", vector_dimension=512, levels=2, clusters=128, overlap_clusters=3);
+  WITH (distance=cosine);
 ```
 
 ## Функции расстояния {#distance}
@@ -151,7 +152,7 @@ ALTER TABLE my_table
   ADD INDEX my_index
   GLOBAL USING vector_kmeans_tree
   ON (embedding)
-  WITH (distance=cosine, vector_type="float", vector_dimension=512, levels=2, clusters=128, overlap_clusters=3);
+  WITH (distance=cosine, overlap_clusters=3);
 ```
 
 В данном примере каждый вектор будет добавлен в 3 ближайших кластера вместо 1.

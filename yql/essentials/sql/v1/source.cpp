@@ -434,7 +434,7 @@ bool ISource::SetTableHints(TContext& ctx, TPosition pos, const TTableHints& hin
     Y_UNUSED(pos);
     Y_UNUSED(contextHints);
     if (hints) {
-        ctx.Error() << "Explicit hints are only supported for table sources";
+        ctx.Error() << "Hint '" << hints.begin()->first << "' requires a table";
         return false;
     }
     return true;
@@ -980,7 +980,7 @@ bool ISource::InitFilters(TContext& ctx) {
 }
 
 TAstNode* ISource::Translate(TContext& ctx) const {
-    YQL_ENSURE(false, "Can't tranlsate ISource, maybe it is used in a scalar context");
+    YQL_ENSURE(false, "Can't translate ISource, maybe it is used in a scalar context");
     Y_UNUSED(ctx);
     return nullptr;
 }

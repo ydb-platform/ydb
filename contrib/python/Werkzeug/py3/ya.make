@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(2.2.3)
+VERSION(2.3.8)
 
 LICENSE(BSD-3-Clause)
 
@@ -21,8 +21,26 @@ PY_SRCS(
     werkzeug/__init__.py
     werkzeug/_internal.py
     werkzeug/_reloader.py
-    werkzeug/datastructures.py
-    werkzeug/datastructures.pyi
+    werkzeug/datastructures/__init__.py
+    werkzeug/datastructures/accept.py
+    werkzeug/datastructures/accept.pyi
+    werkzeug/datastructures/auth.py
+    werkzeug/datastructures/cache_control.py
+    werkzeug/datastructures/cache_control.pyi
+    werkzeug/datastructures/csp.py
+    werkzeug/datastructures/csp.pyi
+    werkzeug/datastructures/etag.py
+    werkzeug/datastructures/etag.pyi
+    werkzeug/datastructures/file_storage.py
+    werkzeug/datastructures/file_storage.pyi
+    werkzeug/datastructures/headers.py
+    werkzeug/datastructures/headers.pyi
+    werkzeug/datastructures/mixins.py
+    werkzeug/datastructures/mixins.pyi
+    werkzeug/datastructures/range.py
+    werkzeug/datastructures/range.pyi
+    werkzeug/datastructures/structures.py
+    werkzeug/datastructures/structures.pyi
     werkzeug/debug/__init__.py
     werkzeug/debug/console.py
     werkzeug/debug/repr.py

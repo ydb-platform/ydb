@@ -153,7 +153,7 @@ message TFeatureFlags {
     optional bool EnableDbMetadataCache = 127 [default = false];
     optional bool EnableTableDatetime64 = 128 [default = true];
     optional bool EnableResourcePools = 129 [default = true];
-    optional bool EnableColumnStatistics = 130 [default = false];
+    optional bool EnableColumnStatistics = 130 [default = true];
     optional bool EnableSingleCompositeActionGroup = 131 [default = false];
     optional bool EnableResourcePoolsOnServerless = 132 [default = false];
     optional bool EnableVectorIndex = 133 [default = true];
@@ -197,7 +197,7 @@ message TFeatureFlags {
     optional bool EnableChangefeedsImport = 170 [default = true];
     optional bool EnablePermissionsExport = 171 [default = true];
     optional bool EnableDataErasure = 172 [default = false];
-    optional bool EnableShowCreate = 173 [default = true];
+    optional bool EnableShowCreate = 173 [default = true, deprecated = true]; // deprecated: always true
     optional bool EnableChangefeedsExport = 174 [default = true];
     optional bool EnableKafkaNativeBalancing = 175 [default = true];
     optional bool EnableTabletRestartOnUnhandledExceptions = 176 [default = true];
@@ -233,7 +233,7 @@ message TFeatureFlags {
     optional bool EnableStreamingQueries = 206 [default = true];
     optional bool EnableTinyDisks = 207 [default = false];
     optional bool EnableMetricsLevel = 208 [default = true];
-    optional bool EnableCompileCacheView = 209 [default = false];
+    optional bool EnableCompileCacheView = 209 [default = true];
     optional bool EnableSecureScriptExecutions = 210 [default = false];
     optional bool EnableColumnshardBool = 211 [default = true];
     optional bool EnableTopicMessageLevelParallelism = 212 [default = false];
@@ -269,7 +269,7 @@ message TFeatureFlags {
     optional bool EnablePDiskSpaceColorOverride = 242 [default = false];
     optional bool EnableSkipConflictCheckForTopicsInTransaction = 243 [default = false];
     // Split protocol control.
-    // By default, the schemeshard handles sorting and split boundary selection.
+    // Originally, schemeshard handled histogram sorting and split boundary selection.
     // These flags move that work to the datashard side:
     //
     // EnableDataShardSplitHistogramSorting - sort KeyAccessSample on datashard
@@ -278,10 +278,10 @@ message TFeatureFlags {
     // EnableDataShardSplitHistogramOmission - stop sending KeyAccessSample
     //     and DataSizeHistogram in datashard stats
     //
-    // Enabling a flag also enables all flags above it (HistogramSorting ⊃ KeySelection ⊃ HistogramOmission).
-    optional bool EnableDataShardSplitHistogramSorting = 244 [default = false];
-    optional bool EnableDataShardSplitKeySelection = 245 [default = false];
-    optional bool EnableDataShardSplitHistogramOmission  = 246 [default = false];
+    // Enabling a flag effectively enables all flags above it (HistogramSorting <- KeySelection <- HistogramOmission).
+    optional bool EnableDataShardSplitHistogramSorting = 244 [default = true];
+    optional bool EnableDataShardSplitKeySelection = 245 [default = true];
+    optional bool EnableDataShardSplitHistogramOmission = 246 [default = true];
     optional bool EnableOnlineAddUniqueIndex = 247 [default = false];
     optional bool EnableSharedReadingInStreamingQueries = 248 [default = false];
     optional bool EnableCsDictionaryEncoding = 249 [default = true];
@@ -298,10 +298,31 @@ message TFeatureFlags {
     optional bool EnableStreamingQueryDisposition = 260 [default = true];
     // Skip persisting partition rows that are not affected by a split/merge operation.
     optional bool EnableSplitMergePartialPersistence = 261 [default = true];
-    optional bool EnableLocalMinMaxIndex = 262 [default = false];
+    optional bool EnableLocalMinMaxIndex = 262 [default = true];
     optional bool DisableOnlineRO = 263 [default = false];
     optional bool EnableUserAttributesInTopicQuery = 264 [default = true];
     optional bool EnableDqSourceStreamLookupJoinFullscan = 265 [default = false];
     optional bool EnableTopicsPredicatePushdown = 266 [default = false];
     optional bool EnableJsonIndexAutoSelect = 267 [default = false];
+    optional bool ForbidRequestsToStaticNodesWithoutDatabase = 268 [default = true];
+    optional bool EnableTabletDevUiSecurePath = 269 [default = false];
+    optional bool EnableExtraSidsControlForHttpViewer = 270 [default = true];
+    // Use TablePartitionsByShardIdx (keyed by ShardIdx) instead of TablePartitions
+    // (keyed by positional index) for local tables.  When ON, split/merge writes only
+    // O(k) rows (src+dst shards) instead of O(N) rows (all partitions after srcFirstIdx).
+    optional bool EnableTablePartitionsFormatShardIdx = 271 [default = false];
+    optional bool EnableTablePartitionsFormatShardIdxByDefault = 272 [default = false];
+    optional bool EnableTablePartitionsFormatAutoConvert = 273 [default = false];
+    optional bool EnableTopicMessagesBatching = 274 [default = false];
+    optional bool EnableTopicWriteOffsetDeltaInKeys = 275 [default = false];
+    optional bool EnableTablePartitionsConsistencyCheck = 276 [default = true];
+    optional bool EnableKqpConstraintsTransformer = 277 [default = true];
+    optional bool EnableLocalIndexAsSchemeObject = 278 [default = true];
+    optional bool EnableDataShardDetailedMetrics = 279 [default = false];
+    optional bool EnableCompactFulltextIndex = 280 [default = false];
+    optional bool EnableVDiskWaitForRecoveryLogCutOnLocalSyncDataReplay = 281 [default = false];
+    optional bool EnableFulltextIndexPrefix = 282 [default = false];
+    optional bool EnableAccessServiceV2Interface = 283 [default = false, (RequireRestart) = true];
+    optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
+    optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
 }

@@ -24,7 +24,7 @@ void TDispatcher::Configure(const TDispatcherConfigPtr& config)
     Impl_->Configure(config);
 }
 
-const TBusNetworkCountersPtr& TDispatcher::GetCounters(const TString& networkName, bool encrypted)
+const TBusNetworkCountersPtr& TDispatcher::GetCounters(const std::string& networkName, bool encrypted)
 {
     return Impl_->GetCounters(networkName, encrypted);
 }

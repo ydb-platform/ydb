@@ -1,8 +1,8 @@
 # Running scan queries
 
-{% include notitle [warning](../../_includes/deprecated_command_warning.md) %}
+{% include notitle [warning](../../../../_includes/scan_query_deprecated_warning.md) %}
 
-To run a query via [Scan Queries](../../../../concepts/scan_query.md) using {{ ydb-short-name }} CLI, add the `-t scan` flag to the `{{ ydb-cli }} table query execute` command.
+To run a query via [Scan Queries](../../../../concepts/query_execution/scan_query.md) using {{ ydb-short-name }} CLI, add the `-t scan` flag to the `{{ ydb-cli }} table query execute` command.
 
 Run a query against the data:
 

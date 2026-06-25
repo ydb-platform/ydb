@@ -1,5 +1,6 @@
 #include "../mkql_match_recognize_nfa.h"
 #include "mkql_computation_node_ut.h"
+#include "mkql_program_builder_test_utils.h"
 #include <yql/essentials/minikql/computation/mkql_computation_node_impl.h>
 #include <yql/essentials/core/sql_types/match_recognize.h>
 #include <library/cpp/testing/unittest/registar.h>
@@ -34,7 +35,7 @@ struct TNfaSetup {
         TCallableBuilder callableBuilder(env, "TestNfa", env.GetTypeOfVoidLazy());
         callableBuilder.Add(pgmBuilder.Arg(matchedVarsTypeBuilder.Build()));
         for (size_t i = 0; i != VarCount; ++i) {
-            callableBuilder.Add(pgmBuilder.Arg(pgmBuilder.NewDataType(NUdf::EDataSlot::Bool)));
+            callableBuilder.Add(pgmBuilder.Arg(NTest::ConvertToMinikqlType<bool>(pgmBuilder)));
         }
         auto testNfa = TRuntimeNode(callableBuilder.Build(), false);
         auto graph = Setup.BuildGraph(testNfa);

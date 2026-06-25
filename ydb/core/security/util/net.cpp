@@ -10,20 +10,14 @@ namespace NKikimr::NSecurity {
 
 namespace {
 
-////////////////////////////////////////////////////////////////////////////////
-
 constexpr TStringBuf IPV6_PREFIX = "ipv6:";
 constexpr TStringBuf IPV4_PREFIX = "ipv4:";
-
-////////////////////////////////////////////////////////////////////////////////
 
 TMaybe<TIpv6Address> GetAddress(TStringBuf address) {
     bool isValid = false;
     const auto ip = TIpv6Address::FromString(address, isValid);
     return isValid ? MakeMaybe(ip) : Nothing();
 }
-
-////////////////////////////////////////////////////////////////////////////////
 
 TMaybe<THostAddressAndPort> TryParsePeername(TStringBuf peername) {
     const auto parsePeername = [](TStringBuf normPeername,
@@ -62,8 +56,6 @@ TMaybe<THostAddressAndPort> TryParsePeername(TStringBuf peername) {
 
 } // namespace
 
-////////////////////////////////////////////////////////////////////////////////
-
 bool IsIPv4(TStringBuf address) {
     const auto addr = GetAddress(address);
     if (addr.Defined()) {
@@ -79,8 +71,6 @@ bool IsIPv6(TStringBuf address) {
     }
     return false;
 }
-
-////////////////////////////////////////////////////////////////////////////////
 
 bool IsGoodPeernameFormat(TStringBuf peername) {
     return TryParsePeername(peername).Defined();

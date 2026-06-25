@@ -22,11 +22,19 @@ message TDirectBlockGroupsConnections {
 // One vchunk's host layout, persisted only when it deviates from the default
 // TVChunkConfig::Make() produces. PBufferHostRoles[i] / DDiskHostRoles[i] hold
 // the EHostRole value for host i; EnabledHosts lists the enabled host indices.
+
+// TODO. Make inner message THostConfig
 message TVChunkConfig {
+    message Watermark {
+        uint32 HostIndex = 1;
+        uint64 Value = 2;
+    }
+
     uint32 VChunkIndex = 1;
     repeated uint32 PBufferHostRoles = 2;
     repeated uint32 DDiskHostRoles = 3;
     repeated uint32 EnabledHosts = 4;
+    repeated Watermark Watermarks = 5;
 }
 
 message TTabletInfo {

@@ -13,8 +13,7 @@ class TGRpcDiscoveryService
     : public NYdbGrpc::TGrpcServiceBase<Ydb::Discovery::V1::DiscoveryService>
 {
 public:
-    TGRpcDiscoveryService(NActors::TActorSystem* system, std::shared_ptr<NYdb::ICredentialsProvider> credentialsProvider,
-                 TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
+    TGRpcDiscoveryService(NActors::TActorSystem* system, TIntrusivePtr<::NMonitoring::TDynamicCounters> counters);
 
     void InitService(grpc::ServerCompletionQueue* cq, NYdbGrpc::TLoggerPtr logger) override;
 
@@ -24,7 +23,6 @@ private:
     NActors::TActorSystem* ActorSystem_;
     grpc::ServerCompletionQueue* CQ_;
 
-    std::shared_ptr<NYdb::ICredentialsProvider> CredentialsProvider_;
     TIntrusivePtr<::NMonitoring::TDynamicCounters> Counters_;
 };
 

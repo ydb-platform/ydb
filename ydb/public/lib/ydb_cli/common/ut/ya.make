@@ -6,11 +6,15 @@ SRCS(
     config_ut.cpp
     csv_parser_ut.cpp
     duration_ut.cpp
+    markdown_ut.cpp
     normalize_path_ut.cpp
     pg_dump_parser_ut.cpp
     print_utils_ut.cpp
     recursive_remove_ut.cpp
+    scheme_query_utils_ut.cpp
     tabbed_table_ut.cpp
+    tx_mode_utils_ut.cpp
+    utf8_utils_ut.cpp
 )
 
 END()

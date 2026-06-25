@@ -9,18 +9,19 @@ std::unique_ptr<TEvPQ::TEvRead> MakeEvRead(const TActorId& selfId, ui64 nextRequ
         nextRequestCookie,
         startOffset,
         lastOffset,
-        nextPartNo.GetOrElse(0),
-        std::numeric_limits<ui32>::max(),
-        TString{},
-        CLIENTID_COMPACTION_CONSUMER,
-        3000,
-        std::numeric_limits<ui32>::max(),
-        0,
-        0,
-        "unknown",
-        false,
-        TActorId{},
-        selfId
+        nextPartNo.GetOrElse(0), // partNo
+        std::numeric_limits<ui32>::max(), // count
+        TString{}, // sessionId
+        CLIENTID_COMPACTION_CONSUMER, // clientId
+        3000, // timeout
+        std::numeric_limits<ui32>::max(), // size
+        false, // readToBlobEnd
+        0, // maxTimeLagMs
+        0, // readTimestampMs
+        "unknown", // clientDC
+        false, // externalOperation
+        TActorId{}, // pipeClient
+        selfId // replyTo
     );
     return evRead;
 }
@@ -453,7 +454,8 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
         TClientBlob blob(std::move(*res.MutableSourceId()), res.GetSeqNo(), std::move(tmpData),
                          Nothing(),
                          TInstant::MilliSeconds(res.GetWriteTimestampMS()), TInstant::MilliSeconds(res.GetCreateTimestampMS()),
-                         res.GetUncompressedSize(), std::move(*res.MutablePartitionKey()), std::move(*res.MutableExplicitHash()));
+                         res.GetUncompressedSize(), std::move(*res.MutablePartitionKey()), std::move(*res.MutableExplicitHash()),
+                         res.GetLogicalMessageCount(), res.GetIsBatch());
 
         if (res.HasTotalParts()) {
             blob.PartData = TPartData{static_cast<ui16>(res.GetPartNo()), static_cast<ui16>(res.GetTotalParts()), res.GetTotalSize()};
@@ -744,10 +746,25 @@ void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
     Y_ENSURE(PartitionActor->CompactionBlobEncoder.DataKeysBody.size() == oldDataKeys.size() - zeroedKeys);
     Y_ENSURE(currCumulSize == PartitionActor->CompactionBlobEncoder.BodySize - sizeDiff);
     PartitionActor->CompactionBlobEncoder.BodySize = currCumulSize;
-    PartitionActor->CompactionBlobEncoder.StartOffset = Max(
-                    PartitionActor->CompactionBlobEncoder.StartOffset,
-                    PartitionActor->CompactionBlobEncoder.DataKeysBody.front().Key.GetOffset()
-                        + (ui32)(PartitionActor->CompactionBlobEncoder.DataKeysBody.front().Key.GetPartNo() > 0));
+    if (PartitionActor->IsTopicRetentionDeleteLastBlobEnabled()) {
+        if (PartitionActor->CompactionBlobEncoder.DataKeysBody.empty()) {
+            const ui64 startOffset = FirstHeadOffset + (FirstHeadPartNo > 0 ? 1 : 0);
+            PartitionActor->CompactionBlobEncoder.StartOffset = startOffset;
+            PartitionActor->CompactionBlobEncoder.EndOffset = startOffset;
+            PartitionActor->CompactionBlobEncoder.Head.Offset = startOffset;
+            PartitionActor->CompactionBlobEncoder.Head.PartNo = 0;
+        } else {
+            PartitionActor->CompactionBlobEncoder.StartOffset = Max(
+                            PartitionActor->CompactionBlobEncoder.StartOffset,
+                            PartitionActor->CompactionBlobEncoder.DataKeysBody.front().Key.GetOffset()
+                                + (ui32)(PartitionActor->CompactionBlobEncoder.DataKeysBody.front().Key.GetPartNo() > 0));
+        }
+    } else {
+        PartitionActor->CompactionBlobEncoder.StartOffset = Max(
+                        PartitionActor->CompactionBlobEncoder.StartOffset,
+                        PartitionActor->CompactionBlobEncoder.DataKeysBody.front().Key.GetOffset()
+                            + (ui32)(PartitionActor->CompactionBlobEncoder.DataKeysBody.front().Key.GetPartNo() > 0));
+    }
 
     UpdatedKeys.clear();
     DeletedKeys.clear();

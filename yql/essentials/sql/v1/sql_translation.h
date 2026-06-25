@@ -1,6 +1,11 @@
 #pragma once
+
 #include "context.h"
+#include "namespace.h"
+#include "select_yql.h"
+
 #include <yql/essentials/parser/proto_ast/gen/v1_proto_split_antlr4/SQLv1Antlr4Parser.pb.main.h>
+
 #include <library/cpp/charset/ci_string.h>
 
 namespace NSQLTranslationV1 {
@@ -10,7 +15,16 @@ using namespace NSQLv1Generated;
 
 class TSqlTranslation;
 
-// Do not use it to get a positon for a SQL hint.
+struct TReadyCTE {
+    TYqlSourceAlias Alias;
+    TNodePtr Node;
+
+    [[nodiscard]] bool IsRecursiveNotReady() const {
+        return !Node;
+    }
+};
+
+// Do not use it to get a position for a SQL hint.
 // Use TContext::TokenPosition instead.
 inline TPosition GetPos(const TToken& token) {
     return TPosition(token.GetColumn(), token.GetLine());
@@ -163,6 +177,11 @@ public:
         IsPure_ = isPure;
     }
 
+    void ForkNamespace() {
+        YQL_ENSURE(IsYqlSelectProduced_);
+        CTEs_ = TYqlNamespace<TReadyCTE>::Fork(CTEs_);
+    }
+
 protected:
     TNodeResult NamedExpr(
         const TRule_expr& exprTree,
@@ -186,7 +205,7 @@ protected:
     TNodePtr IfStatement(const TRule_if_stmt& stmt);
     TNodePtr ForStatement(const TRule_for_stmt& stmt);
     TSQLResult<TTableArg> TableArgImpl(const TRule_table_arg& node);
-    bool TableRefImpl(const TRule_table_ref& node, TTableRef& result, bool unorderedSubquery);
+    bool TableRefImpl(const TRule_table_ref& node, TTableRef& result, bool unorderedSubquery, TTableHints& tableHints, TMaybe<TString>& keyFunc, TString* effectiveProvider = nullptr, bool* isAnonymous = nullptr);
     TMaybe<TSourcePtr> AsTableImpl(const TRule_table_ref& node);
     bool ClusterExpr(const TRule_cluster_expr& node, bool allowWildcard, TString& service, TDeferredAtom& cluster);
     bool ClusterExprOrBinding(const TRule_cluster_expr& node, TString& service, TDeferredAtom& cluster, bool& isBinding);
@@ -263,7 +282,7 @@ protected:
     bool OrderByClause(const TRule_order_by_clause& node, TVector<TSortSpecificationPtr>& orderBy);
     bool SortSpecificationList(const TRule_sort_specification_list& node, TVector<TSortSpecificationPtr>& sortSpecs);
 
-    bool IsDistinctOptSet(const TRule_opt_set_quantifier& node) const;
+    [[nodiscard]] bool IsDistinctOptSet(const TRule_opt_set_quantifier& node) const;
     bool IsDistinctOptSet(const TRule_opt_set_quantifier& node, TPosition& distinctPos) const;
 
     bool AddObjectFeature(std::map<TString, TDeferredAtom>& result, const TRule_object_feature& feature);
@@ -333,6 +352,8 @@ protected:
         std::function<TNodePtr()> legacy,
         TMaybe<TPosition> position = Nothing());
 
+    [[nodiscard]] bool WarnUnusedCTEs() const;
+
 private:
     TMaybe<TDeferredAtom> DoParseObjectPath(const TRule_object_ref& node, TObjectOperatorContext& context, bool ignoreAt, bool useTablePrefix);
     bool SimpleTableRefCoreImpl(const TRule_simple_table_ref_core& node, TTableRef& result);
@@ -351,6 +372,7 @@ protected:
     NSQLTranslation::ESqlMode Mode_;
     bool IsYqlSelectProduced_ = false;
     bool IsPure_ = false;
+    TYqlNamespace<TReadyCTE>::TPtr CTEs_ = TYqlNamespace<TReadyCTE>::Fork();
 };
 
 TNodePtr LiteralNumber(TContext& ctx, const TRule_integer& node);

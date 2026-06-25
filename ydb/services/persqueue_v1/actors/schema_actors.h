@@ -38,14 +38,6 @@ struct TDescribeTopicActorSettings {
     bool RequireStats = false;
     bool RequireLocation = false;
 
-    TDescribeTopicActorSettings()
-        : Mode(EMode::DescribeTopic)
-    {}
-
-    TDescribeTopicActorSettings(const TString& consumer)
-        : Mode(EMode::DescribeConsumer)
-        , Consumer(consumer)
-    {}
     TDescribeTopicActorSettings(EMode mode, bool requireStats, bool requireLocation)
         : Mode(mode)
         , RequireStats(requireStats)

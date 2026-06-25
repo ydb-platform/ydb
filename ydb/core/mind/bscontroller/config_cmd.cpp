@@ -279,6 +279,7 @@ namespace NKikimr::NBsController {
                             MAP_TIMING(ReadDDiskPool, READ_DDISK_POOL)
                             MAP_TIMING(DeleteDDiskPool, DELETE_DDISK_POOL)
                             MAP_TIMING(MoveDDisk, MOVE_DDISK)
+                            MAP_TIMING(DeleteSpecificGroups, DELETE_SPECIFIC_GROUPS)
 
                             default:
                                 break;
@@ -405,6 +406,8 @@ namespace NKikimr::NBsController {
                     HANDLE_COMMAND(ReadDDiskPool)
                     HANDLE_COMMAND(DeleteDDiskPool)
                     HANDLE_COMMAND(MoveDDisk)
+                    HANDLE_COMMAND(DeleteSpecificGroups)
+
                     default: break;
                 }
 

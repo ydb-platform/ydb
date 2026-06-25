@@ -92,6 +92,14 @@ struct TConnectionConfig
     // Old heuristic cause pure locks to be dropped. Option is introduced to roll fix back in case of problems.
     bool DoNotDropPureExclusiveLocks;
 
+    //! Use a separate connection for lightweight control requests.
+    /**
+    *  If this option is set to true, a separate connection is opened for lightweight requests (for example, ping_transaction).
+    *  This is needed so that important lightweight requests do not wait for heavy requests, such as file writes, to complete.
+    *  However, using this option increases the number of open TCP connections.
+    */
+    bool EnableControlMultiplexingBand;
+
     REGISTER_YSON_STRUCT(TConnectionConfig);
 
     static void Register(TRegistrar registrar);

@@ -102,6 +102,9 @@ message TKqpPhyColumn {
     // operation.
     optional bool IsBuildInProgress = 7;
     optional TKqpPhySequenceId DefaultFromSequencePathId = 8;
+    // flag that indicates that column is currently under the set not null
+    // operation.
+    optional bool SetNotNullInProgress = 9;
 }
 
 enum EKqpPhyTableKind {
@@ -232,6 +235,9 @@ message TKqpPhyTableOperation {
         TKqpPhyOpReadOlapRanges ReadOlapRange = 7;
         TKqpPhyOpReadRanges ReadRanges = 8;
     }
+
+    // Estimated number of rows to read, from query optimizer statistics.
+    double EstimatedRows = 9;
 }
 
 message TKqpPhyCnUnionAll {
@@ -403,6 +409,9 @@ enum EKqpFullTextIndexType {
     EKqpFullTextPlain = 0;
     EKqpFullTextRelevance = 1;
     EKqpFullTextJson = 2;
+    EKqpFullTextCompact = 3;
+    EKqpFullTextCompactRelevance = 4;
+    EKqpFullTextJsonCompact = 5;
 }
 
 message TKqpFullTextSource {
@@ -417,6 +426,14 @@ message TKqpFullTextSource {
 
         // Pre-compiled tokens extracted from jsonpath at query compile time (JSON index only)
         repeated TQueryToken Tokens = 3;
+
+        // Equality bindings for the index prefix columns (KeyColumnNames[0..n-2]).
+        // Each value is a literal or $param expression resolved at task build time.
+        message TPrefixColumn {
+            optional NKikimrKqp.TKqpColumnMetadataProto Column = 1;
+            optional TKqpPhyValue Value = 2;
+        }
+        repeated TPrefixColumn PrefixColumns = 4;
     }
 
     message TIndexTable {
@@ -446,6 +463,10 @@ message TKqpFullTextSource {
     TKqpPhyValue Mode = 14;
 
     optional EKqpFullTextIndexType IndexType = 15;
+
+    // When fulltext index uses __ydb_row_id as doc_id, this is the unique secondary index impl table
+    // (keyed by __ydb_row_id, value = main-table PK columns) used to resolve __ydb_row_id -> PK at read time.
+    optional TIndexTable UniqueIndexImplTable = 16;
 }
 
 message TKqpReadRangesSource {
@@ -562,6 +583,8 @@ message TKqpPhyStage {
     uint32 TaskCount = 14;
     double StageCost = 15;
     bool IsShuffleEliminated = 16;
+    // Estimated number of rows produced by this stage, from query optimizer statistics.
+    double EstimatedRows = 19;
     repeated TKqpOutputTransform OutputTransforms = 17;
     map<string, TKqpControlPlaneSettings> StageControlPlaneActors = 18;
 }

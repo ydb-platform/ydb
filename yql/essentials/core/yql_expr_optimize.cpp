@@ -670,7 +670,7 @@ IGraphTransformer::TStatus ExpandSeq(const TExprNode::TPtr& input, TExprNode::TP
     return ret;
 }
 
-IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+IGraphTransformer::TStatus ExpandApplyImpl(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx, bool expandCons) {
     if (ctx.Step.IsDone(TExprStep::ExpandApplyForLambdas))
         return IGraphTransformer::TStatus::Ok;
 
@@ -857,6 +857,34 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
 
                 changed = true;
                 return ctx.NewAtom(node->Pos(), content, flags);
+            } else if (expandCons && node->Content() == "Left!") {
+                if (!EnsureArgsCount(*node, 1, ctx)) {
+                    return nullptr;
+                }
+
+                if (!node->Head().IsCallable("Cons!")) {
+                    return node;
+                }
+
+                if (!EnsureArgsCount(node->Head(), 2, ctx)) {
+                    return nullptr;
+                }
+                changed = true;
+                return node->Head().HeadPtr();
+            } else if (expandCons && node->Content() == "Right!") {
+                if (!EnsureArgsCount(*node, 1, ctx)) {
+                    return nullptr;
+                }
+
+                if (!node->Head().IsCallable("Cons!")) {
+                    return node;
+                }
+
+                if (!EnsureArgsCount(node->Head(), 2, ctx)) {
+                    return nullptr;
+                }
+                changed = true;
+                return node->Head().TailPtr();
             } else if (node->Content() == "Nth") {
                 if (!EnsureArgsCount(*node, 2, ctx)) {
                     return nullptr;
@@ -974,6 +1002,14 @@ IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::
     }
 
     return ret;
+}
+
+IGraphTransformer::TStatus ExpandApply(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+    return ExpandApplyImpl(input, output, ctx, true);
+}
+
+IGraphTransformer::TStatus ExpandApplyWithoutCons(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
+    return ExpandApplyImpl(input, output, ctx, false);
 }
 
 IGraphTransformer::TStatus ExpandApplyNoRepeat(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {

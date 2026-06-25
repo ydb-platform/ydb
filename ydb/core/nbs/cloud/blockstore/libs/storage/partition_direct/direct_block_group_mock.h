@@ -10,19 +10,43 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 struct TOracleMock: public IOracle
 {
+    TDuration ReadHedgingDelay;
+    TDuration ReadRequestTimeout;
     TDuration WriteHedgingDelay;
     TDuration WriteRequestTimeout;
     TDuration PBufferReplyTimeout;
-    EWriteMode WriteMode = EWriteMode::DirectPBuffersFilling;
+    EWriteMode WriteMode = EWriteMode::DirectWrite;
+    TDuration FlushRequestTimeout;
+    TDuration EraseRequestTimeout;
+
+    void OnRequestStarted(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now) override;
+    void OnRequestSucceeded(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now,
+        TDuration executionTime) override;
+    void OnRequestFailed(
+        THostIndex hostIndex,
+        EOperation operation,
+        TInstant now) override;
 
     [[nodiscard]] THostIndex SelectBestPBufferHost(
-        std::span<const THostIndex> hostIndexes,
+        THostMask hosts,
         EOperation operation) const override;
 
+    [[nodiscard]] TDuration GetReadHedgingDelay() const override;
+    [[nodiscard]] TDuration GetReadRequestTimeout() const override;
     [[nodiscard]] TDuration GetWriteHedgingDelay() const override;
     [[nodiscard]] TDuration GetWriteRequestTimeout() const override;
-    [[nodiscard]] TDuration GetPBufferReplyTimeout() const override;
+    [[nodiscard]] TDuration GetIndirectWriteReplyTimeout() const override;
+    [[nodiscard]] TDuration GetFlushRequestTimeout() const override;
+    [[nodiscard]] TDuration GetEraseRequestTimeout() const override;
     [[nodiscard]] EWriteMode GetWriteMode() const override;
+
+    [[nodiscard]] TString Dump() const override;
 };
 
 class TDirectBlockGroupMock: public IDirectBlockGroup
@@ -61,16 +85,16 @@ public:
             TBlockRange64 range,
             const TGuardedSgList& guardedSglist,
             const NWilson::TTraceId& traceId)>;
-    using TWriteBlocksToManyPBuffersHandler = std::function<
-        NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>(
-            ui32 vChunkIndex,
-            THostIndex coordinatorHostIndex,
-            TVector<THostIndex> hostIndexes,
-            ui64 lsn,
-            TBlockRange64 range,
-            TDuration replyTimeout,
-            const TGuardedSgList& guardedSglist,
-            const NWilson::TTraceId& traceId)>;
+    using TWriteBlocksToManyPBuffersHandler = std::function<void(
+        ui32 vChunkIndex,
+        THostIndex coordinatorHostIndex,
+        TVector<THostIndex> hostIndexes,
+        ui64 lsn,
+        TBlockRange64 range,
+        TDuration replyTimeout,
+        const TGuardedSgList& guardedSglist,
+        const NWilson::TTraceId& traceId,
+        TWriteBlocksToManyPBuffersCallback callback)>;
     using TSyncWithPBufferHandler =
         std::function<NThreading::TFuture<TDBGFlushResponse>(
             ui32 vChunkIndex,
@@ -78,7 +102,7 @@ public:
             THostIndex ddiskHostIndex,
             const TVector<TPBufferSegment>& segments,
             const NWilson::TTraceId& traceId)>;
-    using TEraseFromPBufferHandler =
+    using TBatchEraseFromPBufferHandler =
         std::function<NThreading::TFuture<TDBGEraseResponse>(
             ui32 vChunkIndex,
             THostIndex hostIndex,
@@ -103,7 +127,7 @@ public:
     TWriteBlocksToPBufferHandler WriteBlocksToPBufferHandler;
     TWriteBlocksToManyPBuffersHandler WriteBlocksToManyPBuffersHandler;
     TSyncWithPBufferHandler SyncWithPBufferHandler;
-    TEraseFromPBufferHandler EraseFromPBufferHandler;
+    TBatchEraseFromPBufferHandler BatchEraseFromPBufferHandler;
     TDBGRestoreHandler RestoreDBGPBuffersHandler;
     TListPBuffersHandler ListPBuffersHandler;
     TDBGDumpHandler DumpHandler;
@@ -123,7 +147,7 @@ public:
         const NWilson::TTraceId& traceId,
         TStringBuf name) override;
 
-    void Run(IPartitionDirectService* service) override;
+    NThreading::TFuture<void> Run(IPartitionDirectService* service) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
@@ -155,8 +179,7 @@ public:
         const TGuardedSgList& guardedSglist,
         const NWilson::TTraceId& traceId) override;
 
-    NThreading::TFuture<TDBGWriteBlocksToManyPBuffersResponse>
-    WriteBlocksToManyPBuffers(
+    void WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
         TVector<THostIndex> hostIndexes,
@@ -164,7 +187,8 @@ public:
         TBlockRange64 range,
         TDuration replyTimeout,
         const TGuardedSgList& guardedSglist,
-        const NWilson::TTraceId& traceId) override;
+        const NWilson::TTraceId& traceId,
+        TWriteBlocksToManyPBuffersCallback callback) override;
 
     NThreading::TFuture<TDBGFlushResponse> SyncWithPBuffer(
         ui32 vChunkIndex,
@@ -173,11 +197,16 @@ public:
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) override;
 
-    NThreading::TFuture<TDBGEraseResponse> EraseFromPBuffer(
+    NThreading::TFuture<TDBGEraseResponse> BatchEraseFromPBuffer(
         ui32 vChunkIndex,
         THostIndex hostIndex,
         const TVector<TPBufferSegment>& segments,
         const NWilson::TTraceId& traceId) override;
+
+    void BarrierEraseFromPBuffer(ui64 lsn) override;
+
+    NThreading::TFuture<std::optional<ui64>>
+    GatherSafeBarrierForErase() override;
 
     NThreading::TFuture<TDBGRestoreResponse> RestoreDBGPBuffers(
         ui32 vChunkIndex) override;

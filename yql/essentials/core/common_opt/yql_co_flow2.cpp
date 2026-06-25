@@ -2180,10 +2180,16 @@ TExprNode::TPtr PayloadRenameOverWindow(const TCoFlatMapBase& node, TExprContext
         return node.Ptr();
     }
 
+    auto flatMapInputStructType = GetSeqItemType(node.Input().Ref().GetTypeAnn())->Cast<TStructExprType>();
+
     // originalName -> nameAfterFlatMap
     TMap<TStringBuf, TStringBuf> renames;
     for (const auto& [dstName, srcName] : backRenames) {
         if (!renames.insert({ srcName, dstName }).second) {
+            return node.Ptr();
+        }
+        if (srcName != dstName && flatMapInputStructType->FindItemType(dstName)) {
+            // we overwrite existing column - can't handle this case here
             return node.Ptr();
         }
     }
@@ -2213,14 +2219,8 @@ TExprNode::TPtr PayloadRenameOverWindow(const TCoFlatMapBase& node, TExprContext
 
     TExprNodeList extractMembers;
     extractMembers.reserve(renames.size());
-    YQL_ENSURE(calcNode.Input().Ref().GetTypeAnn());
-    const TStructExprType& calcInputType = *calcNode.Input().Ref().GetTypeAnn()->Cast<TListExprType>()->GetItemType()->Cast<TStructExprType>();
     for (const auto& [srcName,  dstName] : renames) {
-        if (payloadColumns.contains(srcName)) {
-            if (calcInputType.FindItem(dstName)) {
-                return node.Ptr();
-            }
-        } else if (srcName != dstName) {
+        if (!payloadColumns.contains(srcName) && srcName != dstName) {
             return node.Ptr();
         }
         extractMembers.push_back(ctx.NewAtom(node.Pos(), dstName));
@@ -2372,7 +2372,7 @@ TExprNode::TPtr EquiJoinEmitPruneKeys(const TExprNode::TPtr& node, TExprContext&
     return ctx.ChangeChildren(*node, std::move(children));
 }
 
-TExprNodeList RenameChildCalcPayloads(const TExprNode::TPtr& node, TExprContext& ctx) {
+TMaybe<TExprNodeList> TryRenameChildCalcPayloads(const TExprNode::TPtr& node, TExprContext& ctx) {
     YQL_ENSURE(TCoCalcOverWindowBase::Match(node.Get()) || TCoCalcOverWindowGroup::Match(node.Get()));
     YQL_ENSURE(TCoExtractMembers::Match(node->Child(0)));
     TCoExtractMembers extract(node->HeadPtr());
@@ -2386,9 +2386,15 @@ TExprNodeList RenameChildCalcPayloads(const TExprNode::TPtr& node, TExprContext&
     // we rename all child payload columns which are filtered by ExtractMembers to new names which will non conflict with any parent columns
     TMap<TStringBuf, TStringBuf> renames;
     for (auto& item : childOutput.GetItems()) {
-        if (!childInput.FindItem(item->GetName()) && !extractOutput.FindItem(item->GetName())) {
-            // this is a payload column for rename - name will be assigned later
-            YQL_ENSURE(renames.insert({ item->GetName(), ""}).second);
+        TStringBuf childOutName = item->GetName();
+        if (!extractOutput.FindItem(childOutName)) {
+            if (!childInput.FindItem(childOutName)) {
+                // this is a payload column for rename - name will be assigned later
+                YQL_ENSURE(renames.insert({childOutName, ""}).second);
+            } else {
+                // non-payload column which is removed by ExtractMembers - can not optimize this case
+                return {};
+            }
         }
     }
 
@@ -2812,10 +2818,6 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
         }
 
         if (self.Input().Maybe<TCoPartitionByKeyBase>()) {
-            if (self.Input().Maybe<TCoPartitionsByKeys>() && !CanApplyExtractMembersToPartitionsByKeys(optCtx.Types)) {
-                return node;
-            }
-
             if (auto res = ApplyExtractMembersToPartitionByKey(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
                 return res;
             }
@@ -2901,6 +2903,13 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
         if (const auto narrow = self.Input().Maybe<TCoNarrowFlatMap>()) {
             if (auto res = ApplyExtractMembersToNarrowMap(self.Input().Ptr(), self.Members().Ptr(), ETypeAnnotationKind::Optional != narrow.Cast().Lambda().Body().Ref().GetTypeAnn()->GetKind(), ctx, {})) {
+                return res;
+            }
+            return node;
+        }
+
+        if (const auto tableSource = self.Input().Maybe<TCoTableSource>()) {
+            if (auto res = ApplyExtractMembersToTableSource(self.Input().Ptr(), self.Members().Ptr(), ctx, {})) {
                 return res;
             }
             return node;
@@ -3287,7 +3296,17 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
             return node;
         }
 
-        TExprNodeList calcs = seenExtractMembers ? RenameChildCalcPayloads(node, ctx) : ExtractCalcsOverWindow(child, ctx);
+        TExprNodeList calcs;
+        if (seenExtractMembers) {
+            auto maybeChildCalcs = TryRenameChildCalcPayloads(node, ctx);
+            if (!maybeChildCalcs) {
+                return node;
+            }
+            calcs = std::move(*maybeChildCalcs);
+        } else {
+            calcs = ExtractCalcsOverWindow(child, ctx);
+        }
+
         calcs.insert(calcs.end(), parentCalcs.begin(), parentCalcs.end());
 
         auto result = RebuildCalcOverWindowGroup(child->Pos(), std::move(input), calcs, ctx);

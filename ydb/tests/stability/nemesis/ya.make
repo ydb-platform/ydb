@@ -36,6 +36,7 @@ PY_SRCS(
     internal/orchestrator/nemesis/default_planner.py
     internal/orchestrator/nemesis/pinned_first_host_planner.py
     internal/orchestrator/nemesis/serial_staggered_planner.py
+    internal/orchestrator/nemesis/rolling_restart_planner.py
     internal/orchestrator/nemesis/topology_fanout_planner.py
     internal/orchestrator/nemesis/network_planner.py
     internal/orchestrator/nemesis/nemesis_planner_base.py

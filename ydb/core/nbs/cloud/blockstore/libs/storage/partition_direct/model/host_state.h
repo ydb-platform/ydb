@@ -11,7 +11,7 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 struct THostState
 {
-    EHostState State = EHostState::Enabled;
+    EHostState State = EHostState::Online;
 
     ui64 PBufferUsedSize = 0;
 
@@ -25,7 +25,10 @@ class IHostStateController
 public:
     virtual ~IHostStateController() = default;
 
-    virtual void SetHostState(THostIndex hostIndex, EHostState state) = 0;
+    virtual void SetHostState(
+        THostIndex hostIndex,
+        EHostState oldState,
+        EHostState newState) = 0;
 
     [[nodiscard]] virtual ui64 GetHostPBufferUsedSize(
         THostIndex hostIndex) const = 0;

@@ -1,11 +1,12 @@
 #include "yql_kikimr_settings.h"
 
+#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/table_service_config.pb.h>
+#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+
 #include <util/generic/size_literals.h>
 #include <util/string/split.h>
-#include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
-#include <ydb/core/kqp/opt/cbo/cbo_optimizer_new.h>
 
 namespace NYql {
 
@@ -26,7 +27,6 @@ EOptionalFlag GetOptionalFlagValue(const TMaybe<TType>& flag) {
     return EOptionalFlag::Disabled;
 }
 
-
 ui64 ParseEnableSpillingNodes(const TString &v) {
     ui64 res = 0;
     TVector<TString> vec;
@@ -45,7 +45,7 @@ static inline bool GetFlagValue(const TMaybe<bool>& flag) {
     return flag ? flag.GetRef() : false;
 }
 
-} // anonymous namespace end
+} // anonymous namespace
 
 TKikimrConfiguration::TKikimrConfiguration() {
     /* KQP */
@@ -65,6 +65,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, _KqpEnableSpilling);
     REGISTER_SETTING(*this, _KqpDisableLlvmForUdfStages);
     REGISTER_SETTING(*this, _KqpYqlCombinerMemoryLimit).Lower(0ULL).Upper(1_GB);
+    REGISTER_SETTING(*this, _KqpYqlConstraintsTransformerEnabled);
 
     REGISTER_SETTING(*this, KqpPushOlapProcess);
     REGISTER_SETTING(*this, KqpForceImmediateEffectsExecution);
@@ -79,6 +80,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, HashJoinMode).Parser([](const TString& v) { return FromString<NDq::EHashJoinMode>(v); });
 
     REGISTER_SETTING(*this, OptDisableTopSort);
+    REGISTER_SETTING(*this, OptDisableAutoIndexSelection);
     REGISTER_SETTING(*this, OptDisableSqlInToJoin);
     REGISTER_SETTING(*this, OptEnableInplaceUpdate);
     REGISTER_SETTING(*this, OptEnablePredicateExtract);
@@ -96,6 +98,7 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, OptUseSortForPartitionsByKeys);
     REGISTER_SETTING(*this, OptDisallowFuseJoins);
     REGISTER_SETTING(*this, OptCreateStageForAggregation);
+    REGISTER_SETTING(*this, OptValidateStreamingConstraints);
     REGISTER_SETTING(*this, OverridePlanner);
     REGISTER_SETTING(*this, UseGraceJoinCoreForMap);
     REGISTER_SETTING(*this, UseBlockHashJoin);
@@ -143,6 +146,8 @@ TKikimrConfiguration::TKikimrConfiguration() {
     REGISTER_SETTING(*this, MaxSequentialReadsInFlight);
 
     REGISTER_SETTING(*this, KMeansTreeSearchTopSize);
+    REGISTER_SETTING(*this, HybridSearchFactor);
+    REGISTER_SETTING(*this, HybridSearchK);
     REGISTER_SETTING(*this, DisableCheckpoints);
 
     REGISTER_SETTING(*this, DefaultTxMode).Parser(
@@ -161,7 +166,43 @@ TKikimrConfiguration::TKikimrConfiguration() {
                 throw yexception() << "Unknown DefaultTxMode, available: [SerializableRW, SnapshotRW, SnapshotRO, StaleRO]";
             }
         });
+    REGISTER_SETTING(*this, UseKqpTasksGraphV2);
 
+    /* CBO internal constants for tuning */
+    REGISTER_SETTING(*this, OptCBOConstsMaxDepth);
+
+    REGISTER_SETTING(*this, OptCBOConstsCrossJoinMult);
+    REGISTER_SETTING(*this, OptCBOConstsCrossJoinPow);
+
+    REGISTER_SETTING(*this, OptCBOConstsSelMult);
+    REGISTER_SETTING(*this, OptCBOConstsSelPow);
+
+    REGISTER_SETTING(*this, OptCBOConstsShuffleLeftSideMult);
+    REGISTER_SETTING(*this, OptCBOConstsShuffleLeftSidePow);
+    REGISTER_SETTING(*this, OptCBOConstsShuffleRightSideMult);
+    REGISTER_SETTING(*this, OptCBOConstsShuffleRightSidePow);
+
+    REGISTER_SETTING(*this, OptCBOConstsRightSideCostMult);
+    REGISTER_SETTING(*this, OptCBOConstsByteSizeMult);
+
+    REGISTER_SETTING(*this, OptCBOConstsLeftSideByteSizeFactor);
+    REGISTER_SETTING(*this, OptCBOConstsRightSideByteSizeFactor);
+    REGISTER_SETTING(*this, OptCBOConstsOutputSideByteSizeFactor);
+
+    REGISTER_SETTING(*this, OptCBOConstsMapJoinLeftSideMult);
+    REGISTER_SETTING(*this, OptCBOConstsMapJoinLeftSidePow);
+    REGISTER_SETTING(*this, OptCBOConstsMapJoinRightSideMult);
+    REGISTER_SETTING(*this, OptCBOConstsMapJoinRightSidePow);
+    REGISTER_SETTING(*this, OptCBOConstsMapJoinOutputMult);
+    REGISTER_SETTING(*this, OptCBOConstsMapJoinOutputPow);
+
+    REGISTER_SETTING(*this, OptCBOConstsGraceJoinLeftSideMult);
+    REGISTER_SETTING(*this, OptCBOConstsGraceJoinLeftSidePow);
+    REGISTER_SETTING(*this, OptCBOConstsGraceJoinRightSideMult);
+    REGISTER_SETTING(*this, OptCBOConstsGraceJoinRightSidePow);
+    REGISTER_SETTING(*this, OptCBOConstsGraceJoinOutputMult);
+    REGISTER_SETTING(*this, OptCBOConstsGraceJoinOutputPow);
+    
     /* Runtime */
     REGISTER_SETTING(*this, ScanQuery);
 }
@@ -235,6 +276,18 @@ NDq::EHashJoinMode TKikimrSettings::GetHashJoinMode() const {
     return maybeHashJoinMode ? *maybeHashJoinMode : NDq::EHashJoinMode::Off;
 }
 
+void TKikimrConfiguration::ApplyServiceConfig(const TTableServiceConfig& serviceConfig) {
+    if (serviceConfig.GetQueryLimits().HasResultRowsLimit()) {
+        _ResultRowsLimit = serviceConfig.GetQueryLimits().GetResultRowsLimit();
+    }
+
+    CopyFrom(serviceConfig);
+
+    if (const auto limit = serviceConfig.GetResourceManager().GetMkqlHeavyProgramMemoryLimit()) {
+        _KqpYqlCombinerMemoryLimit = std::max(1_GB, limit - (limit >> 2U));
+    }
+}
+
 TKikimrSettings::TConstPtr TKikimrConfiguration::Snapshot() const {
     return std::make_shared<const TKikimrSettings>(*this);
 }
@@ -260,6 +313,10 @@ bool TKikimrConfiguration::GetEnableOlapPushdownAggregate() const {
 
 bool TKikimrConfiguration::GetUseDqHashCombine() const {
     return UseDqHashCombine.Get().GetOrElse(TTableServiceConfig::GetEnableDqHashCombineByDefault());
+}
+
+bool TKikimrConfiguration::IsAutoIndexSelectionDisabled() const {
+    return OptDisableAutoIndexSelection.Get().GetOrElse(false);
 }
 
 NSQLTranslation::EBindingsMode TKikimrConfiguration::GetYqlBindingsMode() const {
@@ -297,7 +354,6 @@ NYql::EBackportCompatibleFeaturesMode TKikimrConfiguration::GetYqlBackportMode()
     }
 }
 
-
 bool TKikimrConfiguration::GetUseDqHashAggregate() const {
     return UseDqHashAggregate.Get().GetOrElse(TTableServiceConfig::GetEnableDqHashAggregateByDefault());
 }
@@ -314,4 +370,8 @@ bool TKikimrConfiguration::GetUseBlockHashJoin() const {
     return UseBlockHashJoin.Get().GetOrElse(TTableServiceConfig::GetUseBlockHashJoin());
 }
 
+bool TKikimrConfiguration::GetUseKqpTasksGraphV2() const {
+    return UseKqpTasksGraphV2.Get().GetOrElse(TTableServiceConfig::GetUseKqpTasksGraphV2());
 }
+
+} // namespace NYql

@@ -182,6 +182,13 @@ Y_UNIT_TEST_SUITE(TestKinesisHttpProxy) {
         {
             request = CreateDescribeStreamRequest();
             request["StreamName"] = "teststream";
+            res = SendHttpRequest("/Root", "kinesisApi.MethodNotExists", request, FormAuthorizationStr("ru-central-1"));
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+            UNIT_ASSERT_VALUES_EQUAL(res.Description, "InvalidAction");
+        }
+        {
+            request = CreateDescribeStreamRequest();
+            request["StreamName"] = "teststream";
             res = SendHttpRequest("/Root", "kinesisApi.", request, FormAuthorizationStr("ru-central-1"));
             UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
             UNIT_ASSERT_VALUES_EQUAL(res.Description, "MissingAction");
@@ -1766,5 +1773,52 @@ Y_UNIT_TEST_SUITE(TestKinesisHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
             UNIT_ASSERT_VALUES_EQUAL(res.Description, "MissingParameter");
         }
+    }
+
+    Y_UNIT_TEST_F(GoodRequestCreateStreamV2, THttpProxyTestMockForAccessServiceV2) {
+        auto res = SendHttpRequest("/Root", "kinesisApi.CreateStream", CreateCreateStreamRequest(), FormAuthorizationStr("ru-central1"));
+        Cerr << res.HttpCode << " " << res.Body << "\n";
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+        {
+            auto res = SendHttpRequest("/Root", "kinesisApi.DescribeStream", CreateDescribeStreamRequest(),
+                                       FormAuthorizationStr("ru-central-1"));
+            Cerr << res.HttpCode << " " << res.Body << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+            UNIT_ASSERT(!res.Body.empty());
+            NJson::TJsonValue json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+            const auto& shards = GetByPath<TJVector>(json, "StreamDescription.Shards");
+            UNIT_ASSERT_VALUES_EQUAL(shards[0]["SequenceNumberRange"].Has("StartingSequenceNumber"), true);
+            UNIT_ASSERT_VALUES_EQUAL(shards[0]["SequenceNumberRange"].Has("EndingSequenceNumber"), false);
+            UNIT_ASSERT_VALUES_EQUAL(json["StreamDescription"]["StreamModeDetails"].Has("StreamMode"), true);
+            UNIT_ASSERT_VALUES_EQUAL(json["StreamDescription"]["StreamModeDetails"]["StreamMode"].GetStringSafe(), "ON_DEMAND");
+        }
+        {
+            res = SendHttpRequest("/Root", "kinesisApi.DescribeStreamSummary", CreateDescribeStreamSummaryRequest(),
+                                  FormAuthorizationStr("ru-central-1"));
+            Cerr << res.HttpCode << " " << res.Body << "\n";
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+            UNIT_ASSERT(!res.Body.empty());
+            NJson::TJsonValue json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        }
+        {
+            auto describeReq = CreateDescribeStreamRequest();
+            auto res = SendHttpRequest("/Root", "kinesisApi.DescribeStream", std::move(describeReq), FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 200);
+
+            NJson::TJsonValue json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+            auto streamArn = GetByPath<TString>(json, "StreamDescription.StreamArn");
+            UNIT_ASSERT_VALUES_EQUAL(streamArn, "testtopic");
+        }
+    }
+
+    Y_UNIT_TEST_F(TestRequestWithWrongRegionV2, THttpProxyTestMockForAccessServiceV2) {
+        auto res = SendHttpRequest("/Root", "kinesisApi.CreateStream", CreateCreateStreamRequest(),
+                                   FormAuthorizationStr("aliaska-2"));
+        Cerr << res.HttpCode << " " << res.Body << "\n";
+
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
     }
 } // Y_UNIT_TEST_SUITE(TestKinesisHttpProxy)

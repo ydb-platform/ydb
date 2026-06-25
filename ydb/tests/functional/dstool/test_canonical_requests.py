@@ -311,7 +311,6 @@ class Test(TestBase):
 
         vdisk_columns = [
             'VDiskId',
-            'NodeId:PDiskId',
             'VDiskSlotUsage',
             'VDiskRawUsage',
             'NormalizedOccupancy',
@@ -436,10 +435,34 @@ class Test(TestBase):
         retry_assertions(check_whiteboard_pdisk_info_available)
 
         vdisk_evict_cmd = ['vdisk', 'evict', '--ignore-degraded-group-check', '--ignore-failure-model-group-check']
+
+        def check_donors_dropped():
+            base_config = self.cluster.client.query_base_config().BaseConfig
+            for vslot in base_config.VSlot:
+                assert vslot.Status == 'READY'
+                assert len(vslot.Donors) == 0
+
+        def check_no_leaked_slots():
+            base_config = self.cluster.client.query_base_config().BaseConfig
+            num_active_slots_map = common.build_pdisk_usage_map(base_config, count_donors=True)
+            pdisk_whiteboard_info = common.fetch_json_info('pdiskinfo', nodes=pdisk_node_ids)
+            for pdisk_id in expected_pdisk_ids:
+                expected = num_active_slots_map.get(pdisk_id, 0)
+                wb_info = pdisk_whiteboard_info.get(pdisk_id, {})
+                assert wb_info['NumActiveSlots'] == expected
+
+        pdisk_columns = [
+            'NodeId:PDiskId',
+            'NumActiveSlots',
+            'LeakedSlots',
+        ]
+
         return [
             self._trace(*vdisk_evict_cmd, '--vdisk-ids', '[82000000:_:0:0:0]', with_grpc_calls=True),
             self._trace(*vdisk_evict_cmd, '--vdisk-ids', '[82000000:_:0:1:0]', '--suppress-donor-mode', with_grpc_calls=True),
-            self._trace('--quiet', 'pdisk', 'list', '--check-leaked-slots', allow_http_fetch=True),
+            retry_assertions(check_donors_dropped),
+            retry_assertions(check_no_leaked_slots),
+            self._trace('--quiet', 'pdisk', 'list', '--check-leaked-slots', '--columns', *pdisk_columns, allow_http_fetch=True),
         ]
 
     def test_pool_estimated_usage(self):
@@ -503,4 +526,40 @@ class Test(TestBase):
             # ReassignGroupDisk should be invoked
             builder.update_group(group_id=0x80000001, group_size_in_units=8) and None,
             _trace_cluster_balance('--only-from-overpopulated-pdisks', pending_reassigns={0x80000002: (1, 1002, 1000)}),
+        ]
+
+    def test_cluster_balance_mismatching_size_in_units(self):
+        def make_builder(pu, vu_list):
+            builder = (
+                BaseConfigBuilder()
+                .add_node(node_id=1)
+                .add_pdisk(node_id=1, pdisk_id=1001, expected_slot_count=8, slot_size_in_units=pu)
+                .add_pdisk(node_id=1, pdisk_id=1002, expected_slot_count=8, slot_size_in_units=pu)
+                .add_storage_pool(name='test-pool', erasure_species='none', kind='hdd')
+            )
+            for i, vu in enumerate(vu_list):
+                group_id = 0x80000001 + i
+                vslot_id = 1001 + i
+                builder.add_group(group_id=group_id, vslot_ids=[(1, 1001, vslot_id)], group_size_in_units=vu)
+                builder.add_vslot(node_id=1, pdisk_id=1001, vslot_id=vslot_id, group_id=group_id, group_generation=1)
+            return builder
+
+        def _trace_cluster_balance(builder, pending_reassigns=None):
+            base_config = builder.build()
+            if pending_reassigns is None:
+                pending_reassigns = {}
+            fake_grpc_handler = FakeReassignGroupDiskHandler(pending_reassigns, base_config)
+            return self._trace('--verbose', 'cluster', 'balance', '--only-from-overpopulated-pdisks',
+                               '--storage-pool=test-pool', '--max-iterations=1',
+                               with_grpc_calls=True, allow_http_fetch=True,
+                               mock_base_config=base_config,
+                               fake_grpc_handler=fake_grpc_handler)
+
+        return [
+            _trace_cluster_balance(
+                builder=make_builder(1, [0, 0, 0, 0, 2, 1, 1, 1]),
+                pending_reassigns={0x80000005: (1, 1002, 1000)}),
+            _trace_cluster_balance(
+                builder=make_builder(2, [2, 2, 2, 2, 1, 2, 2, 2, 2]),
+                pending_reassigns={0x80000005: (1, 1002, 1000)}),
         ]

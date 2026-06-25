@@ -104,11 +104,11 @@ Y_UNIT_TEST_LLVM(TestOverList) {
     auto graph = setup.BuildGraph(pgmReturn);
 
     using TRow = std::tuple<TMaybe<i32>, TMaybe<TString>, TMaybe<i32>, TMaybe<TString>>;
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
-                                                                      {TMaybe<i32>{7}, TMaybe<TString>{"A"}, TMaybe<i32>{10}, TMaybe<TString>{"BA"}},
-                                                                      {TMaybe<i32>{}, TMaybe<TString>{}, TMaybe<i32>{10}, TMaybe<TString>{"BA"}},
-                                                                      {TMaybe<i32>{1}, TMaybe<TString>{"D"}, TMaybe<i32>{11}, TMaybe<TString>{"BAD"}},
-                                                                  });
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
+                                                          {i32(7), TString("A"), i32(10), TString("BA")},
+                                                          {{}, {}, i32(10), TString("BA")},
+                                                          {i32(1), TString("D"), i32(11), TString("BAD")},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(Test1OverList) {
@@ -138,12 +138,12 @@ Y_UNIT_TEST_LLVM(Test1OverList) {
     auto graph = setup.BuildGraph(pgmReturn);
 
     using TRow = std::tuple<TMaybe<i32>, TMaybe<TString>, TMaybe<i32>, TMaybe<TString>>;
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
-                                                                      {TMaybe<i32>{3}, TMaybe<TString>{"B"}, TMaybe<i32>{3}, TMaybe<TString>{"B"}},
-                                                                      {TMaybe<i32>{7}, TMaybe<TString>{"A"}, TMaybe<i32>{10}, TMaybe<TString>{"BA"}},
-                                                                      {TMaybe<i32>{1}, TMaybe<TString>{"D"}, TMaybe<i32>{11}, TMaybe<TString>{"BAD"}},
-                                                                      {TMaybe<i32>{}, TMaybe<TString>{}, TMaybe<i32>{}, TMaybe<TString>{}},
-                                                                  });
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<TRow>{
+                                                          {i32(3), TString("B"), i32(3), TString("B")},
+                                                          {i32(7), TString("A"), i32(10), TString("BA")},
+                                                          {i32(1), TString("D"), i32(11), TString("BAD")},
+                                                          {{}, {}, {}, {}},
+                                                      });
 }
 
 Y_UNIT_TEST_LLVM(TestOverFlow) {
@@ -171,12 +171,12 @@ Y_UNIT_TEST_LLVM(TestOverFlow) {
 
     using TRow = std::tuple<TMaybe<i32>, TMaybe<TString>, TMaybe<i32>, TMaybe<TString>>;
     const TVector<TRow> expected{
-        {TMaybe<i32>{7}, TMaybe<TString>{"A"}, TMaybe<i32>{10}, TMaybe<TString>{"BA"}},
-        {TMaybe<i32>{}, TMaybe<TString>{}, TMaybe<i32>{10}, TMaybe<TString>{"BA"}},
-        {TMaybe<i32>{1}, TMaybe<TString>{"D"}, TMaybe<i32>{11}, TMaybe<TString>{"BAD"}},
+        {i32(7), TString("A"), i32(10), TString("BA")},
+        {{}, {}, i32(10), TString("BA")},
+        {i32(1), TString("D"), i32(11), TString("BAD")},
     };
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
-                                               NYql::NUdf::TUnboxedValueComparatorStreamView<TRow>(expected));
+    AssertUnboxedValueElementEqual(graph->GetValue(),
+                                   NYql::NUdf::TUnboxedValueComparatorStreamView<TRow>(expected));
 }
 
 Y_UNIT_TEST_LLVM(Test1OverFlow) {
@@ -207,13 +207,13 @@ Y_UNIT_TEST_LLVM(Test1OverFlow) {
 
     using TRow = std::tuple<TMaybe<i32>, TMaybe<TString>, TMaybe<i32>, TMaybe<TString>>;
     const TVector<TRow> expected{
-        {TMaybe<i32>{3}, TMaybe<TString>{"B"}, TMaybe<i32>{3}, TMaybe<TString>{"B"}},
-        {TMaybe<i32>{7}, TMaybe<TString>{"A"}, TMaybe<i32>{10}, TMaybe<TString>{"BA"}},
-        {TMaybe<i32>{1}, TMaybe<TString>{"D"}, TMaybe<i32>{11}, TMaybe<TString>{"BAD"}},
-        {TMaybe<i32>{}, TMaybe<TString>{}, TMaybe<i32>{}, TMaybe<TString>{}},
+        {i32(3), TString("B"), i32(3), TString("B")},
+        {i32(7), TString("A"), i32(10), TString("BA")},
+        {i32(1), TString("D"), i32(11), TString("BAD")},
+        {{}, {}, {}, {}},
     };
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
-                                               NYql::NUdf::TUnboxedValueComparatorStreamView<TRow>(expected));
+    AssertUnboxedValueElementEqual(graph->GetValue(),
+                                   NYql::NUdf::TUnboxedValueComparatorStreamView<TRow>(expected));
 }
 
 using TChainMapBuilder = TRuntimeNode (*)(TProgramBuilder&, TRuntimeNode, TRuntimeNode);
@@ -244,7 +244,7 @@ void TestMultiUsage(bool WithCollect, TChainMapBuilder chainMapBuilder) {
         expectedItems.emplace_back(value, value);
         value += ::ToString(i);
     }
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), expectedItems);
+    AssertUnboxedValueElementEqual(graph->GetValue(), expectedItems);
 }
 
 template <bool LLVM>
@@ -286,13 +286,15 @@ Y_UNIT_TEST_LLVM(TestChain1MapWithThrottledStream) {
     TSetup<LLVM> setup(GetChain1MapThrottleFactory());
     TProgramBuilder& pb = *setup.PgmBuilder;
 
-    auto item1 = pb.NewStruct({{"dt", pb.NewDataLiteral<ui64>(10)}});
-    auto item2 = pb.NewStruct({{"dt", pb.NewDataLiteral<ui64>(20)}});
-    auto item3 = pb.NewStruct({{"dt", pb.NewDataLiteral<ui64>(30)}});
-    auto item4 = pb.NewStruct({{"dt", pb.NewDataLiteral<ui64>(40)}});
-    auto item5 = pb.NewStruct({{"dt", pb.NewDataLiteral<ui64>(50)}});
-    auto itemType = item1.GetStaticType();
-    auto list = pb.NewList(itemType, {item1, item2, item3, item4, item5});
+    using TInRow = NTest::TStructType<NTest::TStructMember<"dt", ui64>>;
+
+    auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TInRow>{
+                                                         {{{10ULL}}},
+                                                         {{{20ULL}}},
+                                                         {{{30ULL}}},
+                                                         {{{40ULL}}},
+                                                         {{{50ULL}}},
+                                                     });
 
     auto throttledStream = ThrottleNarrowStream(pb, pb.Iterator(list, {}));
 
@@ -333,8 +335,8 @@ Y_UNIT_TEST_LLVM(TestChain1MapWithThrottledStream) {
         {ui64{4}, ui64{0}, ui64{40}},
         {ui64{5}, ui64{0}, ui64{50}},
     };
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
-                                               NYql::NUdf::TUnboxedValueComparatorStreamView<TRow>(expected));
+    AssertUnboxedValueElementEqual(graph->GetValue(),
+                                   NYql::NUdf::TUnboxedValueComparatorStreamView<TRow>(expected));
 }
 
 } // Y_UNIT_TEST_SUITE(TMiniKQLChain1MapThrottleTest)

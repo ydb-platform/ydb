@@ -2,8 +2,13 @@
 
 #include <yql/essentials/minikql/mkql_node.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 namespace NKikimr::NMiniKQL::NTest {
+
+using NYql::NUdf::NTest::TStructMember;
+using NYql::NUdf::NTest::TStructType;
+
 namespace NPrivate {
 
 template <typename T>
@@ -58,6 +63,8 @@ template <typename T>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TMaybe<T>& maybeNode);
 template <typename... TArgs>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const std::tuple<TArgs...>& node);
+template <typename... TArgs>
+TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TStructType<TArgs...>& node);
 template <typename... Args>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const std::variant<Args...>& v);
 template <typename T>
@@ -127,6 +134,10 @@ private:
     TMaybe<i32> Value_{};
 };
 
+struct TUtf8 {
+    TStringBuf Value;
+};
+
 template <typename T>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, T simpleNode)
     requires(NYql::NUdf::TPrimitiveDataType<T>::Result)
@@ -162,6 +173,20 @@ inline TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, TStringBuf si
     return pb.NewDataLiteral<NUdf::EDataSlot::String>(simpleNode);
 }
 
+inline TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TUtf8& utf8Node) {
+    return pb.NewDataLiteral<NUdf::EDataSlot::Utf8>(utf8Node.Value);
+}
+
+template <ui8 Precision, ui8 Scale>
+struct TDecimalLiteral {
+    NYql::NDecimal::TInt128 Value{};
+};
+
+template <ui8 Precision, ui8 Scale>
+TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TDecimalLiteral<Precision, Scale>& decimalNode) {
+    return pb.NewDecimalLiteral(decimalNode.Value, Precision, Scale);
+}
+
 template <typename T, TTag Tag>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TTagged<T, Tag>& taggedNode) {
     auto node = ConvertValueToLiteralNode(pb, taggedNode.Value());
@@ -191,9 +216,22 @@ TRuntimeNode ConvertValueToLiteralNodeTuple(TProgramBuilder& pb, const std::tupl
     return pb.NewTuple(data);
 }
 
+template <typename... TArgs, std::size_t... Is>
+TRuntimeNode ConvertValueToLiteralNodeStruct(TProgramBuilder& pb, const TStructType<TArgs...>& structNode, std::index_sequence<Is...>) {
+    TVector<std::pair<std::string_view, TRuntimeNode>> members = {
+        {std::tuple_element_t<Is, std::tuple<TArgs...>>::MemberName(),
+         ConvertValueToLiteralNode(pb, std::get<Is>(structNode.Members).Value)}...};
+    return pb.NewStruct(members);
+}
+
 template <typename... TArgs>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const std::tuple<TArgs...>& node) {
     return ConvertValueToLiteralNodeTuple(pb, node, std::index_sequence_for<TArgs...>{});
+}
+
+template <typename... TArgs>
+TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TStructType<TArgs...>& node) {
+    return ConvertValueToLiteralNodeStruct(pb, node, std::index_sequence_for<TArgs...>{});
 }
 
 template <typename... Args>
@@ -209,14 +247,37 @@ TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const std::variant<A
 }
 
 template <typename T>
+TType* ConvertToMinikqlType(TProgramBuilder& pb) {
+    return ConvertValueToLiteralNode(pb, T{}).GetStaticType();
+}
+
+template <typename T>
 TRuntimeNode ConvertValueToLiteralNode(TProgramBuilder& pb, const TVector<T>& nodes) {
     TRuntimeNode::TList convertedNodes;
     convertedNodes.reserve(nodes.size());
     for (const auto& node : nodes) {
         convertedNodes.push_back(ConvertValueToLiteralNode(pb, node));
     }
-    auto* type = ConvertValueToLiteralNode(pb, T{}).GetStaticType();
+    TType* const type = nodes.empty()
+                            ? ConvertToMinikqlType<T>(pb)
+                            : convertedNodes.front().GetStaticType();
     return pb.NewList(type, std::move(convertedNodes));
 }
 
 } // namespace NKikimr::NMiniKQL::NTest
+
+namespace NYql::NUdf::NPrivate {
+
+template <>
+struct TUnboxedValueComparator<NKikimr::NMiniKQL::NTest::TUtf8> {
+    template <CComparatorUtilsUdfValue THolder>
+    static TUnboxedValueComparatorResult IsEqual(const THolder& value, const NKikimr::NMiniKQL::NTest::TUtf8& expected) {
+        const TStringBuf got(value.AsStringRef());
+        if (got != expected.Value) {
+            return std::unexpected(TStringBuilder() << "Expected utf8 string \"" << expected.Value << "\" but got \"" << got << "\"");
+        }
+        return {};
+    }
+};
+
+} // namespace NYql::NUdf::NPrivate

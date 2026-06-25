@@ -52,7 +52,6 @@ private:
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx);
 
     void AnswerError(const TString& errorReason, const PersQueue::ErrorCode::ErrorCode errorCode, const NActors::TActorContext& ctx);
-    void ProcessAnswers(const TActorContext& ctx);
 
 private:
     TActorId SchemeCache;

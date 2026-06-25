@@ -28,12 +28,16 @@ TRuntimeSettings::TPtr CreateRuntimeSettingsFromProtoImpl(
     const TString& userName,
     TCredentials::TPtr credentials,
     bool allowActivation,
-    const TQContext& qContext)
+    const TQContext& qContext,
+    const std::function<void(const TString&)>& onPartialFeatureActivation)
 {
     auto config = MakeRuntimeSettingsConfigurationMutable(qContext);
-    auto filter = NConfig::MakeActivationFilter<NProto::TRuntimeSetting>(userName, credentials, [&](const TString&) {
+    auto filter = NConfig::MakeActivationFilter<NProto::TRuntimeSetting>(userName, credentials, [&](const TString& name) {
         YQL_ENSURE(allowActivation, "Activation is not allowed. "
                                     "Seems you are trying to load runtime settings with activation but all settings must be already activated.");
+        if (onPartialFeatureActivation) {
+            onPartialFeatureActivation(name);
+        }
     });
     config->Dispatch(proto.GetHostSettings(), filter);
     FillUdfSettings(*config, proto.GetUdfSettings(), filter, qContext);
@@ -44,7 +48,7 @@ TRuntimeSettings::TPtr CreateRuntimeSettingsFromStringImpl(const TString& data)
 {
     NProto::TRuntimeSettings proto;
     proto.ParseFromStringOrThrow(data);
-    return CreateRuntimeSettingsFromProtoImpl(proto, "", nullptr, /*allowActivation=*/false, TQContext());
+    return CreateRuntimeSettingsFromProtoImpl(proto, "", nullptr, /*allowActivation=*/false, TQContext(), {});
 }
 
 } // namespace
@@ -53,15 +57,16 @@ TRuntimeSettings::TPtr CreateRuntimeSettingsFromProto(
     const NProto::TRuntimeSettings& proto,
     const TString& userName,
     TCredentials::TPtr credentials,
-    const TQContext& qContext)
+    const TQContext& qContext,
+    std::function<void(const TString&)> onPartialFeatureActivation)
 {
-    return CreateRuntimeSettingsFromProtoImpl(proto, userName, credentials, /*allowActivation=*/true, qContext);
+    return CreateRuntimeSettingsFromProtoImpl(proto, userName, credentials, /*allowActivation=*/true, qContext, onPartialFeatureActivation);
 }
 
 TRuntimeSettings::TPtr DeserializeRuntimeSettingsFromProto(
     const NProto::TRuntimeSettings& proto)
 {
-    return CreateRuntimeSettingsFromProtoImpl(proto, "", nullptr, /*allowActivation=*/false, TQContext());
+    return CreateRuntimeSettingsFromProtoImpl(proto, "", nullptr, /*allowActivation=*/false, TQContext(), {});
 }
 
 NProto::TRuntimeSettings SerializeRuntimeSettingsToProto(

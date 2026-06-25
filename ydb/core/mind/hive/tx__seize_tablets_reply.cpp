@@ -57,19 +57,19 @@ public:
 
             db.Table<Schema::Tablet>().Key(tabletId).Update(
                         NIceDb::TUpdate<Schema::Tablet::Owner>(owner),
-                        NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(protoTabletInfo.GetGeneration()),
-                        NIceDb::TUpdate<Schema::Tablet::TabletType>(protoTabletInfo.GetTabletType()),
-                        NIceDb::TUpdate<Schema::Tablet::State>(static_cast<ETabletState>(protoTabletInfo.GetState())),
-                        NIceDb::TUpdate<Schema::Tablet::LeaderNode>(protoTabletInfo.GetNodeID()),
+                        NIceDb::TUpdate<Schema::Tablet::KnownGeneration>(tablet.KnownGeneration),
+                        NIceDb::TUpdate<Schema::Tablet::TabletType>(tablet.Type),
+                        NIceDb::TUpdate<Schema::Tablet::State>(tablet.State),
+                        NIceDb::TUpdate<Schema::Tablet::LeaderNode>(tablet.NodeId),
                         //NIceDb::TUpdate<Schema::Tablet::Category>(),
                         //NIceDb::TUpdate<Schema::Tablet::AllowedNodes>(),
                         //NIceDb::TUpdate<Schema::Tablet::AllowedDataCenters>(),
-                        NIceDb::TUpdate<Schema::Tablet::TabletStorageVersion>(protoTabletInfo.GetTabletStorageVersion()),
+                        NIceDb::TUpdate<Schema::Tablet::TabletStorageVersion>(tablet.TabletStorageInfo->Version),
                         NIceDb::TUpdate<Schema::Tablet::ObjectID>(protoTabletInfo.GetObjectId()),
                         //NIceDb::TUpdate<Schema::Tablet::ActorsToNotify>(),
                         NIceDb::TUpdate<Schema::Tablet::AllowedDomains>(allowedDomains),
-                        NIceDb::TUpdate<Schema::Tablet::BootMode>(protoTabletInfo.GetTabletBootMode()),
-                        NIceDb::TUpdate<Schema::Tablet::LockedToActor>(ActorIdFromProto(protoTabletInfo.GetLockedToActor())),
+                        NIceDb::TUpdate<Schema::Tablet::BootMode>(tablet.BootMode),
+                        NIceDb::TUpdate<Schema::Tablet::LockedToActor>(tablet.LockedToActor),
                         NIceDb::TUpdate<Schema::Tablet::LockedReconnectTimeout>(protoTabletInfo.GetLockedReconnectTimeout()),
                         NIceDb::TUpdate<Schema::Tablet::ObjectDomain>(protoTabletInfo.GetObjectDomain()),
                         NIceDb::TUpdate<Schema::Tablet::NeedToReleaseFromParent>(true));
@@ -118,17 +118,12 @@ public:
                 TFollowerGroup& followerGroup = tablet.AddFollowerGroup();
                 followerGroup = protoFollowerGroup;
 
-                TVector<ui32> allowedDataCenters;
-                for (const TDataCenterId& dc : followerGroup.NodeFilter.AllowedDataCenters) {
-                    allowedDataCenters.push_back(DataCenterFromString(dc));
-                }
                 db.Table<Schema::TabletFollowerGroup>().Key(tabletId, followerGroup.Id).Update(
                             NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCount>(followerGroup.GetRawFollowerCount()),
                             NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowLeaderPromotion>(followerGroup.AllowLeaderPromotion),
                             NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowClientRead>(followerGroup.AllowClientRead),
                             NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedNodes>(followerGroup.NodeFilter.AllowedNodes),
-                            NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedDataCenters>(allowedDataCenters),
-                            NIceDb::TUpdate<Schema::TabletFollowerGroup::AllowedDataCenterIds>(followerGroup.NodeFilter.AllowedDataCenters),
+                            NIceDb::TUpdate<Schema::TabletFollowerGroup::NewAllowedDataCenterIds>(followerGroup.NodeFilter.AllowedDataCenters),
                             NIceDb::TUpdate<Schema::TabletFollowerGroup::RequireAllDataCenters>(followerGroup.RequireAllDataCenters),
                             NIceDb::TUpdate<Schema::TabletFollowerGroup::RequireDifferentNodes>(followerGroup.RequireDifferentNodes),
                             NIceDb::TUpdate<Schema::TabletFollowerGroup::FollowerCountPerDataCenter>(followerGroup.FollowerCountPerDataCenter));

@@ -1,12 +1,13 @@
-# Object–relational mapping (ORM)
+# Object-relational mapping (ORM)
 
-| Delivery System                                                 | Instruction                           |
-|-----------------------------------------------------------------|---------------------------------------|
-| [Hibernate](https://hibernate.org/orm/)                         | [Instruction](../hibernate.md)        |
-| [Spring Data JDBC](https://spring.io/projects/spring-data-jdbc) | [Instruction](../spring-data-jdbc.md) |
-| [JOOQ](https://www.jooq.org/)                                   | [Instruction](../jooq.md)             |
-| [Dapper](https://www.learndapper.com/)                          | [Instruction](../dapper.md)           |
-| [Entity Framework](https://docs.microsoft.com/ef/core/index)    | [Instruction](../entity-framework.md) |
-| [Linq To DB](https://linq2db.github.io/)                        | [Instruction](../linq2db.md)          |
-| [SQLAlchemy](https://www.sqlalchemy.org/)                       | [Instruction](../sqlalchemy.md)       |
-| [Django](https://www.djangoproject.com/)                        | [Instruction](../django.md)           |
+| System | Instructions |
+| --- | --- |
+| [Hibernate](https://hibernate.org/orm/) | [Instructions](../hibernate.md) |
+| [Spring Data JDBC](https://spring.io/projects/spring-data-jdbc) | [Instructions](../spring-data-jdbc.md) |
+| [Kotlin Exposed](https://github.com/JetBrains/Exposed) | [Instructions](../exposed.md) |
+| [JOOQ](https://www.jooq.org/) | [Instructions](../jooq.md) |
+| [Dapper](https://www.learndapper.com/) | [Instructions](../dapper.md) |
+| [Entity Framework](https://docs.microsoft.com/ef/core/index) | [Instructions](../entity-framework.md) |
+| [Linq To DB](https://linq2db.github.io/) | [Instructions](../linq2db.md) |
+| [SQLAlchemy](https://www.sqlalchemy.org/) | [Instructions](../sqlalchemy.md) |
+| [Django](https://www.djangoproject.com/) | [Instructions](../django.md) |

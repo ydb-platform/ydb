@@ -85,15 +85,18 @@ std::vector<ISessionRunner::TPtr> SetupSessions(
     TInteractiveConfigurationManager::TPtr configManager,
     TLazyDriver::TPtr completerLazyDriver,
     TLazyDriver::TPtr sqlLazyDriver,
+    TLazyDriver::TPtr sqlTxLazyDriver,
     TLazyDriver::TPtr aiLazyDriver)
 {
     std::vector<ISessionRunner::TPtr> sessions;
 
     sessions.push_back(CreateSqlSessionRunner({
         .SqlLazyDriver = std::move(sqlLazyDriver),
+        .SqlTxLazyDriver = std::move(sqlTxLazyDriver),
         .CompleterLazyDriver = std::move(completerLazyDriver),
         .Database = config.Database,
         .EnableAiInteractive = config.EnableAiInteractive,
+        .EnableInteractiveTransactions = config.EnableInteractiveTransactions,
     }));
 
     if (config.EnableAiInteractive) {
@@ -163,21 +166,26 @@ int TInteractiveCLI::Run(TClientCommand::TConfig& config) {
         }
     }
 
+    // The completer driver only serves on-demand autocompletion lookups, so it
+    // is released after a short idle period instead of running discovery forever.
     auto completerLazyDriver = std::make_shared<TLazyDriver>(
-        [&config] { return TDriver(config.CreateDriverConfig()); });
+        [&config] { return TDriver(config.CreateDriverConfig()); }, TDuration::Seconds(30));
     auto sqlLazyDriver = std::make_shared<TLazyDriver>(
         [&config] { return TDriver(config.CreateDriverConfigWithBuildInfo("interactive-sql")); });
+    auto sqlTxLazyDriver = std::make_shared<TLazyDriver>(
+        [&config] { return TDriver(config.CreateDriverConfigWithBuildInfo("interactive-sql-transaction")); });
     auto aiLazyDriver = std::make_shared<TLazyDriver>(
         [&config] { return TDriver(config.CreateDriverConfigWithBuildInfo("interactive-ai")); });
 
     Y_DEFER {
         aiLazyDriver->Stop(true);
+        sqlTxLazyDriver->Stop(true);
         sqlLazyDriver->Stop(true);
         completerLazyDriver->Stop(true);
     };
 
     ui64 activeSession = static_cast<ui64>(configManager->GetInteractiveMode());
-    const auto& sessions = SetupSessions(config, configManager, completerLazyDriver, sqlLazyDriver, aiLazyDriver);
+    const auto& sessions = SetupSessions(config, configManager, completerLazyDriver, sqlLazyDriver, sqlTxLazyDriver, aiLazyDriver);
     Y_VALIDATE(activeSession < sessions.size(), "Invalid active session: " << activeSession);
 
     ILineReader::TPtr lineReader;

@@ -955,6 +955,7 @@ namespace NActors {
                 request.SetRequestExternalDataChannel(Common->Settings.EnableExternalDataChannel);
                 request.SetRequestXxhash(true);
                 request.SetRequestXdcShuffle(true);
+                request.SetRequestAllowDisablingPayloadChecksums(true);
                 request.SetHandshakeId(*HandshakeId);
 
                 ui32 pending = 0;
@@ -1019,7 +1020,7 @@ namespace NActors {
 
                 if (reply.HasErrorExplaination()) {
                     notify(reply, false);
-                    Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "error from peer: " + reply.GetErrorExplaination());
+                    FailFromPeer(reply.GetErrorExplaination());
                 } else if (!reply.HasSuccess()) {
                     notify(reply, false);
                     Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, "empty reply");
@@ -1048,6 +1049,7 @@ namespace NActors {
                 Params.UseExternalDataChannel = success.GetUseExternalDataChannel();
                 Params.UseXxhash = success.GetUseXxhash();
                 Params.UseXdcShuffle = success.GetUseXdcShuffle();
+                Params.AllowDisablingPayloadChecksums = success.GetAllowDisablingPayloadChecksums();
                 // Kernel liveness mode is a local transport decision: it depends on whether this side
                 // configured keepalive/user-timeout on its own socket.
                 Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
@@ -1348,7 +1350,8 @@ namespace NActors {
                 Params.UseExternalDataChannel = request.GetRequestExternalDataChannel() && Common->Settings.EnableExternalDataChannel;
                 Params.UseXxhash = request.GetRequestXxhash();
                 Params.UseXdcShuffle = request.GetRequestXdcShuffle();
-                Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady();
+                Params.UseKernelLiveness = MainChannel.IsKernelLivenessReady(); 
+                Params.AllowDisablingPayloadChecksums = request.GetRequestAllowDisablingPayloadChecksums();
 
                 if (Params.UseExternalDataChannel) {
                     if (request.HasHandshakeId()) {
@@ -1421,6 +1424,7 @@ namespace NActors {
                     success.SetUseExternalDataChannel(Params.UseExternalDataChannel);
                     success.SetUseXxhash(Params.UseXxhash);
                     success.SetUseXdcShuffle(Params.UseXdcShuffle);
+                    success.SetAllowDisablingPayloadChecksums(Params.AllowDisablingPayloadChecksums);
 
                     ui32 pending = 0;
                     auto& actors = Common->ConnectionCheckerActorIds;
@@ -1703,23 +1707,38 @@ namespace NActors {
             return WaitForSpecificEvent<T1, T2, TOther...>(std::move(state));
         }
 
-        void Fail(TEvHandshakeFail::EnumHandshakeFail reason, TString explanation, bool network = false) {
+        TEvHandshakeFail::EReason ClassifyPeerError(TStringBuf error) const {
+            const TString peerDoesNotKnowSelf = "DynamicNS knows nothing about the node " + ToString(SelfActorId.NodeId());
+            return error.Contains(peerDoesNotKnowSelf) || error.Contains("Peer node not registered in nameservice")
+                   ? TEvHandshakeFail::EReason::RemoteNodeDoesNotKnowLocalNode
+                   : TEvHandshakeFail::EReason::Unspecified;
+        }
+
+        void FailFromPeer(TString peerError) {
+            const auto detailedReason = ClassifyPeerError(peerError);
+            TString explanation = "error from peer: " + peerError;
+            Fail(TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT, std::move(explanation), false, detailedReason, std::move(peerError));
+        }
+
+        void Fail(TEvHandshakeFail::EnumHandshakeFail failType, TString explanation, bool network = false,
+                  TEvHandshakeFail::EReason detailedReason = TEvHandshakeFail::EReason::Unspecified,
+                  TString peerError = {}) {
             TString msg = Sprintf("%s Peer# %s(%s) %s", HandshakeKind.data(), PeerHostName ? PeerHostName.data() : "<unknown>",
                 PeerAddr.size() ? PeerAddr.data() : "<unknown>", explanation.data());
 
             if (network) {
-                LOG_LOG_NET_X(NActors::NLog::PRI_DEBUG, PeerNodeId, "network-related error occured on handshake: %s", msg.data());
+                LOG_LOG_NET_X(NActors::NLog::PRI_DEBUG, PeerNodeId, "network-related error occurred on handshake: %s", msg.data());
             } else {
-                // calculate log severity based on failure type; permanent failures lead to error log messages
-                auto severity = reason == TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT
-                                    ? NActors::NLog::PRI_NOTICE
-                                    : NActors::NLog::PRI_INFO;
+                // proxy emits throttled NOTICE summaries for permanent failures
+                auto severity = failType == TEvHandshakeFail::HANDSHAKE_FAIL_PERMANENT
+                                    ? NActors::NLog::PRI_INFO
+                                    : NActors::NLog::PRI_DEBUG;
 
                 LOG_LOG_IC_X(NActorsServices::INTERCONNECT, "ICH03", severity, "handshake failed, explanation# %s", msg.data());
             }
 
             if (PeerNodeId) {
-                SendToProxy(MakeHolder<TEvHandshakeFail>(reason, std::move(msg)));
+                SendToProxy(MakeHolder<TEvHandshakeFail>(failType, std::move(msg), PeerHostName, std::move(peerError), detailedReason));
             }
 
             throw TExHandshakeFailed() << explanation;

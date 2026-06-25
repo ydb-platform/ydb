@@ -3941,6 +3941,43 @@ namespace NTypeAnnImpl {
         return IGraphTransformer::TStatus::Ok;
     }
 
+    IGraphTransformer::TStatus HybridRankBuiltinWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
+        YQL_ENSURE(output);
+        if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, MakeLangVersion(2026, 02), ctx.Types.BackportMode)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "HybridRank function is not available before version 2026.02"));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        if (!EnsureMinArgsCount(*input, 2, ctx.Expr)) {
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        TExprNode::TPtr positionalArguments = input;
+        if (input->Head().GetTypeAnn() && input->Head().GetTypeAnn()->GetKind() == ETypeAnnotationKind::Tuple) {
+            if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+
+            positionalArguments = input->ChildPtr(0);
+        }
+
+        if (positionalArguments->ChildrenSize() < 2) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(positionalArguments->Pos()), TStringBuilder() <<
+                "HybridRank expects at least 2 positional arguments (fulltext score and vector distance), but got " <<
+                positionalArguments->ChildrenSize()));
+            return IGraphTransformer::TStatus::Error;
+        }
+
+        for (ui32 i = 0; i < positionalArguments->ChildrenSize(); ++i) {
+            if (!EnsureComputable(*positionalArguments->Child(i), ctx.Expr)) {
+                return IGraphTransformer::TStatus::Error;
+            }
+        }
+
+        input->SetTypeAnn(ctx.Expr.MakeType<TDataExprType>(EDataSlot::Double));
+        return IGraphTransformer::TStatus::Ok;
+    }
+
     IGraphTransformer::TStatus SqlConcatWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx) {
         if (!IsBackwardCompatibleFeatureAvailable(ctx.Types.LangVer, MakeLangVersion(2025, 04), ctx.Types.BackportMode)) {
             ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()), "Concat function is not available before version 2025.04"));
@@ -15857,6 +15894,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["AggrConcat"] = &AggrConcatWrapper;
         ExtFunctions["FulltextMatch"] = &FullTextBuiltinWrapper<false>;
         ExtFunctions["FulltextScore"] = &FullTextBuiltinWrapper<true>;
+        ExtFunctions["HybridRank"] = &HybridRankBuiltinWrapper;
         ExtFunctions["SqlConcat"] = &SqlConcatWrapper;
         ExtFunctions["Substring"] = &SubstringWrapper;
         ExtFunctions["Find"] = &FindWrapper;
@@ -16128,6 +16166,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["CommonJoinCore"] = &CommonJoinCoreWrapper;
         Functions["GraceJoinCore"] = &GraceJoinCoreWrapper;
         Functions["GraceSelfJoinCore"] = &GraceSelfJoinCoreWrapper;
+        Functions["ListJoinCore"] = &ListJoinCoreWrapper;
         Functions["CombineCore"] = &CombineCoreWrapper;
         Functions["GroupingCore"] = &GroupingCoreWrapper;
         Functions["EquiJoin"] = &EquiJoinWrapper;
@@ -16206,16 +16245,18 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["SqlAccess"] = &SqlAccessWrapper;
         Functions["SqlProcess"] = &SqlProcessWrapper;
         Functions["SqlReduce"] = &SqlReduceWrapper;
+        Functions["SqlCombine"] = &SqlCombineWrapper;
         Functions["SqlExternalFunction"] = &SqlExternalFunctionWrapper;
         Functions["SqlExtractKey"] = &SqlExtractKeyWrapper;
         Functions["SqlReduceUdf"] = &SqlReduceUdfWrapper;
+        Functions["SqlCombineInput"] = &SqlCombineInputWrapper;
         Functions["SqlProject"] = &SqlProjectWrapper;
         Functions["SqlTypeFromYson"] = &SqlTypeFromYsonWrapper;
         Functions["SqlColumnOrderFromYson"] = &SqlColumnOrderFromYsonWrapper;
         Functions["OrderedSqlProject"] = &SqlProjectWrapper;
         Functions["SqlProjectItem"] = &SqlProjectItemWrapper;
         Functions["SqlProjectStarItem"] = &SqlProjectItemWrapper;
-        Functions["PgSelf"] = &PgSelfWrapper;
+        Functions["PgSelf"] = &SqlSelfWrapper;
         Functions["PgStar"] = &SqlStarWrapper;
         Functions["PgQualifiedStar"] = &PgQualifiedStarWrapper;
         Functions["PgColumnRef"] = &SqlColumnRefWrapper;
@@ -16253,8 +16294,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["PgGrouping"] = &SqlGroupingWrapper;
         Functions["PgGroupingSet"] = &SqlGroupingSetWrapper;
         Functions["PgToRecord"] = &PgToRecordWrapper;
-        Functions["PgIterate"] = &PgIterateWrapper;
-        Functions["PgIterateAll"] = &PgIterateWrapper;
+        Functions["PgIterate"] = &SqlIterateWrapper;
+        Functions["PgIterateAll"] = &SqlIterateWrapper;
         Functions["StructUnion"] = &StructMergeWrapper;
         Functions["StructIntersection"] = &StructMergeWrapper;
         Functions["StructDifference"] = &StructMergeWrapper;
@@ -16593,6 +16634,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         ExtFunctions["YqlValuesList"] = &SqlValuesListWrapper;
         Functions["YqlColumnRef"] = &SqlColumnRefWrapper;
         Functions["YqlSubLink"] = &SqlSubLinkWrapper;
+        Functions["YqlSelf"] = &SqlSelfWrapper;
         Functions["YqlStar"] = &SqlStarWrapper;
         Functions["YqlWhere"] = &SqlWhereWrapper;
         Functions["YqlSort"] = &SqlSortWrapper;
@@ -16600,6 +16642,8 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["YqlGroupRef"] = &SqlGroupRefWrapper;
         Functions["YqlGrouping"] = &SqlGroupingWrapper;
         Functions["YqlGroupingSet"] = &SqlGroupingSetWrapper;
+        Functions["YqlIterate"] = &SqlIterateWrapper;
+        Functions["YqlIterateAll"] = &SqlIterateWrapper;
         ExtFunctions["YqlAggFactory"] = &YqlAggFactoryWrapper;
         ExtFunctions["YqlAgg"] = &YqlAggWrapper;
         ExtFunctions["YqlWinFactory"] = &YqlWinFactoryWrapper;
@@ -16768,6 +16812,17 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         IGraphTransformer::TStatus ValidateProviderWriteResult(const TExprNode::TPtr& input, TExprContext& ctx) {
             if (!input->GetTypeAnn() || input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::World) {
                 ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Bad datasink write result"));
+                return TStatus::Error;
+            }
+            return TStatus::Ok;
+        }
+
+        IGraphTransformer::TStatus ValidateProviderMaterializeResult(const TExprNode::TPtr& input, TExprContext& ctx) {
+            if (!input->GetTypeAnn() ||
+                input->GetTypeAnn()->GetKind() != ETypeAnnotationKind::Tuple ||
+                input->GetTypeAnn()->Cast<TTupleExprType>()->GetSize() != 2 ||
+                input->GetTypeAnn()->Cast<TTupleExprType>()->GetItems()[0]->GetKind() != ETypeAnnotationKind::World) {
+                ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Bad datasink materialize result"));
                 return TStatus::Error;
             }
             return TStatus::Ok;

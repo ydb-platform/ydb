@@ -2,7 +2,7 @@
 
 PY3_LIBRARY()
 
-VERSION(4.62.1)
+VERSION(4.63.0)
 
 LICENSE(MIT)
 
@@ -105,6 +105,7 @@ PY_SRCS(
     fontTools/misc/filesystem/_walk.py
     fontTools/misc/filesystem/_zipfs.py
     fontTools/misc/fixedTools.py
+    fontTools/misc/iftSparseBitSet.py
     fontTools/misc/intTools.py
     fontTools/misc/iterTools.py
     fontTools/misc/lazyTools.py
@@ -213,6 +214,8 @@ PY_SRCS(
     fontTools/ttLib/tables/G__l_a_t.py
     fontTools/ttLib/tables/G__l_o_c.py
     fontTools/ttLib/tables/H_V_A_R_.py
+    fontTools/ttLib/tables/I_F_T_.py
+    fontTools/ttLib/tables/I_F_T_X_.py
     fontTools/ttLib/tables/J_S_T_F_.py
     fontTools/ttLib/tables/L_T_S_H_.py
     fontTools/ttLib/tables/M_A_T_H_.py
@@ -243,6 +246,7 @@ PY_SRCS(
     fontTools/ttLib/tables/__init__.py
     fontTools/ttLib/tables/_a_n_k_r.py
     fontTools/ttLib/tables/_a_v_a_r.py
+    fontTools/ttLib/tables/_b_g_c_l.py
     fontTools/ttLib/tables/_b_s_l_n.py
     fontTools/ttLib/tables/_c_i_d_g.py
     fontTools/ttLib/tables/_c_m_a_p.py
@@ -281,6 +285,7 @@ PY_SRCS(
     fontTools/ttLib/tables/otBase.py
     fontTools/ttLib/tables/otConverters.py
     fontTools/ttLib/tables/otData.py
+    fontTools/ttLib/tables/otDataSchema.py
     fontTools/ttLib/tables/otTables.py
     fontTools/ttLib/tables/otTraverse.py
     fontTools/ttLib/tables/sbixGlyph.py

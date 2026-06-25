@@ -1,17 +1,43 @@
 #pragma once
 
-#include <ydb/core/protos/kqp_physical.pb.h>
-#include <ydb/core/protos/kqp_stats.pb.h>
 #include <ydb/core/kqp/expr_nodes/kqp_expr_nodes.h>
-#include <ydb/core/kqp/provider/yql_kikimr_provider.h>
-#include <ydb/core/kqp/opt/logical/kqp_opt_log.h>
 
-#include <yql/essentials/ast/yql_expr.h>
+#include <util/generic/string.h>
 
-#include <library/cpp/json/writer/json.h>
+namespace NKqpProto {
 
-namespace NKikimr {
-namespace NKqp {
+class TKqpPhyQuery;
+class TKqpStatsQuery;
+
+} // namespace NKqpProto
+
+namespace NYql::NDqProto {
+
+class TDqExecutionStats;
+
+} // namespace NYql::NDqProto
+
+namespace NYql {
+
+class TKikimrTablesData;
+struct TKikimrConfiguration;
+struct TTypeAnnotationContext;
+
+} // namespace NYql
+
+namespace NKikimrMiniKQL {
+
+class TResult;
+
+} // namespace NKikimrMiniKQL
+
+namespace NKikimr::NKqp {
+
+namespace NOpt {
+
+struct TKqpOptimizeContext;
+
+} // namespace NOpt
 
 enum class EPlanTableReadType {
     Unspecified,
@@ -40,7 +66,7 @@ enum class EPlanTableWriteType {
 void PhyQuerySetTxPlans(NKqpProto::TKqpPhyQuery& queryProto, const NYql::NNodes::TKqpPhysicalQuery& query,
     const NYql::NNodes::TKqpPhysicalQuery& peepHoleOptimizedQuery,
     TVector<TVector<NKikimrMiniKQL::TResult>> pureTxResults, NYql::TExprContext& ctx, const TString& database,
-    const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, NYql::TKikimrConfiguration::TPtr config,
+    const TString& cluster, const TIntrusivePtr<NYql::TKikimrTablesData> tablesData, TIntrusivePtr<NYql::TKikimrConfiguration> config,
     NYql::TTypeAnnotationContext& typeCtx, TIntrusivePtr<NOpt::TKqpOptimizeContext> optCtx);
 
 /*
@@ -53,5 +79,4 @@ TString SerializeAnalyzePlan(const NKqpProto::TKqpStatsQuery& queryStats, bool n
 
 TString SerializeScriptPlan(const TVector<const TString>& queryPlans);
 
-} // namespace NKqp
-} // namespace NKikimr
+} // namespace NKikimr::NKqp

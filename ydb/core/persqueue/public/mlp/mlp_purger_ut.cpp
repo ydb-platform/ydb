@@ -86,7 +86,6 @@ Y_UNIT_TEST_SUITE(TMLPPurgerTests) {
             .WaitTime = TDuration::Seconds(0),
             .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
-            .UncompressMessages = true
         });
 
         auto response = GetReadResponse(runtime);
@@ -135,7 +134,6 @@ Y_UNIT_TEST_SUITE(TMLPPurgerTests) {
             .WaitTime = TDuration::Seconds(0),
             .ProcessingTimeout = TDuration::Seconds(30),
             .MaxNumberOfMessage = 1,
-            .UncompressMessages = true
         });
 
         auto response = GetReadResponse(runtime);

@@ -60,7 +60,7 @@ namespace NKikimr::NBsController {
                 }
             }
 
-            bool AllocateDDisk(std::vector<TDDiskId>& group, ui32 numChunks) {
+            bool AllocateDDisk(std::vector<TDDiskId>& group, ui32 numChunks, TString* errorReason = nullptr) {
                 std::optional<TCommonId> commonId;
                 THashSet<TDistinctId> distinctIds;
                 ParseGroup(group, commonId, distinctIds);
@@ -113,6 +113,39 @@ namespace NKikimr::NBsController {
                     return true;
                 }
 
+                if (errorReason) {
+                    size_t eligibleDisks = 0;
+                    THashSet<TDistinctId> eligibleDistinctDomains;
+                    for (const auto& [_, candidateDDiskId] : DDiskPerClaim) {
+                        const auto jt = NodeMap.find(candidateDDiskId.NodeId);
+                        if (jt == NodeMap.end()) {
+                            continue;
+                        }
+                        const auto& [diskCommonId, diskDistinctId] = jt->second;
+                        if (commonId.value_or(diskCommonId) != diskCommonId || distinctIds.contains(diskDistinctId)) {
+                            continue;
+                        }
+                        const auto it = ClaimPerDDisk.find(candidateDDiskId);
+                        if (it == ClaimPerDDisk.end()) {
+                            continue;
+                        }
+                        const auto& [chunksClaimed, chunksMax] = it->second;
+                        if (numChunks > chunksMax - chunksClaimed) {
+                            continue;
+                        }
+                        ++eligibleDisks;
+                        eligibleDistinctDomains.insert(diskDistinctId);
+                    }
+                    TStringStream ss;
+                    ss << "can't allocate DDisk"
+                        << " NumChunks# " << numChunks
+                        << " GroupSize# " << group.size()
+                        << " UsedDistinctDomains# " << distinctIds.size()
+                        << " EligibleDisks# " << eligibleDisks
+                        << " EligibleDistinctDomains# " << eligibleDistinctDomains.size()
+                        << " TotalDisks# " << DDiskPerClaim.size();
+                    *errorReason = ss.Str();
+                }
                 return false;
             }
 
@@ -397,8 +430,9 @@ namespace NKikimr::NBsController {
 
                             if (!currentNumChunks && numChunks) { // allocate new DDisk
                                 // allocate DDisk through allocator, serialize it to entity and update neighbour list
-                                if (!pool.AllocateDDisk(ddiskIds, numChunks)) {
-                                    ythrow yexception() << "can't allocate DDisk";
+                                TString allocError;
+                                if (!pool.AllocateDDisk(ddiskIds, numChunks, &allocError)) {
+                                    ythrow yexception() << allocError;
                                 }
                                 ddiskIds.back().Serialize(item->MutableDDiskId());
                                 ddiskId.emplace(ddiskIds.back());

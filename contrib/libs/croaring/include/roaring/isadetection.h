@@ -1,3 +1,14 @@
+/*
+ * isadetection.h
+ *
+ * This header declares the small interface used to detect instruction-set
+ * capabilities relevant to CRoaring's optimized kernels on x64 platforms. It
+ * also defines compile-time feature macros that indicate whether the compiler
+ * toolchain is capable of building AVX-512 code paths.
+ *
+ * The resulting flags are used to decide whether accelerated implementations,
+ * such as AVX2 or AVX-512 variants, can be selected safely at runtime.
+ */
 #ifndef ROARING_ISADETECTION_H
 #define ROARING_ISADETECTION_H
 #if defined(__x86_64__) || defined(_M_AMD64)  // x64

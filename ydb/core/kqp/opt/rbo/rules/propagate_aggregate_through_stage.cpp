@@ -4,7 +4,7 @@ namespace NKikimr {
 namespace NKqp {
 
 namespace {
-const THashSet<TString> AllowedAggFunction{"sum", "min", "max", "count", "avg"};
+const THashSet<TString> AllowedAggFunction{"sum", "min", "max", "count", "avg", "variance_1_1", "distinct"};
 
 bool IsValidConnectionToPushAggregation(const TIntrusivePtr<TConnection>& connection) {
     return IsConnection<TUnionAllConnection>(connection) || IsConnection<TShuffleConnection>(connection);
@@ -40,13 +40,12 @@ bool IsSuitableToPropagateAggregateThroughStage(const TIntrusivePtr<IOperator>& 
 
     const auto aggregate = CastOperator<TOpAggregate>(input);
     const auto& aggTraits = aggregate->GetAggregationTraits();
-    const auto distinctAll = aggregate->IsDistinctAll();
 
-    return aggregate->GetAggregationPhase() != EOpPhase::Final && AggregationTraitsAreValidForPropagation(aggTraits) && !distinctAll;
+    return aggregate->GetAggregationPhase() != EOpPhase::Final && AggregationTraitsAreValidForPropagation(aggTraits);
 }
 
 std::pair<TString, TString> GetAggFunctions(const TString& aggFunc) {
-    if (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum" || aggFunc == "avg") {
+    if (aggFunc == "min" || aggFunc == "max" || aggFunc == "sum" || aggFunc == "avg" || aggFunc == "variance_1_1" || aggFunc == "distinct") {
         return std::make_pair(aggFunc, aggFunc);
     }
     if (aggFunc == "count") {
@@ -64,19 +63,25 @@ TIntrusivePtr<TOpAggregate> EmitFinalAndIntermediateAggregates(const TIntrusiveP
 
     TVector<TOpAggregationTraits> intermediateTraits;
     TVector<TOpAggregationTraits> finalTraits;
+    TVector<TInfoUnit> distKeys;
+
     // Here we want to split aggregate to final and intermediate.
     for (const auto& originalTraits : aggregationTraitsList) {
         const auto& originalColName = originalTraits.OriginalColName;
         const auto& aggFunc = originalTraits.AggFunction;
         const auto& resultColName = originalTraits.ResultColName;
-        const auto newIntermediateName = TInfoUnit("_intermediate" + resultColName.GetFullName());
+        const auto newIntermediateName = TInfoUnit("_intermediate_" + resultColName.GetFullName());
         const auto [interAggFunc, finalAggFunc] = GetAggFunctions(aggFunc);
         intermediateTraits.emplace_back(originalColName, interAggFunc, newIntermediateName);
         finalTraits.emplace_back(newIntermediateName, finalAggFunc, resultColName);
+
+        if (distinctAll) {
+            distKeys.emplace_back(newIntermediateName);
+        }
     }
 
     const auto intermediate = MakeIntrusive<TOpAggregate>(aggregate->GetInput(), intermediateTraits, aggKeys, EOpPhase::Intermediate, distinctAll, props, pos);
-    return MakeIntrusive<TOpAggregate>(intermediate, finalTraits, aggKeys, EOpPhase::Final, distinctAll, props, pos);
+    return MakeIntrusive<TOpAggregate>(intermediate, finalTraits, distinctAll ? distKeys : aggKeys, EOpPhase::Final, distinctAll, props, pos);
 }
 
 } // namespace
@@ -98,12 +103,23 @@ TIntrusivePtr<IOperator> TPropagateAggregateThroughStageRule::SimpleMatchAndAppl
         const auto aggStageId = *aggregate->Props.StageId;
         const auto inputStageId = *aggInput->Props.StageId;
         const auto connections = props.StageGraph.GetConnections(inputStageId, aggStageId);
-        Y_ENSURE(connections.size() == 1);
+        Y_ENSURE(connections.size() == 1, "Invalid number of connections.");
         const auto outputIndex = connections.front()->GetOutputIndex();
         auto opProps = aggregate->Props;
         opProps.StageId = inputStageId;
-        TIntrusivePtr<TConnection> connection = MakeIntrusive<TShuffleConnection>(aggregate->GetKeyColumns(), outputIndex);
-        if (aggregate->GetKeyColumns().empty()) {
+
+        TIntrusivePtr<TConnection> connection;
+        if (!aggregate->GetKeyColumns().empty()) {
+            TVector<TInfoUnit> shuffleByKeys;
+            if (aggregate->IsDistinctAll()) {
+                for (const auto& aggTraits : aggregate->GetAggregationTraits()) {
+                    shuffleByKeys.emplace_back(aggTraits.ResultColName);
+                }
+            } else {
+                shuffleByKeys = aggregate->GetKeyColumns();
+            }
+            connection = MakeIntrusive<TShuffleConnection>(shuffleByKeys, outputIndex);
+        } else {
             connection = MakeIntrusive<TUnionAllConnection>(outputIndex);
         }
 

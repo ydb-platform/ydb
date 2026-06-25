@@ -194,9 +194,9 @@ Y_UNIT_TEST(BadFormatYqlHidden) {
     UNIT_ASSERT(!res.Checks[0].Success);
     UNIT_ASSERT_NO_DIFF(res.Checks[0].Issues.ToString(),
                         "<main>:1:0: Warning: Format mismatch, expected:\n"
-                        "SELECT\n"
-                        "••••1\n"
-                        ";\n\n"
+                        "SELECT↵\n"
+                        "••••1↵\n"
+                        ";↵\n\n"
                         "but got:\n"
                         "select→1•\n"
                         ", code: 3\n");

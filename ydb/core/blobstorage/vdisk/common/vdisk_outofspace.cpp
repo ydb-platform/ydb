@@ -24,17 +24,19 @@ namespace NKikimr {
             case TSpaceColor::CYAN:
                 return NKikimrWhiteboard::EFlag::Green;
             case TSpaceColor::LIGHT_YELLOW:
-            case TSpaceColor::YELLOW:
-            case TSpaceColor::LIGHT_ORANGE:
                 return NKikimrWhiteboard::EFlag::Yellow;
+            case TSpaceColor::YELLOW:
+                return NKikimrWhiteboard::EFlag::Orange;
+            case TSpaceColor::LIGHT_ORANGE:
             case TSpaceColor::PRE_ORANGE:
             case TSpaceColor::ORANGE:
                 return NKikimrWhiteboard::EFlag::Orange;
             case TSpaceColor::RED:
             case TSpaceColor::BLACK:
+                return NKikimrWhiteboard::EFlag::Red;
             case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MIN_SENTINEL_DO_NOT_USE_:
             case NKikimrBlobStorage::TPDiskSpaceColor_E_TPDiskSpaceColor_E_INT_MAX_SENTINEL_DO_NOT_USE_:
-                return NKikimrWhiteboard::EFlag::Red;
+                return NKikimrWhiteboard::EFlag::Grey;
         }
     }
 

@@ -19,9 +19,10 @@ TAstNode* SqlASTToYql(const google::protobuf::Message& protoAst, TContext& ctx) 
         ctx.Error() << "Invalid AST structure: " << d->name() << ", expected TSQLv1ParserAST";
         return nullptr;
     }
-    TSqlQuery query(ctx, ctx.Settings.Mode, true);
-    TNodePtr node(query.Build(static_cast<const TSQLv1ParserAST&>(protoAst)));
+
     try {
+        TSqlQuery query(ctx, ctx.Settings.Mode, true);
+        TNodePtr node(query.Build(static_cast<const TSQLv1ParserAST&>(protoAst)));
         if (node && node->Init(ctx, nullptr)) {
             return node->Translate(ctx);
         }
@@ -33,9 +34,9 @@ TAstNode* SqlASTToYql(const google::protobuf::Message& protoAst, TContext& ctx) 
 }
 
 TAstNode* SqlASTsToYqls(const std::vector<::NSQLv1Generated::TRule_sql_stmt_core>& ast, TContext& ctx) {
-    TSqlQuery query(ctx, ctx.Settings.Mode, true);
-    TNodePtr node(query.Build(ast));
     try {
+        TSqlQuery query(ctx, ctx.Settings.Mode, true);
+        TNodePtr node(query.Build(ast));
         if (node && node->Init(ctx, nullptr)) {
             return node->Translate(ctx);
         }
@@ -191,6 +192,7 @@ bool NeedUseForAllStatements(const TRule_sql_stmt_core::AltCase& subquery) {
         case TRule_sql_stmt_core::kAltSqlStmtCore67: // alter secret
         case TRule_sql_stmt_core::kAltSqlStmtCore68: // drop secret
         case TRule_sql_stmt_core::kAltSqlStmtCore69: // truncate table
+        case TRule_sql_stmt_core::kAltSqlStmtCore70: // materialize
             return false;
         case TRule_sql_stmt_core::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");

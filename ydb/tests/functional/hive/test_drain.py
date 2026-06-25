@@ -34,6 +34,7 @@ class TestHive(object):
                     'object_imbalance_to_balance': 100,
                 },
                 extra_feature_flags=['enable_drain_on_shutdown'],
+                shutdown_config={'drain_timeout_seconds': 1000000},
             )
         )
         cls.cluster.start()

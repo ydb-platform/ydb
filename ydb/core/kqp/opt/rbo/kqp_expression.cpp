@@ -1,17 +1,28 @@
 #include "kqp_expression.h"
+#include "kqp_rbo_utils.h"
 
 #include <yql/essentials/ast/yql_ast_escaping.h>
-#include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_expr_optimize.h>
+#include <yql/essentials/core/yql_expr_type_annotation.h>
+#include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/utils/log/log.h>
+
 #include <util/stream/str.h>
+
 #include <optional>
 
-using namespace NYql::NNodes;
+namespace NKikimr::NKqp {
 
 namespace {
 
+using namespace NYql::NNodes;
 using namespace NKikimr;
-using namespace NKikimr::NKqp;
+
+void AddUniqueInfoUnit(TVector<TInfoUnit>& ius, const TInfoUnit& iu) {
+    if (!ContainsInfoUnit(ius, iu)) {
+        ius.push_back(iu);
+    }
+}
 
 TExprNode::TPtr ReplaceArg(TExprNode::TPtr input, TExprNode::TPtr arg, TExprContext &ctx) {
     if (input->IsCallable("Member")) {
@@ -62,6 +73,117 @@ bool TestAndExtractEqualityPredicate(TExprNode::TPtr pred, TExprNode::TPtr& left
         return true;
     }
     return false;
+}
+
+bool SameExpr(const TExprNode::TPtr& left, const TExprNode::TPtr& right) {
+    if (left.Get() == right.Get()) {
+        return true;
+    }
+
+    const TExprNode* leftPtr = left.Get();
+    const TExprNode* rightPtr = right.Get();
+    return CompareExprTrees(leftPtr, rightPtr);
+}
+
+bool ContainsExpr(const TExprNode::TListType& nodes, const TExprNode::TPtr& needle) {
+    return AnyOf(nodes, [&](const TExprNode::TPtr& node) {
+        return SameExpr(node, needle);
+    });
+}
+
+TExprNode::TPtr MakeLogical(TPositionHandle pos, TStringBuf op, TExprNode::TListType terms, TExprContext& ctx) {
+    if (terms.empty()) {
+        return op == "And" ? MakeBool<true>(pos, ctx) : MakeBool<false>(pos, ctx);
+    }
+
+    if (terms.size() == 1) {
+        return terms.front();
+    }
+
+    return ctx.NewCallable(pos, op, std::move(terms));
+}
+
+TExprNode::TPtr MakeConjunct(TPositionHandle pos, TExprNode::TListType terms, TExprContext& ctx) {
+    return MakeLogical(pos, "And", std::move(terms), ctx);
+}
+
+TExprNode::TPtr MakeDisjunct(TPositionHandle pos, TExprNode::TListType terms, TExprContext& ctx) {
+    return MakeLogical(pos, "Or", std::move(terms), ctx);
+}
+
+struct TExtractedCommonExpressions {
+    TExprNode::TListType Common;
+    TVector<TExprNode::TListType> Residuals;
+};
+
+std::optional<TExtractedCommonExpressions> ExtractCommonExpressions(const TVector<TExprNode::TListType>& branches) {
+    TExtractedCommonExpressions result;
+    if (branches.empty()) {
+        return std::nullopt;
+    }
+
+    auto& common = result.Common;
+    for (const auto& candidate : branches.front()) {
+        if (candidate->HasSideEffects() || ContainsExpr(common, candidate)) {
+            continue;
+        }
+
+        if (AllOf(branches, [&](const auto& branch) { return ContainsExpr(branch, candidate); })) {
+            common.push_back(candidate);
+        }
+    }
+
+    if (common.empty()) {
+        return std::nullopt;
+    }
+
+    result.Residuals.reserve(branches.size());
+    for (const auto& branch : branches) {
+        auto& residual = result.Residuals.emplace_back();
+        for (const auto& term : branch) {
+            if (!ContainsExpr(common, term)) {
+                residual.push_back(term);
+            }
+        }
+    }
+
+    return result;
+}
+
+std::optional<TExprNode::TPtr> FactorCommonExpressions(TExprNode::TPtr node, TExprContext& ctx) {
+    TExprNode::TListType disjuncts;
+    GetOrTerms(node, disjuncts);
+    if (disjuncts.size() < 2) {
+        return std::nullopt;
+    }
+
+    TVector<TExprNode::TListType> branches;
+    branches.reserve(disjuncts.size());
+    for (const auto& disjunct : disjuncts) {
+        GetAndTerms(disjunct, branches.emplace_back());
+    }
+
+    auto extracted = ExtractCommonExpressions(branches);
+    if (!extracted) {
+        return std::nullopt;
+    }
+
+    auto common = std::move(extracted->Common);
+    auto residuals = std::move(extracted->Residuals);
+    TExprNode::TListType residualDisjuncts;
+    residualDisjuncts.reserve(residuals.size());
+
+    for (auto& residual : residuals) {
+        if (residual.empty()) {
+            return MakeConjunct(node->Pos(), std::move(common), ctx);
+        }
+
+        residualDisjuncts.push_back(MakeConjunct(node->Pos(), std::move(residual), ctx));
+    }
+
+    common.push_back(MakeDisjunct(node->Pos(), std::move(residualDisjuncts), ctx));
+
+    return MakeConjunct(node->Pos(), std::move(common), ctx);
 }
 
 TExprNode::TPtr RenameMembers(TExprNode::TPtr input, const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap,
@@ -351,10 +473,7 @@ TString FormatExpressionDependencies(const TExpression& expr) {
     return TStringBuilder() << "<expr depends on: " << FormatInfoUnits(deps) << ">";
 }
 
-}
-
-namespace NKikimr {
-namespace NKqp {
+} // anonymous namespace
 
 TExpression::TExpression(TExprNode::TPtr node, TExprContext* ctx, TPlanProps* props) : Ctx(ctx), PlanProps(props) {
     Y_ENSURE(ctx, "Creating an expression with null context");
@@ -371,23 +490,35 @@ TExpression::TExpression(TExprNode::TPtr node, TExprContext* ctx, TPlanProps* pr
 }
 
 TVector<TExpression> TExpression::SplitConjunct() const {
-    Y_ENSURE(PlanProps);
+    Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
+    Y_ENSURE(Ctx, "Expression context is null");
 
-    auto body = Node->ChildPtr(1);
-    if (body->IsCallable("ToPg")) {
-        body = body->ChildPtr(0);
-    }
+    TExprNode::TListType terms;
+    GetAndTerms(GetExpressionBody(), terms);
 
     TVector<TExpression> conjuncts;
-    if (body->IsCallable("And")) {
-        for (auto conj : body->ChildrenList()) {
-            conjuncts.push_back(TExpression(conj, Ctx, PlanProps));
-        }
-    } else {
-        conjuncts.push_back(TExpression(body, Ctx, PlanProps));
+    conjuncts.reserve(terms.size());
+    for (const auto& term : terms) {
+        conjuncts.emplace_back(term, Ctx, PlanProps);
     }
 
     return conjuncts;
+}
+
+TVector<TExpression> TExpression::SplitDisjunct() const {
+    Y_ENSURE(Node->IsLambda(), "Expression node is not a lambda");
+    Y_ENSURE(Ctx, "Expression context is null");
+
+    TExprNode::TListType terms;
+    GetOrTerms(GetExpressionBody(), terms);
+
+    TVector<TExpression> disjuncts;
+    disjuncts.reserve(terms.size());
+    for (const auto& term : terms) {
+        disjuncts.emplace_back(term, Ctx, PlanProps);
+    }
+
+    return disjuncts;
 }
 
 bool TExpression::IsColumnAccess() const {
@@ -497,6 +628,18 @@ TExpression TExpression::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOCon
     YQL_CLOG(TRACE, CoreDq) << "After replace " << PrintRBOExpression(output, *Ctx);
 
     return TExpression(output, Ctx, PlanProps);
+}
+
+std::optional<TExpression> TExpression::TryExtractCommonConjuncts() const {
+    Y_ENSURE(Node->IsLambda(), "Expression node is not lambda");
+    Y_ENSURE(Ctx, "Expression context is null");
+
+    auto newPredicate = FactorCommonExpressions(GetExpressionBody(), *Ctx);
+    if (!newPredicate) {
+        return std::nullopt;
+    }
+
+    return TExpression(*newPredicate, Ctx, PlanProps);
 }
 
 TExpression TExpression::PruneCast() const {
@@ -765,14 +908,19 @@ void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, const TPlanPro
         auto member = TCoMember(node);
         auto iu = TInfoUnit(member.Name().StringValue());
         if (props.Subplans.PlanMap.contains(iu)){
+            const auto& subplan = props.Subplans.PlanMap.at(iu);
             if (withSubplanContext) {
                 iu.SetSubplanContext(true);
-                iu.AddDependencies(props.Subplans.PlanMap.at(iu).Tuple);
+                iu.AddDependencies(subplan.Tuple);
+                iu.AddDependencies(subplan.DependentIUs);
                 IUs.push_back(iu);
             }
             if (withDependencies) {
-                for (auto dep : props.Subplans.PlanMap.at(iu).Tuple) {
-                    IUs.push_back(dep);
+                for (const auto& dep : subplan.Tuple) {
+                    AddUniqueInfoUnit(IUs, dep);
+                }
+                for (const auto& dep : subplan.DependentIUs) {
+                    AddUniqueInfoUnit(IUs, dep);
                 }
             }
         }
@@ -787,5 +935,4 @@ void GetAllMembers(TExprNode::TPtr node, TVector<TInfoUnit> &IUs, const TPlanPro
     }
 }
 
-}
-}
+} // namespace NKikimr::NKqp

@@ -10,7 +10,7 @@
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/replication.pb.h>
-#include <ydb/core/tx/columnshard/engines/storage/indexes/bloom_ngramm/const.h>
+#include <ydb/core/local_indexes/bloom/const.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/helper/index_defaults.h>
 #include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/core/ydb_convert/table_description.h>
@@ -552,22 +552,25 @@ bool FillColumnTableSchema(NKikimrSchemeOp::TColumnTableSchema& schema, const T&
     return true;
 }
 
-static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescription& tableDesc,
+static bool FillCreateLocalIndexDesc(NKikimrSchemeOp::TColumnTableDescription& tableDesc,
     const TVector<TIndexDescription>& indexes, Ydb::StatusIds::StatusCode& code, TString& error)
 {
     THashMap<TString, ui32> columnIdsByName;
-    for (auto&& column : tableDesc.GetSchema().GetColumns()) {
-        if (column.HasId()) {
-            columnIdsByName.emplace(column.GetName(), column.GetId());
+    ui32 nextEntityId = 1;
+    for (const auto& column : tableDesc.GetSchema().GetColumns()) {
+        if (!column.HasId()) {
+            continue;
         }
+        const ui32 columnId = column.GetId();
+        columnIdsByName.emplace(column.GetName(), columnId);
+        nextEntityId = Max(nextEntityId, columnId + 1);
     }
 
-    ui32 nextIndexId = 1;
     for (auto&& index : indexes) {
         switch (index.Type) {
             case TIndexDescription::EType::LocalBloomFilter: {
                 auto* upsert = tableDesc.MutableSchema()->AddIndexes();
-                upsert->SetId(nextIndexId++);
+                upsert->SetId(nextEntityId++);
                 upsert->SetName(index.Name);
                 if (index.KeyColumns.size() != 1 || !index.DataColumns.empty()) {
                     code = Ydb::StatusIds::BAD_REQUEST;
@@ -594,7 +597,7 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
             }
             case TIndexDescription::EType::LocalBloomNgramFilter: {
                 auto* upsert = tableDesc.MutableSchema()->AddIndexes();
-                upsert->SetId(nextIndexId++);
+                upsert->SetId(nextEntityId++);
                 upsert->SetName(index.Name);
                 if (index.KeyColumns.size() != 1 || !index.DataColumns.empty()) {
                     code = Ydb::StatusIds::BAD_REQUEST;
@@ -638,20 +641,31 @@ static bool FillCreateColumnTableIndexDesc(NKikimrSchemeOp::TColumnTableDescript
                     error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.DataColumns);
                     return false;
                 }
-                auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
-                if (columnIdIt == columnIdsByName.end()) {
+                const NKikimrSchemeOp::TOlapColumnDescription* columnDesc = nullptr;
+                for (auto& column: tableDesc.GetSchema().GetColumns()) {
+                    if (column.GetName() == index.KeyColumns.front()) {
+                        columnDesc = &column;
+                        break;
+                    }
+                }
+                if (!columnDesc) {
                     code = Ydb::StatusIds::BAD_REQUEST;
-                    error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.KeyColumns.front());
+                    TVector<TString> tableColumnNames;
+                    for (const auto& col: tableDesc.GetSchema().GetColumns()) {
+                        tableColumnNames.push_back(col.GetName());
+                    }
+                    error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.KeyColumns.front(), tableColumnNames);
                     return false;
                 }
+                auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
 
                 auto* upsert = tableDesc.MutableSchema()->AddIndexes();
-                upsert->SetId(nextIndexId++);
+                upsert->SetId(nextEntityId++);
                 upsert->SetName(index.Name);
                 upsert->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
                 auto* minmax = upsert->MutableMinMaxIndex();
                 minmax->SetColumnId(columnIdIt->second);
-                
+                NKikimr::NOlap::NIndexes::NMinMax::SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(*upsert, columnDesc->GetType());
                 break;
             }
             default:
@@ -720,7 +734,7 @@ bool FillCreateColumnTableDesc(NYql::TKikimrTableMetadataPtr metadata,
         }
     }
 
-    if (!FillCreateColumnTableIndexDesc(tableDesc, metadata->Indexes, code, error)) {
+    if (!FillCreateLocalIndexDesc(tableDesc, metadata->Indexes, code, error)) {
         return false;
     }
 
@@ -1064,7 +1078,42 @@ public:
                                         }
                                     }
                                 }
-                                bloomPrefixes[prefix] = fpp;
+
+                                if (AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
+                                    // The named scheme object stores the index columns explicitly, so they
+                                    // must be a genuine leading prefix of the primary key (the engine prefix
+                                    // is length-only and always covers the first N PK columns).
+                                    const auto& pk = metadata->KeyColumnNames;
+                                    bool validPrefix = index.KeyColumns.size() <= pk.size();
+                                    for (size_t i = 0; validPrefix && i < index.KeyColumns.size(); ++i) {
+                                        validPrefix = (index.KeyColumns[i] == pk[i]);
+                                    }
+                                    if (!validPrefix) {
+                                        tablePromise.SetValue(ResultFromError<TGenericResult>(
+                                            "Bloom filter index columns must be a prefix of the primary key"));
+                                        return;
+                                    }
+
+                                    // Mirror the prefix bloom filter as a named TTableIndex scheme object,
+                                    // in addition to the engine-facing ByKeyFilterPrefixes. Two indexes over
+                                    // the same PK prefix would collapse to a single engine prefix, so reject
+                                    // the duplicate column set.
+                                    if (!bloomPrefixes.emplace(prefix, fpp).second) {
+                                        tablePromise.SetValue(ResultFromError<TGenericResult>(
+                                            "Multiple LocalBloomFilter indexes over the same primary-key prefix are not allowed"));
+                                        return;
+                                    }
+                                    auto* indexDesc = schemeTx.MutableCreateIndexedTable()->AddIndexDescription();
+                                    indexDesc->SetName(index.Name);
+                                    indexDesc->SetType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+                                    indexDesc->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+                                    for (const auto& col : index.KeyColumns) {
+                                        indexDesc->AddKeyColumnNames(col);
+                                    }
+                                    indexDesc->MutableBloomFilterDescription()->SetFalsePositiveProbability(fpp);
+                                } else {
+                                    bloomPrefixes[prefix] = fpp;
+                                }
                             }
                             continue;
                         }
@@ -1092,6 +1141,7 @@ public:
                             case TIndexDescription::EType::GlobalAsync:
                             case TIndexDescription::EType::GlobalSyncUnique:
                             case TIndexDescription::EType::GlobalJson:
+                            case TIndexDescription::EType::GlobalJsonCompact:
                                 // no specialized index description
                                 Y_ASSERT(std::holds_alternative<std::monostate>(index.SpecializedIndexDescription));
                                 break;
@@ -1100,6 +1150,8 @@ public:
                                 break;
                             case TIndexDescription::EType::GlobalFulltextPlain:
                             case TIndexDescription::EType::GlobalFulltextRelevance:
+                            case TIndexDescription::EType::GlobalFulltextCompact:
+                            case TIndexDescription::EType::GlobalFulltextCompactRelevance:
                                 *indexDesc->MutableFulltextIndexDescription()->MutableSettings() = std::get<NKikimrSchemeOp::TFulltextIndexDescription>(index.SpecializedIndexDescription).GetSettings();
                                 break;
                             default:
@@ -1535,7 +1587,7 @@ public:
         return createPromise.GetFuture();
     }
 
-    NThreading::TFuture<NKikimr::NPQ::NSchema::TCreateTopicResponse> CreateTopicPrepared(TCreateTopicSettings&& settings) override {
+    NThreading::TFuture<NKikimr::NPQ::NSchema::TSchemaResponse> CreateTopicPrepared(TCreateTopicSettings&& settings) override {
         return Gateway->CreateTopicPrepared(std::move(settings));
     }
 
@@ -1584,7 +1636,7 @@ public:
         return alterPromise.GetFuture();
     }
 
-    NThreading::TFuture<NKikimr::NPQ::NSchema::TAlterTopicResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) override {
+    NThreading::TFuture<NKikimr::NPQ::NSchema::TSchemaResponse> AlterTopicPrepared(TAlterTopicSettings&& settings) override {
         return Gateway->AlterTopicPrepared(std::move(settings));
     }
 
@@ -2433,12 +2485,13 @@ public:
             if (cluster != SessionCtx->GetCluster()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
             }
+            auto metadata = SessionCtx->Tables().GetTable(cluster, req.path()).Metadata;
 
             NKikimrSchemeOp::TModifyScheme schemeTx;
 
             Ydb::StatusIds::StatusCode code;
             TString error;
-            if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, code, error)) {
+            if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, metadata, code, error)) {
                 IKqpGateway::TGenericResult errResult;
                 errResult.AddIssue(NYql::TIssue(error));
                 errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
@@ -2692,7 +2745,7 @@ public:
 
             if (!settings.ColumnFamilies.empty()) {
                 IKqpGateway::TGenericResult errResult;
-                errResult.AddIssue(NYql::TIssue("TableStore does not support column families"));
+                errResult.AddIssue(NYql::TIssue("Column FAMILY is not supported for column tables"));
                 errResult.SetStatus(NYql::YqlStatusFromYdbStatus(Ydb::StatusIds::BAD_REQUEST));
                 return MakeFuture(std::move(errResult));
             }
@@ -2836,9 +2889,10 @@ public:
             schemeTx.SetWorkingDir(pathPair.first);
             schemeTx.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateExternalTable);
             schemeTx.SetFailedOnAlreadyExists(!existingOk);
+            schemeTx.SetReplaceIfExists(replaceIfExists);
 
             NKikimrSchemeOp::TExternalTableDescription& externalTableDesc = *schemeTx.MutableCreateExternalTable();
-            NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, replaceIfExists, settings);
+            NSchemeHelpers::FillCreateExternalTableColumnDesc(externalTableDesc, pathPair.second, settings);
             TGenericResult result;
             result.SetSuccess();
             phyTxRemover.Forget();

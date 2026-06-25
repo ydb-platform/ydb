@@ -236,6 +236,89 @@ TEST_F(TYPathDesignatedYsonConsumerTest, MissingSubtreeError)
     }
 }
 
+TEST_F(TYPathDesignatedYsonConsumerTest, EmitEntityOnMissingKey)
+{
+    InSequence dummy;
+
+    EXPECT_CALL(Mock, OnEntity());
+
+    auto consumer = CreateYPathDesignatedConsumer("/missing", EMissingPathMode::EmitEntity, &Mock);
+    BuildYsonFluently(consumer.get())
+        .BeginMap()
+            .Item("present").Value("value")
+        .EndMap();
+    consumer->Flush();
+}
+
+TEST_F(TYPathDesignatedYsonConsumerTest, EmitEntityOnScalarMismatch)
+{
+    InSequence dummy;
+
+    EXPECT_CALL(Mock, OnEntity());
+
+    auto consumer = CreateYPathDesignatedConsumer("/key", EMissingPathMode::EmitEntity, &Mock);
+    BuildYsonFluently(consumer.get())
+        .Value(42);
+    consumer->Flush();
+}
+
+TEST_F(TYPathDesignatedYsonConsumerTest, EmitEntityNotEmittedWhenMatched)
+{
+    InSequence dummy;
+
+    EXPECT_CALL(Mock, OnStringScalar("found"));
+
+    auto consumer = CreateYPathDesignatedConsumer("/key", EMissingPathMode::EmitEntity, &Mock);
+    BuildYsonFluently(consumer.get())
+        .BeginMap()
+            .Item("key").Value("found")
+        .EndMap();
+    consumer->Flush();
+}
+
+TEST_F(TYPathDesignatedYsonConsumerTest, FlushResetsForReuse)
+{
+    InSequence dummy;
+
+    auto consumer = CreateYPathDesignatedConsumer("/key", EMissingPathMode::EmitEntity, &Mock);
+
+    EXPECT_CALL(Mock, OnStringScalar("first"));
+    BuildYsonFluently(consumer.get())
+        .BeginMap()
+            .Item("key").Value("first")
+        .EndMap();
+    consumer->Flush();
+
+    EXPECT_CALL(Mock, OnEntity());
+    BuildYsonFluently(consumer.get())
+        .BeginMap()
+            .Item("other").Value("second")
+        .EndMap();
+    consumer->Flush();
+
+    EXPECT_CALL(Mock, OnStringScalar("third"));
+    BuildYsonFluently(consumer.get())
+        .BeginMap()
+            .Item("key").Value("third")
+        .EndMap();
+    consumer->Flush();
+}
+
+TEST_F(TYPathDesignatedYsonConsumerTest, FlushResetsForReuseEmptyPath)
+{
+    InSequence dummy;
+
+    auto consumer = CreateYPathDesignatedConsumer("", EMissingPathMode::EmitEntity, &Mock);
+
+    EXPECT_CALL(Mock, OnStringScalar("first"));
+    BuildYsonFluently(consumer.get()).Value("first");
+    consumer->Flush();
+
+    EXPECT_CALL(Mock, OnInt64Scalar(2));
+    BuildYsonFluently(consumer.get()).Value(2);
+    consumer->Flush();
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace

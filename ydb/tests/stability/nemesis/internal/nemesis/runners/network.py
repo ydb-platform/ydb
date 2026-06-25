@@ -76,6 +76,7 @@ class TimeSkewNemesis(MonitoredAgentActor):
         self._logger.info("Restoring time sync (TimeSkewNemesis)")
         subprocess.run(
             "sudo timedatectl set-ntp true 2>/dev/null; "
+            "sleep 5; "
             "(command -v chronyc >/dev/null && sudo chronyc -a makestep 2>/dev/null) || true",
             shell=True,
             check=False,

@@ -1,22 +1,25 @@
 # ALTER TABLE
 
-Using the `ALTER TABLE` command, you can modify the columns and additional parameters of {% if backend_name == "YDB" %}row and column tables{% else %}tables{% endif %}. Multiple actions can be specified in a single command. Generally, the `ALTER TABLE` command looks like this:
+Using the `ALTER TABLE` command, you can change the column composition and additional parameters of {% if backend_name == "YDB" and oss == true %} [row](../../../../concepts/datamodel/table.md#row-tables) and [columnar](../../../../concepts/datamodel/table.md#colums-tables) tables{% else %}tables {% endif %}. You can specify multiple actions in a single command. In general, the `ALTER TABLE` command looks like this:
+
 
 ```yql
 ALTER TABLE table_name action1, action2, ..., actionN;
 ```
 
-An action is any modification to the table, as described below:
 
-* [Renaming the table](rename.md).
-* Managing [columns](columns.md) of row and column tables.
-* Adding or removing a [changefeed](changefeed.md).
-* Managing [indexes](indexes.md).
-* Managing [column groups](family.md) of a row table.
+`action` is any action to modify a table, from those described below:
 
-{% if backend_name == "YDB" %}
+* [Renaming a table](rename.md).
+* Working with [columns](columns.md) of row and columnar tables.
+* Adding or removing a [change stream](changefeed.md).
+* Working with [indexes](indexes.md).
+* Working with [column groups](family.md) of a row table.
 
-* Modifying [additional table](set.md) parameters.
+{% if backend_name == "YDB" and oss == true %}
+
+* Changing [additional table parameters](set.md).
 
 {% endif %}
 
+* [Running forced compaction](compact.md).

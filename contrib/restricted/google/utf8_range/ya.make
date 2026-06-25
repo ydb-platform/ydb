@@ -10,9 +10,9 @@ LICENSE(
 
 LICENSE_TEXTS(.yandex_meta/licenses.list.txt)
 
-VERSION(34.1)
+VERSION(35.0)
 
-ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v34.1.tar.gz)
+ORIGINAL_SOURCE(https://github.com/protocolbuffers/protobuf/archive/v35.0.tar.gz)
 
 PEERDIR(
     contrib/restricted/abseil-cpp

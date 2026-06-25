@@ -1982,7 +1982,7 @@ TEST_F(TFutureTest, OnCanceledResult)
     }
 }
 
-TString OnCallResult(const TErrorOr<int>& /*callResult*/)
+std::string OnCallResult(const TErrorOr<int>& /*callResult*/)
 {
     THROW_ERROR_EXCEPTION("Call failed");
 }
@@ -2209,7 +2209,7 @@ TEST_F(TFutureTest, ErrorFromException)
     });
 
     static auto getAttribute = [] (const TError& error) {
-        return error.Attributes().Get<TString>("test_attribute", "");
+        return error.Attributes().Get<std::string>("test_attribute", "");
     };
 
     TError::RegisterFromExceptionEnricher([](TError* error, const std::exception&) {

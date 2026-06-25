@@ -4,13 +4,21 @@
 
     pygments "rrt" theme, based on Zap and Emacs defaults.
 
-    :copyright: Copyright 2006-2025 by the Pygments team, see AUTHORS.
+    :copyright: Copyright 2006-present by the Pygments team, see AUTHORS.
     :license: BSD, see LICENSE for details.
 """
 
 from pygments.style import Style
-from pygments.token import Token, Comment, Name, Keyword, String, Number, Operator
-
+from pygments.token import (
+    Comment,
+    Generic,
+    Keyword,
+    Name,
+    Number,
+    Operator,
+    String,
+    Token,
+)
 
 __all__ = ['RrtStyle']
 
@@ -28,11 +36,17 @@ class RrtStyle(Style):
     styles = {
         Token:              '#dddddd',
         Comment:            '#00ff00',
+        Generic.Emph:       '#ffffff',
+        Generic.Heading:    '#ffff00',
+        Generic.Subheading: '#ffff00',
+        Generic.Strong:     '#ffffff',
+        Name.Entity:        '#eedd82',
         Name.Function:      '#ffff00',
         Name.Variable:      '#eedd82',
+        Name.Tag:           '#7fffd4',
         Name.Constant:      '#7fffd4',
         Keyword:            '#ff0000',
-	Operator.Word:      '#ff0000',
+        Operator.Word:      '#ff0000',
         Comment.Preproc:    '#e5e5e5',
         String:             '#87ceeb',
         Keyword.Type:       '#ee82ee',

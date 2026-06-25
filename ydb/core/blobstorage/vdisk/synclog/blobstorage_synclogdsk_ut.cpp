@@ -485,7 +485,7 @@ namespace NKikimr {
                 dsk.reset(new TDiskRecLog(chunkSize, pageSize, indexBulk, serialized.data(), serialized.data() + serialized.size()));
             }
 
-            TVector<ui32> chunks;
+            TVector<TDeletedChunk> chunks;
             ui64 lsn = 0;
 
             chunks.clear();

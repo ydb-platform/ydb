@@ -12,9 +12,9 @@ namespace {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString GetString(const TSharedRef& sharedRef)
+std::string GetString(const TSharedRef& sharedRef)
 {
-    return TString(sharedRef.Begin(), sharedRef.Size());
+    return std::string(sharedRef.Begin(), sharedRef.Size());
 }
 
 TSharedRef ReadAlreadySetValue(const IAsyncZeroCopyInputStreamPtr& input)
@@ -135,7 +135,7 @@ private:
 //! over a small block size async input stream to provoke a stack overflow.
 TEST(TIAsyncZeroCopyInputStreamTest, NoStackOverflow)
 {
-    TString buf(512_KB, 'a');
+    std::string buf(512_KB, 'a');
     TMemoryInput memoryInput(buf.data(), buf.size());
     TMaxBlockSizeInputStream maxBlockSizeInputStream(&memoryInput, 1);
     auto asyncInputStream = CreateAsyncAdapter(&maxBlockSizeInputStream);

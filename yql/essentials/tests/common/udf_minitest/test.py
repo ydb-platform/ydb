@@ -46,6 +46,8 @@ def test(case, mode):
         scan_udfs=spec.scan_udfs,
     )
 
+    RUNNER_FACTORY = facade_runner(prov='pure', cfg_dir=CFG_DIR, binary=MINIRUN_PATH, secure_params=spec.secure_params)
+
     if mode == 'Results':
         runner = RUNNER_FACTORY(spec.langver)
         scalar_res = runner.yql_exec(check_error=not spec.xfail, **exec_args)

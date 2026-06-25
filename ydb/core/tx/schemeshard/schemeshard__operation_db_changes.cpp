@@ -57,6 +57,18 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
         ss->PersistTable(db, pId);
     }
 
+    for (const auto& pId : ColumnTables) {
+        const auto& tableInfo = ss->ColumnTables.GetVerified(pId);
+        ss->PersistColumnTable(db, pId, *tableInfo.GetPtr(), /* isAlter */ false);
+    }
+
+    for (const auto& [shardIdx, pId, txId] : SharedShards) {
+        ss->PersistAddSharedShard(db, shardIdx, pId);
+        if (txId != InvalidTxId) {
+            ss->PersistSharedShardTx(db, shardIdx, pId, txId);
+        }
+    }
+
     for (const auto& [pId, snapshotTxId] : TableSnapshots) {
         ss->PersistSnapshotTable(db, snapshotTxId, pId);
     }
@@ -129,8 +141,24 @@ void TStorageChanges::Apply(TSchemeShard* ss, NTabletFlatExecutor::TTransactionC
         ss->PersistIncrementalBackup(db, id);
     }
 
+    for (const auto& id : FullBackups) {
+        ss->PersistFullBackup(db, id);
+    }
+
     for (const auto& pId : StreamingQueries) {
         ss->PersistStreamingQuery(db, pId);
+    }
+
+    for (const auto& pId : ExternalDataSources) {
+        ss->PersistExternalDataSource(db, pId);
+    }
+
+    for (const auto& pId : ExternalTables) {
+        ss->PersistExternalTable(db, pId);
+    }
+
+    for (const auto& pId : ResourcePools) {
+        ss->PersistResourcePool(db, pId);
     }
 }
 

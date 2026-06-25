@@ -1,5 +1,7 @@
 #include "kqp_column_statistics_utils.h"
 
+#include <yql/essentials/core/yql_type_annotation.h>
+
 namespace NKikimr::NKqp {
 
 using namespace NYql;
@@ -92,4 +94,5 @@ void AddStatRequest(TActorSystem* actorSystem, TVector<NThreading::TFuture<TColu
 
     futures.push_back(promise.GetFuture());
 }
-}
+
+} // namespace NKikimr::NKqp

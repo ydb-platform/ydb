@@ -14,12 +14,11 @@ import os
 import socket
 import struct
 import sys
-from typing import Any, Callable, ClassVar, List, Optional, Union
+from typing import TYPE_CHECKING, Any, Callable, ClassVar, Protocol as TypingProtocol
 
 from zope.interface import Interface, implementer
 
 import attr
-import typing_extensions
 
 from twisted.internet.interfaces import (
     IHalfCloseableProtocol,
@@ -29,7 +28,7 @@ from twisted.internet.interfaces import (
     ISystemHandle,
     ITCPTransport,
 )
-from twisted.internet.protocol import ClientFactory
+from twisted.internet.protocol import ClientFactory, P
 from twisted.logger import ILogObserver, LogEvent, Logger
 from twisted.python import deprecate, versions
 from twisted.python.runtime import platformType
@@ -57,11 +56,30 @@ except ImportError:
         pass
 
 
-if platformType == "win32":
-    # no such thing as WSAEPERM or error code 10001
+if platformType != "win32":
+    from errno import (
+        EAGAIN,
+        EALREADY,
+        ECONNABORTED,
+        EINPROGRESS,
+        EINVAL,
+        EISCONN,
+        EMFILE,
+        ENFILE,
+        ENOBUFS,
+        ENOMEM,
+        EPERM,
+        EWOULDBLOCK,
+    )
+    from os import strerror
+elif not TYPE_CHECKING:  # pragma: no branch
+    # Need a coverage annotation here because we will never fall through this
+    # branch as TYPE_CHECKING is always False.
+
+    # No such thing as WSAEPERM or error code 10001
     # according to winsock.h or MSDN
-    EPERM = object()
-    from errno import (  # type: ignore[attr-defined]
+    EPERM = object()  # type:ignore[assignment]
+    from errno import (  # type: ignore[no-redef,attr-defined]
         WSAEALREADY as EALREADY,
         WSAEINPROGRESS as EINPROGRESS,
         WSAEINVAL as EINVAL,
@@ -72,28 +90,13 @@ if platformType == "win32":
     )
 
     # No such thing as WSAENFILE, either.
-    ENFILE = object()
+    ENFILE = object()  # type:ignore[assignment]
     # Nor ENOMEM
-    ENOMEM = object()
+    ENOMEM = object()  # type:ignore[assignment]
     EAGAIN = EWOULDBLOCK
-    from errno import WSAECONNRESET as ECONNABORTED  # type: ignore[attr-defined]
+    from errno import WSAECONNRESET as ECONNABORTED  # type: ignore[no-redef,attr-defined]
 
     from twisted.python.win32 import formatError as strerror
-else:
-    from errno import EPERM
-    from errno import EINVAL
-    from errno import EWOULDBLOCK
-    from errno import EINPROGRESS
-    from errno import EALREADY
-    from errno import EISCONN
-    from errno import ENOBUFS
-    from errno import EMFILE
-    from errno import ENFILE
-    from errno import ENOMEM
-    from errno import EAGAIN
-    from errno import ECONNABORTED
-
-    from os import strerror
 
 from errno import errorcode
 
@@ -795,9 +798,9 @@ class Server(_TLSServerMixin, Connection):
 
     _base = Connection
 
-    _addressType: Union[
-        type[address.IPv4Address], type[address.IPv6Address]
-    ] = address.IPv4Address
+    _addressType: (
+        type[address.IPv4Address] | type[address.IPv6Address]
+    ) = address.IPv4Address
 
     def __init__(
         self,
@@ -960,7 +963,7 @@ class _IFileDescriptorReservation(Interface):
         """
 
 
-class _HasClose(typing_extensions.Protocol):
+class _HasClose(TypingProtocol):
     def close(self) -> object:
         ...
 
@@ -980,7 +983,7 @@ class _FileDescriptorReservation:
     _log: ClassVar[Logger] = Logger()
 
     _fileFactory: Callable[[], _HasClose]
-    _fileDescriptor: Optional[_HasClose] = attr.ib(init=False, default=None)
+    _fileDescriptor: _HasClose | None = attr.ib(init=False, default=None)
 
     def available(self):
         """
@@ -1132,7 +1135,7 @@ class _BuffersLogs:
 
     _namespace: str
     _observer: ILogObserver
-    _logs: List[LogEvent] = attr.ib(default=attr.Factory(list))
+    _logs: list[LogEvent] = attr.ib(default=attr.Factory(list))
 
     def __enter__(self):
         """
@@ -1277,7 +1280,7 @@ class Port(base.BasePort, _SocketCloser):
 
     # Actual port number being listened on, only set to a non-None
     # value when we are actually listening.
-    _realPortNumber: Optional[int] = None
+    _realPortNumber: int | None = None
 
     # An externally initialized socket that we will use, rather than creating
     # our own.
@@ -1523,7 +1526,7 @@ class Connector(base.BaseConnector):
         self,
         host: str,
         port: int | str,
-        factory: ClientFactory,
+        factory: ClientFactory[P],
         timeout: float,
         bindAddress: str | tuple[str, int] | None,
         reactor: Any = None,

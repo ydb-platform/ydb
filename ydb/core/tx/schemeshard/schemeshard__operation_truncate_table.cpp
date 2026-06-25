@@ -435,6 +435,9 @@ bool DfsOnTableChildrenTree(
                             case NKikimrSchemeOp::EIndexTypeGlobalJson:
                             case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
                             case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
+                            case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+                            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+                            case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
                             case NKikimrSchemeOp::EIndexTypeGlobal:
                             case NKikimrSchemeOp::EIndexTypeGlobalUnique: {
                                 if (!DfsOnTableChildrenTree(opId, tx, context, childPathId, result, ESchemeObjectType::GenericIndex)) {
@@ -443,6 +446,11 @@ bool DfsOnTableChildrenTree(
 
                                 break;
                             }
+                            case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
+                            case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
+                            case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+                                // Bloom filter scheme objects are not supported yet in row tables
+                                break;
                         }
 
                         break;

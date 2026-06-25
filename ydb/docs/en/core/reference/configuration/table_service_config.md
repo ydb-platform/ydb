@@ -2,21 +2,69 @@
 
 The `table_service_config` section contains configuration parameters for the table service, including spilling settings.
 
+## resource_manager {#resource-manager}
+
+The `resource_manager` subsection contains resource management parameters for the table service.
+
+### Vector index level cache
+
+The level table (`indexImplLevelTable`) of a [`vector_kmeans_tree`](../../dev/vector-indexes-kmeans-tree-type.md#index-structure) vector index stores the centroids that {{ ydb-short-name }} reads on every step down the cluster tree during a vector search. To avoid re-reading these centroids from distributed storage on each query, {{ ydb-short-name }} can cache them in memory on each database node.
+
+The cache is per-node, uses LRU eviction, and grows incrementally up to the configured cap.
+
+```yaml
+table_service_config:
+  resource_manager:
+    kqp_level_cache_max_size_bytes: 0
+    kqp_level_cache_increase_batch_size_bytes: 33554432
+```
+
+#### resource_manager.kqp_level_cache_max_size_bytes
+
+**Type:** `uint64`  
+**Default:** `0` (cache disabled)  
+**Description:** Maximum size of the vector index level table cache, in bytes, per database node. Setting this to a non-zero value enables the cache.
+
+#### resource_manager.kqp_level_cache_increase_batch_size_bytes
+
+**Type:** `uint64`  
+**Default:** `33554432` (32 MiB)  
+**Description:** Granularity of incremental memory allocation for the level cache. The cache grows by this amount at a time, up to `kqp_level_cache_max_size_bytes`, and shrinks by the same amount when the cap is reduced.
+
 ## spilling_service_config
 
 [Spilling](../../concepts/query_execution/spilling.md) is a memory management mechanism in {{ ydb-short-name }} that temporarily saves data to disk when the system runs out of RAM.
+
+### Enable {#enable}
+
+Spilling is enabled by default. The following parameter controls enabling and disabling the spilling service.
+
+#### local_file_config.enable {#local-file-config-enable}
+
+**Location:** `table_service_config.spilling_service_config.local_file_config.enable`  
+**Type:** `boolean`  
+**Default:** `true`  
+**Description:** Enables or disables the spilling service. When disabled (`false`), [spilling](../../concepts/query_execution/spilling.md) does not function, which may lead to errors when processing large data volumes.
+
+##### Possible errors
+
+- `Spilling Service not started` / `Service not started` — attempt to use spilling when Spilling Service is disabled. See [{#T}](../../troubleshooting/spilling/service-not-started.md)
+
+```yaml
+table_service_config:
+  spilling_service_config:
+    local_file_config:
+      enable: true
+```
 
 ### Primary Configuration Parameters
 
 ```yaml
 table_service_config:
-    spilling_service_config:
-        local_file_config:
-            root: ""
-            max_total_size: 21474836480
-            io_thread_pool:
-            workers_count: 2
-            queue_size: 1000
+  spilling_service_config:
+    local_file_config:
+      root: ""
+      max_total_size: 21474836480
 ```
 
 ### Directory Configuration
@@ -78,42 +126,6 @@ Spilling is only performed on [database nodes](../../concepts/glossary.md#databa
 
 - `Total size limit exceeded: X/YMb` — maximum total size of spilling files exceeded. See [{#T}](../../troubleshooting/spilling/total-size-limit-exceeded.md)
 
-### Thread Pool Configuration
-
-{% note info %}
-
-I/O pool threads for spilling are created in addition to threads allocated for the [actor system](../../concepts/glossary.md#actor-system). When planning the number of threads, consider the overall system load.
-
-**Important:** The spilling thread pool is separate from the actor system thread pools.
-
-For information about configuring actor system thread pools and their impact on system performance, see [Actor System Configuration](index.md#actor-system) and [Changing Actor System Configuration](../../devops/configuration-management/configuration-v1/change_actorsystem_configs.md). For Configuration V2, the actor system settings are described in the [Configuration V2 settings](../../devops/configuration-management/configuration-v2/config-settings.md).
-
-{% endnote %}
-
-#### local_file_config.io_thread_pool.workers_count
-
-**Type:** `uint32`  
-**Default:** `2`  
-**Description:** Number of worker threads for processing spilling I/O operations.
-
-##### Recommendations
-
-- Increase for high-load systems
-
-##### Possible errors
-
-- `Can not run operation` — I/O thread pool operation queue overflow. See [{#T}](../../troubleshooting/spilling/can-not-run-operation.md)
-
-#### local_file_config.io_thread_pool.queue_size
-
-**Type:** `uint32`  
-**Default:** `1000`  
-**Description:** Size of the spilling operations queue. Each task sends only one data block to spilling at a time, so large values are usually not required.
-
-##### Possible errors
-
-- `Can not run operation` — I/O thread pool operation queue overflow. See [{#T}](../../troubleshooting/spilling/can-not-run-operation.md)
-
 ### Memory Management {#memory-management}
 
 #### Relationship with memory_controller_config
@@ -147,7 +159,7 @@ For information about configuring file descriptor limits during initial deployme
 
 #### High-load System
 
-For maximum performance in high-load systems, it is recommended to increase the spilling size and number of worker threads:
+For maximum performance in high-load systems, it is recommended to increase the spilling size:
 
 ```yaml
 table_service_config:
@@ -155,9 +167,6 @@ table_service_config:
     local_file_config:
       root: ""
       max_total_size: 107374182400   # 100 GiB
-      io_thread_pool:
-        workers_count: 8
-        queue_size: 2000
 ```
 
 #### Limited Resources
@@ -170,79 +179,17 @@ table_service_config:
     local_file_config:
       root: ""
       max_total_size: 5368709120     # 5 GiB
-      io_thread_pool:
-        workers_count: 1
-        queue_size: 500
 ```
-
-### Advanced Configuration
-
-#### Enabling and Disabling Spilling
-
-The following parameters control the enabling and disabling of various spilling types. They should typically only be changed when there are specific system requirements.
-
-##### local_file_config.enable
-
-**Location:** `table_service_config.spilling_service_config.local_file_config.enable`
-**Type:** `boolean`  
-**Default:** `true`  
-**Description:** Enables or disables the spilling service. When disabled (`false`), [spilling](../../concepts/query_execution/spilling.md) does not function, which may lead to errors when processing large data volumes.
-
-##### Possible errors
-
-- `Spilling Service not started` / `Service not started` — attempt to use spilling when Spilling Service is disabled. See [{#T}](../../troubleshooting/spilling/service-not-started.md)
-
-```yaml
-table_service_config:
-  spilling_service_config:
-    local_file_config:
-      enable: true
-```
-
-##### enable_spilling_nodes
-
-**Location:** `table_service_config.enable_spilling_nodes`  
-**Type:** `bool`  
-**Default:** `true`  
-**Description:** Enables spilling on database nodes. When disabled (`false`), spilling does not function on database nodes.
-
-```yaml
-table_service_config:
-  enable_spilling_nodes: true
-```
-
-##### enable_query_service_spilling
-
-**Location:** `table_service_config.enable_query_service_spilling`  
-**Type:** `boolean`  
-**Default:** `true`  
-**Description:** Global option that enables transport spilling during data transfer between tasks.
-
-```yaml
-table_service_config:
-  enable_query_service_spilling: true
-```
-
-{% note info %}
-
-This setting works in conjunction with the local spilling service configuration. When disabled (`false`), transport spilling does not function even with enabled `spilling_service_config`.
-
-{% endnote %}
 
 ### Complete Example
 
 ```yaml
 table_service_config:
-  enable_spilling_nodes: true
-  enable_query_service_spilling: true
   spilling_service_config:
     local_file_config:
       enable: true
       root: "/var/spilling"
       max_total_size: 53687091200    # 50 GiB
-      io_thread_pool:
-        workers_count: 4
-        queue_size: 1500
 ```
 
 ## See Also

@@ -47,6 +47,72 @@ class Button(Widget, can_focus=True):
     ALLOW_SELECT = False
 
     DEFAULT_CSS = """
+
+    Button:ansi.-style-flat, Button:ansi.-style-default {                
+        border: tall $border-blurred;
+        background: ansi_default;
+        
+
+        &:disabled {
+        
+            text-opacity: 1;
+            text-style: bold dim;
+            border: tall $border-blurred !important;
+            # color: initial;
+            background: ansi_default !important;
+            # text-style: dim;
+            pointer: not-allowed;
+            &:hover {
+                background: ansi_default;
+                
+            }
+        }
+
+        &:hover {
+            background: $ansi-background;
+            border: tall $border;               
+        }
+
+        &.-active {
+            background: $ansi-background !important;
+            border: blank $background !important;           
+            tint: transparent;
+        }
+                    
+        &.-primary {
+            color: $primary;
+            border: tall $primary;
+            background: ansi_default;
+            &:hover {
+                background: $ansi-background;
+            }                     
+        }
+        &.-success {              
+            color: $success;      
+            border: tall $success;
+            background: ansi_default;
+            &:hover {
+                background: $ansi-background;
+            }        
+        }
+        &.-warning {       
+            color: $warning;             
+            border: tall $warning;
+            background: ansi_default;
+            &:hover {
+                background: $ansi-background;
+            }
+        }
+        &.-error {         
+            color: $error;           
+            border: tall $error;
+            background: ansi_default;
+            &:hover {
+                background: $ansi-background;
+            }
+        }
+    }
+    
     Button {
         width: auto;
         min-width: 16;
@@ -54,7 +120,7 @@ class Button(Widget, can_focus=True):
         line-pad: 1;
         text-align: center;
         content-align: center middle;
-        
+        pointer: pointer;
 
         &.-style-flat {
             text-style: bold;
@@ -75,6 +141,7 @@ class Button(Widget, can_focus=True):
             }
             &:disabled {
                 color: auto 50%;
+                pointer: not-allowed;
             }
 
             &.-primary {
@@ -133,6 +200,7 @@ class Button(Widget, can_focus=True):
 
             &:disabled {
                 text-opacity: 0.6;
+                pointer: not-allowed;
             }
 
             &:focus {

@@ -85,6 +85,120 @@ class InstallCommandTest(unittest.IsolatedAsyncioTestCase):
 
         update_path_to_bin.assert_called_once_with("/tmp/ydb")
 
+    async def test_deploy_act_install_returns_error_message_when_nodes_still_exist(self):
+        async def check_installed(host):
+            return host == "host1"
+
+        with mock.patch.object(install.deploy, "check_installed", check_installed):
+            result = await install.deploy.act_install(["host1", "host2"], self.config(), parent_task=ParentTask())
+
+        self.assertFalse(result)
+        self.assertIsInstance(result, progress.TaskResult)
+        self.assertIn("YDB node files still exist", result.message)
+        self.assertIn("host1", result.message)
+        self.assertNotIn("host2", result.message)
+
+    async def test_chain_async_preserves_failed_task_result_message(self):
+        expected = progress.TaskResult(
+            level=progress.TaskResultLevel.ERROR,
+            message="failed with details",
+        )
+
+        async def ok():
+            return True
+
+        async def fail():
+            return expected
+
+        result = await install.tools.chain_async(ok(), fail())
+
+        self.assertIs(result, expected)
+        self.assertEqual(result.message, "failed with details")
+
+    async def test_deploy_act_install_marks_internal_steps(self):
+        class NodeCounts:
+            nodes_per_host = 1
+
+            def dynamic_node_count_by_host(self):
+                return {"host1": []}
+
+        async def check_installed(host):
+            return False
+
+        async def make_archive_with_configs():
+            return True
+
+        async def prepare_host(host, parent_task=None, subtasks=None):
+            return True
+
+        async def install_host(host, static_nodes, dynamic_nodes, parent_task=None, subtasks=None):
+            return True
+
+        async def shell(command):
+            return True
+
+        with mock.patch.object(install.deploy, "check_installed", check_installed), \
+                mock.patch.object(install.deploy.configs, "NodeCountByKind", lambda config, hosts: NodeCounts()), \
+                mock.patch.object(install.deploy, "make_archive_with_configs", make_archive_with_configs), \
+                mock.patch.object(install.deploy, "prepare_host", prepare_host), \
+                mock.patch.object(install.deploy, "install_host", install_host), \
+                mock.patch.object(install.deploy.term, "shell", shell):
+            result = await install.deploy.act_install(["host1"], self.config(), parent_task=ParentTask())
+
+        self.assertTrue(result)
+        self.assertEqual(result.step_title, "[bold blue]Install multinode[/]")
+        self.assertEqual(
+            [subresult.step_title for subresult in result.subresults],
+            [
+                "[bold blue]Make archive with configs[/]",
+                "[bold blue]Prepare hosts[/]",
+                "[bold blue]Install nodes[/]",
+                "[bold blue]Remove temporary configs[/]",
+                "[bold blue]Hide completed subtasks[/]",
+            ],
+        )
+
+    async def test_deploy_act_install_marks_failed_host_step(self):
+        class NodeCounts:
+            nodes_per_host = 1
+
+            def dynamic_node_count_by_host(self):
+                return {"host1": []}
+
+        async def check_installed(host):
+            return False
+
+        async def make_archive_with_configs():
+            return True
+
+        async def prepare_host(host, parent_task=None, subtasks=None):
+            return progress.TaskResult(
+                level=progress.TaskResultLevel.ERROR,
+                message="prepare failed",
+            )
+
+        with mock.patch.object(install.deploy, "check_installed", check_installed), \
+                mock.patch.object(install.deploy.configs, "NodeCountByKind", lambda config, hosts: NodeCounts()), \
+                mock.patch.object(install.deploy, "make_archive_with_configs", make_archive_with_configs), \
+                mock.patch.object(install.deploy, "prepare_host", prepare_host):
+            result = await install.deploy.act_install(["host1"], self.config(), parent_task=ParentTask())
+
+        self.assertFalse(result)
+        self.assertEqual(result.step_title, "[bold blue]Install multinode[/]")
+        self.assertEqual(result.subresults[-1].step_title, "[bold blue]Prepare hosts[/]")
+        self.assertIn("prepare failed", result.to_string())
+
+    async def test_install_multinode_step_wraps_bare_false_with_message(self):
+        async def act_install(hosts, config, parent_task=None):
+            return False
+
+        with mock.patch.object(install.deploy, "act_install", act_install):
+            result = await install.make_install_multinode_step(["host1"], self.config()).run(ParentTask())
+
+        self.assertFalse(result)
+        self.assertIsInstance(result, progress.TaskResult)
+        self.assertIn("Install multinode failed without details", result.message)
+
     def test_make_install_steps_passes_ignore_failed_stop(self):
         calls = []
 

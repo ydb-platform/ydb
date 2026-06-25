@@ -26,7 +26,7 @@ public:
         return Consumer_.get();
     }
 
-    TString FlushOutput()
+    std::string FlushOutput()
     {
         auto result = std::move(ValueString_);
         ValueString_.clear();
@@ -34,6 +34,7 @@ public:
     }
 
 private:
+    // TODO(babenko): migrate to std::string
     TString ValueString_;
     TStringOutput Output_;
     const std::unique_ptr<IYsonConsumer> Consumer_;

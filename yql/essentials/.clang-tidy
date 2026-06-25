@@ -18,7 +18,6 @@ Checks: >
   -bugprone-dynamic-static-initializers,
   -bugprone-exception-escape,
   bugprone-fold-init-type,
-  bugprone-forward-declaration-namespace,
   bugprone-forwarding-reference-overload,
   bugprone-inaccurate-erase,
   bugprone-incorrect-roundings,
@@ -371,7 +370,7 @@ Checks: >
   -portability-restrict-system-includes,
   -portability-simd-intrinsics,
   -readability-avoid-return-with-void-value,
-  -readability-avoid-const-params-in-decls,
+  readability-avoid-const-params-in-decls,
   -readability-braces-around-statements,
   readability-const-return-type,
   readability-container-data-pointer,
@@ -396,6 +395,7 @@ Checks: >
   -readability-non-const-parameter,
   -readability-qualified-auto,
   -readability-redundant-access-specifiers,
+  -readability-redundant-casting,
   -readability-redundant-control-flow,
   readability-redundant-declaration,
   readability-redundant-function-ptr-dereference,
@@ -413,8 +413,6 @@ Checks: >
   -readability-uniqueptr-delete-release,
   readability-uppercase-literal-suffix,
   -readability-use-anyofallof,
-  readability-avoid-const-params-in-decls,
-  -sdc-no-lowercase-l-suffix
 CheckOptions:
   - key: modernize-avoid-c-arrays.AllowStringArrays
     value: true

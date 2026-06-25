@@ -7,6 +7,7 @@
 #include <ydb/library/actors/interconnect/logging/logging.h>
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
+#include <ydb/library/actors/interconnect/retro_tracing/spans.h>
 #include <ydb/library/actors/protos/services_common.pb.h>
 #include <ydb/library/actors/util/datetime.h>
 #include <ydb/library/actors/util/rope.h>
@@ -157,7 +158,7 @@ namespace NActors {
                 std::deque<NInterconnect::NRdma::TMemRegionSlice> RdmaBuffers;
                 TRdmaReadContext::TPtr RdmaReadContext = nullptr;
                 size_t RdmaSize = 0;
-                ui32 RdmaCumulativeCheckSum = 0;
+                std::optional<ui32> RdmaCumulativeCheckSum;
             };
 
             std::deque<TPendingEvent> PendingEvents;
@@ -305,7 +306,7 @@ namespace NActors {
         };
         std::deque<TInboundPacket> InboundPacketQ;
         std::deque<std::tuple<ui16, TMutableContiguousSpan>> XdcInputQ; // target buffers for the XDC stream with channel reference
-        std::deque<std::tuple<ui16, ui32>> XdcChecksumQ; // (size, expectedChecksum)
+        std::deque<std::tuple<ui16, std::optional<ui32>>> XdcChecksumQ; // (size, optional(expectedChecksum)). nullopt if checksums are disabled. 
         ui32 XdcCurrentChecksum = 0;
 
         // catch stream -- used after TCP reconnect to match XDC stream with main packet stream
@@ -481,6 +482,7 @@ namespace NActors {
         void Init();
         void CloseInputSession();
         bool IsRdmaInUse();
+        bool HasRdmaState() const;
 
         static TEvTerminate* NewEvTerminate(TDisconnectReason reason) {
             return new TEvTerminate(std::move(reason));
@@ -693,7 +695,7 @@ namespace NActors {
 
         struct TDelayedEvent {
             TAutoPtr<IEventHandle> Event;
-            NWilson::TSpan Span;
+            TDelayedEventSpan::TUniversal Span;
         };
         std::deque<TDelayedEvent> DelayedEvents;
 

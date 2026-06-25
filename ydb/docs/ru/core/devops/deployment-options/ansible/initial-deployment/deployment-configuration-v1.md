@@ -75,7 +75,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
           system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
           
           # Узлы
-          ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
+          ydb_config: "&#123;&#123; ansible_config_file | dirname &#125;&#125;/files/config.yaml"
           ydb_version: "версия_системы"
 
           # Хранилище
@@ -138,7 +138,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
           system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
           
           # Узлы
-          ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
+          ydb_config: "&#123;&#123; ansible_config_file | dirname &#125;&#125;/files/config.yaml"
           ydb_version: "версия_системы"
 
           # Хранилище
@@ -196,7 +196,7 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
           system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
           
           # Узлы
-          ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
+          ydb_config: "&#123;&#123; ansible_config_file | dirname &#125;&#125;/files/config.yaml"
           ydb_version: "версия_системы"
 
           # Хранилище
@@ -931,6 +931,7 @@ static-node-3.ydb-cluster.com : ok=136  changed=69   unreachable=0    failed=0  
 Параметры команды и их значения:
 
 - `config profile create` — эта команда используется для создания профиля подключения. Укажите имя профиля. Более подробную информацию о том, как создавать и изменять профили, можно найти в статье [{#T}](../../../../reference/ydb-cli/profile/create.md).
+- `-d` — [путь базы данных](../../../../concepts/connect.md#database) в виде `/<домен>/<имя_базы>`. Вместо `<ydb-domain>` укажите значение параметра `ydb_domain`, вместо `<ydb-database>` — `ydb_dbname` из `inventory/50-inventory.yaml` (секция «База данных»). При настройках по умолчанию путь будет `/Root/database`.
 - `-e` — конечная точка, строка в формате `protocol://host:port`. Допускается указать FQDN любого узла кластера и опустить порт. По умолчанию используется порт 2135.
 - `--ca-file` — путь к корневому сертификату для подключений к базе данных по `grpcs`.
 - `--user` — пользователь для подключения к базе данных.

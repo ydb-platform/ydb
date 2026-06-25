@@ -119,14 +119,14 @@ struct TCompressBlocksState: public TBlockState {
         return MaxLength_ > OutputPos_;
     }
 
-    void FlushBuffers(const THolderFactory& holderFactory) {
+    void FlushBuffers(const THolderFactory& holderFactory, NYql::EDatumValidationMode validationMode) {
         for (ui32 i = 0; i < Builders_.size(); ++i) {
             if (Builders_[i]) {
-                Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(IsFinished_));
+                Values[i] = holderFactory.CreateArrowBlock(Builders_[i]->Build(IsFinished_), validationMode);
             }
         }
 
-        Values.back() = MakeBlockCount(holderFactory, OutputPos_);
+        Values.back() = MakeBlockCount(holderFactory, OutputPos_, validationMode);
         OutputPos_ = 0;
         FillArrays();
     }
@@ -165,7 +165,8 @@ public:
                                                       std::move(state),
                                                       BitmapIndex_,
                                                       Types_,
-                                                      InputWidth_);
+                                                      InputWidth_,
+                                                      ctx.RuntimeSettings.DatumValidation.Get());
     }
 
 private:
@@ -173,7 +174,7 @@ private:
         using TBase = TComputationValue<TStreamValue>;
 
     public:
-        TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, NYql::NUdf::TUnboxedValue stream, NYql::NUdf::TUnboxedValue state, ui32 bitmapIndex, const TVector<TBlockType*>& types, ui32 inputWidth)
+        TStreamValue(TMemoryUsageInfo* memInfo, const THolderFactory& holderFactory, NYql::NUdf::TUnboxedValue stream, NYql::NUdf::TUnboxedValue state, ui32 bitmapIndex, const TVector<TBlockType*>& types, ui32 inputWidth, NYql::EDatumValidationMode validationMode)
             : TBase(memInfo)
             , HolderFactory_(holderFactory)
             , Stream_(std::move(stream))
@@ -181,6 +182,7 @@ private:
             , BitmapIndex_(bitmapIndex)
             , Types_(types)
             , Input_(inputWidth, NYql::NUdf::TUnboxedValuePod())
+            , ValidationMode_(validationMode)
         {
         }
 
@@ -235,7 +237,7 @@ private:
                 MoveAllExceptBitmap(output);
 
                 if (const auto popCount = GetBitmapPopCountCount(bitmap)) {
-                    output[Input_.size() - 2] = HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(popCount)));
+                    output[Input_.size() - 2] = HolderFactory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(popCount)), ValidationMode_);
                     break;
                 }
             }
@@ -283,7 +285,7 @@ private:
                 } while (!state.IsFinished_ && state.Sparse());
 
                 if (state.OutputPos_) {
-                    state.FlushBuffers(HolderFactory_);
+                    state.FlushBuffers(HolderFactory_, ValidationMode_);
                 } else {
                     return NUdf::EFetchStatus::Finish;
                 }
@@ -307,6 +309,7 @@ private:
         ui32 BitmapIndex_;
         const TVector<TBlockType*>& Types_;
         TUnboxedValueVector Input_;
+        const NYql::EDatumValidationMode ValidationMode_;
     };
 
     void RegisterDependencies() const final {

@@ -158,6 +158,9 @@ TString CanonizePath(const TVector<TString>& path) {
 }
 
 TString NormalizePath(const TString& database, const TString& path) {
+    if (database == path) {
+        return path;
+    }
     if (path.size() > database.size() && path.at(database.size()) == '/' && path.StartsWith(database)) {
         return path;
     }

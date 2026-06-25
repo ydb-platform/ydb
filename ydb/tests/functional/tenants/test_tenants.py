@@ -436,7 +436,7 @@ class TestTenants():
             result = driver.scheme_client.list_directory(database_path)
             logger.debug("From database: list database <%s> is %s", database_path, convert(result))
             assert len(result.children) > 0
-            assert result.children[0].name == ".sys"
+            assert ".sys" in [c.name for c in result.children]
 
         driver_config_for_root = ydb.DriverConfig(ydb_endpoint, ydb_root)
         with ydb.Driver(driver_config_for_root) as driver:
@@ -445,15 +445,17 @@ class TestTenants():
             result = driver.scheme_client.list_directory(database_path)
             logger.debug("From root: list database <%s> is %s", database_path, convert(result))
             assert len(result.children) > 0
-            assert result.children[0].name == ".sys"
+            assert ".sys" in [c.name for c in result.children]
 
             dirname, basename = os.path.split(database_path)
             result = driver.scheme_client.list_directory(dirname)
             logger.debug("From root: list above database <%s> is %s", dirname, convert(result))
             assert len(result.children) > 1
-            assert result.children[0].name == ".sys"
-            assert result.children[1].name == basename
-            assert result.children[1].type == ydb.scheme.SchemeEntryType.DATABASE
+            assert ".sys" in [c.name for c in result.children]
+
+            filtered = [c for c in result.children if c.name == basename]
+            assert len(filtered) == 1
+            assert filtered[0].type == ydb.scheme.SchemeEntryType.DATABASE
 
 
 def _initial_credit(pool):

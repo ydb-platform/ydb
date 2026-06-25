@@ -865,6 +865,17 @@
             ]
         },
         {
+            "Name": "TCoMaterialize",
+            "Base": "TExprBase",
+            "Match": {"Type": "Callable", "Name": "Materialize!"},
+            "Children": [
+                {"Index": 0, "Name": "World", "Type": "TExprBase"},
+                {"Index": 1, "Name": "DataSink", "Type": "TCoDataSink"},
+                {"Index": 2, "Name": "Input", "Type": "TExprBase"},
+                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
+            ]
+        },
+        {
             "Name": "TCoDataType",
             "Base": "TCallable",
             "Match": {"Type": "Callable", "Name": "DataType"},
@@ -2788,6 +2799,11 @@
                 {"Index": 0, "Name": "Input",                "Type": "TExprBase"},
                 {"Index": 1, "Name": "WatermarkExtractor",   "Type": "TCoLambda"}
             ]
+        },
+        {
+            "Name": "TCoTableSource",
+            "Base": "TCoInputBase",
+            "Match": {"Type": "Callable", "Name": "TableSource"}
         }
     ]
 }

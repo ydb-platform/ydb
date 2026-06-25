@@ -1973,14 +1973,17 @@ void ValidateColumnSchema(
         "max",
         "first",
         "xdelta",
+        "dict_sum",
+        // YT internals
         "_yt_stored_replica_set",
         "_yt_last_seen_replica_set",
-        "dict_sum",
+        // Inferrum internals
+        "_inferrum_kv_cache_replica_set",
     };
 
     static const auto allowedNestedAggregates = THashSet<std::string, THash<TStringBuf>, TEqualTo<>>{
         "sum",
-        "max"
+        "max",
     };
 
     try {

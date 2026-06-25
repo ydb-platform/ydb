@@ -214,12 +214,12 @@ public:
 
     // Files.
     TFuture<NApi::TGetFileFromCacheResult> GetFileFromCache(
-        const TString& md5,
+        const std::string& md5,
         const NApi::TGetFileFromCacheOptions& options) override;
 
     TFuture<NApi::TPutFileToCacheResult> PutFileToCache(
         const NYPath::TYPath& path,
-        const TString& expectedMD5,
+        const std::string& expectedMD5,
         const NApi::TPutFileToCacheOptions& options) override;
 
     // Security.
@@ -369,7 +369,7 @@ public:
 
     TFuture<TPollJobShellResponse> PollJobShell(
         NJobTrackerClient::TJobId jobId,
-        const std::optional<TString>& shellName,
+        const std::optional<std::string>& shellName,
         const NYson::TYsonString& parameters,
         const NApi::TPollJobShellOptions& options) override;
 
@@ -444,6 +444,21 @@ public:
     TFuture<void> MasterExitReadOnly(
         const TMasterExitReadOnlyOptions& options) override;
 
+    TFuture<void> FreezeHydraPeer(
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TFreezeHydraPeerOptions& options = {}) override;
+
+    TFuture<void> TruncateChangelog(
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TTruncateChangelogOptions& options = {}) override;
+
+    TFuture<void> ScheduleRestart(
+        NHydra::TCellId cellId,
+        const std::string& address,
+        const TScheduleRestartOptions& options = {}) override;
+
     TFuture<void> ResetDynamicallyPropagatedMasterCells(
         const TResetDynamicallyPropagatedMasterCellsOptions& options) override;
 
@@ -467,7 +482,7 @@ public:
         const std::string& address,
         const NApi::TKillProcessOptions& options) override;
 
-    TFuture<TString> WriteCoreDump(
+    TFuture<std::string> WriteCoreDump(
         const std::string& address,
         const NApi::TWriteCoreDumpOptions& options) override;
 
@@ -475,7 +490,7 @@ public:
         const std::string& address,
         const TWriteLogBarrierOptions& options) override;
 
-    TFuture<TString> WriteOperationControllerCoreDump(
+    TFuture<std::string> WriteOperationControllerCoreDump(
         NJobTrackerClient::TOperationId operationId,
         const NApi::TWriteOperationControllerCoreDumpOptions& options) override;
 
@@ -515,7 +530,7 @@ public:
         EMaintenanceComponent component,
         const std::string& address,
         EMaintenanceType type,
-        const TString& comment,
+        const std::string& comment,
         const TAddMaintenanceOptions& options) override;
 
     TFuture<TMaintenanceCountsPerTarget> RemoveMaintenance(
@@ -552,7 +567,7 @@ public:
 
     TFuture<NQueryTrackerClient::TQueryId> StartQuery(
         NQueryTrackerClient::EQueryEngine engine,
-        const TString& query,
+        const std::string& query,
         const TStartQueryOptions& options) override;
 
     TFuture<void> AbortQuery(
@@ -590,24 +605,24 @@ public:
 
     virtual TFuture<void> SetUserPassword(
         const std::string& user,
-        const TString& currentPasswordSha256,
-        const TString& newPasswordSha256,
+        const std::string& currentPasswordSha256,
+        const std::string& newPasswordSha256,
         const TSetUserPasswordOptions& options) override;
 
     TFuture<TIssueTokenResult> IssueToken(
         const std::string& user,
-        const TString& passwordSha256,
+        const std::string& passwordSha256,
         const TIssueTokenOptions& options) override;
 
     TFuture<void> RevokeToken(
         const std::string& user,
-        const TString& passwordSha256,
-        const TString& tokenSha256,
+        const std::string& passwordSha256,
+        const std::string& tokenSha256,
         const TRevokeTokenOptions& options) override;
 
     TFuture<TListUserTokensResult> ListUserTokens(
         const std::string& user,
-        const TString& passwordSha256,
+        const std::string& passwordSha256,
         const TListUserTokensOptions& options) override;
 
     // Bundle Controller

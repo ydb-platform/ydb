@@ -11,7 +11,7 @@ struct TIteratorReadBackoffSettings : TAtomicRefCount<TIteratorReadBackoffSettin
     TDuration StartRetryDelay = TDuration::MilliSeconds(5);
     size_t MaxShardAttempts = 10;
     size_t MaxShardResolves = 3;
-    double UnsertaintyRatio = 0.5;
+    double UncertaintyRatio = 0.5;
     double Multiplier = 2.0;
     TDuration MaxRetryDelay = TDuration::Seconds(1);
 

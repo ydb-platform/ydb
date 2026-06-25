@@ -1497,9 +1497,9 @@ public:
             if (i == decoder.FillBlockStructSize) {
                 continue;
             }
-            items[i] = SpecsCache_.GetHolderFactory().CreateArrowBlock(std::move(chunk[i]));
+            items[i] = SpecsCache_.GetHolderFactory().CreateArrowBlock(std::move(chunk[i]), Specs_.DatumValidationMode_);
         }
-        items[BlockSizeStructIndex_] = SpecsCache_.GetHolderFactory().CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(chunkLen)));
+        items[BlockSizeStructIndex_] = SpecsCache_.GetHolderFactory().CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(chunkLen)), Specs_.DatumValidationMode_);
         RowIndex_ = chunkRowIndex;
 
         Chunks_.pop_front();

@@ -6,7 +6,6 @@
 
 from __future__ import annotations
 
-import itertools
 import signal
 import subprocess
 import time
@@ -368,34 +367,75 @@ class ClusterSuspendNodeNemesis(MonitoredAgentActor):
         self.on_success_inject_fault()
 
 
-class ClusterRollingUpdateNemesis(MonitoredAgentActor):
-    """Rolling switch_version + kill node + kill slots on the local host."""
+class ClusterRollingRestartNemesis(MonitoredAgentActor):
+    """Agent-side rolling restart of a single ydb node via systemd.
+
+    Each ``inject_fault`` call is one step of a cluster-wide rolling restart:
+    the orchestrator-side ``RollingRestartNemesisPlanner`` picks which nodes
+    must be restarted and dispatches an ``inject`` command per node; this
+    runner consumes that command on the target host and performs the actual
+    stop-wait-start cycle.
+
+    Payload (from the planner):
+        ``node_ic_port`` (int, required):
+            Interconnect port of the node to restart. Used to derive the
+            systemd unit name: ``kikimr-multi@<port>.service`` for slots,
+            with one special case — port ``19001`` maps to ``kikimr.service``
+            (storage node).
+        ``duration`` (int, optional, default 60):
+            How many seconds the unit stays stopped before being started
+            back.
+
+    Flow:
+        1. ``sudo systemctl stop <unit>``.
+        2. ``time.sleep(duration)`` — the node is down for ``duration`` sec.
+        3. ``sudo systemctl start <unit>`` (always, via ``finally``) so the
+           node is brought back even if the wait is interrupted.
+
+    ``extract_fault`` is intentionally a no-op: the recovery is performed by
+    the ``finally`` block in ``inject_fault`` itself.
+    """
 
     def __init__(self) -> None:
         super().__init__(scope="node")
-        self._step_id = itertools.count(1)
 
     def inject_fault(self, payload=None) -> None:
-        del payload
-        cluster = require_external_cluster()
-        node = _resolve_local_node(cluster)
-        if node is None:
-            self._logger.warning("No local node found in cluster — cannot rolling-update")
+        if not payload or "node_ic_port" not in payload:
+            self._logger.error("inject_fault: missing node_ic_port in payload=%s", payload)
             return
-        local_slots = _resolve_local_slots(cluster)
-        self._logger.info("Rolling update step %d on local host", next(self._step_id))
+
+        node_ic_port = int(payload["node_ic_port"])
+        duration = int(payload.get("duration", 60))
+        if node_ic_port == 19001:
+            service = "kikimr.service"
+        else:
+            service = "kikimr-multi@{}.service".format(node_ic_port)
+        self._logger.info(
+            "Stopping %s for %ds", service, duration,
+        )
         try:
-            _local_switch_version()
-            _local_kill_daemon_and_process(int(node.ic_port))
-            for slot in local_slots:
-                try:
-                    _local_kill_daemon_and_process(int(slot.ic_port))
-                except Exception as e:
-                    self._logger.error("slot kill failed: %s", e)
-            self.on_success_inject_fault()
-        except Exception as e:
-            self._logger.error("rolling update failed: %s", e)
+            subprocess.run(
+                ["sudo", "systemctl", "stop", service],
+                check=True,
+            )
+        except subprocess.CalledProcessError as e:
+            self._logger.error("systemctl stop %s failed: %s", service, e)
             raise
+
+        try:
+            time.sleep(duration)
+        finally:
+            try:
+                subprocess.run(
+                    ["sudo", "systemctl", "start", service],
+                    check=True,
+                )
+                self._logger.info("Restarted %s after %ds", service, duration)
+            except subprocess.CalledProcessError as e:
+                self._logger.error("systemctl start %s failed: %s", service, e)
+                raise
+
+        self.on_success_inject_fault()
 
     def extract_fault(self, payload=None) -> None:
         del payload

@@ -25,8 +25,8 @@ public:
 
 private:
 #if OPENTELEMETRY_HAVE_WORKING_REGEX
-  const std::regex name_reg_key_;
-  const std::regex unit_reg_key_;
+  std::regex name_reg_key_;
+  std::regex unit_reg_key_;
 #endif
 };
 

@@ -10,13 +10,13 @@ FROM (
     SELECT
         Count(*) AS h8_30_to_9
     FROM
-        `/Root/test/ds/store_sales`
+        `/Root/test/ds/store_sales` as store_sales
     ,
-        `/Root/test/ds/household_demographics`
+        `/Root/test/ds/household_demographics` as household_demographics
     ,
-        `/Root/test/ds/time_dim`
+        `/Root/test/ds/time_dim` as time_dim
     ,
-        `/Root/test/ds/store`
+        `/Root/test/ds/store` as store
     WHERE
         ss_sold_time_sk == time_dim.t_time_sk
         AND ss_hdemo_sk == household_demographics.hd_demo_sk
@@ -43,13 +43,13 @@ FROM (
     SELECT
         Count(*) AS h9_to_9_30
     FROM
-        `/Root/test/ds/store_sales`
+        `/Root/test/ds/store_sales` as store_sales
     ,
-        `/Root/test/ds/household_demographics`
+        `/Root/test/ds/household_demographics` as household_demographics
     ,
-        `/Root/test/ds/time_dim`
+        `/Root/test/ds/time_dim` as time_dim
     ,
-        `/Root/test/ds/store`
+        `/Root/test/ds/store` as store
     WHERE
         ss_sold_time_sk == time_dim.t_time_sk
         AND ss_hdemo_sk == household_demographics.hd_demo_sk
@@ -76,13 +76,13 @@ FROM (
     SELECT
         Count(*) AS h9_30_to_10
     FROM
-        `/Root/test/ds/store_sales`
+        `/Root/test/ds/store_sales` as store_sales
     ,
-        `/Root/test/ds/household_demographics`
+        `/Root/test/ds/household_demographics` as household_demographics
     ,
-        `/Root/test/ds/time_dim`
+        `/Root/test/ds/time_dim` as time_dim
     ,
-        `/Root/test/ds/store`
+        `/Root/test/ds/store` as store
     WHERE
         ss_sold_time_sk == time_dim.t_time_sk
         AND ss_hdemo_sk == household_demographics.hd_demo_sk
@@ -109,13 +109,13 @@ FROM (
     SELECT
         Count(*) AS h10_to_10_30
     FROM
-        `/Root/test/ds/store_sales`
+        `/Root/test/ds/store_sales` as store_sales
     ,
-        `/Root/test/ds/household_demographics`
+        `/Root/test/ds/household_demographics` as household_demographics
     ,
-        `/Root/test/ds/time_dim`
-    ,
-        `/Root/test/ds/store`
+        `/Root/test/ds/time_dim` as time_dim
+    , 
+        `/Root/test/ds/store` as store
     WHERE
         ss_sold_time_sk == time_dim.t_time_sk
         AND ss_hdemo_sk == household_demographics.hd_demo_sk
@@ -142,13 +142,13 @@ FROM (
     SELECT
         Count(*) AS h10_30_to_11
     FROM
-        `/Root/test/ds/store_sales`
+        `/Root/test/ds/store_sales` as store_sales
     ,
-        `/Root/test/ds/household_demographics`
+        `/Root/test/ds/household_demographics` as household_demographics
     ,
-        `/Root/test/ds/time_dim`
+        `/Root/test/ds/time_dim` as time_dim
     ,
-        `/Root/test/ds/store`
+        `/Root/test/ds/store` as store
     WHERE
         ss_sold_time_sk == time_dim.t_time_sk
         AND ss_hdemo_sk == household_demographics.hd_demo_sk
@@ -175,13 +175,13 @@ FROM (
     SELECT
         Count(*) AS h11_to_11_30
     FROM
-        `/Root/test/ds/store_sales`
+        `/Root/test/ds/store_sales` as store_sales
     ,
-        `/Root/test/ds/household_demographics`
+        `/Root/test/ds/household_demographics` as household_demographics
     ,
-        `/Root/test/ds/time_dim`
+        `/Root/test/ds/time_dim` as time_dim
     ,
-        `/Root/test/ds/store`
+        `/Root/test/ds/store` as store
     WHERE
         ss_sold_time_sk == time_dim.t_time_sk
         AND ss_hdemo_sk == household_demographics.hd_demo_sk
@@ -208,13 +208,13 @@ FROM (
     SELECT
         Count(*) AS h11_30_to_12
     FROM
-        `/Root/test/ds/store_sales`
+        `/Root/test/ds/store_sales` as store_sales
     ,
-        `/Root/test/ds/household_demographics`
+        `/Root/test/ds/household_demographics` as household_demographics
     ,
-        `/Root/test/ds/time_dim`
+        `/Root/test/ds/time_dim` as time_dim
     ,
-        `/Root/test/ds/store`
+        `/Root/test/ds/store` as store
     WHERE
         ss_sold_time_sk == time_dim.t_time_sk
         AND ss_hdemo_sk == household_demographics.hd_demo_sk
@@ -241,13 +241,13 @@ FROM (
     SELECT
         Count(*) AS h12_to_12_30
     FROM
-        `/Root/test/ds/store_sales`
+        `/Root/test/ds/store_sales` as store_sales
     ,
-        `/Root/test/ds/household_demographics`
+        `/Root/test/ds/household_demographics` as household_demographics
     ,
-        `/Root/test/ds/time_dim`
+        `/Root/test/ds/time_dim` as time_dim
     ,
-        `/Root/test/ds/store`
+        `/Root/test/ds/store` as store
     WHERE
         ss_sold_time_sk == time_dim.t_time_sk
         AND ss_hdemo_sk == household_demographics.hd_demo_sk

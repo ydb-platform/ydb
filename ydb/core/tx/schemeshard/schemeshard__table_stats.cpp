@@ -159,7 +159,7 @@ THolder<TProposeRequest> MergeRequest(
         merge.AddSourceTabletId(ui64(tabletId));
     }
 
-    return std::move(request);
+    return request;
 }
 
 const TString* GetPoolKind(const NKikimr::TChannelBind& channelBind, const TStoragePools& pools) {

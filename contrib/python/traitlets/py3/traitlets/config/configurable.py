@@ -300,7 +300,7 @@ class Configurable(HasTraits):
         if helptext is None:
             helptext = trait.help
         if helptext != "":
-            helptext = "\n".join(wrap_paragraphs(helptext, 76))
+            helptext = "\n\n".join(wrap_paragraphs(helptext, 76))
             lines.append(indent(helptext))
 
         if "Enum" in trait.__class__.__name__:

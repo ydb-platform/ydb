@@ -1,19 +1,12 @@
 #pragma once
 
 #include "kqp_info_unit.h"
-
-#include <library/cpp/json/writer/json.h>
-#include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/opt/kqp_opt.h>
-#include <yql/essentials/ast/yql_expr.h>
-#include <ydb/library/yql/dq/common/dq_common.h>
+#include <yql/essentials/core/yql_statistics.h>
 
 #include <optional>
 
-namespace NKikimr {
-namespace NKqp {
-
-using namespace NYql;
+namespace NKikimr::NKqp {
 
 struct TSortElement {
     TSortElement(const TInfoUnit& column, bool asc, bool nullsFirst) : SortColumn(column), Ascending(asc), NullsFirst(nullsFirst) {}
@@ -35,9 +28,9 @@ struct TConnection: TSimpleRefCount<TConnection> {
     }
     virtual ~TConnection() = default;
 
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) = 0;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) = 0;
     template <typename T>
-    TExprNode::TPtr BuildConnectionImpl(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx);
+    NYql::TExprNode::TPtr BuildConnectionImpl(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx);
     ui32 GetOutputIndex() const {
         return OutputIndex;
     }
@@ -49,31 +42,31 @@ struct TConnection: TSimpleRefCount<TConnection> {
 };
 
 struct TBroadcastConnection: public TConnection {
-    TBroadcastConnection(ui32 outputIndex = 0)
+    TBroadcastConnection(ui32 outputIndex)
         : TConnection("Broadcast", outputIndex) {
     }
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) override;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
     virtual TString GetExplainName() const override {
         return "Broadcast";
     }
 };
 
 struct TMapConnection: public TConnection {
-    TMapConnection(ui32 outputIndex = 0)
+    TMapConnection(ui32 outputIndex)
         : TConnection("Map", outputIndex) {
     }
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) override;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
     virtual TString GetExplainName() const override {
         return "Map";
     }
 };
 
 struct TUnionAllConnection: public TConnection {
-    TUnionAllConnection(ui32 outputIndex = 0, bool parallel = false)
+    TUnionAllConnection(ui32 outputIndex, bool parallel = false)
         : TConnection("UnionAll", outputIndex)
         , Parallel(parallel) {
     }
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) override;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
     virtual TString GetExplainName() const override {
         return "UnionAll";
     }
@@ -91,24 +84,24 @@ struct TShuffleConnection: public TConnection {
         , UseSpilling(useSpilling) {
     }
 
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) override;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
     virtual TString GetExplainName() const override {
         return "HashShuffle";
     }
     virtual NJson::TJsonValue ToJson() const override;
 
     TVector<TInfoUnit> Keys;
-    std::optional<NDq::EHashShuffleFuncType> HashFuncType;
+    std::optional<NYql::NDq::EHashShuffleFuncType> HashFuncType;
     bool UseSpilling = false;
 };
 
 struct TMergeConnection: public TConnection {
-    TMergeConnection(const TVector<TSortElement>& order, ui32 outputIndex = 0)
+    TMergeConnection(const TVector<TSortElement>& order, ui32 outputIndex)
         : TConnection("Merge", outputIndex)
         , Order(order) {
     }
 
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) override;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
     virtual TString GetExplainName() const override {
         return "Merge";
     }
@@ -121,7 +114,7 @@ struct TSourceConnection: public TConnection {
     TSourceConnection()
         : TConnection("Source", 0) {
     }
-    virtual TExprNode::TPtr BuildConnection(TExprNode::TPtr inputStage, TPositionHandle pos, TExprContext& ctx) override;
+    virtual NYql::TExprNode::TPtr BuildConnection(NYql::TExprNode::TPtr inputStage, NYql::TPositionHandle pos, NYql::TExprContext& ctx) override;
     virtual TString GetExplainName() const override {
         return "Source";
     }
@@ -153,14 +146,7 @@ struct TStageGraph {
     THashMap<ui32, ui32> StageOutputIndices;
     THashMap<ui32, TString> StageGUIDs;
 
-    ui32 AddStage() {
-        ui32 newStageId = StageIds.size();
-        StageIds.push_back(newStageId);
-        StageInputs[newStageId] = TVector<ui32>();
-        StageOutputs[newStageId] = TVector<ui32>();
-        StageGUIDs[newStageId] = CreateGuidAsString();
-        return newStageId;
-    }
+    ui32 AddStage();
 
     ui32 AddSourceStage(const NYql::EStorageType& storageType) {
         ui32 res = AddStage();
@@ -217,7 +203,7 @@ struct TStageGraph {
      * Generate an expression for stage inputs
      * The complication is the special handling of Source stage due to limitation of data shard reader
      */
-    std::pair<TExprNode::TPtr, TExprNode::TPtr> GenerateStageInput(ui32& stageInputCounter, TPositionHandle pos, TExprContext& ctx) const;
+    std::pair<NYql::TExprNode::TPtr, NYql::TExprNode::TPtr> GenerateStageInput(ui32& stageInputCounter, NYql::TPositionHandle pos, NYql::TExprContext& ctx) const;
 
     ui32 GetOutputIndex(ui32 stageIndex) {
         ui32 outputIndex{0};
@@ -232,8 +218,8 @@ struct TStageGraph {
     }
 
     void TopologicalSort();
-private:
 
+private:
     bool IsSourceStageTypeImpl(const ui32 id, const NYql::EStorageType tableStorageType) const {
         auto it = SourceStages.find(id);
         if (it != SourceStages.end()) {
@@ -243,5 +229,4 @@ private:
     }
 };
 
-}
-}
+} // namespace NKikimr::NKqp

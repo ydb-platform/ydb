@@ -77,8 +77,43 @@ size_t HttpOperation::WriteMemoryCallback(void *contents, size_t size, size_t nm
     return 0;
   }
 
-  self->raw_response_.insert(self->raw_response_.end(), static_cast<char *>(contents),
-                             static_cast<char *>(contents) + (size * nmemb));
+  const size_t data_size = size * nmemb;
+
+  // This code is defensive on purpose, to avoid allocation of unbound
+  // amounts of memory, controlled by the (remote) endpoint response.
+
+  // 1: Check data_size did not overflow
+  if (nmemb != 0)
+  {
+    if (data_size / nmemb != size)
+    {
+      // Should be impossible, really:
+      // CURL will report a huge response small chunks at a time,
+      // not in one block, which would be a DOS in CURL already.
+      return 0;
+    }
+  }
+
+  // 2: Check internal integrity
+  if (self->raw_response_.size() > self->max_response_size_)
+  {
+    // Should be impossible,
+    // this means the previous call did exceed the max size already.
+    return 0;
+  }
+
+  // 3: Protect against memory exhaustion caused by the remote endpoint
+  if (data_size > self->max_response_size_ - self->raw_response_.size())
+  {
+    // This one is possible and must be protected against (CVE-2026-44967).
+    // Checks 1 and 2 ensure the math is correct.
+    return 0;
+  }
+
+  const unsigned char *begin = static_cast<unsigned char *>(contents);
+  const unsigned char *end   = begin + data_size;
+
+  self->raw_response_.insert(self->raw_response_.end(), begin, end);
 
   if (self->WasAborted())
   {
@@ -95,7 +130,7 @@ size_t HttpOperation::WriteMemoryCallback(void *contents, size_t size, size_t nm
     self->DispatchEvent(opentelemetry::ext::http::client::SessionState::Sending);
   }
 
-  return size * nmemb;
+  return data_size;
 }
 
 size_t HttpOperation::WriteVectorHeaderCallback(void *ptr, size_t size, size_t nmemb, void *userp)
@@ -106,8 +141,33 @@ size_t HttpOperation::WriteVectorHeaderCallback(void *ptr, size_t size, size_t n
     return 0;
   }
 
+  const size_t data_size = size * nmemb;
+
+  // See comments in HttpOperation::WriteMemoryCallback().
+
+  if (nmemb != 0)
+  {
+    if (data_size / nmemb != size)
+    {
+      return 0;
+    }
+  }
+
+  // Common limit for header + body
+  if (self->response_headers_.size() + self->response_body_.size() > self->max_response_size_)
+  {
+    return 0;
+  }
+
+  if (data_size >
+      self->max_response_size_ - self->response_headers_.size() - self->response_body_.size())
+  {
+    return 0;
+  }
+
   const unsigned char *begin = static_cast<unsigned char *>(ptr);
-  const unsigned char *end   = begin + size * nmemb;
+  const unsigned char *end   = begin + data_size;
+
   self->response_headers_.insert(self->response_headers_.end(), begin, end);
 
   if (self->WasAborted())
@@ -125,7 +185,7 @@ size_t HttpOperation::WriteVectorHeaderCallback(void *ptr, size_t size, size_t n
     self->DispatchEvent(opentelemetry::ext::http::client::SessionState::Sending);
   }
 
-  return size * nmemb;
+  return data_size;
 }
 
 size_t HttpOperation::WriteVectorBodyCallback(void *ptr, size_t size, size_t nmemb, void *userp)
@@ -136,8 +196,33 @@ size_t HttpOperation::WriteVectorBodyCallback(void *ptr, size_t size, size_t nme
     return 0;
   }
 
+  const size_t data_size = size * nmemb;
+
+  // See comments in HttpOperation::WriteMemoryCallback().
+
+  if (nmemb != 0)
+  {
+    if (data_size / nmemb != size)
+    {
+      return 0;
+    }
+  }
+
+  // Common limit for header + body
+  if (self->response_headers_.size() + self->response_body_.size() > self->max_response_size_)
+  {
+    return 0;
+  }
+
+  if (data_size >
+      self->max_response_size_ - self->response_headers_.size() - self->response_body_.size())
+  {
+    return 0;
+  }
+
   const unsigned char *begin = static_cast<unsigned char *>(ptr);
-  const unsigned char *end   = begin + size * nmemb;
+  const unsigned char *end   = begin + data_size;
+
   self->response_body_.insert(self->response_body_.end(), begin, end);
 
   if (self->WasAborted())
@@ -155,7 +240,7 @@ size_t HttpOperation::WriteVectorBodyCallback(void *ptr, size_t size, size_t nme
     self->DispatchEvent(opentelemetry::ext::http::client::SessionState::Sending);
   }
 
-  return size * nmemb;
+  return data_size;
 }
 
 size_t HttpOperation::ReadMemoryCallback(char *buffer, size_t size, size_t nitems, void *userp)
@@ -293,15 +378,11 @@ HttpOperation::HttpOperation(opentelemetry::ext::http::client::Method method,
                              bool reuse_connection,
                              bool is_log_enabled,
                              const RetryPolicy &retry_policy)
-    : is_aborted_(false),
-      is_finished_(false),
-      is_cleaned_(false),
-      // Optional connection params
+    :  // Optional connection params
       is_raw_response_(is_raw_response),
       reuse_connection_(reuse_connection),
       http_conn_timeout_(http_conn_timeout),
       // Result
-      last_curl_result_(CURLE_OK),
       event_handle_(event_handle),
       method_(method),
       url_(std::move(url)),
@@ -309,8 +390,6 @@ HttpOperation::HttpOperation(opentelemetry::ext::http::client::Method method,
       // Local vars
       request_headers_(request_headers),
       request_body_(request_body),
-      request_nwrite_(0),
-      session_state_(opentelemetry::ext::http::client::SessionState::Created),
       compression_(compression),
       is_log_enabled_(is_log_enabled),
       retry_policy_(retry_policy),
@@ -319,8 +398,7 @@ HttpOperation::HttpOperation(opentelemetry::ext::http::client::Method method,
                        retry_policy.max_backoff > SecondsDecimal::zero() &&
                        retry_policy.backoff_multiplier > 0.0f)
                           ? 0
-                          : retry_policy.max_attempts),
-      response_code_(0)
+                          : retry_policy.max_attempts)
 {
   /* get a curl handle */
   curl_resource_.easy_handle = curl_easy_init();

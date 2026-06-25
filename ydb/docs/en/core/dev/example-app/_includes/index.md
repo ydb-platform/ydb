@@ -14,7 +14,7 @@ This section outlines the implementation of example applications, all designed t
 - [JavaScript](../example-js.md)
 - [Python](../python/index.md)
 
-{% node info %}
+{% note info %}
 
 Refer to [{{ ydb-short-name }} SDK reference documentation](../../../reference/ydb-sdk/index.md) for more details.
 

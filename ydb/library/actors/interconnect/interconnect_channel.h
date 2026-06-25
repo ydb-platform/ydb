@@ -58,6 +58,8 @@ namespace NActors {
         DECLARE_SECTION_INLINE,
         DECLARE_SECTION_RDMA,
         RDMA_READ,
+        PUSH_DATA_NO_CHECKSUMS,
+        RDMA_READ_NO_CHECKSUMS,
     };
 
     struct TExSerializedEventTooLarge : std::exception {
@@ -89,10 +91,10 @@ namespace NActors {
             TEventHolder& event = pool.Allocate(Queue);
             const ui32 bytes = event.Fill(ev, now) + sizeof(TEventDescr2);
             OutputQueueSize += bytes;
-            if (event.Span = NWilson::TSpan(15 /*max verbosity*/, NWilson::TTraceId(ev.TraceId), "Interconnect.Queue")) {
-                event.Span
-                    .Attribute("OutputQueueItems", static_cast<i64>(Queue.size()))
-                    .Attribute("OutputQueueSize", static_cast<i64>(OutputQueueSize));
+            event.Span = NWilson::TSpan(15 /*max verbosity*/, NWilson::TTraceId(ev.TraceId), "Interconnect.Queue");
+            if (NWilson::TSpan* wilsonSpan = event.Span.GetWilsonSpanPtr()) {
+                wilsonSpan->Attribute("OutputQueueItems", static_cast<i64>(Queue.size()));
+                wilsonSpan->Attribute("OutputQueueSize", static_cast<i64>(OutputQueueSize));
             }
             return std::make_pair(bytes, &event);
         }
@@ -159,7 +161,7 @@ namespace NActors {
         const static ui32 RdmaCredsMinSizeSerialized;
 
         template<bool External>
-        bool SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, size_t *bytesSerialized);
+        bool SerializeEvent(TTcpPacketOutTask& task, TEventHolder& event, bool disableChecksums, size_t *bytesSerialized);
         bool SerializeEventRdma(TEventHolder& event);
 
         bool FeedPayload(TTcpPacketOutTask& task, TEventHolder& event, ssize_t rdmaDeviceIndex);

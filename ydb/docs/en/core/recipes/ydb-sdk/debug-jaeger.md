@@ -1,8 +1,12 @@
 # Enabling tracing in Jaeger
 
-Below are examples of the code enabling Jaeger tracing in different {{ ydb-short-name }} SDKs.
+Below are examples of code for enabling tracing in Jaeger in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
+
+- C++
+
+  The functionality is not supported at the moment.
 
 - Go
 
@@ -12,25 +16,25 @@ Below are examples of the code enabling Jaeger tracing in different {{ ydb-short
 
       ```go
       package main
-
+  
       import (
           "context"
           "time"
-
+  
           "github.com/opentracing/opentracing-go"
           jaegerConfig "github.com/uber/jaeger-client-go/config"
-
+  
           "github.com/ydb-platform/ydb-go-sdk/v3"
           "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-
+  
           tracing "github.com/ydb-platform/ydb-go-sdk-opentracing"
       )
-
+  
       const (
           tracerURL   = "localhost:5775"
           serviceName = "ydb-go-sdk"
       )
-
+  
       func main() {
           tracer, closer, err := jaegerConfig.Configuration{
               ServiceName: serviceName,
@@ -47,15 +51,15 @@ Below are examples of the code enabling Jaeger tracing in different {{ ydb-short
           if err != nil {
               panic(err)
           }
-
+  
           defer closer.Close()
-
+  
           // set global tracer of this application
           opentracing.SetGlobalTracer(tracer)
-
+  
           span, ctx := opentracing.StartSpanFromContext(context.Background(), "client")
           defer span.Finish()
-
+  
           db, err := ydb.Open(ctx,
               os.Getenv("YDB_CONNECTION_STRING"),
               tracing.WithTraces(tracing.WithDetails(trace.DetailsAll)),
@@ -72,26 +76,26 @@ Below are examples of the code enabling Jaeger tracing in different {{ ydb-short
 
       ```go
       package main
-
+  
       import (
           "context"
           "database/sql"
           "time"
-
+  
           "github.com/opentracing/opentracing-go"
           jaegerConfig "github.com/uber/jaeger-client-go/config"
-
+  
           "github.com/ydb-platform/ydb-go-sdk/v3"
           "github.com/ydb-platform/ydb-go-sdk/v3/trace"
-
+  
           tracing "github.com/ydb-platform/ydb-go-sdk-opentracing"
       )
-
+  
       const (
           tracerURL   = "localhost:5775"
           serviceName = "ydb-go-sdk"
       )
-
+  
       func main() {
           tracer, closer, err := jaegerConfig.Configuration{
               ServiceName: serviceName,
@@ -108,15 +112,15 @@ Below are examples of the code enabling Jaeger tracing in different {{ ydb-short
           if err != nil {
               panic(err)
           }
-
+  
           defer closer.Close()
-
+  
           // set global tracer of this application
           opentracing.SetGlobalTracer(tracer)
-
+  
           span, ctx := opentracing.StartSpanFromContext(context.Background(), "client")
           defer span.Finish()
-
+  
           nativeDriver, err := ydb.Open(ctx,
               os.Getenv("YDB_CONNECTION_STRING"),
               tracing.WithTraces(tracing.WithDetails(trace.DetailsAll)),
@@ -125,30 +129,42 @@ Below are examples of the code enabling Jaeger tracing in different {{ ydb-short
               panic(err)
           }
           defer nativeDriver.Close(ctx)
-
+  
           connector, err := ydb.Connector(nativeDriver)
           if err != nil {
               panic(err)
           }
-
+  
           db := sql.OpenDB(connector)
           defer db.Close()
           ...
       }
       ```
 
-  {% endlist %}
+    {% endlist %}
 
 - Java
 
-  This functionality is not currently supported.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Python
 
-  This functionality is not currently supported.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

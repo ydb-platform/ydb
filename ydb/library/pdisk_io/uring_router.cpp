@@ -1,8 +1,10 @@
 #include "uring_router.h"
 
+#include <ydb/core/util/hp_timer_helpers.h>
 #include <ydb/library/actors/core/actorsystem.h>
 
 #include <util/string/builder.h>
+#include <util/system/datetime.h>
 #include <util/system/compiler.h>
 #include <util/system/sanitizers.h>
 #include <util/system/thread.h>
@@ -174,6 +176,7 @@ public:
                 io_uring_wait_cqe(Owner.Ring.get(), &waitCqe);
             }
 
+            auto cycleStart = HPNow();
             io_uring_for_each_cqe(Owner.Ring.get(), head, cqe) {
                 void* data = io_uring_cqe_get_data(cqe);
                 if (data == &StopCqeMarker) {
@@ -191,16 +194,21 @@ public:
                     NSan::Acquire(op);
                     op->Result = cqe->res;
                     // For read operations the kernel fills the buffer via a syscall
-                    // that MSAN cannot observe.  Mark the iov as initialized so that
-                    // subsequent reads from the buffer do not trigger false
-                    // use-of-uninitialized-value reports.
+                    // that MSAN cannot observe.  Mark each iovec segment as initialized
+                    // so that subsequent reads do not trigger false use-of-uninitialized-
+                    // value reports.  Walk the active iovec window (starting at IovBegin)
+                    // and unpoison up to cqe->res bytes across all segments.
                     if constexpr (NSan::MSanIsOn()) {
                         if (op->OperationType == TUringOperationBase::EREAD && cqe->res > 0) {
-                            size_t unpoisonSize = static_cast<size_t>(cqe->res);
-                            if (unpoisonSize > op->Iov.iov_len) {
-                                unpoisonSize = op->Iov.iov_len;
+                            size_t remaining = static_cast<size_t>(cqe->res);
+                            for (size_t i = op->IovBegin; i < op->Iov.size() && remaining > 0; ++i) {
+                                size_t unpoisonSize = op->Iov[i].iov_len;
+                                if (unpoisonSize > remaining) {
+                                    unpoisonSize = remaining;
+                                }
+                                NSan::Unpoison(op->Iov[i].iov_base, unpoisonSize);
+                                remaining -= unpoisonSize;
                             }
-                            NSan::Unpoison(op->Iov.iov_base, unpoisonSize);
                         }
                     }
                     op->OnComplete(Owner.ActorSystem);
@@ -211,6 +219,12 @@ public:
             if (count > 0) {
                 io_uring_cq_advance(Owner.Ring.get(), count);
                 Owner.InFlightCount.fetch_sub(count, std::memory_order_release);
+            }
+
+            auto cycleEnd = HPNow();
+            if (Owner.Counters) {
+                *Owner.Counters->CompletionThreadBusyTimeNs += HPNanoSeconds(cycleEnd - cycleStart);
+                *Owner.Counters->CompletionThreadCPU = ThreadCPUTime();
             }
         }
 
@@ -225,10 +239,11 @@ private:
 // TUringRouter
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-TUringRouter::TUringRouter(FHANDLE fd, TActorSystem* actorSystem, TUringRouterConfig config)
+TUringRouter::TUringRouter(FHANDLE fd, TActorSystem* actorSystem, TUringRouterConfig config, TUringCounters* counters)
     : Fd(fd)
     , ActorSystem(actorSystem)
     , Config(config)
+    , Counters(counters)
     , Ring(new struct io_uring())
 {
     TUringRouterConfig effectiveConfig = Config;
@@ -279,13 +294,17 @@ void TUringRouter::PrepareSqe(struct io_uring_sqe* sqe, TUringOperationBase* op)
     // Use readv/writev (IORING_OP_READV/WRITEV) instead of read/write
     // (IORING_OP_READ/WRITE) for kernel 5.4 compatibility.
     // IORING_OP_READ/WRITE were added in 5.6; readv/writev exist since 5.1.
+    // Supports scatter-gather: Iov may contain multiple entries (writes); the
+    // active window starts at IovBegin and is advanced by AdvanceIov on short I/O.
     int fd = (FixedFdIndex >= 0) ? FixedFdIndex : Fd;
+    Y_ABORT_UNLESS(op->IovBegin < op->Iov.size(), "PrepareSqe called with empty iovec window");
+    const unsigned iovCount = static_cast<unsigned>(op->Iov.size() - op->IovBegin);
     switch (op->OperationType) {
     case TUringOperationBase::EREAD:
-        io_uring_prep_readv(sqe, fd, &op->Iov, 1, op->DiskOffset);
+        io_uring_prep_readv(sqe, fd, &op->Iov[op->IovBegin], iovCount, op->DiskOffset);
         break;
     case TUringOperationBase::EWRITE:
-        io_uring_prep_writev(sqe, fd, &op->Iov, 1, op->DiskOffset);
+        io_uring_prep_writev(sqe, fd, &op->Iov[op->IovBegin], iovCount, op->DiskOffset);
         break;
     default:
         Y_ABORT("Unknown OperationType");
@@ -330,6 +349,11 @@ bool TUringRouter::ReadFixed(void* buf, ui32 size, ui64 offset, ui16 bufIndex, T
     if (!sqe) {
         return false;
     }
+    // Populate op->Iov and OperationType so the completion handler's MSan
+    // unpoison loop, GetIovBase(), and GetOperationBytes() work uniformly.
+    // The actual kernel submission still uses the fixed-buffer variant below.
+    op->SetOperationType(TUringOperationBase::EREAD);
+    op->PrepareIov(buf, size, offset);
     int fd = (FixedFdIndex >= 0) ? FixedFdIndex : Fd;
     io_uring_prep_read_fixed(sqe, fd, buf, size, offset, bufIndex);
     if (FixedFdIndex >= 0) {
@@ -347,6 +371,10 @@ bool TUringRouter::WriteFixed(const void* buf, ui32 size, ui64 offset, ui16 bufI
     if (!sqe) {
         return false;
     }
+    // Mirror ReadFixed: populate op->Iov and OperationType for consistent
+    // GetIovBase() logging and GetOperationBytes() bookkeeping in OnComplete.
+    op->SetOperationType(TUringOperationBase::EWRITE);
+    op->PrepareIov(const_cast<void*>(buf), size, offset);
     int fd = (FixedFdIndex >= 0) ? FixedFdIndex : Fd;
     io_uring_prep_write_fixed(sqe, fd, buf, size, offset, bufIndex);
     if (FixedFdIndex >= 0) {

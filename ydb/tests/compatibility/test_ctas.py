@@ -17,17 +17,21 @@ class TestCTASOperations(RollingUpgradeAndDowngradeFixture):
         if min(self.versions) < (25, 1):
             pytest.skip("Only available since 25-1")
 
-        yield from self.setup_cluster(table_service_config={
-            "enable_olap_sink": True,
-            "enable_create_table_as": True,
-            "enable_data_shard_create_table_as": True,
-        }, extra_feature_flags={
-            "enable_temp_tables": True,
-            "enable_olap_schema_operations": True,
-            "enable_move_column_table": True,
-        }, column_shard_config={
-            "disabled_on_scheme_shard": False,
-        })
+        yield from self.setup_cluster(
+            table_service_config={
+                "enable_olap_sink": True,
+                "enable_create_table_as": True,
+                "enable_data_shard_create_table_as": True,
+            },
+            extra_feature_flags=[
+                "enable_temp_tables",
+                "enable_olap_schema_operations",
+                "enable_move_column_table",
+            ],
+            column_shard_config={
+                "disabled_on_scheme_shard": False,
+            }
+        )
 
     def test_ctas_oltp(self):
         self.fill_source_table()

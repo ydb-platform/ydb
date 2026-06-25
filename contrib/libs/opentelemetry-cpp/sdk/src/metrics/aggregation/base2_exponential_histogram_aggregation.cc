@@ -4,6 +4,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <algorithm>
+#include <cassert>
 #include <limits>
 #include <memory>
 #include <mutex>
@@ -11,6 +12,7 @@
 
 #include "opentelemetry/common/spin_lock_mutex.h"
 #include "opentelemetry/nostd/variant.h"
+#include "opentelemetry/sdk/common/global_log_handler.h"
 #include "opentelemetry/sdk/metrics/aggregation/aggregation.h"
 #include "opentelemetry/sdk/metrics/aggregation/aggregation_config.h"
 #include "opentelemetry/sdk/metrics/aggregation/base2_exponential_histogram_aggregation.h"
@@ -32,13 +34,56 @@ namespace
 uint32_t GetScaleReduction(int32_t start_index, int32_t end_index, size_t max_buckets) noexcept
 {
   uint32_t scale_reduction = 0;
-  while (static_cast<size_t>(end_index - start_index + 1) > max_buckets)
+  while (static_cast<int64_t>(end_index) - start_index + 1 > static_cast<int64_t>(max_buckets))
   {
     start_index >>= 1;
     end_index >>= 1;
     scale_reduction++;
   }
   return scale_reduction;
+}
+
+uint32_t GetScaleReductionForUnion(const AdaptingCircularBufferCounter &low,
+                                   const AdaptingCircularBufferCounter &high,
+                                   size_t max_buckets) noexcept
+{
+  if (low.Empty() || high.Empty())
+  {
+    return 0;
+  }
+  return GetScaleReduction((std::min)(low.StartIndex(), high.StartIndex()),
+                           (std::max)(low.EndIndex(), high.EndIndex()), max_buckets);
+}
+
+void DiffBuckets(const AdaptingCircularBufferCounter &left,
+                 const AdaptingCircularBufferCounter &right,
+                 AdaptingCircularBufferCounter &out) noexcept
+{
+  if (left.Empty() && right.Empty())
+  {
+    return;
+  }
+  const int32_t min_index = left.Empty()    ? right.StartIndex()
+                            : right.Empty() ? left.StartIndex()
+                                            : (std::min)(left.StartIndex(), right.StartIndex());
+  const int32_t max_index = left.Empty()    ? right.EndIndex()
+                            : right.Empty() ? left.EndIndex()
+                                            : (std::max)(left.EndIndex(), right.EndIndex());
+  for (int32_t i = min_index; i <= max_index; ++i)
+  {
+    const uint64_t l_cnt = left.Get(i);
+    const uint64_t r_cnt = right.Get(i);
+    if (r_cnt > l_cnt)
+    {
+      if (!out.Increment(i, r_cnt - l_cnt))
+      {
+        OTEL_INTERNAL_LOG_ERROR("[Base2ExponentialHistogramAggregation::DiffBuckets] bucket index "
+                                << i << " out of range; count " << (r_cnt - l_cnt)
+                                << " dropped. SDK invariant violation");
+        assert(false && "DiffBuckets: bucket index out of range");
+      }
+    }
+  }
 }
 
 void DownscaleBuckets(std::unique_ptr<AdaptingCircularBufferCounter> &buckets, uint32_t by) noexcept
@@ -212,7 +257,7 @@ void Base2ExponentialHistogramAggregation::Downscale(uint32_t by) noexcept
     DownscaleBuckets(point_data_.negative_buckets_, by);
   }
 
-  point_data_.scale_ -= by;
+  point_data_.scale_ -= static_cast<int32_t>(by);
   indexer_ = Base2ExponentialHistogramIndexer(point_data_.scale_);
 }
 
@@ -246,7 +291,13 @@ static AdaptingCircularBufferCounter MergeBuckets(size_t max_buckets,
     auto count = A.Get(i) + B.Get(i);
     if (count > 0)
     {
-      C.Increment(i, count);
+      if (!C.Increment(i, count))
+      {
+        OTEL_INTERNAL_LOG_ERROR("[Base2ExponentialHistogramAggregation::MergeBuckets] bucket index "
+                                << i << " out of range; count " << count
+                                << " dropped. SDK invariant violation");
+        assert(false && "MergeBuckets: bucket index out of range");
+      }
     }
   }
 
@@ -299,35 +350,23 @@ std::unique_ptr<Aggregation> Base2ExponentialHistogramAggregation::Merge(
     }
   }
 
-  if (!low_res.positive_buckets_->Empty() && !high_res.positive_buckets_->Empty())
-  {
-    auto pos_min_index = (std::min)(low_res.positive_buckets_->StartIndex(),
-                                    high_res.positive_buckets_->StartIndex());
-    auto pos_max_index =
-        (std::max)(low_res.positive_buckets_->EndIndex(), high_res.positive_buckets_->EndIndex());
-    auto neg_min_index = (std::min)(low_res.negative_buckets_->StartIndex(),
-                                    high_res.negative_buckets_->StartIndex());
-    auto neg_max_index =
-        (std::max)(low_res.negative_buckets_->EndIndex(), high_res.negative_buckets_->EndIndex());
+  // positive_buckets_ and negative_buckets_ share a single scale_; apply
+  // the maximum required reduction across both bucket types.
+  const uint32_t scale_reduction =
+      (std::max)(GetScaleReductionForUnion(*low_res.positive_buckets_, *high_res.positive_buckets_,
+                                           result_value.max_buckets_),
+                 GetScaleReductionForUnion(*low_res.negative_buckets_, *high_res.negative_buckets_,
+                                           result_value.max_buckets_));
 
-    // The range [pos_min_index, pos_max_index] contains (pos_max_index - pos_min_index + 1)
-    // buckets. We need to downscale if this count exceeds max_buckets_.
-    if (static_cast<size_t>(pos_max_index) >=
-            static_cast<size_t>(pos_min_index) + result_value.max_buckets_ ||
-        static_cast<size_t>(neg_max_index) >=
-            static_cast<size_t>(neg_min_index) + result_value.max_buckets_)
-    {
-      // We need to downscale the buckets to fit into the new max_buckets_.
-      const uint32_t scale_reduction =
-          GetScaleReduction(pos_min_index, pos_max_index, result_value.max_buckets_);
-      DownscaleBuckets(low_res.positive_buckets_, scale_reduction);
-      DownscaleBuckets(high_res.positive_buckets_, scale_reduction);
-      DownscaleBuckets(low_res.negative_buckets_, scale_reduction);
-      DownscaleBuckets(high_res.negative_buckets_, scale_reduction);
-      low_res.scale_ -= scale_reduction;
-      high_res.scale_ -= scale_reduction;
-      result_value.scale_ -= scale_reduction;
-    }
+  if (scale_reduction > 0)
+  {
+    DownscaleBuckets(low_res.positive_buckets_, scale_reduction);
+    DownscaleBuckets(high_res.positive_buckets_, scale_reduction);
+    DownscaleBuckets(low_res.negative_buckets_, scale_reduction);
+    DownscaleBuckets(high_res.negative_buckets_, scale_reduction);
+    low_res.scale_ -= static_cast<int32_t>(scale_reduction);
+    high_res.scale_ -= static_cast<int32_t>(scale_reduction);
+    result_value.scale_ -= static_cast<int32_t>(scale_reduction);
   }
 
   result_value.positive_buckets_ = std::make_unique<AdaptingCircularBufferCounter>(MergeBuckets(
@@ -368,49 +407,22 @@ std::unique_ptr<Aggregation> Base2ExponentialHistogramAggregation::Diff(
     }
   }
 
-  auto pos_min_index =
-      (left.positive_buckets_ && right.positive_buckets_)
-          ? (std::min)(left.positive_buckets_->StartIndex(), right.positive_buckets_->StartIndex())
-          : 0;
-  auto pos_max_index =
-      (left.positive_buckets_ && right.positive_buckets_)
-          ? (std::max)(left.positive_buckets_->EndIndex(), right.positive_buckets_->EndIndex())
-          : 0;
-  auto neg_min_index =
-      (left.negative_buckets_ && right.negative_buckets_)
-          ? (std::min)(left.negative_buckets_->StartIndex(), right.negative_buckets_->StartIndex())
-          : 0;
-  auto neg_max_index =
-      (left.negative_buckets_ && right.negative_buckets_)
-          ? (std::max)(left.negative_buckets_->EndIndex(), right.negative_buckets_->EndIndex())
-          : 0;
+  // positive_buckets_ and negative_buckets_ share a single scale_; apply
+  // the maximum required reduction across both bucket types.
+  const uint32_t scale_reduction =
+      (std::max)(GetScaleReductionForUnion(*low_res.positive_buckets_, *high_res.positive_buckets_,
+                                           low_res.max_buckets_),
+                 GetScaleReductionForUnion(*low_res.negative_buckets_, *high_res.negative_buckets_,
+                                           low_res.max_buckets_));
 
-  if (static_cast<size_t>(pos_max_index) >
-          static_cast<size_t>(pos_min_index) + low_res.max_buckets_ ||
-      static_cast<size_t>(neg_max_index) >
-          static_cast<size_t>(neg_min_index) + low_res.max_buckets_)
+  if (scale_reduction > 0)
   {
-    const uint32_t scale_reduction =
-        GetScaleReduction(pos_min_index, pos_max_index, low_res.max_buckets_);
-
-    if (left.positive_buckets_)
-    {
-      DownscaleBuckets(left.positive_buckets_, scale_reduction);
-    }
-    if (right.positive_buckets_)
-    {
-      DownscaleBuckets(right.positive_buckets_, scale_reduction);
-    }
-    if (left.negative_buckets_)
-    {
-      DownscaleBuckets(left.negative_buckets_, scale_reduction);
-    }
-    if (right.negative_buckets_)
-    {
-      DownscaleBuckets(right.negative_buckets_, scale_reduction);
-    }
-    left.scale_ -= scale_reduction;
-    right.scale_ -= scale_reduction;
+    DownscaleBuckets(low_res.positive_buckets_, scale_reduction);
+    DownscaleBuckets(high_res.positive_buckets_, scale_reduction);
+    DownscaleBuckets(low_res.negative_buckets_, scale_reduction);
+    DownscaleBuckets(high_res.negative_buckets_, scale_reduction);
+    low_res.scale_ -= static_cast<int32_t>(scale_reduction);
+    high_res.scale_ -= static_cast<int32_t>(scale_reduction);
   }
 
   Base2ExponentialHistogramPointData result_value;
@@ -427,32 +439,14 @@ std::unique_ptr<Aggregation> Base2ExponentialHistogramAggregation::Diff(
   result_value.negative_buckets_ =
       std::make_unique<AdaptingCircularBufferCounter>(right.max_buckets_);
 
-  if (left.positive_buckets_ && right.positive_buckets_)
+  if (!left.positive_buckets_->Empty() || !right.positive_buckets_->Empty())
   {
-    for (auto i = pos_min_index; i <= pos_max_index; i++)
-    {
-      auto l_cnt = left.positive_buckets_->Get(i);
-      auto r_cnt = right.positive_buckets_->Get(i);
-      auto delta = (std::max)(static_cast<uint64_t>(0), r_cnt - l_cnt);
-      if (delta > 0)
-      {
-        result_value.positive_buckets_->Increment(i, delta);
-      }
-    }
+    DiffBuckets(*left.positive_buckets_, *right.positive_buckets_, *result_value.positive_buckets_);
   }
 
-  if (left.negative_buckets_ && right.negative_buckets_)
+  if (!left.negative_buckets_->Empty() || !right.negative_buckets_->Empty())
   {
-    for (auto i = neg_min_index; i <= neg_max_index; i++)
-    {
-      auto l_cnt = left.negative_buckets_->Get(i);
-      auto r_cnt = right.negative_buckets_->Get(i);
-      auto delta = (std::max)(static_cast<uint64_t>(0), r_cnt - l_cnt);
-      if (delta > 0)
-      {
-        result_value.negative_buckets_->Increment(i, delta);
-      }
-    }
+    DiffBuckets(*left.negative_buckets_, *right.negative_buckets_, *result_value.negative_buckets_);
   }
 
   return std::unique_ptr<Base2ExponentialHistogramAggregation>{

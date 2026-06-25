@@ -274,6 +274,17 @@ bool aws_byte_cursor_next_split(
     struct aws_byte_cursor *AWS_RESTRICT substr);
 
 /**
+ * same as aws_byte_cursor_next_split, but splits on a cursor instead of a single char.
+ * ex. can split on delims like "--" or "<<".
+ * Note: splits on the whole split_on cursor, it does not treat split_on as array of different chars to split on
+ */
+AWS_COMMON_API
+bool aws_byte_cursor_next_split_on_cursor(
+    const struct aws_byte_cursor *AWS_RESTRICT input_str,
+    struct aws_byte_cursor split_on,
+    struct aws_byte_cursor *AWS_RESTRICT substr);
+
+/**
  * No copies, no buffer allocations. Fills in output with a list of
  * aws_byte_cursor instances where buffer is an offset into the input_str and
  * len is the length of that string in the original buffer.
@@ -677,6 +688,16 @@ AWS_COMMON_API bool aws_byte_cursor_read_u8(struct aws_byte_cursor *AWS_RESTRICT
 AWS_COMMON_API bool aws_byte_cursor_read_be16(struct aws_byte_cursor *cur, uint16_t *var);
 
 /**
+ * Reads a 16-bit value in little-endian byte order from cur, and places it in host
+ * byte order into var.
+ *
+ * On success, returns true and updates the cursor pointer/length accordingly.
+ * If there is insufficient space in the cursor, returns false, leaving the
+ * cursor unchanged.
+ */
+AWS_COMMON_API bool aws_byte_cursor_read_le16(struct aws_byte_cursor *cur, uint16_t *var);
+
+/**
  * Reads an unsigned 24-bit value (3 bytes) in network byte order from cur,
  * and places it in host byte order into 32-bit var.
  * Ex: if cur's next 3 bytes are {0xAA, 0xBB, 0xCC}, then var becomes 0x00AABBCC.
@@ -696,6 +717,36 @@ AWS_COMMON_API bool aws_byte_cursor_read_be24(struct aws_byte_cursor *cur, uint3
  * cursor unchanged.
  */
 AWS_COMMON_API bool aws_byte_cursor_read_be32(struct aws_byte_cursor *cur, uint32_t *var);
+
+/**
+ * Reads a 32-bit value in little endian byte order from cur, and places it in host
+ * byte order into var.
+ *
+ * On success, returns true and updates the cursor pointer/length accordingly.
+ * If there is insufficient space in the cursor, returns false, leaving the
+ * cursor unchanged.
+ */
+AWS_COMMON_API bool aws_byte_cursor_read_le32(struct aws_byte_cursor *cur, uint32_t *var);
+
+/**
+ * Reads a signed 32-bit value in network byte order from cur, and places it in host
+ * byte order into var.
+ *
+ * On success, returns true and updates the cursor pointer/length accordingly.
+ * If there is insufficient space in the cursor, returns false, leaving the
+ * cursor unchanged.
+ */
+AWS_COMMON_API bool aws_byte_cursor_read_be_i32(struct aws_byte_cursor *cur, int32_t *var);
+
+/**
+ * Reads a signed 32-bit value in little-endian order from cur, and places it in host
+ * byte order into var.
+ *
+ * On success, returns true and updates the cursor pointer/length accordingly.
+ * If there is insufficient space in the cursor, returns false, leaving the
+ * cursor unchanged.
+ */
+AWS_COMMON_API bool aws_byte_cursor_read_le_i32(struct aws_byte_cursor *cur, int32_t *var);
 
 /**
  * Reads a 64-bit value in network byte order from cur, and places it in host
@@ -941,6 +992,27 @@ AWS_COMMON_API bool aws_isspace(uint8_t ch);
  */
 AWS_COMMON_API
 int aws_byte_cursor_utf8_parse_u64(struct aws_byte_cursor cursor, uint64_t *dst);
+
+/**
+ * Read entire cursor as ASCII/UTF-8 signed base-10 number.
+ * Stricter than strtoll(), which allows whitespace and inputs that start with "0x"
+ *
+ * Examples:
+ * "0" -> 0
+ * "123" -> 123
+ * "00004" -> 4 // leading zeros ok
+ * "-1" -> -1
+ *
+ * Rejects things like:
+ * "1,000" // only characters 0-9 allowed
+ * "" // blank string not allowed
+ * " 0 " // whitespace not allowed
+ * "0x0" // hex not allowed
+ * "FF" // hex not allowed
+ * "999999999999999999999999999999999999999999" // larger than max i64
+ */
+AWS_COMMON_API
+int aws_byte_cursor_utf8_parse_i64(struct aws_byte_cursor cursor, int64_t *dst);
 
 /**
  * Read entire cursor as ASCII/UTF-8 unsigned base-16 number with NO "0x" prefix.

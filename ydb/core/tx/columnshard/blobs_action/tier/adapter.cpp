@@ -22,13 +22,15 @@ std::unique_ptr<NActors::IEventBase> TRepliesAdapter::RebuildReplyEvent(
         return std::make_unique<NBlobCache::TEvBlobCache::TEvReadBlobRangeResult>(
             bRange, NKikimrProto::EReplyStatus::OK, ev->Body, TString{}, false, StorageId);
     } else {
-        AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "s3_request_failed")("request_type", "get_object")(
-            "exception", ev->GetError().GetExceptionName())("message", ev->GetError().GetMessage())("storage_id", StorageId)("blob", logoBlobId);
-        TString err = TStringBuilder() << ev->GetError().GetExceptionName() << ", " << ev->GetError().GetMessage();
+        const auto& error = ev->GetError();
+        const bool isRetriable = error.ShouldRetry() || error.GetExceptionName() == "SlowDown" || error.GetExceptionName() == "TooManyRequests";
+        AFL_DEBUG(NKikimrServices::TX_TIERING)("event", "s3_request_failed")("request_type", "get_object")("exception",
+            error.GetExceptionName())("message", error.GetMessage())("storage_id", StorageId)("blob", logoBlobId)("retriable", isRetriable);
+        TString err = TStringBuilder() << error.GetExceptionName() << ", " << error.GetMessage();
         ErrorCollector->OnReadError(StorageId, err);
 
         return std::make_unique<NBlobCache::TEvBlobCache::TEvReadBlobRangeResult>(
-            bRange, NKikimrProto::EReplyStatus::ERROR, TStringBuilder() << ev->Result, err, false, StorageId);
+            bRange, NKikimrProto::EReplyStatus::ERROR, TStringBuilder() << ev->Result, err, false, StorageId, isRetriable);
     }
 }
 

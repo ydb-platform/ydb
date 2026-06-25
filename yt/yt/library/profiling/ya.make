@@ -8,6 +8,7 @@ SRCS(
     percpu.cpp
     producer.cpp
     sensor.cpp
+    sensor_impl.cpp
     tag.cpp
     testing.cpp
 )

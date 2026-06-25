@@ -62,6 +62,8 @@ struct TEvHttpProxy {
         EvSubscribeForCancel,
         EvRequestCancelled,
         EvHttpOutgoingResponseProgress,
+        EvHttpDumpStateRequest,
+        EvHttpDumpStateResponse,
         EvEnd
     };
 
@@ -219,6 +221,19 @@ struct TEvHttpProxy {
         TEvHttpOutgoingResponseProgress(ui64 bytes, ui64 dataChunks)
             : Bytes(bytes)
             , DataChunks(dataChunks)
+        {}
+    };
+
+    struct TEvHttpDumpStateRequest : NActors::TEventLocal<TEvHttpDumpStateRequest, EvHttpDumpStateRequest> {
+    };
+
+    struct TEvHttpDumpStateResponse : NActors::TEventLocal<TEvHttpDumpStateResponse, EvHttpDumpStateResponse> {
+        TString Body;
+        TString ContentType;
+
+        TEvHttpDumpStateResponse(TString body, TString contentType = "application/json")
+            : Body(std::move(body))
+            , ContentType(std::move(contentType))
         {}
     };
 

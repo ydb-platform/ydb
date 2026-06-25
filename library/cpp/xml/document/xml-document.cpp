@@ -17,13 +17,13 @@ namespace {
 }
 
 namespace NXml {
-    TDocument::TDocument(const TString& xml, Source type) {
+    TDocument::TDocument(const TString& xml, Source type, int parseOptions) {
         switch (type) {
             case File:
-                ParseFile(xml);
+                ParseFile(xml, parseOptions);
                 break;
             case String:
-                ParseString(xml);
+                ParseString(xml, parseOptions);
                 break;
             case RootName: {
                 TDocHolder doc(xmlNewDoc(XMLCHAR("1.0")));
@@ -55,7 +55,7 @@ namespace NXml {
         return *this;
     }
 
-    void TDocument::ParseFile(const TString& file) {
+    void TDocument::ParseFile(const TString& file, int parseOptions) {
         if (!NFs::Exists(file))
             THROW(XmlException, "File " << file << " doesn't exist");
 
@@ -63,7 +63,7 @@ namespace NXml {
         if (!pctx)
             THROW(XmlException, "Can't create parser context");
 
-        TDocHolder doc(xmlCtxtReadFile(pctx.Get(), file.c_str(), nullptr, XML_PARSE_NOCDATA));
+        TDocHolder doc(xmlCtxtReadFile(pctx.Get(), file.c_str(), nullptr, parseOptions));
         if (!doc)
             THROW(XmlException, "Can't parse file " << file);
 
@@ -75,12 +75,12 @@ namespace NXml {
         Doc = std::move(doc);
     }
 
-    void TDocument::ParseString(TZtStringBuf xml) {
+    void TDocument::ParseString(TZtStringBuf xml, int parseOptions) {
         TParserCtxtPtr pctx(xmlNewParserCtxt());
         if (pctx.Get() == nullptr)
             THROW(XmlException, "Can't create parser context");
 
-        TDocHolder doc(xmlCtxtReadMemory(pctx.Get(), xml.c_str(), (int)xml.size(), nullptr, nullptr, XML_PARSE_NOCDATA));
+        TDocHolder doc(xmlCtxtReadMemory(pctx.Get(), xml.c_str(), (int)xml.size(), nullptr, nullptr, parseOptions));
 
         if (!doc)
             THROW(XmlException, "Can't parse string");

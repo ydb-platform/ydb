@@ -2,22 +2,22 @@
 #include "rewrite_io_utils.h"
 #include "yql_kikimr_provider_impl.h"
 
+#include <ydb/core/external_sources/external_source_factory.h>
+#include <ydb/core/fq/libs/result_formatter/result_formatter.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/kqp/host/kqp_translate.h>
-#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
-#include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
+#include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/providers/common/config/transformer/yql_configuration_transformer.h>
+#include <yql/essentials/providers/common/provider/yql_data_provider_impl.h>
+#include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/providers/common/schema/expr/yql_expr_schema.h>
-#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
-#include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
-
-#include <ydb/core/external_sources/external_source_factory.h>
-#include <ydb/core/fq/libs/result_formatter/result_formatter.h>
-
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
 
 #include <util/generic/is_in.h>
 
@@ -238,7 +238,7 @@ public:
         , Types(types)
         , ExternalSourceFactory(externalSourceFactory)
         , IsInternalCall(isInternalCall)
-        {}
+    {}
 
     TStatus DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) final {
         output = input;
@@ -393,7 +393,11 @@ public:
                 bool sysColumnsEnabled = SessionCtx->Config().SystemColumnsEnabled();
                 YQL_ENSURE(res.Metadata->Indexes.size() == res.Metadata->ImplTables.size());
                 for (auto implTable : res.Metadata->ImplTables) {
-                    YQL_ENSURE(implTable);
+                    // Local indexes (e.g. column-store bloom / bloom-ngram / min-max) have
+                    // no impl table, so their slot is null. Skip them.
+                    if (!implTable) {
+                        continue;
+                    }
                     do {
                         auto nextImplTable = implTable->Next;
                         auto& desc = SessionCtx->Tables().GetOrAddTable(implTable->Cluster, SessionCtx->GetDatabase(), implTable->Name);
@@ -556,7 +560,7 @@ public:
         , LoadTableMetadataTransformer(CreateKiSourceLoadTableMetadataTransformer(gateway, sessionCtx, types, externalSourceFactory, isInternalCall))
         , TypeAnnotationTransformer(CreateKiSourceTypeAnnotationTransformer(sessionCtx, types))
         , CallableExecutionTransformer(CreateKiSourceCallableExecutionTransformer(gateway, sessionCtx, types))
-
+        , ConstraintsTransformer(CreateKiSourceConstraintsTransformer(sessionCtx))
     {
         Y_UNUSED(FunctionRegistry);
         Y_UNUSED(Types);
@@ -629,6 +633,11 @@ public:
     IGraphTransformer& GetTypeAnnotationTransformer(bool instantOnly) override {
         Y_UNUSED(instantOnly);
         return *TypeAnnotationTransformer;
+    }
+
+    IGraphTransformer& GetConstraintTransformer(bool instantOnly, bool subGraph) override {
+        Y_UNUSED(instantOnly, subGraph);
+        return *ConstraintsTransformer;
     }
 
     IGraphTransformer& GetCallableExecutionTransformer() override {
@@ -972,9 +981,10 @@ private:
     TAutoPtr<IGraphTransformer> LoadTableMetadataTransformer;
     TAutoPtr<IGraphTransformer> TypeAnnotationTransformer;
     TAutoPtr<IGraphTransformer> CallableExecutionTransformer;
+    const TAutoPtr<IGraphTransformer> ConstraintsTransformer;
 };
 
-} // namespace
+} // anonymous namespace
 
 IGraphTransformer::TStatus TKiSourceVisitorTransformer::DoTransform(TExprNode::TPtr input,
     TExprNode::TPtr& output, TExprContext& ctx)

@@ -14,6 +14,7 @@ PEERDIR(
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
     ydb/core/wrappers/ut_helpers
+    ydb/library/aws_init
     ydb/public/sdk/cpp/src/client/table
 )
 
@@ -24,6 +25,7 @@ SRCS(
     ut_schemeshard_build_index_helpers.cpp
     ut_fulltext_build.cpp
     ut_index_build.cpp
+    ut_json_index_build.cpp
     ut_vector_index_build.cpp
 )
 

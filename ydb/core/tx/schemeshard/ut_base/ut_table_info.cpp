@@ -361,6 +361,7 @@ Y_UNIT_TEST(DeepCopy_PointersAreIndependent) {
     dst.emplace_back(TShardIdx(2, 1), TString(1, '\x02'), 0, 0);
     info->ApplySplitMerge(std::move(dst), {TShardIdx(1, 1)}, /*splitFirstIdx=*/1, TInstant::Zero());
     UNIT_ASSERT_VALUES_EQUAL(info->GetPartitions().size(), 4u);
+    info->VerifyConsistency();
 
     // Copy must be unaffected — its pointers still reach its own PartitionStore.
     UNIT_ASSERT_VALUES_EQUAL(copy->GetPartitions().size(), 3u);
@@ -399,6 +400,30 @@ Y_UNIT_TEST(DeepCopy_WithTTL) {
     UNIT_ASSERT_VALUES_EQUAL(copy->GetInFlightCondErase().size(), 1u);
     UNIT_ASSERT_VALUES_EQUAL(copy->GetPartitions().size(), 4u);
     copy->VerifyConsistency();
+}
+
+Y_UNIT_TEST(DeepCopy_PreservesPartitionsFormat) {
+    auto info = MakeTable();
+    info->SetPartitioning(MakeShards(3));
+
+    // test default and explicit values
+    {
+        auto copy = TTableInfo::DeepCopy(*info);
+        UNIT_ASSERT_VALUES_EQUAL(copy->GetPartitions().size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(copy->PartitionsInShardIdxFormat, info->PartitionsInShardIdxFormat);
+    }
+    info->PartitionsInShardIdxFormat = false;
+    {
+        auto copy = TTableInfo::DeepCopy(*info);
+        UNIT_ASSERT_VALUES_EQUAL(copy->GetPartitions().size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(copy->PartitionsInShardIdxFormat, info->PartitionsInShardIdxFormat);
+    }
+    info->PartitionsInShardIdxFormat = true;
+    {
+        auto copy = TTableInfo::DeepCopy(*info);
+        UNIT_ASSERT_VALUES_EQUAL(copy->GetPartitions().size(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(copy->PartitionsInShardIdxFormat, info->PartitionsInShardIdxFormat);
+    }
 }
 
 // --- TTL state machine ---

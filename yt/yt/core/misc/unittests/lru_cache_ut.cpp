@@ -2,6 +2,8 @@
 
 #include <yt/yt/core/misc/sync_cache.h>
 
+#include <util/generic/strbuf.h>
+
 namespace NYT {
 namespace {
 
@@ -9,7 +11,7 @@ namespace {
 
 TEST(TSimpleLruCacheTest, Common)
 {
-    TSimpleLruCache<TString, int> cache(2);
+    TSimpleLruCache<std::string, int> cache(2);
     cache.Insert("a", 1);
     cache.Insert("b", 2);
 
@@ -46,7 +48,7 @@ TEST(TSimpleLruCacheTest, Common)
 
 TEST(TSimpleLruCacheTest, Clear)
 {
-    TSimpleLruCache<TString, int> cache(2);
+    TSimpleLruCache<std::string, int> cache(2);
     cache.Insert("a", 1);
     cache.Insert("b", 2);
 
@@ -67,7 +69,7 @@ TEST(TSimpleLruCacheTest, Clear)
 
 TEST(TMultiLruCacheTest, InsertAndFind)
 {
-    TMultiLruCache<TString, int> cache(3);
+    TMultiLruCache<std::string, int> cache(3);
 
     EXPECT_EQ(cache.GetSize(), 0);
 
@@ -111,9 +113,33 @@ TEST(TMultiLruCacheTest, InsertAndFind)
     EXPECT_EQ(cache.GetSize(), 0);
 }
 
+TEST(TSimpleLruCacheTest, HeterogeneousLookup)
+{
+    TSimpleLruCache<std::string, int> cache(4);
+    cache.Insert("alpha", 1);
+    cache.Insert("beta", 2);
+
+    // Lookup via TStringBuf must not materialize a std::string key.
+    EXPECT_TRUE(cache.Find(TStringBuf("alpha")));
+    EXPECT_FALSE(cache.Find(TStringBuf("gamma")));
+    EXPECT_TRUE(cache.FindNoTouch(TStringBuf("beta")));
+    EXPECT_EQ(cache.Get(TStringBuf("beta")), 2);
+}
+
+TEST(TMultiLruCacheTest, HeterogeneousLookup)
+{
+    TMultiLruCache<std::string, int> cache(4);
+    cache.Insert("alpha", 1);
+    cache.Insert("beta", 2);
+
+    EXPECT_TRUE(cache.Find(TStringBuf("alpha")));
+    EXPECT_FALSE(cache.Find(TStringBuf("gamma")));
+    EXPECT_EQ(cache.Get(TStringBuf("beta")), 2);
+}
+
 TEST(TMultiLruCacheTest, Extract)
 {
-    TMultiLruCache<TString, int> cache(3);
+    TMultiLruCache<std::string, int> cache(3);
 
     cache.Insert("a", 1);
     cache.Insert("b", 2);

@@ -69,7 +69,7 @@ struct TTestEnv {
 };
 
 TDistributedLock MakeLock(TTestEnv& env, const char* name = SEMAPHORE_NAME) {
-    return env.Client->GetDistributedLock(
+    return env.Client->CreateDistributedLock(
         TDistributedLockSettings().Path(COORD_PATH).Name(name).Timeout(TEST_TIMEOUT));
 }
 

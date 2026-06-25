@@ -115,4 +115,44 @@ Below are examples of setting the "prefer availability zone" balancing algorithm
 
   This functionality is not currently supported.
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Java
+
+  In the **Java SDK**, availability zone preference is set on the gRPC transport.
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```java
+    import tech.ydb.core.grpc.BalancingSettings;
+    import tech.ydb.core.grpc.GrpcTransport;
+
+    try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
+            .withBalancingSettings(BalancingSettings.fromLocation("a")) // preferred availability zone
+            .build()) {
+        // ...
+    }
+    ```
+
+  - JDBC
+
+    See supported availability-zone parameters in [JDBC driver properties](../../reference/languages-and-apis/jdbc-driver/properties.md), or configure balancing through the native API when embedding the driver.
+
+    In Spring Boot, ORMs, and other JDBC wrappers, pass the same JDBC URL and zone parameters as for a direct connection (for example in `spring.datasource.url` or pool properties).
+
+  {% endlist %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#238](https://github.com/ydb-platform/ydb-rs-sdk/issues/238)
+
+>>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 {% endlist %}

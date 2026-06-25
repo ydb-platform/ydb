@@ -97,8 +97,16 @@ Below are examples of the code for enabling metrics in Prometheus in different {
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+<<<<<<< HEAD
 - Python
 
   This functionality is not currently supported.
+=======
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#267](https://github.com/ydb-platform/ydb-rs-sdk/issues/267)
+>>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 
 {% endlist %}

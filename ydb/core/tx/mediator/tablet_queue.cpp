@@ -113,11 +113,17 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             if (tx.Moderator)
                 x->SetModerator(tx.Moderator);
             ActorIdToProto(TActorId(), x->MutableAckTo());
-            LOG_DEBUG(ctx, NKikimrServices::TX_MEDIATOR_PRIVATE, "Send from %" PRIu64 " to tablet %" PRIu64 ", step# %"
-                PRIu64 ", txid# %" PRIu64 ", marker M5" PRIu64, Mediator, tabletId, tabletStep->StepRef->Step, tx.TxId);
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_PRIVATE, "Send from to tablet marker M5lu",
+                {"mediator", Mediator},
+                {"tabletId", tabletId},
+                {"step", tabletStep->StepRef->Step},
+                {"txid", tx.TxId});
         }
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " Mediator# " << Mediator << " SEND to# " << tabletId << " " << evx->ToString());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "SEND",
+            {"actor", ctx.SelfID},
+            {"mediator", Mediator},
+            {"to", tabletId},
+            {"evx", evx->ToString()});
         Pipes->Send(ctx, tabletId, evx.release());
     }
 
@@ -167,8 +173,11 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
             // todo: we must throttle delivery
             const ui32 sendFlags = IEventHandle::FlagTrackDelivery;
             for (const TActorId& x : TimecastWatches) {
-                LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-                    << " Mediator# " << Mediator << " SEND to# " << x.ToString() << " " << evx.ToString());
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "SEND",
+                    {"actor", ctx.SelfID},
+                    {"mediator", Mediator},
+                    {"to", x},
+                    {"evx", evx});
                 ctx.Send(new IEventHandle(TEvMediatorTimecast::TEvUpdate::EventType, sendFlags, x, ctx.SelfID, data, 0));
             }
         }
@@ -179,8 +188,11 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         const TStepId step = msg->Step;
         const TTabletId tabletId = msg->TabletId;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " Mediator# " << Mediator << " HANDLE " << msg->ToString() << " marker# M4");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "HANDLE",
+            {"actor", ctx.SelfID},
+            {"mediator", Mediator},
+            {"msg", msg->ToString()},
+            {"marker", "M4"});
 
         TTabletEntry* tabletEntry = EnsureTablet(tabletId);
         if (!ActiveStep) {
@@ -218,8 +230,10 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         TEvTxMediator::TEvOoOTabletStep* msg = ev->Get();
         const TStepId step = msg->Step;
         const TTabletId tabletId = msg->TabletId;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " Mediator# " << Mediator << " HANDLE " << msg->ToString());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "HANDLE",
+            {"actor", ctx.SelfID},
+            {"mediator", Mediator},
+            {"msg", msg->ToString()});
 
         Y_ABORT_UNLESS(step <= AcceptedStep);
 
@@ -244,16 +258,19 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         const TEvTabletPipe::TEvClientConnected* msg = ev->Get();
         const TTabletId tabletId = msg->TabletId;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " Mediator# " << Mediator << " HANDLE " << msg->ToString());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "HANDLE",
+            {"actor", ctx.SelfID},
+            {"mediator", Mediator},
+            {"msg", msg->ToString()});
 
         TTabletEntry* tabletEntry = Tablets.FindPtr(tabletId);
         Y_ABORT_UNLESS(tabletEntry && tabletEntry->State == TTabletEntry::EState::Connecting);
 
         if (!Pipes->OnConnect(ev)) {
             if (msg->Dead) {
-                LOG_WARN_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-                    << " Mediator# " << Mediator << " HANDLE TEvClientConnected(Dead=true)");
+                YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "HANDLE TEvClientConnected(Dead=true)",
+                    {"actor", ctx.SelfID},
+                    {"mediator", Mediator});
 
                 tabletEntry->State = TTabletEntry::EState::Init;
                 if (!tabletEntry->Queue.empty()) {
@@ -290,8 +307,10 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
         const TEvTabletPipe::TEvClientDestroyed* msg = ev->Get();
         const TTabletId tabletId = msg->TabletId;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " Mediator# " << Mediator << " HANDLE " << msg->ToString());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "HANDLE",
+            {"actor", ctx.SelfID},
+            {"mediator", Mediator},
+            {"msg", msg->ToString()});
 
         Pipes->OnDisconnect(ev);
 
@@ -315,8 +334,10 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
     void Handle(TEvTxMediator::TEvStepPlanComplete::TPtr& ev, const TActorContext& ctx) {
         const TEvTxMediator::TEvStepPlanComplete* msg = ev->Get();
         const TStepId step = msg->Step;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " Mediator# " << Mediator << " HANDLE " << msg->ToString());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "HANDLE",
+            {"actor", ctx.SelfID},
+            {"mediator", Mediator},
+            {"msg", msg->ToString()});
 
         Y_ABORT_UNLESS(AcceptedStep < step);
 
@@ -338,8 +359,10 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         const NKikimrTx::TEvPlanStepAccepted& record = ev->Get()->Record;
         const TTabletId tabletId = record.GetTabletId();
         const TStepId step = record.GetStep();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " Mediator# " << Mediator << " HANDLE " << ev->Get()->ToString());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "HANDLE",
+            {"actor", ctx.SelfID},
+            {"mediator", Mediator},
+            {"ev", ev->Get()->ToString()});
 
         TTabletEntry* tabletEntry = Tablets.FindPtr(tabletId);
         if (!tabletEntry) {
@@ -376,8 +399,10 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
     }
 
     void Handle(TEvTxMediator::TEvWatchBucket::TPtr& ev, const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " Mediator# " << Mediator << " HANDLE " << ev->Get()->ToString());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "HANDLE",
+            {"actor", ctx.SelfID},
+            {"mediator", Mediator},
+            {"ev", ev->Get()->ToString()});
         const TActorId& source = ev->Get()->Source;
         TimecastWatches.insert(source);
 
@@ -387,15 +412,19 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         Y_ABORT_UNLESS(success);
         TIntrusivePtr<TEventSerializedData> data = serializer.Release(evx.CreateSerializationInfo(false));
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " Mediator# " << Mediator << " SEND to# " << source.ToString() << " " << evx.ToString());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "SEND",
+            {"actor", ctx.SelfID},
+            {"mediator", Mediator},
+            {"to", source},
+            {"evx", evx});
         const ui32 sendFlags = IEventHandle::FlagTrackDelivery;
         ctx.Send(new IEventHandle(TEvMediatorTimecast::TEvUpdate::EventType, sendFlags, source, ctx.SelfID, data, 0));
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " Mediator# " << Mediator << " HANDLE TEvUndelivered");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "HANDLE TEvUndelivered",
+            {"actor", ctx.SelfID},
+            {"mediator", Mediator});
         // for now every non-delivery is reason to drop watch
         TimecastWatches.erase(ev->Sender);
     }
@@ -411,8 +440,11 @@ class TTxMediatorTabletQueue : public TActor<TTxMediatorTabletQueue> {
         }
 
         for (auto& x : acks) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Actor# " << ctx.SelfID.ToString()
-                << " Mediator# " << Mediator << " SEND to# " << x.first.ToString() << " " << x.second->ToString());
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "SEND",
+                {"actor", ctx.SelfID},
+                {"mediator", Mediator},
+                {"toActorId", x.first},
+                {"toAck", x.second->ToString()});
             ctx.Send(x.first, x.second.release());
         }
     }
@@ -795,11 +827,11 @@ void TTxMediatorTabletQueue::TTabletEntry::MergeOutOfOrder(TStep* sx, TVector<TT
         // Coordinators shouldn't add new transactions to existing steps, so we
         // complain. Even if that happens, however, it's ok for us to send
         // those transactions later, or never. Currently we don't.
-        LOG_CRIT_S(*TlsActivationContext, NKikimrServices::TX_MEDIATOR_TABLETQUEUE,
-            "Received out-of-order step " << sx->StepRef->Step
-            << " for tablet " << TabletId
-            << " with transactions " << DumpTxIds(update)
-            << " which are not a subset of previously received " << DumpTxIds(sx->Transactions));
+        YDB_LOG_CRIT_COMP(NKikimrServices::TX_MEDIATOR_TABLETQUEUE, "Received out-of-order step for tablet with transactions which are not a subset of previously received",
+            {"step", sx->StepRef->Step},
+            {"tabletId", TabletId},
+            {"updateTxIds", DumpTxIds(update)},
+            {"txIds", DumpTxIds(sx->Transactions)});
     }
 }
 

@@ -201,6 +201,8 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         ydb.ConnectionLost,
         ydb.NotFound,
         ydb.BadSession,
+        ydb.Overloaded,
+        ydb.SessionExpired,
     )
 
     def _updater(self, table_name, stop_event, exec_state, lock):
@@ -232,7 +234,8 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     logger.warning("Updater [%s] retriable error: %s", table_name, e)
                 except Exception as e:
                     logger.error("Updater [%s] error: %s", table_name, e)
-                    exec_state.error = e
+                    with lock:
+                        exec_state.error = e
                     break
 
     def _pk_aggregator(self, table_name, results_table, stop_event, exec_state, lock):
@@ -296,8 +299,6 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                             res2 = list(results)[0].rows[0]
                         assert res2.product_sum == res.product_sum
 
-                        tx.commit()
-
                     pool.retry_tx_sync(callee, ydb.QuerySnapshotReadWrite())
 
                     with lock:
@@ -306,7 +307,8 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     logger.warning("PK aggregator [%s] retriable error: %s", table_name, e)
                 except Exception as e:
                     logger.error("PK aggregator [%s] error: %s", table_name, e)
-                    exec_state.error = e
+                    with lock:
+                        exec_state.error = e
                     break
 
     def _int_range_aggregator(self, table_name, results_table, stop_event, exec_state, lock):
@@ -371,8 +373,6 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                             res2 = list(results)[0].rows[0]
                         assert res2.product_sum == res.product_sum
 
-                        tx.commit()
-
                     pool.retry_tx_sync(callee, ydb.QuerySnapshotReadWrite())
 
                     with lock:
@@ -381,7 +381,8 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     logger.warning("Int range aggregator [%s] retriable error: %s", table_name, e)
                 except Exception as e:
                     logger.error("Int range aggregator [%s] error: %s", table_name, e)
-                    exec_state.error = e
+                    with lock:
+                        exec_state.error = e
                     break
 
     def _str_range_aggregator(self, table_name, results_table, stop_event, exec_state, lock):
@@ -445,8 +446,6 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                             res2 = list(results)[0].rows[0]
                         assert res2.product_sum == res.product_sum
 
-                        tx.commit()
-
                     pool.retry_tx_sync(callee, ydb.QuerySnapshotReadWrite())
 
                     with lock:
@@ -455,7 +454,8 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
                     logger.warning("String range aggregator [%s] retriable error: %s", table_name, e)
                 except Exception as e:
                     logger.error("String range aggregator [%s] error: %s", table_name, e)
-                    exec_state.error = e
+                    with lock:
+                        exec_state.error = e
                     break
 
     # -------------------------------------------------------------------------
@@ -585,6 +585,5 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         self.run_basic(TableType.ROW)
 
     def test_column_tables(self):
-        # TODO: re-enable when the test passes
+        pytest.skip("TODO: re-enable when column table SI test passes")
         # self.run_basic(TableType.COLUMN)
-        pass

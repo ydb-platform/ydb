@@ -121,6 +121,8 @@ ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupBasic.test_warm
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupCounters.test_warmup_counters_attribution[query]
 ydb/tests/functional/query_cache/warmup test_warmup.py.TestWarmupCounters.test_warmup_counters_attribution[table]
 ydb/tests/functional/serverless test_serverless.py.test_discovery[enable_alter_database_create_hive_first--false-enable_pool_encryption--false]
+ydb/tests/functional/serverless test_serverless.py.test_discovery[enable_alter_database_create_hive_first--true-enable_pool_encryption--true]
+ydb/tests/functional/serverless test_serverless.py.test_discovery_exclusive_nodes[enable_alter_database_create_hive_first--false-enable_pool_encryption--false]
 ydb/tests/functional/serverless test_serverless.py.test_discovery_exclusive_nodes[enable_alter_database_create_hive_first--false-enable_pool_encryption--true]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[10]
 ydb/tests/functional/tpc/large test_tpch_spilling.py.TestTpchSpillingS10.test_tpch[11]

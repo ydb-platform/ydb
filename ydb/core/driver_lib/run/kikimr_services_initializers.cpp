@@ -3182,6 +3182,10 @@ TLocalPgWireServiceInitializer::TLocalPgWireServiceInitializer(const TKikimrRunC
 }
 
 void TLocalPgWireServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    if (!Config.GetLocalPgWireConfig().GetEnableLocalPgWire()) {
+        return;
+    }
+
     setup->LocalServices.emplace_back(
         NLocalPgWire::CreateLocalPgWireProxyId(),
         TActorSetupCmd(NLocalPgWire::CreateLocalPgWireProxy(), TMailboxType::HTSwap, appData->UserPoolId)

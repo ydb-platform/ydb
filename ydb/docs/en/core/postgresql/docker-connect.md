@@ -4,7 +4,7 @@
 
 ## Running {{ ydb-short-name }} with PostgreSQL compatibility enabled
 
-Currently, the PostgreSQL compatibility feature is available for testing in the Docker image: `ghcr.io/ydb-platform/local-ydb:nightly`.
+The local {{ ydb-short-name }} Docker image (`ghcr.io/ydb-platform/local-ydb:nightly`) enables the PostgreSQL wire protocol listener (pgwire) by default. You only need to publish port 5432 to connect with PostgreSQL clients.
 
 Commands for starting a local Docker container with {{ ydb-short-name }} and open ports for PostgreSQL and Embedded UI:
 
@@ -35,7 +35,6 @@ To preserve the container's state, you need to remove the environment variable `
             - "YDB_USE_IN_MEMORY_PDISKS=true"
             - "POSTGRES_USER=${YDB_PG_USER:-root}"
             - "POSTGRES_PASSWORD=${YDB_PG_PASSWORD:-1234}"
-            - "YDB_EXPERIMENTAL_PG=1"
     ```
 
     Run:
@@ -47,12 +46,14 @@ To preserve the container's state, you need to remove the environment variable `
 - Docker command
 
     ```bash
-    docker run --name ydb-postgres -d --pull always -p 5432:5432 -p 8765:8765 -e POSTGRES_USER=root -e POSTGRES_PASSWORD=1234 -e YDB_EXPERIMENTAL_PG=1 -e YDB_USE_IN_MEMORY_PDISKS=true ghcr.io/ydb-platform/local-ydb:nightly
+    docker run --name ydb-postgres -d --pull always -p 5432:5432 -p 8765:8765 -e POSTGRES_USER=root -e POSTGRES_PASSWORD=1234 -e YDB_USE_IN_MEMORY_PDISKS=true ghcr.io/ydb-platform/local-ydb:nightly
     ```
 
 {% endlist %}
 
 After launching the container, you can connect to it via PostgreSQL clients on port 5432, the database `local`, or open the [web interface](http://localhost:8765) on port 8765.
+
+To disable pgwire in the container, set `YDB_EXPERIMENTAL_PG=0`.
 
 ## Connecting to the Running Container via psql
 

@@ -3011,6 +3011,7 @@ message TClientCertificateAuthorization {
 
 message TLocalPgWireConfig {
     optional int32 ListeningPort = 1 [default = 5432];
+    optional bool EnableLocalPgWire = 2 [default = false];
     optional string SslCertificate = 5 [(Ydb.sensitive) = true];
     optional string Address = 6 [default = "::"];
     optional bool TcpNotDelay = 7 [default = true];

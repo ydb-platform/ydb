@@ -25,6 +25,7 @@ The following top-level configuration sections are available, listed in alphabet
 || [{#T}](host_configs.md) | No | Typical host configurations for cluster nodes ||
 || [{#T}](hosts.md) | Yes | Static cluster nodes configuration ||
 || [{#T}](kafka.md) | No | [Kafka Proxy](../../reference/kafka-api/index.md) configuration ||
+|| [{#T}](local_pg_wire_config.md) | No | [PostgreSQL wire protocol](../../postgresql/intro.md) (pgwire) configuration ||
 || [{#T}](log_config.md) | No | Logging configuration and parameters ||
 || [{#T}](memory_controller_config.md) | No | Memory allocation and limits for database components ||
 || [{#T}](node_broker_config.md) | No | Stable node names configuration ||

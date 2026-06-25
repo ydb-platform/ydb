@@ -1,8 +1,8 @@
 #include "kafka_messages_int.h"
 
-#include <library/cpp/digest/crc32c/crc32c.h>
 #include <library/cpp/streams/zstd/zstd.h>
 
+#include <array>
 #include <limits>
 
 #include <util/stream/mem.h>
@@ -38,6 +38,29 @@ void WriteKafkaInt32(TString& data, size_t offset, TKafkaInt32 value) {
     data[offset + 1] = static_cast<char>((static_cast<ui32>(value) >> 16) & 0xff);
     data[offset + 2] = static_cast<char>((static_cast<ui32>(value) >> 8) & 0xff);
     data[offset + 3] = static_cast<char>(static_cast<ui32>(value) & 0xff);
+}
+
+constexpr std::array<ui32, 256> MakeCrc32cTable() {
+    constexpr ui32 polynomial = 0x82f63b78;
+    std::array<ui32, 256> table = {};
+    for (ui32 i = 0; i < table.size(); ++i) {
+        ui32 crc = i;
+        for (size_t bit = 0; bit < 8; ++bit) {
+            crc = (crc >> 1) ^ (polynomial & (0 - (crc & 1)));
+        }
+        table[i] = crc;
+    }
+    return table;
+}
+
+ui32 Crc32c(const void* data, size_t size) noexcept {
+    static constexpr auto table = MakeCrc32cTable();
+    ui32 crc = ~ui32{0};
+    const auto* bytes = static_cast<const ui8*>(data);
+    for (size_t i = 0; i < size; ++i) {
+        crc = table[(crc ^ bytes[i]) & 0xff] ^ (crc >> 8);
+    }
+    return ~crc;
 }
 
 TString DecompressRecordBatchPayload(TStringBuf data, ECompressionType compressionType) {

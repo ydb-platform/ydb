@@ -180,7 +180,7 @@ def test_meta_support_links_returns_logging_link_for_node_id(meta_support_links_
     assert_logging_support_links_response(
         meta_support_links_env.get_ok_support_links_payload(CLUSTER_NAME, node=NODE_ID),
         "Node Logs",
-        f'{{cluster="{CLUSTER_NAME}", node="{NODE_ID}"}}',
+        f'{{node_id="{NODE_ID}", __workspace__="{WORKSPACE_NAME}", __bucket__="ydb"}}',
     )
 
 
@@ -188,7 +188,7 @@ def test_meta_support_links_returns_logging_link_for_host(meta_support_links_env
     assert_logging_support_links_response(
         meta_support_links_env.get_ok_support_links_payload(CLUSTER_NAME, host=HOST_NAME),
         "Host Logs",
-        f'{{cluster="{CLUSTER_NAME}", host="{HOST_NAME}"}}',
+        f'{{k8s_node_name="{HOST_NAME}", __workspace__="{WORKSPACE_NAME}", __bucket__="ydb"}}',
     )
 
 
@@ -200,8 +200,8 @@ def test_meta_support_links_combines_node_and_host_groups(meta_support_links_env
             host=HOST_NAME,
         ),
         [
-            ("Node Logs", f'{{cluster="{CLUSTER_NAME}", node="{NODE_ID}"}}'),
-            ("Host Logs", f'{{cluster="{CLUSTER_NAME}", host="{HOST_NAME}"}}'),
+            ("Node Logs", f'{{node_id="{NODE_ID}", __workspace__="{WORKSPACE_NAME}", __bucket__="ydb"}}'),
+            ("Host Logs", f'{{k8s_node_name="{HOST_NAME}", __workspace__="{WORKSPACE_NAME}", __bucket__="ydb"}}'),
         ],
     )
 
@@ -215,8 +215,8 @@ def test_meta_support_links_skips_additional_and_foreign_identity_params_for_log
             extra_params={"custom_label": "kept"},
         ),
         [
-            ("Node Logs", f'{{cluster="{CLUSTER_NAME}", node="{NODE_ID}"}}'),
-            ("Host Logs", f'{{cluster="{CLUSTER_NAME}", host="{HOST_NAME}"}}'),
+            ("Node Logs", f'{{custom_label="kept", node_id="{NODE_ID}", __workspace__="{WORKSPACE_NAME}", __bucket__="ydb"}}'),
+            ("Host Logs", f'{{custom_label="kept", k8s_node_name="{HOST_NAME}", __workspace__="{WORKSPACE_NAME}", __bucket__="ydb"}}'),
         ],
     )
 

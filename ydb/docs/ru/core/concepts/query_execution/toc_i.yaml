@@ -11,6 +11,8 @@ items:
     href: vector_search.md
   - name: Полнотекстовый поиск
     href: fulltext_search.md
+  - name: Локальные индексы
+    href: local_indexes.md
   - name: Гибридный поиск
     href: hybrid_search.md
   - name: Федеративные запросы

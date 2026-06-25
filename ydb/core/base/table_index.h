@@ -132,7 +132,7 @@ namespace NFulltext {
     // Deterministic names of the auto-provisioned unique secondary index over [__ydb_row_id] and
     // of the sequence that generates __ydb_row_id values. Deterministic so a second fulltext index
     // on the same table reuses the same infrastructure instead of creating duplicates.
-    inline constexpr const char* RowIdUniqueIndexName = "uniq__ydb_row_id";
+    inline constexpr const char* RowIdUniqueIndexName = "__ydb_unique_row_id";
     inline constexpr const char* RowIdSequenceName = "_seq___ydb_row_id";
 
     inline constexpr const char* DocsTable = "indexImplDocsTable";

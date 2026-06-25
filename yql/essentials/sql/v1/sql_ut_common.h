@@ -15143,18 +15143,6 @@ Y_UNIT_TEST(NoSyntaxAmbiguity) {
     )sql");
 }
 
-Y_UNIT_TEST(Columns) {
-    NSQLTranslation::TTranslationSettings settings;
-    settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;
-    settings.YqlSelect = NSQLTranslation::EYqlSelect::Force;
-
-    auto res = SqlToYqlWithSettings(R"sql(
-        WITH x(a) AS (SELECT 1) SELECT * FROM x;
-    )sql", settings);
-    UNIT_ASSERT(!res.IsOk());
-    UNIT_ASSERT_STRING_CONTAINS(Err2Str(res), "CTE columns are not implemented yet");
-}
-
 Y_UNIT_TEST(LinearVisibilityOK) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::YqlSelect.MinLangVer;

@@ -871,6 +871,27 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(residualPredicate.Contains("b") && residualPredicate.Contains(" < ") && residualPredicate.Contains("c"), plan);
     }
 
+    Y_UNIT_TEST(CommonConjunctExtractionFeedsJoinKey) {
+        TExplainPlanTestContext testContext;
+        auto plan = ExecuteExplain(testContext.GetSession(), R"(
+            PRAGMA YqlSelect = 'force';
+            PRAGMA AnsiImplicitCrossJoin;
+
+            SELECT count(*)
+            FROM `/Root/t1` AS t1, `/Root/t2` AS t2
+            WHERE
+                (t1.a = t2.a AND t1.b = 1)
+                OR
+                (t1.a = t2.a AND t2.b = 2);
+        )");
+
+        const auto simplifiedPlan = GetSimplifiedPlan(plan);
+        const auto* joinOp = FindOperatorByStringField(simplifiedPlan, "JoinKind", "Inner");
+        UNIT_ASSERT_C(joinOp, plan);
+        const auto condition = GetStringField(*joinOp, "Condition");
+        UNIT_ASSERT_C(condition.Contains("t1.a = t2.a") || condition.Contains("t2.a = t1.a"), plan);
+    }
+
     Y_UNIT_TEST(ExplainExpressionPrintingJoinFilters) {
         NYql::TExprContext exprCtx;
         TPlanProps planProps;
@@ -1258,7 +1279,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         std::vector<std::string> queries = {
             R"(
                 $subselect = (select a, b from `/Root/t1`);
-                SELECT t1.a, t1.b FROM $subselect as t1 join $subselect as t2 on t1.a = t2.a WHERE t1.a == 1 and t1.b = 1 order by t1.a;
+                SELECT t1.a, t1.b FROM $subselect as t1 join $subselect as t2 on t1.a = t2.a WHERE t1.a == 1 and t1.b == 1 order by t1.a;
             )",
         };
 
@@ -1910,11 +1931,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 select avg(distinct t1.a) as r0, avg(distinct t1.c) as r1 from `/Root/t1` as t1 group by t1.b order by t1.b;
             )",
-            /*
             R"(
-                select distinct t1.b from `/Root/t1` as t1 group by t1.a, t1.b;
+                PRAGMA YqlSelect = 'force';
+                select distinct coalesce(t1.a, 0) as a, coalesce(t1.b, 1) as b, unwrap(t1.c) as c from `/Root/t1` as t1 order by a, b, c;
             )",
-            */
         };
 
         std::vector<std::string> results = {
@@ -1970,6 +1990,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                                             R"([[2u;1u];[3u;1u]])",
                                             R"([[0;[2]];[1;[2]]])",
                                             R"([[2.;[2.]];[2.;[2.]]])",
+                                            R"([[0;2;2];[1;1;2];[2;2;2];[3;1;2];[4;2;2]])",
                                         };
 
         for (ui32 i = 0; i < queries.size(); ++i) {
@@ -2661,6 +2682,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             Y_ENSURE(result.IsSuccess());
         }
     }
+
+    /* For debug purpose, just uncomment and run.
+    Y_UNIT_TEST(TPCDS_Q1) {
+        RunTPC_YqlTest(EBenchType::TPCDS, 1, true, true);
+    }
+    */
 
     NKikimrKqp::TKqpSetting MakeTPCHStatsSetting() {
         NKikimrKqp::TKqpSetting statsSetting;
@@ -5710,6 +5737,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 a Int64 NOT NULL,
                 b Int64,
                 c Int64,
+                d Utf8,
                 primary key(a)
             ) WITH (STORE = column);
         )";
@@ -5726,9 +5754,46 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                 PRAGMA YqlSelect = 'force';
                 SELECT t1.a FROM `/Root/t1` as t1 where t1.b > 1 and t1.a not in (select t2.a from `/Root/t2` as t2);
             )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.b FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where t2.b == 1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.b FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where 1 == t2.b;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.b FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where t2.b != 1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.b FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where t2.b < 1;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.b FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where t2.d like '%abcd%';
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.b FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where t2.d not like '%abcd%';
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.b FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where not(t2.b == 10);
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.b FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where t2.d like 'abcd%';
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.b FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where t2.d like '%abcd';
+            )",
         };
 
         auto queryClient = kikimr.GetQueryClient();
+        const std::unordered_set<ui32> notRewriteLeftInnerQueries{0, 1};
         for (ui32 i = 0; i < queries.size(); ++i) {
             const auto& query = queries[i];
             auto session = queryClient.GetSession().GetValueSync().GetSession();
@@ -5738,6 +5803,52 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
             auto ast = *result.GetStats()->GetAst();
             Y_ENSURE(ast.find("KqpOlapFilter") != std::string::npos, TStringBuilder() << "Filter not pushed down.");
+            Y_ENSURE(notRewriteLeftInnerQueries.contains(i) || (ast.find("Inner") != std::string::npos), TStringBuilder() << "Expected inner join");
+
+            result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+        }
+
+        const std::vector<std::string> notPushedQueries = {
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where t2.b is null;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where t2.b == 10 or t2.b is null;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where t2.b is not null or t2.b is null;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where coalesce(t2.b, 0) == 10;
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where t2.b == Just(10);
+            )",
+            R"(
+                PRAGMA YqlSelect = 'force';
+                SELECT t1.a, t2.a FROM `/Root/t1` as t1 left join `/Root/t2` as t2 on t1.a = t2.a where t2.b == Nothing(OptionalType(Int64));
+            )",
+        };
+
+        queryClient = kikimr.GetQueryClient();
+        for (ui32 i = 0; i < notPushedQueries.size(); ++i) {
+            const auto& query = notPushedQueries[i];
+            auto session = queryClient.GetSession().GetValueSync().GetSession();
+            auto result =
+                session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::SUCCESS);
+            auto ast = *result.GetStats()->GetAst();
+            Y_ENSURE(ast.find("KqpOlapFilter") == std::string::npos, TStringBuilder() << "Filter pushed down.");
+            Y_ENSURE(ast.find("Left") != std::string::npos, TStringBuilder() << "Expected left join");
 
             result =
                 session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Execute))
@@ -6754,7 +6865,6 @@ PRAGMA ydb.OptShuffleElimination = "true";
                              << JoinSeq(", ", hashShuffles) << "\n" << plan);
     }
 
-    /*
     void InsertIntoAliasesRenames(NYdb::NTable::TTableClient &db, std::string tableName, int numRows) {
         NYdb::TValueBuilder rows;
         rows.BeginList();
@@ -6773,7 +6883,7 @@ PRAGMA ydb.OptShuffleElimination = "true";
 
     void AliasesRenamesTest(bool newRbo) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
         appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
         appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
         appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
@@ -6803,7 +6913,6 @@ PRAGMA ydb.OptShuffleElimination = "true";
                 c Int64,
                 primary key(id)
             ) with (Store = Column);
-
         )").GetValueSync();
 
         std::vector<std::pair<std::string, int>> tables{{"/Root/foo_0", 4}, {"/Root/foo_1", 3}, {"/Root/foo_2", 2}};
@@ -6814,32 +6923,35 @@ PRAGMA ydb.OptShuffleElimination = "true";
         auto session2 = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session2.ExecuteDataQuery(R"(
-            --!syntax_pg
-            SET TablePathPrefix = "/Root/";
+            PRAGMA YqlSelect = 'force';
+            PRAGMA AnsiImplicitCrossJoin;
 
             WITH cte as (
-                SELECT a1.id2, join_id FROM (SELECT id as "id2", join_id FROM foo_0) as a1)
+                SELECT a1.id2, join_id FROM (SELECT id as id2, join_id FROM `/Root/foo_0` as foo_0) as a1)
 
             SELECT X1.id2, X2.id2
             FROM
                (SELECT id2
-               FROM foo_1, cte
-               WHERE foo_1.join_id = cte.join_id) as X1,
+                FROM `/Root/foo_1` as foo_1, cte
+                WHERE foo_1.join_id = cte.join_id) as X1,
 
                (SELECT id2
-               FROM foo_2, cte
-               WHERE foo_2.join_id = cte.join_id) as X2;
+                FROM `/Root/foo_2` as foo_2, cte
+                WHERE foo_2.join_id = cte.join_id) as X2
+
+            ORDER BY X1.id2, X2.id2;
         )", TTxControl::BeginTx().CommitTx()).GetValueSync();
 
         UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([["0";"0"];["0";"1"];["1";"0"];["1";"1"];["2";"0"];["2";"1"]])");
+        UNIT_ASSERT_VALUES_EQUAL(FormatResultSetYson(result.GetResultSet(0)), R"([[0;0];[0;1];[1;0];[1;1];[2;0];[2;1]])");
     }
 
     Y_UNIT_TEST(AliasesRenames) {
         AliasesRenamesTest(true);
-        AliasesRenamesTest(false);
+        //AliasesRenamesTest(false);
     }
 
+    /*
     Y_UNIT_TEST(PredicatePushdownLeftJoin) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableNewRBO(true);

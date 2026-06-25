@@ -1473,9 +1473,9 @@
     ],
     "test.test[select_yql-with_cte_fibonacci-default.txt-Debug]": [
         {
-            "checksum": "d095ff93299ace1623e3486abeedecd2",
-            "size": 1039,
-            "uri": "https://{canondata_backend}/1903885/5a6e3150ae22687a49e1e93bc8bbd60f7152b379/resource.tar.gz#test.test_select_yql-with_cte_fibonacci-default.txt-Debug_/opt.yql"
+            "checksum": "c858c1a908bde8300f95ba40341fd2b6",
+            "size": 1110,
+            "uri": "https://{canondata_backend}/1899731/673744737828e32b359455b3e8e016d21afb099a/resource.tar.gz#test.test_select_yql-with_cte_fibonacci-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[select_yql-with_cte_fibonacci-default.txt-Results]": [

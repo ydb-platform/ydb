@@ -91,4 +91,10 @@ NThreading::TFuture<TOperationsList<NTable::TCompactionOperation>> TOperationCli
     return List<NTable::TCompactionOperation>("compaction", pageSize, pageToken);
 }
 
+template NThreading::TFuture<NTable::TAnalyzeOperation> TOperationClient::Get(const TOperation::TOperationId& id);
+template <>
+NThreading::TFuture<TOperationsList<NTable::TAnalyzeOperation>> TOperationClient::List(std::uint64_t pageSize, const std::string& pageToken) {
+    return List<NTable::TAnalyzeOperation>("analyze", pageSize, pageToken);
+}
+
 } // namespace NYdb::NOperation

@@ -7,12 +7,16 @@
 #include "handlers.h"
 #include "helpers.h"
 
+#include <yt/yt/core/bus/bus.h>
 #include <yt/yt/core/bus/client.h>
 #include <yt/yt/core/bus/server.h>
 
 #include <yt/yt/core/concurrency/scheduler_api.h>
 
 #include <util/datetime/base.h>
+
+#include <thread>
+#include <vector>
 
 namespace NYT::NBus::NTests {
 
@@ -59,6 +63,17 @@ TYPED_TEST_P(TBusTest, Terminate)
 TYPED_TEST_P(TBusTest, Failed)
 {
     auto client = this->Traits_.CreateUnreachableClient();
+    auto bus = client->CreateBus(New<TEmptyBusHandler>());
+    auto message = CreateMessage(1);
+    auto result = NConcurrency::WaitFor(
+        bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full}));
+    EXPECT_FALSE(result.IsOK());
+}
+
+TYPED_TEST_P(TBusTest, DnsResolutionFails)
+{
+    // RFC 6761 reserves the `.invalid` TLD to never resolve.
+    auto client = this->Traits_.CreateClient("this-host-does-not-exist.invalid:1");
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
     auto message = CreateMessage(1);
     auto result = NConcurrency::WaitFor(
@@ -154,6 +169,135 @@ TYPED_TEST_P(TBusTest, ManyReplies)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TYPED_TEST_P(TBusTest, LargeMessage)
+{
+    auto server = this->Traits_.StartServer(New<TEmptyBusHandler>());
+    auto client = this->Traits_.CreateClient();
+    auto bus = client->CreateBus(New<TEmptyBusHandler>());
+
+    // A single 64 MB part exercises bulk transfer of a large message.
+    auto message = CreateMessage(1, 64_MB);
+    NConcurrency::WaitFor(
+        bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full}))
+        .ThrowOnError();
+
+    NConcurrency::WaitFor(server->Stop())
+        .ThrowOnError();
+}
+
+
+TYPED_TEST_P(TBusTest, ServerTerminationNotifiesBus)
+{
+    auto server = this->Traits_.StartServer(New<TEmptyBusHandler>());
+    auto client = this->Traits_.CreateClient();
+    auto bus = client->CreateBus(New<TEmptyBusHandler>());
+
+    auto terminated = NewPromise<void>();
+    TError observedError;
+    bus->SubscribeTerminated(BIND([&] (const TError& error) {
+        observedError = error;
+        terminated.TrySet();
+    }));
+
+    // Force wire-up so the client actually has a live connection to fail.
+    auto message = CreateMessage(1);
+    NConcurrency::WaitFor(
+        bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full}))
+        .ThrowOnError();
+
+    NConcurrency::WaitFor(server->Stop())
+        .ThrowOnError();
+
+    NConcurrency::WaitFor(terminated.ToFuture())
+        .ThrowOnError();
+    EXPECT_FALSE(observedError.IsOK());
+}
+
+TYPED_TEST_P(TBusTest, ConcurrentSendsOnSameBus)
+{
+    constexpr int ThreadCount = 8;
+    constexpr int SendsPerThread = 64;
+
+    auto server = this->Traits_.StartServer(New<TEmptyBusHandler>());
+    auto client = this->Traits_.CreateClient();
+    auto bus = client->CreateBus(New<TEmptyBusHandler>());
+    auto message = CreateMessage(4, 4_KB);
+
+    std::vector<std::vector<TFuture<void>>> perThread(ThreadCount);
+    std::vector<std::thread> threads;
+    threads.reserve(ThreadCount);
+    for (int t = 0; t < ThreadCount; ++t) {
+        threads.emplace_back([&, t] {
+            for (int i = 0; i < SendsPerThread; ++i) {
+                perThread[t].push_back(
+                    bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full}));
+            }
+        });
+    }
+    for (auto& thread : threads) {
+        thread.join();
+    }
+    for (const auto& futures : perThread) {
+        for (const auto& future : futures) {
+            EXPECT_TRUE(NConcurrency::WaitFor(future).IsOK());
+        }
+    }
+
+    NConcurrency::WaitFor(server->Stop())
+        .ThrowOnError();
+}
+
+TYPED_TEST_P(TBusTest, SendAfterServerStop)
+{
+    auto server = this->Traits_.StartServer(New<TEmptyBusHandler>());
+    auto client = this->Traits_.CreateClient();
+    auto bus = client->CreateBus(New<TEmptyBusHandler>());
+
+    // Force wire-up first so the bus has a connected endpoint.
+    auto firstMessage = CreateMessage(1);
+    NConcurrency::WaitFor(
+        bus->Send(firstMessage, {.TrackingLevel = EDeliveryTrackingLevel::Full}))
+        .ThrowOnError();
+
+    NConcurrency::WaitFor(server->Stop())
+        .ThrowOnError();
+
+    // The remote endpoint is gone; the second send must fail rather than hang.
+    auto message = CreateMessage(1);
+    auto result = NConcurrency::WaitFor(
+        bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full}));
+    EXPECT_FALSE(result.IsOK());
+}
+
+TYPED_TEST_P(TBusTest, EmptyAndZeroSizedParts)
+{
+    auto server = this->Traits_.StartServer(New<TEmptyBusHandler>());
+    auto client = this->Traits_.CreateClient();
+    auto bus = client->CreateBus(New<TEmptyBusHandler>());
+
+    // No parts at all.
+    {
+        auto message = TSharedRefArray();
+        auto result = NConcurrency::WaitFor(
+            bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full}));
+        EXPECT_TRUE(result.IsOK());
+    }
+
+    // One part of zero bytes.
+    {
+        auto message = CreateMessage(1, 0);
+        auto result = NConcurrency::WaitFor(
+            bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full}));
+        EXPECT_TRUE(result.IsOK());
+    }
+
+    NConcurrency::WaitFor(server->Stop())
+        .ThrowOnError();
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+
 REGISTER_TYPED_TEST_SUITE_P(
     TBusTest,
     OK,
@@ -163,7 +307,13 @@ REGISTER_TYPED_TEST_SUITE_P(
     OneReplyNoTracking,
     OneReplyFullTracking,
     OneReplyErrorOnlyTracking,
-    ManyReplies);
+    ManyReplies,
+    LargeMessage,
+    ServerTerminationNotifiesBus,
+    ConcurrentSendsOnSameBus,
+    SendAfterServerStop,
+    EmptyAndZeroSizedParts,
+    DnsResolutionFails);
 
 ////////////////////////////////////////////////////////////////////////////////
 

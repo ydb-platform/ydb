@@ -39,7 +39,9 @@ public:
         const TString& database = {},
         bool isSystemUser = false,
         TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy = Nothing(),
-        TMaybe<NACLib::TDiffACL> tableAclDiff = Nothing())
+        TMaybe<NACLib::TDiffACL> tableAclDiff = Nothing(),
+        TVector<NKikimrSchemeOp::TIndexDescription> tableIndexes = {},
+        TVector<NKikimrSchemeOp::TSequenceDescription> tableSequences = {})
         : PathComponents(std::move(pathComponents))
         , Columns(std::move(columns))
         , KeyColumns(std::move(keyColumns))
@@ -49,6 +51,8 @@ public:
         , IsSystemUser(isSystemUser)
         , PartitioningPolicy(std::move(partitioningPolicy))
         , TableAclDiff(std::move(tableAclDiff))
+        , TableIndexes(std::move(tableIndexes))
+        , TableSequences(std::move(tableSequences))
         , LogPrefix("Table " + TableName() + " updater. ")
     {
         Y_ABORT_UNLESS(!PathComponents.empty());
@@ -120,11 +124,18 @@ public:
 
         switch (OperationType) {
             case NKikimrSchemeOp::ESchemeOpCreateTable: {
-                auto& modifyScheme = *getModifyScheme(NKikimrSchemeOp::ESchemeOpCreateTable);
-                BuildCreateTable(modifyScheme);
+                const bool useIndexedTable = !TableSequences.empty() || !TableIndexes.empty();
+                if (useIndexedTable) {
+                    auto& modifyScheme = *getModifyScheme(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
+                    auto& indexedTable = *modifyScheme.MutableCreateIndexedTable();
+                    BuildCreateIndexedTable(indexedTable);
+                } else {
+                    auto& modifyScheme = *getModifyScheme(NKikimrSchemeOp::ESchemeOpCreateTable);
+                    BuildCreateTable(modifyScheme);
 
-                if (TableAclDiff) {
-                    BuildModifyACL(modifyScheme);
+                    if (TableAclDiff) {
+                        BuildModifyACL(modifyScheme);
+                    }
                 }
 
                 break;
@@ -379,7 +390,35 @@ public:
     }
 
 private:
-    void BuildTableOperation(NKikimrSchemeOp::TTableDescription& tableDesc) const {
+    static NKikimrSchemeOp::TIndexCreationConfig ToIndexCreationConfig(
+        const NKikimrSchemeOp::TIndexDescription& index)
+    {
+        NKikimrSchemeOp::TIndexCreationConfig config;
+        config.SetName(index.GetName());
+        config.SetType(index.GetType());
+        if (index.HasState()) {
+            config.SetState(index.GetState());
+        }
+        config.MutableKeyColumnNames()->Assign(
+            index.GetKeyColumnNames().begin(), index.GetKeyColumnNames().end());
+        return config;
+    }
+
+    void BuildCreateIndexedTable(NKikimrSchemeOp::TIndexedTableCreationConfig& indexedTable) const {
+        auto& tableDesc = *indexedTable.MutableTableDescription();
+        BuildTableOperation(tableDesc, false);
+        tableDesc.MutableKeyColumnNames()->Assign(KeyColumns.begin(), KeyColumns.end());
+
+        for (const auto& index : TableIndexes) {
+            *indexedTable.AddIndexDescription() = ToIndexCreationConfig(index);
+        }
+
+        for (const auto& sequence : TableSequences) {
+            *indexedTable.AddSequenceDescription() = sequence;
+        }
+    }
+
+    void BuildTableOperation(NKikimrSchemeOp::TTableDescription& tableDesc, bool includeTableIndexes = true) const {
         tableDesc.SetName(TableName());
         tableDesc.MutableColumns()->Assign(Columns.begin(), Columns.end());
 
@@ -389,6 +428,10 @@ private:
 
         if (PartitioningPolicy) {
             *tableDesc.MutablePartitionConfig()->MutablePartitioningPolicy() = *PartitioningPolicy;
+        }
+
+        if (includeTableIndexes && !TableIndexes.empty()) {
+            tableDesc.MutableTableIndexes()->Assign(TableIndexes.begin(), TableIndexes.end());
         }
     }
 
@@ -479,6 +522,8 @@ private:
     bool IsSystemUser = false;
     const TMaybe<NKikimrSchemeOp::TPartitioningPolicy> PartitioningPolicy;
     const TMaybe<NACLib::TDiffACL> TableAclDiff;
+    const TVector<NKikimrSchemeOp::TIndexDescription> TableIndexes;
+    const TVector<NKikimrSchemeOp::TSequenceDescription> TableSequences;
     NKikimrSchemeOp::EOperationType OperationType = NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable;
     bool PartialModification = false;
     NActors::TActorId Owner;
@@ -537,6 +582,12 @@ NKikimrSchemeOp::TTTLSettings TMultiTableCreator::TtlCol(const TString& columnNa
     return settings;
 }
 
+NKikimrSchemeOp::TPartitioningPolicy TMultiTableCreator::AutoPartitioningByLoadPolicy() {
+    NKikimrSchemeOp::TPartitioningPolicy policy;
+    policy.MutableSplitByLoadSettings()->SetEnabled(true);
+    return policy;
+}
+
 TMultiTableCreator::TMultiTableCreator(std::vector<NActors::IActor*> tableCreators)
     : TableCreators(std::move(tableCreators))
 {}
@@ -583,11 +634,14 @@ NActors::IActor* CreateTableCreator(
     const TString& database,
     bool isSystemUser,
     TMaybe<NKikimrSchemeOp::TPartitioningPolicy> partitioningPolicy,
-    TMaybe<NACLib::TDiffACL> tableAclDiff)
+    TMaybe<NACLib::TDiffACL> tableAclDiff,
+    TVector<NKikimrSchemeOp::TIndexDescription> tableIndexes,
+    TVector<NKikimrSchemeOp::TSequenceDescription> tableSequences)
 {
     return new TTableCreator(std::move(pathComponents), std::move(columns),
         std::move(keyColumns), logService, std::move(ttlSettings), database,
-        isSystemUser, std::move(partitioningPolicy), std::move(tableAclDiff));
+        isSystemUser, std::move(partitioningPolicy), std::move(tableAclDiff),
+        std::move(tableIndexes), std::move(tableSequences));
 }
 
 } // namespace NKikimr

@@ -31,6 +31,8 @@ ydb-dstool -e <bs_endpoint> cluster set --enable-self-heal
 ydb-dstool -e <bs_endpoint> cluster set --disable-self-heal
 ```
 
+{% endlist %}
+
 ## Настройки SelfHeal {#settings}
 
 Вы можете настроить SelfHeal в **Viewer** → **Cluster Management System** → **CmsConfigItems**.

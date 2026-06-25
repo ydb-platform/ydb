@@ -158,7 +158,7 @@ This guide demonstrates how to stream NGINX access logs to a {{ ydb-short-name }
 * [{#T}](../../concepts/transfer.md)
 * [{#T}](quickstart.md)
 * [Lambda function](../../yql/reference/syntax/expressions.md#lambda)
-* [CREATE TABLE](../../yql/reference/syntax/create_table/index.md)
+* [{#T}](../../yql/reference/syntax/create_table/index.md)
 * [{#T}](../../yql/reference/syntax/create-topic.md)
 * [{#T}](../../yql/reference/syntax/create-transfer.md)
 * [UNWRAP function](../../yql/reference/builtins/basic.md#unwrap)

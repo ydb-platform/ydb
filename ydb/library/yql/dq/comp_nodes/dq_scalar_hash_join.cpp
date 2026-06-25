@@ -70,6 +70,7 @@ public:
         , Converter_(converter)
         , Columns_(static_cast<int>(Buff_.size()))
         , ColumnPermutation_(meta->ColumnPermutation.SelectSide(side))
+        , Side_(side)
     {
         for (int index = 0; index < Columns_; ++index) {
             Pointers_[index] = &Buff_[index];
@@ -92,17 +93,23 @@ public:
             auto res = Flow_->FetchValues(*Ctx_, Pointers_.data());
             switch (res) {
             case EFetchResult::Finish:
+                SHJ_HANG_LOG("Source[" << int(Side_) << "]: underlying flow FINISH (totalRows=" << TotalRows_ << ")");
                 Finished_ = true;
                 if (BatchCount_ > 0) {
                     return FlushBatch();
                 }
                 return Finish{};
             case EFetchResult::Yield:
+                SHJ_HANG_LOG("Source[" << int(Side_) << "]: underlying flow YIELD (totalRows=" << TotalRows_
+                    << " batchCount=" << BatchCount_ << ")");
                 if (BatchCount_ > 0) {
                     return FlushBatch();
                 }
                 return Yield{};
             case EFetchResult::One: {
+                if ((++TotalRows_ & 0xFFFFF) == 0) {
+                    SHJ_HANG_LOG("Source[" << int(Side_) << "]: underlying flow One, totalRows=" << TotalRows_);
+                }
                 if (ColumnPermutation_.empty()) {
                     for (int i = 0; i < Columns_; ++i) {
                         BatchValues_.push_back(Buff_[i]);
@@ -144,6 +151,8 @@ private:
     static constexpr int BatchSize_ = 1024;
     TMKQLVector<NYql::NUdf::TUnboxedValue> BatchValues_;
     int BatchCount_ = 0;
+    ESide Side_;
+    ui64 TotalRows_ = 0;
 };
 
 template <EJoinKind Kind>
@@ -345,10 +354,12 @@ private:
             auto outputIsFull = [&]() {
                 return Output_.SizeTuples() >= Threshold_;
             };
+            ui64 spin = 0;
             while (!outputIsFull()) {
                 auto res = Join_.MatchRows(*JoinCtx_, Output_.MakeConsumeFn(), outputIsFull);
                 switch (res) {
                 case EFetchResult::Finish: {
+                    SHJ_HANG_LOG("FillBuffer: MatchRows=Finish sizeTuples=" << Output_.SizeTuples());
                     if (Output_.SizeTuples() == 0) {
                         return EFetchResult::Finish;
                     }
@@ -356,6 +367,7 @@ private:
                     return EFetchResult::One;
                 }
                 case EFetchResult::Yield: {
+                    SHJ_HANG_LOG("FillBuffer: MatchRows=Yield sizeTuples=" << Output_.SizeTuples());
                     if (Output_.SizeTuples() == 0) {
                         return EFetchResult::Yield;
                     }
@@ -363,6 +375,11 @@ private:
                     return EFetchResult::One;
                 }
                 case EFetchResult::One: {
+                    if ((++spin & 0xFFFFF) == 0) {
+                        SHJ_HANG_LOG("FillBuffer: SPIN MatchRows=One x" << spin
+                            << " sizeTuples=" << Output_.SizeTuples()
+                            << " (no progress to output?)");
+                    }
                     break;
                 }
                 default:

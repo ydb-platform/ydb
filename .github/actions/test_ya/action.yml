@@ -695,7 +695,7 @@ runs:
         read -ra comment_arr <<< "$comment_raw"
 
         printf "$comment"
-        if [[ ${comment_raw} != "Error"* ]]; then
+        if [[ -n "${comment_raw}" && ${comment_raw} != "Error"* ]]; then
           color=${comment_arr[0]}
           replace=$color";;;"
           comment=${comment_raw/$replace/""}

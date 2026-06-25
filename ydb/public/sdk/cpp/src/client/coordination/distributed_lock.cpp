@@ -150,7 +150,7 @@ namespace NCoordination {
     TDistributedLock::TDistributedLock(TClient& client, const TDistributedLockSettings& settings) {
         impl_ = std::make_unique<TImpl>(client, settings);
     }
-    TDistributedLock TClient::GetDistributedLock(const TDistributedLockSettings& settings) {
+    TDistributedLock TClient::CreateDistributedLock(const TDistributedLockSettings& settings) {
         return TDistributedLock(*this, settings);
     }
     TDistributedLock::~TDistributedLock() = default;

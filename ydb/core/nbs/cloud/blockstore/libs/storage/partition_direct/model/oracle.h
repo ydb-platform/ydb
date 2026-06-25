@@ -42,6 +42,7 @@ public:
         THostIndex hostIndex,
         EOperation operation,
         TInstant now) = 0;
+    virtual void OnHostDisconnected(THostIndex hostIndex, TInstant now) = 0;
 
     // Picks the best host (by lowest inflight count) out of the provided set
     // of hosts. Ties are broken uniformly at random.
@@ -83,6 +84,7 @@ public:
         THostIndex hostIndex,
         EOperation operation,
         TInstant now) override;
+    void OnHostDisconnected(THostIndex hostIndex, TInstant now) override;
 
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,

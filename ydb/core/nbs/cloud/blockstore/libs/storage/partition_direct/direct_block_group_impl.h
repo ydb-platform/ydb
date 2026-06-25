@@ -163,6 +163,7 @@ private:
 
         ui64 ConfirmedSessionSeqNo = 0;
 
+        void ResetSession();
         [[nodiscard]] const TFuture& GetFuture() const;
     };
 
@@ -173,6 +174,9 @@ private:
         size_t index,
         ui64 seqNo,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
+    void ReEstablishDDiskConnection(
+        size_t index,
+        EConnectionType connectionType);
     void OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId);
 
     [[nodiscard]] bool HasPBufferQuorum() const;

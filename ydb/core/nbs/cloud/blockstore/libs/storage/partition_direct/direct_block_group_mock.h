@@ -32,6 +32,7 @@ struct TOracleMock: public IOracle
         THostIndex hostIndex,
         EOperation operation,
         TInstant now) override;
+    void OnHostDisconnected(THostIndex hostIndex, TInstant now) override;
 
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,

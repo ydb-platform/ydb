@@ -61,6 +61,13 @@ TDirectBlockGroup::TDDiskConnection::GetFuture() const
     return ConnectFuture;
 }
 
+void TDirectBlockGroup::TDDiskConnection::ResetSession()
+{
+    ConnectPromise = NThreading::NewPromise<NProto::TError>();
+    ConnectFuture = ConnectPromise.GetFuture();
+    SessionState = EDDiskSessionState::NotLocked;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 TDirectBlockGroup::TDirectBlockGroup(
@@ -1232,22 +1239,36 @@ void TDirectBlockGroup::OnConnectionEstablished(
     }
 }
 
+void TDirectBlockGroup::ReEstablishDDiskConnection(
+    size_t index,
+    EConnectionType connectionType)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(index < DDiskConnections.size());
+
+    TDDiskConnection& connection = connectionType == EConnectionType::DDisk
+                                       ? DDiskConnections[index]
+                                       : PBufferConnections[index];
+
+    connection.ResetSession();
+    DoEstablishConnection(index, connectionType);
+}
+
 void TDirectBlockGroup::OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    LOG_ERROR(
+    LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "maks_ololo TDBG::OnNodeDisconnected %s, host %s, nodId: %d",
+        "maks_ololo TDBG::OnNodeDisconnected %s, host %s, nodeId: %d",
         LogTitle.GetWithTime().c_str(),
         PrintHostIndex(hostIndex).c_str(),
         nodeId);
 
-    // TODO
-    // сбросить locked сессии
-    // запстить установку новой сессии
-    // оповестить oracle о проблеме
+    Oracle.OnHostDisconnected(hostIndex, TInstant::Now());
+    // OnNodeDisconnected may be called only for DDisk
+    ReEstablishDDiskConnection(hostIndex, EConnectionType::DDisk);
 }
 
 bool TDirectBlockGroup::HasPBufferQuorum() const

@@ -33,6 +33,11 @@ void TOracleMock::OnRequestFailed(
     Y_UNUSED(hostIndex, operation, now);
 }
 
+void TOracleMock::OnHostDisconnected(THostIndex hostIndex, TInstant now)
+{
+    Y_UNUSED(hostIndex, now);
+}
+
 THostIndex TOracleMock::SelectBestPBufferHost(
     THostMask hosts,
     EOperation operation) const

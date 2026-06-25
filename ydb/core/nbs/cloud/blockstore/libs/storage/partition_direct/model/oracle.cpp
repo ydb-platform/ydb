@@ -195,6 +195,11 @@ void TOracle::OnRequestFailed(
     HostStatistics[hostIndex].OnError(now, operation);
 }
 
+void TOracle::OnHostDisconnected(THostIndex hostIndex, TInstant now)
+{
+    Y_UNUSED(hostIndex, now);
+}
+
 THostIndex TOracle::SelectBestPBufferHost(
     THostMask hosts,
     EOperation operation) const

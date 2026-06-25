@@ -42,5 +42,13 @@ This option only makes sense if the cluster is operating in bridge mode. If it i
 
   This functionality is not currently supported.
 
+<<<<<<< HEAD
+=======
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#491](https://github.com/ydb-platform/ydb-rs-sdk/issues/491)
+>>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 
 {% endlist %}

@@ -562,7 +562,7 @@ private:
                             .Endpoint = federatedCluster.GetEndpoint(),
                             .Path = federatedCluster.GetDatabase(),
                         },
-                        TopicPartitionsCount
+                        federatedCluster.GetPartitionsCount()
                     );
                     if (cluster.PartitionsCount == 0) {
                         cluster.PartitionsCount = TopicPartitionsCount;

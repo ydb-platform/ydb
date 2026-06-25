@@ -9,12 +9,13 @@ namespace {
 class TLogicalLiveness: public ILivenessContext {
 public:
     explicit TLogicalLiveness(TPlanProps& props)
-        : Props(props)
-        , LiveOut(props.LiveOut) {
+        : Props(props) {
     }
 
     void Run(TOpRoot& root) {
-        LiveOut.clear();
+        for (const auto& iter : root) {
+            iter.Current->Props.LiveOut.reset();
+        }
 
         TVector<TInfoUnit> rootColumns;
         rootColumns.reserve(root.ColumnOrder.size());
@@ -27,14 +28,17 @@ public:
     }
 
     const TInfoUnitSet& GetLiveOut(IOperator* op) const override {
-        const auto it = LiveOut.find(op);
-        Y_ENSURE(it != LiveOut.end(), "Liveness requested for an operator that has no live output");
-        return it->second;
+        Y_ENSURE(op);
+        Y_ENSURE(op->Props.LiveOut.has_value(), "Liveness requested for an operator that has no live output");
+        return *op->Props.LiveOut;
     }
 
     bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TVector<TInfoUnit>& columns) override {
         bool changed = false;
-        auto& live = LiveOut[op.get()];
+        if (!op->Props.LiveOut) {
+            op->Props.LiveOut.emplace();
+        }
+        auto& live = *op->Props.LiveOut;
         for (const auto& column : columns) {
             changed |= AddInfoUnit(live, column);
         }
@@ -46,7 +50,10 @@ public:
 
     bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TInfoUnitSet& columns) override {
         bool changed = false;
-        auto& live = LiveOut[op.get()];
+        if (!op->Props.LiveOut) {
+            op->Props.LiveOut.emplace();
+        }
+        auto& live = *op->Props.LiveOut;
         for (const auto& column : columns) {
             changed |= AddInfoUnit(live, column);
         }
@@ -90,7 +97,6 @@ private:
     }
 
     TPlanProps& Props;
-    THashMap<IOperator*, TInfoUnitSet>& LiveOut;
     THashSet<IOperator*> Queued;
     TVector<TIntrusivePtr<IOperator>> Queue;
 };
@@ -249,6 +255,17 @@ void TOpCBOTree::PropagateLiveness(ILivenessContext& ctx) {
 
 void ComputePlanLiveness(TOpRoot& root) {
     TLogicalLiveness(root.PlanProps).Run(root);
+}
+
+const TInfoUnitSet* GetLiveOut(IOperator* op) {
+    return op && op->Props.LiveOut ? &*op->Props.LiveOut : nullptr;
+}
+
+const TInfoUnitSet& GetLiveOutOrEmpty(IOperator* op) {
+    if (const auto* liveOut = GetLiveOut(op)) {
+        return *liveOut;
+    }
+    return EmptyInfoUnitSet();
 }
 
 } // namespace NKqp

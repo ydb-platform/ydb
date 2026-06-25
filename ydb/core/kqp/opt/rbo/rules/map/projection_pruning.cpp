@@ -12,8 +12,8 @@ bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
     }
 
     auto map = CastOperator<TOpMap>(input);
-    const auto liveIt = props.LiveOut.find(map.get());
-    if (liveIt == props.LiveOut.end()) {
+    const auto* liveOut = GetLiveOut(map.get());
+    if (!liveOut) {
         return false;
     }
 
@@ -25,7 +25,7 @@ bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
         }
     }
 
-    auto newElements = KeepLiveMapElements(map, liveIt->second, props, keepKeyColumns);
+    auto newElements = KeepLiveMapElements(map, *liveOut, props, keepKeyColumns);
 
     if (newElements.empty()) {
         const auto& replacementOutput = map->GetInput()->GetOutputIUs();
@@ -53,14 +53,15 @@ bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
 
 bool TPruneDeadReadColumnsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
+    Y_UNUSED(props);
 
     if (input->Kind != EOperator::Source) {
         return false;
     }
 
     auto read = CastOperator<TOpRead>(input);
-    const auto liveIt = props.LiveOut.find(read.get());
-    if (liveIt == props.LiveOut.end()) {
+    const auto* liveOut = GetLiveOut(read.get());
+    if (!liveOut) {
         return false;
     }
 
@@ -72,25 +73,26 @@ bool TPruneDeadReadColumnsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
         }
     }
 
-    const auto liveOutput = KeepLiveColumns(read->GetOutputIUs(), liveIt->second, keepKeyColumns);
+    const auto liveOutput = KeepLiveColumns(read->GetOutputIUs(), *liveOut, keepKeyColumns);
     return NarrowReadColumns(read, liveOutput);
 }
 
 bool TPruneDeadAggregateTraitsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
+    Y_UNUSED(props);
 
     if (input->Kind != EOperator::Aggregate || CastOperator<TOpAggregate>(input)->IsDistinctAll()) {
         return false;
     }
 
     auto aggregate = CastOperator<TOpAggregate>(input);
-    const auto liveIt = props.LiveOut.find(aggregate.get());
-    if (liveIt == props.LiveOut.end()) {
+    const auto* liveOut = GetLiveOut(aggregate.get());
+    if (!liveOut) {
         return false;
     }
 
     // Key columns will be preserved in the aggregate anyway
-    const auto liveOutput = KeepLiveColumns(aggregate->GetOutputIUs(), liveIt->second);
+    const auto liveOutput = KeepLiveColumns(aggregate->GetOutputIUs(), *liveOut);
     return PruneAggregateTraits(aggregate, liveOutput);
 }
 

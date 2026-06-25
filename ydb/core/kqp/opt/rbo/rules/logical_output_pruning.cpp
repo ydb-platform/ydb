@@ -24,12 +24,12 @@ void TLogicalOutputPruningStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
             }
 
             auto map = CastOperator<TOpMap>(iter.Current);
-            const auto liveIt = root.PlanProps.LiveOut.find(map.get());
-            if (liveIt == root.PlanProps.LiveOut.end()) {
+            const auto* liveOut = GetLiveOut(map.get());
+            if (!liveOut) {
                 continue;
             }
 
-            auto newElements = KeepLiveMapElements(map, liveIt->second, root.PlanProps);
+            auto newElements = KeepLiveMapElements(map, *liveOut, root.PlanProps);
             if (newElements.size() == map->MapElements.size()) {
                 continue;
             }
@@ -51,12 +51,12 @@ void TLogicalOutputPruningStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
             }
 
             auto aggregate = CastOperator<TOpAggregate>(iter.Current);
-            const auto liveIt = root.PlanProps.LiveOut.find(aggregate.get());
-            if (liveIt == root.PlanProps.LiveOut.end()) {
+            const auto* liveOut = GetLiveOut(aggregate.get());
+            if (!liveOut) {
                 continue;
             }
 
-            const auto liveOutput = KeepLiveColumns(aggregate->GetOutputIUs(), liveIt->second);
+            const auto liveOutput = KeepLiveColumns(aggregate->GetOutputIUs(), *liveOut);
             pruned |= PruneAggregateTraits(aggregate, liveOutput);
         }
     }
@@ -65,12 +65,12 @@ void TLogicalOutputPruningStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
 
     for (const auto& iter : root) {
         auto op = iter.Current;
-        const auto liveIt = root.PlanProps.LiveOut.find(iter.Current.get());
-        if (liveIt == root.PlanProps.LiveOut.end()) {
+        const auto* liveOut = GetLiveOut(iter.Current.get());
+        if (!liveOut) {
             continue;
         }
 
-        const auto liveOutput = KeepLiveColumns(op->GetOutputIUs(), liveIt->second);
+        const auto liveOutput = KeepLiveColumns(op->GetOutputIUs(), *liveOut);
         if (op->Kind == EOperator::Source) {
             NarrowReadColumns(CastOperator<TOpRead>(op), liveOutput);
             continue;

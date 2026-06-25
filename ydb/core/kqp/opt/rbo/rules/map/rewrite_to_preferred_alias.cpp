@@ -54,7 +54,9 @@ void AddPreferredAliasRename(
     const TInfoUnit& iu,
     const TInfoUnitSet& liveOut)
 {
-    const auto* candidates = props.Aliases.GetAliases(aliasesAt.get(), iu);
+    Y_UNUSED(props);
+
+    const auto* candidates = GetAliases(aliasesAt.get(), iu);
     if (!candidates) {
         return;
     }
@@ -144,6 +146,8 @@ bool IsRedundantAliasAppend(
     const TVector<TInfoUnit>& inputOutput,
     const TPlanProps& props)
 {
+    Y_UNUSED(props);
+
     if (!mapElement.IsColumnAccess() || !ContainsInfoUnit(inputOutput, mapElement.GetElementName())) {
         return false;
     }
@@ -157,13 +161,13 @@ bool IsRedundantAliasAppend(
         return true;
     }
 
-    if (const auto* candidates = props.Aliases.GetAliases(map.GetInput().get(), source)) {
+    if (const auto* candidates = GetAliases(map.GetInput().get(), source)) {
         if (ContainsAliasCandidate(*candidates, mapElement.GetElementName())) {
             return true;
         }
     }
 
-    if (const auto* candidates = props.Aliases.GetAliases(map.GetInput().get(), mapElement.GetElementName())) {
+    if (const auto* candidates = GetAliases(map.GetInput().get(), mapElement.GetElementName())) {
         if (ContainsAliasCandidate(*candidates, source)) {
             return true;
         }
@@ -412,8 +416,8 @@ bool RewriteAggregateInputs(TOpAggregate& aggregate, const TInfoUnitSet& liveOut
 } // anonymous namespace
 
 bool TRewriteExpressionsToPreferredAliasesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    const auto liveIt = props.LiveOut.find(input.get());
-    if (liveIt == props.LiveOut.end()) {
+    const auto* liveOut = GetLiveOut(input.get());
+    if (!liveOut) {
         if (input->Kind == EOperator::Map) {
             return RewriteMapInputs(*CastOperator<TOpMap>(input), EmptyInfoUnitSet(), ctx, props);
         }
@@ -422,17 +426,17 @@ bool TRewriteExpressionsToPreferredAliasesRule::MatchAndApply(TIntrusivePtr<IOpe
 
     switch (input->Kind) {
         case EOperator::Map:
-            return RewriteMapInputs(*CastOperator<TOpMap>(input), liveIt->second, ctx, props);
+            return RewriteMapInputs(*CastOperator<TOpMap>(input), *liveOut, ctx, props);
         case EOperator::Filter:
-            return RewriteFilterInputs(*CastOperator<TOpFilter>(input), liveIt->second, ctx, props);
+            return RewriteFilterInputs(*CastOperator<TOpFilter>(input), *liveOut, ctx, props);
         case EOperator::Join:
-            return RewriteJoinInputs(*CastOperator<TOpJoin>(input), liveIt->second, ctx, props);
+            return RewriteJoinInputs(*CastOperator<TOpJoin>(input), *liveOut, ctx, props);
         case EOperator::Aggregate:
-            return RewriteAggregateInputs(*CastOperator<TOpAggregate>(input), liveIt->second, ctx, props);
+            return RewriteAggregateInputs(*CastOperator<TOpAggregate>(input), *liveOut, ctx, props);
         case EOperator::Limit:
-            return RewriteLimitInputs(*CastOperator<TOpLimit>(input), liveIt->second, ctx, props);
+            return RewriteLimitInputs(*CastOperator<TOpLimit>(input), *liveOut, ctx, props);
         case EOperator::Sort:
-            return RewriteSortInputs(*CastOperator<TOpSort>(input), liveIt->second, ctx, props);
+            return RewriteSortInputs(*CastOperator<TOpSort>(input), *liveOut, ctx, props);
         default:
             return false;
     }

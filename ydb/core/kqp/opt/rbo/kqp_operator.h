@@ -67,6 +67,36 @@ enum ESortDir : ui32 { None = 0x00, Asc = 0x01, Desc = 0x02 };
  * TODO: Make this more generic and extendable
  */
 struct TPhysicalOpProps {
+    TPhysicalOpProps() = default;
+
+    TPhysicalOpProps(const TPhysicalOpProps& other) {
+        CopyPhysicalFrom(other);
+    }
+
+    TPhysicalOpProps(TPhysicalOpProps&& other) {
+        CopyPhysicalFrom(other);
+    }
+
+    TPhysicalOpProps& operator=(const TPhysicalOpProps& other) {
+        if (this != &other) {
+            CopyPhysicalFrom(other);
+        }
+        return *this;
+    }
+
+    TPhysicalOpProps& operator=(TPhysicalOpProps&& other) {
+        if (this != &other) {
+            CopyPhysicalFrom(other);
+        }
+        return *this;
+    }
+
+    void ClearLogicalAnalysis() {
+        LiveOut.reset();
+        Aliases.reset();
+        NameConstraints.ForbiddenOut.clear();
+    }
+
     std::optional<int> StageId;
     std::optional<TString> Algorithm;
     std::optional<TOrderEnforcer> OrderEnforcer;
@@ -82,6 +112,26 @@ struct TPhysicalOpProps {
     // Empty vector means shuffle is eliminated.
     std::optional<TVector<TInfoUnit>> LeftShuffleBy;
     std::optional<TVector<TInfoUnit>> RightShuffleBy;
+    // Recomputable logical analysis state. Copies of physical props intentionally
+    // do not preserve these fields; analyses are valid only for the current graph.
+    std::optional<TInfoUnitSet> LiveOut;
+    std::optional<TPlanAliases::TAliasMap> Aliases;
+    TPlanNameConstraints NameConstraints;
+
+private:
+    void CopyPhysicalFrom(const TPhysicalOpProps& other) {
+        StageId = other.StageId;
+        Algorithm = other.Algorithm;
+        OrderEnforcer = other.OrderEnforcer;
+        EnsureAtMostOne = other.EnsureAtMostOne;
+        Metadata = other.Metadata;
+        Statistics = other.Statistics;
+        JoinAlgo = other.JoinAlgo;
+        Cost = other.Cost;
+        LeftShuffleBy = other.LeftShuffleBy;
+        RightShuffleBy = other.RightShuffleBy;
+        ClearLogicalAnalysis();
+    }
 };
 
 class IOperator;
@@ -171,7 +221,7 @@ public:
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) = 0;
     virtual void PropagateLiveness(ILivenessContext& ctx);
     virtual bool PropagateNameConstraints(INameConstraintsContext& ctx);
-    virtual TPlanAliases::TAliasMap ComputeAliases(const TPlanAliases& planAliases);
+    virtual TPlanAliases::TAliasMap ComputeAliases();
 
     virtual TString GetExplainName() const = 0;
     virtual TString ToString(TExprContext& ctx) = 0;
@@ -359,7 +409,7 @@ public:
     virtual TVector<std::reference_wrapper<TExpression>> GetComplexExpressions();
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual bool PropagateNameConstraints(INameConstraintsContext& ctx) override;
-    virtual TPlanAliases::TAliasMap ComputeAliases(const TPlanAliases& planAliases) override;
+    virtual TPlanAliases::TAliasMap ComputeAliases() override;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
     TInfoUnitSet GetRenameSources() const;
     bool IsExtractableAppend(const TMapElement& element) const;
@@ -403,7 +453,7 @@ public:
     TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>> GetDependencyPairs();
     void SetDependencyPairs(const TVector<std::pair<TInfoUnit, const TTypeAnnotationNode*>>& pairs);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
-    virtual TPlanAliases::TAliasMap ComputeAliases(const TPlanAliases& planAliases) override;
+    virtual TPlanAliases::TAliasMap ComputeAliases() override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
@@ -484,7 +534,7 @@ public:
 
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
-    virtual TPlanAliases::TAliasMap ComputeAliases(const TPlanAliases& planAliases) override;
+    virtual TPlanAliases::TAliasMap ComputeAliases() override;
     virtual void ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext& ctx) override;
 
     TVector<TInfoUnit> GetFilterIUs(TPlanProps& props) const;
@@ -513,7 +563,7 @@ public:
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
     virtual bool PropagateNameConstraints(INameConstraintsContext& ctx) override;
-    virtual TPlanAliases::TAliasMap ComputeAliases(const TPlanAliases& planAliases) override;
+    virtual TPlanAliases::TAliasMap ComputeAliases() override;
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
@@ -562,7 +612,7 @@ public:
 
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
-    virtual TPlanAliases::TAliasMap ComputeAliases(const TPlanAliases& planAliases) override;
+    virtual TPlanAliases::TAliasMap ComputeAliases() override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;
@@ -596,7 +646,7 @@ public:
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
-    virtual TPlanAliases::TAliasMap ComputeAliases(const TPlanAliases& planAliases) override;
+    virtual TPlanAliases::TAliasMap ComputeAliases() override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;

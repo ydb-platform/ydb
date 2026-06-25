@@ -140,8 +140,7 @@ bool TryBuildRenameCandidate(
 } // anonymous namespace
 
 std::optional<TRenameCandidate> FindRenameCandidate(const TIntrusivePtr<TOpMap>& topMap, const TPlanProps& props) {
-    const auto liveIt = props.LiveOut.find(topMap.get());
-    const auto& liveOut = liveIt == props.LiveOut.end() ? EmptyInfoUnitSet() : liveIt->second;
+    const auto& liveOut = GetLiveOutOrEmpty(topMap.get());
 
     for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
         TRenameCandidate candidate;

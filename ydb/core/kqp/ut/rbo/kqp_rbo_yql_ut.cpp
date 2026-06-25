@@ -2655,7 +2655,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
         auto kikimrSettings = NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false);
 
-        kikimrSettings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::EPriority::PRI_TRACE);
+        kikimrSettings.LogSettings = TTestLogSettings().AddLogPriority(NKikimrServices::KQP_YQL, NActors::NLog::EPriority::PRI_CRIT);
         kikimrSettings.LogSettings->DefaultLogPriority = NActors::NLog::EPriority::PRI_CRIT;
 
         TKikimrRunner kikimr(kikimrSettings);
@@ -2672,9 +2672,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
             q = round + "\n" + toDecimal + "\n" + toDecimalMax + "\n" + q;
 
-            TScopedRboTraceTitleOverride traceTitle(
-                FormatBenchmarkTraceTitle(BenchmarkTraceSuiteName, BenchmarkTraceName[type], queryId),
-                q);
+            //TScopedRboTraceTitleOverride traceTitle(
+            //    FormatBenchmarkTraceTitle(BenchmarkTraceSuiteName, BenchmarkTraceName[type], queryId),
+            //    q);
             auto queryClient = kikimr.GetQueryClient();
             auto session = queryClient.GetSession().GetValueSync().GetSession();
             auto result = session.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
@@ -4318,6 +4318,58 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
                            /*rbo never finish*/{}, /*new rbo=*/true, /*printStatus=*/true, /*compareResults=*/true, /*checkNewRBOCbo=*/true,
                            // Still explain these queries, but do not require the CBO stats invariant until the known gaps are fixed.
                            /*queriesWithoutCboCheck=*/{15, 31, 58, 64, 72, 78, 85});
+    }
+
+    Y_UNIT_TEST(TPCH_YQL_17) {
+        RunTPC_YqlTest(EBenchType::TPCH, 17, true, true);
+    }
+
+    Y_UNIT_TEST(TPCDS_YQL_66) {
+        RunTPC_YqlTest(EBenchType::TPCDS, 66, true, true);
+    }
+
+
+    Y_UNIT_TEST(TPCDS_YQL_4) {
+        RunTPC_YqlTest(EBenchType::TPCDS, 4, true, true);
+    }
+
+    Y_UNIT_TEST(Bench_TPCDS_66) {
+        clock_t the_time;
+        double elapsed_time;
+        the_time = clock();
+
+        for (int i=0; i<10; i++) {
+            RunTPC_YqlTest(EBenchType::TPCDS, 66, true, true);
+        }
+
+        elapsed_time = double(clock() - the_time) / CLOCKS_PER_SEC;
+        Cout << "Elasped average: " << elapsed_time / 10.0;
+    }
+
+    Y_UNIT_TEST(Bench_TPCDS_4) {
+        clock_t the_time;
+        double elapsed_time;
+        the_time = clock();
+
+        for (int i=0; i<10; i++) {
+            RunTPC_YqlTest(EBenchType::TPCDS, 4, true, true);
+        }
+
+        elapsed_time = double(clock() - the_time) / CLOCKS_PER_SEC;
+        Cout << "Elasped average: " << elapsed_time / 10.0;
+    }
+
+    Y_UNIT_TEST(Bench_TPCH_21) {
+        clock_t the_time;
+        double elapsed_time;
+        the_time = clock();
+
+        for (int i=0; i<10; i++) {
+            RunTPC_YqlTest(EBenchType::TPCH, 21, true, true);
+        }
+
+        elapsed_time = double(clock() - the_time) / CLOCKS_PER_SEC;
+        Cout << "Elasped average: " << elapsed_time / 10.0;
     }
 
     void InsertIntoSchema0(NYdb::NTable::TTableClient& db, std::string tableName, ui32 numRows) {

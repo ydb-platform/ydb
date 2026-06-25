@@ -212,7 +212,7 @@ bool TOpMap::PropagateNameConstraints(INameConstraintsContext& ctx) {
     const auto inputOutput = MakeInfoUnitSet(GetInput()->GetOutputIUs());
 
     TInfoUnitSet renameSources;
-    for (const auto& mapElement : MapElements) {
+    for (auto& mapElement : MapElements) {
         if (mapElement.IsRename()) {
             AddInfoUnit(renameSources, mapElement.GetRename());
         }

@@ -29,6 +29,9 @@ TRuleBasedStage::TRuleBasedStage(TString&& stageName, TVector<std::unique_ptr<IR
 }
 
 void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString stageName) {
+    // Output IUs are always required
+    root.ComputeOutputIUsSubtree();
+    
     // FIXME: Parents are currently always required, because we need to update them when a rule fires
     root.ComputeParents();
     //if (props & ERuleProperties::RequireParents) {

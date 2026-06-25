@@ -5,7 +5,7 @@ namespace NKqp {
 
 namespace {
 
-bool IsIdentityRename(const TMapElement& mapElement) {
+bool IsIdentityRename(TMapElement& mapElement) {
     return mapElement.IsRename() && mapElement.GetRename() == mapElement.GetElementName();
 }
 
@@ -30,7 +30,7 @@ TIntrusivePtr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const TIntru
     TVector<TMapElement> newElements;
     newElements.reserve(map->MapElements.size());
     bool removed = false;
-    for (const auto& mapElement : map->MapElements) {
+    for (auto& mapElement : map->MapElements) {
         if (IsIdentityRename(mapElement)) {
             removed = true;
             continue;

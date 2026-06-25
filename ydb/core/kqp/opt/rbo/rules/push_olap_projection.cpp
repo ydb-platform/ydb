@@ -48,10 +48,10 @@ TIntrusivePtr<IOperator> TPushOlapProjectionRule::SimpleMatchAndApply(const TInt
 
     TVector<std::tuple<TString, TExprNode::TPtr, TExprNode::TPtr, TExprNode::TPtr>> projectionCandidates;
     TVector<ui32> inMapIndices;
-    const auto& mapElements = map->GetMapElements();
+    auto& mapElements = map->GetMapElements();
     // Iterate over map elements and try to find an expression to push down to column shard.
     for (ui32 mapIndex = 0; mapIndex < mapElements.size(); ++mapIndex) {
-        const auto& mapElement = mapElements[mapIndex];
+        auto& mapElement = mapElements[mapIndex];
         if (!mapElement.IsColumnAccess()) {
             const auto lambda = TCoLambda(mapElement.GetExpression().Node);
             const auto& arg = lambda.Args().Arg(0).Ref();

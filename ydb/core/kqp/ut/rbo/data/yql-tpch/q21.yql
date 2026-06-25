@@ -3,6 +3,8 @@
 --ignore runonopt plan diff
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
+PRAGMA ydb.CostBasedOptimizationLevel = '0';
+
 
 SELECT
     s_name,

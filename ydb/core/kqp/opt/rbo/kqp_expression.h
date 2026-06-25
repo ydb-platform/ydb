@@ -67,7 +67,7 @@ class TExpression {
     // Optionally include columns that bind to subplan results and external columns inside correlated subqueries
     // If the result list of column references is not empty and plan properties are not set in the expression,
     // an exception will be thrown
-    TVector<TInfoUnit> GetInputIUs(bool includeSubplanVars = false, bool includeCorrelatedDeps = false) const;
+    const TVector<TInfoUnit>& GetInputIUs(bool includeSubplanVars = false, bool includeCorrelatedDeps = false);
 
     // Rename column references in the expression
     TExpression ApplyRenames(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> &renameMap) const;
@@ -85,7 +85,7 @@ class TExpression {
     TString ToString() const;
 
     // Produce a compact string suitable for explain output. Complex expressions are summarized by dependencies.
-    TString ToExplainString() const;
+    TString ToExplainString();
 
     TExprNode::TPtr Node;
     TExprContext* Ctx;
@@ -93,6 +93,10 @@ class TExpression {
 
   private:
     bool MaybeEquiJoinConditionInternal(bool includeExpressions) const;
+    std::optional<TVector<TInfoUnit>> InputIUs[4] = {std::nullopt, std::nullopt, std::nullopt, std::nullopt};
+
+
+
 };
 
 /**

@@ -76,6 +76,7 @@ void RepairInfoUnitReference(TInfoUnit& iu, const TVector<TInfoUnit>& visibleIUs
 
 void ValidateUniqueOutputIUs(const TIntrusivePtr<IOperator>& op, TExprContext& ctx) {
     THashSet<TInfoUnit, TInfoUnit::THashFunction> seen;
+    op->ComputeOutputIUs();
     for (const auto& iu : op->GetOutputIUs()) {
         Y_ENSURE(!seen.contains(iu), "Duplicate visible column " << iu.GetFullName() << " after " << op->ToString(ctx));
         seen.insert(iu);
@@ -111,7 +112,7 @@ void RenameJoinSideReferences(TOpJoin& join, const TInfoUnit& from, const TInfoU
         }
     }
 
-    for (const auto& filter : join.JoinFilters) {
+    for (auto& filter : join.JoinFilters) {
         const auto filterIUs = filter.GetInputIUs(false, true);
         Y_ENSURE(!ContainsInfoUnit(filterIUs, from), "Cannot normalize duplicate join output used by a join filter");
     }
@@ -125,7 +126,7 @@ void RepairMapOutputIUs(const TIntrusivePtr<TOpMap>& map, TExprContext& ctx, TPl
         RepairExpressionInputReferences(mapElement.GetExpressionRef(), inputIUs);
     }
 
-    for (const auto& mapElement : map->MapElements) {
+    for (auto& mapElement : map->MapElements) {
         if (mapElement.IsRename()) {
             const auto source = mapElement.GetRename();
             Y_ENSURE(ContainsInfoUnit(inputIUs, source), "Rename source " << source.GetFullName() << " is not visible in map input");

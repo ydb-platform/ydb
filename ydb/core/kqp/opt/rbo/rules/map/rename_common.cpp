@@ -29,7 +29,7 @@ bool CanRewriteResidualTopMap(const TIntrusivePtr<TOpMap>& topMap, size_t rename
             continue;
         }
 
-        const auto& element = topMap->MapElements[idx];
+        auto& element = topMap->MapElements[idx];
         if (element.GetElementName() == to) {
             return false;
         }
@@ -50,7 +50,7 @@ TVector<TInfoUnit> SimulateTopMapOutputAfterPush(const TIntrusivePtr<TOpMap>& to
             continue;
         }
 
-        const auto& element = topMap->MapElements[idx];
+        auto& element = topMap->MapElements[idx];
         if (element.IsRename()) {
             AddInfoUnit(renameSources, element.GetRename());
         }
@@ -80,7 +80,7 @@ void RenameMapInputsOnly(TOpMap& map, const THashMap<TInfoUnit, TInfoUnit, TInfo
     TVector<TMapElement> renamedElements;
     renamedElements.reserve(map.MapElements.size());
 
-    for (const auto& element : map.MapElements) {
+    for (auto& element : map.MapElements) {
         if (element.IsRename()) {
             auto from = element.GetRename();
             if (const auto it = renameMap.find(from); it != renameMap.end()) {
@@ -113,7 +113,7 @@ void RemoveTopRenameAndRewriteResiduals(const TIntrusivePtr<TOpMap>& topMap, siz
     RenameMapInputsOnly(*topMap, renameMap);
 }
 
-bool RenameNeedsPush(const TIntrusivePtr<TOpMap>& topMap, const TMapElement& element, const TInfoUnitSet& liveOut, const TPlanProps& props) {
+bool RenameNeedsPush(const TIntrusivePtr<TOpMap>& topMap, TMapElement& element, const TInfoUnitSet& liveOut, const TPlanProps& props) {
     return liveOut.contains(element.GetElementName()) ||
         props.NameConstraints.IsForbiddenAtOutput(topMap.get(), element.GetRename());
 }
@@ -125,7 +125,7 @@ bool TryBuildRenameCandidate(
     const TPlanProps& props,
     TRenameCandidate& candidate)
 {
-    const auto& element = topMap->MapElements[idx];
+    auto& element = topMap->MapElements[idx];
     candidate.Index = idx;
     candidate.To = element.GetElementName();
 

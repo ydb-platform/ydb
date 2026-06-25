@@ -158,7 +158,7 @@ void TOpRead::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
 
     // Record lineage: source can rename its columns, so already we need to record that
     auto outputIUs = GetOutputIUs();
-    Y_ENSURE(Columns.size() == outputIUs.size());
+    Y_ENSURE(Columns.size() == outputIUs.size(), TStringBuilder());
 
     // KeyColumns must reference the read's actual output IUs (which may have been renamed),
     // not (Alias, physicalColumn). Columns[i] is the physical name aligned with outputIUs[i],
@@ -323,6 +323,17 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Metadata->Type = inputMetadata.Type;
     Props.Metadata->StorageType = inputMetadata.StorageType;
     const auto outputIUs = GetOutputIUs();
+    if (HasOutputConflicts(outputIUs)) {
+        YQL_CLOG(TRACE, CoreDq) << "duplicate columns in map: " << ToString(ctx.ExprCtx);
+        TStringBuilder strBld;
+        strBld << "[";
+        for (const auto& iu: outputIUs) {
+            strBld << iu.GetFullName() << ",";
+        }
+        strBld << "]";
+        YQL_CLOG(TRACE, CoreDq) << "output IUs are: " << strBld;
+
+    }
     Y_ENSURE(!HasOutputConflicts(outputIUs), "Map output must not contain duplicate columns");
     Props.Metadata->ColumnsCount = outputIUs.size();
 
@@ -366,7 +377,7 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     // Build lineage data
     Props.Metadata->ColumnLineage = {};
     TVector<std::pair<TInfoUnit, TInfoUnit>> columnCopies;
-    for (const auto& mapElement : MapElements) {
+    for (auto& mapElement : MapElements) {
         if (mapElement.IsColumnAccess()) {
             columnCopies.emplace_back(mapElement.GetElementName(), mapElement.GetColumnAccess());
         }

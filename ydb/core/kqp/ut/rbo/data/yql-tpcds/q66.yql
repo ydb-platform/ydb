@@ -2,6 +2,7 @@
 /* hybridfile can not - missing langver support */
 PRAGMA YqlSelect = 'force';
 PRAGMA AnsiImplicitCrossJoin;
+PRAGMA ydb.CostBasedOptimizationLevel = '1';
 
 $zero = cast(0 as decimal(7,2));
 

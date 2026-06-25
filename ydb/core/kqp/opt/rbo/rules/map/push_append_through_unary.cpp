@@ -66,7 +66,7 @@ TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
         return valid;
     };
 
-    for (const auto& mapElement : topMap->MapElements) {
+    for (auto& mapElement : topMap->MapElements) {
         const bool isExtractableAppend = topMap->IsExtractableAppend(mapElement);
         const bool canMove = isExtractableAppend &&
             ((canPushAlias && mapElement.IsColumnAccess()) ||

@@ -1,65 +1,84 @@
 #pragma once
 
 #include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/core/protos/kqp.pb.h>
+#include <ydb/library/actors/core/actorid.h>
+#include <ydb/library/actors/core/actorsystem_fwd.h>
 #include <ydb/library/actors/core/events.h>
+#include <ydb/library/actors/core/event_local.h>
 #include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
 #include <yql/essentials/public/issue/yql_issue.h>
+
+#include <util/generic/maybe.h>
+#include <util/system/types.h>
+
+#include <optional>
+#include <vector>
 
 namespace NKikimr::NKqp::NPrivate {
 
 struct TEvPrivate {
     // Event ids
     enum EEv : ui32 {
-        EvCreateScriptOperationResponse = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
+        EvCreateScriptOperationResponse = EventSpaceBegin(TEvents::ES_PRIVATE),
         EvLeaseCheckResult,
-
+        EvFinalizeScriptLeaseResult,
         EvEnd
     };
 
-    static_assert(EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE)");
+    static_assert(EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
     // Events
-    struct TEvCreateScriptOperationResponse : public NActors::TEventLocal<TEvCreateScriptOperationResponse, EvCreateScriptOperationResponse> {
+    struct TEvCreateScriptOperationResponse : public TEventLocal<TEvCreateScriptOperationResponse, EvCreateScriptOperationResponse> {
         TEvCreateScriptOperationResponse(Ydb::StatusIds::StatusCode statusCode, NYql::TIssues&& issues)
             : Status(statusCode)
             , Issues(std::move(issues))
-        {
-        }
+        {}
 
-        TEvCreateScriptOperationResponse(TString executionId)
+        TEvCreateScriptOperationResponse(TString executionId, NYql::TIssues&& issues)
             : Status(Ydb::StatusIds::SUCCESS)
             , ExecutionId(std::move(executionId))
-        {
-        }
-
-        const Ydb::StatusIds::StatusCode Status;
-        const NYql::TIssues Issues;
-        const TString ExecutionId;
-    };
-
-    struct TEvLeaseCheckResult : public NActors::TEventLocal<TEvLeaseCheckResult, EvLeaseCheckResult> {
-        TEvLeaseCheckResult() = default;
-
-        TEvLeaseCheckResult(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues)
-            : Status(status)
             , Issues(std::move(issues))
         {}
 
+        const Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+        const TString ExecutionId;
+        const NYql::TIssues Issues;
+    };
+
+    struct TEvLeaseCheckResult : public TEventLocal<TEvLeaseCheckResult, EvLeaseCheckResult> {
         Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
         NYql::TIssues Issues;
         TMaybe<Ydb::StatusIds::StatusCode> OperationStatus;
         TMaybe<Ydb::Query::ExecStatus> ExecutionStatus;
-        TMaybe<NYql::TIssues> OperationIssues;
-        NActors::TActorId RunScriptActorId;
-        bool LeaseExpired = false;
         TMaybe<EFinalizationStatus> FinalizationStatus;
+        NYql::TIssues OperationIssues;
+        TActorId RunScriptActorId;
+        bool EntryExists = true;
+        bool HasRetryPolicy = false;
+        bool LeaseExpired = false;
         bool RetryRequired = false;
         i64 LeaseGeneration = 0;
-        bool HasRetryPolicy = false;
-        bool WaitFinalizationOrRetry = false;
         std::optional<std::vector<Ydb::Query::ResultSetMeta>> ResultSetMetas;
+    };
+
+    struct TEvFinalizeScriptLeaseResult : public TEventLocal<TEvFinalizeScriptLeaseResult, EvFinalizeScriptLeaseResult> {
+        struct TInfo {
+            const bool LeaseVerified = false;
+            const bool ExecutionEntryExists = true;
+        };
+
+        TEvFinalizeScriptLeaseResult(const Ydb::StatusIds::StatusCode status, TInfo&& info, NYql::TIssues issues = {})
+            : Status(status)
+            , Info(std::move(info))
+            , Issues(std::move(issues))
+        {}
+
+        const Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
+        const TInfo Info;
+        const NYql::TIssues Issues;
     };
 };
 
@@ -72,10 +91,9 @@ enum class ELeaseState {
 
 // Writes new script into db.
 // If lease duration is zero, default one will be taken.
-NActors::IActor* CreateCreateScriptOperationQueryActor(const TString& executionId, const NActors::TActorId& runScriptActorId, const NKikimrKqp::TEvQueryRequest& record,
-                                                       const NKikimrKqp::TScriptExecutionOperationMeta& meta);
+IActor* CreateCreateScriptOperationQueryActor(TString executionId, const TActorId& runScriptActorId, NKikimrKqp::TEvQueryRequest record, NKikimrKqp::TScriptExecutionOperationMeta meta);
 
 // Checks lease of execution, finishes execution if its lease is off, returns current status
-NActors::IActor* CreateCheckLeaseStatusActor(const NActors::TActorId& replyActorId, const TString& database, const TString& executionId, ui64 cookie = 0);
+IActor* CreateCheckLeaseStatusActor(TString database, TString executionId, const ui64 cookie = 0);
 
 } // namespace NKikimr::NKqp::NPrivate

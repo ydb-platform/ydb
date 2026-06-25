@@ -1,4 +1,3 @@
-
 use plato;
 
 select distinct AGGREGATE_LIST(value) over w as values, key from Input2

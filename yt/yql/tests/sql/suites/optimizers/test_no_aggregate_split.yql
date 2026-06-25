@@ -1,4 +1,3 @@
-
 $aggregated = (
     SELECT Group, Name, SUM(Amount) AS TotalAmount
     FROM plato.Input1

@@ -1,4 +1,3 @@
-
 PRAGMA AnsiInForEmptyOrNullableItemsCollections;
 
 SELECT

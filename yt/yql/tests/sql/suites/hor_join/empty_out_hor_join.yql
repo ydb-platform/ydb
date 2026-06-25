@@ -1,4 +1,3 @@
-
 USE plato;
 
 $i = (select * from Input where key == "0" order by key limit 100);

@@ -1,4 +1,3 @@
-
 use plato;
 pragma yt.JoinMergeTablesLimit="10";
 

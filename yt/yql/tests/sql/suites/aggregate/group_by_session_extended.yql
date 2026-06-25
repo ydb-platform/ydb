@@ -1,4 +1,3 @@
-
 $init = ($row) -> (AsStruct($row.ts ?? 0 as value, 1 as count));
 
 $calculate = ($_row, $state) -> ($state.value);

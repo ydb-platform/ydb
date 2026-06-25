@@ -1,4 +1,3 @@
-
 $a = (select null as a, 1 as b);
 $b = (select null as a, 1 as b);
 

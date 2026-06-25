@@ -1,4 +1,3 @@
-
 USE plato;
 
 $input_table = (SELECT * FROM Input);

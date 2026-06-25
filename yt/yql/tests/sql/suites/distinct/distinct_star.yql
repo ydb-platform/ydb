@@ -1,4 +1,3 @@
-
 use plato;
 
 select distinct * from Input2 order by key, subkey;

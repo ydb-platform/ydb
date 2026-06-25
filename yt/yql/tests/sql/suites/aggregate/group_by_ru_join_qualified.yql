@@ -1,4 +1,3 @@
-
 SELECT
     k,
     b.subkey as sk,

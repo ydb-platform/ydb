@@ -1,4 +1,3 @@
-
 SELECT
     value,
     SUM(unwrap(cast(subkey as uint32))) over w1 as sum1,

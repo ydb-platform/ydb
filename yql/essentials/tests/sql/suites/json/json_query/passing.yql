@@ -1,4 +1,3 @@
-
 $json = CAST(@@{
     "key": 123
 }@@ as Json);

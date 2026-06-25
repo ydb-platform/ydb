@@ -1,4 +1,3 @@
-
 PRAGMA DisableAnsiInForEmptyOrNullableItemsCollections;
 
 USE plato;

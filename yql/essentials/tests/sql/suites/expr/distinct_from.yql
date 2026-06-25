@@ -1,4 +1,3 @@
-
 select
     1 is distinct from 2,
     1 is not distinct from 2,

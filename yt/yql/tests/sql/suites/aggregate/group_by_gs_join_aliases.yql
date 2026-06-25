@@ -1,4 +1,3 @@
-
 SELECT k1, k2, b.subkey as kk2, SOME(a.value) as val
 FROM plato.Input AS a JOIN plato.Input AS b USING(key)
 GROUP BY GROUPING SETS(

@@ -1,2 +1,1 @@
-
 select distinct * from plato.Input order by key, subkey;

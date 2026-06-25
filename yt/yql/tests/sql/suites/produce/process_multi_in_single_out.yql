@@ -1,4 +1,3 @@
-
 $udf = YQL::@@
 (lambda '(stream)
     (PartitionByKey stream

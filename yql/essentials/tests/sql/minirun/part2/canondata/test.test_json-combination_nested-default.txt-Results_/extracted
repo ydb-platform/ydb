@@ -1,89 +1,89 @@
 <tmp_path>/program.sql:<main>: Warning: Type annotation
 
-    <tmp_path>/program.sql:<main>:13:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
+    <tmp_path>/program.sql:<main>:12:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
     	SELECT
 	^
-        <tmp_path>/program.sql:<main>:14:4: Warning: At function: JsonValue
+        <tmp_path>/program.sql:<main>:13:4: Warning: At function: JsonValue
         	    JSON_VALUE(
 	   ^
-            <tmp_path>/program.sql:<main>:15:8: Warning: At function: JsonQuery
+            <tmp_path>/program.sql:<main>:14:8: Warning: At function: JsonQuery
             	        JSON_QUERY(
 	       ^
-                <tmp_path>/program.sql:<main>:16:12: Warning: At function: JsonQuery
+                <tmp_path>/program.sql:<main>:15:12: Warning: At function: JsonQuery
                 	            JSON_QUERY(
 	           ^
-                    <tmp_path>/program.sql:<main>:17:16: Warning: At function: JsonQuery
+                    <tmp_path>/program.sql:<main>:16:16: Warning: At function: JsonQuery
                     	                JSON_QUERY(
 	               ^
-                        <tmp_path>/program.sql:<main>:17:16: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+                        <tmp_path>/program.sql:<main>:16:16: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
                         	                JSON_QUERY(
 	               ^
-                    <tmp_path>/program.sql:<main>:16:12: Warning: At function: JsonQuery
+                    <tmp_path>/program.sql:<main>:15:12: Warning: At function: JsonQuery
                     	            JSON_QUERY(
 	           ^
-                        <tmp_path>/program.sql:<main>:16:12: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+                        <tmp_path>/program.sql:<main>:15:12: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
                         	            JSON_QUERY(
 	           ^
-                <tmp_path>/program.sql:<main>:15:8: Warning: At function: JsonQuery
+                <tmp_path>/program.sql:<main>:14:8: Warning: At function: JsonQuery
                 	        JSON_QUERY(
 	       ^
-                    <tmp_path>/program.sql:<main>:15:8: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+                    <tmp_path>/program.sql:<main>:14:8: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
                     	        JSON_QUERY(
 	       ^
-    <tmp_path>/program.sql:<main>:28:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
+    <tmp_path>/program.sql:<main>:27:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
     	SELECT
 	^
-        <tmp_path>/program.sql:<main>:29:4: Warning: At function: JsonExists
+        <tmp_path>/program.sql:<main>:28:4: Warning: At function: JsonExists
         	    JSON_EXISTS(
 	   ^
-            <tmp_path>/program.sql:<main>:30:8: Warning: At function: JsonQuery
+            <tmp_path>/program.sql:<main>:29:8: Warning: At function: JsonQuery
             	        JSON_QUERY(
 	       ^
-                <tmp_path>/program.sql:<main>:31:12: Warning: At function: JsonQuery
+                <tmp_path>/program.sql:<main>:30:12: Warning: At function: JsonQuery
                 	            JSON_QUERY(
 	           ^
-                    <tmp_path>/program.sql:<main>:32:16: Warning: At function: JsonQuery
+                    <tmp_path>/program.sql:<main>:31:16: Warning: At function: JsonQuery
                     	                JSON_QUERY(
 	               ^
-                        <tmp_path>/program.sql:<main>:32:16: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+                        <tmp_path>/program.sql:<main>:31:16: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
                         	                JSON_QUERY(
 	               ^
-                    <tmp_path>/program.sql:<main>:31:12: Warning: At function: JsonQuery
+                    <tmp_path>/program.sql:<main>:30:12: Warning: At function: JsonQuery
                     	            JSON_QUERY(
 	           ^
-                        <tmp_path>/program.sql:<main>:31:12: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+                        <tmp_path>/program.sql:<main>:30:12: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
                         	            JSON_QUERY(
 	           ^
-                <tmp_path>/program.sql:<main>:30:8: Warning: At function: JsonQuery
+                <tmp_path>/program.sql:<main>:29:8: Warning: At function: JsonQuery
                 	        JSON_QUERY(
 	       ^
-                    <tmp_path>/program.sql:<main>:30:8: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+                    <tmp_path>/program.sql:<main>:29:8: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
                     	        JSON_QUERY(
 	       ^
-    <tmp_path>/program.sql:<main>:43:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
+    <tmp_path>/program.sql:<main>:42:1: Warning: At function: RemovePrefixMembers, At function: Unordered, At function: PersistableRepr, At function: OrderedSqlProject, At tuple, At function: SqlProjectItem, At lambda
     	SELECT
 	^
-        <tmp_path>/program.sql:<main>:44:4: Warning: At function: JsonQuery
+        <tmp_path>/program.sql:<main>:43:4: Warning: At function: JsonQuery
         	    JSON_QUERY(
 	   ^
-            <tmp_path>/program.sql:<main>:45:8: Warning: At function: JsonQuery
+            <tmp_path>/program.sql:<main>:44:8: Warning: At function: JsonQuery
             	        JSON_QUERY(
 	       ^
-                <tmp_path>/program.sql:<main>:46:12: Warning: At function: JsonQuery
+                <tmp_path>/program.sql:<main>:45:12: Warning: At function: JsonQuery
                 	            JSON_QUERY(
 	           ^
-                    <tmp_path>/program.sql:<main>:46:12: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+                    <tmp_path>/program.sql:<main>:45:12: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
                     	            JSON_QUERY(
 	           ^
-                <tmp_path>/program.sql:<main>:45:8: Warning: At function: JsonQuery
+                <tmp_path>/program.sql:<main>:44:8: Warning: At function: JsonQuery
                 	        JSON_QUERY(
 	       ^
-                    <tmp_path>/program.sql:<main>:45:8: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+                    <tmp_path>/program.sql:<main>:44:8: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
                     	        JSON_QUERY(
 	       ^
-            <tmp_path>/program.sql:<main>:44:4: Warning: At function: JsonQuery
+            <tmp_path>/program.sql:<main>:43:4: Warning: At function: JsonQuery
             	    JSON_QUERY(
 	   ^
-                <tmp_path>/program.sql:<main>:44:4: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
+                <tmp_path>/program.sql:<main>:43:4: Warning: JSON_QUERY returning Json type is deprecated. Please use PRAGMA JsonQueryReturnsJsonDocument; to make JSON_QUERY return JsonDocument type. It will be turned on by default soon
                 	    JSON_QUERY(
 	   ^

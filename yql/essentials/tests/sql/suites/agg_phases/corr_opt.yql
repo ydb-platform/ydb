@@ -1,4 +1,3 @@
-
 $t = SELECT * FROM AS_TABLE([
     <|key: 1, a: just(2.0), b: just(3.0)|>,
     <|key: 1, a: just(3.0), b: just(4.0)|>]);

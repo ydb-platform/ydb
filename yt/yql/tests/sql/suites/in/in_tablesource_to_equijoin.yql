@@ -1,4 +1,3 @@
-
 USE plato;
 
 $r4_20  = (SELECT optkey FROM Input WHERE optkey BETWEEN 4  AND 20);

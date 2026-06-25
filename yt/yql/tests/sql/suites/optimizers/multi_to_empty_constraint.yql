@@ -1,4 +1,3 @@
-
 USE plato;
 
 select key, some(subkey) from (select * from Input where key > "010" and value in []) group by key

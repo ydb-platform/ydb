@@ -1,4 +1,3 @@
-
 $st_many = <|a: "one", b: "two", c: "three", d: "four"|>;
 $st_single = <|a: "zero"|>;
 $st_empty = <||>;

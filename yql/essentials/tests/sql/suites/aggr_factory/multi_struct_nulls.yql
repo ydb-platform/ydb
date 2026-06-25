@@ -1,4 +1,3 @@
-
 $data = AsList(
     AsStruct(AsStruct(1.0 as a, 2 as b) as x),
     AsStruct(AsStruct(3.0 as a, 4 as b) as x),

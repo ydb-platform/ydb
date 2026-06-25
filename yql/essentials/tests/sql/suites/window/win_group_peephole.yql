@@ -1,5 +1,3 @@
-
-
 $t = SELECT 'john' as name, 42 as age;
 
 SELECT 

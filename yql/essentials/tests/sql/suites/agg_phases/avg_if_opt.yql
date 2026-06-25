@@ -1,4 +1,3 @@
-
 $t = SELECT * FROM AS_TABLE([<|key: 1, value: Just(2)|>,<|key: 1, value: Just(3)|>]);
 
 $p =

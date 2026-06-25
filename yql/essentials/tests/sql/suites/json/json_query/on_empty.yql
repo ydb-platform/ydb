@@ -1,4 +1,3 @@
-
 -- Accessing absent object member will cause empty result in lax mode
 $json = CAST("{}" as Json);
 SELECT

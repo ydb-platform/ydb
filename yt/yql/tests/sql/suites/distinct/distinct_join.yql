@@ -1,4 +1,3 @@
-
 use plato;
 
 select distinct * from (select Unwrap(cast(key as Int32)) as key, value from Input2) as a 

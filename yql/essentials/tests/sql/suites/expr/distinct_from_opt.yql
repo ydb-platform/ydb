@@ -1,4 +1,3 @@
-
 select
   Null is not distinct from 1/0,               --true
   1/0 is distinct from Null,                   --false

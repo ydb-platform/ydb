@@ -234,4 +234,46 @@ public:
     }
 };
 
+class TConfigClientMock
+    : public IConfigClient
+{
+public:
+    std::shared_ptr<IStorageConfigResult> FetchConfig(
+        const TGrpcSslSettings& grpcSettings,
+        const TVector<TString>& addrs,
+        const IEnv& env,
+        IInitLogger& logger) const override
+    {
+        Y_UNUSED(grpcSettings, addrs, env, logger);
+        return SavedResult;
+    }
+
+    std::shared_ptr<IStorageConfigResult> SavedResult;
+};
+
+class TConfigClientRecorder
+    : public IConfigClient
+{
+    IConfigClient& Impl;
+    mutable TConfigClientMock Mock;
+public:
+    TConfigClientRecorder(IConfigClient& impl)
+        : Impl(impl)
+    {}
+
+    std::shared_ptr<IStorageConfigResult> FetchConfig(
+        const TGrpcSslSettings& grpcSettings,
+        const TVector<TString>& addrs,
+        const IEnv& env,
+        IInitLogger& logger) const override
+    {
+        Mock.SavedResult = Impl.FetchConfig(grpcSettings, addrs, env, logger);
+        return Mock.SavedResult;
+    }
+
+    TConfigClientMock GetMock() const {
+        return Mock;
+    }
+};
+
 } // namespace NKikimr::NConfig

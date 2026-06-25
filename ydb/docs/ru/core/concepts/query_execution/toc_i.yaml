@@ -1,6 +1,8 @@
 items:
   - name: Обзор
     href: index.md
+  - name: Процесс выполнения запросов
+    href: execution_process.md
   - name: Оптимизатор запросов
     href: optimizer.md
   - name: Многоверсионное управление конкурентным доступом (MVCC)

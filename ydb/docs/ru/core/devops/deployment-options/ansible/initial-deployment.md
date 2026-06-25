@@ -188,8 +188,8 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
           system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
           
           # Узлы
-          ydb_config: "&#123;&#123; ansible_config_file | dirname &#125;&#125;/files/config.yaml"
-          ydb_version: "версия_системы"
+          ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
+          ydb_version: "25.1.4.7"
 
           # Хранилище
           ydb_cores_static: 8
@@ -251,8 +251,8 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
           system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
           
           # Узлы
-          ydb_config: "&#123;&#123; ansible_config_file | dirname &#125;&#125;/files/config.yaml"
-          ydb_version: "версия_системы"
+          ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
+          ydb_version: "25.1.4.7"
 
           # Хранилище
           ydb_cores_static: 8
@@ -309,8 +309,8 @@ ssh_args = -o UserKnownHostsFile=/dev/null -o StrictHostKeyChecking=no -o Contro
           system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
           
           # Узлы
-          ydb_config: "&#123;&#123; ansible_config_file | dirname &#125;&#125;/files/config.yaml"
-          ydb_version: "версия_системы"
+          ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
+          ydb_version: "25.1.4.7"
 
           # Хранилище
           ydb_cores_static: 8

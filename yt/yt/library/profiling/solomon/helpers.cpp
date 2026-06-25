@@ -3,8 +3,12 @@
 #include "producer.h"
 #include "sensor_set.h"
 
-#include <yt/yt/library/profiling/percpu.h>
-#include <yt/yt/library/profiling/sensor_impl.h>
+#include <yt/yt/library/profiling/per_cpu_sensor_impl.h>
+#include <yt/yt/library/profiling/simple_sensor_impl.h>
+
+#ifdef __linux__
+#include <yt/yt/library/profiling/rseq_sensor_impl.h>
+#endif
 
 #include <yt/yt/core/http/http.h>
 
@@ -96,6 +100,13 @@ i64 GetCountersBytesAlive()
     usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TSimpleGauge>());
     usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TPerCpuGauge>());
     usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TGaugeState>());
+
+    // The rseq-backed hot counters and gauge exist only on Linux (rseq_sensor_impl.h).
+#ifdef __linux__
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TRseqCounter>());
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TRseqTimeCounter>());
+    usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TRseqGauge>());
+#endif
 
     usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TSimpleSummary<double>>());
     usage += tracker->GetBytesAlive(GetRefCountedTypeKey<TPerCpuSummary<double>>());

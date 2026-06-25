@@ -1,4 +1,3 @@
-/* postgres can not */
 /* custom error:Callable expected at most 3 argument(s)*/
 -- Find has optional args
 SELECT

@@ -97,7 +97,7 @@ public:
                 Ranking_);
 
         return service
-            ->Lookup(std::move(request))
+            ->Lookup(request)
             .Apply([this, input, local = std::move(local)](auto f) {
                 return ToCompletion(input, std::move(local), f.ExtractValue());
             });
@@ -144,7 +144,7 @@ private:
         if (local.Hint) {
             THintName::TConstraints constraints;
             constraints.Statement = local.Hint->StatementKind;
-            request.Constraints.Hint = std::move(constraints);
+            request.Constraints.Hint = constraints;
         }
 
         if (local.Object) {

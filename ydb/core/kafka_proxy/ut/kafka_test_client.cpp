@@ -311,19 +311,20 @@ TMessagePtr<TJoinGroupResponseData> TKafkaTestClient::JoinGroup(std::vector<TStr
     NKafka::TJoinGroupRequestData::TJoinGroupRequestProtocol protocol;
     protocol.Name = protocolName;
 
+    TConsumerProtocolSubscription subscribtion;
+
+    for (auto& topic: topics) {
+        subscribtion.Topics.push_back(topic);
+    }
+
+    TKafkaVersion version = 3;
+
+    TKafkaWriteBuffer buf(subscribtion.Size(version) + sizeof(version));
+    TKafkaWritable writable(buf);
+
     if (emptyMetadata) {
         protocol.Metadata = TKafkaRawBytes();
     } else {
-        TConsumerProtocolSubscription subscribtion;
-
-        for (auto& topic: topics) {
-            subscribtion.Topics.push_back(topic);
-        }
-
-        TKafkaVersion version = 3;
-
-        TKafkaWriteBuffer buf( subscribtion.Size(version) + sizeof(version));
-        TKafkaWritable writable(buf);
         writable << version;
         subscribtion.Write(writable, version);
 

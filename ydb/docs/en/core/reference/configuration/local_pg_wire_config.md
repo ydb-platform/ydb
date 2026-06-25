@@ -29,4 +29,4 @@ local_pg_wire_config:
 
 You can also enable pgwire via the hidden `ydbd` command-line option `--pgwire-port`, which sets `enable_local_pg_wire` to `true` automatically.
 
-In the local {{ ydb-short-name }} Docker image, pgwire is enabled by default through the `YDB_ENABLE_LOCAL_PGWIRE` environment variable (default `1`). This is separate from `YDB_EXPERIMENTAL_PG`, which enables additional experimental PostgreSQL feature flags and is off by default.
+In the local {{ ydb-short-name }} Docker image, pgwire and PostgreSQL compatibility features are enabled by setting `YDB_EXPERIMENTAL_PG=1`. This variable is **off by default**.

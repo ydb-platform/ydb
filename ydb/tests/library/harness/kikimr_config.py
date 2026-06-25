@@ -173,7 +173,6 @@ class KikimrConfigGenerator(object):
             enforce_user_token_requirement=False,
             default_user_sid=None,
             pg_compatible_expirement=False,
-            enable_local_pg_wire=False,
             generic_connector_config=None,  # typing.Optional[TGenericConnectorConfig]
             kafka_api_port=None,
             metadata_section=None,
@@ -564,20 +563,18 @@ class KikimrConfigGenerator(object):
         if os.getenv("YDB_CHANNEL_BUFFER_SIZE"):
             self.yaml_config["table_service_config"]["resource_manager"]["channel_buffer_size"] = int(os.getenv("YDB_CHANNEL_BUFFER_SIZE"))
 
-        if enable_local_pg_wire or pg_compatible_expirement:
-            if "local_pg_wire_config" not in self.yaml_config:
-                self.yaml_config["local_pg_wire_config"] = {}
-
-            self.yaml_config['local_pg_wire_config']['enable_local_pg_wire'] = True
-            ydb_pgwire_port = self.port_allocator.get_node_port_allocator(self.__node_ids[0]).pgwire_port
-            self.yaml_config['local_pg_wire_config']['listening_port'] = ydb_pgwire_port
-
         if pg_compatible_expirement:
             self.yaml_config["table_service_config"]["enable_ast_cache"] = True
             self.yaml_config["feature_flags"]['enable_temp_tables'] = True
             self.yaml_config["feature_flags"]['enable_table_pg_types'] = True
             self.yaml_config['feature_flags']['enable_pg_syntax'] = True
             self.yaml_config['feature_flags']['enable_uniq_constraint'] = True
+            if "local_pg_wire_config" not in self.yaml_config:
+                self.yaml_config["local_pg_wire_config"] = {}
+
+            self.yaml_config['local_pg_wire_config']['enable_local_pg_wire'] = True
+            ydb_pgwire_port = self.port_allocator.get_node_port_allocator(self.__node_ids[0]).pgwire_port
+            self.yaml_config['local_pg_wire_config']['listening_port'] = ydb_pgwire_port
 
             # https://github.com/ydb-platform/ydb/issues/5152
             # self.yaml_config["table_service_config"]["enable_pg_consts_to_params"] = True

@@ -383,9 +383,6 @@ def deploy(arguments):
         for flag_name in flags:
             enable_feature_flags.append(flag_name)
 
-    if os.environ.get('YDB_ENABLE_LOCAL_PGWIRE', '1') not in ('0', 'false', 'False', ''):
-        optionals['enable_local_pg_wire'] = True
-
     if 'YDB_EXPERIMENTAL_PG' in os.environ:
         optionals['pg_compatible_expirement'] = True
 

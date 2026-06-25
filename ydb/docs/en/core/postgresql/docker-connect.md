@@ -4,7 +4,7 @@
 
 ## Running {{ ydb-short-name }} with PostgreSQL compatibility enabled
 
-The local {{ ydb-short-name }} Docker image enables the pgwire listener by default (`YDB_ENABLE_LOCAL_PGWIRE`, default `1`). The examples below also set `YDB_EXPERIMENTAL_PG=1` to enable PostgreSQL SQL dialect support (`enable_pg_syntax`, PostgreSQL types, and related feature flags) required for the queries in this guide.
+PostgreSQL wire protocol support (pgwire) and related PostgreSQL compatibility features are **disabled by default** in the local {{ ydb-short-name }} Docker image, as well as on `ydbd` nodes. Set `YDB_EXPERIMENTAL_PG=1` when starting the container to enable the pgwire listener on port 5432, PostgreSQL SQL dialect support, and related feature flags. The examples below include this variable.
 
 Commands for starting a local Docker container with {{ ydb-short-name }} and open ports for PostgreSQL and Embedded UI:
 
@@ -53,8 +53,6 @@ To preserve the container's state, you need to remove the environment variable `
 {% endlist %}
 
 After launching the container, you can connect to it via PostgreSQL clients on port 5432, the database `local`, or open the [web interface](http://localhost:8765) on port 8765.
-
-To disable the pgwire listener, set `YDB_ENABLE_LOCAL_PGWIRE=0`.
 
 ## Connecting to the Running Container via psql
 

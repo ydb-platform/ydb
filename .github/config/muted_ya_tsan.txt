@@ -103,7 +103,6 @@ ydb/core/kqp/ut/channels Channels20.InstantFinish1n
 ydb/core/kqp/ut/data_integrity unittest.[*/*] chunk
 ydb/core/kqp/ut/opt unittest.[*/*] chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
-ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/query KqpLimits.ComputeNodeMemoryLimit
 ydb/core/kqp/ut/query KqpLimits.OutOfSpaceBulkUpsertFail
 ydb/core/kqp/ut/query KqpQueryEventLog.ExecuteSuccessAtDebugLogsCompleted
@@ -155,7 +154,6 @@ ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.Shoul
 ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.ShouldSwitchHostToTemporaryOfflineAndBack
 ydb/core/nbs/cloud/blockstore/libs/vhost/ut TServerTest.ShouldCancelRequestsInFlightWhenStopEndpointOrStopServer
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_DoubleSplit_3min
-ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_RepeatedWriteUntilWindowCloses_DoubleSplit
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_TripleSplit
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_WithGroup_PartialOverlap
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_WithGroup_PartialOverlapWithNonDedup
@@ -195,7 +193,6 @@ ydb/core/transfer/ut/functional Transfer.BaseScenario_Local
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Local
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
-ydb/core/transfer/ut/functional Transfer.PauseAndResumeTransfer
 ydb/core/transfer/ut/functional unittest.sole chunk
 ydb/core/transfer/ut/row_table Transfer_RowTable.ColumnType_Date
 ydb/core/transfer/ut/row_table Transfer_RowTable.ColumnType_Decimal
@@ -795,7 +792,6 @@ ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpchDiffProcessing.t
 ydb/tests/functional/tpc/medium test_diff_processing.py.TestTpchDiffProcessing.test_tpch[CheckCanonicalPolicy.WARNING]
 ydb/tests/functional/tpc/medium test_external.py.TestExternalE1.test[first_query_set.1.sql]
 ydb/tests/functional/tpc/medium test_external.py.TestExternalE1.test[first_query_set.2.yql]
-ydb/tests/functional/tpc/medium test_external.py.TestExternalE1.test[second_query_set.join.sql]
 ydb/tests/functional/tpc/medium test_import_csv.py.TestExternalImportCsv.test
 ydb/tests/functional/tpc/medium test_import_csv.py.TestExternalImportCsvArrow.test
 ydb/tests/functional/tpc/medium test_tpcc.py.TestTpccW10T4SdkCompaction.test
@@ -1003,10 +999,8 @@ ydb/tests/olap/min_max_index test_min_max_index.py.TestYdbMinMaxIndex.test_minma
 ydb/tests/olap/scenario py3test.[*/*] chunk
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test_multi[many_tables]
 ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]
-ydb/tests/solomon/reading backpressure_test.py.TestBackpressure.test_backpressure_monitoring
 ydb/tests/sql py3test.sole chunk
 ydb/tests/sql test_inserts.py.TestYdbInsertsOperations.test_insert_multiple_empty_rows
-ydb/tests/sql test_inserts.py.TestYdbInsertsOperations.test_insert_multiple_rows
 ydb/tests/stress/backup/tests py3test.sole chunk
 ydb/tests/stress/backup/tests test_workload.py.TestYdbBackupWorkload.test
 ydb/tests/stress/cdc/tests py3test.sole chunk

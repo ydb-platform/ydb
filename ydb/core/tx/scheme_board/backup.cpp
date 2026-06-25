@@ -20,6 +20,8 @@
 
 #include <ranges>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SCHEME_BOARD_BACKUP
+
 namespace NKikimr::NSchemeBoard {
 
 using namespace NJson;
@@ -157,11 +159,12 @@ private:
             Send(MakeStateStorageProxyID(), new TEvStateStorage::TEvResolveSchemeBoard(path), 0, cookie);
             Schedule(DefaultTimeout, new TEvents::TEvWakeup(cookie));
 
-            SBB_LOG_D("ProcessPaths"
-                << ", path: " << path
-                << ", cookie: " << cookie
-                << ", paths in progress: " << PathByCookie.size()
-            );
+            YDB_LOG_DEBUG("ProcessPaths paths",
+                {"logPrefix", LogPrefix()},
+                {"selfId", this->SelfId()},
+                {"path", path},
+                {"cookie", cookie},
+                {"inProgress", PathByCookie.size()});
         }
 
         SendProgressUpdate();
@@ -187,18 +190,26 @@ private:
         const ui64 cookie = ev->Cookie;
         auto it = PathByCookie.find(cookie);
         if (it == PathByCookie.end()) {
-            SBB_LOG_N("Unexpected cookie: " << cookie);
+            YDB_LOG_NOTICE("Unexpected",
+                {"logPrefix", LogPrefix()},
+                {"selfId", this->SelfId()},
+                {"cookie", cookie});
             return;
         }
 
         const TString& path = it->second;
-        SBB_LOG_D("Handle " << ev->Get()->ToString() << ", path: " << path);
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", LogPrefix()},
+            {"selfId", this->SelfId()},
+            {"ev", ev->Get()->ToString()},
+            {"path", path});
 
         const auto replicas = ev->Get()->GetPlainReplicas();
         if (replicas.empty()) {
-            SBB_LOG_I("Empty replica list"
-                << ", path: " << path
-            );
+            YDB_LOG_INFO("Empty replica list",
+                {"logPrefix", LogPrefix()},
+                {"selfId", this->SelfId()},
+                {"path", path});
             EmptyReplicaList.emplace(path);
             return MarkPathCompleted(it);
         }
@@ -232,12 +243,19 @@ private:
         const ui64 cookie = GetOriginalCookie(ev->Cookie);
         auto it = PathByCookie.find(cookie);
         if (it == PathByCookie.end()) {
-            SBB_LOG_D("Received description with inactive cookie: " << cookie);
+            YDB_LOG_DEBUG("Received description with inactive",
+                {"logPrefix", LogPrefix()},
+                {"selfId", this->SelfId()},
+                {"cookie", cookie});
             return;
         }
 
         const TString path = it->second;
-        SBB_LOG_D("Handle " << ev->Get()->ToString() << ", path: " << path);
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", LogPrefix()},
+            {"selfId", this->SelfId()},
+            {"ev", ev->Get()->ToString()},
+            {"path", path});
 
         TString jsonDescription = std::move(*ev->Get()->Record.MutableJson());
         if (!jsonDescription.empty()) {
@@ -251,13 +269,18 @@ private:
                                 const auto version = std::stoull(pathDescription["Self"]["PathVersion"].GetStringSafe());
                                 auto aggregate = DescriptionsByCookie.find(cookie);
                                 if (aggregate == DescriptionsByCookie.end()) {
-                                    SBB_LOG_N("No description aggregate for cookie: " << cookie);
+                                    YDB_LOG_NOTICE("No description aggregate",
+                                        {"logPrefix", LogPrefix()},
+                                        {"selfId", this->SelfId()},
+                                        {"cookie", cookie});
                                     return;
                                 }
                                 if (!aggregate->second.AddDescription(std::move(jsonDescription), version, GetReplicaGroupIndex(ev->Cookie))) {
-                                    SBB_LOG_N("Invalid replica group: " << GetReplicaGroupIndex(ev->Cookie)
-                                        << ", cookie: " << ev->Cookie
-                                    );
+                                    YDB_LOG_NOTICE("Invalid replica",
+                                        {"logPrefix", LogPrefix()},
+                                        {"selfId", this->SelfId()},
+                                        {"group", GetReplicaGroupIndex(ev->Cookie)},
+                                        {"cookie", ev->Cookie});
                                     return;
                                 }
                                 if (aggregate->second.IsMajorityReached()) {
@@ -269,7 +292,9 @@ private:
                                     MarkPathCompleted(it);
                                 }
                             } else {
-                                SBB_LOG_I("No version in path description");
+                                YDB_LOG_INFO("No version in path description",
+                                    {"logPrefix", LogPrefix()},
+                                    {"selfId", this->SelfId()});
                             }
                         } else {
                             AddChildrenToPending(pathDescription, path);
@@ -280,9 +305,11 @@ private:
                     }
                 }
             } catch (const std::exception& e) {
-                SBB_LOG_I("Parsing error: " << e.what()
-                    << ", path: " << path
-                );
+                YDB_LOG_INFO("Parsing",
+                    {"logPrefix", LogPrefix()},
+                    {"selfId", this->SelfId()},
+                    {"error", e.what()},
+                    {"path", path});
             }
         }
 
@@ -306,9 +333,10 @@ private:
     void AddChildrenToPending(const TJsonValue& pathDescription, const TString& path) {
         if (pathDescription.Has("Children")) {
             const auto& children = pathDescription["Children"];
-            SBB_LOG_D("Queue children: " << JoinSeq(", ", children.GetArraySafe() | std::views::transform([](const TJsonValue& child) {
-                return child["Name"].GetStringSafe().Quote();
-            })));
+            YDB_LOG_DEBUG("Queue",
+                {"logPrefix", LogPrefix()},
+                {"selfId", this->SelfId()},
+                {"children", JoinSeq(", ", children.GetArraySafe() | std::views::transform([](const TJsonValue& child) {                 return child["Name"].GetStringSafe().Quote();             }))});
             for (const auto& child : children.GetArraySafe()) {
                 if (child.Has("Name")) {
                     TString childPath = TStringBuilder() << path << "/" << child["Name"].GetStringSafe();
@@ -328,12 +356,16 @@ private:
         auto it = PathByCookie.find(cookie);
         if (it == PathByCookie.end()) {
             // assume already processed
-            SBB_LOG_D("Timeout with inactive cookie: " << cookie);
+            YDB_LOG_DEBUG("Timeout with inactive",
+                {"logPrefix", LogPrefix()},
+                {"selfId", this->SelfId()},
+                {"cookie", cookie});
             return;
         }
-        SBB_LOG_I("Timeout"
-            << ", path: " << it->second
-        );
+        YDB_LOG_INFO("Timeout",
+            {"logPrefix", LogPrefix()},
+            {"selfId", this->SelfId()},
+            {"path", it->second});
         Timeouts.emplace(it->second);
         MarkPathCompleted(it);
         if (RequireMajority) {
@@ -345,28 +377,31 @@ private:
         const ui64 cookie = GetOriginalCookie(ev->Cookie);
         auto it = PathByCookie.find(cookie);
         if (it == PathByCookie.end()) {
-            SBB_LOG_N("Undelivered"
-                << ", unexpected cookie: " << cookie
-            );
+            YDB_LOG_NOTICE("Undelivered unexpected",
+                {"logPrefix", LogPrefix()},
+                {"selfId", this->SelfId()},
+                {"cookie", cookie});
             return;
         }
-        SBB_LOG_I("Undelivered"
-            << ", path: " << it->second
-        );
+        YDB_LOG_INFO("Undelivered",
+            {"logPrefix", LogPrefix()},
+            {"selfId", this->SelfId()},
+            {"path", it->second});
         Undelivered.emplace(it->second);
         MarkPathCompleted(it);
     }
 
     void SendProgressUpdate() {
-        SBB_LOG_D("SendProgressUpdate"
-            << ", paths in progress: " << PathByCookie.size()
-            << ", processed paths: " << ProcessedPaths
-            << ", total paths: " << TotalPaths
-            << ", pending paths: " << PendingPaths.size()
-            << ", timeouts: " << Timeouts.size()
-            << ", delivery problems: " << Undelivered.size()
-            << ", empty replica list: " << EmptyReplicaList.size()
-        );
+        YDB_LOG_DEBUG("SendProgressUpdate paths processed total pending delivery empty replica",
+            {"logPrefix", LogPrefix()},
+            {"selfId", this->SelfId()},
+            {"inProgress", PathByCookie.size()},
+            {"processedPaths", ProcessedPaths},
+            {"totalPaths", TotalPaths},
+            {"pendingPaths", PendingPaths.size()},
+            {"timeouts", Timeouts.size()},
+            {"problems", Undelivered.size()},
+            {"list", EmptyReplicaList.size()});
         Send(Parent, new TSchemeBoardMonEvents::TEvBackupProgress(TotalPaths, ProcessedPaths));
     }
 
@@ -476,7 +511,10 @@ private:
             TotalPaths++;
             descriptions.emplace_back(pathId, std::move(description));
             if (TotalPaths % 1'000 == 0) {
-                SBB_LOG_D("Reading file, parsed paths descriptions: " << TotalPaths);
+                YDB_LOG_DEBUG("Reading file, parsed paths",
+                    {"logPrefix", LogPrefix()},
+                    {"selfId", this->SelfId()},
+                    {"descriptions", TotalPaths});
                 SendProgressUpdate();
             }
         }
@@ -488,9 +526,10 @@ private:
     }
 
     void Populate(std::vector<std::pair<TPathId, NSchemeBoard::TTwoPartDescription>>&& descriptions) {
-        SBB_LOG_D("Populate"
-            << ", total paths: " << TotalPaths
-        );
+        YDB_LOG_DEBUG("Populate total",
+            {"logPrefix", LogPrefix()},
+            {"selfId", this->SelfId()},
+            {"paths", TotalPaths});
         std::sort(descriptions.begin(), descriptions.end());
         auto paths = descriptions | std::views::keys;
         PathsToProcess = TVector<TPathId>(paths.begin(), paths.end());
@@ -507,9 +546,14 @@ private:
     }
 
     void Handle(TSchemeBoardMonEvents::TEvInfoResponse::TPtr& ev) {
-        SBB_LOG_D("Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", LogPrefix()},
+            {"selfId", this->SelfId()},
+            {"ev", ev->Get()->ToString()});
         if (ev->Sender != Populator || !ev->Get()->Record.HasPopulatorResponse()) {
-            SBB_LOG_N("Unexpected info response");
+            YDB_LOG_NOTICE("Unexpected info response",
+                {"logPrefix", LogPrefix()},
+                {"selfId", this->SelfId()});
             return;
         }
 

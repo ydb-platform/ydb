@@ -3510,73 +3510,71 @@ void TDataShard::Handle(TEvPrivate::TEvProgressTransaction::TPtr &ev, const TAct
     ExecuteProgressTx(ctx);
 }
 
+void TDataShard::SendCancelledProposeReply(const TProposeQueue::TItem& item, const TActorContext& ctx) {
+    TActorId target = item.Event->Sender;
+    ui64 cookie = item.Event->Cookie;
+    switch (item.Event->GetTypeRewrite()) {
+        case TEvDataShard::TEvProposeTransaction::EventType: {
+            auto* msg = item.Event->Get<TEvDataShard::TEvProposeTransaction>();
+            auto kind = msg->GetTxKind();
+            auto txId = msg->GetTxId();
+            auto result = new TEvDataShard::TEvProposeTransactionResult(
+                kind, TabletID(), txId,
+                NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED);
+            ctx.Send(target, result, 0, cookie);
+            break;
+        }
+        case NEvents::TDataEvents::TEvWrite::EventType: {
+            auto* msg = item.Event->Get<NEvents::TDataEvents::TEvWrite>();
+            auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), msg->GetTxId(), NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED, "Canceled");
+            ctx.Send(target, result.release(), 0, cookie);
+            break;
+        }
+        default:
+            Y_ENSURE(false, "Unexpected event type " << item.Event->GetTypeRewrite());
+    }
+}
+
 void TDataShard::Handle(TEvPrivate::TEvDelayedProposeTransaction::TPtr &ev, const TActorContext &ctx) {
     Y_UNUSED(ev);
     IncCounter(COUNTER_PROPOSE_QUEUE_EV);
 
     if (ProposeQueue) {
+        // N.B. Cancelled items are removed immediately in Cancel() and never reach here.
         auto item = ProposeQueue.Dequeue();
         UpdateProposeQueueSize();
 
-        TDuration latency = TAppData::TimeProvider->Now() - item.ReceivedAt;
+        TDuration latency = TAppData::TimeProvider->Now() - item->ReceivedAt;
         IncCounter(COUNTER_PROPOSE_QUEUE_LATENCY, latency);
 
-        if (!item.Cancelled) {
-            // N.B. we don't call ProposeQueue.Reset(), tx will Ack() on its first Execute()
-
-            switch (item.Event->GetTypeRewrite()) {
-                case TEvDataShard::TEvProposeTransaction::EventType: {
-                    auto event = IEventHandle::Downcast<TEvDataShard::TEvProposeTransaction>(std::move(item.Event));
-                    NWilson::TSpan datashardTransactionSpan(TWilsonTablet::TabletTopLevel, std::move(event->TraceId), "Datashard.Transaction", NWilson::EFlags::AUTO_END);
-                    if (datashardTransactionSpan) {
-                        datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
-                    }
-
-                    auto userCtx = NACLib::TUserContextBuilder()
-                        .DeserializeFromEventHandle(*event.Get())
-                        .Build();
-                    Execute(new TTxProposeTransactionBase(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan), userCtx), ctx);
-                    return;
-                }
-                case NEvents::TDataEvents::TEvWrite::EventType: {
-                    auto event = IEventHandle::Downcast<NEvents::TDataEvents::TEvWrite>(std::move(item.Event));
-                    NWilson::TSpan datashardTransactionSpan(TWilsonTablet::TabletTopLevel, std::move(event->TraceId), "Datashard.WriteTransaction", NWilson::EFlags::AUTO_END);
-                    if (datashardTransactionSpan) {
-                        datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
-                    }
-
-                    Execute(new TTxWrite(this, std::move(event), item.ReceivedAt, item.TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan)), ctx);
-                    return;
-                }
-                default:
-                    Y_ENSURE(false, "Unexpected event type " << item.Event->GetTypeRewrite());
-            }
-        }
-
-        TActorId target = item.Event->Sender;
-        ui64 cookie = item.Event->Cookie;
-        switch (item.Event->GetTypeRewrite()) {
+        // N.B. we don't call ProposeQueue.Reset(), tx will Ack() on its first Execute()
+        switch (item->Event->GetTypeRewrite()) {
             case TEvDataShard::TEvProposeTransaction::EventType: {
-                auto* msg = item.Event->Get<TEvDataShard::TEvProposeTransaction>();
-                auto kind = msg->GetTxKind();
-                auto txId = msg->GetTxId();
-                auto result = new TEvDataShard::TEvProposeTransactionResult(
-                    kind, TabletID(), txId,
-                    NKikimrTxDataShard::TEvProposeTransactionResult::CANCELLED);
-                ctx.Send(target, result, 0, cookie);
-                break;
+                auto event = IEventHandle::Downcast<TEvDataShard::TEvProposeTransaction>(std::move(item->Event));
+                NWilson::TSpan datashardTransactionSpan(TWilsonTablet::TabletTopLevel, std::move(event->TraceId), "Datashard.Transaction", NWilson::EFlags::AUTO_END);
+                if (datashardTransactionSpan) {
+                    datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
+                }
+
+                auto userCtx = NACLib::TUserContextBuilder()
+                    .DeserializeFromEventHandle(*event.Get())
+                    .Build();
+                Execute(new TTxProposeTransactionBase(this, std::move(event), item->ReceivedAt, item->TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan), userCtx), ctx);
+                return;
             }
             case NEvents::TDataEvents::TEvWrite::EventType: {
-                auto* msg = item.Event->Get<NEvents::TDataEvents::TEvWrite>();
-                auto result = NEvents::TDataEvents::TEvWriteResult::BuildError(TabletID(), msg->GetTxId(), NKikimrDataEvents::TEvWriteResult::STATUS_CANCELLED, "Canceled");
-                ctx.Send(target, result.release(), 0, cookie);
-                break;
+                auto event = IEventHandle::Downcast<NEvents::TDataEvents::TEvWrite>(std::move(item->Event));
+                NWilson::TSpan datashardTransactionSpan(TWilsonTablet::TabletTopLevel, std::move(event->TraceId), "Datashard.WriteTransaction", NWilson::EFlags::AUTO_END);
+                if (datashardTransactionSpan) {
+                    datashardTransactionSpan.Attribute("Shard", std::to_string(TabletID()));
+                }
+
+                Execute(new TTxWrite(this, std::move(event), item->ReceivedAt, item->TieBreakerIndex, /* delayed */ true, std::move(datashardTransactionSpan)), ctx);
+                return;
             }
             default:
-                Y_ENSURE(false, "Unexpected event type " << item.Event->GetTypeRewrite());
+                Y_ENSURE(false, "Unexpected event type " << item->Event->GetTypeRewrite());
         }
-
-
     }
 
     // N.B. Ack directly since we didn't start any delayed transactions

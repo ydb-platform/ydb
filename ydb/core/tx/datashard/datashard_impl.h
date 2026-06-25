@@ -2678,20 +2678,26 @@ private:
 
     class TProposeQueue : private TTxProgressIdempotentScalarQueue<TEvPrivate::TEvDelayedProposeTransaction> {
     public:
-        struct TItem : public TMoveOnly {
+        // TItem is heap-allocated and owned by TProposeQueue (via TIntrusiveList).
+        // Using an intrusive list allows O(1) removal from an arbitrary position,
+        // which is needed to physically remove cancelled items immediately in Cancel().
+        struct TItem : public TIntrusiveListItem<TItem> {
             TItem(TAutoPtr<IEventHandle>&& event, TInstant receivedAt, ui64 tieBreakerIndex)
                 : Event(std::move(event))
                 , ReceivedAt(receivedAt)
                 , TieBreakerIndex(tieBreakerIndex)
-                , Next(nullptr)
-                , Cancelled(false)
+                , NextForTxId(nullptr)
             { }
+
+            TItem(const TItem&) = delete;
+            TItem& operator=(const TItem&) = delete;
 
             TAutoPtr<IEventHandle> Event;
             TInstant ReceivedAt;
             ui64 TieBreakerIndex;
-            TItem* Next;
-            bool Cancelled;
+            // Linked list of items with the same txId within Items.
+            // N.B. there should almost always be exactly one propose per txId.
+            TItem* NextForTxId;
         };
 
         struct TItemList {
@@ -2699,14 +2705,23 @@ private:
             TItem* Last = nullptr;
         };
 
+        ~TProposeQueue() {
+            // Items are heap-allocated; destroy all of them.
+            while (!Items.Empty()) {
+                delete Items.PopFront();
+            }
+        }
+
         void Enqueue(TAutoPtr<IEventHandle> event, TInstant receivedAt, ui64 tieBreakerIndex, const TActorContext& ctx) {
-            TItem* item = &Items.emplace_back(std::move(event), receivedAt, tieBreakerIndex);
+            TItem* item = new TItem(std::move(event), receivedAt, tieBreakerIndex);
+            Items.PushBack(item);
+            ++Count;
 
             const ui64 txId = NEvWrite::TConvertor::GetTxId(item->Event);
 
             auto& links = TxIds[txId];
             if (Y_UNLIKELY(links.Last)) {
-                links.Last->Next = item;
+                links.Last->NextForTxId = item;
             } else {
                 links.First = item;
             }
@@ -2715,61 +2730,79 @@ private:
             Progress(ctx);
         }
 
-        TItem Dequeue() {
-            TItem* first = &Items.front();
+        // Removes the front item from the queue and transfers ownership to the caller.
+        THolder<TItem> Dequeue() {
+            Y_ENSURE(!Items.Empty());
+            TItem* first = Items.Front();
             const ui64 txId = NEvWrite::TConvertor::GetTxId(first->Event);
 
             auto it = TxIds.find(txId);
             Y_ENSURE(it != TxIds.end() && it->second.First == first,
-                "Consistency check: proposed txId " << txId << " in deque, but not in hashmap");
+                "Consistency check: proposed txId " << txId << " in list, but not in hashmap");
 
             // N.B. there should almost always be exactly one propose per txId
-            it->second.First = first->Next;
+            it->second.First = first->NextForTxId;
             if (Y_LIKELY(it->second.First == nullptr)) {
                 TxIds.erase(it);
             } else {
-                first->Next = nullptr;
+                first->NextForTxId = nullptr;
             }
 
-            TItem item = std::move(*first);
-            Items.pop_front();
-            return item;
+            first->Unlink();
+            --Count;
+            return THolder<TItem>(first);
         }
 
-        void Cancel(ui64 txId) {
+        // Physically removes all items with the given txId from the queue and calls
+        // onCancelled(item) for each one before deleting it.  Items are removed in
+        // O(1) per item (intrusive list unlink), so the total cost is O(k) where k
+        // is the number of items with this txId (almost always 1).
+        // The HasInFly slot is intentionally NOT released here: if the cancelled item
+        // was at the head of the queue the already-scheduled TEvDelayedProposeTransaction
+        // will arrive and find either the next non-cancelled item or an empty queue.
+        template <typename TOnCancelled>
+        void Cancel(ui64 txId, TOnCancelled&& onCancelled) {
             auto it = TxIds.find(txId);
             if (it != TxIds.end()) {
-                auto* item = it->second.First;
+                TItem* item = it->second.First;
                 while (item) {
-                    item->Cancelled = true;
-                    item = item->Next;
+                    TItem* next = item->NextForTxId;
+                    onCancelled(*item);
+                    item->Unlink();
+                    --Count;
+                    delete item;
+                    item = next;
                 }
+                TxIds.erase(it);
             }
         }
 
         void Ack(const TActorContext& ctx) {
             Reset(ctx);
-            if (Items) {
+            if (!Items.Empty()) {
                 Progress(ctx);
             }
         }
 
         explicit operator bool() const {
-            return bool(Items);
+            return !Items.Empty();
         }
 
         size_t Size() const {
-            return Items.size();
+            return Count;
         }
 
     private:
-        TDeque<TItem> Items;
+        TIntrusiveList<TItem> Items;
         THashMap<ui64, TItemList> TxIds;
+        size_t Count = 0;
     };
 
     TProposeQueue ProposeQueue;
     TVector<THolder<IEventHandle>> DelayedProposeQueue;
     TAsyncEvent DelayedProposeCoroutines;
+
+    void SendCancelledProposeReply(const TProposeQueue::TItem& item, const TActorContext& ctx);
 
     TActorId PersistentPipeCache;
     NTabletPipe::TClientRetryPolicy SchemeShardPipeRetryPolicy;

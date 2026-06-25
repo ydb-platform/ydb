@@ -72,8 +72,12 @@ void TDataShard::Handle(TEvDataShard::TEvCancelTransactionProposal::TPtr &ev, co
     LOG_DEBUG_S(ctx, NKikimrServices::TX_DATASHARD, "Got TEvDataShard::TEvCancelTransactionProposal " << TabletID()
                 << " txId " <<  txId);
 
-    // Mark any queued proposals as cancelled
-    ProposeQueue.Cancel(txId);
+    // Immediately remove any queued proposals with this txId from the ProposeQueue,
+    // sending CANCELLED replies right away instead of waiting for their turn in the queue.
+    ProposeQueue.Cancel(txId, [this, &ctx](const TProposeQueue::TItem& item) {
+        SendCancelledProposeReply(item, ctx);
+        UpdateProposeQueueSize();
+    });
 
     // Cancel transactions that have already been proposed
     Execute(new TTxCancelTransactionProposal(this, txId), ctx);

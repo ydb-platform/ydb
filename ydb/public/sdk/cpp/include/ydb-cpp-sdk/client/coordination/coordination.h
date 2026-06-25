@@ -315,7 +315,7 @@ public:
     TAsyncDescribeNodeResult DescribeNode(const std::string& path,
         const TDescribeNodeSettings& settings = TDescribeNodeSettings());
 
-    TDistributedLock GetDistributedLock(const TDistributedLockSettings& settings);
+    TDistributedLock CreateDistributedLock(const TDistributedLockSettings& settings);
 
 private:
     class TImpl;

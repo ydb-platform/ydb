@@ -142,6 +142,10 @@ namespace NTabletFlatExecutor {
                         return false;
                 return true;
             }
+
+            bool IsErased() const {
+                return Versions.empty() || Versions[0].Row.Op == NTable::ERowOp::Erase;
+            }
         };
 
     public:
@@ -238,7 +242,7 @@ namespace NTabletFlatExecutor {
 
             } else if (seq == 1) /* after the end(), stop compaction */ {
                 // Flush remaining fulltext buffer before finishing
-                if (FtMode && !FtTokenBuf.empty()) {
+                if (FtMode) {
                     FlushFulltextToken();
                 }
 
@@ -263,7 +267,7 @@ namespace NTabletFlatExecutor {
                 TStringBuf newToken = key.size() > 0 && !key[0].IsNull()
                     ? key[0].AsBuf() : TStringBuf();
 
-                if (!FtTokenBuf.empty() && newToken != FtCurrentToken) {
+                if (newToken != FtCurrentToken) {
                     FlushFulltextToken();
                 }
                 FtCurrentToken = TString(newToken);
@@ -449,8 +453,52 @@ namespace NTabletFlatExecutor {
         EScan EndKey() override
         {
             if (FtMode) {
-                // Add current key to the per-token buffer
-                FtTokenBuf.push_back(std::move(FtCurKey));
+                if (FtCurKey.Gen < std::numeric_limits<NTableIndex::NFulltext::TGen>::max()) {
+                    Y_ENSURE(!FtMergerStarted);
+                    if (FtCurKey.IsMergeable(FtMinRowVersion)) {
+                        if (!FtCurKey.IsErased() && !FtCurKey.Versions[0].Segment.empty()) {
+                            // Add current key to the per-token buffer
+                            FtTokenBuf.push_back(std::move(FtCurKey));
+                        }
+                        // Skip erased keys
+                    } else {
+                        // Replay fulltext delta as is, it's not mergeable
+                        ReplayKey(FtCurKey);
+                    }
+                } else {
+                    // This is a Gen==MAX key, we can try to merge it with deltas in FtTokenBuf
+                    if (FtCurKey.IsErased() || FtCurKey.Versions[0].Segment.empty()) {
+                        // Key is erased/empty, just skip it
+                    } else if (FtTokenBuf.empty()) {
+                        // No deltas, just replay the key and don't save it
+                        ReplayKey(FtCurKey);
+                    } else {
+                        // We assume Gen==MAX keys are always mergeable because they always originate
+                        // from the previous compaction. They may be non-mergeable only if the user
+                        // modifies index data manually. In this case we ignore their version info.
+                        StartFulltextMerge();
+                        const auto& ver = FtCurKey.Versions[0];
+                        FtMerger.Add(ver.Added, TConstArrayRef<ui8>((const ui8*)ver.Segment.data(), ver.Segment.size()));
+                        // Try to merge up to MaxId
+                        FtMerger.SetMaxId(FtCurKey.MaxId);
+                        FtMerger.Start();
+                        ui64 docId = 0;
+                        ui32 freq = 0;
+                        bool hasData;
+                        while ((hasData = FtMerger.Read(docId, freq))) {
+                            FtWriter.Add(docId, freq);
+                            if (FtWriter.GetCount() >= Conf->FulltextMaxSegment) {
+                                // Flush current segment
+                                WriteFulltextSegment(FtWriter);
+                                FtWriter.Reset(Conf->FulltextWithRelevance, Conf->FulltextKeySigned);
+                            }
+                        }
+                        FtMerger.Stop();
+                        FtMerger.SetMaxId(Conf->FulltextKeySigned ? INT64_MAX : UINT64_MAX);
+                        FtMerger.Pop();
+                        // Less than FulltextMaxSegment documents may be left in Writer
+                    }
+                }
                 FtCurKey = {};
                 IsLocked = false;
 
@@ -537,80 +585,45 @@ namespace NTabletFlatExecutor {
             Writer->EndKey();
         }
 
+        void StartFulltextMerge() {
+            if (!FtMergerStarted) {
+                FtMergerStarted = true;
+                FtMerger.Reset(Conf->FulltextWithRelevance, Conf->FulltextKeySigned);
+                for (const auto& key: FtTokenBuf) {
+                    const auto& ver = key.Versions[0];
+                    FtMerger.Add(ver.Added, TConstArrayRef<ui8>((const ui8*)ver.Segment.data(), ver.Segment.size()));
+                }
+                FtWriter.Reset(Conf->FulltextWithRelevance, Conf->FulltextKeySigned);
+            }
+        }
+
         // Flush all buffered keys for the current token
         void FlushFulltextToken() {
             if (FtTokenBuf.empty()) {
                 return;
             }
 
-            // Check if ALL keys in the token are mergeable
-            bool allMergeable = true;
-            for (const auto& key : FtTokenBuf) {
-                if (!key.IsMergeable(FtMinRowVersion)) {
-                    allMergeable = false;
-                    break;
-                }
-            }
-
-            if (!allMergeable) {
-                // Pass-through: replay all keys as-is
-                for (const auto& key : FtTokenBuf) {
-                    ReplayKey(key);
-                }
-                FtTokenBuf.clear();
-                return;
-            }
-
-            // Collect segments for merging
-            bool withRelevance = Conf->FulltextWithRelevance;
-            bool keySigned = Conf->FulltextKeySigned;
-
-            NFulltext::TMultiDeltaReader merger;
-            merger.Reset(withRelevance, keySigned);
-
-            bool hasAnySegment = false;
-            for (const auto& key : FtTokenBuf) {
-                bool isErased = false;
-                for (const auto& ver : key.Versions) {
-                    if (ver.Row.Op == NTable::ERowOp::Erase) {
-                        isErased = true;
-                    } else if (!ver.Segment.empty()) {
-                        merger.Add(ver.Added ^ isErased, TConstArrayRef<ui8>((const ui8*)ver.Segment.data(), ver.Segment.size()));
-                        hasAnySegment = true;
-                    }
-                }
-            }
-
-            if (!hasAnySegment) {
-                FtTokenBuf.clear();
-                return;
-            }
-
-            merger.Start();
-
-            // Read merged output and write segments
-            NFulltext::TDeltaWriter wr;
-            wr.Reset(withRelevance, keySigned);
-
+            // Flush remaining delta-lists
+            StartFulltextMerge();
+            FtMerger.Start();
             ui64 docId = 0;
             ui32 freq = 0;
-            bool hasData = merger.Read(docId, freq);
-
-            while (hasData) {
-                wr.Add(docId, freq);
-                hasData = merger.Read(docId, freq);
-                if (hasData && wr.GetCount() >= Conf->FulltextMaxSegment) {
+            bool hasData;
+            while ((hasData = FtMerger.Read(docId, freq))) {
+                FtWriter.Add(docId, freq);
+                if (FtWriter.GetCount() >= Conf->FulltextMaxSegment) {
                     // Flush current segment
-                    WriteFulltextSegment(wr);
-                    wr.Reset(withRelevance, keySigned);
+                    WriteFulltextSegment(FtWriter);
+                    FtWriter.Reset(Conf->FulltextWithRelevance, Conf->FulltextKeySigned);
                 }
             }
-
-            // Flush remaining data
-            if (wr.GetCount() > 0) {
-                WriteFulltextSegment(wr);
+            if (FtWriter.GetCount() > 0) {
+                WriteFulltextSegment(FtWriter);
             }
 
+            FtMergerStarted = false;
+            FtMerger.Reset(Conf->FulltextWithRelevance, Conf->FulltextKeySigned);
+            FtWriter.Reset(Conf->FulltextWithRelevance, Conf->FulltextKeySigned);
             FtTokenBuf.clear();
         }
 
@@ -998,6 +1011,9 @@ namespace NTabletFlatExecutor {
         ui32 FtSegmentPos = 0;          // position of __ydb_segment in Scheme->Cols
         TVector<ui32> FtKeyColPos;      // keyOrder -> Cols position
         TRowVersion FtMinRowVersion;
+        bool FtMergerStarted = false;
+        NFulltext::TMultiDeltaReader FtMerger;
+        NFulltext::TDeltaWriter FtWriter;
     };
 }
 }

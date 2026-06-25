@@ -49,8 +49,8 @@ struct TKqpOptimizeContext : public TSimpleRefCount<TKqpOptimizeContext> {
     NKikimr::NKqp::TShufflingOrderingsByJoinLabels ShufflingOrderingsByJoinLabels;
     NKikimr::NKqp::TKqpStatsStore KqpStats;
     NKikimr::NKqp::TCBOOptimizerStats CBOStats;
-    std::optional<TString> RboTraceAstBeforeRewriteSelect;
-    std::optional<TString> RboTraceAstAfterRewriteSelect;
+    NYql::TExprNode::TPtr RboTraceAstBeforeRewriteSelect;
+    NYql::TExprNode::TPtr RboTraceAstAfterRewriteSelect;
 
     std::shared_ptr<NJson::TJsonValue> GetOverrideStatistics();
 

@@ -127,6 +127,7 @@ bool TBaseCloudAuthRequestProxy::InitAndValidate() {
 STATEFN(TBaseCloudAuthRequestProxy::ProcessAuthentication) {
     switch (ev->GetTypeRewrite()) {
         hFunc(NCloud::TEvAccessService::TEvAuthenticateResponse, HandleAuthenticationResult);
+        hFunc(NCloud::TEvAccessService::TEvAuthenticateResponseV2, HandleAuthenticationResult);
         hFunc(TEvWakeup, HandleWakeup);
     }
 }
@@ -194,7 +195,8 @@ void TBaseCloudAuthRequestProxy::ScheduleFolderServiceRequestRetry() {
     ScheduleRetry(FolderServiceRequestRetryPeriod_, FOLDER_SERVICE_REQUEST_WAKEUP_TAG);
 }
 
-void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
+template <typename TEvResponse>
+void TBaseCloudAuthRequestProxy::HandleAuthenticationResponse(typename TEvResponse::TPtr& ev) {
     ChangeCounters([this, &ev](){
         Counters_.IncCounter(
             NCloudAuth::EActionType::Authenticate,
@@ -218,15 +220,23 @@ void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessSer
             SendReplyAndDie();
         }
         return;
-    } else if (!ev->Get()->Response.Getsubject().Hasservice_account()) {
+    } else if (!ev->Get()->Response.subject().has_service_account()) {
         SetError(NErrors::ACCESS_DENIED, "(this error should be unreachable).");
         SendReplyAndDie();
         return;
     }
 
-    FolderId_ = ev->Get()->Response.Getsubject().Getservice_account().Getfolder_id();
+    FolderId_ = ev->Get()->Response.subject().service_account().folder_id();
 
     GetCloudIdAndAuthorize();
+}
+
+void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponse::TPtr& ev) {
+    HandleAuthenticationResponse<NCloud::TEvAccessService::TEvAuthenticateResponse>(ev);
+}
+
+void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessService::TEvAuthenticateResponseV2::TPtr& ev) {
+    HandleAuthenticationResponse<NCloud::TEvAccessService::TEvAuthenticateResponseV2>(ev);
 }
 
 STATEFN(TBaseCloudAuthRequestProxy::ProcessAuthorization) {
@@ -381,12 +391,18 @@ void TBaseCloudAuthRequestProxy::FillSignatureProto(TSignatureProto& signature) 
 }
 
 void TBaseCloudAuthRequestProxy::Authenticate() {
-    THolder<NCloud::TEvAccessService::TEvAuthenticateRequest> request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
-    request->RequestId = RequestId_;
-    FillSignatureProto(*request->Request.mutable_signature());
-
     AuthenticateRequestStartTimestamp_ = TActivationContext::Now();
-    Send(MakeSqsAccessServiceID(), std::move(request));
+    if (EnableAccessServiceV2Interface_) {
+        auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequestV2>();
+        request->RequestId = RequestId_;
+        FillSignatureProto(*request->Request.mutable_signature());
+        Send(MakeSqsAccessServiceID(), std::move(request));
+    } else {
+        auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
+        request->RequestId = RequestId_;
+        FillSignatureProto(*request->Request.mutable_signature());
+        Send(MakeSqsAccessServiceID(), std::move(request));
+    }
 }
 
 
@@ -563,9 +579,12 @@ void TMultiAuthFactory::Initialize(
         return TActorSetupCmd(actor, TMailboxType::HTSwap, executorPoolID);
     };
 
+    EnableAccessServiceV2Interface_ = appData.FeatureFlags.GetEnableAccessServiceV2Interface();
+
     IActor* const accessService = CreateSqsAccessService(
         config.GetYandexCloudAccessServiceAddress(),
-        rootCAPath);
+        rootCAPath,
+        EnableAccessServiceV2Interface_);
 
     services.emplace_back(MakeSqsAccessServiceID(), setupActor(accessService));
 
@@ -615,12 +634,12 @@ void TMultiAuthFactory::RegisterAuthActor(NActors::TActorSystem& system, TAuthAc
     if (data.RequestFormat == NSQS::TAuthActorData::Json) {
         auto requester = data.Requester;
         system.Register(
-            new THttpProxyAuthRequestProxy(std::move(data), token, requester),
+            new THttpProxyAuthRequestProxy(std::move(data), token, EnableAccessServiceV2Interface_, requester),
             NActors::TMailboxType::HTSwap,
             poolID);
     } else {
         system.Register(
-            new TCloudAuthRequestProxy(std::move(data), token),
+            new TCloudAuthRequestProxy(std::move(data), token, EnableAccessServiceV2Interface_),
             NActors::TMailboxType::HTSwap,
             poolID);
     }

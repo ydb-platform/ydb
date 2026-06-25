@@ -513,7 +513,7 @@ bool FillBatchedData(
     for (ui32 i = 0; i < res.ResultSize(); ++i) {
         const auto& r = res.GetResult(i);
         WTime = r.GetWriteTimestampMS();
-        const ui64 messageCount = Max<ui64>(1, r.GetMessageCount());
+        const ui64 messageCount = Max<ui64>(1, r.GetLogicalMessageCount());
         // When reading from the middle of a batch, tablet returns the whole blob
         // with base offset below ReadOffset; SDK skips already-committed records.
         AFL_ENSURE(r.GetOffset() + static_cast<i64>(messageCount) > ReadOffset);

@@ -605,6 +605,24 @@ private:
     TMetadata Metadata_;
 };
 
+class TAnalyzeOperation : public TOperation {
+public:
+    using TOperation::TOperation;
+    TAnalyzeOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
+
+    struct TMetadata {
+        EAnalyzeState State = EAnalyzeState::Unspecified;
+        float Progress = 0;
+        std::vector<std::string> Paths;           // All paths covered by this analyze.
+        std::vector<std::string> InProgressPaths; // Subset of Paths currently being traversed
+        std::vector<std::string> DonePaths;       // Subset of Paths whose analysis completed
+    };
+
+    const TMetadata& Metadata() const;
+private:
+    TMetadata Metadata_;
+};
+
 ////////////////////////////////////////////////////////////////////////////////
 
 //! Represents changefeed description

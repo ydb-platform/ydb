@@ -1,5 +1,6 @@
 #include "manager.h"
 
+#include <ydb/core/protos/counters_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/columnshard/bg_tasks/protos/data.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/transactions/tx_add.h>
@@ -78,10 +79,17 @@ bool TSessionsManager::LoadIdempotency(NTabletFlatExecutor::TTransactionContext&
     }
     auto storage = std::make_shared<TSessionsStorage>();
     while (records.size()) {
+        const TString className = records.front().GetClassName();
+        const TString identifier = records.front().GetIdentifier();
         std::shared_ptr<TSession> session = std::make_shared<TSession>();
-        session->DeserializeFromLocalDatabase(std::move(records.front())).Validate("on load from local database");
-        storage->AddSession(session);
+        TConclusionStatus status = session->DeserializeFromLocalDatabase(std::move(records.front()));
         records.pop_front();
+        if (status.IsFail()) {
+            AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "skip_invalid_background_session")("class_name", className)(
+                "identifier", identifier)("problem", status.GetErrorMessage());
+            continue;
+        }
+        storage->AddSession(session).Validate("on load from local database");
     }
     Storage = storage;
     return true;

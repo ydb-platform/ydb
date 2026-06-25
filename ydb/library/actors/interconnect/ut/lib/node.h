@@ -207,4 +207,8 @@ public:
     TInterconnectSettings& MutableInterconnectSettings() {
         return Common->Settings;
     }
+
+    std::shared_ptr<NInterconnect::NRdma::IMemPool> GetRdmaMemPool() const {
+        return Common->RdmaMemPool;
+    }
 };

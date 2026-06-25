@@ -2760,6 +2760,7 @@ public:
 
                         auto add_index = alterTableRequest.add_add_indexes();
                         add_index->set_name(alterIndexName);
+                        add_index->add_index_columns(indexIter->KeyColumns[0]);
                         const auto alterIndexSettings = alterIndexIndexSettingsExpr.Cast<TCoNameValueTupleList>();
 
                         if (indexIter->Type == NYql::TIndexDescription::EType::LocalBloomFilter) {

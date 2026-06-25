@@ -747,8 +747,9 @@ namespace NActors {
                     continue;
                 }
 
-                case EXdcCommand::PUSH_DATA: {
-                    const size_t cmdLen = sizeof(ui16) + (Params.Encryption ? 0 : sizeof(ui32));
+                case EXdcCommand::PUSH_DATA:
+                case EXdcCommand::PUSH_DATA_NO_CHECKSUMS: {
+                    const size_t cmdLen = sizeof(ui16) + ((Params.Encryption || (cmd == EXdcCommand::PUSH_DATA_NO_CHECKSUMS)) ? 0 : sizeof(ui32));
                     if (static_cast<size_t>(end - ptr) < cmdLen) {
                         LOG_CRIT_IC_SESSION("ICIS18", "XDC command format error");
                         throw TExDestroySession{TDisconnectReason::FormatError()};
@@ -760,9 +761,15 @@ namespace NActors {
                         throw TExDestroySession{TDisconnectReason::FormatError()};
                     }
 
+                    // HandleXdcChecksum is noop if Params.Encryption is set
                     if (!Params.Encryption) {
-                        const ui32 checksumExpected = ReadUnaligned<ui32>(ptr + sizeof(ui16));
-                        XdcChecksumQ.emplace_back(size, checksumExpected);
+                        if (cmd == EXdcCommand::PUSH_DATA) {
+                            const ui32 checksumExpected = ReadUnaligned<ui32>(ptr + sizeof(ui16));
+                            XdcChecksumQ.emplace_back(size, checksumExpected);
+                        }
+                        else {
+                            XdcChecksumQ.emplace_back(size, std::nullopt);
+                        }
                     }
 
                     // account channel and number of bytes in XDC for this packet
@@ -789,7 +796,8 @@ namespace NActors {
                     continue;
                 }
 
-                case NActors::EXdcCommand::RDMA_READ: {
+                case NActors::EXdcCommand::RDMA_READ:
+                case NActors::EXdcCommand::RDMA_READ_NO_CHECKSUMS: {
                     using namespace NInterconnect::NRdma;
                     if (!RdmaQp || !RdmaCq) {
                         LOG_CRIT_IC_SESSION("ICIS22", "unexpected XDC RDMA_READ command without RDMA QP");
@@ -833,10 +841,11 @@ namespace NActors {
                     NActorsInterconnect::TRdmaCreds creds;
                     Y_ABORT_UNLESS(creds.ParseFromArray(ptr, credsSerializedSize));
                     ptr += credsSerializedSize;
-                    if (Params.ChecksumRdmaEvent) {
+
+                    if (cmd == EXdcCommand::RDMA_READ && Params.ChecksumRdmaEvent) {
                         context.PendingEvents.back().RdmaCumulativeCheckSum = ReadUnaligned<ui32>(ptr);
                     } else {
-                        context.PendingEvents.back().RdmaCumulativeCheckSum = 0;
+                        context.PendingEvents.back().RdmaCumulativeCheckSum = std::nullopt;
                     }
 
                     ptr += sizeof(ui32);
@@ -966,7 +975,7 @@ namespace NActors {
                     }
                 }
                 checksum = XXH3_64bits_digest(&state);
-                if (checksum != pendingEvent.RdmaCumulativeCheckSum) {
+                if (checksum != *pendingEvent.RdmaCumulativeCheckSum) {
                     LOG_CRIT_IC_SESSION("ICIS05", "event rdma checksum error Type# 0x%08" PRIx32, descr.Type);
                     throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
                 }
@@ -1290,21 +1299,25 @@ namespace NActors {
             Y_DEBUG_ABORT_UNLESS(!XdcChecksumQ.empty());
             auto& [size, expected] = XdcChecksumQ.front();
             const size_t n = Min<size_t>(size, span.size());
-            if (Params.UseXxhash) {
-                XXH3_64bits_update(&XxhashXdcState, span.data(), n);
-            } else {
-                XdcCurrentChecksum = Crc32cExtendMSanCompatible(XdcCurrentChecksum, span.data(), n);
+            if (expected) {
+                if (Params.UseXxhash) {
+                    XXH3_64bits_update(&XxhashXdcState, span.data(), n);
+                } else {
+                    XdcCurrentChecksum = Crc32cExtendMSanCompatible(XdcCurrentChecksum, span.data(), n);
+                }
             }
             span = span.SubSpan(n, Max<size_t>());
             size -= n;
             if (!size) {
-                if (Params.UseXxhash) {
-                    XdcCurrentChecksum = XXH3_64bits_digest(&XxhashXdcState);
-                    XXH3_64bits_reset(&XxhashXdcState);
-                }
-                if (XdcCurrentChecksum != expected) {
-                    LOG_ERROR_IC_SESSION("ICIS16", "payload checksum error");
-                    throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
+                if (expected) {
+                    if (Params.UseXxhash) {
+                        XdcCurrentChecksum = XXH3_64bits_digest(&XxhashXdcState);
+                        XXH3_64bits_reset(&XxhashXdcState);
+                    }
+                    if (XdcCurrentChecksum != *expected) {
+                        LOG_ERROR_IC_SESSION("ICIS16", "payload checksum error");
+                        throw TExReestablishConnection{TDisconnectReason::ChecksumError()};
+                    }
                 }
                 XdcChecksumQ.pop_front();
                 XdcCurrentChecksum = 0;

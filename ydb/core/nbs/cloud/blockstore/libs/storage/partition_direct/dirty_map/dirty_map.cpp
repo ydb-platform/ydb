@@ -55,12 +55,34 @@ TString TReadHint::DebugPrint() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString TPBufferSegment::DebugPrint() const
+// static
+TVector<ui64> TPBufferSegment::MakeLsnVector(
+    std::span<const TPBufferSegment> segments)
 {
+    TVector<ui64> result;
+    result.reserve(segments.size());
+    for (const auto& segment: segments) {
+        result.push_back(segment.Lsn);
+    }
+    return result;
+}
+
+TString TPBufferSegment::DebugPrint(bool brief) const
+{
+    if (brief) {
+        return ToString(Lsn);
+    }
     return TStringBuilder() << Lsn << Range.Print();
 }
 
-TString TFlushHint::DebugPrint() const
+////////////////////////////////////////////////////////////////////////////////
+
+TVector<ui64> TFlushHint::MakeLsnVector() const
+{
+    return TPBufferSegment::MakeLsnVector(Segments);
+}
+
+TString TFlushHint::DebugPrint(bool brief) const
 {
     TStringBuilder builder;
     bool first = true;
@@ -68,7 +90,7 @@ TString TFlushHint::DebugPrint() const
         if (!first) {
             builder << ",";
         }
-        builder << segment.DebugPrint();
+        builder << segment.DebugPrint(brief);
         first = false;
     }
     return builder;
@@ -107,14 +129,19 @@ TString TFlushHints::DebugPrint() const
 {
     TStringBuilder builder;
     for (const auto& [route, hint]: Hints) {
-        builder << route.DebugPrint() << ":" << hint.DebugPrint() << ";";
+        builder << route.DebugPrint() << ":" << hint.DebugPrint(false) << ";";
     }
     return builder;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString TEraseHint::DebugPrint() const
+TVector<ui64> TEraseHint::MakeLsnVector() const
+{
+    return TPBufferSegment::MakeLsnVector(Segments);
+}
+
+TString TEraseHint::DebugPrint(bool brief) const
 {
     TStringBuilder builder;
     bool first = true;
@@ -122,7 +149,7 @@ TString TEraseHint::DebugPrint() const
         if (!first) {
             builder << ",";
         }
-        builder << segment.DebugPrint();
+        builder << segment.DebugPrint(brief);
         first = false;
     }
     return builder;
@@ -152,7 +179,7 @@ TString TEraseHints::DebugPrint() const
 {
     TStringBuilder builder;
     for (const auto& [host, hint]: Hints) {
-        builder << PrintHostIndex(host) << ":" << hint.DebugPrint() << ";";
+        builder << PrintHostIndex(host) << ":" << hint.DebugPrint(false) << ";";
     }
     return builder;
 }
@@ -340,9 +367,8 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
         return result;
     }
 
-    auto nonOverlappingRanges = SplitOnNonOverlappingContinuousRanges(
-        TBlockRange64::MakeClosedInterval(range.Start, range.End),
-        ranges);
+    auto nonOverlappingRanges =
+        SplitOnNonOverlappingContinuousRanges(range, ranges);
     result.RangeHints.reserve(nonOverlappingRanges.size());
 
     ui64 offsetBlocks{};

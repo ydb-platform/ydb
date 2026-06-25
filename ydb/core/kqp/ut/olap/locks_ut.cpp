@@ -241,7 +241,7 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
         const auto resultSets = resultSelect.GetResultSets();
         UNIT_ASSERT_VALUES_EQUAL(resultSets.size(), 1);
         const auto resultSet = resultSets[0];
-        if (shardCount > 1 && reboot) {
+        if (reboot) {
             const auto deleteUnavailiable = resultDelete.GetStatus() == NYdb::Dev::EStatus::UNAVAILABLE;
             const auto deleteUndetermined = resultDelete.GetStatus() == NYdb::Dev::EStatus::UNDETERMINED;
             UNIT_ASSERT_C(
@@ -254,13 +254,14 @@ Y_UNIT_TEST_SUITE(KqpOlapLocks) {
                 resultDelete.GetStatus()
             );
         } else {
-            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0); // not need locks
+            // without a reboot the commit always goes through, so the row is deleted
+            UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 0);
         }
 
         //DELETE 0 rows from every shard
         const auto resultDelete2 =
             client.ExecuteQuery("DELETE from `/Root/ttt` WHERE id < 100", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).GetValueSync();
-        if (shardCount > 1 && reboot) {
+        if (reboot) {
             UNIT_ASSERT_C(
                 (!resultDelete2.IsSuccess() && resultSet.RowsCount() == 1) ||
 

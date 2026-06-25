@@ -24,8 +24,8 @@ enum ItemState {
     ITEM_STATE_DOWN = 3;
 }
 
-// NodeRole describes a function a node performs in the cluster.
-// A node may have several roles at once.
+// NodeRole is an additional cluster responsibility a node carries on top of its
+// type, hosting a fault-tolerance-sensitive subsystem that maintenance must respect.
 message NodeRole {
     // Node hosts a state storage replica.
     message StateStorage {
@@ -59,6 +59,8 @@ message Node {
     uint32 port = 3;
     Ydb.Discovery.NodeLocation location = 4;
     ItemState state = 5;
+    // type is the node's base kind: a static storage node or a dynamic (compute)
+    // node serving a tenant. Exactly one is set.
     oneof type {
         StorageNode storage = 6;
         DynamicNode dynamic = 7;
@@ -68,7 +70,8 @@ message Node {
     // version defines YDB version for current Node.
     // For example, 'ydb-stable-24-1'.
     string version = 9;
-    // roles lists functions the node performs in the cluster.
+    // roles lists extra cluster responsibilities the node carries beyond its type;
+    // empty when the node hosts none of them.
     repeated NodeRole roles = 10;
 }
 

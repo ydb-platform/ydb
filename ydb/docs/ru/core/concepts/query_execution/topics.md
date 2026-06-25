@@ -205,7 +205,6 @@ FROM
 
 ## См. также
 
-- [Локальные и внешние топики](local-and-external-topics.md)
 - [CREATE TOPIC](../../yql/reference/syntax/create-topic.md)
 - [ALTER TOPIC](../../yql/reference/syntax/alter-topic.md)
 - [DROP TOPIC](../../yql/reference/syntax/drop-topic.md)

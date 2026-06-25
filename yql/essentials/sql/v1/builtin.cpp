@@ -2987,8 +2987,8 @@ TAggrFuncFactoryCallback BuildAggrFuncFactoryCallback(
 
         if (isYqlSelect) {
             TYqlAggregationArgs aggregation = {
-                .FunctionName = std::move(realFunctionName),
-                .FactoryName = std::move(factoryName),
+                .FunctionName = realFunctionName,
+                .FactoryName = factoryName,
                 .Type = type,
                 .Mode = aggMode,
                 .Args = args,
@@ -4220,7 +4220,7 @@ TNodeResult BuildBuiltinFunc(
             if (isYqlSelect && funcInfo.Kind == "Window") {
                 TYqlWindowArgs wargs = {
                     .Name = std::move(normalizedName),
-                    .Args = std::move(args),
+                    .Args = args,
                 };
 
                 return Wrap(BuildYqlWindow(pos, std::move(wargs)));
@@ -4343,7 +4343,7 @@ TNodeResult BuildBuiltinFunc(
                 resultArgs.emplace_back(std::move(handlers[idx]));
             }
             if (dflt.Defined()) {
-                resultArgs.emplace_back(std::move(dflt->Get()));
+                resultArgs.emplace_back(dflt->Get());
             }
             return TNonNull(TNodePtr(new TCallNodeImpl(pos, "SqlVisit", 1, -1, resultArgs)));
         } else if (normalizedName == "sqlexternalfunction") {

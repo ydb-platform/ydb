@@ -1,6 +1,5 @@
 use plato;
 
-/* postgres can not */
 /* kikimr can not */
 
 pragma DisableSimpleColumns;

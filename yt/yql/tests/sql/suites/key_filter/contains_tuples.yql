@@ -1,4 +1,3 @@
-/* postgres can not */
 
 select * from plato.Input where AsTuple(key) in (
                                 AsTuple("075"),

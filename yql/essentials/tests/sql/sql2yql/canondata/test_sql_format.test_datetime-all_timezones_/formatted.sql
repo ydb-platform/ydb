@@ -1,4 +1,3 @@
-/* syntax version 1 */
 $zones = CAST(
     ListMap(
         ListFromRange(0us, 1000us),

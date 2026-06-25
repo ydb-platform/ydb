@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 
 select
   Null is not distinct from 1/0,               --true

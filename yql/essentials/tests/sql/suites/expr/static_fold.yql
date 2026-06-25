@@ -1,4 +1,3 @@
-/* syntax version 1 */
 
 $st_many = <|a: "one", b: "two", c: "three", d: "four"|>;
 $st_single = <|a: "zero"|>;

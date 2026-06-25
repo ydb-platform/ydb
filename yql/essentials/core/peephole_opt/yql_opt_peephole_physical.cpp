@@ -700,10 +700,10 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
                                     ui32 pos = 0;
                                     for (auto& item : renames) {
                                         parent.List(pos++)
-                                            .Add(0, std::move(std::get<2>(item)))
+                                            .Add(0, std::get<2>(item))
                                             .Callable(1, "Member")
                                                 .Arg(0, std::get<bool>(item) ? "left" : "right")
-                                                .Add(1, std::move(std::get<0>(item)))
+                                                .Add(1, std::get<0>(item))
                                             .Seal()
                                         .Seal();
                                     }
@@ -809,23 +809,23 @@ TExprNode::TPtr ExpandEquiJoinImpl(const TExprNode& node, TExprContext& ctx) {
                         if (payload1 && payload2)
                             for (auto& item : renames) {
                                 parent.List(pos++)
-                                    .Add(0, std::move(std::get<2>(item)))
+                                    .Add(0, std::get<2>(item))
                                     .Callable(1, "Member")
                                         .Callable(0, "Nth")
                                             .Arg(0, "row")
                                             .Atom(1, std::get<bool>(item) ? 0 : 1)
                                         .Seal()
-                                        .Add(1, std::move(std::get<0>(item)))
+                                        .Add(1, std::get<0>(item))
                                     .Seal()
                                 .Seal();
                             }
                         else
                             for (auto& item : renames) {
                                 parent.List(pos++)
-                                    .Add(0, std::move(std::get<2>(item)))
+                                    .Add(0, std::get<2>(item))
                                     .Callable(1, "Member")
                                         .Arg(0, "row")
-                                        .Add(1, std::move(std::get<0>(item)))
+                                        .Add(1, std::get<0>(item))
                                     .Seal()
                                 .Seal();
                             }
@@ -5065,7 +5065,7 @@ TExprNode::TPtr OptimizeTopOrSort(const TExprNode::TPtr& node, TExprContext& ctx
                 .template Input<TCoWideSort>()
                     .Input(input.HeadPtr())
                     .template Keys<TCoSortKeys>()
-                        .Add(std::move(directions))
+                        .Add(directions)
                         .Build()
                     .Build()
                 .Lambda(input.TailPtr())

@@ -142,7 +142,7 @@ Y_UNIT_TEST(TestSqueezeSaveLoad) {
 
         auto graph = setup.BuildGraph(pgmReturn, {streamNode});
         auto streamValue = NUdf::TUnboxedValuePod(new TStreamWithYield(streamItems, yieldPos, startIndex));
-        graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(streamValue));
+        graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), streamValue);
         return graph;
     };
 
@@ -209,7 +209,7 @@ Y_UNIT_TEST(TestSqueeze1SaveLoad) {
 
         auto graph = setup.BuildGraph(pgmReturn, {streamNode});
         auto streamValue = NUdf::TUnboxedValuePod(new TStreamWithYield(streamItems, yieldPos, startIndex));
-        graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(streamValue));
+        graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), streamValue);
         return graph;
     };
 
@@ -332,11 +332,11 @@ Y_UNIT_TEST(TestHoppingSaveLoad) {
             auto structValues = graph->GetHolderFactory().CreateDirectArrayHolder(2, itemsPtr);
             itemsPtr[timeIndex] = NUdf::TUnboxedValuePod(item.first);
             itemsPtr[sumIndex] = NUdf::TUnboxedValuePod(item.second);
-            streamItems.emplace_back(std::move(structValues));
+            streamItems.emplace_back(structValues);
         }
 
         auto streamValue = NUdf::TUnboxedValuePod(new TStreamWithYield(streamItems, yieldPos, startIndex));
-        graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), std::move(streamValue));
+        graph->GetEntryPoint(0, true)->SetValue(graph->GetContext(), streamValue);
         return graph;
     };
 

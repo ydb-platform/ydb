@@ -1,4 +1,3 @@
-/* postgres can not */
 
 $input = (SELECT 1 AS key, '1' AS value);
 

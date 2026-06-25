@@ -1,5 +1,3 @@
-/* syntax version 1 */
-/* postgres can not */
 
 define subquery $foo() as
   select <|a: 1, b: 2|> as s;

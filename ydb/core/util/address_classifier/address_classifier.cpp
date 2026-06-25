@@ -46,7 +46,6 @@ TString ParseAddress(const TString& address, TString& hostname, ui32& port) {
     return hostname;
 }
 
-
 bool TAddressClassifier::AddNetByCidrAndLabel(const TString& cidr, const size_t label) {
     try {
         // The following method still throws despite its name
@@ -99,8 +98,8 @@ std::pair<bool, size_t> TAddressClassifier::ClassifyAddress(const TString& addre
 TLabeledAddressClassifier::TLabeledAddressClassifier(TAddressClassifier&& addressClassifier, std::vector<TString>&& labels)
     : Classifier(std::move(addressClassifier))
     , Labels(std::move(labels))
-    {
-    }
+{
+}
 
 TLabeledAddressClassifier::TConstPtr TLabeledAddressClassifier::MakeLabeledAddressClassifier(TAddressClassifier&& addressClassifier, std::vector<TString>&& labels) {
     return MakeIntrusiveConst<TLabeledAddressClassifier>(std::move(addressClassifier), std::move(labels));

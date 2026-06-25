@@ -25,6 +25,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/kqp
+    ydb/core/kqp/compute_actor/events
     ydb/core/kqp/ut/common
     ydb/core/protos
     yql/essentials/sql/pg_dummy

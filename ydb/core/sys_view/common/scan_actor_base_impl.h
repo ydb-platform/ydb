@@ -1,13 +1,15 @@
 #pragma once
 
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
-#include <ydb/core/kqp/runtime/kqp_compute.h>
+#include <ydb/core/kqp/compute_actor/events/kqp_compute_events.h>
+#include <ydb/core/kqp/runtime/compute_context/kqp_compute_context.h>
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/mind/tenant_node_enumeration.h>
+#include <ydb/core/sys_view/common/events.h>
 #include <ydb/core/sys_view/common/utils.h>
 #include <ydb/core/sys_view/service/sysview_service.h>
 #include <ydb/core/base/appdata.h>
 
+#include <ydb/library/yql/dq/actors/dq.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 #include <ydb/library/yql/dq/actors/protos/dq_status_codes.pb.h>
 #include <yql/essentials/public/issue/yql_issue_message.h>
@@ -77,7 +79,7 @@ protected:
         ReplyErrorAndDie(Ydb::StatusIds::TIMEOUT, "System view: timeout");
     }
 
-    void HandleAbortExecution(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) {
+    void HandleAbortExecution(NYql::NDq::TEvDq::TEvAbortExecution::TPtr& ev) {
         LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
             "Got abort execution event, actor: " << TBase::SelfId()
                 << ", owner: " << OwnerActorId
@@ -335,7 +337,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScanAck);
             hFunc(TEvSysView::TEvGetScanLimiterResult, HandleLimiter);
-            hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
+            hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, this->PassAway);
             default:
@@ -348,7 +350,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScanAck);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNavigate);
-            hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
+            hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, this->PassAway);
             default:
@@ -361,7 +363,7 @@ private:
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleScanAck);
             hFunc(TEvTenantNodeEnumerator::TEvLookupResult, HandleLookup);
-            hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
+            hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, this->PassAway);
             default:

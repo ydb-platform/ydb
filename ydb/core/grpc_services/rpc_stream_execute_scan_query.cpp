@@ -211,7 +211,7 @@ private:
             HFunc(TRpcServices::TEvGrpcNextReply, Handle);
             HFunc(NKqp::TEvKqp::TEvQueryResponse, Handle);
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
-            HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
+            HFunc(NKqp::NEvKqpExecuter::TEvStreamData, Handle);
             default: {
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR, TStringBuilder()
                     << "Unexpected event received in TStreamExecuteScanQueryRPC::StateWork: " << ev->GetTypeRewrite());
@@ -288,7 +288,7 @@ private:
                 << ", to: " << ExecuterActorId_);
 
             // scan query has single result set, so it's ok to put zero as channelId here.
-            auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo_, 0);
+            auto resp = MakeHolder<NKqp::NEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo_, 0);
             resp->Record.SetFreeSpace(freeSpaceBytes);
             ctx.Send(ExecuterActorId_, resp.Release());
             AckedFreeSpaceBytes_ = freeSpaceBytes;
@@ -353,7 +353,7 @@ private:
         ReplyFinishStream(NYql::NDq::DqStatusToYdbStatus(record.GetStatusCode()), issues);
     }
 
-    void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NKqp::NEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
         if (!ExecuterActorId_) {
             ExecuterActorId_ = ev->Sender;
         }
@@ -391,7 +391,7 @@ private:
             << ", to: " << ev->Sender
             << ", queue: " << FlowControl_.QueueSize());
 
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(evRecord.GetSeqNo(), evRecord.GetChannelId());
+        auto resp = MakeHolder<NKqp::NEvKqpExecuter::TEvStreamDataAck>(evRecord.GetSeqNo(), evRecord.GetChannelId());
         resp->Record.SetFreeSpace(freeSpaceBytes);
 
         ctx.Send(ev->Sender, resp.Release());

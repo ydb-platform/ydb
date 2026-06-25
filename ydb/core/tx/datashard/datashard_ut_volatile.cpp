@@ -1342,13 +1342,13 @@ Y_UNIT_TEST_SUITE(DataShardVolatile) {
         TMaybe<Ydb::StatusIds::StatusCode> observedStatus;
         auto scanSender = runtime.Register(new TLambdaActor([&](TAutoPtr<IEventHandle>& ev, const TActorContext& ctx) {
             switch (ev->GetTypeRewrite()) {
-                case NKqp::TEvKqpExecuter::TEvStreamData::EventType: {
-                    auto* msg = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>();
+                case NKqp::NEvKqpExecuter::TEvStreamData::EventType: {
+                    auto* msg = ev->Get<NKqp::NEvKqpExecuter::TEvStreamData>();
                     Cerr << "... observed stream data" << Endl;
                     if (msg->Record.GetResultSet().rows().size()) {
                         observedResults.emplace_back(FormatResult(msg->Record.GetResultSet()));
                     }
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(msg->Record.GetSeqNo(), msg->Record.GetChannelId());
+                    auto resp = MakeHolder<NKqp::NEvKqpExecuter::TEvStreamDataAck>(msg->Record.GetSeqNo(), msg->Record.GetChannelId());
                     resp->Record.SetFreeSpace(1);
                     ctx.Send(ev->Sender, resp.Release());
                     break;

@@ -631,7 +631,7 @@ public:
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
             hFunc(TEvSysView::TEvGetPartitionStatsResult, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-            hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
+            hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:

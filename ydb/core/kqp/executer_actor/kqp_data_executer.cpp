@@ -270,7 +270,7 @@ public:
                 IgnoreFunc(TEvDqCompute::TEvNodeState);
                 IgnoreFunc(TEvDqCompute::TEvChannelData);
                 IgnoreFunc(TEvDqCompute::TEvResumeExecution);
-                IgnoreFunc(TEvKqpExecuter::TEvStreamDataAck);
+                IgnoreFunc(NEvKqpExecuter::TEvStreamDataAck);
                 IgnoreFunc(TEvInterconnect::TEvNodeDisconnected);
                 IgnoreFunc(TEvKqpNode::TEvStartKqpTasksResponse);
                 IgnoreFunc(TEvInterconnect::TEvNodeConnected);
@@ -354,7 +354,7 @@ public:
     STATEFN(WaitResolveState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
+                hFunc(NEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
                 hFunc(NShardResolver::TEvShardsResolveStatus, HandleResolve);
                 hFunc(TEvPrivate::TEvResourcesSnapshot, HandleResolve);
                 hFunc(TEvSaveScriptExternalEffectResponse, HandleResolve);
@@ -409,7 +409,7 @@ private:
                 hFunc(TEvDqCompute::TEvNodeState, HandleNodeState);
                 hFunc(TEvDqCompute::TEvChannelData, HandleChannelData);
                 hFunc(TEvDqCompute::TEvResumeExecution, HandleResultData); // from Fast Channels
-                hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
+                hFunc(NEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvKqp::TEvAbortExecution, HandleExecute);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 hFunc(NFq::TEvCheckpointCoordinator::TEvZeroCheckpointDone, Handle);
@@ -740,7 +740,7 @@ private:
         OnShardsResolve();
     }
 
-    void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
+    void HandleResolve(NEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (TasksGraph.GetMeta().StreamResult || TasksGraph.GetMeta().AllowOlapDataQuery) {
             for (const auto& [stageId, stageInfo] : TasksGraph.GetStagesInfo()) {
                 if (stageInfo.Meta.IsOlap()) {

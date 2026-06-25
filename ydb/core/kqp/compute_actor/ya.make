@@ -4,7 +4,6 @@ SRCS(
     kqp_compute_actor_factory.cpp
     kqp_compute_actor.cpp
     kqp_compute_actor_helpers.cpp
-    kqp_compute_events.cpp
     kqp_compute_state.cpp
     kqp_pure_compute_actor.cpp
     kqp_scan_compute_stat.cpp
@@ -13,19 +12,21 @@ SRCS(
     kqp_scan_fetcher_actor.cpp
     kqp_scan_common.cpp
     kqp_scan_events.cpp
-    kqp_compute_events_stats.cpp
 )
 
 PEERDIR(
     ydb/core/actorlib_impl
     ydb/core/base
+    ydb/core/kqp/compute_actor/events
     ydb/core/kqp/federated_query
+    ydb/core/kqp/common/simple
     ydb/core/kqp/runtime
     ydb/core/tx/datashard
     ydb/core/tx/scheme_cache
     ydb/library/formats/arrow
     ydb/library/formats/arrow/protos
     ydb/library/formats/arrow/common
+    ydb/library/yql/dq/actors
     ydb/library/yql/dq/actors/compute
     ydb/library/yql/dq/actors/input_transforms
     ydb/library/yql/dq/comp_nodes

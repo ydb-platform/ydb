@@ -72,7 +72,7 @@ public:
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             HFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
-            hFunc(NKqp::TEvKqp::TEvAbortExecution, TBase::HandleAbortExecution);
+            hFunc(NYql::NDq::TEvDq::TEvAbortExecution, TBase::HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, TBase::HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:

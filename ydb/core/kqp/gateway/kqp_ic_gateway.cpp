@@ -133,7 +133,7 @@ void FillLiteralResult(const IKqpGateway::TExecPhysicalResult& result, IKqpGatew
     }
 }
 
-void FillPhysicalResult(std::unique_ptr<TEvKqpExecuter::TEvTxResponse>& ev, IKqpGateway::TExecPhysicalResult& result, TQueryData::TPtr params, ui32 txIndex) {
+void FillPhysicalResult(std::unique_ptr<NEvKqpExecuter::TEvTxResponse>& ev, IKqpGateway::TExecPhysicalResult& result, TQueryData::TPtr params, ui32 txIndex) {
     auto& response = *ev->Record.MutableResponse();
     if (response.GetStatus() == Ydb::StatusIds::SUCCESS) {
         result.SetSuccess();
@@ -267,7 +267,7 @@ public:
         this->Become(&TKqpScanQueryRequestHandler::AwaitState);
     }
 
-    void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NKqp::NEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
         ExecuterActorId = ev->Sender;
         auto& record = ev->Get()->Record;
 
@@ -294,7 +294,7 @@ public:
             ResultSet.set_truncated(true);
         }
 
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
+        auto resp = MakeHolder<NKqp::NEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         resp->Record.SetEnough(truncated);
         resp->Record.SetFreeSpace(ResultSetBytesLimit);
         ctx.Send(ev->Sender, resp.Release());
@@ -320,7 +320,7 @@ public:
     STFUNC(AwaitState) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
-            HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
+            HFunc(NKqp::NEvKqpExecuter::TEvStreamData, Handle);
             HFunc(TResponse, HandleResponse);
 
         default:
@@ -452,13 +452,13 @@ public:
         this->Become(&TKqpForwardStreamRequestHandler::AwaitState);
     }
 
-    void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NKqp::NEvKqpExecuter::TEvStreamData::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ctx);
         ExecuterActorId = ev->Sender;
         TlsActivationContext->Send(ev->Forward(TargetActorId));
     }
 
-    void Handle(NKqp::TEvKqpExecuter::TEvStreamDataAck::TPtr& ev, const TActorContext& ctx) {
+    void Handle(NKqp::NEvKqpExecuter::TEvStreamDataAck::TPtr& ev, const TActorContext& ctx) {
         Y_UNUSED(ctx);
         TlsActivationContext->Send(ev->Forward(ExecuterActorId));
     }
@@ -484,7 +484,7 @@ public:
     STFUNC(AwaitState) {
         switch (ev->GetTypeRewrite()) {
             HFunc(NKqp::TEvKqp::TEvAbortExecution, Handle);
-            HFunc(NKqp::TEvKqpExecuter::TEvStreamData, Handle);
+            HFunc(NKqp::NEvKqpExecuter::TEvStreamData, Handle);
             HFunc(TResponse, HandleResponse);
 
         default:
@@ -530,7 +530,7 @@ public:
         Become(&TKqpGenericQueryRequestHandler::AwaitState);
     }
 
-    void Handle(TEvKqpExecuter::TEvStreamData::TPtr& ev) {
+    void Handle(NEvKqpExecuter::TEvStreamData::TPtr& ev) {
         auto& record = ev->Get()->Record;
 
         const ui32 resultSetId = record.GetQueryResultIndex();
@@ -564,7 +564,7 @@ public:
             }
         }
 
-        auto response = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
+        auto response = MakeHolder<NKqp::NEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         response->Record.SetFreeSpace(SizeLimit && SizeLimit < std::numeric_limits<i64>::max() ? SizeLimit : std::numeric_limits<i64>::max());
         Send(ev->Sender, response.Release());
     }
@@ -583,7 +583,7 @@ public:
 
     STFUNC(AwaitState) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvKqpExecuter::TEvStreamData, Handle);
+            hFunc(NEvKqpExecuter::TEvStreamData, Handle);
             HFunc(TEvKqp::TEvQueryResponse, HandleResponse);
 
         default:
@@ -623,11 +623,11 @@ public:
 
     STATEFN(WaitState) {
         switch(ev->GetTypeRewrite()) {
-            hFunc(TEvKqpExecuter::TEvTxResponse, Handle);
+            hFunc(NEvKqpExecuter::TEvTxResponse, Handle);
         }
     }
 
-    void Handle(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
+    void Handle(NEvKqpExecuter::TEvTxResponse::TPtr& ev) {
         auto* response = ev->Get()->Record.MutableResponse();
 
         TResult result;
@@ -686,7 +686,7 @@ private:
         }
     }
 
-    void ProcessPureExecution(std::unique_ptr<TEvKqpExecuter::TEvTxResponse>& ev) {
+    void ProcessPureExecution(std::unique_ptr<NEvKqpExecuter::TEvTxResponse>& ev) {
         TResult result;
         FillPhysicalResult(ev, result, Parameters, TxIndex);
         Promise.SetValue(std::move(result));

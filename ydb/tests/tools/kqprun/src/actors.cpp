@@ -39,13 +39,13 @@ public:
     }
 
     STRICT_STFUNC(StateFunc,
-        hFunc(NKikimr::NKqp::TEvKqpExecuter::TEvStreamData, Handle);
+        hFunc(NKikimr::NKqp::NEvKqpExecuter::TEvStreamData, Handle);
         hFunc(NKikimr::NKqp::TEvKqp::TEvQueryResponse, Handle);
-        hFunc(NKikimr::NKqp::TEvKqpExecuter::TEvExecuterProgress, Handle);
+        hFunc(NKikimr::NKqp::NEvKqpExecuter::TEvExecuterProgress, Handle);
     )
     
-    void Handle(NKikimr::NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
-        auto response = MakeHolder<NKikimr::NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
+    void Handle(NKikimr::NKqp::NEvKqpExecuter::TEvStreamData::TPtr& ev) {
+        auto response = MakeHolder<NKikimr::NKqp::NEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         response->Record.SetFreeSpace(ResultSizeLimit_);
 
         auto resultSetIndex = ev->Get()->Record.GetQueryResultIndex();
@@ -84,7 +84,7 @@ public:
         PassAway();
     }
 
-    void Handle(NKikimr::NKqp::TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
+    void Handle(NKikimr::NKqp::NEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
         try {
             if (ProgressCallback_) {
                 ProgressCallback_(QueryId_, ev->Get()->Record);

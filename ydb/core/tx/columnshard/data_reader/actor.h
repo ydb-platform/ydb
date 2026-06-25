@@ -1,5 +1,5 @@
 #pragma once
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/compute_actor/events/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/columnshard.h>
 
 #include <ydb/library/accessor/accessor.h>

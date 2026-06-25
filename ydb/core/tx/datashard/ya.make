@@ -268,6 +268,7 @@ PEERDIR(
     ydb/core/engine/minikql
     ydb/core/formats
     ydb/core/io_formats/ydb_dump
+    ydb/core/kqp/compute_actor/events
     ydb/core/persqueue/writer
     ydb/core/protos
     ydb/core/scheme
@@ -286,6 +287,7 @@ PEERDIR(
     ydb/library/actors/http
     ydb/library/chunks_limiter
     ydb/library/protobuf_printer
+    ydb/library/yql/dq/actors
     ydb/library/yql/dq/actors/compute
     yql/essentials/types/binary_json
     yql/essentials/types/dynumber

@@ -2604,7 +2604,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 }
 
                 case NKqp::TKqpExecuterEvents::EvStreamData: {
-                    auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
+                    auto& record = ev->Get<NKqp::NEvKqpExecuter::TEvStreamData>()->Record;
 
                     Cerr << (TStringBuilder() << "-- EvStreamData: " << record.AsJSON() << Endl);
                     Cerr.Flush();
@@ -2612,7 +2612,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     Y_ASSERT(record.GetResultSet().rows().size() == 1);
                     result = 1;
 
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                    auto resp = MakeHolder<NKqp::NEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                     resp->Record.SetEnough(false);
                     resp->Record.SetFreeSpace(100);
                     runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
@@ -2673,7 +2673,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 }
 
                 case NKqp::TKqpExecuterEvents::EvStreamData: {
-                    auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
+                    auto& record = ev->Get<NKqp::NEvKqpExecuter::TEvStreamData>()->Record;
 
                     Cerr << (TStringBuilder() << "-- EvStreamData: " << record.AsJSON() << Endl);
                     Cerr.Flush();
@@ -2682,7 +2682,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     Y_ASSERT(record.GetResultSet().rows().at(0).items().size() == 1);
                     result = record.GetResultSet().rows().at(0).items().at(0).uint64_value();
 
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                    auto resp = MakeHolder<NKqp::NEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                     resp->Record.SetEnough(false);
                     resp->Record.SetFreeSpace(100);
                     runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
@@ -2736,7 +2736,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                 }
 
                 case NKqp::TKqpExecuterEvents::EvStreamData: {
-                    auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
+                    auto& record = ev->Get<NKqp::NEvKqpExecuter::TEvStreamData>()->Record;
 
                     Cerr << (TStringBuilder() << "-- EvStreamData: " << record.AsJSON() << Endl);
                     Cerr.Flush();
@@ -2744,7 +2744,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     Y_ASSERT(record.GetResultSet().rows().size() == 0);
                     hasResult = true;
 
-                    auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                    auto resp = MakeHolder<NKqp::NEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                     resp->Record.SetEnough(false);
                     resp->Record.SetFreeSpace(100);
                     runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));
@@ -2818,7 +2818,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                     }
 
                     case NKqp::TKqpExecuterEvents::EvStreamData: {
-                        auto& record = ev->Get<NKqp::TEvKqpExecuter::TEvStreamData>()->Record;
+                        auto& record = ev->Get<NKqp::NEvKqpExecuter::TEvStreamData>()->Record;
 
                         if (needCount) {
                             Cerr << (TStringBuilder() << "-- EvStreamData: " << record.AsJSON() << Endl);
@@ -2832,7 +2832,7 @@ Y_UNIT_TEST_SUITE(KqpOlap) {
                             result += record.GetResultSet().rows().size();
                         }
 
-                        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
+                        auto resp = MakeHolder<NKqp::NEvKqpExecuter::TEvStreamDataAck>(record.GetSeqNo(), record.GetChannelId());
                         resp->Record.SetEnough(false);
                         resp->Record.SetFreeSpace(100);
                         runtime->Send(new IEventHandle(ev->Sender, sender, resp.Release()));

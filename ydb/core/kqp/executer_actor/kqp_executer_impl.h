@@ -66,7 +66,7 @@ namespace NKikimr::NKqp {
 #define KQP_STLOG_E(MARKER, MESSAGE, ...) STLOG(PRI_ERROR, NKikimrServices::KQP_EXECUTER, MARKER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << MESSAGE, __VA_ARGS__)
 #define KQP_STLOG_C(MARKER, MESSAGE, ...) STLOG(PRI_CRIT,  NKikimrServices::KQP_EXECUTER, MARKER, "ActorId: " << SelfId() << " TxId: " << TxId << ". " << "Ctx: " << *GetUserRequestContext() << ". " << MESSAGE, __VA_ARGS__)
 
-using EExecType = TEvKqpExecuter::TEvTxResponse::EExecutionType;
+using EExecType = NEvKqpExecuter::TEvTxResponse::EExecutionType;
 
 constexpr ui64 PotentialUnsigned64OverflowLimit = (std::numeric_limits<ui64>::max() >> 1);
 
@@ -173,7 +173,7 @@ public:
         if (BatchOperationSettings) {
             TasksGraph.GetMeta().MaxBatchSize = BatchOperationSettings->MaxBatchSize;
         }
-        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, ExecType);
+        ResponseEv = std::make_unique<NEvKqpExecuter::TEvTxResponse>(Request.TxAlloc, ExecType);
         ResponseEv->Orbit = std::move(Request.Orbit);
         Stats = std::make_unique<TQueryExecutionStats>(Request.StatsMode, &TasksGraph,
             ResponseEv->Record.MutableResponse()->MutableResult()->MutableStats(), executerConfig.TableServiceConfig.GetQueryDeadlockTimeoutMs());
@@ -217,7 +217,7 @@ protected:
     };
 
     [[nodiscard]]
-    ETableResolveStatus HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
+    ETableResolveStatus HandleResolve(NEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         auto& reply = *ev->Get();
 
         KqpTableResolverId = {};
@@ -502,7 +502,7 @@ protected:
         ui32 channelId, ui32 seqNo, bool finished)
     {
         auto resultIndex = *txResult.QueryResultIndex + StatementResultIndex;
-        auto streamEv = MakeHolder<TEvKqpExecuter::TEvStreamData>();
+        auto streamEv = MakeHolder<NEvKqpExecuter::TEvStreamData>();
         streamEv->Record.SetSeqNo(seqNo);
         streamEv->Record.SetQueryResultIndex(resultIndex);
         streamEv->Record.SetChannelId(channelId);
@@ -722,7 +722,7 @@ protected:
         this->Send(channelComputeActorId, ackEv.Release(), /* TODO: undelivery */ 0, /* cookie */ channel.Id);
     }
 
-    void HandleStreamAck(TEvKqpExecuter::TEvStreamDataAck::TPtr& ev) {
+    void HandleStreamAck(NEvKqpExecuter::TEvStreamDataAck::TPtr& ev) {
         if (ev->Get()->Record.GetChannelId() == std::numeric_limits<ui32>::max())
             return;
 
@@ -798,7 +798,7 @@ protected:
                 if (Request.ProgressStatsPeriod) {
                     auto now = TInstant::Now();
                     if (LastProgressStats + Request.ProgressStatsPeriod <= now) {
-                        auto progress = MakeHolder<TEvKqpExecuter::TEvExecuterProgress>();
+                        auto progress = MakeHolder<NEvKqpExecuter::TEvExecuterProgress>();
                         auto& execStats = *progress->Record.MutableQueryStats()->AddExecutions();
                         Stats->ExportExecStats(execStats);
                         for (ui32 txId = 0; txId < Request.Transactions.size(); ++txId) {
@@ -1013,7 +1013,7 @@ protected:
 
     STATEFN(ReadyState) {
         switch (ev->GetTypeRewrite()) {
-            hFunc(TEvKqpExecuter::TEvTxRequest, HandleReady);
+            hFunc(NEvKqpExecuter::TEvTxRequest, HandleReady);
             hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
             default: {
                 UnexpectedEvent("ReadyState", ev->GetTypeRewrite());
@@ -1022,7 +1022,7 @@ protected:
         ReportEventElapsedTime();
     }
 
-    void HandleReady(TEvKqpExecuter::TEvTxRequest::TPtr ev) {
+    void HandleReady(NEvKqpExecuter::TEvTxRequest::TPtr ev) {
         TasksGraph.GetMeta().ExecuterId = SelfId();
         TasksGraph.GetMeta().TxId = TxId = ev->Get()->Record.GetRequest().GetTxId();
         Target = ActorIdFromProto(ev->Get()->Record.GetTarget());
@@ -1877,7 +1877,7 @@ protected:
     TInstant LastResourceUsageUpdate;
 
     std::unordered_map<ui64, IActor*> ResultChannelProxies;
-    std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
+    std::unique_ptr<NEvKqpExecuter::TEvTxResponse> ResponseEv;
     NWilson::TSpan ExecuterSpan;
     NWilson::TSpan ExecuterStateSpan;
     THashMap<ui32, std::shared_ptr<NYql::NDq::IChannelBuffer>> ResultInputBuffers;

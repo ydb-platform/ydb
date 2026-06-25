@@ -1,6 +1,7 @@
 #pragma once
 
 #include <library/cpp/lwtrace/shuttle.h>
+#include <ydb/core/kqp/executer_actor/events/kqp_executer_events_base.h>
 #include <ydb/core/kqp/common/kqp_batch_operations.h>
 #include <ydb/core/kqp/common/kqp_tx.h>
 #include <ydb/core/kqp/common/kqp_event_ids.h>
@@ -19,9 +20,7 @@
 namespace NKikimr {
 namespace NKqp {
 
-struct TEvKqpExecuter {
-    struct TEvTxRequest : public TEventPB<TEvTxRequest, NKikimrKqp::TEvExecuterTxRequest,
-        TKqpExecuterEvents::EvTxRequest> {};
+namespace NEvKqpExecuter {
 
     struct TEvTxResponse : public TEventLocal<TEvTxResponse, TKqpExecuterEvents::EvTxResponse> {
         NKikimrKqp::TEvExecuterTxResponse Record;
@@ -131,7 +130,8 @@ struct TEvKqpExecuter {
 
         size_t PartitionIdx;
     };
-};
+
+} // namespace NEvKqpExecuter
 
 struct TKqpFederatedQuerySetup;
 
@@ -190,7 +190,7 @@ IActor* CreateKqpSchemeExecuter(
     bool expectsResult = false, TTxAllocatorState::TPtr txAlloc = nullptr,
     const TActorId& kqpTempTablesAgentActor = TActorId());
 
-std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ExecuteLiteral(
+std::unique_ptr<NEvKqpExecuter::TEvTxResponse> ExecuteLiteral(
     IKqpGateway::TExecPhysicalRequest&& request, TKqpRequestCounters::TPtr counters, TActorId owner, const TIntrusivePtr<TUserRequestContext>& userRequestContext);
 
 } // namespace NKqp

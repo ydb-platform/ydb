@@ -5,6 +5,7 @@
 #include <ydb/library/actors/core/events.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 
 #include <ydb/library/wilson_ids/wilson.h>
 
@@ -338,7 +339,7 @@ public:
                     (node_id, SelfId().NodeId()),
                     (tx_id, txId));
                 for (const auto& [taskId, computeActorId]: tasksToAbort) {
-                    auto abortEv = std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::UNSPECIFIED, rmResult.GetFailReason());
+                    auto abortEv = std::make_unique<NYql::NDq::TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::UNSPECIFIED, rmResult.GetFailReason());
                     Send(computeActorId, abortEv.release());
                 }
             }

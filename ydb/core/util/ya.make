@@ -2,7 +2,6 @@ LIBRARY()
 
 SRCS(
     activeactors.h
-    address_classifier.cpp
     backoff.cpp
     cache.cpp
     cache.h
@@ -82,11 +81,16 @@ PEERDIR(
     ydb/core/base
     ydb/core/protos
     ydb/core/mon
+    ydb/core/util/address_classifier
     library/cpp/deprecated/atomic
     ydb/library/yverify_stream
 )
 
 END()
+
+RECURSE(
+    address_classifier
+)
 
 RECURSE_FOR_TESTS(
     btree_benchmark

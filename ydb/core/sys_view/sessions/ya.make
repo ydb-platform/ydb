@@ -8,6 +8,8 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/core/base
+    ydb/core/kqp/common/events
+    ydb/core/kqp/common/simple
     ydb/core/kqp/runtime
     ydb/core/sys_view/common
 )

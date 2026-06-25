@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/kqp/runtime/kqp_compute.h>
+#include <ydb/core/kqp/runtime/compute_context/kqp_compute_context.h>
 #include <ydb/core/protos/sys_view_types.pb.h>
 
 #include <ydb/library/actors/core/actor.h>

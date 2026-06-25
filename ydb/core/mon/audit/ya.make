@@ -16,6 +16,7 @@ PEERDIR(
     library/cpp/protobuf/json
     ydb/library/actors/http
     ydb/core/audit
+    ydb/core/util/address_classifier
 )
 
 END()

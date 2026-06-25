@@ -1,12 +1,14 @@
 #include "actor.h"
 
+#include <ydb/library/yql/dq/actors/dq.h>
+
 namespace NKikimr::NOlap::NDataReader {
 
 void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "scan_data");
     LastAck = std::nullopt;
     if (!CheckActivity()) {
-        TBase::Send(*ScanActorId, new NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, "external task aborted"));
+        TBase::Send(*ScanActorId, new NYql::NDq::TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, "external task aborted"));
         return;
     }
     SwitchStage(EStage::WaitData, EStage::WaitData);
@@ -21,7 +23,7 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanData::TPtr& ev) {
         } else {
             AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "scan_data_restore_fail")("message", status.GetErrorMessage());
             SwitchStage(EStage::WaitData, EStage::Finished);
-            TBase::Send(*ScanActorId, NKqp::TEvKqp::TEvAbortExecution::Aborted("task finished: " + status.GetErrorMessage()).Release());
+            TBase::Send(*ScanActorId, NYql::NDq::TEvDq::TEvAbortExecution::Aborted("task finished: " + status.GetErrorMessage()).Release());
             PassAway();
         }
     } else {
@@ -40,7 +42,7 @@ void TActor::HandleExecute(NKqp::TEvKqpCompute::TEvScanInitActor::TPtr& ev) {
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "init_actor");
     LastAck = std::nullopt;
     if (!CheckActivity()) {
-        TBase::Send(*ScanActorId, new NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, "external task aborted"));
+        TBase::Send(*ScanActorId, new NYql::NDq::TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, "external task aborted"));
         return;
     }
     SwitchStage(EStage::Initialization, EStage::WaitData);
@@ -68,7 +70,7 @@ void TActor::HandleExecute(NActors::TEvents::TEvUndelivered::TPtr& ev) {
 
 void TActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
     if (!CheckActivity()) {
-        TBase::Send(*ScanActorId, new NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, "external task aborted"));
+        TBase::Send(*ScanActorId, new NYql::NDq::TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, "external task aborted"));
         return;
     }
 
@@ -76,7 +78,7 @@ void TActor::HandleExecute(NActors::TEvents::TEvWakeup::TPtr& /*ev*/) {
         SwitchStage(std::nullopt, EStage::Finished);
         AFL_ERROR(NKikimrServices::TX_COLUMNSHARD_RESTORE)("event", "problem_timeout");
         RestoreTask->OnError("timeout on restore data");
-        TBase::Send(*ScanActorId, new NKqp::TEvKqp::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, "external task aborted"));
+        TBase::Send(*ScanActorId, new NYql::NDq::TEvDq::TEvAbortExecution(NYql::NDqProto::StatusIds::ABORTED, "external task aborted"));
         PassAway();
         return;
     }

@@ -47,7 +47,7 @@ public:
                 sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleAck);
                 hFunc(NMetadata::NProvider::TEvRefreshSubscriberData, Handle)
                 hFunc(NKqp::NWorkload::TEvFetchDatabaseResponse, Handle);
-                hFunc(NKqp::TEvKqp::TEvAbortExecution, HandleAbortExecution);
+                hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleAbortExecution);
                 cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
                 cFunc(TEvents::TEvPoison::EventType, PassAway);
                 default:

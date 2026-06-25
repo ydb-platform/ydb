@@ -184,7 +184,7 @@ void TColumnShardScan::HandleScan(NActors::TEvents::TEvPoison::TPtr& /*ev*/) noe
     PassAway();
 }
 
-void TColumnShardScan::HandleScan(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) noexcept {
+void TColumnShardScan::HandleScan(NYql::NDq::TEvDq::TEvAbortExecution::TPtr& ev) noexcept {
     auto& msg = ev->Get()->Record;
     const TString reason = ev->Get()->GetIssues().ToOneLineString();
 

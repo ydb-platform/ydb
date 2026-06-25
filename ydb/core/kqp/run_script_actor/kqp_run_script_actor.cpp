@@ -50,7 +50,7 @@ struct TProducerState {
     bool Enough = false;
 
     void SendAck(const NActors::TActorIdentity& actor) const {
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo, ChannelId);
+        auto resp = MakeHolder<NKqp::NEvKqpExecuter::TEvStreamDataAck>(*LastSeqNo, ChannelId);
         resp->Record.SetFreeSpace(AckedFreeSpaceBytes);
         resp->Record.SetEnough(Enough);
         actor.Send(ActorId, resp.Release());
@@ -163,8 +163,8 @@ private:
     STRICT_STFUNC(StateFunc,
         hFunc(NActors::TEvents::TEvWakeup, Handle);
         hFunc(NActors::TEvents::TEvPoison, Handle);
-        hFunc(TEvKqpExecuter::TEvStreamData, Handle);
-        hFunc(TEvKqpExecuter::TEvExecuterProgress, Handle);
+        hFunc(NEvKqpExecuter::TEvStreamData, Handle);
+        hFunc(NEvKqpExecuter::TEvExecuterProgress, Handle);
         hFunc(TEvSaveScriptExternalEffectRequest, Handle);
         hFunc(TEvSaveScriptPhysicalGraphRequest, Handle);
         hFunc(TEvSaveScriptPhysicalGraphResponse, Handle);
@@ -472,7 +472,7 @@ private:
         }
     }
 
-    void Handle(TEvKqpExecuter::TEvStreamData::TPtr& ev) {
+    void Handle(NEvKqpExecuter::TEvStreamData::TPtr& ev) {
         if (RunState != ERunState::Running) {
             return;
         }
@@ -587,7 +587,7 @@ private:
         LOG_D("Save result meta for result sets #" << ResultSetInfos.size() << ", saver id: " << saverId);
     }
 
-    void Handle(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
+    void Handle(NEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
         const bool isExecuting = IsExecuting();
         LOG_T("Got script progress from " << ev->Sender << ", isExecuting: " << isExecuting);
 

@@ -3638,7 +3638,7 @@ Y_UNIT_TEST_SUITE(KqpQueryDiscard) {
         bool executerIdCaptured = false;
 
         auto observer = [&](TAutoPtr<IEventHandle>& ev) {
-            if (ev->GetTypeRewrite() == NKikimr::NKqp::TEvKqpExecuter::TEvTxRequest::EventType && !executerIdCaptured) {
+            if (ev->GetTypeRewrite() == NKikimr::NKqp::NEvKqpExecuter::TEvTxRequest::EventType && !executerIdCaptured) {
                 executerId = ev->Recipient;
                 executerIdCaptured = true;
                 Cerr << "Captured ExecuterId: " << executerId << Endl;

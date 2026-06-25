@@ -60,8 +60,8 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             bool blockResponses = true;
 
             auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
-                if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvTxResponse::EventType && blockResponses) {
-                    auto* msg = ev->Get<TEvKqpExecuter::TEvTxResponse>();
+                if (ev->GetTypeRewrite() == NEvKqpExecuter::TEvTxResponse::EventType && blockResponses) {
+                    auto* msg = ev->Get<NEvKqpExecuter::TEvTxResponse>();
                     UNIT_ASSERT_C(msg->Snapshot.IsValid(), "unexpected tx response reply without the snapshot");
                     executerResponses.emplace_back(ev.Release());
                     return TTestActorRuntime::EEventAction::DROP;
@@ -156,9 +156,9 @@ Y_UNIT_TEST_SUITE(KqpLocksTricky) {
             IKqpGateway::TKqpSnapshot txSnaphsot;
 
             auto grab = [&](TAutoPtr<IEventHandle> &ev) -> auto {
-                if (ev->GetTypeRewrite() == TEvKqpExecuter::TEvTxResponse::EventType) {
+                if (ev->GetTypeRewrite() == NEvKqpExecuter::TEvTxResponse::EventType) {
                     if (introspectExecutorResponses) {
-                        auto* msg = ev->Get<TEvKqpExecuter::TEvTxResponse>();
+                        auto* msg = ev->Get<NEvKqpExecuter::TEvTxResponse>();
                         UNIT_ASSERT_C(msg->Snapshot.IsValid(), "unexpected tx response reply without the snapshot");
                         if (txSnaphsot.IsValid()) {
                             UNIT_ASSERT(txSnaphsot == msg->Snapshot);

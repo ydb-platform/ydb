@@ -260,7 +260,7 @@ protected:
         TBase::PassAway();
     }
 
-    void Handle(NKqp::TEvKqpExecuter::TEvStreamData::TPtr& ev) {
+    void Handle(NKqp::NEvKqpExecuter::TEvStreamData::TPtr& ev) {
         NYdb::TResultSet resultSet(std::move(*ev->Get()->Record.MutableResultSet()));
         auto response = MakeResponse();
         if (NeedMeta_) {
@@ -283,7 +283,7 @@ protected:
         YDB_LOG_DEBUG("Send stream data ack",
             {"selfId", this->SelfId()},
             {"sender", ev->Sender});
-        auto resp = MakeHolder<NKqp::TEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
+        auto resp = MakeHolder<NKqp::NEvKqpExecuter::TEvStreamDataAck>(ev->Get()->Record.GetSeqNo(), ev->Get()->Record.GetChannelId());
         resp->Record.SetFreeSpace(std::numeric_limits<i64>::max());
         TBase::Send(ev->Sender, resp.Release());
     }
@@ -371,7 +371,7 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqp::TEvQueryResponse, TBase::Handle);
-            hFunc(NKqp::TEvKqpExecuter::TEvStreamData, TBase::Handle);
+            hFunc(NKqp::NEvKqpExecuter::TEvStreamData, TBase::Handle);
             hFunc(TEvEvents::TEvCancelRequest, Handle);
         }
     }
@@ -505,7 +505,7 @@ public:
     STATEFN(StateWork) {
         switch (ev->GetTypeRewrite()) {
             hFunc(NKqp::TEvKqp::TEvQueryResponse, TBase::Handle);
-            hFunc(NKqp::TEvKqpExecuter::TEvStreamData, TBase::Handle);
+            hFunc(NKqp::NEvKqpExecuter::TEvStreamData, TBase::Handle);
             hFunc(TEvEvents::TEvCancelRequest, Handle);
         }
     }

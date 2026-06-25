@@ -17,6 +17,7 @@ PEERDIR(
     ydb/core/mind
     ydb/core/protos
     ydb/core/tablet
+    ydb/library/yql/dq/actors
     ydb/library/yql/dq/actors/compute
     ydb/library/actors/async
 )

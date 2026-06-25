@@ -10,7 +10,7 @@ SRCS(
 PEERDIR(
     ydb/library/actors/core
     ydb/core/base
-    ydb/core/kqp/runtime
+    ydb/core/kqp/runtime/compute_context
     ydb/core/sys_view/common
 )
 

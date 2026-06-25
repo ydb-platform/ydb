@@ -40,7 +40,7 @@ public:
             hFunc(NKqp::TEvKqpCompute::TEvScanDataAck, Handle);
             hFunc(TEvResponse, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-            hFunc(NKqp::TEvKqp::TEvAbortExecution, this->HandleAbortExecution);
+            hFunc(NYql::NDq::TEvDq::TEvAbortExecution, this->HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, this->HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:

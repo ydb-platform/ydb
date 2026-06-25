@@ -1,7 +1,7 @@
 #pragma once
 #include "sub_columns.h"
 
-#include <ydb/core/kqp/compute_actor/kqp_compute_events_stats.h>
+#include <ydb/core/kqp/compute_actor/events/kqp_compute_events_stats.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/counters/duplicate_filtering.h>
 #include <ydb/core/tx/columnshard/counters/thread_safe_value.h>

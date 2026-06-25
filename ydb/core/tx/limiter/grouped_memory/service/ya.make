@@ -11,6 +11,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/mon
     ydb/core/protos
     ydb/library/signals
     ydb/core/tx/limiter/grouped_memory/tracing

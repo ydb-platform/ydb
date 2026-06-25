@@ -4,7 +4,7 @@
 #include <ydb/core/tx/datashard/datashard_impl.h>
 
 #include <ydb/core/engine/mkql_engine_flat.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/compute_actor/events/kqp_compute_events.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/protos/ydb_result_set_old.pb.h>
 #include <ydb/core/testlib/minikql_compile.h>

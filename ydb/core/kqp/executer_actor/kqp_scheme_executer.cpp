@@ -131,9 +131,9 @@ public:
         YQL_ENSURE(PhyTx);
         YQL_ENSURE(PhyTx->GetType() == NKqpProto::TKqpPhyTx::TYPE_SCHEME);
 
-        ResponseEv = std::make_unique<TEvKqpExecuter::TEvTxResponse>(
+        ResponseEv = std::make_unique<NEvKqpExecuter::TEvTxResponse>(
             TxAlloc,
-            TEvKqpExecuter::TEvTxResponse::EExecutionType::Scheme);
+            NEvKqpExecuter::TEvTxResponse::EExecutionType::Scheme);
     }
 
     void StartAlterOperation() {
@@ -1317,7 +1317,7 @@ private:
     const TString Database;
     const TIntrusiveConstPtr<NACLib::TUserToken> UserToken;
     const TString ClientAddress;
-    std::unique_ptr<TEvKqpExecuter::TEvTxResponse> ResponseEv;
+    std::unique_ptr<NEvKqpExecuter::TEvTxResponse> ResponseEv;
     bool Temporary;
     bool CreateTmpDir;
     bool IsCreateTableAs;

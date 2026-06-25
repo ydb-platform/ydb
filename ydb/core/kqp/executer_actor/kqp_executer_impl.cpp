@@ -9,7 +9,7 @@ namespace NKqp {
 
 using namespace NYql;
 
-void TEvKqpExecuter::TEvTxResponse::InitTxResult(const TKqpPhyTxHolder::TConstPtr& tx) {
+void NEvKqpExecuter::TEvTxResponse::InitTxResult(const TKqpPhyTxHolder::TConstPtr& tx) {
     TxHolders.push_back(tx);
     YQL_ENSURE(TxResults.empty());
     TxResults.reserve(TxResults.size() + tx->ResultsSize());
@@ -28,7 +28,7 @@ void TEvKqpExecuter::TEvTxResponse::InitTxResult(const TKqpPhyTxHolder::TConstPt
     }
 }
 
-void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NDq::TDqSerializedBatch&& rows) {
+void NEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NDq::TDqSerializedBatch&& rows) {
     YQL_ENSURE(idx < TxResults.size());
     YQL_ENSURE(AllocState);
     ResultRowsCount += rows.RowCount();
@@ -43,7 +43,7 @@ void TEvKqpExecuter::TEvTxResponse::TakeResult(ui32 idx, NDq::TDqSerializedBatch
     }
 }
 
-TEvKqpExecuter::TEvTxResponse::~TEvTxResponse() {
+NEvKqpExecuter::TEvTxResponse::~TEvTxResponse() {
     if (!TxResults.empty() && Y_LIKELY(AllocState)) {
         with_lock(*AllocState->Alloc) {
             TxResults.crop(0);

@@ -5,11 +5,13 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/core/kqp/compute_actor/events
     ydb/core/tx/columnshard/blobs_action/abstract
+    ydb/core/tx/columnshard/bg_tasks/events
+    ydb/core/tx/columnshard/export/session
+    ydb/core/tx/columnshard/engines/writer
     ydb/library/actors/core
     ydb/library/signals
-    ydb/core/tx/columnshard/engines/writer
-    ydb/core/kqp/compute_actor
 )
 
 END()

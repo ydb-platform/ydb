@@ -960,7 +960,7 @@ public:
                 {
                     auto* kqpTableResolver = CreateKqpTableResolver(SelfId(), 0, QueryState->UserToken, tasksGraph, true);
                     RegisterWithSameMailbox(kqpTableResolver);
-                    auto resolveEv = co_await ActorWaitForEvent<TEvKqpExecuter::TEvTableResolveStatus>(0);
+                    auto resolveEv = co_await ActorWaitForEvent<NEvKqpExecuter::TEvTableResolveStatus>(0);
                     if (resolveEv->Get()->Status != Ydb::StatusIds::SUCCESS) {
                         ReplyResolveError(*resolveEv->Get());
                         co_return;
@@ -2215,7 +2215,7 @@ public:
         }
     }
 
-    void HandleExecute(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
+    void HandleExecute(NEvKqpExecuter::TEvTxResponse::TPtr& ev) {
         // outdated response from dead executer.
         // it this case we should just ignore the event.
         if (ExecuterId != ev->Sender)
@@ -2225,7 +2225,7 @@ public:
         ProcessExecuterResult(ev->Get());
     }
 
-    void HandleExecute(TEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
+    void HandleExecute(NEvKqpExecuter::TEvExecuterProgress::TPtr& ev) {
         if (QueryState && QueryState->RequestActorId) {
             if (ExecuterId != ev->Sender) {
                 return;
@@ -2326,7 +2326,7 @@ public:
     }
 
     // Emit TLI breaker logs for direct lock breaks (one log per shard that broke locks).
-    void EmitBreakerLogs(TEvKqpExecuter::TEvTxResponse* ev) {
+    void EmitBreakerLogs(NEvKqpExecuter::TEvTxResponse* ev) {
         if (ev->LocksBrokenAsBreaker == 0 || !IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
             return;
         }
@@ -2370,7 +2370,7 @@ public:
     }
 
     // Emit TLI breaker logs for deferred lock scenarios (lock broken between snapshot and re-read).
-    void EmitDeferredBreakerLogs(TEvKqpExecuter::TEvTxResponse* ev) {
+    void EmitDeferredBreakerLogs(NEvKqpExecuter::TEvTxResponse* ev) {
         if (ev->DeferredBreakers.empty() || !IS_INFO_LOG_ENABLED(NKikimrServices::TLI)) {
             return;
         }
@@ -2483,7 +2483,7 @@ public:
         }
     }
 
-    void ProcessExecuterResult(TEvKqpExecuter::TEvTxResponse* ev) {
+    void ProcessExecuterResult(NEvKqpExecuter::TEvTxResponse* ev) {
         QueryState->Orbit = std::move(ev->Orbit);
 
         auto* response = ev->Record.MutableResponse();
@@ -2549,7 +2549,7 @@ public:
                     // SCHEME_ERROR during execution is a soft (retriable) error, we abort query execution,
                     // invalidate query cache, and return ABORTED as retriable status.
                     if (status == Ydb::StatusIds::SCHEME_ERROR &&
-                        executionType != TEvKqpExecuter::TEvTxResponse::EExecutionType::Scheme)
+                        executionType != NEvKqpExecuter::TEvTxResponse::EExecutionType::Scheme)
                     {
                         status = Ydb::StatusIds::ABORTED;
                     }
@@ -2591,7 +2591,7 @@ public:
         ExecuteOrDefer();
     }
 
-    void HandleExecute(TEvKqpExecuter::TEvStreamData::TPtr& ev) {
+    void HandleExecute(NEvKqpExecuter::TEvStreamData::TPtr& ev) {
         YQL_ENSURE(QueryState && QueryState->RequestActorId);
         STLOG_D("Forwarded TEvStreamData to " << QueryState->RequestActorId,
             (trace_id, TraceId()));
@@ -2601,7 +2601,7 @@ public:
         TlsActivationContext->Send(ev->Forward(QueryState->RequestActorId));
     }
 
-    void HandleExecute(TEvKqpExecuter::TEvStreamDataAck::TPtr& ev) {
+    void HandleExecute(NEvKqpExecuter::TEvStreamDataAck::TPtr& ev) {
         TlsActivationContext->Send(ev->Forward(ExecuterId));
     }
 
@@ -3078,7 +3078,7 @@ public:
         Send(request->Sender, response.release(), 0, proxyRequestId);
     }
 
-    void ReplyResolveError(const TEvKqpExecuter::TEvTableResolveStatus& ev) {
+    void ReplyResolveError(const NEvKqpExecuter::TEvTableResolveStatus& ev) {
         QueryResponse = std::make_unique<TEvKqp::TEvQueryResponse>();
         auto& record = QueryResponse->Record;
 
@@ -3401,7 +3401,7 @@ public:
         Y_ENSURE(ExecuterId != ev->Sender);
     }
 
-    void HandleCleanup(TEvKqpExecuter::TEvTxResponse::TPtr& ev) {
+    void HandleCleanup(NEvKqpExecuter::TEvTxResponse::TPtr& ev) {
         if (ev->Sender != ExecuterId) {
             return;
         }
@@ -3591,8 +3591,8 @@ public:
                 // forgotten messages from previous aborted request
                 hFunc(TEvKqp::TEvCompileResponse, HandleNoop);
                 hFunc(TEvKqp::TEvSplitResponse, HandleNoop);
-                hFunc(TEvKqpExecuter::TEvTxResponse, HandleNoop);
-                hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop)
+                hFunc(NEvKqpExecuter::TEvTxResponse, HandleNoop);
+                hFunc(NEvKqpExecuter::TEvExecuterProgress, HandleNoop)
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
                 hFunc(NWorkload::TEvContinueRequest, HandleNoop);
@@ -3631,11 +3631,11 @@ public:
 
                 hFunc(TEvents::TEvUndelivered, Handle);
                 hFunc(NWorkload::TEvContinueRequest, Handle);
-                hFunc(TEvKqpExecuter::TEvTxResponse, HandleExecute);
-                hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleExecute)
+                hFunc(NEvKqpExecuter::TEvTxResponse, HandleExecute);
+                hFunc(NEvKqpExecuter::TEvExecuterProgress, HandleExecute)
 
-                hFunc(TEvKqpExecuter::TEvStreamData, HandleExecute);
-                hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleExecute);
+                hFunc(NEvKqpExecuter::TEvStreamData, HandleExecute);
+                hFunc(NEvKqpExecuter::TEvStreamDataAck, HandleExecute);
 
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleExecute);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
@@ -3675,7 +3675,7 @@ public:
                 hFunc(TEvKqpSnapshot::TEvCreateSnapshotResponse, Handle);
                 hFunc(TEvKqp::TEvQueryRequest, Handle);
 
-                hFunc(TEvKqpExecuter::TEvTxResponse, HandleCleanup);
+                hFunc(NEvKqpExecuter::TEvTxResponse, HandleCleanup);
                 hFunc(NWorkload::TEvCleanupResponse, HandleCleanup);
 
                 hFunc(TEvKqp::TEvCloseSessionRequest, HandleCleanup);
@@ -3690,13 +3690,13 @@ public:
                 hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleNoop);
                 hFunc(TEvents::TEvUndelivered, HandleNoop);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);
-                hFunc(TEvKqpExecuter::TEvStreamData, HandleNoop);
+                hFunc(NEvKqpExecuter::TEvStreamData, HandleNoop);
                 hFunc(NWorkload::TEvContinueRequest, HandleNoop);
 
                 // always come from WorkerActor
                 hFunc(TEvKqp::TEvCloseSessionResponse, HandleCleanup);
                 hFunc(TEvKqp::TEvQueryResponse, HandleNoop);
-                hFunc(TEvKqpExecuter::TEvExecuterProgress, HandleNoop)
+                hFunc(NEvKqpExecuter::TEvExecuterProgress, HandleNoop)
             default:
                 UnexpectedEvent("CleanupState", ev);
             }

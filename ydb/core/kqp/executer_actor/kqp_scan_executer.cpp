@@ -72,7 +72,7 @@ public:
     STATEFN(WaitResolveState) {
         try {
             switch (ev->GetTypeRewrite()) {
-                hFunc(TEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
+                hFunc(NEvKqpExecuter::TEvTableResolveStatus, HandleResolve);
                 hFunc(NShardResolver::TEvShardsResolveStatus, HandleResolve);
                 hFunc(TEvPrivate::TEvResourcesSnapshot, HandleResolve);
                 hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandlePartitionStats);
@@ -108,7 +108,7 @@ private:
                 hFunc(TEvDqCompute::TEvNodeState, HandleNodeState);
                 hFunc(TEvDqCompute::TEvChannelData, HandleChannelData);    // from CA
                 hFunc(TEvDqCompute::TEvResumeExecution, HandleResultData); // from Fast Channels
-                hFunc(TEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
+                hFunc(NEvKqpExecuter::TEvStreamDataAck, HandleStreamAck);
                 hFunc(TEvKqp::TEvAbortExecution, HandleAbortExecution);
                 hFunc(TEvents::TEvUndelivered, HandleUndelivered);
                 hFunc(TEvPrivate::TEvRetry, HandleRetry);
@@ -129,7 +129,7 @@ private:
     }
 
 private:
-    void HandleResolve(TEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
+    void HandleResolve(NEvKqpExecuter::TEvTableResolveStatus::TPtr& ev) {
         if (TBase::HandleResolve(ev) == CONTINUE) {
             if (!TBase::GetPartitionStats()) {
                 GetResourcesSnapshot();

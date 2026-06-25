@@ -1,5 +1,5 @@
 #include <ydb/core/base/blobstorage.h>
-#include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
+#include <ydb/core/kqp/compute_actor/events/kqp_compute_events.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>

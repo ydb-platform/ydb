@@ -4,6 +4,7 @@ PEERDIR(
     ydb/core/protos
     ydb/core/formats/arrow
     contrib/libs/apache/arrow
+    ydb/core/kqp/compute_actor/events
     ydb/library/actors/core
     ydb/core/tx/columnshard/blobs_action/bs
     ydb/library/formats/arrow/protos
@@ -13,6 +14,7 @@ PEERDIR(
     ydb/core/tx/columnshard
     ydb/core/tx/long_tx_service/public
     ydb/core/wrappers
+    ydb/library/yql/dq/actors/protos
 )
 
 SRCS(
@@ -38,4 +40,3 @@ ENDIF()
 YQL_LAST_ABI_VERSION()
 
 END()
-

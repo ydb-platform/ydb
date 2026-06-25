@@ -132,7 +132,7 @@ private:
         while (true) {
             TAutoPtr<IEventHandle> handle;
             auto replies = Server->GetRuntime()->GrabEdgeEventsRethrow<TEvKqp::TEvQueryResponse, TEvKqp::TEvAbortExecution,
-                TEvKqpExecuter::TEvStreamData>(handle);
+                NEvKqpExecuter::TEvStreamData>(handle);
 
             if (auto* ev = std::get<TEvKqp::TEvQueryResponse*>(replies)) {
                 auto& response = ev->Record;
@@ -165,7 +165,7 @@ private:
                 UNIT_FAIL(ev->GetIssues().ToOneLineString());
             }
 
-            if (auto* ev = std::get<TEvKqpExecuter::TEvStreamData*>(replies)) {
+            if (auto* ev = std::get<NEvKqpExecuter::TEvStreamData*>(replies)) {
                 NYdb::TResultSet result = ev->Record.resultset();
                 auto columns = result.GetColumnsMeta();
 
@@ -416,7 +416,7 @@ void KqpStabilityTests::AbortOnDisconnect() {
     while (true) {
         TAutoPtr<IEventHandle> handle;
         auto replies = Server->GetRuntime()->GrabEdgeEventsRethrow<TEvKqp::TEvQueryResponse, TEvKqp::TEvAbortExecution,
-            TEvKqpExecuter::TEvStreamData>(handle);
+            NEvKqpExecuter::TEvStreamData>(handle);
 
         if (auto* ev = std::get<TEvKqp::TEvQueryResponse*>(replies)) {
             auto& response = ev->Record;
@@ -430,7 +430,7 @@ void KqpStabilityTests::AbortOnDisconnect() {
             UNIT_FAIL(ev->GetIssues().ToOneLineString());
         }
 
-        if (std::get<TEvKqpExecuter::TEvStreamData*>(replies)) {
+        if (std::get<NEvKqpExecuter::TEvStreamData*>(replies)) {
             UNIT_FAIL("unexpected");
         }
     }

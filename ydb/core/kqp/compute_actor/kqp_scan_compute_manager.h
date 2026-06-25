@@ -12,6 +12,7 @@
 #include <ydb/core/tx/datashard/range_ops.h>
 
 #include <ydb/library/actors/wilson/wilson_profile_span.h>
+#include <ydb/library/yql/dq/actors/dq.h>
 
 namespace NKikimr::NKqp::NScanPrivate {
 
@@ -108,7 +109,7 @@ public:
         AFL_DEBUG(NKikimrServices::KQP_COMPUTE)("event", "stop_scanner")("actor_id", ActorId)("message", message)("final_flag", finalFlag);
         if (ActorId) {
             auto abortEv =
-                std::make_unique<TEvKqp::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, message ? message : "stop from fetcher");
+                std::make_unique<NYql::NDq::TEvDq::TEvAbortExecution>(NYql::NDqProto::StatusIds::CANCELLED, message ? message : "stop from fetcher");
             NActors::TActivationContext::AsActorContext().Send(*ActorId, std::move(abortEv));
             if (finalFlag) {
                 NActors::TActivationContext::AsActorContext().Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(TabletId));

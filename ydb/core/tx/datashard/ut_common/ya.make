@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     contrib/libs/protobuf
+    ydb/core/kqp/compute_actor/events
     ydb/core/kqp/ut/common
     ydb/library/ut
 )

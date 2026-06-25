@@ -1,6 +1,6 @@
 #pragma once
 #include "kqp_compute_actor.h"
-#include "kqp_compute_events.h"
+#include <ydb/core/kqp/compute_actor/events/kqp_compute_events.h>
 #include "kqp_compute_state.h"
 #include "kqp_scan_common.h"
 #include "kqp_scan_compute_manager.h"

@@ -25,7 +25,7 @@ namespace NKikimr::NSysView {
             sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, TBase::HandleAck);
             hFunc(TEvResponse, Handle);
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
-            hFunc(NKqp::TEvKqp::TEvAbortExecution, TBase::HandleAbortExecution);
+            hFunc(NYql::NDq::TEvDq::TEvAbortExecution, TBase::HandleAbortExecution);
             cFunc(TEvents::TEvWakeup::EventType, TBase::HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
         )

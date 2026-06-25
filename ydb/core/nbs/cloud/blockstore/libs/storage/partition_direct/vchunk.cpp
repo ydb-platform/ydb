@@ -370,6 +370,8 @@ void TVChunk::DoStop()
         return;
     }
 
+    Stopped = true;
+
     for (const auto& [_, copier]: Copiers) {
         copier->Stop();
     }
@@ -386,6 +388,12 @@ void TVChunk::DoReadBlocksLocal(
     std::shared_ptr<NWilson::TSpan> span)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (Stopped) {
+        promise.SetValue(TReadBlocksLocalResponse{
+            .Error = MakeError(E_CANCELLED, "VChunk is stopped")});
+        return;
+    }
 
     WaitForDirtyMapReady();
 
@@ -481,6 +489,12 @@ void TVChunk::DoReadBlocksLocal(
 void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (Stopped) {
+        bundle->SendFinalReply(TWriteBlocksLocalResponse{
+            .Error = MakeError(E_CANCELLED, "VChunk is stopped")});
+        return;
+    }
 
     WaitForDirtyMapReady();
 

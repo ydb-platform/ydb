@@ -122,6 +122,10 @@ bool NarrowReadColumns(const TIntrusivePtr<TOpRead>& read, const TVector<TInfoUn
 }
 
 bool PruneAggregateTraits(const TIntrusivePtr<TOpAggregate>& aggregate, const TVector<TInfoUnit>& liveOutput) {
+    if (aggregate->IsDistinctAll()) {
+        return false;
+    }
+
     TInfoUnitSet liveOutputSet;
     AddInfoUnits(liveOutputSet, liveOutput);
 

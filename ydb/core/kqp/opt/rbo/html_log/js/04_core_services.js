@@ -853,6 +853,20 @@ function createTraceSearchIndexer(storeApi) {
         summary.mask |= globalSummaryFieldMask(masks, maskName);
     }
 
+    function pushGlobalSummaryTitleMatch(rows, type, si, gi, count, order) {
+        count = Number(count) || 0;
+        if (count <= 0) return 0;
+        var match = {
+            type: type,
+            si: si,
+            count: count,
+            order: order
+        };
+        if (gi !== undefined && gi !== null) match.gi = gi;
+        rows.push(match);
+        return count;
+    }
+
     function countGlobalSummaryText(text, lowerQuery) {
         return countOccurrences(String(text == null ? '' : text).toLowerCase(), lowerQuery);
     }
@@ -888,55 +902,87 @@ function createTraceSearchIndexer(storeApi) {
         scope = scope || 'tree-rules';
         var lowerQuery = query.toLowerCase();
         var rows = [];
+        var titleRows = [];
         var total = 0;
+        var order = 0;
 
         if (!lowerQuery) {
             return {
                 query: query,
                 scope: String(scope),
                 totalCount: 0,
+                titleMatches: [],
                 ruleOrdinals: [],
                 ruleHandles: [],
                 counts: [],
+                orders: [],
                 masks: []
             };
         }
 
         for (var si = 0; si < storeApi.stageCount(store); si++) {
-            for (var rawIdx = 0; rawIdx < storeApi.stageRuleCount(store, si); rawIdx++) {
-                var item = {
-                    ruleOrdinal: searchRuleOrdinal(store, si, rawIdx),
-                    ruleHandle: searchRuleHandle(store, si, rawIdx),
-                    count: 0,
-                    mask: 0
-                };
+            total += pushGlobalSummaryTitleMatch(
+                titleRows,
+                'stage',
+                si,
+                null,
+                countGlobalSummaryText(storeApi.stageName(store, si), lowerQuery),
+                order++
+            );
 
-                addGlobalSummaryPart(
-                    item,
-                    masks,
-                    countGlobalSummaryText(storeApi.ruleName(store, si, rawIdx), lowerQuery),
-                    'title'
+            var seenRawRules = {};
+            for (var gi = 0; gi < storeApi.groupCount(store, si); gi++) {
+                total += pushGlobalSummaryTitleMatch(
+                    titleRows,
+                    'group',
+                    si,
+                    gi,
+                    storeApi.groupRuleCount(store, si, gi) > 1
+                        ? countGlobalSummaryText(storeApi.groupName(store, si, gi), lowerQuery)
+                        : 0,
+                    order++
                 );
 
-                if (storeApi.ruleType(store, si, rawIdx) === 'text') {
-                    addGlobalSummaryPart(
-                        item,
-                        masks,
-                        countGlobalSummaryText(storeApi.ruleText(store, si, rawIdx), lowerQuery),
-                        'text'
-                    );
-                } else {
-                    addGlobalSummaryPart(
-                        item,
-                        masks,
-                        countGlobalSummaryTreeLabels(storeApi.planTree(store, si, rawIdx), lowerQuery),
-                        'tree'
-                    );
-                }
+                for (var ri = 0; ri < storeApi.groupRuleCount(store, si, gi); ri++) {
+                    var rawIdx = storeApi.rawRuleIndex(store, si, gi, ri);
+                    if (seenRawRules[String(rawIdx)]) continue;
+                    seenRawRules[String(rawIdx)] = true;
 
-                if (item.count > 0) {
-                    rows.push(item);
-                    total += item.count;
+                    var item = {
+                        ruleOrdinal: searchRuleOrdinal(store, si, rawIdx),
+                        ruleHandle: searchRuleHandle(store, si, rawIdx),
+                        count: 0,
+                        mask: 0,
+                        order: order++
+                    };
+
+                    addGlobalSummaryPart(
+                        item,
+                        masks,
+                        countGlobalSummaryText(storeApi.ruleName(store, si, rawIdx), lowerQuery),
+                        'title'
+                    );
+
+                    if (storeApi.ruleType(store, si, rawIdx) === 'text') {
+                        addGlobalSummaryPart(
+                            item,
+                            masks,
+                            countGlobalSummaryText(storeApi.ruleText(store, si, rawIdx), lowerQuery),
+                            'text'
+                        );
+                    } else {
+                        addGlobalSummaryPart(
+                            item,
+                            masks,
+                            countGlobalSummaryTreeLabels(storeApi.planTree(store, si, rawIdx), lowerQuery),
+                            'tree'
+                        );
+                    }
+
+                    if (item.count > 0) {
+                        rows.push(item);
+                        total += item.count;
+                    }
                 }
             }
         }
@@ -945,9 +991,11 @@ function createTraceSearchIndexer(storeApi) {
             query: query,
             scope: String(scope),
             totalCount: total,
+            titleMatches: titleRows,
             ruleOrdinals: rows.map(function(row) { return row.ruleOrdinal; }),
             ruleHandles: rows.map(function(row) { return row.ruleHandle; }),
             counts: rows.map(function(row) { return row.count; }),
+            orders: rows.map(function(row) { return row.order; }),
             masks: rows.map(function(row) { return row.mask; })
         };
     }

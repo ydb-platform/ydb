@@ -88,11 +88,17 @@ bool IsRboTraceLogEnabled() {
 IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
     TOptimizeExprSettings settings(&TypeCtx);
-    const bool needTraceText = IsRboTraceLogEnabled();
-    KqpCtx.RboTraceAstBeforeRewriteSelect.reset();
-    KqpCtx.RboTraceAstAfterRewriteSelect.reset();
-    if (needTraceText) {
-        KqpCtx.RboTraceAstBeforeRewriteSelect = KqpExprToPrettyString(TExprBase(input), ctx);
+    const bool needTraceAst = IsRboTraceLogEnabled();
+    if (needTraceAst) {
+        if (!RboTraceRewriteSelectStarted) {
+            KqpCtx.RboTraceAstBeforeRewriteSelect = input;
+            KqpCtx.RboTraceAstAfterRewriteSelect = nullptr;
+            RboTraceRewriteSelectStarted = true;
+        }
+    } else {
+        KqpCtx.RboTraceAstBeforeRewriteSelect = nullptr;
+        KqpCtx.RboTraceAstAfterRewriteSelect = nullptr;
+        RboTraceRewriteSelectStarted = false;
     }
 
     THashSet<TExprNode*> topLevelSelects;
@@ -116,14 +122,21 @@ IGraphTransformer::TStatus TKqpRewriteSelectTransformer::DoTransform(TExprNode::
         },
         ctx, settings);
 
-    if (needTraceText && status == TStatus::Ok) {
-        KqpCtx.RboTraceAstAfterRewriteSelect = KqpExprToPrettyString(TExprBase(output), ctx);
+    if (needTraceAst && status == TStatus::Ok) {
+        KqpCtx.RboTraceAstAfterRewriteSelect = output;
+        RboTraceRewriteSelectStarted = false;
+    } else if (status == TStatus::Error) {
+        RboTraceRewriteSelectStarted = false;
     }
 
     return status;
 }
 
-void TKqpRewriteSelectTransformer::Rewind() {}
+void TKqpRewriteSelectTransformer::Rewind() {
+    RboTraceRewriteSelectStarted = false;
+    KqpCtx.RboTraceAstBeforeRewriteSelect = nullptr;
+    KqpCtx.RboTraceAstAfterRewriteSelect = nullptr;
+}
 
 IGraphTransformer::TStatus TKqpNewRBOTransformer::DoTransform(TExprNode::TPtr input, TExprNode::TPtr& output, TExprContext& ctx) {
     output = input;
@@ -451,6 +464,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     // Logical state I
     TVector<std::unique_ptr<IRule>> logicalStage_I_Rules;
     logicalStage_I_Rules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());
+    logicalStage_I_Rules.emplace_back(std::make_unique<TExtractCommonConjunctsRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
     logicalStage_I_Rules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites I", std::move(logicalStage_I_Rules)));
@@ -461,6 +475,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     logicalStage_II_Rules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TFuseFiltersRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());
+    logicalStage_II_Rules.emplace_back(std::make_unique<TExtractCommonConjunctsRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TPushFilterIntoJoinRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TEliminateLeftJoinRule>());

@@ -4,6 +4,8 @@ SRCS(
     base_test_fixture.cpp
     ddisk_data_copier_ut.cpp
     direct_block_group_impl_ut.cpp
+    erase_request_ut.cpp
+    flush_request_ut.cpp
     read_request_ut.cpp
     storage_transport_mock.cpp
     vchunk_ut.cpp

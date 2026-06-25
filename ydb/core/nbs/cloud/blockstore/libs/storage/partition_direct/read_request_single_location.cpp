@@ -12,20 +12,6 @@
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
-namespace {
-
-////////////////////////////////////////////////////////////////////////////////
-
-TReadHint ArmLocks(TReadHint readHint)
-{
-    for (auto& hint: readHint.RangeHints) {
-        hint.Lock.Arm();
-    }
-    return readHint;
-}
-
-}   // namespace
-
 ////////////////////////////////////////////////////////////////////////////////
 
 TReadSingleLocationRequestExecutor::TReadSingleLocationRequestExecutor(
@@ -33,7 +19,7 @@ TReadSingleLocationRequestExecutor::TReadSingleLocationRequestExecutor(
     const TLogTitle& logTitle,
     const TVChunkConfig& vChunkConfig,
     IDirectBlockGroupPtr directBlockGroup,
-    TReadHint readHint,
+    TReadRangeHint readHint,
     TCallContextPtr callContext,
     std::shared_ptr<TReadBlocksLocalRequest> request,
     NWilson::TTraceId traceId)
@@ -41,17 +27,20 @@ TReadSingleLocationRequestExecutor::TReadSingleLocationRequestExecutor(
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
           {{"t", "Read"},
+           {"lsn", ToString(readHint.Lsn)},
            {"r", request->Headers.Range.Print()},
-           {"vr", readHint.RangeHints[0].VChunkRange.Print()}}))
+           {"vr", readHint.VChunkRange.Print()}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
-    , ReadHint(ArmLocks(std::move(readHint)))
     , CallContext(std::move(callContext))
     , Request(std::move(request))
     , TraceId(std::move(traceId))
     , HedgingDelay(DirectBlockGroup->GetOracle()->GetReadHedgingDelay())
     , RequestTimeout(DirectBlockGroup->GetOracle()->GetReadRequestTimeout())
-{}
+    , ReadHint(std::move(readHint))
+{
+    ReadHint.Lock.Arm();
+}
 
 TReadSingleLocationRequestExecutor::~TReadSingleLocationRequestExecutor()
 {
@@ -68,8 +57,6 @@ TReadSingleLocationRequestExecutor::~TReadSingleLocationRequestExecutor()
 
 void TReadSingleLocationRequestExecutor::Run()
 {
-    Y_ABORT_UNLESS(ReadHint.RangeHints.size() == 1);
-
     ScheduleRequestTimeout();
 
     StartReading();
@@ -77,11 +64,9 @@ void TReadSingleLocationRequestExecutor::Run()
 
 TString TReadSingleLocationRequestExecutor::Print()
 {
-    const auto& hint = ReadHint.RangeHints[0];
     TStringBuilder result;
     result << LogTitle.GetWithTime();
-    result << " lsn:" << hint.Lsn;
-    result << ",c:" << hint.HostMask.Print();
+    result << "c:" << ReadHint.HostMask.Print();
     result << ",r:" << Requested.Print();
     result << ",f:" << Failed.Print();
     result << (Promise.IsReady() ? ",Replied" : ",NotReplied");
@@ -101,9 +86,7 @@ void TReadSingleLocationRequestExecutor::StartReading()
         return;
     }
 
-    const auto& hint = ReadHint.RangeHints[0];
-
-    auto candidates = hint.HostMask.Exclude(Requested);
+    auto candidates = ReadHint.HostMask.Exclude(Requested);
 
     auto host = candidates.First();
     if (!host) {
@@ -125,7 +108,7 @@ void TReadSingleLocationRequestExecutor::StartReading()
     }
     Requested.Set(*host);
 
-    const bool fromDDisk = hint.Lsn == 0;
+    const bool fromDDisk = ReadHint.Lsn == 0;
 
     LOG_LOG(
         *ActorSystem,
@@ -146,14 +129,14 @@ void TReadSingleLocationRequestExecutor::StartReading()
     auto future = fromDDisk ? DirectBlockGroup->ReadBlocksFromDDisk(
                                   VChunkConfig.GetVChunkIndex(),
                                   *host,
-                                  hint.VChunkRange,
+                                  ReadHint.VChunkRange,
                                   Request->Sglist,
                                   TraceId)
                             : DirectBlockGroup->ReadBlocksFromPBuffer(
                                   VChunkConfig.GetVChunkIndex(),
                                   *host,
-                                  hint.Lsn,
-                                  hint.VChunkRange,
+                                  ReadHint.Lsn,
+                                  ReadHint.VChunkRange,
                                   Request->Sglist,
                                   TraceId);
     future.Subscribe(std::move(onReadResponse));
@@ -205,6 +188,7 @@ void TReadSingleLocationRequestExecutor::Reply(NProto::TError error)
             LogTitle.GetWithTime().c_str());
     }
 
+    ReadHint.Lock.Disarm();
     Request->Sglist.Close();
 
     Promise.TrySetValue(TResponse{.Error = std::move(error)});
@@ -269,8 +253,7 @@ void TReadSingleLocationRequestExecutor::OnHedgingTimeout()
         LogTitle.GetWithTime().c_str(),
         Print().c_str());
 
-    const auto& hint = ReadHint.RangeHints[0];
-    const bool allRetriesAreSpent = hint.HostMask == Requested;
+    const bool allRetriesAreSpent = ReadHint.HostMask == Requested;
     if (!allRetriesAreSpent) {
         StartReading();
     }

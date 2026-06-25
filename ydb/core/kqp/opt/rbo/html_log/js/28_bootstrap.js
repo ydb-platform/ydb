@@ -36,11 +36,11 @@ function initializeOptimizerTraceDom() {
 
 function reloadOptimizerTraceData() {
     var trace = traceRuntime();
-    var index = trace.activeTraceIndex;
+    var selection = activeTraceSelection();
     if (trace.activeTraceLoaded) saveActiveTraceSession();
-    resetTraceSwitchRuntime(index);
+    resetTraceSwitchRuntime(selection);
     trace.activeTraceLoaded = false;
-    loadTraceData(index);
+    loadTraceData(selection);
     if (hasDOM() && mountRuntime().domInitialized) {
         renderLoadedTrace({ resetScroll: true });
     }

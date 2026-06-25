@@ -450,7 +450,7 @@ public:
         }
     }
 
-    void HandleClientLost(NGRpcService::TEvClientLost::TPtr&) {
+    void ClientLost() {
         STLOG_D("Got ClientLost event, send AbortExecution to executer",
             (executer_id, ExecuterId),
             (trace_id, TraceId()));
@@ -462,6 +462,10 @@ public:
         } else {
             Cleanup();
         }
+    }
+
+    void HandleClientLost(NGRpcService::TEvClientLost::TPtr&) {
+        ClientLost();
     }
 
     void Handle(TEvKqp::TEvQueryRequest::TPtr& ev) {
@@ -587,6 +591,19 @@ public:
             STLOG_I("Failed to deliver request to workload service",
                 (trace_id, TraceId()));
             CompileQuery();
+            return;
+        }
+
+        if (ev->Get()->SourceType == NGRpcService::TEvSubscribeGrpcCancel::EventType) {
+            // The remote gRPC request actor we subscribed to for client-cancel
+            // notification is already gone: it raced ahead and died on its own
+            // client-lost before our cross-node subscription arrived. Treat it as
+            // client lost and tear down now, instead of hanging until the query
+            // deadline. See SubscribeRemoteCancel (FlagTrackDelivery).
+            STLOG_D("Grpc cancel subscription undelivered, treat as client lost",
+                (trace_id, TraceId()));
+            ClientLost();
+            return;
         }
     }
 
@@ -3581,6 +3598,11 @@ public:
                 hFunc(NWorkload::TEvContinueRequest, HandleNoop);
                 // message from KQP proxy in case of our reply just after kqp proxy timer tick
                 hFunc(NYql::NDq::TEvDq::TEvAbortExecution, HandleNoop);
+                // A finished request's client may be lost after we already replied and
+                // returned to ReadyState. There is nothing to cancel anymore, so ignore it
+                // instead of treating it as an internal error (which would needlessly tear
+                // down an otherwise healthy long session). CleanupState ignores it likewise.
+                hFunc(NGRpcService::TEvClientLost, HandleNoop);
                 hFunc(TEvKqpBuffer::TEvError, Handle);
                 hFunc(TEvTxUserProxy::TEvAllocateTxIdResult, HandleNoop);
 

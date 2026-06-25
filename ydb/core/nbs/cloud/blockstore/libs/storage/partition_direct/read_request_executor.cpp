@@ -25,7 +25,7 @@ IReadRequestExecutorPtr CreateReadRequestExecutor(
             logTitle,
             vChunkConfig,
             std::move(directBlockGroup),
-            std::move(readHint),
+            std::move(readHint.RangeHints[0]),
             std::move(callContext),
             std::move(request),
             std::move(traceId));

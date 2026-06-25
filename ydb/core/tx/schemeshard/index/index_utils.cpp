@@ -1104,6 +1104,107 @@ TFulltextRowIdClassification ClassifyFulltextRowId(
     return result;
 }
 
+TFulltextRowIdClassification ClassifyFulltextRowIdForCreate(
+    const NKikimrSchemeOp::TIndexedTableCreationConfig& createConfig,
+    const NKikimrSchemeOp::TIndexCreationConfig& indexDesc,
+    TString& error)
+{
+    // Keep the decision rules in sync with ClassifyFulltextRowId above; this variant reads the
+    // create-table request protos instead of the live schema. Every object is created atomically here,
+    // so there is no not-yet-Ready unique index to consider.
+    TFulltextRowIdClassification result;
+
+    const auto indexType = GetIndexType(indexDesc);
+    if (indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain &&
+        indexType != NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance &&
+        indexType != NKikimrSchemeOp::EIndexTypeGlobalJson) {
+        result.Plan = EFulltextRowIdPlan::NotApplicable;
+        return result;
+    }
+    // Used in user-facing error messages so a JSON index create does not talk about "Fulltext".
+    const TStringBuf indexKind = (indexType == NKikimrSchemeOp::EIndexTypeGlobalJson) ? "JSON" : "Fulltext";
+
+    const auto& tableDesc = createConfig.GetTableDescription();
+
+    // Look for a __ydb_row_id column declared on the table being created.
+    const NKikimrSchemeOp::TColumnDescription* rowIdColumn = nullptr;
+    for (const auto& column : tableDesc.GetColumns()) {
+        if (column.GetName() == NFulltext::RowIdColumn) {
+            rowIdColumn = &column;
+            break;
+        }
+    }
+
+    // Scan the indexes requested alongside the table for a single-column GlobalUnique index over
+    // __ydb_row_id (a user can supply both the column and its unique index explicitly).
+    bool hasUniqueIndexOnRowId = false;
+    for (const auto& index : createConfig.GetIndexDescription()) {
+        if (GetIndexType(index) != NKikimrSchemeOp::EIndexTypeGlobalUnique) {
+            continue;
+        }
+        if (index.KeyColumnNamesSize() != 1) {
+            continue;
+        }
+        if (index.GetKeyColumnNames(0) != NFulltext::RowIdColumn) {
+            continue;
+        }
+        hasUniqueIndexOnRowId = true;
+    }
+
+    if (rowIdColumn) {
+        // A user-supplied __ydb_row_id column must be well-formed.
+        TColumnTypes baseColumnTypes;
+        if (!ExtractTypes(tableDesc, baseColumnTypes, error)) {
+            result.Plan = EFulltextRowIdPlan::Error;
+            return result;
+        }
+        const auto& rowIdType = baseColumnTypes.at(NFulltext::RowIdColumn);
+        if (rowIdType.GetTypeId() != NScheme::NTypeIds::Uint64) {
+            error = TStringBuilder()
+                << indexKind << " index opt-in requires column '" << NFulltext::RowIdColumn
+                << "' to be of type 'Uint64' but got " << NScheme::TypeName(rowIdType);
+            result.Plan = EFulltextRowIdPlan::Error;
+            return result;
+        }
+        if (!rowIdColumn->GetNotNull()) {
+            error = TStringBuilder()
+                << indexKind << " index opt-in requires column '" << NFulltext::RowIdColumn << "' to be NOT NULL";
+            result.Plan = EFulltextRowIdPlan::Error;
+            return result;
+        }
+
+        if (hasUniqueIndexOnRowId) {
+            result.Plan = EFulltextRowIdPlan::Reuse;
+            return result;
+        }
+        // The column is supplied but its unique index is missing - provision just the unique index.
+        result.Plan = EFulltextRowIdPlan::Provision;
+        result.NeedColumn = false;
+        result.NeedUniqueIndex = true;
+        return result;
+    }
+
+    // No __ydb_row_id column. A single integer PK keeps the legacy doc_id=PK behaviour.
+    const TTableColumns baseTableColumns = ExtractInfo(tableDesc);
+    TColumnTypes baseColumnTypes;
+    if (!ExtractTypes(tableDesc, baseColumnTypes, error)) {
+        result.Plan = EFulltextRowIdPlan::Error;
+        return result;
+    }
+
+    TString ignore;
+    if (CheckSingleIntegerPrimaryKey(baseTableColumns, baseColumnTypes, indexKind, ignore)) {
+        result.Plan = EFulltextRowIdPlan::LegacyIntegerPk;
+        return result;
+    }
+
+    // Custom PK and no __ydb_row_id infrastructure at all - provision both the column and the unique index.
+    result.Plan = EFulltextRowIdPlan::Provision;
+    result.NeedColumn = true;
+    result.NeedUniqueIndex = true;
+    return result;
+}
+
 bool MaybeEnableFulltextRowIdMode(
     const NSchemeShard::TTableInfo::TPtr& tableInfo,
     const TMap<TString, TPathId>& tableChildren,

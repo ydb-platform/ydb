@@ -51,6 +51,19 @@ TListPBufferResponse MakeListPBufferResponse(
     return result;
 }
 
+TDBGWriteBlocksToManyPBuffersResponse MakeWriteToManyPBuffersResponse(
+    THostMask hosts,
+    EWellKnownResultCodes code,
+    const TString& reason)
+{
+    TDBGWriteBlocksToManyPBuffersResponse result;
+    for (auto host: hosts) {
+        result.Responses.push_back(
+            {.HostIndex = host, .Error = MakeError(code, reason)});
+    }
+    return result;
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -253,6 +266,7 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
                             hostIndex,
                             TMonotonic::Now() - startAt,
                             EOperation::ReadFromDDisk,
+                            false,
                             error);
                     }
 
@@ -327,6 +341,7 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
                             hostIndex,
                             TMonotonic::Now() - startAt,
                             EOperation::ReadFromPBuffer,
+                            false,
                             error);
                     }
 
@@ -404,6 +419,7 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                             hostIndex,
                             TMonotonic::Now() - startAt,
                             EOperation::WriteToDDisk,
+                            false,
                             error);
                     }
 
@@ -478,6 +494,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
                             hostIndex,
                             TMonotonic::Now() - startAt,
                             EOperation::WriteToPBuffer,
+                            false,
                             error);
                     }
 
@@ -491,7 +508,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
 void TDirectBlockGroup::WriteBlocksToManyPBuffers(
     ui32 vChunkIndex,
     THostIndex coordinatorHostIndex,
-    TVector<THostIndex> hostIndexes,
+    THostMask hostIndexes,
     ui64 lsn,
     TBlockRange64 range,
     TDuration replyTimeout,
@@ -501,12 +518,12 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
 {
     // INVARIANT: PBuffer does NOT require a session/lock
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    Y_ABORT_UNLESS(hostIndexes.size() > 0);
+    Y_ABORT_UNLESS(hostIndexes.Count() > 0);
 
     const auto startAt = TMonotonic::Now();
 
     TVector<NKikimrBlobStorage::NDDisk::TDDiskId> disksIds;
-    disksIds.reserve(hostIndexes.size());
+    disksIds.reserve(hostIndexes.Count());
 
     for (auto hostIndex: hostIndexes) {
         const auto& ddiskId =
@@ -521,6 +538,7 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
     auto writeToManyPBuffersCB =
         [startAt,
          coordinatorHostIndex,
+         hostIndexes,
          executor = Executor,
          threadChecker = ExecutorThreadChecker.CreateDelegate(),
          callback = std::move(callback),
@@ -540,6 +558,7 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
             [responseSpan = std::move(responseSpan),
              startAt,
              coordinatorHostIndex,
+             hostIndexes,
              threadChecker,
              result = std::move(result),
              callback,
@@ -557,10 +576,10 @@ void TDirectBlockGroup::WriteBlocksToManyPBuffers(
                         std::move(callback),
                         TMonotonic::Now() - startAt);
                 } else {
-                    callback(
-                        TDBGWriteBlocksToManyPBuffersResponse::MakeOverallError(
-                            E_CANCELLED,
-                            "DBG is destroyed"));
+                    callback(MakeWriteToManyPBuffersResponse(
+                        hostIndexes,
+                        E_CANCELLED,
+                        "DBG is destroyed"));
                 }
             });
     };
@@ -587,9 +606,8 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
     TDuration executionTime)
 {
     TDBGWriteBlocksToManyPBuffersResponse dbgResponse;
-    NProto::TError coordinatorError =
-        MakeError(E_FAIL, "coordinator response not found");
 
+    bool coordinatorFound = false;
     for (const auto& singlePBufferResponse: response.GetResult()) {
         const THostIndex* const hostIndex = PBufferIdToHostIndex.FindPtr(
             singlePBufferResponse.GetPersistentBufferId());
@@ -611,25 +629,27 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
         NProto::TError error =
             TranslateError(singlePBufferResponse.GetResult());
 
-        if (coordinatorHostIndex == *hostIndex) {
-            coordinatorError = error;
-        }
+        const bool isCoordinator = coordinatorHostIndex == *hostIndex;
+        coordinatorFound = coordinatorFound || isCoordinator;
 
         OnResponse(
             *hostIndex,
             executionTime,
-            EOperation::WriteToPBuffer,
+            isCoordinator ? EOperation::WriteToManyPBuffers
+                          : EOperation::WriteToPBuffer,
+            !isCoordinator,
             error);
 
         dbgResponse.Responses.push_back(
             {.HostIndex = *hostIndex, .Error = std::move(error)});
     }
 
-    OnResponse(
-        coordinatorHostIndex,
-        executionTime,
-        EOperation::WriteToManyPBuffers,
-        coordinatorError);
+    if (!coordinatorFound) {
+        Oracle.OnRequestCancelled(
+            coordinatorHostIndex,
+            EOperation::WriteToManyPBuffers,
+            TInstant::Now());
+    }
 
     callback(std::move(dbgResponse));
 }
@@ -665,10 +685,12 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
 
     auto childSpan = CreateChildSpan(traceId, "NbsPartition.SyncWithPBuffer");
 
-    const auto flushOp = pbufferHostIndex == ddiskHostIndex
-                             ? EOperation::Flush
-                             : EOperation::FlushCrossNode;
-    OnRequest(ddiskHostIndex, flushOp);
+    if (pbufferHostIndex == ddiskHostIndex) {
+        OnRequest(ddiskHostIndex, EOperation::Flush);
+    } else {
+        OnRequest(pbufferHostIndex, EOperation::FlushCrossNode);
+        OnRequest(ddiskHostIndex, EOperation::FlushCrossNode);
+    }
 
     auto future = StorageTransport->SyncWithPBuffer(
         PBufferConnections[pbufferHostIndex].HostConnection,
@@ -826,6 +848,7 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::BatchEraseFromPBuffer(
                             hostIndex,
                             TMonotonic::Now() - startAt,
                             EOperation::Erase,
+                            false,
                             error);
                     }
 
@@ -915,6 +938,7 @@ void TDirectBlockGroup::DoBarrierEraseFromPBuffer(
                         hostIndex,
                         TMonotonic::Now() - startAt,
                         EOperation::BarrierErase,
+                        false,
                         TranslateError(result));
                 });
         });
@@ -1299,12 +1323,30 @@ void TDirectBlockGroup::OnResponse(
     THostIndex hostIndex,
     TDuration executionTime,
     EOperation operation,
+    bool optional,
     const NProto::TError& error)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
+    if (optional) {
+        Oracle.OnRequestStarted(hostIndex, operation, TInstant::Now());
+    }
+
     if (HasError(error)) {
-        Oracle.OnRequestFailed(hostIndex, operation, TInstant::Now());
+        LOG_DEBUG(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s OnResponse %s %s %s",
+            LogTitle.GetWithTime().c_str(),
+            PrintHostIndex(hostIndex).c_str(),
+            ToString(operation).c_str(),
+            FormatError(error).c_str());
+
+        if (IsCancelledError(error)) {
+            Oracle.OnRequestCancelled(hostIndex, operation, TInstant::Now());
+        } else {
+            Oracle.OnRequestFailed(hostIndex, operation, TInstant::Now());
+        }
     } else {
         Oracle.OnRequestSucceeded(
             hostIndex,
@@ -1322,25 +1364,70 @@ void TDirectBlockGroup::OnMultiFlushResponse(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    const auto operation = pbufferHostIndex == ddiskHostIndex
-                               ? EOperation::Flush
-                               : EOperation::FlushCrossNode;
+    const auto now = TInstant::Now();
+
     const bool hasError = AnyOf(
         errors,
         [](const NProto::TError& error)
         {   //
             return HasError(error);
         });
+    const bool cancelled = AllOf(
+        errors,
+        [](const NProto::TError& error)
+        {   //
+            return IsCancelledError(error);
+        });
 
-    const auto now = TInstant::Now();
+    if (cancelled) {
+        if (pbufferHostIndex == ddiskHostIndex) {
+            Oracle.OnRequestCancelled(pbufferHostIndex, EOperation::Flush, now);
+        } else {
+            Oracle.OnRequestCancelled(
+                ddiskHostIndex,
+                EOperation::FlushCrossNode,
+                now);
+            Oracle.OnRequestCancelled(
+                pbufferHostIndex,
+                EOperation::FlushCrossNode,
+                now);
+        }
+        return;
+    }
+
     if (hasError) {
-        Oracle.OnRequestFailed(ddiskHostIndex, operation, now);
-    } else {
-        Oracle
-            .OnRequestSucceeded(ddiskHostIndex, operation, now, executionTime);
+        if (pbufferHostIndex == ddiskHostIndex) {
+            Oracle.OnRequestFailed(pbufferHostIndex, EOperation::Flush, now);
+        } else {
+            // Count error only for ddiskHostIndex due-to pull model
+            Oracle.OnRequestFailed(
+                ddiskHostIndex,
+                EOperation::FlushCrossNode,
+                now);
+            Oracle.OnRequestCancelled(
+                pbufferHostIndex,
+                EOperation::FlushCrossNode,
+                now);
+        }
+        return;
+    }
+
+    // OK
+    if (pbufferHostIndex == ddiskHostIndex) {
         Oracle.OnRequestSucceeded(
             pbufferHostIndex,
-            operation,
+            EOperation::Flush,
+            now,
+            executionTime);
+    } else {
+        Oracle.OnRequestSucceeded(
+            ddiskHostIndex,
+            EOperation::FlushCrossNode,
+            now,
+            executionTime);
+        Oracle.OnRequestSucceeded(
+            pbufferHostIndex,
+            EOperation::FlushCrossNode,
             now,
             executionTime);
     }

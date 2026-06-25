@@ -93,7 +93,7 @@ public:
     void WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
-        TVector<THostIndex> hostIndexes,
+        THostMask hostIndexes,
         ui64 lsn,
         TBlockRange64 range,
         TDuration replyTimeout,
@@ -208,6 +208,7 @@ private:
         THostIndex hostIndex,
         TDuration executionTime,
         EOperation operation,
+        bool optional,   // does not require reducing the inflight counter
         const NProto::TError& error);
     void OnMultiFlushResponse(
         THostIndex pbufferHostIndex,

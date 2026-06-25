@@ -19,6 +19,9 @@ struct TBlobStorageMockState {
     struct TGroup {
         std::unordered_map<TLogoBlobID, TBlob, THash<TLogoBlobID>> Blobs;
         NKikimrProto::EReplyStatus Status = NKikimrProto::OK;
+        TString ErrorReason;
+        NKikimrProto::EReplyStatus PutStatus = NKikimrProto::OK;
+        TString PutErrorReason;
         std::optional<ui32> GroupId;
         std::optional<ui32> Cookie;
     };
@@ -40,6 +43,7 @@ struct TBlobStorageMockState {
         }
         std::unique_ptr<TEvBlobStorage::TEvGetResult> getResult = std::make_unique<TEvBlobStorage::TEvGetResult>(
                 group.Status, get->QuerySize, TGroupId::FromValue(groupId));
+        getResult->ErrorReason = group.ErrorReason;
         getResult->Responses.Reset(new TEvBlobStorage::TEvGetResult::TResponse[get->QuerySize]);
         for (ui32 queryIdx = 0; queryIdx < get->QuerySize; ++queryIdx) {
             auto &query = get->Queries[queryIdx];
@@ -75,6 +79,15 @@ struct TBlobStorageMockState {
             return std::make_pair(blob.Status, blob.Buffer);
         });
     }
+
+    std::unique_ptr<TEvBlobStorage::TEvPutResult> OnPut(ui32 groupId, TEvBlobStorage::TEvPut *put) {
+        TGroup &group = Groups[groupId];
+        auto result = std::make_unique<TEvBlobStorage::TEvPutResult>(
+                group.PutStatus, put->Id, TStorageStatusFlags(NKikimrBlobStorage::StatusIsValid),
+                TGroupId::FromValue(groupId), 0.f);
+        result->ErrorReason = group.PutErrorReason;
+        return result;
+    }
 };
 
 struct TBlobStorageMock : TActorBootstrapped<TBlobStorageMock> {
@@ -100,9 +113,15 @@ struct TBlobStorageMock : TActorBootstrapped<TBlobStorageMock> {
         Send(ev->Sender, result.release(), ev->Flags, cookie, std::move(ev->TraceId));
     }
 
+    void Handle(TEvBlobStorage::TEvPut::TPtr &ev) {
+        std::unique_ptr<TEvBlobStorage::TEvPutResult> result = State->OnPut(GroupId, ev->Get());
+        Send(ev->Sender, result.release(), ev->Flags, ev->Cookie, std::move(ev->TraceId));
+    }
+
     STATEFN(Waiting) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBlobStorage::TEvGet, Handle);
+            hFunc(TEvBlobStorage::TEvPut, Handle);
         default:
             Y_ABORT();
         }
@@ -265,7 +284,9 @@ struct TRangeReadRequestBuilder {
 Y_UNIT_TEST_SUITE(KeyValueReadStorage) {
 
 void RunTest(TTestEnv &env, TReadRequestBuilder &builder,
-        const std::vector<ui32> &groupIds, NKikimrKeyValue::Statuses::ReplyStatus status = NKikimrKeyValue::Statuses::RSTATUS_OK) {
+        const std::vector<ui32> &groupIds,
+        NKikimrKeyValue::Statuses::ReplyStatus status = NKikimrKeyValue::Statuses::RSTATUS_OK,
+        const TString& expectedMessage = {}) {
     TTestActorSystem runtime(1);
     runtime.Start();
     runtime.SetLogPriority(NKikimrServices::KEYVALUE, NLog::PRI_DEBUG);
@@ -290,6 +311,11 @@ void RunTest(TTestEnv &env, TReadRequestBuilder &builder,
         UNIT_ASSERT_C(record.status() == status, "Expected# " << NKikimrKeyValue::Statuses::ReplyStatus_Name(status)
                 << " received# " <<  NKikimrKeyValue::Statuses::ReplyStatus_Name(record.status())
                 << " Message# " << record.msg());
+    }
+    if (expectedMessage) {
+        UNIT_ASSERT_C(record.msg().Contains(expectedMessage),
+                "Expected message to contain# " << expectedMessage.Quote()
+                << " actual# " << record.msg().Quote());
     }
 
     runtime.Stop();
@@ -373,6 +399,20 @@ Y_UNIT_TEST(ReadOneItemError) {
     RunTest(env, builder, groupIds, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR);
 }
 
+Y_UNIT_TEST(ReadOneItemErrorForwardsStorageErrorReason) {
+    TTestEnv env;
+    std::vector<ui32> groupIds = {1, 2, 3};
+
+    const TString errorReason = "failed to fetch data from S3: AccessDenied";
+    TReadRequestBuilder builder("a");
+    TLogoBlobID id(1, 2, 3, 2, 1, 0);
+    env.BlobStorageState.Groups[groupIds[2]].ErrorReason = errorReason;
+    env.BlobStorageState.Put(groupIds[2], id, NKikimrProto::ERROR, "");
+    builder.AddToEnd("b", id, 0, 1);
+
+    RunTest(env, builder, groupIds, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, errorReason);
+}
+
 Y_UNIT_TEST(ReadErrorWithWrongGroupId) {
     TTestEnv env;
     std::vector<ui32> groupIds = {1, 2, 3};
@@ -454,8 +494,90 @@ Y_UNIT_TEST(StorageRequestReadNoDataWithoutRefCount) {
     RunStorageRequestNoDataTest(env, builder, groupIds);
 }
 
+Y_UNIT_TEST(StorageRequestReadItemErrorForwardsStorageErrorReason) {
+    TTestActorSystem runtime(1);
+    runtime.Start();
+    runtime.SetLogPriority(NKikimrServices::KEYVALUE, NLog::PRI_DEBUG);
+
+    TTestEnv env;
+    std::vector<ui32> groupIds = {1, 2, 3};
+    env.BindGroupsToChannel(runtime, groupIds);
+
+    const TString errorReason = "failed to fetch data from S3: NoSuchKey";
+    TReadRequestBuilder builder("a");
+    TLogoBlobID id(1, 2, 3, 2, 1, 0);
+    env.BlobStorageState.Groups[groupIds[2]].ErrorReason = errorReason;
+    env.BlobStorageState.Put(groupIds[2], id, NKikimrProto::ERROR, "");
+    builder.AddToEnd("b", id, 0, 1);
+
+    TActorId edgeActor = runtime.AllocateEdgeActor(1);
+    auto [intermediate, expectedValues] = builder.Build(edgeActor, edgeActor, 1, 1);
+    Y_UNUSED(expectedValues);
+
+    auto &readCommand = std::get<TIntermediate::TRead>(*intermediate->ReadCommand);
+    intermediate->Reads.push_back(std::move(readCommand));
+    intermediate->ReadCommand.reset();
+    intermediate->EvType = TEvKeyValue::TEvRequest::EventType;
+
+    runtime.Register(CreateKeyValueStorageRequest(std::move(intermediate), env.TabletInfo.release(), 1, &env.State, env.State.GetLifetimeToken()), 1);
+
+    std::unique_ptr<IEventHandle> ev = runtime.WaitForEdgeActorEvent({edgeActor});
+    UNIT_ASSERT_C(ev->Type == static_cast<ui64>(TEvKeyValue::EvIntermediate), "Type# " << ev->GetTypeName());
+    TEvKeyValue::TEvIntermediate *response = ev->Get<TEvKeyValue::TEvIntermediate>();
+
+    const auto &read = response->Intermediate->Reads.front();
+    UNIT_ASSERT_VALUES_EQUAL(read.Status, NKikimrProto::UNKNOWN);
+    UNIT_ASSERT_VALUES_EQUAL(read.CumulativeStatus(), NKikimrProto::ERROR);
+    UNIT_ASSERT_VALUES_EQUAL(read.Message, errorReason);
+    UNIT_ASSERT_VALUES_EQUAL(read.ReadItems.front().Status, NKikimrProto::ERROR);
+
+    runtime.Stop();
+}
+
+Y_UNIT_TEST(StorageRequestWriteErrorForwardsStorageErrorReason) {
+    TTestActorSystem runtime(1);
+    runtime.Start();
+    runtime.SetLogPriority(NKikimrServices::KEYVALUE, NLog::PRI_DEBUG);
+
+    TTestEnv env;
+    std::vector<ui32> groupIds = {1, 2, 3};
+    env.BindGroupsToChannel(runtime, groupIds);
+
+    const TString errorReason = "failed to put object to S3: AccessDenied";
+    env.BlobStorageState.Groups[groupIds[2]].PutStatus = NKikimrProto::ERROR;
+    env.BlobStorageState.Groups[groupIds[2]].PutErrorReason = errorReason;
+
+    TActorId edgeActor = runtime.AllocateEdgeActor(1);
+    auto intermediate = MakeHolder<TIntermediate>(edgeActor, edgeActor, 1, 1, TRequestType::WriteOnly,
+            NWilson::TTraceId());
+    intermediate->RequestUid = 1;
+    intermediate->EvType = TEvKeyValue::TEvExecuteTransaction::EventType;
+
+    TLogoBlobID id(1, 2, 3, 2, 1, 0);
+    auto& write = intermediate->Writes.emplace_back();
+    write.LogoBlobIds.push_back(id);
+    write.Key = "key";
+    write.Data = TRope(TString("b"));
+    write.Tactic = TEvBlobStorage::TEvPut::TacticDefault;
+    write.HandleClass = NKikimrBlobStorage::TabletLog;
+    write.Status = NKikimrProto::UNKNOWN;
+    write.CreationUnixTime = 0;
+
+    runtime.Register(CreateKeyValueStorageRequest(std::move(intermediate), env.TabletInfo.release(), 1, &env.State, env.State.GetLifetimeToken()), 1);
+
+    std::unique_ptr<IEventHandle> ev = runtime.WaitForEdgeActorEvent({edgeActor});
+    UNIT_ASSERT_C(ev->Type == static_cast<ui64>(TEvKeyValue::EvExecuteTransactionResponse), "Type# " << ev->GetTypeName());
+    auto *response = ev->Get<TEvKeyValue::TEvExecuteTransactionResponse>();
+    UNIT_ASSERT_C(response->Record.status() == NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR,
+            "Status# " << NKikimrKeyValue::Statuses_ReplyStatus_Name(response->Record.status()));
+    UNIT_ASSERT_VALUES_EQUAL(response->Record.msg(), errorReason);
+
+    runtime.Stop();
+}
+
 void RunTest(TTestEnv &env, TRangeReadRequestBuilder &builder, const std::vector<ui32> &groupIds,
-        NKikimrKeyValue::Statuses::ReplyStatus status = NKikimrKeyValue::Statuses::RSTATUS_OK)
+        NKikimrKeyValue::Statuses::ReplyStatus status = NKikimrKeyValue::Statuses::RSTATUS_OK,
+        const TString& expectedMessage = {})
 {
     TTestActorSystem runtime(1);
     runtime.Start();
@@ -485,6 +607,11 @@ void RunTest(TTestEnv &env, TRangeReadRequestBuilder &builder, const std::vector
                 "Expected# " << NKikimrKeyValue::Statuses::ReplyStatus_Name(status)
                 << " received# " <<  NKikimrKeyValue::Statuses::ReplyStatus_Name(record.status())
                 << " Message# " << record.msg());
+    }
+    if (expectedMessage) {
+        UNIT_ASSERT_C(record.msg().Contains(expectedMessage),
+                "Expected message to contain# " << expectedMessage.Quote()
+                << " actual# " << record.msg().Quote());
     }
 
     runtime.Stop();
@@ -525,6 +652,20 @@ Y_UNIT_TEST(ReadRangeNoData) {
     TRangeReadRequestBuilder builder;
 
     RunTest(env, builder, groupIds, NKikimrKeyValue::Statuses::RSTATUS_OK);
+}
+
+Y_UNIT_TEST(ReadRangeOneItemErrorForwardsStorageErrorReason) {
+    TTestEnv env;
+    std::vector<ui32> groupIds = {1, 2, 3};
+
+    const TString errorReason = "failed to fetch data from S3: SlowDown";
+    TRangeReadRequestBuilder builder;
+    TLogoBlobID id(1, 2, 3, 2, 1, 0);
+    env.BlobStorageState.Groups[groupIds[2]].ErrorReason = errorReason;
+    env.BlobStorageState.Put(groupIds[2], id, NKikimrProto::ERROR, "");
+    builder.AddRead("key", "b", id);
+
+    RunTest(env, builder, groupIds, NKikimrKeyValue::Statuses::RSTATUS_INTERNAL_ERROR, errorReason);
 }
 
 } // Y_UNIT_TEST_SUITE(KeyValueReadStorage)

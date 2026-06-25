@@ -5,6 +5,10 @@ items:
   include:
     path: analytics/toc_p.yaml
     mode: link
+- name: Потоковая обработка
+  include:
+    path: streaming-query/toc_p.yaml
+    mode: link
 - name: Архитектура
   href: architecture/index.md
   include:
@@ -43,7 +47,3 @@ items:
   href: bridge.md
 - name: Трансфер данных
   href: transfer.md
-- name: Потоковые запросы
-  href: streaming-query.md
-- name: Водяные знаки
-  href: watermarks.md

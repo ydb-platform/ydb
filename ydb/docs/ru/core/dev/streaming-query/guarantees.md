@@ -111,6 +111,6 @@ sequenceDiagram
 
 ## См. также
 
-- [{#T}](../../concepts/streaming-query.md) — общее описание потоковых запросов.
+- [{#T}](../../concepts/streaming-query/streaming-query.md) — общее описание потоковых запросов.
 - [{#T}](checkpoints.md) — механизм чекпоинтов, обеспечивающий восстановление после сбоев.
 - [{#T}](table-writing.md) — запись в таблицы и идемпотентность UPSERT.

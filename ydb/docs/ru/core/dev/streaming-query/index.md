@@ -14,4 +14,4 @@
 ## См. также
 
 - [Рецепты работы с потоковыми запросами](../../recipes/streaming_queries/index.md)
-- [Описание потоковых запросов](../../concepts/streaming-query.md)
+- [Описание потоковых запросов](../../concepts/streaming-query/streaming-query.md)

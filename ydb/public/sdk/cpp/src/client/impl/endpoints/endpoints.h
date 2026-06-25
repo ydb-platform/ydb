@@ -116,6 +116,9 @@ public:
 
     class TObjRegistry;
 private:
+    // Move endpoint to the end
+    void PessimizeEndpointUnlocked(const std::string& endpoint);
+
     using TTaggedObjRegistry = std::unordered_map<const void*, std::shared_ptr<TObjRegistry>>;
 
     struct TKnownEndpoint {

@@ -572,6 +572,14 @@ private:
 
 } // namespace
 
+template<>
+template<>
+IActor* TEvExecuteQueryRequest::CreateRpcActor(IRequestNoOpCtx* msg, ui64 rpcBufferSize) {
+    auto* req = dynamic_cast<TEvExecuteQueryRequest*>(msg);
+    Y_ABORT_UNLESS(req != nullptr, "Wrong using of TGRpcRequestWrapper");
+    return new TExecuteQueryRPC(req, rpcBufferSize);
+}
+
 namespace NQuery {
 
 void DoExecuteQuery(std::unique_ptr<IRequestNoOpCtx> p, const IFacilityProvider& f) {

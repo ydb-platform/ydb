@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/formats/arrow/serializer/abstract.h>
+#include <ydb/core/formats/arrow/arrow_helpers.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/core/protos/kqp_lookup_source.pb.h>
@@ -19,6 +20,7 @@
 #include <ydb/library/yql/dq/runtime/dq_arrow_helpers.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/api/protos/ydb_query.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/result/result.h>
 #include <yql/essentials/core/yql_expr_type_annotation.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
@@ -44,6 +46,7 @@
 using namespace NKikimr;
 
 namespace {
+    constexpr ui64 channelBufferSize = 1_MB; // XXX FIXME
 template <typename T>
 T ExtractFromConstFuture(const NThreading::TFuture<T>& f) {
     // We want to avoid making a copy of data stored in a future.
@@ -84,8 +87,6 @@ namespace NYql::NDq {
         constexpr TDuration MinRetryDelay = TDuration::MilliSeconds(10);
         constexpr TDuration MaxRetryDelay = TDuration::Seconds(30); // TODO lookup parameters or PRAGMA?
                                                                     // = at most 6 minutes
-        constexpr ui64 TableServiceResultLimit = 1000;
-
         const NKikimr::NMiniKQL::TStructType* MergeStructTypes(const NKikimr::NMiniKQL::TTypeEnvironment& env, const NKikimr::NMiniKQL::TStructType* t1, const NKikimr::NMiniKQL::TStructType* t2) {
             Y_ABORT_UNLESS(t1);
             Y_ABORT_UNLESS(t2);
@@ -105,6 +106,9 @@ namespace NYql::NDq {
         : public NYql::NDq::IDqAsyncLookupSource,
           public NActors::TActorBootstrapped<TKikimrLookupActor> {
         using TBase = NActors::TActorBootstrapped<TKikimrLookupActor>;
+
+        struct TSessionState;
+
         struct TLookupState {
             using TPtr = std::shared_ptr<TLookupState>;
             std::weak_ptr<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap> Request;
@@ -113,7 +117,18 @@ namespace NYql::NDq {
             TInstant SentTime;
             size_t FullscanLimit = 0;
             size_t ResultRows = 0;
+            // Query
+            std::shared_ptr<TSessionState> SessionState; // avoid circular ownership
+            std::shared_ptr<arrow::Schema> Schema;
+            NRpcService::TStreamReadProcessorPtr<Ydb::Query::ExecuteQueryResponsePart> StreamProcessor;
+        };
+
+        struct TSessionState {
+            using TPtr = std::shared_ptr<TSessionState>;
+            TBackoff Backoff;
             TString SessionId;
+            NRpcService::TStreamReadProcessorPtr<Ydb::Query::SessionState> StreamProcessor;
+            TLookupState::TPtr PendingLookup; // avoid circular ownership, either PendingLookup or PendingLookup->SessionState must be nullptr
         };
 
         // Event ids
@@ -121,6 +136,9 @@ namespace NYql::NDq {
             EvBegin = EventSpaceBegin(NActors::TEvents::ES_PRIVATE),
             EvYdbExecuteDataQueryResponse = EvBegin,
             EvYdbCreateSessionResponse,
+            EvQueryCreateSessionResponse,
+            EvQuerySessionState,
+            EvQueryExecuteQueryResponsePart,
             EvError,
             EvRetry,
             EvEnd
@@ -129,30 +147,38 @@ namespace NYql::NDq {
         static_assert(EEventIds::EvEnd < EventSpaceEnd(NActors::TEvents::ES_PRIVATE), "expect EvEnd < EventSpaceEnd(TEvents::ES_PRIVATE)");
 
         // Beware: destroys future value
-        template <typename TResponse, typename TResult, enum EEventIds EvId>
-        struct TEvYdbResponse: NActors::TEventLocal<TEvYdbResponse<TResponse, TResult, EvId>, EvId> {
-            explicit TEvYdbResponse(const NThreading::TFuture<TResponse>& responseFuture, TLookupState::TPtr state)
+        template <typename TResponse, enum EEventIds EvId>
+        struct TEvQueryResponse: NActors::TEventLocal<TEvQueryResponse<TResponse, EvId>, EvId> {
+            explicit TEvQueryResponse(const NThreading::TFuture<TResponse>& responseFuture, TLookupState::TPtr state)
                 : State(std::move(state))
             {
                 try {
-                    auto response = ExtractFromConstFuture(responseFuture);
-                    Status = response.operation().status();
-                    Issues = IssuesFromProtoMessage(response.operation());
-                    response.operation().result().UnpackTo(&Result);
+                    Response = ExtractFromConstFuture(responseFuture);
                 } catch(std::exception& ex) {
-                    Status = Ydb::StatusIds::INTERNAL_ERROR;
-                    Issues.AddIssue(TIssue(TStringBuilder() << "Got unexpected exception: " << ex.what()));
+                    Response.set_status(Ydb::StatusIds::INTERNAL_ERROR);
+                    auto& issue = *Response.add_issues();
+                    issue.set_message(TStringBuilder() << "Got unexpected exception: " << ex.what());
                 }
             }
 
             TLookupState::TPtr State;
-            TResult Result;
-            Ydb::StatusIds::StatusCode Status;
-            NYql::TIssues Issues;
+            TResponse Response;
         };
 
-        using TEvYdbExecuteDataQueryResponse = TEvYdbResponse<Ydb::Table::ExecuteDataQueryResponse, Ydb::Table::ExecuteQueryResult, EvYdbExecuteDataQueryResponse>;
-        using TEvYdbCreateSessionResponse = TEvYdbResponse<Ydb::Table::CreateSessionResponse, Ydb::Table::CreateSessionResult, EvYdbCreateSessionResponse>;
+        template <typename TResponse, typename TEvState, enum EEventIds EvId>
+        struct TEvStreamResponse: NActors::TEventLocal<TEvStreamResponse<TResponse, TEvState, EvId>, EvId> {
+            explicit TEvStreamResponse(TResponse response, TEvState state)
+                : State(std::move(state))
+                , Response(std::move(response))
+            {
+            }
+
+            TEvState State;
+            TResponse Response;
+        };
+        using TEvQueryCreateSessionResponse = TEvQueryResponse<Ydb::Query::CreateSessionResponse, EvQueryCreateSessionResponse>;
+        using TEvQuerySessionState = TEvStreamResponse<Ydb::Query::SessionState, TSessionState::TPtr, EvQuerySessionState>;
+        using TEvQueryExecuteQueryResponsePart = TEvStreamResponse<Ydb::Query::ExecuteQueryResponsePart, TLookupState::TPtr, EvQueryExecuteQueryResponsePart>;
 
     private:
         TString LogPrefix;
@@ -188,7 +214,7 @@ namespace NYql::NDq {
             , SelectResultType(MergeStructTypes(typeEnv, keyType, payloadType))
             , HolderFactory(holderFactory)
             , ColumnDestinations(CreateColumnDestination())
-            , MaxKeysInRequest(std::min(maxKeysInRequest, size_t{100}))
+            , MaxKeysInRequest(maxKeysInRequest)
             , IsMultiMatches(isMultiMatches)
         {
             InitMonCounters(taskCounters);
@@ -222,10 +248,12 @@ namespace NYql::NDq {
             Fullscans = component->GetCounter("Fullscans", true);
             Keys = component->GetCounter("Keys", true);
             ResultRows = component->GetCounter("Rows", true);
+            ResultChunks = component->GetCounter("Chunks", true);
+            ResultBytes = component->GetCounter("Bytes", true);
             AnswerTime = component->GetCounter("AnswerUs", true);
             CpuTime = component->GetCounter("CpuUs", true);
             InFlight = component->GetCounter("InFlight");
-            Sessions = component->GetCounter("Sessions");
+            ActiveSessions = component->GetCounter("Sessions");
         }
     public:
 
@@ -245,15 +273,18 @@ namespace NYql::NDq {
         size_t GetMaxSupportedFullscanRequest() const override {
             return MaxSupportedFullscanRequest;
         }
+
         void AsyncLookup(std::weak_ptr<IDqAsyncLookupSource::TUnboxedValueMap> request) override {
             auto guard = Guard(*Alloc);
             CreateRequest(request.lock(), 0);
         }
+
         void PassAway() override {
-            for (auto&& sessionId: SessionIds) {
-                SendDeleteSession(std::move(sessionId));
+            for (auto&& session: Sessions) {
+                CleanupStreamProcessor(session);
+                SendDeleteSession(std::move(session->SessionId));
             }
-            SessionIds.clear();
+            Sessions.clear();
             Free();
             TBase::PassAway();
         }
@@ -261,8 +292,9 @@ namespace NYql::NDq {
     private: // events
         STRICT_STFUNC_EXC(StateFunc,
             hFunc(TEvLookupRequest, Handle)
-            hFunc(TEvYdbExecuteDataQueryResponse, Handle)
-            hFunc(TEvYdbCreateSessionResponse, Handle)
+            hFunc(TEvQueryExecuteQueryResponsePart, Handle)
+            hFunc(TEvQueryCreateSessionResponse, Handle)
+            hFunc(TEvQuerySessionState, Handle)
             hFunc(TEvLookupRetry, Handle)
             hFunc(NActors::TEvents::TEvPoison, Handle)
             , ExceptionFunc(std::exception, HandleException)
@@ -329,6 +361,11 @@ namespace NYql::NDq {
                 Schedule(delay, new TEvLookupRetry(std::move(state)));
                 return;
             }
+            CleanupStreamProcessor(state);
+            if (auto& session = state->SessionState) {
+                CleanupStreamProcessor(session);
+                session.reset();
+            }
             SendError(status, std::move(issues));
         }
 
@@ -383,89 +420,181 @@ namespace NYql::NDq {
         void SendRequest(TLookupState::TPtr state) {
             auto startCycleCount = GetCycleCountFast();
 
-            if (state->SessionId.empty()) { // reuse or create session
-                if (SessionIds.empty()) {
+            if (!state->SessionState) { // reuse or create session
+                if (Sessions.empty()) {
                     SendCreateSession(std::move(state));
                     return;
                 }
-                state->SessionId = std::move(SessionIds.back());
-                SessionIds.pop_back();
+                state->SessionState = std::move(Sessions.back());
+                Sessions.pop_back();
             }
 
-            using TRequest = Ydb::Table::ExecuteDataQueryRequest;
-            using TResponse = Ydb::Table::ExecuteDataQueryResponse;
-            using TRpcRequest = NGRpcService::TGrpcRequestOperationCall<TRequest, TResponse>;
-            auto actorSystem = TActivationContext::ActorSystem();
-            auto selfId = SelfId();
-            auto result = NRpcService::DoLocalRpc<TRpcRequest>(FillSelect(state), AppData()->TenantName, /*token=*/Nothing(), actorSystem);
-            result.Subscribe([actorSystem, selfId, state = std::move(state)](const NThreading::TFuture<TResponse>& future) mutable {
-                actorSystem->Send(selfId, new TEvYdbExecuteDataQueryResponse(future, std::move(state)));
-            });
+            using TRequest = Ydb::Query::ExecuteQueryRequest;
+            using TResponse = Ydb::Query::ExecuteQueryResponsePart;
+            using TRpcRequest = NGRpcService::TGrpcRequestNoOperationCall<TRequest, TResponse>;
+            state->StreamProcessor = NRpcService::DoLocalRpcStreamSameMailbox<TRpcRequest>(FillQuery(state), /*database*/AppData()->TenantName, /*token=*/Nothing(), ActorContext(), false, channelBufferSize);
+            ReadNextResponsePart(state);
             auto cputime = GetCpuTimeDelta(startCycleCount).MicroSeconds();
             if (CpuTime) {
                 CpuTime->Add(cputime);
             }
-            LOG_T("SendRequest time " << cputime);
         }
 
-        void Handle(TEvYdbExecuteDataQueryResponse::TPtr ev) {
+        void ReadNextResponsePart(TLookupState::TPtr state) {
+            auto actorSystem = TActivationContext::ActorSystem();
+            auto selfId = SelfId();
+            Y_ABORT_UNLESS(state->StreamProcessor && state->StreamProcessor->HasData());
+            state->StreamProcessor->Read([actorSystem, selfId, state = std::move(state)](Ydb::Query::ExecuteQueryResponsePart&& response) {
+                actorSystem->Send(selfId, new TEvQueryExecuteQueryResponsePart(std::move(response), std::move(state)));
+            });
+        }
+
+        void Handle(TEvQueryExecuteQueryResponsePart::TPtr ev) {
             auto state = std::move(ev->Get()->State);
-            switch(ev->Get()->Status) {
+            auto& response = ev->Get()->Response;
+            LOG_T("TEvQueryExecuteQueryResponsePart: " << response.DebugString());
+            switch(response.status()) {
                 case Ydb::StatusIds::SUCCESS:
                     break;
 
                 case Ydb::StatusIds::SESSION_EXPIRED:
                 case Ydb::StatusIds::BAD_SESSION:
-                    if (Sessions && !state->SessionId.empty()) {
-                        Sessions->Dec();
+                    if (auto& sessionState = state->SessionState) {
+                        CleanupStreamProcessor(sessionState);
+                        sessionState.reset();
                     }
-                    state->SessionId.clear();
                     [[fallthrough]];
                 default:
-                    SendRetryOrError(std::move(state), ev->Get()->Status, ev->Get()->Issues);
+                    SendRetryOrError(std::move(state), response.status(), IssuesFromProtoMessage(response));
                     return;
             }
-            ProcessReceivedData(ev->Get()->Result, state);
-            FinalizeRequest(std::move(state));
+            ProcessReceivedData(response, state);
+            if (state->StreamProcessor->HasData()) {
+                ReadNextResponsePart(std::move(state));
+            } else {
+                FinalizeRequest(std::move(state));
+            }
+        }
+
+        void SendAttachSession(TSessionState::TPtr session) {
+            using TRequest = Ydb::Query::AttachSessionRequest;
+            using TResponse = Ydb::Query::SessionState;
+            using TRpcRequest = NGRpcService::TGrpcRequestNoOperationCall<TRequest, TResponse>;
+            TRequest request;
+            request.set_session_id(session->SessionId);
+            session->StreamProcessor = NRpcService::DoLocalRpcStreamSameMailbox<TRpcRequest>(std::move(request), /*database*/AppData()->TenantName, /*token=*/Nothing(), ActorContext(), false, channelBufferSize);
+            if (ActiveSessions) {
+                ActiveSessions->Inc();
+            }
+            ReadNextSessionState(std::move(session));
+        }
+
+        void ReadNextSessionState(TSessionState::TPtr session) {
+            auto actorSystem = TActivationContext::ActorSystem();
+            auto selfId = SelfId();
+            Y_ABORT_UNLESS(session->StreamProcessor && session->StreamProcessor->HasData());
+            session->StreamProcessor->Read([actorSystem, selfId, session = std::move(session)](Ydb::Query::SessionState&& response) mutable {
+                actorSystem->Send(selfId, new TEvQuerySessionState(std::move(response), std::move(session)));
+            });
+        }
+
+        void Handle(TEvQuerySessionState::TPtr ev) {
+            auto session = std::move(ev->Get()->State);
+            auto& response = ev->Get()->Response;
+            LOG_D("TEvQuerySessionState: " << response.DebugString());
+            auto status = response.status();
+            if (response.has_session_shutdown()) {
+                status = Ydb::StatusIds::SESSION_EXPIRED;
+            }
+            if (response.has_node_shutdown()) {
+                status = Ydb::StatusIds::SESSION_EXPIRED; // XXX
+            }
+            switch(status) {
+                case Ydb::StatusIds::SUCCESS:
+                    if (auto& lookup = session->PendingLookup) {
+                        // send request (once) upon successful attach
+                        lookup->SessionState = session;
+                        SendRequest(std::exchange(lookup, {}));
+                    }
+                    break;
+
+                case Ydb::StatusIds::SESSION_EXPIRED:
+                case Ydb::StatusIds::BAD_SESSION:
+                    session->SessionId.clear();
+                    [[fallthrough]];
+                default:
+                    CleanupStreamProcessor(session);
+                    if (auto& lookup = session->PendingLookup) {
+                        SendRetryOrError(std::exchange(lookup, {}), response.status(), IssuesFromProtoMessage(response));
+                    }
+                    return;
+            }
+            if (session->StreamProcessor->HasData()) {
+                ReadNextSessionState(std::move(session));
+            } else {
+                FinalizeSession(std::move(session));
+            }
+        }
+
+        void FinalizeSession(TSessionState::TPtr state) {
+            state->SessionId.clear();
+        }
+
+        void CleanupStreamProcessor(TSessionState::TPtr& session) {
+            if (auto& streamProcessor = session->StreamProcessor) {
+                if (!streamProcessor->IsFinished()) {
+                    streamProcessor->Cancel();
+                }
+                streamProcessor.Reset();
+                if (ActiveSessions) {
+                    ActiveSessions->Dec();
+                }
+            }
+        }
+
+        void CleanupStreamProcessor(TLookupState::TPtr& state) {
+            if (auto& streamProcessor = state->StreamProcessor) {
+                if(!streamProcessor->IsFinished()) {
+                    streamProcessor->Cancel();
+                }
+                streamProcessor.Reset();
+            }
         }
 
         void SendCreateSession(TLookupState::TPtr state) {
-            using TRequest = Ydb::Table::CreateSessionRequest;
-            using TResponse = Ydb::Table::CreateSessionResponse;
-            using TRpcRequest = NGRpcService::TGrpcRequestOperationCall<TRequest, TResponse>;
+            using TRequest = Ydb::Query::CreateSessionRequest;
+            using TResponse = Ydb::Query::CreateSessionResponse;
+            using TRpcRequest = NGRpcService::TGrpcRequestNoOperationCall<TRequest, TResponse>;
 
             TRequest request;
             auto actorSystem = TActivationContext::ActorSystem();
             auto selfId = SelfId();
             auto result = NRpcService::DoLocalRpc<TRpcRequest>(std::move(request), /*database=*/AppData()->TenantName, /*token=*/Nothing(), actorSystem);
-            result.Subscribe([actorSystem, selfId, state] (const NThreading::TFuture<TResponse>& future) mutable {
-                actorSystem->Send(selfId, new TEvYdbCreateSessionResponse(future, std::move(state)));
+            result.Subscribe([actorSystem, selfId, state = std::move(state)] (const NThreading::TFuture<TResponse>& future) mutable {
+                actorSystem->Send(selfId, new TEvQueryCreateSessionResponse(future, std::move(state)));
             });
         }
 
-        void Handle(TEvYdbCreateSessionResponse::TPtr ev) {
+        void Handle(TEvQueryCreateSessionResponse::TPtr ev) {
             auto state = std::move(ev->Get()->State);
-            Y_ENSURE(state->SessionId.empty());
-            if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
-                SendRetryOrError(std::move(state), ev->Get()->Status, ev->Get()->Issues);
+            Y_ENSURE(!state->SessionState);
+            auto& response = ev->Get()->Response;
+            LOG_D("TEvQueryCreateSessionResponse: " << response.DebugString());
+            if (response.status() != Ydb::StatusIds::SUCCESS) {
+                SendRetryOrError(std::move(state), response.status(), IssuesFromProtoMessage(response));
                 return;
             }
-            state->SessionId = std::move(*ev->Get()->Result.mutable_session_id());
-            if (Sessions) {
-                Sessions->Inc();
-            }
-            auto guard = Guard(*Alloc);
-            SendRequest(std::move(state));
+            auto sessionState = std::make_shared<TSessionState>();
+            sessionState->SessionId = std::move(*response.mutable_session_id());
+            sessionState->PendingLookup = std::move(state);
+            SendAttachSession(std::move(sessionState));
         }
 
         void SendDeleteSession(TString sessionId) {
-            using TRequest = Ydb::Table::DeleteSessionRequest;
-            using TResponse = Ydb::Table::DeleteSessionResponse;
-            using TRpcRequest = NGRpcService::TGrpcRequestOperationCall<TRequest, TResponse>;
+            using TRequest = Ydb::Query::DeleteSessionRequest;
+            using TResponse = Ydb::Query::DeleteSessionResponse;
+            using TRpcRequest = NGRpcService::TGrpcRequestNoOperationCall<TRequest, TResponse>;
 
-            if (Sessions) {
-                Sessions->Dec();
-            }
             TRequest request;
             request.set_session_id(std::move(sessionId));
             auto actorSystem = TActivationContext::ActorSystem();
@@ -476,90 +605,11 @@ namespace NYql::NDq {
             // don't wait for results
         }
 
-        static NUdf::TUnboxedValue YdbValueToUnboxedValue(NYdb::TValueParser& columnParser, const NKikimr::NMiniKQL::TType *type) {
-            NUdf::TUnboxedValue v;
-            bool is_optional = type->IsOptional();
-            if (is_optional) {
-                columnParser.OpenOptional();
-                if (columnParser.IsNull()) {
-                    columnParser.CloseOptional();
-                    return v;
-                }
-                type = AS_TYPE(NKikimr::NMiniKQL::TOptionalType, type)->GetItemType();
-            }
-            if (type->IsData()) {
-                auto dataSlot = AS_TYPE(NKikimr::NMiniKQL::TDataType, type)->GetDataSlot();
-                Y_ENSURE(dataSlot);
-                using namespace NYql::NUdf;
-                switch (*dataSlot) {
-                    case NYql::NUdf::EDataSlot::Bool:
-                        v = TUnboxedValuePod(columnParser.GetBool());
-                        break;
-                    case NYql::NUdf::EDataSlot::Int8:
-                        v = TUnboxedValuePod(columnParser.GetInt8());
-                        break;
-                    case NYql::NUdf::EDataSlot::Int16:
-                        v = TUnboxedValuePod(columnParser.GetInt16());
-                        break;
-                    case NYql::NUdf::EDataSlot::Int32:
-                        v = TUnboxedValuePod(columnParser.GetInt32());
-                        break;
-                    case NYql::NUdf::EDataSlot::Int64:
-                        v = TUnboxedValuePod(columnParser.GetInt64());
-                        break;
-                    case NYql::NUdf::EDataSlot::Uint8:
-                        v = TUnboxedValuePod(columnParser.GetUint8());
-                        break;
-                    case NYql::NUdf::EDataSlot::Uint16:
-                        v = TUnboxedValuePod(columnParser.GetUint16());
-                        break;
-                    case NYql::NUdf::EDataSlot::Uint32:
-                        v = TUnboxedValuePod(columnParser.GetUint32());
-                        break;
-                    case NYql::NUdf::EDataSlot::Uint64:
-                        v = TUnboxedValuePod(columnParser.GetUint64());
-                        break;
-                    case NYql::NUdf::EDataSlot::Double:
-                        v = TUnboxedValuePod(columnParser.GetDouble());
-                        break;
-                    case NYql::NUdf::EDataSlot::Float:
-                        v = TUnboxedValuePod(columnParser.GetFloat());
-                        break;
-                    case NYql::NUdf::EDataSlot::String:
-                        v = NKikimr::NMiniKQL::ValueFromString(*dataSlot, columnParser.GetString());
-                        break;
-                    case NYql::NUdf::EDataSlot::Utf8:
-                        v = NKikimr::NMiniKQL::ValueFromString(*dataSlot, columnParser.GetUtf8());
-                        break;
-                    case NYql::NUdf::EDataSlot::Json:
-                        v = NKikimr::NMiniKQL::ValueFromString(*dataSlot, columnParser.GetJson());
-                        break;
-                    case NYql::NUdf::EDataSlot::Timestamp:
-                        v = TUnboxedValuePod(columnParser.GetTimestamp().MicroSeconds());
-                        break;
-                    case NYql::NUdf::EDataSlot::Interval:
-                        v = TUnboxedValuePod(columnParser.GetInterval());
-                        break;
-
-                    default:
-                        throw yexception() << "Unimplemented DataType slot " << *dataSlot;
-                        break;
-                }
-            } else {
-                throw yexception() << "Unimplemented type " << type->GetKindAsStr();
-            }
-            if (is_optional) {
-                columnParser.CloseOptional();
-            }
-            return v;
-        }
-
-        void ProcessReceivedData(Ydb::Table::ExecuteQueryResult& result, TLookupState::TPtr state) {
-            Y_ENSURE(result.result_setsSize() == 1);
-            ProcessReceivedData(result.result_sets()[0], state);
-            LOG_T("tx meta: " << result.tx_meta().DebugString() << " query meta: " << result.query_meta().DebugString());
-            LOG_D("query stats: " << result.query_stats().DebugString());
-            Y_ENSURE(state->ResultRows < TableServiceResultLimit || state->FullscanLimit == TableServiceResultLimit, "Result size " << state->ResultRows << " exceed safe TableService size " << (TableServiceResultLimit - 1) << ", terminate to avoid data loss");
+        void ProcessReceivedData(Ydb::Query::ExecuteQueryResponsePart& result, TLookupState::TPtr state) {
+            Y_ENSURE(result.result_set_index() == 0);
+            ProcessReceivedData(result.result_set(), std::move(state));
+            LOG_T("tx meta: " << result.tx_meta().DebugString());
+            LOG_D("query stats: " << result.exec_stats().DebugString());
         }
 
         void ProcessReceivedData(const Ydb::ResultSet& resultSet, TLookupState::TPtr state) {
@@ -571,30 +621,47 @@ namespace NYql::NDq {
                 return;
             }
             Y_ENSURE(!resultSet.truncated(), (state->FullscanLimit > 0 ? TStringBuilder() << "Fullscan request for " << state->FullscanLimit << " keys" : TStringBuilder() << "Keyed request for " << request->size() << " keys") << ": truncated result, terminate to avoid data loss");
-            NYdb::TResultSetParser parser(resultSet);
-            ui32 columnsCount = SelectResultType->GetMembersCount();
-            TVector<ui32> columnMap(columnsCount);
-            for (ui32 c = 0; c != columnsCount; ++c) {
-                auto index = parser.ColumnIndex(std::string(SelectResultType->GetMemberName(c)));
-                Y_ENSURE(index >= 0);
-                columnMap[c] = index;
+            if (resultSet.has_arrow_format_meta()) {
+                const auto& schema = resultSet.arrow_format_meta().schema();
+                if (!schema.empty()) {
+                    state->Schema = NKikimr::NArrow::DeserializeSchema(schema);
+                    if (ResultBytes) {
+                        ResultBytes->Add(schema.size());
+                    }
+                }
+            }
+            if (ResultBytes) {
+                ResultBytes->Add(resultSet.data().size());
+                ResultChunks->Inc();
+            }
+            NKikimr::NArrow::NSerialization::TSerializerContainer deser = NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(); // todo move to class' member
+            Y_ENSURE(resultSet.format() == Ydb::ResultSet::FORMAT_ARROW);
+            const auto& data = deser->Deserialize(resultSet.data(), state->Schema);
+            Y_ENSURE(data.ok(), data.status().ToString());
+            const auto& value = data.ValueOrDie();
+            Y_ENSURE(static_cast<ui32>(value->num_columns()) == ColumnDestinations.size(), value->num_columns() << " == " << ColumnDestinations.size());
+            std::vector<NKikimr::NMiniKQL::TUnboxedValueVector> columns(ColumnDestinations.size());
+            for (size_t i = 0; i != columns.size(); ++i) {
+                Y_ENSURE(value->column_name(i) == (ColumnDestinations[i].first == EColumnDestination::Key ? KeyType : PayloadType)->GetMemberName(ColumnDestinations[i].second));
+                columns[i] = NArrow::ExtractUnboxedValues(value->column(i), SelectResultType->GetMemberType(i), HolderFactory);
             }
 
-            auto savedResultRows = state->ResultRows;
-            while (parser.TryNextRow()) {
-                if (state->ResultRows == state->FullscanLimit && state->FullscanLimit > 0) {
-                    Y_VALIDATE(false, "Result count exceed requested limit " << state->FullscanLimit);
-                    break;
+            auto height = columns[0].size();
+            Y_DEBUG_ABORT_UNLESS(state->FullscanLimit == 0 || state->FullscanLimit > state->ResultRows);
+            if (state->FullscanLimit > 0 && height > state->FullscanLimit - state->ResultRows) {
+                Y_VALIDATE(false, "Result count exceed requested limit " << state->FullscanLimit); // unlike generic lookup/connector, this is an internal bug
+                height = state->FullscanLimit - state->ResultRows;
+                if (!state->StreamProcessor->IsFinished()) {
+                    state->StreamProcessor->Cancel();
                 }
-                ++state->ResultRows;
+            }
+            for (size_t i = 0; i != height; ++i) {
                 NUdf::TUnboxedValue* keyItems;
                 NUdf::TUnboxedValue key = HolderFactory.CreateDirectArrayHolder(KeyType->GetMembersCount(), keyItems);
                 NUdf::TUnboxedValue* outputItems;
                 NUdf::TUnboxedValue output = HolderFactory.CreateDirectArrayHolder(PayloadType->GetMembersCount(), outputItems);
-
-                for (ui32 j = 0; j != columnsCount; ++j) {
-                    auto& v = (ColumnDestinations[j].first == EColumnDestination::Key ? keyItems : outputItems)[ColumnDestinations[j].second];
-                    v = YdbValueToUnboxedValue(parser.ColumnParser(columnMap[j]), SelectResultType->GetMemberType(j));
+                for (size_t j = 0; j != columns.size(); ++j) {
+                    (ColumnDestinations[j].first == EColumnDestination::Key ? keyItems : outputItems)[ColumnDestinations[j].second] = columns[j][i];
                 }
 
                 NUdf::TUnboxedValue *v;
@@ -604,8 +671,6 @@ namespace NYql::NDq {
                 } else if (auto it = request->find(key); it != request->end()) {
                     v = &(it->second);
                 } else {
-                    // Different from generic provider; connector may return unwanted keys (and we filter out them locally); for kikimr lookups this is a hard failure
-                    Y_VALIDATE(false, "SELECT returned unrequested keys, should not have happened");
                     continue;
                 }
                 if (IsMultiMatches) {
@@ -614,15 +679,17 @@ namespace NYql::NDq {
                     *v = std::move(output); // duplicates will be overwritten
                 }
             }
+            state->ResultRows += height;
             auto cputime = GetCpuTimeDelta(startCycleCount).MicroSeconds();
             if (CpuTime) {
                 CpuTime->Add(cputime);
-                ResultRows->Add(state->ResultRows - savedResultRows);
+                ResultRows->Add(height);
             }
-            LOG_T("ProcessReceivedData cputime " << cputime << " for " << (state->ResultRows - savedResultRows) << " rows");
+            LOG_T("ProcessReceivedData cputime " << cputime << " for " << height << " rows");
         }
 
         void FinalizeRequest(TLookupState::TPtr state) {
+            CleanupStreamProcessor(state);
             if (LocalInFlight == 0) { // PassAway was called
                 return;
             }
@@ -635,9 +702,12 @@ namespace NYql::NDq {
             }
             LOG_T("AnswerTime " << (TInstant::Now() - state->SentTime));
             auto* ev = new IDqAsyncLookupSource::TEvLookupResult(std::move(state->Request), state->ResultRows, state->FullscanLimit);
-            if (state->SessionId) { // return SessionId to pool
-                SessionIds.push_back(std::move(state->SessionId));
+            if (auto& session = state->SessionState) {
+                if (session->SessionId) { // return Session to the pool
+                    Sessions.push_back(std::move(state->SessionState));
+                }
             }
+            state->SessionState.reset();
             state.reset();
             TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
         }
@@ -754,27 +824,32 @@ namespace NYql::NDq {
         }
 
         // must be called with bound Alloc
-        Ydb::Table::ExecuteDataQueryRequest FillSelect(TLookupState::TPtr state) {
-            Ydb::Table::ExecuteDataQueryRequest request;
+        Ydb::Query::ExecuteQueryRequest FillQuery(TLookupState::TPtr state) {
+            Ydb::Query::ExecuteQueryRequest request;
             if (state->FullscanLimit > 0) {
                 TStringBuilder out;
                 MakeSelectWithLimit(out, state->FullscanLimit);
-                request.mutable_query()->set_yql_text(std::move(out));
+                request.mutable_query_content()->set_text(std::move(out));
             } else {
                 auto& keyTupleList = (*request.mutable_parameters())[KeyTupleListName];
                 FillKeyTupleList(keyTupleList, state);
-                request.mutable_query()->set_yql_text(SelectWithKeys);
+                request.mutable_query_content()->set_text(SelectWithKeys);
             }
-            request.set_session_id(state->SessionId);
+            Y_ENSURE(state->SessionState);
+            request.set_session_id(state->SessionState->SessionId);
+            request.set_exec_mode(Ydb::Query::EXEC_MODE_EXECUTE);
+            request.set_result_set_format(Ydb::ResultSet::FORMAT_ARROW);
+            request.mutable_arrow_format_settings()->mutable_compression_codec()->set_type(Ydb::Formats::ArrowFormatSettings::CompressionCodec::TYPE_NONE); // as local rpc
+            request.set_schema_inclusion_mode(Ydb::Query::SCHEMA_INCLUSION_MODE_FIRST_ONLY);
             {
                 auto& tx_control = *request.mutable_tx_control();
                 tx_control.mutable_begin_tx()->mutable_snapshot_read_only();
                 tx_control.set_commit_tx(true);
             }
-            request.mutable_query_cache_policy()->set_keep_in_cache(true);
-            LOG_D("QueryStatsCollection : " << (request.set_collect_stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_BASIC), "BASIC")); // intentional side effects
-            LOG_T("QueryStatsCollection : " << (request.set_collect_stats(Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL), "FULL")); // intentional side effects
-            LOG_T("Query: <<<" << request.DebugString() << ">>>");
+            LOG_D("QueryStatsMode : " << (request.set_stats_mode(Ydb::Query::STATS_MODE_BASIC), "BASIC")); // intentional side effects
+            LOG_T("QueryStatsMode : " << (request.set_stats_mode(Ydb::Query::STATS_MODE_FULL), "FULL")); // intentional side effects
+            LOG_T("Query: " << request.DebugString());
+
             return request;
         }
 
@@ -794,18 +869,19 @@ namespace NYql::NDq {
         static inline constexpr std::string_view KeyTupleListName = "$keyTupleList"sv;
         NYql::NUdf::ITypeInfoHelper::TPtr TypeInfoHelper = new NKikimr::NMiniKQL::TTypeInfoHelper();
         TString SelectWithKeys;
-        TVector<TString> SessionIds;
+        TVector<TSessionState::TPtr> Sessions;
 
         ::NMonitoring::TDynamicCounters::TCounterPtr Count;
         ::NMonitoring::TDynamicCounters::TCounterPtr Fullscans;
         ::NMonitoring::TDynamicCounters::TCounterPtr Keys;
         ::NMonitoring::TDynamicCounters::TCounterPtr ResultRows;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ResultBytes;
+        ::NMonitoring::TDynamicCounters::TCounterPtr ResultChunks;
         ::NMonitoring::TDynamicCounters::TCounterPtr AnswerTime;
         ::NMonitoring::TDynamicCounters::TCounterPtr CpuTime;
         ::NMonitoring::TDynamicCounters::TCounterPtr InFlight;
-        ::NMonitoring::TDynamicCounters::TCounterPtr Sessions;
-        static constexpr size_t MaxSupportedFullscanRequest = TableServiceResultLimit; // todo: consider making tweakable
-        // N.B. TableService limits with 1000
+        ::NMonitoring::TDynamicCounters::TCounterPtr ActiveSessions;
+        static constexpr size_t MaxSupportedFullscanRequest = 50000;
     };
 
     std::pair<NYql::NDq::IDqAsyncLookupSource*, NActors::IActor*> CreateKikimrLookupActor(

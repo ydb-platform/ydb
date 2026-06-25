@@ -35,14 +35,19 @@ public:
     TStatus DoTransform(TExprNode::TPtr inputExpr, TExprNode::TPtr& outputExpr, TExprContext& ctx) final {
         outputExpr = inputExpr;
 
-        if (!KqpCtx->Config->GetEnableOltpSink()) {
-            return TStatus::Ok;
-        }
-
         TNodeOnNodeOwnedMap marked;
 
         {
             const auto [precomputeStages, sinkStages] = GatherPrecomputeAndSinkStages(outputExpr, *KqpCtx);
+
+            if (KqpCtx->Config->GetEnableStreamWrite()) {
+                auto sameTableSinkStages = GatherSameTableSinkStages(sinkStages);
+                for (const auto& [_, exprNode] : FindStagesUsedForBothStagesSets(sameTableSinkStages, sameTableSinkStages)) {
+                    TExprBase node(exprNode);
+                    const auto stage = node.Cast<TDqStage>();
+                    marked.emplace(node.Raw(), node.Ptr());
+                }
+            }
 
             for (const auto& [_, exprNode] : FindStagesUsedForBothStagesSets(precomputeStages, sinkStages)) {
                 AFL_ENSURE(exprNode);
@@ -238,6 +243,36 @@ private:
         }
 
         return stagesUsedForLeftAndRight;
+    }
+
+    TNodeOnNodeOwnedMap GatherSameTableSinkStages(const TNodeOnNodeOwnedMap& sinkStages) {
+        THashMap<TString, TNodeOnNodeOwnedMap> sinksByTable;
+
+        for (const auto& [_, stagePtr] : sinkStages) {
+            TExprBase node(stagePtr);
+            const auto stage = node.Cast<TDqStage>();
+
+            if (const auto outputs = stage.Outputs()) {
+                for (const auto& output : outputs.Cast()) {
+                    if (auto maybeSink = output.Maybe<TDqSink>()) {
+                        if (auto sinkSettings = maybeSink.Cast().Settings().Maybe<TKqpTableSinkSettings>()) {
+                            TString tablePath(sinkSettings.Cast().Table().Path().Value());
+                            sinksByTable[tablePath].emplace(stage.Raw(), stage.Ptr());
+                        }
+                    }
+                }
+            }
+        }
+
+        TNodeOnNodeOwnedMap sameTableSinkStages;
+        for (const auto& [tablePath, stages] : sinksByTable) {
+            if (stages.size() > 1) {
+                for (const auto& [stageRaw, stagePtr] : stages) {
+                    sameTableSinkStages.emplace(stageRaw, stagePtr);
+                }
+            }
+        }
+        return sameTableSinkStages;
     }
 
     std::pair<TNodeOnNodeOwnedMap, TNodeOnNodeOwnedMap> GatherPrecomputeAndSinkStages(const TExprNode::TPtr& query, const TKqpOptimizeContext& kqpCtx) {

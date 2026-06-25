@@ -567,57 +567,53 @@ Y_UNIT_TEST_SUITE(TClusterInfoTest) {
     Y_UNIT_TEST(FillNodeRoles) {
         TActorSystemStub stub;
 
+        //   node 1 -> state storage replica only;
+        //   node 2 -> static group host only;
+        //   node 3 -> system tablet host only;
+        //   node 4 -> all roles at once.
         TClusterInfoPtr cluster(new TClusterInfo);
         for (ui32 nodeId = 1; nodeId <= 4; ++nodeId) {
             cluster->AddNode({nodeId, "::1", "host" + ToString(nodeId), "host" + ToString(nodeId), 1, TNodeLocation()}, nullptr);
+            cluster->SetNodeState(nodeId, NKikimrCms::UP, MakeSystemStateInfo("1", {"Storage"}));
         }
 
-        // Services are derived from whiteboard roles:
-        //   "Storage" -> EService::Storage, "Tenant" -> EService::DynamicNode.
-        cluster->SetNodeState(1, NKikimrCms::UP, MakeSystemStateInfo("1", {"Storage"}));
-        cluster->SetNodeState(2, NKikimrCms::UP, MakeSystemStateInfo("1", {"Tenant"}));
-        cluster->SetNodeState(3, NKikimrCms::UP, MakeSystemStateInfo("1", {"Storage"}));
-        cluster->SetNodeState(4, NKikimrCms::UP, MakeSystemStateInfo("1", {"Storage"}));
-
-        // Node 3 hosts a VDisk of a static group (group id with Static type bits).
-        const TVDiskID staticVDisk(0, 1, 0, 0, 0);
-        UNIT_ASSERT(TClusterInfo::IsStaticGroupVDisk(staticVDisk));
-        cluster->AddPDisk(MakePDiskConfig(3, 3));
-        cluster->AddVDisk(MakeVSlotConfig(3, staticVDisk, 3, 0));
-
-        // Node 4 hosts only a VDisk of a dynamic group; it must NOT get STATIC_GROUP.
-        const ui32 dynamicGroupId = TGroupID(EGroupConfigurationType::Dynamic, 1, 1).GetRaw();
-        const TVDiskID dynamicVDisk(dynamicGroupId, 1, 0, 0, 0);
-        UNIT_ASSERT(!TClusterInfo::IsStaticGroupVDisk(dynamicVDisk));
+        const TVDiskID staticVDisk2(0, 1, 0, 2, 0);
+        const TVDiskID staticVDisk4(0, 1, 0, 4, 0);
+        UNIT_ASSERT(TClusterInfo::IsStaticGroupVDisk(staticVDisk2));
+        UNIT_ASSERT(TClusterInfo::IsStaticGroupVDisk(staticVDisk4));
+        cluster->AddPDisk(MakePDiskConfig(2, 2));
+        cluster->AddVDisk(MakeVSlotConfig(2, staticVDisk2, 2, 0));
         cluster->AddPDisk(MakePDiskConfig(4, 4));
-        cluster->AddVDisk(MakeVSlotConfig(4, dynamicVDisk, 4, 0));
+        cluster->AddVDisk(MakeVSlotConfig(4, staticVDisk4, 4, 0));
 
-        // Node 3 is configured to host system tablets.
+        const ui32 dynamicGroupId = TGroupID(EGroupConfigurationType::Dynamic, 1, 1).GetRaw();
+        const TVDiskID dynamicVDisk(dynamicGroupId, 1, 0, 1, 0);
+        UNIT_ASSERT(!TClusterInfo::IsStaticGroupVDisk(dynamicVDisk));
+        cluster->AddPDisk(MakePDiskConfig(1, 1));
+        cluster->AddVDisk(MakeVSlotConfig(1, dynamicVDisk, 1, 0));
+
         cluster->NodeToTabletTypes[3].push_back(NKikimrConfig::TBootstrap::FLAT_BS_CONTROLLER);
+        cluster->NodeToTabletTypes[4].push_back(NKikimrConfig::TBootstrap::FLAT_SCHEMESHARD);
 
-        // Node 3 is a state storage replica.
         auto ssInfo = MakeIntrusive<TStateStorageInfo>();
         ssInfo->RingGroups.emplace_back();
         auto &ssGroup = ssInfo->RingGroups.back();
-        ssGroup.NToSelect = 1;
-        ssGroup.Rings.resize(1);
-        ssGroup.Rings[0].Replicas.push_back(TActorId(3, 0, 0, 0));
+        ssGroup.NToSelect = 2;
+        ssGroup.Rings.resize(2);
+        ssGroup.Rings[0].Replicas.push_back(TActorId(1, 0, 0, 0));
+        ssGroup.Rings[1].Replicas.push_back(TActorId(4, 0, 0, 0));
         cluster->ApplyStateStorageInfo(ssInfo);
-        UNIT_ASSERT(cluster->IsStateStorageReplicaNode(3));
+        UNIT_ASSERT(cluster->IsStateStorageReplicaNode(1));
+        UNIT_ASSERT(cluster->IsStateStorageReplicaNode(4));
 
-        // Node 1: minimal storage node.
-        CheckNodeRoles(*cluster, 1, {Ydb::Maintenance::NodeRole::kStorage});
-        // Node 2: minimal compute node.
-        CheckNodeRoles(*cluster, 2, {Ydb::Maintenance::NodeRole::kCompute});
-        // Node 3: maximal set of co-occurring roles.
-        CheckNodeRoles(*cluster, 3, {
-            Ydb::Maintenance::NodeRole::kStorage,
+        CheckNodeRoles(*cluster, 1, {Ydb::Maintenance::NodeRole::kStateStorage});
+        CheckNodeRoles(*cluster, 2, {Ydb::Maintenance::NodeRole::kStaticGroup});
+        CheckNodeRoles(*cluster, 3, {Ydb::Maintenance::NodeRole::kSystemTablet});
+        CheckNodeRoles(*cluster, 4, {
             Ydb::Maintenance::NodeRole::kStateStorage,
             Ydb::Maintenance::NodeRole::kStaticGroup,
             Ydb::Maintenance::NodeRole::kSystemTablet,
         });
-        // Node 4: storage node with a dynamic-group VDisk only.
-        CheckNodeRoles(*cluster, 4, {Ydb::Maintenance::NodeRole::kStorage});
     }
 }
 

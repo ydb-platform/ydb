@@ -27,14 +27,6 @@ enum ItemState {
 // NodeRole describes a function a node performs in the cluster.
 // A node may have several roles at once.
 message NodeRole {
-    // Static storage node.
-    message Storage {
-    }
-
-    // Dynamic (compute) node.
-    message Compute {
-    }
-
     // Node hosts a state storage replica.
     message StateStorage {
     }
@@ -48,11 +40,9 @@ message NodeRole {
     }
 
     oneof role {
-        Storage storage = 1;
-        Compute compute = 2;
-        StateStorage state_storage = 3;
-        StaticGroup static_group = 4;
-        SystemTablet system_tablet = 5;
+        StateStorage state_storage = 1;
+        StaticGroup static_group = 2;
+        SystemTablet system_tablet = 3;
     }
 }
 

@@ -979,12 +979,6 @@ void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> i
 }
 
 void TClusterInfo::FillNodeRoles(const TNodeInfo &node, Ydb::Maintenance::Node &out) const {
-    if (node.Services & EService::DynamicNode) {
-        out.add_roles()->mutable_compute();
-    } else {
-        out.add_roles()->mutable_storage();
-    }
-
     if (IsStateStorageReplicaNode(node.NodeId)) {
         out.add_roles()->mutable_state_storage();
     }

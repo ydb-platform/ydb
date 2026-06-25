@@ -12,7 +12,7 @@ TS3State::TS3State()
     , GatewayRetryPolicy(GetHTTPDefaultRetryPolicy())
 {}
 
-TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, std::shared_ptr<ISecuredServiceAccountCredentialsFactory> credentialsFactory, NActors::TActorSystem* actorSystem, TS3Configuration::TSetupper configurationInit) {
+TDataProviderInitializer GetS3DataProviderInitializer(IHTTPGateway::TPtr gateway, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, NActors::TActorSystem* actorSystem, TS3Configuration::TSetupper configurationInit) {
     return [gateway, credentialsFactory, actorSystem, configurationInit] (
         const TString& userName,
         const TString& sessionId,

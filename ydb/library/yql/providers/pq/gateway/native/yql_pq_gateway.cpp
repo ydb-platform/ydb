@@ -169,7 +169,7 @@ private:
 private:
     const TPqGatewayConfigPtr Config;
     const IMetricsRegistryPtr Metrics;
-    const ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    const IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     const ::NPq::NConfigurationManager::IConnections::TPtr CmConnections;
     const TDriver YdbDriver;
     const TMaybe<TTopicClientSettings> CommonTopicClientSettings;

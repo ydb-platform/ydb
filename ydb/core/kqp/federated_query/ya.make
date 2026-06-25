@@ -6,6 +6,7 @@ SRCS(
 
 PEERDIR(
     ydb/core/base
+    ydb/core/fq/libs/credentials
     ydb/core/fq/libs/db_id_async_resolver_impl
     ydb/core/local_proxy/local_pq_client
     ydb/core/protos
@@ -35,8 +36,4 @@ END()
 
 RECURSE(
     actors
-)
-
-RECURSE_FOR_TESTS(
-    ut
 )

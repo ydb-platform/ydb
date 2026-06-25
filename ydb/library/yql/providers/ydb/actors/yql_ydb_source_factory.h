@@ -9,6 +9,8 @@
 
 namespace NYql::NDq {
 
-void RegisterYdbReadActorFactory(NYql::NDq::TDqAsyncIoFactory& factory, NYdb::TDriver driver, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory);
+void RegisterYdbReadActorFactory(NYql::NDq::TDqAsyncIoFactory& factory,
+    NYdb::TDriver driver,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory);
 
 }

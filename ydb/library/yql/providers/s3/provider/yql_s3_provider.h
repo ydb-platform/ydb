@@ -41,7 +41,7 @@ struct TS3State : public TThrRefBase {
     TTypeAnnotationContext* Types = nullptr;
     TIntrusivePtr<TS3Configuration> Configuration;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry = nullptr;
-    std::shared_ptr<ISecuredServiceAccountCredentialsFactory> CredentialsFactory;
+    IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     IHTTPGateway::TPtr Gateway;
     IHTTPGateway::TRetryPolicy::TPtr GatewayRetryPolicy;
     ui32 ExecutorPoolId = 0;
@@ -51,8 +51,10 @@ struct TS3State : public TThrRefBase {
 };
 
 TDataProviderInitializer GetS3DataProviderInitializer(
-    IHTTPGateway::TPtr gateway, std::shared_ptr<ISecuredServiceAccountCredentialsFactory> credentialsFactory = nullptr,
-    NActors::TActorSystem* actorSystem = nullptr, TS3Configuration::TSetupper configurationInit = nullptr);
+    IHTTPGateway::TPtr gateway,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory = CreateStructuredTokenCredentialsFactory(),
+    NActors::TActorSystem* actorSystem = nullptr,
+    TS3Configuration::TSetupper configurationInit = nullptr);
 
 TIntrusivePtr<IDataProvider> CreateS3DataSource(TS3State::TPtr state);
 TIntrusivePtr<IDataProvider> CreateS3DataSink(TS3State::TPtr state);

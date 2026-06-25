@@ -157,7 +157,7 @@ public:
         TIntrusivePtr<IRandomProvider> randomProvider,
         NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
         const ::NYql::NCommon::TServiceCounters& serviceCounters,
-        ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+        IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
         IHTTPGateway::TPtr s3Gateway,
         NYql::NConnector::IClient::TPtr connectorClient,
         ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,
@@ -533,7 +533,8 @@ private:
 
     TActorId DatabaseResolver;
 
-    ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
+
     const IHTTPGateway::TPtr S3Gateway;
     const NYql::NConnector::IClient::TPtr ConnectorClient;
     const ::NPq::NConfigurationManager::IConnections::TPtr PqCmConnections;
@@ -575,7 +576,7 @@ NActors::IActor* CreatePendingFetcher(
     TIntrusivePtr<IRandomProvider> randomProvider,
     NKikimr::NMiniKQL::TComputationNodeFactory dqCompFactory,
     const ::NYql::NCommon::TServiceCounters& serviceCounters,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
     IHTTPGateway::TPtr s3Gateway,
     NYql::NConnector::IClient::TPtr connectorClient,
     ::NPq::NConfigurationManager::IConnections::TPtr pqCmConnections,

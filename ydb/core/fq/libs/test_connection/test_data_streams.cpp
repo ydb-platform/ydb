@@ -80,7 +80,7 @@ class TTestDataStreamsConnectionActor : public NActors::TActorBootstrapped<TTest
     TString Token;
     TTestConnectionRequestCountersPtr Counters;
     NFq::TYqSharedResources::TPtr SharedResources;
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     ::NPq::NConfigurationManager::IConnections::TPtr CmConnections;
     const NKikimr::NMiniKQL::IFunctionRegistry* FunctionRegistry;
     std::shared_ptr<NYql::IDatabaseAsyncResolver> DbResolver;
@@ -97,7 +97,7 @@ public:
         const TActorId& sender,
         ui64 cookie,
         const NFq::TYqSharedResources::TPtr& sharedResources,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
         const ::NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TString& scope,
@@ -275,7 +275,7 @@ NActors::IActor* CreateTestDataStreamsConnectionActor(
         const TActorId& sender,
         ui64 cookie,
         const NFq::TYqSharedResources::TPtr& sharedResources,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
         const ::NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
         const NKikimr::NMiniKQL::IFunctionRegistry* functionRegistry,
         const TString& scope,

@@ -145,10 +145,10 @@ std::pair<NYql::NDq::IDqComputeActorAsyncInput*, IActor*> CreateClickHouseReadAc
     const THashMap<TString, TString>& secureParams,
     const THashMap<TString, TString>& taskParams,
     const NActors::TActorId& computeActorId,
-    ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory)
+    IStructuredTokenCredentialsFactory::TPtr credentialsFactory)
 {
     const auto token = secureParams.Value(params.GetToken(), TString{});
-    const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(credentialsFactory, token);
+    const auto credentialsProviderFactory = credentialsFactory->Create(token);
     const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
     const auto one = token.find('#'), two = token.rfind('#');
     YQL_ENSURE(one != TString::npos && two != TString::npos && one < two, "Bad token format:" << token);

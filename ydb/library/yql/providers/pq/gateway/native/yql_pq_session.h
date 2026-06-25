@@ -21,7 +21,7 @@ public:
     using TPtr = TIntrusivePtr<TPqSession>;
 
     TPqSession(const TString& sessionId, const TString& username, const NPq::NConfigurationManager::IConnections::TPtr& cmConnections,
-        const NYdb::TDriver& ydbDriver, const TPqClusterConfigsMapPtr& clusterConfigs, ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory,
+        const NYdb::TDriver& ydbDriver, const TPqClusterConfigsMapPtr& clusterConfigs, IStructuredTokenCredentialsFactory::TPtr credentialsFactory,
         IPqLocalClientFactory::TPtr localTopicClientFactory);
 
     NPq::NConfigurationManager::TAsyncDescribePathResult DescribePath(const TString& cluster, const TString& database, const TString& path, const TString& token);
@@ -45,7 +45,7 @@ private:
     const NPq::NConfigurationManager::IConnections::TPtr CmConnections;
     const NYdb::TDriver YdbDriver;
     const TPqClusterConfigsMapPtr ClusterConfigs;
-    const ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    const IStructuredTokenCredentialsFactory::TPtr CredentialsProvider;
     const IPqLocalClientFactory::TPtr LocalTopicClientFactory;
 
     TMutex Mutex;

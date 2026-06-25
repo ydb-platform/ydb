@@ -586,5 +586,4 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         self.run_basic(TableType.ROW)
 
     def test_column_tables(self):
-        pytest.skip("TODO: re-enable when column table SI test passes")
-        # self.run_basic(TableType.COLUMN)
+        self.run_basic(TableType.COLUMN)

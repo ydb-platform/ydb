@@ -140,12 +140,12 @@ FROM
 ```yql
 SELECT
     Data,                                                   -- тело сообщения
-    SystemMetadata('create_time') AS CreateTime,            -- время создания сообщения
-    SystemMetadata('write_time') AS WriteTime,              -- время записи сообщения
-    SystemMetadata('offset') AS Offset,                     -- смещение сообщения в топике
-    SystemMetadata('partition_id') AS Partition,            -- номер партиции
-    SystemMetadata('message_group_id') AS MessageGroupId,   -- идентификатор группы сообщений
-    SystemMetadata('seq_no') AS SeqNo                       -- порядковый номер внутри партиции
+    __ydb_create_time AS CreateTime,                        -- время создания сообщения
+    __ydb_write_time AS WriteTime,                          -- время записи сообщения
+    __ydb_offset AS Offset,                                 -- смещение сообщения в топике
+    __ydb_partition_id AS Partition,                        -- номер партиции
+    __ydb_message_group_id AS MessageGroupId,               -- идентификатор группы сообщений
+    __ydb_seq_no AS SeqNo                                   -- порядковый номер внутри партиции
 FROM
     input_topic  -- локальный топик; для внешнего: ext_source.input_topic
 LIMIT 10;
@@ -159,10 +159,10 @@ SELECT
 FROM
     ext_source.input_topic  -- внешний топик; для локального: input_topic
 WHERE
-    SystemMetadata('partition_id') = 42
-        AND SystemMetadata('offset') >= 1000
-        AND SystemMetadata('offset') <= 1100
-        AND SystemMetadata('write_time') > CurrentUtcTimestamp() - Interval("PT2H");
+    __ydb_partition_id = 42
+        AND __ydb_offset >= 1000
+        AND __ydb_offset <= 1100
+        AND __ydb_write_time > CurrentUtcTimestamp() - Interval("PT2H");
 ```
 
 ## Запись в топик {#topic-write}

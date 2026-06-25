@@ -29,7 +29,7 @@ import re
 import sys
 
 CODE_RE = re.compile(r"^YDBE-\d{5}$")
-CODE_IN_SOURCE_RE = re.compile(r"YDBE-\d{5}(?!\d)")
+CODE_IN_SOURCE_RE = re.compile(r"\bYDBE-\d{5}(?!\d)")
 REGISTRY_LINE_RE = re.compile(r"^(\S+)\s+(.+?)\s*$")
 SOURCE_EXTENSIONS = {
     ".cpp", ".cc", ".cxx", ".c",

@@ -118,7 +118,7 @@ jobs:
 
       - name: Validate YDBE-XXXXX error tags
         run: |
-          set -uo pipefail
+          set -euo pipefail
           if [ "${{ github.event_name }}" = "pull_request_target" ]; then
             # Diff mode: only inspect the files touched by this PR.
             python3 ydb/library/error_tags/validate_error_tags.py \

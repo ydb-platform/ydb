@@ -240,9 +240,17 @@ TInferredType* MergeTypes(TTypeArena& arena, TInferredType* a, TInferredType* b)
     return arena.Alloc(EKind::String);
 }
 
+// Builds the (possibly nested-expanded) document `out` and infers its type.
+//
+// String leaves are kept verbatim here; their conversion into value-dictionary
+// ids is deferred to CoerceValues(), which runs against the final unified
+// schema. This matters because MergeTypes() can widen a value to String after
+// the fact (e.g. a key that is a number in one row and a string in another):
+// only the final schema knows which values must become string ids, and storing
+// ids eagerly here would make a raw integer indistinguishable from a string id.
 TInferredType* ExpandAndInfer(
     const NJson::TJsonValue& val, bool parseNested, TTypeArena& arena,
-    TStringDict& keyDict, TStringDict& valDict, NJson::TJsonValue& out)
+    TStringDict& keyDict, NJson::TJsonValue& out)
 {
     switch (val.GetType()) {
         case NJson::JSON_NULL:
@@ -270,12 +278,11 @@ TInferredType* ExpandAndInfer(
                 NJson::TJsonValue parsed;
                 if (NJson::ReadJsonFastTree(sv, &parsed)) {
                     if (parsed.GetType() == NJson::JSON_MAP || parsed.GetType() == NJson::JSON_ARRAY) {
-                        return ExpandAndInfer(parsed, parseNested, arena, keyDict, valDict, out);
+                        return ExpandAndInfer(parsed, parseNested, arena, keyDict, out);
                     }
                 }
             }
-            uint32_t id = valDict.GetOrAdd(std::string_view(sv.data(), sv.size()));
-            out = NJson::TJsonValue(static_cast<long long>(id));
+            out = val;
             return arena.Alloc(EKind::String);
         }
         case NJson::JSON_MAP: {
@@ -284,7 +291,7 @@ TInferredType* ExpandAndInfer(
             for (const auto& [k, v] : val.GetMap()) {
                 keyDict.GetOrAdd(std::string_view(k.data(), k.size()));
                 NJson::TJsonValue& child = out[k];
-                TInferredType* ft = ExpandAndInfer(v, parseNested, arena, keyDict, valDict, child);
+                TInferredType* ft = ExpandAndInfer(v, parseNested, arena, keyDict, child);
                 r->Fields.emplace_back(std::string(k.data(), k.size()), ft);
             }
             std::sort(r->Fields.begin(), r->Fields.end(),
@@ -299,11 +306,11 @@ TInferredType* ExpandAndInfer(
                 r->Items = arena.Alloc(EKind::String);
             } else {
                 NJson::TJsonValue tmp;
-                r->Items = ExpandAndInfer(arr[0], parseNested, arena, keyDict, valDict, tmp);
+                r->Items = ExpandAndInfer(arr[0], parseNested, arena, keyDict, tmp);
                 out.AppendValue(std::move(tmp));
                 for (size_t i = 1; i < arr.size(); ++i) {
                     NJson::TJsonValue tmp2;
-                    TInferredType* it = ExpandAndInfer(arr[i], parseNested, arena, keyDict, valDict, tmp2);
+                    TInferredType* it = ExpandAndInfer(arr[i], parseNested, arena, keyDict, tmp2);
                     r->Items = MergeTypes(arena, r->Items, it);
                     out.AppendValue(std::move(tmp2));
                 }
@@ -312,9 +319,66 @@ TInferredType* ExpandAndInfer(
         }
         default: {
             std::string s = NJson::WriteJson(val, false);
-            uint32_t id = valDict.GetOrAdd(std::string_view(s));
-            out = NJson::TJsonValue(static_cast<long long>(id));
+            out = NJson::TJsonValue(TString(s));
             return arena.Alloc(EKind::String);
+        }
+    }
+}
+
+// Resolves String-typed leaves of `val` (interpreted against the final unified
+// `schema`) into value-dictionary ids, mutating `val` in place. A value lands
+// here as a real string only when its path stayed String; when the schema
+// widened a non-string value to String, its JSON text representation is stored
+// instead. The traversal mirrors SerializeValue() exactly so encoder and
+// decoder stay in sync.
+void CoerceValues(NJson::TJsonValue& val, const TInferredType& schema, TStringDict& valDict) {
+    switch (schema.Kind) {
+        case EKind::Null:
+        case EKind::Boolean:
+        case EKind::Int:
+        case EKind::Long:
+        case EKind::Double:
+            return;
+        case EKind::String: {
+            std::string text;
+            std::string_view repr;
+            if (val.GetType() == NJson::JSON_STRING) {
+                const TStringBuf sv = val.GetString();
+                repr = std::string_view(sv.data(), sv.size());
+            } else {
+                text = NJson::WriteJson(val, false);
+                repr = text;
+            }
+            uint32_t id = valDict.GetOrAdd(repr);
+            val = NJson::TJsonValue(static_cast<long long>(id));
+            return;
+        }
+        case EKind::Nullable:
+            if (val.GetType() != NJson::JSON_NULL) {
+                CoerceValues(val, *schema.Inner, valDict);
+            }
+            return;
+        case EKind::Record: {
+            if (val.GetType() != NJson::JSON_MAP) {
+                return;
+            }
+            auto& map = val.GetMapSafe();
+            for (const auto& [fname, ftype] : schema.Fields) {
+                auto it = map.find(TString(fname.data(), fname.size()));
+                if (it != map.end()) {
+                    CoerceValues(it->second, *ftype, valDict);
+                }
+            }
+            return;
+        }
+        case EKind::Array: {
+            if (val.GetType() != NJson::JSON_ARRAY) {
+                return;
+            }
+            for (auto& item : val.GetArraySafe()) {
+                CoerceValues(item, *schema.Items, valDict);
+            }
+            return;
         }
     }
 }
@@ -815,18 +879,30 @@ TString TSerializer::SerializeArray(const std::shared_ptr<arrow::Array>& binaryJ
             ythrow yexception() << "compact_kv: cannot parse json text from binary json at row " << i;
         }
         docs.emplace_back();
-        TInferredType* rowType = ExpandAndInfer(raw, parseNested, arena, keyDict, valDict, docs.back());
+        TInferredType* rowType = ExpandAndInfer(raw, parseNested, arena, keyDict, docs.back());
         unifiedType = unifiedType ? MergeTypes(arena, unifiedType, rowType) : rowType;
     }
 
-    // Build the Avro schema. If there are no non-null rows, use a trivial schema.
-    std::string schemaJson;
-    if (unifiedType) {
-        if (unifiedType->Kind == EKind::Record) {
-            for (auto& [k, v] : unifiedType->Fields) {
-                v = MakeNullable(arena, v);
-            }
+    // Finalize the unified type. When there are no non-null rows (unifiedType is
+    // null), fall back to an empty record.
+    if (!unifiedType) {
+        unifiedType = arena.Alloc(EKind::Record);
+    } else if (unifiedType->Kind == EKind::Record) {
+        for (auto& [k, v] : unifiedType->Fields) {
+            v = MakeNullable(arena, v);
         }
+    }
+
+    // Resolve string leaves into value-dictionary ids against the final type.
+    // This must run after MergeTypes() so values widened to String are stored
+    // as ids, and before the schema/dictionary are emitted below.
+    for (auto& doc : docs) {
+        CoerceValues(doc, *unifiedType, valDict);
+    }
+
+    // Build the Avro schema.
+    std::string schemaJson;
+    {
         int recordCounter = 0;
         bool stringRefDefined = false;
         schemaJson = ToAvroSchemaJson(*unifiedType, valDict.GetStrings().size(), stringRefDefined, recordCounter);
@@ -834,13 +910,6 @@ TString TSerializer::SerializeArray(const std::shared_ptr<arrow::Array>& binaryJ
             schemaJson = "{\"type\":\"record\",\"name\":\"Row\",\"fields\":"
                          "[{\"name\":\"value\",\"type\":[\"null\"," + schemaJson + "],\"default\":null}]}";
         }
-    } else {
-        // All rows null (or empty): emit an empty record schema.
-        TInferredType emptyRecord(EKind::Record);
-        int recordCounter = 0;
-        bool stringRefDefined = false;
-        schemaJson = ToAvroSchemaJson(emptyRecord, 0, stringRefDefined, recordCounter);
-        unifiedType = arena.Alloc(EKind::Record);
     }
 
     std::vector<uint8_t> rowsRaw = SerializeAvroContainer(docs, *unifiedType, schemaJson);

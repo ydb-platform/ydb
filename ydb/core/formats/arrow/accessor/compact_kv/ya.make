@@ -36,3 +36,7 @@ RECURSE(
     reader
     checker
 )
+
+RECURSE_FOR_TESTS(
+    ut
+)

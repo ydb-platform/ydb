@@ -28,6 +28,17 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
 
   [Examples on GitHub](https://github.com/ydb-platform/ydb-dotnet-sdk/tree/main/examples/src/Topic)
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  [Examples on GitHub](https://github.com/ydb-platform/ydb-js-sdk/tree/main/examples/topic)
+
+- Rust
+
+  [Examples on GitHub](https://github.com/ydb-platform/ydb-rs-sdk/tree/master/ydb/examples) (`topic-writer`, `topic-reader-retry`, `topic-read-in-transaction-example`).
+
+>>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 {% endlist %}
 
 ## Initializing a connection {#init}
@@ -194,7 +205,22 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
     producer: "demo-producer",
   });
   ```
-  
+
+- Rust
+
+  ```rust
+  use ydb::{ClientBuilder, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136/local")?.client()?;
+      client.wait().await?;
+      let mut topic_client = client.topic_client();
+      // topic_client.create_reader(...), create_writer_with_params(...), ...
+      Ok(())
+  }
+  ```
+
 {% endlist %}
 
 ## Managing topics {#manage}
@@ -299,6 +325,22 @@ The topic path is mandatory. Other parameters are optional.
   );
   ```
 
+- Rust
+
+  ```rust
+  use ydb::{Codec, CreateTopicOptionsBuilder, YdbResult};
+
+  topic_client
+      .create_topic(
+          "/local/my-topic".into(),
+          CreateTopicOptionsBuilder::default()
+              .min_active_partitions(3)
+              .supported_codecs(vec![Codec::Raw, Codec::Zstd])
+              .build()?,
+      )
+      .await?;
+  ```
+
 {% endlist %}
 
 ### Updating a topic {#alter-topic}
@@ -379,6 +421,21 @@ When you update a topic, you must specify the topic path and the parameters to b
   );
   ```
 
+- Rust
+
+  ```rust
+  use ydb::{AlterTopicOptionsBuilder, YdbResult};
+
+  topic_client
+      .alter_topic(
+          "/local/my-topic".into(),
+          AlterTopicOptionsBuilder::default()
+              .set_min_active_partitions(Some(5))
+              .build()?,
+      )
+      .await?;
+  ```
+
 {% endlist %}
 
 ### Getting topic information {#describe-topic}
@@ -444,6 +501,19 @@ When you update a topic, you must specify the topic path and the parameters to b
   );
   ```
 
+- Rust
+
+  ```rust
+  use ydb::{DescribeTopicOptionsBuilder, YdbResult};
+
+  let description = topic_client
+      .describe_topic(
+          "/local/my-topic".into(),
+          DescribeTopicOptionsBuilder::default().include_stats(true).build()?,
+      )
+      .await?;
+  ```
+
 {% endlist %}
 
 ### Deleting a topic {#drop-topic}
@@ -491,6 +561,12 @@ To delete a topic, just specify the path to it.
       path: "/path-to-my-topic",
     }),
   );
+  ```
+
+- Rust
+
+  ```rust
+  topic_client.drop_topic("/local/my-topic".into()).await?;
   ```
 
 {% endlist %}
@@ -627,6 +703,22 @@ Only connections with matching [producer and message group](../../concepts/topic
     topic: topicName,
     producer: producerName,
   });
+  ```
+
+- Rust
+
+  ```rust
+  use ydb::{TopicWriter, TopicWriterOptionsBuilder, YdbResult};
+
+  let writer: TopicWriter = topic_client
+      .create_writer_with_params(
+          TopicWriterOptionsBuilder::default()
+              .topic_path("/local/my-topic".into())
+              .producer_id("group-id".into())
+              .message_group_id("group-id".into())
+              .build()?,
+      )
+      .await?;
   ```
 
 {% endlist %}
@@ -793,6 +885,21 @@ Only connections with matching [producer and message group](../../concepts/topic
   await writer.close();
   ```
 
+- Rust
+
+  ```rust
+  use ydb::{TopicWriterMessageBuilder, YdbResult};
+
+  writer
+      .write(
+          TopicWriterMessageBuilder::default()
+              .data(b"payload".to_vec())
+              .build()?,
+      )
+      .await?;
+  writer.stop().await?;
+  ```
+
 {% endlist %}
 
 ### Message writes with storage confirmation on the server
@@ -945,6 +1052,20 @@ Only connections with matching [producer and message group](../../concepts/topic
   await writer.flush();
   ```
 
+- Rust
+
+  ```rust
+  use ydb::{TopicWriterMessageBuilder, YdbResult};
+
+  writer
+      .write_with_ack(
+          TopicWriterMessageBuilder::default()
+              .data(b"payload".to_vec())
+              .build()?,
+      )
+      .await?;
+  ```
+
 {% endlist %}
 
 ### Selecting a codec for message compression {#codec}
@@ -1028,6 +1149,14 @@ For more details on using data compression for topics, see [here](../../concepts
   });
   ```
 
+- Rust
+
+  Per-writer message compression codec is not configurable in the Rust SDK yet; messages are sent with the `Raw` codec.
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
+
 {% endlist %}
 
 ### Writing messages in no-deduplication mode {#nodedup}
@@ -1035,25 +1164,43 @@ For more details on using data compression for topics, see [here](../../concepts
 {% list tabs group=lang %}
 
 - C++
+  If no ProducerId is specified on write session setup, the session runs in no-deduplication mode. The example below demonstrates such a session setup:
 
-If no ProducerId is specified on write session setup, the session runs in no-deduplication mode. The example below demonstrates such a session setup:
+  ```cpp
+  auto settings = NYdb::NTopic::TWriteSessionSettings()
+      .Path(myTopicPath);
+  auto session = topicClient.CreateWriteSession(settings);
+  ```
 
-```cpp
-auto settings = NYdb::NTopic::TWriteSessionSettings()
-    .Path(myTopicPath);
-
-auto session = topicClient.CreateWriteSession(settings);
-```
-
-If, on other hand, you want to ensure deduplication is enabled, you can specify the ProducerId option or call the `DeduplicationEnabled()` method from WriteSessionSettings. The '[Connecting to a topic for message writes](#start-writer)' section has an example of write session that has deduplication enabled.
+  If, on other hand, you want to ensure deduplication is enabled, you can specify the ProducerId option or call the `DeduplicationEnabled()` method from WriteSessionSettings. The '[Connecting to a topic for message writes](#start-writer)' section has an example of write session that has deduplication enabled.
 
 - Go
-
   In **ydb-go-sdk**, when you create a writer without explicitly passing `topicoptions.WithWriterProducerID`, the SDK still assigns a producer ID (it generates one automatically). A mode equivalent to omitting `ProducerId` in the C++ example above is not available in the current SDK version.
 
 - Java
-
   This functionality is not currently supported.
+
+- Python
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -1184,6 +1331,12 @@ All the metadata provided when writing a message is sent to a consumer with the 
     },
   });
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
 
 {% endlist %}
 
@@ -1412,6 +1565,12 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
+
 {% endlist %}
 
 ## Reading messages {#reading}
@@ -1584,6 +1743,16 @@ Topic can have several Consumers and for each of them server stores its own read
   });
   ```
 
+- Rust
+
+  ```rust
+  use ydb::YdbResult;
+
+  let mut reader = topic_client
+      .create_reader("my-consumer", "/local/my-topic")
+      .await?;
+  ```
+
 {% endlist %}
 
 Additional options are used to specify multiple topics and other parameters.
@@ -1704,6 +1873,30 @@ To establish a connection to the `my-topic` and `my-specific-topic` topics using
   });
   ```
 
+- Rust
+
+  ```rust
+  use std::time::{Duration, SystemTime};
+
+  use ydb::{TopicReaderOptionsBuilder, TopicSelector, TopicSelectors, YdbResult};
+
+  let mut reader = topic_client
+      .create_reader_with_params(
+          TopicReaderOptionsBuilder::default()
+              .consumer("my-consumer".into())
+              .topic(TopicSelectors(vec![
+                  TopicSelector::new("/local/my-topic"),
+                  TopicSelector {
+                      path: "/local/my-specific-topic".into(),
+                      partition_ids: None,
+                      read_from: Some(SystemTime::now() - Duration::from_secs(3600)),
+                  },
+              ]))
+              .build()?,
+      )
+      .await?;
+  ```
+
 {% endlist %}
 
 ### Reading messages {#reading-messages}
@@ -1745,6 +1938,15 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Rust
+
+  Full example of reading a topic in a transaction with table writes: [`topic-read-in-transaction-example.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/topic-read-in-transaction-example.rs).
+
+  ```rust
+  let batch = reader.pop_batch_in_tx(&mut tx).await?;
+  // process batch.messages and commit the transaction
+  ```
 
 {% endlist %}
 
@@ -1841,6 +2043,12 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
     }
   }
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 {% endlist %}
 
@@ -1955,6 +2163,12 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
   {
   }
   ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 {% endlist %}
 
@@ -2211,6 +2425,15 @@ If a commit fails with an error, the application should log it and continue; it 
   }
   ```
 
+- Rust
+
+  ```rust
+  let batch = reader.read_batch().await?;
+  reader.commit(batch.get_commit_marker())?;
+  // or with waiting for server acknowledgment:
+  reader.commit_with_ack(batch.get_commit_marker()).await?;
+  ```
+
 {% endlist %}
 
 ### Reading with consumer offset storage on the client side {#client-commit}
@@ -2319,6 +2542,12 @@ Instead of committing messages, the client application may track reading progres
   });
   ```
 
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
+
 {% endlist %}
 
 ### Reading without a Consumer {#no-consumer}
@@ -2381,6 +2610,12 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 {% endlist %}
 
@@ -2582,6 +2817,15 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+- Rust
+
+  Full example of reading a topic in a transaction with table writes: [`topic-read-in-transaction-example.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/topic-read-in-transaction-example.rs).
+
+  ```rust
+  let batch = reader.pop_batch_in_tx(&mut tx).await?;
+  // process batch.messages and commit the transaction
+  ```
+
 {% endlist %}
 
 
@@ -2626,7 +2870,6 @@ In case of a _hard interruption_, the client receives a notification that it is 
        processBatch(batch)
        _ = r.Commit(batch.Context(), batch)
    }
-
    ```
 
 - Python
@@ -2688,6 +2931,14 @@ In case of a _hard interruption_, the client receives a notification that it is 
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Rust
+
+  The Rust SDK handles partition session stop and close events internally; there is no public API to customize soft or hard interruption handling yet.
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 {% endlist %}
 
@@ -2792,6 +3043,14 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+- Rust
+
+  The Rust SDK handles partition session stop and close events internally; there is no public API to customize soft or hard interruption handling yet.
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
+
 {% endlist %}
 
 ### Topic autoscaling {#autoscaling}
@@ -2879,7 +3138,7 @@ In case of a _hard interruption_, the client receives a notification that it is 
     "github.com/ydb-platform/ydb-go-sdk/v3/topic/topicoptions"
     "github.com/ydb-platform/ydb-go-sdk/v3/topic/topictypes"
   )
-  
+
   // full support mode (autoscaling processing in SDK, by default)
   reader, err := db.Topic().StartReader(
     "consumer",
@@ -2975,6 +3234,12 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#311](https://github.com/ydb-platform/ydb-rs-sdk/issues/311)
+
 {% endlist %}
 
 ### Commit outside the reader {#commit-outside-the-reader}
@@ -3002,4 +3267,32 @@ Most often, committing is conveniently done within the reader that has read the 
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
+<<<<<<< HEAD
+=======
+- Java
+
+  ```java
+  TopicClient client = ...;
+
+  String sessionID = reader.getSessionId();
+  // For AsyncReader, the session ID can be obtained when handling SessionStartedEvent
+
+  client.commitOffset(
+      topicPath,
+      CommitOffsetSettings.newBuilder()
+          .setReadSessionId(sessionID)
+          .setPartitionId(partitionID)
+          .setConsumer(consumer)
+          .setOffset(offset)
+          .build()
+  ).join().expectSuccess("Error commit!");
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
+
+>>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 {% endlist %}

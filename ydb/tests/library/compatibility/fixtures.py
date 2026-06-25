@@ -107,7 +107,8 @@ all_binary_combinations_ids_restart = [
 
 class ClusterOperationsWaitMixin:
     def _wait_for_cluster_operations(self):
-        query = """
+        drop_query = """DROP TABLE IF EXISTS `test_readiness`"""
+        create_query = """
             CREATE TABLE `test_readiness` (
             id Int64 NOT NULL,
             PRIMARY KEY (id)
@@ -120,16 +121,19 @@ class ClusterOperationsWaitMixin:
         while time.time() - start_time < timeout:
             try:
                 with ydb.QuerySessionPool(self.driver) as session_pool:
-                    session_pool.execute_with_retries(query, retry_settings=ydb.RetrySettings(max_retries=1))
+                    session_pool.execute_with_retries(drop_query, retry_settings=ydb.RetrySettings(max_retries=1))
+                    session_pool.execute_with_retries(create_query, retry_settings=ydb.RetrySettings(max_retries=1))
                 break
             except Exception as e:
                 last_exception = e
                 time.sleep(interval)
         else:
             raise last_exception
-        query = """DROP TABLE `test_readiness`"""
-        with ydb.QuerySessionPool(self.driver) as session_pool:
-            session_pool.execute_with_retries(query)
+        try:
+            with ydb.QuerySessionPool(self.driver) as session_pool:
+                session_pool.execute_with_retries(drop_query)
+        except Exception:
+            pass
 
 
 class RestartToAnotherVersionFixture(ClusterOperationsWaitMixin):

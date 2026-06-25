@@ -18,6 +18,8 @@ Below are examples of using the {{ ydb-short-name }} SDK built-in tools for bulk
 
   - Native SDK
 
+    {% cut "Bulk upsert with native {{ ydb-short-name }} data" %}
+
   ```go
   package main
 

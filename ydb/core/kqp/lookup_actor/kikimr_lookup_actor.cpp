@@ -687,7 +687,10 @@ namespace NYql::NDq {
             auto columnsCount = KeyType->GetMembersCount();
             Y_ENSURE(columnsCount > 0);
             out << "PRAGMA AnsiInForEmptyOrNullableItemsCollections;\n";
-            out << "DECLARE "<< KeyTupleListName << " AS List<Tuple<";
+            out << "DECLARE "<< KeyTupleListName << " AS List<";
+            if (columnsCount != 1) {
+                out << "Tuple<";
+            }
             char sep = ' ';
             for (ui32 c = 0; c != columnsCount; ++c) {
                 out << sep;
@@ -695,16 +698,25 @@ namespace NYql::NDq {
                 p.Out(out.Out);
                 sep = ',';
             }
-            out << ">>;\n";
+            if (columnsCount != 1) {
+                out << '>';
+            }
+            out << ">;\n";
             MakeSelect(out);
-            out << "\n WHERE AsTuple(";
+            out << "\n WHERE ";
+            if (columnsCount != 1) {
+                out << "AsTuple(";
+            }
             sep = ' ';
             for (ui32 c = 0; c != columnsCount; ++c) {
                 out << sep;
                 Backtick(out.Out, KeyType->GetMemberName(c));
                 sep = ',';
             }
-            out << ") IN " << KeyTupleListName;
+            if (columnsCount != 1) {
+                out << ')';
+            }
+            out << " IN " << KeyTupleListName;
         }
 
         void MakeSelectWithLimit(TStringBuilder& out, ui64 limit, ui64 offset = 0) {
@@ -717,10 +729,15 @@ namespace NYql::NDq {
 
         // must be called with bound Alloc
         void FillKeyTupleList(Ydb::TypedValue& keyTupleList, TLookupState::TPtr& state) {
-            auto& keyTupleTypes = *keyTupleList.mutable_type()->mutable_list_type()->mutable_item()->mutable_tuple_type();
             auto keyColumnsCount = KeyType->GetMembersCount();
-            for (ui32 c = 0; c != keyColumnsCount; ++c) {
-                ExportTypeToProto(KeyType->GetMemberType(c), *keyTupleTypes.add_elements());
+            if (keyColumnsCount != 1) {
+                auto& keyTupleTypes = *keyTupleList.mutable_type()->mutable_list_type()->mutable_item()->mutable_tuple_type();
+                for (ui32 c = 0; c != keyColumnsCount; ++c) {
+                    ExportTypeToProto(KeyType->GetMemberType(c), *keyTupleTypes.add_elements());
+                }
+            } else {
+                auto& keyListType = *keyTupleList.mutable_type()->mutable_list_type()->mutable_item();
+                ExportTypeToProto(KeyType->GetMemberType(0), keyListType);
             }
             auto& list = *keyTupleList.mutable_value();
             auto locked = state->Request.lock();
@@ -730,7 +747,7 @@ namespace NYql::NDq {
             for (const auto& [keys, _]: *locked) {
                 auto& row = *list.add_items();
                 for (ui32 c = 0; c != keyColumnsCount; ++c) {
-                    auto& value = *row.add_items();
+                    auto& value = keyColumnsCount != 1 ? *row.add_items() : row;
                     ExportValueToProto(KeyType->GetMemberType(c), keys.GetElement(c), value);
                 }
             }

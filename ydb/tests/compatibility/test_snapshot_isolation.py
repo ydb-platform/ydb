@@ -203,6 +203,7 @@ class TestSnapshotIsolation(RollingUpgradeAndDowngradeFixture):
         ydb.BadSession,
         ydb.Overloaded,
         ydb.SessionExpired,
+        ydb.Cancelled,
     )
 
     def _updater(self, table_name, stop_event, exec_state, lock):

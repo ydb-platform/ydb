@@ -85,11 +85,10 @@ public:
     }
 
     void Enqueue(STFUNC_SIG) override {
-        ALOG_ERROR(NKikimrServices::TX_ALLOCATOR,
-                    "tablet# " << TabletID() <<
-                    " IGNORING message type# " <<  ev->GetTypeRewrite() <<
-                    " from Sender# " << ev->Sender.ToString() <<
-                    " at StateInit");
+        YDB_LOG_ERROR_COMP(NKikimrServices::TX_ALLOCATOR, "IGNORING message at StateInit",
+            {"tablet", TabletID()},
+            {"type", ev->GetTypeRewrite()},
+            {"fromSender", ev->Sender});
     }
 
     STFUNC(StateWork) {
@@ -99,11 +98,10 @@ public:
             IgnoreFunc(TEvTabletPipe::TEvServerDisconnected);
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
-                ALOG_ERROR(NKikimrServices::TX_ALLOCATOR,
-                            "tablet# " << TabletID() <<
-                            " IGNORING message type# " <<  ev->GetTypeRewrite() <<
-                            " from Sender# " << ev->Sender.ToString() <<
-                            " at StateWork");
+                YDB_LOG_ERROR_COMP(NKikimrServices::TX_ALLOCATOR, "IGNORING message at StateWork",
+                    {"tablet", TabletID()},
+                    {"type", ev->GetTypeRewrite()},
+                    {"fromSender", ev->Sender});
             }
         }
     }

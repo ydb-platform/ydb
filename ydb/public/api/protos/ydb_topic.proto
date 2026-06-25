@@ -152,11 +152,10 @@ message StreamWriteMessage {
         // See enum Codec above for values.
         int32 codec = 2;
 
-        optional TransactionIdentity tx = 3;
-
-        // Deferred topic publish identity.
-        // Must not be set together with tx (KQP transaction).
-        optional DeferredPublishIdentity deferred_publish = 9;
+        oneof write_context {
+            TransactionIdentity tx = 3;
+            DeferredPublishIdentity deferred_publish = 9;
+        }
 
         message MessageData {
             // Message sequence number, provided by client for deduplication. Max sequence number for batch messages.

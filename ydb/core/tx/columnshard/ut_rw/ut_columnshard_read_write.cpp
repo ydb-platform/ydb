@@ -3134,6 +3134,7 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         const TString issuesText = NYql::IssuesFromMessageAsString(scanError->Record.GetIssues());
         UNIT_ASSERT_C(issuesText.Contains("column_id=7"), issuesText);
         UNIT_ASSERT_C(issuesText.Contains("not in schema version"), issuesText);
+        UNIT_ASSERT_C(issuesText.Contains("request_schema_version=1"), issuesText);
     }
 }
 

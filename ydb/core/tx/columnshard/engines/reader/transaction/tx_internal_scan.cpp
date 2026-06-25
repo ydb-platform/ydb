@@ -77,8 +77,14 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
             auto readSchema = read.TableMetadataAccessor->GetSnapshotSchemaVerified(
                 Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedSchemas(), read.GetSnapshot());
             if (auto unknownColumnId = readSchema->GetIndexInfo().FindUnknownColumnId(read.ColumnIds)) {
-                return SendError("column not found in schema",
-                    TStringBuilder() << "column_id=" << *unknownColumnId << " not in schema version " << readSchema->GetVersion(), ctx);
+                TStringBuilder details;
+                details << "column_id=" << *unknownColumnId << " not in schema version " << readSchema->GetVersion();
+                if (request.SchemaVersion) {
+                    details << "; request_schema_version=" << *request.SchemaVersion;
+                }
+
+                details << "; snapshot=" << read.GetSnapshot();
+                return SendError("column not found in schema", details, ctx);
             }
 
             TProgramContainer pContainer;

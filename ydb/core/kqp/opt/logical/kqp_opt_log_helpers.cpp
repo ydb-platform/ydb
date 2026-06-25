@@ -375,18 +375,14 @@ TExprBase RedirectReadToIndex(TExprBase read, const TString& indexName, TExprCon
     auto src = maybeRanges.Cast();
     const auto pos = src.Pos();
 
-    TExprNode::TListType children = src.Ptr()->ChildrenList();
-    TExprNode::TListType newChildren;
-    newChildren.reserve(children.size() + 1);
-    for (size_t i = 0; i < 5 && i < children.size(); ++i) {
-        newChildren.push_back(children[i]);
-    }
-    newChildren.push_back(Build<TCoAtom>(ctx, pos).Value(indexName).Done().Ptr());
-    for (size_t i = 5; i < children.size(); ++i) {
-        newChildren.push_back(children[i]);
-    }
-
-    return TExprBase(ctx.NewCallable(pos, TKqlReadTableIndexRanges::CallableName(), std::move(newChildren)));
+    return Build<TKqlReadTableIndexRanges>(ctx, pos)
+        .Table(src.Table())
+        .Ranges(src.Ranges())
+        .Columns(src.Columns())
+        .Settings(src.Settings())
+        .ExplainPrompt(src.ExplainPrompt())
+        .Index(Build<TCoAtom>(ctx, pos).Value(indexName).Done())
+        .Done();
 }
 
 TCoLambda MakeFilterForRange(TKqlKeyRange range, TExprContext& ctx, TPositionHandle pos, TVector<TString> keyColumns) {

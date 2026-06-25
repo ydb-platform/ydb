@@ -27,6 +27,7 @@
 {% endif %}
 
 При чтении из [топика](../../../../concepts/datamodel/topic.md) в [потоковых запросах](../../../../dev/streaming-query/index.md) можно указывать параметры водяных знаков:
+
 {% include notitle [x](../../../../_includes/watermark_parameters.md) %}
 
 При задании подсказок `SCHEMA` и `COLUMNS` в качестве значения типа type должен быть задан тип [структуры](../../types/containers.md).

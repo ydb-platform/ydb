@@ -800,7 +800,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     Y_UNIT_TEST(AddNonColumnDoesnotReturnInternalError) {
         TKikimrRunner kikimr(TKikimrSettings()
             .SetUseRealThreads(false)
-            .SetDisableMissingDefaultColumnsInBulkUpsert(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); } );
@@ -1607,9 +1606,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(DefaultColumnAndBulkUpsert, DisableMissingDefaultColumnsInBulkUpsert) {
+    Y_UNIT_TEST(DefaultColumnAndBulkUpsert) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetDisableMissingDefaultColumnsInBulkUpsert(DisableMissingDefaultColumnsInBulkUpsert)
             .SetWithSampleTables(false));
 
         auto queryClient = kikimr.GetQueryClient();
@@ -1672,12 +1670,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             rowsBuilder.EndList();
 
             auto result = tableClient.BulkUpsert("/Root/DefaultColumnAndBulkUpsert", rowsBuilder.Build()).ExtractValueSync();
-            if (DisableMissingDefaultColumnsInBulkUpsert) {
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: Value3, Value1");
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-            }
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: Value3, Value1");
         }
     }
 
@@ -2770,7 +2764,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
-            .SetDisableMissingDefaultColumnsInBulkUpsert(true)
             .SetWithSampleTables(false));
 
         auto queryClient = kikimr.GetQueryClient();

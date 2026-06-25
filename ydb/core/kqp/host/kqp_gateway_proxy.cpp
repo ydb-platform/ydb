@@ -641,12 +641,23 @@ static bool FillCreateLocalIndexDesc(NKikimrSchemeOp::TColumnTableDescription& t
                     error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.DataColumns);
                     return false;
                 }
-                auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
-                if (columnIdIt == columnIdsByName.end()) {
+                const NKikimrSchemeOp::TOlapColumnDescription* columnDesc = nullptr;
+                for (auto& column: tableDesc.GetSchema().GetColumns()) {
+                    if (column.GetName() == index.KeyColumns.front()) {
+                        columnDesc = &column;
+                        break;
+                    }
+                }
+                if (!columnDesc) {
                     code = Ydb::StatusIds::BAD_REQUEST;
-                    error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.KeyColumns.front());
+                    TVector<TString> tableColumnNames;
+                    for (const auto& col: tableDesc.GetSchema().GetColumns()) {
+                        tableColumnNames.push_back(col.GetName());
+                    }
+                    error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.KeyColumns.front(), tableColumnNames);
                     return false;
                 }
+                auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
 
                 auto* upsert = tableDesc.MutableSchema()->AddIndexes();
                 upsert->SetId(nextEntityId++);
@@ -654,7 +665,7 @@ static bool FillCreateLocalIndexDesc(NKikimrSchemeOp::TColumnTableDescription& t
                 upsert->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
                 auto* minmax = upsert->MutableMinMaxIndex();
                 minmax->SetColumnId(columnIdIt->second);
-
+                NKikimr::NOlap::NIndexes::NMinMax::SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(*upsert, columnDesc->GetType());
                 break;
             }
             default:
@@ -1067,7 +1078,42 @@ public:
                                         }
                                     }
                                 }
-                                bloomPrefixes[prefix] = fpp;
+
+                                if (AppData()->FeatureFlags.GetEnableLocalIndexAsSchemeObject()) {
+                                    // The named scheme object stores the index columns explicitly, so they
+                                    // must be a genuine leading prefix of the primary key (the engine prefix
+                                    // is length-only and always covers the first N PK columns).
+                                    const auto& pk = metadata->KeyColumnNames;
+                                    bool validPrefix = index.KeyColumns.size() <= pk.size();
+                                    for (size_t i = 0; validPrefix && i < index.KeyColumns.size(); ++i) {
+                                        validPrefix = (index.KeyColumns[i] == pk[i]);
+                                    }
+                                    if (!validPrefix) {
+                                        tablePromise.SetValue(ResultFromError<TGenericResult>(
+                                            "Bloom filter index columns must be a prefix of the primary key"));
+                                        return;
+                                    }
+
+                                    // Mirror the prefix bloom filter as a named TTableIndex scheme object,
+                                    // in addition to the engine-facing ByKeyFilterPrefixes. Two indexes over
+                                    // the same PK prefix would collapse to a single engine prefix, so reject
+                                    // the duplicate column set.
+                                    if (!bloomPrefixes.emplace(prefix, fpp).second) {
+                                        tablePromise.SetValue(ResultFromError<TGenericResult>(
+                                            "Multiple LocalBloomFilter indexes over the same primary-key prefix are not allowed"));
+                                        return;
+                                    }
+                                    auto* indexDesc = schemeTx.MutableCreateIndexedTable()->AddIndexDescription();
+                                    indexDesc->SetName(index.Name);
+                                    indexDesc->SetType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+                                    indexDesc->SetState(NKikimrSchemeOp::EIndexState::EIndexStateReady);
+                                    for (const auto& col : index.KeyColumns) {
+                                        indexDesc->AddKeyColumnNames(col);
+                                    }
+                                    indexDesc->MutableBloomFilterDescription()->SetFalsePositiveProbability(fpp);
+                                } else {
+                                    bloomPrefixes[prefix] = fpp;
+                                }
                             }
                             continue;
                         }
@@ -2439,12 +2485,13 @@ public:
             if (cluster != SessionCtx->GetCluster()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
             }
+            auto metadata = SessionCtx->Tables().GetTable(cluster, req.path()).Metadata;
 
             NKikimrSchemeOp::TModifyScheme schemeTx;
 
             Ydb::StatusIds::StatusCode code;
             TString error;
-            if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, code, error)) {
+            if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, metadata, code, error)) {
                 IKqpGateway::TGenericResult errResult;
                 errResult.AddIssue(NYql::TIssue(error));
                 errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));

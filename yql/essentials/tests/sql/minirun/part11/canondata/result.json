@@ -1225,9 +1225,9 @@
     ],
     "test.test[select_yql-with_cte_graph-default.txt-Debug]": [
         {
-            "checksum": "c5acb5d4407ed571c59dc4942faa987d",
-            "size": 2078,
-            "uri": "https://{canondata_backend}/1923547/08b6cd9a1880e92161a0077149c23102b15d7229/resource.tar.gz#test.test_select_yql-with_cte_graph-default.txt-Debug_/opt.yql"
+            "checksum": "d1a1ecd0a254a6d78f041fb9f2898440",
+            "size": 2158,
+            "uri": "https://{canondata_backend}/1899731/450d16e5954d0f0d78bafa54b230a5d645089cc9/resource.tar.gz#test.test_select_yql-with_cte_graph-default.txt-Debug_/opt.yql"
         }
     ],
     "test.test[select_yql-with_cte_graph-default.txt-Results]": [

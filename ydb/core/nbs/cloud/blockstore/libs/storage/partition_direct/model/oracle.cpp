@@ -101,7 +101,10 @@ TOracle::TOracle(
     , DefaultReadRequestTimeout(StorageConfig->GetReadRequestTimeout())
     , DefaultWriteHedgingDelay(StorageConfig->GetWriteHedgingDelay())
     , DefaultWriteRequestTimeout(StorageConfig->GetWriteRequestTimeout())
-    , DefaultPBufferReplyTimeout(StorageConfig->GetPBufferReplyTimeout())
+    , DefaultIndirectWriteReplyTimeout(
+          StorageConfig->GetIndirectWriteReplyTimeout())
+    , DefaultFlushRequestTimeout(StorageConfig->GetFlushRequestTimeout())
+    , DefaultEraseRequestTimeout(StorageConfig->GetEraseRequestTimeout())
     , DefaultWriteMode(GetWriteModeFromProto(StorageConfig->GetWriteMode()))
     , HostStatistics(DirectBlockGroupHostCount)
     , HostStates(DirectBlockGroupHostCount)
@@ -249,9 +252,19 @@ TDuration TOracle::GetWriteRequestTimeout() const
     return DefaultWriteRequestTimeout;
 }
 
-TDuration TOracle::GetPBufferReplyTimeout() const
+TDuration TOracle::GetIndirectWriteReplyTimeout() const
 {
-    return DefaultPBufferReplyTimeout;
+    return DefaultIndirectWriteReplyTimeout;
+}
+
+TDuration TOracle::GetFlushRequestTimeout() const
+{
+    return DefaultFlushRequestTimeout;
+}
+
+TDuration TOracle::GetEraseRequestTimeout() const
+{
+    return DefaultEraseRequestTimeout;
 }
 
 EWriteMode TOracle::GetWriteMode() const

@@ -3596,6 +3596,9 @@ public:
         MergeRecords(ssContext.IssueRecords);
         context.UpdateMaxStatus(ssContext.GetOverallStatus());
         context.AddIssues(ssContext.IssueRecords);
+        if (ssContext.GetOverallStatus() >= Ydb::Monitoring::StatusFlag::BLUE) {
+            context.HasDegraded = true;
+        }
     }
 
     void FillResult(TOverallStateContext context) {

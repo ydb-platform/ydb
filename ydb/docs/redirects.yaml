@@ -536,7 +536,7 @@ ru:
   - from: /recipes/ydb-sdk/debug-jaeger.md
     to: /reference/ydb-sdk/observability/tracing/jaeger.md
   - from: /recipes/ydb-sdk/debug-otel-tracing.md
-    to: /reference/ydb-sdk/observability/tracing/opentelemetry.md  
+    to: /reference/ydb-sdk/observability/tracing/opentelemetry.md
 
 en:
   - from: /reference/ydb-sdk/recipes/debug-jaeger.md

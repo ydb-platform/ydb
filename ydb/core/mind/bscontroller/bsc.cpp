@@ -67,9 +67,7 @@ TBlobStorageController::TVSlotInfo::TVSlotInfo(TVSlotId vSlotId, TPDiskInfo *pdi
             Group = group;
             group->AddVSlot(this);
         }
-        pdisk->NumActiveSlots += TPDiskConfig::GetOwnerWeight(
-            group->GroupSizeInUnits,
-            pdisk->SlotSizeInUnits);
+        pdisk->NumActiveSlots += pdisk->GetOwnerWeight(group->GroupSizeInUnits);
     }
 }
 
@@ -172,12 +170,10 @@ bool TBlobStorageController::TGroupInfo::FillInResources(
         const TPDiskInfo *pdisk = vslot->PDisk;
         const auto& metrics = pdisk->Metrics;
 
-        ui32 maxSlots = 0;
-        ui32 slotSizeInUnits = 0;
-        pdisk->ExtractInferredPDiskSettings(maxSlots, slotSizeInUnits);
+        const ui32 maxSlots = pdisk->GetEffectiveExpectedSlotCount();
 
         ui64 vdiskSlotSize = 0;
-        const ui32 weight = TPDiskConfig::GetOwnerWeight(GroupSizeInUnits, slotSizeInUnits);
+        const ui32 weight = pdisk->GetOwnerWeight(GroupSizeInUnits);
         if (metrics.HasEnforcedDynamicSlotSize()) {
             vdiskSlotSize = metrics.GetEnforcedDynamicSlotSize() * weight;
         } else if (metrics.GetTotalSize()) {
@@ -895,7 +891,7 @@ void TBlobStorageController::ValidateInternalState() {
             if (!vslot->IsBeingDeleted()) {
                 const TGroupInfo* group = FindGroup(vslot->GroupId);
                 Y_ABORT_UNLESS(group);
-                numActiveSlots += TPDiskConfig::GetOwnerWeight(group->GroupSizeInUnits, pdisk->SlotSizeInUnits);
+                numActiveSlots += pdisk->GetOwnerWeight(group->GroupSizeInUnits);
             }
         }
         Y_ABORT_UNLESS(pdisk->NumActiveSlots == numActiveSlots);

@@ -23,6 +23,65 @@ namespace NBlobStorageNodeWardenTest{
 
 Y_UNIT_TEST_SUITE(TDistconfGenerateConfigTest) {
 
+    Y_UNIT_TEST(AllocateStaticGroupRespectsExpectedSlotSizeFromBaseConfig) {
+        NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
+
+        NKikimrBlobStorage::TStorageConfig config;
+        auto *node = config.AddAllNodes();
+        node->SetNodeId(1);
+        node->MutableLocation()->SetDataCenter("dc-1");
+        node->MutableLocation()->SetRack("rack-1");
+        node->MutableLocation()->SetUnit("unit-1");
+
+        NKikimrBlobStorage::TBaseConfig baseConfig;
+        baseConfig.MutableSettings()->AddDefaultMaxSlots(16);
+
+        auto *pdisk = baseConfig.AddPDisk();
+        pdisk->SetNodeId(1);
+        pdisk->SetPDiskId(1);
+        pdisk->SetPath("/dev/disk1");
+        pdisk->SetType(NKikimrBlobStorage::SSD);
+        pdisk->SetKind(0);
+        pdisk->SetGuid(1);
+        pdisk->SetDriveStatus(NKikimrBlobStorage::ACTIVE);
+        pdisk->SetDecommitStatus(NKikimrBlobStorage::DECOMMIT_NONE);
+        pdisk->SetExpectedSlotCount(4);
+        pdisk->SetExpectedSlotSize(100);
+        pdisk->MutablePDiskConfig()->SetExpectedSlotSize(100);
+        pdisk->MutablePDiskMetrics()->SetTotalSize(1000);
+        pdisk->MutablePDiskMetrics()->SetAvailableSize(1000);
+
+        NKikimrBlobStorage::TGroupGeometry geometry;
+        geometry.SetNumFailRealms(1);
+        geometry.SetNumFailDomainsPerFailRealm(1);
+        geometry.SetNumVDisksPerFailDomain(1);
+
+        try {
+            keeper.AllocateStaticGroup(
+                &config,
+                TGroupId::Zero(),
+                1,
+                TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone),
+                geometry,
+                {},
+                NKikimrBlobStorage::SSD,
+                {},
+                {},
+                200,
+                &baseConfig,
+                false,
+                false,
+                false,
+                TBridgePileId(),
+                std::nullopt);
+            UNIT_FAIL("Expected group allocation to fail");
+        } catch (const NStorage::TDistributedConfigKeeper::TExConfigError& ex) {
+            const TString error = ex.what();
+            UNIT_ASSERT_C(error.Contains("group allocation failed"), error);
+            UNIT_ASSERT_C(error.Contains("-v"), error);
+        }
+    }
+
     NKikimrConfig::TDomainsConfig::TStateStorage GenerateSimpleStateStorage(ui32 nodes, std::unordered_set<ui32> usedNodes = {}, ui32 overrideReplicasInRingCount = 0, ui32 overrideRingsCount = 0, ui32 replicasSpecificVolume = 200) {
         NKikimr::NStorage::TDistributedConfigKeeper keeper(nullptr, nullptr, true);
         NKikimrConfig::TDomainsConfig::TStateStorage ss;

@@ -498,6 +498,7 @@ public:
                 .NumSlots = pair.second.NumSlots,
                 .MaxSlots = equalSlots || location.Rack < 8 ? maxSlots : 2 * maxSlots,
                 .SlotSizeInUnits = pair.second.SlotSizeInUnits,
+                .SlotSizeInBytes = 0,
                 .Groups{g.begin(), g.end()},
                 .SpaceAvailable = 0,
                 .Operational = !nonoperationalDisks.contains(pair.first),
@@ -626,6 +627,33 @@ Y_UNIT_TEST_SUITE(TGroupMapperTest) {
         Ctest << "group after allocation:" << Endl;
         context.DumpGroup(g1);
         context.DumpGroup(g2);
+    }
+
+    Y_UNIT_TEST(SlotSizeInBytesLimitsRequiredSpace) {
+        NActorsInterconnect::TNodeLocation locationProto;
+        locationProto.SetDataCenter("1");
+        locationProto.SetModule("1");
+        locationProto.SetRack("1");
+        locationProto.SetUnit("1");
+
+        TGroupMapper mapper(TTestContext::CreateGroupGeometry(TBlobStorageGroupType::ErasureNone, 1, 1, 1));
+        UNIT_ASSERT(mapper.RegisterPDisk({
+            .PDiskId = TPDiskId(1, 1),
+            .Location = TNodeLocation(locationProto),
+            .Usable = true,
+            .NumSlots = 0,
+            .MaxSlots = 2,
+            .SlotSizeInUnits = 1,
+            .SlotSizeInBytes = 100,
+            .Groups{},
+            .SpaceAvailable = 1000,
+            .Operational = true,
+            .Decommitted = false,
+        }));
+
+        TGroupMapper::TGroupDefinition group;
+        TGroupMapperError error;
+        UNIT_ASSERT_C(!mapper.AllocateGroup(1, group, {}, {}, 2, 150, false, TBridgePileId(), error), error.ErrorMessage);
     }
 
     Y_UNIT_TEST(SimplestMirror3dc) {

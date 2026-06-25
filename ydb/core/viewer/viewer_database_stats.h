@@ -416,6 +416,9 @@ public:
                         if (itPDisk != pDisksIdx.end()) {
                             auto slotSize = itPDisk->second.GetEnforcedDynamicSlotSize();
                             if (!slotSize) {
+                                slotSize = itPDisk->second.GetExpectedSlotSize();
+                            }
+                            if (!slotSize) {
                                 auto slotCount = itPDisk->second.GetExpectedSlotCount();
                                 if (!slotCount) {
                                     unknownSlotSize = true;
@@ -424,7 +427,11 @@ public:
                                 }
                                 slotSize = itPDisk->second.GetTotalSize() / slotCount;
                             }
-                            storageTotal += slotSize * TPDiskConfig::GetOwnerWeight(itGroup->second.GetInfo().GetGroupSizeInUnits(), itPDisk->second.GetSlotSizeInUnits());
+                            const ui32 ownerWeight = TPDiskConfig::GetOwnerWeight(
+                                itGroup->second.GetInfo().GetGroupSizeInUnits(),
+                                itPDisk->second.GetSlotSizeInUnits(),
+                                itPDisk->second.GetExpectedSlotSize());
+                            storageTotal += slotSize * ownerWeight;
                         } else {
                             unknownPDisk = true;
                         }

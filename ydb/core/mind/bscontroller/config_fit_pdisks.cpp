@@ -109,7 +109,7 @@ namespace NKikimr {
                         }
                         const TBlobStorageController::TGroupInfo *group = state.Groups.Find(vslot->GroupId);
                         Y_ABORT_UNLESS(group);
-                        numActiveSlots += TPDiskConfig::GetOwnerWeight(group->GroupSizeInUnits, pdiskInfo->SlotSizeInUnits);
+                        numActiveSlots += pdiskInfo->GetOwnerWeight(group->GroupSizeInUnits);
                     }
                     pdiskInfo->NumActiveSlots = numActiveSlots;
                 }

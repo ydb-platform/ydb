@@ -227,7 +227,14 @@ void CopyFromConfigResponse(const NKikimrBlobStorage::TConfigResponse &from, Ydb
             newDrive->set_shared_with_os(drive.GetSharedWithOs());
             newDrive->set_read_centric(drive.GetReadCentric());
             newDrive->set_kind(drive.GetKind());
-            newDrive->set_expected_slot_count(hostConfig.GetDefaultHostPDiskConfig().GetExpectedSlotCount());
+            const auto& pdiskConfig = drive.HasPDiskConfig()
+                ? drive.GetPDiskConfig()
+                : hostConfig.GetDefaultHostPDiskConfig();
+            if (pdiskConfig.GetExpectedSlotSize()) {
+                newDrive->set_expected_slot_size(pdiskConfig.GetExpectedSlotSize());
+            } else {
+                newDrive->set_expected_slot_count(pdiskConfig.GetExpectedSlotCount());
+            }
         }
     }
     auto boxes = boxStatus.GetBox();

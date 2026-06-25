@@ -673,7 +673,11 @@ message TInferPDiskSlotCountForDriveTypeSettings {
     // where SlotSizeInUnits = 2^N is chosen to meet ExpectedSlotCount <= MaxSlots
     optional uint64 UnitSize = 1; // in bytes
     optional uint32 MaxSlots = 2;
-    optional bool PreferInferredSettingsOverExplicit = 3; // Unless true, PDisk.ExpectedSlotCount overrides inferred settings
+    // Unless true, explicit PDisk slot settings override inferred settings.
+    optional bool PreferInferredSettingsOverExplicit = 3;
+    // SlotSize is used as PDiskConfig ExpectedSlotSize for this drive type.
+    // It is mutually exclusive with UnitSize and requires MaxSlots as slot-count cap.
+    optional uint64 SlotSize = 4; // in bytes
 }
 
 message TInferPDiskSlotCountSettings {
@@ -830,6 +834,7 @@ message TBaseConfig {
         TMaintenanceStatus.E MaintenanceStatus = 20;
         reserved 21; // uint64 InferPDiskSlotCountFromUnitSize = 21
         reserved 22; // uint32 InferPDiskSlotCountMax = 22
+        uint64 ExpectedSlotSize = 23;
     }
     message TVSlot {
         message TDonorDisk {

@@ -142,9 +142,10 @@ struct TPDiskConfig : public TThrRefBase {
     ui32 IoPieceSizeBytes = 0;
     bool UseSpdkNvmeDriver;
 
-    // Next 2 are either user-defined or inferred from drive size
+    // Slot sizing settings are either user-defined or inferred from drive size
     ui32 ExpectedSlotCount = 0;
     ui32 SlotSizeInUnits = 0;
+    ui64 ExpectedSlotSize = 0;
 
     // Free chunk permille that triggers Cyan color (e.g. 100 is 10%). Between 130 (default) and 13.
     ui32 ChunkBaseLimit = 130;
@@ -335,6 +336,7 @@ struct TPDiskConfig : public TThrRefBase {
         str << " MaxQueuedCompletionActions# " << MaxQueuedCompletionActions << x;
         str << " IoPieceSizeBytes# " << IoPieceSizeBytes << x;
         str << " ExpectedSlotCount# " << ExpectedSlotCount << x;
+        str << " ExpectedSlotSize# " << ExpectedSlotSize << x;
         str << " SlotSizeInUnits# " << SlotSizeInUnits << x;
 
         str << " ReserveLogChunksMultiplier# " << ReserveLogChunksMultiplier << x;
@@ -431,6 +433,10 @@ struct TPDiskConfig : public TThrRefBase {
             ExpectedSlotCount = cfg->GetExpectedSlotCount();
         }
 
+        if (cfg->HasExpectedSlotSize()) {
+            ExpectedSlotSize = cfg->GetExpectedSlotSize();
+        }
+
         if (cfg->HasChunkBaseLimit()) {
             ui32 limit = cfg->GetChunkBaseLimit();
             limit = Min<ui32>(130, limit);
@@ -462,7 +468,11 @@ struct TPDiskConfig : public TThrRefBase {
     }
 
     ui32 GetOwnerWeight(ui32 groupSizeInUnits) {
-        return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits);
+        return TPDiskConfig::GetOwnerWeight(groupSizeInUnits, SlotSizeInUnits, ExpectedSlotSize);
+    }
+
+    static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 slotSizeInUnits, ui64 expectedSlotSize) {
+        return expectedSlotSize ? 1 : GetOwnerWeight(groupSizeInUnits, slotSizeInUnits);
     }
 
     static ui32 GetOwnerWeight(ui32 groupSizeInUnits, ui32 slotSizeInUnits) {
@@ -473,6 +483,7 @@ struct TPDiskConfig : public TThrRefBase {
 };
 
 struct TInferPDiskSlotCountSettingsForDriveType {
+    ui64 SlotSize = 0;
     ui64 UnitSize = 0;
     ui32 MaxSlots = 0;
     bool PreferInferredSettingsOverExplicit = false;
@@ -480,12 +491,14 @@ struct TInferPDiskSlotCountSettingsForDriveType {
     TInferPDiskSlotCountSettingsForDriveType(const NKikimrBlobStorage::TInferPDiskSlotCountSettings& settings, NPDisk::EDeviceType type) {
         switch (type) {
             case NPDisk::DEVICE_TYPE_ROT:
+                SlotSize = settings.GetRot().GetSlotSize();
                 UnitSize = settings.GetRot().GetUnitSize();
                 MaxSlots = settings.GetRot().GetMaxSlots();
                 PreferInferredSettingsOverExplicit = settings.GetRot().GetPreferInferredSettingsOverExplicit();
                 break;
             case NPDisk::DEVICE_TYPE_SSD:
             case NPDisk::DEVICE_TYPE_NVME:
+                SlotSize = settings.GetSsd().GetSlotSize();
                 UnitSize = settings.GetSsd().GetUnitSize();
                 MaxSlots = settings.GetSsd().GetMaxSlots();
                 PreferInferredSettingsOverExplicit = settings.GetSsd().GetPreferInferredSettingsOverExplicit();
@@ -496,7 +509,7 @@ struct TInferPDiskSlotCountSettingsForDriveType {
     }
 
     explicit operator bool() const {
-        return UnitSize && MaxSlots;
+        return (SlotSize || UnitSize) && MaxSlots;
     }
 };
 

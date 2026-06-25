@@ -301,6 +301,7 @@ public:
                 // Clear cache after each object because
                 // values allocated on another allocator and should be released
                 Converter.ClearCache();
+                WorkerHolder->Invalidate();
                 WorkerHolder->GetGraph().Invalidate();
             };
 
@@ -340,6 +341,7 @@ void TInputSpecTraits<TMessageInputSpec>::PreparePullStreamWorker(
 ) {
     with_lock(worker->GetScopedAlloc()) {
         Y_DEFER {
+            worker->Invalidate();
             worker->GetGraph().Invalidate();
         };
 
@@ -355,6 +357,7 @@ void TInputSpecTraits<TMessageInputSpec>::PreparePullListWorker(
 ) {
     with_lock(worker->GetScopedAlloc()) {
         Y_DEFER {
+            worker->Invalidate();
             worker->GetGraph().Invalidate();
         };
 

@@ -28,3 +28,5 @@ local_pg_wire_config:
 ```
 
 Также pgwire можно включить через скрытую опцию командной строки `ydbd` `--pgwire-port` — при этом `enable_local_pg_wire` выставляется в `true` автоматически.
+
+В локальном Docker-образе {{ ydb-short-name }} pgwire включён по умолчанию через переменную окружения `YDB_ENABLE_LOCAL_PGWIRE` (значение по умолчанию `1`). Это отделено от `YDB_EXPERIMENTAL_PG`, которая включает дополнительные экспериментальные feature flags и по умолчанию выключена.

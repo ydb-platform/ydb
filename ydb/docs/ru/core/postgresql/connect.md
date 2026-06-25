@@ -10,7 +10,7 @@
 
 ## Нативный сетевой протокол PostgreSQL {#pgwire}
 
-Слушатель pgwire по умолчанию **отключён** на узлах `ydbd`. Чтобы включить его в конфигурации кластера, задайте `enable_local_pg_wire: true` в секции [`local_pg_wire_config`](../reference/configuration/local_pg_wire_config.md). В [локальном Docker-образе](../reference/docker/start.md) pgwire включён по умолчанию.
+Слушатель pgwire по умолчанию **отключён** на узлах `ydbd`. Чтобы включить его в конфигурации кластера, задайте `enable_local_pg_wire: true` в секции [`local_pg_wire_config`](../reference/configuration/local_pg_wire_config.md). В [локальном Docker-образе](../reference/docker/start.md) pgwire включён по умолчанию через `YDB_ENABLE_LOCAL_PGWIRE`. Переменная `YDB_EXPERIMENTAL_PG` включает дополнительные экспериментальные feature flags и по умолчанию не задана.
 
 Для подключения к {{ ydb-name }} через PostgreSQL-протокол можно использовать любые клиентские библиотеки и приложения, поддерживающие этот протокол. Ниже приведен пример подключения с помощью утилиты `psql`, входящей в комплект поставки PostgreSQL.
 

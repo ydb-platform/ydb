@@ -53,7 +53,7 @@ To preserve the container's state, you need to remove the environment variable `
 
 After launching the container, you can connect to it via PostgreSQL clients on port 5432, the database `local`, or open the [web interface](http://localhost:8765) on port 8765.
 
-To disable pgwire in the container, set `YDB_EXPERIMENTAL_PG=0`.
+The local Docker image enables the pgwire listener by default. To disable it, set `YDB_ENABLE_LOCAL_PGWIRE=0`. To additionally enable experimental PostgreSQL compatibility feature flags, set `YDB_EXPERIMENTAL_PG=1`.
 
 ## Connecting to the Running Container via psql
 

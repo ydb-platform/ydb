@@ -1104,11 +1104,11 @@ void TDirectBlockGroup::DoEstablishConnections()
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     for (size_t i = 0; i < DDiskConnections.size(); ++i) {
-        DoEstablishConnection(i, DDiskConnections[i]);
+        DoEstablishConnection(i, EConnectionType::DDisk);
     }
 
     for (size_t i = 0; i < PBufferConnections.size(); ++i) {
-        DoEstablishConnection(i, PBufferConnections[i]);
+        DoEstablishConnection(i, EConnectionType::PBuffer);
     }
 
     DoListPBuffers();
@@ -1116,12 +1116,15 @@ void TDirectBlockGroup::DoEstablishConnections()
 
 void TDirectBlockGroup::DoEstablishConnection(
     size_t index,
-    TDDiskConnection& connection)
+    EConnectionType connectionType)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
+    auto& connection = connectionType == EConnectionType::DDisk
+                           ? DDiskConnections[index]
+                           : PBufferConnections[index];
     ui64& actualSeqNo = connection.HostConnection.Credentials.DDiskSessionSeqNo;
-    if (connection.HostConnection.ConnectionType == EConnectionType::DDisk) {
+    if (connectionType == EConnectionType::DDisk) {
         actualSeqNo++;
 
         LOG_INFO(

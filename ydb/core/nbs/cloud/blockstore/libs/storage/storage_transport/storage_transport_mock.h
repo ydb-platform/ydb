@@ -1,14 +1,13 @@
 #pragma once
 
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
+#include "storage_transport.h"
 
 #include <ydb/core/protos/blobstorage_ddisk.pb.h>
 
 #include <library/cpp/threading/future/future.h>
 
+#include <util/generic/map.h>
 #include <util/generic/yexception.h>
-
-#include <map>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
 
@@ -145,11 +144,10 @@ private:
 
     [[nodiscard]] static TKey MakeKey(const THostConnection& connection);
 
-    std::map<TKey, TConnectPromise> PendingConnects;
+    TMap<TKey, TConnectPromise> PendingConnects;
     // ConnectCredentials stores the credentials of every Connect() call
     // observed for the given (type, ddiskId), ordered by call.
-    std::map<TKey, TVector<NKikimr::NDDisk::TQueryCredentials>>
-        ConnectCredentials;
+    TMap<TKey, TVector<NKikimr::NDDisk::TQueryCredentials>> ConnectCredentials;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

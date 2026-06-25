@@ -57,7 +57,7 @@ sequenceDiagram
 
 Параметры настройки:
 
-{% include [watermark_parameters.md](../../_includes/watermark_parameters.md) %}
+{% include notitle [x](../../../../_includes/watermark_parameters.md) %}
 
 {% note warning %}
 

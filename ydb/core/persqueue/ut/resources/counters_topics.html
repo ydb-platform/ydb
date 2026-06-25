@@ -1,9 +1,14 @@
 <pre>
 host=:
+
     database=/Root:
+
         cloud_id=cloud_id:
+
             folder_id=folder_id:
+
                 database_id=database_id:
+
                     topic=topic:
                         name=topic.partition.active_count: 1
                         name=topic.partition.alive_count: 1
@@ -35,6 +40,7 @@ host=:
                         name=topic.reserve.limit_bytes: 0
                         name=topic.reserve.used_bytes: 0
                         name=topic.storage_bytes: 0
+
                         consumer=client:
                             name=topic.committed_lag_messages: 30
                             name=topic.partition.alive_count: 1

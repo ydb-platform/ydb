@@ -2025,7 +2025,9 @@ public:
 
             Node_ = Y("block", Q(L(block, Y("return", "res"))));
         } else {
-            Node_ = ctx.EnableSystemColumns ? Y("RemoveSystemMembers", "row") : BuildAtom(Pos_, "row", 0);
+            Node_ = ctx.EnableSystemColumns
+                        ? RemoveSystemColumns(AstNode(TString("row")), ctx.Settings.ExtraSystemColumnPrefixes)
+                        : BuildAtom(Pos_, "row", 0);
         }
         return true;
     }
@@ -2068,7 +2070,9 @@ bool TTableRows::DoInit(TContext& ctx, ISource* /*src*/) {
         ctx.Error(Pos_) << "TableRows requires exactly 0 arguments";
         return false;
     }
-    Node_ = ctx.EnableSystemColumns ? Y("RemoveSystemMembers", "inputRowsList") : BuildAtom(Pos_, "inputRowsList", 0);
+    Node_ = ctx.EnableSystemColumns
+                ? RemoveSystemColumns(AstNode(TString("inputRowsList")), ctx.Settings.ExtraSystemColumnPrefixes)
+                : BuildAtom(Pos_, "inputRowsList", 0);
     return true;
 }
 

@@ -311,8 +311,7 @@ void TPartition::HandleOnInit(TEvPQ::TEvPartitionOffsets::TPtr& ev, const TActor
 
 std::pair<TInstant, TInstant> TPartition::GetTime(const TUserInfo& userInfo, ui64 offset) const {
     TInstant wtime = userInfo.WriteTimestamp > TInstant::Zero() ? userInfo.WriteTimestamp : GetWriteTimeEstimate(offset);
-    TInstant ctime = userInfo.CreateTimestamp > TInstant::Zero() ? userInfo.CreateTimestamp : wtime;
-    return std::make_pair(wtime, ctime);
+    return std::make_pair(wtime, userInfo.CreateTimestamp);
 }
 
 void TPartition::Handle(TEvPQ::TEvGetClientOffset::TPtr& ev, const TActorContext& ctx) {

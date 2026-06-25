@@ -31,6 +31,7 @@ TConclusion<bool> TSnapshotFilter::DoExecuteInplace(
             return true;
         }
     }
+    AFL_VERIFY(filter.IsTotalAllowFilter());
     source->MutableStageData().AddFilter(filter);
     return true;
 }

@@ -1,4 +1,6 @@
+import glob
 import logging
+import os
 import socket
 import time
 import requests
@@ -9,7 +11,9 @@ import pytest
 
 from ydb.tests.oss.ydb_sdk_import import ydb
 from ydb.tests.library.harness.kikimr_cluster import kikimr_cluster_factory
+from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
+from ydb.tests.library.harness.util import LogLevels
 from ydb.tests.library.common.types import Erasure
 
 logger = logging.getLogger(__name__)
@@ -18,15 +22,37 @@ logger = logging.getLogger(__name__)
 WARMUP_DEADLINE_SECONDS = 30
 NODE_READY_TIMEOUT_SECONDS = 600
 
-WARMUP_QUERIES = [
-    "SELECT 1 + 1 AS result",
-    "SELECT 2 * 3 AS result",
-    "SELECT 100 / 4 AS result",
-    "SELECT LENGTH('test string') AS len",
-    "SELECT COALESCE(NULL, 'default') AS val",
-    "SELECT IF(1 > 0, 'yes', 'no') AS answer",
-]
-WARMUP_QUERY_PARAM = "DECLARE $val AS Int64; SELECT $val + 1 AS result"
+
+def _heavy_query(seed):
+    # Heavy on purpose: sub-ms queries round Warmup/SavedCompileMs to 0 and break TestWarmupCounters; the multi-way JOIN costs ~10+ ms to compile. seed = distinct cache entry.
+    return (
+        "$t = AsList("
+        "AsStruct(1 AS k, {0} AS v), "
+        "AsStruct(2 AS k, {0} + 1 AS v), "
+        "AsStruct(3 AS k, {0} + 2 AS v)); "
+        "SELECT a.v + b.v + c.v + d.v AS s "
+        "FROM AS_TABLE($t) AS a "
+        "JOIN AS_TABLE($t) AS b ON a.k = b.k "
+        "JOIN AS_TABLE($t) AS c ON b.k = c.k "
+        "JOIN AS_TABLE($t) AS d ON c.k = d.k "
+        "ORDER BY s"
+    ).format(seed)
+
+
+WARMUP_QUERIES = [_heavy_query(seed) for seed in (101, 202, 303, 404, 505, 606)]
+WARMUP_QUERY_PARAM = (
+    "DECLARE $val AS Int64; "
+    "$t = AsList("
+    "AsStruct(1 AS k, $val AS v), "
+    "AsStruct(2 AS k, $val + 1 AS v), "
+    "AsStruct(3 AS k, $val + 2 AS v)); "
+    "SELECT a.v + b.v + c.v + d.v AS s "
+    "FROM AS_TABLE($t) AS a "
+    "JOIN AS_TABLE($t) AS b ON a.k = b.k "
+    "JOIN AS_TABLE($t) AS c ON b.k = c.k "
+    "JOIN AS_TABLE($t) AS d ON c.k = d.k "
+    "ORDER BY s"
+)
 WARMUP_PARAM_VALUES = {"$val": 42}
 
 
@@ -389,9 +415,8 @@ def _make_warmup_config(nodes=3, max_nodes_to_request=None,
     return config
 
 
-class TestWarmupBasic:
-    """Basic warmup scenarios: Table API, Query API, simultaneous restart, concurrent queries.
-    Single 3-node cluster, single cache populate, multiple restart scenarios."""
+class TestWarmupRestart:
+    """Restart -> warmup refills cache -> queries served: Table/Query API, concurrent, and stress restarts on one 3-node cluster."""
 
     @classmethod
     def setup_class(cls):
@@ -523,42 +548,23 @@ class TestWarmupBasic:
         self._restart_node(node3, sleep_after=3)
         self._assert_warmup(node3, "Concurrent")
 
+        # Warmed and fresh queries must all succeed while the node is warming;
+        # counter attribution (hits/misses/saved_ms) is owned by TestWarmupCounters.
         warmed_queries = list(WARMUP_QUERIES)
 
-        # 4a: Table API
         fresh_table = [
             f"SELECT 7919 + {i} AS unique_warmup_miss_probe_t_{i}"
             for i in range(6)
         ]
-        ctrs_before_4a = CompileCacheView.get_warmup_window_counters(node3)
-        logger.info("[Concurrent/3a Table] window before: %s", ctrs_before_4a)
-
         ok_t, errors_t = self._run_pinned_queries_table_api(
             node3, warmed_queries + fresh_table,
         )
         for e in errors_t:
-            logger.warning("[Concurrent/3a Table] pinned query failed: %r", e)
-        logger.info(
-            "[Concurrent/3a Table] OK: %d/%d", ok_t, len(warmed_queries) + len(fresh_table),
-        )
+            logger.warning("[Concurrent/Table] pinned query failed: %r", e)
         assert ok_t == len(warmed_queries) + len(fresh_table), (
-            f"[Concurrent/3a Table] Expected all queries OK, got {ok_t}"
+            f"[Concurrent/Table] Expected all queries OK, got {ok_t}"
         )
 
-        ctrs_after_4a = CompileCacheView.get_warmup_window_counters(node3)
-        logger.info("[Concurrent/3a Table] window after: %s", ctrs_after_4a)
-        d_hits_4a = ctrs_after_4a["hits"] - ctrs_before_4a["hits"]
-        d_misses_4a = ctrs_after_4a["misses"] - ctrs_before_4a["misses"]
-        assert d_hits_4a >= len(warmed_queries), (
-            f"[Concurrent/3a Table] Warmed queries pinned to node3 must bump "
-            f"Warmup/HitsInWindow >= {len(warmed_queries)}, got delta={d_hits_4a}, ctrs={ctrs_after_4a}"
-        )
-        assert d_misses_4a >= len(fresh_table), (
-            f"[Concurrent/3a Table] Fresh probes pinned to node3 must bump "
-            f"Warmup/MissesInWindow >= {len(fresh_table)}, got delta={d_misses_4a}, ctrs={ctrs_after_4a}"
-        )
-
-        # 4b: Query API
         fresh_query = [
             f"SELECT 7919 + {i} AS unique_warmup_miss_probe_q_{i}"
             for i in range(6)
@@ -567,51 +573,12 @@ class TestWarmupBasic:
             node3, warmed_queries + fresh_query,
         )
         for e in errors_q:
-            logger.warning("[Concurrent/3b Query] pinned query failed: %r", e)
-        logger.info(
-            "[Concurrent/3b Query] OK: %d/%d", ok_q, len(warmed_queries) + len(fresh_query),
-        )
+            logger.warning("[Concurrent/Query] pinned query failed: %r", e)
         assert ok_q == len(warmed_queries) + len(fresh_query), (
-            f"[Concurrent/3b Query] Expected all queries OK, got {ok_q}"
+            f"[Concurrent/Query] Expected all queries OK, got {ok_q}"
         )
 
-        ctrs_after_4b = CompileCacheView.get_warmup_window_counters(node3)
-        logger.info("[Concurrent/3b Query] window after: %s", ctrs_after_4b)
-        d_hits_4b = ctrs_after_4b["hits"] - ctrs_after_4a["hits"]
-        d_misses_4b = ctrs_after_4b["misses"] - ctrs_after_4a["misses"]
-        assert d_hits_4b >= len(warmed_queries), (
-            f"[Concurrent/3b Query] Warmed queries pinned to node3 must bump "
-            f"Warmup/HitsInWindow >= {len(warmed_queries)}, got delta={d_hits_4b}, ctrs={ctrs_after_4b}"
-        )
-        assert d_misses_4b >= len(fresh_query), (
-            f"[Concurrent/3b Query] Fresh probes pinned to node3 must bump "
-            f"Warmup/MissesInWindow >= {len(fresh_query)}, got delta={d_misses_4b}, ctrs={ctrs_after_4b}"
-        )
-
-        logger.info("ALL 3 BASIC SCENARIOS PASSED (incl. 3a Table + 3b Query)")
-
-
-class TestWarmupStress:
-    """Stress warmup scenarios: multiple restarts, rolling restart, full cluster restart."""
-
-    @classmethod
-    def setup_class(cls):
-        cls.config = _make_warmup_config(nodes=3)
-        cls.cluster = kikimr_cluster_factory(cls.config)
-        cls.cluster.start()
-        cls.driver = ydb.Driver(
-            endpoint=f"grpc://localhost:{cls.cluster.nodes[1].port}",
-            database="/Root",
-        )
-        cls.driver.wait(timeout=10)
-        cls.cache = CompileCacheView(cls.cluster)
-
-    @classmethod
-    def teardown_class(cls):
-        if hasattr(cls, "driver"):
-            cls.driver.stop()
-        if hasattr(cls, "cluster"):
-            cls.cluster.stop()
+        logger.info("ALL 3 RESTART SCENARIOS PASSED")
 
     def test_warmup_stress(self):
         all_node_ids = sorted(self.cluster.nodes.keys())
@@ -897,136 +864,67 @@ class TestCompileCacheViewPeerWarnings:
             time.sleep(3)
 
 
-class TestWarmupSingleNode:
+class TestWarmupSkip:
+    """Warmup skips cleanly (fetched=0, window stays closed, cluster still serves) when there is nothing to warm: a single node with no peers, or a cold multi-node start with empty caches."""
+
     SOFT_DEADLINE_SECONDS = 10
     HARD_DEADLINE_SECONDS = 12
 
-    @classmethod
-    def setup_class(cls):
-        cls.config = _make_warmup_config(
-            nodes=1,
-            soft_deadline_seconds=cls.SOFT_DEADLINE_SECONDS,
-            hard_deadline_seconds=cls.HARD_DEADLINE_SECONDS,
+    @contextmanager
+    def _cluster(self, nodes):
+        config = _make_warmup_config(
+            nodes=nodes,
+            soft_deadline_seconds=self.SOFT_DEADLINE_SECONDS,
+            hard_deadline_seconds=self.HARD_DEADLINE_SECONDS,
         )
-        cls.cluster = kikimr_cluster_factory(cls.config)
-        cls.cluster.start()
-        cls.driver = ydb.Driver(
-            endpoint=f"grpc://localhost:{cls.cluster.nodes[1].port}",
-            database="/Root",
-        )
-        cls.driver.wait(timeout=10)
-        cls.cache = CompileCacheView(cls.cluster)
-
-    @classmethod
-    def teardown_class(cls):
-        if hasattr(cls, "driver"):
-            cls.driver.stop()
-        if hasattr(cls, "cluster"):
-            cls.cluster.stop()
-
-    def test_warmup_skips_on_single_node(self):
-        node = self.cluster.nodes[1]
-
-        wait_seconds = 3
-        logger.info("Waiting %ds past warmup hard deadline before reading counters", wait_seconds)
-        time.sleep(wait_seconds)
-
-        counters = CompileCacheView.get_warmup_counters(node, verbose=True)
-        fetched = counters.get("Warmup/QueriesFetched", 0)
-        compiled = counters.get("Warmup/QueriesCompiled", 0)
-        logger.info("SingleNode counters: %s", counters)
-
-        assert fetched == 0, f"[SingleNode] Expected QueriesFetched=0, got {fetched}"
-        assert compiled == 0, f"[SingleNode] Expected QueriesCompiled=0, got {compiled}"
-
-        pool = ydb.SessionPool(self.driver)
+        cluster = kikimr_cluster_factory(config)
+        cluster.start()
+        driver = ydb.Driver(endpoint=f"grpc://localhost:{cluster.nodes[1].port}", database="/Root")
+        driver.wait(timeout=10)
         try:
-            def _do(session):
-                return session.transaction().execute(
-                    "SELECT 1 + 1 AS r",
-                    commit_tx=True,
-                    settings=ydb.BaseRequestSettings().with_timeout(10),
-                )
-            result = pool.retry_operation_sync(_do)
-            assert result[0].rows[0].r == 2, "Cluster must serve queries after warmup skip"
+            yield cluster, driver
         finally:
-            pool.stop()
+            driver.stop()
+            cluster.stop()
 
-        # HitsInWindow/MissesInWindow only attribute to in-window inserts;
-        # without warmup inserts the window stays closed.
-        window = CompileCacheView.get_warmup_window_counters(node)
-        logger.info("[SingleNode] window counters after client query: %s", window)
-        assert window["hits"] == 0 and window["misses"] == 0, (
-            f"[SingleNode] Observation window must not open without warmup inserts, got {window}"
-        )
-
-        logger.info("SingleNode skip scenario PASSED")
-
-
-class TestWarmupMultiNodeColdStart:
-    SOFT_DEADLINE_SECONDS = 10
-    HARD_DEADLINE_SECONDS = 12
-
-    @classmethod
-    def setup_class(cls):
-        cls.config = _make_warmup_config(
-            nodes=3,
-            soft_deadline_seconds=cls.SOFT_DEADLINE_SECONDS,
-            hard_deadline_seconds=cls.HARD_DEADLINE_SECONDS,
-        )
-        cls.cluster = kikimr_cluster_factory(cls.config)
-        cls.cluster.start()
-        cls.driver = ydb.Driver(
-            endpoint=f"grpc://localhost:{cls.cluster.nodes[1].port}",
-            database="/Root",
-        )
-        cls.driver.wait(timeout=10)
-        cls.cache = CompileCacheView(cls.cluster)
-
-    @classmethod
-    def teardown_class(cls):
-        if hasattr(cls, "driver"):
-            cls.driver.stop()
-        if hasattr(cls, "cluster"):
-            cls.cluster.stop()
-
-    def test_warmup_cold_start_no_queries(self):
-        wait_seconds = 4
-        logger.info("Waiting %ds past warmup hard deadline before reading counters", wait_seconds)
-        time.sleep(wait_seconds)
-
-        for nid in sorted(self.cluster.nodes.keys()):
-            node = self.cluster.nodes[nid]
-            counters = CompileCacheView.get_warmup_counters(node, verbose=True)
+    @staticmethod
+    def _assert_skipped_and_serving(cluster, driver, label):
+        time.sleep(5)
+        for nid in sorted(cluster.nodes.keys()):
+            counters = CompileCacheView.get_warmup_counters(cluster.nodes[nid], verbose=True)
             fetched = counters.get("Warmup/QueriesFetched", 0)
             compiled = counters.get("Warmup/QueriesCompiled", 0)
-            logger.info("[ColdStart] node %d counters: %s", nid, counters)
-            assert fetched == 0, f"[ColdStart] node {nid}: expected QueriesFetched=0, got {fetched}"
-            assert compiled == 0, f"[ColdStart] node {nid}: expected QueriesCompiled=0, got {compiled}"
+            logger.info("[%s] node %d counters: %s", label, nid, counters)
+            assert fetched == 0, f"[{label}] node {nid}: expected QueriesFetched=0, got {fetched}"
+            assert compiled == 0, f"[{label}] node {nid}: expected QueriesCompiled=0, got {compiled}"
 
-        pool = ydb.SessionPool(self.driver)
+        pool = ydb.SessionPool(driver)
         try:
-            def _do(session):
-                return session.transaction().execute(
-                    "SELECT 1 + 1 AS r",
-                    commit_tx=True,
+            result = pool.retry_operation_sync(
+                lambda s: s.transaction().execute(
+                    "SELECT 1 + 1 AS r", commit_tx=True,
                     settings=ydb.BaseRequestSettings().with_timeout(10),
                 )
-            result = pool.retry_operation_sync(_do)
-            assert result[0].rows[0].r == 2, "Cluster must serve queries after cold-start warmup"
+            )
+            assert result[0].rows[0].r == 2, f"[{label}] cluster must serve queries after warmup skip"
         finally:
             pool.stop()
 
-        for nid in sorted(self.cluster.nodes.keys()):
-            node = self.cluster.nodes[nid]
-            window = CompileCacheView.get_warmup_window_counters(node)
-            logger.info("[ColdStart] node %d window counters: %s", nid, window)
+        for nid in sorted(cluster.nodes.keys()):
+            window = CompileCacheView.get_warmup_window_counters(cluster.nodes[nid])
+            logger.info("[%s] node %d window counters: %s", label, nid, window)
             assert window["hits"] == 0 and window["misses"] == 0, (
-                f"[ColdStart] node {nid}: observation window must not open without "
-                f"warmup inserts, got {window}"
+                f"[{label}] node {nid}: window must not open without warmup inserts, got {window}"
             )
+        logger.info("%s skip scenario PASSED", label)
 
-        logger.info("MultiNodeColdStart no-queries scenario PASSED")
+    def test_single_node(self):
+        with self._cluster(nodes=1) as (cluster, driver):
+            self._assert_skipped_and_serving(cluster, driver, "SingleNode")
+
+    def test_multi_node_cold_start(self):
+        with self._cluster(nodes=3) as (cluster, driver):
+            self._assert_skipped_and_serving(cluster, driver, "ColdStart")
 
 
 class TestWarmupGrpcIsolation:
@@ -1134,3 +1032,75 @@ class TestWarmupGrpcIsolation:
             ready_driver.stop()
 
         logger.info("GrpcIsolation scenario PASSED")
+
+
+_WARMUP_MARKERS = (
+    "Warmup actor started",
+    "Initial board sync delivered",
+    "No peers in initial",
+    "Received TEvStartWarmup",
+    "Fetched",
+    "Warmup completed",
+    "Warmup finished",
+    "skipping warmup",
+    "Board not synced",
+)
+
+
+class TestWarmupSelfMgmt:
+    """Cold bootstrap of a self-managed (config v2) /Root cluster: warmup must still run."""
+
+    @classmethod
+    def setup_class(cls):
+        cls.configurator = KikimrConfigGenerator(
+            Erasure.NONE,
+            nodes=3,
+            use_in_memory_pdisks=False,
+            use_config_store=True,
+            metadata_section={"kind": "MainConfig", "version": 0, "cluster": ""},
+            separate_node_configs=True,
+            simple_config=True,
+            use_self_management=True,
+            extra_grpc_services=["config"],
+            additional_log_configs={
+                "KQP_COMPILE_SERVICE": LogLevels.INFO,
+                "KQP_PROXY": LogLevels.INFO,
+            },
+        )
+        # simple_config drops table_service_config, so inject the warmup flags straight
+        # into the MainConfig that seeds the config store (else warmup never enables on v2).
+        cls.configurator.full_config["config"]["table_service_config"] = {
+            "enable_compile_cache_warmup": True,
+            "compile_cache_warmup_config": {
+                "soft_deadline_seconds": 10,
+                "hard_deadline_seconds": 20,
+            },
+        }
+        cls.cluster = KiKiMR(configurator=cls.configurator)
+        cls.cluster.start()
+
+    @classmethod
+    def teardown_class(cls):
+        if getattr(cls, "cluster", None) is not None:
+            cls.cluster.stop()
+
+    @staticmethod
+    def _node_log(node):
+        # KiKiMRNode keeps no public log-path accessor; the ydbd log is a
+        # logfile_*.log inside the node's working dir (see kikimr_runner).
+        text = ""
+        for path in glob.glob(os.path.join(node.cwd, "logfile_*.log")):
+            with open(path, "r", errors="replace") as f:
+                text += f.read()
+        return text
+
+    def test_observe_warmup_on_cold_start(self):
+        out = []
+        for i, node in enumerate(self.cluster.nodes.values(), start=1):
+            lines = [ln for ln in self._node_log(node).splitlines()
+                     if any(p in ln for p in _WARMUP_MARKERS)]
+            out.append("==== node %d ====" % i)
+            out.extend(lines)
+        for ln in out:
+            logger.info(ln)
+        assert any("Warmup actor started" in ln for ln in out), "warmup never started"

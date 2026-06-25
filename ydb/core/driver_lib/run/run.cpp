@@ -767,16 +767,7 @@ void TKikimrRunner::InitializeGRpc(const TKikimrRunConfig& runConfig) {
         GRpcServersWrapper = std::make_shared<TGRpcServersWrapper>();
     }
 
-    const auto& kqpConfig = runConfig.AppConfig.GetKQPConfig();
-    const bool kqpEnabled = runConfig.ServicesMask.EnableKqp
-        && (!kqpConfig.HasEnable() || kqpConfig.GetEnable());
-
-    if (kqpEnabled && runConfig.AppConfig.GetTableServiceConfig().GetEnableCompileCacheWarmup()) {
-        auto warmupConfig = NKqp::ImportWarmupConfigFromProto(
-            runConfig.AppConfig.GetTableServiceConfig().GetCompileCacheWarmupConfig());
-        GRpcWarmupTimeout = warmupConfig.HardDeadline;
-    }
-
+    // Open the gRPC port immediately: a node must be reachable while its cache warms (slow on a v2 cold bootstrap); cold queries are instead held at the query layer (KqpProxy) until warmup completes.
     GRpcServersWrapper->GrpcServersFactory = [runConfig, this] { return CreateGRpcServers(runConfig); };
 }
 
@@ -2285,7 +2276,7 @@ void TKikimrRunner::KikimrStart() {
     if (GRpcServersWrapper) {
         GRpcServersWrapper->Servers = GRpcServersWrapper->GrpcServersFactory();
         GRpcServersManager = ActorSystem->Register(new TGRpcServersManager(
-            GRpcServersWrapper, ProcessMemoryInfoProvider, GRpcWarmupTimeout));
+            GRpcServersWrapper, ProcessMemoryInfoProvider, TDuration::Zero()));
         ActorSystem->RegisterLocalService(NKikimr::MakeGRpcServersManagerId(ActorSystem->NodeId), GRpcServersManager);
     }
 

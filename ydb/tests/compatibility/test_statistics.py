@@ -363,7 +363,6 @@ class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
         def check_background_operations():
             """Check for background ANALYZE operations using operation client."""
             # Try to list operations - this tests the background operation functionality
-            # from commit 9b4503e which added long-running operation support for ANALYZE
             request = ydb._apis.ydb_operation.ListOperationsRequest(kind="analyze")
             list_result = self.driver(request, ydb._apis.OperationService.Stub, "ListOperations")
             operations = getattr(list_result, "operations", [])

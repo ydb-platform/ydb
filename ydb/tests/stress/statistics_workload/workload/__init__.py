@@ -129,7 +129,7 @@ class Workload(object):
             session.execute_scheme(f"ANALYZE `{table_path}`")
         self.run_query_ignore_errors(callee)
 
-        # Check for background operations after ANALYZE (from commit 9b4503e)
+        # Check for background operations after ANALYZE
         max_retries = 5
         retry_delay = 2  # seconds
         for attempt in range(max_retries):
@@ -146,7 +146,6 @@ class Workload(object):
     def check_background_operations(self, table_path):
         """Check for background ANALYZE operations using operation client."""
         # Try to list operations - this tests the background operation functionality
-        # from commit 9b4503e which added long-running operation support for ANALYZE
         request = ydb._apis.ydb_operation.ListOperationsRequest(kind="analyze")
         list_result = self.driver(request, ydb._apis.OperationService.Stub, "ListOperations")
         operations = getattr(list_result, "operations", [])

@@ -17,10 +17,6 @@
 
 #include <yql/essentials/public/purecalc/helpers/stream/stream_from_vector.h>
 
-#include <array>
-#include <cctype>
-#include <optional>
-
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TRANSFER
 
 using namespace NActors::NStructuredLog;

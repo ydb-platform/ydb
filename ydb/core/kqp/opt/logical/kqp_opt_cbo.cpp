@@ -184,7 +184,7 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
 
     switch( joinAlgo ) {
         case EJoinAlgoType::LookupJoin:
-            if ((OptLevel != 3) && (left->Stats.Nrows > 1000)) {
+            if ((OptLevel != 3) && (left->Stats.Nrows > 5000)) {
                 return false;
             }
             return IsLookupJoinApplicable(left, right, leftJoinKeys, rightJoinKeys, *this);
@@ -193,7 +193,7 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
             if (joinKind != EJoinKind::LeftSemi) {
                 return false;
             }
-            if ((OptLevel != 3) && (right->Stats.Nrows > 1000)) {
+            if ((OptLevel != 3) && (right->Stats.Nrows > 5000)) {
                 return false;
             }
             return IsLookupJoinApplicable(right, left, rightJoinKeys, leftJoinKeys, *this);

@@ -137,34 +137,10 @@ public:
                                 AFL_ENSURE(stage.Program().Body().Cast<TCoArgument>().Name() ==
                                     stage.Program().Args().Arg(0).Cast<TCoArgument>().Name());
 
-                                auto inputRows = Build<TDqPhyPrecompute>(ctx, node.Pos())
-                                    .Connection(stage.Inputs().Item(0).Ptr())
-                                    .Done();
-
-                                auto rowArg = Build<TCoArgument>(ctx, node.Pos())
-                                    .Name("rowArg")
-                                    .Done();
-
-                                replaces[node.Raw()] = Build<TDqStage>(ctx, node.Pos())
-                                    .Inputs()
-                                        .Add(inputRows)
-                                        .Build()
-                                    .Program()
-                                        .Args({rowArg})
-                                        .Body<TCoToFlow>()
-                                            .Input(rowArg)
-                                            .Build()
-                                        .Build()
-                                    .Outputs<TDqStageOutputsList>()
-                                        .Add(sink)
-                                        .Build()
-                                    .Settings().Build()
-                                    .Done().Ptr();
+                                replaces[node.Raw()] = BuildNewStageWithSink(ctx, node.Pos(), stage, sink, sinkSettings.Cast());
                             }
                         }
-                    }
-
-                    if (auto maybeTransform = output.Maybe<TDqTransform>()) {
+                    } else if (auto maybeTransform = output.Maybe<TDqTransform>()) {
                         const auto transform = maybeTransform.Cast();
                         if (const auto sinkSettings = transform.Settings().Maybe<TKqpTableSinkSettings>()) {
                             AFL_ENSURE(sinkSettings.Cast().Mode() != "fill_table");
@@ -178,29 +154,7 @@ public:
                             AFL_ENSURE(stage.Program().Body().Cast<TCoArgument>().Name() ==
                                 stage.Program().Args().Arg(0).Cast<TCoArgument>().Name());
 
-                            auto inputRows = Build<TDqPhyPrecompute>(ctx, node.Pos())
-                                .Connection(stage.Inputs().Item(0).Ptr())
-                                .Done();
-
-                            auto rowArg = Build<TCoArgument>(ctx, node.Pos())
-                                .Name("rowArg")
-                                .Done();
-
-                            replaces[node.Raw()] = Build<TDqStage>(ctx, node.Pos())
-                                .Inputs()
-                                    .Add(inputRows)
-                                    .Build()
-                                .Program()
-                                    .Args({rowArg})
-                                    .Body<TCoToFlow>()
-                                        .Input(rowArg)
-                                        .Build()
-                                    .Build()
-                                .Outputs<TDqStageOutputsList>()
-                                    .Add(transform)
-                                    .Build()
-                                .Settings().Build()
-                                .Done().Ptr();
+                            replaces[node.Raw()] = BuildNewStageWithTransform(ctx, node.Pos(), stage, transform, sinkSettings.Cast());
                         }
                     }
                 }
@@ -393,6 +347,108 @@ private:
             return !hasNonDeterministicFunction;
         });
         return hasNonDeterministicFunction;
+    }
+
+    TExprNode::TPtr BuildModifiedSinkSettings(TExprContext& ctx, TPositionHandle pos, const TKqpTableSinkSettings& sinkSettings) {
+        return Build<TKqpTableSinkSettings>(ctx, pos)
+            .Table(sinkSettings.Table())
+            .InconsistentWrite(sinkSettings.InconsistentWrite())
+            .StreamWrite(ctx.NewAtom(pos, "false"))
+            .Mode(sinkSettings.Mode())
+            .Priority(sinkSettings.Priority())
+            .IsBatch(sinkSettings.IsBatch())
+            .IsIndexImplTable(sinkSettings.IsIndexImplTable())
+            .DefaultColumns(sinkSettings.DefaultColumns())
+            .ReturningColumns(sinkSettings.ReturningColumns())
+            .Settings(sinkSettings.Settings())
+            .Done()
+            .Ptr();
+    }
+
+    std::pair<TDqPhyPrecompute, TCoArgument> BuildPrecomputeAndRowArg(
+            TExprContext& ctx,
+            TPositionHandle pos,
+            const TDqStage& stage) {
+        auto inputRows = Build<TDqPhyPrecompute>(ctx, pos)
+            .Connection(stage.Inputs().Item(0).Ptr())
+            .Done();
+
+        auto rowArg = Build<TCoArgument>(ctx, pos)
+            .Name("rowArg")
+            .Done();
+
+        return {inputRows, rowArg};
+    }
+
+    TExprNode::TPtr BuildNewStageWithSink(
+            TExprContext& ctx,
+            TPositionHandle pos,
+            const TDqStage& stage,
+            const TDqSink& sink,
+            const TKqpTableSinkSettings& sinkSettings) {
+        auto modifiedSinkSettingsPtr = BuildModifiedSinkSettings(ctx, pos, sinkSettings);
+        auto modifiedSinkSettings = TKqpTableSinkSettings(modifiedSinkSettingsPtr);
+
+        auto modifiedSink = Build<TDqSink>(ctx, pos)
+            .DataSink(sink.DataSink())
+            .Index(sink.Index())
+            .Settings(modifiedSinkSettings)
+            .Done();
+
+        auto [inputRows, rowArg] = BuildPrecomputeAndRowArg(ctx, pos, stage);
+
+        return Build<TDqStage>(ctx, pos)
+            .Inputs()
+                .Add(inputRows)
+                .Build()
+            .Program()
+                .Args({rowArg})
+                .Body<TCoToFlow>()
+                    .Input(rowArg)
+                    .Build()
+                .Build()
+            .Outputs<TDqStageOutputsList>()
+                .Add(modifiedSink)
+                .Build()
+            .Settings().Build()
+            .Done().Ptr();
+    }
+
+    TExprNode::TPtr BuildNewStageWithTransform(
+            TExprContext& ctx,
+            TPositionHandle pos,
+            const TDqStage& stage,
+            const TDqTransform& transform,
+            const TKqpTableSinkSettings& sinkSettings) {
+        auto modifiedSinkSettingsPtr = BuildModifiedSinkSettings(ctx, pos, sinkSettings);
+        auto modifiedSinkSettings = TKqpTableSinkSettings(modifiedSinkSettingsPtr);
+
+        auto modifiedTransform = Build<TDqTransform>(ctx, pos)
+            .Index(transform.Index())
+            .DataSink(transform.DataSink())
+            .Type(transform.Type())
+            .InputType(transform.InputType())
+            .OutputType(transform.OutputType())
+            .Settings(modifiedSinkSettings)
+            .Done();
+
+        auto [inputRows, rowArg] = BuildPrecomputeAndRowArg(ctx, pos, stage);
+
+        return Build<TDqStage>(ctx, pos)
+            .Inputs()
+                .Add(inputRows)
+                .Build()
+            .Program()
+                .Args({rowArg})
+                .Body<TCoToFlow>()
+                    .Input(rowArg)
+                    .Build()
+                .Build()
+            .Outputs<TDqStageOutputsList>()
+                .Add(modifiedTransform)
+                .Build()
+            .Settings().Build()
+            .Done().Ptr();
     }
 
     void VisitStagesBackwards(

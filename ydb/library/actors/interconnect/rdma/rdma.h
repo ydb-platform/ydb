@@ -3,11 +3,15 @@
 #include <util/generic/noncopyable.h>
 #include <util/generic/vector.h>
 #include <util/stream/output.h>
+#include <ydb/library/actors/core/actorid.h>
 
+#include <functional>
+#include <memory>
 #include <optional>
 
 struct ibv_qp;
 struct ibv_cq;
+struct ibv_srq;
 struct ibv_wc;
 union ibv_gid;
 struct ibv_send_wr;
@@ -22,17 +26,25 @@ namespace NMonitoring {
 }
 
 class IOutputStream;
+class TRcBuf;
 
 namespace NInterconnect::NRdma {
 
 class TRdmaCtx;
 class TCqCommon;
 class TCqActor;
+class IMemPool;
 struct TEvRdmaIoDone;
 
 class TQueuePair;
 class IIbVerbsBuilder;
 
+struct TRdmaRuntimeParams {
+    int MaxCqe;   // max capacity of single queue under CQ actor abstruction. -1 - use limit from rdma context
+    int MaxWr;    // max number of work request in the pool (for READ verbs)
+    int MaxSrqWr; // max number of work request for shared recieve queue
+    int RecieveBufSz; // Size of one wr buffer
+};
 
 // Wrapper for ibv Completion Queue
 // Hides logic to controll work request count
@@ -51,6 +63,7 @@ public:
     using TPtr = std::shared_ptr<ICq>;
     virtual ~ICq() = default;
     virtual ibv_cq* GetCq() noexcept = 0;
+    virtual ibv_srq* GetSrq() noexcept = 0;
 
     struct TBusy {}; // try later
     struct TErr {};  // fatal error, cq must be recreated. All associated qp failed.
@@ -65,6 +78,9 @@ public:
     virtual std::optional<TErr> DoWrBatchAsync(std::shared_ptr<TQueuePair> qp, std::unique_ptr<IIbVerbsBuilder> builder) noexcept = 0;
     virtual TWrStats GetWrStats() const noexcept = 0;
 
+    virtual bool RegisterQpAsync(ui32 qpNum, NActors::TActorId actorId) noexcept = 0;
+    virtual bool DeregisterQpAsync(ui32 qpNum) noexcept = 0;
+
     static bool IsWrSuccess(const TAllocResult& ar) {
         return std::holds_alternative<IWr*>(ar);
     }
@@ -78,8 +94,8 @@ private:
     virtual void NotifyErr() noexcept = 0;
 };
 
-ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr, NMonitoring::TDynamicCounters* counter) noexcept;
-ICq::TPtr CreateSimpleEventDrivenCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr, NMonitoring::TDynamicCounters* counter) noexcept;
+ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter) noexcept;
+ICq::TPtr CreateSimpleEventDrivenCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter) noexcept;
 
 struct THandshakeData {
     ui32 QpNum;
@@ -133,6 +149,8 @@ class IIbVerbsBuilder : public NNonCopyable::TNonCopyable {
 public:
     virtual ~IIbVerbsBuilder() = default;
     virtual void AddReadVerb(void* mrAddr, ui32 mrlKey, void* dstAddr, ui32 dstRkey, ui32 dstSize,
+        std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept = 0;
+    virtual void AddSendVerb(TRcBuf packet,
         std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept = 0;
 private:
     IIbVerbsBuilder() noexcept = default;

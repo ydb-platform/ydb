@@ -63,7 +63,7 @@ std::shared_ptr<TLocalRdmaStuff> InitLocalRdmaStuff(TString bindTo, NInterconnec
     rdma->Qp1 = std::make_shared<TQueuePair>();
     rdma->Qp2 = std::make_shared<TQueuePair>();
 
-    rdma->CqActorId = rdma->ActorSystem->Register(CreateCqActor(1, 1, cqMode, nullptr));
+    rdma->CqActorId = rdma->ActorSystem->Register(CreateCqActor(TRdmaRuntimeParams{1, 1, 0, 0}, cqMode, nullptr));
     rdma->CqPtr = GetCqHandle(rdma->ActorSystem.get(), rdma->Ctx, rdma->CqActorId);
 
     {

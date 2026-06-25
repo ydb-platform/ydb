@@ -1264,8 +1264,6 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
         return items
     ```
 
-    {% endcut %}
-
     ```python
     def search_items_vector_as_bytes(
         pool: ydb.QuerySessionPool,
@@ -1634,8 +1632,6 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
 
         return items
     ```
-
-    {% endcut %}
 
     ```python
     def search_items_vector_as_float_list(

@@ -100,11 +100,20 @@ private:
         return ConsecutiveFailures >= MaxConsecutiveFailures;
     }
 
-    void OpenPipeAndSend(const TActorContext& ctx, TTabletId hive, THolder<TEvHive::TEvCreateTablet> request) {
+    void EnsurePipe(TTabletId hive) {
+        if (PipeClient && CurrentHive == hive) {
+            return;
+        }
+
+        ClosePipe();
         CurrentHive = hive;
         NTabletPipe::TClientConfig pipeConfig;
         pipeConfig.RetryPolicy = NTabletPipe::TClientRetryPolicy::WithRetries();
         PipeClient = Register(NTabletPipe::CreateClient(SelfId(), ui64(CurrentHive), pipeConfig));
+    }
+
+    void SendToHive(const TActorContext& ctx, TTabletId hive, THolder<TEvHive::TEvCreateTablet> request) {
+        EnsurePipe(hive);
         WaitingCreateReply = true;
         ScheduleTimeout(ctx);
         NTabletPipe::SendData(SelfId(), PipeClient, request.Release());
@@ -137,7 +146,7 @@ private:
                                 << "/" << Shards.size()
                                 << ", msg: " << ev->Record.ShortDebugString());
 
-        OpenPipeAndSend(ctx, hive, std::move(ev));
+        SendToHive(ctx, hive, std::move(ev));
     }
 
 public:
@@ -229,7 +238,6 @@ public:
                 RetryCurrent(ctx);
                 return;
             }
-            ClosePipe();
             auto path = SS->PathsById.at(SS->FindTx(OperationId)->TargetPathId);
             auto request = CreateEvCreateTablet(path, expectedShardIdx, SS);
 
@@ -238,7 +246,7 @@ public:
                                     << ", shardIdx: " << expectedShardIdx
                                     << ", hive: " << redirectTo);
 
-            OpenPipeAndSend(ctx, redirectTo, std::move(request));
+            SendToHive(ctx, redirectTo, std::move(request));
             return;
         }
 
@@ -264,7 +272,6 @@ public:
                                    << ", tabletId: " << record.GetTabletID());
             ConsecutiveFailures = 0;
             ++CurrentShardPos;
-            ClosePipe();
             WaitingCreateReply = false;
             ExpectedTabletId = InvalidTabletId;
             SendCurrent(ctx);
@@ -342,7 +349,6 @@ public:
 
         ConsecutiveFailures = 0;
         ++CurrentShardPos;
-        ClosePipe();
         ExpectedTabletId = InvalidTabletId;
         WaitingCreationResult = false;
         SendCurrent(ctx);

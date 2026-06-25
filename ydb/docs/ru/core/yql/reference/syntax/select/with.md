@@ -24,9 +24,12 @@
 * `projection.enabled` - флаг включения [расширенного партиционирования данных](../../../../concepts/query_execution/federated_query/s3/partition_projection.md). Допустимые значения: `true`, `false`.
 * `projection.<field_name>.type` - тип поля [расширенного партиционирования данных](../../../../concepts/query_execution/federated_query/s3/partition_projection.md). Допустимые значения: `integer`, `enum`, `date`.
 * `projection.<field_name>.<options>` - расширенные свойства поля [расширенного партиционирования данных](../../../../concepts/query_execution/federated_query/s3/partition_projection.md).
-{% include [watermark_parameters.md](../../../../_includes/watermark_parameters.md) %}
 
 {% endif %}
+
+При чтении из [топика](../../../../concepts/datamodel/topic.md) в [потоковых запросах](../../../../dev/streaming-query/index.md) можно указывать параметры водяных знаков:
+
+{% include notitle [x](../../../../_includes/watermark_parameters.md) %}
 
 При задании подсказок `SCHEMA` и `COLUMNS` в качестве значения типа type должен быть задан тип [структуры](../../types/containers.md).
 
@@ -72,7 +75,7 @@ WITH (
     SCHEMA = (
         ts String
     ),
-    WATERMARK = __ydb_write_time - Interval("PT5S"),
+    WATERMARK = SystemMetadata("write_time") - Interval("PT5S"),
     WATERMARK_GRANULARITY = "PT1S",
     WATERMARK_IDLE_TIMEOUT = "PT5S"
 );

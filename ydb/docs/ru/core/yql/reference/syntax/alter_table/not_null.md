@@ -2,7 +2,7 @@
 
 ## Ограничения
 
-Операции `SET NOT NULL` и `DROP NOT NULL` поддерживаются только для [строковых таблиц](../../../concepts/glossary.md#row-oriented-table).
+Операции `SET NOT NULL` и `DROP NOT NULL` поддерживаются только для [строковых таблиц](../../../../concepts/glossary.md#row-oriented-table).
 
 ## Сброс `NOT NULL`
 

@@ -34,6 +34,24 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
 
   This functionality is not currently supported.
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  This functionality is not currently supported in the JavaScript SDK. You can create a monitoring client and call health-check APIs yourself:
+
+  ```javascript
+  const monitoring = driver.createClient(MonitoringServiceDefinition);
+  await monitoring.selfCheck();
+  ```
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
+
+>>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 {% endlist %}
 
 ## Call parameters {#call-parameters}
@@ -88,6 +106,19 @@ The complete list of extra parameters is presented below:
 
   This functionality is not currently supported.
 
+<<<<<<< HEAD
+=======
+- JavaScript
+
+  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
+
+>>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 {% endlist %}
 
 | Parameter | Type | Description |

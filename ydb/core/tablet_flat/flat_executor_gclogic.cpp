@@ -147,18 +147,19 @@ TDuration TExecutorGCLogic::OnCollectGarbageResult(TEvBlobStorage::TEvCollectGar
         if (channel.OnCollectGarbageSuccess() && channel.CutHistoryStatus == TChannelInfo::ECutHistoryStatus::SentBarrier) {
             auto historyToCut = HistoryCutter.GetHistoryToCut(channelId);
             for (const auto* historyEntry : historyToCut) {
-                TAutoPtr<TEvTablet::TEvCutTabletHistory> ev(new TEvTablet::TEvCutTabletHistory);
-                auto &record = ev->Record;
+                TAutoPtr<TEvTablet::TEvCutTabletHistory> request(new TEvTablet::TEvCutTabletHistory);
+                auto &record = request->Record;
                 record.SetTabletID(TabletStorageInfo->TabletID);
                 record.SetChannel(channelId);
                 record.SetFromGeneration(historyEntry->FromGeneration);
                 record.SetGroupID(historyEntry->GroupID);
-                ctx.Send(launcher, ev.Release());
+                ctx.Send(launcher, request.Release());
             }
             channel.CutHistoryStatus = TChannelInfo::ECutHistoryStatus::Cut;
         }
     } else {
         channel.OnCollectGarbageFailure();
+        channel.CutHistoryStatus = TChannelInfo::ECutHistoryStatus::None;
     }
     return channel.TryScheduleGcRequestRetries();
 }

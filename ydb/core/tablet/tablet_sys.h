@@ -255,7 +255,7 @@ class TTablet : public TActor<TTablet> {
 
     void SeenBlobForCutHistory(const TLogoBlobID& blob);
     void FeedCutHistoryFromGraph(const TEvTablet::TDependencyGraph* graph);
-    void ConfirmCutHistory();
+    void SendBarriersForCutHistory();
     void SendCutTabletHistory();
     void TryCutHistoryAfterGc();
 

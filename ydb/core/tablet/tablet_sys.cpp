@@ -1499,7 +1499,7 @@ void TTablet::FeedCutHistoryFromGraph(const TEvTablet::TDependencyGraph* graph) 
     }
 }
 
-void TTablet::ConfirmCutHistory() {
+void TTablet::SendBarriersForCutHistory() {
     if (!AppData()->FeatureFlags.GetEnableCutHistory()) {
         return;
     }
@@ -1560,13 +1560,14 @@ void TTablet::SendCutTabletHistory() {
         Send(Launcher, ev.Release());
     }
     CutHistoryStatus = ECutHistoryStatus::Cut;
+    WantCutHistoryAfterGc = false;
 }
 
 void TTablet::TryCutHistoryAfterGc() {
     if (!WantCutHistoryAfterGc) {
         return;
     }
-    ConfirmCutHistory();
+    SendBarriersForCutHistory();
 }
 
 void TTablet::GcLogChannel(ui32 step) {

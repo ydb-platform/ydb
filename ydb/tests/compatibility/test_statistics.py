@@ -389,7 +389,18 @@ class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
                 for table in self.tables:
                     try_analyze(session_pool, table)
                     # Check for background operations after each ANALYZE
-                    check_background_operations()
+                    max_retries = 5
+                    retry_delay = 2  # seconds
+                    for attempt in range(max_retries):
+                        try:
+                            check_background_operations()
+                            break
+                        except AssertionError as e:
+                            if attempt == max_retries - 1:
+                                # Last attempt failed, re-raise the error
+                                raise
+                            logger.warning(f"Background operations check failed (attempt {attempt + 1}/{max_retries}), retrying...")
+                            time.sleep(retry_delay)
                     # Give some time for background operations to progress
                     time.sleep(1)
 

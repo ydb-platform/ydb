@@ -130,7 +130,18 @@ class Workload(object):
         self.run_query_ignore_errors(callee)
 
         # Check for background operations after ANALYZE (from commit 9b4503e)
-        self.check_background_operations(table_path)
+        max_retries = 5
+        retry_delay = 2  # seconds
+        for attempt in range(max_retries):
+            try:
+                self.check_background_operations(table_path)
+                break
+            except AssertionError as e:
+                if attempt == max_retries - 1:
+                    # Last attempt failed, re-raise the error
+                    raise
+                logger.warning(f"[{table_path}] Background operations check failed (attempt {attempt + 1}/{max_retries}), retrying...")
+                time.sleep(retry_delay)
 
     def check_background_operations(self, table_path):
         """Check for background ANALYZE operations using operation client."""

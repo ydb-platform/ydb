@@ -30,7 +30,7 @@ static constexpr TDuration REWIND_COMMIT_INTERVAL = TDuration::Minutes(4);
 namespace {
 
 struct TBatchInfo {
-    ui32 MessageCount = 1;
+    ui32 LogicalMessageCount = 1;
     std::optional<ui64> MaxSeqNo;
 };
 
@@ -44,13 +44,13 @@ TBatchInfo GetBatchInfo(const TPersQueueReadEvent::TDataReceivedEvent::TCompress
         return {};
     }
 
-    const ui32 messageCount = static_cast<ui32>(header->RecordsCount);
+    const ui32 logicalMessageCount = static_cast<ui32>(header->RecordsCount);
     const auto [error, maxSeqNo] = NKafka::GetBatchMaxSeqNo(*header, message.GetSeqNo());
     if (error != NKafka::EKafkaErrors::NONE_ERROR) {
         return {};
     }
     return {
-        .MessageCount = messageCount,
+        .LogicalMessageCount = logicalMessageCount,
         .MaxSeqNo = maxSeqNo,
     };
 }
@@ -58,7 +58,7 @@ TBatchInfo GetBatchInfo(const TPersQueueReadEvent::TDataReceivedEvent::TCompress
 ui64 GetWriteRequestEndOffset(const NKikimrClient::TPersQueuePartitionRequest& request) {
     ui64 offset = request.GetCmdWriteOffset();
     for (const auto& cmd : request.GetCmdWrite()) {
-        offset += cmd.GetMessageCount();
+        offset += cmd.GetLogicalMessageCount();
     }
     return offset;
 }
@@ -171,8 +171,8 @@ bool TMirrorer::AddToWriteRequest(
     write->SetUncompressedSize(message.GetUncompressedSize());
 
     const auto batchInfo = GetBatchInfo(message);
-    if (batchInfo.MessageCount > 1) {
-        write->SetMessageCount(batchInfo.MessageCount);
+    if (batchInfo.LogicalMessageCount > 1) {
+        write->SetLogicalMessageCount(batchInfo.LogicalMessageCount);
         write->SetMaxSeqNo(*batchInfo.MaxSeqNo);
     }
     return true;
@@ -247,11 +247,11 @@ void TMirrorer::ProcessWriteResponse(
         ui64 offset = writtenMessageInfo.GetOffset();
         PQ_ENSURE((ui64)result.GetOffset() == offset);
         PQ_ENSURE(EndOffset <= offset)("EndOffset", EndOffset)("offset", offset);
-        const ui64 messageCount = GetBatchInfo(writtenMessageInfo).MessageCount;
-        EndOffset = offset + messageCount;
+        const ui64 logicalMessageCount = GetBatchInfo(writtenMessageInfo).LogicalMessageCount;
+        EndOffset = offset + logicalMessageCount;
         BytesInFlight -= writtenMessageInfo.GetData().size();
 
-        deferredCommit.Add(writtenMessageInfo.GetPartitionSession(), offset, offset + messageCount);
+        deferredCommit.Add(writtenMessageInfo.GetPartitionSession(), offset, offset + logicalMessageCount);
         WriteInFlight.pop_front();
     }
 
@@ -635,6 +635,7 @@ void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceive
     for (auto& msg : messages) {
         ui64 offset = msg.GetOffset();
         PQ_ENSURE(OffsetToRead <= offset);
+        LastReadOffset = offset;
         ui64 messageSize = msg.GetData().size();
 
         Counters.Cumulative()[COUNTER_PQ_TABLET_NETWORK_BYTES_USAGE].Increment(messageSize);
@@ -656,6 +657,7 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
     ReadFeatures.clear();
     WaitNextReaderEventInFlight = false;
     LastReadEventTime = TInstant::Zero();
+    LastReadOffset = Nothing();
 
     Become(&TThis::StateInitConsumer);
 
@@ -758,7 +760,7 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
 
            OffsetToRead = createStream->GetCommittedOffset();
         }
-
+        LastReadOffset = Nothing();
         createStream->Confirm(OffsetToRead, createStream->GetCommittedOffset());
         RequestSourcePartitionStatus();
     } else if (auto* destroyStream = std::get_if<TPersQueueReadEvent::TStopPartitionSessionEvent>(&event.value())) {
@@ -833,9 +835,8 @@ bool TMirrorer::TryRewindCommittedOffset(const TActorContext& ctx) {
         {"endOffset", StreamStatus->GetEndOffset()},
         {"secondsSinceLastInitStage", (ctx.Now() - LastInitStageTimestamp).Seconds()},
         {"secondsSinceLastRewindCommit", (ctx.Now() - LastRewindCommitTimestamp).Seconds()});
-    if (!(OffsetToRead == 0 /* never seen any data */
+    if (!(LastReadOffset.Empty() /* never seen any data is this read session */
         && StreamStatus->GetCommittedOffset() < StreamStatus->GetEndOffset()
-        && StreamStatus->GetCommittedOffset() == 0 /* new mirror rule */
         && StreamStatus->GetReadOffset() == StreamStatus->GetEndOffset())) {
         return false;
     }
@@ -847,15 +848,16 @@ bool TMirrorer::TryRewindCommittedOffset(const TActorContext& ctx) {
         return false;
     }
     LastRewindCommitTimestamp = now;
+    const ui64 newEndOffset = StreamStatus->GetEndOffset();
     YDB_LOG_INFO("Topic contains only old messages. Rewinding committed offset forward",
         {"logPrefix", NPQ_LOG_PREFIX},
-        {"streamStatusCommittedOffset", StreamStatus->GetCommittedOffset()},
-        {"streamStatusEndOffset", StreamStatus->GetEndOffset()});
+        {"from", StreamStatus->GetCommittedOffset()},
+        {"to", newEndOffset});
     auto* factory = AppData(ctx)->PersQueueMirrorReaderFactory;
     PQ_ENSURE(factory);
-    auto future = factory->CommitOffset(Config, CredentialsProvider, Partition, StreamStatus->GetEndOffset());
+    auto future = factory->CommitOffset(Config, CredentialsProvider, Partition, newEndOffset);
     future.Subscribe(
-        [actorSystem = ctx.ActorSystem(), selfId = SelfId()](const NThreading::TFuture<NYdb::TStatus>& result) {
+        [actorSystem = ctx.ActorSystem(), selfId = SelfId(), newEndOffset](const NThreading::TFuture<NYdb::TStatus>& result) {
             NYdb::TStatus status{NYdb::EStatus::SUCCESS, {}};
             try {
                 status = result.GetValue();
@@ -863,20 +865,25 @@ bool TMirrorer::TryRewindCommittedOffset(const TActorContext& ctx) {
                 TString error = CurrentExceptionMessage();
                 status = NYdb::TStatus{NYdb::EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues({NYdb::NIssue::TIssue(std::move(error)),})};
             }
-            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, new TEvPQ::TEvRewindCommitResult(std::move(status))));
+            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, new TEvPQ::TEvRewindCommitResult(std::move(status), newEndOffset)));
         }
     );
     return true;
 }
 
 void TMirrorer::HandleRewindCommit(TEvPQ::TEvRewindCommitResult::TPtr& ev, const TActorContext& ctx) {
+<<<<<<< HEAD
     YDB_LOG_INFO("Rewind committed offset",
         {"logPrefix", NPQ_LOG_PREFIX},
         {"result", ev->Get()->Status});
+=======
+    LOG_I("Rewind committed offset result: " << ev->Get()->Status << "; offset: " << ev->Get()->EndOffset);
+>>>>>>> main
     if (!ev->Get()->Status.IsSuccess()) {
-        ProcessError(ctx, TStringBuilder() << "failed to rewind committed offset: " << ev->Get()->Status);
+        ProcessError(ctx, TStringBuilder() << "failed to rewind committed offset: " << ev->Get()->Status << "; offset: " << ev->Get()->EndOffset);
         return;
     }
+    EndOffset = ev->Get()->EndOffset;
     ScheduleConsumerCreation(ctx);
 }
 

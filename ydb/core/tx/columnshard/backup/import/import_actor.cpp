@@ -1,6 +1,7 @@
 #include "import_actor.h"
 
 #include <ydb/core/tx/columnshard/backup/async_jobs/import_downloader.h>
+#include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/data_events/payload_helper.h>
 #include <ydb/core/tx/datashard/datashard_user_table.h>
@@ -12,6 +13,8 @@ class TTxProposeFinish: public NTabletFlatExecutor::TTransactionBase<NColumnShar
 private:
     using TBase = NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard>;
     const ui64 TxId;
+    const NActors::TActorId ProgressActorId;
+    const ui64 TxInternalId;
 
 protected:
     virtual bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override {
@@ -20,13 +23,16 @@ protected:
     }
 
     virtual void Complete(const TActorContext& ctx) override {
+        ctx.Send(ProgressActorId, new NBackground::TEvLocalTransactionCompleted(TxInternalId));
         Self->GetProgressTxController().FinishProposeOnComplete(TxId, ctx);
     }
 
 public:
-    TTxProposeFinish(NColumnShard::TColumnShard* self, const ui64 txId)
+    TTxProposeFinish(NColumnShard::TColumnShard* self, const ui64 txId, const NActors::TActorId& progressActorId, const ui64 txInternalId)
         : TBase(self)
         , TxId(txId)
+        , ProgressActorId(progressActorId)
+        , TxInternalId(txInternalId)
     {
     }
 };
@@ -104,7 +110,8 @@ void TImportActor::OnSessionStateSaved() {
     AFL_VERIFY(ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished());
     NYDBTest::TControllers::GetColumnShardController()->OnImportFinished();
     if (ImportSession->GetTxId()) {
-        ExecuteTransaction(std::make_unique<TTxProposeFinish>(GetShardVerified<NColumnShard::TColumnShard>(), *ImportSession->GetTxId()));
+        ExecuteTransaction(std::make_unique<TTxProposeFinish>(
+            GetShardVerified<NColumnShard::TColumnShard>(), *ImportSession->GetTxId(), SelfId(), GetNextTxId()));
     } else {
         Session->FinishActor();
     }

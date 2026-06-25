@@ -60,7 +60,7 @@ void TConsumerBatchProcessor::Handle(TEvProcessBatch::TPtr& ev, const NActors::T
             return true;
         }
 
-        resultsCount += result.GetMessageCount();
+        resultsCount += result.GetLogicalMessageCount();
         readResult->AddResult()->Swap(&result);
         return resultsCount >= context.Count;
     };

@@ -135,7 +135,7 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         TString serializedDataChunk;
         Y_ENSURE(dataChunk.SerializeToString(&serializedDataChunk));
         write->SetData(std::move(serializedDataChunk));
-        write->SetMessageCount(values.size());
+        write->SetLogicalMessageCount(values.size());
         write->SetMaxSeqNo(seqNo + values.size() - 1);
 
         setup.GetRuntime().SendToPipe(tabletId, edge, request.Release(), 0, GetPipeConfigWithRetries());

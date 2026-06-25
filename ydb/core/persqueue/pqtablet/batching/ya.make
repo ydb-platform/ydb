@@ -10,6 +10,7 @@ PEERDIR(
     library/cpp/streams/zstd
     ydb/core/persqueue/common
     ydb/core/persqueue/events
+    ydb/core/persqueue/public/codecs
     ydb/library/kafka
     ydb/core/persqueue/public/write_meta
     ydb/core/protos

@@ -2,6 +2,8 @@
 
 #include "uring_operation.h"
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
+
 #include <util/generic/string.h>
 #include <util/system/fhandle.h>
 
@@ -71,6 +73,11 @@ struct TUringRouterConfig {
     TString ToString() const;
 };
 
+struct TUringCounters {
+    NMonitoring::TDynamicCounters::TCounterPtr CompletionThreadCPU;
+    NMonitoring::TDynamicCounters::TCounterPtr CompletionThreadBusyTimeNs;
+};
+
 // TUringRouter is NOT thread-safe.  All public methods (Register*, Start,
 // Read, Write, Flush, Stop, SubmitItemsLeft, etc.) must be called from a
 // single thread (e.g. the DDisk actor). The only internal concurrency is the
@@ -78,7 +85,12 @@ struct TUringRouterConfig {
 // OnComplete callbacks.
 class TUringRouter {
 public:
-    TUringRouter(FHANDLE fd, NActors::TActorSystem* actorSystem, TUringRouterConfig config = {});
+    TUringRouter(
+        FHANDLE fd,
+        NActors::TActorSystem* actorSystem,
+        TUringRouterConfig config = {},
+        TUringCounters* counters = nullptr);
+
     ~TUringRouter();
 
     const TUringRouterConfig& GetConfig() const {
@@ -156,6 +168,7 @@ private:
     FHANDLE Fd;
     NActors::TActorSystem* ActorSystem;
     TUringRouterConfig Config;
+    TUringCounters* Counters;
 
     std::unique_ptr<struct io_uring> Ring;
 

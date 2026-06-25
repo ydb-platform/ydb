@@ -329,6 +329,14 @@ void TInitMetaStep::LoadMeta(const NKikimrClient::TResponse& kvResponse) {
         Partition()->BlobEncoder.EndOffset = meta.GetEndOffset();
         Partition()->BlobEncoder.FirstUncompactedOffset = meta.GetFirstUncompactedOffset();
 
+        if (meta.HasStartOffset()) {
+            Partition()->CompactionBlobEncoder.StartOffset = meta.GetStartOffset();
+        }
+        if (meta.HasEndOffset()) {
+            Partition()->CompactionBlobEncoder.EndOffset = meta.GetEndOffset();
+            Partition()->CompactionBlobEncoder.Head.Offset = meta.GetEndOffset();
+        }
+
         if (Partition()->BlobEncoder.StartOffset == Partition()->BlobEncoder.EndOffset) {
            Partition()->BlobEncoder.NewHead.Offset = Partition()->BlobEncoder.Head.Offset = Partition()->BlobEncoder.EndOffset;
         }

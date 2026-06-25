@@ -1233,7 +1233,7 @@ void TPartition::SendInfoToAutopartitioningManager(const TWriteMsg& p) {
 }
 
 bool TPartition::ValidateBatchMessage(const TActorContext& ctx, const TWriteMsg& p) {
-    if (p.Msg.MessageCount <= 1) {
+    if (p.Msg.LogicalMessageCount <= 1) {
         return true;
     }
 
@@ -1523,7 +1523,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
     TClientBlob blob(TString{p.Msg.SourceId}, p.Msg.SeqNo, std::move(p.Msg.Data), partData, WriteTimestampEstimate,
                      TInstant::MilliSeconds(p.Msg.CreateTimestamp == 0 ? curOffset : p.Msg.CreateTimestamp),
                      p.Msg.UncompressedSize, std::move(p.Msg.PartitionKey), std::move(p.Msg.ExplicitHashKey),
-                     p.Msg.MessageCount, p.Msg.IsBatch); //remove curOffset when LB will report CTime
+                     p.Msg.LogicalMessageCount, p.Msg.IsBatch); //remove curOffset when LB will report CTime
 
     const ui64 writeLagMs =
         (WriteTimestamp - TInstant::MilliSeconds(p.Msg.CreateTimestamp)).MilliSeconds();
@@ -1608,7 +1608,7 @@ bool TPartition::ExecRequest(TWriteMsg& p, ProcessParameters& parameters, TEvKey
             CurrentTimestamp,
             p.Msg.ProducerEpoch);
 
-        curOffset += p.Msg.MessageCount;
+        curOffset += p.Msg.LogicalMessageCount;
         BlobEncoder.ClearPartitionedBlob(Partition, MaxBlobSize);
     }
     return true;

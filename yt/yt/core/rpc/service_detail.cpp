@@ -614,8 +614,9 @@ public:
 
     void RecordThrottling(TDuration throttleDuration) override
     {
-        ThrottlingTime_.store(ThrottlingTime_.load(std::memory_order::acquire) +
-            throttleDuration, std::memory_order::release);
+        ThrottlingTime_.store(
+            ThrottlingTime_.load(std::memory_order::acquire) + throttleDuration,
+            std::memory_order::release);
         if (auto executionTime = ExecutionTime_.load(std::memory_order::acquire)) {
             ExecutionTime_.store(*executionTime - throttleDuration, std::memory_order::release);
         }
@@ -1046,7 +1047,7 @@ private:
         ExecutionTime_.store(executionTime, std::memory_order::release);
 
         auto totalTime = replyInstant - ArriveInstant_;
-        TotalTime_.store(replyInstant - ArriveInstant_, std::memory_order::release);
+        TotalTime_.store(totalTime, std::memory_order::release);
 
         MethodPerformanceCounters_->ExecutionTimeCounter.Record(executionTime);
         MethodPerformanceCounters_->TotalTimeCounter.Record(totalTime);

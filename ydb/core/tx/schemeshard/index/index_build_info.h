@@ -50,6 +50,7 @@ struct TIndexBuildShardStatus {
 };
 
 struct TValidateColumnConstraintShardStatus : TIndexBuildShardStatus {
+    using TIndexBuildShardStatus::TIndexBuildShardStatus;
     NKikimrSetColumnConstraint::EValidateStatus ValidateStatus = NKikimrSetColumnConstraint::EValidateStatus::INVALID;
 };
 
@@ -981,7 +982,7 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     };
 
     EOperationState OperationState = EOperationState::Invalid;
-    std::vector<std::string> SetNotNullColumns;
+    std::vector<TString> SetNotNullColumns;
 
     TTxId LockNullWritesTxId = TTxId();
     NKikimrScheme::EStatus LockNullWritesTxStatus = NKikimrScheme::StatusSuccess;
@@ -991,14 +992,12 @@ struct TSetColumnConstraintOperationInfo: public TIndexBuildInfo {
     NKikimrScheme::EStatus UnlockNullWritesTxStatus = NKikimrScheme::StatusSuccess;
     bool UnlockNullWritesTxDone = false;
 
+    bool NeedToCalculateValidationShards = true;
     THashMap<TShardIdx, TValidateColumnConstraintShardStatus> ValidationShards;
 
     TDeque<TShardIdx> ToValidateShards;
     THashSet<TShardIdx> InProgressValidationShards;
-    TVector<TShardIdx> DoneValidationShards;
-
-    TTxId ValidationSnapshotTxId = TTxId();
-    TStepId ValidationSnapshotStep = TStepId();
+    THashSet<TShardIdx> DoneValidationShards;
 
     constexpr static ui32 MaxInProgressValidationShards = 10;
 

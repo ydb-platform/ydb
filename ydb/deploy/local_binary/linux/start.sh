@@ -89,7 +89,7 @@ if [[ $? -ge 1 ]]; then
     echo Database /Root/test already exists, skipping registration.
   else
     echo Errors found when registering database, cancelling start script, check "$LOGS_PATH/db_reg.log"
-    exit
+    exit 1
   fi
 fi
 echo Starting database process...

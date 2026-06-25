@@ -623,20 +623,21 @@ private:
         meta->SetNotNull(notNull);
     }
 
-    // Push top-K-by-distance ranking down into the datashard read so it returns
-    // only the K nearest rows of this read instead of the full scan. The actor
-    // still merges the per-read top-K across leaf clusters into the global top-K
-    // (the global K nearest are necessarily among each cluster's own top-K).
-    // VectorColumnIndex is the position of the embedding column within the read's
-    // requested columns list (datashard interprets VectorTopK.Column as that index,
-    // not as a column id); both call sites read the output columns first, so the
-    // embedding sits at that position.
-    NKikimrKqp::TReadVectorTopK* SetVectorTopK(NKikimrTxDataShard::TKqpReadRangesSourceSettings* src) {
+    // Push top-K-by-distance ranking down into the datashard read so it returns only
+    // the K nearest rows of this read instead of the full scan. The actor still merges
+    // the per-read top-K across shards/clusters into the global top-K (the global K
+    // nearest are necessarily among each read's own top-K). `column` is the position of
+    // the embedding column within the read's requested columns list (the datashard
+    // interprets VectorTopK.Column as that index, not as a column id), and `limit` is
+    // how many nearest rows the read should keep.
+    NKikimrKqp::TReadVectorTopK* SetVectorTopK(NKikimrTxDataShard::TKqpReadRangesSourceSettings* src,
+        ui32 column, ui32 limit)
+    {
         auto* topK = src->MutableVectorTopK();
-        topK->SetColumn(Settings.GetVectorColumnIndex());
+        topK->SetColumn(column);
         *topK->MutableSettings() = Settings.GetIndexSettings();
         topK->SetTargetVector(TargetVector);
-        topK->SetLimit(TopK);
+        topK->SetLimit(limit);
         return topK;
     }
 
@@ -649,9 +650,23 @@ private:
         AddUint64KeyColumnType(src);
         AddUint64KeyColumnType(src);
 
+        // Columns are read in this order, so the centroid (the embedding to rank on)
+        // sits at index 2 -- the position the datashard's VectorTopK interprets.
         AddColumn(src, Settings.GetLevelTableParentColumnId(), NTableIndex::NKMeans::ParentColumn, NScheme::NTypeIds::Uint64, nullptr, true);
         AddColumn(src, Settings.GetLevelTableClusterColumnId(), NTableIndex::NKMeans::IdColumn, NScheme::NTypeIds::Uint64, nullptr, true);
         AddColumn(src, Settings.GetLevelTableCentroidColumnId(), NTableIndex::NKMeans::CentroidColumn, NScheme::NTypeIds::String, nullptr, true);
+
+        if (!UseLevelCache) {
+            // Push the per-round top-K down into the datashard so the read returns only
+            // the LevelTop nearest children instead of every child of every parent
+            // (which can be hundreds of large centroids per parent). The actor merges
+            // the per-shard top-K and keeps LevelTop -- identical to ranking them all,
+            // but transferring and ranking ~LevelTop rows instead of the full fan-out.
+            // Skipped when the level cache is on: it stores all children to serve other
+            // target vectors, so it must read them all. (VectorColumnIndex = 2, the
+            // centroid's position in the columns added above.)
+            SetVectorTopK(src, /* column */ 2, LevelTop);
+        }
 
         LaunchPhaseReads(src, arena, LevelPartitioning, EReadKind::Level);
     }
@@ -687,7 +702,7 @@ private:
             // leaf clusters, and with overlap the same row can appear under multiple
             // clusters; dedup by PK inside the pushed-down top-K so duplicates don't
             // crowd out distinct nearest rows (the actor still dedups across shards).
-            auto* topK = SetVectorTopK(src);
+            auto* topK = SetVectorTopK(src, Settings.GetVectorColumnIndex(), TopK);
             for (ui32 pos : CoveredPkPositions) {
                 topK->AddDistinctColumns(pos);
             }
@@ -753,7 +768,7 @@ private:
 
         // Non-covered index ranks on the main table: push top-K down so the
         // datashard returns only the K nearest of the gathered candidate PKs.
-        SetVectorTopK(src);
+        SetVectorTopK(src, Settings.GetVectorColumnIndex(), TopK);
 
         LaunchPhaseReads(src, arena, MainPartitioning, EReadKind::Main);
     }

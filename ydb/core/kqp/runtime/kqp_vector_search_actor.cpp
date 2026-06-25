@@ -46,9 +46,19 @@ class TKqpVectorSearchActor : public NActors::TActorBootstrapped<TKqpVectorSearc
         WaitInput,    // waiting for the target vector
         Resolve,      // resolving shard partitionings of the index/main tables
         Level,        // traversing the KMeans tree level table
-        Posting,      // scanning posting table for candidate PKs
-        Main,         // reading main table rows for candidate PKs
+        Posting,      // scanning posting table for candidate PKs (and, for a
+                      // non-covered index, the pipelined main reads they feed)
         Done,         // results ready to be drained
+    };
+
+    // Each inner read of a phase is tagged with which table it scans. The posting
+    // and main reads of a non-covered search overlap (main reads are launched as
+    // posting shards finish), so a single EPhase no longer identifies a read's
+    // table -- the tag does. See HandleRead.
+    enum class EReadKind {
+        Level,
+        Posting,
+        Main,
     };
 
 public:
@@ -473,35 +483,14 @@ private:
         toRead.reserve(CurrentParents.size() + DirectPostingParents.size());
         toRead.insert(toRead.end(), CurrentParents.begin(), CurrentParents.end());
         toRead.insert(toRead.end(), DirectPostingParents.begin(), DirectPostingParents.end());
-        PostingKeys.clear();
+        PendingMainKeys.clear();
         Phase = EPhase::Posting;
         if (toRead.empty()) {
-            OnPostingDone();
+            // No leaf clusters to scan: empty result (covered and non-covered alike).
+            FinalizeResults();
         } else {
             StartPostingRead(toRead);
         }
-    }
-
-    void OnPostingDone() {
-        if (PostingCovers) {
-            // Covered index: candidate rows were built straight from the posting
-            // scan (no main read needed), so finalize the TopK now.
-            CA_LOG_D("Posting done (covered): candidateRows=" << Candidates.size());
-            FinalizeResults();
-            return;
-        }
-        CA_LOG_D("Posting done: candidatePKs=" << PostingKeys.size());
-        if (PostingKeys.empty()) {
-            Phase = EPhase::Done;
-            NotifyCA();
-            return;
-        }
-        StartMainRead();
-    }
-
-    void OnMainDone() {
-        CA_LOG_D("Main done: candidateRows=" << Candidates.size() << " topK=" << TopK);
-        FinalizeResults();
     }
 
     // Populate the shared level cache with the children read for each cache-miss
@@ -664,7 +653,7 @@ private:
         AddColumn(src, Settings.GetLevelTableClusterColumnId(), NTableIndex::NKMeans::IdColumn, NScheme::NTypeIds::Uint64, nullptr, true);
         AddColumn(src, Settings.GetLevelTableCentroidColumnId(), NTableIndex::NKMeans::CentroidColumn, NScheme::NTypeIds::String, nullptr, true);
 
-        LaunchPhaseReads(src, arena, LevelPartitioning);
+        LaunchPhaseReads(src, arena, LevelPartitioning, EReadKind::Level);
     }
 
     void StartPostingRead(TVector<TClusterId>& parents) {
@@ -712,11 +701,20 @@ private:
             }
         }
 
-        LaunchPhaseReads(src, arena, PostingPartitioning);
+        LaunchPhaseReads(src, arena, PostingPartitioning, EReadKind::Posting);
     }
 
-    void StartMainRead() {
-        Phase = EPhase::Main;
+    // Launch a main-table read for one batch of candidate PKs. Non-covered searches
+    // pipeline posting -> main: instead of waiting for the whole posting scan, each
+    // posting shard's PKs are looked up as that shard finishes (see HandleRead), so
+    // the main reads overlap the remaining posting reads and cross-node latency is
+    // hidden instead of serialized behind a barrier. Each batch pushes its own
+    // top-K down; the global K nearest are necessarily among the per-batch top-Ks,
+    // which the actor merges in FinalizeResults.
+    void LaunchMainReadFor(TVector<TString> keys) {
+        if (keys.empty()) {
+            return;
+        }
         TIntrusivePtr<NActors::TProtoArenaHolder> arena;
         // The main table is mutable, so it is always read from the leader with the
         // query snapshot (never from followers).
@@ -731,8 +729,8 @@ private:
         // Parse each key once up front, then sort the parsed cell vecs, instead of
         // re-deserializing both operands on every comparison.
         TVector<TSerializedCellVec> sortedKeys;
-        sortedKeys.reserve(PostingKeys.size());
-        for (auto& key : PostingKeys) {
+        sortedKeys.reserve(keys.size());
+        for (auto& key : keys) {
             sortedKeys.emplace_back(std::move(key));
         }
         std::sort(sortedKeys.begin(), sortedKeys.end(), [keyTypes, keyCount](const TSerializedCellVec& a, const TSerializedCellVec& b) {
@@ -757,7 +755,7 @@ private:
         // datashard returns only the K nearest of the gathered candidate PKs.
         SetVectorTopK(src);
 
-        LaunchPhaseReads(src, arena, MainPartitioning);
+        LaunchPhaseReads(src, arena, MainPartitioning, EReadKind::Main);
     }
 
     // Launch the reads for one phase. With a pre-resolved partitioning, each read is
@@ -766,27 +764,32 @@ private:
     // failed), a single read is launched that resolves itself -- the legacy behaviour.
     void LaunchPhaseReads(NKikimrTxDataShard::TKqpReadRangesSourceSettings* src,
         TIntrusivePtr<NActors::TProtoArenaHolder>& arena,
-        const TPartitioning::TCPtr& partitioning)
+        const TPartitioning::TCPtr& partitioning,
+        EReadKind kind)
     {
         TVector<std::pair<NKikimrTxDataShard::TKqpReadRangesSourceSettings*, TIntrusivePtr<NActors::TProtoArenaHolder>>> reads;
-        if (partitioning && partitioning->Size() == 1) {
-            // Single-shard table: hint the shard directly to skip the resolve.
-            src->SetShardIdHint(partitioning->GetTablePartitioning()[0].ShardId);
-            reads.emplace_back(src, arena);
-        } else if (partitioning && partitioning->Size() > 1) {
+        if (partitioning && partitioning->Size() > 1) {
             // Multi-shard table: fan out one read per shard, each pinned via ShardIdHint.
             SplitByShards(src, partitioning, reads);
         } else {
+            // Single-shard table: hint the shard directly to skip the resolve.
             // No partitioning (resolve failed): leave the read to resolve itself.
+            if (partitioning) {
+                src->SetShardIdHint(partitioning->GetTablePartitioning()[0].ShardId);
+            }
             reads.emplace_back(src, arena);
         }
 
         for (auto& [shardSrc, shardArena] : reads) {
             auto [readActorInput, readActor] = CreateKqpReadActor(shardSrc, shardArena, this->SelfId(),
                 0, IngressStats.Level, TxId, TaskId, TypeEnv, HolderFactory, Alloc, TraceId, Counters);
-            ActiveReads.push_back(readActorInput);
+            ActiveReads.push_back({readActorInput, kind});
             RegisterWithSameMailbox(readActor);
         }
+        // Kick off the freshly launched reads: the first GetAsyncInputData poll starts
+        // the inner read actor. Always called after (never during) the ActiveReads
+        // iteration loop, so re-entering HandleRead here is safe -- the new reads have
+        // no data yet, so the nested call finds nothing finished and returns early.
         HandleRead(nullptr);
     }
 
@@ -872,36 +875,50 @@ private:
     }
 
     void StopAllReads() {
-        for (auto* read : ActiveReads) {
-            StopRead(read);
+        for (auto& ar : ActiveReads) {
+            StopRead(ar.Read);
         }
         ActiveReads.clear();
     }
 
-    // Drain every active inner read of the current phase, collecting their rows. A
-    // phase fans out into one read per shard; the phase completes only once all of
-    // them finish. Inner reads notify via TEvNewAsyncInputDataArrived (all with the
-    // same input index), so each wake-up polls all of them.
+    ui32 CountActiveReads(EReadKind kind) const {
+        ui32 n = 0;
+        for (const auto& ar : ActiveReads) {
+            if (ar.Kind == kind) {
+                ++n;
+            }
+        }
+        return n;
+    }
+
+    // Drain every active inner read, collecting their rows by table kind. Inner reads
+    // notify via TEvNewAsyncInputDataArrived (all with the same input index), so each
+    // wake-up polls all of them. Level rounds are barriered (the next round needs all
+    // children ranked). Posting and main reads of a non-covered search overlap: as
+    // each posting shard finishes, the PKs it produced are dispatched to a main read
+    // (LaunchMainReadFor) while the remaining posting shards are still reading, so
+    // cross-node latency is hidden instead of serialized behind a posting->main
+    // barrier. The search finishes once no posting and no main reads remain.
     void HandleRead(TEvNewAsyncInputDataArrived::TPtr) {
         if (ActiveReads.empty()) {
             return;
         }
-        TVector<NYql::NDq::IDqComputeActorAsyncInput*> finishedReads;
+        TVector<TActiveRead> finishedReads;
         {
             auto guard = BindAllocator();
-            for (auto* read : ActiveReads) {
+            for (auto& ar : ActiveReads) {
                 TMaybe<TInstant> watermark;
                 ui64 freeSpace = 32 * 1024 * 1024;
                 bool finished = false;
                 NKikimr::NMiniKQL::TUnboxedValueBatch rows;
-                read->GetAsyncInputData(rows, watermark, finished, freeSpace);
+                ar.Read->GetAsyncInputData(rows, watermark, finished, freeSpace);
                 rows.ForEachRow([&](NUdf::TUnboxedValue& value) {
-                    ProcessReadRow(value);
+                    ProcessReadRow(value, ar.Kind);
                 });
                 rows.clear();
                 if (finished) {
-                    CollectLocks(read);
-                    finishedReads.push_back(read);
+                    CollectLocks(ar.Read);
+                    finishedReads.push_back(ar);
                 }
                 if (Failed) {
                     break;
@@ -910,41 +927,59 @@ private:
         }
         // Drop finished reads from the active set; any left unpolled after a Failed
         // break stay active and are torn down later in PassAway.
+        THashSet<NYql::NDq::IDqComputeActorAsyncInput*> finishedSet;
+        for (const auto& ar : finishedReads) {
+            finishedSet.insert(ar.Read);
+        }
         ActiveReads.erase(
-            std::remove_if(ActiveReads.begin(), ActiveReads.end(), [&](auto* read) {
-                return std::find(finishedReads.begin(), finishedReads.end(), read) != finishedReads.end();
+            std::remove_if(ActiveReads.begin(), ActiveReads.end(), [&](const TActiveRead& ar) {
+                return finishedSet.contains(ar.Read);
             }),
             ActiveReads.end());
         // Tear down finished reads outside our allocator guard (their PassAway binds
         // the allocator itself).
-        for (auto* read : finishedReads) {
-            StopRead(read);
+        for (const auto& ar : finishedReads) {
+            StopRead(ar.Read);
         }
-        if (!Failed && ActiveReads.empty() && !finishedReads.empty()) {
-            OnPhaseReadsDone();
+        if (Failed) {
+            return;
         }
-    }
+        // Pipeline posting -> main: a posting shard just finished, so dispatch the PKs
+        // gathered so far (across all posting reads) to a main read that overlaps the
+        // remaining posting reads. Covered searches build candidates straight from the
+        // posting rows and never read the main table.
+        bool postingFinished = false;
+        for (const auto& ar : finishedReads) {
+            postingFinished |= (ar.Kind == EReadKind::Posting);
+        }
+        if (postingFinished && !PostingCovers && !PendingMainKeys.empty()) {
+            TVector<TString> batch;
+            batch.swap(PendingMainKeys);
+            LaunchMainReadFor(std::move(batch));
+        }
 
-    void OnPhaseReadsDone() {
-        switch (Phase) {
-            case EPhase::Level:
+        if (finishedReads.empty() || Phase == EPhase::Done) {
+            return;
+        }
+        if (Phase == EPhase::Level) {
+            if (CountActiveReads(EReadKind::Level) == 0) {
                 FlushLevelCache();
                 OnLevelRoundDone();
-                break;
-            case EPhase::Posting:
-                OnPostingDone();
-                break;
-            case EPhase::Main:
-                OnMainDone();
-                break;
-            default:
-                break;
+            }
+            return;
+        }
+        // Posting phase (and the main reads it pipelines into): done once neither
+        // remains. Covered -> candidates are already built; non-covered -> candidates
+        // came from the main reads (or there were none -> empty result).
+        if (CountActiveReads(EReadKind::Posting) == 0 && CountActiveReads(EReadKind::Main) == 0) {
+            CA_LOG_D("Posting/main done: candidateRows=" << Candidates.size() << " topK=" << TopK);
+            FinalizeResults();
         }
     }
 
-    void ProcessReadRow(NUdf::TUnboxedValue& value) {
-        switch (Phase) {
-            case EPhase::Level: {
+    void ProcessReadRow(NUdf::TUnboxedValue& value, EReadKind kind) {
+        switch (kind) {
+            case EReadKind::Level: {
                 TClusterId parent = value.GetElement(0).Get<ui64>();
                 if (!ReadingParents.contains(parent)) {
                     RuntimeError("Returned clusters for invalid parent", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
@@ -964,7 +999,7 @@ private:
                 }
                 break;
             }
-            case EPhase::Posting: {
+            case EReadKind::Posting: {
                 // Dedup rows that appear in overlapping clusters by their PK. In
                 // the covered path the PK columns sit at CoveredPkPositions and the
                 // output columns occupy the first positions (so AddCandidate reads
@@ -976,16 +1011,16 @@ private:
                 if (PostingCovers) {
                     AddCandidate(value);
                 } else {
-                    PostingKeys.push_back(std::move(serialized));
+                    // Buffer the PK for the next pipelined main read (dispatched when
+                    // a posting shard finishes; see HandleRead).
+                    PendingMainKeys.push_back(std::move(serialized));
                 }
                 break;
             }
-            case EPhase::Main: {
+            case EReadKind::Main: {
                 AddCandidate(value);
                 break;
             }
-            default:
-                break;
         }
     }
 
@@ -1116,6 +1151,11 @@ private:
         ui64 Bytes = 0;
     };
 
+    struct TActiveRead {
+        NYql::NDq::IDqComputeActorAsyncInput* Read;
+        EReadKind Kind;
+    };
+
     // Parameters
     const NKikimrTxDataShard::TKqpVectorSearchSettings Settings;
     const ui32 TopK;
@@ -1169,7 +1209,7 @@ private:
     // Parents of the current round being read (level phase); a read row's parent
     // must be one of these.
     THashSet<TClusterId> ReadingParents;
-    TMap<TClusterId, TString> LevelChildren;
+    THashMap<TClusterId, TString> LevelChildren;
 
     // Shared, process-wide cache of immutable level-table rows.
     TIntrusivePtr<TVectorIndexLevelsCache> LevelsCache;
@@ -1179,15 +1219,19 @@ private:
     // are gathered here and inserted into the shared cache when the read finishes.
     THashMap<TClusterId, TOwnedCellVecBatch> CachingLevelBatches;
 
-    TVector<TString> PostingKeys;         // serialized PK cell vecs
+    // Non-covered posting rows produce candidate PKs (serialized cell vecs) that are
+    // buffered here and flushed into a pipelined main read when a posting shard
+    // finishes (see HandleRead). SeenKeys dedups PKs that recur across overlapping
+    // clusters, across all posting shards of the query.
+    TVector<TString> PendingMainKeys;
     THashSet<TString> SeenKeys;
 
     TVector<TCandidate> Candidates;
     NKikimr::NMiniKQL::TUnboxedValueDeque ResultRows;
 
-    // Active inner read actors of the current phase (one per shard). The phase
-    // completes when all of them have finished.
-    TVector<NYql::NDq::IDqComputeActorAsyncInput*> ActiveReads;
+    // Active inner read actors, each tagged with the table it scans. Level rounds are
+    // barriered; posting and (non-covered) main reads coexist (pipelined).
+    TVector<TActiveRead> ActiveReads;
 
     // Pre-resolved shard partitionings of the index/main tables, used to pin each
     // per-phase read to its shards via ShardIdHint and skip per-read resolves. A null

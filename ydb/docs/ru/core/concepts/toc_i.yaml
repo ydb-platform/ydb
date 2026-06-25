@@ -6,6 +6,7 @@ items:
     path: analytics/toc_p.yaml
     mode: link
 - name: Потоковая обработка
+  href: streaming-query/index.md
   include:
     path: streaming-query/toc_p.yaml
     mode: link

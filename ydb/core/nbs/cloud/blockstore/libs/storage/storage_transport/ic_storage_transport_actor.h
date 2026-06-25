@@ -54,6 +54,9 @@ private:
 
     THashMap<ui64, TWriteToManyPBuffersReqInfo> WriteToManyPBuffersRequests;
 
+    using TDisconnectCB = std::function<void(ui32)>;
+    THashMap<ui64, TVector<TDisconnectCB>> ICSubscribedNodes;
+
 public:
     TICStorageTransportActor() = default;
 
@@ -156,6 +159,16 @@ private:
         const NActors::TActorContext& ctx);
     void HandleListPersistentBufferResult(
         const NKikimr::NDDisk::TEvListPersistentBufferResult::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void PassAway() override;
+
+    void HandleICNodeDisconnected(
+        const NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleICNodeConnected(
+        const NActors::TEvInterconnect::TEvNodeConnected::TPtr& ev,
         const NActors::TActorContext& ctx);
 };
 

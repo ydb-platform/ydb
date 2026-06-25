@@ -176,6 +176,7 @@ private:
         size_t index,
         ui64 seqNo,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
+    void OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId);
 
     [[nodiscard]] bool HasPBufferQuorum() const;
     [[nodiscard]] bool HasLockedQuorum() const;

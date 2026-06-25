@@ -21,17 +21,22 @@ struct TEvTransportPrivate
     struct TConnect: TDisableCopyMove
     {
         using TResult = NKikimrBlobStorage::NDDisk::TEvConnectResult;
+        using TDisconnectCB = std::function<void(ui32)>;
 
         const NActors::TActorId ServiceId;
         const NKikimr::NDDisk::TQueryCredentials Credentials;
         NThreading::TPromise<TResult> Promise =
             NThreading::NewPromise<TResult>();
 
+        TDisconnectCB DisconnectCB;
+
         TConnect(
             const NActors::TActorId& serviceId,
-            const NKikimr::NDDisk::TQueryCredentials& credentials)
+            const NKikimr::NDDisk::TQueryCredentials& credentials,
+            TDisconnectCB disconnectCB)
             : ServiceId(serviceId)
             , Credentials(credentials)
+            , DisconnectCB(std::move(disconnectCB))
         {}
 
         ~TConnect();

@@ -15,11 +15,14 @@ TICStorageTransport::TICStorageTransport(NActors::TActorSystem* actorSystem)
 {}
 
 TFuture<NKikimrBlobStorage::NDDisk::TEvConnectResult>
-TICStorageTransport::Connect(const THostConnection& connection)
+TICStorageTransport::Connect(
+    const THostConnection& connection,
+    TDisconnectCB disconnectCB)
 {
     auto request = std::make_unique<TEvTransportPrivate::TEvConnect>(
         connection.GetServiceId(),
-        connection.Credentials);
+        connection.Credentials,
+        std::move(disconnectCB));
     auto future = request->Promise.GetFuture();
 
     ActorSystem->Send(ICStorageTransportActorId, request.release());

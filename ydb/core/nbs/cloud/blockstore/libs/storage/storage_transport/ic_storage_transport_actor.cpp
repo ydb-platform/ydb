@@ -126,10 +126,10 @@ void TICStorageTransportActor::HandleConnect(
         ConnectRequests.emplace(requestId, ev->Release().Release());
     Y_ABORT_UNLESS(inserted);
 
-    LOG_DEBUG(
+    LOG_ERROR(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "Sent TEvConnect with requestId# %lu",
+        "maks_ololo Sent TEvConnect with requestId# %lu",
         requestId);
 
     SendWithUndeliveryTracking(
@@ -182,7 +182,10 @@ void TICStorageTransportActor::HandleConnectResult(
 
     if (auto* r = ConnectRequests.FindPtr(requestId)) {
         auto& request = **r;
+        ICSubscribedNodes[request.ServiceId.NodeId()].push_back(
+            std::move(request.DisconnectCB));
         request.Promise.SetValue(std::move(ev->Get()->Record));
+
         ConnectRequests.erase(requestId);
     } else {
         // That means that request is already completed
@@ -1076,6 +1079,61 @@ void TICStorageTransportActor::HandleListPersistentBufferResult(
     }
 }
 
+void TICStorageTransportActor::PassAway()
+{
+    for (const auto& [nodeId, _]: ICSubscribedNodes) {
+        if (nodeId != SelfId().NodeId()) {
+            auto request = std::make_unique<TEvents::TEvUnsubscribe>();
+            Send(
+                TActivationContext::InterconnectProxy(nodeId),
+                request.release());
+        }
+    }
+    ICSubscribedNodes.clear();
+    // TODO do we need to call cb and notify dbg?
+    NActors::IActor::PassAway();
+}
+
+void TICStorageTransportActor::HandleICNodeDisconnected(
+    const TEvInterconnect::TEvNodeDisconnected::TPtr& ev,
+    const TActorContext& ctx)
+{
+    Y_UNUSED(ctx);
+    const ui32 nodeId = ev->Get()->NodeId;
+
+    LOG_CRIT(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "maks_ololo Node #%lu disconnected",
+        nodeId);
+
+    auto it = ICSubscribedNodes.find(nodeId);
+    if (it != ICSubscribedNodes.end()) {
+        for (const auto& cb: it->second) {
+            if (cb) {
+                cb(nodeId);
+            }
+        }
+        ICSubscribedNodes.erase(it);
+    }
+}
+
+void TICStorageTransportActor::HandleICNodeConnected(
+    const TEvInterconnect::TEvNodeConnected::TPtr& ev,
+    const TActorContext& ctx)
+{
+    Y_UNUSED(ev, ctx);
+    /*
+    const ui32 node = ev->Get()->NodeId;
+
+    LOG_CRIT(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "maks_ololo Node #%lu connected",
+        node);
+    */
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 STFUNC(TICStorageTransportActor::StateWork)
@@ -1164,6 +1222,9 @@ STFUNC(TICStorageTransportActor::StateWork)
         HFunc(
             NKikimr::NDDisk::TEvListPersistentBufferResult,
             HandleListPersistentBufferResult);
+
+        HFunc(TEvInterconnect::TEvNodeDisconnected, HandleICNodeDisconnected);
+        HFunc(TEvInterconnect::TEvNodeConnected, HandleICNodeConnected);
 
         default:
             LOG_ERROR_S(

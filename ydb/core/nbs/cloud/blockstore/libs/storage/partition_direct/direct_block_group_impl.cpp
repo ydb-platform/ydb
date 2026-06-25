@@ -1133,6 +1133,8 @@ void TDirectBlockGroup::DoEstablishConnection(
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
+    std::function<void(ui32)> disconnectCB = nullptr;
+
     ui64& actualSeqNo = connection.HostConnection.Credentials.DDiskSessionSeqNo;
     if (connection.HostConnection.ConnectionType == EConnectionType::DDisk) {
         actualSeqNo++;
@@ -1144,11 +1146,27 @@ void TDirectBlockGroup::DoEstablishConnection(
             LogTitle.GetWithTime().c_str(),
             index,
             actualSeqNo);
+
+        disconnectCB =
+            [index, weakSelf = weak_from_this(), executor = Executor]   //
+            (ui32 nodeId)
+        {
+            executor->ExecuteSimple(
+                [index, nodeId, weakSelf]   //
+                () mutable -> void
+                {
+                    if (auto self = weakSelf.lock()) {
+                        self->OnNodeDisconnected(index, nodeId);
+                    }
+                });
+        };
     }
 
     using TEvConnectResult = NKikimrBlobStorage::NDDisk::TEvConnectResult;
 
-    auto future = StorageTransport->Connect(connection.HostConnection);
+    auto future = StorageTransport->Connect(
+        connection.HostConnection,
+        std::move(disconnectCB));
 
     future.Subscribe(
         [weakSelf = weak_from_this(),
@@ -1232,6 +1250,24 @@ void TDirectBlockGroup::OnConnectionEstablished(
             LogTitle.GetWithTime().c_str(),
             MinLockedDDiskSessionsToStart);
     }
+}
+
+void TDirectBlockGroup::OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    LOG_ERROR(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "maks_ololo TDBG::OnNodeDisconnected %s, host %s, nodId: %d",
+        LogTitle.GetWithTime().c_str(),
+        PrintHostIndex(hostIndex).c_str(),
+        nodeId);
+
+    // TODO
+    // сбросить locked сессии
+    // запстить установку новой сессии
+    // оповестить oracle о проблеме
 }
 
 bool TDirectBlockGroup::HasPBufferQuorum() const

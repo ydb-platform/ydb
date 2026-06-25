@@ -9,7 +9,6 @@
 #include <yql/essentials/minikql/mkql_node_builder.h>
 #include <yql/essentials/minikql/mkql_string_util.h>
 #include <yql/essentials/minikql/mkql_watermark.h>
-#include <yql/essentials/minikql/udf_value_test_support/udf_value_comparator_utils.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -132,7 +131,10 @@ void TestImpl(
     for (const auto& source : input) {
         NUdf::TUnboxedValue result;
         UNIT_ASSERT_VALUES_EQUAL(NUdf::EFetchStatus::Ok, root.Fetch(result));
-        NUdf::AssertUnboxedValueElementEqual(result, std::make_tuple(source.Cluster, source.PartitionId, source.Timestamp.MicroSeconds()));
+        const auto clusterValue = result.GetElement(0);
+        UNIT_ASSERT_VALUES_EQUAL(TString(clusterValue.AsStringRef()), source.Cluster);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetElement(1).Get<ui64>(), source.PartitionId);
+        UNIT_ASSERT_VALUES_EQUAL(result.GetElement(2).Get<ui64>(), source.Timestamp.MicroSeconds());
         actual.push_back(watermark.WatermarkIn);
     }
 

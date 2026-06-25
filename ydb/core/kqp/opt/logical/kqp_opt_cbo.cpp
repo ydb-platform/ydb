@@ -50,60 +50,99 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<TRelOptimizerNode>& no
         return true;
     }
 
+    TString tablePath;
+    bool baseTableMatch = true;
     auto readMatch = MatchRead<TKqlReadTable>(expr);
     TMaybeNode<TKqlKeyInc> maybeTablePrefix;
     size_t prefixSize;
 
     if (readMatch) {
-        if (readMatch->FlatMap && !IsPassthroughFlatMap(readMatch->FlatMap.Cast(), nullptr)){
-            return false;
-        }
-        auto read = readMatch->Read.Cast<TKqlReadTable>();
-        maybeTablePrefix = GetRightTableKeyPrefix(read.Range());
+        if (readMatch->FlatMap && !IsPassthroughFlatMap(readMatch->FlatMap.Cast(), nullptr)) {
+            baseTableMatch = false;
+        } else {
+            auto read = readMatch->Read.Cast<TKqlReadTable>();
+            tablePath = read.Table().Path().StringValue();
 
-        if (!maybeTablePrefix) {
-            return false;
-        }
+            maybeTablePrefix = GetRightTableKeyPrefix(read.Range());
 
-         prefixSize = maybeTablePrefix.Cast().ArgCount();
+            if (!maybeTablePrefix) {
+                baseTableMatch = false;
+            } else {
+                prefixSize = maybeTablePrefix.Cast().ArgCount();
 
-        if (!prefixSize) {
-            return true;
+                if (!prefixSize) {
+                    baseTableMatch = true;
+                }
+            }
         }
     } else {
         readMatch = MatchRead<TKqlReadTableRangesBase>(expr);
         if (readMatch) {
-            if (readMatch->FlatMap && !IsPassthroughFlatMap(readMatch->FlatMap.Cast(), nullptr)){
-                return false;
-            }
-            auto read = readMatch->Read.Cast<TKqlReadTableRangesBase>();
-            if (TCoVoid::Match(read.Ranges().Raw())) {
-                return true;
+            if (readMatch->FlatMap && !IsPassthroughFlatMap(readMatch->FlatMap.Cast(), nullptr)) {
+                baseTableMatch = false;
             } else {
-                auto prompt = TKqpReadTableExplainPrompt::Parse(read);
+                auto read = readMatch->Read.Cast<TKqlReadTableRangesBase>();
+                tablePath = read.Table().Path().StringValue();
 
-                if (prompt.PointPrefixLen != prompt.UsedKeyColumns.size()) {
-                    return false;
-                }
+                if (TCoVoid::Match(read.Ranges().Raw())) {
+                    baseTableMatch = false;
+                } else {
+                    auto prompt = TKqpReadTableExplainPrompt::Parse(read);
 
-                if (prompt.ExpectedMaxRanges != TMaybe<ui64>(1)) {
-                    return false;
+                    if (prompt.PointPrefixLen != prompt.UsedKeyColumns.size()) {
+                        baseTableMatch = false;
+                    } else {
+                        if (prompt.ExpectedMaxRanges != TMaybe<ui64>(1)) {
+                            baseTableMatch = false;
+                        } else {
+                            prefixSize = prompt.PointPrefixLen;
+                        }
+                    }
                 }
-                prefixSize = prompt.PointPrefixLen;
             }
         }
     }
-    if (! readMatch) {
+    if (!readMatch) {
         return false;
     }
 
-    if (prefixSize < node->Stats.KeyColumns->Data.size() && (std::find_if(joinColumns.begin(), joinColumns.end(), [&] (const TJoinColumn& c) {
-            return node->Stats.KeyColumns->Data[prefixSize] == c.AttributeName;
-        }) == joinColumns.end())){
-            return false;
+    if(baseTableMatch) {
+        if (prefixSize < node->Stats.KeyColumns->Data.size() && (std::find_if(joinColumns.begin(), joinColumns.end(), [&] (const TJoinColumn& c) {
+                return node->Stats.KeyColumns->Data[prefixSize] == c.AttributeName;
+            }) == joinColumns.end())) {
+                baseTableMatch = false;
+            }
         }
 
-    return true;
+    if (baseTableMatch) {
+        return true;
+    }
+
+    // Check indexes
+    THashSet<TString> rightJoinKeys;
+    for (const auto& col : joinColumns) {
+        rightJoinKeys.insert(col.AttributeName);
+    }
+
+    const auto& tableData = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, tablePath);
+    const auto& meta = *tableData.Metadata;
+    for (const auto& index : meta.Indexes) {
+        if (index.Type == TIndexDescription::EType::GlobalAsync
+            || index.Type == TIndexDescription::EType::GlobalJson
+            || index.Type == TIndexDescription::EType::GlobalJsonCompact)
+        {
+            continue;
+        }
+
+        if (index.State != TIndexDescription::EIndexState::Ready) {
+            continue;
+        }
+
+        if(rightJoinKeys.contains(index.KeyColumns[0])) {
+            return true;
+        }
+    }
+    return false;
 }
 
 bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
@@ -128,11 +167,11 @@ bool IsLookupJoinApplicable(std::shared_ptr<IBaseOptimizerNode> left,
         return false;
     }
 
-    for (auto rightCol : rightJoinKeys) {
-        if (find(rightStats.KeyColumns->Data.begin(), rightStats.KeyColumns->Data.end(), rightCol.AttributeName) == rightStats.KeyColumns->Data.end()) {
-            return false;
-        }
-    }
+    // for (auto rightCol : rightJoinKeys) {
+    //     if (find(rightStats.KeyColumns->Data.begin(), rightStats.KeyColumns->Data.end(), rightCol.AttributeName) == rightStats.KeyColumns->Data.end()) {
+    //         return false;
+    //     }
+    // }
 
     return IsLookupJoinApplicableDetailed(std::static_pointer_cast<TRelOptimizerNode>(right), rightJoinKeys, ctx);
 }
@@ -183,13 +222,13 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
     EJoinKind joinKind) {
 
     switch( joinAlgo ) {
-        case EJoinAlgoType::LookupJoin:
+        case EJoinAlgoType::LookupJoin: {
             if ((OptLevel != 3) && (left->Stats.Nrows > 5000)) {
                 return false;
             }
             return IsLookupJoinApplicable(left, right, leftJoinKeys, rightJoinKeys, *this);
-
-        case EJoinAlgoType::LookupJoinReverse:
+        }
+        case EJoinAlgoType::LookupJoinReverse: {
             if (joinKind != EJoinKind::LeftSemi) {
                 return false;
             }
@@ -197,7 +236,7 @@ bool TKqpProviderContext::IsJoinApplicable(const std::shared_ptr<IBaseOptimizerN
                 return false;
             }
             return IsLookupJoinApplicable(right, left, rightJoinKeys, leftJoinKeys, *this);
-
+        }
         case EJoinAlgoType::MapJoin:
             return joinKind != EJoinKind::OuterJoin && joinKind != EJoinKind::Exclusion && right->Stats.ByteSize < 1e6;
         case EJoinAlgoType::GraceJoin:
@@ -228,18 +267,18 @@ double TKqpProviderContext::ComputeJoinCost(
     double estimatedOutputByteSize = outputRows * WeightedRowSize(outputRows, outputByteSize, CONSTS_OUTPUT_SIDE_BYTESIZE_FACTOR);
 
     switch(joinAlgo) {
-        case EJoinAlgoType::LookupJoin:
+        case EJoinAlgoType::LookupJoin: {
             if (OptLevel == 3) {
                 return -1;
             }
-            return leftStats.ByteSize + outputByteSize;
-
-        case EJoinAlgoType::LookupJoinReverse:
+            return leftSideByteSize;
+        }
+        case EJoinAlgoType::LookupJoinReverse: {
             if (OptLevel == 3) {
                 return -1;
             }
-            return rightStats.ByteSize + outputByteSize;
-
+            return rightSideByteSize;
+        }
         case EJoinAlgoType::MapJoin: {
             return 1.5 * (CONSTS_MAPJOIN_LEFT_SIDE_MULT * std::pow(leftSideByteSize, CONSTS_MAPJOIN_LEFT_SIDE_POW)
                 + CONSTS_MAPJOIN_RIGHT_SIDE_MULT * std::pow(rightSideByteSize, CONSTS_MAPJOIN_RIGHT_SIDE_POW)

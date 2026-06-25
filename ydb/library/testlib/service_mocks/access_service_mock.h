@@ -196,7 +196,7 @@ public:
             const TString& token = request->signature().access_key_id() + request->iam_token() + "-" + action.permission() + "-" + lastResourceId;
 
             auto it = AuthorizeData.find(token);
-            if (it != AuthorizeData.end()) {
+            if (it != AuthorizeData.end() && it->second.Status.ok()) {
                 CheckRequestId(ctx, it->second, token);
                 if (it->second.Response.has_subject()) {
                     response->mutable_subject()->CopyFrom(it->second.Response.subject());
@@ -205,7 +205,7 @@ public:
                 auto* result_item = response->mutable_results()->add_items();
                 result_item->set_permission(action.permission());
                 result_item->mutable_resource_path()->CopyFrom(action.resource_path());
-                result_item->mutable_permission_denied_error()->set_message("Permission denied");
+                result_item->mutable_permission_denied_error()->set_message((it != AuthorizeData.end()) ? it->second.Status.error_message() : "Permission denied");
             }
         }
 

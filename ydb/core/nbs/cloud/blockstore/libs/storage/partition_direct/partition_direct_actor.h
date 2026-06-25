@@ -113,6 +113,14 @@ private:
         const TEvPartitionDirectPrivate::TEvFastPathServiceReady::TPtr& ev,
         const NActors::TActorContext& ctx);
 
+    void HandleFastPathServiceShutdown(
+        const TEvPartitionDirectPrivate::TEvFastPathServiceShutdown::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleFastPathServiceStopped(
+        const TEvPartitionDirectPrivate::TEvFastPathServiceStopped::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
     void Start(
         const NActors::TActorContext& ctx,
         TDirectBlockGroupsConnections directBlockGroupsConnections,

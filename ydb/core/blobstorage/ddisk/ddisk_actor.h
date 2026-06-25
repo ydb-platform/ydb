@@ -88,10 +88,6 @@ namespace NKikimr::NDDisk {
         std::vector<std::pair<TString, TString>> CountersChain;
         ui64 DDiskInstanceGuid = RandomNumber<ui64>();
 
-#if defined(__linux__)
-        std::unique_ptr<NPDisk::TUringRouter> UringRouter;
-#endif
-
         static constexpr ui32 MaxInFlight = 256; // TODO: make configurable
 
         class TDirectIoOpBase;
@@ -212,6 +208,10 @@ namespace NKikimr::NDDisk {
                 NMonitoring::THistogramPtr QueueTime;
             } DirectIO;
 
+#if defined(__linux__)
+            NPDisk::TUringCounters UringCounters;
+#endif
+
             struct {
                 NMonitoring::TDynamicCounters::TCounterPtr AllocatedChunks;
                 NMonitoring::TDynamicCounters::TCounterPtr TotalBytes;
@@ -222,6 +222,13 @@ namespace NKikimr::NDDisk {
         };
 
         TCounters Counters;
+
+#if defined(__linux__)
+        // we share Counters with UringRouter, so that
+        // UringRouter must be after the counters to have a
+        // proper destruction order
+        std::unique_ptr<NPDisk::TUringRouter> UringRouter;
+#endif
 
     public:
         struct TEvPrivate {
@@ -517,14 +524,13 @@ namespace NKikimr::NDDisk {
             };
 
             auto logError = [&](TStringBuf reason) {
-                LOG_DEBUG_S(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK,
-                    "TDDiskActor::CheckQuery validation failed"
-                    << " reason# " << reason
-                    << " DDiskId# " << DDiskId
-                    << " EvType# " << ev.GetTypeRewrite()
-                    << " Sender# " << ev.Sender
-                    << " Cookie# " << ev.Cookie
-                    << " ICSession# " << ev.InterconnectSession);
+                YDB_LOG_DEBUG_CTX_COMP(*TActivationContext::ActorSystem(), NKikimrServices::BS_DDISK, "TDDiskActor::CheckQuery validation failed",
+                    {"reason", reason},
+                    {"DDiskId", DDiskId},
+                    {"evType", ev.GetTypeRewrite()},
+                    {"sender", ev.Sender},
+                    {"cookie", ev.Cookie},
+                    {"ICSession", ev.InterconnectSession});
             };
 
             const TQueryCredentials creds(record.GetCredentials());

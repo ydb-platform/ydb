@@ -13,6 +13,8 @@
 #include <util/generic/set.h>
 #include <util/generic/vector.h>
 
+#include <span>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 class TVChunkConfig;
@@ -64,14 +66,19 @@ struct TPBufferSegment
     ui64 Lsn = 0;
     TBlockRange64 Range;
 
-    [[nodiscard]] TString DebugPrint() const;
+    static TVector<ui64> MakeLsnVector(
+        std::span<const TPBufferSegment> segments);
+
+    [[nodiscard]] TString DebugPrint(bool brief) const;
 };
 
 struct TFlushHint
 {
     TVector<TPBufferSegment> Segments;
 
-    [[nodiscard]] TString DebugPrint() const;
+    [[nodiscard]] TVector<ui64> MakeLsnVector() const;
+
+    [[nodiscard]] TString DebugPrint(bool brief) const;
 };
 
 class TFlushHints
@@ -100,7 +107,9 @@ struct TEraseHint
 {
     TVector<TPBufferSegment> Segments;
 
-    [[nodiscard]] TString DebugPrint() const;
+    [[nodiscard]] TVector<ui64> MakeLsnVector() const;
+
+    [[nodiscard]] TString DebugPrint(bool brief) const;
 };
 
 class TEraseHints

@@ -1,17 +1,16 @@
 {%- macro IncludeGlobs(some_set, dir) -%}
-.include({%- for glob in some_set.globs -%}"{{ glob }}"{%- if not loop.last -%}, {%- endif -%}{%- endfor -%})
+.include({%- for glob in some_set.globs -%}"{{ glob|replace(export_root + "/" + curdir, "$projectBuildDir")|replace(export_root, "$baseBuildDir") }}"{%- if not loop.last -%}, {%- endif -%}{%- endfor -%})
 {%- endmacro -%}
 
 {%- macro PrintGlobs(module, some_set, dir) -%}
 {%-     if module == 'resources' -%}
-{%-         if (some_set.globs|length) and not('**/*' in some_set.globs) -%}
+{%-         if (some_set.globs|length) -%}
 {{ IncludeGlobs(some_set, dir) }}
 {%-         else -%}
 .include("**/*")
 {%-         endif -%}
 {%-     else -%}
-{%-         if (some_set.globs|length) and (some_set.globs|join('')|replace('*', '') == some_set.globs|join('')) -%}
-{#- Use single source file from each glob -#}
+{%-         if (some_set.globs|length) -%}
 {{ IncludeGlobs(some_set, dir) }}
 {%-         else -%}
 .include("**/*")

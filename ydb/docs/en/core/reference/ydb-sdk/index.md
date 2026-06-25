@@ -9,7 +9,7 @@ To work with {{ ydb-short-name }}, OpenSource SDKs are available for the followi
 
 {% if oss %}
 
-| C++ | [ydb-platform/ydb/tree/main/ydb/public/sdk/cpp](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp) | N/A |
+| C++ | [ydb-platform/ydb-cpp-sdk](https://github.com/ydb-platform/ydb-cpp-sdk) | N/A |
 
 {% endif %}
 

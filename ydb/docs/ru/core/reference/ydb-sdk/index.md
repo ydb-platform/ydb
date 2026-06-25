@@ -7,7 +7,7 @@
 | Язык | Репозиторий на GitHub | Справка по API |
 |----------|------------|----------------|
 {% if oss %}
-| C++ | [ydb-platform/ydb/tree/main/ydb/public/sdk/cpp](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp) | N/A |
+| C++ | [ydb-platform/ydb-cpp-sdk](https://github.com/ydb-platform/ydb-cpp-sdk) | N/A |
 {% endif %}
 | С# | [ydb-platform/ydb-dotnet-sdk](https://github.com/ydb-platform/ydb-dotnet-sdk) | N/A |
 | Go | [ydb-platform/ydb-go-sdk](https://github.com/ydb-platform/ydb-go-sdk) | [https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3) |

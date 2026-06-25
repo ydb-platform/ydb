@@ -245,6 +245,8 @@ common:
     to: /dev/example-app/java/index.md
   - from: /reference/ydb-sdk/example/python/index.md
     to: /dev/example-app/python/index.md
+  - from: /reference/ydb-sdk/ydb-cpp-sdk.md
+    to: /reference/ydb-sdk/install.md
 
 # YQL-related redirects
   - from: /yql/reference/syntax/alter_topic.md

@@ -211,7 +211,7 @@ std::vector<TQueryPhaseStats> TExecStats::GetQueryPhases() const {
 
 std::optional<TCompilationStats> TExecStats::GetCompilation() const {
     const auto& proto = Impl_->Proto;
-    if (!proto.Hascompilation()) {
+    if (!proto.has_compilation()) {
         return {};
     }
     return TCompilationStats(proto.compilation());

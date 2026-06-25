@@ -169,7 +169,7 @@ public:
         const auto& status = ev->Get()->Status;
         auto it = ModifyPermissionsRequests.find(ev->Cookie);
         if (it == ModifyPermissionsRequests.end()) {
-            YDB_LOG_ERROR("[ydb] [CmsGrpcClient]: Request doesn't exist (ModifyPermissionsResponse). Need to fix this bug urgently");
+            LOG_E("Request doesn't exist (ModifyPermissionsResponse). Need to fix this bug urgently");
             return;
         }
         auto request = it->second;

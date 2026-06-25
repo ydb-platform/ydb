@@ -46,7 +46,7 @@ A colum-oriented table is created by specifying the parameter `STORE = COLUMN` i
   );
 ```
 
-The properties and capabilities of columnar tables are described in the article [Table](../../../../concepts/datamodel/table.md), and the specifics of their creation through YQL are described on the page [CREATE TABLE](./index.md).
+The properties and capabilities of columnar tables are described in the article [{#T}](../../../../concepts/datamodel/table.md), and the specifics of their creation through YQL are described on the page [{#T}](./index.md).
 
 ## Time to Live (TTL) {#time-to-live}
 

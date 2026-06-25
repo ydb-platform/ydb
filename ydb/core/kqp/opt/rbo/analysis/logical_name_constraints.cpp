@@ -9,12 +9,10 @@ namespace {
 
 class TLogicalNameConstraints: public INameConstraintsContext {
 public:
-    explicit TLogicalNameConstraints(TPlanProps& props)
-        : Props(props) {
-    }
-
     void Run(TOpRoot& root) {
-        Props.NameConstraints.Clear();
+        for (const auto& iter : root) {
+            iter.Current->Props.NameConstraints.Clear();
+        }
 
         bool changed = true;
         ui32 iteration = 0;
@@ -30,7 +28,7 @@ public:
     TInfoUnitSet GetIncomingForbidden(IOperator* op) const override {
         TInfoUnitSet result;
         for (const auto& [parent, childIdx] : op->Parents) {
-            AddInfoUnits(result, Props.NameConstraints.GetForbiddenOut(parent, childIdx, op));
+            AddInfoUnits(result, op->Props.NameConstraints.GetForbiddenOut(parent, childIdx, op));
         }
         return result;
     }
@@ -40,11 +38,9 @@ public:
             return false;
         }
         Y_ENSURE(childIdx < parent->Children.size());
-        return Props.NameConstraints.AddForbiddenOut(parent, childIdx, parent->Children[childIdx].get(), forbidden);
+        auto child = parent->Children[childIdx];
+        return child->Props.NameConstraints.AddForbiddenOut(parent, childIdx, child.get(), forbidden);
     }
-
-private:
-    TPlanProps& Props;
 };
 
 ui32 ResolveChildIdx(IOperator* from, IOperator* to) {
@@ -165,7 +161,7 @@ bool TOpUnionAll::PropagateNameConstraints(INameConstraintsContext& ctx) {
 }
 
 void ComputePlanNameConstraints(TOpRoot& root) {
-    TLogicalNameConstraints(root.PlanProps).Run(root);
+    TLogicalNameConstraints().Run(root);
 }
 
 const TInfoUnitSet& GetForbidden(
@@ -173,21 +169,23 @@ const TInfoUnitSet& GetForbidden(
     IOperator* from,
     IOperator* to)
 {
+    Y_UNUSED(props);
     const ui32 childIdx = ResolveChildIdx(from, to);
-    return props.NameConstraints.GetForbiddenOut(to, childIdx, from);
+    return from->Props.NameConstraints.GetForbiddenOut(to, childIdx, from);
 }
 
 TInfoUnitSet GetForbidden(
     const TPlanProps& props,
     IOperator* op)
 {
+    Y_UNUSED(props);
     TInfoUnitSet result;
     if (!op) {
         return result;
     }
 
     for (const auto& [parent, childIdx] : op->Parents) {
-        AddInfoUnits(result, props.NameConstraints.GetForbiddenOut(parent, childIdx, op));
+        AddInfoUnits(result, op->Props.NameConstraints.GetForbiddenOut(parent, childIdx, op));
     }
     return result;
 }

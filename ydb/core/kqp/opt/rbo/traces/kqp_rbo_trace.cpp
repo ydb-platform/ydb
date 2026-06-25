@@ -364,7 +364,7 @@ struct TForbiddenOutEntry {
     std::vector<std::string> Columns;
 };
 
-std::vector<TForbiddenOutEntry> BuildForbiddenOutEntries(const IOperator& op, const TPlanProps& props) {
+std::vector<TForbiddenOutEntry> BuildForbiddenOutEntries(const IOperator& op) {
     std::vector<std::tuple<std::string, IOperator*, ui32>> parents;
     parents.reserve(op.Parents.size());
     for (const auto& [parent, childIdx] : op.Parents) {
@@ -379,7 +379,7 @@ std::vector<TForbiddenOutEntry> BuildForbiddenOutEntries(const IOperator& op, co
 
     std::vector<TForbiddenOutEntry> entries;
     for (const auto& [label, parent, childIdx] : parents) {
-        const auto& forbidden = props.NameConstraints.GetForbiddenOut(parent, childIdx, const_cast<IOperator*>(&op));
+        const auto& forbidden = op.Props.NameConstraints.GetForbiddenOut(parent, childIdx, const_cast<IOperator*>(&op));
         if (forbidden.empty()) {
             continue;
         }
@@ -887,9 +887,8 @@ optimizer_trace::Node BuildPlanNode(
         }
     }
 
-    const auto liveOutIt = planProps.LiveOut.find(op.get());
-    if (liveOutIt != planProps.LiveOut.end()) {
-        AddInfoUnitField(node, "LiveOut", "Live out", SortInfoUnitSet(liveOutIt->second));
+    if (op->Props.LiveOut) {
+        AddInfoUnitField(node, "LiveOut", "Live out", SortInfoUnitSet(*op->Props.LiveOut));
     }
 
     const auto usedIUs = SortInfoUnits(UniqueInfoUnits(op->GetUsedIUs(planProps)));
@@ -897,16 +896,15 @@ optimizer_trace::Node BuildPlanNode(
         AddInfoUnitField(node, "UsedIUs", "Used IUs", usedIUs, op.Get());
     }
 
-    const auto aliasIt = planProps.Aliases.AliasesAtOutput.find(op.get());
-    if (aliasIt != planProps.Aliases.AliasesAtOutput.end()) {
-        const auto rows = BuildAliasRows(aliasIt->second);
+    if (op->Props.Aliases) {
+        const auto rows = BuildAliasRows(*op->Props.Aliases);
         if (!rows.empty()) {
             node.field("Aliases", FormatPairSummary(rows))
                 .detail(BuildColumnTable("Aliases at output", rows));
         }
     }
 
-    const auto forbiddenEntries = BuildForbiddenOutEntries(*op, planProps);
+    const auto forbiddenEntries = BuildForbiddenOutEntries(*op);
     if (!forbiddenEntries.empty()) {
         node.field("ForbiddenOut", FormatCountedSummary(BuildForbiddenOutSummaryItems(forbiddenEntries), 3))
             .details(BuildForbiddenOutWidgets(forbiddenEntries));

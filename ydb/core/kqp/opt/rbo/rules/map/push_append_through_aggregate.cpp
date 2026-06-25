@@ -108,8 +108,8 @@ TIntrusivePtr<IOperator> TPushAppendThroughAggregateRule::SimpleMatchAndApply(co
 
         const auto from = mapElement.GetColumnAccess();
         const auto to = mapElement.GetElementName();
-        const auto liveIt = props.LiveOut.find(topMap.get());
-        if (liveIt == props.LiveOut.end() || !liveIt->second.contains(to) || liveIt->second.contains(from)) {
+        const auto* liveOut = GetLiveOut(topMap.get());
+        if (!liveOut || !liveOut->contains(to) || liveOut->contains(from)) {
             continue;
         }
 

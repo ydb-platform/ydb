@@ -99,22 +99,6 @@ struct TAliasCandidate {
 struct TPlanAliases {
     using TCandidates = TVector<TAliasCandidate>;
     using TAliasMap = THashMap<TInfoUnit, TCandidates, TInfoUnit::THashFunction>;
-
-    void Clear() {
-        AliasesAtOutput.clear();
-    }
-
-    const TCandidates* GetAliases(IOperator* op, const TInfoUnit& iu) const {
-        const auto opIt = AliasesAtOutput.find(op);
-        if (opIt == AliasesAtOutput.end()) {
-            return nullptr;
-        }
-
-        const auto aliasIt = opIt->second.find(iu);
-        return aliasIt == opIt->second.end() ? nullptr : &aliasIt->second;
-    }
-
-    THashMap<IOperator*, TAliasMap> AliasesAtOutput;
 };
 
 /**
@@ -122,9 +106,6 @@ struct TPlanAliases {
  */
 struct TPlanProps {
     TStageGraph StageGraph;
-    THashMap<IOperator*, TInfoUnitSet> LiveOut;
-    TPlanNameConstraints NameConstraints;
-    TPlanAliases Aliases;
     int InternalVarIdx = 1;
     TSubplans Subplans;
     bool PgSyntax = false;

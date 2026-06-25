@@ -741,6 +741,91 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
 
     }
 
+    Y_UNIT_TEST(TieringDoesntWorkForMinMaxIndexStoredOutsideOfLocalDB, ELocalIndexAsSchemeObject) {
+        const bool localIndexAsSchemeObject = (Arg<0>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        TTieringTestHelper tieringHelper{localIndexAsSchemeObject};
+        auto& testHelper = tieringHelper.GetTestHelper();
+        {
+            auto createStatus = testHelper.GetSession().ExecuteSchemeQuery(R"(
+            CREATE TABLE `/Root/ColumnWithTTLAndMinMaxIndex` (
+                id Int32 NOT NULL,
+                ts Timestamp NOT NULL,
+                PRIMARY KEY(id)
+            ) PARTITION BY HASH (`id`) 
+            WITH ( STORE = COLUMN );
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(createStatus.GetStatus(), NYdb::EStatus::SUCCESS, createStatus.GetIssues().ToString());            
+        }
+        testHelper.CreateTier(DEFAULT_TIER_NAME);
+        {
+            auto addBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_ts, TYPE=MIN_MAX,
+                        FEATURES=`{"storage_id": "__DEFAULT", "inherit_portion_storage": false, "column_name": "ts"}`);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(addBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, addBadIndex.GetIssues().ToString());
+            auto addTTL = testHelper.GetSession().ExecuteSchemeQuery(
+                TStringBuilder() << "ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "` ON `ts`;"
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString());   
+            auto dropBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=DROP_INDEX, NAME=index_minmax_ts);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(dropBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, dropBadIndex.GetIssues().ToString());
+        }
+
+        {
+            auto addBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_ts, TYPE=MIN_MAX,
+                        FEATURES=`{"storage_id": "__DEFAULT", "inherit_portion_storage": true, "column_name": "ts"}`);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(addBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, addBadIndex.GetIssues().ToString());
+            auto addTTL = testHelper.GetSession().ExecuteSchemeQuery(
+                TStringBuilder() << "ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "` ON `ts`;"
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString());   
+            auto dropBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=DROP_INDEX, NAME=index_minmax_ts);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(dropBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, dropBadIndex.GetIssues().ToString());
+        }
+
+        {
+            auto addBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_ts, TYPE=MIN_MAX,
+                        FEATURES=`{"storage_id": "__LOCAL_METADATA", "inherit_portion_storage": true, "column_name": "ts"}`);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(addBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, addBadIndex.GetIssues().ToString());
+            auto addTTL = testHelper.GetSession().ExecuteSchemeQuery(
+                TStringBuilder() << "ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "` ON `ts`;"
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_UNEQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString());   
+            auto dropBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=DROP_INDEX, NAME=index_minmax_ts);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(dropBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, dropBadIndex.GetIssues().ToString());
+        }
+
+        {
+            auto addGoodIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_ts, TYPE=MIN_MAX,
+                        FEATURES=`{"storage_id": "__LOCAL_METADATA", "inherit_portion_storage": false, "column_name": "ts"}`);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(addGoodIndex.GetStatus(), NYdb::EStatus::SUCCESS, addGoodIndex.GetIssues().ToString());
+            auto addTTL = testHelper.GetSession().ExecuteSchemeQuery(
+                TStringBuilder() << "ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "` ON `ts`;"
+            ).GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString()); 
+            auto addBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+                ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_ts2, TYPE=MIN_MAX,
+                        FEATURES=`{"storage_id": "__LOCAL_METADATA", "inherit_portion_storage": true, "column_name": "ts"}`);
+            )").GetValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(addBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, addBadIndex.GetIssues().ToString());
+
+        }
+        
+    }
+
+
     Y_UNIT_TEST(TieringBoolToS3) {
         TTieringTestHelper tieringHelper;
         auto& csController = tieringHelper.GetCsController();

@@ -228,8 +228,7 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
                 }
             }
             
-            if (indexProto.GetImplementationCase() == NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex ||
-                indexProto.GetImplementationCase() == NKikimrSchemeOp::TOlapIndexDescription::kCountMinSketch) {
+            if (indexProto.GetImplementationCase() == NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex) {
                 continue;
             }
 

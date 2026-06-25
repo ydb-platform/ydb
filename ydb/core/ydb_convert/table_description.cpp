@@ -1945,6 +1945,11 @@ void FillIndexDescriptionImpl(TYdbProto& out, const NKikimrSchemeOp::TTableDescr
         case NKikimrSchemeOp::EIndexTypeLocalMinMax:
             index->mutable_local_min_max_index();
             break;
+        case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
+            // count_min_sketch is a scheme object visible in the scheme tree, but is
+            // intentionally not exposed through the public table index API, so no
+            // specialized oneof is set here.
+            break;
         case NKikimrSchemeOp::EIndexTypeInvalid:
             break;
         };

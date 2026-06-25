@@ -1569,6 +1569,11 @@ private:
                     
                     break;
                 }
+                case TIndexDescription::EType::LocalCountMinSketch:
+                    // count_min_sketch indexes are created via ALTER OBJECT, not via the
+                    // table index DDL handled here, so this branch is unreachable; it exists
+                    // only to keep the switch exhaustive. No specialized description.
+                    break;
             }
 
             // IndexState and version, pathId are ignored for create table with index request

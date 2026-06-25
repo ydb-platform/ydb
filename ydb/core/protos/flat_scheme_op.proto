@@ -1343,6 +1343,7 @@ enum EIndexType {
     EIndexTypeGlobalFulltextCompact = 11;
     EIndexTypeGlobalFulltextCompactRelevance = 12;
     EIndexTypeGlobalJsonCompact = 13;
+    EIndexTypeLocalCountMinSketch = 14;
 }
 
 enum EIndexState {
@@ -2204,6 +2205,7 @@ enum EPathSubType {
     EPathSubTypeLocalBloomFilterIndex = 7;
     EPathSubTypeLocalBloomNgramFilterIndex = 8;
     EPathSubTypeLocalMinMaxIndex = 9;
+    EPathSubTypeLocalCountMinSketchIndex = 10;
 }
 
 enum EPathState {

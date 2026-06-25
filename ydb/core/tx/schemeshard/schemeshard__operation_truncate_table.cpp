@@ -449,7 +449,8 @@ bool DfsOnTableChildrenTree(
                             case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
                             case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
                             case NKikimrSchemeOp::EIndexTypeLocalMinMax:
-                                // Bloom filter scheme objects are not supported yet in row tables
+                            case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
+                                // Local index scheme objects are not supported yet in row tables
                                 break;
                         }
 

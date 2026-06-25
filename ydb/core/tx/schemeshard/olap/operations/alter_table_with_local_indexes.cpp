@@ -125,8 +125,7 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
 
         // Validate all upsert indexes first
         for (const auto& upsertIdx : alterSchema.GetUpsertIndexes()) {
-            if (upsertIdx.GetImplementationCase() == NKikimrSchemeOp::TOlapIndexRequested::kMaxIndex ||
-                upsertIdx.GetImplementationCase() == NKikimrSchemeOp::TOlapIndexRequested::kCountMinSketch) {
+            if (upsertIdx.GetImplementationCase() == NKikimrSchemeOp::TOlapIndexRequested::kMaxIndex) {
                 continue;
             }
             const TString& indexName = upsertIdx.GetName();
@@ -206,8 +205,7 @@ TVector<ISubOperation::TPtr> AlterColumnTableWithLocalIndexes(TOperationId nextI
                     TStringBuilder() << "Source index '" << sourceName << "' not found in table schema")};
             }
             
-            if (sourceIndexProto->GetImplementationCase() == NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex ||
-                sourceIndexProto->GetImplementationCase() == NKikimrSchemeOp::TOlapIndexDescription::kCountMinSketch) {
+            if (sourceIndexProto->GetImplementationCase() == NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex) {
                 continue;
             }
 

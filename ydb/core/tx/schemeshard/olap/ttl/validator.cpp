@@ -1,5 +1,6 @@
 #include "validator.h"
 
+#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 #include <ydb/core/tx/schemeshard/common/validation.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 #include <ydb/core/tx/tiering/tier/object.h>
@@ -88,6 +89,16 @@ bool TTTLValidator::ValidateColumnTableTtl(const NKikimrSchemeOp::TColumnDataLif
                     break;
                 }
                 if (proto.HasMinMaxIndex() && proto.GetMinMaxIndex().GetColumnId() == column->GetId()) {
+                    const TString& storageId = proto.GetStorageId();
+                    if (storageId != NKikimr::NOlap::NBlobOperations::TGlobal::LocalMetadataStorageId || proto.GetInheritPortionStorage()) {
+                        errors.AddError(Sprintf(
+                            "tried to use min_max index '%s' on column '%s' for TTL, failed because min_max index for tiering should be stored in LocalDB, "
+                            "i.e. have storage_id='%s' and inherit_portion_storage=false, but it has storage_id='%s' and inherit_portion_storage=%s",
+                            proto.GetName().c_str(), colName.c_str(),
+                            NKikimr::NOlap::NBlobOperations::TGlobal::LocalMetadataStorageId.c_str(),
+                            storageId.c_str(), proto.GetInheritPortionStorage() ? "true" : "false"));
+                        return false;
+                    }
                     correct = true;
                     break;
                 }

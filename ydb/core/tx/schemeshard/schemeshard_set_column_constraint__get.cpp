@@ -14,7 +14,7 @@ struct TSchemeShard::TIndexBuilder::TTxGetSetColumnConstraint
 {
 public:
     explicit TTxGetSetColumnConstraint(TSelf* self, TEvSetColumnConstraint::TEvGetRequest::TPtr& ev)
-        : TTxSimple(self, TIndexBuildId(ev->Get()->Record.GetOperationId()), ev, TXTYPE_CREATE_SET_COLUMN_CONSTRAINT, false)
+        : TTxSimple(self, TIndexBuildId(ev->Get()->Record.GetOperationId()), ev, TXTYPE_GET_SET_COLUMN_CONSTRAINT, false)
     {}
 
     bool DoExecute(TTransactionContext&, const TActorContext&) override {
@@ -55,7 +55,7 @@ public:
         auto* proto = respRecord.MutableSetColumnConstraint();
         FillSetColumnConstraint(*proto, operationInfo);
 
-        if (operationInfo.ValidationFailed) {
+        if (operationInfo.ValidationFailed && operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Done) {
             TPath tablePath = TPath::Init(operationInfo.TablePathId, Self);
             auto* issue = respRecord.AddIssues();
             issue->set_message(TStringBuilder()

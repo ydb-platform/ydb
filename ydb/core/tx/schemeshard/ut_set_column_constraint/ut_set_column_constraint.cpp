@@ -1032,7 +1032,8 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
     NKikimrSetColumnConstraint::TSetColumnConstraint DoGetRequest(
         ui64 setConstraintTxId,
         TTestActorRuntime& runtime,
-        const TString& root)
+        const TString& root,
+        Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS)
     {
         auto sender = runtime.AllocateEdgeActor();
         ForwardToTablet(runtime, TTestTxConfig::SchemeShard, sender,
@@ -1043,7 +1044,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         UNIT_ASSERT(event);
         UNIT_ASSERT_VALUES_EQUAL_C(
             event->Record.GetStatus(),
-            Ydb::StatusIds::SUCCESS,
+            status,
             event->Record.ShortDebugString());
 
         return event->Record.GetSetColumnConstraint();
@@ -1219,4 +1220,33 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         }
     }
 
+    Y_UNIT_TEST(GetRequestNotFound) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TString root = "/MyRoot";
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+        ui64 setConstraintTxId = ++txId;
+
+        DoGetRequest(setConstraintTxId, runtime, root, Ydb::StatusIds::NOT_FOUND);
+    }
+
+    Y_UNIT_TEST(GetRequestBadRequest) {
+        TTestBasicRuntime runtime;
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
+
+        TString wrongRoot = "/MyWrongRoot";
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+        ui64 setConstraintTxId = ++txId;
+
+        DoGetRequest(setConstraintTxId, runtime, wrongRoot, Ydb::StatusIds::BAD_REQUEST);
+    }
 } // Y_UNIT_TEST_SUITE(SetNotNullTest)

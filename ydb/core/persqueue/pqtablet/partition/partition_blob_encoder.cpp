@@ -488,10 +488,20 @@ void TPartitionBlobEncoder::SyncNewHeadKey()
         return false;
     };
 
+    bool replacedHeadKeys = false;
     while (!HeadKeys.empty() && !isLess(HeadKeys.back().Key, NewHeadKey.Key)) {
         // HeadKeys.back >= NewHeadKey
         ScheduleDelete(HeadKeys.back());
         HeadKeys.pop_back();
+        replacedHeadKeys = true;
+    }
+
+    if (replacedHeadKeys && CompactedKeys.empty()) {
+        // This is the only sync path where old HeadKeys are replaced while the
+        // old in-memory Head is retained. If some init-loaded shared owners
+        // became sparse, materialize them here. Paths with CompactedKeys clear
+        // Head wholesale via SyncHeadFromNewHead().
+        Head.MaterializeRetainedSharedData();
     }
 
     HeadKeys.push_back(std::move(NewHeadKey));
@@ -558,7 +568,7 @@ void TPartitionBlobEncoder::SyncHead(ui64& startOffset, ui64& endOffset)
     AFL_ENSURE(!ForFastWrite);
     //append Head with newHead
     while (!NewHead.GetBatches().empty()) {
-        Head.AddBatch(NewHead.ExtractFirstBatch());
+        Head.AddBatch(NewHead.ExtractFirstBatch(false));
     }
     Head.PackedSize += NewHead.PackedSize;
 

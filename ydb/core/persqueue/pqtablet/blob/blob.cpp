@@ -1,6 +1,7 @@
 #include "blob.h"
 #include "header.h"
 
+#include <util/generic/hash.h>
 #include <util/string/builder.h>
 #include <util/string/escape.h>
 #include <util/system/unaligned_mem.h>
@@ -16,6 +17,128 @@ bool CanWriteOffsetDeltaInKeys() {
     return HasAppData() && AppData()->FeatureFlags.GetEnableTopicWriteOffsetDeltaInKeys();
 }
 
+struct TSharedPackedDataStats {
+    ui32 LiveBatchCount = 0;
+    ui64 LivePayloadSize = 0;
+};
+
+bool ShouldMaterializeSharedData(const TPackedBatchDataOwner& owner, const TSharedPackedDataStats& stats)
+{
+    if (!stats.LiveBatchCount) {
+        return false;
+    }
+
+    AFL_ENSURE(stats.LiveBatchCount <= owner.InitialBatchCount)
+        ("liveBatchCount", stats.LiveBatchCount)
+        ("initialBatchCount", owner.InitialBatchCount);
+    AFL_ENSURE(stats.LivePayloadSize <= owner.InitialPayloadSize)
+        ("livePayloadSize", stats.LivePayloadSize)
+        ("initialPayloadSize", owner.InitialPayloadSize);
+
+    // Keep the DataHead value shared while most of its parsed batches are still
+    // live. Materialize only after at least as much data was dropped as remains
+    // live, so small head movement does not destroy the allocation-saving
+    // effect of sharing.
+    const ui32 droppedBatchCount = owner.InitialBatchCount - stats.LiveBatchCount;
+    const ui64 droppedPayloadSize = owner.InitialPayloadSize - stats.LivePayloadSize;
+    return droppedBatchCount >= stats.LiveBatchCount
+        || droppedPayloadSize >= stats.LivePayloadSize;
+}
+
+}
+
+//
+// TPackedBatchData
+//
+
+TPackedBatchDataOwner::TPackedBatchDataOwner(TString&& data)
+    : Data(std::move(data))
+{
+}
+
+void TPackedBatchDataOwner::RegisterBatch(ui32 payloadSize)
+{
+    ++InitialBatchCount;
+    InitialPayloadSize += payloadSize;
+}
+
+TPackedBatchData::TPackedBatchData(const char* data, size_t size)
+    : Buffer(data, size)
+{
+}
+
+TPackedBatchData::TPackedBatchData(TBuffer&& data)
+    : Buffer(std::move(data))
+{
+}
+
+TPackedBatchData::TPackedBatchData(TIntrusivePtr<TPackedBatchDataOwner> owner, ui32 offset, ui32 size)
+    : Owner(std::move(owner))
+    , Offset(offset)
+    , PayloadSize(size)
+{
+    AFL_ENSURE(Owner);
+    AFL_ENSURE(static_cast<size_t>(Offset) + PayloadSize <= Owner->Data.size())
+        ("offset", Offset)
+        ("size", PayloadSize)
+        ("ownerSize", Owner->Data.size());
+    Owner->RegisterBatch(PayloadSize);
+}
+
+const char* TPackedBatchData::data() const noexcept
+{
+    return Owner ? Owner->Data.data() + Offset : Buffer.data();
+}
+
+size_t TPackedBatchData::size() const noexcept
+{
+    return Size();
+}
+
+size_t TPackedBatchData::Size() const noexcept
+{
+    return Owner ? PayloadSize : Buffer.Size();
+}
+
+size_t TPackedBatchData::Capacity() const noexcept
+{
+    return Owner ? PayloadSize : Buffer.Capacity();
+}
+
+bool TPackedBatchData::Empty() const noexcept
+{
+    return Size() == 0;
+}
+
+bool TPackedBatchData::IsShared() const noexcept
+{
+    return static_cast<bool>(Owner);
+}
+
+const TPackedBatchDataOwner* TPackedBatchData::SharedOwner() const noexcept
+{
+    return Owner.Get();
+}
+
+void TPackedBatchData::Materialize()
+{
+    if (!Owner) {
+        return;
+    }
+
+    TBuffer buffer(Owner->Data.data() + Offset, PayloadSize);
+    Owner.Reset();
+    Offset = 0;
+    PayloadSize = 0;
+    Buffer = std::move(buffer);
+}
+
+void TPackedBatchData::Reset()
+{
+    Owner.Reset();
+    Offset = 0;
+    PayloadSize = 0;
+    TBuffer().Swap(Buffer);
 }
 
 //
@@ -112,7 +235,6 @@ TString TClientBlob::DebugString() const {
 TBatch::TBatch()
     : Packed(false)
 {
-    PackedData.Reserve(8_MB);
 }
 
 TBatch::TBatch(const ui64 offset, const ui16 partNo)
@@ -129,6 +251,13 @@ TBatch::TBatch(const NKikimrPQ::TBatchHeader &header, const char* data)
     : Packed(true)
     , Header(header)
     , PackedData(data, header.GetPayloadSize())
+{
+}
+
+TBatch::TBatch(const NKikimrPQ::TBatchHeader& header, TIntrusivePtr<TPackedBatchDataOwner> owner, ui32 payloadOffset)
+    : Packed(true)
+    , Header(header)
+    , PackedData(std::move(owner), payloadOffset, header.GetPayloadSize())
 {
 }
 
@@ -325,6 +454,11 @@ void THead::AddBatch(const TBatch& batch) {
     InternalPartsCount += b.GetInternalPartsCount();
 }
 
+void THead::AddBatch(TBatch&& batch) {
+    auto& b = Batches.emplace_back(std::move(batch));
+    InternalPartsCount += b.GetInternalPartsCount();
+}
+
 void THead::ClearBatches() {
     Batches.clear();
     InternalPartsCount = 0;
@@ -343,12 +477,44 @@ const TBatch& THead::GetLastBatch() const {
     return Batches.back();
 }
 
-TBatch THead::ExtractFirstBatch() {
+TBatch THead::ExtractFirstBatch(bool materializeSharedData) {
     AFL_ENSURE(!Batches.empty());
     auto batch = std::move(Batches.front());
     InternalPartsCount -= batch.GetInternalPartsCount();
     Batches.pop_front();
+    if (materializeSharedData) {
+        MaterializeRetainedSharedData();
+    }
     return batch;
+}
+
+void THead::MaterializeRetainedSharedData() {
+    THashMap<const TPackedBatchDataOwner*, TSharedPackedDataStats> owners;
+
+    for (const auto& batch : Batches) {
+        if (!batch.Packed) {
+            continue;
+        }
+
+        if (const auto* owner = batch.PackedData.SharedOwner()) {
+            auto& stats = owners[owner];
+            ++stats.LiveBatchCount;
+            stats.LivePayloadSize += batch.PackedData.Size();
+        }
+    }
+
+    for (auto& batch : Batches) {
+        if (!batch.Packed) {
+            continue;
+        }
+
+        if (const auto* owner = batch.PackedData.SharedOwner()) {
+            const auto it = owners.find(owner);
+            if (it != owners.end() && ShouldMaterializeSharedData(*owner, it->second)) {
+                batch.PackedData.Materialize();
+            }
+        }
+    }
 }
 
 void THead::AddBlob(const TClientBlob& blob) {
@@ -796,13 +962,25 @@ bool TPartitionedBlob::IsNextPart(const TString& sourceId, const ui64 seqNo, con
 
 
 TBlobIterator::TBlobIterator(const TKey& key, const TString& blob)
+    : TBlobIterator(key, blob, EDataOwnership::Borrowed)
+{
+}
+
+TBlobIterator::TBlobIterator(const TKey& key, const TString& blob, EDataOwnership ownership)
     : Key(key)
-    , Data(blob.c_str())
-    , End(Data + blob.size())
     , Offset(key.GetOffset())
     , Count(0)
     , InternalPartsCount(0)
 {
+    if (ownership == EDataOwnership::Shared) {
+        Owner = MakeIntrusive<TPackedBatchDataOwner>(TString(blob));
+        Data = Owner->Data.data();
+        End = Data + Owner->Data.size();
+    } else {
+        Data = blob.data();
+        End = Data + blob.size();
+    }
+
     AFL_ENSURE(Data != End)("Key", Key.ToString())("blob.size", blob.size());
     ParseBatch();
     AFL_ENSURE(Header.GetPartNo() == Key.GetPartNo());
@@ -841,7 +1019,15 @@ TBatch TBlobIterator::GetBatch()
 {
     AFL_ENSURE(IsValid());
 
-    return TBatch(Header, Data + sizeof(ui16) + Header.ByteSize());
+    const char* payload = Data + sizeof(ui16) + Header.ByteSize();
+    if (Owner) {
+        const auto offset = payload - Owner->Data.data();
+        AFL_ENSURE(offset >= 0);
+        AFL_ENSURE(static_cast<ui64>(offset) <= Max<ui32>());
+        return TBatch(Header, Owner, static_cast<ui32>(offset));
+    }
+
+    return TBatch(Header, payload);
 }
 
 TVector<TBatch> GetUnpackedBatches(const TKey& key, const TString& blob)

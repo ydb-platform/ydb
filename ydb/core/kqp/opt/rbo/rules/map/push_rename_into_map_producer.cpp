@@ -25,13 +25,18 @@ bool TPushRenameIntoMapProducerRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
         !NMapRules::CanRenameOutput(map, candidate->From, candidate->To, props)) {
         return false;
     }
+    if (!outputElement->IsRename() &&
+        outputElement->IsColumnAccess() &&
+        outputElement->GetColumnAccess() == candidate->To) {
+        return false;
+    }
 
     const auto outputElementIdx = outputElement - map->MapElements.data();
     auto elements = map->MapElements;
     elements[outputElementIdx].SetElementName(candidate->To);
 
     auto output = BuildMapOutput(map, elements);
-    if (!CanExposeOutput(map, output, props)) {
+    if (MakeInfoUnitSet(output).size() != output.size()) {
         return false;
     }
     if (!NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {

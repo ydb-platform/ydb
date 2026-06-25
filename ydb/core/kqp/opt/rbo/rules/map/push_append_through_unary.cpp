@@ -68,9 +68,9 @@ TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
         candidateElements.push_back(mapElement);
 
         auto candidatePushedOutput = BuildMapOutput(inputIUs, candidateElements);
-        bool valid = !HasOutputConflicts(candidatePushedOutput);
+        bool valid = MakeInfoUnitSet(candidatePushedOutput).size() == candidatePushedOutput.size();
         const auto candidateUnaryOutput = BuildUnaryOutput(unary, candidatePushedOutput);
-        valid = valid && !HasOutputConflicts(candidateUnaryOutput);
+        valid = valid && MakeInfoUnitSet(candidateUnaryOutput).size() == candidateUnaryOutput.size();
 
         if (valid) {
             pushedElements = std::move(candidateElements);
@@ -99,7 +99,7 @@ TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
     auto pushedMap = MakeIntrusive<TOpMap>(unaryInput, topMap->Pos, pushedElements);
 
     if (topElements.empty()) {
-        if (!CanReplaceOutputInParents(topMap, unaryOutput, props)) {
+        if (!IUSetIntersect(unaryOutput, GetForbidden(props, topMap.get())).empty()) {
             return input;
         }
         pushedMap->Props.OutputIUs = pushedOutput;
@@ -109,7 +109,8 @@ TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
     }
 
     const auto newTopOutput = BuildMapOutput(unaryOutput, topElements);
-    if (!CanReplaceOutputInParents(topMap, newTopOutput, props)) {
+    if (MakeInfoUnitSet(newTopOutput).size() != newTopOutput.size() ||
+        !IUSetIntersect(newTopOutput, GetForbidden(props, topMap.get())).empty()) {
         return input;
     }
 

@@ -938,8 +938,25 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         ComputeLogicalTestProps(root);
 
-        UNIT_ASSERT(root.PlanProps.NameConstraints.GetForbiddenOut(join.get(), 0).contains(TInfoUnit("a")));
-        UNIT_ASSERT(root.PlanProps.NameConstraints.GetForbiddenOut(filter.get(), 0).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(root.PlanProps, filter.get(), join.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(root.PlanProps, leftRead.get(), filter.get()).contains(TInfoUnit("a")));
+    }
+
+    Y_UNIT_TEST(NameConstraintsTransparentUnaryForwardsAbsentForbiddenName) {
+        NYql::TExprContext exprCtx;
+        TPlanProps planProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftRead = MakeTestRead({TInfoUnit("b")}, pos);
+        auto filter = MakeIntrusive<TOpFilter>(leftRead, pos, MakeColumnAccess(TInfoUnit("b"), pos, &exprCtx, &planProps));
+        auto rightRead = MakeTestRead({TInfoUnit("a")}, pos);
+        auto join = MakeIntrusive<TOpJoin>(filter, rightRead, pos, "Inner", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        TOpRoot root(join, pos, {"b", "a"});
+
+        ComputeLogicalTestProps(root);
+
+        UNIT_ASSERT(GetForbidden(root.PlanProps, filter.get(), join.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(root.PlanProps, leftRead.get(), filter.get()).contains(TInfoUnit("a")));
     }
 
     Y_UNIT_TEST(NameConstraintsMapRenameHidesForbiddenSource) {
@@ -955,8 +972,29 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         ComputeLogicalTestProps(root);
 
-        UNIT_ASSERT(root.PlanProps.NameConstraints.GetForbiddenOut(join.get(), 0).contains(TInfoUnit("a")));
-        UNIT_ASSERT(!root.PlanProps.NameConstraints.GetForbiddenOut(leftMap.get(), 0).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(root.PlanProps, leftMap.get(), join.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(!GetForbidden(root.PlanProps, leftRead.get(), leftMap.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(root.PlanProps, leftRead.get(), leftMap.get()).contains(TInfoUnit("b")));
+    }
+
+    Y_UNIT_TEST(NameConstraintsMapForbidsElementOutputsExceptHiddenSources) {
+        NYql::TExprContext exprCtx;
+        TPlanProps planProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("b"), TInfoUnit("payload")}, pos);
+        auto map = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestRename("c", "b", pos, exprCtx, planProps),
+            MakeTestAppend("d", "payload", pos, exprCtx, planProps),
+        });
+        TOpRoot root(map, pos, {"c", "d"});
+
+        ComputeLogicalTestProps(root);
+
+        const auto& forbidden = GetForbidden(root.PlanProps, read.get(), map.get());
+        UNIT_ASSERT(forbidden.contains(TInfoUnit("c")));
+        UNIT_ASSERT(forbidden.contains(TInfoUnit("d")));
+        UNIT_ASSERT(!forbidden.contains(TInfoUnit("b")));
     }
 
     Y_UNIT_TEST(NameConstraintsMapAppendDoesNotHideForbiddenSource) {
@@ -972,8 +1010,30 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         ComputeLogicalTestProps(root);
 
-        UNIT_ASSERT(root.PlanProps.NameConstraints.GetForbiddenOut(join.get(), 0).contains(TInfoUnit("a")));
-        UNIT_ASSERT(root.PlanProps.NameConstraints.GetForbiddenOut(leftMap.get(), 0).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(root.PlanProps, leftMap.get(), join.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(root.PlanProps, leftRead.get(), leftMap.get()).contains(TInfoUnit("a")));
+    }
+
+    Y_UNIT_TEST(NameConstraintsJoinEdgesIncludeIncomingForbiddenNames) {
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftRead = MakeTestRead({TInfoUnit("l")}, pos);
+        auto rightRead = MakeTestRead({TInfoUnit("r")}, pos);
+        auto join = MakeIntrusive<TOpJoin>(leftRead, rightRead, pos, "Inner", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        auto parentRightRead = MakeTestRead({TInfoUnit("z")}, pos);
+        auto parentJoin = MakeIntrusive<TOpJoin>(join, parentRightRead, pos, "Inner", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        TOpRoot root(parentJoin, pos, {"l", "r", "z"});
+
+        ComputeLogicalTestProps(root);
+
+        const auto& leftForbidden = GetForbidden(root.PlanProps, leftRead.get(), join.get());
+        const auto& rightForbidden = GetForbidden(root.PlanProps, rightRead.get(), join.get());
+        UNIT_ASSERT(leftForbidden.contains(TInfoUnit("r")));
+        UNIT_ASSERT(leftForbidden.contains(TInfoUnit("z")));
+        UNIT_ASSERT(!leftForbidden.contains(TInfoUnit("l")));
+        UNIT_ASSERT(rightForbidden.contains(TInfoUnit("l")));
+        UNIT_ASSERT(rightForbidden.contains(TInfoUnit("z")));
+        UNIT_ASSERT(!rightForbidden.contains(TInfoUnit("r")));
     }
 
     Y_UNIT_TEST(ProjectedKqpOpMapAddsIgnoreRenamesForInputColumns) {

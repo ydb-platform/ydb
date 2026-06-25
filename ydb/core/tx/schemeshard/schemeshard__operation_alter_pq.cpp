@@ -168,9 +168,13 @@ public:
                 errStr = Sprintf("Invalid min and max partition count specified: %u > %u", strategy.GetMinPartitionCount(), strategy.GetMaxPartitionCount());
                 return nullptr;
             }
-            if (splitMergeEnabled && (strategy.GetMinPartitionCount() > topic->ActivePartitionCount)) { // request will increase active partitions
+            if (strategy.GetMinPartitionCount() > topic->ActivePartitionCount) { // request will increase active partitions
                 if (alter.MergeSize() || alter.SplitSize() || alter.RootPartitionBoundariesSize()) {
                     errStr = Sprintf("Can't increase active partitions and Split/Merge or change root boundaries at the same time");
+                    return nullptr;
+                }
+                if (!NPQ::SplitMergeEnabled(*tabletConfig) && topic->ActivePartitionCount != 1) {
+                    errStr = Sprintf("Can't icrease active partitions and enable Split/Merge strategy at the same time");
                     return nullptr;
                 }
             }

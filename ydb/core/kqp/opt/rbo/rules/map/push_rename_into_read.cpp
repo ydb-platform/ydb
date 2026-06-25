@@ -37,7 +37,8 @@ bool TPushRenameIntoReadRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRB
     }
 
     const auto output = ReplaceOutputName(read->OutputIUs, candidate->From, candidate->To);
-    if (HasOutputConflicts(output) || !NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
+    if (MakeInfoUnitSet(output).size() != output.size() ||
+        !NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
         return false;
     }
 

@@ -29,7 +29,8 @@ bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
 
     if (newElements.empty()) {
         const auto& replacementOutput = map->GetInput()->GetOutputIUs();
-        if (!CanReplaceOutputInParents(map, replacementOutput, props)) {
+        if (MakeInfoUnitSet(replacementOutput).size() != replacementOutput.size() ||
+            !IUSetIntersect(replacementOutput, GetForbidden(props, map.get())).empty()) {
             return false;
         }
         input = map->GetInput();
@@ -39,7 +40,8 @@ bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
         }
 
         auto newOutput = BuildMapOutput(map, newElements);
-        if (!CanReplaceOutputInParents(map, newOutput, props)) {
+        if (MakeInfoUnitSet(newOutput).size() != newOutput.size() ||
+            !IUSetIntersect(newOutput, GetForbidden(props, map.get())).empty()) {
             return false;
         }
         map->MapElements = std::move(newElements);

@@ -323,7 +323,7 @@ void TOpMap::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Metadata->Type = inputMetadata.Type;
     Props.Metadata->StorageType = inputMetadata.StorageType;
     const auto outputIUs = GetOutputIUs();
-    Y_ENSURE(!HasOutputConflicts(outputIUs), "Map output must not contain duplicate columns");
+    Y_ENSURE(MakeInfoUnitSet(outputIUs).size() == outputIUs.size(), "Map output must not contain duplicate columns");
     Props.Metadata->ColumnsCount = outputIUs.size();
 
     auto propertyPreservingMappings = GetPropertyPreservingMappings(planProps);

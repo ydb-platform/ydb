@@ -75,7 +75,7 @@ TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const
         if (mapElement.IsRename()) {
             const auto from = mapElement.GetRename();
             if (liveOut.contains(to) || keepKeyColumns.contains(to) ||
-                props.NameConstraints.IsForbiddenAtOutput(map.get(), from) ||
+                GetForbidden(props, map.get()).contains(from) ||
                 isShadowedByKeptOutput(from))
             {
                 newElements.push_back(mapElement);

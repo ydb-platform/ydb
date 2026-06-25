@@ -125,7 +125,7 @@ TIntrusivePtr<IOperator> TPushAppendThroughAggregateRule::SimpleMatchAndApply(co
         }
 
         const auto pushedOutput = BuildMapOutput(aggregateInputIUs, TVector<TMapElement>{mapElement});
-        if (HasOutputConflicts(pushedOutput)) {
+        if (MakeInfoUnitSet(pushedOutput).size() != pushedOutput.size()) {
             continue;
         }
 
@@ -133,7 +133,7 @@ TIntrusivePtr<IOperator> TPushAppendThroughAggregateRule::SimpleMatchAndApply(co
         auto newTraits = aggregate->AggregationTraitsList;
         RenameAggregateKey(newKeys, newTraits, aggregate->IsDistinctAll(), from, to);
         const auto aggregateOutput = BuildAggregateOutput(newKeys, newTraits, aggregate->IsDistinctAll());
-        if (HasOutputConflicts(aggregateOutput)) {
+        if (MakeInfoUnitSet(aggregateOutput).size() != aggregateOutput.size()) {
             continue;
         }
 
@@ -147,7 +147,7 @@ TIntrusivePtr<IOperator> TPushAppendThroughAggregateRule::SimpleMatchAndApply(co
         RewriteResidualTopMapInputs(topElements, from, to);
 
         if (topElements.empty()) {
-            if (!CanReplaceOutputInParents(topMap, aggregateOutput, props)) {
+            if (!IUSetIntersect(aggregateOutput, GetForbidden(props, topMap.get())).empty()) {
                 return input;
             }
             auto pushedMap = MakeIntrusive<TOpMap>(oldAggregateInput, topMap->Pos, TVector<TMapElement>{mapElement});
@@ -160,7 +160,8 @@ TIntrusivePtr<IOperator> TPushAppendThroughAggregateRule::SimpleMatchAndApply(co
         }
 
         const auto newTopOutput = BuildMapOutput(aggregateOutput, topElements);
-        if (!CanReplaceOutputInParents(topMap, newTopOutput, props)) {
+        if (MakeInfoUnitSet(newTopOutput).size() != newTopOutput.size() ||
+            !IUSetIntersect(newTopOutput, GetForbidden(props, topMap.get())).empty()) {
             return input;
         }
 

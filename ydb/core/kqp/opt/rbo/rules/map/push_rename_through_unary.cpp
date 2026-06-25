@@ -70,12 +70,13 @@ bool TPushRenameThroughTransparentUnaryRule::MatchAndApply(TIntrusivePtr<IOperat
     const auto oldInput = unary->GetInput();
     const TVector<TMapElement> pushedElements{NMapRules::MakeRenameElement(*candidate, topMap)};
     const auto pushedOutput = BuildMapOutput(oldInput->GetOutputIUs(), pushedElements);
-    if (HasOutputConflicts(pushedOutput)) {
+    if (MakeInfoUnitSet(pushedOutput).size() != pushedOutput.size()) {
         return false;
     }
 
     const auto output = BuildUnaryOutput(unary, pushedOutput);
-    if (HasOutputConflicts(output) || !NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
+    if (MakeInfoUnitSet(output).size() != output.size() ||
+        !NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
         return false;
     }
 

@@ -56,7 +56,8 @@ bool TPushRenameIntoAggregateResultRule::MatchAndApply(TIntrusivePtr<IOperator>&
     }
 
     const auto output = BuildAggregateOutput(*aggregate, newTraits);
-    if (HasOutputConflicts(output) || !NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
+    if (MakeInfoUnitSet(output).size() != output.size() ||
+        !NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
         return false;
     }
 

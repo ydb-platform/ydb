@@ -131,7 +131,7 @@ TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const T
     bool pushLeft = !leftMapElements.empty();
     if (!leftMapElements.empty()) {
         newLeftOutput = BuildMapOutput(leftOutput, leftMapElements);
-        if (HasOutputConflicts(newLeftOutput)) {
+        if (MakeInfoUnitSet(newLeftOutput).size() != newLeftOutput.size()) {
             pushLeft = false;
             newLeftOutput = leftOutput;
         }
@@ -141,7 +141,7 @@ TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const T
     bool pushRight = !rightMapElements.empty();
     if (!rightMapElements.empty()) {
         newRightOutput = BuildMapOutput(rightOutput, rightMapElements);
-        if (HasOutputConflicts(newRightOutput)) {
+        if (MakeInfoUnitSet(newRightOutput).size() != newRightOutput.size()) {
             pushRight = false;
             newRightOutput = rightOutput;
         }
@@ -152,7 +152,7 @@ TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const T
     }
 
     const auto newJoinOutput = BuildJoinOutput(join->JoinKind, newLeftOutput, newRightOutput);
-    if (HasOutputConflicts(newJoinOutput)) {
+    if (MakeInfoUnitSet(newJoinOutput).size() != newJoinOutput.size()) {
         return input;
     }
 
@@ -166,7 +166,7 @@ TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const T
     }
 
     if (topMapElements.empty()) {
-        if (!CanReplaceOutputInParents(topMap, newJoinOutput, props)) {
+        if (!IUSetIntersect(newJoinOutput, GetForbidden(props, topMap.get())).empty()) {
             return input;
         }
         if (pushLeft) {
@@ -184,7 +184,8 @@ TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const T
     }
 
     const auto newTopOutput = BuildMapOutput(newJoinOutput, topMapElements);
-    if (!CanReplaceOutputInParents(topMap, newTopOutput, props)) {
+    if (MakeInfoUnitSet(newTopOutput).size() != newTopOutput.size() ||
+        !IUSetIntersect(newTopOutput, GetForbidden(props, topMap.get())).empty()) {
         return input;
     }
 

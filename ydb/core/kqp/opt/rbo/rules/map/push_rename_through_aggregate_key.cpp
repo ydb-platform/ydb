@@ -72,7 +72,7 @@ bool TPushRenameThroughAggregateKeyRule::MatchAndApply(TIntrusivePtr<IOperator>&
     const auto oldInput = aggregate->GetInput();
     const TVector<TMapElement> pushedElements{NMapRules::MakeRenameElement(*candidate, topMap)};
     const auto pushedOutput = BuildMapOutput(oldInput->GetOutputIUs(), pushedElements);
-    if (HasOutputConflicts(pushedOutput)) {
+    if (MakeInfoUnitSet(pushedOutput).size() != pushedOutput.size()) {
         return false;
     }
 
@@ -80,7 +80,8 @@ bool TPushRenameThroughAggregateKeyRule::MatchAndApply(TIntrusivePtr<IOperator>&
     auto newTraits = aggregate->AggregationTraitsList;
     RenameAggregate(newKeys, newTraits, candidate->From, candidate->To);
     const auto output = BuildAggregateOutput(newKeys, newTraits, aggregate->IsDistinctAll());
-    if (HasOutputConflicts(output) || !NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
+    if (MakeInfoUnitSet(output).size() != output.size() ||
+        !NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
         return false;
     }
 

@@ -87,9 +87,6 @@ struct TPlanNameConstraints {
     bool AddForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child, const TInfoUnitSet& ius);
 
     const TInfoUnitSet& GetForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child) const;
-    const TInfoUnitSet& GetForbiddenOut(IOperator* parent, ui32 childIdx) const;
-    const TInfoUnitSet& GetForbiddenOutForSingleConsumer(IOperator* op) const;
-    bool IsForbiddenAtOutput(IOperator* op, const TInfoUnit& iu) const;
 
     THashMap<TPlanEdgeKey, TInfoUnitSet, TPlanEdgeKey::THashFunction> ForbiddenOut;
 };

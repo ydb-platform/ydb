@@ -41,7 +41,7 @@ bool TPushRenameThroughPassThroughMapRule::MatchAndApply(TIntrusivePtr<IOperator
     elements.push_back(NMapRules::MakeRenameElement(*candidate, topMap));
 
     auto output = BuildMapOutput(map, elements);
-    if (!CanExposeOutput(map, output, props)) {
+    if (MakeInfoUnitSet(output).size() != output.size()) {
         return false;
     }
     if (!NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {

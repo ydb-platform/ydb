@@ -35,7 +35,8 @@ void TLogicalOutputPruningStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
             }
 
             auto newOutput = BuildMapOutput(map, newElements);
-            if (!CanReplaceOutputInParents(map, newOutput, root.PlanProps)) {
+            if (MakeInfoUnitSet(newOutput).size() != newOutput.size() ||
+                !IUSetIntersect(newOutput, GetForbidden(root.PlanProps, map.get())).empty()) {
                 continue;
             }
 

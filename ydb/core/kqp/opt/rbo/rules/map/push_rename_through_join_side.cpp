@@ -59,7 +59,7 @@ bool TPushRenameThroughJoinSideRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
     const bool pushLeft = selectedInput == join->GetLeftInput();
     const TVector<TMapElement> pushedElements{NMapRules::MakeRenameElement(*candidate, topMap)};
     const auto pushedOutput = BuildMapOutput(selectedInput->GetOutputIUs(), pushedElements);
-    if (HasOutputConflicts(pushedOutput)) {
+    if (MakeInfoUnitSet(pushedOutput).size() != pushedOutput.size()) {
         return false;
     }
 
@@ -67,7 +67,8 @@ bool TPushRenameThroughJoinSideRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
         join->JoinKind,
         pushLeft ? pushedOutput : join->GetLeftInput()->GetOutputIUs(),
         pushLeft ? join->GetRightInput()->GetOutputIUs() : pushedOutput);
-    if (HasOutputConflicts(output) || !NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
+    if (MakeInfoUnitSet(output).size() != output.size() ||
+        !NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
         return false;
     }
 

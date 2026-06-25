@@ -7,10 +7,8 @@ namespace NKqp {
 namespace {
 
 bool TryAppendToBottomMap(
-    const TIntrusivePtr<TOpMap>& bottomMap,
     const TMapElement& mapElement,
     const TVector<TInfoUnit>& bottomInputIUs,
-    const TPlanProps& props,
     TVector<TMapElement>& bottomElements,
     TVector<TInfoUnit>& bottomOutput)
 {
@@ -23,7 +21,7 @@ bool TryAppendToBottomMap(
     elements.push_back(mapElement);
 
     auto output = BuildMapOutput(bottomInputIUs, elements);
-    if (!CanExposeOutput(bottomMap, output, props)) {
+    if (MakeInfoUnitSet(output).size() != output.size()) {
         return false;
     }
 
@@ -59,7 +57,7 @@ TPushAppendIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& inpu
     // Map(input, bottomElements + movable top appends), with non-movable top elements left above.
     for (const auto& mapElement : topMap->MapElements) {
         if (topMap->IsExtractableAppend(mapElement) &&
-            TryAppendToBottomMap(bottomMap, mapElement, bottomInputIUs, props, bottomElements, bottomOutput)) {
+            TryAppendToBottomMap(mapElement, bottomInputIUs, bottomElements, bottomOutput)) {
             pushed = true;
         } else {
             topElements.push_back(mapElement);
@@ -71,7 +69,7 @@ TPushAppendIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& inpu
     }
 
     if (topElements.empty()) {
-        if (!CanReplaceOutputInParents(topMap, bottomOutput, props)) {
+        if (!IUSetIntersect(bottomOutput, GetForbidden(props, topMap.get())).empty()) {
             return input;
         }
         bottomMap->MapElements = std::move(bottomElements);
@@ -80,7 +78,8 @@ TPushAppendIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& inpu
     }
 
     const auto newTopOutput = BuildMapOutput(bottomOutput, topElements);
-    if (!CanReplaceOutputInParents(topMap, newTopOutput, props)) {
+    if (MakeInfoUnitSet(newTopOutput).size() != newTopOutput.size() ||
+        !IUSetIntersect(newTopOutput, GetForbidden(props, topMap.get())).empty()) {
         return input;
     }
 

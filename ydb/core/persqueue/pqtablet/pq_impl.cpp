@@ -1131,8 +1131,6 @@ void TPersQueue::Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const
 
     auto it = Partitions.find(TPartitionId{partitionId});
     if (it == Partitions.end()) {
-        Send(ev->Sender, new TEvPQ::TEvMLPErrorResponse(partitionId, Ydb::StatusIds::SCHEME_ERROR,
-            TStringBuilder() <<"Partition " << partitionId << " not found"), 0, ev->Cookie);
         return;
     }
 

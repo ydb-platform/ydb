@@ -239,7 +239,12 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - Rust
 
-  ImplicitTx mode is not supported.
+  ```rust
+  let mut qc = client.query_client();
+  // ImplicitTx is the default for QueryClient methods that execute a single SQL statement:
+  // the server picks isolation from SQL (SELECT → snapshot RO, DML → serializable RW).
+  let mut row = qc.query_row("SELECT 1 AS one").await?;
+  ```
 
 - PHP
 
@@ -562,16 +567,18 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 - Rust
 
   ```rust
-  use ydb::{TransactionOptions};
+  use ydb::{QueryTransactionOptions, QueryTxMode};
 
-  let tx_options = TransactionOptions::default().with_mode(
-    ydb::Mode::SerializableReadWrite
-  );
-  let table_client = db.table_client().clone_with_transaction_options(tx_options);
-  let result = table_client.retry_transaction(|mut tx| async move {
-    let res = tx.query("SELECT 1".into()).await?;
-    return Ok(res)
-  }).await?;
+  let qc = client
+      .query_client()
+      .clone_with_transaction_options(
+          QueryTransactionOptions::new().with_mode(QueryTxMode::SerializableReadWrite),
+      );
+  qc.retry_transaction(async |tx| {
+      tx.query_row("SELECT 1 AS one").await?;
+      Ok(())
+  })
+  .await?;
   ```
 
 - PHP
@@ -836,14 +843,21 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 - Rust
 
   ```rust
-  let tx_options = TransactionOptions::default().with_mode(
-    ydb::Mode::OnlineReadonly,
-  ).with_autocommit(true);
-  let table_client = db.table_client().clone_with_transaction_options(tx_options);
-  let result = table_client.retry_transaction(|mut tx| async move {
-    let res = tx.query("SELECT 1".into()).await?;
-    return Ok(res)
-  }).await?;
+  use ydb::QueryTxMode;
+
+  let mut qc = client.query_client();
+
+  // Online RO — consistent reads (allow_inconsistent_reads = false)
+  let mut row = qc
+      .query_row("SELECT 1 AS one")
+      .with_tx_mode(QueryTxMode::OnlineReadOnly)
+      .await?;
+
+  // Online inconsistent RO — higher throughput (allow_inconsistent_reads = true)
+  let mut row = qc
+      .query_row("SELECT 1 AS one")
+      .with_tx_mode(QueryTxMode::OnlineReadOnlyInconsistent)
+      .await?;
   ```
 
 - PHP
@@ -1103,7 +1117,16 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - Rust
 
-  Stale Read-Only mode is not supported in the Rust SDK.
+  ```rust
+  use ydb::QueryTxMode;
+
+  let mut qc = client.query_client();
+  // Stale Read-Only is supported only for QueryClient methods that execute a single SQL statement (not for retry_transaction).
+  let mut row = qc
+      .query_row("SELECT 1 AS one")
+      .with_tx_mode(QueryTxMode::StaleReadOnly)
+      .await?;
+  ```
 
 - PHP
 
@@ -1359,7 +1382,23 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - Rust
 
-  Snapshot Read-Only mode is not supported in the Rust SDK.
+  ```rust
+  use ydb::{QueryTransactionOptions, QueryTxMode};
+
+  let mut qc = client.query_client();
+  qc.query_row("SELECT 1 AS one")
+      .with_tx_mode(QueryTxMode::SnapshotReadOnly)
+      .await?;
+
+  let qc = qc.clone_with_transaction_options(
+      QueryTransactionOptions::new().with_mode(QueryTxMode::SnapshotReadOnly),
+  );
+  qc.retry_transaction(async |tx| {
+      tx.query_row("SELECT 1 AS one").await?;
+      Ok(())
+  })
+  .await?;
+  ```
 
 - PHP
 
@@ -1661,7 +1700,23 @@ Below are code examples showing the {{ ydb-short-name }} SDK built-in tools to c
 
 - Rust
 
-  Snapshot Read-Write mode is not supported in the Rust SDK.
+  ```rust
+  use ydb::{QueryTransactionOptions, QueryTxMode};
+
+  let mut qc = client.query_client();
+  qc.query_row("SELECT 1 AS one")
+      .with_tx_mode(QueryTxMode::SnapshotReadWrite)
+      .await?;
+
+  let qc = qc.clone_with_transaction_options(
+      QueryTransactionOptions::new().with_mode(QueryTxMode::SnapshotReadWrite),
+  );
+  qc.retry_transaction(async |tx| {
+      tx.query_row("SELECT 1 AS one").await?;
+      Ok(())
+  })
+  .await?;
+  ```
 
 - PHP
 

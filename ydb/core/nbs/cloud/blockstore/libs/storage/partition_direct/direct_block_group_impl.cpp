@@ -1092,19 +1092,6 @@ ui64 TDirectBlockGroup::GetHostPBufferUsedSize(THostIndex hostIndex) const
     return result;
 }
 
-void TDirectBlockGroup::ReEstablishDDiskConnection(size_t index)
-{
-    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
-    Y_ABORT_UNLESS(index < DDiskConnections.size());
-
-    auto& connection = DDiskConnections[index];
-    connection.ConnectPromise = NThreading::NewPromise<NProto::TError>();
-    connection.ConnectFuture = connection.ConnectPromise.GetFuture();
-    connection.SessionState = EDDiskSessionState::NotLocked;
-
-    DoEstablishConnection(index, connection);
-}
-
 ui64 TDirectBlockGroup::GetDDiskSessionSeqNo(size_t index) const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());

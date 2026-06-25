@@ -539,6 +539,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
             } else {
                 table.Lookup(tuple, [&](TSingleTuple tableMatch) {
                     found = true;
+                    ++DbgMatches_;
                     if constexpr (Kind == EJoinKind::Inner) {
                         consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
                     }
@@ -588,6 +589,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 }
                 for (TSingleTuple tuple: *state.Pack) { 
                     state.Spiller.AddRow(tuple); 
+                    ++DbgBuildRows_;
                 }
                 state.Pack = std::nullopt;
             }
@@ -647,9 +649,9 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
             if (!state.FetchedPack.has_value()) {
                 FetchResult<TPackResult> var = state.Probe.FetchRow();
                 NYql::NUdf::EFetchStatus status = AsStatus(var);
-                SHJ_HANG_LOG("Probing: Probe.FetchRow status=" << int(status));
                 if (status == NYql::NUdf::EFetchStatus::Yield) {
-                    SHJ_HANG_LOG("Probing: return Yield (probe input not ready)");
+                    SHJ_HANG_LOG("Probing: return Yield (probe input not ready) probeRows=" << DbgProbeRows_
+                        << " matches=" << DbgMatches_);
                     return EFetchResult::Yield;
                 } else if (status == NYql::NUdf::EFetchStatus::Ok) {
                     state.FetchedPack = std::move(GetPayload(var));
@@ -720,6 +722,11 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     }
                     int bucketIndex = Settings.BucketIndex(tuple);
                     bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
+                    ++DbgProbeRows_;
+                    if ((DbgProbeRows_ & 0xFFFF) == 0) {
+                        SHJ_HANG_LOG("Probing(in-mem): probeRows=" << DbgProbeRows_
+                            << " matches=" << DbgMatches_ << " buildRows=" << DbgBuildRows_);
+                    }
                     if (thisBucketSpilled) {
                         state.Spiller.AddRow({.Val = tuple, .Side = ESide::Probe, .BucketIndex = bucketIndex});
                     } else {
@@ -849,6 +856,10 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     TBlockHashJoinSettings Settings_;
     std::variant<Init, FetchingBuild, BuildingInMemoryTable, Probing, DumpRestOfPages, JoinPairsOfPartitions, Finish>
         State_ = Init{};
+    // SHJ_HANG: temporary diagnostic counters.
+    ui64 DbgProbeRows_ = 0;
+    ui64 DbgMatches_ = 0;
+    ui64 DbgBuildRows_ = 0;
 };
 } // namespace NJoinPackedTuples
 

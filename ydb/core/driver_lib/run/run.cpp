@@ -2350,7 +2350,8 @@ void TKikimrRunner::KikimrStop(bool graceful) {
 #endif
 
     if (drainProgress) {
-        ui32 maxTicks = DrainTimeout.MilliSeconds() / 100;
+        constexpr auto drainCheckInterval = TDuration::MilliSeconds(100);
+        ui32 maxTicks = DrainTimeout / drainCheckInterval;
         for (ui32 i = 0; i < maxTicks; i++) {
             auto cnt = drainProgress->GetOnlineTabletsEstimate();
             if (cnt > 0) {
@@ -2362,7 +2363,7 @@ void TKikimrRunner::KikimrStop(bool graceful) {
                 break;
             }
 
-            Sleep(TDuration::MilliSeconds(100));
+            Sleep(drainCheckInterval);
         }
 
         auto stillOnline = drainProgress->GetOnlineTabletsEstimate();

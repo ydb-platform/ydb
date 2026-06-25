@@ -248,6 +248,13 @@ private:
     TNodeOnNodeOwnedMap GatherSameTableSinkStages(const TNodeOnNodeOwnedMap& sinkStages) {
         THashMap<TString, TNodeOnNodeOwnedMap> sinksByTable;
 
+        auto processSinkSettings = [&](const TKqpTableSinkSettings& sinkSettings, const TDqStage& stage) {
+            if (sinkSettings.StreamWrite().Value() == "true") {
+                TString tablePath(sinkSettings.Table().Path().Value());
+                sinksByTable[tablePath].emplace(stage.Raw(), stage.Ptr());
+            }
+        };
+
         for (const auto& [_, stagePtr] : sinkStages) {
             TExprBase node(stagePtr);
             const auto stage = node.Cast<TDqStage>();
@@ -256,8 +263,11 @@ private:
                 for (const auto& output : outputs.Cast()) {
                     if (auto maybeSink = output.Maybe<TDqSink>()) {
                         if (auto sinkSettings = maybeSink.Cast().Settings().Maybe<TKqpTableSinkSettings>()) {
-                            TString tablePath(sinkSettings.Cast().Table().Path().Value());
-                            sinksByTable[tablePath].emplace(stage.Raw(), stage.Ptr());
+                            processSinkSettings(sinkSettings.Cast(), stage);
+                        }
+                    } else if (auto maybeTransform = output.Maybe<TDqTransform>()) {
+                        if (auto sinkSettings = maybeTransform.Cast().Settings().Maybe<TKqpTableSinkSettings>()) {
+                            processSinkSettings(sinkSettings.Cast(), stage);
                         }
                     }
                 }

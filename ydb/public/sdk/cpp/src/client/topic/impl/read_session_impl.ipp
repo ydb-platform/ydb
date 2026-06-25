@@ -3185,14 +3185,15 @@ TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePt
 
             messageData.clear_data();
 
+            auto log = partitionStream->GetLog();
             if (recordsSkipped > 0) {
-                LOG_LAZY(partitionStream->GetLog(), TLOG_DEBUG, TStringBuilder()
+                LOG_LAZY(log, TLOG_DEBUG, TStringBuilder()
                     << "Take Data (codec batch). Partition " << partitionStream->GetPartitionId()
                     << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
                     << minOffset << "-" << maxOffset << "), messages: " << result.MessagesTaken
                     << ", skipped as committed: " << recordsSkipped);
             } else {
-                LOG_LAZY(partitionStream->GetLog(), TLOG_DEBUG, TStringBuilder()
+                LOG_LAZY(log, TLOG_DEBUG, TStringBuilder()
                     << "Take Data. Partition " << partitionStream->GetPartitionId()
                     << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
                     << minOffset << "-" << maxOffset << ")");
@@ -3223,7 +3224,8 @@ TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePt
         result.DataSize += messageData.data().size();
         messageData.clear_data();
 
-        LOG_LAZY(partitionStream->GetLog(), TLOG_DEBUG, TStringBuilder()
+        auto log = partitionStream->GetLog();
+        LOG_LAZY(log, TLOG_DEBUG, TStringBuilder()
             << "Take Data. Partition " << partitionStream->GetPartitionId()
             << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
             << minOffset << "-" << maxOffset << ")");
@@ -3269,7 +3271,8 @@ TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePt
     // Clear data to free internal session's memory.
     messageData.clear_data();
 
-    LOG_LAZY(partitionStream->GetLog(), TLOG_DEBUG, TStringBuilder()
+    auto log = partitionStream->GetLog();
+    LOG_LAZY(log, TLOG_DEBUG, TStringBuilder()
                                         << "Take Data. Partition " << partitionStream->GetPartitionId()
                                         << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
                                         << minOffset << "-" << maxOffset << ")");

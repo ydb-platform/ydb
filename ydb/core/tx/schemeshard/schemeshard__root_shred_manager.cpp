@@ -329,7 +329,8 @@ bool TRootShredManager::Restore(NIceDb::TNiceDb& db) {
                 }
             }
             // Max generation should not be removed.
-            generationsToCleanup.erase(std::remove(generationsToCleanup.begin(), generationsToCleanup.end(), Generation), generationsToCleanup.end());
+            std::erase(generationsToCleanup, Generation);
+
             if (Status == EShredStatus::UNSPECIFIED || Status == EShredStatus::COMPLETED) {
                 auto ctx = SchemeShard->ActorContext();
                 TDuration interval = AppData(ctx)->TimeProvider->Now() - StartTime;
@@ -428,7 +429,7 @@ void TRootShredManager::CleanupOldGenerationsOnRestore(NIceDb::TNiceDb& db, cons
 
 void TRootShredManager::CleanupOldGenerationsOnShred(NIceDb::TNiceDb& db) {
     if (Generation >= 2) {
-        // Generation - 2 is used in order not to remove record with max Generation that might be used within TTenantShredManager::Restore
+        // Generation - 2 is used in order not to remove record with max Generation that might be used within TRootShredManager::Restore
         // to restore Generation property. Despite the fact that both removal and further update is performed within same transaction and thus
         // there's no chance of a data loss in case of (Generation -1) removal and SchemaShard death after removal but before updating
         // Schema::TenantShredGenerations with new value (Generation -2) is used for greater robustness.

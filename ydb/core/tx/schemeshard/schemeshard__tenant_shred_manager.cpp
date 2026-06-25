@@ -321,7 +321,7 @@ bool TTenantShredManager::Restore(NIceDb::TNiceDb& db) {
             }
         }
         // Max generation should not be removed.
-        generationsToCleanup.erase(std::remove(generationsToCleanup.begin(), generationsToCleanup.end(), Generation), generationsToCleanup.end());
+        std::erase(generationsToCleanup, Generation);
 
         CleanupOldGenerationsOnRestore(db, generationsToCleanup); 
     }

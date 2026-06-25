@@ -24,10 +24,10 @@ TYPED_TEST_P(TBusTest, OK)
     auto client = this->Traits_.CreateClient();
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
     auto message = CreateMessage(1);
-    auto result = NConcurrency::WaitForFast(
+    auto result = NConcurrency::WaitFor(
         bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full}));
     EXPECT_TRUE(result.IsOK());
-    NConcurrency::WaitForFast(server->Stop())
+    NConcurrency::WaitFor(server->Stop())
         .ThrowOnError();
 }
 
@@ -45,14 +45,14 @@ TYPED_TEST_P(TBusTest, Terminate)
     auto error = TError(TErrorCode(54321), "Terminated");
     bus->Terminate(error);
     bus->Terminate(TError(TErrorCode(12345), "Ignored"));
-    EXPECT_EQ(NConcurrency::WaitForFast(terminated.ToFuture()).GetCode(), error.GetCode());
+    EXPECT_EQ(NConcurrency::WaitFor(terminated.ToFuture()).GetCode(), error.GetCode());
     bus->Terminate(TError(TErrorCode(12345), "Ignored"));
 
     auto result = bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full});
     EXPECT_TRUE(result.IsSet());
-    EXPECT_EQ(NConcurrency::WaitForFast(result).GetCode(), error.GetCode());
+    EXPECT_EQ(NConcurrency::WaitFor(result).GetCode(), error.GetCode());
 
-    NConcurrency::WaitForFast(server->Stop())
+    NConcurrency::WaitFor(server->Stop())
         .ThrowOnError();
 }
 
@@ -61,7 +61,7 @@ TYPED_TEST_P(TBusTest, Failed)
     auto client = this->Traits_.CreateUnreachableClient();
     auto bus = client->CreateBus(New<TEmptyBusHandler>());
     auto message = CreateMessage(1);
-    auto result = NConcurrency::WaitForFast(
+    auto result = NConcurrency::WaitFor(
         bus->Send(message, {.TrackingLevel = EDeliveryTrackingLevel::Full}));
     EXPECT_FALSE(result.IsOK());
 }
@@ -94,7 +94,7 @@ TYPED_TEST_P(TBusTest, SendCancel)
     Sleep(TDuration::Seconds(1));
     ASSERT_LE(handler->GetCount(), 16);
 
-    NConcurrency::WaitForFast(server->Stop())
+    NConcurrency::WaitFor(server->Stop())
         .ThrowOnError();
 }
 
@@ -122,13 +122,13 @@ void RunRepliesTest(
     }
 
     for (const auto& result : results) {
-        auto error = NConcurrency::WaitForFast(result);
+        auto error = NConcurrency::WaitFor(result);
         EXPECT_TRUE(error.IsOK());
     }
 
     handler->WaitUntilDone();
 
-    NConcurrency::WaitForFast(server->Stop())
+    NConcurrency::WaitFor(server->Stop())
         .ThrowOnError();
 }
 

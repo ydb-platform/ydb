@@ -284,8 +284,8 @@ def _get_dir(urls, md5, ya_name):
             os.rename(tmp_dir, dest_dir)
         except OSError as e:
             import errno
-
-            if e.errno != errno.ENOTEMPTY:
+            # EEXIST - windows, ENOTEMPTY - linux, EEXIST is also permitted by POSIX
+            if e.errno not in (errno.ENOTEMPTY, errno.EEXIST):
                 raise
 
         return dest_dir

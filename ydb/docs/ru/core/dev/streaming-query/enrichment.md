@@ -2,7 +2,7 @@
 
 Обогащение данных — добавление к событиям из потока дополнительной информации из справочника. Например, событие содержит только идентификатор, а справочник позволяет добавить к нему название или другие атрибуты. В качестве справочника можно использовать данные из [локальной таблицы](#enrichment-local-table) или из [объектного хранилища S3](#enrichment-s3).
 
-В [потоковых запросах](../../concepts/streaming-query.md) справочник подключают с помощью конструкции `JOIN`. Поток должен быть слева, справочник — справа.
+В [потоковых запросах](../../concepts/streaming-query/streaming-query.md) справочник подключают с помощью конструкции `JOIN`. Поток должен быть слева, справочник — справа.
 
 {% note warning %}
 
@@ -33,7 +33,7 @@
 
 В данном примере справочник хранится в [таблице](../../concepts/datamodel/table.md) `services_dict` в текущей базе данных.
 
-Создайте [потоковый запрос](../../concepts/streaming-query.md), выполняющий обогащение:
+Создайте [потоковый запрос](../../concepts/streaming-query/streaming-query.md), выполняющий обогащение:
 
 ```yql
 CREATE STREAMING QUERY query_with_table_join AS
@@ -94,7 +94,7 @@ CREATE EXTERNAL DATA SOURCE s3_source WITH (
 
 - `<s3_endpoint>` — URL S3-хранилища, например `https://storage.yandexcloud.net/<bucket>/` для Yandex Cloud.
 
-Создайте [потоковый запрос](../../concepts/streaming-query.md), выполняющий обогащение:
+Создайте [потоковый запрос](../../concepts/streaming-query/streaming-query.md), выполняющий обогащение:
 
 ```yql
 CREATE STREAMING QUERY query_with_join AS

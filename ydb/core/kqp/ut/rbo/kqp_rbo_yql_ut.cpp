@@ -35,8 +35,9 @@
 
 #include <algorithm>
 #include <ctime>
-#include <regex>
 #include <fstream>
+#include <memory>
+#include <regex>
 
 namespace {
 
@@ -2492,6 +2493,16 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     static constexpr std::array<const char*, 2> BenchmarkTraceName{"TPCH_YQL", "TPCDS_YQL"};
     static constexpr std::array<ui32, 2> BenchmarkQueryCount{22, 99};
 
+    NKikimrConfig::TAppConfig MakeTPCYqlBenchmarkAppConfig(const bool newRbo) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
+        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
+        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
+        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
+        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        return appConfig;
+    }
+
     bool PlanHasJoin(const NJson::TJsonValue& planNode) {
         if (!planNode.IsMap()) {
             return false;
@@ -2558,12 +2569,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
     void RunTPC_YqlBenchmark(const EBenchType type, const bool columnStore, std::set<ui32>&& queriesStatus, std::set<ui32>&& skipList, const bool newRbo,
                              const bool printStatus = false, const bool compareResults = false, const bool checkNewRBOCbo = false,
                              std::set<ui32>&& queriesWithoutCboCheck = {}) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableNewRBO(newRbo);
-        appConfig.MutableTableServiceConfig()->SetEnableFallbackToYqlOptimizer(false);
-        appConfig.MutableTableServiceConfig()->SetAllowOlapDataQuery(true);
-        appConfig.MutableTableServiceConfig()->SetDefaultLangVer(NYql::GetMaxLangVersion());
-        appConfig.MutableTableServiceConfig()->SetBackportMode(NKikimrConfig::TTableServiceConfig_EBackportMode_All);
+        NKikimrConfig::TAppConfig appConfig = MakeTPCYqlBenchmarkAppConfig(newRbo);
 
         TKikimrRunner kikimr(NKqp::TKikimrSettings(appConfig).SetWithSampleTables(false));
         auto db = kikimr.GetTableClient();
@@ -2591,21 +2597,21 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             q = toDecimal + "\n" + toDecimalMax + "\n" + round + "\n" + q;
 
             Cerr << "Executing benchmark query " << qId << "\n";
-            TScopedRboTraceTitleOverride traceTitle(
-                FormatBenchmarkTraceTitle(BenchmarkTraceSuiteName, BenchmarkTraceName[type], qId),
-                q);
+            const TString traceTitle = FormatBenchmarkTraceTitle(BenchmarkTraceSuiteName, BenchmarkTraceName[type], qId);
 
-            auto queryClient = kikimr.GetQueryClient();
-            auto session = queryClient.GetSession().GetValueSync().GetSession();
-            auto result = session.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
-                              .ExtractValueSync();
+            auto result = [&]() {
+                TScopedRboTraceTitleOverride traceMetadata(traceTitle, q);
+                auto queryClient = kikimr.GetQueryClient();
+                auto session = queryClient.GetSession().GetValueSync().GetSession();
+                return session.ExecuteQuery(q, NYdb::NQuery::TTxControl::NoTx(), NYdb::NQuery::TExecuteQuerySettings().ExecMode(NQuery::EExecMode::Explain))
+                    .ExtractValueSync();
+            }();
             queriesCurrentStatus.insert({qId, result.IsSuccess()});
             errors.emplace_back(result.GetIssues().ToString());
             if (checkNewRBOCbo && result.IsSuccess() && !queriesWithoutCboCheck.contains(qId)) {
                 UNIT_ASSERT_C(result.GetStats()->GetPlan().has_value(), "Missing explain plan for query: " << qId);
                 AssertNewRBOCboOptimizedAllTrees(type, qId, TString{*result.GetStats()->GetPlan()});
             }
-
         }
 
         if (printStatus) {

@@ -305,9 +305,9 @@ public:
               << (Config.MaxConcurrentCompilations == 0 ? " (adjusted from 0)" : "")
               << ", self-orchestrating topology discovery");
 
+        // Soft deadline is armed only after the board is up (HandleCheckTopology), so a long board wait on a cold v2 bootstrap doesn't eat the compile budget.
         Schedule(hardDeadline, new TEvPrivate::TEvHardDeadline());
         SoftDeadlineCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
-        Schedule(softDeadline, new TEvPrivate::TEvSoftDeadline(), SoftDeadlineCookieHolder.Get());
 
         if (Database.empty()) {
             LOG_I("Database is empty, skipping warmup");
@@ -440,6 +440,9 @@ private:
             Complete(true, "Skipped: no peers in initial kqpexch+ board sync");
             return;
         }
+
+        SoftDeadlineCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
+        Schedule(Config.SoftDeadline, new TEvPrivate::TEvSoftDeadline(), SoftDeadlineCookieHolder.Get());
 
         LOG_I("Initial board sync delivered " << peerCount << " peer(s), waiting for "
               "TEvStartWarmup from KqpProxy");
@@ -736,7 +739,6 @@ private:
     }
 
     static constexpr TDuration TopologyCheckInterval = TDuration::MilliSeconds(500);
-    // Bounded under the soft deadline so genuine failures still report as failures.
     static constexpr ui32 MaxFetchAttempts = 3;
     static constexpr TDuration FetchRetryDelay = TDuration::Seconds(1);
 

@@ -3,7 +3,12 @@ import pytest
 import time
 import uuid
 
-from ydb.tests.library.compatibility.fixtures import RollingUpgradeAndDowngradeFixture, RollingDowngradeAndUpgradeFixture, string_version_to_tuple
+from ydb.tests.library.compatibility.fixtures import (
+    RollingUpgradeAndDowngradeFixture,
+    RollingUpgradeLongLivedClientsFixture,
+    RollingDowngradeAndUpgradeFixture,
+    string_version_to_tuple,
+)
 from ydb.tests.oss.ydb_sdk_import import ydb
 
 
@@ -111,27 +116,10 @@ class Workload:
                 break
 
 
-_LONG_LIVED_CLIENT_TESTS = frozenset({
-    'test_write_and_read_with_long_live_consumer',
-    'test_write_and_read_with_long_live_producer',
-})
-
-
 class TestTopicRollingUpdate(RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
-    def setup(self, request):
-        if request.node.name in _LONG_LIVED_CLIENT_TESTS:
-            # Keep driver/topic clients alive; graceful shutdown avoids long node stop delays.
-            yield from self.setup_cluster(disable_graceful_shutdown=False)
-        else:
-            yield from self.setup_cluster()
-
-    @pytest.fixture(autouse=True)
-    def long_lived_clients_mode(self, request):
-        if request.node.name in _LONG_LIVED_CLIENT_TESTS:
-            self.recreate_driver = False
-        yield
-        self.recreate_driver = True
+    def setup(self):
+        yield from self.setup_cluster()
 
     def test_write_and_read(self):
         utils = Workload(self)
@@ -144,6 +132,13 @@ class TestTopicRollingUpdate(RollingUpgradeAndDowngradeFixture):
             utils.write_to_topic()
 
         utils.read_from_topic()
+
+
+class TestTopicRollingUpdateLongLivedClients(RollingUpgradeLongLivedClientsFixture):
+    @pytest.fixture(autouse=True, scope="function")
+    def setup(self):
+        # Graceful shutdown avoids long node stop delays when topic clients stay connected.
+        yield from self.setup_cluster(disable_graceful_shutdown=False)
 
     def test_write_and_read_with_long_live_consumer(self):
         utils = Workload(self)

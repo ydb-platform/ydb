@@ -396,6 +396,11 @@ class RollingUpgradeAndDowngradeFixture(ClusterOperationsWaitMixin):
             yield
 
 
+class RollingUpgradeLongLivedClientsFixture(RollingUpgradeAndDowngradeFixture):
+    # Keep driver and topic clients alive across node restarts to test long-lived consumers/producers.
+    recreate_driver = False
+
+
 # Starts with a new cluster and downgrades it. Useful for testing new features that may be absent from the previous release.
 class RollingDowngradeAndUpgradeFixture(RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, params=all_binary_combinations_rolling, ids=all_binary_combinations_ids_rolling)

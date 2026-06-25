@@ -749,10 +749,12 @@ Y_UNIT_TEST_SUITE(TBlobStorageSyncLogRealPDisk) {
         };
 
         auto pumpUntil = [&](auto predicate, ui32 iterations, TDuration step) {
-            for (ui32 i = 0; i < iterations && !predicate(); ++i) {
+            bool ok = predicate();
+            for (ui32 i = 0; i < iterations && !ok; ++i) {
                 dispatchFor(step);
+                ok = predicate();
             }
-            return predicate();
+            return ok;
         };
 
         auto waitReady = [&] {

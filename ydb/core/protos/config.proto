@@ -1674,12 +1674,12 @@ message TImmediateControlsConfig {
             MaxValue: 1024,
             DefaultValue: 10 }];
         optional uint64 SyncLogMaxDiskAmount = 49 [(ControlOptions) = {
-            Description: "Maximum amount of SyncLog data stored on disk in bytes; effective chunk count is derived from PDisk chunk size",
+            Description: "Maximum amount of SyncLog data stored on disk in bytes; effective chunk count is max(2, amount / PDisk chunk size)",
             MinValue: 0,
             MaxValue: 1099511627776,
             DefaultValue: 0 }];
         optional uint64 SyncLogMaxMemAmount = 50 [(ControlOptions) = {
-            Description: "Maximum amount of SyncLog data stored in memory in bytes",
+            Description: "Maximum amount of SyncLog data stored in memory in bytes; effective page count is max(2, amount / append block size)",
             MinValue: 0,
             MaxValue: 1073741824,
             DefaultValue: 67108864 }];

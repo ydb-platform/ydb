@@ -37,10 +37,11 @@ def string_version_to_tuple(s):
     return tuple(result)
 
 
-def prepare_feature_flags(extra_feature_flags, disabled_feature_flags):
+def prepare_feature_flags(extra_feature_flags, disabled_feature_flags, disable_graceful_shutdown=True):
     disabled_feature_flags = copy.copy(disabled_feature_flags)
     assert isinstance(disabled_feature_flags, list), "Feature flags must be list"
-    disabled_feature_flags.append("enable_graceful_shutdown")
+    if disable_graceful_shutdown:
+        disabled_feature_flags.append("enable_graceful_shutdown")
 
     extra_feature_flags = copy.copy(extra_feature_flags)
     assert isinstance(extra_feature_flags, list), "Feature flags must be list"
@@ -104,7 +105,34 @@ all_binary_combinations_ids_restart = [
 ]
 
 
-class RestartToAnotherVersionFixture:
+class ClusterOperationsWaitMixin:
+    def _wait_for_cluster_operations(self):
+        query = """
+            CREATE TABLE `test_readiness` (
+            id Int64 NOT NULL,
+            PRIMARY KEY (id)
+        ) """
+        timeout = 120  # seconds
+        interval = 2  # seconds
+
+        start_time = time.time()
+        last_exception = None
+        while time.time() - start_time < timeout:
+            try:
+                with ydb.QuerySessionPool(self.driver) as session_pool:
+                    session_pool.execute_with_retries(query, retry_settings=ydb.RetrySettings(max_retries=1))
+                break
+            except Exception as e:
+                last_exception = e
+                time.sleep(interval)
+        else:
+            raise last_exception
+        query = """DROP TABLE `test_readiness`"""
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            session_pool.execute_with_retries(query)
+
+
+class RestartToAnotherVersionFixture(ClusterOperationsWaitMixin):
     @pytest.fixture(autouse=True, params=all_binary_combinations_restart, ids=all_binary_combinations_ids_restart)
     def base_setup(self, request):
         self.current_binary_paths_index = 0
@@ -127,7 +155,12 @@ class RestartToAnotherVersionFixture:
         return driver
 
     def setup_cluster(self, tenant_db=None, **kwargs):
-        extra_feature_flags, disabled_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []), kwargs.pop("disabled_feature_flags", []))
+        disable_graceful_shutdown = kwargs.pop("disable_graceful_shutdown", True)
+        extra_feature_flags, disabled_feature_flags = prepare_feature_flags(
+            kwargs.pop("extra_feature_flags", []),
+            kwargs.pop("disabled_feature_flags", []),
+            disable_graceful_shutdown=disable_graceful_shutdown,
+        )
         self.config = KikimrConfigGenerator(
             erasure=kwargs.pop("erasure", Erasure.MIRROR_3_DC),
             binary_paths=[self.all_binary_paths[self.current_binary_paths_index]],
@@ -159,14 +192,17 @@ class RestartToAnotherVersionFixture:
         new_binary_paths = self.all_binary_paths[self.current_binary_paths_index]
         self.config.set_binary_paths([new_binary_paths])
 
+        if self.driver is not None:
+            try:
+                with ydb.QuerySessionPool(self.driver) as session_pool:
+                    session_pool.execute_with_retries("SELECT 1")
+            except Exception:
+                pass
+
         self.stop_driver()
         self.cluster.update_configurator_and_restart(self.config)
         self.driver = self.create_driver()
-
-        # TODO: remove sleep
-        # without sleep there are errors like
-        # ydb.issues.Unavailable: message: "Failed to resolve tablet: 72075186224037909 after several retries." severity: 1 (server_code: 400050)
-        time.sleep(60)
+        self._wait_for_cluster_operations()
 
 
 all_binary_combinations_mixed = [
@@ -205,7 +241,12 @@ class MixedClusterFixture:
         return driver
 
     def setup_cluster(self, tenant_db=None, **kwargs):
-        extra_feature_flags, disabled_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []), kwargs.pop("disabled_feature_flags", []))
+        disable_graceful_shutdown = kwargs.pop("disable_graceful_shutdown", True)
+        extra_feature_flags, disabled_feature_flags = prepare_feature_flags(
+            kwargs.pop("extra_feature_flags", []),
+            kwargs.pop("disabled_feature_flags", []),
+            disable_graceful_shutdown=disable_graceful_shutdown,
+        )
         all_versions_numbered = all(
             # +inf == current will be float, all other versions are int
             isinstance(item, int)
@@ -249,7 +290,7 @@ all_binary_combinations_ids_rolling = [
 ]
 
 
-class RollingUpgradeAndDowngradeFixture:
+class RollingUpgradeAndDowngradeFixture(ClusterOperationsWaitMixin):
     recreate_driver = True  # TODO: temporary workaround. We don't want to recreate driver, but not working now
 
     @pytest.fixture(autouse=True, params=all_binary_combinations_rolling, ids=all_binary_combinations_ids_rolling)
@@ -275,33 +316,15 @@ class RollingUpgradeAndDowngradeFixture:
     def _wait_for_readiness(self):
         if self.recreate_driver:
             self.driver = self.create_driver()
-
-        query = """
-            CREATE TABLE `test_readiness` (
-            id Int64 NOT NULL,
-            PRIMARY KEY (id)
-        ) """
-        timeout = 120  # seconds
-        interval = 2  # seconds
-
-        start_time = time.time()
-        last_exception = None
-        while time.time() - start_time < timeout:
-            try:
-                with ydb.QuerySessionPool(self.driver) as session_pool:
-                    session_pool.execute_with_retries(query, retry_settings=ydb.RetrySettings(max_retries=1))
-                break
-            except Exception as e:
-                last_exception = e
-                time.sleep(interval)
-        else:
-            raise last_exception
-        query = """DROP TABLE `test_readiness`"""
-        with ydb.QuerySessionPool(self.driver) as session_pool:
-            session_pool.execute_with_retries(query)
+        self._wait_for_cluster_operations()
 
     def setup_cluster(self, tenant_db=None, **kwargs):
-        extra_feature_flags, disabled_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []), kwargs.pop("disabled_feature_flags", []))
+        disable_graceful_shutdown = kwargs.pop("disable_graceful_shutdown", True)
+        extra_feature_flags, disabled_feature_flags = prepare_feature_flags(
+            kwargs.pop("extra_feature_flags", []),
+            kwargs.pop("disabled_feature_flags", []),
+            disable_graceful_shutdown=disable_graceful_shutdown,
+        )
         self.config = KikimrConfigGenerator(
             erasure=kwargs.pop("erasure", Erasure.MIRROR_3_DC),
             binary_paths=[self.all_binary_paths[0]],

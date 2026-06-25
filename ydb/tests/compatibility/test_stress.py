@@ -13,6 +13,7 @@ class TestStress(MixedClusterFixture):
     @pytest.fixture(autouse=True)
     def setup(self):
         yield from self.setup_cluster(
+            disable_graceful_shutdown=False,
             # uncomment for 64 datetime in tpc-h/tpc-ds
             # extra_feature_flags=["enable_table_datetime64"],
             column_shard_config={

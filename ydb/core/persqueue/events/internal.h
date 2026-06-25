@@ -304,7 +304,7 @@ struct TEvPQ {
 
             std::optional<TString> MessageDeduplicationId;
             TMessageExternalDeduplicationInfo ExternalDeduplicationInfo;
-            ui32 MessageCount = 1;
+            ui32 LogicalMessageCount = 1;
             bool IsBatch = false;
             std::vector<std::pair<TString, ui64>> PartitionKeys;
         };
@@ -1847,12 +1847,14 @@ struct TEvPQ {
     };
 
     struct TEvRewindCommitResult: public TEventLocal<TEvRewindCommitResult, EvRewindCommitResult> {
-        explicit TEvRewindCommitResult(NYdb::TStatus status)
+        explicit TEvRewindCommitResult(NYdb::TStatus status, ui64 endOffset)
             : Status(std::move(status))
+            , EndOffset(endOffset)
         {
         }
 
         NYdb::TStatus Status;
+        ui64 EndOffset;
     };
 };
 

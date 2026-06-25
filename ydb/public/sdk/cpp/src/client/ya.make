@@ -41,6 +41,7 @@ RECURSE(
     rate_limiter
     resources
     result
+    row_ranges
     scheme
     secret
     table

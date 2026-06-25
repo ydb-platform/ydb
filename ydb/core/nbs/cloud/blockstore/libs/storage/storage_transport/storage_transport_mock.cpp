@@ -153,11 +153,10 @@ NThreading::TFuture<TEvSyncResult> TStorageTransportMock::SyncWithPBuffer(
 NThreading::TFuture<TEvErasePersistentBufferResult>
 TStorageTransportMock::BatchEraseFromPBuffer(
     const THostConnection& connection,
-    TVector<NKikimr::NDDisk::TBlockSelector> selectors,
     TVector<ui64> lsns,
     NWilson::TSpan* span)
 {
-    Y_UNUSED(connection, selectors, lsns, span);
+    Y_UNUSED(connection, lsns, span);
 
     Y_ABORT("BatchEraseFromPBuffer is not expected in this test");
 }

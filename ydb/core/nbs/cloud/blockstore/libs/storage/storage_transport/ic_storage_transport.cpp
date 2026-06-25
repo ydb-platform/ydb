@@ -133,7 +133,6 @@ TICStorageTransport::WriteToDDisk(
 TFuture<NKikimrBlobStorage::NDDisk::TEvErasePersistentBufferResult>
 TICStorageTransport::BatchEraseFromPBuffer(
     const THostConnection& connection,
-    TVector<NKikimr::NDDisk::TBlockSelector> selectors,
     TVector<ui64> lsns,
     NWilson::TSpan* span)
 {
@@ -143,7 +142,6 @@ TICStorageTransport::BatchEraseFromPBuffer(
         std::make_unique<TEvTransportPrivate::TEvBatchEraseFromPBuffer>(
             connection.GetServiceId(),
             connection.Credentials,
-            std::move(selectors),
             std::move(lsns),
             span ? span->GetTraceId() : NWilson::TTraceId());
 

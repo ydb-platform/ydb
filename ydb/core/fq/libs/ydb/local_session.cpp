@@ -115,10 +115,10 @@ struct TLocalSession : public ISession {
             execDataQuerySettings,
             promise));
 
-        if (txControl.Begin_) {
-            HasTransaction = true;
-        } else if (txControl.Commit_) {
+        if (txControl.Commit_) { // commit, or continue-and-commit, or begin-and-commit
             HasTransaction = false;
+        } else if (txControl.Begin_) {
+            HasTransaction = true;
         }
         return promise.GetFuture();
     }

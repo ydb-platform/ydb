@@ -5481,6 +5481,147 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
         }
 
+        // Read SetColumnConstraint operations
+        {
+            THashMap<TIndexBuildId, std::shared_ptr<TSetColumnConstraintOperationInfo>> loadedOperations;
+
+            {
+                auto rowset = db.Table<Schema::SetColumnConstraint>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    auto operationInfo = std::make_shared<TSetColumnConstraintOperationInfo>();
+
+                    TIndexBuildId operationId = TIndexBuildId(rowset.GetValue<Schema::SetColumnConstraint::OperationId>());
+                    operationInfo->Id = operationId;
+
+                    operationInfo->TablePathId = TPathId(
+                        rowset.GetValue<Schema::SetColumnConstraint::TableOwnerId>(),
+                        rowset.GetValue<Schema::SetColumnConstraint::TableLocalId>()
+                    );
+
+                    {
+                        TPath tablePath = TPath::Init(operationInfo->TablePathId, Self);
+                        operationInfo->DomainPathId = tablePath.GetPathIdForDomain();
+                    }
+
+                    TString serializedColumns = rowset.GetValue<Schema::SetColumnConstraint::SerializedColumnNames>();
+                    operationInfo->SetNotNullColumns = DeserializeSetColumnConstraintColumnNames(serializedColumns);
+
+                    operationInfo->ValidationFailed = rowset.GetValueOrDefault<Schema::SetColumnConstraint::ValidationFailed>(false);
+                    operationInfo->OperationState = TSetColumnConstraintOperationInfo::EOperationState(
+                        rowset.GetValue<Schema::SetColumnConstraint::OperationState>()
+                    );
+
+                    TTxId subStateTxId = rowset.GetValueOrDefault<Schema::SetColumnConstraint::SubStateTxId>(TTxId());
+                    NKikimrScheme::EStatus subStateTxStatus = rowset.GetValueOrDefault<Schema::SetColumnConstraint::SubStateTxStatus>(NKikimrScheme::StatusSuccess);
+                    bool subStateTxDone = rowset.GetValueOrDefault<Schema::SetColumnConstraint::SubStateTxDone>(false);
+
+                    // LockTxId is stored separately so it survives SubStateTxId overwrites in later phases
+                    operationInfo->LockTxId = rowset.GetValueOrDefault<Schema::SetColumnConstraint::LockTxId>(TTxId());
+
+                    switch (operationInfo->OperationState) {
+                        case TSetColumnConstraintOperationInfo::EOperationState::Locking:
+                            // We set the operationInfo->LockTxId value above in the code
+                            operationInfo->LockTxStatus = subStateTxStatus;
+                            operationInfo->LockTxDone = subStateTxDone;
+                            if (subStateTxId && !subStateTxDone) {
+                                Self->TxIdToSetColumnConstraintOperations[subStateTxId] = operationId;
+                            }
+                            break;
+                        case TSetColumnConstraintOperationInfo::EOperationState::LockingNullWrites:
+                            operationInfo->LockNullWritesTxId = subStateTxId;
+                            operationInfo->LockNullWritesTxStatus = subStateTxStatus;
+                            operationInfo->LockNullWritesTxDone = subStateTxDone;
+                            if (subStateTxId && !subStateTxDone) {
+                                Self->TxIdToSetColumnConstraintOperations[subStateTxId] = operationId;
+                            }
+                            break;
+                        case TSetColumnConstraintOperationInfo::EOperationState::Validating:
+                            // No active sub-state tx; shards handle validation
+                            break;
+                        case TSetColumnConstraintOperationInfo::EOperationState::Finishing:
+                            operationInfo->UnlockNullWritesTxId = subStateTxId;
+                            operationInfo->UnlockNullWritesTxStatus = subStateTxStatus;
+                            operationInfo->UnlockNullWritesTxDone = subStateTxDone;
+                            if (subStateTxId && !subStateTxDone) {
+                                Self->TxIdToSetColumnConstraintOperations[subStateTxId] = operationId;
+                            }
+                            break;
+                        case TSetColumnConstraintOperationInfo::EOperationState::Unlocking:
+                            operationInfo->UnlockTxId = subStateTxId;
+                            operationInfo->UnlockTxStatus = subStateTxStatus;
+                            operationInfo->UnlockTxDone = subStateTxDone;
+                            if (subStateTxId && !subStateTxDone) {
+                                Self->TxIdToSetColumnConstraintOperations[subStateTxId] = operationId;
+                            }
+                            break;
+                        case TSetColumnConstraintOperationInfo::EOperationState::Done:
+                        case TSetColumnConstraintOperationInfo::EOperationState::Invalid:
+                            break;
+                    }
+
+                    loadedOperations[operationId] = operationInfo;
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+
+            // Read per-shard validation statuses in SetColumnConstraint
+            {
+                auto rowset = db.Table<Schema::SetColumnConstraintShardStatus>().Range().Select();
+                if (!rowset.IsReady()) {
+                    return false;
+                }
+
+                while (!rowset.EndOfSet()) {
+                    TIndexBuildId operationId = TIndexBuildId(rowset.GetValue<Schema::SetColumnConstraintShardStatus::OperationId>());
+                    TShardIdx shardIdx(
+                        rowset.GetValue<Schema::SetColumnConstraintShardStatus::OwnerShardIdx>(),
+                        rowset.GetValue<Schema::SetColumnConstraintShardStatus::LocalShardIdx>()
+                    );
+                    auto validateStatus = rowset.GetValue<Schema::SetColumnConstraintShardStatus::Status>();
+                    TString issue = rowset.GetValueOrDefault<Schema::SetColumnConstraintShardStatus::Issue>(TString{});
+
+                    auto* opPtr = loadedOperations.FindPtr(operationId);
+                    if (!opPtr) {
+                        LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                            "SetColumnConstraint shard status: operation not found, id# " << operationId);
+                        if (!rowset.Next()) {
+                            return false;
+                        }
+                        continue;
+                    }
+                    auto& operationInfo = **opPtr;
+
+                    TValidateColumnConstraintShardStatus shardStatus(TSerializedTableRange{}, "");
+                    shardStatus.ValidateStatus = validateStatus;
+                    shardStatus.DebugMessage = issue;
+
+                    operationInfo.ValidationShards.emplace(shardIdx, std::move(shardStatus));
+                    operationInfo.DoneValidationShards.insert(shardIdx);
+
+                    if (!rowset.Next()) {
+                        return false;
+                    }
+                }
+            }
+
+            for (auto& [id, operationInfo] : loadedOperations) {
+                Self->AddSetColumnConstraintOperation(operationInfo);
+                OnComplete.ToProgress(id);
+            }
+
+            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "SetColumnConstraint"
+                    << ", records: " << Self->SetColumnConstraintOperations.size()
+                    << ", at schemeshard: " << Self->TabletID());
+        }
+
         // Read snapshot tables
         {
             ui64 records = 0;

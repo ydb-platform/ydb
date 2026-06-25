@@ -7,6 +7,7 @@
 #include <ydb/core/fq/libs/checkpointing_common/defs.h>
 #include <ydb/core/fq/libs/checkpointing/checkpoint_coordinator.h>
 #include <ydb/core/fq/libs/common/entity_id.h>
+#include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/fq/libs/compute/common/pinger.h>
 #include <ydb/core/fq/libs/compute/common/utils.h>
 #include <ydb/core/fq/libs/control_plane_storage/control_plane_storage.h>
@@ -20,7 +21,6 @@
 #include <ydb/core/fq/libs/read_rule/read_rule_creator.h>
 #include <ydb/core/fq/libs/read_rule/read_rule_deleter.h>
 #include <ydb/core/fq/libs/tasks_packer/tasks_packer.h>
-#include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/kqp/proxy_service/script_executions_utils/kqp_script_execution_compression.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/events.h>
@@ -979,7 +979,7 @@ private:
             Fq::Private::PingTaskRequest request;
             if (proto.issues_size()) {
                 *request.mutable_transient_issues() = proto.issues();
-                NKikimr::NKqp::TruncateIssues(request.mutable_transient_issues());
+                TruncateIssues(request.mutable_transient_issues());
             }
             if (proto.metric_size()) {
                 TString statistics;
@@ -995,7 +995,7 @@ private:
 
     void SendTransientIssues(const NYql::TIssues& issues) {
         Fq::Private::PingTaskRequest request;
-        NYql::IssuesToMessage(NKikimr::NKqp::TruncateIssues(issues), request.mutable_transient_issues());
+        NYql::IssuesToMessage(TruncateIssues(issues), request.mutable_transient_issues());
         Send(Pinger, new TEvents::TEvForwardPingRequest(request), 0, RaiseTransientIssuesCookie);
     }
 
@@ -1042,7 +1042,7 @@ private:
                 auto* header = QueryStateUpdateRequest.add_result_set_meta();
                 (*header->mutable_column()) = emptyResultSet.columns();
 
-                if (const auto& issues = NKikimr::NKqp::ValidateResultSetColumns(header->column())) {
+                if (const auto& issues = ValidateResultSetColumns(header->column())) {
                     header->clear_column();
                     Abort("Invalid result set columns, please contact internal support", FederatedQuery::QueryMeta::FAILED, issues);
                     return;
@@ -1220,7 +1220,7 @@ private:
     }
 
     TIssue WrapInternalIssues(const TIssues& issues) {
-        NYql::IssuesToMessage(NKikimr::NKqp::TruncateIssues(issues), QueryStateUpdateRequest.mutable_internal_issues());
+        NYql::IssuesToMessage(TruncateIssues(issues), QueryStateUpdateRequest.mutable_internal_issues());
         TString referenceId = GetEntityIdAsString(Params.Config.GetCommon().GetIdsPrefix(), EEntityType::UNDEFINED);
         LOG_E(referenceId << ": " << issues.ToOneLineString());
         return TIssue("Contact technical support and provide query information and this id: " + referenceId + "_" + Now().ToStringUpToSeconds());
@@ -1453,7 +1453,7 @@ private:
         for (const Fq::Private::TopicConsumer& c : Params.Resources.topic_consumers()) {
             if (const TString& tokenName = c.token_name()) {
                 credentials.emplace_back(
-                    CreateCredentialsProviderFactoryForStructuredToken(Params.CredentialsFactory, FindTokenByName(tokenName), c.add_bearer_to_token()));
+                    Params.CredentialsFactory->Create(FindTokenByName(tokenName), c.add_bearer_to_token()));
             } else {
                 credentials.emplace_back(NYdb::CreateInsecureCredentialsProviderFactory());
             }
@@ -1924,8 +1924,8 @@ private:
             Issues.Clear();
         }
 
-        NYql::IssuesToMessage(NKikimr::NKqp::TruncateIssues(TransientIssues), QueryStateUpdateRequest.mutable_transient_issues());
-        NYql::IssuesToMessage(NKikimr::NKqp::TruncateIssues(Issues), QueryStateUpdateRequest.mutable_issues());
+        NYql::IssuesToMessage(TruncateIssues(TransientIssues), QueryStateUpdateRequest.mutable_transient_issues());
+        NYql::IssuesToMessage(TruncateIssues(Issues), QueryStateUpdateRequest.mutable_issues());
         /*
             1. If the execution has already started then the issue will be put through TEvAbortExecution
             2. If execution hasn't started then the issue will be put in this place

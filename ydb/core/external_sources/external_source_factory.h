@@ -18,7 +18,7 @@ struct IExternalSourceFactory : public TThrRefBase {
 IExternalSourceFactory::TPtr CreateExternalSourceFactory(const std::vector<TString>& hostnamePatterns,
                                                          NActors::TActorSystem* actorSystem = nullptr,
                                                          size_t pathsLimit = 50000,
-                                                         std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> credentialsFactory = nullptr,
+                                                         std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> credentialsFactory = nullptr,
                                                          bool enableInfer = false,
                                                          bool allowLocalFiles = false,
                                                          bool allExternalDataSourcesAreAvailable = true,

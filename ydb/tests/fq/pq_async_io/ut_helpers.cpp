@@ -76,11 +76,11 @@ void TPqIoTestFixture::InitAsyncOutput(
     i64 freeSpace)
 {
     const THashMap<TString, TString> secureParams;
-
+    NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory = NYql::CreateStructuredTokenCredentialsFactory();
     TPqGatewayServices pqServices(
             Driver,
             nullptr,
-            nullptr,
+            credentialsFactory,
             std::make_shared<TPqGatewayConfig>(),
             nullptr
         );

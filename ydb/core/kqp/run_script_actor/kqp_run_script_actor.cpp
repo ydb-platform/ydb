@@ -1,6 +1,7 @@
 #include "kqp_run_script_actor.h"
 
 #include <ydb/core/fq/libs/checkpointing/events/events.h>
+#include <ydb/core/fq/libs/common/util.h>
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
@@ -525,7 +526,7 @@ private:
                     meta.set_enabled_runtime_results(true);
                     *meta.mutable_columns() = streamData.GetResultSet().columns();
 
-                    if (const auto& issues = NKikimr::NKqp::ValidateResultSetColumns(meta.columns())) {
+                    if (const auto& issues = NFq::ValidateResultSetColumns(meta.columns())) {
                         NYql::TIssue rootIssue(TStringBuilder() << "Invalid result set " << resultSetIndex << " columns, please contact internal support");
                         for (const NYql::TIssue& issue : issues) {
                             rootIssue.AddSubIssue(MakeIntrusive<NYql::TIssue>(issue));
@@ -699,7 +700,7 @@ private:
         const auto& issueMessage = record.GetResponse().GetQueryIssues();
         NYql::TIssues issues;
         NYql::IssuesFromMessage(issueMessage, issues);
-        Issues.AddIssues(TruncateIssues(issues));
+        Issues.AddIssues(NFq::TruncateIssues(issues));
 
         if (record.GetYdbStatus() == Ydb::StatusIds::SUCCESS) {
             LOG_I("Script query successfully finished from " << ev->Sender << ", Issues: " << Issues.ToOneLineString());

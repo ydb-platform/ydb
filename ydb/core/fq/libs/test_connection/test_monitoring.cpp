@@ -29,7 +29,7 @@ class TTestMonitoringConnectionActor : public NActors::TActorBootstrapped<TTestM
     TString User;
     TString Token;
     TTestConnectionRequestCountersPtr Counters;
-    NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+    NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory;
     NFq::TSigner::TPtr Signer;
     NYql::TSolomonClusterConfig ClusterConfig;
     const TInstant StartTime = TInstant::Now();
@@ -40,7 +40,7 @@ public:
         const TActorId& sender,
         ui64 cookie,
         const TString& endpoint,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
         const TString& scope,
         const TString& user,
         const TString& token,
@@ -80,8 +80,8 @@ public:
 
     void FillAuth(NHttp::THttpOutgoingRequestPtr& httpRequest) {
         const TString authorizationHeader = "Authorization";
-        const auto structedToken = NYql::ComposeStructuredTokenJsonForServiceAccount(ClusterConfig.GetServiceAccountId(), ClusterConfig.GetServiceAccountIdSignature(), ClusterConfig.GetToken());
-        const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, structedToken);
+        const auto structuredToken = NYql::ComposeStructuredTokenJsonForServiceAccount(ClusterConfig.GetServiceAccountId(), ClusterConfig.GetServiceAccountIdSignature(), ClusterConfig.GetToken());
+        const auto credentialsProviderFactory = CredentialsFactory->Create(structuredToken);
         const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
 
         switch (static_cast<NYql::NSo::NProto::ESolomonClusterType>(ClusterConfig.GetClusterType())) {
@@ -154,7 +154,7 @@ NActors::IActor* CreateTestMonitoringConnectionActor(
         const TActorId& sender,
         ui64 cookie,
         const TString& endpoint,
-        const NYql::ISecuredServiceAccountCredentialsFactory::TPtr& credentialsFactory,
+        const NYql::IStructuredTokenCredentialsFactory::TPtr& credentialsFactory,
         const TString& scope,
         const TString& user,
         const TString& token,

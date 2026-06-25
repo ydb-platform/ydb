@@ -19,11 +19,14 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
     void WaitResourcesPublish(ui32 nodeId, ui32 expectedNodeCount);
     void WaitResourcesPublish(const TKikimrRunner& kikimrRunner);
 
+    std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> CreateCredentialsFactory(
+        const TString& token = NYql::NConnector::NTest::DEFAULT_PASSWORD);
+
     struct TKikimrRunnerOptions {
         TString DomainRoot = "Root";
         ui32 NodeCount = 1;
         ui32 DynamicNodeCount = 0;
-        NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+        NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory = CreateCredentialsFactory();
         bool EnableScriptExecutionBackgroundChecks = true;
         TIntrusivePtr<NYql::IPqGateway> PqGateway;
         TDuration CheckpointPeriod = TDuration::MilliSeconds(200);
@@ -40,8 +43,5 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         std::optional<NKikimrConfig::TAppConfig> appConfig = std::nullopt,
         std::shared_ptr<NYql::NDq::IS3ActorsFactory> s3ActorsFactory = nullptr,
         const TKikimrRunnerOptions& options = {});
-
-    std::shared_ptr<NYql::ISecuredServiceAccountCredentialsFactory> CreateCredentialsFactory(
-        const TString& token = NYql::NConnector::NTest::DEFAULT_PASSWORD);
 
 } // namespace NKikimr::NKqp::NFederatedQueryTest

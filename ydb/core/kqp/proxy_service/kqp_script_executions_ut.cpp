@@ -278,9 +278,9 @@ struct TScriptExecutionsYdbSetup {
     }
 
     NPrivate::TEvPrivate::TEvLeaseCheckResult::TPtr CheckLeaseStatus(const TString& executionId) {
-        const ui32 node = 0;
+        constexpr ui32 node = 0;
         TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
-        GetRuntime()->Register(NPrivate::CreateCheckLeaseStatusActor(edgeActor, TestDatabase, executionId));
+        GetRuntime()->Register(NPrivate::CreateCheckLeaseStatusActor(TestDatabase, executionId), node, 0, TMailboxType::Simple, 0, edgeActor);
 
         auto reply = GetRuntime()->GrabEdgeEvent<NPrivate::TEvPrivate::TEvLeaseCheckResult>(edgeActor, TestTimeout);
         UNIT_ASSERT(reply->Get()->Status == Ydb::StatusIds::SUCCESS);
@@ -345,7 +345,7 @@ struct TScriptExecutionsYdbSetup {
 
     TEvScriptLeaseUpdateResponse::TPtr UpdateLease(const TString& executionId, TDuration leaseDuration, i64 leaseGeneration = 1) {
         const auto edgeActor = GetRuntime()->AllocateEdgeActor();
-        GetRuntime()->Register(CreateScriptLeaseUpdateActor(edgeActor, TestDatabase, executionId, leaseDuration, leaseGeneration, nullptr));
+        GetRuntime()->Register(CreateScriptLeaseUpdateActor(edgeActor, TestDatabase, executionId, leaseDuration, leaseGeneration));
 
         auto reply = GetRuntime()->GrabEdgeEvent<TEvScriptLeaseUpdateResponse>(edgeActor, TestTimeout);
         UNIT_ASSERT_C(reply, "ScriptLeaseUpdate response is empty");
@@ -788,7 +788,7 @@ Y_UNIT_TEST_SUITE(ScriptExecutionsTest) {
 
         const auto leaseCheck = ydb.CheckLeaseStatus(executionId);
         UNIT_ASSERT_VALUES_EQUAL(leaseCheck->Get()->Status, Ydb::StatusIds::SUCCESS);
-        UNIT_ASSERT(leaseCheck->Get()->WaitFinalizationOrRetry);
+        UNIT_ASSERT(leaseCheck->Get()->EntryExists);
         UNIT_ASSERT(leaseCheck->Get()->OperationStatus);
         UNIT_ASSERT_VALUES_EQUAL(*leaseCheck->Get()->OperationStatus, Ydb::StatusIds::SUCCESS);
         UNIT_ASSERT(leaseCheck->Get()->ExecutionStatus);

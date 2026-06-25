@@ -135,8 +135,8 @@ protected:
     void Finish(Ydb::StatusIds::StatusCode status, NYql::TIssues&& issues, bool rollbackOnError = true);
     void Finish();
 
-    void RunDataQuery(const TString& sql, NYdb::TParamsBuilder* params = nullptr, TTxControl txControl = TTxControl::BeginAndCommitTx());
-    void RunStreamQuery(const TString& sql, NYdb::TParamsBuilder* params = nullptr, ui64 channelBufferSize = 60_MB);
+    void RunDataQuery(TString sql, NYdb::TParamsBuilder* params = nullptr, TTxControl txControl = TTxControl::BeginAndCommitTx());
+    void RunStreamQuery(TString sql, NYdb::TParamsBuilder* params = nullptr, ui64 channelBufferSize = 60_MB);
     void CancelStreamQuery();
     void CommitTransaction();
 
@@ -242,6 +242,8 @@ private:
 
 class TQueryRetryActorBase {
 public:
+    using IRetryPolicy = IRetryPolicy<Ydb::StatusIds::StatusCode>;
+
     static ERetryErrorClass Retryable(Ydb::StatusIds::StatusCode status);
 
 protected:
@@ -259,29 +261,28 @@ protected:
 
 template<typename TQueryActor, typename TResponse, typename ...TArgs>
 class TQueryRetryActor : public NActors::TActorBootstrapped<TQueryRetryActor<TQueryActor, TResponse, TArgs...>>, public TQueryRetryActorBase {
-public:
     static_assert(std::is_base_of<TQueryBase, TQueryActor>::value, "Query actor must inherit from TQueryBase");
     static_assert(std::is_base_of<IEventBase, TResponse>::value, "Invalid response type");
 
     using TBase = NActors::TActorBootstrapped<TQueryRetryActor<TQueryActor, TResponse, TArgs...>>;
-    using IRetryPolicy = IRetryPolicy<Ydb::StatusIds::StatusCode>;
 
-    explicit TQueryRetryActor(const NActors::TActorId& replyActorId, const TArgs&... args)
+public:
+    explicit TQueryRetryActor(const NActors::TActorId& replyActorId, TArgs... args)
         : ReplyActorId(replyActorId)
         , RetryPolicy(IRetryPolicy::GetExponentialBackoffPolicy(
             Retryable, TDuration::MilliSeconds(10), 
             TDuration::MilliSeconds(200), TDuration::Seconds(1),
             std::numeric_limits<size_t>::max(), TDuration::Seconds(1)
         ))
-        , CreateQueryActor([=]() {
+        , CreateQueryActor([...args = std::forward<TArgs>(args)]() {
             return std::make_unique<TQueryActor>(args...);
         })
     {}
 
-    TQueryRetryActor(const NActors::TActorId& replyActorId, IRetryPolicy::TPtr retryPolicy, const TArgs&... args)
+    TQueryRetryActor(const NActors::TActorId& replyActorId, IRetryPolicy::TPtr retryPolicy, TArgs... args)
         : ReplyActorId(replyActorId)
         , RetryPolicy(retryPolicy)
-        , CreateQueryActor([=]() {
+        , CreateQueryActor([...args = std::forward<TArgs>(args)]() {
             return std::make_unique<TQueryActor>(args...);
         })
         , RetryState(RetryPolicy->CreateRetryState())
@@ -342,6 +343,23 @@ private:
     const std::function<std::unique_ptr<TQueryActor>()> CreateQueryActor;
     IRetryPolicy::IRetryState::TPtr RetryState = nullptr;
     ui64 RetryAttempts = 0;
+};
+
+template<typename TQueryActor, typename TResponse>
+class TQueryRetryActorMixin {
+    template<typename... TArgs>
+    using TRetry = TQueryRetryActor<TQueryActor, TResponse, TArgs...>;
+
+public:
+    template<typename... TArgs>
+    static auto MakeRetry(const NActors::TActorId& replyActorId, TArgs&&... args) {
+        return new TRetry<std::decay_t<TArgs>...>(replyActorId, std::forward<TArgs>(args)...);
+    }
+
+    template<typename... TArgs>
+    static auto MakeRetry(const NActors::TActorId& replyActorId, TQueryRetryActorBase::IRetryPolicy::TPtr retryPolicy, TArgs&&... args) {
+        return new TRetry<std::decay_t<TArgs>...>(replyActorId, std::move(retryPolicy), std::forward<TArgs>(args)...);
+    }
 };
 
 } // namespace NKikimr

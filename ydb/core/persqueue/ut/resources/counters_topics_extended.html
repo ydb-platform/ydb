@@ -1,14 +1,9 @@
 <pre>
 host=:
-
     database=/Root:
-
         cloud_id=cloud_id:
-
             folder_id=folder_id:
-
                 database_id=database_id:
-
                     topic=topic:
                         name=topic.keys.compacted_bytes: 34531695
                         name=topic.keys.uncompacted_bytes: 8315875
@@ -48,7 +43,6 @@ host=:
                         name=topic.reserve.limit_bytes: 7549747200
                         name=topic.reserve.used_bytes: 31460143
                         name=topic.storage_bytes: 7549747200
-
                         consumer=__ydb_compaction_consumer:
                             name=topic.committed_lag_messages: 1
                             name=topic.partition.alive_count: 1
@@ -60,11 +54,11 @@ host=:
                             name=topic.partition.read.inflight_limit_reached_duration_milliseconds: 0
                             name=topic.partition.read.lag_messages_max: 1
                             name=topic.partition.read.lag_milliseconds_max: 300
+                            name=topic.partition.read.recompression_cpu_usage: 0
                             name=topic.partition.read.speed_limit_bytes_per_second: 4194304
                             name=topic.partition.read.throttled_microseconds_max: 2000
                             name=topic.partition.write.lag_milliseconds_max: 200
                             name=topic.read.lag_messages: 1
-
                         consumer=client:
                             name=topic.committed_lag_messages: 0
                             name=topic.partition.alive_count: 0
@@ -76,6 +70,7 @@ host=:
                             name=topic.partition.read.inflight_limit_reached_duration_milliseconds: 0
                             name=topic.partition.read.lag_messages_max: 0
                             name=topic.partition.read.lag_milliseconds_max: 0
+                            name=topic.partition.read.recompression_cpu_usage: 0
                             name=topic.partition.read.speed_limit_bytes_per_second: 0
                             name=topic.partition.read.throttled_microseconds_max: 0
                             name=topic.partition.write.lag_milliseconds_max: 0

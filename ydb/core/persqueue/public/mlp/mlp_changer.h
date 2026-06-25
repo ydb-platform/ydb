@@ -43,7 +43,8 @@ public:
 private:
 
     void DoDescribe() {
-        LOG_D("Start describe");
+        YDB_LOG_DEBUG_COMP(Service, "Start describe",
+            {"logPrefix", NPQ_LOG_PREFIX});
         TBase::Become(&TThis::DescribeState);
 
         NDescriber::TDescribeSettings settings = {
@@ -54,7 +55,8 @@ private:
     }
 
     void Handle(NDescriber::TEvDescribeTopicsResponse::TPtr& ev) {
-        LOG_D("Handle NDescriber::TEvDescribeTopicsResponse");
+        YDB_LOG_DEBUG_COMP(Service, "Handle NDescriber::TEvDescribeTopicsResponse",
+            {"logPrefix", NPQ_LOG_PREFIX});
 
         ChildActorId = {};
 
@@ -88,7 +90,8 @@ private:
     }
 
     void DoChanges() {
-        LOG_D("Start DoChanges");
+        YDB_LOG_DEBUG_COMP(Service, "Start DoChanges",
+            {"logPrefix", NPQ_LOG_PREFIX});
         TBase::Become(&TThis::ChangesState);
 
         for (const TMessageId& messageId: Settings.Messages) {
@@ -116,12 +119,16 @@ private:
     }
 
     void Handle(typename TResponse::TPtr& ev) {
-        LOG_D("Handle response " << ev->Get()->Record.ShortDebugString());
+        YDB_LOG_DEBUG_COMP(Service, "Handle response",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"ev", ev->Get()->Record});
         auto partitionId = ev->Cookie;
 
         auto it = PendingPartitions.find(partitionId);
         if (it == PendingPartitions.end()) {
-            LOG_D("Received response fron unexpected partition " << partitionId);
+            YDB_LOG_DEBUG_COMP(Service, "Received response fron unexpected partition",
+                {"logPrefix", NPQ_LOG_PREFIX},
+                {"partitionId", partitionId});
             return;
         }
 
@@ -134,13 +141,17 @@ private:
     }
 
     void Handle(TEvPQ::TEvMLPErrorResponse::TPtr& ev) {
-        LOG_D("Handle TEvPQ::TEvMLPErrorResponse " << ev->Get()->Record.ShortDebugString());
+        YDB_LOG_DEBUG_COMP(Service, "Handle TEvPQ::TEvMLPErrorResponse",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"ev", ev->Get()->Record});
 
         auto partitionId = ev->Cookie;
 
         auto it = PendingPartitions.find(partitionId);
         if (it == PendingPartitions.end()) {
-            LOG_D("Received response from unexpected partition " << partitionId);
+            YDB_LOG_DEBUG_COMP(Service, "Received response from unexpected partition",
+                {"logPrefix", NPQ_LOG_PREFIX},
+                {"partitionId", partitionId});
             return;
         }
 
@@ -154,11 +165,15 @@ private:
     }
 
     void Handle(TEvPipeCache::TEvDeliveryProblem::TPtr& ev) {
-        LOG_D("Handle TEvPipeCache::TEvDeliveryProblem " << ev->Get()->TabletId);
+        YDB_LOG_DEBUG_COMP(Service, "Handle TEvPipeCache::TEvDeliveryProblem",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"TabletId", ev->Get()->TabletId});
 
         auto it = Pipes.find(ev->Get()->TabletId);
         if (it == Pipes.end()) {
-            LOG_D("Received pipe error for unexpected tablet " << ev->Get()->TabletId);
+            YDB_LOG_DEBUG_COMP(Service, "Received pipe error for unexpected tablet",
+                {"logPrefix", NPQ_LOG_PREFIX},
+                {"TabletId", ev->Get()->TabletId});
             return;
         }
 
@@ -217,7 +232,9 @@ private:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode errorCode, TString&& errorMessage) {
-        LOG_I("Reply error " << Ydb::StatusIds::StatusCode_Name(errorCode));
+        YDB_LOG_INFO_COMP(Service, "Reply error",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"statusCodeName", Ydb::StatusIds::StatusCode_Name(errorCode)});
         TBase::Send(ParentId, new TEvChangeResponse(errorCode, std::move(errorMessage)));
         PassAway();
     }

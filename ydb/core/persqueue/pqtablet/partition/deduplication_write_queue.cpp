@@ -13,6 +13,8 @@
 #include <util/string/join.h>
 #include <ranges>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ {
 
 
@@ -55,7 +57,12 @@ public:
         };
         const auto recentPartitionsIt = std::partition(ParentPartitions.begin(), ParentPartitions.end(), isRecentPartition);
         std::ranges::sort(ParentPartitions.begin(), recentPartitionsIt, std::greater<>{}, &TParentPartitionInfo::PartitionId); // oldest partitions at end
-        LOG_D("Partitions: " << JoinRange(", ", ParentPartitions.begin(), recentPartitionsIt) << "; OldPartitions " << JoinRange(", ", recentPartitionsIt, ParentPartitions.end()) << "; DisableTimestamp " << DisableTimestamp << "; InNSeconds=" << (DisableTimestamp - now).Seconds());
+        YDB_LOG_DEBUG("OldPartitions DisableTimestamp",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"partitions", JoinRange(", ", ParentPartitions.begin(), recentPartitionsIt)},
+            {"recentPartitions", JoinRange(", ", recentPartitionsIt, ParentPartitions.end())},
+            {"disableTimestamp", DisableTimestamp},
+            {"inNSeconds", (DisableTimestamp - now).Seconds()});
         ParentPartitions.erase(recentPartitionsIt, ParentPartitions.end());
     }
 
@@ -174,7 +181,9 @@ private:
     }
 
     void Handle(TEvPQ::TEvWrite::TPtr& ev) {
-        LOG_D("Handle TEvWrite: " << LabeledOutput(BypassMode));
+        YDB_LOG_DEBUG("Handle TEvWrite",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"bypassMode", BypassMode});
         if (TryBypass(ev)) {
             return;
         }
@@ -217,7 +226,9 @@ private:
     }
 
     void Handle(TEvPQ::TEvReserveBytes::TPtr& ev) {
-        LOG_D("Handle TEvReserveBytes: " << LabeledOutput(BypassMode));
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"bypassMode", BypassMode});
         if (TryBypass(ev)) {
             return;
         }
@@ -234,7 +245,11 @@ private:
                 parentPartition.PartitionId,
                 tabletInfo.Generation,
                 TConstArrayRef(&messageDeduplicationId, 1));
-            LOG_D("Send TEvCheckMessageDeduplicationRequest: partition=" << parentPartition.PartitionId << "; tabletId=" << tabletId << "; messageDeduplicationId=" << messageDeduplicationId);
+            YDB_LOG_DEBUG("Send TEvCheckMessageDeduplicationRequest",
+                {"logPrefix", NPQ_LOG_PREFIX},
+                {"partition", parentPartition.PartitionId},
+                {"tabletId", tabletId},
+                {"messageDeduplicationId", messageDeduplicationId});
             auto forward = std::make_unique<TEvPipeCache::TEvForward>(
                 ev.release(),
                 tabletId,
@@ -248,20 +263,28 @@ private:
 
     void Handle(NKikimr::TEvPersQueue::TEvCheckMessageDeduplicationResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
-        LOG_D("Handle TEvCheckMessageDeduplicationResponse: " << record.ShortUtf8DebugString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"TEvCheckMessageDeduplicationResponse", record.ShortUtf8DebugString()});
         for (const auto& [messageDeduplicationId, result] : record.GetResult()) {
             auto deduplicationInfoIt = DeduplicationInfo.find(messageDeduplicationId);
             if (deduplicationInfoIt == DeduplicationInfo.end()) {
-                LOG_D("Got unknown messageDeduplicationId=" << messageDeduplicationId << " in TEvCheckMessageDeduplicationResponse");
+                YDB_LOG_DEBUG("Got unknown in TEvCheckMessageDeduplicationResponse",
+                    {"logPrefix", NPQ_LOG_PREFIX},
+                    {"messageDeduplicationId", messageDeduplicationId});
                 continue;
             }
             auto& deduplicationInfo = deduplicationInfoIt->second;
             if (auto it = deduplicationInfo.RemainsPartitionWithGeneration.find(record.GetPartitionId());
                 it == deduplicationInfo.RemainsPartitionWithGeneration.end()) {
-                LOG_D("Got unknown partition for messageDeduplicationId=" << messageDeduplicationId << " in TEvCheckMessageDeduplicationResponse");
+                YDB_LOG_DEBUG("Got unknown partition for in TEvCheckMessageDeduplicationResponse",
+                    {"logPrefix", NPQ_LOG_PREFIX},
+                    {"messageDeduplicationId", messageDeduplicationId});
                 continue;
             } else if (it->second > record.GetGeneration()) {
-                LOG_D("Got wrong generation for messageDeduplicationId=" << messageDeduplicationId << " in TEvCheckMessageDeduplicationResponse");
+                YDB_LOG_DEBUG("Got wrong generation for in TEvCheckMessageDeduplicationResponse",
+                    {"logPrefix", NPQ_LOG_PREFIX},
+                    {"messageDeduplicationId", messageDeduplicationId});
                 continue;
             } else {
                 deduplicationInfo.RemainsPartitionWithGeneration.erase(it);
@@ -341,14 +364,22 @@ private:
 
     void SendEvent(TEvPQ::TEvWrite::TPtr ev) {
         bool update = SetChecked(ev->Get()->ExternalDeduplicationStatus);
-        LOG_D("Forward event " << ev->GetTypeRewrite() << " to " << PartitionActorId << "; update=" << update);
+        YDB_LOG_DEBUG("Forward event",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"typeRewrite", ev->GetTypeRewrite()},
+            {"partitionActorId", PartitionActorId},
+            {"update", update});
         Forward(ev, PartitionActorId);
     }
 
     void SendEvent(TEvPQ::TEvReserveBytes::TPtr ev) {
         bool prevFromDeduplicatedQueue = std::exchange(ev->Get()->FromDeduplicatedQueue, true);
         AFL_ENSURE(prevFromDeduplicatedQueue == false);
-        LOG_D("Forward event " << ev->GetTypeRewrite() << " to " << PartitionActorId << "; update=" << !prevFromDeduplicatedQueue);
+        YDB_LOG_DEBUG("Forward event",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"typeRewrite", ev->GetTypeRewrite()},
+            {"partitionActorId", PartitionActorId},
+            {"update", !prevFromDeduplicatedQueue});
         Forward(ev, PartitionActorId);
     }
 
@@ -414,7 +445,12 @@ private:
             return;
         }
         AFL_ENSURE(newMode != BypassMode)("BypassMode", BypassMode)("NewMode", newMode);
-        LOG_D("SwitchToBypassMode " << *newMode << "; Now=" << TAppData::TimeProvider->Now() << "; DisableTimestamp=" << DisableTimestamp << "; PassSeconds=" << (TAppData::TimeProvider->Now() - DisableTimestamp).Seconds());
+        YDB_LOG_DEBUG("SwitchToBypassMode",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"newMode", *newMode},
+            {"now", TAppData::TimeProvider->Now()},
+            {"disableTimestamp", DisableTimestamp},
+            {"passSeconds", (TAppData::TimeProvider->Now() - DisableTimestamp).Seconds()});
         if (newMode == EBypassMode::Enabled) {
             Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
         }
@@ -429,7 +465,9 @@ private:
             hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
             sFunc(TEvents::TEvPoison, PassAway);
             default:
-                LOG_E("Unexpected " << EventStr("StateWork", ev));
+                YDB_LOG_ERROR("Unexpected",
+                    {"logPrefix", NPQ_LOG_PREFIX},
+                    {"event", EventStr("StateWork", ev)});
                 AFL_VERIFY_DEBUG(false)("Unexpected", EventStr("StateInit", ev));
         }
     }

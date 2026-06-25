@@ -60,7 +60,8 @@ void TBasicAccountQuoter::InitCounters(const TActorContext& ctx) {
 }
 
 void TBasicAccountQuoter::Handle(TEvents::TEvPoisonPill::TPtr&, const TActorContext& ctx) {
-    LOG_I("killed");
+    YDB_LOG_INFO_COMP(Service, "Killed",
+        {"logPrefix", NPQ_LOG_PREFIX});
     for (const auto& event : Queue) {
         auto cookie = event.Request->Get()->Cookie;
         ReplyPersQueueError(
@@ -78,7 +79,9 @@ void TBasicAccountQuoter::HandleUpdateCounters(TEvPQ::TEvUpdateCounters::TPtr&, 
 }
 
 void TBasicAccountQuoter::HandleQuotaRequest(NAccountQuoterEvents::TEvRequest::TPtr& ev, const TActorContext& ctx) {
-    LOG_D("quota required for cookie=" << ev->Get()->Cookie);
+    YDB_LOG_DEBUG_COMP(Service, "Quota required",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"cookie", ev->Get()->Cookie});
     InitCounters(ctx);
     bool hasActualErrors = ctx.Now() - LastReportedErrorTime < DoNotQuoteAfterErrorPeriod;
     if (ResourcePath && (QuotaRequestInFlight || !InProcessQuotaRequestCookies.empty()) && !hasActualErrors) {
@@ -90,10 +93,12 @@ void TBasicAccountQuoter::HandleQuotaRequest(NAccountQuoterEvents::TEvRequest::T
 
 void TBasicAccountQuoter::HandleQuotaConsumed(NAccountQuoterEvents::TEvConsumed::TPtr& ev, const TActorContext& ctx) {
     ConsumedBytesInCredit += ev->Get()->BytesConsumed;
-    LOG_D("consumed quota " << ev->Get()->BytesConsumed
-        << " bytes by cookie=" << ev->Get()->RequestCookie
-        << ", consumed in credit " << ConsumedBytesInCredit << "/" << CreditBytes
-    );
+    YDB_LOG_DEBUG_COMP(Service, "Consumed quota bytes by consumed in credit /",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"BytesConsumed", ev->Get()->BytesConsumed},
+        {"cookie", ev->Get()->RequestCookie},
+        {"consumedBytesInCredit", ConsumedBytesInCredit},
+        {"creditBytes", CreditBytes});
     auto it = InProcessQuotaRequestCookies.find(ev->Get()->RequestCookie);
     PQ_ENSURE(it != InProcessQuotaRequestCookies.end());
     InProcessQuotaRequestCookies.erase(it);
@@ -120,7 +125,10 @@ void TBasicAccountQuoter::HandleQuotaConsumed(NAccountQuoterEvents::TEvConsumed:
 void TBasicAccountQuoter::HandleClearance(TEvQuota::TEvClearance::TPtr& ev, const TActorContext& ctx) {
     QuotaRequestInFlight = false;
     const ui64 cookie = ev->Cookie;
-    LOG_D("Got quota from Kesus:" << ev->Get()->Result << ". Cookie: " << cookie);
+    YDB_LOG_DEBUG_COMP(Service, "Got quota",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"fromKesus", ev->Get()->Result},
+        {"cookie", cookie});
 
     PQ_ENSURE(CurrentQuotaRequestCookie == cookie);
     if (!Queue.empty()) {
@@ -131,7 +139,9 @@ void TBasicAccountQuoter::HandleClearance(TEvQuota::TEvClearance::TPtr& ev, cons
     if (Y_UNLIKELY(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Success)) {
         PQ_ENSURE(ev->Get()->Result != TEvQuota::TEvClearance::EResult::Deadline); // We set deadline == inf in quota request.
         if (ctx.Now() - LastReportedErrorTime > TDuration::Minutes(1)) {
-            LOG_E("Got quota request error: " << ev->Get()->Result);
+            YDB_LOG_ERROR_COMP(Service, "Got quota request",
+                {"logPrefix", NPQ_LOG_PREFIX},
+                {"error", ev->Get()->Result});
             LastReportedErrorTime = ctx.Now();
         }
         return;
@@ -139,8 +149,9 @@ void TBasicAccountQuoter::HandleClearance(TEvQuota::TEvClearance::TPtr& ev, cons
 }
 
 void TBasicAccountQuoter::ApproveQuota(NAccountQuoterEvents::TEvRequest::TPtr& ev, TInstant startWait, const TActorContext& ctx) {
-    LOG_D("approve read for cookie=" << ev->Get()->Cookie
-    );
+    YDB_LOG_DEBUG_COMP(Service, "Approve read",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"cookie", ev->Get()->Cookie});
     InProcessQuotaRequestCookies.insert(ev->Get()->Cookie);
 
     auto waitTime = ctx.Now() - startWait;
@@ -179,7 +190,10 @@ TAccountReadQuoter::TAccountReadQuoter(
             AppData()->PQConfig.GetQuotingConfig().GetReadCreditBytes(), counters, DO_NOT_QUOTE_AFTER_ERROR_PERIOD)
     , User(user)
 {
-    LOG_I("kesus=" << KesusPath << " resource_path=" << ResourcePath);
+    YDB_LOG_INFO_COMP(Service, "Create account quoter",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"kesus", KesusPath},
+        {"resourcePath", ResourcePath});
     ConsumerPath = NPersQueue::ConvertOldConsumerName(user);
 }
 
@@ -225,11 +239,11 @@ TAccountWriteQuoter::TAccountWriteQuoter(
                           0, counters,
                           TDuration::Zero())
 {
-    LOG_D("topicWriteQuotaResourcePath '" << ResourcePath
-                << "' topicWriteQuoterPath '" << KesusPath
-                << "' account '" << topicConverter->GetAccount()
-                << "'"
-    );
+    YDB_LOG_DEBUG_COMP(Service, "TopicWriteQuotaResourcePath topicWriteQuoterPath account",
+        {"logPrefix", NPQ_LOG_PREFIX},
+        {"resourcePath", ResourcePath},
+        {"kesusPath", KesusPath},
+        {"account", topicConverter->GetAccount()});
 }
 
 TQuoterParams TAccountWriteQuoter::CreateQuoterParams(
@@ -243,8 +257,9 @@ TQuoterParams TAccountWriteQuoter::CreateQuoterParams(
 
     auto topicParts = SplitPath(topicPath); // account/folder/topic // account is first element
     if (topicParts.size() < 2) {
-        LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE,
-                    "tablet " << tabletId << " topic '" << topicPath << "' Bad topic name. Disable quoting for topic");
+        YDB_LOG_WARN_CTX_COMP(ctx, NKikimrServices::PERSQUEUE, "Tablet topic Bad topic name. Disable quoting for topic",
+            {"tabletId", tabletId},
+            {"topicPath", topicPath});
         return params;
     }
     topicParts[0] = WRITE_QUOTA_ROOT_PATH; // write-quota/folder/topic

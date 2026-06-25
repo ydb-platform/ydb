@@ -5,6 +5,8 @@
 
 #include <ydb/library/wilson_ids/wilson.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_TX
+
 #define TX_ENSURE(condition) AFL_ENSURE(condition)("TxId", TxId)("State", NKikimrPQ::TTransaction_EState_Name(State))
 
 namespace NKikimr::NPQ {
@@ -242,7 +244,8 @@ void TDistributedTransaction::OnPlanStep(ui64 step)
 
 void TDistributedTransaction::OnTxCalcPredicateResult(const TEvPQ::TEvTxCalcPredicateResult& event)
 {
-    PQ_LOG_TX_D("Handle TEvTxCalcPredicateResult");
+    YDB_LOG_DEBUG("Handle TEvTxCalcPredicateResult",
+        {"logPrefix", LogPrefix()});
 
     TMaybe<EDecision> decision;
 
@@ -277,7 +280,8 @@ void UpdatePartitionsData(NKikimrPQ::TPartitions& partitionsData, NKikimrPQ::TPa
 
 void TDistributedTransaction::OnProposePartitionConfigResult(TEvPQ::TEvProposePartitionConfigResult& event)
 {
-    PQ_LOG_TX_D("Handle TEvProposePartitionConfigResult");
+    YDB_LOG_DEBUG("Handle TEvProposePartitionConfigResult",
+        {"logPrefix", LogPrefix()});
 
     UpdatePartitionsData(PartitionsData, event.Data);
 
@@ -299,14 +303,19 @@ void TDistributedTransaction::OnPartitionResult(const E& event, TMaybe<EDecision
 
     ++PartitionRepliesCount;
 
-    PQ_LOG_TX_D("Partition responses " << PartitionRepliesCount << "/" << PartitionRepliesExpected);
+    YDB_LOG_DEBUG("Partition responses /",
+        {"logPrefix", LogPrefix()},
+        {"partitionRepliesCount", PartitionRepliesCount},
+        {"partitionRepliesExpected", PartitionRepliesExpected});
 }
 
 void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
                                         const TActorId& sender,
                                         std::unique_ptr<TEvTxProcessing::TEvReadSetAck> ack)
 {
-    PQ_LOG_TX_D("Handle TEvReadSet " << TxId);
+    YDB_LOG_DEBUG("Handle TEvReadSet",
+        {"logPrefix", LogPrefix()},
+        {"txId", TxId});
 
     TX_ENSURE((Step == Max<ui64>()) || (event.HasStep() && (Step == event.GetStep())));
     TX_ENSURE(event.HasTxId() && (TxId == event.GetTxId()));
@@ -323,7 +332,10 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
             p.SetPredicate(data.GetDecision() == NKikimrTx::TReadSetData::DECISION_COMMIT);
             ++ReadSetCount;
 
-            PQ_LOG_TX_D("Predicates " << ReadSetCount << "/" << PredicatesReceived.size());
+            YDB_LOG_DEBUG("Predicates /",
+                {"logPrefix", LogPrefix()},
+                {"readSetCount", ReadSetCount},
+                {"predicatesReceivedSize", PredicatesReceived.size()});
         }
 
         NKikimrPQ::TPartitions d;
@@ -342,7 +354,9 @@ void TDistributedTransaction::OnReadSet(const NKikimrTx::TEvReadSet& event,
 
 void TDistributedTransaction::OnReadSetAck(const NKikimrTx::TEvReadSetAck& event)
 {
-    PQ_LOG_TX_D("Handle TEvReadSetAck txId " << TxId);
+    YDB_LOG_DEBUG("Handle TEvReadSetAck txId",
+        {"logPrefix", LogPrefix()},
+        {"txId", TxId});
 
     TX_ENSURE(event.HasStep() && (Step == event.GetStep()));
     TX_ENSURE(event.HasTxId() && (TxId == event.GetTxId()));
@@ -356,7 +370,10 @@ void TDistributedTransaction::OnReadSetAck(ui64 tabletId)
         PredicateRecipients[tabletId] = true;
         ++PredicateAcksCount;
 
-        PQ_LOG_TX_D("Predicate acks " << PredicateAcksCount << "/" << PredicateRecipients.size());
+        YDB_LOG_DEBUG("Predicate acks /",
+            {"logPrefix", LogPrefix()},
+            {"predicateAcksCount", PredicateAcksCount},
+            {"predicateRecipientsSize", PredicateRecipients.size()});
     }
 }
 
@@ -404,7 +421,10 @@ bool TDistributedTransaction::HaveParticipantsDecision() const
 
 bool TDistributedTransaction::HaveAllRecipientsReceive() const
 {
-    PQ_LOG_TX_D("PredicateAcks: " << PredicateAcksCount << "/" << PredicateRecipients.size());
+    YDB_LOG_DEBUG("/",
+        {"logPrefix", LogPrefix()},
+        {"predicateAcks", PredicateAcksCount},
+        {"predicateRecipientsSize", PredicateRecipients.size()});
     return PredicateRecipients.size() == PredicateAcksCount;
 }
 
@@ -412,7 +432,9 @@ void TDistributedTransaction::AddCmdWrite(NKikimrClient::TKeyValueRequest& reque
                                           EState state)
 {
     auto tx = Serialize(state);
-    PQ_LOG_TX_D("Save tx " << tx.ShortDebugString());
+    YDB_LOG_DEBUG("Save tx",
+        {"logPrefix", LogPrefix()},
+        {"tx", tx});
 
     TString value;
     TX_ENSURE(tx.SerializeToString(&value));

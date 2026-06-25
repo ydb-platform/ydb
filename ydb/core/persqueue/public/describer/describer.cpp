@@ -1,10 +1,8 @@
 #include "describer.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PQ_DESCRIBER
+
 #define LOG_PREFIX NActors::TlsActivationContext->AsActorContext().SelfID
-#define LOG_E(stream) LOG_ERROR_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
-#define LOG_W(stream) LOG_WARN_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
-#define LOG_I(stream) LOG_INFO_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*NActors::TlsActivationContext, NKikimrServices::PQ_DESCRIBER, LOG_PREFIX << stream)
 
 
 namespace NKikimr::NPQ::NDescriber {
@@ -29,7 +27,10 @@ public:
     }
 
     void DoRequest(const std::unordered_set<TString>& topicPath) {
-        LOG_D("Create request [" << JoinRange(", ", topicPath.begin(), topicPath.end()) << "] with SyncVersion=" << RetryWithSyncVersion);
+        YDB_LOG_DEBUG("Create request with",
+            {"logPrefix", LOG_PREFIX},
+            {"topicPaths", JoinRange(", ", topicPath.begin(), topicPath.end())},
+            {"syncVersion", RetryWithSyncVersion});
 
         auto schemeRequest = std::make_unique<TSchemeCacheNavigate>(1);
         schemeRequest->DatabaseName = DatabasePath;
@@ -55,7 +56,8 @@ public:
     }
 
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
-        LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult");
+        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            {"logPrefix", LOG_PREFIX});
         auto& result = ev->Get()->Request;
 
         std::unordered_set<TString> unknownPaths;
@@ -75,7 +77,9 @@ public:
                 case TSchemeCacheNavigate::EStatus::PathErrorUnknown:
                 case TSchemeCacheNavigate::EStatus::RootUnknown: {
                     if (RetryWithSyncVersion) {
-                        LOG_D("Path '" << realPath << "' not found");
+                        YDB_LOG_DEBUG("Path not found",
+                            {"logPrefix", LOG_PREFIX},
+                            {"realPath", realPath});
                         Result[originalPath] = TTopicInfo{
                             .Status = EStatus::NOT_FOUND
                         };
@@ -86,12 +90,16 @@ public:
                 }
                 case TSchemeCacheNavigate::EStatus::Ok: {
                     if (entry.Kind == NSchemeCache::TSchemeCacheNavigate::KindCdcStream) {
-                        LOG_D("Path '" << realPath << "' is a CDC");
+                        YDB_LOG_DEBUG("Path is a CDC",
+                            {"logPrefix", LOG_PREFIX},
+                            {"realPath", realPath});
                         CDCPaths[TStringBuilder() << realPath << "/streamImpl"] = originalPath;
                     } else if (entry.Kind == TSchemeCacheNavigate::EKind::KindTopic) {
                         if (!entry.PQGroupInfo || entry.PQGroupInfo->Description.GetBalancerTabletID() == 0) {
                             if (RetryWithSyncVersion) {
-                                LOG_D("Path '" << realPath << "' not found");
+                                YDB_LOG_DEBUG("Path not found",
+                                    {"logPrefix", LOG_PREFIX},
+                                    {"realPath", realPath});
                                 Result[originalPath] = TTopicInfo{
                                     .Status = EStatus::NOT_FOUND
                                 };
@@ -100,13 +108,17 @@ public:
                             }
                         } else {
                             if (Settings.UserToken && !entry.SecurityObject->CheckAccess(Settings.AccessRights, *Settings.UserToken)) {
-                                LOG_D("Path '" << realPath << "' UNAUTHORIZED");
+                                YDB_LOG_DEBUG("Path UNAUTHORIZED",
+                                    {"logPrefix", LOG_PREFIX},
+                                    {"realPath", realPath});
                                 Result[originalPath] = TTopicInfo{
                                     .Status = entry.SecurityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Settings.UserToken)
                                             ? EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS : EStatus::UNAUTHORIZED
                                 };
                             } else {
-                                LOG_D("Path '" << realPath << "' SUCCESS");
+                                YDB_LOG_DEBUG("Path SUCCESS",
+                                    {"logPrefix", LOG_PREFIX},
+                                    {"realPath", realPath});
                                 Result[originalPath] = TTopicInfo{
                                     .Status = EStatus::SUCCESS,
                                     .RealPath = realPath,
@@ -119,9 +131,14 @@ public:
                             }
                         }
                     } else {
-                        LOG_D("Path '" << realPath << "' is not a topic: " << entry.Kind);
+                        YDB_LOG_DEBUG("Path is not a",
+                            {"logPrefix", LOG_PREFIX},
+                            {"realPath", realPath},
+                            {"topic", entry.Kind});
                         if (Settings.UserToken && !entry.SecurityObject->CheckAccess(NACLib::EAccessRights::DescribeSchema, *Settings.UserToken)) {
-                            LOG_D("Path '" << realPath << "' UNAUTHORIZED");
+                            YDB_LOG_DEBUG("Path UNAUTHORIZED",
+                                {"logPrefix", LOG_PREFIX},
+                                {"realPath", realPath});
                             Result[originalPath] = TTopicInfo{
                                 .Status = EStatus::UNAUTHORIZED
                             };
@@ -135,7 +152,9 @@ public:
                     break;
                 }
                 default: {
-                    LOG_D("Path '" << realPath << "' unknown error");
+                    YDB_LOG_DEBUG("Path unknown error",
+                        {"logPrefix", LOG_PREFIX},
+                        {"realPath", realPath});
                     Result[originalPath] = TTopicInfo{
                         .Status = EStatus::UNKNOWN_ERROR,
                         .RealPath = realPath

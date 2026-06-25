@@ -2,6 +2,8 @@
 
 #include <ydb/core/protos/pqdata_mlp.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NMLP {
 
 TMessageEnricherActor::TMessageEnricherActor(ui64 tabletId, ui32 partitionId, const TString& consumerName, std::deque<TReadResult>&& replies)
@@ -20,7 +22,8 @@ void TMessageEnricherActor::Bootstrap() {
 }
 
 void TMessageEnricherActor::PassAway() {
-    LOG_D("PassAway");
+    YDB_LOG_DEBUG("PassAway",
+        {"logPrefix", NPQ_LOG_PREFIX});
     for (auto& reply : Queue) {
         Send(reply.Sender, new TEvPQ::TEvMLPErrorResponse(PartitionId, Ydb::StatusIds::SCHEME_ERROR, "Shutdown"), 0, reply.Cookie);
     }
@@ -31,10 +34,13 @@ void TMessageEnricherActor::PassAway() {
 }
 
 void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
-    LOG_D("Handle TEvPersQueue::TEvResponse");
+    YDB_LOG_DEBUG("Handle TEvPersQueue::TEvResponse",
+        {"logPrefix", NPQ_LOG_PREFIX});
 
     if (!IsSucess(ev)) {
-        LOG_W("Fetch messages failed: " << ev->Get()->Record.DebugString());
+        YDB_LOG_WARN("Fetch messages",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"failed", ev->Get()->Record.DebugString()});
         return PassAway();
     }
 
@@ -86,7 +92,8 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 }
 
 void TMessageEnricherActor::Handle(TEvPipeCache::TEvDeliveryProblem::TPtr&) {
-    LOG_D("Handle TEvPipeCache::TEvDeliveryProblem");
+    YDB_LOG_DEBUG("Handle TEvPipeCache::TEvDeliveryProblem",
+        {"logPrefix", NPQ_LOG_PREFIX});
     PassAway();
 }
 
@@ -96,7 +103,9 @@ STFUNC(TMessageEnricherActor::StateWork) {
         hFunc(TEvPipeCache::TEvDeliveryProblem, Handle);
         sFunc(TEvents::TEvPoison, PassAway);
         default:
-            LOG_E("Unexpected " << EventStr("StateWork", ev));
+            YDB_LOG_ERROR("Unexpected",
+                {"logPrefix", NPQ_LOG_PREFIX},
+                {"event", EventStr("StateWork", ev)});
     }
 }
 
@@ -111,7 +120,10 @@ void TMessageEnricherActor::ProcessQueue() {
         }
 
         auto firstOffset = reply.Messages.front().Offset;
-        LOG_D("Fetching from offset " << firstOffset << " from " << TabletId);
+        YDB_LOG_DEBUG("Fetching from offset",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"firstOffset", firstOffset},
+            {"tabletId", TabletId});
         SendToPQTablet(MakeEvPQRead(ConsumerName, PartitionId, firstOffset, 1));
 
         return;

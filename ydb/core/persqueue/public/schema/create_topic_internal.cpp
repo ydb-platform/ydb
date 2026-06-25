@@ -4,6 +4,8 @@
 #include <ydb/services/persqueue_v1/actors/events.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT Service
+
 namespace NKikimr::NPQ::NSchema {
 
 namespace {
@@ -30,7 +32,9 @@ public:
     }
 
     void OnException(const std::exception& exc) override {
-        LOG_E("OnException: " << exc.what());
+        YDB_LOG_ERROR("Catch exception",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"onException", exc.what()});
 
         TEvSchemaResponse response(Path, Ydb::StatusIds::INTERNAL_ERROR, exc.what());
 
@@ -43,7 +47,10 @@ public:
 
 private:
     void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
-        LOG_D("Handle TEvSchemaResponse. Status: " << ev->Get()->Status << ", ErrorMessage: " << ev->Get()->ErrorMessage);
+        YDB_LOG_DEBUG("Handle TEvSchemaResponse",
+            {"logPrefix", NPQ_LOG_PREFIX},
+            {"status", ev->Get()->Status},
+            {"errorMessage", ev->Get()->ErrorMessage});
 
         Promise.SetValue({
             .Path = Path,

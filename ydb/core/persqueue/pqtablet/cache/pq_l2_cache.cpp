@@ -1,6 +1,8 @@
 #include "pq_l2_cache.h"
 #include <ydb/core/mon/mon.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::PERSQUEUE
+
 namespace NKikimr {
 namespace NPQ {
 
@@ -91,7 +93,9 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
         TKey key(tabletId, blob);
         // PQ tablet could send some data twice (if it's restored after die)
         if (Cache.FindWithoutPromote(key) != Cache.End()) {
-            LOG_WARN_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Same blob insertion. " << key.ToString() << " size " << blob.Value->GetDataSize());
+            YDB_LOG_WARN_CTX(ctx, "PQ Cache (L2). Same blob insertion. size",
+                {"key", key},
+                {"valueDataSize", blob.Value->GetDataSize()});
             continue;
         }
 
@@ -120,13 +124,17 @@ void TPersQueueCacheL2::AddBlobs(const TActorContext& ctx, ui64 tabletId, const 
             if (value->GetAccessCount() == 0)
                 ++numUnused;
 
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Evicting blob. " << oldest.Key().ToString() << " size " << value->GetDataSize());
+            YDB_LOG_DEBUG_CTX(ctx, "PQ Cache (L2). Evicting blob. size",
+                {"key", oldest.Key()},
+                {"dataSize", value->GetDataSize()});
 
             CurrentSize -= value->GetDataSize();
             Cache.Erase(oldest);
         }
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Adding blob. " << key.ToString() << " size " << blob.Value->GetDataSize());
+        YDB_LOG_DEBUG_CTX(ctx, "PQ Cache (L2). Adding blob. size",
+            {"key", key},
+            {"valueDataSize", blob.Value->GetDataSize()});
 
         Cache.Insert(key, blob.Value);
     }
@@ -152,10 +160,13 @@ void TPersQueueCacheL2::RemoveBlobs(const TActorContext& ctx, ui64 tabletId, con
             numEvicted++;
             if ((*it)->GetAccessCount() == 0)
                 ++numUnused;
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Removed. " << key.ToString() << " size " << (*it)->GetDataSize());
+            YDB_LOG_DEBUG_CTX(ctx, "PQ Cache (L2). Removed. size",
+                {"key", key},
+                {"dataSize", (*it)->GetDataSize()});
             Cache.Erase(it);
         } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Miss in remove. " << key.ToString());
+            YDB_LOG_DEBUG_CTX(ctx, "PQ Cache (L2). Miss in remove",
+                {"key", key});
         }
     }
 
@@ -185,7 +196,9 @@ void TPersQueueCacheL2::RenameBlobs(const TActorContext& ctx, ui64 tabletId,
         Cache.Insert(newKey, *it);
         Cache.Erase(it);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Renamed. old " << oldKey.ToString() << ", new " << newKey.ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "PQ Cache (L2). Renamed. old new",
+            {"oldKey", oldKey},
+            {"newKey", newKey});
     }
 }
 
@@ -198,9 +211,11 @@ void TPersQueueCacheL2::TouchBlobs(const TActorContext& ctx, ui64 tabletId, cons
         auto it = Cache.Find(key);
         if (it != Cache.End()) {
             (*it)->Touch(now);
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Touched. " << key.ToString());
+            YDB_LOG_DEBUG_CTX(ctx, "PQ Cache (L2). Touched",
+                {"key", key});
         } else {
-            LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Miss in touch. " << key.ToString());
+            YDB_LOG_DEBUG_CTX(ctx, "PQ Cache (L2). Miss in touch",
+                {"key", key});
         }
     }
 
@@ -218,9 +233,13 @@ void TPersQueueCacheL2::TouchBlobs(const TActorContext& ctx, ui64 tabletId, cons
 void TPersQueueCacheL2::RegretBlobs(const TActorContext& ctx, ui64 tabletId, const TVector<TCacheBlobL2>& blobs)
 {
     for (const TCacheBlobL2& blob : blobs) {
-        LOG_DEBUG_S(ctx, NKikimrServices::PERSQUEUE, "PQ Cache (L2). Missed blob. tabletId '" << tabletId
-            << "' partition " << blob.Partition << " offset " << blob.Offset <<
-            " partno " << blob.PartNo << " count " << blob.Count << " parts_count " << blob.InternalPartsCount);
+        YDB_LOG_DEBUG_CTX(ctx, "PQ Cache (L2). Missed blob. tabletId partition offset partno count parts_count",
+            {"tabletId", tabletId},
+            {"blobPartition", blob.Partition},
+            {"blobOffset", blob.Offset},
+            {"partNo", blob.PartNo},
+            {"blobCount", blob.Count},
+            {"internalPartsCount", blob.InternalPartsCount});
     }
 
     { // counters

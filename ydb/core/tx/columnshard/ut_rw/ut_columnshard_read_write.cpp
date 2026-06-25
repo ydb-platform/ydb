@@ -1558,6 +1558,74 @@ void TestReadAggregate(const std::vector<NArrow::NTest::TTestColumn>& ydbSchema,
 
 }   // namespace
 
+Y_UNIT_TEST_SUITE(TColumnShardInit) {
+    // Regression test for the "Unhandled StateInit event" crash: while a columnshard is
+    // still booting (StateInit), the scheme cache may answer the subdomain watch with
+    // TEvWatchNotifyUnavailable (e.g. the subdomain can't be resolved during a cluster
+    // version change). Before the fix this event was unhandled and fell through to
+    // TTabletExecutedFlat::Enqueue, which had Y_DEBUG_ABORT. So it crashed in debug mode
+    // and ran with a possibly inconsistent state in release.
+    // The current fix is to die and restart in loop until a proper init happens.
+    //
+    // Note: TTabletExecutedFlat::Enqueue only Y_DEBUG_ABORTs, which is a no-op in release
+    // builds, so without the fix the unhandled event is silently dropped there and the
+    // shard boots to StateWork as if nothing happened. Asserting "the tablet eventually
+    // becomes active" is therefore not enough - it holds with or without the fix in release.
+    // What the fix actually changes is that the shard's user part *dies and is re-created*:
+    // the bootstrapper boots a brand new user actor with a different TActorId. We assert on
+    // that. (We can't count TEvRestored events: the test tablet framework delivers two per
+    // physical boot, to the same user actor, so the count is 2 even with no restart.)
+    Y_UNIT_TEST(SubDomainUnavailableDuringInit) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        auto controller = NKikimr::NYDBTest::TControllers::GetControllerAs<NKikimr::NYDBTest::NColumnShard::TController>();
+
+        const ui64 tabletId = TTestTxConfig::TxTablet0;
+
+        // Inject the unavailable notification exactly once, the moment the shard's user
+        // actor first appears (it is in StateInit until TTxInit finishes), reproducing the
+        // production ordering where the reply lands before the switch to StateWork. Track
+        // the set of distinct user actors that boot for this tablet: a real restart of the
+        // user part shows up as a second, different TActorId.
+        bool injected = false;
+        THashSet<TActorId> userActors;
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+            if (ev->GetTypeRewrite() == TEvTablet::TEvRestored::EventType) {
+                const auto* msg = ev->Get<TEvTablet::TEvRestored>();
+                if (msg->TabletID == tabletId && !msg->Follower) {
+                    userActors.insert(msg->UserTabletActor);
+                    if (!injected) {
+                        injected = true;
+                        runtime.Send(new IEventHandle(msg->UserTabletActor, TActorId(),
+                                         new TEvTxProxySchemeCache::TEvWatchNotifyUnavailable(0, "/Root", TPathId(1, 1))), 0, true);
+                    }
+                }
+            }
+            return TTestActorRuntime::EEventAction::PROCESS;
+        });
+
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(tabletId, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        // With the fix the shard dies on the injected event and the bootstrapper restarts
+        // it; the restart is not re-injected (guarded by `injected`) and reaches StateWork.
+        while (!controller->IsActiveTablet(tabletId)) {
+            runtime.SimulateSleep(TDuration::Seconds(1));
+        }
+        UNIT_ASSERT(injected);
+
+        // The fix's contract: the shard's user part must have died on the injected event and
+        // been re-created by the bootstrapper, so a second distinct user actor exists.
+        // Without the fix the event is dropped and the original user actor reaches StateWork
+        // untouched, so there is only ever one - and this fails.
+        UNIT_ASSERT_GE_C(userActors.size(), 2, "shard did not restart after TEvWatchNotifyUnavailable (only one user actor booted)");
+
+        // The recovered shard is fully functional.
+        TActorId sender = runtime.AllocateEdgeActor();
+        Y_UNUSED(SetupSchema(runtime, sender, 1, TestTableDescription{}));
+    }
+}
+
 Y_UNIT_TEST_SUITE(EvWrite) {
     Y_UNIT_TEST(WriteInTransaction) {
         using namespace NArrow;

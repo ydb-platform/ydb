@@ -319,6 +319,7 @@ public:
     ui32 GetColumnIndexVerified(const ui32 id) const;
     std::shared_ptr<arrow::Field> GetColumnFieldOptional(const ui32 columnId) const;
     std::shared_ptr<arrow::Field> GetColumnFieldVerified(const ui32 columnId) const;
+    std::optional<ui32> FindUnknownColumnId(const std::vector<ui32>& columnIds) const;
     std::shared_ptr<arrow::Schema> GetColumnSchema(const ui32 columnId) const;
     std::shared_ptr<arrow::Schema> GetColumnsSchema(const std::set<ui32>& columnIds) const;
     std::shared_ptr<arrow::Schema> GetColumnsSchemaByOrderedIndexes(const std::vector<ui32>& columnIds) const;

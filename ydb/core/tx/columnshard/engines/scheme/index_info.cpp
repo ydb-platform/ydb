@@ -173,8 +173,21 @@ std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldOptional(const ui32 colu
     return ArrowSchemaWithSpecials()->GetFieldByIndexVerified(*index);
 }
 
+std::optional<ui32> TIndexInfo::FindUnknownColumnId(const std::vector<ui32>& columnIds) const {
+    for (ui32 columnId : columnIds) {
+        if (!HasColumnId(columnId)) {
+            return columnId;
+        }
+    }
+
+    return {};
+}
+
 std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldVerified(const ui32 columnId) const {
     auto result = GetColumnFieldOptional(columnId);
+    // Write without MvccSnapshot uses ApplyToSnapshot=Max in restore, while column IDs come from
+    // ActualSchema captured at write start. If ALTER DROP COLUMN commits before internal scan is
+    // processed, GetSchemaVerified(Max) returns a newer schema and stale column IDs reach here.
     AFL_VERIFY(!!result)("column_id", columnId);
     return result;
 }

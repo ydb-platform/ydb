@@ -74,6 +74,13 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         const TVersionedIndex* vIndex = Self->GetIndexOptional() ? &Self->GetIndexOptional()->GetVersionedIndex() : nullptr;
         AFL_VERIFY(vIndex);
         {
+            auto readSchema = read.TableMetadataAccessor->GetSnapshotSchemaVerified(
+                Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedSchemas(), read.GetSnapshot());
+            if (auto unknownColumnId = readSchema->GetIndexInfo().FindUnknownColumnId(read.ColumnIds)) {
+                return SendError("column not found in schema",
+                    TStringBuilder() << "column_id=" << *unknownColumnId << " not in schema version " << readSchema->GetVersion(), ctx);
+            }
+
             TProgramContainer pContainer;
             pContainer.OverrideProcessingColumns(read.ColumnIds);
             read.SetProgram(std::move(pContainer));

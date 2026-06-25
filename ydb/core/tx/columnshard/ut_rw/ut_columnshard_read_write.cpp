@@ -3081,53 +3081,59 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
 
         runtime.SetEventFilter(captureInternalScan);
 
-        UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, false, nullptr, NEvWrite::EModificationType::Update));
+        {
+            auto write = std::make_unique<NEvents::TDataEvents::TEvWrite>(++writeId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            auto& operation = write->AddOperation(
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE, TTableId(0, tableId, 1), {}, 0, NKikimrDataEvents::FORMAT_ARROW);
+            *operation.MutablePayloadSchema() = NArrow::SerializeSchema(*NArrow::MakeArrowSchema(ydbSchema));
+            NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite> writer(*write);
+            auto dataCopy = testData;
+            writer.AddDataToPayload(std::move(dataCopy));
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, write.release());
+        }
 
         const TInstant waitStart = TInstant::Now();
         while (capturedInternalScans.empty() && TInstant::Now() - waitStart < TDuration::Seconds(30)) {
             runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
         }
 
-        UNIT_ASSERT_C(!capturedInternalScans.empty(), "Update write should trigger internal scan from restore actor");
+        UNIT_ASSERT_C(!capturedInternalScans.empty(), "Update write without MvccSnapshot should trigger restore internal scan");
 
         runtime.SetEventFilter([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
             return false;
         });
 
-        planStep = SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 2, ydbSchemaV2, ydbPk, {}), ++txId);
+        Y_UNUSED(SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 2, ydbSchemaV2, ydbPk, {}), ++txId));
 
-        while (!capturedInternalScans.empty()) {
-            runtime.Send(capturedInternalScans.front().Release());
-            capturedInternalScans.pop_front();
-        }
-
-        TDeque<TAutoPtr<IEventHandle>> capturedScanInit;
-        const auto captureScanInit = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
-            if (TryGetPrivateEvent<NKqp::TEvKqpCompute::TEvScanInitActor>(ev)) {
-                capturedScanInit.push_back(ev.Release());
+        TDeque<TAutoPtr<IEventHandle>> capturedScanErrors;
+        const auto captureScanError = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (TryGetPrivateEvent<NKqp::TEvKqpCompute::TEvScanError>(ev)) {
+                capturedScanErrors.push_back(ev.Release());
                 return true;
             }
 
             return false;
         };
 
-        runtime.SetEventFilter(captureScanInit);
+        runtime.SetEventFilter(captureScanError);
+
+        while (!capturedInternalScans.empty()) {
+            runtime.Send(capturedInternalScans.front().Release());
+            capturedInternalScans.pop_front();
+        }
 
         const TInstant scanWaitStart = TInstant::Now();
-        while (capturedScanInit.empty() && TInstant::Now() - scanWaitStart < TDuration::Seconds(30)) {
+        while (capturedScanErrors.empty() && TInstant::Now() - scanWaitStart < TDuration::Seconds(30)) {
             runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
         }
 
-        UNIT_ASSERT_C(!capturedScanInit.empty(), "Restore internal scan should start on tablet after schema drop (no index_info crash)");
-
-        runtime.SetEventFilter([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
-            return false;
-        });
-
-        while (!capturedScanInit.empty()) {
-            runtime.Send(capturedScanInit.front().Release());
-            capturedScanInit.pop_front();
-        }
+        UNIT_ASSERT_C(!capturedScanErrors.empty(), "Internal scan must fail gracefully when column was dropped from schema");
+        const auto* scanError = TryGetPrivateEvent<NKqp::TEvKqpCompute::TEvScanError>(capturedScanErrors.front());
+        UNIT_ASSERT(scanError);
+        UNIT_ASSERT_VALUES_EQUAL(scanError->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST);
+        const TString issuesText = NYql::IssuesFromMessageAsString(scanError->Record.GetIssues());
+        UNIT_ASSERT_C(issuesText.Contains("column_id=7"), issuesText);
+        UNIT_ASSERT_C(issuesText.Contains("not in schema version"), issuesText);
     }
 }
 

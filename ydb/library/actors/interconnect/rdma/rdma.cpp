@@ -41,8 +41,8 @@ public:
         : TSimpleCqBase(as, sz, c, true)
     {}
 
-    int Init(const TRdmaCtx* ctx, int maxCqe) noexcept {
-        return TSimpleCqBase::Init(ctx, maxCqe, nullptr);
+    int Init(const TRdmaCtx* ctx, const TRdmaRuntimeParams& params, std::shared_ptr<IMemPool> memPool) noexcept {
+        return TSimpleCqBase::Init(ctx, params, std::move(memPool), nullptr);
     }
 
     virtual ~TSimpleCq() {
@@ -61,13 +61,13 @@ public:
         : TSimpleCqBase(as, sz, c, false)
     {}
 
-    int Init(const TRdmaCtx* ctx, int maxCqe) noexcept {
+    int Init(const TRdmaCtx* ctx, const TRdmaRuntimeParams& params, std::shared_ptr<IMemPool> memPool) noexcept {
         CompChannel = ibv_create_comp_channel(ctx->GetContext());
         if (!CompChannel) {
             return errno;
         }
 
-        int err = TSimpleCqBase::Init(ctx, maxCqe, CompChannel);
+        int err = TSimpleCqBase::Init(ctx, params, std::move(memPool), CompChannel);
         if (err) {
             return err;
         }
@@ -78,6 +78,27 @@ public:
         }
 
         return 0;
+    }
+
+    bool RegisterQpAsync(ui32 qpNum, NActors::TActorId actorId) noexcept override {
+        if (!TSimpleCqBase::RegisterQpAsync(qpNum, actorId)) {
+            return false;
+        }
+        Awake();
+        return true;
+    }
+
+    bool DeregisterQpAsync(ui32 qpNum) noexcept override {
+        if (!TSimpleCqBase::DeregisterQpAsync(qpNum)) {
+            return false;
+        }
+        Awake();
+        return true;
+    }
+
+    void NotifyErr() noexcept override {
+        TSimpleCqBase::NotifyErr();
+        Awake();
     }
 
     void Idle() noexcept override final {
@@ -144,12 +165,12 @@ private:
     ibv_comp_channel* CompChannel;
 };
 
-ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr, NMonitoring::TDynamicCounters* counter) noexcept {
-    return CreateCq<TSimpleCq>(ctx, as, maxCqe, maxWr, counter);
+ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter) noexcept {
+    return CreateCq<TSimpleCq>(ctx, as, runtimeParams, std::move(memPool), counter);
 }
 
-ICq::TPtr CreateSimpleEventDrivenCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, int maxCqe, int maxWr, NMonitoring::TDynamicCounters* counter) noexcept {
-    return CreateCq<TSimpleEventDrivenCq>(ctx, as, maxCqe, maxWr, counter);
+ICq::TPtr CreateSimpleEventDrivenCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter) noexcept {
+    return CreateCq<TSimpleEventDrivenCq>(ctx, as, runtimeParams, std::move(memPool), counter);
 }
 
 const int TQueuePair::UnknownQpState = IBV_QPS_UNKNOWN;
@@ -174,10 +195,14 @@ int TQueuePair::Init(TRdmaCtx* ctx, ICq* icq, int maxWr) noexcept {
     bzero(&qpInitAttr, sizeof(qpInitAttr));
     qpInitAttr.send_cq = cq;
     qpInitAttr.recv_cq = cq;
+    qpInitAttr.srq = icq->GetSrq();
     qpInitAttr.cap.max_send_wr = static_cast<ui32>(maxWr);
-    qpInitAttr.cap.max_recv_wr = static_cast<ui32>(maxWr);
     qpInitAttr.cap.max_send_sge = static_cast<ui32>(attr.max_sge);
-    qpInitAttr.cap.max_recv_sge = static_cast<ui32>(attr.max_sge);
+    // With SRQ attached the QP has no private receive queue; receive capacity is owned by SRQ.
+    if (!qpInitAttr.srq) {
+        qpInitAttr.cap.max_recv_wr = static_cast<ui32>(maxWr);
+        qpInitAttr.cap.max_recv_sge = static_cast<ui32>(attr.max_sge);
+    }
     qpInitAttr.qp_type = IBV_QPT_RC;
 
     TStringStream ss;
@@ -369,19 +394,51 @@ void TIbVerbsBuilderImpl::AddReadVerb(void* mrAddr, ui32 mrlKey, void* dstAddr, 
     );
 }
 
-ibv_send_wr* TIbVerbsBuilderImpl::BuildListOfVerbs(std::vector<TWr*>& wr) noexcept {
+void TIbVerbsBuilderImpl::AddSendVerb(TRcBuf packet,
+    std::function<void(NActors::TActorSystem* as, TEvRdmaIoDone*)> ioCb) noexcept
+{
+    Y_ABORT_UNLESS(packet);
+    Y_ABORT_UNLESS(packet.GetSize() <= Max<ui32>());
+
+    WorkBuf.emplace_back(
+        TWrVerbData {
+            .Sg = {
+                .addr = reinterpret_cast<ui64>(packet.GetData()),
+                .length = static_cast<ui32>(packet.GetSize()),
+            },
+            .Wr = {
+               .wr_id = 0/*wrId*/,
+               .sg_list = nullptr,
+               .num_sge = 1,
+               .opcode = IBV_WR_SEND,
+               .send_flags = IBV_SEND_SIGNALED,
+            },
+            .SendBuf = std::move(packet),
+            .IoCb = std::move(ioCb)
+        }
+    );
+}
+
+ibv_send_wr* TIbVerbsBuilderImpl::BuildListOfVerbs(std::vector<TWr*>& wr, size_t deviceIndex) noexcept {
     Y_ABORT_UNLESS(wr.size() == WorkBuf.size());
     Y_ABORT_UNLESS(wr.size());
 
-    WorkBuf[0].Wr.sg_list = &WorkBuf[0].Sg;
-    WorkBuf[0].Wr.wr_id = wr[0]->GetId();
-    wr[0]->AttachCb(std::move(WorkBuf[0]).IoCb);
+    auto attach = [&](size_t i) {
+        WorkBuf[i].Wr.sg_list = &WorkBuf[i].Sg;
+        WorkBuf[i].Wr.wr_id = wr[i]->GetId();
+        if (WorkBuf[i].SendBuf) {
+            auto memReg = TryExtractFromRcBuf(WorkBuf[i].SendBuf);
+            Y_ABORT_UNLESS(!memReg.Empty());
+            WorkBuf[i].Sg.lkey = memReg.GetLKey(deviceIndex);
+        }
+        wr[i]->AttachCb(std::move(WorkBuf[i].IoCb));
+    };
+
+    attach(0);
 
     for (size_t i = 1; i < WorkBuf.size(); i++) {
-        WorkBuf[i].Wr.sg_list = &WorkBuf[i].Sg;
         WorkBuf[i - 1].Wr.next = &WorkBuf[i].Wr;
-        WorkBuf[i].Wr.wr_id = wr[i]->GetId();
-        wr[i]->AttachCb(std::move(WorkBuf[i]).IoCb);
+        attach(i);
         wr[i]->ResetTimer();
     }
 

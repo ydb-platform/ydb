@@ -228,6 +228,8 @@ namespace NKikimr::NStorage {
         vdiskConfig->ThrottlingMinLogChunkCount = ThrottlingMinLogChunkCount;
         vdiskConfig->ThrottlingMaxLogChunkCount = ThrottlingMaxLogChunkCount;
         vdiskConfig->MaxActiveCompactionsPerPDisk = MaxActiveCompactionsPerPDisk;
+        vdiskConfig->SyncLogMaxDiskAmount = SyncLogMaxDiskAmount;
+        vdiskConfig->SyncLogMaxMemAmount = SyncLogMaxMemAmount;
 
         vdiskConfig->MaxInProgressSyncCount = MaxInProgressSyncCount;
 

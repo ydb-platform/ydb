@@ -7,6 +7,8 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+
 namespace NKikimr::NGRpcProxy::V1::NPQv1 {
 
 namespace {
@@ -36,7 +38,7 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         const auto& pqConfig = AppData()->PQConfig;
         const auto& sourceTabletConfig = sourceConfig.GetPQTabletConfig();
 
-        THashMap<TString, ui64> addedAtTopicConfigVersionByConsumer;
+        absl::flat_hash_map<TString, ui64> addedAtTopicConfigVersionByConsumer;
         for (const auto& c : sourceTabletConfig.GetConsumers()) {
             addedAtTopicConfigVersionByConsumer[c.GetName()] = c.GetAddedAtTopicConfigVersion();
         }
@@ -64,8 +66,8 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         auto& targetTabletConfig = *targetConfig.MutablePQTabletConfig();
         targetTabletConfig.SetTopicConfigVersion(sourceTabletConfig.GetTopicConfigVersion() + 1);
         for (auto& consumer : *targetTabletConfig.MutableConsumers()) {
-            if (const auto* addedAtVersion = addedAtTopicConfigVersionByConsumer.FindPtr(consumer.GetName())) {
-                consumer.SetAddedAtTopicConfigVersion(*addedAtVersion);
+            if (const auto it = addedAtTopicConfigVersionByConsumer.find(consumer.GetName()); it != addedAtTopicConfigVersionByConsumer.end()) {
+                consumer.SetAddedAtTopicConfigVersion(it->second);
             } else {
                 NPQ::NSchema::MarkConsumerAddedAtCurrentTopicConfigVersion(consumer, targetTabletConfig);
             }

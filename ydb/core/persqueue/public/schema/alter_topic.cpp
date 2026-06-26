@@ -8,6 +8,8 @@
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
+
 namespace NKikimr::NPQ::NSchema {
 
 namespace {
@@ -256,7 +258,7 @@ TResult ApplyChangesInt(
 
     const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes();
 
-    THashMap<TString, ui64> addedAtTopicConfigVersionByConsumer;
+    absl::flat_hash_map<TString, ui64> addedAtTopicConfigVersionByConsumer;
     for (const auto& c : pqTabletConfig->GetConsumers()) {
         addedAtTopicConfigVersionByConsumer[c.GetName()] = c.GetAddedAtTopicConfigVersion();
     }
@@ -337,8 +339,8 @@ TResult ApplyChangesInt(
         }
     }
     for (auto& consumer : *pqTabletConfig->MutableConsumers()) {
-        if (const auto* addedAtVersion = addedAtTopicConfigVersionByConsumer.FindPtr(consumer.GetName())) {
-            consumer.SetAddedAtTopicConfigVersion(*addedAtVersion);
+        if (const auto it = addedAtTopicConfigVersionByConsumer.find(consumer.GetName()); it != addedAtTopicConfigVersionByConsumer.end()) {
+            consumer.SetAddedAtTopicConfigVersion(it->second);
         } else {
             MarkConsumerAddedAtCurrentTopicConfigVersion(consumer, *pqTabletConfig);
         }

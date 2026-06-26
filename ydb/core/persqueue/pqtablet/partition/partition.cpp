@@ -4057,7 +4057,9 @@ void TPartition::EmulatePostProcessUserAct(const TEvPQ::TEvSetClientInfo& act,
         auto counter = createSession ? COUNTER_PQ_CREATE_SESSION_OK : (dropSession ? COUNTER_PQ_DELETE_SESSION_OK : COUNTER_PQ_SET_CLIENT_OFFSET_OK);
         TabletCounters.Cumulative()[counter].Increment(1);
         auto *userInfoFull = UsersInfoStorage->GetIfExists(userInfo.User);
-        if (userInfoFull && userInfo.Offset > userInfoFull->GetReadOffset()) {
+        if (act.Type == TEvPQ::TEvSetClientInfo::ESCI_OFFSET &&
+                userInfoFull && userInfo.Offset > userInfoFull->GetReadOffset() &&
+                userInfoFull->WriteTimestamp > TInstant::Zero()) {
             auto timestamps = GetTime(*userInfoFull, userInfo.Offset);
             userInfoFull->UpdateReadOffset(userInfo.Offset - 1, timestamps.first, timestamps.second, ctx.Now(), true);
         }

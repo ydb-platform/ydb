@@ -5156,6 +5156,79 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         UNIT_ASSERT_VALUES_EQUAL(read_lag_counter->Val(), desired_read_lag);
     }
 
+    Y_UNIT_TEST(CheckWriteLagMetricNotBrokenWhenCommitAfterSessionRestart) {
+        TInsecureTestServer testServer("1", false, true);
+        TKafkaTestClient kafkaClient(testServer.Port);
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        TString topicName = "topic";
+        testServer.KikimrServer->GetServer().GetRuntime()->GetAppData().PQConfig.SetBalancerWakeupIntervalSec(1);
+        TString fullTopicName = "/Root/topic";
+        TString consumerName = "my-consumer";
+        ui64 minActivePartitions = 1;
+
+        CreateTopic(pqClient, topicName, minActivePartitions, {consumerName});
+
+        NYdb::NTopic::TWriteSessionSettings wsSettings;
+        wsSettings.Path(topicName).ProducerId("12345").PartitionId(0);
+        auto writer = pqClient.CreateSimpleBlockingWriteSession(wsSettings);
+        writer->Write(NYdb::NTopic::TWriteMessage("Data-12345"));
+        writer->Write(NYdb::NTopic::TWriteMessage("Data-67890"));
+        writer->Write(NYdb::NTopic::TWriteMessage("Data-38t54"));
+        writer->Write(NYdb::NTopic::TWriteMessage("Data-3rgeij"));
+        writer->Close();
+
+        {
+            NKikimr::NFlatTests::TFlatMsgBusClient kikimrClient(*(testServer.KikimrServer->ServerSettings));
+            auto pathDescr = kikimrClient.Ls(fullTopicName)->Record.GetPathDescription().GetPersQueueGroup();
+            auto tabletId = pathDescr.GetPartitions(0).GetTabletId();
+            kikimrClient.KillTablet(testServer.KikimrServer->GetServer(), tabletId);
+        }
+
+        std::unordered_map<TString, std::vector<NKafka::TEvKafka::PartitionConsumerOffset>> offsets;
+        std::vector<NKafka::TEvKafka::PartitionConsumerOffset> partitionsAndOffsets;
+        partitionsAndOffsets.emplace_back(0, 2, "additional-info");
+        offsets[topicName] = partitionsAndOffsets;
+        {
+            const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+            bool committed = false;
+            while (TInstant::Now() < deadline) {
+                auto msg = kafkaClient.OffsetCommit(consumerName, offsets);
+                if (!msg->Topics.empty() && !msg->Topics[0].Partitions.empty() &&
+                    msg->Topics[0].Partitions[0].ErrorCode == static_cast<TKafkaInt16>(EKafkaErrors::NONE_ERROR)) {
+                    committed = true;
+                    break;
+                }
+                Sleep(TDuration::MilliSeconds(200));
+            }
+            UNIT_ASSERT_C(committed, "Failed to commit offset after tablet restart");
+        }
+
+        auto counters = testServer.KikimrServer->GetRuntime()->GetAppData(0).Counters;
+        auto dbGroup = GetServiceCounters(counters, "topics", false);
+        auto group = dbGroup->GetSubgroup("host", "")
+                                ->GetSubgroup("database", "/Root")
+                                ->GetSubgroup("cloud_id", "somecloud")
+                                ->GetSubgroup("folder_id", "somefolder")
+                                ->GetSubgroup("database_id", "root")
+                                ->GetSubgroup("topic", "topic")
+                                ->GetSubgroup("consumer", "my-consumer");
+        auto write_lag_counter = group->GetNamedCounter("name", "topic.partition.write.lag_milliseconds_max", false);
+
+        const i64 saneUpperBoundMs = TDuration::Days(1).MilliSeconds();
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
+        while (TInstant::Now() < deadline) {
+            if (write_lag_counter->Val() > 0) {
+                break;
+            }
+            Sleep(TDuration::MilliSeconds(100));
+        }
+
+        TStringStream countersStr;
+        dbGroup->OutputPlainText(countersStr);
+        Cerr << ">>>>> COUNTERS: " << countersStr.Str() << Endl;
+        UNIT_ASSERT_LT_C(write_lag_counter->Val(), saneUpperBoundMs, "write lag metric is unexpectedly huge: " << write_lag_counter->Val());
+    }
+
     Y_UNIT_TEST(ProduceMetrics) {
         TInsecureTestServer testServer("2");
 

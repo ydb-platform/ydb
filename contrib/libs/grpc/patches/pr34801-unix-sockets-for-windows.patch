@@ -1,10 +1,57 @@
+From a58f83c947be52d4b622aa0d32435323b81a8e5e Mon Sep 17 00:00:00 2001
+From: youyuanwu <48816116+youyuanwu@users.noreply.github.com>
+Date: Wed, 14 Feb 2024 13:14:04 -0800
+Subject: [PATCH] [EventEngine] Support AF_UNIX for windows (#34801)
+
+#22285
+Unix domain socket has been added to windows: [AF_UNIX comes to Windows](https://devblogs.microsoft.com/commandline/af_unix-comes-to-windows/)
+
+Golang net pkg has adopted this long ago:
+https://go-review.googlesource.com/c/go/+/125456
+https://go-review.googlesource.com/c/sys/+/132555
+grpc-go already support this.
+
+AF_UNIX on windows is seamlessly integrated with winsock API.
+The modification needed are:
+* Set the right address family AF_UNIX depending on the address config, instead of using AF_INET6 all the time.
+* Ignore socket options for tcp.
+
+Closes #34801
+
+COPYBARA_INTEGRATE_REVIEW=https://github.com/grpc/grpc/pull/34801 from youyuanwu:dev 3d9b5c097bc6394f113be4e55173a4e8d4d85e9d
+PiperOrigin-RevId: 607083164
+---
+ .../binder/client/binder_connector.cc         |  7 ++
+ src/core/lib/address_utils/parse_address.cc   |  9 ++-
+ src/core/lib/address_utils/sockaddr_utils.cc  |  9 ++-
+ .../posix_engine/tcp_socket_utils.cc          |  7 ++
+ src/core/lib/event_engine/tcp_socket_utils.cc |  7 ++
+ .../lib/event_engine/windows/win_socket.cc    |  4 ++
+ .../lib/event_engine/windows/win_socket.h     |  3 +
+ .../event_engine/windows/windows_engine.cc    | 22 +++++-
+ .../event_engine/windows/windows_listener.cc  | 58 ++++++++++++++--
+ .../event_engine/windows/windows_listener.h   | 14 ++++
+ src/core/lib/iomgr/port.h                     |  3 +
+ src/core/lib/iomgr/tcp_client_windows.cc      | 29 ++++++--
+ src/core/lib/iomgr/tcp_server_windows.cc      | 69 ++++++++++++++++---
+ src/core/lib/iomgr/unix_sockets_posix.cc      | 13 ++++
+ src/core/resolver/binder/binder_resolver.cc   |  7 ++
+ test/core/address_utils/parse_address_test.cc |  9 ++-
+ .../core/address_utils/sockaddr_utils_test.cc |  9 ++-
+ .../resolvers/binder_resolver_test.cc         |  9 ++-
+ test/core/end2end/end2end_test_suites.cc      | 40 ++++++++---
+ test/core/end2end/tests/default_host.cc       |  3 +-
+ .../event_engine/tcp_socket_utils_test.cc     |  9 ++-
+ tools/run_tests/run_tests.py                  |  4 ++
+ 22 files changed, 306 insertions(+), 38 deletions(-)
+
 diff --git a/src/core/ext/transport/binder/client/binder_connector.cc b/src/core/ext/transport/binder/client/binder_connector.cc
-index c948e372ad..0c3db89927 100644
+index c948e372ad5e3..0c3db89927cbb 100644
 --- a/src/core/ext/transport/binder/client/binder_connector.cc
 +++ b/src/core/ext/transport/binder/client/binder_connector.cc
 @@ -20,7 +20,14 @@
  #include "src/core/lib/iomgr/port.h"
-
+ 
  #ifdef GRPC_HAVE_UNIX_SOCKET
 +#ifdef GPR_WINDOWS
 +// clang-format off
@@ -15,10 +62,10 @@ index c948e372ad..0c3db89927 100644
  #include <sys/un.h>
 +#endif  // GPR_WINDOWS
  #endif
-
+ 
  #include <functional>
 diff --git a/src/core/lib/address_utils/parse_address.cc b/src/core/lib/address_utils/parse_address.cc
-index deb2b07972..4806d17098 100644
+index deb2b07972376..4806d17098801 100644
 --- a/src/core/lib/address_utils/parse_address.cc
 +++ b/src/core/lib/address_utils/parse_address.cc
 @@ -30,8 +30,15 @@
@@ -37,14 +84,14 @@ index deb2b07972..4806d17098 100644
 +#endif  // GRPC_HAVE_UNIX_SOCKET
  #include <util/generic/string.h>
  #include <util/string/cast.h>
-
+ 
 diff --git a/src/core/lib/address_utils/sockaddr_utils.cc b/src/core/lib/address_utils/sockaddr_utils.cc
-index a1442afe5d..c82efe927a 100644
+index a1442afe5daaf..c82efe927a1c7 100644
 --- a/src/core/lib/address_utils/sockaddr_utils.cc
 +++ b/src/core/lib/address_utils/sockaddr_utils.cc
 @@ -44,8 +44,15 @@
  #include "src/core/lib/uri/uri_parser.h"
-
+ 
  #ifdef GRPC_HAVE_UNIX_SOCKET
 +#ifdef GPR_WINDOWS
 +// clang-format off
@@ -56,16 +103,16 @@ index a1442afe5d..c82efe927a 100644
 -#endif
 +#endif  // GPR_WINDOWS
 +#endif  // GRPC_HAVE_UNIX_SOCKET
-
+ 
  #ifdef GRPC_HAVE_UNIX_SOCKET
  static y_absl::StatusOr<std::string> grpc_sockaddr_to_uri_unix_if_possible(
 diff --git a/src/core/lib/event_engine/posix_engine/tcp_socket_utils.cc b/src/core/lib/event_engine/posix_engine/tcp_socket_utils.cc
-index 76e1b0a57e..ab98713b62 100644
+index 76e1b0a57e199..ab98713b62af1 100644
 --- a/src/core/lib/event_engine/posix_engine/tcp_socket_utils.cc
 +++ b/src/core/lib/event_engine/posix_engine/tcp_socket_utils.cc
 @@ -58,8 +58,15 @@
  #include "src/core/lib/gprpp/strerror.h"
-
+ 
  #ifdef GRPC_HAVE_UNIX_SOCKET
 +#ifdef GPR_WINDOWS
 +// clang-format off
@@ -77,15 +124,15 @@ index 76e1b0a57e..ab98713b62 100644
  #include <sys/un.h>
 +#endif  // GPR_WINDOWS
  #endif
-
+ 
  namespace grpc_event_engine {
 diff --git a/src/core/lib/event_engine/tcp_socket_utils.cc b/src/core/lib/event_engine/tcp_socket_utils.cc
-index a5fa15223d..c3bd35fc90 100644
+index a5fa15223d1da..c3bd35fc90566 100644
 --- a/src/core/lib/event_engine/tcp_socket_utils.cc
 +++ b/src/core/lib/event_engine/tcp_socket_utils.cc
 @@ -32,8 +32,15 @@
  #endif  //  GRPC_POSIX_SOCKET_UTILS_COMMON
-
+ 
  #ifdef GRPC_HAVE_UNIX_SOCKET
 +#ifdef GPR_WINDOWS
 +// clang-format off
@@ -97,16 +144,16 @@ index a5fa15223d..c3bd35fc90 100644
  #include <sys/un.h>
 +#endif  // GPR_WINDOWS
  #endif
-
+ 
  #ifdef GRPC_HAVE_VSOCK
 diff --git a/src/core/lib/event_engine/windows/win_socket.cc b/src/core/lib/event_engine/windows/win_socket.cc
-index 22ee56650d..da919e2ba7 100644
+index 22ee56650d278..da919e2ba7cd1 100644
 --- a/src/core/lib/event_engine/windows/win_socket.cc
 +++ b/src/core/lib/event_engine/windows/win_socket.cc
 @@ -208,6 +208,10 @@ static grpc_error_handle enable_socket_low_latency(SOCKET sock) {
-
+ 
  }  // namespace
-
+ 
 +y_absl::Status SetSocketNonBlock(SOCKET sock) {
 +  return grpc_tcp_set_non_block(sock);
 +}
@@ -115,21 +162,21 @@ index 22ee56650d..da919e2ba7 100644
    y_absl::Status err;
    err = grpc_tcp_set_non_block(sock);
 diff --git a/src/core/lib/event_engine/windows/win_socket.h b/src/core/lib/event_engine/windows/win_socket.h
-index bc8e8061c8..c6d52f41de 100644
+index bc8e8061c81d3..c6d52f41def65 100644
 --- a/src/core/lib/event_engine/windows/win_socket.h
 +++ b/src/core/lib/event_engine/windows/win_socket.h
 @@ -133,6 +133,9 @@ class WinSocket {
  // Attempt to configure default socket settings
  y_absl::Status PrepareSocket(SOCKET sock);
-
+ 
 +// Set non block option for socket.
 +y_absl::Status SetSocketNonBlock(SOCKET sock);
 +
  }  // namespace experimental
  }  // namespace grpc_event_engine
-
+ 
 diff --git a/src/core/lib/event_engine/windows/windows_engine.cc b/src/core/lib/event_engine/windows/windows_engine.cc
-index 5503f3fc85..f4431ae4ef 100644
+index 5503f3fc85b4f..f4431ae4ef456 100644
 --- a/src/core/lib/event_engine/windows/windows_engine.cc
 +++ b/src/core/lib/event_engine/windows/windows_engine.cc
 @@ -306,7 +306,10 @@ EventEngine::ConnectionHandle WindowsEventEngine::Connect(
@@ -176,7 +223,7 @@ index 5503f3fc85..f4431ae4ef 100644
    if (istatus != 0) {
      Run([on_connect = std::move(on_connect),
 diff --git a/src/core/lib/event_engine/windows/windows_listener.cc b/src/core/lib/event_engine/windows/windows_listener.cc
-index 71116a6332..d74cfc0e8b 100644
+index 71116a63326a9..d74cfc0e8bc23 100644
 --- a/src/core/lib/event_engine/windows/windows_listener.cc
 +++ b/src/core/lib/event_engine/windows/windows_listener.cc
 @@ -27,6 +27,7 @@
@@ -184,13 +231,13 @@ index 71116a6332..d74cfc0e8b 100644
  #include "src/core/lib/gprpp/sync.h"
  #include "src/core/lib/iomgr/error.h"
 +#include "src/core/lib/iomgr/port.h"
-
+ 
  namespace grpc_event_engine {
  namespace experimental {
 @@ -67,11 +68,39 @@ void WindowsEventEngineListener::SinglePortSocketListener::
-
+ 
  // ---- SinglePortSocketListener ----
-
+ 
 +// TODO(hork): This may be refactored to share with posix engine.
 +void UnlinkIfUnixDomainSocket(
 +    const EventEngine::ResolvedAddress& resolved_addr) {
@@ -226,9 +273,9 @@ index 71116a6332..d74cfc0e8b 100644
 +  UnlinkIfUnixDomainSocket(listener_sockname());
    GRPC_EVENT_ENGINE_TRACE("~SinglePortSocketListener::%p", this);
  }
-
+ 
 @@ -109,7 +138,11 @@ y_absl::Status WindowsEventEngineListener::SinglePortSocketListener::Start() {
-
+ 
  y_absl::Status
  WindowsEventEngineListener::SinglePortSocketListener::StartLocked() {
 -  SOCKET accept_socket = WSASocket(AF_INET6, SOCK_STREAM, IPPROTO_TCP, NULL, 0,
@@ -289,7 +336,7 @@ index 71116a6332..d74cfc0e8b 100644
    if (sock == INVALID_SOCKET) {
      auto error = GRPC_WSA_ERROR(WSAGetLastError(), "WSASocket");
 diff --git a/src/core/lib/event_engine/windows/windows_listener.h b/src/core/lib/event_engine/windows/windows_listener.h
-index a84238c3b7..2773f3afbf 100644
+index a84238c3b7c71..2773f3afbf343 100644
 --- a/src/core/lib/event_engine/windows/windows_listener.h
 +++ b/src/core/lib/event_engine/windows/windows_listener.h
 @@ -30,6 +30,14 @@
@@ -304,11 +351,11 @@ index a84238c3b7..2773f3afbf 100644
 +#include <afunix.h>
 +// clang-format on
 +#endif
-
+ 
  namespace grpc_event_engine {
  namespace experimental {
 @@ -120,9 +128,15 @@ class WindowsEventEngineListener : public EventEngine::Listener {
-
+ 
      // The cached AcceptEx for that port.
      LPFN_ACCEPTEX AcceptEx;
 +    // Buffer to hold the local and remote address.
@@ -324,7 +371,7 @@ index a84238c3b7..2773f3afbf 100644
      WindowsEventEngineListener* listener_;
      // shared state for asynchronous cleanup of overlapped operations
 diff --git a/src/core/lib/iomgr/port.h b/src/core/lib/iomgr/port.h
-index 3385408309..f4102a524a 100644
+index 3385408309b76..f4102a524a2d4 100644
 --- a/src/core/lib/iomgr/port.h
 +++ b/src/core/lib/iomgr/port.h
 @@ -30,6 +30,9 @@
@@ -338,7 +385,7 @@ index 3385408309..f4102a524a 100644
  #define GRPC_WINDOWS_SOCKET_ARES_EV_DRIVER 1
  #elif defined(GPR_ANDROID)
 diff --git a/src/core/lib/iomgr/tcp_client_windows.cc b/src/core/lib/iomgr/tcp_client_windows.cc
-index 7a4d7ca310..637c6e3cb5 100644
+index 7a4d7ca310396..637c6e3cb55df 100644
 --- a/src/core/lib/iomgr/tcp_client_windows.cc
 +++ b/src/core/lib/iomgr/tcp_client_windows.cc
 @@ -145,6 +145,8 @@ static int64_t tcp_connect(grpc_closure* on_done, grpc_endpoint** endpoint,
@@ -347,13 +394,13 @@ index 7a4d7ca310..637c6e3cb5 100644
    y_absl::StatusOr<TString> addr_uri;
 +  int addr_family;
 +  int protocol;
-
+ 
    addr_uri = grpc_sockaddr_to_uri(addr);
    if (!addr_uri.ok()) {
 @@ -159,14 +161,25 @@ static int64_t tcp_connect(grpc_closure* on_done, grpc_endpoint** endpoint,
      addr = &addr6_v4mapped;
    }
-
+ 
 -  sock = WSASocket(AF_INET6, SOCK_STREAM, IPPROTO_TCP, NULL, 0,
 +  // extract family
 +  addr_family =
@@ -366,7 +413,7 @@ index 7a4d7ca310..637c6e3cb5 100644
      error = GRPC_WSA_ERROR(WSAGetLastError(), "WSASocket");
      goto failure;
    }
-
+ 
 -  error = grpc_tcp_prepare_socket(sock);
 +  if (addr_family == AF_UNIX) {
 +    // tcp settings for af_unix are skipped.
@@ -381,7 +428,7 @@ index 7a4d7ca310..637c6e3cb5 100644
 @@ -183,7 +196,15 @@ static int64_t tcp_connect(grpc_closure* on_done, grpc_endpoint** endpoint,
      goto failure;
    }
-
+ 
 -  grpc_sockaddr_make_wildcard6(0, &local_address);
 +  if (addr_family == AF_UNIX) {
 +    // For ConnectEx() to work for AF_UNIX, the sock needs to be bound to
@@ -392,7 +439,7 @@ index 7a4d7ca310..637c6e3cb5 100644
 +  } else {
 +    grpc_sockaddr_make_wildcard6(0, &local_address);
 +  }
-
+ 
    status =
        bind(sock, (grpc_sockaddr*)&local_address.addr, (int)local_address.len);
 @@ -196,7 +217,6 @@ static int64_t tcp_connect(grpc_closure* on_done, grpc_endpoint** endpoint,
@@ -412,7 +459,7 @@ index 7a4d7ca310..637c6e3cb5 100644
    ac->on_done = on_done;
    ac->socket = socket;
 diff --git a/src/core/lib/iomgr/tcp_server_windows.cc b/src/core/lib/iomgr/tcp_server_windows.cc
-index d7775a1e26..9de6cb0f26 100644
+index d7775a1e26784..9de6cb0f268bf 100644
 --- a/src/core/lib/iomgr/tcp_server_windows.cc
 +++ b/src/core/lib/iomgr/tcp_server_windows.cc
 @@ -78,13 +78,21 @@ using ::grpc_event_engine::experimental::WindowsEventEngineListener;
@@ -440,7 +487,7 @@ index d7775a1e26..9de6cb0f26 100644
 @@ -125,6 +133,35 @@ struct grpc_tcp_server {
    WindowsEventEngineListener* ee_listener;
  };
-
+ 
 +// TODO(hork): This may be refactored to share with posix engine and event
 +// engine.
 +void unlink_if_unix_domain_socket(const grpc_resolved_address* resolved_addr) {
@@ -508,7 +555,7 @@ index d7775a1e26..9de6cb0f26 100644
 +  const DWORD addrlen = sizeof(port->addresses) / 2;
    DWORD bytes_received = 0;
    grpc_error_handle error;
-
+ 
    if (port->shutting_down) {
      return y_absl::OkStatus();
    }
@@ -532,7 +579,7 @@ index d7775a1e26..9de6cb0f26 100644
 +    error = grpc_tcp_prepare_socket(sock);
 +  }
    if (!error.ok()) goto failure;
-
+ 
    // Start the "accept" asynchronously.
 @@ -463,6 +510,7 @@ static grpc_error_handle add_socket_to_server(grpc_tcp_server* s, SOCKET sock,
    sp->outstanding_calls = 0;
@@ -545,7 +592,7 @@ index d7775a1e26..9de6cb0f26 100644
 @@ -522,7 +570,10 @@ static grpc_error_handle tcp_server_add_port(grpc_tcp_server* s,
      addr = &wildcard;
    }
-
+ 
 -  sock = WSASocket(AF_INET6, SOCK_STREAM, IPPROTO_TCP, NULL, 0,
 +  const int addr_family =
 +      grpc_sockaddr_get_family(addr) == AF_UNIX ? AF_UNIX : AF_INET6;
@@ -555,7 +602,7 @@ index d7775a1e26..9de6cb0f26 100644
    if (sock == INVALID_SOCKET) {
      error = GRPC_WSA_ERROR(WSAGetLastError(), "WSASocket");
 diff --git a/src/core/lib/iomgr/unix_sockets_posix.cc b/src/core/lib/iomgr/unix_sockets_posix.cc
-index e182e6adf1..01daa2c90c 100644
+index e182e6adf131d..01daa2c90cf03 100644
 --- a/src/core/lib/iomgr/unix_sockets_posix.cc
 +++ b/src/core/lib/iomgr/unix_sockets_posix.cc
 @@ -24,7 +24,14 @@
@@ -570,12 +617,12 @@ index e182e6adf1..01daa2c90c 100644
 +#else
  #include <sys/un.h>
 +#endif  // GPR_WINDOWS
-
+ 
  #include "y_absl/strings/str_cat.h"
-
+ 
 @@ -39,7 +46,11 @@
  #include "src/core/lib/transport/error_utils.h"
-
+ 
  void grpc_create_socketpair_if_unix(int sv[2]) {
 +#ifdef GPR_WINDOWS
 +  grpc_core::Crash("AF_UNIX socket pairs are not supported on Windows");
@@ -583,12 +630,12 @@ index e182e6adf1..01daa2c90c 100644
    GPR_ASSERT(socketpair(AF_UNIX, SOCK_STREAM, 0, sv) == 0);
 +#endif
  }
-
+ 
  y_absl::StatusOr<std::vector<grpc_resolved_address>>
 @@ -86,10 +97,12 @@ void grpc_unlink_if_unix_domain_socket(
      return;
    }
-
+ 
 +#ifndef GPR_WINDOWS
    struct stat st;
    if (stat(un->sun_path, &st) == 0 && (st.st_mode & S_IFMT) == S_IFSOCK) {
@@ -596,15 +643,15 @@ index e182e6adf1..01daa2c90c 100644
    }
 +#endif
  }
-
+ 
  #endif
 diff --git a/src/core/ext/filters/client_channel/resolver/binder/binder_resolver.cc b/src/core/ext/filters/client_channel/resolver/binder/binder_resolver.cc
-index 5f1916958a..dfc8e15b2d 100644
+index 5f1916958a6c3..dfc8e15b2d802 100644
 --- a/src/core/ext/filters/client_channel/resolver/binder/binder_resolver.cc
 +++ b/src/core/ext/filters/client_channel/resolver/binder/binder_resolver.cc
 @@ -24,8 +24,15 @@
  #ifdef GRPC_HAVE_UNIX_SOCKET
-
+ 
  #include <string.h>
 +#ifdef GPR_WINDOWS
 +// clang-format off
@@ -615,6 +662,6 @@ index 5f1916958a..dfc8e15b2d 100644
  #include <sys/socket.h>
  #include <sys/un.h>
 +#endif // GPR_WINDOWS
-
+ 
  #include <memory>
  #include <utility>

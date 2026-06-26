@@ -345,7 +345,7 @@ class Test(TestBase):
             self._trace('--dry-run', 'group', 'add', '--pool-name', pool_name, '--groups', '1', '--size-in-units', '4', with_grpc_calls=True),
             self._trace('group', 'add', '--pool-name', pool_name, '--groups', '1', '--size-in-units', '2', with_grpc_calls=True),
             self._trace('group', 'add', '--pool-name', pool_name, '--groups', '1', with_grpc_calls=True),
-            self._trace('group', 'list', '--columns', 'GroupId', 'Pool', 'SizeInUnits'),
+            self._trace('group', 'list', '--columns', 'GroupId', 'PoolName', 'SizeInUnits'),
         ]
 
     def test_group_resize(self):

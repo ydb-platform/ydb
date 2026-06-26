@@ -214,7 +214,7 @@ private:
         } else {
             str << "<table class='table table-condensed table-bordered'>";
             str << "<thead><tr>"
-                   "<th>TabletId</th><th>Owner index</th><th>TabletState</th>"
+                   "<th>TabletId</th><th>Owner index</th><th>NodeId</th><th>TabletState</th>"
                    "<th>PoolName</th><th>NumDirectBlockGroups</th><th>Actions</th>"
                    "</tr></thead><tbody>";
             for (const auto& row : Accum) {
@@ -222,16 +222,18 @@ private:
                 const ui64 ownerIdx = row.Hive.HasTabletOwner()
                     ? row.Hive.GetTabletOwner().GetOwnerIdx()
                     : 0;
+                const ui32 nodeId = row.Hive.GetNodeID();
                 const TString stateLabel = BuildStateLabel(row.Hive);
                 str << "<tr>";
                 str << "<td><a href='/tablets?TabletID=" << tid << "'>" << tid << "</a></td>";
                 str << "<td>" << ownerIdx << "</td>";
+                str << "<td>" << nodeId << "</td>";
                 str << "<td>" << NbsTabletHtmlEscape(stateLabel) << "</td>";
                 str << "<td>" << NbsTabletHtmlEscape(row.PoolCell) << "</td>";
                 str << "<td>" << NbsTabletHtmlEscape(row.NumDbgCell) << "</td>";
                 str << "<td>";
                 str << "<button type='button' class='btn btn-xs btn-primary' "
-                       "onClick='nbsTabletPrepareRun(\"" << tid << "\")'>Run</button> ";
+                       "onClick='nbsTabletPrepareRun(\"" << tid << "\"," << nodeId << ")'>Run</button> ";
                 str << "<button type='button' class='btn btn-xs btn-danger' "
                        "onClick='nbsTabletDeleteOwner(" << ownerIdx << ")'>Delete</button>";
                 str << "</td>";
@@ -246,15 +248,20 @@ private:
                 const ui64 ownerIdx = row.Hive.HasTabletOwner()
                     ? row.Hive.GetTabletOwner().GetOwnerIdx()
                     : 0;
+                const ui32 nodeId = row.Hive.GetNodeID();
                 if (!firstRow) {
                     str << ",";
                 }
                 firstRow = false;
-                str << "{tid:\"" << tid << "\",oi:" << ownerIdx << "}";
+                str << "{tid:\"" << tid << "\",oi:" << ownerIdx << ",nid:" << nodeId << "}";
             }
             str << "];"
                    "var maxOi=0;"
-                   "rows.forEach(function(r){if(r.oi>maxOi)maxOi=r.oi;});"
+                   "window.nbsTabletNodeMap=window.nbsTabletNodeMap||{};"
+                   "rows.forEach(function(r){"
+                   "if(r.oi>maxOi)maxOi=r.oi;"
+                   "window.nbsTabletNodeMap[String(r.tid)]=r.nid;"
+                   "});"
                    "var ownerInput=document.getElementById('nbs-tablet-owner-idx');"
                    "if(ownerInput)ownerInput.value=maxOi+1;"
                    "})();</script>";
@@ -936,16 +943,16 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                     .replace(/"/g, "\\\"");
             }
 
-            function nbsRunScaleLsns(factor) {
-                const inp = $("#nbs-run-max-inflight-lsns");
+            function nbsRunScaleLsns(inst, factor) {
+                const inp = $("#nbs-" + inst + "-max-inflight-lsns");
                 const v = parseInt(inp.val(), 10);
                 if (!isNaN(v) && v >= 1) {
                     inp.val(factor >= 1 ? v * factor : Math.max(1, Math.floor(v * factor)));
                 }
             }
 
-            function nbsRunDisableReplicationChanged(cb) {
-                const readRatio = $("#nbs-run-read-ratio");
+            function nbsRunDisableReplicationChanged(inst, cb) {
+                const readRatio = $("#nbs-" + inst + "-read-ratio");
                 if (cb.checked) {
                     readRatio.val("0").prop("disabled", true);
                 } else {
@@ -1138,36 +1145,257 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 nbsTabletRefreshPreview();
             });
 
-            // ── Run workload / sweep ────────────────────────────────────────
+            // ── Run workload (independent per-tablet cards) ──────────────────
+            //
+            // Each tablet gets its own run card with a full parameter form plus
+            // its own status line, progress bar, result tables and plots. Every
+            // element id inside a card is scoped by a per-tablet instance id, so
+            // several cards can run sweeps simultaneously and independently.
 
-            function nbsTabletPrepareRun(tabletId) {
-                var inp = document.getElementById("nbs-tablet-run-tablet-id");
-                if (inp) inp.value = tabletId;
-                var lbl = document.getElementById("nbs-run-target-label");
-                if (lbl) lbl.textContent = "Target tablet: " + tabletId;
-                var panel = document.getElementById("nbs-run-panel");
-                if (panel) {
-                    panel.style.display = "";
-                    panel.scrollIntoView({behavior: "smooth", block: "start"});
-                }
+            window.nbsRunCards = window.nbsRunCards || {};
+
+            function nbsRunNodeForTablet(tabletId) {
+                var map = window.nbsTabletNodeMap || {};
+                var nid = map[String(tabletId)];
+                return (typeof nid === "number" && isFinite(nid)) ? nid : 0;
             }
 
-            function nbsTabletRunOnce(tabletId, maxInFlight) {
+            function nbsRunInst(tabletId) {
+                return "rt" + String(tabletId).replace(/[^0-9a-zA-Z]/g, "");
+            }
+
+            // Scoped accessor bundle for a single card's elements/fields.
+            function nbsRunCtx(inst) {
+                const reg = window.nbsRunCards[inst] || {};
+                return {
+                    inst: inst,
+                    reg: reg,
+                    tabletId: reg.tabletId,
+                    nodeId: reg.nodeId,
+                    id: function(suffix) { return "nbs-" + inst + "-" + suffix; },
+                    el: function(suffix) { return document.getElementById("nbs-" + inst + "-" + suffix); },
+                    $f: function(suffix) { return $("#nbs-" + inst + "-" + suffix); },
+                    val: function(suffix) { return nbsTabletTrim($("#nbs-" + inst + "-" + suffix).val()); },
+                    checked: function(suffix) { return $("#nbs-" + inst + "-" + suffix).is(":checked"); }
+                };
+            }
+
+            function nbsCardStatus(ctx, text) {
+                const el = ctx.el("status");
+                if (el) { el.textContent = text; }
+            }
+
+            function nbsRunCloseCard(inst) {
+                const reg = window.nbsRunCards[inst];
+                if (reg && reg.running &&
+                    !confirm("A sweep is still running for this tablet. Close anyway?")) {
+                    return;
+                }
+                const card = document.getElementById("nbs-" + inst + "-card");
+                if (card && card.parentNode) {
+                    card.parentNode.removeChild(card);
+                }
+                delete window.nbsRunCards[inst];
+            }
+
+            // Shared workload parameter form rows (used by both the per-tablet
+            // card and the combined multi-tablet card). All ids are scoped by
+            // the card prefix p ("nbs-<inst>-"); inst is needed for the inline
+            // button handlers.
+            function nbsRunFormFieldsHtml(p, inst) {
+                return "" +
+                    "<div class='row'>" +
+                      "<div class='col-sm-4'><div class='form-group'><label>Tag (0 = auto-assign):</label>" +
+                        "<input id='" + p + "tag' class='form-control' type='number' min='0' step='1' value='0' /></div></div>" +
+                      "<div class='col-sm-4'><div class='form-group'><label>DurationSeconds:</label>" +
+                        "<input id='" + p + "duration' class='form-control' type='number' min='0' step='1' value='60' /></div></div>" +
+                      "<div class='col-sm-4'><div class='form-group'><label>Measure after (warmup s):</label>" +
+                        "<input id='" + p + "delay-before' class='form-control' type='number' min='0' step='1' value='15' /></div></div>" +
+                    "</div>" +
+                    "<div class='row'>" +
+                      "<div class='col-sm-4'><div class='form-group'><label>Trials per InFlight:</label>" +
+                        "<input id='" + p + "trials' class='form-control' type='number' min='1' step='2' value='1' />" +
+                        "<p class='help-block'>1 = single run. Values &gt; 1 must be odd.</p></div></div>" +
+                      "<div class='col-sm-4'><div class='form-group'><label>MaxInFlight (single run):</label>" +
+                        "<input id='" + p + "max-inflight' class='form-control' type='number' min='1' step='1' value='32' /></div></div>" +
+                    "</div>" +
+                    "<div class='row'>" +
+                      "<div class='col-sm-4'><div class='form-group'><label>InFlightFrom (sweep start):</label>" +
+                        "<input id='" + p + "inflight-from' class='form-control' type='number' min='1' step='1' placeholder='e.g. 1' /></div></div>" +
+                      "<div class='col-sm-4'><div class='form-group'><label>InFlightTo (sweep end):</label>" +
+                        "<input id='" + p + "inflight-to' class='form-control' type='number' min='1' step='1' placeholder='e.g. 128' />" +
+                        "<p class='help-block'>If both set, sweeps MaxInFlight x2 per step.</p></div></div>" +
+                    "</div>" +
+                    "<div class='row'>" +
+                      "<div class='col-sm-4'><div class='form-group'><label>ReadRatioPct (0-100):</label>" +
+                        "<input id='" + p + "read-ratio' class='form-control' type='number' min='0' max='100' step='1' value='0' /></div></div>" +
+                      "<div class='col-sm-4'><div class='form-group'><label>ReadWriteSizeKiB:</label>" +
+                        "<input id='" + p + "size-kib' class='form-control' type='number' min='4' step='4' value='4' /></div></div>" +
+                      "<div class='col-sm-4'><div class='form-group'><label>NumDirectBlockGroupsToUse (0=all):</label>" +
+                        "<input id='" + p + "num-dbg' class='form-control' type='number' min='0' step='1' value='0' /></div></div>" +
+                    "</div>" +
+                    "<div class='row'>" +
+                      "<div class='col-sm-4'><div class='form-group'><label>MaxInflightLsns:</label>" +
+                        "<div class='input-group'>" +
+                          "<span class='input-group-btn'><button type='button' class='btn btn-default' onclick='nbsRunScaleLsns(\"" + inst + "\",0.5)' title='Halve'>&divide;2</button></span>" +
+                          "<input id='" + p + "max-inflight-lsns' class='form-control' type='number' min='1' step='1' value='4096' />" +
+                          "<span class='input-group-btn'><button type='button' class='btn btn-default' onclick='nbsRunScaleLsns(\"" + inst + "\",2)' title='Double'>&times;2</button></span>" +
+                        "</div></div></div>" +
+                    "</div>" +
+                    "<div class='form-group'><div class='checkbox'><label>" +
+                      "<input id='" + p + "sequential' type='checkbox' /> Sequential (round-robin address space instead of random)" +
+                    "</label></div></div>" +
+                    "<div class='form-group'><div class='checkbox'><label>" +
+                      "<input id='" + p + "disable-replication' type='checkbox' onchange='nbsRunDisableReplicationChanged(\"" + inst + "\", this)' /> Disable replication (single-PB write, skip DDisk flush)" +
+                    "</label></div></div>";
+            }
+
+            // Common result containers (progress, status is rendered separately).
+            function nbsRunResultContainersHtml(p) {
+                return "" +
+                    "<div id='" + p + "progress' style='display:none'></div>" +
+                    "<div id='" + p + "result-table'></div>" +
+                    "<div id='" + p + "median-table' style='margin-top:16px;display:none'></div>" +
+                    "<div id='" + p + "iops-plot' style='margin-top:16px'></div>" +
+                    "<div id='" + p + "latency-plot' style='margin-top:16px'></div>";
+            }
+
+            // Builds the full per-tablet run-card markup with instance-scoped ids.
+            function nbsRunCardHtml(inst, tabletId, nodeId) {
+                const p = "nbs-" + inst + "-";
+                return "" +
+                "<div id='" + p + "card' class='panel panel-primary' style='margin-top:16px'>" +
+                  "<div class='panel-heading' style='display:flex;justify-content:space-between;align-items:center'>" +
+                    "<strong>Run workload &mdash; tablet " + tabletId + " (node " + nodeId + ")</strong>" +
+                    "<button type='button' class='btn btn-xs btn-default' onclick='nbsRunCloseCard(\"" + inst + "\")'>Close</button>" +
+                  "</div>" +
+                  "<div class='panel-body'>" +
+                    nbsRunFormFieldsHtml(p, inst) +
+                    "<div class='form-group'>" +
+                      "<button type='button' id='" + p + "run-btn' onclick='nbsTabletSweepInst(\"" + inst + "\")' class='btn btn-primary'>Run</button> " +
+                      "<span id='" + p + "status' class='text-muted' style='margin-left:10px'></span>" +
+                    "</div>" +
+                    nbsRunResultContainersHtml(p) +
+                  "</div>" +
+                "</div>";
+            }
+
+            // Builds the singleton combined multi-tablet card. It targets several
+            // tablets at once (each load actor runs on its tablet's node) and shows
+            // both the aggregated result and a per-tablet breakdown.
+            function nbsMultiCardHtml(inst) {
+                const p = "nbs-" + inst + "-";
+                return "" +
+                "<div id='" + p + "card' class='panel panel-info' style='margin-top:16px'>" +
+                  "<div class='panel-heading' style='display:flex;justify-content:space-between;align-items:center'>" +
+                    "<strong>Run multi-tablet load (combined)</strong>" +
+                    "<button type='button' class='btn btn-xs btn-default' onclick='nbsRunCloseCard(\"" + inst + "\")'>Close</button>" +
+                  "</div>" +
+                  "<div class='panel-body'>" +
+                    "<div class='form-group'>" +
+                      "<label>Target tablet ids (comma/space separated):</label>" +
+                      "<input id='" + p + "targets' class='form-control' type='text' placeholder='e.g. 72075186224037888, 72075186224037889' />" +
+                      "<p class='help-block'>Each tablet's node is resolved from the list above; its load actor runs on that node. The results below combine all tablets, plus a per-tablet breakdown.</p>" +
+                    "</div>" +
+                    nbsRunFormFieldsHtml(p, inst) +
+                    "<div class='form-group'>" +
+                      "<button type='button' id='" + p + "run-btn' onclick='nbsTabletSweepInst(\"" + inst + "\")' class='btn btn-primary'>Run</button> " +
+                      "<span id='" + p + "status' class='text-muted' style='margin-left:10px'></span>" +
+                    "</div>" +
+                    "<div id='" + p + "progress' style='display:none'></div>" +
+                    "<div id='" + p + "pertablet-tables' style='margin-top:16px;display:none'></div>" +
+                    "<div id='" + p + "pertablet-plot' style='margin-top:16px;display:none'></div>" +
+                    "<div id='" + p + "result-table'></div>" +
+                    "<div id='" + p + "median-table' style='margin-top:16px;display:none'></div>" +
+                    "<div id='" + p + "iops-plot' style='margin-top:16px'></div>" +
+                    "<div id='" + p + "latency-plot' style='margin-top:16px'></div>" +
+                  "</div>" +
+                "</div>";
+            }
+
+            // Parses the multi-tablet card's target field into a deduplicated list
+            // of {tid, nid} (nid resolved from the rendered tablet list).
+            function nbsRunCollectTargets(ctx) {
+                const raw = ctx.val("targets");
+                const seen = {};
+                const out = [];
+                raw.split(/[\s,]+/).forEach(function(tok) {
+                    tok = nbsTabletTrim(tok);
+                    if (tok === "" || !/^[0-9]+$/.test(tok) || seen[tok]) {
+                        return;
+                    }
+                    seen[tok] = true;
+                    out.push({ tid: tok, nid: nbsRunNodeForTablet(tok) });
+                });
+                return out;
+            }
+
+            // Opens (or focuses) the singleton combined multi-tablet card.
+            function nbsTabletOpenMulti() {
+                const inst = "multi";
+                let card = document.getElementById("nbs-" + inst + "-card");
+                if (!card) {
+                    window.nbsRunCards[inst] = { multi: true, running: false };
+                    const container = document.getElementById("nbs-run-cards");
+                    const wrap = document.createElement("div");
+                    wrap.innerHTML = nbsMultiCardHtml(inst);
+                    card = wrap.firstElementChild;
+                    container.insertBefore(card, container.firstChild);
+                }
+                const field = document.getElementById("nbs-" + inst + "-targets");
+                if (field && nbsTabletTrim(field.value) === "") {
+                    field.value = Object.keys(window.nbsTabletNodeMap || {}).join(", ");
+                }
+                card.scrollIntoView({behavior: "smooth", block: "start"});
+            }
+
+            // Opens (or focuses) the dedicated run card for the given tablet.
+            function nbsTabletPrepareRun(tabletId, nodeId) {
+                if (typeof nodeId === "number" && isFinite(nodeId)) {
+                    window.nbsTabletNodeMap = window.nbsTabletNodeMap || {};
+                    window.nbsTabletNodeMap[String(tabletId)] = nodeId;
+                } else {
+                    nodeId = nbsRunNodeForTablet(tabletId);
+                }
+                const inst = nbsRunInst(tabletId);
+                let card = document.getElementById("nbs-" + inst + "-card");
+                if (!card) {
+                    window.nbsRunCards[inst] = {
+                        tabletId: String(tabletId), nodeId: nodeId, running: false
+                    };
+                    const container = document.getElementById("nbs-run-cards");
+                    const wrap = document.createElement("div");
+                    wrap.innerHTML = nbsRunCardHtml(inst, tabletId, nodeId);
+                    card = wrap.firstElementChild;
+                    container.appendChild(card);
+                } else {
+                    window.nbsRunCards[inst].tabletId = String(tabletId);
+                    window.nbsRunCards[inst].nodeId = nodeId;
+                }
+                card.scrollIntoView({behavior: "smooth", block: "start"});
+            }
+
+            function nbsTabletRunOnce(ctx, maxInFlight, targetsCsv) {
                 return new Promise(function(resolve, reject) {
+                    const disableRepl = ctx.checked("disable-replication");
                     const params = {
                         mode:                    "tablet_run",
-                        tablet_id:               String(tabletId),
-                        tag:                     nbsTabletTrim($("#nbs-run-tag").val()) || "0",
-                        duration_seconds:        nbsTabletTrim($("#nbs-run-duration").val()) || "0",
-                        delay_before_seconds:    nbsTabletTrim($("#nbs-run-delay-before").val()) || "15",
+                        tag:                     ctx.val("tag") || "0",
+                        duration_seconds:        ctx.val("duration") || "0",
+                        delay_before_seconds:    ctx.val("delay-before") || "15",
                         max_in_flight:           String(maxInFlight),
-                        read_ratio_pct:          $("#nbs-run-disable-replication").is(":checked") ? "0" : (nbsTabletTrim($("#nbs-run-read-ratio").val()) || "0"),
-                        read_write_size_kib:     nbsTabletTrim($("#nbs-run-size-kib").val()) || "4",
-                        sequential:              $("#nbs-run-sequential").is(":checked") ? "1" : "0",
-                        num_dbg_to_use:          nbsTabletTrim($("#nbs-run-num-dbg").val()) || "0",
-                        max_inflight_lsns:       nbsTabletTrim($("#nbs-run-max-inflight-lsns").val()) || "4096",
-                        disable_replication:     $("#nbs-run-disable-replication").is(":checked") ? "1" : "0"
+                        read_ratio_pct:          disableRepl ? "0" : (ctx.val("read-ratio") || "0"),
+                        read_write_size_kib:     ctx.val("size-kib") || "4",
+                        sequential:              ctx.checked("sequential") ? "1" : "0",
+                        num_dbg_to_use:          ctx.val("num-dbg") || "0",
+                        max_inflight_lsns:       ctx.val("max-inflight-lsns") || "4096",
+                        disable_replication:     disableRepl ? "1" : "0"
                     };
+                    if (targetsCsv) {
+                        params.targets = targetsCsv;
+                    } else {
+                        params.tablet_id = String(ctx.tabletId);
+                    }
                     $.ajax({
                         url: "",
                         data: params,
@@ -1292,8 +1520,8 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 return String(Math.round(v));
             }
 
-            function nbsTabletParseTrials() {
-                const raw = nbsTabletTrim($("#nbs-run-trials").val());
+            function nbsTabletParseTrials(ctx) {
+                const raw = ctx.val("trials");
                 if (raw === "") {
                     return { ok: true, trials: 1 };
                 }
@@ -1320,8 +1548,8 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 return sorted[Math.floor(sorted.length / 2)];
             }
 
-            function nbsTabletRenderTableSkeleton(sweepValues, showReads) {
-                const tbl = document.getElementById("nbs-run-result-table");
+            function nbsTabletRenderTableSkeleton(ctx, sweepValues, showReads) {
+                const tbl = ctx.el("result-table");
                 if (!tbl) {
                     return;
                 }
@@ -1340,25 +1568,25 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 html += "<tbody>";
                 for (let i = 0; i < sweepValues.length; i++) {
                     const v = sweepValues[i];
-                    html += "<tr id='nbs-sweep-w-" + i + "'>";
+                    html += "<tr id='" + ctx.id("sweep-w-" + i) + "'>";
                     if (showReads) {
                         html += "<td rowspan='2' style='vertical-align:middle;font-weight:bold'>" + v + "</td>";
                     } else {
                         html += "<td style='font-weight:bold'>" + v + "</td>";
                     }
                     html += "<td>Writes</td>";
-                    html += "<td id='nbs-sw-wiops-" + i + "'>&#9711;</td>";
-                    html += "<td id='nbs-sw-wp50-"  + i + "'>&#9711;</td>";
-                    html += "<td id='nbs-sw-wp95-"  + i + "'>&#9711;</td>";
-                    html += "<td id='nbs-sw-wp99-"  + i + "'>&#9711;</td>";
+                    html += "<td id='" + ctx.id("sw-wiops-" + i) + "'>&#9711;</td>";
+                    html += "<td id='" + ctx.id("sw-wp50-" + i) + "'>&#9711;</td>";
+                    html += "<td id='" + ctx.id("sw-wp95-" + i) + "'>&#9711;</td>";
+                    html += "<td id='" + ctx.id("sw-wp99-" + i) + "'>&#9711;</td>";
                     html += "</tr>";
                     if (showReads) {
-                        html += "<tr id='nbs-sweep-r-" + i + "'>";
+                        html += "<tr id='" + ctx.id("sweep-r-" + i) + "'>";
                         html += "<td>Reads</td>";
-                        html += "<td id='nbs-sw-riops-" + i + "'>&#9711;</td>";
-                        html += "<td id='nbs-sw-rp50-"  + i + "'>&#9711;</td>";
-                        html += "<td id='nbs-sw-rp95-"  + i + "'>&#9711;</td>";
-                        html += "<td id='nbs-sw-rp99-"  + i + "'>&#9711;</td>";
+                        html += "<td id='" + ctx.id("sw-riops-" + i) + "'>&#9711;</td>";
+                        html += "<td id='" + ctx.id("sw-rp50-" + i) + "'>&#9711;</td>";
+                        html += "<td id='" + ctx.id("sw-rp95-" + i) + "'>&#9711;</td>";
+                        html += "<td id='" + ctx.id("sw-rp99-" + i) + "'>&#9711;</td>";
                         html += "</tr>";
                     }
                 }
@@ -1366,8 +1594,8 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 tbl.innerHTML = html;
             }
 
-            function nbsTabletRenderMultiTrialSkeleton(sweepValues, trials, showReads) {
-                const tbl = document.getElementById("nbs-run-result-table");
+            function nbsTabletRenderMultiTrialSkeleton(ctx, sweepValues, trials, showReads) {
+                const tbl = ctx.el("result-table");
                 if (!tbl) {
                     return;
                 }
@@ -1383,7 +1611,7 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                     const v = sweepValues[i];
                     const rowSpan = showReads ? 2 * trials : trials;
                     for (let t = 0; t < trials; t++) {
-                        html += "<tr id='nbs-sweep-w-" + i + "-" + t + "'>";
+                        html += "<tr id='" + ctx.id("sweep-w-" + i + "-" + t) + "'>";
                         if (t === 0) {
                             html += "<td rowspan='" + rowSpan +
                                 "' style='vertical-align:middle;font-weight:bold'>" + v + "</td>";
@@ -1391,18 +1619,18 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                         html += "<td rowspan='" + (showReads ? "2" : "1") +
                             "' style='vertical-align:middle'>" + (t + 1) + "</td>";
                         html += "<td>Writes</td>";
-                        html += "<td id='nbs-sw-wiops-" + i + "-" + t + "'>&#9711;</td>";
-                        html += "<td id='nbs-sw-wp50-" + i + "-" + t + "'>&#9711;</td>";
-                        html += "<td id='nbs-sw-wp95-" + i + "-" + t + "'>&#9711;</td>";
-                        html += "<td id='nbs-sw-wp99-" + i + "-" + t + "'>&#9711;</td>";
+                        html += "<td id='" + ctx.id("sw-wiops-" + i + "-" + t) + "'>&#9711;</td>";
+                        html += "<td id='" + ctx.id("sw-wp50-" + i + "-" + t) + "'>&#9711;</td>";
+                        html += "<td id='" + ctx.id("sw-wp95-" + i + "-" + t) + "'>&#9711;</td>";
+                        html += "<td id='" + ctx.id("sw-wp99-" + i + "-" + t) + "'>&#9711;</td>";
                         html += "</tr>";
                         if (showReads) {
-                            html += "<tr id='nbs-sweep-r-" + i + "-" + t + "'>";
+                            html += "<tr id='" + ctx.id("sweep-r-" + i + "-" + t) + "'>";
                             html += "<td>Reads</td>";
-                            html += "<td id='nbs-sw-riops-" + i + "-" + t + "'>&#9711;</td>";
-                            html += "<td id='nbs-sw-rp50-" + i + "-" + t + "'>&#9711;</td>";
-                            html += "<td id='nbs-sw-rp95-" + i + "-" + t + "'>&#9711;</td>";
-                            html += "<td id='nbs-sw-rp99-" + i + "-" + t + "'>&#9711;</td>";
+                            html += "<td id='" + ctx.id("sw-riops-" + i + "-" + t) + "'>&#9711;</td>";
+                            html += "<td id='" + ctx.id("sw-rp50-" + i + "-" + t) + "'>&#9711;</td>";
+                            html += "<td id='" + ctx.id("sw-rp95-" + i + "-" + t) + "'>&#9711;</td>";
+                            html += "<td id='" + ctx.id("sw-rp99-" + i + "-" + t) + "'>&#9711;</td>";
                             html += "</tr>";
                         }
                     }
@@ -1411,8 +1639,8 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 tbl.innerHTML = html;
             }
 
-            function nbsTabletRenderMedianSkeleton(sweepValues, showReads) {
-                const tbl = document.getElementById("nbs-run-median-table");
+            function nbsTabletRenderMedianSkeleton(ctx, sweepValues, showReads) {
+                const tbl = ctx.el("median-table");
                 if (!tbl) {
                     return;
                 }
@@ -1431,25 +1659,25 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 html += "</tr></thead><tbody>";
                 for (let i = 0; i < sweepValues.length; i++) {
                     const v = sweepValues[i];
-                    html += "<tr id='nbs-median-w-" + i + "'>";
+                    html += "<tr id='" + ctx.id("median-w-" + i) + "'>";
                     if (showReads) {
                         html += "<td rowspan='2' style='vertical-align:middle;font-weight:bold'>" + v + "</td>";
                     } else {
                         html += "<td style='font-weight:bold'>" + v + "</td>";
                     }
                     html += "<td>Writes</td>";
-                    html += "<td id='nbs-sm-wiops-" + i + "'>&#9711;</td>";
-                    html += "<td id='nbs-sm-wp50-" + i + "'>&#9711;</td>";
-                    html += "<td id='nbs-sm-wp95-" + i + "'>&#9711;</td>";
-                    html += "<td id='nbs-sm-wp99-" + i + "'>&#9711;</td>";
+                    html += "<td id='" + ctx.id("sm-wiops-" + i) + "'>&#9711;</td>";
+                    html += "<td id='" + ctx.id("sm-wp50-" + i) + "'>&#9711;</td>";
+                    html += "<td id='" + ctx.id("sm-wp95-" + i) + "'>&#9711;</td>";
+                    html += "<td id='" + ctx.id("sm-wp99-" + i) + "'>&#9711;</td>";
                     html += "</tr>";
                     if (showReads) {
-                        html += "<tr id='nbs-median-r-" + i + "'>";
+                        html += "<tr id='" + ctx.id("median-r-" + i) + "'>";
                         html += "<td>Reads</td>";
-                        html += "<td id='nbs-sm-riops-" + i + "'>&#9711;</td>";
-                        html += "<td id='nbs-sm-rp50-" + i + "'>&#9711;</td>";
-                        html += "<td id='nbs-sm-rp95-" + i + "'>&#9711;</td>";
-                        html += "<td id='nbs-sm-rp99-" + i + "'>&#9711;</td>";
+                        html += "<td id='" + ctx.id("sm-riops-" + i) + "'>&#9711;</td>";
+                        html += "<td id='" + ctx.id("sm-rp50-" + i) + "'>&#9711;</td>";
+                        html += "<td id='" + ctx.id("sm-rp95-" + i) + "'>&#9711;</td>";
+                        html += "<td id='" + ctx.id("sm-rp99-" + i) + "'>&#9711;</td>";
                         html += "</tr>";
                     }
                 }
@@ -1457,17 +1685,17 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 tbl.innerHTML = html;
             }
 
-            function nbsTabletRenderDetailSkeleton(sweepValues, trials, showReads) {
+            function nbsTabletRenderDetailSkeleton(ctx, sweepValues, trials, showReads) {
                 if (trials > 1) {
-                    nbsTabletRenderMultiTrialSkeleton(sweepValues, trials, showReads);
+                    nbsTabletRenderMultiTrialSkeleton(ctx, sweepValues, trials, showReads);
                 } else {
-                    nbsTabletRenderTableSkeleton(sweepValues, showReads);
+                    nbsTabletRenderTableSkeleton(ctx, sweepValues, showReads);
                 }
             }
 
-            function nbsTabletFillMetricsCells(prefix, idx, suffix, jr) {
-                function set(id, val) {
-                    const el = document.getElementById(id);
+            function nbsTabletFillMetricsCells(ctx, kind, idx, suffix, jr) {
+                function set(suff, val) {
+                    const el = ctx.el(suff);
                     if (el) {
                         el.textContent = val;
                     }
@@ -1475,56 +1703,56 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 const sfx = suffix !== undefined ? ("-" + suffix) : "";
                 const wIops = jr.write_rps !== undefined ? Math.round(jr.write_rps) : "-";
                 const rIops = jr.read_rps !== undefined ? Math.round(jr.read_rps) : "-";
-                set(prefix + "wiops-" + idx + sfx, wIops);
-                set(prefix + "wp50-" + idx + sfx, nbsTabletFmtUs(jr.write_p50));
-                set(prefix + "wp95-" + idx + sfx, nbsTabletFmtUs(jr.write_p95));
-                set(prefix + "wp99-" + idx + sfx, nbsTabletFmtUs(jr.write_p99));
-                set(prefix + "riops-" + idx + sfx, rIops);
-                set(prefix + "rp50-" + idx + sfx, nbsTabletFmtUs(jr.read_p50));
-                set(prefix + "rp95-" + idx + sfx, nbsTabletFmtUs(jr.read_p95));
-                set(prefix + "rp99-" + idx + sfx, nbsTabletFmtUs(jr.read_p99));
+                set(kind + "-wiops-" + idx + sfx, wIops);
+                set(kind + "-wp50-" + idx + sfx, nbsTabletFmtUs(jr.write_p50));
+                set(kind + "-wp95-" + idx + sfx, nbsTabletFmtUs(jr.write_p95));
+                set(kind + "-wp99-" + idx + sfx, nbsTabletFmtUs(jr.write_p99));
+                set(kind + "-riops-" + idx + sfx, rIops);
+                set(kind + "-rp50-" + idx + sfx, nbsTabletFmtUs(jr.read_p50));
+                set(kind + "-rp95-" + idx + sfx, nbsTabletFmtUs(jr.read_p95));
+                set(kind + "-rp99-" + idx + sfx, nbsTabletFmtUs(jr.read_p99));
             }
 
-            function nbsTabletSetMetricsError(prefix, idx, suffix, msg) {
-                function set(id, val) {
-                    const el = document.getElementById(id);
+            function nbsTabletSetMetricsError(ctx, kind, idx, suffix, msg) {
+                function set(suff, val) {
+                    const el = ctx.el(suff);
                     if (el) {
                         el.textContent = val;
                     }
                 }
                 const sfx = suffix !== undefined ? ("-" + suffix) : "";
-                set(prefix + "wiops-" + idx + sfx, "ERR");
-                set(prefix + "wp50-" + idx + sfx, msg || "ERR");
-                set(prefix + "wp95-" + idx + sfx, "");
-                set(prefix + "wp99-" + idx + sfx, "");
-                set(prefix + "riops-" + idx + sfx, "ERR");
-                set(prefix + "rp50-" + idx + sfx, "");
-                set(prefix + "rp95-" + idx + sfx, "");
-                set(prefix + "rp99-" + idx + sfx, "");
+                set(kind + "-wiops-" + idx + sfx, "ERR");
+                set(kind + "-wp50-" + idx + sfx, msg || "ERR");
+                set(kind + "-wp95-" + idx + sfx, "");
+                set(kind + "-wp99-" + idx + sfx, "");
+                set(kind + "-riops-" + idx + sfx, "ERR");
+                set(kind + "-rp50-" + idx + sfx, "");
+                set(kind + "-rp95-" + idx + sfx, "");
+                set(kind + "-rp99-" + idx + sfx, "");
             }
 
-            function nbsTabletFillTableColumn(idx, jr) {
-                nbsTabletFillMetricsCells("nbs-sw-", idx, undefined, jr);
+            function nbsTabletFillTableColumn(ctx, idx, jr) {
+                nbsTabletFillMetricsCells(ctx, "sw", idx, undefined, jr);
             }
 
-            function nbsTabletFillTrialRows(idx, trialIdx, jr) {
-                nbsTabletFillMetricsCells("nbs-sw-", idx, trialIdx, jr);
+            function nbsTabletFillTrialRows(ctx, idx, trialIdx, jr) {
+                nbsTabletFillMetricsCells(ctx, "sw", idx, trialIdx, jr);
             }
 
-            function nbsTabletFillMedianRow(idx, jr) {
-                nbsTabletFillMetricsCells("nbs-sm-", idx, undefined, jr);
+            function nbsTabletFillMedianRow(ctx, idx, jr) {
+                nbsTabletFillMetricsCells(ctx, "sm", idx, undefined, jr);
             }
 
-            function nbsTabletSetColumnError(idx, msg) {
-                nbsTabletSetMetricsError("nbs-sw-", idx, undefined, msg);
+            function nbsTabletSetColumnError(ctx, idx, msg) {
+                nbsTabletSetMetricsError(ctx, "sw", idx, undefined, msg);
             }
 
-            function nbsTabletSetTrialError(idx, trialIdx, msg) {
-                nbsTabletSetMetricsError("nbs-sw-", idx, trialIdx, msg);
+            function nbsTabletSetTrialError(ctx, idx, trialIdx, msg) {
+                nbsTabletSetMetricsError(ctx, "sw", idx, trialIdx, msg);
             }
 
-            function nbsTabletSetMedianError(idx, msg) {
-                nbsTabletSetMetricsError("nbs-sm-", idx, undefined, msg);
+            function nbsTabletSetMedianError(ctx, idx, msg) {
+                nbsTabletSetMetricsError(ctx, "sm", idx, undefined, msg);
             }
 
             function nbsTabletIopsStats(values) {
@@ -1541,8 +1769,8 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 };
             }
 
-            function nbsTabletRenderIopsPlot(sweepValues, plotData) {
-                const plotDiv = document.getElementById("nbs-run-iops-plot");
+            function nbsTabletRenderIopsPlot(ctx, sweepValues, plotData) {
+                const plotDiv = ctx.el("iops-plot");
                 if (!plotDiv || !sweepValues || sweepValues.length === 0) {
                     return;
                 }
@@ -1693,8 +1921,8 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 return sorted[Math.floor(sorted.length / 2)];
             }
 
-            function nbsTabletRenderLatencyPlot(sweepValues, plotData) {
-                const plotDiv = document.getElementById("nbs-run-latency-plot");
+            function nbsTabletRenderLatencyPlot(ctx, sweepValues, plotData) {
+                const plotDiv = ctx.el("latency-plot");
                 if (!plotDiv || !sweepValues || sweepValues.length === 0) {
                     return;
                 }
@@ -1856,53 +2084,286 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 });
             }
 
-            async function nbsTabletSweep() {
-                const tabletId = nbsTabletTrim(
-                    $("#nbs-tablet-run-tablet-id").val());
-                if (!tabletId) {
-                    nbsTabletStatus("Run error: select a target tablet first");
+            function nbsTabletPalette(i) {
+                const colors = ["#337ab7", "#5cb85c", "#f0ad4e", "#d9534f",
+                    "#9b59b6", "#1abc9c", "#e67e22", "#34495e", "#16a085",
+                    "#c0392b", "#2980b9", "#8e44ad"];
+                return colors[i % colors.length];
+            }
+
+            // perTabletData[tid][i] is the array of per-tablet jr objects (one
+            // per trial) for sweep value i. Renders one median table per tablet
+            // into the multi-tablet card's pertablet-tables container.
+            function nbsTabletRenderPerTabletTables(ctx, sweepValues, tabletOrder, tabletNode, perTabletData, showReads) {
+                const div = ctx.el("pertablet-tables");
+                if (!div) {
                     return;
                 }
-                const trialsParsed = nbsTabletParseTrials();
+                if (!tabletOrder || tabletOrder.length === 0) {
+                    div.style.display = "none";
+                    div.innerHTML = "";
+                    return;
+                }
+                let html = "<h4 style='margin-top:0'>Per-tablet results (median by write IOPS)</h4>";
+                tabletOrder.forEach(function(tid) {
+                    html += "<div style='margin-bottom:14px'>";
+                    html += "<strong>Tablet " + tid + " (node " +
+                        (tabletNode[tid] || 0) + ")</strong>";
+                    html += "<table class='table table-condensed table-bordered' style='margin-top:6px'>";
+                    html += "<thead><tr>";
+                    html += "<th>MaxInFlight</th><th>Direction</th><th>IOPS</th>" +
+                        "<th>p50 us</th><th>p95 us</th><th>p99 us</th>";
+                    html += "</tr></thead><tbody>";
+                    for (let i = 0; i < sweepValues.length; i++) {
+                        const trials = (perTabletData[tid] && perTabletData[tid][i])
+                            ? perTabletData[tid][i] : [];
+                        const m = nbsTabletMedianByWriteIops(trials);
+                        const wIops = (m && m.write_rps != null) ? Math.round(m.write_rps) : "-";
+                        const rIops = (m && m.read_rps != null) ? Math.round(m.read_rps) : "-";
+                        const rowspan = showReads ? "2" : "1";
+                        html += "<tr>";
+                        html += "<td rowspan='" + rowspan +
+                            "' style='vertical-align:middle;font-weight:bold'>" + sweepValues[i] + "</td>";
+                        html += "<td>Writes</td>";
+                        html += "<td>" + wIops + "</td>";
+                        html += "<td>" + nbsTabletFmtUs(m ? m.write_p50 : undefined) + "</td>";
+                        html += "<td>" + nbsTabletFmtUs(m ? m.write_p95 : undefined) + "</td>";
+                        html += "<td>" + nbsTabletFmtUs(m ? m.write_p99 : undefined) + "</td>";
+                        html += "</tr>";
+                        if (showReads) {
+                            html += "<tr>";
+                            html += "<td>Reads</td>";
+                            html += "<td>" + rIops + "</td>";
+                            html += "<td>" + nbsTabletFmtUs(m ? m.read_p50 : undefined) + "</td>";
+                            html += "<td>" + nbsTabletFmtUs(m ? m.read_p95 : undefined) + "</td>";
+                            html += "<td>" + nbsTabletFmtUs(m ? m.read_p99 : undefined) + "</td>";
+                            html += "</tr>";
+                        }
+                    }
+                    html += "</tbody></table></div>";
+                });
+                div.innerHTML = html;
+                div.style.display = "";
+            }
+
+            // One write-IOPS line per tablet (median across trials) over the
+            // sweep; read lines (dashed, same color) added when reads are on.
+            function nbsTabletRenderPerTabletPlot(ctx, sweepValues, tabletOrder, tabletNode, perTabletData, showReads) {
+                const div = ctx.el("pertablet-plot");
+                if (!div) {
+                    return;
+                }
+                if (!tabletOrder || tabletOrder.length === 0 || sweepValues.length === 0) {
+                    div.style.display = "none";
+                    div.innerHTML = "";
+                    return;
+                }
+
+                const n = sweepValues.length;
+                const marginLeft = 60, marginRight = 140, marginTop = 40, marginBottom = 50;
+                const width = 800, height = 320;
+                const plotW = width - marginLeft - marginRight;
+                const plotH = height - marginTop - marginBottom;
+                const baseY = height - marginBottom;
+
+                function xAt(i) {
+                    return n <= 1 ? marginLeft + plotW / 2 : marginLeft + (i / (n - 1)) * plotW;
+                }
+                function yAt(v, yMax) {
+                    return yMax <= 0 ? baseY : baseY - (v / yMax) * plotH;
+                }
+                function medianOf(arr) {
+                    if (!arr || arr.length === 0) {
+                        return null;
+                    }
+                    const s = arr.slice().sort(function(a, b) { return a - b; });
+                    return s[Math.floor(s.length / 2)];
+                }
+
+                // Median write/read IOPS per tablet per sweep value.
+                const series = [];
+                tabletOrder.forEach(function(tid) {
+                    const wr = [], rd = [];
+                    for (let i = 0; i < n; i++) {
+                        const trials = (perTabletData[tid] && perTabletData[tid][i])
+                            ? perTabletData[tid][i] : [];
+                        wr.push(medianOf(trials.map(function(j) { return Math.round(j.write_rps || 0); })));
+                        rd.push(medianOf(trials.map(function(j) { return Math.round(j.read_rps || 0); })));
+                    }
+                    series.push({ tid: tid, writes: wr, reads: rd });
+                });
+
+                let yMax = 1;
+                series.forEach(function(s) {
+                    s.writes.forEach(function(v) { if (v != null) yMax = Math.max(yMax, v); });
+                    if (showReads) {
+                        s.reads.forEach(function(v) { if (v != null) yMax = Math.max(yMax, v); });
+                    }
+                });
+                yMax = Math.ceil(yMax * 1.1);
+
+                let svg = "<h4 style='margin-top:0'>Per-tablet write IOPS vs MaxInFlight</h4>";
+                svg += "<svg viewBox='0 0 " + width + " " + height +
+                    "' width='100%' style='max-width:800px;background:#fff' " +
+                    "xmlns='http://www.w3.org/2000/svg'>";
+                svg += "<line x1='" + marginLeft + "' y1='" + marginTop + "' x2='" + marginLeft +
+                    "' y2='" + baseY + "' stroke='#ccc' stroke-width='1'/>";
+                svg += "<line x1='" + marginLeft + "' y1='" + baseY + "' x2='" + (width - marginRight) +
+                    "' y2='" + baseY + "' stroke='#ccc' stroke-width='1'/>";
+
+                const yTicks = 5;
+                for (let t = 0; t <= yTicks; t++) {
+                    const val = Math.round((yMax * t) / yTicks);
+                    const y = yAt(val, yMax);
+                    svg += "<line x1='" + marginLeft + "' y1='" + y + "' x2='" + (width - marginRight) +
+                        "' y2='" + y + "' stroke='#eee' stroke-width='1'/>";
+                    svg += "<text x='" + (marginLeft - 6) + "' y='" + (y + 4) +
+                        "' text-anchor='end' font-size='10' fill='#666'>" + val + "</text>";
+                }
+                for (let i = 0; i < n; i++) {
+                    svg += "<text x='" + xAt(i) + "' y='" + (baseY + 16) +
+                        "' text-anchor='middle' font-size='11' fill='#333'>" + sweepValues[i] + "</text>";
+                }
+
+                series.forEach(function(s, si) {
+                    const color = nbsTabletPalette(si);
+                    const wpts = [];
+                    for (let i = 0; i < n; i++) {
+                        if (s.writes[i] == null) {
+                            continue;
+                        }
+                        const x = xAt(i), y = yAt(s.writes[i], yMax);
+                        wpts.push(x + "," + y);
+                        svg += "<circle cx='" + x + "' cy='" + y + "' r='3' fill='" + color + "'/>";
+                    }
+                    if (wpts.length >= 2) {
+                        svg += "<polyline points='" + wpts.join(" ") +
+                            "' fill='none' stroke='" + color + "' stroke-width='2'/>";
+                    }
+                    if (showReads) {
+                        const rpts = [];
+                        for (let i = 0; i < n; i++) {
+                            if (s.reads[i] == null) {
+                                continue;
+                            }
+                            const x = xAt(i), y = yAt(s.reads[i], yMax);
+                            rpts.push(x + "," + y);
+                        }
+                        if (rpts.length >= 2) {
+                            svg += "<polyline points='" + rpts.join(" ") +
+                                "' fill='none' stroke='" + color +
+                                "' stroke-width='1.5' stroke-dasharray='4,3'/>";
+                        }
+                    }
+                    const ly = marginTop + si * 16;
+                    svg += "<line x1='" + (width - marginRight + 10) + "' y1='" + ly + "' x2='" +
+                        (width - marginRight + 30) + "' y2='" + ly + "' stroke='" + color + "' stroke-width='2'/>";
+                    svg += "<text x='" + (width - marginRight + 34) + "' y='" + (ly + 4) +
+                        "' font-size='10' fill='#333'>" + s.tid + "</text>";
+                });
+
+                if (showReads) {
+                    svg += "<text x='" + (width - marginRight + 10) + "' y='" +
+                        (marginTop + series.length * 16 + 12) +
+                        "' font-size='10' fill='#666'>solid=write dashed=read</text>";
+                }
+
+                svg += "</svg>";
+                div.innerHTML = svg;
+                div.style.display = "";
+            }
+
+            // Entry point wired to a card's Run button; guards against starting
+            // a second sweep on a card that is already running.
+            function nbsTabletSweepInst(inst) {
+                const ctx = nbsRunCtx(inst);
+                const multi = !!(ctx.reg && ctx.reg.multi);
+                if (!multi && !ctx.tabletId) {
+                    nbsCardStatus(ctx, "Run error: missing tablet id");
+                    return;
+                }
+                if (ctx.reg && ctx.reg.running) {
+                    return;
+                }
+                nbsTabletSweep(ctx);
+            }
+
+            async function nbsTabletSweep(ctx) {
+                const multi = !!(ctx.reg && ctx.reg.multi);
+                let targets = [];
+                let targetsCsv = "";
+                if (multi) {
+                    targets = nbsRunCollectTargets(ctx);
+                    if (targets.length === 0) {
+                        nbsCardStatus(ctx, "Run error: add at least one target tablet");
+                        return;
+                    }
+                    targetsCsv = targets.map(function(t) {
+                        return t.tid + ":" + t.nid;
+                    }).join(",");
+                }
+
+                const trialsParsed = nbsTabletParseTrials(ctx);
                 if (!trialsParsed.ok) {
-                    nbsTabletStatus("Run error: " + trialsParsed.error);
+                    nbsCardStatus(ctx, "Run error: " + trialsParsed.error);
                     return;
                 }
                 const trials = trialsParsed.trials;
 
-                const fromVal = nbsTabletTrim($("#nbs-run-inflight-from").val());
-                const toVal   = nbsTabletTrim($("#nbs-run-inflight-to").val());
-                const single  = nbsTabletTrim($("#nbs-run-max-inflight").val()) || "32";
+                const fromVal = ctx.val("inflight-from");
+                const toVal   = ctx.val("inflight-to");
+                const single  = ctx.val("max-inflight") || "32";
                 const sweepValues = nbsTabletBuildSweepValues(fromVal, toVal, single);
 
-                const durationSec = parseInt(
-                    nbsTabletTrim($("#nbs-run-duration").val())) || 0;
-                const delayBeforeSec = parseInt(
-                    nbsTabletTrim($("#nbs-run-delay-before").val())) || 0;
-                const disableReplication = $("#nbs-run-disable-replication").is(":checked");
+                const durationSec = parseInt(ctx.val("duration")) || 0;
+                const delayBeforeSec = parseInt(ctx.val("delay-before")) || 0;
+                const disableReplication = ctx.checked("disable-replication");
                 const readRatioPct = disableReplication ? 0 : (parseInt(
-                    nbsTabletTrim($("#nbs-run-read-ratio").val()) || "0") || 0);
+                    ctx.val("read-ratio") || "0") || 0);
                 const showReads = readRatioPct > 0;
 
-                nbsTabletRenderDetailSkeleton(sweepValues, trials, showReads);
-                const medianDiv = document.getElementById("nbs-run-median-table");
+                nbsTabletRenderDetailSkeleton(ctx, sweepValues, trials, showReads);
+                const medianDiv = ctx.el("median-table");
                 if (medianDiv) {
                     if (trials > 1) {
                         medianDiv.style.display = "";
-                        nbsTabletRenderMedianSkeleton(sweepValues, showReads);
+                        nbsTabletRenderMedianSkeleton(ctx, sweepValues, showReads);
                     } else {
                         medianDiv.style.display = "none";
                         medianDiv.innerHTML = "";
                     }
                 }
 
-                const plotDiv = document.getElementById("nbs-run-iops-plot");
-                if (plotDiv) {
-                    plotDiv.innerHTML = "";
+                const iopsDiv = ctx.el("iops-plot");
+                if (iopsDiv) {
+                    iopsDiv.innerHTML = "";
                 }
-                const latencyPlotDiv = document.getElementById("nbs-run-latency-plot");
-                if (latencyPlotDiv) {
-                    latencyPlotDiv.innerHTML = "";
+                const latencyDiv = ctx.el("latency-plot");
+                if (latencyDiv) {
+                    latencyDiv.innerHTML = "";
+                }
+
+                // Per-tablet accumulation (multi-tablet card only).
+                const perTabletData = {};
+                const tabletOrder = [];
+                const tabletNode = {};
+                if (multi) {
+                    targets.forEach(function(t) {
+                        tabletOrder.push(t.tid);
+                        tabletNode[t.tid] = t.nid;
+                        perTabletData[t.tid] = [];
+                        for (let i = 0; i < sweepValues.length; i++) {
+                            perTabletData[t.tid].push([]);
+                        }
+                    });
+                }
+
+                if (ctx.reg) {
+                    ctx.reg.running = true;
+                }
+                const runBtn = ctx.el("run-btn");
+                if (runBtn) {
+                    runBtn.disabled = true;
                 }
 
                 let statusMsg = "Starting sweep over " + sweepValues.length + " value(s)";
@@ -1910,83 +2371,110 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                     statusMsg += ", " + trials + " trials each";
                 }
                 statusMsg += "…";
-                nbsTabletStatus(statusMsg);
+                nbsCardStatus(ctx, statusMsg);
 
-                const progressDiv = document.getElementById("nbs-run-progress");
+                const progressDiv = ctx.el("progress");
                 const plotData = [];
 
-                for (let i = 0; i < sweepValues.length; i++) {
-                    const v = sweepValues[i];
-                    const trialResults = [];
-                    plotData.push({ inflight: v, writes: [], reads: [],
-                        writeLat: { p50: [], p95: [], p99: [] },
-                        readLat:  { p50: [], p95: [], p99: [] } });
+                try {
+                    for (let i = 0; i < sweepValues.length; i++) {
+                        const v = sweepValues[i];
+                        const trialResults = [];
+                        plotData.push({ inflight: v, writes: [], reads: [],
+                            writeLat: { p50: [], p95: [], p99: [] },
+                            readLat:  { p50: [], p95: [], p99: [] } });
 
-                    for (let t = 0; t < trials; t++) {
-                        let statusLine = "MaxInFlight=" + v + " (" + (i + 1) + "/" +
-                            sweepValues.length + ")";
+                        for (let t = 0; t < trials; t++) {
+                            let statusLine = "MaxInFlight=" + v + " (" + (i + 1) + "/" +
+                                sweepValues.length + ")";
+                            if (trials > 1) {
+                                statusLine += " trial " + (t + 1) + "/" + trials;
+                            }
+                            statusLine += "...";
+                            nbsCardStatus(ctx, statusLine);
+
+                            if (progressDiv) {
+                                progressDiv.innerHTML =
+                                    "<div class='progress' style='margin-top:8px'>" +
+                                    "<div class='progress-bar progress-bar-striped active' " +
+                                    "role='progressbar' style='width:0%;min-width:2em'>0%</div>" +
+                                    "</div>" +
+                                    "<small class='text-muted'>" + statusLine + "</small>";
+                                progressDiv.style.display = "";
+                            }
+
+                            try {
+                                const runInfo = await nbsTabletRunOnce(
+                                    ctx, v, multi ? targetsCsv : null);
+                                const jr = await nbsTabletPollResult(
+                                    runInfo.uuid, durationSec + delayBeforeSec, progressDiv);
+                                trialResults.push(jr);
+                                if (multi && jr && Array.isArray(jr.tablets)) {
+                                    jr.tablets.forEach(function(entry) {
+                                        const tid = String(entry.tablet_id);
+                                        if (perTabletData[tid] && perTabletData[tid][i]) {
+                                            perTabletData[tid][i].push(entry);
+                                        }
+                                    });
+                                }
+                                plotData[i].writes.push(Math.round(jr.write_rps || 0));
+                                plotData[i].reads.push(Math.round(jr.read_rps || 0));
+                                if (jr.write_p50 != null) {
+                                    plotData[i].writeLat.p50.push(jr.write_p50);
+                                    plotData[i].writeLat.p95.push(jr.write_p95);
+                                    plotData[i].writeLat.p99.push(jr.write_p99);
+                                }
+                                if (jr.read_p50 != null && (jr.read_p50 || jr.read_p95 || jr.read_p99)) {
+                                    plotData[i].readLat.p50.push(jr.read_p50);
+                                    plotData[i].readLat.p95.push(jr.read_p95);
+                                    plotData[i].readLat.p99.push(jr.read_p99);
+                                }
+                                if (trials > 1) {
+                                    nbsTabletFillTrialRows(ctx, i, t, jr);
+                                } else {
+                                    nbsTabletFillTableColumn(ctx, i, jr);
+                                }
+                            } catch (e) {
+                                if (trials > 1) {
+                                    nbsTabletSetTrialError(ctx, i, t, String(e));
+                                } else {
+                                    nbsTabletSetColumnError(ctx, i, String(e));
+                                }
+                            }
+                            if (progressDiv) {
+                                progressDiv.style.display = "none";
+                            }
+                        }
+
                         if (trials > 1) {
-                            statusLine += " trial " + (t + 1) + "/" + trials;
-                        }
-                        statusLine += "...";
-                        nbsTabletStatus(statusLine);
-
-                        if (progressDiv) {
-                            progressDiv.innerHTML =
-                                "<div class='progress' style='margin-top:8px'>" +
-                                "<div class='progress-bar progress-bar-striped active' " +
-                                "role='progressbar' style='width:0%;min-width:2em'>0%</div>" +
-                                "</div>" +
-                                "<small class='text-muted'>" + statusLine + "</small>";
-                            progressDiv.style.display = "";
-                        }
-
-                        try {
-                            const runInfo = await nbsTabletRunOnce(tabletId, v);
-                            const jr = await nbsTabletPollResult(
-                                runInfo.uuid, durationSec + delayBeforeSec, progressDiv);
-                            trialResults.push(jr);
-                            plotData[i].writes.push(Math.round(jr.write_rps || 0));
-                            plotData[i].reads.push(Math.round(jr.read_rps || 0));
-                            if (jr.write_p50 != null) {
-                                plotData[i].writeLat.p50.push(jr.write_p50);
-                                plotData[i].writeLat.p95.push(jr.write_p95);
-                                plotData[i].writeLat.p99.push(jr.write_p99);
-                            }
-                            if (jr.read_p50 != null && (jr.read_p50 || jr.read_p95 || jr.read_p99)) {
-                                plotData[i].readLat.p50.push(jr.read_p50);
-                                plotData[i].readLat.p95.push(jr.read_p95);
-                                plotData[i].readLat.p99.push(jr.read_p99);
-                            }
-                            if (trials > 1) {
-                                nbsTabletFillTrialRows(i, t, jr);
+                            const medianJr = nbsTabletMedianByWriteIops(trialResults);
+                            if (medianJr) {
+                                nbsTabletFillMedianRow(ctx, i, medianJr);
                             } else {
-                                nbsTabletFillTableColumn(i, jr);
+                                nbsTabletSetMedianError(ctx, i, "ERR");
                             }
-                        } catch (e) {
-                            if (trials > 1) {
-                                nbsTabletSetTrialError(i, t, String(e));
-                            } else {
-                                nbsTabletSetColumnError(i, String(e));
-                            }
-                        }
-                        if (progressDiv) {
-                            progressDiv.style.display = "none";
                         }
                     }
-
-                    if (trials > 1) {
-                        const medianJr = nbsTabletMedianByWriteIops(trialResults);
-                        if (medianJr) {
-                            nbsTabletFillMedianRow(i, medianJr);
-                        } else {
-                            nbsTabletSetMedianError(i, "ERR");
-                        }
+                    if (multi) {
+                        nbsTabletRenderPerTabletTables(
+                            ctx, sweepValues, tabletOrder, tabletNode, perTabletData, showReads);
+                        nbsTabletRenderPerTabletPlot(
+                            ctx, sweepValues, tabletOrder, tabletNode, perTabletData, showReads);
+                    }
+                    nbsTabletRenderIopsPlot(ctx, sweepValues, plotData);
+                    nbsTabletRenderLatencyPlot(ctx, sweepValues, plotData);
+                    nbsCardStatus(ctx, "Sweep complete.");
+                } finally {
+                    if (ctx.reg) {
+                        ctx.reg.running = false;
+                    }
+                    if (runBtn) {
+                        runBtn.disabled = false;
+                    }
+                    if (progressDiv) {
+                        progressDiv.style.display = "none";
                     }
                 }
-                nbsTabletRenderIopsPlot(sweepValues, plotData);
-                nbsTabletRenderLatencyPlot(sweepValues, plotData);
-                nbsTabletStatus("Sweep complete.");
             }
         </script>
     )___";
@@ -2060,129 +2548,16 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                 </div>
             )___";
             str << nbsTabletListHtml;
-            // ── Run workload panel ──────────────────────────────────────────
+            // ── Run workload cards ──────────────────────────────────────────
+            // One independent run card is created per tablet (via the per-row
+            // "Run" button); each card has its own form, progress and results
+            // and can run a sweep simultaneously with the others.
             str << R"___(
-                <div id='nbs-run-panel' class='row' style='margin-top:16px;display:none'>
-                    <div class='col-md-12'>
-                        <div class='panel panel-primary'>
-                            <div class='panel-heading'><strong>Run workload</strong></div>
-                            <div class='panel-body'>
-                                <input type='hidden' id='nbs-tablet-run-tablet-id'>
-                                <div id='nbs-run-target-label' class='alert alert-info' style='margin-bottom:8px'></div>
-                                <div class='row'>
-                                    <div class='col-sm-4'>
-                                        <div class='form-group'>
-                                            <label for='nbs-run-tag'>Tag (0 = auto-assign):</label>
-                                            <input id='nbs-run-tag' class='form-control' type='number' min='0' step='1' value='0' />
-                                        </div>
-                                    </div>
-                                    <div class='col-sm-4'>
-                                        <div class='form-group'>
-                                            <label for='nbs-run-duration'>DurationSeconds:</label>
-                                            <input id='nbs-run-duration' class='form-control' type='number' min='0' step='1' value='60' />
-                                        </div>
-                                    </div>
-                                    <div class='col-sm-4'>
-                                        <div class='form-group'>
-                                            <label for='nbs-run-delay-before'>Measure after (warmup s):</label>
-                                            <input id='nbs-run-delay-before' class='form-control' type='number' min='0' step='1' value='15' />
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class='row'>
-                                    <div class='col-sm-4'>
-                                        <div class='form-group'>
-                                            <label for='nbs-run-trials'>Trials per InFlight:</label>
-                                            <input id='nbs-run-trials' class='form-control' type='number' min='1' step='2' value='1' />
-                                            <p class='help-block'>1 = single run. Values &gt; 1 must be odd; each InFlight is run that many times.</p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class='row'>
-                                    <div class='col-sm-4'>
-                                        <div class='form-group'>
-                                            <label for='nbs-run-max-inflight'>MaxInFlight (single run):</label>
-                                            <input id='nbs-run-max-inflight' class='form-control' type='number' min='1' step='1' value='32' />
-                                        </div>
-                                    </div>
-                                    <div class='col-sm-4'>
-                                        <div class='form-group'>
-                                            <label for='nbs-run-inflight-from'>InFlightFrom (sweep start):</label>
-                                            <input id='nbs-run-inflight-from' class='form-control' type='number' min='1' step='1' placeholder='e.g. 1' />
-                                        </div>
-                                    </div>
-                                    <div class='col-sm-4'>
-                                        <div class='form-group'>
-                                            <label for='nbs-run-inflight-to'>InFlightTo (sweep end):</label>
-                                            <input id='nbs-run-inflight-to' class='form-control' type='number' min='1' step='1' placeholder='e.g. 128' />
-                                            <p class='help-block'>If both From/To set, sweeps MaxInFlight x2 per step (From should be a power of 2; otherwise the last value may be below To).</p>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class='row'>
-                                    <div class='col-sm-4'>
-                                        <div class='form-group'>
-                                            <label for='nbs-run-read-ratio'>ReadRatioPct (0-100):</label>
-                                            <input id='nbs-run-read-ratio' class='form-control' type='number' min='0' max='100' step='1' value='0' />
-                                        </div>
-                                    </div>
-                                    <div class='col-sm-4'>
-                                        <div class='form-group'>
-                                            <label for='nbs-run-size-kib'>ReadWriteSizeKiB:</label>
-                                            <input id='nbs-run-size-kib' class='form-control' type='number' min='4' step='4' value='4' />
-                                        </div>
-                                    </div>
-                                    <div class='col-sm-4'>
-                                        <div class='form-group'>
-                                            <label for='nbs-run-num-dbg'>NumDirectBlockGroupsToUse (0=all):</label>
-                                            <input id='nbs-run-num-dbg' class='form-control' type='number' min='0' step='1' value='0' />
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class='row'>
-                                    <div class='col-sm-4'>
-                                        <div class='form-group'>
-                                            <label for='nbs-run-max-inflight-lsns'>MaxInflightLsns:</label>
-                                            <div class='input-group'>
-                                                <span class='input-group-btn'>
-                                                    <button type='button' class='btn btn-default' onclick='nbsRunScaleLsns(0.5)' title='Halve'>&divide;2</button>
-                                                </span>
-                                                <input id='nbs-run-max-inflight-lsns' class='form-control' type='number' min='1' step='1' value='4096' />
-                                                <span class='input-group-btn'>
-                                                    <button type='button' class='btn btn-default' onclick='nbsRunScaleLsns(2)' title='Double'>&times;2</button>
-                                                </span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class='form-group'>
-                                    <div class='checkbox'>
-                                        <label>
-                                            <input id='nbs-run-sequential' type='checkbox' />
-                                            Sequential (round-robin address space instead of random)
-                                        </label>
-                                    </div>
-                                </div>
-                                <div class='form-group'>
-                                    <div class='checkbox'>
-                                        <label>
-                                            <input id='nbs-run-disable-replication' type='checkbox' onchange='nbsRunDisableReplicationChanged(this)' />
-                                            Disable replication (single-PB write, skip DDisk flush)
-                                        </label>
-                                    </div>
-                                </div>
-                                <div class='form-group'>
-                                    <button type='button' onClick='nbsTabletSweep()' class='btn btn-primary'>Run</button>
-                                </div>
-                                <div id='nbs-run-progress' style='display:none'></div>
-                                <div id='nbs-run-result-table'></div>
-                                <div id='nbs-run-median-table' style='margin-top:16px;display:none'></div>
-                                <div id='nbs-run-iops-plot' style='margin-top:16px'></div>
-                                <div id='nbs-run-latency-plot' style='margin-top:16px'></div>
-                            </div>
-                        </div>
-                    </div>
+                <div style='margin-top:16px'>
+                    <button type='button' class='btn btn-info' onclick='nbsTabletOpenMulti()'>Run multi-tablet load (combined)</button>
+                    <span class='text-muted' style='margin-left:8px'>Loads several tablets at once and shows combined + per-tablet results. Use the per-row Run for an isolated single-tablet card.</span>
                 </div>
+                <div id='nbs-run-cards'></div>
             )___";
             DIV_CLASS("form-group") {
                 str << "<p id='nbs-tablet-status'></p>";

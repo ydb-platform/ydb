@@ -22,7 +22,7 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
         TEnvironmentSetup Env;
         TActorId Edge;
 
-        TFixture()
+        explicit TFixture(ui32 numDDiskGroups = 4)
             : Env({
                 .NodeCount = 8,
                 .Erasure = TBlobStorageGroupType::Erasure4Plus2Block,
@@ -40,7 +40,7 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
             Env.CreateBoxAndPool();
             Env.Sim(TDuration::Seconds(30));
 
-            DefineDDiskPool(/*numDDiskGroups=*/4);
+            DefineDDiskPool(numDDiskGroups);
 
             Edge = Env.Runtime->AllocateEdgeActor(Env.Settings.ControllerNodeId, __FILE__, __LINE__);
         }
@@ -210,6 +210,60 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
                 if (resp->Get()->Report) {
                     info.DurationMs = resp->Get()->Report->Duration.MilliSeconds();
                 }
+            }
+            return info;
+        }
+
+        struct TMultiRunResultInfo {
+            bool FinishedReceived = false;
+            TString ErrorReason;
+            NJson::TJsonValue JsonResult;
+        };
+
+        // Registers the multi-tablet coordinator (TNbsDbgLikeMultiLoadActor via
+        // CreateNbsDbgLikeLoadActor with Targets) against several tablets. Each
+        // target uses NodeId=0 so the coordinator runs the per-tablet child
+        // proxy locally (no load-service dependency in the test env). Waits for
+        // the single combined TEvLoadTestFinished and returns it.
+        TMultiRunResultInfo RunMultiViaLoadActor(
+            const TVector<ui64>& tabletIds, ui64 tag = 100,
+            ui64 stopOnWritesDoneCount = 50)
+        {
+            TEvLoadTestRequest::TNbsDbgLikeLoad cmd;
+            cmd.SetTag(tag);
+            auto& wc = *cmd.MutableWorkloadConfig();
+            wc.SetTag(tag);
+            wc.SetDelayBeforeMeasurementsSeconds(0);
+            wc.SetMaxInFlight(1);
+            wc.SetReadWriteSizeKiB(4);
+            // Keep the per-tablet work tiny: each child runs several real load
+            // workers against a real tablet, and the test actor system has heavy
+            // per-event overhead. A small stop count makes every child finish
+            // quickly so the coordinator can merge and report.
+            wc.SetStopOnWritesDoneCount(stopOnWritesDoneCount);
+            wc.SetDurationSeconds(1);
+            auto& tcfg = *wc.MutableTabletConfig();
+            tcfg.SetMaxInflightLsns(64);
+            tcfg.SetPBufferReplyTimeoutMicroseconds(500000);
+
+            for (ui64 tid : tabletIds) {
+                auto* t = cmd.AddTargets();
+                t->SetTabletId(tid);
+                t->SetNodeId(0); // 0 => coordinator runs the child locally
+            }
+
+            auto counters = MakeIntrusive<::NMonitoring::TDynamicCounters>();
+            Env.Runtime->Register(
+                NNbsDbgLike::CreateNbsDbgLikeLoadActor(cmd, Edge, counters, tag),
+                Edge.NodeId());
+
+            TMultiRunResultInfo info;
+            auto resp = Env.WaitForEdgeActorEvent<TEvLoad::TEvLoadTestFinished>(
+                Edge, /*termOnCapture=*/false, Deadline(TDuration::Seconds(180)));
+            if (resp) {
+                info.FinishedReceived = true;
+                info.ErrorReason = resp->Get()->ErrorReason;
+                info.JsonResult = resp->Get()->JsonResult;
             }
             return info;
         }
@@ -663,6 +717,67 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
 
         UNIT_ASSERT_VALUES_EQUAL(f.TabletDelete(pipe), NBSLT_OK);
         f.ClosePipe(pipe);
+    }
+
+    // Multi-tablet coordinator: create K tablets, run one combined load via the
+    // coordinator (TNbsDbgLikeMultiLoadActor) which fans out a child proxy per
+    // tablet (locally, NodeId=0), then verify the single combined finish event
+    // carries both the aggregated result and a per-tablet breakdown of size K.
+    Y_UNIT_TEST(MultiTablet) {
+        constexpr ui32 kTablets = 2;
+        // Give each tablet its own DDisk groups so the concurrent per-tablet
+        // load runs do not contend on shared DDisk/PB resources.
+        TFixture f(/*numDDiskGroups=*/4 * kTablets);
+
+        TVector<ui64> tabletIds;
+        TVector<TActorId> pipes;
+        for (ui32 i = 0; i < kTablets; ++i) {
+            const ui64 tabletId = f.CreateNbsLoadTabletViaHive(/*ownerIdx=*/1 + i);
+            TActorId pipe = f.OpenTabletPipe(tabletId);
+            // Each tablet must get a distinct storage identity, otherwise their
+            // DBGs/persistent buffers collide on the same DDisk slots and the
+            // concurrent writes are rejected as duplicate records.
+            UNIT_ASSERT_VALUES_EQUAL(
+                f.TabletCreate(pipe, /*numDirectBlockGroups=*/1, /*bscTabletId=*/1 + i),
+                NBSLT_OK);
+            tabletIds.push_back(tabletId);
+            pipes.push_back(pipe);
+        }
+
+        // Allow DDisk/PB init + peer-connect handshakes for every tablet's DBG.
+        f.Env.Sim(TDuration::Seconds(10));
+
+        auto fin = f.RunMultiViaLoadActor(tabletIds);
+        UNIT_ASSERT(fin.FinishedReceived);
+        UNIT_ASSERT_C(fin.ErrorReason.empty(), fin.ErrorReason);
+
+        // Combined per-tablet breakdown: one entry per target tablet.
+        UNIT_ASSERT_C(fin.JsonResult.Has("tablets"),
+            "combined result is missing the per-tablet 'tablets' array");
+        const auto& tablets = fin.JsonResult["tablets"];
+        UNIT_ASSERT_C(tablets.IsArray(), "'tablets' is not a JSON array");
+        UNIT_ASSERT_VALUES_EQUAL(tablets.GetArray().size(), kTablets);
+
+        // Every entry references one of our tablets, has no error, and exposes
+        // the per-tablet metric fields the front-end renders.
+        THashSet<ui64> seen;
+        for (const auto& entry : tablets.GetArray()) {
+            UNIT_ASSERT_C(entry.Has("tablet_id"), "per-tablet entry missing tablet_id");
+            const ui64 tid = entry["tablet_id"].GetUInteger();
+            UNIT_ASSERT_C(Find(tabletIds, tid) != tabletIds.end(),
+                "unexpected tablet_id in breakdown: " << tid);
+            UNIT_ASSERT_C(seen.insert(tid).second,
+                "duplicate tablet_id in breakdown: " << tid);
+            UNIT_ASSERT_C(!entry.Has("error"),
+                "per-tablet run failed for tablet " << tid << ": "
+                    << entry["error"].GetStringRobust());
+            UNIT_ASSERT_C(entry.Has("write_rps"), "per-tablet entry missing write_rps");
+        }
+
+        for (ui32 i = 0; i < kTablets; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(f.TabletDelete(pipes[i]), NBSLT_OK);
+            f.ClosePipe(pipes[i]);
+        }
     }
 
 } // Y_UNIT_TEST_SUITE

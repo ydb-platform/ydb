@@ -118,8 +118,8 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
     bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
         const auto& request = Request->Get()->Record;
 
-        LOG_D("TExport::TTxCreate: DoExecute");
-        LOG_T("Message:\n" << request.ShortDebugString());
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxCreate: DoExecute");
+        LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "Message:\n" << request.ShortDebugString());
 
         auto response = MakeHolder<TEvExport::TEvCreateExportResponse>(request.GetTxId());
 
@@ -262,7 +262,7 @@ struct TSchemeShard::TExport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
     }
 
     void DoComplete(const TActorContext& ctx) override {
-        LOG_D("TExport::TTxCreate: DoComplete");
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxCreate: DoComplete");
 
         if (Progress) {
             const ui64 id = Request->Get()->Record.GetTxId();
@@ -276,10 +276,10 @@ private:
         const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
         const TString& errorMessage = TString()
     ) {
-        LOG_D("TExport::TTxCreate: Reply"
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxCreate: Reply"
             << ": status# " << status
             << ", error# " << errorMessage);
-        LOG_T("Message:\n" << response->Record.ShortDebugString());
+        LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "Message:\n" << response->Record.ShortDebugString());
 
         auto& exprt = *response->Record.MutableResponse()->MutableEntry();
         exprt.SetStatus(status);
@@ -416,7 +416,7 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     }
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_D("TExport::TTxProgress: DoExecute");
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: DoExecute");
 
         if (AllocateResult) {
             OnAllocateResult();
@@ -436,12 +436,12 @@ struct TSchemeShard::TExport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     }
 
     void DoComplete(const TActorContext&) override {
-        LOG_D("TExport::TTxProgress: DoComplete");
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: DoComplete");
     }
 
 private:
     void MkDir(const TExportInfo& exportInfo, TTxId txId) {
-        LOG_I("TExport::TTxProgress: MkDir propose"
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: MkDir propose"
             << ": info# " << exportInfo.ToString()
             << ", txId# " << txId);
 
@@ -450,7 +450,7 @@ private:
     }
 
     void CopyTables(const TExportInfo& exportInfo, TTxId txId) {
-        LOG_I("TExport::TTxProgress: CopyTables propose"
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: CopyTables propose"
             << ": info# " << exportInfo.ToString()
             << ", txId# " << txId);
 
@@ -464,7 +464,7 @@ private:
 
         item.SubState = ESubState::Proposed;
 
-        LOG_I("TExport::TTxProgress: Backup propose"
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: Backup propose"
             << ": info# " << exportInfo.ToString()
             << ", item# " << item.ToString(itemIdx)
             << ", txId# " << txId
@@ -544,7 +544,7 @@ private:
 
         item.SubState = ESubState::Proposed;
 
-        LOG_I("TExport::TTxProgress: UploadScheme"
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: UploadScheme"
             << ": info# " << exportInfo.ToString()
             << ", item# " << item.ToString(itemIdx)
         );
@@ -669,7 +669,7 @@ private:
 
         exportInfo.State = EState::Cancellation;
 
-        LOG_I("TExport::TTxProgress: cancel backup's tx"
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: cancel backup's tx"
             << ": info# " << exportInfo.ToString()
             << ", item# " << item.ToString(itemIdx));
 
@@ -681,7 +681,7 @@ private:
         Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
         const auto& item = exportInfo.Items.at(itemIdx);
 
-        LOG_I("TExport::TTxProgress: Drop propose"
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: Drop propose"
             << ": info# " << exportInfo.ToString()
             << ", item# " << item.ToString(itemIdx)
             << ", txId# " << txId);
@@ -691,7 +691,7 @@ private:
     }
 
     void DropDir(const TExportInfo& exportInfo, TTxId txId) {
-        LOG_I("TExport::TTxProgress: Drop propose"
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: Drop propose"
             << ": info# " << exportInfo.ToString()
             << ", txId# " << txId);
 
@@ -700,7 +700,7 @@ private:
     }
 
     void AllocateTxId(const TExportInfo& exportInfo) {
-        LOG_I("TExport::TTxProgress: Allocate txId"
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: Allocate txId"
             << ": info# " << exportInfo.ToString());
 
         Y_ABORT_UNLESS(exportInfo.WaitTxId == InvalidTxId);
@@ -713,7 +713,7 @@ private:
 
         item.SubState = ESubState::AllocateTxId;
 
-        LOG_I("TExport::TTxProgress: Allocate txId"
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: Allocate txId"
             << ": info# " << exportInfo.ToString()
             << ", item# " << item.ToString(itemIdx));
 
@@ -738,7 +738,7 @@ private:
     }
 
     void SubscribeTx(const TExportInfo& exportInfo) {
-        LOG_I("TExport::TTxProgress: Wait for completion"
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: Wait for completion"
             << ": info# " << exportInfo.ToString());
 
         Y_ABORT_UNLESS(exportInfo.WaitTxId != InvalidTxId);
@@ -751,7 +751,7 @@ private:
 
         item.SubState = ESubState::Subscribed;
 
-        LOG_I("TExport::TTxProgress: Wait for completion"
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: Wait for completion"
             << ": info# " << exportInfo.ToString()
             << ", item# " << item.ToString(itemIdx));
 
@@ -830,7 +830,7 @@ private:
         Y_ABORT_UNLESS(itemIdx < exportInfo.Items.size());
         const auto& item = exportInfo.Items.at(itemIdx);
 
-        LOG_N("TExport::TTxProgress: " << marker << ", cancelling"
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: " << marker << ", cancelling"
             << ", info# " << exportInfo.ToString()
             << ", item# " << item.ToString(itemIdx));
 
@@ -920,7 +920,7 @@ private:
         Y_ABORT_UNLESS(Self->Exports.contains(Id));
         TExportInfo::TPtr exportInfo = Self->Exports.at(Id);
 
-        LOG_D("TExport::TTxProgress: Resume"
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: Resume"
             << ": id# " << Id);
 
         NIceDb::TNiceDb db(txc.DB);
@@ -1041,12 +1041,12 @@ private:
         const auto txId = TTxId(AllocateResult->Get()->TxIds.front());
         const ui64 id = AllocateResult->Cookie;
 
-        LOG_D("TExport::TTxProgress: OnAllocateResult"
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: OnAllocateResult"
             << ": txId# " << txId
             << ", id# " << id);
 
         if (!Self->Exports.contains(id)) {
-            LOG_E("TExport::TTxProgress: OnAllocateResult received unknown id"
+            LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: OnAllocateResult received unknown id"
                 << ": id# " << id);
             return;
         }
@@ -1071,7 +1071,7 @@ private:
             if (IsPathTypeTransferrable(exportInfo->Items.at(itemIdx))) {
                 TransferData(*exportInfo, itemIdx, txId);
             } else {
-                LOG_W("TExport::TTxProgress: OnAllocateResult allocated a needless txId for an item transferring"
+                LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: OnAllocateResult allocated a needless txId for an item transferring"
                     << ": id# " << id
                     << ", itemIdx# " << itemIdx
                     << ", type# " << exportInfo->Items.at(itemIdx).SourcePathType
@@ -1102,14 +1102,14 @@ private:
         Y_ABORT_UNLESS(ModifyResult);
         const auto& record = ModifyResult->Get()->Record;
 
-        LOG_D("TExport::TTxProgress: OnModifyResult"
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: OnModifyResult"
             << ": txId# " << record.GetTxId()
             << ", status# " << record.GetStatus());
-        LOG_T("Message:\n" << record.ShortDebugString());
+        LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "Message:\n" << record.ShortDebugString());
 
         auto txId = TTxId(record.GetTxId());
         if (!Self->TxIdToExport.contains(txId)) {
-            LOG_E("TExport::TTxProgress: OnModifyResult received unknown txId"
+            LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: OnModifyResult received unknown txId"
                 << ": txId# " << txId);
             return;
         }
@@ -1118,7 +1118,7 @@ private:
         ui32 itemIdx;
         std::tie(id, itemIdx) = Self->TxIdToExport.at(txId);
         if (!Self->Exports.contains(id)) {
-            LOG_E("TExport::TTxProgress: OnModifyResult received unknown id"
+            LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: OnModifyResult received unknown id"
                 << ": id# " << id);
             return;
         }
@@ -1291,7 +1291,7 @@ private:
             return; // no need to wait notification
         }
 
-        LOG_I("TExport::TTxProgress: Wait for completion"
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: Wait for completion"
             << ": info# " << exportInfo->ToString()
             << ", itemIdx# " << itemIdx
             << ", txId# " << txId);
@@ -1302,7 +1302,7 @@ private:
         Y_ABORT_UNLESS(SchemeUploadResult);
         const auto& result = *SchemeUploadResult.Get()->Get();
 
-        LOG_D("TExport::TTxProgress: OnSchemeUploadResult"
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: OnSchemeUploadResult"
             << ": id# " << result.ExportId
             << ", itemIdx# " << result.ItemIdx
             << ", success# " << result.Success
@@ -1312,7 +1312,7 @@ private:
         const auto exportId = result.ExportId;
         auto exportInfo = Self->Exports.Value(exportId, nullptr);
         if (!exportInfo) {
-            LOG_E("TExport::TTxProgress: OnSchemeUploadResult received unknown export id"
+            LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: OnSchemeUploadResult received unknown export id"
                 << ": id# " << exportId
             );
             return;
@@ -1320,7 +1320,7 @@ private:
 
         ui32 itemIdx = result.ItemIdx;
         if (itemIdx >= exportInfo->Items.size()) {
-            LOG_E("TExport::TTxProgress: OnSchemeUploadResult item index out of range"
+            LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: OnSchemeUploadResult item index out of range"
                 << ": id# " << exportId
                 << ", item index# " << itemIdx
                 << ", number of items# " << exportInfo->Items.size()
@@ -1377,7 +1377,7 @@ private:
         Y_ABORT_UNLESS(UploadMetadataResult);
         const auto& result = *UploadMetadataResult.Get()->Get();
 
-        LOG_D("TExport::TTxProgress: OnUploadMetadataResult"
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: OnUploadMetadataResult"
             << ": id# " << result.ExportId
             << ", success# " << result.Success
             << ", error# " << result.Error
@@ -1386,7 +1386,7 @@ private:
         const auto exportId = result.ExportId;
         auto exportInfo = Self->Exports.Value(exportId, nullptr);
         if (!exportInfo) {
-            LOG_E("TExport::TTxProgress: OnUploadMetadataResult received unknown export id"
+            LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: OnUploadMetadataResult received unknown export id"
                 << ": id# " << exportId
             );
             return;
@@ -1395,7 +1395,7 @@ private:
         Self->RunningExportSchemeUploaders.erase(std::exchange(exportInfo->ExportMetadataUploader, {}));
 
         if (!exportInfo->IsInProgress()) {
-            LOG_D("TExport::TTxProgress: IsInProgress"
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: IsInProgress"
                 << ": id# " << result.ExportId
                 << ", success# " << result.Success
                 << ", error# " << result.Error);
@@ -1436,12 +1436,12 @@ private:
 
     void OnNotifyResult(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(CompletedTxId);
-        LOG_D("TExport::TTxProgress: OnNotifyResult"
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: OnNotifyResult"
             << ": txId# " << CompletedTxId);
 
         const auto txId = CompletedTxId;
         if (!Self->TxIdToExport.contains(txId) && !Self->TxIdToDependentExport.contains(txId)) {
-            LOG_E("TExport::TTxProgress: OnNotifyResult received unknown txId"
+            LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: OnNotifyResult received unknown txId"
                 << ": txId# " << txId);
             return;
         }
@@ -1465,13 +1465,13 @@ private:
     }
 
     void OnNotifyResult(TTxId txId, ui64 id, ui32 itemIdx, TTransactionContext& txc, const TActorContext& ctx) {
-        LOG_D("TExport::TTxProgress: OnNotifyResult"
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: OnNotifyResult"
             << ": txId# " << txId
             << ", id# " << id
             << ", itemIdx# " << itemIdx);
 
         if (!Self->Exports.contains(id)) {
-            LOG_E("TExport::TTxProgress: OnNotifyResult received unknown id"
+            LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxProgress: OnNotifyResult received unknown id"
                 << ": id# " << id);
             return;
         }

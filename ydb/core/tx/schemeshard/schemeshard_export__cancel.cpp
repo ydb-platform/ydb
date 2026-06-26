@@ -59,7 +59,7 @@ struct TSchemeShard::TExport::TTxCancel: public TSchemeShard::TXxport::TTxBase {
             return true;
         }
 
-        LOG_D("TExport::TTxCancel, cancelling manually"
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxCancel, cancelling manually"
             << ", info: " << exportInfo->ToString()
         );
 

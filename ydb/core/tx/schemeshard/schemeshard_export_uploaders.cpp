@@ -122,7 +122,7 @@ protected:
         const auto& result = ev->Get()->Result;
         TFileUpload& upload = Files.front();
 
-        LOG_D("Put file response " << upload.Path
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "Put file response " << upload.Path
             << ", self: " << this->SelfId()
             << ", result: " << result
         );
@@ -224,7 +224,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
     void HandleSchemeDescription(TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
         const auto& describeResult = ev->Get()->GetRecord();
 
-        LOG_D("HandleSchemeDescription"
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "HandleSchemeDescription"
             << ", self: " << this->SelfId()
             << ", status: " << describeResult.GetStatus()
         );
@@ -303,7 +303,7 @@ class TSchemeUploader: public TExportFilesUploader<TSchemeUploader<TSettings>, T
     }
 
     void Finish(bool success = true, const TString& error = TString()) {
-        LOG_I("Finish"
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "Finish"
             << ", self: " << this->SelfId()
             << ", success: " << success
             << ", error: " << error
@@ -478,7 +478,7 @@ private:
     }
 
     void OnFilesUploaded(bool success, const TString& error) override {
-        LOG_I("Finish uploading export metadata"
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "Finish uploading export metadata"
             << ", self: " << this->SelfId()
             << ", success: " << success
             << ", error: " << error

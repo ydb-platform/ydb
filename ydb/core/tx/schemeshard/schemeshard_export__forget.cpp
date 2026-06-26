@@ -69,7 +69,7 @@ struct TSchemeShard::TExport::TTxForget: public TSchemeShard::TXxport::TTxBase {
 
             Self->PersistRemoveExport(db, *exportInfo);
         } else {
-            LOG_D("TExport::TTxForget, dropping export tables"
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::EXPORT, "TExport::TTxForget, dropping export tables"
                 << ", info: " << exportInfo->ToString()
             );
 

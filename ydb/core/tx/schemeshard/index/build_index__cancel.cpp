@@ -15,7 +15,7 @@ public:
 
     bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
         const auto& record = Request->Get()->Record;
-        LOG_N("DoExecute " << record.ShortDebugString());
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "DoExecute " << record.ShortDebugString());
 
         Response = MakeHolder<TEvIndexBuilder::TEvCancelResponse>(record.GetTxId());
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);

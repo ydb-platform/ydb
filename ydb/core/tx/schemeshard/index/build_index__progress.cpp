@@ -126,12 +126,12 @@ private:
             hFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
             cFunc(TEvents::TSystem::Wakeup, HandleWakeup);
             default:
-                LOG_E("StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
+                LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "StateWork unexpected event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
         }
     }
 
     void HandleWakeup() {
-        LOG_D("Retry upload " << Debug());
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "Retry upload " << Debug());
 
         if (UploadRows) {
             Upload(true);
@@ -139,7 +139,7 @@ private:
     }
 
     void Handle(TEvTxUserProxy::TEvUploadRowsResponse::TPtr& ev) {
-        LOG_D("Handle TEvUploadRowsResponse "
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "Handle TEvUploadRowsResponse "
               << Debug()
               << " Uploader: " << Uploader.ToString()
               << " ev->Sender: " << ev->Sender.ToString());
@@ -157,7 +157,7 @@ private:
         UploadStatus.Issues = std::move(ev->Get()->Issues);
 
         if (UploadStatus.IsRetriable() && RetryCount < ScanSettings.GetMaxBatchRetries()) {
-            LOG_N("Got retriable error, " << Debug() << " RetryCount: " << RetryCount);
+            LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "Got retriable error, " << Debug() << " RetryCount: " << RetryCount);
 
             this->Schedule(NDataShard::GetRetryWakeupTimeoutBackoff(RetryCount), new TEvents::TEvWakeup());
             return;
@@ -396,13 +396,13 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
 
     auto& policy = *resetPartitionsSettings();
     static constexpr std::string_view LogPrefix = "Create build table boundaries for ";
-    LOG_D(buildInfo.Id << " table " << suffix
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << buildInfo.Id << " table " << suffix
         << ", count: " << count << ", parts: " << parts << ", step: " << step
         << ", " << buildInfo.DebugString());
     if (parts > 1) {
         const auto from = buildInfo.KMeans.ChildBegin;
         for (auto i = from + step, e = from + count; i < e; i += step) {
-            LOG_D(buildInfo.Id << " table " << suffix << " value: " << i);
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << buildInfo.Id << " table " << suffix << " value: " << i);
             auto cell = TCell::Make(i);
             op.AddSplitBoundary()->SetSerializedKeyPrefix(TSerializedCellVec::Serialize({&cell, 1}));
         }
@@ -766,7 +766,7 @@ private:
 
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
         FillScanRequestSeed(ev->Record);
-        LOG_N("TTxBuildProgress: TEvSampleKRequest: " << ev->Record.ShortDebugString());
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: TEvSampleKRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -790,7 +790,7 @@ private:
 
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
         FillScanRequestSeed(ev->Record);
-        LOG_N("TTxBuildProgress: TEvSampleKRequest (autodetect): " << ev->Record.ShortDebugString());
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: TEvSampleKRequest (autodetect): " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -844,7 +844,7 @@ private:
                 shardStatus.Range.Serialize(*ev->Record.MutableKeyRange());
             }
         }
-        LOG_N("TTxBuildProgress: TEvReshuffleKMeansRequest: " << ToShortDebugString(ev->Record));
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: TEvReshuffleKMeansRequest: " << ToShortDebugString(ev->Record));
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -876,7 +876,7 @@ private:
         ev->Record.SetEmbeddingColumn(buildInfo.IndexColumns.back());
 
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
-        LOG_N("TTxBuildProgress: TEvRecomputeKMeansRequest: " << ToShortDebugString(ev->Record));
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: TEvRecomputeKMeansRequest: " << ToShortDebugString(ev->Record));
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -908,7 +908,7 @@ private:
             const auto& range = buildInfo.Shards.at(shardIdx).Range;
             const auto [parentFrom, parentTo] = buildInfo.KMeans.RangeToBorders(range);
             const auto childBegin = buildInfo.KMeans.ChildBegin + (parentFrom - buildInfo.KMeans.ParentBegin) * buildInfo.KMeans.K;
-            LOG_D("shard " << shardIdx << ", parent range { From: " << parentFrom << ", To: " << parentTo << " }, child begin " << childBegin);
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "shard " << shardIdx << ", parent range { From: " << parentFrom << ", To: " << parentTo << " }, child begin " << childBegin);
             ev->Record.SetParentFrom(parentFrom);
             ev->Record.SetParentTo(parentTo);
             ev->Record.SetChild(childBegin);
@@ -954,7 +954,7 @@ private:
                 }
             }
         }
-        LOG_N("TTxBuildProgress: TEvLocalKMeansRequest: " << ev->Record.ShortDebugString());
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: TEvLocalKMeansRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -1018,7 +1018,7 @@ private:
                 shardStatus.Range.Serialize(*ev->Record.MutableKeyRange());
             }
         }
-        LOG_N("TTxBuildProgress: TEvPrefixKMeansRequest: " << ev->Record.ShortDebugString());
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: TEvPrefixKMeansRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -1051,7 +1051,7 @@ private:
         }
 
         auto shardId = FillScanRequestCommon<false>(ev->Record, shardIdx, buildInfo);
-        LOG_N("TTxBuildProgress: TEvFilterKMeansRequest: " << ev->Record.ShortDebugString());
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: TEvFilterKMeansRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -1141,7 +1141,7 @@ private:
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
 
-        LOG_N("TTxBuildProgress: UploadKMeansBorders: " << buildInfo);
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: UploadKMeansBorders: " << buildInfo);
     }
 
     void SendBuildSecondaryIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -1177,7 +1177,7 @@ private:
 
         auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
 
-        LOG_N("TTxBuildProgress: TEvBuildIndexCreateRequest: " << ev->Record.ShortDebugString());
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: TEvBuildIndexCreateRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -1215,7 +1215,7 @@ private:
         TTabletId shardId = Self->ShardInfos.at(shardIdx).TabletID;
         record.SetTabletId(ui64(shardId));
 
-        LOG_N("TTxBuildProgress: TEvValidateUniqueIndexRequest: " << record.ShortDebugString());
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: TEvValidateUniqueIndexRequest: " << record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -1268,7 +1268,7 @@ private:
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
 
-        LOG_N("TTxBuildProgress: TUploadSampleK: " << buildInfo);
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: TUploadSampleK: " << buildInfo);
     }
 
     void SendBuildFulltextIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
@@ -1328,7 +1328,7 @@ private:
             shardStatus.Range.Serialize(*ev->Record.MutableKeyRange());
         }
 
-        LOG_N("TTxBuildProgress: TEvBuildFulltextIndexRequest: " << ev->Record.ShortDebugString());
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: TEvBuildFulltextIndexRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -1396,7 +1396,7 @@ private:
 
         auto shardId = FillScanRequestCommon<false>(ev->Record, shardIdx, buildInfo);
 
-        LOG_N("TTxBuildProgress: TEvBuildFulltextDictRequest: " << ev->Record.ShortDebugString());
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: TEvBuildFulltextDictRequest: " << ev->Record.ShortDebugString());
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -1427,7 +1427,7 @@ private:
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
 
-        LOG_N("TTxBuildProgress: TUploadFulltextStats: " << buildInfo);
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: TUploadFulltextStats: " << buildInfo);
     }
 
     void SendUploadFulltextBordersRequest(TIndexBuildInfo& buildInfo) {
@@ -1470,7 +1470,7 @@ private:
 
         TActivationContext::AsActorContext().MakeFor(Self->SelfId()).Register(actor);
 
-        LOG_N("TTxBuildProgress: TUploadFulltextStats: " << buildInfo);
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: TUploadFulltextStats: " << buildInfo);
     }
 
     void ClearAfterFill(const TActorContext& ctx, TIndexBuildInfo& buildInfo) {
@@ -1548,7 +1548,7 @@ private:
     }
 
     bool FillSecondaryIndex(TIndexBuildInfo& buildInfo) {
-        LOG_D("FillSecondaryIndex Start");
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillSecondaryIndex Start");
 
         if (NoShardsAdded(buildInfo)) {
             AddAllShards(buildInfo);
@@ -1558,14 +1558,14 @@ private:
                buildInfo.DoneShards.size() == buildInfo.Shards.size();
 
         if (done) {
-            LOG_D("FillSecondaryIndex Done");
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillSecondaryIndex Done");
         }
 
         return done;
     }
 
     bool ValidateSecondaryUniqueIndex(TIndexBuildInfo& buildInfo, TString& errorDesc) {
-        LOG_D("ValidateSecondaryUniqueIndex Start");
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "ValidateSecondaryUniqueIndex Start");
 
         if (NoShardsAdded(buildInfo)) {
             AddAllShards(buildInfo);
@@ -1583,7 +1583,7 @@ private:
                buildInfo.DoneShards.size() == buildInfo.Shards.size();
 
         if (done) {
-            LOG_D("ValidateSecondaryUniqueIndex Done");
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "ValidateSecondaryUniqueIndex Done");
         }
 
         return done;
@@ -1708,12 +1708,12 @@ private:
 
     bool SendKMeansBorders(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
-            LOG_D("FillVectorIndex FilterBorders " << buildInfo.DebugString());
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillVectorIndex FilterBorders " << buildInfo.DebugString());
             buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
             SendUploadKMeansBordersRequest(buildInfo);
             Progress(BuildId);
         } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
-            LOG_D("FillVectorIndex FilterBorders Done " << buildInfo.DebugString());
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillVectorIndex FilterBorders Done " << buildInfo.DebugString());
             NIceDb::TNiceDb db{txc.DB};
             buildInfo.SubState = TIndexBuildInfo::ESubState::None;
             Self->PersistBuildIndexState(db, buildInfo);
@@ -1814,7 +1814,7 @@ private:
                 SendVectorAutodetectRequest(idx, buildInfo);
                 return false;
             }
-            LOG_E("FillPrefixedVectorIndex Autodetect: no shards available");
+            LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillPrefixedVectorIndex Autodetect: no shards available");
             buildInfo.KMeans.NeedVectorAutodetect = false;
             NIceDb::TNiceDb db{txc.DB};
             Self->PersistBuildIndexAddIssue(db, buildInfo,
@@ -1832,7 +1832,7 @@ private:
     }
 
     bool FillPrefixedVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
-        LOG_D("FillPrefixedVectorIndex Start " << buildInfo.DebugString());
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillPrefixedVectorIndex Start " << buildInfo.DebugString());
 
         if (buildInfo.KMeans.Level == 1) {
             if (buildInfo.KMeans.NeedVectorAutodetect) {
@@ -1844,7 +1844,7 @@ private:
             if (!FillSecondaryIndex(buildInfo)) {
                 return false;
             }
-            LOG_D("FillPrefixedVectorIndex DoneLevel " << buildInfo.DebugString());
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillPrefixedVectorIndex DoneLevel " << buildInfo.DebugString());
 
             const ui64 doneShards = buildInfo.DoneShards.size();
             ClearDoneShards(txc, buildInfo);
@@ -1852,7 +1852,7 @@ private:
             buildInfo.KMeans.TableSize = std::max<ui64>(1, buildInfo.Processed.GetUploadRows());
             buildInfo.KMeans.PrefixIndexDone(doneShards);
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
-            LOG_D("FillPrefixedVectorIndex PrefixIndexDone " << buildInfo.DebugString());
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillPrefixedVectorIndex PrefixIndexDone " << buildInfo.DebugString());
 
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
@@ -1887,7 +1887,7 @@ private:
                 return false;
             }
             if (buildInfo.KMeans.OverlapClusters > 1) {
-                LOG_D("FillPrefixedVectorIndex Filter " << buildInfo.DebugString());
+                LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillPrefixedVectorIndex Filter " << buildInfo.DebugString());
                 buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Filter;
                 PersistKMeansState(txc, buildInfo);
                 ClearDoneShards(txc, buildInfo);
@@ -1900,7 +1900,7 @@ private:
             // continue to NextLevel
         }
 
-        LOG_D("FillPrefixedVectorIndex DoneLevel " << buildInfo.DebugString());
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillPrefixedVectorIndex DoneLevel " << buildInfo.DebugString());
 
         ClearDoneShards(txc, buildInfo);
         const bool needsAnotherLevel = buildInfo.KMeans.NextLevel();
@@ -1908,13 +1908,13 @@ private:
         if (buildInfo.KMeans.Level == 2) {
             buildInfo.KMeans.Parent = buildInfo.KMeans.ParentEnd();
         }
-        LOG_D("FillPrefixedVectorIndex NextLevel " << buildInfo.DebugString());
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillPrefixedVectorIndex NextLevel " << buildInfo.DebugString());
 
         PersistKMeansState(txc, buildInfo);
         NIceDb::TNiceDb db{txc.DB};
         Self->PersistBuildIndexShardStatusReset(db, buildInfo);
         if (!needsAnotherLevel) {
-            LOG_D("FillPrefixedVectorIndex Done " << buildInfo.DebugString());
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillPrefixedVectorIndex Done " << buildInfo.DebugString());
             return true;
         }
         ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
@@ -1923,7 +1923,7 @@ private:
     }
 
     bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
-        LOG_D("FillVectorIndex Start " << buildInfo.DebugString());
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillVectorIndex Start " << buildInfo.DebugString());
 
         // (Sample -> Recompute* -> Reshuffle)* -> MultiLocal -> (Filter)? -> NextLevel
         if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Sample) {
@@ -1945,12 +1945,12 @@ private:
                 buildInfo.KMeans.Round++;
             } else {
                 // Cluster generation completed, save clusters
-                LOG_D("FillVectorIndex SendUploadClusters " << buildInfo.DebugString());
+                LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillVectorIndex SendUploadClusters " << buildInfo.DebugString());
                 buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Sample;
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
                 SendUploadSampleKRequest(buildInfo);
             }
-            LOG_D("FillVectorIndex NextState " << buildInfo.DebugString());
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillVectorIndex NextState " << buildInfo.DebugString());
             PersistKMeansState(txc, buildInfo);
             Progress(BuildId);
             return false;
@@ -2017,7 +2017,7 @@ private:
                     return FillVectorIndexNextParent(txc, buildInfo);
                 }
                 // Otherwise, we collect samples
-                LOG_D("FillVectorIndex Samples " << buildInfo.DebugString());
+                LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillVectorIndex Samples " << buildInfo.DebugString());
             }
 
             if (buildInfo.KMeans.NeedVectorAutodetect) {
@@ -2089,7 +2089,7 @@ private:
             }
 
             if (buildInfo.KMeans.Rounds > 1) {
-                LOG_D("FillVectorIndex Recompute " << buildInfo.DebugString());
+                LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillVectorIndex Recompute " << buildInfo.DebugString());
                 buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Recompute;
                 buildInfo.KMeans.Round = 1;
                 // Initialize Clusters
@@ -2100,7 +2100,7 @@ private:
                 PersistKMeansState(txc, buildInfo);
                 Progress(BuildId);
             } else {
-                LOG_D("FillVectorIndex SendUploadSampleKRequest " << buildInfo.DebugString());
+                LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillVectorIndex SendUploadSampleKRequest " << buildInfo.DebugString());
                 SendUploadSampleKRequest(buildInfo);
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
             }
@@ -2114,7 +2114,7 @@ private:
                 return true;
             }
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Reshuffle;
-            LOG_D("FillVectorIndex NextState " << buildInfo.DebugString());
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillVectorIndex NextState " << buildInfo.DebugString());
             PersistKMeansState(txc, buildInfo);
             Progress(BuildId);
             return false;
@@ -2125,7 +2125,7 @@ private:
     bool FillVectorIndexNextParent(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         if (buildInfo.KMeans.NextParent()) {
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Sample;
-            LOG_D("FillVectorIndex NextParent " << buildInfo.DebugString());
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillVectorIndex NextParent " << buildInfo.DebugString());
             PersistKMeansState(txc, buildInfo);
             Progress(BuildId);
             return false;
@@ -2135,7 +2135,7 @@ private:
             AddLocalClusters(buildInfo);
             buildInfo.Cluster2Shards.clear();
             if (!buildInfo.ToUploadShards.empty()) {
-                LOG_D("FillVectorIndex MultiKMeans " << buildInfo.DebugString());
+                LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillVectorIndex MultiKMeans " << buildInfo.DebugString());
                 buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::MultiLocal;
                 PersistKMeansState(txc, buildInfo);
                 Progress(BuildId);
@@ -2148,7 +2148,7 @@ private:
 
     bool FillVectorIndexFilter(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         if (!buildInfo.KMeans.IsEmpty && buildInfo.KMeans.OverlapClusters > 1 && buildInfo.KMeans.Levels > 1) {
-            LOG_D("FillVectorIndex Filter " << buildInfo.DebugString());
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillVectorIndex Filter " << buildInfo.DebugString());
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Filter;
             ClearDoneShards(txc, buildInfo);
             NIceDb::TNiceDb db(txc.DB);
@@ -2167,7 +2167,7 @@ private:
     bool FillVectorIndexNextLevel(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         if (!buildInfo.KMeans.IsEmpty && buildInfo.KMeans.NextLevel()) {
             buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Sample;
-            LOG_D("FillVectorIndex NextLevel " << buildInfo.DebugString());
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillVectorIndex NextLevel " << buildInfo.DebugString());
             PersistKMeansState(txc, buildInfo);
             NIceDb::TNiceDb db{txc.DB};
             Self->PersistBuildIndexShardStatusReset(db, buildInfo);
@@ -2188,7 +2188,7 @@ private:
                 return false;
             }
             if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
-                LOG_D("FillVectorIndex UploadEmpty " << buildInfo.DebugString());
+                LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillVectorIndex UploadEmpty " << buildInfo.DebugString());
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
                 SendUploadSampleKRequest(buildInfo);
                 return false;
@@ -2202,7 +2202,7 @@ private:
             }
         }
 
-        LOG_D("FillVectorIndex Done " << buildInfo.DebugString());
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillVectorIndex Done " << buildInfo.DebugString());
         return true;
     }
 
@@ -2212,14 +2212,14 @@ private:
         switch (buildInfo.SubState) {
         case TIndexBuildInfo::ESubState::None:
             // Stage 1 for FulltextRelevance - build "posting" table (token-documents)
-            LOG_D("FillFulltextIndex Posting");
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillFulltextIndex Posting");
             if (NoShardsAdded(buildInfo)) {
                 AddAllShards(buildInfo);
             }
             done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildFulltextIndexRequest(shardIdx, buildInfo); }) &&
                 buildInfo.DoneShards.size() == buildInfo.Shards.size();
             if (done) {
-                LOG_D("FillFulltextIndex Posting Done");
+                LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillFulltextIndex Posting Done");
                 if (buildInfo.IsBuildFulltextRelevance()) {
                     NIceDb::TNiceDb db{txc.DB};
                     buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Collect;
@@ -2242,12 +2242,12 @@ private:
         case TIndexBuildInfo::ESubState::FulltextIndexStats:
             // Stage 2 for FulltextRelevance/FulltextCompactRelevance - build statistics table (DocCount & TotalDocLength)
             if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
-                LOG_D("FillFulltextIndex SendUploadStats " << buildInfo.DebugString());
+                LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillFulltextIndex SendUploadStats " << buildInfo.DebugString());
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
                 SendUploadFulltextStatsRequest(buildInfo);
                 Progress(BuildId);
             } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
-                LOG_D("FillFulltextIndex UploadStats Done " << buildInfo.DebugString());
+                LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillFulltextIndex UploadStats Done " << buildInfo.DebugString());
                 ClearDoneShards(txc, buildInfo);
                 NIceDb::TNiceDb db{txc.DB};
                 buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextIndexDictionary;
@@ -2260,14 +2260,14 @@ private:
         case TIndexBuildInfo::ESubState::FulltextIndexDictionary:
             // Stage 3 for FulltextRelevance - build dictionary table
             // And/or stage 2 for FulltextCompact - compact token table
-            LOG_D("FillFulltextIndex Dictionary");
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillFulltextIndex Dictionary");
             if (NoShardsAdded(buildInfo)) {
                 AddAllShards(buildInfo);
             }
             done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildFulltextDictRequest(shardIdx, buildInfo); }) &&
                 buildInfo.DoneShards.size() == buildInfo.Shards.size();
             if (done) {
-                LOG_D("FillFulltextIndex Dictionary Done");
+                LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillFulltextIndex Dictionary Done");
                 NIceDb::TNiceDb db{txc.DB};
                 if (buildInfo.IsBuildFulltextRelevance()) {
                     buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Collect;
@@ -2285,12 +2285,12 @@ private:
         case TIndexBuildInfo::ESubState::FulltextIndexBorders:
             // Stage 4 for FulltextRelevance - fill border values for dictionary
             if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Collect) {
-                LOG_D("FillFulltextIndex SendUploadBorders " << buildInfo.DebugString());
+                LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillFulltextIndex SendUploadBorders " << buildInfo.DebugString());
                 buildInfo.Sample.State = TIndexBuildInfo::TSample::EState::Upload;
                 SendUploadFulltextBordersRequest(buildInfo);
                 Progress(BuildId);
             } else if (buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Done) {
-                LOG_D("FillFulltextIndex UploadBorders Done " << buildInfo.DebugString());
+                LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillFulltextIndex UploadBorders Done " << buildInfo.DebugString());
                 ClearDoneShards(txc, buildInfo);
                 NIceDb::TNiceDb db{txc.DB};
                 buildInfo.SubState = TIndexBuildInfo::ESubState::None;
@@ -2304,7 +2304,7 @@ private:
         }
 
         if (done) {
-            LOG_D("FillFulltextIndex Done");
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "FillFulltextIndex Done");
         }
 
         return done;
@@ -2351,7 +2351,7 @@ private:
             return true;
         }
 
-        LOG_N("TTxBuildProgress: Performing cross shard unique index validation: " << BuildId << " " << buildInfo.State);
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: Performing cross shard unique index validation: " << BuildId << " " << buildInfo.State);
 
         auto path = GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
         TTableInfo::TPtr table = Self->Tables.at(path->PathId);
@@ -2383,7 +2383,7 @@ private:
         }
 
         if (!NSchemeShard::PerformCrossShardUniqIndexValidation(indexColumnTypeInfos, buildInfo.IndexColumns, sortedRanges, errorDesc)) {
-            LOG_E("TTxBuildProgress: Cross shard index validation failed. " << errorDesc << ". Cancelling unique index build");
+            LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: Cross shard index validation failed. " << errorDesc << ". Cancelling unique index build");
             return false;
         }
         return true;
@@ -2414,8 +2414,8 @@ public:
         Y_ENSURE(buildInfoPtr);
         auto& buildInfo = *buildInfoPtr->get();
 
-        LOG_N("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State);
-        LOG_D("TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State << " " << buildInfo);
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State);
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: Execute: " << BuildId << " " << buildInfo.State << " " << buildInfo);
 
         if (buildInfo.IsBroken) {
             return true;
@@ -2839,7 +2839,7 @@ public:
 
     void OnUnhandledException(TTransactionContext& txc, const TActorContext& ctx, TIndexBuildInfo* buildInfo, const std::exception& exc) override {
         if (!buildInfo) {
-            LOG_N("TTxBuildProgress: OnUnhandledException: BuildIndexId not found "
+            LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: OnUnhandledException: BuildIndexId not found "
                 << (BuildId == InvalidIndexBuildId ? TString("") : TStringBuilder() << ", id# " << BuildId));
             return;
         }
@@ -2851,7 +2851,7 @@ public:
         if (buildInfo->State != TIndexBuildInfo::EState::Filling) {
             // no idea how to gracefully stop index build otherwise
             // leave everything as is
-            LOG_E("TTxBuildProgress: OnUnhandledException: not a Filling state, id# " << buildInfo->Id
+            LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxBuildProgress: OnUnhandledException: not a Filling state, id# " << buildInfo->Id
                 << ", TIndexBuildInfo: " << *buildInfo);
             return;
         }
@@ -2908,7 +2908,7 @@ public:
     }
 
     bool InitiateShards(NIceDb::TNiceDb& db, TIndexBuildInfo& buildInfo) {
-        LOG_D("InitiateShards " << buildInfo.DebugString());
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "InitiateShards " << buildInfo.DebugString());
 
         Y_ENSURE(buildInfo.Shards.empty());
         Y_ENSURE(buildInfo.ToUploadShards.empty());
@@ -2925,7 +2925,7 @@ public:
             return false;
         }
         Y_ENSURE(path.LockedBy() == buildInfo.LockTxId);
-        LOG_D("InitiateShards table: " << path.PathString());
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "InitiateShards table: " << path.PathString());
 
         TTableInfo::TPtr table = Self->Tables.at(path->PathId);
 
@@ -2942,10 +2942,10 @@ public:
                 ? TSerializedTableRange() : TSerializedTableRange(prevBound, x->EndOfRange, true, false));
             if (buildInfo.BuildKind == TIndexBuildInfo::EBuildKind::BuildVectorIndex &&
                 buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::Filter) {
-                LOG_D("InitiateShard " << x->ShardIdx << " range " << buildInfo.KMeans.RangeToDebugStr(shardRange));
+                LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "InitiateShard " << x->ShardIdx << " range " << buildInfo.KMeans.RangeToDebugStr(shardRange));
                 buildInfo.AddParent(shardRange, x->ShardIdx);
             } else {
-                LOG_D("InitiateShard " << x->ShardIdx);
+                LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "InitiateShard " << x->ShardIdx);
             }
             auto [it, emplaced] = buildInfo.Shards.emplace(x->ShardIdx, TIndexBuildShardStatus{std::move(shardRange), ""});
             Y_ENSURE(emplaced);
@@ -2980,7 +2980,7 @@ public:
     {}
 
     bool DoExecute(TTransactionContext& , const TActorContext& ctx) override {
-        LOG_I("TTxReply : TTxBilling, id# " << BuildId);
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : TTxBilling, id# " << BuildId);
 
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
         if (!buildInfoPtr) {
@@ -3015,7 +3015,7 @@ public:
 
     void OnUnhandledException(TTransactionContext& txc, const TActorContext& ctx, TIndexBuildInfo* buildInfo, const std::exception& exc) override {
         if (!buildInfo) {
-            LOG_E("TTxReply : OnUnhandledException BuildIndexId not found"
+            LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : OnUnhandledException BuildIndexId not found"
                 << (BuildId == InvalidIndexBuildId ? TString("") : TStringBuilder() << ", id# " << BuildId));
             return;
         }
@@ -3028,7 +3028,7 @@ public:
             // most replies are used at Filling stage
             // no idea how to gracefully stop index build otherwise
             // leave everything as is
-            LOG_E("TTxReply : OnUnhandledException not a Filling state, id# " << buildInfo->Id
+            LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : OnUnhandledException not a Filling state, id# " << buildInfo->Id
                 << ", TIndexBuildInfo: " << *buildInfo);
             return;
         }
@@ -3062,7 +3062,7 @@ public:
     bool DoExecute([[maybe_unused]] TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& shardIdx = Self->GetShardIdx(ShardId);
 
-        LOG_N("TTxReply : PipeRetry, id# " << BuildId
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : PipeRetry, id# " << BuildId
             << ", shardId# " << ShardId
             << ", shardIdx# " << shardIdx);
 
@@ -3071,7 +3071,7 @@ public:
             return true;
         }
         auto& buildInfo = *buildInfoPtr->get();
-        LOG_D("TTxReply : PipeRetry"
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : PipeRetry"
             << ", TIndexBuildInfo: " << buildInfo
             << ", shardId# " << ShardId
             << ", shardIdx# " << shardIdx);
@@ -3081,7 +3081,7 @@ public:
         }
 
         if (buildInfo.State != TIndexBuildInfo::EState::Filling) {
-            LOG_I("TTxReply : PipeRetry superfluous event, id# " << BuildId);
+            LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : PipeRetry superfluous event, id# " << BuildId);
             return true;
         }
 
@@ -3116,7 +3116,7 @@ public:
         TTabletId shardId = TTabletId(record.GetTabletId());
         TShardIdx shardIdx = Self->GetShardIdx(shardId);
 
-        LOG_N("TTxReply : " << TypeName<TEvResponse>() << ", id# " << BuildId
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : " << TypeName<TEvResponse>() << ", id# " << BuildId
             << ", shardId# " << shardId
             << ", shardIdx# " << shardIdx);
 
@@ -3126,7 +3126,7 @@ public:
         }
 
         auto& buildInfo = *buildInfoPtr->get();
-        LOG_D("TTxReply : " << TypeName<TEvResponse>()
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : " << TypeName<TEvResponse>()
             << ", TIndexBuildInfo: " << buildInfo
             << ", record: " << ResponseShortDebugString()
             << ", shardId# " << shardId
@@ -3137,13 +3137,13 @@ public:
         }
 
         if (buildInfo.State != TIndexBuildInfo::EState::Filling) {
-            LOG_N("TTxReply : " << TypeName<TEvResponse>() << " superfluous state event, id# " << BuildId
+            LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : " << TypeName<TEvResponse>() << " superfluous state event, id# " << BuildId
                 << ", TIndexBuildInfo: " << buildInfo);
             return true;
         }
 
         if (!buildInfo.InProgressShards.contains(shardIdx)) {
-            LOG_N("TTxReply : " << TypeName<TEvResponse>() << " superfluous shard event, id# " << BuildId
+            LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : " << TypeName<TEvResponse>() << " superfluous shard event, id# " << BuildId
                 << ", TIndexBuildInfo: " << buildInfo);
             return true;
         }
@@ -3153,7 +3153,7 @@ public:
         auto recordSeqNo = std::pair<ui64, ui64>(record.GetRequestSeqNoGeneration(), record.GetRequestSeqNoRound());
 
         if (actualSeqNo != recordSeqNo) {
-            LOG_D("TTxReply : " << TypeName<TEvResponse>() << " ignore progress message by seqNo"
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : " << TypeName<TEvResponse>() << " ignore progress message by seqNo"
                 << ", TIndexBuildInfo: " << buildInfo
                 << ", actual seqNo for the shard " << shardId << " (" << shardIdx << ") is: "  << Self->Generation() << ":" <<  shardStatus.SeqNoRound
                 << ", record: " << record.ShortDebugString());
@@ -3252,7 +3252,7 @@ public:
 
                 int cmp = CompareBorders<true, true>(next.GetCells(), prev.GetCells(), true, true, keyTypes);
                 if (cmp < 0) {
-                    LOG_W("Check that all LastKeyAcks are monotonously increase"
+                    LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "Check that all LastKeyAcks are monotonously increase"
                         << ", next: " << DebugPrintPoint(keyTypes, next.GetCells(), *AppData()->TypeRegistry)
                         << ", prev: " << DebugPrintPoint(keyTypes, prev.GetCells(), *AppData()->TypeRegistry));
                 } else {
@@ -3476,7 +3476,7 @@ public:
     bool DoExecute([[maybe_unused]] TTransactionContext& txc, [[maybe_unused]] const TActorContext& ctx) override {
         const auto& record = UploadSample->Get()->Record;
 
-        LOG_N("TTxReply : TEvUploadSampleKResponse, id# " << BuildId);
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : TEvUploadSampleKResponse, id# " << BuildId);
 
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
         if (!buildInfoPtr) {
@@ -3484,13 +3484,13 @@ public:
         }
 
         auto& buildInfo = *buildInfoPtr->get();
-        LOG_D("TTxReply : TEvUploadSampleKResponse"
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : TEvUploadSampleKResponse"
             << ", TIndexBuildInfo: " << buildInfo
             << ", record: " << record.ShortDebugString());
         Y_ENSURE(buildInfo.IsBuildVectorIndex() || buildInfo.IsBuildFulltextIndex());
 
         if (buildInfo.State != TIndexBuildInfo::EState::Filling) {
-            LOG_I("TTxReply : TEvUploadSampleKResponse superfluous event, id# " << BuildId);
+            LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : TEvUploadSampleKResponse superfluous event, id# " << BuildId);
             return true;
         }
         Y_ENSURE(!buildInfo.IsBuildVectorIndex() || buildInfo.Sample.State == TIndexBuildInfo::TSample::EState::Upload);
@@ -3637,7 +3637,7 @@ public:
 
         const auto* buildIdPtr = Self->TxIdToIndexBuilds.FindPtr(txId);
         if (!buildIdPtr) {
-            LOG_I("TTxReply : TEvNotifyTxCompletionResult superfluous message"
+            LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : TEvNotifyTxCompletionResult superfluous message"
                 << ", txId: " << txId
                 << ", BuildIndexId not found");
             return true;
@@ -3645,9 +3645,9 @@ public:
 
         BuildId = *buildIdPtr;
         auto& buildInfo = *Self->IndexBuilds.at(BuildId);
-        LOG_I("TTxReply : TEvNotifyTxCompletionResult, id# " << BuildId
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : TEvNotifyTxCompletionResult, id# " << BuildId
             << ", txId# " << txId);
-        LOG_D("TTxReply : TEvNotifyTxCompletionResult"
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : TEvNotifyTxCompletionResult"
             << ", TIndexBuildInfo: " << buildInfo
             << ", txId# " << txId);
 
@@ -3761,7 +3761,7 @@ public:
             AddIssue(response.MutableIssues(), buildInfo.GetIssue());
         }
 
-        LOG_N("TIndexBuilder::TTxReply: ReplyOnCreation"
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TIndexBuilder::TTxReply: ReplyOnCreation"
               << ", BuildIndexId: " << buildInfo.Id
               << ", status: " << Ydb::StatusIds::StatusCode_Name(status)
               << ", error: " << buildInfo.GetIssue()
@@ -3777,7 +3777,7 @@ public:
 
         const auto* buildIdPtr = Self->TxIdToIndexBuilds.FindPtr(txId);
         if (!buildIdPtr) {
-            LOG_I("TTxReply : TEvModifySchemeTransactionResult superfluous message"
+            LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : TEvModifySchemeTransactionResult superfluous message"
                 << ", cookie: " << ModifyResult->Cookie
                 << ", record: " << record.ShortDebugString()
                 << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus())
@@ -3789,11 +3789,11 @@ public:
         // We need this because we use buildInfo after EraseBuildInfo
         auto buildInfoPin = Self->IndexBuilds.at(BuildId);
         auto& buildInfo = *buildInfoPin;
-        LOG_I("TTxReply : TEvModifySchemeTransactionResult, id# " << BuildId
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : TEvModifySchemeTransactionResult, id# " << BuildId
             << ", cookie: " << ModifyResult->Cookie
             << ", record: " << record.ShortDebugString()
             << ", status: " << NKikimrScheme::EStatus_Name(record.GetStatus()));
-        LOG_D("TTxReply : TEvModifySchemeTransactionResult"
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : TEvModifySchemeTransactionResult"
             << ", TIndexBuildInfo: " << buildInfo
             << ", cookie: " << ModifyResult->Cookie
             << ", record: " << record.ShortDebugString()
@@ -4029,7 +4029,7 @@ public:
 
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(BuildId);
         if (!buildInfoPtr) {
-            LOG_I("TTxReply : TEvAllocateResult superfluous message"
+            LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : TEvAllocateResult superfluous message"
                 << ", cookie: " << AllocateResult->Cookie
                 << ", txId# " << txId
                 << ", BuildIndexId not found");
@@ -4037,9 +4037,9 @@ public:
         }
 
         auto& buildInfo = *buildInfoPtr->get();
-        LOG_I("TTxReply : TEvAllocateResult, id# " << BuildId
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : TEvAllocateResult, id# " << BuildId
             << ", txId# " << txId);
-        LOG_D("TTxReply : TEvAllocateResult"
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReply : TEvAllocateResult"
             << ", TIndexBuildInfo: " << buildInfo
             << ", txId# " << txId);
 

@@ -20,7 +20,7 @@ public:
 
     bool DoExecute(TTransactionContext&, const TActorContext&) override {
         const auto& record = Request->Get()->Record;
-        LOG_D("DoExecute " << record.ShortDebugString());
+        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "DoExecute " << record.ShortDebugString());
 
         Response = MakeHolder<TEvIndexBuilder::TEvListResponse>();
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);

@@ -102,9 +102,9 @@ public:
         }
 
         if (IsMutableOperation) {
-            LOG_N("Reply " << Response->Record.ShortDebugString());
+            LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "Reply " << Response->Record.ShortDebugString());
         } else {
-            LOG_D("Reply " << Response->Record.ShortDebugString());
+            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "Reply " << Response->Record.ShortDebugString());
         }
 
         Send(Request->Sender, std::move(Response), 0, Request->Cookie);

@@ -21,7 +21,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
         const auto* buildInfoPtr = Self->IndexBuilds.FindPtr(buildId);
         Y_VERIFY_S(buildInfoPtr, "IndexBuilds has no " << buildId);
         auto& buildInfo = *buildInfoPtr->get();
-        LOG_I("Change state from " << buildInfo.State << " to " << state);
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "Change state from " << buildInfo.State << " to " << state);
         if (state == TIndexBuildInfo::EState::Rejected ||
             state == TIndexBuildInfo::EState::Cancelled ||
             state == TIndexBuildInfo::EState::Done) {
@@ -41,7 +41,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyState(NTabletFlatExecutor::TTran
         const auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(operationId);
         Y_VERIFY_S(operationInfoPtr, "SetColumnConstraintOperations has no " << operationId);
         auto& operationInfo = *operationInfoPtr->get();
-        LOG_I("Change SetColumnConstraint state from " << ToString(operationInfo.OperationState) << " to " << ToString(state));
+        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "Change SetColumnConstraint state from " << ToString(operationInfo.OperationState) << " to " << ToString(state));
         if (state == TSetColumnConstraintOperationInfo::EOperationState::Done) {
             operationInfo.EndTime = TAppData::TimeProvider->Now();
         }
@@ -136,7 +136,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         }
 
         if (!cloud_id || !folder_id || !database_id) {
-            LOG_I("ApplyBill: unable to make a bill, neither cloud_id and nor folder_id nor database_id have found in user attributes at the domain"
+            LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "ApplyBill: unable to make a bill, neither cloud_id and nor folder_id nor database_id have found in user attributes at the domain"
                   << ", build index operation: " << buildId
                   << ", domain: " << domain.PathString()
                   << ", domainId: " << buildInfo.DomainPathId
@@ -146,7 +146,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
         }
 
         if (!Self->IsServerlessDomain(domain)) {
-            LOG_I("ApplyBill: unable to make a bill, domain is not a serverless db"
+            LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "ApplyBill: unable to make a bill, domain is not a serverless db"
                   << ", build index operation: " << buildId
                   << ", domain: " << domain.PathString()
                   << ", domainId: " << buildInfo.DomainPathId
@@ -182,7 +182,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::ApplyBill(NTabletFlatExecutor::TTrans
             .Usage(TBillRecord::RequestUnits(requestUnits, startPeriod, endPeriod))
             .ToString();
 
-        LOG_N("ApplyBill: make a bill, id#" << buildId
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "ApplyBill: make a bill, id#" << buildId
             << ", billRecord: " << billRecord
             << ", toBill: " << toBill
             << ", explain: " << requestUnitsExplain
@@ -199,7 +199,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::Send(TActorId dst, THolder<IEventBase
 }
 
 void TSchemeShard::TIndexBuilder::TTxBase::AllocateTxId(TIndexBuildId buildId) {
-    LOG_D("AllocateTxId " << buildId);
+    LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "AllocateTxId " << buildId);
     Send(Self->TxAllocatorClient, MakeHolder<TEvTxAllocatorClient::TEvAllocate>(), 0, ui64(buildId));
 }
 
@@ -374,7 +374,7 @@ void TSchemeShard::TIndexBuilder::TTxBase::SendNotificationsIfFinished(TIndexBui
         return;
     }
 
-    LOG_T("TIndexBuildInfo SendNotifications: "
+    LOG_TRACE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TIndexBuildInfo SendNotifications: "
           << ": id# " << indexInfo.Id
           << ", subscribers count# " << indexInfo.Subscribers.size());
 
@@ -519,7 +519,7 @@ bool TSchemeShard::TIndexBuilder::TTxBase::OnUnhandledExceptionSafe(TTransaction
             ? buildInfoPtr->get()
             : nullptr;
 
-        LOG_E("Unhandled exception, id#"
+        LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "Unhandled exception, id#"
             << (BuildId == InvalidIndexBuildId ? TString("<no id>") : TStringBuilder() << BuildId)
             << " " << TypeName(originalExc) << ": " << originalExc.what() << Endl
             << TBackTrace::FromCurrentException().PrintToString()
@@ -529,7 +529,7 @@ bool TSchemeShard::TIndexBuilder::TTxBase::OnUnhandledExceptionSafe(TTransaction
 
         return true;
     } catch (const std::exception& handleExc) {
-        LOG_E("OnUnhandledException throws unhandled exception "
+        LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "OnUnhandledException throws unhandled exception "
             << TypeName(handleExc) << ": " << handleExc.what() << Endl
             << TBackTrace::FromCurrentException().PrintToString());
         return false;

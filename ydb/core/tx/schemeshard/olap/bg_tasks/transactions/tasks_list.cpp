@@ -2,13 +2,6 @@
 #include <ydb/core/tx/schemeshard/schemeshard_import_helpers.h>
 #include <util/string/cast.h>
 
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::IMPORT, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::IMPORT, stream)
-#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::IMPORT, stream)
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::IMPORT, stream)
-
 namespace NKikimr::NSchemeShard::NBackground {
 
 bool TTxTasksList::Execute(NTabletFlatExecutor::TTransactionContext&, const TActorContext&) {

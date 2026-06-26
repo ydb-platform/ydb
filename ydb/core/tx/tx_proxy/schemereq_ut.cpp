@@ -290,7 +290,7 @@ void CreateLocalUser2(TTestEnv& env, const TString& database, const TString& nam
         runtime->Send(new IEventHandle(MakeTicketParserID(), edge, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = token,
             .Database = database,
-            .PeerName = "test",
+            .PeerName = "192.168.0.101",
         })), 0);
 
         Cerr << __FUNCTION__ << " call ticket_parser" << Endl;
@@ -338,7 +338,7 @@ void CreateLocalGroup2(TTestEnv& env, const TString& database, const TString& na
         runtime->Send(new IEventHandle(MakeTicketParserID(), edge, new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = token,
             .Database = database,
-            .PeerName = "test",
+            .PeerName = "192.168.0.101",
         })), 0);
 
         Cerr << __FUNCTION__ << " call ticket_parser" << Endl;

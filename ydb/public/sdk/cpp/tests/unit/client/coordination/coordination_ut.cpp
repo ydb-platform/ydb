@@ -113,58 +113,6 @@ Y_UNIT_TEST_SUITE(Coordination) {
         UNIT_ASSERT_VALUES_EQUAL_C(res2.GetStatus(), EStatus::TIMEOUT, res2.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(SessionCloseWaitsForOnStopped) {
-        TPortManager pm;
-
-        TMockCoordinationService coordinationService;
-        ui16 coordinationPort = pm.GetPort();
-        auto coordinationServer = StartGrpcServer(
-                TStringBuilder() << "0.0.0.0:" << coordinationPort,
-                coordinationService);
-
-        TMockDiscoveryService discoveryService;
-        {
-            auto& dbResult = discoveryService.MockResults["/Root/My/DB"];
-            auto* endpoint = dbResult.add_endpoints();
-            endpoint->set_address("localhost");
-            endpoint->set_port(coordinationPort);
-        }
-
-        ui16 discoveryPort = pm.GetPort();
-        auto discoveryServer = StartGrpcServer(
-                TStringBuilder() << "0.0.0.0:" << discoveryPort,
-                discoveryService);
-
-        auto config = TDriverConfig()
-            .SetEndpoint(TStringBuilder() << "localhost:" << discoveryPort)
-            .SetDatabase("/Root/My/DB");
-        TDriver driver(config);
-        TClient client(driver);
-
-        auto stoppedEnteredPromise = NThreading::NewPromise();
-        auto stoppedEnteredFuture = stoppedEnteredPromise.GetFuture();
-        auto releaseStoppedPromise = NThreading::NewPromise();
-        auto releaseStoppedFuture = releaseStoppedPromise.GetFuture();
-        auto settings = TSessionSettings()
-            .OnStopped([stoppedEnteredPromise, releaseStoppedFuture]() mutable {
-                stoppedEnteredPromise.SetValue();
-                releaseStoppedFuture.Wait();
-            })
-            .Timeout(TDuration::MilliSeconds(1000));
-
-        auto res = client.StartSession("/Some/Path", settings).ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(res.GetStatus(), EStatus::SUCCESS, res.GetIssues().ToString());
-
-        auto session = res.ExtractResult();
-        auto closeFuture = session.Close();
-        UNIT_ASSERT(stoppedEnteredFuture.Wait(TDuration::Seconds(5)));
-        UNIT_ASSERT(!closeFuture.Wait(TDuration::MilliSeconds(100)));
-
-        releaseStoppedPromise.SetValue();
-        auto closeResult = closeFuture.ExtractValueSync();
-        UNIT_ASSERT_VALUES_EQUAL_C(closeResult.GetStatus(), EStatus::SUCCESS, closeResult.GetIssues().ToString());
-    }
-
     Y_UNIT_TEST(SessionCancelByDriver) {
         TPortManager pm;
 

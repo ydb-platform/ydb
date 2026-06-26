@@ -265,9 +265,6 @@ private:
             if (Deadline == TInstant::Max()) {
                 return Max<uint64_t>();
             }
-            if (Deadline <= TInstant::Now()) {
-                return 0;
-            }
             return (Deadline - TInstant::Now()).MilliSeconds();
         }
 
@@ -1020,6 +1017,10 @@ private:
             op->SetFailure(status);
         }
 
+        if (closePromise.Initialized()) {
+            closePromise.SetValue(TResult<void>(expired ? MakeStatus() : status));
+        }
+
         if (stopped) {
             if (notifyExpired && Settings_.OnStateChanged_) {
                 Settings_.OnStateChanged_(ESessionState::EXPIRED);
@@ -1027,14 +1028,7 @@ private:
             if (Settings_.OnStopped_) {
                 Settings_.OnStopped_();
             }
-            if (closePromise.Initialized()) {
-                closePromise.SetValue(TResult<void>(expired ? MakeStatus() : status));
-            }
             return;
-        }
-
-        if (closePromise.Initialized()) {
-            closePromise.SetValue(TResult<void>(expired ? MakeStatus() : status));
         }
 
         TDuration sleepDuration;

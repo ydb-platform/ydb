@@ -982,15 +982,16 @@ public:
     void Handle(TEvPrivate::TEvCollectPeerProxyData::TPtr&) {
         if (!ShutdownRequested) {
             TDuration d;
-            // Fast-poll only while warmup may still fire and RM board hasn't converged
-            // (post-convergence the warmup actor self-skips, so 2s polling is pointless).
+            // Board convergence alone mustn't stop fast-poll: the warmup actor blocks
+            // on TEvStartWarmup, which we only send once peer resources are gathered.
             bool fastPoll = false;
             if (!WarmupStarted
                 && TableServiceConfig.GetEnableCompileCacheWarmup()
                 && PeerProxyNodeResources.size() <= 1)
             {
                 auto rm = TryGetKqpResourceManager(SelfId().NodeId());
-                fastPoll = !rm || !rm->GetInitialBoardSyncDone();
+                fastPoll = !rm || !rm->GetInitialBoardSyncDone()
+                    || rm->GetInitialBoardNodeIds().size() > 1;
             }
             if (fastPoll) {
                 d = TDuration::Seconds(2);
@@ -1065,6 +1066,11 @@ public:
                 << " proxy nodes, starting warmup");
             Send(MakeKqpWarmupActorId(SelfId().NodeId()), new TEvStartWarmup(PeerProxyNodeResources.size(), std::move(nodeIds)));
         }
+    }
+
+    // Warmup done (often a skip) — stop fast-polling and don't send to a dead actor.
+    void Handle(NKqp::TEvKqpWarmupComplete::TPtr&) {
+        WarmupStarted = true;
     }
 
     bool ShouldStartBalancing(const TSimpleResourceStats& stats, const double minResourceThreshold, const double currentResourceUsage) const {
@@ -1339,6 +1345,7 @@ public:
             hFunc(TEvInterconnect::TEvNodeInfo, Handle);
             hFunc(NMon::TEvHttpInfo, Handle);
             hFunc(TEvPrivate::TEvCollectPeerProxyData, Handle);
+            hFunc(NKqp::TEvKqpWarmupComplete, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);

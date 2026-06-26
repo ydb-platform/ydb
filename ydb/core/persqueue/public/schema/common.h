@@ -53,7 +53,7 @@ TResult ValidateConfig(
 
 void InitTopicConfigVersion(NKikimrPQ::TPQTabletConfig& config);
 void BumpTopicConfigVersion(NKikimrPQ::TPQTabletConfig& config);
-void MarkConsumerAddedAtCurrentTopicConfigVersion(
+void UpdateConsumerVersion(
     NKikimrPQ::TPQTabletConfig_TConsumer& consumer,
     const NKikimrPQ::TPQTabletConfig& config
 );

@@ -113,7 +113,7 @@ TResult AddConsumerImpl(
         consumersAdvancedMonitoringSettings->UpdateConsumerConfig(rr.consumer_name(), *consumer);
     }
 
-    MarkConsumerAddedAtCurrentTopicConfigVersion(*consumer, *config);
+    UpdateConsumerVersion(*consumer, *config);
 
     return {};
 }

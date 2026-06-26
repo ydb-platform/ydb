@@ -1,6 +1,7 @@
 #include "alter_topic_operation.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -258,9 +259,12 @@ TResult ApplyChangesInt(
 
     const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes();
 
-    absl::flat_hash_map<TString, ui64> addedAtTopicConfigVersionByConsumer;
+    absl::flat_hash_map<TString, std::pair<ui64, TString>> oldConsumerInfoByName;
     for (const auto& c : pqTabletConfig->GetConsumers()) {
-        addedAtTopicConfigVersionByConsumer[c.GetName()] = c.GetAddedAtTopicConfigVersion();
+        oldConsumerInfoByName[c.GetName()] = {
+            c.GetModificationVersion(),
+            GetDLQTopicPath(c),
+        };
     }
     BumpTopicConfigVersion(*pqTabletConfig);
 
@@ -339,10 +343,15 @@ TResult ApplyChangesInt(
         }
     }
     for (auto& consumer : *pqTabletConfig->MutableConsumers()) {
-        if (const auto it = addedAtTopicConfigVersionByConsumer.find(consumer.GetName()); it != addedAtTopicConfigVersionByConsumer.end()) {
-            consumer.SetAddedAtTopicConfigVersion(it->second);
+        const TString newDlqTopicPath = GetDLQTopicPath(consumer);
+        if (const auto it = oldConsumerInfoByName.find(consumer.GetName()); it != oldConsumerInfoByName.end()) {
+            if (newDlqTopicPath != it->second.second) {
+                UpdateConsumerVersion(consumer, *pqTabletConfig);
+            } else {
+                consumer.SetModificationVersion(it->second.first);
+            }
         } else {
-            MarkConsumerAddedAtCurrentTopicConfigVersion(consumer, *pqTabletConfig);
+            UpdateConsumerVersion(consumer, *pqTabletConfig);
         }
     }
     if (auto errorCode = consumersAdvancedMonitoringSettings.CheckForUnknownConsumers(error); errorCode != Ydb::StatusIds::SUCCESS) {

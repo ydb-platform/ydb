@@ -163,6 +163,28 @@ THolder<TEvSchemaResponse> CreateAndAlterTopicWithDLQ(
     return DoAlterTopicRequest(runtime, request, userToken);
 }
 
+THolder<TEvSchemaResponse> AlterTopicMlpConsumerDlq(
+    const std::shared_ptr<TTopicSdkTestSetup>& setup,
+    const TString& userSid,
+    const char* mainTopic,
+    const char* newDlqTopic
+) {
+    auto& runtime = setup->GetRuntime();
+    const auto userToken = MakeUserToken(userSid);
+    const TString mainTopicPath = TStringBuilder() << "/Root/" << mainTopic;
+
+    Ydb::Topic::AlterTopicRequest request;
+    request.set_path(mainTopicPath);
+    auto* alterConsumer = request.add_alter_consumers();
+    alterConsumer->set_name(MLP_CONSUMER_NAME);
+    alterConsumer->mutable_alter_shared_consumer_type()
+        ->mutable_alter_dead_letter_policy()
+        ->mutable_alter_move_action()
+        ->set_set_dead_letter_queue(newDlqTopic);
+
+    return DoAlterTopicRequest(runtime, request, userToken);
+}
+
 THolder<TEvSchemaResponse> AlterTopicRetention(
     const std::shared_ptr<TTopicSdkTestSetup>& setup,
     const TString& userSid,
@@ -465,6 +487,40 @@ Y_UNIT_TEST(AlterTopicWithMlpConsumerFailsWhenDlqTopicDoesNotExist) {
 
     UNIT_ASSERT(result);
     UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SCHEME_ERROR, result->ErrorMessage);
+    UNIT_ASSERT(!result->ErrorMessage.empty());
+}
+
+Y_UNIT_TEST(AlterTopicMlpConsumerFailsWhenChangingDlqToTopicWithoutAccess) {
+    constexpr const char* USER_NAME = "topicuser8";
+    constexpr const char* DLQ_TOPIC_1 = "dlq-topic-switch-1";
+    constexpr const char* DLQ_TOPIC_2 = "dlq-topic-switch-2";
+    constexpr const char* MAIN_TOPIC = "main-topic-dlq-switch-test";
+
+    auto setup = CreateSetup();
+    auto& client = *setup->GetServer().AnnoyingClient;
+
+    const TString userSid = CreateUser(client, USER_NAME);
+
+    CreateDLQTopic(setup, DLQ_TOPIC_1);
+    GrantOnlyOnTopic(client, DLQ_TOPIC_1, userSid, {
+        NACLib::EAccessRights::AlterSchema,
+        NACLib::EAccessRights::UpdateRow,
+    });
+
+    CreateDLQTopic(setup, DLQ_TOPIC_2);
+    RevokeAllRightsOnTopic(client, DLQ_TOPIC_2, userSid);
+
+    {
+        auto result = CreateTopicWithDLQ(setup, userSid, MAIN_TOPIC, DLQ_TOPIC_1);
+        UNIT_ASSERT(result);
+        UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->ErrorMessage);
+        setup->GetServer().WaitInit(TStringBuilder() << "/Root/" << MAIN_TOPIC);
+    }
+
+    auto result = AlterTopicMlpConsumerDlq(setup, userSid, MAIN_TOPIC, DLQ_TOPIC_2);
+
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::UNAUTHORIZED, result->ErrorMessage);
     UNIT_ASSERT(!result->ErrorMessage.empty());
 }
 

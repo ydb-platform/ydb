@@ -412,7 +412,7 @@ TResult AddConsumer(
         consumersAdvancedMonitoringSettings->UpdateConsumerConfig(consumerConfig.name(), *consumer);
     }
 
-    MarkConsumerAddedAtCurrentTopicConfigVersion(*consumer, *config);
+    UpdateConsumerVersion(*consumer, *config);
 
     return TResult();
 }
@@ -425,11 +425,11 @@ void BumpTopicConfigVersion(NKikimrPQ::TPQTabletConfig& config) {
     config.SetTopicConfigVersion(config.GetTopicConfigVersion() + 1);
 }
 
-void MarkConsumerAddedAtCurrentTopicConfigVersion(
+void UpdateConsumerVersion(
     NKikimrPQ::TPQTabletConfig_TConsumer& consumer,
     const NKikimrPQ::TPQTabletConfig& config
 ) {
-    consumer.SetAddedAtTopicConfigVersion(config.GetTopicConfigVersion());
+    consumer.SetModificationVersion(config.GetTopicConfigVersion());
 }
 
 } // namespace NKikimr::NPQ::NSchema

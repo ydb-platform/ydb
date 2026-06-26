@@ -3,6 +3,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/grpc_services/rpc_calls_topic.h>
+#include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/persqueue/public/schema/alter_topic_operation.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
@@ -38,9 +39,12 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         const auto& pqConfig = AppData()->PQConfig;
         const auto& sourceTabletConfig = sourceConfig.GetPQTabletConfig();
 
-        absl::flat_hash_map<TString, ui64> addedAtTopicConfigVersionByConsumer;
+        absl::flat_hash_map<TString, std::pair<ui64, TString>> oldConsumerInfoByName;
         for (const auto& c : sourceTabletConfig.GetConsumers()) {
-            addedAtTopicConfigVersionByConsumer[c.GetName()] = c.GetAddedAtTopicConfigVersion();
+            oldConsumerInfoByName[c.GetName()] = {
+                c.GetModificationVersion(),
+                NPQ::GetDLQTopicPath(c),
+            };
         }
 
         for (const auto& readRule : Request.settings().read_rules()) {
@@ -66,10 +70,15 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         auto& targetTabletConfig = *targetConfig.MutablePQTabletConfig();
         targetTabletConfig.SetTopicConfigVersion(sourceTabletConfig.GetTopicConfigVersion() + 1);
         for (auto& consumer : *targetTabletConfig.MutableConsumers()) {
-            if (const auto it = addedAtTopicConfigVersionByConsumer.find(consumer.GetName()); it != addedAtTopicConfigVersionByConsumer.end()) {
-                consumer.SetAddedAtTopicConfigVersion(it->second);
+            const TString newDlqTopicPath = NPQ::GetDLQTopicPath(consumer);
+            if (const auto it = oldConsumerInfoByName.find(consumer.GetName()); it != oldConsumerInfoByName.end()) {
+                if (newDlqTopicPath != it->second.second) {
+                    NPQ::NSchema::UpdateConsumerVersion(consumer, targetTabletConfig);
+                } else {
+                    consumer.SetModificationVersion(it->second.first);
+                }
             } else {
-                NPQ::NSchema::MarkConsumerAddedAtCurrentTopicConfigVersion(consumer, targetTabletConfig);
+                NPQ::NSchema::UpdateConsumerVersion(consumer, targetTabletConfig);
             }
         }
 

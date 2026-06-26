@@ -76,28 +76,37 @@ const NKikimrPQ::TPQTabletConfig_TPartition* GetPartitionConfigFromAllPartitions
     return nullptr;
 }
 
-THashSet<TString> CollectDlqTopicPaths(
+TString GetDLQTopicPath(const NKikimrPQ::TPQTabletConfig_TConsumer& consumer) {
+    if (consumer.GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
+        return {};
+    }
+    if (consumer.GetDeadLetterPolicy() != NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE
+        || !consumer.GetDeadLetterPolicyEnabled()) {
+        return {};
+    }
+
+    const auto& dlq = consumer.GetDeadLetterQueue();
+    if (dlq.empty() || dlq.StartsWith("sqs://"sv)) {
+        return {};
+    }
+
+    return dlq;
+}
+
+THashSet<TString> CollectDLQTopicPaths(
     const NKikimrPQ::TPQTabletConfig& config,
     const TString& database,
-    bool onlyConsumersAddedAtCurrentVersion
+    std::optional<ui64> modificationVersion
 ) {
     THashSet<TString> result;
-    const ui64 topicConfigVersion = config.GetTopicConfigVersion();
 
     for (const auto& consumer : config.GetConsumers()) {
-        if (onlyConsumersAddedAtCurrentVersion && consumer.GetAddedAtTopicConfigVersion() != topicConfigVersion) {
-            continue;
-        }
-        if (consumer.GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
-            continue;
-        }
-        if (consumer.GetDeadLetterPolicy() != NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE
-            || !consumer.GetDeadLetterPolicyEnabled()) {
+        if (modificationVersion && consumer.GetModificationVersion() != *modificationVersion) {
             continue;
         }
 
-        const auto& dlq = consumer.GetDeadLetterQueue();
-        if (dlq.empty() || dlq.StartsWith("sqs://"sv)) {
+        const auto dlq = GetDLQTopicPath(consumer);
+        if (dlq.empty()) {
             continue;
         }
 

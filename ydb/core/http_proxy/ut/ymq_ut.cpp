@@ -702,7 +702,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
         auto req = CreateSqsGetQueueUrlRequest();
         req["QueueName"] = "not-existing-queue";
-        auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", std::move(req), "X-YaCloud-SubjectToken: sa_proxy@builtin");
+        auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", std::move(req), "X-YaCloud-SubjectToken: proxy_sa@builtin");
         UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
 
         NJson::TJsonValue json;
@@ -738,7 +738,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
         auto req = CreateSqsGetQueueUrlRequest();
         req["QueueName"] = "not-existing-queue";
-        auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", std::move(req), "X-YaCloud-SubjectToken: sa_proxy@builtin");
+        auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", std::move(req), "X-YaCloud-SubjectToken: proxy_sa@builtin");
         UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
 
         NJson::TJsonValue json;
@@ -756,7 +756,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
         auto createQueueReq = CreateSqsCreateQueueRequest();
         createQueueReq["QueueName"] = "ExampleQueueName";
-        auto createQueueRes = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), "X-YaCloud-SubjectToken: sa_proxy@builtin");
+        auto createQueueRes = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), "X-YaCloud-SubjectToken: proxy_sa@builtin");
         UNIT_ASSERT_VALUES_EQUAL(createQueueRes.HttpCode, 200);
 
         NJson::TJsonValue createQueueJson;
@@ -767,7 +767,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         NJson::TJsonValue sendMessageReq;
         sendMessageReq["QueueUrl"] = queueUrl;
         sendMessageReq["MessageBody"] = "MessageBody-0";
-        auto sendMessageRes = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), "X-YaCloud-SubjectToken: sa_proxy@builtin");
+        auto sendMessageRes = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), "X-YaCloud-SubjectToken: proxy_sa@builtin");
         UNIT_ASSERT_VALUES_EQUAL(sendMessageRes.HttpCode, 200);
 
         NJson::TJsonValue sendMessageJson;
@@ -783,7 +783,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
         auto createQueueReq = CreateSqsCreateQueueRequest();
         createQueueReq["QueueName"] = "ExampleQueueName";
-        auto createQueueRes = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), "X-YaCloud-SubjectToken: sa_proxy@builtin");
+        auto createQueueRes = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), "X-YaCloud-SubjectToken: proxy_sa@builtin");
         UNIT_ASSERT_VALUES_EQUAL(createQueueRes.HttpCode, 200);
 
         NJson::TJsonValue createQueueJson;
@@ -794,7 +794,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         NJson::TJsonValue sendMessageReq;
         sendMessageReq["QueueUrl"] = queueUrl;
         sendMessageReq["MessageBody"] = "MessageBody-0";
-        auto sendMessageRes = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), "X-YaCloud-SubjectToken: sa_proxy@builtin");
+        auto sendMessageRes = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), "X-YaCloud-SubjectToken: proxy_sa@builtin");
         UNIT_ASSERT_VALUES_EQUAL(sendMessageRes.HttpCode, 200);
 
         NJson::TJsonValue sendMessageJson;

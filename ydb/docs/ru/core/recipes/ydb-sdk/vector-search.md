@@ -6,11 +6,11 @@
 
 - [Векторный поиск](#векторный-поиск)
   - [Подключение к {{ ydb-short-name }}](#connect-ydb)
-  - [Создание таблицы](#create-table)
-  - [Вставка векторов](#insert-vectors)
-  - [Добавление индекса](#add-vector-index)
-  - [Поиск по вектору](#search-by-vector)
-  - [Итоговый пример](#full-example)
+  - [Создание таблицы {#create-table}](#создание-таблицы-create-table)
+  - [Вставка векторов {#insert-vectors}](#вставка-векторов-insert-vectors)
+  - [Добавление индекса {#add-vector-index}](#добавление-индекса-add-vector-index)
+  - [Поиск по вектору {#search-by-vector}](#поиск-по-вектору-search-by-vector)
+  - [Итоговый пример {#full-example}](#итоговый-пример-full-example)
 
 В данном рецепте будет создано хранилище текстов со следующей структурой:
 
@@ -247,6 +247,8 @@
 
 - Java
 
+    Создайте таблицу для документов и их векторных представлений. Используйте `SessionRetryContext` из раздела [Подключение к {{ ydb-short-name }}]({#connect-ydb}).
+
     ```java
     import tech.ydb.common.transaction.TxMode;
     import tech.ydb.query.tools.QueryReader;
@@ -331,34 +333,6 @@
         embedding String,
         PRIMARY KEY (id)
     );`
-    ```
-
-- Java
-
-    Создайте таблицу для документов и их векторных представлений. Используйте `SessionRetryContext` из раздела [Подключение к {{ ydb-short-name }}](#connect-ydb).
-
-    ```java
-    import tech.ydb.common.transaction.TxMode;
-    import tech.ydb.query.tools.QueryReader;
-    import tech.ydb.query.tools.SessionRetryContext;
-    import tech.ydb.table.query.Params;
-
-    static void createVectorTable(SessionRetryContext retryCtx, String tableName) {
-        // DDL выполняется без транзакции (TxMode.NONE).
-        String query = String.format("""
-                CREATE TABLE IF NOT EXISTS `%s` (
-                    id Utf8,
-                    document Utf8,
-                    embedding String,
-                    PRIMARY KEY (id)
-                );""", tableName);
-
-        retryCtx.supplyResult(session -> QueryReader.readFrom(
-                session.createQuery(query, TxMode.NONE, Params.empty())
-        )).join().getValue();
-
-        System.out.println("Vector table created: " + tableName);
-    }
     ```
 
 - Rust

@@ -1,4 +1,5 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/distributed_lock.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/session_pool.h>
 
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/type_switcher.h>
 
@@ -73,6 +74,14 @@ TDistributedLock MakeLock(TTestEnv& env, const char* name = SEMAPHORE_NAME) {
         TDistributedLockSettings().Path(COORD_PATH).Name(name).Timeout(TEST_TIMEOUT));
 }
 
+TCoordinationSessionPool MakePool(TTestEnv& env, size_t size = 1) {
+    return env.Client->CreateSessionPool(
+        COORD_PATH,
+        TCoordinationSessionPoolSettings()
+            .PoolSize(size)
+            .SessionSettings(TSessionSettings().Timeout(TEST_TIMEOUT)));
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(DistributedLock) {
@@ -111,7 +120,7 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
         env.CoordinationService.FailNextAcquire.store(true);
         auto lock = MakeLock(env);
         UNIT_ASSERT_EXCEPTION(lock.lock(), TYdbLockException);
-        UNIT_ASSERT(!lock.getStopToken().stop_requested());
+        UNIT_ASSERT(!lock.GetStopToken().stop_requested());
         lock.lock();
         lock.unlock();
     }
@@ -120,10 +129,88 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
         TTestEnv env;
         auto lock = MakeLock(env);
         lock.lock();
-        auto token = lock.getStopToken();
+        auto token = lock.GetStopToken();
         env.CoordinationService.FailNextRelease.store(true);
         lock.unlock();
         UNIT_ASSERT(token.stop_requested());
+    }
+
+    Y_UNIT_TEST(SessionPoolStartsConfiguredSessions) {
+        TTestEnv env;
+        auto pool = MakePool(env, 3);
+        Y_UNUSED(pool);
+        UNIT_ASSERT_VALUES_EQUAL(env.CoordinationService.StartedSessions.load(), 3u);
+    }
+
+    Y_UNIT_TEST(PooledLockUnlock) {
+        TTestEnv env;
+        auto pool = MakePool(env);
+        auto lock = pool.CreateDistributedLock(
+            TDistributedLockSettings().Name(SEMAPHORE_NAME).Timeout(TEST_TIMEOUT));
+        lock.lock();
+        lock.unlock();
+    }
+
+    Y_UNIT_TEST(PooledTryLockFailsWhenPoolIsEmpty) {
+        TTestEnv env;
+        auto pool = MakePool(env);
+        auto lockA = pool.CreateDistributedLock(
+            TDistributedLockSettings().Name(SEMAPHORE_NAME).Timeout(TEST_TIMEOUT));
+        auto lockB = pool.CreateDistributedLock(
+            TDistributedLockSettings().Name("another-lock").Timeout(TEST_TIMEOUT));
+
+        lockA.lock();
+        UNIT_ASSERT(!lockB.try_lock());
+        lockA.unlock();
+
+        UNIT_ASSERT(lockB.try_lock());
+        lockB.unlock();
+    }
+
+    Y_UNIT_TEST(PooledLockReusesReturnedSession) {
+        TTestEnv env;
+        auto pool = MakePool(env);
+        auto lockA = pool.CreateDistributedLock(
+            TDistributedLockSettings().Name(SEMAPHORE_NAME).Timeout(TEST_TIMEOUT));
+        auto lockB = pool.CreateDistributedLock(
+            TDistributedLockSettings().Name("another-lock").Timeout(TEST_TIMEOUT));
+
+        lockA.lock();
+        lockA.unlock();
+
+        UNIT_ASSERT(lockB.try_lock());
+        lockB.unlock();
+        UNIT_ASSERT_VALUES_EQUAL(env.CoordinationService.StartedSessions.load(), 1u);
+    }
+
+    Y_UNIT_TEST(PooledLockAcquireFailureReturnsUsableSession) {
+        TTestEnv env;
+        auto pool = MakePool(env);
+        auto lock = pool.CreateDistributedLock(
+            TDistributedLockSettings().Name(SEMAPHORE_NAME).Timeout(TEST_TIMEOUT));
+
+        env.CoordinationService.FailNextAcquire.store(true);
+        UNIT_ASSERT_EXCEPTION(lock.lock(), TYdbLockException);
+
+        lock.lock();
+        lock.unlock();
+    }
+
+    Y_UNIT_TEST(PooledLockReleaseFailureReplacesSession) {
+        TTestEnv env;
+        auto pool = MakePool(env);
+        auto lock = pool.CreateDistributedLock(
+            TDistributedLockSettings().Name(SEMAPHORE_NAME).Timeout(TEST_TIMEOUT));
+
+        lock.lock();
+        auto token = lock.GetStopToken();
+        env.CoordinationService.FailNextRelease.store(true);
+        lock.unlock();
+        UNIT_ASSERT(token.stop_requested());
+
+        lock.lock();
+        UNIT_ASSERT(!lock.GetStopToken().stop_requested());
+        lock.unlock();
     }
 
     Y_UNIT_TEST(OwnerDataIsHostName) {
@@ -151,7 +238,7 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
     Y_UNIT_TEST(GetStopTokenInitiallyValid) {
         TTestEnv env;
         auto lock = MakeLock(env);
-        UNIT_ASSERT(!lock.getStopToken().stop_requested());
+        UNIT_ASSERT(!lock.GetStopToken().stop_requested());
     }
 
     Y_UNIT_TEST(SessionExpiryWhileHoldingLock) {
@@ -160,13 +247,13 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
         auto lock = MakeLock(env);
         lock.lock();
         const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
-        while (!lock.getStopToken().stop_requested() && TInstant::Now() < deadline) {
+        while (!lock.GetStopToken().stop_requested() && TInstant::Now() < deadline) {
             Sleep(TDuration::MilliSeconds(50));
         }
-        UNIT_ASSERT(lock.getStopToken().stop_requested());
+        UNIT_ASSERT(lock.GetStopToken().stop_requested());
         lock.unlock();
         lock.lock();
-        UNIT_ASSERT(!lock.getStopToken().stop_requested());
+        UNIT_ASSERT(!lock.GetStopToken().stop_requested());
         lock.unlock();
     }
 

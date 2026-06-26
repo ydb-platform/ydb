@@ -1,8 +1,8 @@
-* Added a distributed lock primitive based on the coordination service, which implements basic_lockable concept.
+* Added a distributed lock primitive based on the coordination service. The lock implements the BasicLockable concept and can be created directly or from a coordination session pool.
 
-* Added automatic retries for unary methods of table and query clients(ExecuteQuery, ExecuteScript, BulkUpsert, ReadRows).
+* Added automatic retries for unary methods of table and query clients (ExecuteQuery, ExecuteScript, BulkUpsert, ReadRows).
 
-* Implemented native ranges(TRowRange) and iterators over both streaming query results and TResultSet.
+* Implemented native ranges (TRowRange) and iterators over both streaming query results and TResultSet.
 
 ## v3.19.0
 

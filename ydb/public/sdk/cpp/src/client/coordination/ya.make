@@ -4,6 +4,7 @@ SRCS(
     coordination.cpp
     proto_accessor.cpp
     distributed_lock.cpp
+    session_pool.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h)

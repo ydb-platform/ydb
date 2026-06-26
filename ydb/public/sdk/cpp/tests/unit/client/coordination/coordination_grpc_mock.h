@@ -50,6 +50,7 @@ public:
     // Zero means unlimited pong responses; set to a positive value to stop responding
     // after N pings (used by SessionPingTimeout).
     std::atomic<size_t> MaxPingResponses{0};
+    std::atomic<size_t> StartedSessions{0};
 
     grpc::Status Session(
             grpc::ServerContext* context,
@@ -70,6 +71,7 @@ public:
         if (!sessionId) {
             sessionId = ++LastSessionId_;
         }
+        StartedSessions.fetch_add(1);
         {
             Ydb::Coordination::SessionResponse response;
             auto* started = response.mutable_session_started();
@@ -121,18 +123,18 @@ public:
                     result->set_status(Ydb::StatusIds::BAD_REQUEST);
                     result->set_released(false);
                 } else {
-                std::lock_guard guard(SemaphoreLock_);
-                auto it = Semaphores_.find(release.name());
-                if (it != Semaphores_.end() && it->second.Held && it->second.OwnerSessionId == sessionId) {
-                    it->second.Held = false;
-                    it->second.OwnerSessionId = 0;
-                    it->second.Data.clear();
-                    result->set_status(Ydb::StatusIds::SUCCESS);
-                    result->set_released(true);
-                } else {
-                    result->set_status(Ydb::StatusIds::SUCCESS);
-                    result->set_released(false);
-                }
+                    std::lock_guard guard(SemaphoreLock_);
+                    auto it = Semaphores_.find(release.name());
+                    if (it != Semaphores_.end() && it->second.Held && it->second.OwnerSessionId == sessionId) {
+                        it->second.Held = false;
+                        it->second.OwnerSessionId = 0;
+                        it->second.Data.clear();
+                        result->set_status(Ydb::StatusIds::SUCCESS);
+                        result->set_released(true);
+                    } else {
+                        result->set_status(Ydb::StatusIds::SUCCESS);
+                        result->set_released(false);
+                    }
                 }
                 stream->Write(response);
             } else if (request.has_describe_semaphore()) {

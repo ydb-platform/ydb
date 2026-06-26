@@ -27,7 +27,7 @@ plugins {
 {%-     endif -%}
 {%- endif -%}
 
-{%- if with_errorprone or with_test_errorprone %}
+{%- if with_errorprone or with_test_errorprones|length %}
     id("net.ltgt.errorprone") version "{{ ver_errorprone }}"
 {%- endif -%}
 

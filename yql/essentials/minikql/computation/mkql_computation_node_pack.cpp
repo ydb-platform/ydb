@@ -481,7 +481,7 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
                 items[i] = std::move(tmp[i]);
             }
 
-            return std::move(list);
+            return list;
         }
 
         case TType::EKind::Struct: {
@@ -492,7 +492,7 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
                 auto memberType = structType->GetMemberType(index);
                 itemsPtr[index] = UnpackFromChunkedBuffer<Fast>(memberType, buf, topLength, holderFactory, s);
             }
-            return std::move(res);
+            return res;
         }
 
         case TType::EKind::Tuple: {
@@ -503,7 +503,7 @@ NUdf::TUnboxedValue UnpackFromChunkedBuffer(const TType* type, TChunkedInputBuff
                 auto elementType = tupleType->GetElementType(index);
                 itemsPtr[index] = UnpackFromChunkedBuffer<Fast>(elementType, buf, topLength, holderFactory, s);
             }
-            return std::move(res);
+            return res;
         }
 
         case TType::EKind::Dict: {
@@ -1481,7 +1481,7 @@ void TValuePackerTransport<Fast>::UnpackBatchBlocks(TChunkedBuffer&& buf, const 
             for (ui32 i = 0; i < width; ++i) {
                 valueItems[i] = producer(i);
             }
-            result.emplace_back(std::move(structValue));
+            result.emplace_back(structValue);
         } else {
             result.PushRow(producer);
         }

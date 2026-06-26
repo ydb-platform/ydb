@@ -4,10 +4,7 @@
 #include "rdma/mem_pool.h"
 #include <ydb/library/actors/core/probes.h>
 #include <ydb/library/actors/util/datetime.h>
-
-#ifdef __linux__
-#include <liburing.h>
-#endif
+#include <ydb/library/uring/liburing_compat.h>
 
 #include <variant>
 
@@ -147,7 +144,7 @@ namespace NActors {
                 );
 
                 mrOffset += credCopy.GetSize();
-                credOffset += credCopy.GetSize(); 
+                credOffset += credCopy.GetSize();
 
                 if (mrOffset == curMemReg.GetSize()) {  // section finished
                     pendingEvent.RdmaBuffers.pop_front();

@@ -74,7 +74,7 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
             return Finish(Ydb::StatusIds::GENERIC_ERROR, "empty compile response");
         }
 
-        LOG_D("TSchemeQueryExecutor HandleCompileResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "TSchemeQueryExecutor HandleCompileResponse"
             << ", self: " << SelfId()
             << ", status: " << result->Status;
         );
@@ -117,7 +117,7 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
         auto logMessage = TStringBuilder() << "TSchemeQueryExecutor Reply"
             << ", self: " << SelfId()
             << ", status: " << status;
-        LOG_I(logMessage);
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, logMessage);
 
         std::visit([&]<typename T>(T& value) {
             if constexpr (std::is_same_v<T, TString>) {
@@ -125,7 +125,7 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
             } else if constexpr (std::is_same_v<T, NKikimrSchemeOp::TModifyScheme>) {
                 logMessage << ", prepared query: " << value.ShortDebugString().Quote();
             }
-            LOG_D(logMessage);
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, logMessage);
             Send(ReplyTo, new TEvPrivate::TEvImportSchemeQueryResult(ImportId, ItemIdx, status, std::move(value)));
         }, result);
 

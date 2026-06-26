@@ -453,7 +453,7 @@ void TSchemeShard::ResumeImports(const TVector<ui64>& ids, const TActorContext& 
 }
 
 void TSchemeShard::WaitForTableProfiles(ui64 importId, ui32 itemIdx) {
-    LOG_N("Wait for table profiles"
+    LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::IMPORT, "Wait for table profiles"
         << ": id# " << importId
         << ", itemIdx# " << itemIdx);
     TableProfilesWaiters.insert(std::make_pair(importId, itemIdx));
@@ -461,10 +461,10 @@ void TSchemeShard::WaitForTableProfiles(ui64 importId, ui32 itemIdx) {
 
 void TSchemeShard::LoadTableProfiles(const NKikimrConfig::TTableProfilesConfig* config, const TActorContext& ctx) {
     if (config) {
-        LOG_N("Load table profiles");
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::IMPORT, "Load table profiles");
         TableProfiles.Load(*config);
     } else {
-        LOG_W("Table profiles were not loaded");
+        LOG_WARN_S(*TlsActivationContext, NKikimrServices::IMPORT, "Table profiles were not loaded");
     }
 
     TableProfilesLoaded = true;

@@ -217,8 +217,8 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
     bool DoExecute(TTransactionContext& txc, const TActorContext&) override {
         const auto& request = Request->Get()->Record;
 
-        LOG_D("TImport::TTxCreate: DoExecute");
-        LOG_T("Message:\n" << request.ShortDebugString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxCreate: DoExecute");
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::IMPORT, "Message:\n" << request.ShortDebugString());
 
         auto response = MakeHolder<TEvImport::TEvCreateImportResponse>(request.GetTxId());
 
@@ -373,7 +373,7 @@ struct TSchemeShard::TImport::TTxCreate: public TSchemeShard::TXxport::TTxBase {
     }
 
     void DoComplete(const TActorContext& ctx) override {
-        LOG_D("TImport::TTxCreate: DoComplete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxCreate: DoComplete");
 
         if (Progress) {
             const ui64 id = Request->Get()->Record.GetTxId();
@@ -387,10 +387,10 @@ private:
         const Ydb::StatusIds::StatusCode status = Ydb::StatusIds::SUCCESS,
         const TString& errorMessage = TString()
     ) {
-        LOG_D("TImport::TTxCreate: Reply"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxCreate: Reply"
             << ": status# " << status
             << ", error# " << errorMessage);
-        LOG_T("Message:\n" << response->Record.ShortDebugString());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::IMPORT, "Message:\n" << response->Record.ShortDebugString());
 
         auto& entry = *response->Record.MutableResponse()->MutableEntry();
         entry.SetStatus(status);
@@ -531,7 +531,7 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     }
 
     bool DoExecute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_D("TImport::TTxProgress: DoExecute");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: DoExecute");
 
         if (SchemeResult) {
             OnSchemeResult(txc, ctx);
@@ -555,7 +555,7 @@ struct TSchemeShard::TImport::TTxProgress: public TSchemeShard::TXxport::TTxBase
     }
 
     void DoComplete(const TActorContext&) override {
-        LOG_D("TImport::TTxProgress: DoComplete");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: DoComplete");
     }
 
 private:
@@ -563,7 +563,7 @@ private:
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
 
-        LOG_I("TImport::TTxProgress: Get scheme"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: Get scheme"
             << ": info# " << importInfo->ToString()
             << ", item# " << item.ToString(itemIdx));
 
@@ -572,7 +572,7 @@ private:
     }
 
     void GetSchemaMapping(TImportInfo::TPtr importInfo, const TActorContext& ctx) {
-        LOG_I("TImport::TTxProgress: Download schema mapping"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: Download schema mapping"
             << ": info# " << importInfo->ToString());
 
         importInfo->SchemaMappingGetter = ctx.RegisterWithSameMailbox(CreateSchemaMappingGetter(Self->SelfId(), importInfo));
@@ -586,7 +586,7 @@ private:
 
         item.SubState = ESubState::Proposed;
 
-        LOG_I("TImport::TTxProgress: CreateTable propose"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: CreateTable propose"
             << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx)
             << ", txId# " << txId);
@@ -607,7 +607,7 @@ private:
         NIceDb::TNiceDb db(txc.DB);
         NYql::TIssues issues;
 
-        LOG_I("TImport::TTxProgress: ProcessSysViewRestore"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: ProcessSysViewRestore"
             << ": info# " << importInfo->ToString()
             << ", item# " << item.ToString(itemIdx)
         );
@@ -617,7 +617,7 @@ private:
         const auto status = describeResult.GetStatus();
 
         if (status == NKikimrScheme::StatusPathDoesNotExist) {
-            LOG_I("TImport::TTxProgress: ProcessSysViewRestore"
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: ProcessSysViewRestore"
                 << ", item# " << item.ToString(itemIdx)
                 << ": system view does not exist"
             );
@@ -631,7 +631,7 @@ private:
 
             const auto& pathDescription = describeResult.GetPathDescription();
             if (!FillSysViewDescription(describeSysViewResult, pathDescription, status, error)) {
-                LOG_I("TImport::TTxProgress: ProcessSysViewRestore"
+                LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: ProcessSysViewRestore"
                     << ", item# " << item.ToString(itemIdx)
                     << ": path is not a system view"
                 );
@@ -642,7 +642,7 @@ private:
 
             const auto compatibilityStatus = NYdb::NDump::CheckSysViewCompatibility(*item.SysView, describeSysViewResult);
             if (!compatibilityStatus.IsSuccess()) {
-                LOG_E("TImport::TTxProgress: ProcessSysViewRestore"
+                LOG_ERROR_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: ProcessSysViewRestore"
                     << ", item# " << item.ToString(itemIdx)
                     << ": system view compatibility check failed"
                 );
@@ -654,7 +654,7 @@ private:
                     item.State = EState::Done;
                     return;
                 } else {
-                    LOG_I("TImport::TTxProgress: ProcessSysViewRestore"
+                    LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: ProcessSysViewRestore"
                         << ", item# " << item.ToString(itemIdx)
                         << ": needs to restore ACL"
                     );
@@ -676,7 +676,7 @@ private:
 
         item.SubState = ESubState::Proposed;
 
-        LOG_I("TImport::TTxProgress: RestoreSysViewPermissions propose"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: RestoreSysViewPermissions propose"
             << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx)
             << ", txId# " << txId);
@@ -711,7 +711,7 @@ private:
 
         item.SubState = ESubState::Proposed;
 
-        LOG_I("TImport::TTxProgress: CreateTopic propose"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: CreateTopic propose"
             << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx)
             << ", txId# " << txId);
@@ -733,7 +733,7 @@ private:
 
         item.SubState = ESubState::Proposed;
 
-        LOG_I("TImport::TTxProgress: ExecutePreparedQuery"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: ExecutePreparedQuery"
             << ": info# " << importInfo->ToString()
             << ", item# " << item.ToString(itemIdx)
             << ", txId# " << txId
@@ -771,7 +771,7 @@ private:
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
 
-        LOG_D("TImport::TTxProgress: delay scheme object query execution"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: delay scheme object query execution"
             << ": id# " << importInfo->Id
             << ", delayed item# " << itemIdx);
 
@@ -812,7 +812,7 @@ private:
         }
         if (!retriedItems.empty()) {
             importInfo.WaitingSchemeObjects = std::ssize(retriedItems);
-            LOG_D("TImport::TTxProgress: retry scheme object query execution"
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: retry scheme object query execution"
                 << ": id# " << importInfo.Id
                 << ", retried items# " << JoinSeq(", ", retriedItems)
             );
@@ -825,7 +825,7 @@ private:
 
         item.SubState = ESubState::Proposed;
 
-        LOG_I("TImport::TTxProgress: Restore propose"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: Restore propose"
             << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx)
             << ", txId# " << txId);
@@ -848,7 +848,7 @@ private:
 
         importInfo.State = EState::Cancellation;
 
-        LOG_I("TImport::TTxProgress: cancel restore's tx"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: cancel restore's tx"
             << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx));
 
@@ -862,7 +862,7 @@ private:
 
         item.SubState = ESubState::Proposed;
 
-        LOG_I("TImport::TTxProgress: build index"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: build index"
             << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx)
             << ", txId# " << txId);
@@ -885,7 +885,7 @@ private:
 
         importInfo.State = EState::Cancellation;
 
-        LOG_I("TImport::TTxProgress: cancel index building"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: cancel index building"
             << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx));
 
@@ -898,7 +898,7 @@ private:
         auto& item = importInfo.Items.at(itemIdx);
         item.SubState = ESubState::Proposed;
 
-        LOG_I("TImport::TTxProgress: CreateChangefeed propose"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: CreateChangefeed propose"
             << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx)
             << ", txId# " << txId);
@@ -919,7 +919,7 @@ private:
         auto& item = importInfo.Items.at(itemIdx);
         item.SubState = ESubState::Proposed;
 
-        LOG_I("TImport::TTxProgress: CreateConsumers propose"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: CreateConsumers propose"
             << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx)
             << ", txId# " << txId);
@@ -935,7 +935,7 @@ private:
 
         item.SubState = ESubState::AllocateTxId;
 
-        LOG_I("TImport::TTxProgress: Allocate txId"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: Allocate txId"
             << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx));
 
@@ -949,7 +949,7 @@ private:
 
         item.SubState = ESubState::Subscribed;
 
-        LOG_I("TImport::TTxProgress: Wait for completion"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: Wait for completion"
             << ": info# " << importInfo.ToString()
             << ", item# " << item.ToString(itemIdx));
 
@@ -1052,7 +1052,7 @@ private:
         if (item) {
             itemLogStr << ", item# " << item->ToString(itemIdx);
         }
-        LOG_N("TImport::TTxProgress: " << marker << ", cancelling"
+        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: " << marker << ", cancelling"
             << ", info# " << importInfo.ToString()
             << itemLogStr);
 
@@ -1179,7 +1179,7 @@ private:
         Y_ABORT_UNLESS(Self->Imports.contains(Id));
         TImportInfo::TPtr importInfo = Self->Imports.at(Id);
 
-        LOG_D("TImport::TTxProgress: Resume"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: Resume"
             << ": id# " << Id
             << ", itemIdx# " << ItemIdx);
 
@@ -1205,7 +1205,7 @@ private:
         Y_ABORT_UNLESS(itemIdx < importInfo->Items.size());
         auto& item = importInfo->Items.at(itemIdx);
 
-        LOG_D("TImport::TTxProgress: Resume"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: Resume"
             << ": info# " << importInfo->ToString()
             << ", item# " << item.ToString(itemIdx));
 
@@ -1297,21 +1297,21 @@ private:
 
         const auto& msg = *SchemeResult->Get();
 
-        LOG_D("TImport::TTxProgress: OnSchemeResult"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: OnSchemeResult"
             << ": id# " << msg.ImportId
             << ", itemIdx# " << msg.ItemIdx
             << ", success# " << msg.Success
         );
 
         if (!Self->Imports.contains(msg.ImportId)) {
-            LOG_E("TImport::TTxProgress: OnSchemeResult received unknown id"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: OnSchemeResult received unknown id"
                 << ": id# " << msg.ImportId);
             return;
         }
 
         TImportInfo::TPtr importInfo = Self->Imports.at(msg.ImportId);
         if (msg.ItemIdx >= importInfo->Items.size()) {
-            LOG_E("TImport::TTxProgress: OnSchemeResult received unknown item"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: OnSchemeResult received unknown item"
                 << ": id# " << msg.ImportId
                 << ", item# " << msg.ItemIdx);
             return;
@@ -1408,13 +1408,13 @@ private:
 
         const auto& msg = *SchemaMappingResult->Get();
 
-        LOG_D("TImport::TTxProgress: OnSchemaMappingResult"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: OnSchemaMappingResult"
             << ": id# " << msg.ImportId
             << ", success# " << msg.Success
         );
 
         if (!Self->Imports.contains(msg.ImportId)) {
-            LOG_E("TImport::TTxProgress: OnSchemaMappingResult received unknown id"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: OnSchemaMappingResult received unknown id"
                 << ": id# " << msg.ImportId);
             return;
         }
@@ -1451,7 +1451,7 @@ private:
         const auto& message = *SchemeQueryResult.Get()->Get();
         const TString error = std::holds_alternative<TString>(message.Result) ? std::get<TString>(message.Result) : "";
 
-        LOG_D("TImport::TTxProgress: OnSchemeQueryPreparation"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: OnSchemeQueryPreparation"
             << ": id# " << message.ImportId
             << ", itemIdx# " << message.ItemIdx
             << ", status# " << message.Status
@@ -1460,13 +1460,13 @@ private:
 
         auto importInfo = Self->Imports.Value(message.ImportId, nullptr);
         if (!importInfo) {
-            LOG_E("TImport::TTxProgress: OnSchemeQueryPreparation received unknown import id"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: OnSchemeQueryPreparation received unknown import id"
                 << ": id# " << message.ImportId
             );
             return;
         }
         if (message.ItemIdx >= importInfo->Items.size()) {
-            LOG_E("TImport::TTxProgress: OnSchemeQueryPreparation item index out of range"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: OnSchemeQueryPreparation item index out of range"
                 << ": id# " << message.ImportId
                 << ", item index# " << message.ItemIdx
                 << ", number of items# " << importInfo->Items.size()
@@ -1506,12 +1506,12 @@ private:
         const auto txId = TTxId(AllocateResult->Get()->TxIds.front());
         const ui64 id = AllocateResult->Cookie;
 
-        LOG_D("TImport::TTxProgress: OnAllocateResult"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: OnAllocateResult"
             << ": txId# " << txId
             << ", id# " << id);
 
         if (!Self->Imports.contains(id)) {
-            LOG_E("TImport::TTxProgress: OnAllocateResult received unknown id"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: OnAllocateResult received unknown id"
                 << ": id# " << id);
             return;
         }
@@ -1612,14 +1612,14 @@ private:
         Y_ABORT_UNLESS(ModifyResult);
         const auto& record = ModifyResult->Get()->Record;
 
-        LOG_D("TImport::TTxProgress: OnModifyResult"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: OnModifyResult"
             << ": txId# " << record.GetTxId()
             << ", status# " << record.GetStatus());
-        LOG_T("Message:\n" << record.ShortDebugString());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::IMPORT, "Message:\n" << record.ShortDebugString());
 
         auto txId = TTxId(record.GetTxId());
         if (!Self->TxIdToImport.contains(txId)) {
-            LOG_E("TImport::TTxProgress: OnModifyResult received unknown txId"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: OnModifyResult received unknown txId"
                 << ": txId# " << txId);
             return;
         }
@@ -1628,7 +1628,7 @@ private:
         ui32 itemIdx;
         std::tie(id, itemIdx) = Self->TxIdToImport.at(txId);
         if (!Self->Imports.contains(id)) {
-            LOG_E("TImport::TTxProgress: OnModifyResult received unknown id"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: OnModifyResult received unknown id"
                 << ": id# " << id);
             return;
         }
@@ -1744,14 +1744,14 @@ private:
         Y_ABORT_UNLESS(CreateIndexResult);
         const auto& record = CreateIndexResult->Get()->Record;
 
-        LOG_D("TImport::TTxProgress: OnCreateIndexResult"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: OnCreateIndexResult"
             << ": txId# " << record.GetTxId()
             << ", status# " << record.GetStatus());
-        LOG_T("Message:\n" << record.ShortDebugString());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::IMPORT, "Message:\n" << record.ShortDebugString());
 
         auto txId = TTxId(record.GetTxId());
         if (!Self->TxIdToImport.contains(txId)) {
-            LOG_E("TImport::TTxProgress: OnCreateIndexResult received unknown txId"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: OnCreateIndexResult received unknown txId"
                 << ": txId# " << txId);
             return;
         }
@@ -1760,7 +1760,7 @@ private:
         ui32 itemIdx;
         std::tie(id, itemIdx) = Self->TxIdToImport.at(txId);
         if (!Self->Imports.contains(id)) {
-            LOG_E("TImport::TTxProgress: OnCreateIndexResult received unknown id"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: OnCreateIndexResult received unknown id"
                 << ": id# " << id);
             return;
         }
@@ -1812,12 +1812,12 @@ private:
 
     void OnNotifyResult(TTransactionContext& txc, const TActorContext& ctx) {
         Y_ABORT_UNLESS(CompletedTxId);
-        LOG_D("TImport::TTxProgress: OnNotifyResult"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: OnNotifyResult"
             << ": txId# " << CompletedTxId);
 
         const auto txId = CompletedTxId;
         if (!Self->TxIdToImport.contains(txId)) {
-            LOG_E("TImport::TTxProgress: OnNotifyResult received unknown txId"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: OnNotifyResult received unknown txId"
                 << ": txId# " << txId);
             return;
         }
@@ -1826,7 +1826,7 @@ private:
         ui32 itemIdx;
         std::tie(id, itemIdx) = Self->TxIdToImport.at(txId);
         if (!Self->Imports.contains(id)) {
-            LOG_E("TImport::TTxProgress: OnNotifyResult received unknown id"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::IMPORT, "TImport::TTxProgress: OnNotifyResult received unknown id"
                 << ": id# " << id);
             return;
         }

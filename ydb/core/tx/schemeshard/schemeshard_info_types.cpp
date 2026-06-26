@@ -418,7 +418,7 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
                 && !columnFamily
                 && !col.HasDefaultFromSequence()
                 && !col.HasEmptyDefault()
-                && !col.HasDefaultFromLiteral()) 
+                && !col.HasDefaultFromLiteral())
             {
                 errStr = Sprintf("Nothing to alter for column '%s'", colName.data());
                 return nullptr;

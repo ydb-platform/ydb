@@ -145,7 +145,7 @@ protected:
             return true;
         }
 
-        LOG_E("Error at '" << marker << "'"
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::IMPORT, "Error at '" << marker << "'"
             << ": self# " << this->SelfId()
             << ", error# " << result);
         MaybeRetry(result.GetError());
@@ -224,7 +224,7 @@ protected:
     void HandleChecksum(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_D("HandleChecksum TEvExternalStorage::TEvHeadObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleChecksum TEvExternalStorage::TEvHeadObjectResponse"
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
@@ -239,7 +239,7 @@ protected:
         const auto& msg = *ev->Get();
         const auto& result = msg.Result;
 
-        LOG_D("HandleChecksum TEvExternalStorage::TEvGetObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleChecksum TEvExternalStorage::TEvGetObjectResponse"
             << ": self# " << this->SelfId()
             << ", result# " << result);
 
@@ -393,7 +393,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     void HandleMetadata(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_D("HandleMetadata TEvExternalStorage::TEvHeadObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleMetadata TEvExternalStorage::TEvHeadObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -431,11 +431,11 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     void HeadNextScheme() {
         while (++SchemePropertiesIdx < GetXxportProperties().size()) {
             const auto& properties = GetXxportProperties()[SchemePropertiesIdx];
-            LOG_D("HeadNextScheme"
+            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HeadNextScheme"
                 << ": self# " << SelfId()
                 << ", file name# " << properties.FileName);
             if (!CheckAvailableInImport(properties.PathType)) {
-                LOG_D(TStringBuilder() << properties.FileName << " not available in imports");
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, TStringBuilder() << properties.FileName << " not available in imports");
                 continue;
             }
 
@@ -450,7 +450,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     void HandleScheme(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_D("HandleScheme TEvExternalStorage::TEvHeadObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleScheme TEvExternalStorage::TEvHeadObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -469,7 +469,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     void HandlePermissions(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_D("HandlePermissions TEvExternalStorage::TEvHeadObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandlePermissions TEvExternalStorage::TEvHeadObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -492,7 +492,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     void HandleIndex(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_D("HandleIndex TEvExternalStorage::TEvHeadObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleIndex TEvExternalStorage::TEvHeadObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -514,7 +514,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     void HandleChangefeed(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_D("HandleChangefeed TEvExternalStorage::TEvHeadObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleChangefeed TEvExternalStorage::TEvHeadObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -529,7 +529,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
     void HandleTopic(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_D("HandleTopic TEvExternalStorage::TEvHeadObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleTopic TEvExternalStorage::TEvHeadObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -545,7 +545,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         const auto& msg = *ev->Get();
         const auto& result = msg.Result;
 
-        LOG_D("HandleMetadata TEvExternalStorage::TEvGetObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleMetadata TEvExternalStorage::TEvGetObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -561,7 +561,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
         auto& item = ImportInfo->Items.at(ItemIdx);
 
-        LOG_T("Trying to parse metadata"
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::IMPORT, "Trying to parse metadata"
             << ": self# " << SelfId()
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
         try {
@@ -592,7 +592,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         const auto& msg = *ev->Get();
         const auto& result = msg.Result;
 
-        LOG_D("HandleScheme TEvExternalStorage::TEvGetObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleScheme TEvExternalStorage::TEvGetObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -608,7 +608,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
         auto& item = ImportInfo->Items.at(ItemIdx);
 
-        LOG_T("Trying to parse scheme"
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::IMPORT, "Trying to parse scheme"
             << ": self# " << SelfId()
             << ", itemIdx# " << ItemIdx
             << ", schemeKey# " << SchemeKey
@@ -657,7 +657,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         const auto& msg = *ev->Get();
         const auto& result = msg.Result;
 
-        LOG_D("HandlePermissions TEvExternalStorage::TEvGetObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandlePermissions TEvExternalStorage::TEvGetObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -673,7 +673,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
         auto& item = ImportInfo->Items.at(ItemIdx);
 
-        LOG_T("Trying to parse permissions"
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::IMPORT, "Trying to parse permissions"
             << ": self# " << SelfId()
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
@@ -698,7 +698,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         const auto& msg = *ev->Get();
         const auto& result = msg.Result;
 
-        LOG_D("HandleIndex TEvExternalStorage::TEvGetObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleIndex TEvExternalStorage::TEvGetObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -714,7 +714,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
         auto& item = ImportInfo->Items.at(ItemIdx);
 
-        LOG_T("Trying to parse index"
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::IMPORT, "Trying to parse index"
             << ": self# " << SelfId()
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
@@ -749,7 +749,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         const auto& msg = *ev->Get();
         const auto& result = msg.Result;
 
-        LOG_D("HandleChangefeed TEvExternalStorage::TEvGetObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleChangefeed TEvExternalStorage::TEvGetObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -765,7 +765,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
         auto& item = ImportInfo->Items.at(ItemIdx);
 
-        LOG_T("Trying to parse changefeed"
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::IMPORT, "Trying to parse changefeed"
             << ": self# " << SelfId()
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
@@ -792,7 +792,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         const auto& msg = *ev->Get();
         const auto& result = msg.Result;
 
-        LOG_D("HandleTopic TEvExternalStorage::TEvGetObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleTopic TEvExternalStorage::TEvGetObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -808,7 +808,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
         Y_ABORT_UNLESS(ItemIdx < ImportInfo->Items.size());
         auto& item = ImportInfo->Items.at(ItemIdx);
 
-        LOG_T("Trying to parse topic"
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::IMPORT, "Trying to parse topic"
             << ": self# " << SelfId()
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
@@ -841,7 +841,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
     void HandleChangefeeds(TEvExternalStorage::TEvListObjectsResponse::TPtr& ev) {
         const auto& result = ev.Get()->Get()->Result;
-        LOG_D("HandleChangefeeds TEvExternalStorage::TEvListObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleChangefeeds TEvExternalStorage::TEvListObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -865,7 +865,7 @@ class TSchemeGetter: public TGetterFromS3<TSchemeGetter> {
 
     void Reply(Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS, const TString& error = TString()) override {
         const bool success = (statusCode == Ydb::StatusIds::SUCCESS);
-        LOG_I("Reply"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "Reply"
             << ": self# " << SelfId()
             << ", success# " << success
             << ", error# " << error);
@@ -1135,7 +1135,7 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
     void HandleMetadata(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_D("HandleMetadata TEvExternalStorage::TEvHeadObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleMetadata TEvExternalStorage::TEvHeadObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -1149,7 +1149,7 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
     void HandleSchemaMappingMetadata(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_D("HandleSchemaMappingMetadata TEvExternalStorage::TEvHeadObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleSchemaMappingMetadata TEvExternalStorage::TEvHeadObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -1163,7 +1163,7 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
     void HandleSchemaMapping(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_D("HandleSchemaMapping TEvExternalStorage::TEvHeadObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleSchemaMapping TEvExternalStorage::TEvHeadObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -1178,7 +1178,7 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
         const auto& msg = *ev->Get();
         const auto& result = msg.Result;
 
-        LOG_D("HandleMetadata TEvExternalStorage::TEvGetObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleMetadata TEvExternalStorage::TEvGetObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -1187,7 +1187,7 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
         }
 
         TString content = msg.Body;
-        LOG_T("Trying to parse metadata"
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::IMPORT, "Trying to parse metadata"
             << ": self# " << SelfId()
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
@@ -1210,7 +1210,7 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
         const auto& msg = *ev->Get();
         const auto& result = msg.Result;
 
-        LOG_D("HandleSchemaMappingMetadata TEvExternalStorage::TEvGetObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleSchemaMappingMetadata TEvExternalStorage::TEvGetObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -1224,7 +1224,7 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
         }
         ImportInfo->ExportIV = IV;
 
-        LOG_T("Trying to parse schema mapping metadata"
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::IMPORT, "Trying to parse schema mapping metadata"
             << ": self# " << SelfId()
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
 
@@ -1247,7 +1247,7 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
         const auto& msg = *ev->Get();
         const auto& result = msg.Result;
 
-        LOG_D("HandleSchemaMapping TEvExternalStorage::TEvGetObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleSchemaMapping TEvExternalStorage::TEvGetObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -1260,7 +1260,7 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
             return;
         }
 
-        LOG_T("Trying to parse scheme"
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::IMPORT, "Trying to parse scheme"
             << ": self# " << SelfId()
             << ", schemaMappingKey# " << SchemaMappingKey
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
@@ -1285,7 +1285,7 @@ class TSchemaMappingGetter : public TGetterFromS3<TSchemaMappingGetter> {
 
     void Reply(Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS, const TString& error = TString()) override {
         const bool success = (statusCode == Ydb::StatusIds::SUCCESS);
-        LOG_I("Reply"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "Reply"
             << ": self# " << SelfId()
             << ", success# " << success
             << ", error# " << error);
@@ -1498,7 +1498,7 @@ public:
     void HandleSchemaMapping(TEvExternalStorage::TEvHeadObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_D("HandleSchemaMapping TEvExternalStorage::TEvHeadObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleSchemaMapping TEvExternalStorage::TEvHeadObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -1517,7 +1517,7 @@ public:
         const auto& msg = *ev->Get();
         const auto& result = msg.Result;
 
-        LOG_D("HandleSchemaMapping TEvExternalStorage::TEvGetObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleSchemaMapping TEvExternalStorage::TEvGetObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -1534,7 +1534,7 @@ public:
             return;
         }
 
-        LOG_T("Trying to parse schema mapping"
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::IMPORT, "Trying to parse schema mapping"
             << ": self# " << SelfId()
             << ", schemaMappingKey# " << GetSchemaMappingKey()
             << ", body# " << SubstGlobalCopy(content, "\n", "\\n"));
@@ -1557,7 +1557,7 @@ public:
 
     void HandleListObjects(TEvExternalStorage::TEvListObjectsResponse::TPtr& ev) {
         const auto& result = ev.Get()->Get()->Result;
-        LOG_D("HandleListObjects TEvExternalStorage::TEvListObjectResponse"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "HandleListObjects TEvExternalStorage::TEvListObjectResponse"
             << ": self# " << SelfId()
             << ", result# " << result);
 
@@ -1576,7 +1576,7 @@ public:
             // Prefix also may be added with the bucket name here, so cut bucket name also
             size_t prefixPos = key.find(prefix);
             if (prefixPos == TStringBuf::npos) {
-                LOG_D("Unexpected key found: " << key);
+                LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::IMPORT, "Unexpected key found: " << key);
                 continue;
             }
             key = key.SubString(prefixPos + prefix.size(), TStringBuf::npos);
@@ -1614,7 +1614,7 @@ public:
     }
 
     void Reply(Ydb::StatusIds::StatusCode statusCode = Ydb::StatusIds::SUCCESS, const TString& error = TString()) override {
-        LOG_I("Reply"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::IMPORT, "Reply"
             << ": self# " << SelfId()
             << ", status# " << static_cast<int>(statusCode)
             << ", error# " << error);

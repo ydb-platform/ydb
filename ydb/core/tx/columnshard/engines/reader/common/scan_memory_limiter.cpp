@@ -10,7 +10,6 @@ std::shared_ptr<NGroupedMemoryManager::TStageFeatures> BuildScanStageFeatures(
         case EScanGroupedMemoryLimiterOperator::Deduplication:
             return NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildStageFeatures(name, limit);
         case EScanGroupedMemoryLimiterOperator::Scan:
-        default:
             return NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(name, limit);
     }
 }
@@ -19,9 +18,8 @@ std::shared_ptr<NGroupedMemoryManager::TProcessGuard> BuildScanProcessGuard(ESca
     const ui64 externalProcessId, const std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>>& stages) {
     switch (operatorType) {
         case EScanGroupedMemoryLimiterOperator::Deduplication:
-            return NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildProcessGuard(stages);
+            return NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::BuildProcessGuard(externalProcessId, stages);
         case EScanGroupedMemoryLimiterOperator::Scan:
-        default:
             return NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildProcessGuard(externalProcessId, stages);
     }
 }
@@ -32,7 +30,6 @@ bool SendScanToAllocation(EScanGroupedMemoryLimiterOperator operatorType, const 
         case EScanGroupedMemoryLimiterOperator::Deduplication:
             return NGroupedMemoryManager::TDeduplicationMemoryLimiterOperator::SendToAllocation(processId, scopeId, groupId, tasks, stageIdx);
         case EScanGroupedMemoryLimiterOperator::Scan:
-        default:
             return NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(processId, scopeId, groupId, tasks, stageIdx);
     }
 }

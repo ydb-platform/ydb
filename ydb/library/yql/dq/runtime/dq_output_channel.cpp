@@ -79,21 +79,10 @@ public:
     }
 
     EDqFillLevel CalcFillLevel() const {
-        size_t storedSize = PackedDataSize + Packer.PackedSizeEstimate();
-        if (QuotaManager) {
-            if (QuotedSize < storedSize) {
-                if (!QuotaManager->AllocateQuota(storedSize - QuotedSize)) {
-                    throw NKikimr::TMemoryLimitExceededException();
-                }
-            } else if (QuotedSize > storedSize) {
-                QuotaManager->FreeQuota(QuotedSize - storedSize);
-            }
-            QuotedSize = storedSize;
-        }
         if (Storage) {
             return FirstStoredId < NextStoredId ? (Storage->IsFull() ? HardLimit : SoftLimit) : NoLimit;
         } else {
-            return storedSize >= MaxStoredBytes ? HardLimit : NoLimit;
+            return PackedDataSize + Packer.PackedSizeEstimate() >= MaxStoredBytes ? HardLimit : NoLimit;
         }
     }
 
@@ -110,6 +99,20 @@ public:
             FillLevel = result;
         }
         return result;
+    }
+
+    void UpdateQuota() {
+        if (QuotaManager) {
+            size_t storedSize = PackedDataSize + Packer.PackedSizeEstimate();
+            if (QuotedSize < storedSize) {
+                if (!QuotaManager->AllocateQuota(storedSize - QuotedSize)) {
+                    throw NKikimr::TMemoryLimitExceededException();
+                }
+            } else if (QuotedSize > storedSize) {
+                QuotaManager->FreeQuota(QuotedSize - storedSize);
+            }
+            QuotedSize = storedSize;
+        }
     }
 
     void SetFillAggregator(std::shared_ptr<TDqFillAggregator> aggregator) override {
@@ -233,6 +236,7 @@ public:
         }
 
         UpdateFillLevel();
+        UpdateQuota();
 
         if (PopStats.CollectFull()) {
             if (FillLevel != NoLimit) {
@@ -298,6 +302,7 @@ public:
         DLOG("Took " << data.RowCount() << " rows");
 
         UpdateFillLevel();
+        UpdateQuota();
 
         if (PopStats.CollectBasic()) {
             PopStats.Bytes += data.Size();
@@ -404,6 +409,7 @@ public:
             if (UpdateFillLevel() == NoLimit) {
                 PopStats.Resume();
             }
+            UpdateQuota();
         }
         YQL_ENSURE(!HasData());
         return true;
@@ -451,6 +457,7 @@ public:
         PackerCurrentRowCount = 0;
         FirstStoredId = NextStoredId;
         UpdateFillLevel();
+        UpdateQuota();
         return chunks;
     }
 
@@ -512,7 +519,7 @@ private:
     std::shared_ptr<TDqFillAggregator> Aggregator;
     EDqFillLevel FillLevel = NoLimit;
     IMemoryQuotaManager::TPtr QuotaManager;
-    mutable size_t QuotedSize = 0;
+    size_t QuotedSize = 0;
 };
 
 } // anonymous namespace

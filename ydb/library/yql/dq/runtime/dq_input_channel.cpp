@@ -77,13 +77,14 @@ private:
     }
 
     void DeserializeAllData() {
-        if (QuotaManager) {
-            QuotaManager->FreeQuota(StoredSerializedBytes);
-        }
         while (!DataForDeserialize.empty()) {
             auto& data = DataForDeserialize.front();
             std::visit(TOverloaded {
                 [this](TDqSerializedBatch& data) {
+                    if (QuotaManager) {
+                        QuotaManager->FreeQuota(data.Size());
+                    }
+                    StoredSerializedBytes -= data.Size();
                     PushImpl(std::move(data));
                 },
                 [this](TInstant watermark) {
@@ -92,7 +93,7 @@ private:
             }, data);
             DataForDeserialize.pop_front();
         }
-        StoredSerializedBytes = 0;
+        YQL_ENSURE(StoredSerializedBytes == 0);
     }
 
 public:
@@ -154,10 +155,10 @@ public:
         if (Y_UNLIKELY(data.Proto.GetChunks() == 0)) {
             return;
         }
-        StoredSerializedBytes += data.Size();
         if (QuotaManager && !QuotaManager->AllocateQuota(data.Size())) {
             throw NKikimr::TMemoryLimitExceededException();
         }
+        StoredSerializedBytes += data.Size();
 
         if (Impl.PushStats.CollectBasic()) {
             Impl.PushStats.Bytes += data.Size();

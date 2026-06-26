@@ -988,10 +988,8 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
             }
 
             function nbsTabletBuildAllocConfigProto() {
-                const tabletId = nbsTabletFieldInt("nbs-tablet-create-tablet-id", "TabletId", 1);
-                if (!tabletId.ok) {
-                    return tabletId;
-                }
+                // The storage namespace owner (AllocConfig.TabletId) is forced to
+                // the load tablet's own TabletID() server-side, so it is not set here.
                 const numDbg = nbsTabletFieldInt("nbs-tablet-create-num-dbg", "NumDirectBlockGroups", 1);
                 if (!numDbg.ok) {
                     return numDbg;
@@ -1037,7 +1035,6 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                     }
                 }
 
-                addNumber("TabletId", tabletId.value, 0, true);
                 addString("DDiskPoolName", ddiskPoolName || "ddp1", "ddp1");
                 addString("PersistentBufferDDiskPoolName", pbPoolName || "ddp1", "ddp1");
                 addNumber("NumDirectBlockGroups", numDbg.value, 1, false);
@@ -2526,10 +2523,6 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                                 </div>
                                 <details class='form-group'>
                                     <summary>Advanced</summary>
-                                    <div class='form-group'>
-                                        <label for='nbs-tablet-create-tablet-id'>BSC TabletId:</label>
-                                        <input id='nbs-tablet-create-tablet-id' class='form-control nbs-tablet-builder' type='number' min='1' step='1' value='9000' />
-                                    </div>
                                     <div class='checkbox'>
                                         <label>
                                             <input id='nbs-tablet-create-non-default' class='nbs-tablet-builder' type='checkbox' />

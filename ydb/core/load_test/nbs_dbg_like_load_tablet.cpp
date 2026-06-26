@@ -1250,6 +1250,13 @@ void TNbsDbgLikeLoadTablet::Handle(TEvLoad::TEvNbsLoadTabletAllocateGroups::TPtr
 
     AllocConfig = ev->Get()->Record.GetAllocConfig();
 
+    // Storage namespace owner must be unique per load tablet; the PB dedup key
+    // is {TabletId, Generation, Lsn}. A shared/user-supplied id makes two load
+    // tablets collide ("duplicate record with incorrect data"). Always use our
+    // own (Hive-assigned) TabletID() as the BSC allocation owner and PB/DD
+    // credential TabletId.
+    AllocConfig.SetTabletId(TabletID());
+
     // Input validation (spec §23.10 / Phase 2.6).
     if (AllocConfig.GetNumDirectBlockGroups() == 0) {
         return reply(NBSLT_INTERNAL_ERROR, "NumDirectBlockGroups must be > 0");
@@ -1673,7 +1680,7 @@ void TNbsDbgLikeLoadTablet::RenderHtml(IOutputStream& out) const {
                 TABLER() { TABLED() { out << "Phase"; } TABLED() {
                     out << Phase;
                 } }
-                TABLER() { TABLED() { out << "AllocTabletId"; } TABLED() { out << AllocConfig.GetTabletId(); } }
+                TABLER() { TABLED() { out << "Storage owner (TabletId)"; } TABLED() { out << AllocConfig.GetTabletId(); } }
                 TABLER() { TABLED() { out << "NumDirectBlockGroups"; } TABLED() { out << Dbgs.size(); } }
                 TABLER() { TABLED() { out << "VChunkSizeBytes"; } TABLED() { out << AllocConfig.GetVChunkSizeBytes(); } }
                 TABLER() { TABLED() { out << "BscRetryAttempts"; } TABLED() { out << BscRetryAttempts; } }

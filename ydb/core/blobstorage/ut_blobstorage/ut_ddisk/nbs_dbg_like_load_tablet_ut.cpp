@@ -827,9 +827,10 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
         for (ui32 i = 0; i < kTablets; ++i) {
             const ui64 tabletId = f.CreateNbsLoadTabletViaHive(/*ownerIdx=*/1 + i);
             TActorId pipe = f.OpenTabletPipe(tabletId);
-            // Each tablet must get a distinct storage identity, otherwise their
-            // DBGs/persistent buffers collide on the same DDisk slots and the
-            // concurrent writes are rejected as duplicate records.
+            // Each tablet gets a distinct storage identity (the tablet forces the
+            // PB/DD owner to its own TabletID()), so their DBGs/persistent buffers
+            // never collide on the same dedup namespace; the input bscTabletId is
+            // ignored. See MultiTabletSharedBscTabletId for the shared-input case.
             UNIT_ASSERT_VALUES_EQUAL(
                 f.TabletCreate(pipe, /*numDirectBlockGroups=*/1, /*bscTabletId=*/1 + i),
                 NBSLT_OK);
@@ -865,6 +866,57 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
                 "per-tablet run failed for tablet " << tid << ": "
                     << entry["error"].GetStringRobust());
             UNIT_ASSERT_C(entry.Has("write_rps"), "per-tablet entry missing write_rps");
+        }
+
+        for (ui32 i = 0; i < kTablets; ++i) {
+            UNIT_ASSERT_VALUES_EQUAL(f.TabletDelete(pipes[i]), NBSLT_OK);
+            f.ClosePipe(pipes[i]);
+        }
+    }
+
+    // Regression: two tablets created with the SAME user-supplied bscTabletId
+    // must NOT share a PB/DD dedup namespace. The tablet forces the storage
+    // owner to its own (unique) TabletID(), so concurrent writes from both
+    // tablets do not collide as "duplicate record with incorrect data". Before
+    // the fix this run failed with NBSIO_QUORUM_LOST on every write.
+    Y_UNIT_TEST(MultiTabletSharedBscTabletId) {
+        constexpr ui32 kTablets = 2;
+        TFixture f(/*numDDiskGroups=*/4 * kTablets);
+
+        TVector<ui64> tabletIds;
+        TVector<TActorId> pipes;
+        for (ui32 i = 0; i < kTablets; ++i) {
+            const ui64 tabletId = f.CreateNbsLoadTabletViaHive(/*ownerIdx=*/1 + i);
+            TActorId pipe = f.OpenTabletPipe(tabletId);
+            // Intentionally identical bscTabletId for every tablet: the fix must
+            // make this harmless by overriding it with each tablet's TabletID().
+            UNIT_ASSERT_VALUES_EQUAL(
+                f.TabletCreate(pipe, /*numDirectBlockGroups=*/1, /*bscTabletId=*/9000),
+                NBSLT_OK);
+            tabletIds.push_back(tabletId);
+            pipes.push_back(pipe);
+        }
+
+        f.Env.Sim(TDuration::Seconds(10));
+
+        auto fin = f.RunMultiViaLoadActor(tabletIds);
+        UNIT_ASSERT(fin.FinishedReceived);
+        UNIT_ASSERT_C(fin.ErrorReason.empty(), fin.ErrorReason);
+
+        UNIT_ASSERT_C(fin.JsonResult.Has("tablets"),
+            "combined result is missing the per-tablet 'tablets' array");
+        const auto& tablets = fin.JsonResult["tablets"];
+        UNIT_ASSERT_C(tablets.IsArray(), "'tablets' is not a JSON array");
+        UNIT_ASSERT_VALUES_EQUAL(tablets.GetArray().size(), kTablets);
+
+        // No per-tablet run may report an error: distinct namespaces => no
+        // duplicate-record cross-talk despite the shared input bscTabletId.
+        for (const auto& entry : tablets.GetArray()) {
+            UNIT_ASSERT_C(entry.Has("tablet_id"), "per-tablet entry missing tablet_id");
+            const ui64 tid = entry["tablet_id"].GetUInteger();
+            UNIT_ASSERT_C(!entry.Has("error"),
+                "per-tablet run failed for tablet " << tid << ": "
+                    << entry["error"].GetStringRobust());
         }
 
         for (ui32 i = 0; i < kTablets; ++i) {

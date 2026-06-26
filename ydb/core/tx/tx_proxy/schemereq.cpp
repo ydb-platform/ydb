@@ -7,9 +7,10 @@
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/docapi/traits.h>
+#include <ydb/core/persqueue/public/config.h>
+#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
-#include <ydb/core/protos/pqconfig.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/protos/replication.pb.h>
 #include <ydb/core/security/sasl/events.h>
@@ -26,42 +27,9 @@
 #include <ydb/library/ydb_issue/issue_helpers.h>
 #include <ydb/public/api/protos/ydb_issue_message.pb.h>
 
-#include <util/generic/hash_set.h>
 #include <util/string/cast.h>
 
 namespace {
-
-using TPQTabletConfig = NKikimrPQ::TPQTabletConfig;
-
-THashSet<TString> CollectDlqTopicPaths(
-    const TPQTabletConfig& config,
-    const TString& database,
-    bool onlyConsumersAddedAtCurrentVersion
-) {
-    THashSet<TString> result;
-    const ui64 topicConfigVersion = config.GetTopicConfigVersion();
-
-    for (const auto& consumer : config.GetConsumers()) {
-        if (onlyConsumersAddedAtCurrentVersion && consumer.GetAddedAtTopicConfigVersion() != topicConfigVersion) {
-            continue;
-        }
-        if (consumer.GetType() != TPQTabletConfig::CONSUMER_TYPE_MLP) {
-            continue;
-        }
-        if (consumer.GetDeadLetterPolicy() != TPQTabletConfig::DEAD_LETTER_POLICY_MOVE || !consumer.GetDeadLetterPolicyEnabled()) {
-            continue;
-        }
-
-        const auto& dlq = consumer.GetDeadLetterQueue();
-        if (dlq.empty() || dlq.StartsWith("sqs://"sv)) {
-            continue;
-        }
-
-        result.insert(NKikimr::NormalizePath(NKikimr::CanonizePath(database), NKikimr::CanonizePath(dlq)));
-    }
-
-    return result;
-}
 
 const TVector<NLoginProto::EHashType::HashType> HASHES_TO_COMPUTE = {
     NLoginProto::EHashType::Argon,
@@ -818,9 +786,9 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
 
     void AddDlqTopicsResolveForACL(
         const NKikimrSchemeOp::TModifyScheme& pbModifyScheme,
-        const TPQTabletConfig& config
+        const NKikimrPQ::TPQTabletConfig& config
     ) {
-        const auto dlqPaths = CollectDlqTopicPaths(config, GetRequestProto().GetDatabaseName(), true);
+        const auto dlqPaths = NPQ::CollectDlqTopicPaths(config, GetRequestProto().GetDatabaseName(), true);
         for (const auto& dlqPath : dlqPaths) {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = SplitPath(dlqPath);

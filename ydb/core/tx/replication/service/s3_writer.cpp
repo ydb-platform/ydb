@@ -1,5 +1,4 @@
 #include "json_change_record.h"
-#include "logging.h"
 #include "s3_writer.h"
 #include "worker.h"
 
@@ -9,19 +8,13 @@
 #include <ydb/core/wrappers/s3_wrapper.h>
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <library/cpp/json/json_writer.h>
 
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
-
-#define CB_LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << stream)
-#define CB_LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << stream)
-#define CB_LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << stream)
-#define CB_LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << stream)
-#define CB_LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << stream)
-#define CB_LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() <<  stream)
 
 namespace {
 
@@ -73,7 +66,7 @@ class TS3Writer
             return true;
         }
 
-        CB_LOG_E("Error at '" << marker << "'"
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Error at '" << marker << "'"
             << ", error# " << result);
         RetryOrLeave(result.GetError());
 
@@ -111,7 +104,7 @@ class TS3Writer
     }
 
     void Leave(const TString& error) {
-        CB_LOG_I("Leave"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Leave"
             << ": error# " << error);
 
         // TODO support different error kinds
@@ -127,7 +120,7 @@ class TS3Writer
 
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
         Worker = ev->Sender;
-        CB_LOG_D("Handshake"
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Handshake"
             << ": worker# " << Worker);
 
         S3Client = RegisterWithSameMailbox(NWrappers::CreateStorageWrapper(ExternalStorageConfig->ConstructStorageOperator()));
@@ -159,7 +152,7 @@ class TS3Writer
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
-        CB_LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Handle " << ev->Get()->ToString());
 
         if (!ev->Get()->Records) {
             Finished = true;
@@ -185,7 +178,7 @@ class TS3Writer
     void Handle(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        CB_LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Handle " << ev->Get()->ToString());
 
         if (!CheckResult(result, TStringBuf("PutObject"))) {
             return;

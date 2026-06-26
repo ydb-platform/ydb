@@ -1,4 +1,3 @@
-#include "logging.h"
 #include "service.h"
 #include "table_writer.h"
 #include "topic_reader.h"
@@ -16,6 +15,7 @@
 #include <ydb/core/transfer/transfer_writer.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <util/generic/hash.h>
 #include <util/generic/hash_set.h>
@@ -547,7 +547,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     void Handle(TEvService::TEvHandshake::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
 
         const auto& record = ev->Get()->Record;
         const auto& controller = record.GetController();
@@ -560,7 +560,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         auto& session = it->second;
 
         if (session.GetGeneration() > controller.GetGeneration()) {
-            LOG_W("Ignore stale controller"
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Ignore stale controller"
                 << ": controller# " << controller.GetTabletId()
                 << ", generation# " << controller.GetGeneration());
             return;
@@ -663,7 +663,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     void Handle(TEvService::TEvRunWorker::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
 
         const auto& record = ev->Get()->Record;
         const auto& controller = record.GetController();
@@ -671,7 +671,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         auto it = Sessions.find(controller.GetTabletId());
         if (it == Sessions.end()) {
-            LOG_W("Cannot run worker"
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Cannot run worker"
                 << ": controller# " << controller.GetTabletId()
                 << ", worker# " << id
                 << ", reason# " << R"("unknown session")");
@@ -680,7 +680,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         auto& session = it->second;
         if (session.GetGeneration() != controller.GetGeneration()) {
-            LOG_W("Cannot run worker"
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Cannot run worker"
                 << ": controller# " << controller.GetTabletId()
                 << ", generation# " << controller.GetGeneration()
                 << ", worker# " << id
@@ -692,7 +692,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             return session.SendWorkerStatus(this, id, NKikimrReplication::TEvWorkerStatus::STATUS_RUNNING);
         }
 
-        LOG_I("Run worker"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Run worker"
             << ": worker# " << id);
 
         const auto& cmd = record.GetCommand();
@@ -710,7 +710,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             const auto& writerSettings = cmd.GetTransferWriter();
             const auto* transferWriterFactory = AppData()->TransferWriterFactory.get();
             if (!transferWriterFactory) {
-                LOG_C("Run transfer but TransferWriterFactory does not exists.");
+                LOG_CRIT_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Run transfer but TransferWriterFactory does not exists.");
                 return;
             }
             autoCommit = false;
@@ -733,7 +733,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     void Handle(TEvService::TEvStopWorker::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
 
         const auto& record = ev->Get()->Record;
         const auto& controller = record.GetController();
@@ -741,7 +741,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         auto it = Sessions.find(controller.GetTabletId());
         if (it == Sessions.end()) {
-            LOG_W("Cannot stop worker"
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Cannot stop worker"
                 << ": controller# " << controller.GetTabletId()
                 << ", worker# " << id
                 << ", reason# " << R"("unknown session")");
@@ -750,7 +750,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         auto& session = it->second;
         if (session.GetGeneration() != controller.GetGeneration()) {
-            LOG_W("Cannot stop worker"
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Cannot stop worker"
                 << ": controller# " << controller.GetTabletId()
                 << ", generation# " << controller.GetGeneration()
                 << ", worker# " << id
@@ -762,14 +762,14 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
             return session.SendWorkerStatus(this, id, NKikimrReplication::TEvWorkerStatus::STATUS_STOPPED);
         }
 
-        LOG_I("Stop worker"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Stop worker"
             << ": worker# " << id);
         WorkerActorIdToSession.erase(session.GetWorkerActorId(id));
         session.StopWorker(this, id);
     }
 
     void Handle(TEvService::TEvGetTxId::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
 
         auto* session = SessionFromWorker(ev->Sender);
         if (!session) {
@@ -777,7 +777,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         }
 
         if (!session->HasWorker(ev->Sender)) {
-            LOG_E("Cannot find worker"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Cannot find worker"
                 << ": worker# " << ev->Sender);
             return;
         }
@@ -786,14 +786,14 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     void Handle(TEvService::TEvTxIdResult::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
 
         const auto& record = ev->Get()->Record;
         const auto& controller = record.GetController();
 
         auto it = Sessions.find(controller.GetTabletId());
         if (it == Sessions.end()) {
-            LOG_W("Cannot process tx id result"
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Cannot process tx id result"
                 << ": controller# " << controller.GetTabletId()
                 << ", reason# " << R"("unknown session")");
             return;
@@ -801,7 +801,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
 
         auto& session = it->second;
         if (session.GetGeneration() != controller.GetGeneration()) {
-            LOG_W("Cannot process tx id result"
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Cannot process tx id result"
                 << ": controller# " << controller.GetTabletId()
                 << ", generation# " << controller.GetGeneration()
                 << ", reason# " << R"("generation mismatch")");
@@ -812,7 +812,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     void Handle(TEvService::TEvHeartbeat::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
 
         auto* session = SessionFromWorker(ev->Sender);
         if (!session) {
@@ -820,19 +820,19 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         }
 
         if (!session->HasWorker(ev->Sender)) {
-            LOG_E("Cannot find worker"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Cannot find worker"
                 << ": worker# " << ev->Sender);
             return;
         }
 
-        LOG_I("Heartbeat"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Heartbeat"
             << ": worker# " << ev->Sender
             << ", version# " << TRowVersion::FromProto(ev->Get()->Record.GetVersion()));
         session->Handle(this, ev);
     }
 
     void Handle(TEvWorker::TEvDataEnd::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
 
         auto* session = SessionFromWorker(ev->Sender);
         if (!session) {
@@ -840,19 +840,19 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         }
 
         if (!session->HasWorker(ev->Sender)) {
-            LOG_E("Cannot find worker"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Cannot find worker"
                 << ": worker# " << ev->Sender);
             return;
         }
 
-        LOG_I("Worker has ended"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Worker has ended"
             << ": worker# " << ev->Sender);
         session->SendWorkerDataEnd(this, session->GetWorkerId(ev->Sender), ev->Get()->PartitionId,
             std::move(ev->Get()->AdjacentPartitionsIds), std::move(ev->Get()->ChildPartitionsIds));
     }
 
     void Handle(TEvWorker::TEvStatsWakeup::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
 
         if (ev->Get()->SessionToAdd) {
             SessionsToWake.insert(ev->Get()->SessionToAdd);
@@ -879,7 +879,7 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     }
 
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
 
         auto* session = SessionFromWorker(ev->Sender);
         if (!session) {
@@ -887,19 +887,19 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
         }
 
         if (!session->HasWorker(ev->Sender)) {
-            LOG_E("Cannot find worker"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Cannot find worker"
                 << ": worker# " << ev->Sender);
             return;
         }
 
-        LOG_I("Worker has gone"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Worker has gone"
             << ": worker# " << ev->Sender);
         WorkerActorIdToSession.erase(ev->Sender);
         session->StopWorker(this, ev->Sender, ToReason(ev->Get()->Status), ev->Get()->ErrorDescription);
     }
 
     void Handle(TEvWorker::TEvStatus::TPtr& ev) {
-        LOG_T("Handle " << ev->Get()->ToString());
+        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
 
         auto* session = SessionFromWorker(ev->Sender);
         if (session && session->HasWorker(ev->Sender)) {
@@ -915,14 +915,14 @@ class TReplicationService: public TActorBootstrapped<TReplicationService> {
     TSessionInfo* SessionFromWorker(const TActorId& id) {
         auto wit = WorkerActorIdToSession.find(id);
         if (wit == WorkerActorIdToSession.end()) {
-            LOG_W("Unknown worker has gone"
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Unknown worker has gone"
                 << ": worker# " << id);
             return nullptr;
         }
 
         auto it = Sessions.find(wit->second);
         if (it == Sessions.end()) {
-            LOG_E("Cannot find session"
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Cannot find session"
                 << ": worker# " << id
                 << ", session# " << wit->second);
             return nullptr;

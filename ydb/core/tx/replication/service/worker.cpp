@@ -1,4 +1,3 @@
-#include "logging.h"
 #include "service.h"
 #include "topic_reader_stats.h"
 #include "worker.h"
@@ -9,6 +8,7 @@
 #include <ydb/core/tx/replication/ydb_proxy/topic_message.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <util/generic/maybe.h>
@@ -180,10 +180,10 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
 
         if (ev->Sender == Reader) {
-            LOG_I("Handshake with reader"
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handshake with reader"
                 << ": sender# " << ev->Sender);
 
             Reader.Registered();
@@ -191,7 +191,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
                 Send(Reader, new TEvWorker::TEvPoll());
             }
         } else if (ev->Sender == Writer) {
-            LOG_I("Handshake with writer"
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handshake with writer"
                 << ": sender# " << ev->Sender);
 
             Writer.Registered();
@@ -201,17 +201,17 @@ class TWorker: public TActorBootstrapped<TWorker> {
                 Send(Writer, new TEvWorker::TEvTerminateWriter(TerminateWriter->PartitionId));
             }
         } else {
-            LOG_W("Handshake from unknown actor"
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handshake from unknown actor"
                 << ": sender# " << ev->Sender);
             return;
         }
     }
 
     void Handle(TEvWorker::TEvPoll::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
 
         if (ev->Sender != Writer) {
-            LOG_W("Poll from unknown actor"
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Poll from unknown actor"
                 << ": sender# " << ev->Sender);
             return;
         }
@@ -235,10 +235,10 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Handle(TEvWorker::TEvCommit::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
 
         if (ev->Sender != Writer) {
-            LOG_W("Commit from unknown actor"
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Commit from unknown actor"
                 << ": sender# " << ev->Sender);
             return;
         }
@@ -249,10 +249,10 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
 
         if (ev->Sender != Reader) {
-            LOG_W("Data from unknown actor"
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Data from unknown actor"
                 << ": sender# " << ev->Sender);
             return;
         }
@@ -270,10 +270,10 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Handle(TEvWorker::TEvTerminateWriter::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
 
         if (ev->Sender != Reader) {
-            LOG_W("Terminate writer from unknown actor"
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Terminate writer from unknown actor"
                 << ": sender# " << ev->Sender);
             return;
         }
@@ -288,25 +288,25 @@ class TWorker: public TActorBootstrapped<TWorker> {
 
     void Handle(TEvWorker::TEvGone::TPtr& ev) {
         if (ev->Sender == Reader) {
-            LOG_I("Reader has gone"
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Reader has gone"
                 << ": sender# " << ev->Sender
                 << ": " << ev->Get()->ToString());
             MaybeRecreateActor(ev, Reader);
         } else if (ev->Sender == Writer) {
-            LOG_I("Writer has gone"
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Writer has gone"
                 << ": sender# " << ev->Sender
                 << ": " << ev->Get()->ToString());
             MaybeRecreateActor(ev, Writer);
         } else {
-            LOG_W("Unknown actor has gone"
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Unknown actor has gone"
                 << ": sender# " << ev->Sender);
         }
     }
 
     void Handle(TEvWorker::TEvStatus::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
         if (!ev->Get()->DetailedStats) {
-            LOG_W("Unexpected TEvWorker::TEvStatus with no stats, ignored"
+            LOG_WARN_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Unexpected TEvWorker::TEvStatus with no stats, ignored"
                 << ": sender# " << ev->Sender);
             return;
         }
@@ -333,7 +333,7 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Leave(TEvWorker::TEvGone::TPtr& ev) {
-        LOG_I("Leave"
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Leave"
             << ": status# " << ev->Get()->Status
             << ", error# " << ev->Get()->ErrorDescription);
 
@@ -344,13 +344,13 @@ class TWorker: public TActorBootstrapped<TWorker> {
     }
 
     void Handle(TEvService::TEvTxIdResult::TPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
         Send(ev->Forward(Writer));
     }
 
     template <typename TEventPtr>
     void Forward(TEventPtr& ev) {
-        LOG_D("Handle " << ev->Get()->ToString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
 
         ev->Sender = SelfId();
         Send(ev->Forward(Parent));

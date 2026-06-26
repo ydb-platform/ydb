@@ -38,26 +38,30 @@ public:
         TNodeOnNodeOwnedMap marked;
 
         {
-            const auto [precomputeStages, sinkStages, outputTransformStages] = GatherPrecomputeAndSinkStages(outputExpr, *KqpCtx);
+            const auto [precomputeStages, sinkStages, returningStages] = GatherPrecomputeAndSinkStages(outputExpr, *KqpCtx);
 
             if (KqpCtx->Config->GetEnableStreamWrite()) {
-                auto sameTableSinkStages = GatherSameTableSinkStages(sinkStages);
-                for (const auto& [_, exprNode] : FindStagesUsedForBothStagesSets(sameTableSinkStages, sameTableSinkStages)) {
-                    TExprBase node(exprNode);
-                    AFL_ENSURE(node.Maybe<TDqStage>());
-                    marked.emplace(node.Raw(), node.Ptr());
-                }
+                TNodeOnNodeOwnedMap sinkAndreturningStages = sinkStages;
+                sinkAndreturningStages.insert(returningStages.begin(), returningStages.end());
+                const auto sameTableSinkStages = GatherSameTableSinkStages(sinkAndreturningStages);
+                AFL_ENSURE(sameTableSinkStages.empty()); // Don't allow two writes to the same table to be executed in one query block.
             }
 
             {
-                for (const auto& [_, exprNode] : FindStagesUsedForBothStagesSets(precomputeStages, sinkStages)) {
-                    AFL_ENSURE(exprNode);
-                    TExprBase node(exprNode);
-                    const auto stage = node.Cast<TDqStage>();
-                    if (HasNonDeterministicFunction(stage) || !IsKqpPureInputs(stage.Inputs())) {
-                        marked.emplace(node.Raw(), node.Ptr());
+                auto markCommonUndeterminedStages = [&](const TNodeOnNodeOwnedMap& left, const TNodeOnNodeOwnedMap& right) {
+                    for (const auto& [_, exprNode] : FindStagesUsedForBothStagesSets(left, right)) {
+                        AFL_ENSURE(exprNode);
+                        TExprBase node(exprNode);
+                        const auto stage = node.Cast<TDqStage>();
+                        if (HasNonDeterministicFunction(stage) || !IsKqpPureInputs(stage.Inputs())) {
+                            marked.emplace(node.Raw(), node.Ptr());
+                        }
                     }
-                }
+                };
+
+                markCommonUndeterminedStages(precomputeStages, sinkStages);
+                markCommonUndeterminedStages(returningStages, precomputeStages);
+                markCommonUndeterminedStages(sinkStages, returningStages);
             }
 
             {
@@ -66,14 +70,19 @@ public:
                     return TStatus::Error;
                 }
 
-                for (const auto& [_, exprNode] : FindStagesUsedForBothStagesSets(*resultStages, sinkStages)) {
-                    AFL_ENSURE(exprNode);
-                    TExprBase node(exprNode);
-                    const auto stage = node.Cast<TDqStage>();
-                    if (!IsKqpPureInputs(stage.Inputs())) {
-                        marked.emplace(node.Raw(), node.Ptr());
+                auto markCommonStages = [&](const TNodeOnNodeOwnedMap& left, const TNodeOnNodeOwnedMap& right) {
+                    for (const auto& [_, exprNode] : FindStagesUsedForBothStagesSets(left, right)) {
+                        AFL_ENSURE(exprNode);
+                        TExprBase node(exprNode);
+                        const auto stage = node.Cast<TDqStage>();
+                        if (!IsKqpPureInputs(stage.Inputs())) {
+                            marked.emplace(node.Raw(), node.Ptr());
+                        }
                     }
-                }
+                };
+                
+                markCommonStages(*resultStages, sinkStages);
+                markCommonStages(*resultStages, returningStages);
             }
         }
 
@@ -246,13 +255,13 @@ private:
     std::tuple<TNodeOnNodeOwnedMap, TNodeOnNodeOwnedMap, TNodeOnNodeOwnedMap> GatherPrecomputeAndSinkStages(const TExprNode::TPtr& query, const TKqpOptimizeContext& kqpCtx) {
         TNodeOnNodeOwnedMap precomputeStages;
         TNodeOnNodeOwnedMap sinkStages;
-        TNodeOnNodeOwnedMap outputTransformStages;
+        TNodeOnNodeOwnedMap returningStages;
 
         auto filter = [](const TExprNode::TPtr& exprNode) {
             return !exprNode->IsLambda();
         };
 
-        auto gather = [&precomputeStages, &sinkStages, &outputTransformStages, &kqpCtx](const TExprNode::TPtr& exprNode) {
+        auto gather = [&precomputeStages, &sinkStages, &returningStages, &kqpCtx](const TExprNode::TPtr& exprNode) {
             TExprBase node(exprNode);
 
             const auto maybeStage = node.Maybe<TDqStage>();
@@ -303,7 +312,7 @@ private:
                             sinkOrTransformOutputsCount++;
                             AFL_ENSURE(sinkSettings.Cast().Mode() != "fill_table");
                             AFL_ENSURE(kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Datashard);
-                            outputTransformStages.emplace(stage.Raw(), stage.Ptr());
+                            returningStages.emplace(stage.Raw(), stage.Ptr());
                         }
                     }
                 }
@@ -316,7 +325,7 @@ private:
 
         VisitExpr(query, filter, gather);
 
-        return {std::move(precomputeStages), std::move(sinkStages), std::move(outputTransformStages)};
+        return {std::move(precomputeStages), std::move(sinkStages), std::move(returningStages)};
     }
 
     std::optional<TNodeOnNodeOwnedMap> GatherResultStages(

@@ -13,5 +13,5 @@ items:
   href: guarantees.md
 - name: Чекпоинты
   href: checkpoints.md
-- name: Вотермарки
+- name: Watermarks
   href: watermarks.md

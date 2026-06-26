@@ -1,5 +1,5 @@
 items:
 - name: Потоковые запросы
   href: streaming-query.md
-- name: Вотермарки
+- name: Watermarks
   href: watermarks.md

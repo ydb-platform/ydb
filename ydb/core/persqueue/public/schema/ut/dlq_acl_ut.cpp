@@ -279,6 +279,23 @@ Y_UNIT_TEST(CreateTopicWithMlpConsumerSucceedsWithAlterSchemaAndUpdateRowOnDlqTo
     setup->GetServer().WaitInit(TStringBuilder() << "/Root/" << MAIN_TOPIC);
 }
 
+Y_UNIT_TEST(CreateTopicWithMlpConsumerFailsWhenDlqTopicDoesNotExist) {
+    constexpr const char* USER_NAME = "topicuser6";
+    constexpr const char* DLQ_TOPIC = "nonexistent-dlq-topic";
+    constexpr const char* MAIN_TOPIC = "main-topic-missing-dlq-test";
+
+    auto setup = CreateSetup();
+    auto& client = *setup->GetServer().AnnoyingClient;
+
+    const TString userSid = CreateUser(client, USER_NAME);
+
+    auto result = CreateTopicWithDLQ(setup, userSid, MAIN_TOPIC, DLQ_TOPIC);
+
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SCHEME_ERROR, result->ErrorMessage);
+    UNIT_ASSERT(!result->ErrorMessage.empty());
+}
+
 Y_UNIT_TEST(CreateTopicWithMlpConsumerFailsWithOnlySelectRowOnDlqTopic) {
     constexpr const char* USER_NAME = "topicuser5";
     constexpr const char* DLQ_TOPIC = "dlq-topic-read-test";
@@ -385,6 +402,23 @@ Y_UNIT_TEST(AlterTopicWithMlpConsumerSucceedsWithAlterSchemaAndUpdateRowOnDlqTop
     UNIT_ASSERT(result);
     UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SUCCESS, result->ErrorMessage);
     setup->GetServer().WaitInit(TStringBuilder() << "/Root/" << MAIN_TOPIC);
+}
+
+Y_UNIT_TEST(AlterTopicWithMlpConsumerFailsWhenDlqTopicDoesNotExist) {
+    constexpr const char* USER_NAME = "topicuser6";
+    constexpr const char* DLQ_TOPIC = "nonexistent-dlq-alter-test";
+    constexpr const char* MAIN_TOPIC = "main-topic-missing-dlq-alter-test";
+
+    auto setup = CreateSetup();
+    auto& client = *setup->GetServer().AnnoyingClient;
+
+    const TString userSid = CreateUser(client, USER_NAME);
+
+    auto result = CreateAndAlterTopicWithDLQ(setup, userSid, MAIN_TOPIC, DLQ_TOPIC);
+
+    UNIT_ASSERT(result);
+    UNIT_ASSERT_VALUES_EQUAL_C(result->Status, Ydb::StatusIds::SCHEME_ERROR, result->ErrorMessage);
+    UNIT_ASSERT(!result->ErrorMessage.empty());
 }
 
 Y_UNIT_TEST(AlterTopicWithMlpConsumerFailsWithOnlySelectRowOnDlqTopic) {

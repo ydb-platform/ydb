@@ -218,21 +218,13 @@ namespace NYql::NDq {
             , ColumnDestinations(CreateColumnDestination())
             , MaxKeysInRequest(maxKeysInRequest)
             , IsMultiMatches(isMultiMatches)
+            , SelectBody(MakeSelect())
+            , SelectWithKeys(MakeSelectWithKeys())
         {
             if (auto token = LookupSource.GetToken(); !token.empty()) {
                 Token.emplace(token);
             }
             InitMonCounters(taskCounters);
-            {
-                TStringBuilder out;
-                MakeSelect(out);
-                SelectBody = std::move(out);
-            }
-            {
-                TStringBuilder out;
-                MakeSelectWithKeys(out);
-                SelectWithKeys = std::move(out);
-            }
         }
 
         ~TKikimrLookupActor() {
@@ -753,7 +745,8 @@ namespace NYql::NDq {
             return result;
         }
 
-        void MakeSelect(TStringBuilder& out) {
+        TString MakeSelect() {
+            TStringBuilder out;
             out << "SELECT";
             char sep = ' ';
             for (ui32 i = 0; i != SelectResultType->GetMembersCount(); ++i) {
@@ -763,9 +756,11 @@ namespace NYql::NDq {
             }
             out << "\n  FROM ";
             Backtick(out.Out, LookupSource.GetPath());
+            return std::move(out);
         }
 
-        void MakeSelectWithKeys(TStringBuilder& out) {
+        TString MakeSelectWithKeys() {
+            TStringBuilder out;
             Y_DEBUG_ABORT_UNLESS(!SelectBody.empty());
 
             auto columnsCount = KeyType->GetMembersCount();
@@ -801,16 +796,19 @@ namespace NYql::NDq {
                 out << ')';
             }
             out << " IN " << KeyTupleListName;
+            return std::move(out);
         }
 
-        void MakeSelectWithLimit(TStringBuilder& out, ui64 limit, ui64 offset = 0) {
+        TString MakeSelectWithLimit(ui64 limit, ui64 offset = 0) {
             Y_DEBUG_ABORT_UNLESS(!SelectBody.empty());
+            TStringBuilder out;
 
             out << SelectBody;
             out << " LIMIT " << limit;
             if (offset) {
                 out << " OFFSET " << offset;
             }
+            return std::move(out);
         }
 
         // must be called only in actor context
@@ -845,9 +843,7 @@ namespace NYql::NDq {
         Ydb::Query::ExecuteQueryRequest FillQuery(TLookupState::TPtr state) {
             Ydb::Query::ExecuteQueryRequest request;
             if (state->FullscanLimit > 0) {
-                TStringBuilder out;
-                MakeSelectWithLimit(out, state->FullscanLimit);
-                request.mutable_query_content()->set_text(std::move(out));
+                request.mutable_query_content()->set_text(MakeSelectWithLimit(state->FullscanLimit));
             } else {
                 auto& keyTupleList = (*request.mutable_parameters())[KeyTupleListName];
                 FillKeyTupleList(keyTupleList, state);
@@ -888,8 +884,8 @@ namespace NYql::NDq {
         ui32 LocalInFlight = 0;
         static inline constexpr std::string_view KeyTupleListName = "$keyTupleList"sv;
         NYql::NUdf::ITypeInfoHelper::TPtr TypeInfoHelper = new NKikimr::NMiniKQL::TTypeInfoHelper();
-        TString SelectWithKeys;
-        TString SelectBody;
+        const TString SelectBody;
+        const TString SelectWithKeys;
         TVector<TSessionState::TPtr> Sessions;
 
         ::NMonitoring::TDynamicCounters::TCounterPtr Count;

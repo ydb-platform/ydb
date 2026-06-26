@@ -22,6 +22,8 @@
 #include <util/generic/set.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_SERVICE
+
 namespace NKikimr::NReplication::NService {
 
 class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
@@ -51,7 +53,9 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     void Handle(TEvTxUserProxy::TEvGetProxyServicesResponse::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         LeaderPipeCache = ev->Get()->Services.LeaderPipeCache;
         Ready();
@@ -71,7 +75,9 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRecords::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         auto event = MakeHolder<TEvDataShard::TEvApplyReplicationChanges>();
         auto& tableId = *event->Record.MutableTableId();
@@ -108,17 +114,20 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     void Handle(TEvDataShard::TEvApplyReplicationChangesResult::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         const auto& record = ev->Get()->Record;
         switch (record.GetStatus()) {
         case NKikimrTxDataShard::TEvApplyReplicationChangesResult::STATUS_OK:
             return Ready();
         default:
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Apply result"
-                << ": status# " << static_cast<ui32>(record.GetStatus())
-                << ", reason# " << static_cast<ui32>(record.GetReason())
-                << ", error# " << record.GetErrorDescription());
+            YDB_LOG_ERROR("Apply result",
+                {"logPrefix", GetLogPrefix()},
+                {"status", static_cast<ui32>(record.GetStatus())},
+                {"reason", static_cast<ui32>(record.GetReason())},
+                {"error", record.GetErrorDescription()});
             if (IsHardError(record.GetReason())) {
                 return Leave(true);
             } else {
@@ -150,8 +159,9 @@ class TTablePartitionWriter: public TActorBootstrapped<TTablePartitionWriter> {
     }
 
     void Leave(bool hardError = false) {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Leave"
-            << ": hard error# " << hardError);
+        YDB_LOG_INFO("Leave hard",
+            {"logPrefix", GetLogPrefix()},
+            {"error", hardError});
 
         Send(Parent, new NChangeExchange::TEvChangeExchangePrivate::TEvGone(TabletId, hardError));
         PassAway();
@@ -234,12 +244,14 @@ class TLocalTableWriter
     }
 
     void LogCritAndLeave(const TString& error) {
-        LOG_CRIT_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << error);
+        YDB_LOG_CRIT(error,
+            {"logPrefix", GetLogPrefix()});
         Leave(TEvWorker::TEvGone::SCHEME_ERROR, error);
     }
 
     void LogWarnAndRetry(const TString& error) {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << error);
+        YDB_LOG_WARN(error,
+            {"logPrefix", GetLogPrefix()});
         Retry();
     }
 
@@ -291,8 +303,9 @@ class TLocalTableWriter
 
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
         Worker = ev->Sender;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handshake"
-            << ": worker# " << Worker);
+        YDB_LOG_DEBUG("Handshake",
+            {"logPrefix", GetLogPrefix()},
+            {"worker", Worker});
 
         ResolveTable();
     }
@@ -310,8 +323,9 @@ class TLocalTableWriter
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult"
-            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
+        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySetResult",
+            {"logPrefix", GetLogPrefix()},
+            {"result", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!CheckNotEmpty(result)) {
             return;
@@ -386,8 +400,9 @@ class TLocalTableWriter
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
         const auto& result = ev->Get()->Request;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle TEvTxProxySchemeCache::TEvResolveKeySetResult"
-            << ": result# " << (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr"));
+        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvResolveKeySetResult",
+            {"logPrefix", GetLogPrefix()},
+            {"result", (result ? result->ToString(*AppData()->TypeRegistry) : "nullptr")});
 
         if (!CheckNotEmpty(result)) {
             return;
@@ -416,8 +431,9 @@ class TLocalTableWriter
         CreateSenders(NChangeExchange::MakePartitionIds(KeyDesc->GetPartitions()));
 
         if (!Initialized) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Send handshake"
-                << ": worker# " << Worker);
+            YDB_LOG_DEBUG("Send handshake",
+                {"logPrefix", GetLogPrefix()},
+                {"worker", Worker});
             Send(Worker, new TEvWorker::TEvHandshake());
             Initialized = true;
         }
@@ -431,7 +447,9 @@ class TLocalTableWriter
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         Y_ABORT_UNLESS(PendingRecords.empty());
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records(::Reserve(ev->Get()->Records.size()));
@@ -490,7 +508,9 @@ class TLocalTableWriter
     }
 
     void Handle(TEvWorker::TEvTerminateWriter::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         Terminating = true;
         if (IsAllSendersReadyOrUninit()) {
@@ -499,7 +519,9 @@ class TLocalTableWriter
     }
 
     void Handle(TEvService::TEvTxIdResult::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         TVector<NChangeExchange::TEvChangeExchange::TEvEnqueueRecords::TRecordInfo> records;
 
@@ -565,7 +587,9 @@ class TLocalTableWriter
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRequestRecords::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         TVector<NChangeExchange::IChangeRecord::TPtr> records(::Reserve(ev->Get()->Records.size()));
 
@@ -579,7 +603,9 @@ class TLocalTableWriter
     }
 
     void Handle(NChangeExchange::TEvChangeExchange::TEvRemoveRecords::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         for (const auto& record : ev->Get()->Records) {
             PendingRecords.erase(record);
@@ -596,7 +622,9 @@ class TLocalTableWriter
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvReady::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", ev->Get()->ToString()});
         OnReady(ev->Get()->PartitionId);
 
         if (Terminating && IsAllSendersReadyOrUninit()) {
@@ -605,7 +633,9 @@ class TLocalTableWriter
     }
 
     void Handle(NChangeExchange::TEvChangeExchangePrivate::TEvGone::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         if (ev->Get()->HardError) {
             Leave(TEvWorker::TEvGone::SCHEME_ERROR, "Cannot apply changes");
@@ -620,7 +650,8 @@ class TLocalTableWriter
 
     template <typename... Args>
     void Leave(Args&&... args) {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Leave");
+        YDB_LOG_INFO("Leave",
+            {"logPrefix", GetLogPrefix()});
 
         Send(Worker, new TEvWorker::TEvGone(std::forward<Args>(args)...));
         PassAway();

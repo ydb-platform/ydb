@@ -16,6 +16,8 @@
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONTINUOUS_BACKUP
+
 namespace {
 
 TString GetPartKey(ui64 firstOffset, const TString& writerName) {
@@ -66,8 +68,10 @@ class TS3Writer
             return true;
         }
 
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Error at '" << marker << "'"
-            << ", error# " << result);
+        YDB_LOG_ERROR("Error at",
+            {"logPrefix", GetLogPrefix()},
+            {"marker", marker},
+            {"error", result});
         RetryOrLeave(result.GetError());
 
         return false;
@@ -104,8 +108,9 @@ class TS3Writer
     }
 
     void Leave(const TString& error) {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Leave"
-            << ": error# " << error);
+        YDB_LOG_INFO("Leave",
+            {"logPrefix", GetLogPrefix()},
+            {"error", error});
 
         // TODO support different error kinds
         Send(Worker, new TEvWorker::TEvGone(TEvWorker::TEvGone::S3_ERROR));
@@ -120,8 +125,9 @@ class TS3Writer
 
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
         Worker = ev->Sender;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Handshake"
-            << ": worker# " << Worker);
+        YDB_LOG_DEBUG("Handshake",
+            {"logPrefix", GetLogPrefix()},
+            {"worker", Worker});
 
         S3Client = RegisterWithSameMailbox(NWrappers::CreateStorageWrapper(ExternalStorageConfig->ConstructStorageOperator()));
 
@@ -152,7 +158,9 @@ class TS3Writer
     }
 
     void Handle(TEvWorker::TEvData::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         if (!ev->Get()->Records) {
             Finished = true;
@@ -178,7 +186,9 @@ class TS3Writer
     void Handle(TEvExternalStorage::TEvPutObjectResponse::TPtr& ev) {
         const auto& result = ev->Get()->Result;
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         if (!CheckResult(result, TStringBuf("PutObject"))) {
             return;

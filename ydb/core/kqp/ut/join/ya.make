@@ -21,6 +21,7 @@ ENDIF()
 
 SRCS(
     kqp_block_hash_join_ut.cpp
+    kqp_scalar_hash_join_ut.cpp
     kqp_join_order_ut.cpp
     kqp_join_topology_generator.cpp
     kqp_join_topology_ut.cpp

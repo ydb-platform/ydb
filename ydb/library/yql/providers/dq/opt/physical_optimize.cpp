@@ -275,7 +275,7 @@ protected:
         const TParentsMap* parentsMap = getParents();
         const auto mode = Config->HashJoinMode.Get().GetOrElse(EHashJoinMode::Off);
         const auto useGraceJoin = Config->UseGraceJoinCoreForMap.Get().GetOrElse(false);
-        return DqBuildJoin(join, ctx, optCtx, *parentsMap, IsGlobal, /* pushLeftStage = */ false /* TODO */, mode, true, useGraceJoin);
+        return DqBuildJoin(join, ctx, optCtx, *parentsMap, IsGlobal, /* pushLeftStage = */ false /* TODO */, mode, true, useGraceJoin, /*useBlockHashJoin=*/false, /*useScalarHashJoin=*/false);
     }
 
     template <bool IsGlobal>

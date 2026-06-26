@@ -10,6 +10,12 @@
 #include <yql/essentials/minikql/computation/mkql_computation_node.h>
 #include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
 #include <yql/essentials/minikql/mkql_program_builder.h>
+#include <util/stream/output.h>
+#include <util/system/thread.h>
+
+// SHJ_HANG: temporary diagnostic logging for scalar hash join hang investigation.
+// Grep with: rg SHJ_HANG
+#define SHJ_HANG_LOG(msg) Cerr << "SHJ_HANG [tid=" << TThread::CurrentThreadId() << "] " << msg << Endl
 
 namespace NKikimr::NMiniKQL {
 
@@ -533,6 +539,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
             } else {
                 table.Lookup(tuple, [&](TSingleTuple tableMatch) {
                     found = true;
+                    ++DbgMatches_;
                     if constexpr (Kind == EJoinKind::Inner) {
                         consume(TSides<TSingleTuple>{.Build = tableMatch, .Probe = tuple});
                     }
@@ -556,19 +563,23 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
             if (!state.Pack.has_value()) {
                 FetchResult<TPackResult> var = state.Build.FetchRow();
                 NYql::NUdf::EFetchStatus status = AsStatus(var);
+                SHJ_HANG_LOG("FetchingBuild: Build.FetchRow status=" << int(status));
                 if (status == NYql::NUdf::EFetchStatus::Yield) {
+                    SHJ_HANG_LOG("FetchingBuild: return Yield (build input not ready)");
                     return EFetchResult::Yield;
                 } else if (status == NYql::NUdf::EFetchStatus::Ok) {
                     state.Pack = std::move(GetPayload(var));
                 } else {
                     MKQL_ENSURE(status == NYql::NUdf::EFetchStatus::Finish, "unhandled status");
                     MKQL_ENSURE(state.Build.Finished(), "sanity check");
+                    SHJ_HANG_LOG("TRANSITION FetchingBuild -> BuildingInMemoryTable (build input finished)");
                     State_ = BuildingInMemoryTable{*this, std::move(state.Spiller)};
                 }
             } else {
                 ESpillResult res = state.Spiller.SpillWhile(notEnoughMemory);
                 switch (res) {
                 case Spilling:
+                    SHJ_HANG_LOG("FetchingBuild: SpillWhile=Spilling -> WaitWhileSpilling (Yield)");
                     return WaitWhileSpilling();
                 case FinishedSpilling:
                     break;
@@ -578,6 +589,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 }
                 for (TSingleTuple tuple: *state.Pack) { 
                     state.Spiller.AddRow(tuple); 
+                    ++DbgBuildRows_;
                 }
                 state.Pack = std::nullopt;
             }
@@ -586,6 +598,7 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
             ESpillResult res = state.Spiller.SpillWhile(notEnoughMemory);
             switch (res) {
                 case Spilling:
+                    SHJ_HANG_LOG("BuildingInMemoryTable: SpillWhile=Spilling -> WaitWhileSpilling (Yield)");
                     return WaitWhileSpilling();
                 case FinishedSpilling:
                     break;
@@ -616,13 +629,18 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                         probeBucket = std::move(thisBucket);
                     }
                 }
+                SHJ_HANG_LOG("TRANSITION BuildingInMemoryTable -> Probing (all in-memory buckets built)");
                 State_ = Probing{*this, std::move(state.ProbeState)};
             } else {
                 TTable* table = std::get_if<TTable>(&state.ProbeState.Buckets[*smallestBucket]);
                 MKQL_ENSURE(table, "sanity check");
                 TBucket& buildBucket = state.Spiller.GetBuckets()[*smallestBucket];
 
+                SHJ_HANG_LOG("BuildingInMemoryTable: building bucket=" << *smallestBucket
+                    << " inMemPages=" << buildBucket.InMemoryPages().size());
                 table->BuildWith(Flatten(buildBucket.ReleaseInMemoryPages()));
+                SHJ_HANG_LOG("BuildingInMemoryTable: built bucket=" << *smallestBucket
+                    << " nowEmpty=" << state.Spiller.GetBuckets()[*smallestBucket].Empty());
                 MKQL_ENSURE(state.Spiller.GetBuckets()[*smallestBucket].Empty(), "this bucket should be empty now");
             }
 
@@ -632,6 +650,8 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                 FetchResult<TPackResult> var = state.Probe.FetchRow();
                 NYql::NUdf::EFetchStatus status = AsStatus(var);
                 if (status == NYql::NUdf::EFetchStatus::Yield) {
+                    SHJ_HANG_LOG("Probing: return Yield (probe input not ready) probeRows=" << DbgProbeRows_
+                        << " matches=" << DbgMatches_);
                     return EFetchResult::Yield;
                 } else if (status == NYql::NUdf::EFetchStatus::Ok) {
                     state.FetchedPack = std::move(GetPayload(var));
@@ -668,8 +688,11 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     }
                     state.Spiller.GetState().InMemoryPages.clear();
                     state.Spiller.GetState().InMemoryPages.shrink_to_fit();
+                    SHJ_HANG_LOG("Probing: probe input finished, futures=" << futures.size()
+                        << " dumpedBuckets=" << alreadyDumped.size());
                     if (futures.empty()) {
                         if (alreadyDumped.empty()) {
+                            SHJ_HANG_LOG("TRANSITION Probing -> Finish");
                             State_ = Finish{};
                         } else {
                             State_ = JoinPairsOfPartitions{*this, std::move(alreadyDumped)};
@@ -699,6 +722,11 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
                     }
                     int bucketIndex = Settings.BucketIndex(tuple);
                     bool thisBucketSpilled = state.Spiller.IsBucketSpilled(bucketIndex);
+                    ++DbgProbeRows_;
+                    if ((DbgProbeRows_ & 0xFFFF) == 0) {
+                        SHJ_HANG_LOG("Probing(in-mem): probeRows=" << DbgProbeRows_
+                            << " matches=" << DbgMatches_ << " buildRows=" << DbgBuildRows_);
+                    }
                     if (thisBucketSpilled) {
                         state.Spiller.AddRow({.Val = tuple, .Side = ESide::Probe, .BucketIndex = bucketIndex});
                     } else {
@@ -828,6 +856,10 @@ template <typename Source, TSpillerSettings Settings, EJoinKind Kind> class THyb
     TBlockHashJoinSettings Settings_;
     std::variant<Init, FetchingBuild, BuildingInMemoryTable, Probing, DumpRestOfPages, JoinPairsOfPartitions, Finish>
         State_ = Init{};
+    // SHJ_HANG: temporary diagnostic counters.
+    ui64 DbgProbeRows_ = 0;
+    ui64 DbgMatches_ = 0;
+    ui64 DbgBuildRows_ = 0;
 };
 } // namespace NJoinPackedTuples
 

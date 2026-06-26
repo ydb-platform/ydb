@@ -185,7 +185,6 @@ bool FinishRenamePush(
     TIntrusivePtr<IOperator>& input,
     const TIntrusivePtr<TOpMap>& topMap,
     const TRenameCandidate& candidate,
-    const TVector<TInfoUnit>& pushedInputOutput,
     TRBOContext& ctx,
     TPlanProps& props)
 {
@@ -194,8 +193,6 @@ bool FinishRenamePush(
 
     if (topMap->MapElements.empty()) {
         input = topMap->GetInput();
-    } else {
-        topMap->Props.OutputIUs = BuildMapOutput(pushedInputOutput, topMap->MapElements);
     }
 
     return true;

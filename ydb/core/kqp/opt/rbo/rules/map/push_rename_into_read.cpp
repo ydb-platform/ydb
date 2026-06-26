@@ -43,8 +43,7 @@ bool TPushRenameIntoReadRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRB
     }
 
     read->OutputIUs = output;
-    read->Props.OutputIUs = output;
-    return NMapRules::FinishRenamePush(input, topMap, *candidate, output, ctx, props);
+    return NMapRules::FinishRenamePush(input, topMap, *candidate, ctx, props);
 }
 
 } // namespace NKqp

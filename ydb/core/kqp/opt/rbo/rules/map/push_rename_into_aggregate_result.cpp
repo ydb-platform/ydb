@@ -62,8 +62,7 @@ bool TPushRenameIntoAggregateResultRule::MatchAndApply(TIntrusivePtr<IOperator>&
     }
 
     aggregate->AggregationTraitsList = std::move(newTraits);
-    aggregate->Props.OutputIUs = output;
-    return NMapRules::FinishRenamePush(input, topMap, *candidate, output, ctx, props);
+    return NMapRules::FinishRenamePush(input, topMap, *candidate, ctx, props);
 }
 
 } // namespace NKqp

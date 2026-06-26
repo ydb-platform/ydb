@@ -1,5 +1,4 @@
 #include <ydb/core/kqp/opt/rbo/rules/kqp_rules_include.h>
-#include <ydb/core/kqp/opt/rbo/rules/map/map_output_utils.h>
 
 #include <ydb/core/kqp/opt/physical/kqp_olap_filter_inspection.h>
 
@@ -128,7 +127,6 @@ bool NarrowReadColumns(const TIntrusivePtr<TOpRead>& read, const TVector<TInfoUn
 
     read->Columns = std::move(newColumns);
     read->OutputIUs = std::move(newOutputIUs);
-    read->Props.OutputIUs = read->OutputIUs;
     return true;
 }
 
@@ -149,11 +147,6 @@ bool PruneAggregateTraits(const TIntrusivePtr<TOpAggregate>& aggregate, const TV
     }
 
     aggregate->AggregationTraitsList = std::move(newTraits);
-    TVector<TInfoUnit> output = aggregate->KeyColumns;
-    for (const auto& traits : aggregate->AggregationTraitsList) {
-        output.push_back(traits.ResultColName);
-    }
-    aggregate->Props.OutputIUs = std::move(output);
     return true;
 }
 
@@ -181,24 +174,13 @@ bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
     auto newElements = KeepLiveMapElements(map, liveOut, keepKeyColumns);
 
     if (newElements.empty()) {
-        const auto& replacementOutput = map->GetInput()->GetOutputIUs();
-        if (MakeInfoUnitSet(replacementOutput).size() != replacementOutput.size() ||
-            !IUSetIntersect(replacementOutput, GetForbidden(map.get())).empty()) {
-            return false;
-        }
         input = map->GetInput();
     } else {
         if (newElements.size() == map->MapElements.size()) {
             return false;
         }
 
-        auto newOutput = BuildMapOutput(map, newElements);
-        if (MakeInfoUnitSet(newOutput).size() != newOutput.size() ||
-            !IUSetIntersect(newOutput, GetForbidden(map.get())).empty()) {
-            return false;
-        }
         map->MapElements = std::move(newElements);
-        map->Props.OutputIUs = std::move(newOutput);
     }
 
     return true;

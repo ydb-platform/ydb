@@ -81,11 +81,9 @@ bool TPushRenameThroughTransparentUnaryRule::MatchAndApply(TIntrusivePtr<IOperat
     }
 
     auto pushedMap = MakeIntrusive<TOpMap>(oldInput, topMap->Pos, pushedElements);
-    pushedMap->Props.OutputIUs = pushedOutput;
     unary->SetInput(pushedMap);
     unary->RenameIUs({{candidate->From, candidate->To}}, ctx.ExprCtx);
-    unary->Props.OutputIUs = output;
-    return NMapRules::FinishRenamePush(input, topMap, *candidate, output, ctx, props);
+    return NMapRules::FinishRenamePush(input, topMap, *candidate, ctx, props);
 }
 
 } // namespace NKqp

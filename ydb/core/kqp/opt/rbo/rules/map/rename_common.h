@@ -32,7 +32,6 @@ bool FinishRenamePush(
     TIntrusivePtr<IOperator>& input,
     const TIntrusivePtr<TOpMap>& topMap,
     const TRenameCandidate& candidate,
-    const TVector<TInfoUnit>& pushedInputOutput,
     TRBOContext& ctx,
     TPlanProps& props);
 

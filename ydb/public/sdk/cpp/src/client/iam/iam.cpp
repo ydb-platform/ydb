@@ -29,6 +29,7 @@ public:
         std::string ticket;
         TInstant nextTicketUpdate;
         auto now = TInstant::Now();
+        std::optional<TString> lastErrorMessage;
         {
             std::lock_guard lock(Lock_);
             if (LastErrorMessage_.has_value() && now > ExpiresAt_) {
@@ -36,16 +37,18 @@ public:
             }
             ticket = Ticket_;
             nextTicketUpdate = NextTicketUpdate_;
+            lastErrorMessage = LastErrorMessage_;
         }
         if (now >= nextTicketUpdate) {
             GetTicket();
             {
                 std::lock_guard lock(Lock_);
                 ticket = Ticket_;
+                lastErrorMessage = LastErrorMessage_;
             }
         }
-        if (ticket.empty() && LastErrorMessage_.has_value()) {
-            throw yexception() << *LastErrorMessage_;
+        if (ticket.empty() && lastErrorMessage.has_value()) {
+            throw yexception() << *lastErrorMessage;
         }
         return ticket;
     }
@@ -85,7 +88,6 @@ private:
             TInstant nextUpdate;
             TDuration expiresIn;
             TInstant expiresAt = TInstant::Max();
-            std::optional<std::string> lastError;
             if (auto it = respMap.find("expires_in"); it != respMap.end()) {
                 auto seconds = it->second.GetUInteger();
                 if (seconds > 0) {

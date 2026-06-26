@@ -18,7 +18,7 @@
 
 #define FASTFLOAT_VERSION_MAJOR 8
 #define FASTFLOAT_VERSION_MINOR 2
-#define FASTFLOAT_VERSION_PATCH 7
+#define FASTFLOAT_VERSION_PATCH 9
 
 #define FASTFLOAT_STRINGIZE_IMPL(x) #x
 #define FASTFLOAT_STRINGIZE(x) FASTFLOAT_STRINGIZE_IMPL(x)
@@ -207,7 +207,11 @@ using parse_options = parse_options_t<char>;
 // to a no-op elsewhere (e.g. pre-C++20 MSVC, which has no equivalent hint).
 #ifdef __has_cpp_attribute
 #if __has_cpp_attribute(unlikely) >= 201803L
-#define FASTFLOAT_USE_UNLIKELY_ATTR 1
+// g++-9 hits hits this branch, but then fails to compile
+// [[unlikely]]. This happens only with g++-9.
+#if !defined(__GNUC__) || (__GNUC__ != 9)
+#define FASTFLOAT_USE_UNLIKELY_ATTR
+#endif
 #endif
 #endif
 

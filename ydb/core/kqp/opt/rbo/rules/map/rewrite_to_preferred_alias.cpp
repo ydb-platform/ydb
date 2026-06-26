@@ -244,7 +244,6 @@ bool RewriteMapInputs(TOpMap& map, const TInfoUnitSet& liveOut, TRBOContext& ctx
     const bool subplansChanged = props.Subplans.RenameIUs(mapRenameMap, ctx.ExprCtx);
     if (changed) {
         map.MapElements = std::move(elements);
-        map.Props.OutputIUs = output;
     }
 
     return changed || subplansChanged;
@@ -408,7 +407,6 @@ bool RewriteAggregateInputs(TOpAggregate& aggregate, const TInfoUnitSet& liveOut
 
     aggregate.KeyColumns = std::move(newKeys);
     aggregate.AggregationTraitsList = std::move(newTraits);
-    aggregate.Props.OutputIUs = output;
     const bool subplansChanged = props.Subplans.RenameIUs(renameMap, ctx.ExprCtx);
     return changed || subplansChanged;
 }

@@ -86,12 +86,10 @@ bool TPushRenameThroughAggregateKeyRule::MatchAndApply(TIntrusivePtr<IOperator>&
     }
 
     auto pushedMap = MakeIntrusive<TOpMap>(oldInput, topMap->Pos, pushedElements);
-    pushedMap->Props.OutputIUs = pushedOutput;
     aggregate->SetInput(pushedMap);
     aggregate->KeyColumns = std::move(newKeys);
     aggregate->AggregationTraitsList = std::move(newTraits);
-    aggregate->Props.OutputIUs = output;
-    return NMapRules::FinishRenamePush(input, topMap, *candidate, output, ctx, props);
+    return NMapRules::FinishRenamePush(input, topMap, *candidate, ctx, props);
 }
 
 } // namespace NKqp

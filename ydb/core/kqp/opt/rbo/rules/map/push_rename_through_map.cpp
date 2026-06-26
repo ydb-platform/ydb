@@ -49,8 +49,7 @@ bool TPushRenameThroughPassThroughMapRule::MatchAndApply(TIntrusivePtr<IOperator
     }
 
     map->MapElements = std::move(elements);
-    map->Props.OutputIUs = output;
-    return NMapRules::FinishRenamePush(input, topMap, *candidate, output, ctx, props);
+    return NMapRules::FinishRenamePush(input, topMap, *candidate, ctx, props);
 }
 
 } // namespace NKqp

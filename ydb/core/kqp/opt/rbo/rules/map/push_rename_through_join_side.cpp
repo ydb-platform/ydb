@@ -73,15 +73,13 @@ bool TPushRenameThroughJoinSideRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
     }
 
     auto pushedMap = MakeIntrusive<TOpMap>(selectedInput, topMap->Pos, pushedElements);
-    pushedMap->Props.OutputIUs = pushedOutput;
     if (pushLeft) {
         join->SetLeftInput(pushedMap);
     } else {
         join->SetRightInput(pushedMap);
     }
     join->RenameIUs({{candidate->From, candidate->To}}, ctx.ExprCtx);
-    join->Props.OutputIUs = output;
-    return NMapRules::FinishRenamePush(input, topMap, *candidate, output, ctx, props);
+    return NMapRules::FinishRenamePush(input, topMap, *candidate, ctx, props);
 }
 
 } // namespace NKqp

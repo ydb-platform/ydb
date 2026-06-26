@@ -1,5 +1,4 @@
 #include <ydb/core/kqp/opt/rbo/rules/kqp_rules_include.h>
-#include <ydb/core/kqp/opt/rbo/rules/map/map_output_utils.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -18,18 +17,6 @@ bool IsLeftPreserved(const TString& joinKind) {
 
 bool IsRightPreserved(const TString& joinKind) {
     return joinKind == "Inner" || joinKind == "Cross" || joinKind == "Right" || joinKind == "RightOnly" || joinKind == "RightSemi";
-}
-
-TVector<TInfoUnit> BuildJoinOutput(const TString& joinKind, TVector<TInfoUnit> leftOutput, TVector<TInfoUnit> rightOutput) {
-    if (joinKind == "LeftOnly" || joinKind == "LeftSemi") {
-        rightOutput.clear();
-    }
-    if (joinKind == "RightOnly" || joinKind == "RightSemi") {
-        leftOutput.clear();
-    }
-
-    leftOutput.insert(leftOutput.end(), rightOutput.begin(), rightOutput.end());
-    return leftOutput;
 }
 
 EPushTarget SelectAliasJoinPushTarget(
@@ -128,82 +115,37 @@ TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const T
         return input;
     }
 
-    TVector<TInfoUnit> newLeftOutput = leftOutput;
     bool pushLeft = !leftMapElements.empty();
-    if (!leftMapElements.empty()) {
-        newLeftOutput = BuildMapOutput(leftOutput, leftMapElements);
-        if (MakeInfoUnitSet(newLeftOutput).size() != newLeftOutput.size()) {
-            pushLeft = false;
-            newLeftOutput = leftOutput;
-        }
-    }
-
-    TVector<TInfoUnit> newRightOutput = rightOutput;
     bool pushRight = !rightMapElements.empty();
-    if (!rightMapElements.empty()) {
-        newRightOutput = BuildMapOutput(rightOutput, rightMapElements);
-        if (MakeInfoUnitSet(newRightOutput).size() != newRightOutput.size()) {
-            pushRight = false;
-            newRightOutput = rightOutput;
-        }
-    }
-
-    if (!pushLeft && !pushRight) {
-        return input;
-    }
-
-    const auto newJoinOutput = BuildJoinOutput(join->JoinKind, newLeftOutput, newRightOutput);
-    if (MakeInfoUnitSet(newJoinOutput).size() != newJoinOutput.size()) {
-        return input;
-    }
 
     TVector<TMapElement> topMapElements;
     for (const auto& [mapElement, target] : classifiedElements) {
-        if (target == EPushTarget::Top ||
-            (target == EPushTarget::Left && !pushLeft) ||
-            (target == EPushTarget::Right && !pushRight)) {
+        if (target == EPushTarget::Top) {
             topMapElements.push_back(mapElement);
         }
     }
 
     if (topMapElements.empty()) {
-        if (!IUSetIntersect(newJoinOutput, GetForbidden(topMap.get())).empty()) {
-            return input;
-        }
         if (pushLeft) {
             auto leftMap = MakeIntrusive<TOpMap>(originalLeftInput, topMap->Pos, leftMapElements);
-            leftMap->Props.OutputIUs = newLeftOutput;
             join->SetLeftInput(leftMap);
         }
         if (pushRight) {
             auto rightMap = MakeIntrusive<TOpMap>(originalRightInput, topMap->Pos, rightMapElements);
-            rightMap->Props.OutputIUs = newRightOutput;
             join->SetRightInput(rightMap);
         }
-        join->Props.OutputIUs = newJoinOutput;
         return join;
-    }
-
-    const auto newTopOutput = BuildMapOutput(newJoinOutput, topMapElements);
-    if (MakeInfoUnitSet(newTopOutput).size() != newTopOutput.size() ||
-        !IUSetIntersect(newTopOutput, GetForbidden(topMap.get())).empty()) {
-        return input;
     }
 
     if (pushLeft) {
         auto leftMap = MakeIntrusive<TOpMap>(originalLeftInput, topMap->Pos, leftMapElements);
-        leftMap->Props.OutputIUs = newLeftOutput;
         join->SetLeftInput(leftMap);
     }
     if (pushRight) {
         auto rightMap = MakeIntrusive<TOpMap>(originalRightInput, topMap->Pos, rightMapElements);
-        rightMap->Props.OutputIUs = newRightOutput;
         join->SetRightInput(rightMap);
     }
-    join->Props.OutputIUs = newJoinOutput;
-    auto newTopMap = MakeIntrusive<TOpMap>(join, topMap->Pos, topMapElements, topMap->Ordered);
-    newTopMap->Props.OutputIUs = newTopOutput;
-    return newTopMap;
+    return MakeIntrusive<TOpMap>(join, topMap->Pos, topMapElements, topMap->Ordered);
 }
 
 } // namespace NKqp

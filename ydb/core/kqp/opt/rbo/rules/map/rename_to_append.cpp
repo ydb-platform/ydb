@@ -6,7 +6,7 @@ namespace NKqp {
 
 namespace {
 
-bool CanConvertRenameToAppend(const TIntrusivePtr<TOpMap>& map, size_t renameIdx, TVector<TInfoUnit>& output) {
+bool CanConvertRenameToAppend(const TIntrusivePtr<TOpMap>& map, size_t renameIdx) {
     if (!map->IsSingleConsumer()) {
         return false;
     }
@@ -18,7 +18,7 @@ bool CanConvertRenameToAppend(const TIntrusivePtr<TOpMap>& map, size_t renameIdx
 
     auto elements = map->MapElements;
     elements[renameIdx].SetIsRename(false);
-    output = BuildMapOutput(map, elements);
+    const auto output = BuildMapOutput(map, elements);
     return MakeInfoUnitSet(output).size() == output.size() &&
         IUSetIntersect(output, GetForbidden(map.get())).empty();
 }
@@ -41,13 +41,11 @@ bool TRenameToAppendRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOCon
             continue;
         }
 
-        TVector<TInfoUnit> output;
-        if (!CanConvertRenameToAppend(map, idx, output)) {
+        if (!CanConvertRenameToAppend(map, idx)) {
             continue;
         }
 
         map->MapElements[idx].SetIsRename(false);
-        map->Props.OutputIUs = std::move(output);
         changed = true;
     }
 

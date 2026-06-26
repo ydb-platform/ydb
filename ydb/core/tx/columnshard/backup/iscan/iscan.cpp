@@ -9,6 +9,8 @@
 #include <ydb/library/services/services.pb.h>
 #include <ydb/library/signals/owner.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NColumnShard::NBackup {
 
 class TUploaderCounters: public NColumnShard::TCommonCountersOwner {
@@ -232,18 +234,28 @@ public:
     void HandleWakeup() {
         const auto elapsed = TInstant::Now() - LastActivityTime;
         if (elapsed > DiagnosticInterval) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("component", "TUploaderActor")("event", "slow_upload")("elapsed_sec", elapsed.Seconds())(
-                "last_state", LastState == NTable::EScan::Sleep ? "Sleep" : "Feed")("queue_size", DataQueue.size())(
-                "current_batch_rows", CurrentBatch.Batch.size())("current_batch_position", CurrentBatch.Position)(
-                "current_batch_is_last", CurrentBatch.IsLast)("total_batches_received", TotalBatchesReceived)("total_rows_fed", TotalRowsFed)(
-                "total_intermediate_results", TotalIntermediateResults)("subscriber", SubscriberActorId.ToString());
+            YDB_LOG_WARN("",
+                {"component", "TUploaderActor"},
+                {"event", "slow_upload"},
+                {"elapsedSec", elapsed.Seconds()},
+                {"lastState", LastState == NTable::EScan::Sleep ? "Sleep" : "Feed"},
+                {"queueSize", DataQueue.size()},
+                {"currentBatchRows", CurrentBatch.Batch.size()},
+                {"currentBatchPosition", CurrentBatch.Position},
+                {"currentBatchIsLast", CurrentBatch.IsLast},
+                {"totalBatchesReceived", TotalBatchesReceived},
+                {"totalRowsFed", TotalRowsFed},
+                {"totalIntermediateResults", TotalIntermediateResults},
+                {"subscriber", SubscriberActorId});
         }
         ScheduleDiagnostics();
     }
 
     void Fail(const TString& errorMessage) {
         Counters.OnError();
-        AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)("component", "TUploaderActor")("error", errorMessage);
+        YDB_LOG_ERROR("",
+            {"component", "TUploaderActor"},
+            {"error", errorMessage});
         Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(errorMessage));
         Counters.ResetSleeping();
         Counters.SetQueueSize(0);
@@ -260,7 +272,9 @@ public:
                 cFunc(NActors::TEvents::TEvWakeup::EventType, HandleWakeup) cFunc(NActors::TEvents::TEvPoisonPill::EventType, HandlePoisonPill))
 
     void HandlePoisonPill() {
-        AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)("component", "TUploaderActor")("event", "poison_pill");
+        YDB_LOG_NOTICE("",
+            {"component", "TUploaderActor"},
+            {"event", "poison_pill"});
         Counters.ResetSleeping();
         Counters.SetQueueSize(0);
         if (Exporter) {
@@ -271,7 +285,10 @@ public:
 
     void HandleGetS3Upload(TEvDataShard::TEvGetS3Upload::TPtr& ev) {
         const auto& msg = *ev->Get();
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("component", "TUploaderActor")("event", "GetS3Upload")("tx_id", msg.TxId);
+        YDB_LOG_DEBUG("",
+            {"component", "TUploaderActor"},
+            {"event", "GetS3Upload"},
+            {"txId", msg.TxId});
         auto it = S3Uploads.find(msg.TxId);
         if (it != S3Uploads.end()) {
             Send(msg.ReplyTo, new TEvDataShard::TEvS3Upload(it->second), 0, ev->Cookie);
@@ -282,8 +299,11 @@ public:
 
     void HandleStoreS3UploadId(TEvDataShard::TEvStoreS3UploadId::TPtr& ev) {
         const auto& msg = *ev->Get();
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("component", "TUploaderActor")("event", "StoreS3UploadId")("tx_id", msg.TxId)(
-            "upload_id", msg.UploadId);
+        YDB_LOG_DEBUG("",
+            {"component", "TUploaderActor"},
+            {"event", "StoreS3UploadId"},
+            {"txId", msg.TxId},
+            {"uploadId", msg.UploadId});
         auto [it, inserted] = S3Uploads.emplace(msg.TxId, NDataShard::TS3Upload(msg.UploadId));
         if (!inserted) {
             it->second.Id = msg.UploadId;
@@ -296,8 +316,11 @@ public:
 
     void HandleChangeS3UploadStatus(TEvDataShard::TEvChangeS3UploadStatus::TPtr& ev) {
         auto& msg = *ev->Get();
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("component", "TUploaderActor")("event", "ChangeS3UploadStatus")("tx_id", msg.TxId)(
-            "status", static_cast<ui8>(msg.Status));
+        YDB_LOG_DEBUG("",
+            {"component", "TUploaderActor"},
+            {"event", "ChangeS3UploadStatus"},
+            {"txId", msg.TxId},
+            {"status", static_cast<ui8>(msg.Status)});
         auto it = S3Uploads.find(msg.TxId);
         AFL_VERIFY(it != S3Uploads.end())("tx_id", msg.TxId)("event", "ChangeS3UploadStatus without prior StoreS3UploadId");
         it->second.Status = msg.Status;
@@ -347,25 +370,35 @@ public:
         Counters.SetQueueSize(0);
         switch (scanProduct->Outcome) {
             case NDataShard::EExportOutcome::Success:
-                AFL_NOTICE(NKikimrServices::TX_COLUMNSHARD)
-                ("component", "TUploaderActor")("reason", "successfully finished")("bytes_read", scanProduct->BytesRead)(
-                    "rows_read", scanProduct->RowsRead)("total_batches_received", TotalBatchesReceived)("total_rows_fed", TotalRowsFed)(
-                    "total_intermediate_results", TotalIntermediateResults);
+                YDB_LOG_NOTICE("",
+                    {"component", "TUploaderActor"},
+                    {"reason", "successfully finished"},
+                    {"bytesRead", scanProduct->BytesRead},
+                    {"rowsRead", scanProduct->RowsRead},
+                    {"totalBatchesReceived", TotalBatchesReceived},
+                    {"totalRowsFed", TotalRowsFed},
+                    {"totalIntermediateResults", TotalIntermediateResults});
                 Send(SubscriberActorId, new TEvPrivate::TEvBackupExportRecordBatchResult(true));
                 break;
             case NDataShard::EExportOutcome::Error:
                 Counters.OnError();
                 Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(scanProduct->Error));
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
-                ("component", "TUploaderActor")("reason", "error")("error", scanProduct->Error)("bytes_read", scanProduct->BytesRead)(
-                    "rows_read", scanProduct->RowsRead);
+                YDB_LOG_ERROR("",
+                    {"component", "TUploaderActor"},
+                    {"reason", "error"},
+                    {"error", scanProduct->Error},
+                    {"bytesRead", scanProduct->BytesRead},
+                    {"rowsRead", scanProduct->RowsRead});
                 break;
             case NDataShard::EExportOutcome::Aborted:
                 Counters.OnError();
                 Send(SubscriberActorId, new TEvPrivate::TEvBackupExportError(scanProduct->Error));
-                AFL_ERROR(NKikimrServices::TX_COLUMNSHARD)
-                ("component", "TUploaderActor")("reason", "aborted")("error", scanProduct->Error)("bytes_read", scanProduct->BytesRead)(
-                    "rows_read", scanProduct->RowsRead);
+                YDB_LOG_ERROR("",
+                    {"component", "TUploaderActor"},
+                    {"reason", "aborted"},
+                    {"error", scanProduct->Error},
+                    {"bytesRead", scanProduct->BytesRead},
+                    {"rowsRead", scanProduct->RowsRead});
                 break;
         }
         PassAway();

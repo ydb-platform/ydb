@@ -123,6 +123,7 @@ message TQueryStats {
     optional uint64 RequestUnits = 17;
     optional uint64 LocksBrokenAsBreaker = 18;
     optional uint64 LocksBrokenAsVictim = 19;
+    optional string TraceId = 20;
 }
 
 message TTopQueryStats {

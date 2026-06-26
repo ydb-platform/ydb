@@ -738,7 +738,7 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
             UNIT_ASSERT_GE_C(iteratorCounter->Continues, expectedResult.Continues, "test " << test);
             UNIT_ASSERT_LE_C(iteratorCounter->Continues, 20, "test " << test); // can be up to total requested blobs due ShouldStopByElapsedTime() time limit
             UNIT_ASSERT_GE_C(iteratorCounter->EvGets, expectedResult.EvGets, "test " << test);
-            UNIT_ASSERT_LE_C(iteratorCounter->EvGets, 20, "test " << test);
+            UNIT_ASSERT_LE_C(iteratorCounter->EvGets, expectedResult.BlobsRequested, "test " << test);
             UNIT_ASSERT_VALUES_EQUAL_C(iteratorCounter->BlobsRequested, expectedResult.BlobsRequested, "test " << test);
         }
     }

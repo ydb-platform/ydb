@@ -805,6 +805,7 @@ void InferStatisticsForAggregateBase(const TExprNode::TPtr& input, TKqpStatsStor
         double rowBytes = aggStats->Nrows > 0.0 ? aggStats->ByteSize / aggStats->Nrows : aggStats->ByteSize;
         aggStats->Nrows = 1.0;
         aggStats->ByteSize = rowBytes;
+        aggStats->Selectivity = 1.0;
         aggStats->Type = EStatisticsType::Constant;
     } else {
         aggStats->Nrows = aggStats->Nrows * selectivity;

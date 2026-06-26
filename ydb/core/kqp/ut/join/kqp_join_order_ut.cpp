@@ -1376,11 +1376,11 @@ Y_UNIT_TEST_SUITE(KqpJoinOrder) {
         );
     }
 
-    // Y_UNIT_TEST(CanonizedJoinOrderTPCH15) {
-    //     CanonizedJoinOrderTest(
-    //         "queries/tpch15.sql", "stats/tpch1000s.json", "join_order/tpch15_1000s.json", false, true
-    //     );
-    // }
+    Y_UNIT_TEST(CanonizedJoinOrderTPCH15) {
+        CanonizedJoinOrderTest(
+            "queries/tpch15.sql", "stats/tpch1000s.json", "join_order/tpch15_1000s.json", false, true
+        );
+    }
 
     Y_UNIT_TEST(CanonizedJoinOrderTPCH16) {
         CanonizedJoinOrderTest(

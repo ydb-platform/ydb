@@ -29,6 +29,8 @@ items:
   when: feature_changefeed
 - name: Time to live and eviction
   href: ttl.md
+- name: Scan queries
+  href: query_execution/scan_query.md
 - name: Database limits
   href: limits-ydb.md
 - name: Multi-Version Concurrency Control (MVCC)

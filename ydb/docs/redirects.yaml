@@ -484,31 +484,10 @@ common:
   - from: /olap/datasets/(.*)$
     to: /analyst/datasets/$1
 
-<<<<<<< HEAD
-=======
-  # Redirects for query_execution
-  
-  - from: /concepts/query_execution.md
-    to: /concepts/query_execution/index.md
-  - from: /concepts/mvcc.md
-    to: /concepts/query_execution/mvcc.md
-  - from: /concepts/optimizer.md
-    to: /concepts/query_execution/optimizer.md
-  - from: /concepts/spilling.md
-    to: /concepts/query_execution/spilling.md
-  - from: /concepts/vector_search.md
-    to: /concepts/query_execution/vector_search.md
-  - from: /concepts/secondary_indexes.md
-    to: /concepts/query_execution/secondary_indexes.md
   - from: /concepts/scan_query.md
     to: /concepts/query_execution/scan_query.md
   - from: /reference/ydb-cli/commands/scan-query.md
     to: /reference/ydb-cli/scan-query.md
-  - from: /yql/reference/syntax/analyze.md
-    to: /concepts/query_execution/optimizer.md
-  - from: /concepts/federated_query/(.*)$
-    to: /concepts/query_execution/federated_query/$1
->>>>>>> 48da0d6260a ([YDBDOCS-2232] перенести статью https://github.com/ydb-platform/ydb/pull/41475 в "Выполнение запросов" (#43439))
 
 ru:
   - from: /postgresql/index.md

@@ -25,29 +25,38 @@ struct EventTypeFromTEvPtr {
     // It would help if TEventHandle* had an explicit type alias to wrapped TEventType
 };
 
+// Defaults for TSchemeLimits are runtime-tunable via YDB_TEST_SCHEMESHARD_* env vars
+// (see schemeshard_types.cpp). Defaults match historical compile-time values when env unset.
+// TODO(YDBAPPTEAM-773): revert this override after the ticket is closed.
+ui64 SchemeLimitsDefaultMaxObjectsInBackup();
+ui64 SchemeLimitsDefaultMaxTableColumns();
+ui64 SchemeLimitsDefaultMaxTableIndices();
+
 struct TSchemeLimits {
     // Used for backward compatability in case of old databases without explicit limits
     static constexpr ui64 MaxPathsCompat = 200*1000;
-    static constexpr ui64 MaxObjectsInBackup = 10*1000;
+    // Function (not data member) to avoid static-init ordering issues with
+    // TSchemeShard::DefaultLimits, which is itself a global.
+    static ui64 MaxObjectsInBackup() { return SchemeLimitsDefaultMaxObjectsInBackup(); }
 
     // path
     ui64 MaxDepth = 32;
-    ui64 MaxPaths = MaxObjectsInBackup;
+    ui64 MaxPaths = MaxObjectsInBackup();
     ui64 MaxChildrenInDir = 100*1000;
     ui64 MaxAclBytesSize = 10 << 10;
     ui64 MaxPathElementLength = 255;
     TString ExtraPathSymbolsAllowed = "!\"#$%&'()*+,-.:;<=>?@[\\]^_`{|}~";
 
     // table
-    ui64 MaxTableColumns = 200;
+    ui64 MaxTableColumns = SchemeLimitsDefaultMaxTableColumns();
     ui64 MaxColumnTableColumns = 10000;
     ui64 MaxTableColumnNameLength = 255;
     ui64 MaxTableKeyColumns = 30;
-    ui64 MaxTableIndices = 20;
+    ui64 MaxTableIndices = SchemeLimitsDefaultMaxTableIndices();
     ui64 MaxTableCdcStreams = 5;
     ui64 MaxShards = 200*1000; // In each database
     ui64 MaxShardsInPath = 35*1000; // In each path in database
-    ui64 MaxConsistentCopyTargets = MaxObjectsInBackup;
+    ui64 MaxConsistentCopyTargets = MaxObjectsInBackup();
 
     // pq group
     ui64 MaxPQPartitions = 1000000;

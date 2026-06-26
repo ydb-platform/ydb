@@ -163,7 +163,7 @@ bool CreateConsistentCopyTables(
 
     const auto& limits = firstPath.DomainInfo()->GetSchemeLimits();
     const auto limit = allForBackup
-        ? Max(limits.MaxObjectsInBackup, limits.MaxConsistentCopyTargets)
+        ? Max(limits.MaxObjectsInBackup(), limits.MaxConsistentCopyTargets)
         : limits.MaxConsistentCopyTargets;
 
     if (op.CopyTableDescriptionsSize() > limit) {

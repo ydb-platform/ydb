@@ -10,8 +10,21 @@
 #include <yql/essentials/minikql/mkql_node.h>
 
 #include <util/generic/size_literals.h>
+#include <util/string/cast.h>
+#include <util/system/env.h>
 
 namespace NYql::NDq {
+
+// TODO(YDBAPPTEAM-773): revert this override after the ticket is closed.
+namespace NDqChannelSettingsEnv {
+    inline ui64 GetChunkSizeLimit() {
+        static const ui64 value = []() -> ui64 {
+            ui64 v = 0;
+            return TryFromString<ui64>(GetEnv("YDB_TEST_DQ_CHANNEL_CHUNK_SIZE_LIMIT"), v) ? v : (48ULL * 1024 * 1024);
+        }();
+        return value;
+    }
+}
 
 struct TDqChannelSettings {
 
@@ -31,7 +44,7 @@ struct TDqChannelSettings {
     // Output channels settings (may changed in future)
 
     ui64 MaxChunkBytes = 2_MB;
-    ui64 ChunkSizeLimit = 48_MB;
+    ui64 ChunkSizeLimit = NDqChannelSettingsEnv::GetChunkSizeLimit();
     IDqChannelStorage::TPtr ChannelStorage;
     TMaybe<ui8> ArrayBufferMinFillPercentage;
     TMaybe<size_t> BufferPageAllocSize;

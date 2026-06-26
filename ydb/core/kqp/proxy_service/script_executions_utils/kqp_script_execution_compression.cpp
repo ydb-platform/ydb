@@ -60,12 +60,12 @@ TScriptArtifacts CompressScriptArtifacts(const std::optional<TString>& ast, cons
         }
 
         std::tie(resultCompressionMethod, resultValue) = compressor.Compress(*value);
-        if (resultValue->size() > NDataShard::NLimits::MaxWriteValueSize) {
+        if (resultValue->size() > NDataShard::NLimits::MaxWriteValueSize()) {
             result.Issues.AddIssue(
-                NYql::TIssue(TStringBuilder() << "Query " << name << " size is " << resultValue->size() << " bytes, that is larger than allowed limit " << NDataShard::NLimits::MaxWriteValueSize << " bytes, " << name << " was truncated")
+                NYql::TIssue(TStringBuilder() << "Query " << name << " size is " << resultValue->size() << " bytes, that is larger than allowed limit " << NDataShard::NLimits::MaxWriteValueSize() << " bytes, " << name << " was truncated")
                     .SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO)
             );
-            resultValue = TruncateString(*value, NDataShard::NLimits::MaxWriteValueSize - 1_KB);
+            resultValue = TruncateString(*value, NDataShard::NLimits::MaxWriteValueSize() - 1_KB);
             resultCompressionMethod = std::nullopt;
         }
     };

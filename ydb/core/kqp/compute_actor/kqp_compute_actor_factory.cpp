@@ -5,7 +5,18 @@
 #include <ydb/core/kqp/node_service/kqp_node_state.h>
 #include <ydb/core/kqp/rm_service/kqp_resource_estimation.h>
 
+#include <util/string/cast.h>
+#include <util/system/env.h>
+
 namespace NKikimr::NKqp::NComputeActor {
+
+// TODO(YDBAPPTEAM-773): revert this override after the ticket is closed.
+namespace {
+    ui64 EnvUi64(const char* name, ui64 def) {
+        ui64 v = 0;
+        return TryFromString<ui64>(GetEnv(name), v) ? v : def;
+    }
+}
 
 class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     std::shared_ptr<NRm::IKqpResourceManager> ResourceManager_;
@@ -28,7 +39,7 @@ class TKqpCaFactory : public IKqpNodeComputeActorFactory {
     std::atomic<ui64> MinChannelBufferSize = 0;
     std::atomic<ui64> MinMemAllocSize = 1_MB;
     std::atomic<ui64> MinMemFreeSize = 32_MB;
-    std::atomic<ui64> ChannelChunkSizeLimit = 48_MB;
+    std::atomic<ui64> ChannelChunkSizeLimit = EnvUi64("YDB_TEST_KQP_CHANNEL_CHUNK_SIZE_LIMIT", 48_MB);
 
 public:
     TKqpCaFactory(const NKikimrConfig::TTableServiceConfig::TResourceManager& config,

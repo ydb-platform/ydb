@@ -1,6 +1,33 @@
 #include "schemeshard_types.h"
 
+#include <util/string/cast.h>
+#include <util/system/env.h>
+
 namespace NKikimr::NSchemeShard {
+
+// TODO(YDBAPPTEAM-773): revert this override after the ticket is closed.
+namespace {
+    ui64 EnvUi64(const char* name, ui64 def) {
+        ui64 v = 0;
+        return TryFromString<ui64>(GetEnv(name), v) ? v : def;
+    }
+}
+
+ui64 SchemeLimitsDefaultMaxObjectsInBackup() {
+    static const ui64 value = EnvUi64("YDB_TEST_SCHEMESHARD_MAX_OBJECTS_IN_BACKUP", 10*1000);
+    return value;
+}
+
+ui64 SchemeLimitsDefaultMaxTableColumns() {
+    static const ui64 value = EnvUi64("YDB_TEST_SCHEMESHARD_MAX_TABLE_COLUMNS", 200);
+    return value;
+}
+
+ui64 SchemeLimitsDefaultMaxTableIndices() {
+    static const ui64 value = EnvUi64("YDB_TEST_SCHEMESHARD_MAX_TABLE_INDICES", 20);
+    return value;
+}
+
 
 void TSchemeLimits::MergeFromProto(const NKikimrSubDomains::TSchemeLimits& proto) {
     if (proto.HasMaxDepth()) {

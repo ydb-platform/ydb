@@ -82,7 +82,8 @@ public:
         : UserToken(NACLib::TUserToken{ownerUserId, TVector<NACLib::TSID>{}})
         , SecretIds(CreateSecretIds(ownerUserId, secretIds))
         , Promise(promise)
-    {}
+    {
+    }
 
     void Bootstrap() {
         if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {

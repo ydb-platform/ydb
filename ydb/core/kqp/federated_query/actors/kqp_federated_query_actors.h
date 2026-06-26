@@ -12,18 +12,24 @@
 #include <memory>
 
 namespace NActors {
+
 class IActor;
 struct TActorId;
 class TActorSystem;
-}
+
+} // namespace NActors
 
 namespace NACLib {
+
 class TUserToken;
-}
+
+} // namespace NACLib
 
 namespace NKikimrSchemeOp {
+
 class TAuth;
-}
+
+} // namespace NKikimrSchemeOp
 
 namespace NKikimr::NKqp {
 

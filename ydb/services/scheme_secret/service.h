@@ -67,7 +67,8 @@ public:
     struct TEvResolveSecretSchemeCacheRetry : public NActors::TEventLocal<TEvResolveSecretSchemeCacheRetry, EvResolveSecretSchemeCacheRetry> {
         TEvResolveSecretSchemeCacheRetry(ui64 initialRequestId)
             : InitialRequestId(initialRequestId)
-        {}
+        {
+        }
 
         const ui64 InitialRequestId = 0;
     };
@@ -76,7 +77,8 @@ public:
         TEvResolveSecretSchemeShardRetry(ui64 initialRequestId, TString secretPath)
             : InitialRequestId(initialRequestId)
             , SecretPath(std::move(secretPath))
-        {}
+        {
+        }
 
         const ui64 InitialRequestId = 0;
         const TString SecretPath;

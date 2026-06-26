@@ -14,7 +14,7 @@ PEERDIR(
 )
 
 SRCS(
-    describe_schema_secrets_service_ut.cpp
+    service_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

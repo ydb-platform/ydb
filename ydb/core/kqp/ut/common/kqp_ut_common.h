@@ -85,7 +85,8 @@ public:
     TMaybe<NFake::TStorage> Storage = Nothing();
     bool InitFederatedQuerySetupFactory = false;
     NKqp::IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
-    NSecret::IDescribeSchemaSecretsServiceFactory::TPtr DescribeSchemaSecretsServiceFactory = std::make_shared<NSecret::TDescribeSchemaSecretsServiceFactory>();
+    NSecret::IDescribeSchemaSecretsServiceFactory::TPtr DescribeSchemaSecretsServiceFactory =
+        std::make_shared<NSecret::TDescribeSchemaSecretsServiceFactory>();
     std::shared_ptr<NKqp::IQueryReplayBackendFactory> QueryReplayBackendFactory;
     NMonitoring::TDynamicCounterPtr CountersRoot = MakeIntrusive<NMonitoring::TDynamicCounters>();
     std::shared_ptr<NYql::NDq::IS3ActorsFactory> S3ActorsFactory = NYql::NDq::CreateDefaultS3ActorsFactory();

@@ -8,6 +8,8 @@
 #include <ydb/core/tx/columnshard/splitter/batch_slice.h>
 #include <ydb/core/tx/columnshard/splitter/settings.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_COLUMNSHARD
+
 namespace NKikimr::NOlap {
 
 void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self, TWriteIndexContext& context) {
@@ -21,8 +23,10 @@ void TChangesWithAppend::DoWriteIndexOnExecute(NColumnShard::TColumnShard* self,
     const auto predRemoveDroppedTable = [self](const TWritePortionInfoWithBlobsResult& item) {
         auto& portionInfo = item.GetPortionResult();
         if (!!self && !self->TablesManager.HasTable(portionInfo.GetPortionInfo().GetPathId(), false)) {
-            AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_inserted_data")("reason", "table_removed")(
-                "path_id", portionInfo.GetPortionInfo().GetPathId());
+            YDB_LOG_WARN("",
+                {"event", "skip_inserted_data"},
+                {"reason", "table_removed"},
+                {"pathId", portionInfo.GetPortionInfo().GetPathId()});
             return true;
         } else {
             return false;
@@ -62,7 +66,9 @@ void TChangesWithAppend::DoWriteIndexOnComplete(NColumnShard::TColumnShard* self
                     break;
             }
         }
-        AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("portions", sb)("task_id", GetTaskIdentifier());
+        YDB_LOG_DEBUG("",
+            {"portions", sb},
+            {"taskId", GetTaskIdentifier()});
     }
 
     auto g = context.EngineLogs.GranulesStorage->GetStats()->StartPackModification();

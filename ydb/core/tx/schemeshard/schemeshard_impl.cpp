@@ -1,4 +1,8 @@
 #include "schemeshard_impl.h"
+#include <ydb/core/cms/console/configs_dispatcher.h>
+#include <ydb/core/cms/console/console.h>
+#include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
+#include <ydb/core/external_sources/external_source_factory.h>
 #include "schemeshard__local_index_migration.h"
 #include "schemeshard_login_helper.h"
 #include "schemeshard_svp_migration.h"
@@ -5491,6 +5495,8 @@ TSchemeShard::TSchemeShard(const TActorId &tablet, TTabletStorageInfo *info)
         },
         IsLoginCacheEnabled, {})
 {
+    ExternalSourceFactory = NExternalSource::CreateExternalSourceFactory({});
+
     TabletCountersPtr.Reset(new TProtobufTabletCounters<
                             ESimpleCounters_descriptor,
                             ECumulativeCounters_descriptor,

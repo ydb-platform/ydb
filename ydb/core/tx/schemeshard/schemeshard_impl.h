@@ -31,16 +31,14 @@
 #include <ydb/core/base/subdomain.h>
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/blob_depot/events.h>
-#include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
+#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/blockstore/core/blockstore.h>
-#include <ydb/core/cms/console/configs_dispatcher.h>
-#include <ydb/core/cms/console/console.h>
-#include <ydb/core/external_sources/external_source_factory.h>
 #include <ydb/core/filestore/core/filestore.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
+#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/counters_schemeshard.pb.h>
 #include <ydb/core/protos/filestore_config.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
@@ -83,6 +81,15 @@ namespace NKikimr::TEvKeyValue {
     using TEvVacuumResponse__HandlePtr = TAutoPtr<NActors::TEventHandle<TEvVacuumResponse>>;
 }
 
+namespace NKikimr::NExternalSource {
+    struct IExternalSourceFactory;
+}
+
+namespace NKikimr::NConsole {
+    namespace TEvConfigsDispatcher { struct TEvSetConfigSubscriptionResponse; }
+    namespace TEvConsole { struct TEvConfigNotificationRequest; }
+}
+
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -97,6 +104,15 @@ struct TIncrementalRestoreState;
 struct TIndexBuildInfo;
 struct TSetColumnConstraintOperationInfo;
 struct TIndexBuildShardStatus;
+
+// Decoupled from blobstorage_shred_events.h: name the handle type without
+// requiring the full TEvControllerShredResponse definition (and its .pb.h).
+using TEvControllerShredResponse__HandlePtr = TAutoPtr<NActors::TEventHandle<TEvBlobStorage::TEvControllerShredResponse>>;
+
+// Decoupled from console.h / configs_dispatcher.h: name the handle types
+// without requiring the full event definitions (and config.pb.h).
+using TEvSetConfigSubscriptionResponse__HandlePtr = TAutoPtr<NActors::TEventHandle<NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse>>;
+using TEvConfigNotificationRequest__HandlePtr = TAutoPtr<NActors::TEventHandle<NConsole::TEvConsole::TEvConfigNotificationRequest>>;
 
 class TSchemeShard
     : public TActor<TSchemeShard>
@@ -471,7 +487,7 @@ public:
     TActorId DelayedInitTenantDestination;
     TAutoPtr<TEvSchemeShard::TEvInitTenantSchemeShardResult> DelayedInitTenantReply;
 
-    NExternalSource::IExternalSourceFactory::TPtr ExternalSourceFactory{NExternalSource::CreateExternalSourceFactory({})};
+    TIntrusivePtr<NExternalSource::IExternalSourceFactory> ExternalSourceFactory;
 
     struct TTablePartitionsFormatSweepState {
         enum class EStatus : ui8 {
@@ -1285,7 +1301,7 @@ public:
     NTabletFlatExecutor::ITransaction* CreateTxCompleteShredTenant(TEvSchemeShard::TEvTenantShredResponse::TPtr& ev);
 
     struct TTxCompleteShredBSC;
-    NTabletFlatExecutor::ITransaction* CreateTxCompleteShredBSC(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxCompleteShredBSC(TEvControllerShredResponse__HandlePtr& ev);
 
     void PublishToSchemeBoard(THashMap<TTxId, TDeque<TPathId>>&& paths, const TActorContext& ctx);
     void PublishToSchemeBoard(TTxId txId, TDeque<TPathId>&& paths, const TActorContext& ctx);
@@ -1521,7 +1537,7 @@ public:
     void Handle(TEvKeyValue::TEvVacuumResponse__HandlePtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvTenantShredResponse::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvAddNewShardToShred::TPtr& ev, const TActorContext& ctx);
-    void Handle(TEvBlobStorage::TEvControllerShredResponse::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvControllerShredResponse__HandlePtr& ev, const TActorContext& ctx);
     void Handle(TEvBlobDepot::TEvApplyConfigResult::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvShredInfoRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvSchemeShard::TEvShredManualStartupRequest::TPtr& ev, const TActorContext& ctx);
@@ -1568,8 +1584,8 @@ public:
     void ScheduleServerlessStorageBilling(const TActorContext& ctx);
     void Handle(TEvPrivate::TEvServerlessStorageBilling::TPtr& ev, const TActorContext& ctx);
 
-    void Handle(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse::TPtr &ev, const TActorContext &ctx);
-    void Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx);
+    void Handle(TEvSetConfigSubscriptionResponse__HandlePtr &ev, const TActorContext &ctx);
+    void Handle(TEvConfigNotificationRequest__HandlePtr &ev, const TActorContext &ctx);
 
     void Handle(TEvSchemeShard::TEvLogin::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvPrivate::TEvLoginFinalize::TPtr& ev, const TActorContext& ctx);

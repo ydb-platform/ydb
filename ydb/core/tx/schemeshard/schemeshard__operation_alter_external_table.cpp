@@ -2,6 +2,7 @@
 #include "schemeshard__operation_common_external_table.h"
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
+#include <ydb/core/external_sources/external_source_factory.h>
 
 #include <utility>
 

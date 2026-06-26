@@ -249,7 +249,7 @@ private:
                 }
                 try {
                     FillContext(guard);
-                } catch(...) {
+                } catch (...) {
                     const auto now = SysClock::now();
                     LastRequestError_ = TStringBuilder()
                         << "Last request error was at " << FormatSysTimeUtcIsoMicros(now)

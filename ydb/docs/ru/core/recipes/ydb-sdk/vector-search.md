@@ -5,7 +5,7 @@
 Подробно будут разобраны операции:
 
 - [Векторный поиск](#векторный-поиск)
-  - [Подключение к {{ ydb-short-name }}](#connect-ydb)
+  - [Подключение к {{ ydb-short-name }} {#connect-ydb}](#подключение-к--ydb-short-name--connect-ydb)
   - [Создание таблицы {#create-table}](#создание-таблицы-create-table)
   - [Вставка векторов {#insert-vectors}](#вставка-векторов-insert-vectors)
   - [Добавление индекса {#add-vector-index}](#добавление-индекса-add-vector-index)
@@ -627,7 +627,6 @@
             System.out.println(items.size() + " items inserted");
         }
 
-        // record Item(String id, String document, float[] embedding) {}
         ```
 
         {% note info %}
@@ -711,7 +710,6 @@
             System.out.println(items.size() + " items inserted");
         }
 
-        // record Item(String id, String document, float[] embedding) {}
         ```
 
     {% endlist %}
@@ -1193,7 +1191,6 @@
         System.out.println("Table index `" + indexName + "` for table `" + tableName + "` added");
     }
 
-    // SessionRetryContext tableRetry = SessionRetryContext.create(TableClient.newClient(transport).build()).build();
     ```
 
 - Python
@@ -1602,7 +1599,6 @@
             return result;
         }
 
-        // record ResultItem(String id, String document, float score) {}
         ```
 
     - Альтернативный способ
@@ -1680,7 +1676,6 @@
             return result;
         }
 
-        // record ResultItem(String id, String document, float score) {}
         ```
 
   {% endlist %}
@@ -2569,7 +2564,6 @@
     Полный пример на GitHub: [vector-search.rs](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/vector-search.rs).
 
     ```rust
-    // drop → create table → insert → search → add index → search with VIEW
     drop_vector_table_if_exists(&mut qc, table_name).await?;
     create_vector_table(&mut qc, table_name).await?;
     insert_items_as_bytes(&mut qc, table_name, &items).await?;

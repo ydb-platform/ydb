@@ -8,6 +8,8 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -676,12 +678,8 @@ bool TTxStoreTableStats::VerifySplitAndRequestStats(
     }
 
     if (newPartitionStats.HasBorrowedData) {
-        LOG_NOTICE_S(
-            ctx,
-            NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Postpone split tablet " << datashardId
-                << " because it has borrow parts, enqueue compact them first"
-        );
+        YDB_LOG_NOTICE_CTX(ctx, "Postpone split tablet because it has borrow parts, enqueue compact them first",
+            {"datashardId", datashardId});
 
         Self->EnqueueBorrowedCompaction(shardIdx);
         return false;

@@ -1839,11 +1839,10 @@ void TOperation::RegisterRelationByTabletId(TSubTxId partId, TTabletId tablet, c
         return;
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TOperation RegisterRelationByTabletId"
-                    << ", TxId: " << TxId
-                    << ", partId: " << partId
-                    << ", tablet: " << tablet);
+    YDB_LOG_DEBUG_CTX(ctx, "TOperation RegisterRelationByTabletId",
+        {"txId", TxId},
+        {"partId", partId},
+        {"tablet", tablet});
 
     RelationsByTabletId[tablet] = partId;
 }

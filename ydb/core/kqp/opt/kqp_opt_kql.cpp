@@ -1260,7 +1260,7 @@ bool CheckDisabledWriteToUniqIndex(const TExprBase& write, const NYql::TKikimrTa
 
 bool ValidateBatchOperation(const NYql::TKikimrTableDescription& tableData, const TExprBase& expr, TExprContext& ctx, TKqpOptimizeContext& kqpCtx)
 {
-    const bool allowBatchUpdates = kqpCtx.Config->GetEnableBatchUpdates() && kqpCtx.Config->GetEnableOltpSink();
+    const bool allowBatchUpdates = kqpCtx.Config->GetEnableOltpSink();
     const bool enabledIndexStreamWrite = kqpCtx.Config->GetEnableIndexStreamWrite();
 
     if (!allowBatchUpdates) {

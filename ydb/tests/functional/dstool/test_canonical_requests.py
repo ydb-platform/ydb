@@ -338,6 +338,16 @@ class Test(TestBase):
             self._trace('pool', 'list', '-H', '--show-vdisk-estimated-usage'),
         ]
 
+    def test_group_add(self):
+        retry_assertions(self.check_vdisks_state_ok)
+        pool_name = 'dynamic_storage_pool:1'
+        return [
+            self._trace('--dry-run', 'group', 'add', '--pool-name', pool_name, '--groups', '1', '--size-in-units', '4', with_grpc_calls=True),
+            self._trace('group', 'add', '--pool-name', pool_name, '--groups', '1', '--size-in-units', '2', with_grpc_calls=True),
+            self._trace('group', 'add', '--pool-name', pool_name, '--groups', '1', with_grpc_calls=True),
+            self._trace('group', 'list', '--columns', 'GroupId', 'PoolName', 'SizeInUnits'),
+        ]
+
     def test_group_resize(self):
         group_id = 2181038080
         return [

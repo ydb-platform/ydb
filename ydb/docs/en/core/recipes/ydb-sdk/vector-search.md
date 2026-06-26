@@ -5,7 +5,7 @@ This section contains code recipes in different programming languages for [vecto
 The following operations are covered in detail:
 
 - [Vector search](#vector-search)
-  - [Connecting to {{ ydb-short-name }} {#connect-ydb}](#connecting-to--ydb-short-name--connect-ydb)
+  - [Connecting to {{ ydb-short-name }}](#connect-ydb)
   - [Creating a table {#create-table}](#creating-a-table-create-table)
   - [Inserting vectors {#insert-vectors}](#inserting-vectors-insert-vectors)
   - [Adding an index {#add-vector-index}](#adding-an-index-add-vector-index)

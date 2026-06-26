@@ -266,12 +266,10 @@ public:
                 [[fallthrough]];
             case NTxProxy::TResultStatus::ExecAlready:
                 if (ssStatus == NKikimrScheme::EStatus::StatusSuccess || ssStatus == NKikimrScheme::EStatus::StatusAlreadyExists) {
-                    if (ssStatus == NKikimrScheme::EStatus::StatusAlreadyExists
-                        && (!TableIndexes.empty() || !TableSequences.empty()))
+                    if ((ssStatus == NKikimrScheme::EStatus::StatusAlreadyExists
+                            && (!TableIndexes.empty() || !TableSequences.empty()))
+                        || PartialModification)
                     {
-                        FallBack();
-                    } else if (PartialModification) {
-                        // Apply next modification
                         FallBack();
                     } else {
                         Success(ev);

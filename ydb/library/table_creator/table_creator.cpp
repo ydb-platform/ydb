@@ -124,6 +124,7 @@ public:
 
         switch (OperationType) {
             case NKikimrSchemeOp::ESchemeOpCreateTable: {
+                TableCreateAttempted = true;
                 const bool useIndexedTable = !TableSequences.empty() || !TableIndexes.empty();
                 if (useIndexedTable) {
                     auto& modifyScheme = *getModifyScheme(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
@@ -162,6 +163,11 @@ public:
     }
 
     void RunTableModification(const THashMap<ui32, TSysTables::TTableColumnInfo>& existingColumns, TIntrusivePtr<TSecurityObject> securityObject) {
+        if (!TableCreateAttempted && (!TableIndexes.empty() || !TableSequences.empty())) {
+            Fail("Table already exists; index and sequence upgrade is not supported");
+            return;
+        }
+
         ExcludeExistingColumns(existingColumns);
         bool aclChanged = false;
 
@@ -554,6 +560,7 @@ private:
     const TVector<NKikimrSchemeOp::TIndexDescription> TableIndexes;
     const TVector<NKikimrSchemeOp::TSequenceDescription> TableSequences;
     NKikimrSchemeOp::EOperationType OperationType = NKikimrSchemeOp::EOperationType::ESchemeOpCreateTable;
+    bool TableCreateAttempted = false;
     bool PartialModification = false;
     NActors::TActorId Owner;
     NActors::TActorId SchemePipeActorId;

@@ -61,9 +61,14 @@ class TIndexedTableCreator : public NTableCreator::TMultiTableCreator {
     using TBase = NTableCreator::TMultiTableCreator;
 
 public:
-    explicit TIndexedTableCreator(NThreading::TPromise<void> promise)
+    struct TResult {
+        bool Success = false;
+        NYql::TIssues Issues;
+    };
+
+    explicit TIndexedTableCreator(NThreading::TPromise<TResult> promise)
         : TBase({ GetCreator() })
-        , Promise(promise)
+        , Promise(std::move(promise))
     {}
 
 private:
@@ -100,12 +105,11 @@ private:
     }
 
     void OnTablesCreated(bool success, NYql::TIssues issues) override {
-        UNIT_ASSERT_C(success, issues.ToString());
-        Promise.SetValue();
+        Promise.SetValue({success, std::move(issues)});
     }
 
 private:
-    NThreading::TPromise<void> Promise;
+    NThreading::TPromise<TResult> Promise;
 };
 
 } // namespace
@@ -176,10 +180,11 @@ Y_UNIT_TEST_SUITE(TableCreator) {
         client.InitRootScheme();
         auto runtime = server.GetRuntime();
 
-        auto promise = NThreading::NewPromise();
+        auto promise = NThreading::NewPromise<TIndexedTableCreator::TResult>();
         TActorId edgeActor = runtime->AllocateEdgeActor(0);
         runtime->Register(new TIndexedTableCreator(promise), 0, 0, TMailboxType::Simple, 0, edgeActor);
-        promise.GetFuture().GetValueSync();
+        const auto result = promise.GetFuture().GetValueSync();
+        UNIT_ASSERT_C(result.Success, result.Issues.ToString());
 
         NYdb::TDriverConfig cfg;
         cfg.SetEndpoint(TStringBuilder() << "localhost:" << grpcPort).SetDatabase(Tests::TestDomainName);
@@ -221,6 +226,38 @@ Y_UNIT_TEST_SUITE(TableCreator) {
         UNIT_ASSERT(parser.TryNextRow());
         UNIT_ASSERT_GT(parser.ColumnParser("id").GetUint64(), 0u);
         UNIT_ASSERT(!parser.TryNextRow());
+    }
+
+    Y_UNIT_TEST(RejectIndexedTableUpgradeOnExistingTable) {
+        TPortManager tp;
+        ui16 mbusPort = tp.GetPort();
+        ui16 grpcPort = tp.GetPort();
+        auto settings = Tests::TServerSettings(mbusPort);
+        settings.SetNodeCount(1);
+
+        Tests::TServer server(settings);
+        Tests::TClient client(settings);
+
+        server.EnableGRpc(grpcPort);
+        client.InitRootScheme();
+        auto runtime = server.GetRuntime();
+        TActorId edgeActor = runtime->AllocateEdgeActor(0);
+
+        {
+            auto promise = NThreading::NewPromise<TIndexedTableCreator::TResult>();
+            runtime->Register(new TIndexedTableCreator(promise), 0, 0, TMailboxType::Simple, 0, edgeActor);
+            const auto result = promise.GetFuture().GetValueSync();
+            UNIT_ASSERT_C(result.Success, result.Issues.ToString());
+        }
+
+        {
+            auto promise = NThreading::NewPromise<TIndexedTableCreator::TResult>();
+            runtime->Register(new TIndexedTableCreator(promise), 0, 0, TMailboxType::Simple, 0, edgeActor);
+            const auto result = promise.GetFuture().GetValueSync();
+            UNIT_ASSERT(!result.Success);
+            UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToString(),
+                "Table already exists; index and sequence upgrade is not supported");
+        }
     }
 }
 

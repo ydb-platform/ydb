@@ -194,6 +194,8 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const T& rec,
     newStats.DataSize = tableStats.GetDataSize();
     newStats.IndexSize = tableStats.GetIndexSize();
     newStats.ByKeyFilterSize = tableStats.GetByKeyFilterSize();
+    newStats.SmallBlobsBytes = tableStats.GetSmallBlobsVolume();
+    newStats.SmallBlobsCount = tableStats.GetSmallBlobsCount();
     newStats.LastAccessTime = TInstant::MilliSeconds(tableStats.GetLastAccessTime());
     newStats.LastUpdateTime = TInstant::MilliSeconds(tableStats.GetLastUpdateTime());
 
@@ -424,6 +426,8 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     }
 
     TDiskSpaceUsageDelta diskSpaceUsageDelta;
+    i64 smallBlobsBytesDelta = 0;
+    i64 smallBlobsCountDelta = 0;
 
     if (isDataShard) {
         if (!Self->Tables.contains(pathId)) {
@@ -459,7 +463,11 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         }
 
         TOlapStoreInfo::TPtr olapStore = Self->OlapStores[pathId];
+        const i64 prevSmallBlobsBytes = olapStore->Stats.Aggregated.SmallBlobsBytes;
+        const i64 prevSmallBlobsCount = olapStore->Stats.Aggregated.SmallBlobsCount;
         olapStore->UpdateShardStats(&diskSpaceUsageDelta, shardIdx, newStats, now);
+        smallBlobsBytesDelta = olapStore->Stats.Aggregated.SmallBlobsBytes - prevSmallBlobsBytes;
+        smallBlobsCountDelta = olapStore->Stats.Aggregated.SmallBlobsCount - prevSmallBlobsCount;
         updateSubdomainInfo = true;
 
         const auto tables = rec.GetTables();
@@ -497,7 +505,11 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
                    "PersistSingleStats: ColumnTable rec.GetColumnTables() size=" << rec.GetTables().size());
 
         auto columnTable = Self->ColumnTables.GetVerifiedPtr(pathId);
+        const i64 prevSmallBlobsBytes = columnTable->Stats.Aggregated.SmallBlobsBytes;
+        const i64 prevSmallBlobsCount = columnTable->Stats.Aggregated.SmallBlobsCount;
         columnTable->UpdateShardStats(&diskSpaceUsageDelta, shardIdx, newStats, now);
+        smallBlobsBytesDelta = columnTable->Stats.Aggregated.SmallBlobsBytes - prevSmallBlobsBytes;
+        smallBlobsCountDelta = columnTable->Stats.Aggregated.SmallBlobsCount - prevSmallBlobsCount;
         updateSubdomainInfo = true;
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
@@ -509,7 +521,10 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
 
     if (updateSubdomainInfo) {
         subDomainInfo->AggrDiskSpaceUsage(Self, diskSpaceUsageDelta);
-        if (subDomainInfo->CheckDiskSpaceQuotas(Self)) {
+        subDomainInfo->AggrSmallBlobsUsage(Self, smallBlobsBytesDelta, smallBlobsCountDelta);
+        const bool diskQuotaChanged = subDomainInfo->CheckDiskSpaceQuotas(Self);
+        const bool smallBlobsQuotaChanged = subDomainInfo->CheckSmallBlobsQuotas(Self);
+        if (diskQuotaChanged || smallBlobsQuotaChanged) {
             auto subDomainId = Self->ResolvePathIdForDomain(pathElement);
             Self->PersistSubDomainState(db, subDomainId, *subDomainInfo);
             // Publish is done in a separate transaction, so we may call this directly

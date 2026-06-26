@@ -1672,6 +1672,14 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                     if (domainInfo->GetDiskQuotaExceeded()) {
                         Self->ChangeDiskSpaceQuotaExceeded(+1);
                     }
+                    domainInfo->SetSmallBlobsVolumeQuotaExceeded(rowset.GetValueOrDefault<Schema::SubDomains::SmallBlobsVolumeQuotaExceeded>(false));
+                    if (domainInfo->GetSmallBlobsVolumeQuotaExceeded()) {
+                        Self->ChangeSmallBlobsVolumeQuotaExceeded(+1);
+                    }
+                    domainInfo->SetSmallBlobsCountQuotaExceeded(rowset.GetValueOrDefault<Schema::SubDomains::SmallBlobsCountQuotaExceeded>(false));
+                    if (domainInfo->GetSmallBlobsCountQuotaExceeded()) {
+                        Self->ChangeSmallBlobsCountQuotaExceeded(+1);
+                    }
 
                     if (rowset.HaveValue<Schema::SubDomains::AuditSettings>()) {
                         NKikimrSubDomains::TAuditSettings value;

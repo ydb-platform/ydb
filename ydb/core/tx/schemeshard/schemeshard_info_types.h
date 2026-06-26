@@ -412,6 +412,9 @@ struct TPartitionStats {
     ui64 IndexSize = 0;
     ui64 ByKeyFilterSize = 0;
 
+    ui64 SmallBlobsBytes = 0;
+    ui64 SmallBlobsCount = 0;
+
     struct TStoragePoolStats {
         ui64 DataSize = 0;
         ui64 IndexSize = 0;
@@ -1927,6 +1930,14 @@ struct IQuotaCounters {
     virtual void ChangeDiskSpaceHardQuotaBytes(i64 delta) = 0;
     virtual void ChangeDiskSpaceSoftQuotaBytes(i64 delta) = 0;
     virtual void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) = 0;
+    virtual void ChangeSmallBlobsVolumeBytes(i64 delta) = 0;
+    virtual void ChangeSmallBlobsCount(i64 delta) = 0;
+    virtual void ChangeSmallBlobsVolumeHardQuotaBytes(i64 delta) = 0;
+    virtual void ChangeSmallBlobsVolumeSoftQuotaBytes(i64 delta) = 0;
+    virtual void ChangeSmallBlobsCountHardQuota(i64 delta) = 0;
+    virtual void ChangeSmallBlobsCountSoftQuota(i64 delta) = 0;
+    virtual void ChangeSmallBlobsVolumeQuotaExceeded(i64 delta) = 0;
+    virtual void ChangeSmallBlobsCountQuotaExceeded(i64 delta) = 0;
     virtual void ChangePathCount(i64 delta) = 0;
     virtual void SetPathCount(ui64 value) = 0;
     virtual void SetPathsQuota(ui64 value) = 0;
@@ -1950,6 +1961,8 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
             ui64 TotalSize = 0;
             ui64 DataSize = 0;
             ui64 IndexSize = 0;
+            ui64 SmallBlobsBytes = 0;
+            ui64 SmallBlobsCount = 0;
         } Tables;
 
         struct TTopics {
@@ -1980,6 +1993,13 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
                 }
             );
         }
+    };
+
+    struct TSmallBlobsQuotas {
+        ui64 VolumeHardQuota = 0;
+        ui64 VolumeSoftQuota = 0;
+        ui64 CountHardQuota = 0;
+        ui64 CountSoftQuota = 0;
     };
 
     TSubDomainInfo() = default;
@@ -2302,12 +2322,16 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
         AlterData->DomainStateVersion = DomainStateVersion;
         AlterData->DiskQuotaExceeded = DiskQuotaExceeded;
+        AlterData->SmallBlobsVolumeQuotaExceeded = SmallBlobsVolumeQuotaExceeded;
+        AlterData->SmallBlobsCountQuotaExceeded = SmallBlobsCountQuotaExceeded;
 
         // Update DiskSpaceUsage and recheck quotas (which may have changed by an alter)
         AlterData->DiskSpaceUsage = DiskSpaceUsage;
         AlterData->CheckDiskSpaceQuotas(counters);
+        AlterData->CheckSmallBlobsQuotas(counters);
 
         CountDiskSpaceQuotas(counters, GetDiskSpaceQuotas(), AlterData->GetDiskSpaceQuotas());
+        CountSmallBlobsQuotas(counters, GetSmallBlobsQuotas(), AlterData->GetSmallBlobsQuotas());
         CountStreamShardsQuota(counters, GetStreamShardsQuota(), AlterData->GetStreamShardsQuota());
         CountStreamReservedStorageQuota(counters, GetStreamReservedStorageQuota(), AlterData->GetStreamReservedStorageQuota());
     }
@@ -2338,6 +2362,8 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
     static void CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& prev, const TDiskSpaceQuotas& next);
 
+    static void CountSmallBlobsQuotas(IQuotaCounters* counters, const TSmallBlobsQuotas& prev, const TSmallBlobsQuotas& next);
+
     static void CountStreamShardsQuota(IQuotaCounters* counters, const i64 delta) {
         counters->ChangeStreamShardsQuota(delta);
     }
@@ -2356,11 +2382,19 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
     TDiskSpaceQuotas GetDiskSpaceQuotas() const;
 
+    TSmallBlobsQuotas GetSmallBlobsQuotas() const;
+
     /*
     Checks current disk usage against disk quotas.
     Returns true when DiskQuotaExceeded value has changed and needs to be persisted and pushed to scheme board.
     */
     bool CheckDiskSpaceQuotas(IQuotaCounters* counters);
+
+    /*
+    Checks current small-blobs usage against small-blobs quotas.
+    Returns true when either small-blobs *QuotaExceeded flag has changed and needs to be persisted and pushed to scheme board.
+    */
+    bool CheckSmallBlobsQuotas(IQuotaCounters* counters);
 
     ui64 TotalDiskSpaceUsage() {
         return DiskSpaceUsage.Tables.TotalSize + (AppData()->FeatureFlags.GetEnableTopicDiskSubDomainQuota() ? GetPQAccountStorage() : 0);
@@ -2533,6 +2567,7 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
     void AggrDiskSpaceUsage(IQuotaCounters* counters, const TPartitionStats& newAggr, const TPartitionStats& oldAggr = {});
     void AggrDiskSpaceUsage(IQuotaCounters* counters, const TDiskSpaceUsageDelta& delta);
+    void AggrSmallBlobsUsage(IQuotaCounters* counters, i64 bytesDelta, i64 countDelta);
 
     void AggrDiskSpaceUsage(const TTopicStats& newAggr, const TTopicStats& oldAggr = {});
 
@@ -2558,13 +2593,16 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
 
     void SetDatabaseQuotas(const Ydb::Cms::DatabaseQuotas& databaseQuotas, IQuotaCounters* counters) {
         auto prev = GetDiskSpaceQuotas();
+        auto prevSmallBlobs = GetSmallBlobsQuotas();
         auto prevs = GetStreamShardsQuota();
         auto prevrs = GetStreamReservedStorageQuota();
         DatabaseQuotas.ConstructInPlace(databaseQuotas);
         auto next = GetDiskSpaceQuotas();
+        auto nextSmallBlobs = GetSmallBlobsQuotas();
         auto nexts = GetStreamShardsQuota();
         auto nextrs = GetStreamReservedStorageQuota();
         CountDiskSpaceQuotas(counters, prev, next);
+        CountSmallBlobsQuotas(counters, prevSmallBlobs, nextSmallBlobs);
         CountStreamShardsQuota(counters, prevs, nexts);
         CountStreamReservedStorageQuota(counters, prevrs, nextrs);
     }
@@ -2647,6 +2685,22 @@ struct TSubDomainInfo: TSimpleRefCount<TSubDomainInfo> {
         DiskQuotaExceeded = value;
     }
 
+    bool GetSmallBlobsVolumeQuotaExceeded() const {
+        return SmallBlobsVolumeQuotaExceeded;
+    }
+
+    void SetSmallBlobsVolumeQuotaExceeded(bool value) {
+        SmallBlobsVolumeQuotaExceeded = value;
+    }
+
+    bool GetSmallBlobsCountQuotaExceeded() const {
+        return SmallBlobsCountQuotaExceeded;
+    }
+
+    void SetSmallBlobsCountQuotaExceeded(bool value) {
+        SmallBlobsCountQuotaExceeded = value;
+    }
+
     const NLoginProto::TSecurityState& GetSecurityState() const {
         return SecurityState;
     }
@@ -2696,6 +2750,8 @@ private:
     TMaybe<Ydb::Cms::DatabaseQuotas> DatabaseQuotas;
     ui64 DomainStateVersion = 0;
     bool DiskQuotaExceeded = false;
+    bool SmallBlobsVolumeQuotaExceeded = false;
+    bool SmallBlobsCountQuotaExceeded = false;
 
     TVector<TShardIdx> PrivateShards;
     TStoragePools StoragePools;

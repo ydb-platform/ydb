@@ -29,6 +29,7 @@ using namespace NKikimr::NSchemeShard;
 using TDiskSpaceQuotas = TSubDomainInfo::TDiskSpaceQuotas;
 using TQuotasPair = TDiskSpaceQuotas::TQuotasPair;
 using TStoragePoolUsage = TSubDomainInfo::TDiskSpaceUsage::TStoragePoolUsage;
+using TSmallBlobsQuotas = TSubDomainInfo::TSmallBlobsQuotas;
 
 enum class EDiskUsageStatus {
     AboveHardQuota,
@@ -146,6 +147,40 @@ TDiskSpaceQuotas TSubDomainInfo::GetDiskSpaceQuotas() const {
     return TDiskSpaceQuotas{hardQuota, softQuota, std::move(storagePoolsQuotas)};
 }
 
+TSmallBlobsQuotas TSubDomainInfo::GetSmallBlobsQuotas() const {
+    if (!DatabaseQuotas) {
+        return {};
+    }
+
+    // Columnshards report only the total small-blobs usage, not a per-pool split, so we
+    // collapse the quota into a single budget to compare that total against
+    ui64 diskHardQuotaBytes = 0;
+    if (!AppData()->FeatureFlags.GetEnableSeparateDiskSpaceQuotas()) {
+        diskHardQuotaBytes = DatabaseQuotas->data_size_hard_quota();
+    } else {
+        for (const auto& storageQuota : DatabaseQuotas->storage_quotas()) {
+            diskHardQuotaBytes += storageQuota.data_size_hard_quota();
+        }
+    }
+
+    // A zero disk hard quota yields a zero small-blobs limit, i.e. "no limit".
+    if (!diskHardQuotaBytes) {
+        return {};
+    }
+
+    constexpr ui64 TenTiB = 10ull << 40;
+    const double storageUnits = static_cast<double>(diskHardQuotaBytes) / TenTiB;
+
+    const auto& config = AppData()->ColumnShardConfig.GetSmallBlobsQuota();
+
+    TSmallBlobsQuotas quotas;
+    quotas.VolumeHardQuota = static_cast<ui64>(storageUnits * config.GetVolumeBytesPer10TiB());
+    quotas.CountHardQuota = static_cast<ui64>(storageUnits * config.GetCountPer10TiB());
+    quotas.VolumeSoftQuota = static_cast<ui64>(quotas.VolumeHardQuota * config.GetSoftRatio());
+    quotas.CountSoftQuota = static_cast<ui64>(quotas.CountHardQuota * config.GetSoftRatio());
+    return quotas;
+}
+
 bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
     const auto changeSubdomainState = [&](EDiskUsageStatus diskUsage) {
         if (diskUsage == EDiskUsageStatus::AboveHardQuota && !DiskQuotaExceeded) {
@@ -205,6 +240,64 @@ bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
     return false;
 }
 
+bool TSubDomainInfo::CheckSmallBlobsQuotas(IQuotaCounters* counters) {
+    const auto status = [](ui64 usage, ui64 hardQuota, ui64 softQuota) -> EDiskUsageStatus {
+        if (hardQuota && usage > hardQuota) {
+            return EDiskUsageStatus::AboveHardQuota;
+        }
+        if (!softQuota || usage < softQuota) {
+            return EDiskUsageStatus::BelowSoftQuota;
+        }
+        return EDiskUsageStatus::InBetween;
+    };
+
+    // Hysteresis: flips a flag only on a soft<->hard crossing. Mirrors CheckDiskSpaceQuotas.
+    const auto applyStatus = [&](EDiskUsageStatus status, bool& exceeded, auto&& changeCounter) -> bool {
+        if (status == EDiskUsageStatus::AboveHardQuota && !exceeded) {
+            changeCounter(+1);
+            exceeded = true;
+            return true;
+        }
+        if (status == EDiskUsageStatus::BelowSoftQuota && exceeded) {
+            changeCounter(-1);
+            exceeded = false;
+            return true;
+        }
+        return false;
+    };
+
+    const auto quotas = GetSmallBlobsQuotas();
+
+    const EDiskUsageStatus volumeStatus = status(DiskSpaceUsage.Tables.SmallBlobsBytes, quotas.VolumeHardQuota, quotas.VolumeSoftQuota);
+    const EDiskUsageStatus countStatus = status(DiskSpaceUsage.Tables.SmallBlobsCount, quotas.CountHardQuota, quotas.CountSoftQuota);
+
+    bool changed = false;
+    changed |= applyStatus(volumeStatus, SmallBlobsVolumeQuotaExceeded,
+        [&](i64 delta) { counters->ChangeSmallBlobsVolumeQuotaExceeded(delta); });
+    changed |= applyStatus(countStatus, SmallBlobsCountQuotaExceeded,
+        [&](i64 delta) { counters->ChangeSmallBlobsCountQuotaExceeded(delta); });
+
+    if (changed) {
+        ++DomainStateVersion;
+    }
+    return changed;
+}
+
+void TSubDomainInfo::CountSmallBlobsQuotas(IQuotaCounters* counters, const TSmallBlobsQuotas& prev, const TSmallBlobsQuotas& next) {
+    if (const i64 delta = next.VolumeHardQuota - prev.VolumeHardQuota; delta != 0) {
+        counters->ChangeSmallBlobsVolumeHardQuotaBytes(delta);
+    }
+    if (const i64 delta = next.VolumeSoftQuota - prev.VolumeSoftQuota; delta != 0) {
+        counters->ChangeSmallBlobsVolumeSoftQuotaBytes(delta);
+    }
+    if (const i64 delta = next.CountHardQuota - prev.CountHardQuota; delta != 0) {
+        counters->ChangeSmallBlobsCountHardQuota(delta);
+    }
+    if (const i64 delta = next.CountSoftQuota - prev.CountSoftQuota; delta != 0) {
+        counters->ChangeSmallBlobsCountSoftQuota(delta);
+    }
+}
+
 void TSubDomainInfo::CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskSpaceQuotas& quotas) {
     if (quotas.HardQuota != 0) {
         counters->ChangeDiskSpaceHardQuotaBytes(quotas.HardQuota);
@@ -244,6 +337,17 @@ void TSubDomainInfo::CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskS
                 counters->AddDiskSpaceSoftQuotaBytes(GetUserFacingStorageType(poolKind), addend);
             }
         }
+    }
+}
+
+void TSubDomainInfo::AggrSmallBlobsUsage(IQuotaCounters* counters, i64 bytesDelta, i64 countDelta) {
+    if (bytesDelta != 0) {
+        DiskSpaceUsage.Tables.SmallBlobsBytes += bytesDelta;
+        counters->ChangeSmallBlobsVolumeBytes(bytesDelta);
+    }
+    if (countDelta != 0) {
+        DiskSpaceUsage.Tables.SmallBlobsCount += countDelta;
+        counters->ChangeSmallBlobsCount(countDelta);
     }
 }
 
@@ -2189,6 +2293,10 @@ void TTableAggregatedStats::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsag
         Aggregated.DataSize += delta.DataSize;
         Aggregated.IndexSize += delta.IndexSize;
     }
+
+    Aggregated.SmallBlobsBytes += (static_cast<i64>(newStats.SmallBlobsBytes) - static_cast<i64>(oldStats.SmallBlobsBytes));
+    Aggregated.SmallBlobsCount += (static_cast<i64>(newStats.SmallBlobsCount) - static_cast<i64>(oldStats.SmallBlobsCount));
+
     // second, aggregation of space separated by storage pool kinds
     for (const auto& [poolKind, newStoragePoolStats] : newStats.StoragePoolsStats) {
         const auto* oldStoragePoolStats = oldStats.StoragePoolsStats.FindPtr(poolKind);

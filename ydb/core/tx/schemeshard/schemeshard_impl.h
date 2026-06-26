@@ -2183,6 +2183,14 @@ public:
     void ChangeDiskSpaceHardQuotaBytes(i64 delta) override;
     void ChangeDiskSpaceSoftQuotaBytes(i64 delta) override;
     void AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType, ui64 addend) override;
+    void ChangeSmallBlobsVolumeBytes(i64 delta) override;
+    void ChangeSmallBlobsCount(i64 delta) override;
+    void ChangeSmallBlobsVolumeHardQuotaBytes(i64 delta) override;
+    void ChangeSmallBlobsVolumeSoftQuotaBytes(i64 delta) override;
+    void ChangeSmallBlobsCountHardQuota(i64 delta) override;
+    void ChangeSmallBlobsCountSoftQuota(i64 delta) override;
+    void ChangeSmallBlobsVolumeQuotaExceeded(i64 delta) override;
+    void ChangeSmallBlobsCountQuotaExceeded(i64 delta) override;
     void ChangePathCount(i64 delta) override;
     void SetPathCount(ui64 value) override;
     void SetPathsQuota(ui64 value) override;

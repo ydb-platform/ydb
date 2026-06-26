@@ -2731,7 +2731,6 @@ message TColumnShardConfig {
     optional bool EnableCursorV1 = 68 [default = false];
     optional uint64 LimitSortedStartInFlight = 69 [default = 16];
 
-    optional TSmallBlobsQuota SmallBlobsQuota = 70;
     message TReadRetryPolicy {
         optional uint32 InitialRetryDelayMs = 1 [default = 100];
         optional uint32 MaxRetryDelayMs = 2 [default = 5000];
@@ -2743,10 +2742,9 @@ message TColumnShardConfig {
     // Cluster config for the database-wide small-blobs quota. Per-database limits
     // are derived from data_size_hard_quota; 0 hard quota disables it.
     message TSmallBlobsQuota {
-        // Hard limit = coef * (data_size_hard_quota / 2^30)
-        optional uint64 VolumeBytesPerGiB = 1 [default = 104857]; // 1 GiB / 10 TiB
-        optional uint64 CountPerGiB = 2 [default = 488];          // 5M / 10 TiB
-        optional double SoftRatio = 3 [default = 0.95];           // soft = ratio * hard
+        optional uint64 VolumeBytesPer10TiB = 1 [default = 1073741824]; // 1 GiB per 10 TiB
+        optional uint64 CountPer10TiB = 2 [default = 5000000];          // 5M per 10 TiB
+        optional double SoftRatio = 3 [default = 0.95];                 // soft = ratio * hard
 
         // Base "small" threshold; scaled per-erasure dynamically (block-4-2 x4).
         optional uint64 SmallBlobSizeThresholdBytes = 4 [default = 65536]; // 64 KiB
@@ -2755,6 +2753,8 @@ message TColumnShardConfig {
         optional uint32 Mirror3dcStorageHardQuotaCoef = 5 [default = 3];
         optional uint32 Block42StorageHardQuotaCoef = 6 [default = 2];
     }
+
+    optional TSmallBlobsQuota SmallBlobsQuota = 71;
 
 }
 

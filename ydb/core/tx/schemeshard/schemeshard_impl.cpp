@@ -2647,7 +2647,9 @@ void TSchemeShard::PersistSubDomainState(NIceDb::TNiceDb& db, const TPathId& pat
 
     db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::SubDomains::StateVersion>(subDomain.GetDomainStateVersion()),
-            NIceDb::TUpdate<Schema::SubDomains::DiskQuotaExceeded>(subDomain.GetDiskQuotaExceeded()));
+            NIceDb::TUpdate<Schema::SubDomains::DiskQuotaExceeded>(subDomain.GetDiskQuotaExceeded()),
+            NIceDb::TUpdate<Schema::SubDomains::SmallBlobsVolumeQuotaExceeded>(subDomain.GetSmallBlobsVolumeQuotaExceeded()),
+            NIceDb::TUpdate<Schema::SubDomains::SmallBlobsCountQuotaExceeded>(subDomain.GetSmallBlobsCountQuotaExceeded()));
 }
 
 void TSchemeShard::PersistSubDomainSchemeQuotas(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain) {
@@ -9010,6 +9012,38 @@ void TSchemeShard::AddDiskSpaceSoftQuotaBytes(EUserFacingStorageType storageType
     } else if (storageType == EUserFacingStorageType::Hdd) {
         TabletCounters->Simple()[COUNTER_DISK_SPACE_SOFT_QUOTA_BYTES_ON_HDD].Add(addend);
     }
+}
+
+void TSchemeShard::ChangeSmallBlobsVolumeBytes(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_VOLUME_BYTES].Add(delta);
+}
+
+void TSchemeShard::ChangeSmallBlobsCount(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_COUNT].Add(delta);
+}
+
+void TSchemeShard::ChangeSmallBlobsVolumeHardQuotaBytes(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_VOLUME_HARD_QUOTA_BYTES].Add(delta);
+}
+
+void TSchemeShard::ChangeSmallBlobsVolumeSoftQuotaBytes(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_VOLUME_SOFT_QUOTA_BYTES].Add(delta);
+}
+
+void TSchemeShard::ChangeSmallBlobsCountHardQuota(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_COUNT_HARD_QUOTA].Add(delta);
+}
+
+void TSchemeShard::ChangeSmallBlobsCountSoftQuota(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_COUNT_SOFT_QUOTA].Add(delta);
+}
+
+void TSchemeShard::ChangeSmallBlobsVolumeQuotaExceeded(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_VOLUME_QUOTA_EXCEEDED].Add(delta);
+}
+
+void TSchemeShard::ChangeSmallBlobsCountQuotaExceeded(i64 delta) {
+    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_COUNT_QUOTA_EXCEEDED].Add(delta);
 }
 
 void TSchemeShard::ChangePathCount(i64 delta) {

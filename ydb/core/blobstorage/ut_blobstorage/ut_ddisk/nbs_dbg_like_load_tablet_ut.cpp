@@ -697,6 +697,99 @@ Y_UNIT_TEST_SUITE(NbsDbgLikeLoadTablet) {
         f.ClosePipe(pipe);
     }
 
+    // Regression for cross-DBG LSN collision. With a single DDisk group PB
+    // slots are scarce, so the BSC packs both DBGs of one tablet onto the SAME
+    // persistent-buffer slot instance (AllocatePersistentBuffer refcounts and
+    // reuses slots; there is no cross-DBG exclusion). A PB record is deduped by
+    // {TabletId, Generation, Lsn} only -- the per-DBG DDiskInstanceGuid is the
+    // slot-instance id, not part of the key. Each DBG worker used to assign LSNs
+    // from an independent sequence starting at 1, so DBG0 and DBG1 emitted
+    // identical LSNs with different data to the shared slot -> "duplicate record
+    // with incorrect data" -> the write lost quorum (NBSIO_QUORUM_LOST). Drives
+    // a few writes per DBG at distinct offsets (so flushes hit different DD
+    // blocks); every write must be accepted.
+    Y_UNIT_TEST(MultiDbgSharedDDiskNoLsnCollision) {
+        // One group => both DBGs share the same physical DDisks.
+        TFixture f(/*numDDiskGroups=*/1);
+        const ui64 tabletId = f.CreateNbsLoadTabletViaHive(/*ownerIdx=*/1);
+        TActorId pipe = f.OpenTabletPipe(tabletId);
+
+        UNIT_ASSERT_VALUES_EQUAL(f.TabletCreate(pipe, /*numDirectBlockGroups=*/2), NBSLT_OK);
+        f.Env.Sim(TDuration::Seconds(5));
+
+        constexpr ui32 kBlockSize = 4096;
+        // A few writes per DBG: enough to overlap LSN ranges (DBG0/DBG1 both
+        // start at Lsn=1 pre-fix) without overfilling the small test PB, whose
+        // flush pipeline would otherwise churn under the forced full-share.
+        constexpr ui32 kBlocksPerDbg = 4;
+        constexpr ui32 kNumDbgs = 2;
+        constexpr ui32 kTotal = kBlocksPerDbg * kNumDbgs;
+        // BytesPerDbg = TargetNumVChunks(1) * VChunkSizeBytes(128MB).
+        const ui64 bytesPerDbg = 128_MB;
+
+        f.Env.Runtime->WrapInActorContext(f.Edge, [&] {
+            auto ev = std::make_unique<TEvLoad::TEvConfigureTablet>();
+            auto& cfg = ev->Record;
+            cfg.SetMaxInflightLsns(2000); // keep all writes live so LSN ranges overlap
+            cfg.SetFlushBatchSize(16);
+            cfg.SetEraseBatchSize(32);
+            cfg.SetSyncRequestsBatchSize(1);
+            cfg.SetPBufferReplyTimeoutMicroseconds(500000);
+            cfg.SetNumDirectBlockGroupsToUse(kNumDbgs);
+            cfg.SetIoSizeBytes(kBlockSize);
+            NTabletPipe::SendData(f.Edge, pipe, ev.release());
+        });
+
+        // Distinct intra-DBG offsets per DBG: DBG0 uses blocks [0, kBlocksPerDbg)
+        // and DBG1 uses [kBlocksPerDbg, 2*kBlocksPerDbg), all inside the DBG's
+        // 128MB vchunk. The two DBGs therefore flush to different DD blocks (no
+        // shared-DD overwrite churn), while their LSNs still collide pre-fix
+        // because LSN assignment is independent of the write selector.
+        auto addressOf = [&](ui32 dbg, ui32 i) -> ui64 {
+            const ui64 intraOffsetBlock = static_cast<ui64>(dbg) * kBlocksPerDbg + i;
+            return dbg * bytesPerDbg + intraOffsetBlock * kBlockSize;
+        };
+        auto cookieOf = [&](ui32 dbg, ui32 i) -> ui64 {
+            return static_cast<ui64>(dbg) * kBlocksPerDbg + i;
+        };
+
+        // Interleave writes across both DBGs. At each i, DBG0 and DBG1 both emit
+        // their next LSN (Lsn=i+1 pre-fix) with distinct payloads, so a shared
+        // LSN triggers the duplicate-record rejection on the shared PB slot.
+        f.Env.Runtime->WrapInActorContext(f.Edge, [&] {
+            for (ui32 i = 0; i < kBlocksPerDbg; ++i) {
+                for (ui32 dbg = 0; dbg < kNumDbgs; ++dbg) {
+                    const ui64 cookie = cookieOf(dbg, i);
+                    auto ev = std::make_unique<TEvLoad::TEvNbsWrite>(
+                        addressOf(dbg, i), /*sizeBytes=*/kBlockSize);
+                    TString data(kBlockSize, '\0');
+                    memcpy(data.Detach(), &cookie, sizeof(cookie));
+                    const ui32 payloadId = ev->AddPayload(TRope(std::move(data)));
+                    ev->Record.SetPayloadId(payloadId);
+                    NTabletPipe::SendData(f.Edge, pipe, ev.release(), cookie);
+                }
+            }
+        });
+
+        TVector<bool> writeOk(kTotal, false);
+        for (ui32 got = 0; got < kTotal; ++got) {
+            auto resp = f.Env.WaitForEdgeActorEvent<TEvLoad::TEvNbsWriteResult>(
+                f.Edge, /*termOnCapture=*/false, f.Deadline(TDuration::Seconds(120)));
+            UNIT_ASSERT(resp);
+            const ui64 cookie = resp->Cookie;
+            UNIT_ASSERT_C(cookie < kTotal, "cookie=" << cookie);
+            UNIT_ASSERT_C(!writeOk[cookie], "duplicate ack for cookie=" << cookie);
+            UNIT_ASSERT_C(resp->Get()->Record.GetStatus() == NBSIO_OK,
+                "write cookie=" << cookie << " status="
+                    << static_cast<int>(resp->Get()->Record.GetStatus())
+                    << " reason=" << resp->Get()->Record.GetReason());
+            writeOk[cookie] = true;
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(f.TabletDelete(pipe), NBSLT_OK);
+        f.ClosePipe(pipe);
+    }
+
     // Two back-to-back Run cycles with one Create. Verifies the tablet can
     // serve multiple consecutive runs from independent load actors.
     Y_UNIT_TEST(RunRunDelete) {

@@ -2192,7 +2192,17 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
     }
 
     auto& dbg = Dbg;
-    const ui64 lsn = ++SequenceGenerator;
+    // LSNs must be unique per {TabletId, Generation}: when PB slots are scarce
+    // the BSC packs several DBGs of this tablet onto the SAME persistent-buffer
+    // slot instance (AllocatePersistentBuffer refcounts and reuses slots; there
+    // is no cross-DBG exclusion). A PB record is deduped by {TabletId,
+    // Generation, Lsn} only -- the per-DBG DDiskInstanceGuid identifies the slot
+    // instance (identical for two DBGs on one slot) and is not part of the key.
+    // Stride the per-worker sequence by DbgIndex so two DBG workers never emit
+    // the same Lsn against a shared PB slot. Single-DBG layout is unchanged
+    // (stride 1, index 0 -> 1, 2, 3, ...).
+    const ui64 lsnStride = Max<ui64>(1, NumDbgsTotal);
+    const ui64 lsn = (SequenceGenerator++) * lsnStride + MyDbgIndex + 1;
     const ui32 coord = ChooseCoordinator(dbg);
 
     TWriteInfo info;

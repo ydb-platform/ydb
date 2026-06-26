@@ -5,6 +5,7 @@
 #include <ydb/core/blobstorage/nodewarden/node_warden.h>
 #include <ydb/core/blobstorage/nodewarden/node_warden_impl.h>
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
+#include <ydb/core/control/immediate_control_board_impl.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_tools.h>
 #include <ydb/core/blobstorage/pdisk/blobstorage_pdisk_ut_http_request.h>
 #include <ydb/core/mind/bscontroller/bsc.h>
@@ -15,6 +16,8 @@
 
 #include <google/protobuf/text_format.h>
 #include <library/cpp/testing/unittest/registar.h>
+
+#include <functional>
 
 const bool STRAND_PDISK = true;
 #ifndef NDEBUG
@@ -55,7 +58,17 @@ static yexception LastException;
 
 constexpr ui32 DOMAIN_ID = 1;
 
+using TAppPreprocessor = std::function<void(TAppPrepare&)>;
+using TNodeWardenConfigPreprocessor = std::function<void(ui32, TNodeWardenConfig&)>;
+
 using namespace NActors;
+
+void RegisterSharedControl(THotSwap<TControl>& icbControl, TAtomicBase defaultValue,
+        TAtomicBase lowerBound, TAtomicBase upperBound, TAtomicBase currentValue) {
+    TControlWrapper control(defaultValue, lowerBound, upperBound);
+    TControlBoard::RegisterSharedControl(control, icbControl);
+    TControlBoard::SetValue(currentValue, icbControl);
+}
 
 void FormatPDiskRandomKeys(TString path, ui32 diskSize, ui32 chunkSize, ui64 guid, bool isGuidValid,
         TIntrusivePtr<NPDisk::TSectorMap> sectorMap, bool enableSmallDiskOptimization) {
@@ -94,7 +107,8 @@ void SetupLogging(TTestActorRuntime& runtime) {
     runtime.SetLogPriority(NKikimrServices::BS_SYNCER, otherPriority);
 }
 
-void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<NPDisk::TSectorMap> extraSectorMap) {
+void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<NPDisk::TSectorMap> extraSectorMap,
+        TAppPreprocessor appPreprocessor = {}, TNodeWardenConfigPreprocessor nodeWardenConfigPreprocessor = {}) {
     const ui32 domainsNum = 1;
     const ui32 disksInDomain = 1;
 
@@ -122,6 +136,9 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
     }
 
     SetupChannelProfiles(app);
+    if (appPreprocessor) {
+        appPreprocessor(app);
+    }
 
     if (false) { // setup channel profiles
         TIntrusivePtr<TChannelProfiles> channelProfiles = new TChannelProfiles;
@@ -221,6 +238,10 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
             nodeWardenConfig->SectorMaps[pDiskPath1] = sectorMap1;
         }
 
+        if (nodeWardenConfigPreprocessor) {
+            nodeWardenConfigPreprocessor(nodeIndex, *nodeWardenConfig);
+        }
+
         SetupBSNodeWarden(runtime, nodeIndex, nodeWardenConfig.Release());
         SetupTabletResolver(runtime, nodeIndex);
     }
@@ -247,9 +268,11 @@ void SetupServices(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<
     SetupBoxAndStoragePool(runtime, runtime.AllocateEdgeActor());
 }
 
-void Setup(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<NPDisk::TSectorMap> extraSectorMap) {
+void Setup(TTestActorRuntime &runtime, TString extraPath, TIntrusivePtr<NPDisk::TSectorMap> extraSectorMap,
+        TAppPreprocessor appPreprocessor = {}, TNodeWardenConfigPreprocessor nodeWardenConfigPreprocessor = {}) {
     SetupLogging(runtime);
-    SetupServices(runtime, extraPath, extraSectorMap);
+    SetupServices(runtime, extraPath, extraSectorMap,
+        std::move(appPreprocessor), std::move(nodeWardenConfigPreprocessor));
 //    runtime.SetLogPriority(NKikimrServices::BS_CONTROLLER, NLog::PRI_DEBUG);
 //    runtime.SetLogPriority(NKikimrServices::BS_NODE, NLog::PRI_DEBUG);
     runtime.SetLogPriority(NKikimrServices::BS_PROXY, NLog::PRI_DEBUG);
@@ -403,6 +426,49 @@ Y_UNIT_TEST_SUITE(TBlobStorageWardenTest) {
             Runtime->SetObserverFunc(PrevObserver);
         }
     };
+
+    CUSTOM_UNIT_TEST(TestSyncLogLimitControlsPassedToVDiskConfig) {
+        TTestBasicRuntime runtime(1, false);
+
+        constexpr ui64 expectedSyncLogMaxDiskAmount = 96_MB;
+        constexpr ui64 expectedSyncLogMaxMemAmount = 7_MB;
+
+        ui32 observedConfigs = 0;
+        TVector<TString> mismatches;
+
+        auto appPreprocessor = [&](TAppPrepare& app) {
+            app.InitIcb(runtime.GetNodeCount());
+            for (ui32 nodeIndex = 0; nodeIndex < runtime.GetNodeCount(); ++nodeIndex) {
+                RegisterSharedControl(app.Icb[nodeIndex]->VDiskControls.SyncLogMaxDiskAmount,
+                    0, 0, 1ull << 40, expectedSyncLogMaxDiskAmount);
+                RegisterSharedControl(app.Icb[nodeIndex]->VDiskControls.SyncLogMaxMemAmount,
+                    64ull << 20, 0, 1ull << 30, expectedSyncLogMaxMemAmount);
+            }
+        };
+
+        auto nodeWardenConfigPreprocessor = [&](ui32, TNodeWardenConfig& config) {
+            config.VDiskConfigPreprocessor = [&](TVDiskConfig& vdiskConfig) {
+                ++observedConfigs;
+                if (vdiskConfig.SyncLogMaxDiskAmount != expectedSyncLogMaxDiskAmount ||
+                        vdiskConfig.SyncLogMaxMemAmount != expectedSyncLogMaxMemAmount) {
+                    mismatches.push_back(TStringBuilder()
+                        << "{SyncLogMaxDiskAmount# " << vdiskConfig.SyncLogMaxDiskAmount
+                        << " SyncLogMaxMemAmount# " << vdiskConfig.SyncLogMaxMemAmount
+                        << "}");
+                }
+            };
+        };
+
+        Setup(runtime, "", nullptr, std::move(appPreprocessor), std::move(nodeWardenConfigPreprocessor));
+
+        UNIT_ASSERT_C(observedConfigs,
+            "VDiskConfigPreprocessor was not called; NodeWarden did not create local VDisk configs");
+        UNIT_ASSERT_C(mismatches.empty(),
+            "NodeWarden did not pass SyncLog immediate controls to TVDiskConfig"
+            << " expectedSyncLogMaxDiskAmount# " << expectedSyncLogMaxDiskAmount
+            << " expectedSyncLogMaxMemAmount# " << expectedSyncLogMaxMemAmount
+            << " mismatches# " << FormatList(mismatches));
+    }
 
     void BlockGroup(TTestBasicRuntime& runtime, TActorId sender, ui64 tabletId, ui32 groupId, ui32 generation, bool isMonitored,
             NKikimrProto::EReplyStatus expectAnsver = NKikimrProto::EReplyStatus::OK) {

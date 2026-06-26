@@ -2278,6 +2278,14 @@ namespace NKikimr {
                                     TABLED() {str << "VDiskIncarnationGuid";}
                                     TABLED() {str << Db->GetVDiskIncarnationGuid(true);}
                                 }
+                                TABLER() {
+                                    TABLED() {str << "SyncLogMaxDiskAmount";}
+                                    TABLED() {str << Config->SyncLogMaxDiskAmount;}
+                                }
+                                TABLER() {
+                                    TABLED() {str << "SyncLogMaxMemAmount";}
+                                    TABLED() {str << Config->SyncLogMaxMemAmount;}
+                                }
 
                                 if (PDiskCtx && PDiskCtx->Dsk) {
                                     NPDisk::EDeviceType trueMedia = PDiskCtx->Dsk->TrueMediaType;

@@ -1,8 +1,10 @@
 #include <ydb/core/tablet_flat/flat_executor_ut_common.h>
 #include <ydb/core/base/memory_controller_iface.h>
+#include <ydb/core/tablet/tablet_monitoring_proxy.h>
 #include <ydb/core/tablet_flat/shared_sausagecache.h>
 #include <ydb/core/testlib/actors/wait_events.h>
 
+#include <library/cpp/monlib/service/mon_service_http_request.h>
 #include <util/string/cast.h>
 #include <util/system/env.h>
 
@@ -246,6 +248,82 @@ public:
         UNIT_FAIL("Missing executor cumulative counter " << name);
         return 0;
     }
+
+    ui64 GetExecutorSimpleCounter(TStringBuf name)
+    {
+        SendAsync(new TEvTablet::TEvGetCounters);
+        const auto response = GrabEdgeEvent<TEvTablet::TEvGetCountersResponse>();
+        const auto& counters = response->Get()->Record.GetTabletCounters().GetExecutorCounters();
+        for (const auto& counter : counters.GetSimpleCounters()) {
+            if (counter.GetName() == name) {
+                return counter.GetValue();
+            }
+        }
+        UNIT_FAIL("Missing executor simple counter " << name);
+        return 0;
+    }
+};
+
+class TDbMonHttpRequest : public NMonitoring::IHttpRequest {
+public:
+    TDbMonHttpRequest(ui64 tabletId, ui32 tableId, ui64 rowsOffset, ui64 maxRows)
+        : Uri("/tablets/db")
+        , Path("/tablets/db")
+    {
+        Params.InsertUnescaped("TabletID", ToString(tabletId));
+        Params.InsertUnescaped("TableID", ToString(tableId));
+        Params.InsertUnescaped("RowsOffset", ToString(rowsOffset));
+        Params.InsertUnescaped("MaxRows", ToString(maxRows));
+        Params.InsertUnescaped("MaxString", "1");
+        Params.InsertUnescaped("DisableOffsetScanPrecharge", "1");
+    }
+
+    const char* GetURI() const override
+    {
+        return Uri.c_str();
+    }
+
+    const char* GetPath() const override
+    {
+        return Path.c_str();
+    }
+
+    const TCgiParameters& GetParams() const override
+    {
+        return Params;
+    }
+
+    const TCgiParameters& GetPostParams() const override
+    {
+        return PostParams;
+    }
+
+    TStringBuf GetPostContent() const override
+    {
+        return {};
+    }
+
+    HTTP_METHOD GetMethod() const override
+    {
+        return HTTP_METHOD_GET;
+    }
+
+    const THttpHeaders& GetHeaders() const override
+    {
+        return Headers;
+    }
+
+    TString GetRemoteAddr() const override
+    {
+        return {};
+    }
+
+private:
+    TString Uri;
+    TString Path;
+    TCgiParameters Params;
+    TCgiParameters PostParams;
+    THttpHeaders Headers;
 };
 
 struct TDbPageStats {
@@ -335,7 +413,7 @@ bool DisableOffsetScanPrechargeForValidation(bool defaultValue)
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(TFlatTableExecutor_DbMon) {
+Y_UNIT_TEST_SUITE(TabletMon) {
     Y_UNIT_TEST(ExecutorDbMonResumesOffsetScanAfterPageRetry)
     {
         constexpr ui32 Rows = 6000;
@@ -425,6 +503,152 @@ Y_UNIT_TEST_SUITE(TFlatTableExecutor_DbMon) {
                 << withPrecharge.TxPostponed
                 << ", without precharge: "
                 << withoutPrecharge.TxPostponed);
+    }
+
+    Y_UNIT_TEST(TabletMonitoringProxyTimeoutStopsDbMonTransaction)
+    {
+        constexpr ui32 Rows = 6000;
+        constexpr ui32 RowsOffset = 5000;
+        constexpr ui32 MaxRows = 10;
+
+        TDbMonEnv env;
+        env.AddRowsAndCompact(Rows);
+        env.SetSharedCacheLimit(0);
+
+        auto prevDispatchTimeout = env.Env.SetDispatchTimeout(TDuration::Seconds(5));
+        ui32 registeredActors = 0;
+        ui32 forwardingActors = 0;
+        TActorId forwardingActor;
+        auto prevRegistrationObserver = env.Env.SetRegistrationObserverFunc(
+            [&](TTestActorRuntimeBase& runtime, const TActorId& parentId, const TActorId& actorId) {
+                TTestActorRuntimeBase::DefaultRegistrationObserver(runtime, parentId, actorId);
+                ++registeredActors;
+                if (runtime.GetActorName(actorId).Contains("TForwardingActor")) {
+                    forwardingActor = actorId;
+                    runtime.EnableScheduleForActor(actorId);
+                    ++forwardingActors;
+                }
+            });
+        auto prevScheduledEventsSelector = env.Env.SetScheduledEventsSelectorFunc(
+            [&](TTestActorRuntimeBase&, TScheduledEventsList& scheduledEvents, TEventsList& queue) {
+                auto it = scheduledEvents.begin();
+                while (it != scheduledEvents.end()) {
+                    auto current = it++;
+                    auto& item = *current;
+                    if (item.Event->GetRecipientRewrite() == forwardingActor) {
+                        if (item.Cookie->Get()) {
+                            if (item.Cookie->Detach()) {
+                                queue.push_back(item.Event);
+                            }
+                        } else {
+                            queue.push_back(item.Event);
+                        }
+                    }
+                    scheduledEvents.erase(current);
+                }
+            });
+
+        const TActorId proxy = env.Env.Register(NTabletMonitoringProxy::CreateTabletMonitoringProxy());
+        TDispatchOptions bootstrapOptions;
+        bootstrapOptions.FinalEvents.emplace_back(TEvents::TSystem::Bootstrap, 1);
+        UNIT_ASSERT_C(env.Env.DispatchEvents(bootstrapOptions, TDuration::Seconds(1)),
+            "Expected tablet monitoring proxy actor to bootstrap");
+
+        bool delayBlobResults = true;
+        bool timeoutSeen = false;
+        TString timeoutBody;
+        TVector<THolder<IEventHandle>> delayedBlobResults;
+        ui32 remoteRequests = 0;
+        ui32 delayedBlobResultCount = 0;
+        ui32 remoteResponses = 0;
+
+        auto observer = [&](TAutoPtr<IEventHandle>& ev) {
+            switch (ev->GetTypeRewrite()) {
+                case NMon::TEvRemoteHttpInfo::EventType:
+                    ++remoteRequests;
+                    break;
+
+                case TEvBlobStorage::EvGetResult:
+                    if (delayBlobResults) {
+                        ++delayedBlobResultCount;
+                        delayedBlobResults.emplace_back(ev.Release());
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+
+                case NMon::TEvHttpInfoRes::EventType:
+                    if (ev->GetRecipientRewrite() == env.Edge) {
+                        TStringStream body;
+                        ev->Get<NMon::TEvHttpInfoRes>()->Output(body);
+                        timeoutBody = body.Str();
+                        timeoutSeen = true;
+                        return TTestActorRuntime::EEventAction::DROP;
+                    }
+                    break;
+
+                case NMon::TEvRemoteHttpInfoRes::EventType:
+                    ++remoteResponses;
+                    return TTestActorRuntime::EEventAction::DROP;
+            }
+
+            return TTestActorRuntime::EEventAction::PROCESS;
+        };
+        auto prevObserver = env.Env.SetObserverFunc(observer);
+
+        TDbMonHttpRequest httpRequest(env.Tablet, TDbMonRowsModel::TableId, RowsOffset, MaxRows);
+        NMonitoring::TMonService2HttpRequest monRequest(
+            nullptr,
+            &httpRequest,
+            nullptr,
+            nullptr,
+            "/db",
+            nullptr);
+
+        env.Env.Send(new IEventHandle(proxy, env.Edge, new NMon::TEvHttpInfo(monRequest)));
+
+        auto dispatchUntil = [&](std::function<bool()> condition, TDuration timeout) {
+            TDispatchOptions options;
+            options.CustomFinalCondition = std::move(condition);
+            options.FinalEvents.emplace_back([](IEventHandle&) {
+                return false;
+            });
+            env.Env.DispatchEvents(options, timeout);
+        };
+
+        dispatchUntil([&] {
+            return delayedBlobResultCount > 0;
+        }, TDuration::Seconds(5));
+
+        UNIT_ASSERT_C(delayedBlobResultCount > 0,
+            "Expected db monitoring transaction to stop on page miss"
+                << ", registered actors: " << registeredActors
+                << ", forwarding actors: " << forwardingActors
+                << ", remote requests: " << remoteRequests);
+
+        env.Env.AdvanceCurrentTime(TDuration::Seconds(60));
+        dispatchUntil([&] {
+            return timeoutSeen;
+        }, TDuration::Seconds(5));
+
+        UNIT_ASSERT_C(timeoutSeen,
+            "Expected tablet monitoring proxy timeout"
+                << ", delayed blob results: " << delayedBlobResultCount
+                << ", remote responses: " << remoteResponses);
+        UNIT_ASSERT_STRING_CONTAINS(timeoutBody, "Timeout");
+
+        delayBlobResults = false;
+        for (auto& delayed : delayedBlobResults) {
+            env.Env.Send(delayed.Release());
+        }
+        delayedBlobResults.clear();
+
+        UNIT_ASSERT_VALUES_EQUAL(env.GetExecutorSimpleCounter("ExecutorTxInFly"), 0);
+        UNIT_ASSERT_VALUES_EQUAL(remoteResponses, 0);
+
+        env.Env.SetObserverFunc(prevObserver);
+        env.Env.SetScheduledEventsSelectorFunc(prevScheduledEventsSelector);
+        env.Env.SetRegistrationObserverFunc(prevRegistrationObserver);
+        env.Env.SetDispatchTimeout(prevDispatchTimeout);
     }
 }
 

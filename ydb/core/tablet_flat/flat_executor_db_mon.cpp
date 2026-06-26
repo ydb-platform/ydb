@@ -1,5 +1,7 @@
 #include "flat_executor.h"
 
+#include <ydb/core/base/appdata.h>
+
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/dynumber/dynumber.h>
 
@@ -10,24 +12,48 @@
 namespace NKikimr {
 namespace NTabletFlatExecutor {
 
+namespace {
+
+static constexpr TDuration DbMonRequestTimeout = TDuration::Seconds(60);
+static constexpr TStringBuf DbMonRequestDeadlineHeader = "x-ydb-monitoring-deadline-us";
+
+TInstant GetDbMonRequestDeadline(const NMon::TEvRemoteHttpInfo::TPtr& event) {
+    const TString deadlineUs = event->Get()->GetHeader(DbMonRequestDeadlineHeader);
+    const ui64 deadlineValue = FromStringWithDefault<ui64>(deadlineUs);
+    if (deadlineValue) {
+        return TInstant::MicroSeconds(deadlineValue);
+    }
+    return TAppData::TimeProvider->Now() + DbMonRequestTimeout;
+}
+
+}
+
 class TExecutor::TTxExecutorDbMon : public TTransactionBase<TExecutor> {
 public:
     NMon::TEvRemoteHttpInfo::TPtr Event;
 
-    TTxExecutorDbMon(NMon::TEvRemoteHttpInfo::TPtr& event, TSelf *executor)
+    TTxExecutorDbMon(NMon::TEvRemoteHttpInfo::TPtr& event, TSelf *executor, TInstant deadline)
         : TBase(executor)
         , Event(event)
+        , Deadline(deadline)
     {}
 
 private:
+    TInstant Deadline;
     ssize_t RowsScanned = 0;
     ui64 TotalDataSteps = 0;
     std::optional<TSerializedCellVec> LastSeenKey;
     TVector<TString> RenderedRows;
 
+    // We check for timeout every TimeoutCheckRows rows, so that we don't check too often and don't check too rarely.
+    static constexpr ui64 TimeoutCheckRows = 256;
     static constexpr ui64 OffsetScanPrechargeBytes = 16 * 1024 * 1024;
 
 private:
+    bool IsTimedOut() const {
+        return TAppData::TimeProvider->Now() >= Deadline;
+    }
+
     static TVector<TRawTypeValue> MakeRawKey(const NTable::TScheme::TTableInfo& tableInfo, TConstArrayRef<TCell> cells) {
         TVector<TRawTypeValue> key;
         key.reserve(cells.size());
@@ -49,6 +75,10 @@ private:
 
 public:
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
+        if (IsTimedOut()) {
+            return true;
+        }
+
         TStringStream str;
         {
             const auto &scheme = txc.DB.GetScheme();
@@ -229,6 +259,9 @@ public:
                         ++TotalDataSteps;
                         ++RowsScanned;
                         rowCount = RowsScanned;
+                        if (TotalDataSteps % TimeoutCheckRows == 0 && IsTimedOut()) {
+                            return true;
+                        }
                         if (rowCount > rowOffset) {
                             TStringStream rowStr;
                             {
@@ -349,6 +382,10 @@ public:
 
                     rememberIteratorKey();
 
+                    if (IsTimedOut()) {
+                        return true;
+                    }
+
                     if (result->Last() == NTable::EReady::Page) {
                         doPrecharge();
                         return false;
@@ -356,6 +393,9 @@ public:
 
                     // More rows?
                     const auto moreRowsReady = result->Next(NTable::ENext::Data);
+                    if (IsTimedOut()) {
+                        return true;
+                    }
                     if (moreRowsReady == NTable::EReady::Page) {
                         rememberIteratorKey();
                         doPrecharge();
@@ -402,6 +442,9 @@ public:
                 }
             }
         }
+        if (IsTimedOut()) {
+            return true;
+        }
         ctx.Send(Event->Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
         return true;
     }
@@ -410,7 +453,7 @@ public:
 };
 
 void TExecutor::RenderHtmlDb(NMon::TEvRemoteHttpInfo::TPtr &ev, const TActorContext &ctx) const {
-    const_cast<TExecutor*>(this)->Execute(new TTxExecutorDbMon(ev, const_cast<TExecutor*>(this)), ctx);
+    const_cast<TExecutor*>(this)->Execute(new TTxExecutorDbMon(ev, const_cast<TExecutor*>(this), GetDbMonRequestDeadline(ev)), ctx);
 }
 
 

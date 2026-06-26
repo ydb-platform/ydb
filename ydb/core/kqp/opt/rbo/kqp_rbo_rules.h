@@ -484,15 +484,6 @@ class TPruneDeadAggregateTraitsRule : public IRule {
 };
 
 /**
- * Prune dead logical outputs using final liveness.
- */
-class TLogicalOutputPruningStage : public IRBOStage {
-  public:
-    TLogicalOutputPruningStage();
-    virtual void RunStage(TOpRoot& root, TRBOContext& ctx) override;
-};
-
-/**
  * Propagate and assign hash functions on StageGraph connections.
  */
 class TPropagateHashFuncStage : public IRBOStage {

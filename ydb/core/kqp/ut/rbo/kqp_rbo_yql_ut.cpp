@@ -3281,8 +3281,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         });
         TOpRoot root(map, pos, {"a_plus"});
 
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
+        rules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>());
+        TRuleBasedStage outputPruning("Focused output pruning", std::move(rules));
         ComputeLogicalTestProps(root);
-        TLogicalOutputPruningStage outputPruning;
         outputPruning.RunStage(root, testContext.RboCtx);
 
         const auto mapOutput = map->GetOutputIUs();
@@ -3401,8 +3404,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         );
         TOpRoot root(aggregate, pos, {"key", "sum_value"});
 
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
+        rules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>());
+        TRuleBasedStage outputPruning("Focused aggregate/read pruning", std::move(rules));
         ComputeLogicalTestProps(root);
-        TLogicalOutputPruningStage outputPruning;
         outputPruning.RunStage(root, testContext.RboCtx);
 
         UNIT_ASSERT_VALUES_EQUAL(aggregate->AggregationTraitsList.size(), 1);

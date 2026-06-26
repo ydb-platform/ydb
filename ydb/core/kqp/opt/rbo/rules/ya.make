@@ -17,7 +17,6 @@ SRCS(
     inline_join_filters.cpp
     inline_scalar_subplan.cpp
     inline_simple_in_exists_subplan.cpp
-    logical_output_pruning.cpp
     inline_generic_in_exists_subplan.cpp
     kqp_cbo_trees.cpp
     peephole_predicate.cpp

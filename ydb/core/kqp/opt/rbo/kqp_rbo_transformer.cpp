@@ -485,6 +485,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     // Prune all columns, including key columns
     TVector<std::unique_ptr<IRule>> finalPruningStageRules;
     finalPruningStageRules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
+    finalPruningStageRules.emplace_back(std::make_unique<TPruneDeadAggregateTraitsRule>());
     finalPruningStageRules.emplace_back(std::make_unique<TPruneDeadReadColumnsRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Final pruning", std::move(finalPruningStageRules)));
 
@@ -523,8 +524,6 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateTopSortThroughStageRule>());
     optimizePhysicalStagesRules.emplace_back(std::make_unique<TPropagateLimitThroughStageRule>());
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Optimize physical stages", std::move(optimizePhysicalStagesRules)));
-
-    RBO.AddStage(std::make_unique<TLogicalOutputPruningStage>());
 
     RBO.AddStage(std::make_unique<TPropagateHashFuncStage>());
 }

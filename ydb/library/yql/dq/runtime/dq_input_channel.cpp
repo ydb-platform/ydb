@@ -77,6 +77,9 @@ private:
     }
 
     void DeserializeAllData() {
+        if (QuotaManager) {
+            QuotaManager->FreeQuota(StoredSerializedBytes);
+        }
         while (!DataForDeserialize.empty()) {
             auto& data = DataForDeserialize.front();
             std::visit(TOverloaded {
@@ -95,7 +98,15 @@ private:
 public:
     TDqInputChannel(const TDqChannelSettings& settings, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv)
         : Impl(settings.ChannelId, settings.SrcStageId, settings.RowType, settings.MaxStoredBytes, settings.Level, settings.ChannelQuotaManager)
-        , DataSerializer(typeEnv, *settings.HolderFactory, settings.TransportVersion, settings.PackerVersion) {
+        , DataSerializer(typeEnv, *settings.HolderFactory, settings.TransportVersion, settings.PackerVersion)
+        , QuotaManager(settings.ChannelQuotaManager)
+    {
+    }
+
+    ~TDqInputChannel() override {
+        if (StoredSerializedBytes && QuotaManager) {
+            QuotaManager->FreeQuota(StoredSerializedBytes);
+        }
     }
 
     ui64 GetChannelId() const override {
@@ -144,6 +155,9 @@ public:
             return;
         }
         StoredSerializedBytes += data.Size();
+        if (QuotaManager && !QuotaManager->AllocateQuota(data.Size())) {
+            throw NKikimr::TMemoryLimitExceededException();
+        }
 
         if (Impl.PushStats.CollectBasic()) {
             Impl.PushStats.Bytes += data.Size();
@@ -196,6 +210,7 @@ private:
     TDqInputChannelImpl Impl;
     TDqDataSerializer DataSerializer;
     bool IsLocalChannel = false;
+    IMemoryQuotaManager::TPtr QuotaManager;
 };
 
 IDqInputChannel::TPtr CreateDqInputChannel(const TDqChannelSettings& settings, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv)

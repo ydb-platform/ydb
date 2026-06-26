@@ -14,6 +14,8 @@
 #include <util/generic/maybe.h>
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::REPLICATION_SERVICE
+
 namespace NKikimr::NReplication::NService {
 
 class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
@@ -32,8 +34,9 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     void Handle(TEvWorker::TEvHandshake::TPtr& ev) {
         Worker = ev->Sender;
         CreatingReadSessionInProgress = true;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handshake"
-            << ": worker# " << Worker);
+        YDB_LOG_DEBUG("Handshake",
+            {"logPrefix", GetLogPrefix()},
+            {"worker", Worker});
 
         Y_ABORT_UNLESS(!ReadSession);
         Send(YdbProxy, new TEvYdbProxy::TEvCreateTopicReaderRequest(Settings));
@@ -42,8 +45,9 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     void Handle(TEvYdbProxy::TEvCreateTopicReaderResponse::TPtr& ev) {
         ReadSession = ev->Get()->Result;
         CreatingReadSessionInProgress = false;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Create read session"
-            << ": session# " << ReadSession);
+        YDB_LOG_DEBUG("Create read session",
+            {"logPrefix", GetLogPrefix()},
+            {"session", ReadSession});
 
         if (StoppingInProgress) {
             return PassAway();
@@ -54,7 +58,9 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     }
 
     void Handle(TEvWorker::TEvPoll::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         Y_ABORT_UNLESS(ReadSession);
         auto settings = TEvYdbProxy::TReadTopicSettings()
@@ -68,7 +74,9 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     }
 
     void Handle(TEvYdbProxy::TEvReadTopicResponse::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         Y_ABORT_UNLESS(!ReadQueue.empty());
         TResponseDataTracker req{GetElapsedTicksAsSeconds(), Now() - ReadQueue.front().ReadStartTime, ev};
@@ -141,20 +149,26 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     }
 
     void Handle(TEvYdbProxy::TEvEndTopicPartition::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         auto& result = ev->Get()->Result;
         Send(Worker, new TEvWorker::TEvDataEnd(result.PartitionId, std::move(result.AdjacentPartitionsIds), std::move(result.ChildPartitionsIds)));
     }
 
     void Handle(TEvYdbProxy::TEvStartTopicReadingSession::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         ReadSessionId = ev->Get()->Result.ReadSessionId;
     }
 
     void Handle(TEvWorker::TEvCommit::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", ev->Get()->ToString()});
 
         if (!YdbProxy || !ReadSessionId) {
             return Leave(TEvWorker::TEvGone::UNAVAILABLE);
@@ -166,10 +180,15 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
 
     void Handle(TEvYdbProxy::TEvCommitOffsetResponse::TPtr& ev) {
         if (!ev->Get()->Result.IsSuccess()) {
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
+            YDB_LOG_WARN("Handle",
+                {"logPrefix", GetLogPrefix()},
+                {"ev", ev->Get()->ToString()});
             return Leave(TEvWorker::TEvGone::UNAVAILABLE);
         } else {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << CommittedOffset << " " << ev->Get()->ToString());
+            YDB_LOG_DEBUG("Handle",
+                {"logPrefix", GetLogPrefix()},
+                {"committedOffset", CommittedOffset},
+                {"ev", ev->Get()->ToString()});
             if (CommittedOffset) {
                 Send(ReadSession, CreateCommitOffsetRequest().release());
             }
@@ -188,7 +207,9 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
     }
 
     void Handle(TEvYdbProxy::TEvTopicReaderGone::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle " << ev->Get()->ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", ev->Get()->ToString()});
         if (Settings.ReportStats_) {
             SendError();
         }
@@ -209,13 +230,16 @@ class TRemoteTopicReader: public TActor<TRemoteTopicReader> {
             case DecompressionDoneWakeupTag:
                 return ProcessData();
             default:
-                LOG_WARN_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Handle Wakeup with unexpected tag " << ev->Get()->Tag);
+                YDB_LOG_WARN("Handle Wakeup with unexpected tag",
+                    {"logPrefix", GetLogPrefix()},
+                    {"tag", ev->Get()->Tag});
         }
     }
 
     template <typename... Args>
     void Leave(Args&&... args) {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::REPLICATION_SERVICE, GetLogPrefix() << "Leave");
+        YDB_LOG_INFO("Leave",
+            {"logPrefix", GetLogPrefix()});
 
         Send(Worker, new TEvWorker::TEvGone(std::forward<Args>(args)...));
         PassAway();

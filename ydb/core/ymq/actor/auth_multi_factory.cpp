@@ -223,7 +223,8 @@ void TBaseCloudAuthRequestProxy::HandleAuthenticationResponse(typename TEvRespon
     }
 
     if (!ev->Get()->Response.subject().has_service_account()) {
-        SetError(NErrors::ACCESS_DENIED, AuthenticateIamToken_ ? "Failed to resolve folder id for IAM token." : "(this error should be unreachable).");
+        SetError(AuthenticateIamToken_ ? NErrors::INVALID_CLIENT_TOKEN_ID : NErrors::ACCESS_DENIED,
+            AuthenticateIamToken_ ? "Failed to resolve folder id for IAM token." : "(this error should be unreachable).");
         SendReplyAndDie();
         return;
     }
@@ -515,12 +516,14 @@ void TBaseCloudAuthRequestProxy::Bootstrap() {
                 return;
             }
         }
-    } else if (FolderId_) {
-        GetCloudIdAndAuthorize();
-    } else {
+    } else if (IamToken_) {
         AuthenticateIamToken_ = true;
         Become(&TThis::ProcessAuthentication);
         Authenticate();
+    } else if (FolderId_) {
+        GetCloudIdAndAuthorize();
+    } else {
+        Y_ABORT("Unexpected auth state after InitAndValidate");
     }
 };
 

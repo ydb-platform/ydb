@@ -887,6 +887,7 @@ void THttpProxyTestMock::InitAccessServiceService(bool enableAccessServiceV2Inte
         asMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
         asMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
         asMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
+        asMock.AuthenticateData["user@builtin"].Response.mutable_subject()->mutable_user_account()->set_id("user1_id");
 
         asMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
         asMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");

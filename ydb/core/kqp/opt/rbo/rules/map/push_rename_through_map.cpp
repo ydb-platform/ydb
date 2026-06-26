@@ -19,8 +19,8 @@ bool TPushRenameThroughPassThroughMapRule::MatchAndApply(TIntrusivePtr<IOperator
     }
 
     auto topMap = CastOperator<TOpMap>(input);
-    const auto candidate = NMapRules::FindRenameCandidate(topMap, props);
-    if (!candidate || !NMapRules::CanStartLocalRenamePush(topMap, *candidate, props)) {
+    const auto candidate = NMapRules::FindRenameCandidate(topMap);
+    if (!candidate || !NMapRules::CanStartLocalRenamePush(topMap, *candidate)) {
         return false;
     }
 
@@ -30,7 +30,7 @@ bool TPushRenameThroughPassThroughMapRule::MatchAndApply(TIntrusivePtr<IOperator
 
     auto map = CastOperator<TOpMap>(topMap->GetInput());
     if (!map->IsSingleConsumer() || !IsPassThroughMap(map, candidate->From) ||
-        !NMapRules::CanRenameOutput(map, candidate->From, candidate->To, props)) {
+        !NMapRules::CanRenameOutput(map, candidate->From, candidate->To)) {
         return false;
     }
 
@@ -44,7 +44,7 @@ bool TPushRenameThroughPassThroughMapRule::MatchAndApply(TIntrusivePtr<IOperator
     if (MakeInfoUnitSet(output).size() != output.size()) {
         return false;
     }
-    if (!NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
+    if (!NMapRules::CanFinishRenamePush(topMap, *candidate, output)) {
         return false;
     }
 

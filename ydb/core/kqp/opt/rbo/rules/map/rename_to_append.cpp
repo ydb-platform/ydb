@@ -6,7 +6,7 @@ namespace NKqp {
 
 namespace {
 
-bool CanConvertRenameToAppend(const TIntrusivePtr<TOpMap>& map, size_t renameIdx, const TPlanProps& props, TVector<TInfoUnit>& output) {
+bool CanConvertRenameToAppend(const TIntrusivePtr<TOpMap>& map, size_t renameIdx, TVector<TInfoUnit>& output) {
     if (!map->IsSingleConsumer()) {
         return false;
     }
@@ -20,13 +20,14 @@ bool CanConvertRenameToAppend(const TIntrusivePtr<TOpMap>& map, size_t renameIdx
     elements[renameIdx].SetIsRename(false);
     output = BuildMapOutput(map, elements);
     return MakeInfoUnitSet(output).size() == output.size() &&
-        IUSetIntersect(output, GetForbidden(props, map.get())).empty();
+        IUSetIntersect(output, GetForbidden(map.get())).empty();
 }
 
 } // anonymous namespace
 
 bool TRenameToAppendRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
+    Y_UNUSED(props);
 
     if (input->Kind != EOperator::Map) {
         return false;
@@ -41,7 +42,7 @@ bool TRenameToAppendRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOCon
         }
 
         TVector<TInfoUnit> output;
-        if (!CanConvertRenameToAppend(map, idx, props, output)) {
+        if (!CanConvertRenameToAppend(map, idx, output)) {
             continue;
         }
 

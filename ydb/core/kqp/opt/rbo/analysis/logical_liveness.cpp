@@ -14,7 +14,7 @@ public:
 
     void Run(TOpRoot& root) {
         for (const auto& iter : root) {
-            iter.Current->Props.LiveOut.reset();
+            iter.Current->Props.Analysis.LiveOut.reset();
         }
 
         TVector<TInfoUnit> rootColumns;
@@ -29,16 +29,16 @@ public:
 
     const TInfoUnitSet& GetLiveOut(IOperator* op) const override {
         Y_ENSURE(op);
-        Y_ENSURE(op->Props.LiveOut.has_value(), "Liveness requested for an operator that has no live output");
-        return *op->Props.LiveOut;
+        Y_ENSURE(op->Props.Analysis.LiveOut.has_value(), "Liveness requested for an operator that has no live output");
+        return *op->Props.Analysis.LiveOut;
     }
 
     bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TVector<TInfoUnit>& columns) override {
         bool changed = false;
-        if (!op->Props.LiveOut) {
-            op->Props.LiveOut.emplace();
+        if (!op->Props.Analysis.LiveOut) {
+            op->Props.Analysis.LiveOut.emplace();
         }
-        auto& live = *op->Props.LiveOut;
+        auto& live = *op->Props.Analysis.LiveOut;
         for (const auto& column : columns) {
             changed |= AddInfoUnit(live, column);
         }
@@ -50,10 +50,10 @@ public:
 
     bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TInfoUnitSet& columns) override {
         bool changed = false;
-        if (!op->Props.LiveOut) {
-            op->Props.LiveOut.emplace();
+        if (!op->Props.Analysis.LiveOut) {
+            op->Props.Analysis.LiveOut.emplace();
         }
-        auto& live = *op->Props.LiveOut;
+        auto& live = *op->Props.Analysis.LiveOut;
         for (const auto& column : columns) {
             changed |= AddInfoUnit(live, column);
         }
@@ -258,7 +258,7 @@ void ComputePlanLiveness(TOpRoot& root) {
 }
 
 const TInfoUnitSet* GetLiveOut(IOperator* op) {
-    return op && op->Props.LiveOut ? &*op->Props.LiveOut : nullptr;
+    return op && op->Props.Analysis.LiveOut ? &*op->Props.Analysis.LiveOut : nullptr;
 }
 
 const TInfoUnitSet& GetLiveOutOrEmpty(IOperator* op) {

@@ -938,8 +938,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         ComputeLogicalTestProps(root);
 
-        UNIT_ASSERT(GetForbidden(root.PlanProps, filter.get(), join.get()).contains(TInfoUnit("a")));
-        UNIT_ASSERT(GetForbidden(root.PlanProps, leftRead.get(), filter.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(filter.get(), join.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(leftRead.get(), filter.get()).contains(TInfoUnit("a")));
     }
 
     Y_UNIT_TEST(NameConstraintsTransparentUnaryForwardsAbsentForbiddenName) {
@@ -955,8 +955,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         ComputeLogicalTestProps(root);
 
-        UNIT_ASSERT(GetForbidden(root.PlanProps, filter.get(), join.get()).contains(TInfoUnit("a")));
-        UNIT_ASSERT(GetForbidden(root.PlanProps, leftRead.get(), filter.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(filter.get(), join.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(leftRead.get(), filter.get()).contains(TInfoUnit("a")));
     }
 
     Y_UNIT_TEST(NameConstraintsMapRenameHidesForbiddenSource) {
@@ -972,9 +972,9 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         ComputeLogicalTestProps(root);
 
-        UNIT_ASSERT(GetForbidden(root.PlanProps, leftMap.get(), join.get()).contains(TInfoUnit("a")));
-        UNIT_ASSERT(!GetForbidden(root.PlanProps, leftRead.get(), leftMap.get()).contains(TInfoUnit("a")));
-        UNIT_ASSERT(GetForbidden(root.PlanProps, leftRead.get(), leftMap.get()).contains(TInfoUnit("b")));
+        UNIT_ASSERT(GetForbidden(leftMap.get(), join.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(!GetForbidden(leftRead.get(), leftMap.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(leftRead.get(), leftMap.get()).contains(TInfoUnit("b")));
     }
 
     Y_UNIT_TEST(NameConstraintsMapForbidsElementOutputsExceptHiddenSources) {
@@ -991,7 +991,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         ComputeLogicalTestProps(root);
 
-        const auto& forbidden = GetForbidden(root.PlanProps, read.get(), map.get());
+        const auto& forbidden = GetForbidden(read.get(), map.get());
         UNIT_ASSERT(forbidden.contains(TInfoUnit("c")));
         UNIT_ASSERT(forbidden.contains(TInfoUnit("d")));
         UNIT_ASSERT(!forbidden.contains(TInfoUnit("b")));
@@ -1010,8 +1010,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         ComputeLogicalTestProps(root);
 
-        UNIT_ASSERT(GetForbidden(root.PlanProps, leftMap.get(), join.get()).contains(TInfoUnit("a")));
-        UNIT_ASSERT(GetForbidden(root.PlanProps, leftRead.get(), leftMap.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(leftMap.get(), join.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(leftRead.get(), leftMap.get()).contains(TInfoUnit("a")));
     }
 
     Y_UNIT_TEST(NameConstraintsJoinEdgesIncludeIncomingForbiddenNames) {
@@ -1026,8 +1026,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         ComputeLogicalTestProps(root);
 
-        const auto& leftForbidden = GetForbidden(root.PlanProps, leftRead.get(), join.get());
-        const auto& rightForbidden = GetForbidden(root.PlanProps, rightRead.get(), join.get());
+        const auto& leftForbidden = GetForbidden(leftRead.get(), join.get());
+        const auto& rightForbidden = GetForbidden(rightRead.get(), join.get());
         UNIT_ASSERT(leftForbidden.contains(TInfoUnit("r")));
         UNIT_ASSERT(leftForbidden.contains(TInfoUnit("z")));
         UNIT_ASSERT(!leftForbidden.contains(TInfoUnit("l")));

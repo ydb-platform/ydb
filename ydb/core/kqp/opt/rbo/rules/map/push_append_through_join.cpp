@@ -82,6 +82,7 @@ EPushTarget SelectExpressionJoinPushTarget(
 
 TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
+    Y_UNUSED(props);
 
     if (input->Kind != EOperator::Map) {
         return input;
@@ -166,7 +167,7 @@ TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const T
     }
 
     if (topMapElements.empty()) {
-        if (!IUSetIntersect(newJoinOutput, GetForbidden(props, topMap.get())).empty()) {
+        if (!IUSetIntersect(newJoinOutput, GetForbidden(topMap.get())).empty()) {
             return input;
         }
         if (pushLeft) {
@@ -185,7 +186,7 @@ TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const T
 
     const auto newTopOutput = BuildMapOutput(newJoinOutput, topMapElements);
     if (MakeInfoUnitSet(newTopOutput).size() != newTopOutput.size() ||
-        !IUSetIntersect(newTopOutput, GetForbidden(props, topMap.get())).empty()) {
+        !IUSetIntersect(newTopOutput, GetForbidden(topMap.get())).empty()) {
         return input;
     }
 

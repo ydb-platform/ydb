@@ -78,7 +78,7 @@ TAliasMap BuildIdentityAliases(const TVector<TInfoUnit>& output) {
 }
 
 TAliasMap GetAliasesAtOutput(const TIntrusivePtr<IOperator>& op) {
-    return op->Props.Aliases ? *op->Props.Aliases : BuildIdentityAliases(op->GetOutputIUs());
+    return op->Props.Analysis.Aliases ? *op->Props.Analysis.Aliases : BuildIdentityAliases(op->GetOutputIUs());
 }
 
 TAliasMap RestrictAliases(const TAliasMap& inputAliases, const TVector<TInfoUnit>& output) {
@@ -246,7 +246,7 @@ TPlanAliases::TAliasMap TOpSort::ComputeAliases() {
 
 void ComputePlanAliases(TOpRoot& root) {
     for (const auto& iter : root) {
-        iter.Current->Props.Aliases.reset();
+        iter.Current->Props.Analysis.Aliases.reset();
     }
 
     THashSet<IOperator*> visited;
@@ -259,7 +259,7 @@ void ComputePlanAliases(TOpRoot& root) {
             compute(child);
         }
 
-        op->Props.Aliases = op->ComputeAliases();
+        op->Props.Analysis.Aliases = op->ComputeAliases();
     };
 
     compute(root.GetInput());
@@ -269,12 +269,12 @@ void ComputePlanAliases(TOpRoot& root) {
 }
 
 const TPlanAliases::TCandidates* GetAliases(IOperator* op, const TInfoUnit& iu) {
-    if (!op || !op->Props.Aliases) {
+    if (!op || !op->Props.Analysis.Aliases) {
         return nullptr;
     }
 
-    const auto aliasIt = op->Props.Aliases->find(iu);
-    return aliasIt == op->Props.Aliases->end() ? nullptr : &aliasIt->second;
+    const auto aliasIt = op->Props.Analysis.Aliases->find(iu);
+    return aliasIt == op->Props.Analysis.Aliases->end() ? nullptr : &aliasIt->second;
 }
 
 } // namespace NKqp

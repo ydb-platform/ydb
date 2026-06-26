@@ -15,19 +15,18 @@ struct TRenameCandidate {
     bool FromRenameElement = false;
 };
 
-bool CanRenameOutput(const TIntrusivePtr<IOperator>& op, const TInfoUnit& from, const TInfoUnit& to, const TPlanProps& props);
+bool CanRenameOutput(const TIntrusivePtr<IOperator>& op, const TInfoUnit& from, const TInfoUnit& to);
 
-std::optional<TRenameCandidate> FindRenameCandidate(const TIntrusivePtr<TOpMap>& topMap, const TPlanProps& props);
+std::optional<TRenameCandidate> FindRenameCandidate(const TIntrusivePtr<TOpMap>& topMap);
 
-bool CanStartLocalRenamePush(const TIntrusivePtr<TOpMap>& topMap, const TRenameCandidate& candidate, const TPlanProps& props);
+bool CanStartLocalRenamePush(const TIntrusivePtr<TOpMap>& topMap, const TRenameCandidate& candidate);
 
 TMapElement MakeRenameElement(const TRenameCandidate& candidate, const TIntrusivePtr<TOpMap>& topMap);
 
 bool CanFinishRenamePush(
     const TIntrusivePtr<TOpMap>& topMap,
     const TRenameCandidate& candidate,
-    const TVector<TInfoUnit>& pushedInputOutput,
-    const TPlanProps& props);
+    const TVector<TInfoUnit>& pushedInputOutput);
 
 bool FinishRenamePush(
     TIntrusivePtr<IOperator>& input,

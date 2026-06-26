@@ -22,8 +22,8 @@ bool TPushRenameIntoReadRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRB
     }
 
     auto topMap = CastOperator<TOpMap>(input);
-    const auto candidate = NMapRules::FindRenameCandidate(topMap, props);
-    if (!candidate || !NMapRules::CanStartLocalRenamePush(topMap, *candidate, props)) {
+    const auto candidate = NMapRules::FindRenameCandidate(topMap);
+    if (!candidate || !NMapRules::CanStartLocalRenamePush(topMap, *candidate)) {
         return false;
     }
 
@@ -32,13 +32,13 @@ bool TPushRenameIntoReadRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRB
     }
 
     auto read = CastOperator<TOpRead>(topMap->GetInput());
-    if (!read->IsSingleConsumer() || !NMapRules::CanRenameOutput(read, candidate->From, candidate->To, props)) {
+    if (!read->IsSingleConsumer() || !NMapRules::CanRenameOutput(read, candidate->From, candidate->To)) {
         return false;
     }
 
     const auto output = ReplaceOutputName(read->OutputIUs, candidate->From, candidate->To);
     if (MakeInfoUnitSet(output).size() != output.size() ||
-        !NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
+        !NMapRules::CanFinishRenamePush(topMap, *candidate, output)) {
         return false;
     }
 

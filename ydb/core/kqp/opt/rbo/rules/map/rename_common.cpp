@@ -5,9 +5,7 @@ namespace NKikimr {
 namespace NKqp {
 namespace NMapRules {
 
-bool CanRenameOutput(const TIntrusivePtr<IOperator>& op, const TInfoUnit& from, const TInfoUnit& to, const TPlanProps& props) {
-    Y_UNUSED(props);
-
+bool CanRenameOutput(const TIntrusivePtr<IOperator>& op, const TInfoUnit& from, const TInfoUnit& to) {
     const auto output = op->GetOutputIUs();
     return ContainsInfoUnit(output, from) && !ContainsInfoUnit(output, to);
 }
@@ -107,16 +105,15 @@ void RemoveTopRenameAndRewriteResiduals(const TIntrusivePtr<TOpMap>& topMap, siz
     topMap->MapElements = BuildResidualTopMapElements(topMap, renameIdx, from, to);
 }
 
-bool RenameNeedsPush(const TIntrusivePtr<TOpMap>& topMap, const TMapElement& element, const TInfoUnitSet& liveOut, const TPlanProps& props) {
+bool RenameNeedsPush(const TIntrusivePtr<TOpMap>& topMap, const TMapElement& element, const TInfoUnitSet& liveOut) {
     return liveOut.contains(element.GetElementName()) ||
-        GetForbidden(props, topMap.get()).contains(element.GetRename());
+        GetForbidden(topMap.get()).contains(element.GetRename());
 }
 
 bool TryBuildRenameCandidate(
     const TIntrusivePtr<TOpMap>& topMap,
     size_t idx,
     const TInfoUnitSet& liveOut,
-    const TPlanProps& props,
     TRenameCandidate& candidate)
 {
     const auto& element = topMap->MapElements[idx];
@@ -126,7 +123,7 @@ bool TryBuildRenameCandidate(
     if (element.IsRename()) {
         candidate.From = element.GetRename();
         candidate.FromRenameElement = true;
-        return RenameNeedsPush(topMap, element, liveOut, props);
+        return RenameNeedsPush(topMap, element, liveOut);
     }
 
     if (!element.IsColumnAccess()) {
@@ -139,12 +136,12 @@ bool TryBuildRenameCandidate(
 
 } // anonymous namespace
 
-std::optional<TRenameCandidate> FindRenameCandidate(const TIntrusivePtr<TOpMap>& topMap, const TPlanProps& props) {
+std::optional<TRenameCandidate> FindRenameCandidate(const TIntrusivePtr<TOpMap>& topMap) {
     const auto& liveOut = GetLiveOutOrEmpty(topMap.get());
 
     for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
         TRenameCandidate candidate;
-        if (TryBuildRenameCandidate(topMap, idx, liveOut, props, candidate) && candidate.From != candidate.To) {
+        if (TryBuildRenameCandidate(topMap, idx, liveOut, candidate) && candidate.From != candidate.To) {
             return candidate;
         }
     }
@@ -152,7 +149,7 @@ std::optional<TRenameCandidate> FindRenameCandidate(const TIntrusivePtr<TOpMap>&
     return std::nullopt;
 }
 
-bool CanStartLocalRenamePush(const TIntrusivePtr<TOpMap>& topMap, const TRenameCandidate& candidate, const TPlanProps& props) {
+bool CanStartLocalRenamePush(const TIntrusivePtr<TOpMap>& topMap, const TRenameCandidate& candidate) {
     if (!topMap->IsSingleConsumer() ||
         !CanRewriteResidualTopMap(topMap, candidate.Index, candidate.From, candidate.To)) {
         return false;
@@ -160,7 +157,7 @@ bool CanStartLocalRenamePush(const TIntrusivePtr<TOpMap>& topMap, const TRenameC
 
     const auto output = SimulateTopMapOutputAfterPush(topMap, candidate.Index, candidate.From, candidate.To);
     return MakeInfoUnitSet(output).size() == output.size() &&
-        IUSetIntersect(output, GetForbidden(props, topMap.get())).empty();
+        IUSetIntersect(output, GetForbidden(topMap.get())).empty();
 }
 
 TMapElement MakeRenameElement(const TRenameCandidate& candidate, const TIntrusivePtr<TOpMap>& topMap) {
@@ -171,18 +168,17 @@ TMapElement MakeRenameElement(const TRenameCandidate& candidate, const TIntrusiv
 bool CanFinishRenamePush(
     const TIntrusivePtr<TOpMap>& topMap,
     const TRenameCandidate& candidate,
-    const TVector<TInfoUnit>& pushedInputOutput,
-    const TPlanProps& props)
+    const TVector<TInfoUnit>& pushedInputOutput)
 {
     const auto residualElements = BuildResidualTopMapElements(topMap, candidate.Index, candidate.From, candidate.To);
     if (residualElements.empty()) {
         return MakeInfoUnitSet(pushedInputOutput).size() == pushedInputOutput.size() &&
-            IUSetIntersect(pushedInputOutput, GetForbidden(props, topMap.get())).empty();
+            IUSetIntersect(pushedInputOutput, GetForbidden(topMap.get())).empty();
     }
 
     const auto output = BuildMapOutput(pushedInputOutput, residualElements);
     return MakeInfoUnitSet(output).size() == output.size() &&
-        IUSetIntersect(output, GetForbidden(props, topMap.get())).empty();
+        IUSetIntersect(output, GetForbidden(topMap.get())).empty();
 }
 
 bool FinishRenamePush(

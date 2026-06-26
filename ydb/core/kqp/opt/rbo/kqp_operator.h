@@ -62,6 +62,20 @@ struct TOrderEnforcer {
 
 enum ESortDir : ui32 { None = 0x00, Asc = 0x01, Desc = 0x02 };
 
+// Recomputable logical analysis state. There is no per-analysis validity token:
+// analysis passes clear and rebuild the fields required by the current stage.
+struct TOperatorAnalysisProps {
+    void Clear() {
+        LiveOut.reset();
+        Aliases.reset();
+        NameConstraints.Clear();
+    }
+
+    std::optional<TInfoUnitSet> LiveOut;
+    std::optional<TPlanAliases::TAliasMap> Aliases;
+    TPlanNameConstraints NameConstraints;
+};
+
 /**
  * Per-operator physical plan properties
  * TODO: Make this more generic and extendable
@@ -92,9 +106,7 @@ struct TPhysicalOpProps {
     }
 
     void ClearLogicalAnalysis() {
-        LiveOut.reset();
-        Aliases.reset();
-        NameConstraints.ForbiddenOut.clear();
+        Analysis.Clear();
     }
 
     std::optional<int> StageId;
@@ -114,9 +126,7 @@ struct TPhysicalOpProps {
     std::optional<TVector<TInfoUnit>> RightShuffleBy;
     // Recomputable logical analysis state. Copies of physical props intentionally
     // do not preserve these fields; analyses are valid only for the current graph.
-    std::optional<TInfoUnitSet> LiveOut;
-    std::optional<TPlanAliases::TAliasMap> Aliases;
-    TPlanNameConstraints NameConstraints;
+    TOperatorAnalysisProps Analysis;
 
 private:
     void CopyPhysicalFrom(const TPhysicalOpProps& other) {

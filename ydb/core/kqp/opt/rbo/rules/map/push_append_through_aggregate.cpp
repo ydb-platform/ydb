@@ -85,6 +85,7 @@ TVector<TInfoUnit> BuildAggregateOutput(
 
 TIntrusivePtr<IOperator> TPushAppendThroughAggregateRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
+    Y_UNUSED(props);
 
     if (input->Kind != EOperator::Map) {
         return input;
@@ -147,7 +148,7 @@ TIntrusivePtr<IOperator> TPushAppendThroughAggregateRule::SimpleMatchAndApply(co
         RewriteResidualTopMapInputs(topElements, from, to);
 
         if (topElements.empty()) {
-            if (!IUSetIntersect(aggregateOutput, GetForbidden(props, topMap.get())).empty()) {
+            if (!IUSetIntersect(aggregateOutput, GetForbidden(topMap.get())).empty()) {
                 return input;
             }
             auto pushedMap = MakeIntrusive<TOpMap>(oldAggregateInput, topMap->Pos, TVector<TMapElement>{mapElement});
@@ -161,7 +162,7 @@ TIntrusivePtr<IOperator> TPushAppendThroughAggregateRule::SimpleMatchAndApply(co
 
         const auto newTopOutput = BuildMapOutput(aggregateOutput, topElements);
         if (MakeInfoUnitSet(newTopOutput).size() != newTopOutput.size() ||
-            !IUSetIntersect(newTopOutput, GetForbidden(props, topMap.get())).empty()) {
+            !IUSetIntersect(newTopOutput, GetForbidden(topMap.get())).empty()) {
             return input;
         }
 

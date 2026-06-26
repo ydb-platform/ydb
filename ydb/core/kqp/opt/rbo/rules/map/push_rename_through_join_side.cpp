@@ -36,8 +36,8 @@ bool TPushRenameThroughJoinSideRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
     }
 
     auto topMap = CastOperator<TOpMap>(input);
-    const auto candidate = NMapRules::FindRenameCandidate(topMap, props);
-    if (!candidate || !NMapRules::CanStartLocalRenamePush(topMap, *candidate, props)) {
+    const auto candidate = NMapRules::FindRenameCandidate(topMap);
+    if (!candidate || !NMapRules::CanStartLocalRenamePush(topMap, *candidate)) {
         return false;
     }
 
@@ -46,13 +46,13 @@ bool TPushRenameThroughJoinSideRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
     }
 
     auto join = CastOperator<TOpJoin>(topMap->GetInput());
-    if (!join->IsSingleConsumer() || !NMapRules::CanRenameOutput(join, candidate->From, candidate->To, props)) {
+    if (!join->IsSingleConsumer() || !NMapRules::CanRenameOutput(join, candidate->From, candidate->To)) {
         return false;
     }
 
     const auto selectedInput = SelectJoinInputForRename(join, candidate->From);
     if (!selectedInput || !selectedInput->IsSingleConsumer() ||
-        !NMapRules::CanRenameOutput(selectedInput, candidate->From, candidate->To, props)) {
+        !NMapRules::CanRenameOutput(selectedInput, candidate->From, candidate->To)) {
         return false;
     }
 
@@ -68,7 +68,7 @@ bool TPushRenameThroughJoinSideRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
         pushLeft ? pushedOutput : join->GetLeftInput()->GetOutputIUs(),
         pushLeft ? join->GetRightInput()->GetOutputIUs() : pushedOutput);
     if (MakeInfoUnitSet(output).size() != output.size() ||
-        !NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
+        !NMapRules::CanFinishRenamePush(topMap, *candidate, output)) {
         return false;
     }
 

@@ -22,13 +22,13 @@ void ExecuteQuery(NQuery::TQueryClient& db, const TString& query) {
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 }
 
-TString FulltextSearch(NQuery::TQueryClient& db, const TString& searchQuery) {
+TString FulltextSearch(NQuery::TQueryClient& db, const char* searchQuery, const char* field = "Text", const char* idxName = "fulltext_idx") {
     TString query = Sprintf(R"sql(
         SELECT `Key`, `Text`, `Data`
-        FROM `/Root/Texts` VIEW `fulltext_idx`
-        WHERE FulltextMatch(`Text`, "%s")
+        FROM `/Root/Texts` VIEW `%s`
+        WHERE FulltextMatch(`%s`, "%s")
         ORDER BY `Key`;
-    )sql", searchQuery.c_str());
+    )sql", idxName, field, searchQuery);
     auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
     UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
     return NYdb::FormatResultSetYson(result.GetResultSet(0));
@@ -249,7 +249,7 @@ Y_UNIT_TEST_TWIN(InsertRow, WithRelevance) {
 Y_UNIT_TEST_TWIN(InsertMultipleTimes, WithRelevance) {
     auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -354,7 +354,7 @@ Y_UNIT_TEST(UpsertNewRowRelevance) {
 Y_UNIT_TEST_TWIN(UpsertModifyExisting, WithRelevance) {
     auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -384,7 +384,7 @@ Y_UNIT_TEST_TWIN(UpsertModifyExisting, WithRelevance) {
 Y_UNIT_TEST_TWIN(UpsertMixNewAndExisting, WithRelevance) {
     auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -415,7 +415,7 @@ Y_UNIT_TEST_TWIN(UpsertMixNewAndExisting, WithRelevance) {
 Y_UNIT_TEST_TWIN(DeleteRow, WithRelevance) {
     auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertTexts(db);
@@ -450,7 +450,7 @@ Y_UNIT_TEST_TWIN(DeleteRow, WithRelevance) {
 Y_UNIT_TEST_TWIN(DeleteMultipleRows, WithRelevance) {
     auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertTexts(db);
@@ -485,7 +485,7 @@ Y_UNIT_TEST_TWIN(DeleteMultipleRows, WithRelevance) {
 Y_UNIT_TEST_TWIN(UpdateRow, WithRelevance) {
     auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -513,7 +513,7 @@ Y_UNIT_TEST_TWIN(UpdateRow, WithRelevance) {
 Y_UNIT_TEST_TWIN(ReplaceRow, WithRelevance) {
     auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -572,7 +572,7 @@ Y_UNIT_TEST(AddIndexCoveredCompact) {
 Y_UNIT_TEST_TWIN(Compaction, WithRelevance) {
     auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -629,7 +629,7 @@ Y_UNIT_TEST_TWIN(Compaction, WithRelevance) {
 Y_UNIT_TEST_TWIN(CompactionWithDelete, WithRelevance) {
     auto kikimr = KikimrWithCompact();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -692,7 +692,7 @@ TKikimrRunner KikimrWithZeroSnapshotTimeout() {
 Y_UNIT_TEST_TWIN(LsmCompaction, WithRelevance) {
     auto kikimr = KikimrWithZeroSnapshotTimeout();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -759,7 +759,7 @@ Y_UNIT_TEST_TWIN(LsmCompaction, WithRelevance) {
 Y_UNIT_TEST_TWIN(LsmCompactionWithConcurrentWrites, WithRelevance) {
     auto kikimr = KikimrWithZeroSnapshotTimeout();
     auto db = kikimr.GetQueryClient();
-    const TString indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
+    const char* indexType = WithRelevance ? "fulltext_relevance" : "fulltext_plain";
 
     CreateTexts(db);
     UpsertSomeTexts(db);
@@ -890,6 +890,79 @@ Y_UNIT_TEST_TWIN(LsmCompactionWithConcurrentWrites, WithRelevance) {
     CompareYson(R"([
         [[300u];["Bears love honey."];["bears data"]]
     ])", FulltextSearch(db, "honey"));
+}
+
+Y_UNIT_TEST(UpsertTwoIndexes) {
+    auto kikimr = KikimrWithCompact();
+    auto db = kikimr.GetQueryClient();
+
+    CreateTexts(db);
+    UpsertSomeTexts(db);
+
+    {
+        TString query = R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX idx_text
+                GLOBAL USING fulltext_plain
+                ON (Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        TString query = R"sql(
+            ALTER TABLE `/Root/Texts` ADD INDEX idx_data
+                GLOBAL USING fulltext_plain
+                ON (Data)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        )sql";
+        auto result = db.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    // Update only data, then update both fields - each index should use its own sequence
+    ExecuteQuery(db, "UPDATE `/Root/Texts` SET Data=\"birds data\" WHERE Key=100");
+    ExecuteQuery(db, "UPDATE `/Root/Texts` SET Data=\"wolves data\", Text=\"Wolves love rabbits.\" WHERE Key=200");
+
+    // Check index tables
+    {
+        auto result = db.ExecuteQuery("SELECT * FROM `/Root/Texts/idx_data/indexImplTable`", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto idx = NYdb::FormatResultSetYson(result.GetResultSet(0));
+        Cerr << "idx_data: " << idx << "\n";
+        CompareYson(R"([
+            [%true;18446744073709551614u;100u;"d";"birds"];
+            [%false;18446744073709551613u;100u;"d";"cats"];
+            [%true;18446744073709551615u;100u;"d";"cats"];
+            [%false;18446744073709551611u;200u;"\xC8\1";"data"];
+            [%true;18446744073709551612u;200u;"\xC8\1";"data"];
+            [%false;18446744073709551613u;100u;"d";"data"];
+            [%true;18446744073709551614u;100u;"d";"data"];
+            [%true;18446744073709551615u;200u;"dd";"data"];
+            [%false;18446744073709551611u;200u;"\xC8\1";"dogs"];
+            [%true;18446744073709551615u;200u;"\xC8\1";"dogs"];
+            [%true;18446744073709551612u;200u;"\xC8\1";"wolves"]
+        ])", idx);
+    }
+    {
+        auto result = db.ExecuteQuery("SELECT * FROM `/Root/Texts/idx_text/indexImplTable`", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        auto idx = NYdb::FormatResultSetYson(result.GetResultSet(0));
+        Cerr << "idx_text: " << idx << "\n";
+        CompareYson(R"([
+            [%true;18446744073709551615u;100u;"d";"cats"];
+            [%false;18446744073709551613u;200u;"\xC8\1";"dogs"];
+            [%true;18446744073709551615u;200u;"\xC8\1";"dogs"];
+            [%false;18446744073709551613u;200u;"\xC8\1";"foxes"];
+            [%true;18446744073709551615u;200u;"\xC8\1";"foxes"];
+            [%false;18446744073709551613u;200u;"\xC8\1";"love"];
+            [%true;18446744073709551614u;200u;"\xC8\1";"love"];
+            [%true;18446744073709551615u;200u;"dd";"love"];
+            [%true;18446744073709551614u;200u;"\xC8\1";"rabbits"];
+            [%true;18446744073709551614u;200u;"\xC8\1";"wolves"]
+        ])", idx);
+    }
 }
 
 } // Y_UNIT_TEST_SUITE(KqpFulltextCompact)

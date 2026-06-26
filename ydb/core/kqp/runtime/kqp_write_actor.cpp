@@ -1646,6 +1646,8 @@ public:
         TPathId FulltextDictTableId;
         TPathId FulltextStatsTableId;
         TString GenSequencePath;
+        std::vector<i64> AllocatedGenValues;
+        size_t RequestedGenValues = 0;
     };
 
     struct TPathLookupInfo {
@@ -1848,39 +1850,38 @@ public:
     }
 
     bool NeedsGenSequence() const {
-        for (const auto& [pathId, info] : PathWriteInfo) {
+        for (auto& [pathId, info] : PathWriteInfo) {
             if (!info.GenSequencePath.empty()) {
-                return true;
+                size_t n = (!info.DeleteKeysIndexes.empty() ? 2 : 1);
+                if (info.AllocatedGenValues.size() < n) {
+                    return true;
+                }
             }
         }
         return false;
-    }
-
-    bool IsWaitingForGenSequence() const {
-        return WaitingForGenSequence && !GenSequenceRequested;
-    }
-
-    TString GetGenSequencePath() const {
-        for (const auto& [pathId, info] : PathWriteInfo) {
-            if (!info.GenSequencePath.empty()) {
-                return info.GenSequencePath;
-            }
-        }
-        return {};
     }
 
     const TString& GetDatabase() const {
         return Database;
     }
 
-    void MarkGenSequenceRequested() {
-        GenSequenceRequested = true;
+    void OnGenSequenceAllocated(TPathId pathId, i64 value) {
+        PathWriteInfo.at(pathId).AllocatedGenValues.push_back(value);
+        PathWriteInfo.at(pathId).RequestedGenValues--;
     }
 
-    void OnGenSequenceAllocated(i64 value) {
-        AllocatedGenValue = value;
-        WaitingForGenSequence = false;
-        GenSequenceRequested = false;
+    std::vector<std::pair<TPathId, TString>> SendGenSequenceRequests() {
+        std::vector<std::pair<TPathId, TString>> res;
+        for (auto& [pathId, info] : PathWriteInfo) {
+            if (!info.GenSequencePath.empty()) {
+                size_t n = (!info.DeleteKeysIndexes.empty() ? 2 : 1);
+                while ((info.RequestedGenValues + info.AllocatedGenValues.size()) < n) {
+                    info.RequestedGenValues++;
+                    res.emplace_back(pathId, info.GenSequencePath);
+                }
+            }
+        }
+        return res;
     }
 
 private:
@@ -2274,13 +2275,11 @@ private:
             return false;
         }
 
-        if (NeedsGenSequence() && !AllocatedGenValue) {
-            WaitingForGenSequence = true;
+        if (NeedsGenSequence()) {
             return false;
         }
 
         FlushWritesToActors();
-        AllocatedGenValue.reset();
         State = EState::BUFFERING;
         return true;
     }
@@ -2355,9 +2354,10 @@ private:
                             deleteProjection = CreateFulltextTokenizeProjection(actorInfo.ColumnTypes,
                                 actorInfo.PathType == FulltextCompactRelevance, false,
                                 actorInfo.FulltextSettings, actorInfo.DeleteKeysIndexes, Alloc);
-                            AFL_ENSURE(AllocatedGenValue);
                             auto ft = (IFulltextTokenizeProjection*)deleteProjection.Get();
-                            ft->SetGen(static_cast<NTableIndex::NFulltext::TGen>(*AllocatedGenValue));
+                            AFL_ENSURE(actorInfo.AllocatedGenValues.size());
+                            ft->SetGen((NTableIndex::NFulltext::TGen)actorInfo.AllocatedGenValues.back());
+                            actorInfo.AllocatedGenValues.pop_back();
                         } else {
                             deleteProjection = CreateDataBatchProjection(actorInfo.DeleteKeysIndexes, Alloc);
                         }
@@ -2392,9 +2392,10 @@ private:
                             actorInfo.PathType == FulltextCompactRelevance,
                             OperationType != NKikimrKqp::TKqpTableSinkSettings::MODE_DELETE,
                             actorInfo.FulltextSettings, actorInfo.NewColumnsIndexes, Alloc);
-                        AFL_ENSURE(AllocatedGenValue);
                         auto ft = (IFulltextTokenizeProjection*)projection.Get();
-                        ft->SetGen(static_cast<NTableIndex::NFulltext::TGen>(*AllocatedGenValue));
+                        AFL_ENSURE(actorInfo.AllocatedGenValues.size());
+                        ft->SetGen((NTableIndex::NFulltext::TGen)actorInfo.AllocatedGenValues.back());
+                        actorInfo.AllocatedGenValues.pop_back();
                     } else {
                         projection = CreateDataBatchProjection(actorInfo.NewColumnsIndexes, Alloc);
                     }
@@ -2486,6 +2487,7 @@ private:
 
     EState State = EState::BLOCKED;
 
+    TString Database;
     THashMap<TPathId, TPathWriteInfo> PathWriteInfo;
     THashMap<TPathId, TPathLookupInfo> PathLookupInfo;
     THashMap<TPathId, TPathLockInfo> PathLockInfo;
@@ -2495,11 +2497,6 @@ private:
     i64 Memory = 0;
 
     std::optional<TString> Error;
-
-    TString Database;
-    std::optional<i64> AllocatedGenValue;
-    bool WaitingForGenSequence = false;
-    bool GenSequenceRequested = false;
 
     std::vector<IDataBatchPtr> BufferedBatches;
     std::vector<IDataBatchPtr> ProcessBatches;
@@ -3923,10 +3920,12 @@ public:
 
     void HandleGenSequence(NSequenceProxy::TEvSequenceProxy::TEvNextValResult::TPtr& ev) {
         ui64 cookie = ev->Cookie;
-        auto it = WriteTasks.find(cookie);
-        if (it == WriteTasks.end()) {
+        auto it = SeqCookies.find(cookie);
+        if (it == SeqCookies.end()) {
             return;
         }
+        auto [taskCookie, pathId] = it->second;
+        SeqCookies.erase(it);
         if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
             ReplyError(
                 NYql::NDqProto::StatusIds::INTERNAL_ERROR,
@@ -3935,18 +3934,20 @@ public:
                 ev->Get()->Issues);
             return;
         }
-        it->second.OnGenSequenceAllocated(ev->Get()->Value);
+        auto taskIt = WriteTasks.find(taskCookie);
+        YQL_ENSURE(taskIt != WriteTasks.end());
+        taskIt->second.OnGenSequenceAllocated(pathId, ev->Get()->Value);
         Process();
     }
 
     void SendGenSequenceRequests() {
-        for (auto& [cookie, writeTask] : WriteTasks) {
-            if (writeTask.IsWaitingForGenSequence()) {
-                TString path = writeTask.GetGenSequencePath();
-                TString database = writeTask.GetDatabase();
+        for (auto& [taskCookie, task] : WriteTasks) {
+            for (auto& [pathId, seqPath] : task.SendGenSequenceRequests()) {
+                NextSeqCookie++;
+                SeqCookies[NextSeqCookie] = std::make_pair(taskCookie, pathId);
                 Send(NSequenceProxy::MakeSequenceProxyServiceID(),
-                    new NSequenceProxy::TEvSequenceProxy::TEvNextVal(database, path), 0, cookie);
-                writeTask.MarkGenSequenceRequested();
+                    new NSequenceProxy::TEvSequenceProxy::TEvNextVal(task.GetDatabase(), seqPath),
+                    0, NextSeqCookie);
             }
         }
     }
@@ -5814,6 +5815,8 @@ private:
     THashMap<TPathId, TLockInfo> LockInfos;
     THashMap<ui64, TReturningConsumer> ReturningConsumers;
     THashMap<ui64, TKqpWriteTask> WriteTasks;
+    THashMap<ui64, std::pair<ui64, TPathId>> SeqCookies;
+    ui64 NextSeqCookie = 0;
     TKqpTableWriteActor::TWriteToken CurrentWriteToken = 0;
 
     THashMap<TPathId, std::queue<TBufferWriteMessage>> RequestQueues;

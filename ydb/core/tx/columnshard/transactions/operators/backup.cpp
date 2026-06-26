@@ -4,8 +4,35 @@
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/common/snapshot.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
+#include <ydb/core/tx/columnshard/tablet/ext_tx_base.h>
 
 namespace NKikimr::NColumnShard {
+
+class TTxStartBackupTask: public TExtendedTransactionBase {
+private:
+    using TBase = TExtendedTransactionBase;
+    const ui64 TxId;
+
+    virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const NActors::TActorContext& /*ctx*/) override {
+        return true;
+    }
+
+    virtual void DoComplete(const NActors::TActorContext& ctx) override {
+        auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TBackupTransactionOperator>(TxId, true);
+        if (!op) {
+            return;
+        }
+        op->StartTask(ctx);
+        Self->EnqueueProgressTx(ctx, TxId);
+    }
+
+public:
+    TTxStartBackupTask(TColumnShard* owner, const ui64 txId)
+        : TBase(owner, "start_backup_task")
+        , TxId(txId)
+    {
+    }
+};
 
 bool TBackupTransactionOperator::DoParse(TColumnShard& owner, const TString& data) {
     NKikimrTxColumnShard::TBackupTxBody txBody;
@@ -131,17 +158,55 @@ TString TBackupTransactionOperator::DoDebugString() const {
 }
 
 bool TBackupTransactionOperator::DoIsAsync() const {
-    return true;
+    return false;
 }
 
 TString TBackupTransactionOperator::DoGetOpType() const {
     return "Backup";
 }
 
-void TBackupTransactionOperator::DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) {
+void TBackupTransactionOperator::DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& ctx) {
+    if (!TaskExists && TxAddTask) {
+        TxAddTask->Complete(ctx);
+        TxAddTask.reset();
+        TaskStarted = true;
+    } else if (TaskExists) {
+        TaskStarted = true;
+    }
 }
 
 void TBackupTransactionOperator::DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) {
+}
+
+bool TBackupTransactionOperator::DoIsInProgress() const {
+    return TaskStarted && !TaskCompleted;
+}
+
+void TBackupTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
+    if (TaskExists) {
+        TaskStarted = true;
+        const auto key = ::ToString(ExportTask->GetIdentifier().GetSchemeShardLocalPathId().GetRawValue());
+        auto status = owner.GetBackgroundSessionsManager()->GetStatus(ExportTask->GetClassName(), key);
+        if (status.Success || !status.ErrorMessage.empty()) {
+            TaskCompleted = true;
+        }
+    }
+}
+
+std::unique_ptr<NTabletFlatExecutor::ITransaction> TBackupTransactionOperator::DoBuildTxPrepareForProgress(TColumnShard* owner) const {
+    return std::make_unique<TTxStartBackupTask>(owner, GetTxId());
+}
+
+void TBackupTransactionOperator::StartTask(const TActorContext& ctx) {
+    if (!TaskStarted && !TaskExists && TxAddTask) {
+        TxAddTask->Complete(ctx);
+        TxAddTask.reset();
+    }
+    TaskStarted = true;
+}
+
+void TBackupTransactionOperator::OnBackgroundTaskCompleted() {
+    TaskCompleted = true;
 }
 
 }   // namespace NKikimr::NColumnShard

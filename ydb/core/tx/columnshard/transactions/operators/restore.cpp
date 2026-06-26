@@ -4,8 +4,35 @@
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/manager/manager.h>
 #include <ydb/core/tx/columnshard/common/tablet_id.h>
+#include <ydb/core/tx/columnshard/tablet/ext_tx_base.h>
 
 namespace NKikimr::NColumnShard {
+
+class TTxStartRestoreTask: public TExtendedTransactionBase {
+private:
+    using TBase = TExtendedTransactionBase;
+    const ui64 TxId;
+
+    virtual bool DoExecute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const NActors::TActorContext& /*ctx*/) override {
+        return true;
+    }
+
+    virtual void DoComplete(const NActors::TActorContext& ctx) override {
+        auto op = Self->GetProgressTxController().GetTxOperatorVerifiedAs<TRestoreTransactionOperator>(TxId, true);
+        if (!op) {
+            return;
+        }
+        op->StartTask(ctx);
+        Self->EnqueueProgressTx(ctx, TxId);
+    }
+
+public:
+    TTxStartRestoreTask(TColumnShard* owner, const ui64 txId)
+        : TBase(owner, "start_restore_task")
+        , TxId(txId)
+    {
+    }
+};
 
 bool TRestoreTransactionOperator::DoParse(TColumnShard& owner, const TString& data) {
     NKikimrTxColumnShard::TRestoreTxBody txBody;
@@ -117,17 +144,55 @@ bool TRestoreTransactionOperator::CompleteOnAbort(TColumnShard& /*owner*/, const
 }
 
 bool TRestoreTransactionOperator::DoIsAsync() const {
-    return true;
+    return false;
 }
 
 TString TRestoreTransactionOperator::DoGetOpType() const {
     return "Restore";
 }
 
-void TRestoreTransactionOperator::DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) {
+void TRestoreTransactionOperator::DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& ctx) {
+    if (!TaskExists && TxAddTask) {
+        TxAddTask->Complete(ctx);
+        TxAddTask.reset();
+        TaskStarted = true;
+    } else if (TaskExists) {
+        TaskStarted = true;
+    }
 }
 
 void TRestoreTransactionOperator::DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) {
+}
+
+bool TRestoreTransactionOperator::DoIsInProgress() const {
+    return TaskStarted && !TaskCompleted;
+}
+
+void TRestoreTransactionOperator::DoOnTabletInit(TColumnShard& owner) {
+    if (TaskExists) {
+        TaskStarted = true;
+        const auto key = ::ToString(ImportTask->GetSchemeShardLocalPathId().GetRawValue());
+        auto status = owner.GetBackgroundSessionsManager()->GetStatus(ImportTask->GetClassName(), key);
+        if (status.Success || !status.ErrorMessage.empty()) {
+            TaskCompleted = true;
+        }
+    }
+}
+
+std::unique_ptr<NTabletFlatExecutor::ITransaction> TRestoreTransactionOperator::DoBuildTxPrepareForProgress(TColumnShard* owner) const {
+    return std::make_unique<TTxStartRestoreTask>(owner, GetTxId());
+}
+
+void TRestoreTransactionOperator::StartTask(const TActorContext& ctx) {
+    if (!TaskStarted && !TaskExists && TxAddTask) {
+        TxAddTask->Complete(ctx);
+        TxAddTask.reset();
+    }
+    TaskStarted = true;
+}
+
+void TRestoreTransactionOperator::OnBackgroundTaskCompleted() {
+    TaskCompleted = true;
 }
 
 void TRestoreTransactionOperator::RegisterSubscriber(const TActorId& actorId) {

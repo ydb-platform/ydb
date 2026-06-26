@@ -120,10 +120,6 @@ namespace NKikimr::NBlobDepot {
                 STLOG(PRI_WARN, BLOB_DEPOT, BDTS20, "S3 SlowDown for batch delete", (Id, LogId),
                     (Error, msg.GetError().GetMessage().c_str()));
             } else {
-<<<<<<< HEAD
-                STLOG(PRI_WARN, BLOB_DEPOT, BDTS12, "failed to delete object(s) from S3", (Id, LogId),
-                    (Error, msg.GetError().GetMessage().c_str()));
-=======
                 const int httpCode = static_cast<int>(msg.GetError().GetResponseCode());
                 if (httpCode > 0) {
                     httpErrorCounts[httpCode] = Locators.size();
@@ -132,7 +128,6 @@ namespace NKikimr::NBlobDepot {
                     {"marker", "BDTS12"},
                     {"id", LogId},
                     {"error", msg.GetError().GetMessage().c_str()});
->>>>>>> d1534a1ad08 ([KV] added sensor (#43996))
             }
 
             auto *remainingTarget = requestThrottled ? &locatorsThrottled : &locatorsError;

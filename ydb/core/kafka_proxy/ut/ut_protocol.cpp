@@ -1291,6 +1291,28 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
     } // Y_UNIT_TEST(FetchScenarioWithJoinGroup)
 
+    Y_UNIT_TEST(JoinGroupWithEmptyMetadataScenario) {
+        TInsecureTestServer testServer("2", false, false);
+
+        TString protocolName = "roundrobin";
+
+        TString topicName = "/Root/topic-0";
+        TString group = "consumer-group";
+
+        ui64 minActivePartitions = 10;
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName, minActivePartitions, { group });
+
+        TKafkaTestClient client(testServer.Port);
+
+        client.PlainAuthenticateToKafka();
+
+        std::vector<TString> topics = {topicName};
+        auto msg = client.JoinGroup(topics, group, protocolName, 10000, /* emptyMetadata = */ true);
+        UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::INVALID_REQUEST));
+    } // Y_UNIT_TEST(JoinGroupWithEmptyMetadataScenario)
+
     Y_UNIT_TEST(FetchEmptyTopicScenario) {
         TInsecureTestServer testServer("FetchEmptyTopicScenario");
 

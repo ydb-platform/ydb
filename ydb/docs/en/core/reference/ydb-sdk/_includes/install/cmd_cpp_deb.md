@@ -1,5 +1,5 @@
 ``` bash
-# Replace <TAG> with the desired release tag (e.g. v3.19.0)
+# Replace <TAG> with a release tag from GitHub releases
 TAG=<TAG>
 BASE="https://github.com/ydb-platform/ydb-cpp-sdk/releases/download/${TAG}"
 

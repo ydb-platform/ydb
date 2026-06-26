@@ -66,12 +66,6 @@ The build process using the source code is described in the source code reposito
 
   {% endnote %}
 
-  | Version | Release date | Packages |
-  | ------ | ------------ | ------- |
-  | v3.19.0 | 05.06.2026 | [libydb-cpp-dev](https://github.com/ydb-platform/ydb-cpp-sdk/releases/download/v3.19.0/libydb-cpp-dev_3.19.0_amd64.deb), [libydb-cpp-iam-dev](https://github.com/ydb-platform/ydb-cpp-sdk/releases/download/v3.19.0/libydb-cpp-iam-dev_3.19.0_amd64.deb), [libydb-cpp-otel-metrics-dev](https://github.com/ydb-platform/ydb-cpp-sdk/releases/download/v3.19.0/libydb-cpp-otel-metrics-dev_3.19.0_amd64.deb), [libydb-cpp-otel-tracing-dev](https://github.com/ydb-platform/ydb-cpp-sdk/releases/download/v3.19.0/libydb-cpp-otel-tracing-dev_3.19.0_amd64.deb), [yandex-googleapis-api-common-protos](https://github.com/ydb-platform/ydb-cpp-sdk/releases/download/v3.19.0/yandex-googleapis-api-common-protos-1.0.0-Linux.deb) |
-
-  For other versions and future releases, see the [full list of releases on GitHub](https://github.com/ydb-platform/ydb-cpp-sdk/releases).
-
   ### Using the SDK in CMake
 
   After installing the packages, use the SDK in your CMake project:

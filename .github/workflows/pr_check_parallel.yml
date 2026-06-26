@@ -26,6 +26,11 @@ on:
         required: false
         type: string
         default: auto
+      test_size:
+        description: 'Test sizes: small, medium, large (default: small,medium)'
+        required: false
+        type: string
+        default: small,medium
       checkout_sha:
         description: 'Optional pinned commit SHA (overrides PR merge commit)'
         required: false
@@ -201,6 +206,7 @@ jobs:
       build_preset: ${{ matrix.build_preset }}
       mode: ${{ inputs.mode }}
       shard_count: ${{ inputs.shard_count }}
+      test_size: ${{ inputs.test_size }}
       increment: true
       pr_number: ${{ needs.gate.outputs.pr_number }}
       history_branch: ${{ needs.gate.outputs.history_branch }}

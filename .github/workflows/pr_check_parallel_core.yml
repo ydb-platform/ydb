@@ -30,6 +30,11 @@ on:
         required: false
         type: string
         default: 'ydb/'
+      test_size:
+        description: 'Test sizes passed to ya make (e.g. small,medium or large)'
+        required: false
+        type: string
+        default: 'small,medium'
       build_preset:
         description: 'relwithdebinfo or release-asan'
         required: false
@@ -185,7 +190,7 @@ jobs:
           build_target: ${{ inputs.test_targets }}
           increment: ${{ inputs.increment }}
           run_tests: true
-          test_size: small,medium
+          test_size: ${{ inputs.test_size }}
           test_threads: 52
           custom_branch_name: ${{ inputs.history_branch }}
           put_build_results_to_cache: true
@@ -248,7 +253,7 @@ jobs:
           save_test_graph: true
           s3_subdir: build
           clean_ya_cache: false
-          test_size: small,medium
+          test_size: ${{ inputs.test_size }}
           test_threads: 52
           custom_branch_name: ${{ inputs.history_branch }}
           put_build_results_to_cache: true
@@ -294,7 +299,7 @@ jobs:
             graph.json \
             "$SHARD_COUNT" \
             shard_plan_out
-          plan_suffix="${{ inputs.test_targets }}"
+          plan_suffix="${{ inputs.test_targets }}, test_size=${{ inputs.test_size }}"
           if [ "${{ inputs.increment }}" = "true" ]; then
             plan_suffix="$plan_suffix, increment"
           fi
@@ -409,7 +414,7 @@ jobs:
           build_target: ${{ inputs.test_targets }}
           increment: false
           run_tests: true
-          test_size: small,medium
+          test_size: ${{ inputs.test_size }}
           test_threads: 52
           custom_branch_name: ${{ inputs.history_branch }}
           put_build_results_to_cache: true
@@ -547,6 +552,7 @@ jobs:
           {
             echo "ref=${{ inputs.checkout_ref }}"
             echo "test_targets=${{ inputs.test_targets }}"
+            echo "test_size=${{ inputs.test_size }}"
             echo "shard_reports=$shard_count"
             echo "attempts=${#try_dirs[@]}"
             echo "failed_tests_after_retries=$failed_count"

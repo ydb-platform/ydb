@@ -19,6 +19,11 @@ on:
         required: false
         type: string
         default: 'ydb/'
+      test_size:
+        description: 'Test sizes: small, medium, large (default: small,medium)'
+        required: false
+        type: string
+        default: small,medium
       build_preset:
         description: 'Build preset'
         required: false
@@ -132,6 +137,7 @@ jobs:
       build_preset: ${{ inputs.build_preset }}
       mode: ${{ inputs.mode }}
       shard_count: ${{ inputs.shard_count }}
+      test_size: ${{ inputs.test_size }}
       increment: ${{ inputs.increment }}
       pr_number: ${{ needs.resolve.outputs.pr_number }}
       history_branch: ${{ needs.resolve.outputs.history_branch }}

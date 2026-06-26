@@ -15,4 +15,10 @@ namespace NKikimr {
     TTabletTypes::EType BootstrapperTypeToTabletType(ui32 type);
     TIntrusivePtr<TTabletSetupInfo> MakeTabletSetupInfo(TTabletTypes::EType tabletType,
         ETabletBootType bootType, ui32 poolId, ui32 tabletPoolId);
+
+    // selects the actor-system pool for a tablet executor
+    ui32 SelectTabletWorkPoolId(TTabletTypes::EType tabletType, const TAppData* appData);
+
+    // creates a tablet bootstrapper actor from a tablet config
+    IActor* CreateTabletBootstrapper(const ::NKikimrConfig::TBootstrap::TTablet& tablet, const TAppData* appData);
 }

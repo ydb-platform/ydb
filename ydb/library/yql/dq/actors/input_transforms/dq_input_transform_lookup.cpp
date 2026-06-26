@@ -1216,8 +1216,8 @@ std::pair<IDqComputeActorAsyncInput*, NActors::IActor*> CreateInputTransformStre
         lookupPayloadColumns,
         inputColumns
     );
-    auto taskCounters = args.TaskCounters;
-    if (taskCounters) {
+    auto taskCounters = args.StatsLevel != TCollectStatsLevel::None ? args.TaskCounters : nullptr;
+    if (taskCounters && args.StatsLevel != TCollectStatsLevel::Basic) {
         taskCounters = taskCounters->GetSubgroup("task_id", ToString(args.TaskId))->GetSubgroup("input", ToString(args.InputIndex));
     }
     if (settings.GetIsMultiget()) {

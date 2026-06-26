@@ -204,6 +204,7 @@ struct Schema : NIceDb::Schema {
         struct ProcessCPUTime    : Column<27, NScheme::NTypeIds::Uint64> {};
         struct TypeCol           : Column<28, NScheme::NTypeIds::Utf8> { static TString GetColumnName(const TString&) { return "Type"; } };
         struct RequestUnits      : Column<29, NScheme::NTypeIds::Uint64> {};
+        struct TraceId           : Column<30, NScheme::NTypeIds::Utf8> {};
 
         using TKey = TableKey<IntervalEnd, Rank>;
         using TColumns = TableColumns<
@@ -235,7 +236,8 @@ struct Schema : NIceDb::Schema {
             CompileCPUTime,
             ProcessCPUTime,
             TypeCol,
-            RequestUnits>;
+            RequestUnits,
+            TraceId>;
     };
 
     struct PDisks : Table<4> {

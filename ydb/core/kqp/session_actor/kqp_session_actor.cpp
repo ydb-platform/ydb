@@ -2253,7 +2253,8 @@ public:
                 if (IsQueryAllowedToLog(text)) {
                     auto userSID = QueryState->UserToken->GetUserSID();
                     CollectQueryStats(TlsActivationContext->AsActorContext(), stats, queryDuration, text,
-                        userSID, QueryState->ParametersSize, database, type, requestUnits);
+                        userSID, QueryState->ParametersSize, database, type, requestUnits,
+                        QueryState->RequestEv->GetTraceId());
                 }
                 break;
             }

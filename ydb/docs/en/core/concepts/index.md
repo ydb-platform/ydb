@@ -16,7 +16,6 @@ The following topics provide comprehensive coverage of {{ ydb-short-name }}'s co
 - [Vector search](vector_search.md)
 - [Change Data Capture (CDC)](cdc.md)
 - [Time to live and eviction](ttl.md)
-- [Scan queries](scan_query.md)
 - [Database limits](limits-ydb.md)
 - [Multi-Version Concurrency Control (MVCC)](mvcc.md)
 - [Asynchronous replication](async-replication.md)

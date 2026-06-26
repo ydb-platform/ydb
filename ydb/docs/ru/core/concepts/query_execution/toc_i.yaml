@@ -15,3 +15,5 @@ items:
       mode: link
   - name: Спиллинг
     href: spilling.md
+  - name: Скан запросы
+    href: scan_query.md

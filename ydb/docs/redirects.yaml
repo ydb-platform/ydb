@@ -484,6 +484,10 @@ common:
   - from: /olap/datasets/(.*)$
     to: /analyst/datasets/$1
 
+  - from: /concepts/scan_query.md
+    to: /concepts/query_execution/scan_query.md
+  - from: /reference/ydb-cli/commands/scan-query.md
+    to: /reference/ydb-cli/scan-query.md
 
 ru:
   - from: /postgresql/index.md

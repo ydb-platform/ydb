@@ -517,6 +517,8 @@ ru:
   - from: /devops/backup-and-recovery.md
     to: /devops/backup-and-recovery/index.md
 
+  - from: /devops/deployment-options/ansible/initial-deployment.md
+    to: /devops/deployment-options/ansible/initial-deployment/index.md
   - from: /devops/deployment-options/manual/initial-deployment.md
     to: /devops/deployment-options/manual/initial-deployment/index.md
   - from: /devops/manual/initial-deployment.md

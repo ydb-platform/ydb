@@ -94,6 +94,11 @@ Y_UNIT_TEST(CreateTopicWithSharedConsumer) {
     auto& client = setup.GetPersQueueClient();
     const std::string path = TPqv1SdkTestSetup::MakeTopicPath("topic-shared");
 
+    {
+        const auto dlqStatus = CreateDlqTopicViaSdk(client);
+        UNIT_ASSERT_C(dlqStatus.IsSuccess(), "CreateDlqTopic: " << dlqStatus.GetIssues().ToOneLineString());
+    }
+
     TCreateTopicSettings settings;
     settings.ReadRules({MakeSharedConsumerReadRuleSettings()});
 
@@ -146,6 +151,11 @@ Y_UNIT_TEST(DescribeTopicReturnsSharedConsumerSettings) {
 
     auto& client = setup.GetPersQueueClient();
     const std::string path = TPqv1SdkTestSetup::MakeTopicPath("topic-describe-shared");
+
+    {
+        const auto dlqStatus = CreateDlqTopicViaSdk(client);
+        UNIT_ASSERT_C(dlqStatus.IsSuccess(), "CreateDlqTopic: " << dlqStatus.GetIssues().ToOneLineString());
+    }
 
     TCreateTopicSettings settings;
     settings.ReadRules({MakeSharedConsumerReadRuleSettings()});
@@ -271,6 +281,11 @@ Y_UNIT_TEST(DescribeTopicPreservesDeadLetterActionMove) {
 
     auto& client = setup.GetPersQueueClient();
     const std::string path = TPqv1SdkTestSetup::MakeTopicPath("topic-dlp-move");
+
+    {
+        const auto dlqStatus = CreateDlqTopicViaSdk(client);
+        UNIT_ASSERT_C(dlqStatus.IsSuccess(), "CreateDlqTopic: " << dlqStatus.GetIssues().ToOneLineString());
+    }
 
     TCreateTopicSettings settings;
     settings.ReadRules({

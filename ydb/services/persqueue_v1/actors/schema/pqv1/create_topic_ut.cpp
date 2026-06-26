@@ -30,7 +30,13 @@ std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
 }
 
 template<typename TRequest, typename TResponse>
-std::shared_ptr<TResultHolder<TResponse>> DoRequest(NActors::TTestActorRuntime& runtime, const TRequest& request, TString path = "/Root/test_db/topic1", TString database = "/Root/test_db") {
+std::shared_ptr<TResultHolder<TResponse>> DoRequest(
+    NActors::TTestActorRuntime& runtime,
+    const TRequest& request,
+    NActors::IActor* (*createActor)(NGRpcService::IRequestOpCtx*),
+    TString path = "/Root/test_db/topic1",
+    TString database = "/Root/test_db"
+) {
     auto result = std::make_shared<TResultHolder<TResponse>>();
 
     auto ctx = new TRequestCtx<TRequest, TResponse>(
@@ -39,7 +45,7 @@ std::shared_ptr<TResultHolder<TResponse>> DoRequest(NActors::TTestActorRuntime& 
         database,
         result
     );
-    runtime.Register(CreateCreateTopicActor(ctx));
+    runtime.Register(createActor(ctx));
 
     for (int i = 0; i < 50; ++i) {
         if (result->ResultStatus) {
@@ -51,6 +57,39 @@ std::shared_ptr<TResultHolder<TResponse>> DoRequest(NActors::TTestActorRuntime& 
 
     UNIT_ASSERT_C(result->ResultStatus, "The operation is still in progress");
     return result;
+}
+
+Ydb::PersQueue::V1::CreateTopicRequest MakeBasicCreateTopicRequest(
+    const TString& path,
+    i64 retentionPeriodMs = TDuration::Days(1).MilliSeconds()
+) {
+    Ydb::PersQueue::V1::CreateTopicRequest request;
+    request.set_path(path);
+
+    auto& settings = *request.mutable_settings();
+    settings.set_partitions_count(1);
+    settings.set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
+    settings.set_retention_period_ms(retentionPeriodMs);
+    settings.mutable_attributes()->insert({"_federation_account", "account1"});
+
+    return request;
+}
+
+void CreateDlqTopic(
+    NActors::TTestActorRuntime& runtime,
+    const TString& dlqTopicPath,
+    const TString& database = "/Root/test_db"
+) {
+    auto request = MakeBasicCreateTopicRequest(dlqTopicPath);
+    auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
+        runtime,
+        request,
+        CreateCreateTopicActor,
+        dlqTopicPath,
+        database
+    );
+    UNIT_ASSERT(result->ResultStatus);
+    UNIT_ASSERT_VALUES_EQUAL_C(*result->ResultStatus, Ydb::StatusIds::SUCCESS, result->Issues.ToString());
 }
 
     
@@ -65,6 +104,7 @@ Y_UNIT_TEST(SharedConsumer) {
     auto& runtime = setup->GetRuntime();
     runtime.GetAppData().PQConfig.SetTopicsAreFirstClassCitizen(false);
 
+    CreateDlqTopic(runtime, "/Root/test_db/test_dead_letter_queue");
 
     Ydb::PersQueue::V1::CreateTopicRequest request;
     request.set_path("/Root/test_db/topic1");
@@ -95,7 +135,11 @@ Y_UNIT_TEST(SharedConsumer) {
     type.mutable_dead_letter_policy()->mutable_condition()->set_max_processing_attempts(11);
     type.mutable_dead_letter_policy()->mutable_move_action()->set_dead_letter_queue("test_dead_letter_queue");
 
-    auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(runtime, request);
+    auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
+        runtime,
+        request,
+        CreateCreateTopicActor
+    );
 
     auto status = result->ResultStatus;
     UNIT_ASSERT(status);
@@ -143,7 +187,11 @@ Y_UNIT_TEST(MessageWriteBurstDefaultsToSpeed) {
 
     settings.mutable_attributes()->insert({"_federation_account", "account1"});
 
-    auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(runtime, request);
+    auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
+        runtime,
+        request,
+        CreateCreateTopicActor
+    );
 
     auto status = result->ResultStatus;
     UNIT_ASSERT(status);
@@ -174,7 +222,13 @@ Y_UNIT_TEST(CreateTopicWithNameEqDB) {
     settings.set_supported_format(Ydb::PersQueue::V1::TopicSettings::FORMAT_BASE);
     settings.set_retention_period_ms(TDuration::Days(1).MilliSeconds());
 
-    auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(runtime, request, "/Root", "/Root");
+    auto result = DoRequest<Ydb::PersQueue::V1::CreateTopicRequest, Ydb::PersQueue::V1::CreateTopicResponse>(
+        runtime,
+        request,
+        CreateCreateTopicActor,
+        "/Root",
+        "/Root"
+    );
 
     auto status = result->ResultStatus;
     UNIT_ASSERT(status);

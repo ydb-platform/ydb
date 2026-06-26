@@ -223,20 +223,14 @@ void TBaseCloudAuthRequestProxy::HandleAuthenticationResponse(typename TEvRespon
     }
 
     if (!ev->Get()->Response.subject().has_service_account()) {
-        SetError(
-            AuthenticateIamToken_ ? NErrors::ACCESS_DENIED : NErrors::INTERNAL_FAILURE,
-            AuthenticateIamToken_ ? "Failed to resolve folder id for IAM token." : "(this error should be unreachable)."
-        );
+        SetError(NErrors::ACCESS_DENIED, AuthenticateIamToken_ ? "Failed to resolve folder id for IAM token." : "(this error should be unreachable).");
         SendReplyAndDie();
         return;
     }
 
     FolderId_ = ev->Get()->Response.subject().service_account().folder_id();
-    if (!FolderId_) {
-        SetError(
-            AuthenticateIamToken_ ? NErrors::ACCESS_DENIED : NErrors::INTERNAL_FAILURE,
-            AuthenticateIamToken_ ? "Failed to resolve folder id for IAM token." : "(this error should be unreachable)."
-        );
+    if (AuthenticateIamToken_ && !FolderId_) {
+        SetError(NErrors::ACCESS_DENIED, "Failed to resolve folder id for IAM token.");
         SendReplyAndDie();
         return;
     }

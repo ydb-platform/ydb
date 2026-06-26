@@ -695,6 +695,24 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist.");
     }
 
+    Y_UNIT_TEST_F(TestGetQueueUrlWithIAMWithoutFolderId, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+
+        auto req = CreateSqsGetQueueUrlRequest();
+        req["QueueName"] = "not-existing-queue";
+        auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", std::move(req), "X-YaCloud-SubjectToken: sa_proxy@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+        TString resultMessage = GetByPath<TString>(json, "message");
+        UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist.");
+    }
+
     Y_UNIT_TEST_F(TestGetQueueUrlWithIAM_TableImplementation, THttpProxyTestMock) {
         PrepareConfigs(KikimrServer.Get());
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
@@ -711,6 +729,78 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
         TString resultMessage = GetByPath<TString>(json, "message");
         UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist.");
+    }
+
+    Y_UNIT_TEST_F(TestGetQueueUrlWithIAMWithoutFolderId_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+
+        auto req = CreateSqsGetQueueUrlRequest();
+        req["QueueName"] = "not-existing-queue";
+        auto res = SendHttpRequest("/Root", "AmazonSQS.GetQueueUrl", std::move(req), "X-YaCloud-SubjectToken: sa_proxy@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(res.HttpCode, 400);
+
+        NJson::TJsonValue json;
+        UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json));
+        TString resultType = GetByPath<TString>(json, "__type");
+        UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+        TString resultMessage = GetByPath<TString>(json, "message");
+        UNIT_ASSERT_VALUES_EQUAL(resultMessage, "The specified queue doesn't exist.");
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageWithIAMWithoutFolderId, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto createQueueReq = CreateSqsCreateQueueRequest();
+        createQueueReq["QueueName"] = "ExampleQueueName";
+        auto createQueueRes = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), "X-YaCloud-SubjectToken: sa_proxy@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(createQueueRes.HttpCode, 200);
+
+        NJson::TJsonValue createQueueJson;
+        UNIT_ASSERT(NJson::ReadJsonTree(createQueueRes.Body, &createQueueJson));
+        const TString queueUrl = GetByPath<TString>(createQueueJson, "QueueUrl");
+        UNIT_ASSERT(!queueUrl.empty());
+
+        NJson::TJsonValue sendMessageReq;
+        sendMessageReq["QueueUrl"] = queueUrl;
+        sendMessageReq["MessageBody"] = "MessageBody-0";
+        auto sendMessageRes = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), "X-YaCloud-SubjectToken: sa_proxy@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(sendMessageRes.HttpCode, 200);
+
+        NJson::TJsonValue sendMessageJson;
+        UNIT_ASSERT(NJson::ReadJsonTree(sendMessageRes.Body, &sendMessageJson));
+        UNIT_ASSERT(!GetByPath<TString>(sendMessageJson, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(sendMessageJson, "MessageId").empty());
+    }
+
+    Y_UNIT_TEST_F(TestSendMessageWithIAMWithoutFolderId_TableImplementation, THttpProxyTestMock) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
+
+        auto createQueueReq = CreateSqsCreateQueueRequest();
+        createQueueReq["QueueName"] = "ExampleQueueName";
+        auto createQueueRes = SendHttpRequest("/Root", "AmazonSQS.CreateQueue", std::move(createQueueReq), "X-YaCloud-SubjectToken: sa_proxy@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(createQueueRes.HttpCode, 200);
+
+        NJson::TJsonValue createQueueJson;
+        UNIT_ASSERT(NJson::ReadJsonTree(createQueueRes.Body, &createQueueJson));
+        const TString queueUrl = GetByPath<TString>(createQueueJson, "QueueUrl");
+        UNIT_ASSERT(!queueUrl.empty());
+
+        NJson::TJsonValue sendMessageReq;
+        sendMessageReq["QueueUrl"] = queueUrl;
+        sendMessageReq["MessageBody"] = "MessageBody-0";
+        auto sendMessageRes = SendHttpRequest("/Root", "AmazonSQS.SendMessage", std::move(sendMessageReq), "X-YaCloud-SubjectToken: sa_proxy@builtin");
+        UNIT_ASSERT_VALUES_EQUAL(sendMessageRes.HttpCode, 200);
+
+        NJson::TJsonValue sendMessageJson;
+        UNIT_ASSERT(NJson::ReadJsonTree(sendMessageRes.Body, &sendMessageJson));
+        UNIT_ASSERT(!GetByPath<TString>(sendMessageJson, "MD5OfMessageBody").empty());
+        UNIT_ASSERT(!GetByPath<TString>(sendMessageJson, "MessageId").empty());
     }
 
     Y_UNIT_TEST_F(TestSendMessage, THttpProxyTestMock) {

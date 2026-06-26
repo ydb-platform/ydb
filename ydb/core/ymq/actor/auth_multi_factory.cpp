@@ -114,7 +114,7 @@ bool TBaseCloudAuthRequestProxy::InitAndValidate() {
         }
     }
 
-    if (IamToken_ && FolderId_) {
+    if (IamToken_) {
         // UI
         return true;
     }
@@ -200,7 +200,7 @@ void TBaseCloudAuthRequestProxy::HandleAuthenticationResponse(typename TEvRespon
     ChangeCounters([this, &ev](){
         Counters_.IncCounter(
             NCloudAuth::EActionType::Authenticate,
-            NCloudAuth::ECredentialType::Signature,
+            (AccessKeySignature_ ? NCloudAuth::ECredentialType::Signature : NCloudAuth::ECredentialType::IamToken),
             ev->Get()->Status.GRpcStatusCode
         );
         auto now = TActivationContext::Now();
@@ -220,13 +220,26 @@ void TBaseCloudAuthRequestProxy::HandleAuthenticationResponse(typename TEvRespon
             SendReplyAndDie();
         }
         return;
-    } else if (!ev->Get()->Response.subject().has_service_account()) {
-        SetError(NErrors::ACCESS_DENIED, "(this error should be unreachable).");
+    }
+
+    if (!ev->Get()->Response.subject().has_service_account()) {
+        SetError(
+            AuthenticateIamToken_ ? NErrors::ACCESS_DENIED : NErrors::INTERNAL_FAILURE,
+            AuthenticateIamToken_ ? "Failed to resolve folder id for IAM token." : "(this error should be unreachable)."
+        );
         SendReplyAndDie();
         return;
     }
 
     FolderId_ = ev->Get()->Response.subject().service_account().folder_id();
+    if (!FolderId_) {
+        SetError(
+            AuthenticateIamToken_ ? NErrors::ACCESS_DENIED : NErrors::INTERNAL_FAILURE,
+            AuthenticateIamToken_ ? "Failed to resolve folder id for IAM token." : "(this error should be unreachable)."
+        );
+        SendReplyAndDie();
+        return;
+    }
 
     GetCloudIdAndAuthorize();
 }
@@ -395,12 +408,20 @@ void TBaseCloudAuthRequestProxy::Authenticate() {
     if (EnableAccessServiceV2Interface_) {
         auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequestV2>();
         request->RequestId = RequestId_;
-        FillSignatureProto(*request->Request.mutable_signature());
+        if (AccessKeySignature_) {
+            FillSignatureProto(*request->Request.mutable_signature());
+        } else {
+            request->Request.set_iam_token(IamToken_);
+        }
         Send(MakeSqsAccessServiceID(), std::move(request));
     } else {
         auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
         request->RequestId = RequestId_;
-        FillSignatureProto(*request->Request.mutable_signature());
+        if (AccessKeySignature_) {
+            FillSignatureProto(*request->Request.mutable_signature());
+        } else {
+            request->Request.set_iam_token(IamToken_);
+        }
         Send(MakeSqsAccessServiceID(), std::move(request));
     }
 }
@@ -500,8 +521,12 @@ void TBaseCloudAuthRequestProxy::Bootstrap() {
                 return;
             }
         }
-    } else {
+    } else if (FolderId_) {
         GetCloudIdAndAuthorize();
+    } else {
+        AuthenticateIamToken_ = true;
+        Become(&TThis::ProcessAuthentication);
+        Authenticate();
     }
 };
 

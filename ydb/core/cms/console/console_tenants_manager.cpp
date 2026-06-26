@@ -2478,6 +2478,14 @@ void TTenantsManager::FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDataba
     if (tenant->ScaleRecommenderPolicies && !tenant->ScaleRecommenderPolicies->policies().empty()) {
         status.mutable_scale_recommender_policies()->CopyFrom(*tenant->ScaleRecommenderPolicies);
     }
+
+    for (const auto &attr : tenant->Attributes.GetUserAttributes()) {
+        // Filter out emty-value attributes kept forever as tombstones
+        // (see TTenantsManager::TTxAlterTenant::Execute())
+        if (attr.HasValue()) {
+            (*status.mutable_attributes())[attr.GetKey()] = attr.GetValue();
+        }
+    }
 }
 
 void TTenantsManager::FillTenantAllocatedSlots(TTenant::TPtr tenant, Ydb::Cms::GetDatabaseStatusResult &status,

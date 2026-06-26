@@ -1,4 +1,4 @@
-#include "console_configs_manager.h"
+#include "console.h"
 #include "ut_helpers.h"
 
 #include <ydb/core/config/init/mock.h>
@@ -2127,7 +2127,7 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherDatabaseConfigSelectorsTests) {
         return res;
     }
 
-    const TString PermissiveTenantUserAttribute = NConsole::TConfigsManager::GetPermissiveDatabaseConfigSelectorsTenantAttributeName();
+    const TString PermissiveTenantUserAttribute = TString(NConsole::TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS);
 
     Y_UNIT_TEST(TestEndToEndSelectorsResolution) {
         const TString mainConfig = R"(

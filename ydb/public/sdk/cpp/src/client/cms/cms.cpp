@@ -69,26 +69,26 @@ namespace {
         } else if (std::holds_alternative<std::monostate>(resourcesKind)) {
             out.clear_resources_kind();
         }
-        
+
         for (const auto& quota : schemaQuotas.LeakyBucketQuotas) {
             auto protoQuota = out.mutable_schema_operation_quotas()->add_leaky_bucket_quotas();
             protoQuota->set_bucket_seconds(quota.BucketSeconds);
             protoQuota->set_bucket_size(quota.BucketSize);
         }
-    
+
         out.mutable_database_quotas()->set_data_size_hard_quota(dbQuotas.DataSizeHardQuota);
         out.mutable_database_quotas()->set_data_size_soft_quota(dbQuotas.DataSizeSoftQuota);
         out.mutable_database_quotas()->set_data_stream_shards_quota(dbQuotas.DataStreamShardsQuota);
         out.mutable_database_quotas()->set_data_stream_reserved_storage_quota(dbQuotas.DataStreamReservedStorageQuota);
         out.mutable_database_quotas()->set_ttl_min_run_internal_seconds(dbQuotas.TtlMinRunInternalSeconds);
-    
+
         for (const auto& quota : dbQuotas.StorageQuotas) {
             auto protoQuota = out.mutable_database_quotas()->add_storage_quotas();
             protoQuota->set_unit_kind(quota.UnitKind);
             protoQuota->set_data_size_hard_quota(quota.DataSizeHardQuota);
             protoQuota->set_data_size_soft_quota(quota.DataSizeSoftQuota);
         }
-    
+
         for (const auto& policy : scaleRecommenderPolicies.Policies) {
             auto* protoPolicy = out.mutable_scale_recommender_policies()->add_policies();
             if (std::holds_alternative<NCms::TTargetTrackingPolicy>(policy.Policy)) {
@@ -121,7 +121,7 @@ TStorageUnits::TStorageUnits(const Ydb::Cms::StorageUnits& proto)
     , Count(proto.count())
 {}
 
-TComputationalUnits::TComputationalUnits(const Ydb::Cms::ComputationalUnits& proto) 
+TComputationalUnits::TComputationalUnits(const Ydb::Cms::ComputationalUnits& proto)
     : UnitKind(proto.unit_kind())
     , AvailabilityZone(proto.availability_zone())
     , Count(proto.count())
@@ -152,7 +152,7 @@ TSchemaOperationQuotas::TSchemaOperationQuotas(const Ydb::Cms::SchemaOperationQu
 {}
 
 TDatabaseQuotas::TStorageQuotas::TStorageQuotas(const Ydb::Cms::DatabaseQuotas_StorageQuotas& proto)
-    : UnitKind(proto.unit_kind()) 
+    : UnitKind(proto.unit_kind())
     , DataSizeHardQuota(proto.data_size_hard_quota())
     , DataSizeSoftQuota(proto.data_size_soft_quota())
 {}
@@ -190,7 +190,7 @@ TScaleRecommenderPolicy::TScaleRecommenderPolicy(const Ydb::Cms::ScaleRecommende
     }
 }
 
-TScaleRecommenderPolicies::TScaleRecommenderPolicies(const Ydb::Cms::ScaleRecommenderPolicies& proto) 
+TScaleRecommenderPolicies::TScaleRecommenderPolicies(const Ydb::Cms::ScaleRecommenderPolicies& proto)
     : Policies(proto.policies().begin(), proto.policies().end())
 {}
 
@@ -204,6 +204,7 @@ TGetDatabaseStatusResult::TGetDatabaseStatusResult(TStatus&& status, const Ydb::
     , SchemaOperationQuotas_(proto.schema_operation_quotas())
     , DatabaseQuotas_(proto.database_quotas())
     , ScaleRecommenderPolicies_(proto.scale_recommender_policies())
+    , UserAttributes_(proto.attributes().begin(), proto.attributes().end())
 {
     switch (proto.resources_kind_case()) {
         case Ydb::Cms::GetDatabaseStatusResult::kRequiredResources:
@@ -257,9 +258,19 @@ const TScaleRecommenderPolicies& TGetDatabaseStatusResult::GetScaleRecommenderPo
     return ScaleRecommenderPolicies_;
 }
 
+const TUserAttributes& TGetDatabaseStatusResult::GetUserAttributes() const {
+    return UserAttributes_;
+}
+
 void TGetDatabaseStatusResult::SerializeTo(Ydb::Cms::CreateDatabaseRequest& request) const {
     request.set_path(Path_);
     SerializeToImpl(ResourcesKind_, SchemaOperationQuotas_, DatabaseQuotas_, ScaleRecommenderPolicies_, request);
+}
+
+void TAlterDatabaseSettings::SerializeTo(Ydb::Cms::AlterDatabaseRequest& request) const {
+    for (const auto& [name, value] : AlterAttributes_) {
+        (*request.mutable_alter_attributes())[name] = value;
+    }
 }
 
 TCreateDatabaseSettings::TCreateDatabaseSettings(const Ydb::Cms::CreateDatabaseRequest& request)
@@ -356,6 +367,17 @@ public:
             &Ydb::Cms::V1::CmsService::Stub::AsyncCreateDatabase,
             TRpcRequestSettings::Make(settings));
     }
+
+    TAsyncStatus AlterDatabase(const std::string& path, const TAlterDatabaseSettings& settings) {
+        auto request = MakeOperationRequest<Ydb::Cms::AlterDatabaseRequest>(settings);
+        request.set_path(path);
+        settings.SerializeTo(request);
+
+        return RunSimple<Ydb::Cms::V1::CmsService, Ydb::Cms::AlterDatabaseRequest, Ydb::Cms::AlterDatabaseResponse>(
+            std::move(request),
+            &Ydb::Cms::V1::CmsService::Stub::AsyncAlterDatabase,
+            TRpcRequestSettings::Make(settings));
+    }
 };
 
 TCmsClient::TCmsClient(const TDriver& driver, const TCommonClientSettings& settings)
@@ -375,9 +397,16 @@ TAsyncGetDatabaseStatusResult TCmsClient::GetDatabaseStatus(
 
 TAsyncStatus TCmsClient::CreateDatabase(
     const std::string& path,
-    const TCreateDatabaseSettings& settings) 
+    const TCreateDatabaseSettings& settings)
 {
     return Impl_->CreateDatabase(path, settings);
+}
+
+TAsyncStatus TCmsClient::AlterDatabase(
+    const std::string& path,
+    const TAlterDatabaseSettings& settings)
+{
+    return Impl_->AlterDatabase(path, settings);
 }
 
 } // namespace NYdb::NCms

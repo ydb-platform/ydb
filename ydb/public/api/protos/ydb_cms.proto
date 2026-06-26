@@ -101,7 +101,7 @@ message DatabaseQuotas {
     // A minimum value of `TtlSettings.run_interval_seconds` that can be specified.
     // Default is 1800 (15 minutes).
     uint32 ttl_min_run_internal_seconds = 4;
-    
+
     message StorageQuotas {
         // in theory an arbitrary string, but in practice "hdd" or "ssd"
         string unit_kind = 1;
@@ -120,7 +120,7 @@ message ScaleRecommenderPolicies {
         message TargetTrackingPolicy {
             oneof target {
                 // A percentage of compute resources' average CPU utilization.
-                uint32 average_cpu_utilization_percent = 1 [(Ydb.value) = "[10; 90]"]; 
+                uint32 average_cpu_utilization_percent = 1 [(Ydb.value) = "[10; 90]"];
             }
         }
 
@@ -160,6 +160,8 @@ message CreateDatabaseRequest {
     DatabaseQuotas database_quotas = 10;
     // Optional scale recommender policies
     ScaleRecommenderPolicies scale_recommender_policies = 11;
+    // Current database attributes
+    map<string, string> attributes = 12;
 }
 
 message CreateDatabaseResponse {

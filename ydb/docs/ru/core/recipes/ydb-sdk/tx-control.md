@@ -301,7 +301,12 @@
 
 - Rust
 
-  Режим ImplicitTx не поддерживается
+  ```rust
+  let mut qc = client.query_client();
+  // ImplicitTx — режим по умолчанию для вспомогательных методов QueryClient, выполняющих один транзакционный SQL-запрос:
+  // сервер выбирает изоляцию по типу SQL (SELECT → snapshot RO, DML → serializable RW).
+  let mut row = qc.query_row("SELECT 1 AS one").await?;
+  ```
 
 - PHP
 
@@ -689,16 +694,18 @@
 - Rust
 
   ```rust
-  use ydb::{TransactionOptions};
+  use ydb::{QueryTransactionOptions, QueryTxMode};
 
-  let tx_options = TransactionOptions::default().with_mode(
-    ydb::Mode::SerializableReadWrite
-  );
-  let table_client = db.table_client().clone_with_transaction_options(tx_options);
-  let result = table_client.retry_transaction(|mut tx| async move {
-    let res = tx.query("SELECT 1".into()).await?;
-    return Ok(res)
-  }).await?;
+  let qc = client
+      .query_client()
+      .clone_with_transaction_options(
+          QueryTransactionOptions::new().with_mode(QueryTxMode::SerializableReadWrite),
+      );
+  qc.retry_transaction(async |tx| {
+      tx.query_row("SELECT 1 AS one").await?;
+      Ok(())
+  })
+  .await?;
   ```
 
 - PHP
@@ -1044,14 +1051,21 @@
 - Rust
 
   ```rust
-  let tx_options = TransactionOptions::default().with_mode(
-    ydb::Mode::OnlineReadonly,
-  ).with_autocommit(true);
-  let table_client = db.table_client().clone_with_transaction_options(tx_options);
-  let result = table_client.retry_transaction(|mut tx| async move {
-    let res = tx.query("SELECT 1".into()).await?;
-    return Ok(res)
-  }).await?;
+  use ydb::QueryTxMode;
+
+  let mut qc = client.query_client();
+
+  // Online RO — согласованное чтение (allow_inconsistent_reads = false)
+  let mut row = qc
+      .query_row("SELECT 1 AS one")
+      .with_tx_mode(QueryTxMode::OnlineReadOnly)
+      .await?;
+
+  // Online inconsistent RO — максимальная производительность (allow_inconsistent_reads = true)
+  let mut row = qc
+      .query_row("SELECT 1 AS one")
+      .with_tx_mode(QueryTxMode::OnlineReadOnlyInconsistent)
+      .await?;
   ```
 
 - PHP
@@ -1382,7 +1396,16 @@
 
 - Rust
 
-  Режим Stale Read-Only не поддерживается в rust sdk.
+  ```rust
+  use ydb::QueryTxMode;
+
+  let mut qc = client.query_client();
+  // Режим Stale Read-Only поддерживается только для таких вызовов на query-клиенте (не для retry_transaction).
+  let mut row = qc
+      .query_row("SELECT 1 AS one")
+      .with_tx_mode(QueryTxMode::StaleReadOnly)
+      .await?;
+  ```
 
 - PHP
 
@@ -1704,7 +1727,23 @@
 
 - Rust
 
-  Режим Snapshot Read-Only не поддерживается в rust sdk.
+  ```rust
+  use ydb::{QueryTransactionOptions, QueryTxMode};
+
+  let mut qc = client.query_client();
+  qc.query_row("SELECT 1 AS one")
+      .with_tx_mode(QueryTxMode::SnapshotReadOnly)
+      .await?;
+
+  let qc = qc.clone_with_transaction_options(
+      QueryTransactionOptions::new().with_mode(QueryTxMode::SnapshotReadOnly),
+  );
+  qc.retry_transaction(async |tx| {
+      tx.query_row("SELECT 1 AS one").await?;
+      Ok(())
+  })
+  .await?;
+  ```
 
 - PHP
 
@@ -2083,7 +2122,23 @@
 
 - Rust
 
-  Режим Snapshot Read-Write не поддерживается в rust sdk.
+  ```rust
+  use ydb::{QueryTransactionOptions, QueryTxMode};
+
+  let mut qc = client.query_client();
+  qc.query_row("SELECT 1 AS one")
+      .with_tx_mode(QueryTxMode::SnapshotReadWrite)
+      .await?;
+
+  let qc = qc.clone_with_transaction_options(
+      QueryTransactionOptions::new().with_mode(QueryTxMode::SnapshotReadWrite),
+  );
+  qc.retry_transaction(async |tx| {
+      tx.query_row("SELECT 1 AS one").await?;
+      Ok(())
+  })
+  .await?;
+  ```
 
 - PHP
 

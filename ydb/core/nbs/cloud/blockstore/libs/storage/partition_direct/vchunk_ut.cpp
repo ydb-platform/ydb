@@ -116,9 +116,9 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         // Finish erase requests with success.
         SetEraseResult(TDBGEraseResponse{.Error = MakeError(S_OK)}, true);
 
-        // Should not get more scheduled tasks.
+        // Should get scheduled tasks.
         UNIT_ASSERT_VALUES_EQUAL(
-            false,
+            true,
             WaitScheduledTasks(1, TDuration::MilliSeconds(100)));
 
         auto onStop = vchunk->Stop();

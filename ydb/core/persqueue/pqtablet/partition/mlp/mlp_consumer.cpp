@@ -916,11 +916,13 @@ void TConsumerActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     auto& results = response.GetPartitionResponse().GetCmdReadResult();
 
     bool allMessagesAdded = false;
-    size_t messageCount = 0;
+    size_t logicalMessageCount = 0;
 
     auto lastOffset = Storage->GetLastOffset();
     for (auto& result : results.GetResult()) {
-        if (lastOffset > result.GetOffset()) {
+        const ui64 resultLogicalMessageCount = result.GetLogicalMessageCount();
+        const ui64 resultEndOffset = result.GetOffset() + resultLogicalMessageCount;
+        if (lastOffset >= resultEndOffset) {
             continue;
         }
 
@@ -944,20 +946,22 @@ void TConsumerActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
             !messageGroupId.empty(),
             static_cast<ui32>(Hash(messageGroupId)),
             TInstant::MilliSeconds(result.GetWriteTimestampMS()),
-            TDuration::Seconds(delaySeconds)
+            TDuration::Seconds(delaySeconds),
+            resultLogicalMessageCount
         );
         if (!allMessagesAdded) {
             break;
         }
-        ++messageCount;
+        logicalMessageCount += resultLogicalMessageCount;
+        lastOffset = resultEndOffset;
     }
 
-    LOG_D("Fetched " << messageCount << " messages");
+    LOG_D("Fetched " << logicalMessageCount << " messages");
     if (allMessagesAdded) {
         FetchMessagesIfNeeded();
     }
 
-    if (messageCount > 0) {
+    if (logicalMessageCount > 0) {
         LastTimeWithMessages = TInstant::Now();
         NotifyPQRB();
     }

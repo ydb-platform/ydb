@@ -324,6 +324,67 @@ TMaybe<TPrefixLookup> RewriteReadToPrefixLookup(TKqlReadTableRangesBase read, TE
 
 } // anonymous namespace
 
+TMaybe<TString> ChooseIndexForLookupJoin(
+    const TKikimrTableDescription& mainTableDesc,
+    const THashSet<TString>& rightJoinKeys)
+{
+    const auto& meta = *mainTableDesc.Metadata;
+
+    if (!meta.KeyColumnNames.empty() && rightJoinKeys.contains(meta.KeyColumnNames[0])) {
+        return Nothing();
+    }
+
+    TMaybe<TString> best;
+    size_t bestPrefix = 0;
+    for (const auto& index : meta.Indexes) {
+        if (index.Type == TIndexDescription::EType::GlobalAsync
+            || index.Type == TIndexDescription::EType::GlobalJson
+            || index.Type == TIndexDescription::EType::GlobalJsonCompact)
+        {
+            continue;
+        }
+
+        if (index.State != TIndexDescription::EIndexState::Ready) {
+            continue;
+        }
+
+        size_t prefix = 0;
+        for (const auto& keyCol : index.KeyColumns) {
+            if (!rightJoinKeys.contains(keyCol)) {
+                break;
+            }
+            ++prefix;
+        }
+
+        // the first index in declaration order wins ties (deterministic).
+        if (prefix > bestPrefix) {
+            bestPrefix = prefix;
+            best = index.Name;
+        }
+    }
+
+    return best;
+}
+
+TExprBase RedirectReadToIndex(TExprBase read, const TString& indexName, TExprContext& ctx) {
+    auto maybeRanges = read.Maybe<TKqlReadTableRanges>();
+    if (!maybeRanges) {
+        return read;
+    }
+
+    auto src = maybeRanges.Cast();
+    const auto pos = src.Pos();
+
+    return Build<TKqlReadTableIndexRanges>(ctx, pos)
+        .Table(src.Table())
+        .Ranges(src.Ranges())
+        .Columns(src.Columns())
+        .Settings(src.Settings())
+        .ExplainPrompt(src.ExplainPrompt())
+        .Index(Build<TCoAtom>(ctx, pos).Value(indexName).Done())
+        .Done();
+}
+
 TCoLambda MakeFilterForRange(TKqlKeyRange range, TExprContext& ctx, TPositionHandle pos, TVector<TString> keyColumns) {
     size_t prefix = 0;
     auto arg = Build<TCoArgument>(ctx, pos).Name("_row_arg").Done();

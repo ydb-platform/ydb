@@ -271,7 +271,7 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Политика RandomChoice (случайный выбор endpoint среди нод discovery) используется **по умолчанию** — дополнительная настройка не требуется.
 
 - PHP
 

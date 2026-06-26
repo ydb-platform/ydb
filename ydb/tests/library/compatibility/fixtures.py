@@ -206,7 +206,11 @@ class RestartToAnotherVersionFixture(ClusterOperationsWaitMixin):
         self.stop_driver()
         self.cluster.update_configurator_and_restart(self.config)
         self.driver = self.create_driver()
-        self._wait_for_cluster_operations()
+
+        # TODO: remove sleep
+        # without sleep there are errors like
+        # ydb.issues.Unavailable: message: "Failed to resolve tablet: 72075186224037909 after several retries." severity: 1 (server_code: 400050)
+        time.sleep(60)
 
 
 all_binary_combinations_mixed = [

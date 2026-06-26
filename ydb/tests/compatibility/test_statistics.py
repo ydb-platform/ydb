@@ -265,12 +265,15 @@ class TestBaseStatisticsRollingUpdate(RollingUpgradeAndDowngradeFixture):
 class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
     @pytest.fixture(autouse=True, scope="function")
     def setup(self):
-        if min(self.versions) < (25, 4):
-            pytest.skip("Only available since 26-1")
+        if min(self.versions) < (26, 3):
+            pytest.skip("Only available since 26-3")
 
         yield from self.setup_cluster(
             tenant_db="mydb",
-            extra_feature_flags=["enable_column_statistics"],
+            extra_feature_flags=[
+                "enable_column_statistics",
+                "enable_analyze_long_running_operation",
+            ],
             additional_log_configs={
                 'STATISTICS': LogLevels.DEBUG,
             },
@@ -383,10 +386,19 @@ class TestAnalyzeRollingUpdate(RollingUpgradeAndDowngradeFixture):
                 "ANALYZE operation must be present in background operations list after ANALYZE command"
             logger.info("✓ ANALYZE operation successfully found in background operations list")
 
+        supports_analyze_lro = max(self.versions) >= (26, 3)
+        new_binary_path = self.all_binary_paths[1]
+
+        def all_nodes_on_binary(binary_path):
+            all_units = list(self.cluster.nodes.values()) + list(self.cluster.slots.values())
+            return all(unit.binary_path == binary_path for unit in all_units)
+
         for _ in self.roll():
             with ydb.QuerySessionPool(self.driver) as session_pool:
                 for table in self.tables:
                     try_analyze(session_pool, table)
+                    if not supports_analyze_lro or not all_nodes_on_binary(new_binary_path):
+                        continue
                     # Check for background operations after each ANALYZE
                     max_retries = 5
                     retry_delay = 2  # seconds

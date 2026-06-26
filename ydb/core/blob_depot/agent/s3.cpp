@@ -257,14 +257,6 @@ namespace NKikimr::NBlobDepot {
                 Finish("event undelivered", false);
             }
 
-<<<<<<< HEAD
-            void Finish(std::optional<TString>&& error, bool slowDown) {
-                if (!LifetimeToken.expired()) {
-                    InvokeOtherActor(Query->Agent, &TBlobDepotAgent::Invoke, [&] {
-                        auto& Agent = Query->Agent;
-                        const auto& QueryId = Query->QueryId;
-                        BDEV_QUERY(BDEV37, "written_to_S3", (BlobId, Id), (Locator, Locator));
-=======
             void Finish(std::optional<TString>&& error, bool slowDown, int httpCode = 0) {
                 InvokeOtherActor(Query->Agent, &TBlobDepotAgent::Invoke, [&] {
                     auto& Agent = Query->Agent;
@@ -280,7 +272,6 @@ namespace NKikimr::NBlobDepot {
                             {"Q", QueryId},
                             {"blobId", Id},
                             {"locator", Locator});
->>>>>>> d1534a1ad08 ([KV] added sensor (#43996))
                         Query->OnPutS3ObjectResponse(std::move(error), slowDown);
                     }
                     Y_ABORT_UNLESS(Agent.S3PutsInFlight);

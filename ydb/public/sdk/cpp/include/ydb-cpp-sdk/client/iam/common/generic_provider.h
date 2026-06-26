@@ -189,9 +189,13 @@ private:
             try {
                 RequestFiller_(req);
             } catch (...) {
+                const auto now = SysClock::now();
                 std::lock_guard guard(Lock_);
-                LastRequestError_ = TStringBuilder() << "Request failed: " << CurrentExceptionMessage();
+                LastRequestError_ = TStringBuilder()
+                    << "Last request error was at " << FormatSysTimeUtcIsoMicros(now)
+                    << ". Failed to prepare IAM request: " << CurrentExceptionMessage();
                 ResetContextImpl();
+                RescheduleOnFailure();
                 return;
             }
 

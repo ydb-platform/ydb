@@ -11,10 +11,14 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/tenant_runtime.h>
 #include <ydb/core/tx/schemeshard/schemeshard.h>
+#include <ydb/core/tx/schemeshard/schemeshard_user_attr_limits.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <util/generic/string.h>
 #include <util/random/random.h>
+
+#include <algorithm>
 
 namespace NKikimr {
 
@@ -2296,7 +2300,7 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                     )"
                 )
         );
-        
+
         CheckCreateTenant(runtime, Ydb::StatusIds::BAD_REQUEST,
             TCreateTenantRequest(TENANT1_1_NAME, TCreateTenantRequest::EType::Common)
                 .WithPools({{"hdd", 1}})
@@ -2331,6 +2335,78 @@ Y_UNIT_TEST_SUITE(TConsoleTests) {
                     )"
                 )
         );
+    }
+
+    Y_UNIT_TEST(TestDatabaseAttributesValidation) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, {{"hdd", 1}});
+
+        // Empty key
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
+            "", "val1");
+        CheckGetTenantAttributes(runtime, TENANT1_1_NAME, {});
+
+        // Long key
+        std::string longKey(NSchemeShard::TUserAttributesLimits::MaxNameLen + 1, 'k');;
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
+            longKey.c_str(), "val1");
+        CheckGetTenantAttributes(runtime, TENANT1_1_NAME, {});
+
+        // Long value
+        std::string longValue(NSchemeShard::TUserAttributesLimits::MaxValueLen + 1, 'v');;
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::BAD_REQUEST,
+            "k", longValue.c_str());
+        CheckGetTenantAttributes(runtime, TENANT1_1_NAME, {});
+    }
+
+    Y_UNIT_TEST(TestDatabaseAttributesManipulation) {
+        TTenantTestRuntime runtime(DefaultConsoleTestConfig());
+        CheckCreateTenant(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, {{"hdd", 1}});
+
+        // No attributes at start
+        CheckGetTenantAttributes(runtime, TENANT1_1_NAME, {});
+
+        // Add first attribute
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, "attr1", "val1");
+        CheckGetTenantAttributes(runtime, TENANT1_1_NAME, {{"attr1", "val1"}});
+
+        // Add second
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, "attr2", "val2");
+        CheckGetTenantAttributes(runtime, TENANT1_1_NAME, {{"attr1", "val1"}, {"attr2", "val2"}});
+
+        // Add third
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, "attr3", "val3");
+        CheckGetTenantAttributes(runtime, TENANT1_1_NAME, {{"attr1", "val1"}, {"attr2", "val2"}, {"attr3", "val3"}});
+
+        // Update one
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, "attr2", "val22");
+        CheckGetTenantAttributes(runtime, TENANT1_1_NAME, {{"attr1", "val1"}, {"attr2", "val22"}, {"attr3", "val3"}});
+
+        // Clear one
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, "attr1", "");
+        CheckGetTenantAttributes(runtime, TENANT1_1_NAME, {{"attr2", "val22"}, {"attr3", "val3"}});
+
+        // Add a new one
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, "attr4", "val4");
+        CheckGetTenantAttributes(runtime, TENANT1_1_NAME,
+            {{"attr2", "val22"}, {"attr3", "val3"}, {"attr4", "val4"}});
+
+        // Remove all
+        CheckSetTenantAttributes(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
+            {{"attr2", ""}, {"attr3", ""}, {"attr4", ""}});
+        CheckGetTenantAttributes(runtime, TENANT1_1_NAME, {});
+
+        // Add new one
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, "attr1", "val1");
+        CheckGetTenantAttributes(runtime, TENANT1_1_NAME, {{"attr1", "val1"}});
+
+        // Update one
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, "attr1", "val11");
+        CheckGetTenantAttributes(runtime, TENANT1_1_NAME, {{"attr1", "val11"}});
+
+        // Remove one
+        CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS, "attr1", "");
+        CheckGetTenantAttributes(runtime, TENANT1_1_NAME, {});
     }
 }
 

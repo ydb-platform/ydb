@@ -23,12 +23,6 @@
 
 namespace NKikimr::NConsole {
 
-const TString& TConfigsManager::GetPermissiveDatabaseConfigSelectorsTenantAttributeName()
-{
-    static const TString name = "allow_database_config_selectors";
-    return name;
-}
-
 void TConfigsManager::ClearState()
 {
     ConfigIndex.Clear();
@@ -323,7 +317,7 @@ bool TConfigsManager::IsDatabaseConfigSelectorsAllowed(const TString& database) 
     }
 
     for (const auto& attr : tenant->Attributes.GetUserAttributes()) {
-        if (attr.GetKey() == GetPermissiveDatabaseConfigSelectorsTenantAttributeName()) {
+        if (attr.GetKey() == TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS) {
             bool value = false;
             if (TryFromString<bool>(attr.GetValue(), value) && value) {
                 return true;

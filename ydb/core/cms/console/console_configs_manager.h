@@ -83,14 +83,6 @@ public:
     };
 
 public:
-
-    // Name of the tenant UserAttribute that enables the usage of database YAML config selectors.
-    // Values: (according to TryFromString<bool>() function logic - IsTrue()/IsFalse())
-    //  - "true", "yes", "on", "1"            - enabled
-    //  - "false", "no", "off", "0", (absent) - disabled
-    static const TString& GetPermissiveDatabaseConfigSelectorsTenantAttributeName();
-
-public:
     void ClearState();
     void SetConfig(const NKikimrConsole::TConfigsConfig &config);
     // Check if specified config may be applied to configs manager.

@@ -10,11 +10,18 @@
 #include <ydb/public/api/protos/ydb_cms.pb.h>
 #include <ydb/public/api/protos/draft/ydb_dynamic_config.pb.h>
 
+#include <util/generic/strbuf.h>
 #include <util/generic/hash.h>
 
 #include <memory>
 
 namespace NKikimr::NConsole {
+
+// Tenant UserAttribute that enables the usage of database YAML config selectors.
+// Values: (according to TryFromString<bool>() function logic - IsTrue()/IsFalse())
+//  - "true", "yes", "on", "1"            - enabled
+//  - "false", "no", "off", "0", (absent) - disabled
+constexpr TStringBuf TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS = "allow_database_config_selectors";
 
 namespace TEvConsole {
     enum EEv {

@@ -1,4 +1,5 @@
 #include "ut_helpers.h"
+#include "console.h"
 #include "console_configs_manager.h"
 #include "console_configs_subscriber.h"
 
@@ -5292,7 +5293,7 @@ config:
     database_yaml_config_allowed: true
 )";
 
-    const TString PermissiveTenantUserAttribute      = NConsole::TConfigsManager::GetPermissiveDatabaseConfigSelectorsTenantAttributeName();
+    const TString PermissiveTenantUserAttribute      = TString(NConsole::TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS);
     const TString NotAllowedErrorSubstring           = "\\'selector_config\\' and \\'allowed_labels\\' are not allowed";
     const TString ForbiddenTenantLabelErrorSubstring = "\\'tenant\\' label is forbidden";
 

@@ -533,16 +533,17 @@ inline void CheckRemoveTenant(TTenantTestRuntime &runtime,
     CheckRemoveTenant(runtime, path, "", code);
 }
 
-inline void CheckSetTenantAttribute(TTenantTestRuntime &runtime,
+inline void CheckSetTenantAttributes(TTenantTestRuntime &runtime,
                                     const TString &path,
                                     const TString &token,
                                     Ydb::StatusIds::StatusCode code,
-                                    const TString &attrName,
-                                    const TString &attrValue)
+                                    const TMap<TString, TString> &attrs)
 {
     auto *event = new NConsole::TEvConsole::TEvAlterTenantRequest;
     event->Record.MutableRequest()->set_path(path);
-    (*event->Record.MutableRequest()->mutable_alter_attributes())[attrName] = attrValue;
+    for (const auto& attr : attrs) {
+        (*event->Record.MutableRequest()->mutable_alter_attributes())[attr.first] = attr.second;
+    }
     if (token)
         event->Record.SetUserToken(token);
 
@@ -572,6 +573,24 @@ inline void CheckSetTenantAttribute(TTenantTestRuntime &runtime,
     }
 }
 
+inline void CheckSetTenantAttributes(TTenantTestRuntime &runtime,
+                                    const TString &path,
+                                    Ydb::StatusIds::StatusCode code,
+                                    const TMap<TString, TString> &attrs)
+{
+    CheckSetTenantAttributes(runtime, path, "", code, attrs);
+}
+
+inline void CheckSetTenantAttribute(TTenantTestRuntime &runtime,
+                                    const TString &path,
+                                    const TString &token,
+                                    Ydb::StatusIds::StatusCode code,
+                                    const TString &attrName,
+                                    const TString &attrValue)
+{
+    CheckSetTenantAttributes(runtime, path, token, code, {{attrName, attrValue}});
+}
+
 inline void CheckSetTenantAttribute(TTenantTestRuntime &runtime,
                                     const TString &path,
                                     Ydb::StatusIds::StatusCode code,
@@ -579,6 +598,61 @@ inline void CheckSetTenantAttribute(TTenantTestRuntime &runtime,
                                     const TString &attrValue)
 {
     CheckSetTenantAttribute(runtime, path, "", code, attrName, attrValue);
+}
+
+inline Ydb::Cms::GetDatabaseStatusResult GetTenantStatusResult(TTenantTestRuntime &runtime,
+                                                               const TString &path)
+{
+    auto *req = new NConsole::TEvConsole::TEvGetTenantStatusRequest;
+    req->Record.MutableRequest()->set_path(path);
+    runtime.SendToConsole(req);
+
+    TAutoPtr<IEventHandle> handle;
+    auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetTenantStatusResponse>(handle);
+    auto &operation = reply->Record.GetResponse().operation();
+    UNIT_ASSERT_VALUES_EQUAL(operation.status(), Ydb::StatusIds::SUCCESS);
+
+    Ydb::Cms::GetDatabaseStatusResult result;
+    UNIT_ASSERT_C(operation.result().UnpackTo(&result),
+        "Failed to unpack status result for tenant " << path);
+    return result;
+}
+
+inline void CheckGetTenantAttributes(TTenantTestRuntime &runtime,
+                                      const TString &path,
+                                      const TMap<TString, TString> &expectedAttrs)
+{
+    auto result = GetTenantStatusResult(runtime, path);
+    UNIT_ASSERT_VALUES_EQUAL_C(result.attributes_size(), expectedAttrs.size(),
+        "Attribute count mismatch for tenant " << path);
+    for (const auto &[key, expectedValue] : expectedAttrs) {
+        auto it = result.attributes().find(key);
+        UNIT_ASSERT_C(it != result.attributes().end(),
+            "Attribute '" << key << "' is missing for tenant " << path);
+        UNIT_ASSERT_VALUES_EQUAL_C(it->second, expectedValue,
+            "Attribute '" << key << "' value mismatch for tenant " << path);
+    }
+}
+
+inline void CheckGetTenantAttribute(TTenantTestRuntime &runtime,
+                                    const TString &path,
+                                    const TString &attrName,
+                                    const TString &expectedValue)
+{
+    auto result = GetTenantStatusResult(runtime, path);
+    auto it = result.attributes().find(attrName);
+    UNIT_ASSERT_C(it != result.attributes().end(),
+        "Attribute '" << attrName << "' is not set for tenant " << path);
+    UNIT_ASSERT_VALUES_EQUAL(it->second, expectedValue);
+}
+
+inline void CheckTenantAttributeAbsent(TTenantTestRuntime &runtime,
+                                       const TString &path,
+                                       const TString &attrName)
+{
+    auto result = GetTenantStatusResult(runtime, path);
+    UNIT_ASSERT_C(result.attributes().find(attrName) == result.attributes().end(),
+        "Attribute '" << attrName << "' is unexpectedly set for tenant " << path);
 }
 
 inline void WaitTenantStatus(TTenantTestRuntime &runtime,
@@ -590,8 +664,8 @@ inline void WaitTenantStatus(TTenantTestRuntime &runtime,
         req->Record.MutableRequest()->set_path(path);
         runtime.SendToConsole(req);
 
-        auto ev = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetTenantStatusResponse>(runtime.Sender);
-        auto &operation = ev->Get()->Record.GetResponse().operation();
+        auto reply = runtime.GrabEdgeEventRethrow<NConsole::TEvConsole::TEvGetTenantStatusResponse>(runtime.Sender);
+        auto &operation = reply->Get()->Record.GetResponse().operation();
         UNIT_ASSERT_C(operation.status() == Ydb::StatusIds::SUCCESS,
                 "Unexpected status " << operation.status() << " for tenant " << path);
 

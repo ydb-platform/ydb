@@ -2097,28 +2097,54 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TActorId sender = runtime->AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        // Authorization successful.
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           "192.168.0.101",
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
-                                           TVector<TEvTicketParser::TEvAuthorizeTicket::TPermission>{TEvTicketParser::TEvAuthorizeTicket::Optional("something.read"), TEvTicketParser::TEvAuthorizeTicket::Optional("something.write")})), 0);
-        TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT(!result->HasError());
-        UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
-        UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
+        {
+            // Authorization successful.
+            const TVector<TEvTicketParser::TEvAuthorizeTicket::TPermission> permissions{
+                TEvTicketParser::TEvAuthorizeTicket::Optional("something.read"),
+                TEvTicketParser::TEvAuthorizeTicket::Optional("something.write"),
+            };
+            const TVector<std::pair<TString, TString>> attributes{
+                {"folder_id", "aaaa1234"},
+                {"database_id", "bbbb4554"},
+            };
+            runtime->Send(new IEventHandle(
+                MakeTicketParserID(), sender,
+                new TEvTicketParser::TEvAuthorizeTicket({
+                    .Ticket = userToken,
+                    .PeerName = "192.168.0.101",
+                    .Entries = {{permissions, attributes}},
+                })
+            ));
+            auto* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+            UNIT_ASSERT(!result->HasError());
+            UNIT_ASSERT(result->Token->IsExist("something.read-bbbb4554@as"));
+            UNIT_ASSERT(!result->Token->IsExist("something.write-bbbb4554@as"));
+        }
 
-        // Authorization failure with not enough permissions.
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
-                                           userToken,
-                                           "192.168.0.101",
-                                           {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
-                                           TVector<TEvTicketParser::TEvAuthorizeTicket::TPermission>{TEvTicketParser::TEvAuthorizeTicket::Optional("something.read"), TEvTicketParser::TEvAuthorizeTicket::Required("something.write")})), 0);
-        result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
-        UNIT_ASSERT(result->HasError());
-        UNIT_ASSERT(!result->Error.Retryable);
-        UNIT_ASSERT_STRING_CONTAINS(result->Error.Message, "something.write for ");
-        UNIT_ASSERT_STRING_CONTAINS(result->Error.Message, "aaaa1234");
+        {
+            // Authorization failure with not enough permissions.
+            const TVector<TEvTicketParser::TEvAuthorizeTicket::TPermission> permissions{
+                TEvTicketParser::TEvAuthorizeTicket::Optional("something.read"),
+                TEvTicketParser::TEvAuthorizeTicket::Required("something.write"),
+            };
+            const TVector<std::pair<TString, TString>> attributes{
+                {"folder_id", "aaaa1234"},
+                {"database_id", "bbbb4554"},
+            };
+            runtime->Send(new IEventHandle(
+                MakeTicketParserID(), sender,
+                new TEvTicketParser::TEvAuthorizeTicket({
+                    .Ticket = userToken,
+                    .PeerName = "192.168.0.101",
+                    .Entries = {{permissions, attributes}},
+                })
+            ));
+            auto* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
+            UNIT_ASSERT(result->HasError());
+            UNIT_ASSERT(!result->Error.Retryable);
+            UNIT_ASSERT_STRING_CONTAINS(result->Error.Message, "something.write for ");
+            UNIT_ASSERT_STRING_CONTAINS(result->Error.Message, "aaaa1234");
+        }
     }
 
     Y_UNIT_TEST(AuthorizationWithRequiredPermissions) {

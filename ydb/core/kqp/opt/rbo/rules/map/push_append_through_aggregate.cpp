@@ -1,5 +1,5 @@
 #include <ydb/core/kqp/opt/rbo/rules/kqp_rules_include.h>
-#include <ydb/core/kqp/opt/rbo/rules/map/projection_pruning_helpers.h>
+#include <ydb/core/kqp/opt/rbo/rules/map/map_output_utils.h>
 
 namespace NKikimr {
 namespace NKqp {

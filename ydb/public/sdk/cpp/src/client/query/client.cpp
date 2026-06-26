@@ -375,9 +375,6 @@ public:
     }
 
     void DeleteSession(TKqpSessionCommon* sessionImpl) override {
-        //TODO: Remove this copy-paste
-
-        // Closing not owned by session pool session should not fire getting new session
         if (sessionImpl->IsOwnedBySessionPool()) {
             if (SessionPool_.CheckAndFeedWaiterNewSession(sessionImpl->NeedUpdateActiveCounter())) {
                 // We requested new session for waiter which already incremented
@@ -407,6 +404,10 @@ public:
             return false;
         }
         return true;
+    }
+
+    void PessimizeNode(std::uint64_t nodeId) override {
+        DbDriverState_->EndpointPool.BanNodeId(nodeId);
     }
 
     void DoAttachSession(Ydb::Query::CreateSessionResponse* resp

@@ -112,6 +112,40 @@ private:
     NThreading::TPromise<TResult> Promise;
 };
 
+class TPlainIndexedPathTableCreator : public NTableCreator::TMultiTableCreator {
+    using TBase = NTableCreator::TMultiTableCreator;
+
+public:
+    explicit TPlainIndexedPathTableCreator(NThreading::TPromise<void> promise)
+        : TBase({ GetCreator() })
+        , Promise(promise)
+    {}
+
+private:
+    static IActor* GetCreator() {
+        auto idColumn = Col("id", NScheme::NTypeIds::Uint64);
+        idColumn.SetNotNull(true);
+
+        auto extIdColumn = Col("ext_id", NScheme::NTypeIds::Text);
+        extIdColumn.SetNotNull(true);
+
+        return CreateTableCreator(
+            { "path", "to", "indexed", "table" },
+            { idColumn, extIdColumn },
+            { "id" },
+            NKikimrServices::STATISTICS
+        );
+    }
+
+    void OnTablesCreated(bool success, NYql::TIssues issues) override {
+        UNIT_ASSERT_C(success, issues.ToString());
+        Promise.SetValue();
+    }
+
+private:
+    NThreading::TPromise<void> Promise;
+};
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TableCreator) {
@@ -248,6 +282,37 @@ Y_UNIT_TEST_SUITE(TableCreator) {
             runtime->Register(new TIndexedTableCreator(promise), 0, 0, TMailboxType::Simple, 0, edgeActor);
             const auto result = promise.GetFuture().GetValueSync();
             UNIT_ASSERT_C(result.Success, result.Issues.ToString());
+        }
+
+        {
+            auto promise = NThreading::NewPromise<TIndexedTableCreator::TResult>();
+            runtime->Register(new TIndexedTableCreator(promise), 0, 0, TMailboxType::Simple, 0, edgeActor);
+            const auto result = promise.GetFuture().GetValueSync();
+            UNIT_ASSERT(!result.Success);
+            UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToString(),
+                "Table already exists; index and sequence upgrade is not supported");
+        }
+    }
+
+    Y_UNIT_TEST(RejectIndexedTableOnPlainExistingTable) {
+        TPortManager tp;
+        ui16 mbusPort = tp.GetPort();
+        ui16 grpcPort = tp.GetPort();
+        auto settings = Tests::TServerSettings(mbusPort);
+        settings.SetNodeCount(1);
+
+        Tests::TServer server(settings);
+        Tests::TClient client(settings);
+
+        server.EnableGRpc(grpcPort);
+        client.InitRootScheme();
+        auto runtime = server.GetRuntime();
+        TActorId edgeActor = runtime->AllocateEdgeActor(0);
+
+        {
+            auto promise = NThreading::NewPromise();
+            runtime->Register(new TPlainIndexedPathTableCreator(promise), 0, 0, TMailboxType::Simple, 0, edgeActor);
+            promise.GetFuture().GetValueSync();
         }
 
         {

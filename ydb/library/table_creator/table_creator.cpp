@@ -21,6 +21,8 @@
 #include <util/generic/utility.h>
 #include <util/random/random.h>
 
+#include <algorithm>
+
 namespace NKikimr {
 
 namespace {
@@ -162,7 +164,12 @@ public:
         Send(MakeTxProxyID(), std::move(request));
     }
 
-    void RunTableModification(const THashMap<ui32, TSysTables::TTableColumnInfo>& existingColumns, TIntrusivePtr<TSecurityObject> securityObject) {
+    void RunTableModification(
+        const THashMap<ui32, TSysTables::TTableColumnInfo>& existingColumns,
+        TIntrusivePtr<TSecurityObject> securityObject,
+        const TVector<NKikimrSchemeOp::TIndexDescription>& existingIndexes,
+        const TVector<NKikimrSchemeOp::TSequenceDescription>& existingSequences)
+    {
         if (!TableCreateAttempted && (!TableIndexes.empty() || !TableSequences.empty())) {
             Fail("Table already exists; index and sequence upgrade is not supported");
             return;
@@ -178,6 +185,10 @@ public:
         }
 
         if (Columns.empty() && !aclChanged) {
+            if (!HasRequestedIndexedSchema(existingIndexes, existingSequences)) {
+                Fail("Existing table schema does not match requested indexes or sequences");
+                return;
+            }
             Success();
             return;
         }
@@ -240,7 +251,7 @@ public:
             case EStatus::Ok:
                 LOG_DEBUG_S(*TlsActivationContext, LogService,
                     LogPrefix << "Table already exists, number of columns: " << result.Columns.size() << ", has SecurityObject: " << (result.SecurityObject ? "true" : "false"));
-                RunTableModification(result.Columns, result.SecurityObject);
+                RunTableModification(result.Columns, result.SecurityObject, result.Indexes, result.Sequences);
                 break;
         }
     }
@@ -254,7 +265,11 @@ public:
                 [[fallthrough]];
             case NTxProxy::TResultStatus::ExecAlready:
                 if (ssStatus == NKikimrScheme::EStatus::StatusSuccess || ssStatus == NKikimrScheme::EStatus::StatusAlreadyExists) {
-                    if (PartialModification) {
+                    if (ssStatus == NKikimrScheme::EStatus::StatusAlreadyExists
+                        && (!TableIndexes.empty() || !TableSequences.empty()))
+                    {
+                        FallBack();
+                    } else if (PartialModification) {
                         // Apply next modification
                         FallBack();
                     } else {
@@ -397,6 +412,38 @@ public:
 
     const TString& TableName() const {
         return PathComponents.back();
+    }
+
+    bool HasRequestedIndexedSchema(
+        const TVector<NKikimrSchemeOp::TIndexDescription>& existingIndexes,
+        const TVector<NKikimrSchemeOp::TSequenceDescription>& existingSequences) const
+    {
+        if (TableIndexes.empty() && TableSequences.empty()) {
+            return true;
+        }
+
+        for (const auto& requiredIndex : TableIndexes) {
+            const auto it = std::find_if(existingIndexes.begin(), existingIndexes.end(),
+                [&](const NKikimrSchemeOp::TIndexDescription& index) {
+                    return index.GetName() == requiredIndex.GetName()
+                        && index.GetType() == requiredIndex.GetType();
+                });
+            if (it == existingIndexes.end()) {
+                return false;
+            }
+        }
+
+        for (const auto& requiredSequence : TableSequences) {
+            const auto it = std::find_if(existingSequences.begin(), existingSequences.end(),
+                [&](const NKikimrSchemeOp::TSequenceDescription& sequence) {
+                    return sequence.GetName() == requiredSequence.GetName();
+                });
+            if (it == existingSequences.end()) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
 private:

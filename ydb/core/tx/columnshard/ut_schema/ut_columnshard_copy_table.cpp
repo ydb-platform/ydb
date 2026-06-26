@@ -77,6 +77,19 @@ void AssertReadOnlySnapshotState(const TColumnShard& shard, const NOlap::TSnapsh
     UNIT_ASSERT_VALUES_EQUAL(present, expectedPresent);
 }
 
+bool IsInPathsToDrop(const TColumnShard& shard, const TInternalPathId& pathId) {
+    for (const auto& [_, pathIds] : shard.GetTablesManager().GetPathsToDrop()) {
+        if (pathIds.contains(pathId)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+void AssertPathsToDropState(const TColumnShard& shard, const TInternalPathId& pathId, const bool expectedPresent) {
+    UNIT_ASSERT_VALUES_EQUAL(IsInPathsToDrop(shard, pathId), expectedPresent);
+}
+
 void AssertCopyPathState(const TColumnShard& shard, const ui64 copyPathId, const std::optional<NOlap::TSnapshot>& expectedCopySnapshot) {
     const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(copyPathId);
     const auto internalPathId = shard.GetTablesManager().ResolveInternalPathId(schemeShardLocalPathId, false);
@@ -588,8 +601,10 @@ Y_UNIT_TEST_SUITE(CopyTable) {
         AssertCopyPathState(*shard, copyPathId2, copySnapshot2);
         AssertReadOnlySnapshotState(*shard, copySnapshot1, false);
         AssertReadOnlySnapshotState(*shard, copySnapshot2, true);
+        UNIT_ASSERT(!shard->GetTablesManager().GetCopyVersionOptional(TSchemeShardLocalPathId::FromRawValue(copyPathId1)));
         UNIT_ASSERT(!CheckTableInfoV1RowExists(runtime, TTestTxConfig::TxTablet0, internalPathId->GetRawValue(), copyPathId1));
         UNIT_ASSERT(CheckTableInfoV1RowExists(runtime, TTestTxConfig::TxTablet0, internalPathId->GetRawValue(), copyPathId2));
+        AssertPathsToDropState(*shard, *internalPathId, false);
 
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, NOlap::TSnapshot(planStep, txId));
@@ -605,6 +620,94 @@ Y_UNIT_TEST_SUITE(CopyTable) {
             UNIT_ASSERT(rb);
             UNIT_ASSERT_EQUAL(rb->num_rows(), 200);
         }
+    }
+
+    // Drop source first while read-only copies still exist, then drop copies one by one.
+    // The internal path must enter PathsToDrop only after the last copy is removed, then cleanup erases it.
+    Y_UNIT_TEST(DropSourceThenReadOnlyCopiesAddedToPathsToDropAndCleanedUp) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TCopyTableDropTestController>();
+        auto& csController = *csControllerGuard.operator->();
+        csControllerGuard->DisableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
+        csControllerGuard->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
+
+        ui64 txId = 10;
+        int writeId = 10;
+
+        {
+            std::vector<ui64> writeIds;
+            const bool ok =
+                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(ok);
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        const ui64 copyPathId1 = 2;
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, copyPathId1, 1), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        {
+            std::vector<ui64> writeIds;
+            const bool ok = WriteData(
+                runtime, sender, writeId++, srcPathId, MakeTestBlob({ 100, 200 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(ok);
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        const ui64 copyPathId2 = 3;
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, copyPathId2, 1), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        const auto* shard = WaitForShard(csController, runtime);
+        const auto internalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(srcPathId), false);
+        UNIT_ASSERT(internalPathId);
+        AssertPathsToDropState(*shard, *internalPathId, false);
+
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(srcPathId, 2), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        shard = WaitForShard(csController, runtime);
+        UNIT_ASSERT(shard->GetTablesManager().HasTable(*internalPathId));
+        AssertPathsToDropState(*shard, *internalPathId, false);
+
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(copyPathId1, 2), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        shard = WaitForShard(csController, runtime);
+        UNIT_ASSERT(shard->GetTablesManager().HasTable(*internalPathId));
+        AssertPathsToDropState(*shard, *internalPathId, false);
+        UNIT_ASSERT(!shard->GetTablesManager().GetCopyVersionOptional(TSchemeShardLocalPathId::FromRawValue(copyPathId1)));
+
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(copyPathId2, 2), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        shard = WaitForShard(csController, runtime);
+        UNIT_ASSERT(shard->GetTablesManager().HasTable(*internalPathId, /*withDeleted=*/true));
+        AssertPathsToDropState(*shard, *internalPathId, true);
+        UNIT_ASSERT(!shard->GetTablesManager().GetCopyVersionOptional(TSchemeShardLocalPathId::FromRawValue(copyPathId2)));
+
+        csControllerGuard->EnableBackground(NKikimr::NYDBTest::ICSController::EBackground::Cleanup);
+        for (ui32 i = 0; i < 60; ++i) {
+            Wakeup(runtime, sender, TTestTxConfig::TxTablet0);
+            runtime.SimulateSleep(TDuration::Seconds(1));
+            shard = WaitForShard(csController, runtime);
+            if (shard->GetTablesManager().GetPathsToDrop().empty()) {
+                break;
+            }
+        }
+
+        shard = WaitForShard(csController, runtime);
+        UNIT_ASSERT(shard->GetTablesManager().GetPathsToDrop().empty());
+        UNIT_ASSERT(!shard->GetTablesManager().HasTable(*internalPathId));
+        UNIT_ASSERT(!shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(srcPathId), false));
     }
 
     // Verifies that CopyTable and DropTable use independent per-path seq_no tracking.

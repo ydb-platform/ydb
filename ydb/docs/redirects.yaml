@@ -471,10 +471,8 @@ common:
   - from: /olap/datasets/(.*)$
     to: /analyst/datasets/$1
 
-<<<<<<< HEAD
-=======
   # Redirects for query_execution
-  
+
   - from: /concepts/query_execution.md
     to: /concepts/query_execution/index.md
   - from: /concepts/mvcc.md
@@ -495,7 +493,6 @@ common:
     to: /concepts/query_execution/optimizer.md
   - from: /concepts/federated_query/(.*)$
     to: /concepts/query_execution/federated_query/$1
->>>>>>> 48da0d6260a ([YDBDOCS-2232] перенести статью https://github.com/ydb-platform/ydb/pull/41475 в "Выполнение запросов" (#43439))
 
 ru:
   - from: /postgresql/index.md

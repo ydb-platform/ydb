@@ -1,3 +1,5 @@
 items:
 - name: Initial deployment
   href: initial-deployment.md
+- name: AI assistant
+  href: ai-assistant.md

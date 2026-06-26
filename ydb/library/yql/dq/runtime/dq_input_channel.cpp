@@ -12,8 +12,8 @@ public:
     TDqInputChannelStats PushStats;
     TDqInputStats PopStats;
 
-    TDqInputChannelImpl(ui64 channelId, ui32 srcStageId, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, TCollectStatsLevel level)
-        : TBaseImpl(inputType, maxBufferBytes)
+    TDqInputChannelImpl(ui64 channelId, ui32 srcStageId, NKikimr::NMiniKQL::TType* inputType, ui64 maxBufferBytes, TCollectStatsLevel level, IMemoryQuotaManager::TPtr quotaManager)
+        : TBaseImpl(inputType, maxBufferBytes, quotaManager)
     {
         PopStats.Level = level;
         PushStats.Level = level;
@@ -94,7 +94,7 @@ private:
 
 public:
     TDqInputChannel(const TDqChannelSettings& settings, const NKikimr::NMiniKQL::TTypeEnvironment& typeEnv)
-        : Impl(settings.ChannelId, settings.SrcStageId, settings.RowType, settings.MaxStoredBytes, settings.Level)
+        : Impl(settings.ChannelId, settings.SrcStageId, settings.RowType, settings.MaxStoredBytes, settings.Level, settings.ChannelQuotaManager)
         , DataSerializer(typeEnv, *settings.HolderFactory, settings.TransportVersion, settings.PackerVersion) {
     }
 

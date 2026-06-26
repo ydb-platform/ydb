@@ -44,6 +44,7 @@ public:
         , ChunkSizeLimit(settings.ChunkSizeLimit)
         , ArrayBufferMinFillPercentage(settings.ArrayBufferMinFillPercentage)
         , LogFunc(logFunc)
+        , QuotaManager(settings.ChannelQuotaManager)
     {
         PopStats.Level = settings.Level;
         PushStats.Level = settings.Level;
@@ -52,6 +53,12 @@ public:
 
         if (Packer.IsBlock() && ArrayBufferMinFillPercentage && *ArrayBufferMinFillPercentage > 0) {
             BlockSplitter = NArrow::CreateBlockSplitter(OutputType, (ChunkSizeLimit - MaxChunkBytes) * *ArrayBufferMinFillPercentage / 100);
+        }
+    }
+
+    ~TDqOutputChannel() override {
+        if (QuotedSize && QuotaManager) {
+            QuotaManager->FreeQuota(QuotedSize);
         }
     }
 
@@ -72,10 +79,21 @@ public:
     }
 
     EDqFillLevel CalcFillLevel() const {
+        size_t storedSize = PackedDataSize + Packer.PackedSizeEstimate();
+        if (QuotaManager) {
+            if (QuotedSize < storedSize) {
+                if (!QuotaManager->AllocateQuota(storedSize - QuotedSize)) {
+                    throw NKikimr::TMemoryLimitExceededException();
+                }
+            } else if (QuotedSize > storedSize) {
+                QuotaManager->FreeQuota(QuotedSize - storedSize);
+            }
+            QuotedSize = storedSize;
+        }
         if (Storage) {
             return FirstStoredId < NextStoredId ? (Storage->IsFull() ? HardLimit : SoftLimit) : NoLimit;
         } else {
-            return PackedDataSize + Packer.PackedSizeEstimate() >= MaxStoredBytes ? HardLimit : NoLimit;
+            return storedSize >= MaxStoredBytes ? HardLimit : NoLimit;
         }
     }
 
@@ -493,6 +511,8 @@ private:
     TMaybe<NDqProto::TCheckpoint> Checkpoint;
     std::shared_ptr<TDqFillAggregator> Aggregator;
     EDqFillLevel FillLevel = NoLimit;
+    IMemoryQuotaManager::TPtr QuotaManager;
+    mutable size_t QuotedSize = 0;
 };
 
 } // anonymous namespace

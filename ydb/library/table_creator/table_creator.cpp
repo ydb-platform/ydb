@@ -428,10 +428,9 @@ public:
         for (const auto& requiredIndex : TableIndexes) {
             const auto it = std::find_if(existingIndexes.begin(), existingIndexes.end(),
                 [&](const NKikimrSchemeOp::TIndexDescription& index) {
-                    return index.GetName() == requiredIndex.GetName()
-                        && index.GetType() == requiredIndex.GetType();
+                    return index.GetName() == requiredIndex.GetName();
                 });
-            if (it == existingIndexes.end()) {
+            if (it == existingIndexes.end() || !IndexDefinitionsMatch(requiredIndex, *it)) {
                 return false;
             }
         }
@@ -441,7 +440,7 @@ public:
                 [&](const NKikimrSchemeOp::TSequenceDescription& sequence) {
                     return sequence.GetName() == requiredSequence.GetName();
                 });
-            if (it == existingSequences.end()) {
+            if (it == existingSequences.end() || !SequenceDefinitionsMatch(requiredSequence, *it)) {
                 return false;
             }
         }
@@ -450,6 +449,118 @@ public:
     }
 
 private:
+    template <typename TRepeated>
+    static bool RepeatedStringFieldsEqual(const TRepeated& left, const TRepeated& right)
+    {
+        if (left.size() != right.size()) {
+            return false;
+        }
+        for (int i = 0; i < left.size(); ++i) {
+            if (left.Get(i) != right.Get(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    static bool IndexDefinitionsMatch(
+        const NKikimrSchemeOp::TIndexDescription& required,
+        const NKikimrSchemeOp::TIndexDescription& existing)
+    {
+        if (required.GetType() != existing.GetType()) {
+            return false;
+        }
+        if (required.HasState() && required.GetState() != existing.GetState()) {
+            return false;
+        }
+        if (!RepeatedStringFieldsEqual(required.GetKeyColumnNames(), existing.GetKeyColumnNames())) {
+            return false;
+        }
+        if (!RepeatedStringFieldsEqual(required.GetDataColumnNames(), existing.GetDataColumnNames())) {
+            return false;
+        }
+        if (required.GetSpecializedIndexDescriptionCase() != existing.GetSpecializedIndexDescriptionCase()) {
+            if (required.GetSpecializedIndexDescriptionCase()
+                != NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET)
+            {
+                return false;
+            }
+        } else {
+            switch (required.GetSpecializedIndexDescriptionCase()) {
+                case NKikimrSchemeOp::TIndexDescription::kVectorIndexKmeansTreeDescription:
+                    if (required.GetVectorIndexKmeansTreeDescription().SerializeAsString()
+                        != existing.GetVectorIndexKmeansTreeDescription().SerializeAsString())
+                    {
+                        return false;
+                    }
+                    break;
+                case NKikimrSchemeOp::TIndexDescription::kFulltextIndexDescription:
+                    if (required.GetFulltextIndexDescription().SerializeAsString()
+                        != existing.GetFulltextIndexDescription().SerializeAsString())
+                    {
+                        return false;
+                    }
+                    break;
+                case NKikimrSchemeOp::TIndexDescription::kBloomFilterDescription:
+                    if (required.GetBloomFilterDescription().SerializeAsString()
+                        != existing.GetBloomFilterDescription().SerializeAsString())
+                    {
+                        return false;
+                    }
+                    break;
+                case NKikimrSchemeOp::TIndexDescription::kBloomNGrammFilterDescription:
+                    if (required.GetBloomNGrammFilterDescription().SerializeAsString()
+                        != existing.GetBloomNGrammFilterDescription().SerializeAsString())
+                    {
+                        return false;
+                    }
+                    break;
+                default:
+                    break;
+            }
+        }
+
+        if (!required.GetIndexImplTableDescriptions().empty()) {
+            if (required.GetIndexImplTableDescriptions().size()
+                != existing.GetIndexImplTableDescriptions().size())
+            {
+                return false;
+            }
+            for (int i = 0; i < required.GetIndexImplTableDescriptions().size(); ++i) {
+                if (required.GetIndexImplTableDescriptions(i).SerializeAsString()
+                    != existing.GetIndexImplTableDescriptions(i).SerializeAsString())
+                {
+                    return false;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    static bool SequenceDefinitionsMatch(
+        const NKikimrSchemeOp::TSequenceDescription& required,
+        const NKikimrSchemeOp::TSequenceDescription& existing)
+    {
+#define REQUIRE_MATCHING_SEQUENCE_FIELD(field) \
+        if (required.Has##field() && required.Get##field() != existing.Get##field()) { \
+            return false; \
+        }
+
+        REQUIRE_MATCHING_SEQUENCE_FIELD(MinValue);
+        REQUIRE_MATCHING_SEQUENCE_FIELD(MaxValue);
+        REQUIRE_MATCHING_SEQUENCE_FIELD(StartValue);
+        REQUIRE_MATCHING_SEQUENCE_FIELD(Cache);
+        REQUIRE_MATCHING_SEQUENCE_FIELD(Increment);
+        REQUIRE_MATCHING_SEQUENCE_FIELD(Cycle);
+        REQUIRE_MATCHING_SEQUENCE_FIELD(DataType);
+        REQUIRE_MATCHING_SEQUENCE_FIELD(Restart);
+
+#undef REQUIRE_MATCHING_SEQUENCE_FIELD
+
+        return true;
+    }
+
     static NKikimrSchemeOp::TIndexCreationConfig ToIndexCreationConfig(
         const NKikimrSchemeOp::TIndexDescription& index)
     {

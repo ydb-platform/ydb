@@ -112,6 +112,56 @@ private:
     NThreading::TPromise<TResult> Promise;
 };
 
+class TIndexedTableCreatorWithWrongIndexKey : public NTableCreator::TMultiTableCreator {
+    using TBase = NTableCreator::TMultiTableCreator;
+
+public:
+    explicit TIndexedTableCreatorWithWrongIndexKey(NThreading::TPromise<TIndexedTableCreator::TResult> promise)
+        : TBase({ GetCreator() })
+        , Promise(std::move(promise))
+    {}
+
+private:
+    static IActor* GetCreator() {
+        NKikimrSchemeOp::TSequenceDescription sequence;
+        sequence.SetName("id_seq");
+
+        NKikimrSchemeOp::TIndexDescription index;
+        index.SetName("ext_id_uniq");
+        index.AddKeyColumnNames("id");
+        index.SetType(NKikimrSchemeOp::EIndexTypeGlobalUnique);
+        index.SetState(NKikimrSchemeOp::EIndexStateReady);
+
+        auto idColumn = Col("id", NScheme::NTypeIds::Uint64);
+        idColumn.SetNotNull(true);
+        idColumn.SetDefaultFromSequence("id_seq");
+
+        auto extIdColumn = Col("ext_id", NScheme::NTypeIds::Text);
+        extIdColumn.SetNotNull(true);
+
+        return CreateTableCreator(
+            { "path", "to", "indexed", "table" },
+            { idColumn, extIdColumn },
+            { "id" },
+            NKikimrServices::STATISTICS,
+            Nothing(),
+            {},
+            false,
+            Nothing(),
+            Nothing(),
+            { index },
+            { sequence }
+        );
+    }
+
+    void OnTablesCreated(bool success, NYql::TIssues issues) override {
+        Promise.SetValue({success, std::move(issues)});
+    }
+
+private:
+    NThreading::TPromise<TIndexedTableCreator::TResult> Promise;
+};
+
 class TPlainIndexedPathTableCreator : public NTableCreator::TMultiTableCreator {
     using TBase = NTableCreator::TMultiTableCreator;
 
@@ -323,6 +373,35 @@ Y_UNIT_TEST_SUITE(TableCreator) {
             UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToString(),
                 "Table already exists; index and sequence upgrade is not supported");
         }
+    }
+
+    Y_UNIT_TEST(RejectMismatchedIndexedSchemaOnCreateRace) {
+        TPortManager tp;
+        ui16 mbusPort = tp.GetPort();
+        ui16 grpcPort = tp.GetPort();
+        auto settings = Tests::TServerSettings(mbusPort);
+        settings.SetNodeCount(1);
+
+        Tests::TServer server(settings);
+        Tests::TClient client(settings);
+
+        server.EnableGRpc(grpcPort);
+        client.InitRootScheme();
+        auto runtime = server.GetRuntime();
+        TActorId edgeActor = runtime->AllocateEdgeActor(0);
+
+        auto correctPromise = NThreading::NewPromise<TIndexedTableCreator::TResult>();
+        auto wrongPromise = NThreading::NewPromise<TIndexedTableCreator::TResult>();
+        runtime->Register(new TIndexedTableCreator(correctPromise), 0, 0, TMailboxType::Simple, 0, edgeActor);
+        runtime->Register(new TIndexedTableCreatorWithWrongIndexKey(wrongPromise), 0, 0, TMailboxType::Simple, 0, edgeActor);
+
+        const auto correctResult = correctPromise.GetFuture().GetValueSync();
+        const auto wrongResult = wrongPromise.GetFuture().GetValueSync();
+
+        UNIT_ASSERT(correctResult.Success != wrongResult.Success);
+        const auto& failedResult = correctResult.Success ? wrongResult : correctResult;
+        UNIT_ASSERT_STRING_CONTAINS(failedResult.Issues.ToString(),
+            "Existing table schema does not match requested indexes or sequences");
     }
 }
 

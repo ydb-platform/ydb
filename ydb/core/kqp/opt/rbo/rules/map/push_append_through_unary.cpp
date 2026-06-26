@@ -3,22 +3,30 @@
 namespace NKikimr {
 namespace NKqp {
 
-namespace {
+// Main shape this handles:
+// A: Map [ a := b ]         == becomes ==>  Unary
+// B: `- Unary                              `- Map [ a := b ]
+// C:    `- input                              `- input
+//
+// Where: Unary = either Filter, Limit, Sort or AddDependencies
 
-bool CanPushAliasAppendThroughUnary(EOperator kind, bool pushUnderFilter) {
-    switch (kind) {
-        case EOperator::Filter:
-            return pushUnderFilter;
-        case EOperator::Limit:
-        case EOperator::Sort:
-        case EOperator::AddDependencies:
-            return true;
-        default:
-            return false;
-    }
-}
-
-} // anonymous namespace
+// Caveats:
+// 1.
+// A: Map [ a := b ]         -- move prevented, because map A
+// B: `- Unary                  can't be evaluated at point C (no "b")
+// C:    `- input
+//
+// 2.
+// A: Map [ a := f(b) ]      -- expression appends move only through filters
+// B: `- Sort                   when push-under-filter is enabled; alias appends
+// C:    `- input               may move through Limit, Sort, and AddDependencies.
+//
+// 3.
+// A: Map [ a := b ]         -- move prevented if Unary B has multiple consumers;
+// B: `- Unary B                pushing below B would require cloning Unary B to
+// C:    `- input               avoid changing Parent2's input.
+// D: Parent2
+// E: `- Unary B
 
 TIntrusivePtr<IOperator>
 TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
@@ -31,10 +39,14 @@ TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
 
     auto topMap = CastOperator<TOpMap>(input);
     const auto unaryKind = topMap->GetInput()->Kind;
-    const bool canPushAlias = CanPushAliasAppendThroughUnary(unaryKind, PushUnderFilter);
-    const bool canPushExpression = PushUnderFilter && unaryKind == EOperator::Filter;
 
-    if (!canPushAlias && !canPushExpression) {
+    const bool canPushThroughFilter = unaryKind == EOperator::Filter && PushUnderFilter;
+    const bool canPushAliasThroughUnary =
+        unaryKind == EOperator::Limit ||
+        unaryKind == EOperator::Sort ||
+        unaryKind == EOperator::AddDependencies;
+
+    if (!canPushThroughFilter && !canPushAliasThroughUnary) {
         return input;
     }
 
@@ -52,8 +64,8 @@ TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
     for (const auto& mapElement : topMap->MapElements) {
         const bool isExtractableAppend = topMap->IsExtractableAppend(mapElement);
         const bool canMove = isExtractableAppend &&
-            ((canPushAlias && mapElement.IsColumnAccess()) ||
-             (canPushExpression && !mapElement.IsColumnAccess()));
+            (canPushThroughFilter ||
+             (canPushAliasThroughUnary && mapElement.IsColumnAccess()));
 
         if (canMove && mapElement.DependsOnlyOn(inputIUs)) {
             pushedElements.push_back(mapElement);
@@ -67,13 +79,12 @@ TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
     }
 
     auto pushedMap = MakeIntrusive<TOpMap>(unaryInput, topMap->Pos, pushedElements);
+    unary->SetInput(pushedMap);
 
     if (topElements.empty()) {
-        unary->SetInput(pushedMap);
         return unary;
     }
 
-    unary->SetInput(pushedMap);
     return MakeIntrusive<TOpMap>(unary, topMap->Pos, topElements, topMap->Ordered);
 }
 

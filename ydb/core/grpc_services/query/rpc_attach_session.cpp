@@ -187,9 +187,7 @@ private:
     }
 
     void ReplyFinishStream(Ydb::StatusIds::StatusCode status) {
-        if (status != Ydb::StatusIds::SUCCESS) {
-            SendAttachResult(status);
-        }
+        SendAttachResult(status);
         Request->FinishStream(status);
         this->PassAway();
     }

@@ -8,6 +8,40 @@ The build process using the source code is described in the source code reposito
 
 {% list tabs %}
 
+- Go
+
+  Run the command from the command line:
+
+  {% include [install/cmd_go.md](install/cmd_go.md) %}
+
+  To ensure that the installation is successful, make sure that your environment is running [Go](https://go.dev/doc/install) 1.17 or higher.
+
+- Java
+
+  Add dependencies to the Maven project as described in the ["Install the SDK"](https://github.com/ydb-platform/ydb-java-sdk#install-the-sdk) step of the `readme.md` file in the source code repository.
+
+- Python
+
+  Run the command from the command line:
+
+  {% include [install/cmd_python.md](install/cmd_python.md) %}
+
+  If the command fails, make sure your environment has [Python](https://www.python.org/downloads/) 3.8 or newer installed with the [pip](https://pypi.org/project/pip/) package manager enabled.
+
+- C# (.NET)
+
+  {% include [install/cmd_dotnet.md](install/cmd_dotnet.md) %}
+
+- JavaScript
+
+  {% include [install/cmd_npm.md](install/cmd_npm.md) %}
+
+  The minimum supported [Node.js®](https://nodejs.org/en/download) version is 20.19.
+
+- Rust
+
+  {% include [install/cmd_rust.md](install/cmd_rust.md) %}
+
 - C++
 
   ### Debian packages (Ubuntu 24.04)
@@ -56,40 +90,6 @@ The build process using the source code is described in the source code reposito
   - `ydb_install_dir` — the path where you want to install the SDK.
 
   Make sure all dependencies are installed before running the commands. See the [README](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/README.md) in the source repository for the full list of build dependencies and instructions.
-
-- Go
-
-  Run the command from the command line:
-
-  {% include [install/cmd_go.md](install/cmd_go.md) %}
-
-  To ensure that the installation is successful, make sure that your environment is running [Go](https://go.dev/doc/install) 1.17 or higher.
-
-- Java
-
-  Add dependencies to the Maven project as described in the ["Install the SDK"](https://github.com/ydb-platform/ydb-java-sdk#install-the-sdk) step of the `readme.md` file in the source code repository.
-
-- Python
-
-  Run the command from the command line:
-
-  {% include [install/cmd_python.md](install/cmd_python.md) %}
-
-  If the command fails, make sure your environment has [Python](https://www.python.org/downloads/) 3.8 or newer installed with the [pip](https://pypi.org/project/pip/) package manager enabled.
-
-- C# (.NET)
-
-  {% include [install/cmd_dotnet.md](install/cmd_dotnet.md) %}
-
-- JavaScript
-
-  {% include [install/cmd_npm.md](install/cmd_npm.md) %}
-
-  The minimum supported [Node.js®](https://nodejs.org/en/download) version is 20.19.
-
-- Rust
-
-  {% include [install/cmd_rust.md](install/cmd_rust.md) %}
 
 - PHP
 

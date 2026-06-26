@@ -8,6 +8,40 @@
 
 {% list tabs %}
 
+- Go
+
+  Выполните команду из командной строки:
+
+  {% include [install/cmd_go.md](install/cmd_go.md) %}
+
+  Для успешной установки в вашем окружении должен быть установлен [Go](https://go.dev/doc/install) версии не ниже 1.17.
+
+- Java
+
+  Добавьте зависимости в Maven-проект, как описано в пункте ["Install the SDK"](https://github.com/ydb-platform/ydb-java-sdk#install-the-sdk) файла `readme.md` в репозитории исходного кода.
+
+- Python
+
+  Выполните команду из командной строки:
+
+  {% include [install/cmd_python.md](install/cmd_python.md) %}
+
+  Если команда не выполнилась успешно, убедитесь, что в вашем окружении установлен [Python3](https://www.python.org/downloads/) версии 3.8 или более новой, со включенным  пакетным менеджером [pip](https://pypi.org/project/pip/).
+
+- С#
+
+  {% include [install/cmd_dotnet.md](install/cmd_dotnet.md) %}
+
+- JavaScript
+
+  {% include [install/cmd_npm.md](install/cmd_npm.md) %}
+
+  Минимальная поддерживаемая версия [Node.js®](https://nodejs.org/en/download) не ниже 20.19.
+
+- Rust
+
+  {% include [install/cmd_rust.md](install/cmd_rust.md) %}
+
 - C++
 
   ### Пакеты Debian (Ubuntu 24.04)
@@ -56,40 +90,6 @@
   - `ydb_install_dir` — путь, по которому вы хотите установить SDK.
 
   Перед выполнением команды убедитесь, что все зависимости установлены. Полный список зависимостей для сборки и инструкции см. в [README](https://github.com/ydb-platform/ydb-cpp-sdk/blob/main/README.md) репозитория.
-
-- Go
-
-  Выполните команду из командной строки:
-
-  {% include [install/cmd_go.md](install/cmd_go.md) %}
-
-  Для успешной установки в вашем окружении должен быть установлен [Go](https://go.dev/doc/install) версии не ниже 1.17.
-
-- Java
-
-  Добавьте зависимости в Maven-проект, как описано в пункте ["Install the SDK"](https://github.com/ydb-platform/ydb-java-sdk#install-the-sdk) файла `readme.md` в репозитории исходного кода.
-
-- Python
-
-  Выполните команду из командной строки:
-
-  {% include [install/cmd_python.md](install/cmd_python.md) %}
-
-  Если команда не выполнилась успешно, убедитесь, что в вашем окружении установлен [Python3](https://www.python.org/downloads/) версии 3.8 или более новой, со включенным  пакетным менеджером [pip](https://pypi.org/project/pip/).
-
-- С#
-
-  {% include [install/cmd_dotnet.md](install/cmd_dotnet.md) %}
-
-- JavaScript
-
-  {% include [install/cmd_npm.md](install/cmd_npm.md) %}
-
-  Минимальная поддерживаемая версия [Node.js®](https://nodejs.org/en/download) не ниже 20.19.
-
-- Rust
-
-  {% include [install/cmd_rust.md](install/cmd_rust.md) %}
 
 - PHP
 

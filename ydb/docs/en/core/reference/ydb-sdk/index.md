@@ -7,19 +7,20 @@ To work with {{ ydb-short-name }}, OpenSource SDKs are available for the followi
 | Language | GitHub Repository | API Reference |
 | --- | --- | --- |
 
+| Go | [ydb-platform/ydb-go-sdk](https://github.com/ydb-platform/ydb-go-sdk) | [https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3) |
+| Java | [ydb-platform/ydb-java-sdk](https://github.com/ydb-platform/ydb-java-sdk) | N/A |
+| Python | [ydb-platform/ydb-python-sdk](https://github.com/ydb-platform/ydb-python-sdk) | [https://ydb-platform.github.io/ydb-python-sdk](https://ydb-platform.github.io/ydb-python-sdk/) |
+| C# | [ydb-platform/ydb-dotnet-sdk](https://github.com/ydb-platform/ydb-dotnet-sdk) | N/A |
+| JavaScript | [ydb-platform/ydb-js-sdk](https://github.com/ydb-platform/ydb-js-sdk) | [https://ydb.js.org](https://ydb.js.org) |
+| Rust | [ydb-platform/ydb-rs-sdk](https://github.com/ydb-platform/ydb-rs-sdk) | N/A |
+
 {% if oss %}
 
 | C++ | [ydb-platform/ydb-cpp-sdk](https://github.com/ydb-platform/ydb-cpp-sdk) | N/A |
 
 {% endif %}
 
-| C# | [ydb-platform/ydb-dotnet-sdk](https://github.com/ydb-platform/ydb-dotnet-sdk) | N/A |
-| Go | [ydb-platform/ydb-go-sdk](https://github.com/ydb-platform/ydb-go-sdk) | [https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3](https://pkg.go.dev/github.com/ydb-platform/ydb-go-sdk/v3) |
-| Java | [ydb-platform/ydb-java-sdk](https://github.com/ydb-platform/ydb-java-sdk) | N/A |
-| JavaScript | [ydb-platform/ydb-js-sdk](https://github.com/ydb-platform/ydb-js-sdk) | [https://ydb.js.org](https://ydb.js.org) |
 | PHP | [ydb-platform/ydb-php-sdk](https://github.com/ydb-platform/ydb-php-sdk) | N/A |
-| Python | [ydb-platform/ydb-python-sdk](https://github.com/ydb-platform/ydb-python-sdk) | [https://ydb-platform.github.io/ydb-python-sdk](https://ydb-platform.github.io/ydb-python-sdk/) |
-| Rust | [ydb-platform/ydb-rs-sdk](https://github.com/ydb-platform/ydb-rs-sdk) | N/A |
 
 The SDK documentation contains the following sections:
 

@@ -88,7 +88,9 @@ void TController::DoOnTabletInitCompleted(const ::NKikimr::NColumnShard::TColumn
 
 void TController::DoOnTabletStopped(const ::NKikimr::NColumnShard::TColumnShard& shard) {
     TGuard<TMutex> g(Mutex);
-    AFL_VERIFY(ShardActuals.erase(shard.TabletID()));
+    // A shard may stop before init completes (e.g. it dies on TEvWatchNotifyUnavailable
+    // while still in StateInit), in which case it was never added to ShardActuals.
+    ShardActuals.erase(shard.TabletID());
 }
 
 bool TController::IsTrivialLinks() const {

@@ -1103,6 +1103,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
             return;
         }
         const TIntrusivePtr<TPartitionStreamImpl<true>>& partitionStream = partitionStreamIt->second;
+        Y_ABORT_UNLESS(partitionStream);
 
         typename TPartitionCookieMapping::TCookie::TPtr cookie = MakeIntrusive<typename TPartitionCookieMapping::TCookie>(partitionData.cookie().partition_cookie(), partitionStream);
 
@@ -1183,9 +1184,10 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     NextPartitionStreamId += PartitionStreamIdStep;
 
     // Renew partition stream.
-    TIntrusivePtr<TPartitionStreamImpl<true>>& currentPartitionStream =
-        PartitionStreams[partitionStream->GetAssignId()];
-    if (currentPartitionStream) {
+    auto [partitionStreamIt, inserted] = PartitionStreams.emplace(partitionStream->GetAssignId(), partitionStream);
+    TIntrusivePtr<TPartitionStreamImpl<true>>& currentPartitionStream = partitionStreamIt->second;
+    if (!inserted) {
+        Y_ABORT_UNLESS(currentPartitionStream);
         CookieMapping.RemoveMapping(currentPartitionStream->GetPartitionStreamId());
 
         bool pushRes = EventsQueue->PushEvent(
@@ -1197,8 +1199,8 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
             AbortImpl();
             return;
         }
+        currentPartitionStream = partitionStream;
     }
-    currentPartitionStream = partitionStream;
 
     // Send event to user.
     bool pushRes = EventsQueue->PushEvent(
@@ -1355,6 +1357,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
             }
         }
         const TIntrusivePtr<TPartitionStreamImpl<false>>& partitionStream = partitionStreamIt->second;
+        Y_ABORT_UNLESS(partitionStream);
 
         i64 firstOffset = std::numeric_limits<i64>::max();
         i64 currentOffset = std::numeric_limits<i64>::max();
@@ -1419,6 +1422,7 @@ template <>
 inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
     TIntrusivePtr<TPartitionStreamImpl<false>> partitionStream, bool graceful, TDeferredActions<false>& deferred
 ) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
     auto partitionSessionId = partitionStream->GetAssignId();
 
     if (IsDirectRead()) {
@@ -1574,12 +1578,14 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
     auto partitionSessionId = msg.partition_session().partition_session_id();
 
     // Renew partition stream.
-    TIntrusivePtr<TPartitionStreamImpl<false>>& partitionStream = PartitionStreams[partitionSessionId];
-    if (partitionStream) {
+    auto partitionStreamIt = PartitionStreams.find(partitionSessionId);
+    if (partitionStreamIt != PartitionStreams.end()) {
+        const TIntrusivePtr<TPartitionStreamImpl<false>>& currentPartitionStream = partitionStreamIt->second;
+        Y_ABORT_UNLESS(currentPartitionStream);
         bool pushRes = EventsQueue->PushEvent(
-            partitionStream,
+            currentPartitionStream,
             TReadSessionEvent::TPartitionSessionClosedEvent(
-                partitionStream, TReadSessionEvent::TPartitionSessionClosedEvent::EReason::Lost),
+                currentPartitionStream, TReadSessionEvent::TPartitionSessionClosedEvent::EReason::Lost),
             deferred);
 
         if (!pushRes) {
@@ -1588,7 +1594,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         }
     }
 
-    partitionStream = MakeIntrusive<TPartitionStreamImpl<false>>(
+    auto partitionStream = MakeIntrusive<TPartitionStreamImpl<false>>(
         NextPartitionStreamId,
         msg.partition_session().path(),
         ReadSessionId,
@@ -1599,6 +1605,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         SelfContext);
 
     NextPartitionStreamId += PartitionStreamIdStep;
+    PartitionStreams.insert_or_assign(partitionSessionId, partitionStream);
 
     // Send event to user.
     bool pushRes = EventsQueue->PushEvent(
@@ -3038,6 +3045,7 @@ template<bool UseMigrationProtocol>
 void TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double averageCompressionRatio,
                                                                           TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream) {
     constexpr size_t TASK_LIMIT = 512_KB;
+    Y_ABORT_UNLESS(partitionStream);
 
     auto session = CbContext->LockShared();
     Y_ASSERT(session);
@@ -3177,14 +3185,15 @@ TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePt
 
             messageData.clear_data();
 
+            auto log = partitionStream->GetLog();
             if (recordsSkipped > 0) {
-                LOG_LAZY(partitionStream->GetLog(), TLOG_DEBUG, TStringBuilder()
+                LOG_LAZY(log, TLOG_DEBUG, TStringBuilder()
                     << "Take Data (codec batch). Partition " << partitionStream->GetPartitionId()
                     << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
                     << minOffset << "-" << maxOffset << "), messages: " << result.MessagesTaken
                     << ", skipped as committed: " << recordsSkipped);
             } else {
-                LOG_LAZY(partitionStream->GetLog(), TLOG_DEBUG, TStringBuilder()
+                LOG_LAZY(log, TLOG_DEBUG, TStringBuilder()
                     << "Take Data. Partition " << partitionStream->GetPartitionId()
                     << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
                     << minOffset << "-" << maxOffset << ")");
@@ -3215,7 +3224,8 @@ TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePt
         result.DataSize += messageData.data().size();
         messageData.clear_data();
 
-        LOG_LAZY(partitionStream->GetLog(), TLOG_DEBUG, TStringBuilder()
+        auto log = partitionStream->GetLog();
+        LOG_LAZY(log, TLOG_DEBUG, TStringBuilder()
             << "Take Data. Partition " << partitionStream->GetPartitionId()
             << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
             << minOffset << "-" << maxOffset << ")");
@@ -3261,7 +3271,8 @@ TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePt
     // Clear data to free internal session's memory.
     messageData.clear_data();
 
-    LOG_LAZY(partitionStream->GetLog(), TLOG_DEBUG, TStringBuilder()
+    auto log = partitionStream->GetLog();
+    LOG_LAZY(log, TLOG_DEBUG, TStringBuilder()
                                         << "Take Data. Partition " << partitionStream->GetPartitionId()
                                         << ". Read: {" << batchIndex << ", " << messageIndex << "} ("
                                         << minOffset << "-" << maxOffset << ")");
@@ -3400,6 +3411,7 @@ TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::TDecompression
     : Parent(std::move(parent))
     , PartitionStream(std::move(partitionStream))
     , Ready(ready) {
+    Y_ABORT_UNLESS(PartitionStream);
 }
 
 template<bool UseMigrationProtocol>
@@ -3475,6 +3487,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
     }
 
     if (auto session = parent->CbContext->LockShared()) {
+        const auto& log = session->GetLog();
         const i64 partition_id = [parent](){
             if constexpr (UseMigrationProtocol) {
                 return parent->ServerMessage.partition();
@@ -3482,9 +3495,9 @@ void TDataDecompressionInfo<UseMigrationProtocol>::TDecompressionTask::operator(
                 return parent->ServerMessage.partition_session_id();
             }
         }();
-        LOG_LAZY(session->GetLog(), TLOG_DEBUG, TStringBuilder() << "Decompression task done. Partition/PartitionSessionId: "
-                                                                 << partition_id << " (" << minOffset << "-"
-                                                                 << maxOffset << ")");
+        LOG_LAZY(log, TLOG_DEBUG, TStringBuilder() << "Decompression task done. Partition/PartitionSessionId: "
+                                                   << partition_id << " (" << minOffset << "-"
+                                                   << maxOffset << ")");
     }
 
     Y_ASSERT(dataProcessed == SourceDataSize);

@@ -27,6 +27,11 @@ IF (OS_LINUX)
     SRCS(
         poller_tcp_unit_epoll.cpp
         poller_tcp_unit_epoll.h
+        uring_poller_actor.cpp
+        uring_poller_actor.h
+    )
+    PEERDIR(
+        contrib/libs/liburing
     )
 ENDIF()
 

@@ -1291,6 +1291,28 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
         }
     } // Y_UNIT_TEST(FetchScenarioWithJoinGroup)
 
+    Y_UNIT_TEST(JoinGroupWithEmptyMetadataScenario) {
+        TInsecureTestServer testServer("2", false, false);
+
+        TString protocolName = "roundrobin";
+
+        TString topicName = "/Root/topic-0";
+        TString group = "consumer-group";
+
+        ui64 minActivePartitions = 10;
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        CreateTopic(pqClient, topicName, minActivePartitions, { group });
+
+        TKafkaTestClient client(testServer.Port);
+
+        client.PlainAuthenticateToKafka();
+
+        std::vector<TString> topics = {topicName};
+        auto msg = client.JoinGroup(topics, group, protocolName, 10000, /* emptyMetadata = */ true);
+        UNIT_ASSERT_VALUES_EQUAL(msg->ErrorCode, static_cast<TKafkaInt16>(EKafkaErrors::INVALID_REQUEST));
+    } // Y_UNIT_TEST(JoinGroupWithEmptyMetadataScenario)
+
     Y_UNIT_TEST(FetchEmptyTopicScenario) {
         TInsecureTestServer testServer("FetchEmptyTopicScenario");
 
@@ -5264,6 +5286,34 @@ Y_UNIT_TEST_SUITE(KafkaProtocol) {
 
         auto record2 = recordsBatch.Records[1];
         UNIT_ASSERT_VALUES_EQUAL(TString(record2.Key.value().data(), record2.Key.value().size()), "key2");
+    }
+
+    Y_UNIT_TEST(ReadWithMlpConsumerShouldReturnConsumerNotFound) {
+        TInsecureTestServer testServer("2", false, false);
+
+        TString topicName = TStringBuilder() << "/Root/topic-mlp-" << RandomNumber<ui64>();
+        TString mlpConsumerName = "mlp-consumer";
+        TString protocolName = "roundrobin";
+
+        NYdb::NTopic::TTopicClient pqClient(*testServer.Driver);
+        auto createResult = pqClient.CreateTopic(
+            topicName,
+            NYdb::NTopic::TCreateTopicSettings()
+                .PartitioningSettings(1, 100)
+                .BeginAddSharedConsumer(mlpConsumerName)
+                .EndAddConsumer()
+        ).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL(createResult.IsTransportError(), false);
+        UNIT_ASSERT_VALUES_EQUAL(createResult.GetStatus(), EStatus::SUCCESS);
+
+        TKafkaTestClient client(testServer.Port);
+        client.PlainAuthenticateToKafka();
+
+        std::vector<TString> topics = { topicName };
+        auto joinResponse = client.JoinGroup(topics, mlpConsumerName, protocolName, 10000);
+        UNIT_ASSERT_VALUES_EQUAL(
+            joinResponse->ErrorCode,
+            static_cast<TKafkaInt16>(EKafkaErrors::GROUP_ID_NOT_FOUND));
     }
 
     Y_UNIT_TEST(CheckReadOffsetMetricUpdateWhenCommit) {

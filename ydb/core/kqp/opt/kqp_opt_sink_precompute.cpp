@@ -38,37 +38,41 @@ public:
         TNodeOnNodeOwnedMap marked;
 
         {
-            const auto [precomputeStages, sinkStages] = GatherPrecomputeAndSinkStages(outputExpr, *KqpCtx);
+            const auto [precomputeStages, sinkStages, outputTransformStages] = GatherPrecomputeAndSinkStages(outputExpr, *KqpCtx);
 
             if (KqpCtx->Config->GetEnableStreamWrite()) {
                 auto sameTableSinkStages = GatherSameTableSinkStages(sinkStages);
                 for (const auto& [_, exprNode] : FindStagesUsedForBothStagesSets(sameTableSinkStages, sameTableSinkStages)) {
                     TExprBase node(exprNode);
+                    AFL_ENSURE(node.Maybe<TDqStage>());
+                    marked.emplace(node.Raw(), node.Ptr());
+                }
+            }
+
+            {
+                for (const auto& [_, exprNode] : FindStagesUsedForBothStagesSets(precomputeStages, sinkStages)) {
+                    AFL_ENSURE(exprNode);
+                    TExprBase node(exprNode);
                     const auto stage = node.Cast<TDqStage>();
-                    marked.emplace(node.Raw(), node.Ptr());
+                    if (HasNonDeterministicFunction(stage) || !IsKqpPureInputs(stage.Inputs())) {
+                        marked.emplace(node.Raw(), node.Ptr());
+                    }
                 }
             }
 
-            for (const auto& [_, exprNode] : FindStagesUsedForBothStagesSets(precomputeStages, sinkStages)) {
-                AFL_ENSURE(exprNode);
-                TExprBase node(exprNode);
-                const auto stage = node.Cast<TDqStage>();
-                if (HasNonDeterministicFunction(stage) || !IsKqpPureInputs(stage.Inputs())) {
-                    marked.emplace(node.Raw(), node.Ptr());
+            {
+                const auto resultStages = GatherResultStages(outputExpr, ctx);
+                if (!resultStages) {
+                    return TStatus::Error;
                 }
-            }
 
-            const auto resultStages = GatherResultStages(outputExpr, ctx);
-            if (!resultStages) {
-                return TStatus::Error;
-            }
-
-            for (const auto& [_, exprNode] : FindStagesUsedForBothStagesSets(*resultStages, sinkStages)) {
-                AFL_ENSURE(exprNode);
-                TExprBase node(exprNode);
-                const auto stage = node.Cast<TDqStage>();
-                if (!IsKqpPureInputs(stage.Inputs())) {
-                    marked.emplace(node.Raw(), node.Ptr());
+                for (const auto& [_, exprNode] : FindStagesUsedForBothStagesSets(*resultStages, sinkStages)) {
+                    AFL_ENSURE(exprNode);
+                    TExprBase node(exprNode);
+                    const auto stage = node.Cast<TDqStage>();
+                    if (!IsKqpPureInputs(stage.Inputs())) {
+                        marked.emplace(node.Raw(), node.Ptr());
+                    }
                 }
             }
         }
@@ -239,15 +243,16 @@ private:
         return sameTableSinkStages;
     }
 
-    std::pair<TNodeOnNodeOwnedMap, TNodeOnNodeOwnedMap> GatherPrecomputeAndSinkStages(const TExprNode::TPtr& query, const TKqpOptimizeContext& kqpCtx) {
+    std::tuple<TNodeOnNodeOwnedMap, TNodeOnNodeOwnedMap, TNodeOnNodeOwnedMap> GatherPrecomputeAndSinkStages(const TExprNode::TPtr& query, const TKqpOptimizeContext& kqpCtx) {
         TNodeOnNodeOwnedMap precomputeStages;
         TNodeOnNodeOwnedMap sinkStages;
+        TNodeOnNodeOwnedMap outputTransformStages;
 
         auto filter = [](const TExprNode::TPtr& exprNode) {
             return !exprNode->IsLambda();
         };
 
-        auto gather = [&precomputeStages, &sinkStages, &kqpCtx](const TExprNode::TPtr& exprNode) {
+        auto gather = [&precomputeStages, &sinkStages, &outputTransformStages, &kqpCtx](const TExprNode::TPtr& exprNode) {
             TExprBase node(exprNode);
 
             const auto maybeStage = node.Maybe<TDqStage>();
@@ -298,9 +303,7 @@ private:
                             sinkOrTransformOutputsCount++;
                             AFL_ENSURE(sinkSettings.Cast().Mode() != "fill_table");
                             AFL_ENSURE(kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, sinkSettings.Cast().Table().Path()).Metadata->Kind == EKikimrTableKind::Datashard);
-                            // OutputTransforms are not added to sinkStages directly.
-                            // They can still be processed for precomputation if they share
-                            // upstream dependencies with actual sink stages.
+                            outputTransformStages.emplace(stage.Raw(), stage.Ptr());
                         }
                     }
                 }
@@ -313,7 +316,7 @@ private:
 
         VisitExpr(query, filter, gather);
 
-        return {std::move(precomputeStages), std::move(sinkStages)};
+        return {std::move(precomputeStages), std::move(sinkStages), std::move(outputTransformStages)};
     }
 
     std::optional<TNodeOnNodeOwnedMap> GatherResultStages(

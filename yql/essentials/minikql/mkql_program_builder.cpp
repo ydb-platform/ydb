@@ -6292,6 +6292,46 @@ TRuntimeNode TProgramBuilder::PgInternal0(TType* returnType) {
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
+TRuntimeNode TProgramBuilder::BlockGuess(TRuntimeNode variant, ui32 tupleIndex) {
+    if constexpr (RuntimeVersion < 79) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto blockType = AS_TYPE(TBlockType, variant.GetStaticType());
+    auto inputItemType = blockType->GetItemType();
+    bool isOptional;
+    auto unpacked = UnpackOptional(inputItemType, isOptional);
+    auto variantType = AS_TYPE(TVariantType, unpacked);
+    auto underlying = AS_TYPE(TTupleType, variantType->GetUnderlyingType());
+    MKQL_ENSURE(tupleIndex < underlying->GetElementsCount(), "Wrong tuple index");
+    auto alternativeType = underlying->GetElementType(tupleIndex);
+    auto returnType = NewBlockType(NewOptionalType(alternativeType), blockType->GetShape());
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(variant);
+    callableBuilder.Add(NewDataLiteral<ui32>(tupleIndex));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
+TRuntimeNode TProgramBuilder::BlockGuess(TRuntimeNode variant, const std::string_view& memberName) {
+    if constexpr (RuntimeVersion < 79) {
+        THROW yexception() << "Runtime version (" << RuntimeVersion << ") too old for " << __func__;
+    }
+    auto blockType = AS_TYPE(TBlockType, variant.GetStaticType());
+    auto inputItemType = blockType->GetItemType();
+    bool isOptional;
+    auto unpacked = UnpackOptional(inputItemType, isOptional);
+    auto variantType = AS_TYPE(TVariantType, unpacked);
+    auto underlying = AS_TYPE(TStructType, variantType->GetUnderlyingType());
+    auto structIndex = underlying->GetMemberIndex(memberName);
+    auto alternativeType = underlying->GetMemberType(structIndex);
+    auto returnType = NewBlockType(NewOptionalType(alternativeType), blockType->GetShape());
+
+    TCallableBuilder callableBuilder(Env_, __func__, returnType);
+    callableBuilder.Add(variant);
+    callableBuilder.Add(NewDataLiteral<ui32>(structIndex));
+    return TRuntimeNode(callableBuilder.Build(), false);
+}
+
 TRuntimeNode TProgramBuilder::BlockIf(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch) {
     const auto conditionType = AS_TYPE(TBlockType, condition.GetStaticType());
     MKQL_ENSURE(AS_TYPE(TDataType, conditionType->GetItemType())->GetSchemeType() == NUdf::TDataType<bool>::Id,

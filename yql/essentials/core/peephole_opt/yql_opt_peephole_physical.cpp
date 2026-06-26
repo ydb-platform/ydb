@@ -6450,7 +6450,8 @@ private:
         TExprNode::TListType funcArgs;
         std::string_view arrowFunctionName;
         const bool rewriteAsIs = node->IsCallable({"AssumeStrict", "AssumeNonStrict", "NoPush", "Likely"});
-        if (node->IsList() || rewriteAsIs ||
+        bool isSuitableGuess = NKikimr::NMiniKQL::RuntimeVersion >= 79 && node->IsCallable("Guess");
+        if (node->IsList() || rewriteAsIs || isSuitableGuess ||
             node->IsCallable({"DecimalMul", "DecimalDiv", "DecimalMod", "And", "Or", "Xor", "Not", "Coalesce", "Exists", "If", "Just", "AsStruct", "Member", "Nth", "ToPg", "FromPg", "PgResolvedCall", "PgResolvedOp"})) {
             if (node->IsCallable() && !IsSupportedAsBlockType(node->Pos(), *node->GetTypeAnn(), Ctx_, Types_, true)) {
                 YQL_CLOG(TRACE, CorePeepHole) << Log(node) << "Type are not supported";

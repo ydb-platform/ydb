@@ -16460,6 +16460,7 @@ template <NKikimr::NUdf::EDataSlot DataSlot>
         Functions["BlockOr"] = &BlockLogicalWrapper;
         Functions["BlockXor"] = &BlockLogicalWrapper;
         Functions["BlockNot"] = &BlockLogicalWrapper;
+        Functions["BlockGuess"] = &BlockGuessWrapper;
         Functions["BlockIf"] = &BlockIfWrapper;
         Functions["BlockJust"] = &BlockJustWrapper;
         Functions["BlockAsStruct"] = &BlockAsStructWrapper;

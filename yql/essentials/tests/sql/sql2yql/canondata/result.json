@@ -2330,6 +2330,41 @@
             "uri": "https://{canondata_backend}/1942100/698d95eec1cbd4e4ada1a8da105c203a7a12bb85/resource.tar.gz#test_sql2yql.test_blocks-frompg_/sql.yql"
         }
     ],
+    "test_sql2yql.test[blocks-guess_struct]": [
+        {
+            "checksum": "84d8c16ade2df9cbf4fafa084f925616",
+            "size": 1768,
+            "uri": "https://{canondata_backend}/1942100/59faa31c8c62f57bd9d23c377a9ecd8a3fc1fc84/resource.tar.gz#test_sql2yql.test_blocks-guess_struct_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[blocks-guess_struct_optional]": [
+        {
+            "checksum": "dabbcbab4b66442b84a804df6ae216dd",
+            "size": 1678,
+            "uri": "https://{canondata_backend}/1942100/59faa31c8c62f57bd9d23c377a9ecd8a3fc1fc84/resource.tar.gz#test_sql2yql.test_blocks-guess_struct_optional_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[blocks-guess_struct_optional_member]": [
+        {
+            "checksum": "54ce491fdb17455668bb6f5bba1b8d16",
+            "size": 1811,
+            "uri": "https://{canondata_backend}/1942100/59faa31c8c62f57bd9d23c377a9ecd8a3fc1fc84/resource.tar.gz#test_sql2yql.test_blocks-guess_struct_optional_member_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[blocks-guess_tuple]": [
+        {
+            "checksum": "f9e25ddbfed1d8d6de147d4567142216",
+            "size": 1659,
+            "uri": "https://{canondata_backend}/1899731/617f799adb700d0123a74da1da91c1c62797b1e0/resource.tar.gz#test_sql2yql.test_blocks-guess_tuple_/sql.yql"
+        }
+    ],
+    "test_sql2yql.test[blocks-guess_tuple_optional]": [
+        {
+            "checksum": "b1eab2d46db98c837f877f5dad37478b",
+            "size": 1669,
+            "uri": "https://{canondata_backend}/1899731/617f799adb700d0123a74da1da91c1c62797b1e0/resource.tar.gz#test_sql2yql.test_blocks-guess_tuple_optional_/sql.yql"
+        }
+    ],
     "test_sql2yql.test[blocks-if]": [
         {
             "checksum": "2b573fa3534410c28b1273b496c93231",
@@ -14017,6 +14052,31 @@
     "test_sql_format.test[blocks-frompg]": [
         {
             "uri": "file://test_sql_format.test_blocks-frompg_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-guess_struct]": [
+        {
+            "uri": "file://test_sql_format.test_blocks-guess_struct_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-guess_struct_optional]": [
+        {
+            "uri": "file://test_sql_format.test_blocks-guess_struct_optional_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-guess_struct_optional_member]": [
+        {
+            "uri": "file://test_sql_format.test_blocks-guess_struct_optional_member_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-guess_tuple]": [
+        {
+            "uri": "file://test_sql_format.test_blocks-guess_tuple_/formatted.sql"
+        }
+    ],
+    "test_sql_format.test[blocks-guess_tuple_optional]": [
+        {
+            "uri": "file://test_sql_format.test_blocks-guess_tuple_optional_/formatted.sql"
         }
     ],
     "test_sql_format.test[blocks-if]": [

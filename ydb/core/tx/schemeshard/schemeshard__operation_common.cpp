@@ -650,7 +650,10 @@ bool CollectSchemaChangedImpl(
 
     if (TEvSchemaChangedTraits<TEvent>::HasOpResult(ev)) {
         // TODO: remove TxBackup handling
-        Y_DEBUG_ABORT_UNLESS(txState.TxType == TTxState::TxBackup || txState.TxType == TTxState::TxRestore);
+        Y_DEBUG_ABORT_UNLESS(
+            txState.TxType == TTxState::TxBackup ||
+            txState.TxType == TTxState::TxRestore ||
+            txState.TxType == TTxState::TxRestoreIncrementalBackupAtTable);
     }
 
     if (!txState.ReadyForNotifications) {

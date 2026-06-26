@@ -70,7 +70,10 @@ public:
 
     ~TFastPathService() override;
 
-    void Run();
+    // Starts all DBGs and regions; returns a future that becomes ready the
+    // first time the Locked-session quorum is reached in every DBG.
+    NThreading::TFuture<void> Run();
+    NThreading::TFuture<void> Stop();
 
     // IStorage implementation
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(

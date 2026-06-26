@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "invoker_util.h"
 #endif
-#undef INVOKER_UTIL_INL_H_
 
 #include <yt/yt/core/misc/finally.h>
 

@@ -14,14 +14,14 @@ Y_UNIT_TEST_LLVM(TestOverList) {
 
     const auto data1 = pb.NewDataLiteral<ui32>(1);
     const auto data2 = pb.NewDataLiteral<ui32>(2);
-    const auto list = ConvertValueToLiteralNode(pb, TVector<ui32>{1, 2, 3});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<ui32>{1, 2, 3});
     const auto pgmReturn = pb.MultiMap(list,
                                        [&](TRuntimeNode item) {
                                            return TRuntimeNode::TList{pb.Add(item, data1), item, pb.Mul(item, data2)};
                                        });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui32>{2, 1, 2, 3, 2, 4, 4, 3, 6});
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui32>{2, 1, 2, 3, 2, 4, 4, 3, 6});
 }
 
 Y_UNIT_TEST_LLVM(TestOverLazyList) {
@@ -30,14 +30,14 @@ Y_UNIT_TEST_LLVM(TestOverLazyList) {
 
     const auto data1 = pb.NewDataLiteral<ui32>(1);
     const auto data2 = pb.NewDataLiteral<ui32>(2);
-    const auto list = ConvertValueToLiteralNode(pb, TVector<ui32>{1, 2, 3});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<ui32>{1, 2, 3});
     const auto pgmReturn = pb.MultiMap(pb.LazyList(list),
                                        [&](TRuntimeNode item) {
                                            return TRuntimeNode::TList{pb.Add(item, data1), item, pb.Mul(item, data2)};
                                        });
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui32>{2, 1, 2, 3, 2, 4, 4, 3, 6});
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui32>{2, 1, 2, 3, 2, 4, 4, 3, 6});
 }
 
 Y_UNIT_TEST_LLVM(TestOverFlow) {
@@ -46,14 +46,14 @@ Y_UNIT_TEST_LLVM(TestOverFlow) {
 
     const auto data1 = pb.NewDataLiteral<ui32>(1);
     const auto data2 = pb.NewDataLiteral<ui32>(2);
-    const auto list = ConvertValueToLiteralNode(pb, TVector<ui32>{1, 2, 3});
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<ui32>{1, 2, 3});
     const auto pgmReturn = pb.Collect(pb.MultiMap(pb.ToFlow(list),
                                                   [&](TRuntimeNode item) {
                                                       return TRuntimeNode::TList{pb.Add(item, data1), item, pb.Mul(item, data2)};
                                                   }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui32>{2, 1, 2, 3, 2, 4, 4, 3, 6});
+    AssertUnboxedValueElementEqual(graph->GetValue(), TVector<ui32>{2, 1, 2, 3, 2, 4, 4, 3, 6});
 }
 
 Y_UNIT_TEST_LLVM(TestFlattenByNarrow) {
@@ -61,19 +61,19 @@ Y_UNIT_TEST_LLVM(TestFlattenByNarrow) {
     TProgramBuilder& pb = *setup.PgmBuilder;
 
     using TRow = std::tuple<TMaybe<i32>, TMaybe<i32>, TMaybe<i32>>;
-    const auto list = ConvertValueToLiteralNode(pb, TVector<TRow>{
-                                                        {TMaybe<i32>{1}, TMaybe<i32>{}, TMaybe<i32>{-1}},
-                                                        {TMaybe<i32>{}, TMaybe<i32>{2}, TMaybe<i32>{-2}},
-                                                        {TMaybe<i32>{3}, TMaybe<i32>{}, TMaybe<i32>{-3}},
-                                                    });
+    const auto list = NTest::ConvertValueToLiteralNode(pb, TVector<TRow>{
+                                                               {i32(1), {}, i32(-1)},
+                                                               {{}, i32(2), i32(-2)},
+                                                               {i32(3), {}, i32(-3)},
+                                                           });
 
     const auto pgmReturn = pb.Collect(pb.NarrowMultiMap(pb.ExpandMap(pb.ToFlow(list),
                                                                      [&](TRuntimeNode item) -> TRuntimeNode::TList { return {pb.Nth(item, 0U), pb.Nth(item, 1U), pb.Nth(item, 2U)}; }),
                                                         [&](TRuntimeNode::TList items) -> TRuntimeNode::TList { return {items[2U], items[1U], items[0U]}; }));
 
     const auto graph = setup.BuildGraph(pgmReturn);
-    NYql::NUdf::AssertUnboxedValueElementEqual(graph->GetValue(),
-                                               TVector<TMaybe<i32>>{-1, {}, 1, -2, 2, {}, -3, {}, 3});
+    AssertUnboxedValueElementEqual(graph->GetValue(),
+                                   TVector<TMaybe<i32>>{-1, {}, 1, -2, 2, {}, -3, {}, 3});
 }
 } // Y_UNIT_TEST_SUITE(TMiniKQLMultiMapTest)
 

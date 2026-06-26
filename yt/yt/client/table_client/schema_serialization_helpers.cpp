@@ -138,7 +138,7 @@ public:
             auto key = (*cursor)->UncheckedAsString();
             if (key == "name") {
                 cursor->Next();
-                SetName(ExtractTo<TString>(cursor));
+                SetName(ExtractTo<std::string>(cursor));
             } else if (key == "required") {
                 cursor->Next();
                 RequiredV1_ = ExtractTo<bool>(cursor);

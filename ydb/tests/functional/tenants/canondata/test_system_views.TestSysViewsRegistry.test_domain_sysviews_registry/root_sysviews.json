@@ -496,6 +496,10 @@
         "type": "Uint32?"
       },
       {
+        "name": "PhantomOnly",
+        "type": "Bool?"
+      },
+      {
         "name": "PDiskId",
         "type": "Uint32?"
       },
@@ -980,6 +984,10 @@
       {
         "name": "WmExitTime",
         "type": "Timestamp?"
+      },
+      {
+        "name": "TraceId",
+        "type": "Utf8?"
       }
     ],
     "primary_key": [
@@ -1338,10 +1346,6 @@
   "top_queries_by_cpu_time_one_hour": {
     "columns": [
       {
-        "name": "RequestUnits",
-        "type": "Uint64?"
-      },
-      {
         "name": "IntervalEnd",
         "type": "Timestamp?"
       },
@@ -1451,6 +1455,14 @@
       },
       {
         "name": "Type",
+        "type": "Utf8?"
+      },
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TraceId",
         "type": "Utf8?"
       }
     ],
@@ -1462,10 +1474,6 @@
   "top_queries_by_cpu_time_one_minute": {
     "columns": [
       {
-        "name": "RequestUnits",
-        "type": "Uint64?"
-      },
-      {
         "name": "IntervalEnd",
         "type": "Timestamp?"
       },
@@ -1575,6 +1583,14 @@
       },
       {
         "name": "Type",
+        "type": "Utf8?"
+      },
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TraceId",
         "type": "Utf8?"
       }
     ],
@@ -1586,10 +1602,6 @@
   "top_queries_by_duration_one_hour": {
     "columns": [
       {
-        "name": "RequestUnits",
-        "type": "Uint64?"
-      },
-      {
         "name": "IntervalEnd",
         "type": "Timestamp?"
       },
@@ -1699,6 +1711,14 @@
       },
       {
         "name": "Type",
+        "type": "Utf8?"
+      },
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TraceId",
         "type": "Utf8?"
       }
     ],
@@ -1710,10 +1730,6 @@
   "top_queries_by_duration_one_minute": {
     "columns": [
       {
-        "name": "RequestUnits",
-        "type": "Uint64?"
-      },
-      {
         "name": "IntervalEnd",
         "type": "Timestamp?"
       },
@@ -1823,6 +1839,14 @@
       },
       {
         "name": "Type",
+        "type": "Utf8?"
+      },
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TraceId",
         "type": "Utf8?"
       }
     ],
@@ -1834,10 +1858,6 @@
   "top_queries_by_read_bytes_one_hour": {
     "columns": [
       {
-        "name": "RequestUnits",
-        "type": "Uint64?"
-      },
-      {
         "name": "IntervalEnd",
         "type": "Timestamp?"
       },
@@ -1947,6 +1967,14 @@
       },
       {
         "name": "Type",
+        "type": "Utf8?"
+      },
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TraceId",
         "type": "Utf8?"
       }
     ],
@@ -1958,10 +1986,6 @@
   "top_queries_by_read_bytes_one_minute": {
     "columns": [
       {
-        "name": "RequestUnits",
-        "type": "Uint64?"
-      },
-      {
         "name": "IntervalEnd",
         "type": "Timestamp?"
       },
@@ -2071,6 +2095,14 @@
       },
       {
         "name": "Type",
+        "type": "Utf8?"
+      },
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TraceId",
         "type": "Utf8?"
       }
     ],
@@ -2082,10 +2114,6 @@
   "top_queries_by_request_units_one_hour": {
     "columns": [
       {
-        "name": "RequestUnits",
-        "type": "Uint64?"
-      },
-      {
         "name": "IntervalEnd",
         "type": "Timestamp?"
       },
@@ -2195,6 +2223,14 @@
       },
       {
         "name": "Type",
+        "type": "Utf8?"
+      },
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TraceId",
         "type": "Utf8?"
       }
     ],
@@ -2206,10 +2242,6 @@
   "top_queries_by_request_units_one_minute": {
     "columns": [
       {
-        "name": "RequestUnits",
-        "type": "Uint64?"
-      },
-      {
         "name": "IntervalEnd",
         "type": "Timestamp?"
       },
@@ -2319,6 +2351,14 @@
       },
       {
         "name": "Type",
+        "type": "Utf8?"
+      },
+      {
+        "name": "RequestUnits",
+        "type": "Uint64?"
+      },
+      {
+        "name": "TraceId",
         "type": "Utf8?"
       }
     ],

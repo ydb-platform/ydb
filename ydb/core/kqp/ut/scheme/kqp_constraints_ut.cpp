@@ -80,17 +80,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         {
             TString query = R"(
                 ALTER TABLE `/Root/SerialTable`
-                DROP COLUMN Value;
-            )";
-
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Can't drop serial column: 'Value'");
-        }
-
-        {
-            TString query = R"(
-                ALTER TABLE `/Root/SerialTable`
                 ALTER COLUMN Value DROP NOT NULL;
             )";
 
@@ -112,6 +101,40 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL(result.GetStatus(), EStatus::BAD_REQUEST);
             UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Cannot alter serial column 'Value'");
+        }
+
+        {
+            // Dropping a serial column is allowed: the column and its backing sequence are
+            // removed together.
+            TString query = R"(
+                ALTER TABLE `/Root/SerialTable`
+                DROP COLUMN Value;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        {
+            // The dropped column is gone.
+            TString query = R"(
+                SELECT Value FROM `/Root/SerialTable`;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT(!result.IsSuccess());
+        }
+
+        {
+            TString query = R"(
+                SELECT * FROM `/Root/SerialTable`;
+            )";
+
+            auto result = session.ExecuteQuery(query, TTxControl::BeginTx().CommitTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(R"([
+                [[1u]]
+            ])", NYdb::FormatResultSetYson(result.GetResultSet(0)));
         }
     }
 
@@ -355,42 +378,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(AddColumnWithDefaultForbidden) {
-        TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableAddColumsWithDefaults(false)
-            .SetWithSampleTables(false));
-
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            auto query = R"(
-                CREATE TABLE `/Root/SerialTableCreateAndAlter` (
-                    Key Int32,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-            )";
-
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            auto query = R"(
-                ALTER TABLE `/Root/SerialTableCreateAndAlter`
-                ADD COLUMN SeqNo Int32 DEFAULT 5;
-            )";
-
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Adding columns with defaults is disabled");
-        }
-    }
-
     Y_UNIT_TEST(AlterTableAddColumnWithDefaultValue) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableAddColumsWithDefaults(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -811,8 +800,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
     Y_UNIT_TEST(AddNonColumnDoesnotReturnInternalError) {
         TKikimrRunner kikimr(TKikimrSettings()
             .SetUseRealThreads(false)
-            .SetEnableAddColumsWithDefaults(true)
-            .SetDisableMissingDefaultColumnsInBulkUpsert(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.RunCall([&] { return kikimr.GetQueryClient(); } );
@@ -1052,7 +1039,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(IndexedTableAndNotNullColumnAddNotNullColumn) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableAddColumsWithDefaults(true)
             .SetEnableParameterizedDecimal(true)
             .SetWithSampleTables(false));
 
@@ -1335,7 +1321,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(Utf8AndDefault) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableAddColumsWithDefaults(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -1414,7 +1399,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableAddNotNullWithDefault) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableAddColumsWithDefaults(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -1513,7 +1497,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableAddColumnWithDefaultRejection) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableAddColumsWithDefaults(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -1556,7 +1539,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableAddColumnWithDefaultCancellation) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableAddColumsWithDefaults(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -1594,7 +1576,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableAddColumnWithDefaultOlap) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableAddColumsWithDefaults(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -1625,10 +1606,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(DefaultColumnAndBulkUpsert, DisableMissingDefaultColumnsInBulkUpsert) {
+    Y_UNIT_TEST(DefaultColumnAndBulkUpsert) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetEnableAddColumsWithDefaults(true)
-            .SetDisableMissingDefaultColumnsInBulkUpsert(DisableMissingDefaultColumnsInBulkUpsert)
             .SetWithSampleTables(false));
 
         auto queryClient = kikimr.GetQueryClient();
@@ -1691,19 +1670,13 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             rowsBuilder.EndList();
 
             auto result = tableClient.BulkUpsert("/Root/DefaultColumnAndBulkUpsert", rowsBuilder.Build()).ExtractValueSync();
-            if (DisableMissingDefaultColumnsInBulkUpsert) {
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
-                UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: Value3, Value1");
-            } else {
-                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SUCCESS, result.GetIssues().ToString());
-            }
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), NYdb::EStatus::SCHEME_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Missing default columns: Value3, Value1");
         }
     }
 
     Y_UNIT_TEST(AlterTableAddColumnDefaultNullIsNotAllowed) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableAddColumsWithDefaults(true);
-
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
 
@@ -2225,7 +2198,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
-            .SetEnableAddColumsWithDefaults(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -2314,8 +2286,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
-            .SetEnableAddColumsWithDefaults(true)
-            .SetEnableShowCreate(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -2430,8 +2400,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
-            .SetEnableAddColumsWithDefaults(true)
-            .SetEnableShowCreate(true)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -2796,7 +2764,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
-            .SetDisableMissingDefaultColumnsInBulkUpsert(true)
             .SetWithSampleTables(false));
 
         auto queryClient = kikimr.GetQueryClient();
@@ -3186,8 +3153,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableAddColumnDefaultWithChangefeed) {
         TKikimrRunner kikimr(TKikimrSettings()
-            .SetWithSampleTables(false)
-            .SetEnableAddColumsWithDefaults(true));
+            .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
 

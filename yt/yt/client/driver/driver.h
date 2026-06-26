@@ -63,10 +63,10 @@ struct TDriverRequest
     std::optional<std::string> UserRemoteAddress;
 
     //! User token.
-    std::optional<TString> UserToken;
+    std::optional<std::string> UserToken;
 
     //! TVM service ticket.
-    std::optional<TString> ServiceTicket;
+    std::optional<std::string> ServiceTicket;
 
     //! Additional logging tags.
     std::optional<std::string> LoggingTags;

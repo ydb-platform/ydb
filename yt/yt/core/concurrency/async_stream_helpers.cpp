@@ -41,7 +41,7 @@ private:
         TSharedMutableRef readBuffer;
         if (Strategy_ == EWaitForStrategy::WaitFor) {
             struct TSyncInputStreamAdapterIntermediateBufferTag { };
-            readBuffer = TSharedMutableRef::Allocate<TSyncInputStreamAdapterIntermediateBufferTag>(length);
+            readBuffer = TSharedMutableRef::Allocate<TSyncInputStreamAdapterIntermediateBufferTag>(length, {.InitializeStorage = false});
         } else {
             readBuffer = TSharedMutableRef(buffer, length, /*holder*/ nullptr);
         }
@@ -191,7 +191,7 @@ private:
     void Reset()
     {
         CurrentBufferSize_ = 0;
-        Buffer_ = TSharedMutableRef::Allocate<TBufferTag>(BufferCapacity_);
+        Buffer_ = TSharedMutableRef::Allocate<TBufferTag>(BufferCapacity_, {.InitializeStorage = false});
     }
 
     void* WriteToBuffer(const void* data, size_t length)

@@ -218,6 +218,8 @@ namespace NKikimr::NStorage {
         TControlWrapper EnableSyncLogChunkCompressionSSD;
         TControlWrapper MaxSyncLogChunksInFlightHDD;
         TControlWrapper MaxSyncLogChunksInFlightSSD;
+        TControlWrapper SyncLogMaxDiskAmount;
+        TControlWrapper SyncLogMaxMemAmount;
         TControlWrapper DefaultHugeGarbagePerMille;
         TControlWrapper HugeDefragFreeSpaceBorderPerMille;
         TControlWrapper MaxChunksToDefragInflight;
@@ -251,6 +253,7 @@ namespace NKikimr::NStorage {
         TControlWrapper EnablePhantomFlagStorage;
         TControlWrapper EnablePersistentPhantomFlagStorage;
         TControlWrapper PhantomFlagStorageLimitPerVDiskBytes;
+        TControlWrapper VolatilePhantomFlagStorageBlobSizeLimitBytes;
 
         TControlWrapper EnableChunkKeeper;
 
@@ -285,6 +288,8 @@ namespace NKikimr::NStorage {
         TControlWrapper MaxPutTimeoutSeconds;
 
         TControlWrapper EnableDeepScrubbing;
+
+        TControlWrapper EnableFreshSyncDataThrottling;
 
     public:
         struct TGroupRecord;

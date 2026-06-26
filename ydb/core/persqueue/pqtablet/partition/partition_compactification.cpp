@@ -1,5 +1,4 @@
 #include "partition.h"
-#include <ydb/core/persqueue/pqtablet/blob/message_format.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include "partition_util.h"
@@ -456,8 +455,7 @@ bool TPartitionCompaction::TCompactState::ProcessResponse(TEvPQ::TEvProxyRespons
                          Nothing(),
                          TInstant::MilliSeconds(res.GetWriteTimestampMS()), TInstant::MilliSeconds(res.GetCreateTimestampMS()),
                          res.GetUncompressedSize(), std::move(*res.MutablePartitionKey()), std::move(*res.MutableExplicitHash()),
-                         res.GetMessageCount(),
-                         FromProtoMessageFormat(res.GetMessageFormat()));
+                         res.GetLogicalMessageCount(), res.GetIsBatch());
 
         if (res.HasTotalParts()) {
             blob.PartData = TPartData{static_cast<ui16>(res.GetPartNo()), static_cast<ui16>(res.GetTotalParts()), res.GetTotalSize()};
@@ -748,10 +746,25 @@ void TPartitionCompaction::TCompactState::UpdateDataKeysBody() {
     Y_ENSURE(PartitionActor->CompactionBlobEncoder.DataKeysBody.size() == oldDataKeys.size() - zeroedKeys);
     Y_ENSURE(currCumulSize == PartitionActor->CompactionBlobEncoder.BodySize - sizeDiff);
     PartitionActor->CompactionBlobEncoder.BodySize = currCumulSize;
-    PartitionActor->CompactionBlobEncoder.StartOffset = Max(
-                    PartitionActor->CompactionBlobEncoder.StartOffset,
-                    PartitionActor->CompactionBlobEncoder.DataKeysBody.front().Key.GetOffset()
-                        + (ui32)(PartitionActor->CompactionBlobEncoder.DataKeysBody.front().Key.GetPartNo() > 0));
+    if (PartitionActor->IsTopicRetentionDeleteLastBlobEnabled()) {
+        if (PartitionActor->CompactionBlobEncoder.DataKeysBody.empty()) {
+            const ui64 startOffset = FirstHeadOffset + (FirstHeadPartNo > 0 ? 1 : 0);
+            PartitionActor->CompactionBlobEncoder.StartOffset = startOffset;
+            PartitionActor->CompactionBlobEncoder.EndOffset = startOffset;
+            PartitionActor->CompactionBlobEncoder.Head.Offset = startOffset;
+            PartitionActor->CompactionBlobEncoder.Head.PartNo = 0;
+        } else {
+            PartitionActor->CompactionBlobEncoder.StartOffset = Max(
+                            PartitionActor->CompactionBlobEncoder.StartOffset,
+                            PartitionActor->CompactionBlobEncoder.DataKeysBody.front().Key.GetOffset()
+                                + (ui32)(PartitionActor->CompactionBlobEncoder.DataKeysBody.front().Key.GetPartNo() > 0));
+        }
+    } else {
+        PartitionActor->CompactionBlobEncoder.StartOffset = Max(
+                        PartitionActor->CompactionBlobEncoder.StartOffset,
+                        PartitionActor->CompactionBlobEncoder.DataKeysBody.front().Key.GetOffset()
+                            + (ui32)(PartitionActor->CompactionBlobEncoder.DataKeysBody.front().Key.GetPartNo() > 0));
+    }
 
     UpdatedKeys.clear();
     DeletedKeys.clear();

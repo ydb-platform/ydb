@@ -22,9 +22,9 @@ protected:
             return true;
         }
         if (currentTxInfo.SeqNo->Generation == GetTxInfo().SeqNo->Generation) {
-            return currentTxInfo.SeqNo->Round < GetTxInfo().SeqNo->Round;
+            return currentTxInfo.SeqNo->Round <= GetTxInfo().SeqNo->Round;
         }
-        return currentTxInfo.SeqNo->Generation < GetTxInfo().SeqNo->Generation;
+        return currentTxInfo.SeqNo->Generation <= GetTxInfo().SeqNo->Generation;
     }
 
 public:

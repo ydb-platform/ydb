@@ -51,7 +51,7 @@ protected:
 
 private:
     NScheduler::TOperationId OperationId;
-    std::optional<TString> OperationAlias;
+    std::optional<std::string> OperationAlias;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

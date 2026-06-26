@@ -138,6 +138,48 @@ void TPQDescribeTopicActor::HandleCacheNavigateResponse(TEvTxProxySchemeCache::T
                 }
                 rr->set_service_type(pqConfig.GetDefaultClientServiceType().GetName());
             }
+
+            switch (consumer.GetType()) {
+                case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_STREAMING: {
+                    rr->mutable_streaming_consumer_type();
+                    break;
+                }
+                case NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP: {
+                    auto* shared = rr->mutable_shared_consumer_type();
+                    shared->set_keep_messages_order(consumer.GetKeepMessageOrder());
+                    if (consumer.GetDefaultProcessingTimeoutSeconds() > 0) {
+                        shared->mutable_default_processing_timeout()->set_seconds(consumer.GetDefaultProcessingTimeoutSeconds());
+                    }
+                    if (const auto waitTimeMs = consumer.GetDefaultReceiveMessageWaitTimeMs(); waitTimeMs > 0) {
+                        shared->mutable_receive_message_wait_time()->set_seconds(waitTimeMs / 1'000);
+                        shared->mutable_receive_message_wait_time()->set_nanos((waitTimeMs % 1'000) * 1'000'000);
+                    }
+                    if (const auto delayTimeMs = consumer.GetDefaultDelayMessageTimeMs(); delayTimeMs > 0) {
+                        shared->mutable_receive_message_delay()->set_seconds(delayTimeMs / 1'000);
+                        shared->mutable_receive_message_delay()->set_nanos((delayTimeMs % 1'000) * 1'000'000);
+                    }
+
+                    if (consumer.GetDeadLetterPolicyEnabled()) {
+                        auto* deadLetterPolicy = shared->mutable_dead_letter_policy();
+                        deadLetterPolicy->set_enabled(true);
+                        if (consumer.GetMaxProcessingAttempts() > 0) {
+                            deadLetterPolicy->mutable_condition()->set_max_processing_attempts(consumer.GetMaxProcessingAttempts());
+                        }
+                        switch (consumer.GetDeadLetterPolicy()) {
+                            case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE:
+                                deadLetterPolicy->mutable_move_action()->set_dead_letter_queue(consumer.GetDeadLetterQueue());
+                                break;
+                            case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE:
+                                deadLetterPolicy->mutable_delete_action();
+                                break;
+                            case NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_UNSPECIFIED:
+                                break;
+                        }
+                    }
+                    break;
+                }
+            }
+
             NJson::TJsonValue customMonitoringSettings;
             if (consumer.HasMetricsLevel()) {
                 customMonitoringSettings["metrics_level"] = consumer.GetMetricsLevel();

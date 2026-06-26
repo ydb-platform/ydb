@@ -13,6 +13,7 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/operation/operation.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/tx/tx.h>
 
+#include <memory>
 #include <variant>
 
 namespace Ydb {
@@ -64,6 +65,7 @@ class TRetryContext;
 namespace NRetry {
 template <typename TClient>
 class TRetryDeadlineHelper;
+class TBulkUpsertRetryState;
 } // namespace NRetry
 
 namespace NScheme {
@@ -596,6 +598,24 @@ public:
         uint32_t MaxInFlight = 0;
         uint32_t Total = 0;
         uint32_t Done = 0;
+    };
+
+    const TMetadata& Metadata() const;
+private:
+    TMetadata Metadata_;
+};
+
+class TAnalyzeOperation : public TOperation {
+public:
+    using TOperation::TOperation;
+    TAnalyzeOperation(TStatus&& status, Ydb::Operations::Operation&& operation);
+
+    struct TMetadata {
+        EAnalyzeState State = EAnalyzeState::Unspecified;
+        float Progress = 0;
+        std::vector<std::string> Paths;           // All paths covered by this analyze.
+        std::vector<std::string> InProgressPaths; // Subset of Paths currently being traversed
+        std::vector<std::string> DonePaths;       // Subset of Paths whose analysis completed
     };
 
     const TMetadata& Metadata() const;
@@ -1545,17 +1565,24 @@ struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {
     // ydb.table.session.pool.name. When empty the default
     // "<database>@<endpoint>" is used.
     FLUENT_SETTING(std::string, PoolName);
+
+    FLUENT_SETTING_DEFAULT(TRetryOperationSettings, RetrySettings, TRetryOperationSettings());
 };
 
 struct TBulkUpsertSettings : public TOperationRequestSettings<TBulkUpsertSettings> {
     // Format setting proto serialized into string. If not set format defaults are used.
     // I.e. it's Ydb.Table.CsvSettings for CSV.
     FLUENT_SETTING_DEFAULT(std::string, FormatSettings, "");
+    FLUENT_SETTING_OPTIONAL(TRetryOperationSettings, RetrySettings);
     google::protobuf::Arena* Arena_ = nullptr;
     TBulkUpsertSettings& Arena(google::protobuf::Arena* arena) { Arena_ = arena; return *this; }
+
+    // Internal: BulkUpsert retry backup hook.
+    std::shared_ptr<NRetry::TBulkUpsertRetryState> RetryRowsState_;
 };
 
 struct TReadRowsSettings : public TOperationRequestSettings<TReadRowsSettings> {
+    FLUENT_SETTING_OPTIONAL(TRetryOperationSettings, RetrySettings);
 };
 
 struct TStreamExecScanQuerySettings : public TRequestSettings<TStreamExecScanQuerySettings> {
@@ -1581,6 +1608,8 @@ class TTableClient {
     friend class TSessionPool;
     friend class NRetry::Sync::TRetryContext<TTableClient, TStatus>;
     friend class NRetry::Async::TRetryContext<TTableClient, TAsyncStatus>;
+    friend class NRetry::Async::TRetryContext<TTableClient, TAsyncBulkUpsertResult>;
+    friend class NRetry::Async::TRetryContext<TTableClient, TAsyncReadRowsResult>;
 
 public:
     using TOperationFunc = std::function<TAsyncStatus(TSession session)>;
@@ -1610,6 +1639,10 @@ public:
 
     //! Returns the size of session pool
     int64_t GetCurrentPoolSize() const;
+
+    // Internal: used by retry wrappers to suppress nested retries.
+    bool GetInRetryOperationContext() const;
+    void SetInRetryOperationContext(bool value);
 
     //! Returns new table builder
     TTableBuilder GetTableBuilder();
@@ -2724,6 +2757,7 @@ class TReadRowsResult : public TStatus {
     TResultSet ResultSet;
 
   public:
+    explicit TReadRowsResult(TStatus&& status);
     explicit TReadRowsResult(TStatus&& status, TResultSet&& resultSet);
 
     TResultSet GetResultSet() {

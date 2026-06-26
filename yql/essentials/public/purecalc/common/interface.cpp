@@ -34,6 +34,7 @@ TProgramFactoryOptions::TProgramFactoryOptions()
     , UseSystemColumns(false)
     , UseWorkerPool(true)
     , LangVer(MinLangVersion)
+    , RemoveUnsupportedPragmas(false)
 {
 }
 
@@ -132,6 +133,11 @@ TProgramFactoryOptions& TProgramFactoryOptions::SetInternalSettings(const TInter
 
 TProgramFactoryOptions& TProgramFactoryOptions::SetIssueReportTarget(const TString& reportTarget) {
     IssueReportTarget = reportTarget;
+    return *this;
+}
+
+TProgramFactoryOptions& TProgramFactoryOptions::SetRemoveUnsupportedPragmas(bool removeUnsupportedPragmas) {
+    RemoveUnsupportedPragmas = removeUnsupportedPragmas;
     return *this;
 }
 

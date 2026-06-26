@@ -156,6 +156,13 @@ void DoWithRetry(std::function<bool(void)> action, i32 retryCount = 2) {
     UNIT_ASSERT(isEnd);
 }
 
+void EnableRejectNonExistentStorageChannel(TTestContext &tc) {
+    auto &icb = tc.Runtime->GetAppData().Icb;
+    TControlWrapper rejectNonExistentStorageChannel(0, 0, 1);
+    TControlBoard::RegisterSharedControl(rejectNonExistentStorageChannel, icb->KeyValueVolumeControls.RejectNonExistentStorageChannel);
+    rejectNonExistentStorageChannel = 1;
+}
+
 void CmdWrite(const TDeque<TString> &keys, const TDeque<TString> &values,
         const NKikimrClient::TKeyValueRequest::EStorageChannel storageChannel,
         const NKikimrClient::TKeyValueRequest::EPriority priority,
@@ -2863,8 +2870,7 @@ Y_UNIT_TEST(TestWriteAndRenameWithoutCreationUnixTimeNewApi)
 }
 
 
-Y_UNIT_TEST(TestReadRequestInFlightLimit)
-{
+Y_UNIT_TEST(TestReadRequestInFlightLimit) {
     TTestContext tc;
     TFinalizer finalizer(tc);
     bool activeZone = false;
@@ -2877,16 +2883,93 @@ Y_UNIT_TEST(TestReadRequestInFlightLimit)
 
     ui64 creationUnixTime = (TInstant::Now() - TDuration::Seconds(1000)).Seconds();
 
-    CmdWrite("key-1", "value",
-        NKikimrClient::TKeyValueRequest::MAIN,
-        NKikimrClient::TKeyValueRequest::REALTIME,
-        creationUnixTime,
-        tc);
-    CmdRead({"key-1"},
-        NKikimrClient::TKeyValueRequest::REALTIME,
-        {"value"}, {false}, {creationUnixTime},
-        tc);
+    CmdWrite("key-1", "value", NKikimrClient::TKeyValueRequest::MAIN, NKikimrClient::TKeyValueRequest::REALTIME, creationUnixTime, tc);
+    CmdRead({"key-1"}, NKikimrClient::TKeyValueRequest::REALTIME, {"value"}, {false}, {creationUnixTime}, tc);
 }
+
+Y_UNIT_TEST(TestWriteToNonExistentChannelReturnsError) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        EnableRejectNonExistentStorageChannel(tc);
+        activeZone = false;
+
+        TAutoPtr<IEventHandle> handle;
+        TEvKeyValue::TEvResponse *result;
+        THolder<TEvKeyValue::TEvRequest> request;
+        DoWithRetry([&] {
+            tc.Runtime->ResetScheduledCount();
+            request.Reset(new TEvKeyValue::TEvRequest);
+            auto write = request->Record.AddCmdWrite();
+            write->SetKey("key");
+            write->SetValue("value");
+            write->SetStorageChannel(NKikimrClient::TKeyValueRequest::EXTRA3);
+            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_ERROR);
+            return true;
+        });
+    });
+}
+
+Y_UNIT_TEST(TestWriteToNonExistentChannelReturnsErrorNewApi) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        EnableRejectNonExistentStorageChannel(tc);
+
+        ExecuteWrite<NKikimrKeyValue::Statuses::RSTATUS_BAD_REQUEST>(tc, {{"key", "value"}}, 0, 5,
+            NKikimrKeyValue::Priorities::PRIORITY_REALTIME);
+    });
+}
+
+Y_UNIT_TEST(TestGetStatusNonExistentChannelReturnsError) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        EnableRejectNonExistentStorageChannel(tc);
+        activeZone = false;
+
+        TAutoPtr<IEventHandle> handle;
+        TEvKeyValue::TEvResponse *result;
+        THolder<TEvKeyValue::TEvRequest> request;
+        DoWithRetry([&] {
+            tc.Runtime->ResetScheduledCount();
+            request.Reset(new TEvKeyValue::TEvRequest);
+            auto getStatus = request->Record.AddCmdGetStatus();
+            getStatus->SetStorageChannel(NKikimrClient::TKeyValueRequest::EXTRA3);
+            tc.Runtime->SendToPipe(tc.TabletId, tc.Edge, request.Release(), 0, GetPipeConfigWithRetries());
+            result = tc.Runtime->GrabEdgeEvent<TEvKeyValue::TEvResponse>(handle);
+            UNIT_ASSERT(result);
+            UNIT_ASSERT_EQUAL(result->Record.GetStatus(), NMsgBusProxy::MSTATUS_ERROR);
+            return true;
+        });
+    });
+}
+
+Y_UNIT_TEST(TestGetStatusNonExistentChannelReturnsErrorNewApi) {
+    TTestContext tc;
+    RunTestWithReboots(tc.TabletIds, [&]() {
+        return tc.InitialEventsFilter.Prepare();
+    }, [&](const TString &dispatchName, std::function<void(TTestActorRuntime&)> setup, bool &activeZone) {
+        TFinalizer finalizer(tc);
+        tc.Prepare(dispatchName, setup, activeZone);
+        EnableRejectNonExistentStorageChannel(tc);
+
+        ExecuteGetStatus<NKikimrKeyValue::Statuses::RSTATUS_BAD_REQUEST>(tc, {5}, 0);
+    });
+}
+
 
 } // TKeyValueTest
 } // NKikimr

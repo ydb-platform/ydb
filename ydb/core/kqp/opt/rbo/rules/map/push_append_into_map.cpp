@@ -1,36 +1,25 @@
 #include <ydb/core/kqp/opt/rbo/rules/kqp_rules_include.h>
-#include <ydb/core/kqp/opt/rbo/rules/map/map_output_utils.h>
 
 namespace NKikimr {
 namespace NKqp {
 
-namespace {
+// Main shape this handles:
+// A: Map [ a := b ]         == becomes ==>  Map [ c := d, a := b ]
+// B: `- Map [ c := d ]      (element "a := b" is pushed into map B)
 
-bool TryAppendToBottomMap(
-    const TMapElement& mapElement,
-    const TVector<TInfoUnit>& bottomInputIUs,
-    TVector<TMapElement>& bottomElements,
-    TVector<TInfoUnit>& bottomOutput)
-{
-    // Move an append into the bottom map only when it can be evaluated before that map.
-    if (!mapElement.DependsOnlyOn(bottomInputIUs)) {
-        return false;
-    }
-
-    auto elements = bottomElements;
-    elements.push_back(mapElement);
-
-    auto output = BuildMapOutput(bottomInputIUs, elements);
-    if (MakeInfoUnitSet(output).size() != output.size()) {
-        return false;
-    }
-
-    bottomElements = std::move(elements);
-    bottomOutput = std::move(output);
-    return true;
-}
-
-} // anonymous namespace
+// Caveats:
+// 1.
+// A: Map [ a := b ]         -- move prevented, because map A
+// B: `- Map [ b := a ]         can't be evaluated at point B (no "b")
+//
+// 2.
+// A: Map [ a := b, e <- a ] -- move prevented, because "a := b" produces
+// B: `- Map [ c := d ]         "a", which would be removed from output by
+//                              rename "e <- a" if it's moved below.
+//
+// Consequence of this behaviour #1: stacks of maps with just appends
+// will eventually become topologically sorted (when this rule runs in
+// a loop, e.g. inside a rule stage)
 
 TIntrusivePtr<IOperator>
 TPushAppendIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
@@ -49,7 +38,6 @@ TPushAppendIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& inpu
     auto bottomMap = CastOperator<TOpMap>(topMap->GetInput());
     const auto bottomInputIUs = bottomMap->GetInput()->GetOutputIUs();
     auto bottomElements = bottomMap->MapElements;
-    auto bottomOutput = bottomMap->GetOutputIUs();
 
     TVector<TMapElement> topElements;
     bool pushed = false;
@@ -57,38 +45,25 @@ TPushAppendIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& inpu
     // Map(Map(input, bottomElements), topElements) ->
     // Map(input, bottomElements + movable top appends), with non-movable top elements left above.
     for (const auto& mapElement : topMap->MapElements) {
-        if (topMap->IsExtractableAppend(mapElement) &&
-            TryAppendToBottomMap(mapElement, bottomInputIUs, bottomElements, bottomOutput)) {
-            pushed = true;
-        } else {
+        if (!topMap->IsExtractableAppend(mapElement) || !mapElement.DependsOnlyOn(bottomInputIUs)) {
             topElements.push_back(mapElement);
+            continue;
         }
+
+        bottomElements.push_back(mapElement);
+        pushed = true;
     }
 
     if (!pushed) {
         return input;
     }
 
+    bottomMap->MapElements = std::move(bottomElements);
     if (topElements.empty()) {
-        if (!IUSetIntersect(bottomOutput, GetForbidden(topMap.get())).empty()) {
-            return input;
-        }
-        bottomMap->MapElements = std::move(bottomElements);
-        bottomMap->Props.OutputIUs = bottomOutput;
         return bottomMap;
     }
 
-    const auto newTopOutput = BuildMapOutput(bottomOutput, topElements);
-    if (MakeInfoUnitSet(newTopOutput).size() != newTopOutput.size() ||
-        !IUSetIntersect(newTopOutput, GetForbidden(topMap.get())).empty()) {
-        return input;
-    }
-
-    bottomMap->MapElements = std::move(bottomElements);
-    bottomMap->Props.OutputIUs = bottomOutput;
-    auto newTopMap = MakeIntrusive<TOpMap>(bottomMap, topMap->Pos, topElements, topMap->Ordered);
-    newTopMap->Props.OutputIUs = newTopOutput;
-    return newTopMap;
+    return MakeIntrusive<TOpMap>(bottomMap, topMap->Pos, topElements, topMap->Ordered);
 }
 
 } // namespace NKqp

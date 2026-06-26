@@ -1,6 +1,7 @@
 #include <ydb/core/base/blobstorage.h>
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
+#include <ydb/core/tx/columnshard/columnshard_schema.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
 #include <ydb/core/tx/columnshard/engines/changes/with_appended.h>
@@ -19,6 +20,7 @@
 
 #include <arrow/api.h>
 #include <arrow/ipc/reader.h>
+#include <util/generic/algorithm.h>
 #include <util/string/join.h>
 #include <util/string/printf.h>
 
@@ -31,6 +33,86 @@ using namespace NTxUT;
 using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
 using TDefaultTestsController = NKikimr::NYDBTest::NColumnShard::TController;
+
+namespace {
+
+class TCopyTableDropTestController: public TDefaultTestsController {
+private:
+    mutable TMutex ShardMutex;
+    const TColumnShard* Shard = nullptr;
+
+public:
+    void DoOnTabletInitCompleted(const TColumnShard& shard) override {
+        TDefaultTestsController::DoOnTabletInitCompleted(shard);
+        TGuard<TMutex> g(ShardMutex);
+        Shard = &shard;
+    }
+
+    void DoOnTabletStopped(const TColumnShard& shard) override {
+        TDefaultTestsController::DoOnTabletStopped(shard);
+        TGuard<TMutex> g(ShardMutex);
+        if (Shard == &shard) {
+            Shard = nullptr;
+        }
+    }
+
+    const TColumnShard* GetShard() const {
+        TGuard<TMutex> g(ShardMutex);
+        return Shard;
+    }
+};
+
+const TColumnShard* WaitForShard(TCopyTableDropTestController& controller, TTestBasicRuntime& runtime) {
+    const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
+    while (controller.GetShardActualsCount() == 0 && TInstant::Now() < deadline) {
+        runtime.SimulateSleep(TDuration::MilliSeconds(50));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(controller.GetShardActualsCount(), 1);
+    return controller.GetShard();
+}
+
+void AssertReadOnlySnapshotState(const TColumnShard& shard, const NOlap::TSnapshot& snapshot, const bool expectedPresent) {
+    const auto snapshots = shard.GetTablesManager().GetReadOnlyTablesSnapshots();
+    const bool present = Find(snapshots, snapshot) != snapshots.end();
+    UNIT_ASSERT_VALUES_EQUAL(present, expectedPresent);
+}
+
+void AssertCopyPathState(const TColumnShard& shard, const ui64 copyPathId, const std::optional<NOlap::TSnapshot>& expectedCopySnapshot) {
+    const auto schemeShardLocalPathId = TSchemeShardLocalPathId::FromRawValue(copyPathId);
+    const auto internalPathId = shard.GetTablesManager().ResolveInternalPathId(schemeShardLocalPathId, false);
+    UNIT_ASSERT_VALUES_EQUAL(internalPathId.has_value(), expectedCopySnapshot.has_value());
+    if (!expectedCopySnapshot) {
+        UNIT_ASSERT(!shard.GetTablesManager().GetCopyVersionOptional(schemeShardLocalPathId));
+        return;
+    }
+    UNIT_ASSERT(internalPathId);
+    const auto copySnapshot = shard.GetTablesManager().GetCopyVersionOptional(schemeShardLocalPathId);
+    UNIT_ASSERT(copySnapshot);
+    UNIT_ASSERT_VALUES_EQUAL(*copySnapshot, *expectedCopySnapshot);
+}
+
+bool CheckTableInfoV1RowExists(TTestBasicRuntime& runtime, ui64 tabletId, ui64 internalPathId, ui64 schemeShardLocalPathId) {
+    TActorId sender = runtime.AllocateEdgeActor();
+    const TString query = Sprintf(R"___(
+        (
+            (let key '('('PathId (Uint64 '%lu)) '('SchemeShardLocalPathId (Uint64 '%lu))))
+            (let select '('PathId))
+            (return (AsList (SetResult 'Result (SelectRow 'TableInfoV1 key select))))
+        )
+    )___", internalPathId, schemeShardLocalPathId);
+
+    auto evTx = new TEvTablet::TEvLocalMKQL;
+    evTx->Record.MutableProgram()->MutableProgram()->SetText(query);
+    ForwardToTablet(runtime, tabletId, sender, evTx);
+
+    auto event = runtime.GrabEdgeEvent<TEvTablet::TEvLocalMKQLResponse>(sender);
+    UNIT_ASSERT(event);
+    UNIT_ASSERT_VALUES_EQUAL(event->Get()->Record.GetStatus(), NKikimrProto::OK);
+    const auto& result = event->Get()->Record.GetExecutionEngineEvaluatedResponse();
+    return result.GetValue().GetStruct(0).GetOptional().HasOptional();
+}
+
+}   // namespace
 
 Y_UNIT_TEST_SUITE(CopyTable) {
     Y_UNIT_TEST(EmptyTable) {
@@ -435,6 +517,89 @@ Y_UNIT_TEST_SUITE(CopyTable) {
         // Second copy pinned at 200 rows
         {
             TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId2, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 200);
+        }
+    }
+
+    // After DropTable on a read-only copy, its TableInfoV1 row and pinned snapshot must disappear.
+    Y_UNIT_TEST(ReadOnlyTableDropRemovesTableInfoV1AndSnapshot) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TCopyTableDropTestController>();
+        auto& csController = *csControllerGuard.operator->();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
+
+        ui64 txId = 10;
+        int writeId = 10;
+
+        {
+            std::vector<ui64> writeIds;
+            const bool ok =
+                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(ok);
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        const ui64 copyPathId1 = 2;
+        const auto copyTxId1 = ++txId;
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, copyPathId1, 1), copyTxId1);
+        const auto copySnapshot1 = NOlap::TSnapshot(planStep, copyTxId1);
+        PlanSchemaTx(runtime, sender, { planStep, copyTxId1 });
+
+        {
+            std::vector<ui64> writeIds;
+            const bool ok = WriteData(
+                runtime, sender, writeId++, srcPathId, MakeTestBlob({ 100, 200 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(ok);
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        const ui64 copyPathId2 = 3;
+        const auto copyTxId2 = ++txId;
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, copyPathId2, 1), copyTxId2);
+        const auto copySnapshot2 = NOlap::TSnapshot(planStep, copyTxId2);
+        PlanSchemaTx(runtime, sender, { planStep, copyTxId2 });
+
+        const auto* shard = WaitForShard(csController, runtime);
+        const auto internalPathId = shard->GetTablesManager().ResolveInternalPathId(TSchemeShardLocalPathId::FromRawValue(srcPathId), false);
+        UNIT_ASSERT(internalPathId);
+
+        AssertCopyPathState(*shard, copyPathId1, copySnapshot1);
+        AssertCopyPathState(*shard, copyPathId2, copySnapshot2);
+        AssertReadOnlySnapshotState(*shard, copySnapshot1, true);
+        AssertReadOnlySnapshotState(*shard, copySnapshot2, true);
+        UNIT_ASSERT(CheckTableInfoV1RowExists(runtime, TTestTxConfig::TxTablet0, internalPathId->GetRawValue(), copyPathId1));
+        UNIT_ASSERT(CheckTableInfoV1RowExists(runtime, TTestTxConfig::TxTablet0, internalPathId->GetRawValue(), copyPathId2));
+
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::DropTableTxBody(copyPathId1, 2), ++txId);
+        PlanSchemaTx(runtime, sender, { planStep, txId });
+
+        shard = WaitForShard(csController, runtime);
+        AssertCopyPathState(*shard, copyPathId1, std::nullopt);
+        AssertCopyPathState(*shard, copyPathId2, copySnapshot2);
+        AssertReadOnlySnapshotState(*shard, copySnapshot1, false);
+        AssertReadOnlySnapshotState(*shard, copySnapshot2, true);
+        UNIT_ASSERT(!CheckTableInfoV1RowExists(runtime, TTestTxConfig::TxTablet0, internalPathId->GetRawValue(), copyPathId1));
+        UNIT_ASSERT(CheckTableInfoV1RowExists(runtime, TTestTxConfig::TxTablet0, internalPathId->GetRawValue(), copyPathId2));
+
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, srcPathId, NOlap::TSnapshot(planStep, txId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 200);
+        }
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, copyPathId2, NOlap::TSnapshot(planStep, txId));
             reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
             auto rb = reader.ReadAll();
             UNIT_ASSERT(rb);

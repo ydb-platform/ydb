@@ -440,6 +440,14 @@ void TTablesManager::DropTable(
     auto* table = Tables.FindPtr(pathId);
     AFL_VERIFY(table);
     const bool isReadOnly = table->IsReadOnly(schemeShardLocalPathId);
+    if (isReadOnly && table->GetPathIds().size() > 1) {
+        Schema::EraseTableInfoV1(db, pathId, schemeShardLocalPathId);
+        table->Remove(schemeShardLocalPathId);
+        AFL_VERIFY(SchemeShardLocalToInternal.erase(schemeShardLocalPathId));
+        NYDBTest::TControllers::GetColumnShardController()->OnDeletePathId(TabletId, TUnifiedPathId::BuildValid(pathId, schemeShardLocalPathId));
+        RebuildReadOnlyTablesSnapshots();
+        return;
+    }
     table->SetDropVersion(schemeShardLocalPathId, version);
     if (table->IsDropped()) {
         AFL_VERIFY(PathsToDrop[version].emplace(pathId).second);

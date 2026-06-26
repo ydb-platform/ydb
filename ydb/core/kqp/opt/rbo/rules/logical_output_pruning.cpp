@@ -6,17 +6,14 @@ namespace NKqp {
 
 TLogicalOutputPruningStage::TLogicalOutputPruningStage()
     : IRBOStage("Prune dead logical outputs") {
-    Props = ERuleProperties::RequireParents | ERuleProperties::RequireNameConstraints;
+    Props = ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints;
 }
 
 void TLogicalOutputPruningStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
-    Y_UNUSED(ctx);
-
     bool pruned = true;
     while (pruned) {
         pruned = false;
-        ComputePlanLiveness(root);
-        ComputePlanNameConstraints(root);
+        ComputeRequiredProps(root, Props, ctx, StageName);
 
         for (const auto& iter : root) {
             if (iter.Current->Kind != EOperator::Map) {
@@ -24,12 +21,8 @@ void TLogicalOutputPruningStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
             }
 
             auto map = CastOperator<TOpMap>(iter.Current);
-            const auto* liveOut = GetLiveOut(map.get());
-            if (!liveOut) {
-                continue;
-            }
-
-            auto newElements = KeepLiveMapElements(map, *liveOut);
+            const auto& liveOut = GetLiveOut(map.get());
+            auto newElements = KeepLiveMapElements(map, liveOut);
             if (newElements.size() == map->MapElements.size()) {
                 continue;
             }
@@ -51,26 +44,18 @@ void TLogicalOutputPruningStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
             }
 
             auto aggregate = CastOperator<TOpAggregate>(iter.Current);
-            const auto* liveOut = GetLiveOut(aggregate.get());
-            if (!liveOut) {
-                continue;
-            }
-
-            const auto liveOutput = KeepLiveColumns(aggregate->GetOutputIUs(), *liveOut);
+            const auto& liveOut = GetLiveOut(aggregate.get());
+            const auto liveOutput = KeepLiveColumns(aggregate->GetOutputIUs(), liveOut);
             pruned |= PruneAggregateTraits(aggregate, liveOutput);
         }
     }
 
-    ComputePlanLiveness(root);
+    ComputeRequiredProps(root, Props, ctx, StageName);
 
     for (const auto& iter : root) {
         auto op = iter.Current;
-        const auto* liveOut = GetLiveOut(iter.Current.get());
-        if (!liveOut) {
-            continue;
-        }
-
-        const auto liveOutput = KeepLiveColumns(op->GetOutputIUs(), *liveOut);
+        const auto& liveOut = GetLiveOut(iter.Current.get());
+        const auto liveOutput = KeepLiveColumns(op->GetOutputIUs(), liveOut);
         if (op->Kind == EOperator::Source) {
             NarrowReadColumns(CastOperator<TOpRead>(op), liveOutput);
             continue;

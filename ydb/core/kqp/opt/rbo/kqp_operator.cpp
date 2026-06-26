@@ -376,12 +376,12 @@ TVector<std::reference_wrapper<TExpression>> TOpMap::GetComplexExpressions() {
 }
 
 TVector<TInfoUnit> TOpMap::GetSubplanIUs(TPlanProps& props) {
-    Y_UNUSED(props);
     TVector<TInfoUnit> subplanIUs;
     TVector<TInfoUnit> res;
 
     for (const auto& mapElement : MapElements) {
-        auto vars = mapElement.GetExpression().GetInputIUs(true, false);
+        auto expression = mapElement.GetExpression();
+        auto vars = TExpression(expression.Node, expression.Ctx, &props).GetInputIUs(true, false);
         for (const auto& iu : vars) {
             if (iu.IsSubplanContext()) {
                 subplanIUs.push_back(iu);
@@ -577,8 +577,7 @@ void TOpFilter::ApplyReplaceMap(const TNodeOnNodeOwnedMap& map, TRBOContext & ct
 }
 
 TVector<TInfoUnit> TOpFilter::GetFilterIUs(TPlanProps& props) const {
-    Y_UNUSED(props);
-    return FilterExpr.GetInputIUs(true, true);
+    return TExpression(FilterExpr.Node, FilterExpr.Ctx, &props).GetInputIUs(true, true);
 }
 
 TVector<TInfoUnit> TOpFilter::GetUsedIUs(TPlanProps& props) {
@@ -1128,6 +1127,17 @@ TVector<TInfoUnit> TOpRoot::GetOutputIUs() {
     return GetInput()->GetOutputIUs();
 }
 
+void TOpRoot::ClearParentsRec(TIntrusivePtr<IOperator> op, std::unordered_set<IOperator*>& visited) const {
+    if (!op || !visited.insert(op.get()).second) {
+        return;
+    }
+
+    op->Parents.clear();
+    for (const auto& child : op->Children) {
+        ClearParentsRec(child, visited);
+    }
+}
+
 void TOpRoot::ComputeParentsRec(TIntrusivePtr<IOperator> op, TIntrusivePtr<IOperator> parent, ui32 parentChildIndex) const {
     if (parent) {
         const auto parentEntry = std::make_pair(parent.get(), parentChildIndex);
@@ -1144,13 +1154,16 @@ void TOpRoot::ComputeParentsRec(TIntrusivePtr<IOperator> op, TIntrusivePtr<IOper
 }
 
 void TOpRoot::ComputeParents() {
-    for (auto it : *this) {
-        it.Current->Parents.clear();
+    std::unordered_set<IOperator*> visited;
+    ClearParentsRec(GetInput(), visited);
+    const auto subPlans = PlanProps.Subplans.Get();
+    for (const auto& subPlan : subPlans) {
+        ClearParentsRec(CastOperator<IOperator>(subPlan.Plan), visited);
     }
+
     TIntrusivePtr<TOpRoot> noParent = nullptr;
     ComputeParentsRec(GetInput(), noParent, 0);
 
-    const auto subPlans = PlanProps.Subplans.Get();
     for (const auto& subPlan : subPlans) {
         ComputeParentsRec(CastOperator<IOperator>(subPlan.Plan), noParent, 0);
     }
@@ -1205,12 +1218,10 @@ TOpIterator::TOpIterator(TOpRoot* ptr) {
         return;
     }
 
+    PlanProps = &ptr->PlanProps;
     std::unordered_set<IOperator*> visited;
-    for (const auto& subplan : ptr->PlanProps.Subplans.Get()) {
-        BuildDfsList(CastOperator<IOperator>(subplan.Plan), nullptr, size_t(0), visited, std::make_shared<TInfoUnit>(subplan.IU));
-    }
     auto child = ptr->GetInput();
-    BuildDfsList(child, {}, size_t(0), visited, nullptr);
+    BuildDfsList(child, {}, size_t(0), visited, nullptr, true);
     CurrElement = 0;
 }
 

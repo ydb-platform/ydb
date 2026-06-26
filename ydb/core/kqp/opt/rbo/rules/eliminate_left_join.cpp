@@ -26,7 +26,7 @@ TIntrusivePtr<IOperator> TEliminateLeftJoinRule::SimpleMatchAndApply(const TIntr
     auto& rhs = join->GetRightInput();
 
     // R is should not be live
-    if (!IUSetIntersect(rhs->GetOutputIUs(), GetLiveOutOrEmpty(join.get())).empty()) {
+    if (!IUSetIntersect(rhs->GetOutputIUs(), GetLiveOut(join.get())).empty()) {
         return input;
     }
 

@@ -78,7 +78,9 @@ TAliasMap BuildIdentityAliases(const TVector<TInfoUnit>& output) {
 }
 
 TAliasMap GetAliasesAtOutput(const TIntrusivePtr<IOperator>& op) {
-    return op->Props.Analysis.Aliases ? *op->Props.Analysis.Aliases : BuildIdentityAliases(op->GetOutputIUs());
+    Y_ENSURE(op);
+    Y_ENSURE(op->Props.Analysis.Aliases.has_value(), "Aliases requested for an operator without computed aliases");
+    return *op->Props.Analysis.Aliases;
 }
 
 TAliasMap RestrictAliases(const TAliasMap& inputAliases, const TVector<TInfoUnit>& output) {
@@ -269,9 +271,8 @@ void ComputePlanAliases(TOpRoot& root) {
 }
 
 const TPlanAliases::TCandidates* GetAliases(IOperator* op, const TInfoUnit& iu) {
-    if (!op || !op->Props.Analysis.Aliases) {
-        return nullptr;
-    }
+    Y_ENSURE(op);
+    Y_ENSURE(op->Props.Analysis.Aliases.has_value(), "Aliases requested for an operator without computed aliases");
 
     const auto aliasIt = op->Props.Analysis.Aliases->find(iu);
     return aliasIt == op->Props.Analysis.Aliases->end() ? nullptr : &aliasIt->second;

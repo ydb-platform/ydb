@@ -62,18 +62,19 @@ struct TOrderEnforcer {
 
 enum ESortDir : ui32 { None = 0x00, Asc = 0x01, Desc = 0x02 };
 
-// Recomputable logical analysis state. There is no per-analysis validity token:
-// analysis passes clear and rebuild the fields required by the current stage.
+// Recomputable logical analysis state. std::nullopt means the analysis was not
+// computed for this operator; computed-but-empty state is represented by an
+// engaged empty value.
 struct TOperatorAnalysisProps {
     void Clear() {
         LiveOut.reset();
         Aliases.reset();
-        NameConstraints.Clear();
+        NameConstraints.reset();
     }
 
     std::optional<TInfoUnitSet> LiveOut;
     std::optional<TPlanAliases::TAliasMap> Aliases;
-    TPlanNameConstraints NameConstraints;
+    std::optional<TPlanNameConstraints> NameConstraints;
 };
 
 /**
@@ -747,8 +748,8 @@ struct TOpIterator {
     using iterator_category = std::input_iterator_tag;
     using difference_type = std::ptrdiff_t;
 
-    // Build a default iterator for the root of the plan
-    // It will visit all the subplans in their DFS order first and then the main plan
+    // Build a default iterator for the root of the plan, following subplans
+    // referenced by expressions in DFS order.
     TOpIterator(TOpRoot* ptr);
 
     // Build an iterator for traversing the children of specific operator
@@ -814,6 +815,7 @@ public:
     TVector<TString> ColumnOrder;
 
 private:
+    void ClearParentsRec(TIntrusivePtr<IOperator> op, std::unordered_set<IOperator*>& visited) const;
     void ComputeParentsRec(TIntrusivePtr<IOperator> op, TIntrusivePtr<IOperator> parent, ui32 parentChildIndex) const;
 };
 

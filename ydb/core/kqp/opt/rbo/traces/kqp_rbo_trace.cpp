@@ -365,6 +365,10 @@ struct TForbiddenOutEntry {
 };
 
 std::vector<TForbiddenOutEntry> BuildForbiddenOutEntries(const IOperator& op) {
+    if (!op.Props.Analysis.NameConstraints) {
+        return {};
+    }
+
     std::vector<std::tuple<std::string, IOperator*, ui32>> parents;
     parents.reserve(op.Parents.size());
     for (const auto& [parent, childIdx] : op.Parents) {
@@ -379,7 +383,7 @@ std::vector<TForbiddenOutEntry> BuildForbiddenOutEntries(const IOperator& op) {
 
     std::vector<TForbiddenOutEntry> entries;
     for (const auto& [label, parent, childIdx] : parents) {
-        const auto& forbidden = op.Props.Analysis.NameConstraints.GetForbiddenOut(parent, childIdx, const_cast<IOperator*>(&op));
+        const auto& forbidden = op.Props.Analysis.NameConstraints->GetForbiddenOut(parent, childIdx, const_cast<IOperator*>(&op));
         if (forbidden.empty()) {
             continue;
         }

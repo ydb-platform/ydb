@@ -416,27 +416,21 @@ bool RewriteAggregateInputs(TOpAggregate& aggregate, const TInfoUnitSet& liveOut
 } // anonymous namespace
 
 bool TRewriteExpressionsToPreferredAliasesRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    const auto* liveOut = GetLiveOut(input.get());
-    if (!liveOut) {
-        if (input->Kind == EOperator::Map) {
-            return RewriteMapInputs(*CastOperator<TOpMap>(input), EmptyInfoUnitSet(), ctx, props);
-        }
-        return false;
-    }
+    const auto& liveOut = GetLiveOut(input.get());
 
     switch (input->Kind) {
         case EOperator::Map:
-            return RewriteMapInputs(*CastOperator<TOpMap>(input), *liveOut, ctx, props);
+            return RewriteMapInputs(*CastOperator<TOpMap>(input), liveOut, ctx, props);
         case EOperator::Filter:
-            return RewriteFilterInputs(*CastOperator<TOpFilter>(input), *liveOut, ctx, props);
+            return RewriteFilterInputs(*CastOperator<TOpFilter>(input), liveOut, ctx, props);
         case EOperator::Join:
-            return RewriteJoinInputs(*CastOperator<TOpJoin>(input), *liveOut, ctx, props);
+            return RewriteJoinInputs(*CastOperator<TOpJoin>(input), liveOut, ctx, props);
         case EOperator::Aggregate:
-            return RewriteAggregateInputs(*CastOperator<TOpAggregate>(input), *liveOut, ctx, props);
+            return RewriteAggregateInputs(*CastOperator<TOpAggregate>(input), liveOut, ctx, props);
         case EOperator::Limit:
-            return RewriteLimitInputs(*CastOperator<TOpLimit>(input), *liveOut, ctx, props);
+            return RewriteLimitInputs(*CastOperator<TOpLimit>(input), liveOut, ctx, props);
         case EOperator::Sort:
-            return RewriteSortInputs(*CastOperator<TOpSort>(input), *liveOut, ctx, props);
+            return RewriteSortInputs(*CastOperator<TOpSort>(input), liveOut, ctx, props);
         default:
             return false;
     }

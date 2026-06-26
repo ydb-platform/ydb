@@ -116,10 +116,6 @@ TKikimrRunner::TKikimrRunner(const TKikimrSettings& settings) {
     NKikimrConfig::TAppConfig appConfig = settings.AppConfig;
     appConfig.MutableColumnShardConfig()->SetDisabledOnSchemeShard(false);
     appConfig.MutableTableServiceConfig()->SetEnableRowsDuplicationCheck(true);
-    // Warmup defaults on in prod, but in UTs it would gate queries run right at startup; keep it off unless a test opts in.
-    if (!appConfig.GetTableServiceConfig().HasEnableCompileCacheWarmup()) {
-        appConfig.MutableTableServiceConfig()->SetEnableCompileCacheWarmup(false);
-    }
     if (settings.EnableStorageProxy) {
         NFq::TCheckpointCoordinatorSettings::DefaultCheckpointingPeriod = settings.CheckpointPeriod;
 

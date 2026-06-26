@@ -9,6 +9,7 @@ namespace NYT::NBus {
 ////////////////////////////////////////////////////////////////////////////////
 
 DECLARE_REFCOUNTED_STRUCT(IBus)
+DECLARE_REFCOUNTED_STRUCT(IDirectPlacementTransfer)
 DECLARE_REFCOUNTED_STRUCT(IMessageHandler)
 DECLARE_REFCOUNTED_STRUCT(IBusClient)
 DECLARE_REFCOUNTED_STRUCT(IBusServer)

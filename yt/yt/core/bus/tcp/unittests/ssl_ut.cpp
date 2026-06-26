@@ -3,6 +3,7 @@
 
 #include <yt/yt/core/bus/bus.h>
 #include <yt/yt/core/bus/client.h>
+#include <yt/yt/core/bus/message_handler.h>
 #include <yt/yt/core/bus/server.h>
 
 #include <yt/yt/core/bus/tcp/config.h>
@@ -41,12 +42,10 @@ class TEmptyBusHandler
 {
 public:
     void HandleMessage(
-        TSharedRefArray message,
-        IBusPtr replyBus) noexcept override
-    {
-        Y_UNUSED(message);
-        Y_UNUSED(replyBus);
-    }
+        TSharedRefArray /*message*/,
+        IBusPtr /*replyBus*/,
+        IDirectPlacementTransferPtr /*transfer*/) noexcept override
+    { }
 };
 
 ////////////////////////////////////////////////////////////////////////////////

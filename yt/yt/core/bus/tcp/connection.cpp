@@ -4,6 +4,8 @@
 #include "local_bypass.h"
 #include "dispatcher_impl.h"
 
+#include <yt/yt/core/bus/message_handler.h>
+
 #include <yt/yt/core/misc/fs.h>
 #include <yt/yt/core/misc/memory_usage_tracker.h>
 #include <yt/yt/core/misc/proc.h>

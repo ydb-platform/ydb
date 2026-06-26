@@ -2,11 +2,14 @@
 
 #include "authentication_identity.h"
 #include "config.h"
+#include "direct_placement_transfer.h"
 #include "dispatcher.h"
+#include "helpers.h"
 #include "message.h"
 #include "private.h"
 
 #include <yt/yt/core/bus/bus.h>
+#include <yt/yt/core/bus/direct_placement_transfer.h>
 
 #include <yt/yt/core/net/address.h>
 
@@ -88,9 +91,9 @@ void TServiceContextBase::Initialize()
 
     YT_ASSERT(RequestMessage_.Size() >= 2);
     RequestBody_ = RequestMessage_[1];
-    RequestAttachments_ = std::vector<TSharedRef>(
-        RequestMessage_.Begin() + 2,
-        RequestMessage_.End());
+    // NB: #RequestAttachments_ is engaged lazily (see #RequestAttachments) so that,
+    // in the direct placement transfer case, it stays disengaged until the transfer
+    // is run.
     TotalSize_ = TypicalRequestSize +
         GetMessageHeaderSize(RequestMessage_) +
         GetMessageBodySize(RequestMessage_) +
@@ -288,12 +291,44 @@ TSharedRef TServiceContextBase::GetRequestBody() const
 
 std::vector<TSharedRef>& TServiceContextBase::RequestAttachments()
 {
-    return RequestAttachments_;
+    if (!RequestAttachments_) {
+        // Not yet available. When delivered via direct placement transfer, the
+        // service must drive the transfer to completion first (see
+        // #TryGetRequestAttachmentsTransfer); otherwise read them from the message.
+        YT_VERIFY(!RequestAttachmentsTransfer_);
+        RequestAttachments_ = std::vector<TSharedRef>(
+            RequestMessage_.Begin() + 2,
+            RequestMessage_.End());
+    }
+    return *RequestAttachments_;
 }
 
 IAsyncZeroCopyInputStreamPtr TServiceContextBase::GetRequestAttachmentsStream()
 {
     return nullptr;
+}
+
+IDirectPlacementTransferPtr TServiceContextBase::TryGetRequestAttachmentsTransfer()
+{
+    // The stored transfer is the RPC-layer wrapper installed by
+    // #SetRequestAttachmentsTransfer, so this is safe to call any number of times
+    // (it always hands out the same handle). Running it, however, must happen
+    // exactly once, as per #IDirectPlacementTransfer.
+    return RequestAttachmentsTransfer_;
+}
+
+void TServiceContextBase::SetRequestAttachmentsTransfer(NBus::IDirectPlacementTransferPtr transfer)
+{
+    // Wrap the bus-layer transfer so that, once the service drives it to completion,
+    // the request attachments become available via #RequestAttachments. A weak ref
+    // avoids a cycle (the wrapper is held by this context).
+    RequestAttachmentsTransfer_ = CreateChainedDirectPlacementTransfer(
+        std::move(transfer),
+        BIND([weakThis = MakeWeak(this)] (std::vector<TSharedRef>&& attachments) {
+            if (auto this_ = weakThis.Lock()) {
+                this_->RequestAttachments_ = std::move(attachments);
+            }
+        }));
 }
 
 TSharedRef TServiceContextBase::GetResponseBody()
@@ -744,6 +779,11 @@ std::vector<TSharedRef>& TServiceContextWrapper::RequestAttachments()
 IAsyncZeroCopyInputStreamPtr TServiceContextWrapper::GetRequestAttachmentsStream()
 {
     return UnderlyingContext_->GetRequestAttachmentsStream();
+}
+
+IDirectPlacementTransferPtr TServiceContextWrapper::TryGetRequestAttachmentsTransfer()
+{
+    return UnderlyingContext_->TryGetRequestAttachmentsTransfer();
 }
 
 std::vector<TSharedRef>& TServiceContextWrapper::ResponseAttachments()

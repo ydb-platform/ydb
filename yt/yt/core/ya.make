@@ -26,6 +26,7 @@ SRCS(
     actions/invoker_util.cpp
 
     bus/public.cpp
+    bus/helpers.cpp
 
     bus/tcp/connection.cpp
     bus/tcp/dispatcher.cpp

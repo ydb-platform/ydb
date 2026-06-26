@@ -11,6 +11,8 @@
 
 #include <yt/yt/core/net/public.h>
 
+#include <library/cpp/yt/memory/ref.h>
+
 #include <library/cpp/yt/misc/enum.h>
 
 namespace NYT::NBus {
@@ -59,8 +61,27 @@ struct TSendOptions
 {
     static constexpr int AllParts = std::numeric_limits<int>::max();
 
+    //! Determines if and how the delivery of the message is tracked
+    //! (see #IBus::Send).
     EDeliveryTrackingLevel TrackingLevel = EDeliveryTrackingLevel::None;
+
+    //! The number of leading message parts to protect with a checksum.
+    //! The default protects every part; use zero to disable checksumming.
     int ChecksummedPartCount = AllParts;
+
+    //! The number of trailing message parts to deliver via Direct Placement Transfer (DPT).
+    /*!
+     *  When positive and supported by the underlying transport, these parts are
+     *  omitted from the message passed to #IMessageHandler::HandleMessage and
+     *  are instead fetched, under the receiver's control, into buffers of the
+     *  receiver's choosing (potentially enabling a true zero-copy receive).
+     *
+     *  Transports that do not support DPT ignore this option and deliver the whole message inline.
+     */
+    int DirectPlacementTransferPartCount = 0;
+
+    //! If true, canceling the future returned by #IBus::Send drops the message
+    //! from the send queue (provided the transport supports cancelation).
     bool EnableSendCancelation = false;
 };
 
@@ -114,7 +135,9 @@ struct IBus
      *
      *  \note Thread affinity: any
      */
-    virtual TFuture<void> Send(TSharedRefArray message, const TSendOptions& options = {}) = 0;
+    virtual TFuture<void> Send(
+        TSharedRefArray message,
+        const TSendOptions& options = {}) = 0;
 
     //! For socket buses, updates the TOS level.
     /*!
@@ -138,27 +161,6 @@ struct IBus
 };
 
 DEFINE_REFCOUNTED_TYPE(IBus)
-
-////////////////////////////////////////////////////////////////////////////////
-
-//! Handles incoming bus messages.
-struct IMessageHandler
-    : public virtual TRefCounted
-{
-    //! Raised whenever a new message arrives via the bus.
-    /*!
-     *  \param message The just arrived message.
-     *  \param replyBus A bus that can be used for replying back.
-     *
-     *  \note
-     *  Thread affinity: this method is called from an unspecified thread
-     *  and must return ASAP. No context switch or fiber cancelation is possible.
-     *
-     */
-    virtual void HandleMessage(TSharedRefArray message, IBusPtr replyBus) noexcept = 0;
-};
-
-DEFINE_REFCOUNTED_TYPE(IMessageHandler)
 
 ////////////////////////////////////////////////////////////////////////////////
 

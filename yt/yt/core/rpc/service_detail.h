@@ -247,30 +247,38 @@ public:
             return false;
         }
 
-        std::vector<TSharedRef> requestAttachments;
-        try {
-            if (attachmentCodecId == NCompression::ECodec::None) {
-                requestAttachments = underlyingContext->RequestAttachments();
-            } else {
-                requestAttachments = DecompressAttachments(
-                    underlyingContext->RequestAttachments(),
-                    attachmentCodecId);
+        // When the request attachments are delivered via direct placement transfer,
+        // they are not yet available (and #RequestAttachments would abort): leave the
+        // typed attachments empty and let the handler drive
+        // #IServiceContext::TryGetRequestAttachmentsTransfer, then read them from the
+        // context. For all non-DPT methods #TryGetRequestAttachmentsTransfer is null
+        // and this behaves exactly as before.
+        if (!underlyingContext->TryGetRequestAttachmentsTransfer()) {
+            std::vector<TSharedRef> requestAttachments;
+            try {
+                if (attachmentCodecId == NCompression::ECodec::None) {
+                    requestAttachments = underlyingContext->RequestAttachments();
+                } else {
+                    requestAttachments = DecompressAttachments(
+                        underlyingContext->RequestAttachments(),
+                        attachmentCodecId);
 
-                // For decompressed blocks, memory tracking must be used again,
-                // since they are allocated in a new allocation.
-                for (auto& attachment : requestAttachments) {
-                    attachment = TrackMemory(tracker, attachment);
+                    // For decompressed blocks, memory tracking must be used again,
+                    // since they are allocated in a new allocation.
+                    for (auto& attachment : requestAttachments) {
+                        attachment = TrackMemory(tracker, attachment);
+                    }
                 }
+            } catch (const std::exception& ex) {
+                underlyingContext->Reply(TError(
+                    NRpc::EErrorCode::ProtocolError,
+                    "Error deserializing request attachments")
+                    << TError(ex));
+                return false;
             }
-        } catch (const std::exception& ex) {
-            underlyingContext->Reply(TError(
-                NRpc::EErrorCode::ProtocolError,
-                "Error deserializing request attachments")
-                << TError(ex));
-            return false;
-        }
 
-        Request_->Attachments() = std::move(requestAttachments);
+            Request_->Attachments() = std::move(requestAttachments);
+        }
 
         return true;
     }
@@ -533,7 +541,8 @@ public:
     void HandleRequest(
         std::unique_ptr<NProto::TRequestHeader> header,
         TSharedRefArray message,
-        NYT::NBus::IBusPtr replyBus) override;
+        NYT::NBus::IBusPtr replyBus,
+        NYT::NBus::IDirectPlacementTransferPtr requestAttachmentsTransfer) override;
     void HandleRequestCancellation(TRequestId requestId) override;
     void HandleStreamingPayload(
         TRequestId requestId,
@@ -638,6 +647,15 @@ protected:
         //! If |true| then the method supports attachments streaming.
         bool StreamingEnabled = false;
 
+        //! If |true| then the method supports direct placement transfer (DPT) of the
+        //! request attachments: when the client also requests it, the attachments are
+        //! not delivered inline but fetched lazily, under the service's control, via
+        //! #IServiceContext::TryGetRequestAttachmentsTransfer.
+        bool RequestAttachmentsDptEnabled = false;
+
+        //! Like #RequestAttachmentsDptEnabled but for the response attachments.
+        bool ResponseAttachmentsDptEnabled = false;
+
         //! If |true| then requests and responses are pooled.
         bool Pooled = true;
 
@@ -660,6 +678,8 @@ protected:
         TMethodDescriptor SetCancelable(bool value) const;
         TMethodDescriptor SetGenerateAttachmentChecksums(bool value) const;
         TMethodDescriptor SetStreamingEnabled(bool value) const;
+        TMethodDescriptor SetRequestAttachmentsDptEnabled(bool value) const;
+        TMethodDescriptor SetResponseAttachmentsDptEnabled(bool value) const;
         TMethodDescriptor SetPooled(bool value) const;
         TMethodDescriptor SetHandleMethodError(bool value) const;
     };
@@ -1024,6 +1044,11 @@ private:
         std::optional<TError> ThrottledError;
         TMemoryUsageTrackerGuard MemoryGuard;
         IMemoryUsageTrackerPtr MemoryUsageTracker;
+        //! Non-null iff the request's attachments are delivered via direct placement
+        //! transfer (the client requested it and the transport supports it). Whether
+        //! the attachments are exposed lazily to the service (vs. materialized inline)
+        //! additionally depends on the method declaring DPT support.
+        NYT::NBus::IDirectPlacementTransferPtr RequestAttachmentsTransfer;
     };
 
     void DoDeclareServerFeature(int featureId);
@@ -1036,6 +1061,10 @@ private:
     void OnReplyBusTerminated(const TWeakPtr<NYT::NBus::IBus>& weakBus, const TError& error);
 
     void DoHandleRequest(TIncomingRequest&& incomingRequest);
+    //! Drives #incomingRequest.RequestAttachmentsTransfer to completion, appends the
+    //! materialized attachments to the message, and re-dispatches the request inline.
+    //! Used when the client requested DPT for a method that does not support it.
+    void MaterializeRequestAttachmentsAndReinvoke(TIncomingRequest&& incomingRequest);
     void ReplyError(TError error, TIncomingRequest&& incomingRequest);
     void OnRequestAuthenticated(
         const NProfiling::TWallTimer& timer,

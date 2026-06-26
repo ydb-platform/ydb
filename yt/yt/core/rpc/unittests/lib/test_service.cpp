@@ -75,6 +75,9 @@ public:
         RegisterMethod(RPC_SERVICE_METHOD_DESC(PassCall));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(AllocationCall));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(RegularAttachments));
+        RegisterMethod(RPC_SERVICE_METHOD_DESC(DirectPlacementAttachments)
+            .SetRequestAttachmentsDptEnabled(true)
+            .SetResponseAttachmentsDptEnabled(true));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(NullAndEmptyAttachments));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(Compression));
         RegisterMethod(RPC_SERVICE_METHOD_DESC(DoNothing));
@@ -146,6 +149,21 @@ public:
 
     DECLARE_RPC_SERVICE_METHOD(NTestRpc, RegularAttachments)
     {
+        for (const auto& attachment : request->Attachments()) {
+            auto data = TBlob();
+            data.Append(attachment);
+            data.Append("_", 1);
+            response->Attachments().push_back(TSharedRef::FromBlob(std::move(data)));
+        }
+        context->Reply();
+    }
+
+    DECLARE_RPC_SERVICE_METHOD(NTestRpc, DirectPlacementAttachments)
+    {
+        // Over a non-DPT-capable transport (e.g. TCP) the attachments are delivered
+        // inline even though the method supports direct placement transfer, so no
+        // transfer is handed to the service.
+        EXPECT_FALSE(context->TryGetRequestAttachmentsTransfer());
         for (const auto& attachment : request->Attachments()) {
             auto data = TBlob();
             data.Append(attachment);

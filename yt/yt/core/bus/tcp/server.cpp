@@ -6,6 +6,7 @@
 #include "dispatcher_impl.h"
 
 #include <yt/yt/core/bus/bus.h>
+#include <yt/yt/core/bus/message_handler.h>
 #include <yt/yt/core/bus/server.h>
 #include <yt/yt/core/bus/private.h>
 
@@ -143,6 +144,61 @@ public:
                 NRpc::EErrorCode::TransportError,
                 "Bus server terminated"));
         }
+    }
+
+    THashMap<std::string, int> GetConnectionCountsByNetwork() const
+    {
+        decltype(Connections_) connections;
+        {
+            auto guard = Guard(ConnectionsSpinLock_);
+            connections = Connections_;
+        }
+        THashMap<std::string, int> result;
+        for (const auto& connection : connections) {
+            const auto& attributes = connection->GetEndpointAttributes();
+            auto network = attributes.Find<std::string>("network").value_or(DefaultNetworkName);
+            ++result[std::move(network)];
+        }
+        return result;
+    }
+
+    IYPathServicePtr GetOrchidService() const
+    {
+        return IYPathService::FromProducer(
+            BIND(&TBusServerBase::BuildOrchid, MakeStrong(this)));
+    }
+
+    void BuildOrchid(IYsonConsumer* consumer) const
+    {
+        BuildYsonFluently(consumer)
+            .BeginMap()
+                .Item("port").Value(Config_->Port)
+                .Item("unix_domain_socket_path").Value(Config_->UnixDomainSocketPath)
+                .Item("encryption_mode").Value(Config_->EncryptionMode)
+                .Item("verification_mode").Value(Config_->VerificationMode)
+                .Item("load_certs_from_bus_certs_directory").Value(Config_->LoadCertsFromBusCertsDirectory)
+                .Item("peer_alternative_host_name").Value(Config_->PeerAlternativeHostName)
+                .Item("connection_counts").Value(GetConnectionCountsByNetwork())
+                .DoIf(Config_->CertificateChain != nullptr, [&] (auto fluent) {
+                    try {
+                        auto cert = NCrypto::ReadCertFromPemBlob(Config_->CertificateChain);
+                        auto secondsToExpiry = NCrypto::GetCertTimeToExpiry(cert);
+                        fluent
+                            .Item("certificate_chain").BeginMap()
+                                .Item("environment_variable").Value(Config_->CertificateChain->EnvironmentVariable)
+                                .Item("file_name").Value(Config_->CertificateChain->FileName)
+                                .Item("signature_algorithm").Value(OBJ_nid2ln(X509_get_signature_nid(cert.get())))
+                                .Item("version").Value(X509_get_version(cert.get()))
+                                .Item("seconds_to_expiry").Value(secondsToExpiry)
+                            .EndMap();
+                    } catch (const std::exception& ex) {
+                        fluent
+                            .Item("certificate_chain").BeginMap()
+                                .Item("error").Value(TError(ex))
+                            .EndMap();
+                    }
+                })
+            .EndMap();
     }
 
 protected:
@@ -438,7 +494,7 @@ class TBusServerProxy
     : public IBusServer
 {
 public:
-    explicit TBusServerProxy(
+    TBusServerProxy(
         TBusServerConfigPtr config,
         IPacketTranscoderFactory* packetTranscoderFactory,
         IMemoryUsageTrackerPtr memoryUsageTracker,
@@ -513,8 +569,10 @@ public:
 
     IYPathServicePtr GetOrchidService() const final
     {
-        auto producer = BIND(&TBusServerProxy::BuildOrchid, MakeStrong(this));
-        return IYPathService::FromProducer(std::move(producer));
+        if (auto server = Server_.Acquire()) {
+            return server->GetOrchidService();
+        }
+        return GetEphemeralNodeFactory()->CreateMap();
     }
 
 private:
@@ -538,37 +596,6 @@ private:
             YT_LOG_WARNING(ex, "Failed to update cert sensors");
         }
     }
-
-    void BuildOrchid(IYsonConsumer* consumer) const
-    {
-        BuildYsonFluently(consumer)
-            .BeginMap()
-                .Item("encryption_mode").Value(Config_->EncryptionMode)
-                .Item("verification_mode").Value(Config_->VerificationMode)
-                .Item("load_certs_from_bus_certs_directory").Value(Config_->LoadCertsFromBusCertsDirectory)
-                .Item("peer_alternative_host_name").Value(Config_->PeerAlternativeHostName)
-                .DoIf(!!Config_->CertificateChain, [&] (auto fluent) {
-                    try {
-                        auto cert = NCrypto::ReadCertFromPemBlob(Config_->CertificateChain);
-                        auto secondsToExpiry = NCrypto::GetCertTimeToExpiry(cert);
-
-                        fluent
-                            .Item("certificate_chain").BeginMap()
-                                .Item("environment_variable").Value(Config_->CertificateChain->EnvironmentVariable)
-                                .Item("file_name").Value(Config_->CertificateChain->FileName)
-                                .Item("signature_algorithm").Value(OBJ_nid2ln(X509_get_signature_nid(cert.get())))
-                                .Item("version").Value(X509_get_version(cert.get()))
-                                .Item("seconds_to_expiry").Value(secondsToExpiry)
-                            .EndMap();
-                    } catch (const std::exception& ex) {
-                        fluent
-                            .Item("certificate_chain").BeginMap()
-                                .Item("error").Value(ex.what())
-                            .EndMap();
-                    }
-                })
-            .EndMap();
-    }
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -583,9 +610,12 @@ public:
         : Underlying_(std::move(underlying))
     { }
 
-    void HandleMessage(TSharedRefArray message, IBusPtr replyBus) noexcept final
+    void HandleMessage(
+        TSharedRefArray message,
+        IBusPtr replyBus,
+        IDirectPlacementTransferPtr transfer) noexcept final
     {
-        Underlying_->HandleMessage(std::move(message), std::move(replyBus));
+        Underlying_->HandleMessage(std::move(message), std::move(replyBus), std::move(transfer));
     }
 
     void SubscribeTerminated(const TCallback<void(const TError&)>& callback) final

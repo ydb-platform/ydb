@@ -4,6 +4,8 @@
 #include <yt/yt/core/rpc/private.h>
 
 #include <yt/yt/core/bus/bus.h>
+#include <yt/yt/core/bus/helpers.h>
+#include <yt/yt/core/bus/message_handler.h>
 #include <yt/yt/core/bus/server.h>
 
 #include <yt/yt/core/misc/protobuf_helpers.h>
@@ -56,12 +58,29 @@ private:
             }));
     }
 
-    void HandleMessage(TSharedRefArray message, IBusPtr replyBus) noexcept override
+    void HandleMessage(
+        TSharedRefArray message,
+        IBusPtr replyBus,
+        NYT::NBus::IDirectPlacementTransferPtr transfer) noexcept override
     {
         auto messageType = GetMessageType(message);
+
+        // Only request attachments may arrive via direct placement transfer; the
+        // transfer is handed to the service, which decides (per method) whether to
+        // expose it lazily or materialize it inline. Any other message type carrying
+        // a transfer is unexpected; fall back to materializing it inline.
+        if (transfer && messageType != EMessageType::Request) {
+            MaterializeTransferAndReinvoke(
+                MakeStrong(this),
+                std::move(message),
+                std::move(replyBus),
+                std::move(transfer));
+            return;
+        }
+
         switch (messageType) {
             case EMessageType::Request:
-                OnRequestMessage(std::move(message), std::move(replyBus));
+                OnRequestMessage(std::move(message), std::move(replyBus), std::move(transfer));
                 break;
 
             case EMessageType::RequestCancelation:
@@ -85,7 +104,7 @@ private:
         }
     }
 
-    void OnRequestMessage(TSharedRefArray message, IBusPtr replyBus)
+    void OnRequestMessage(TSharedRefArray message, IBusPtr replyBus, NYT::NBus::IDirectPlacementTransferPtr transfer)
     {
         auto header = std::make_unique<NProto::TRequestHeader>();
         if (!TryParseRequestHeader(message, header.get())) {
@@ -141,7 +160,8 @@ private:
         service->HandleRequest(
             std::move(header),
             std::move(message),
-            std::move(replyBus));
+            std::move(replyBus),
+            std::move(transfer));
     }
 
     void OnRequestCancelationMessage(TSharedRefArray message)

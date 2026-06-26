@@ -26,7 +26,7 @@
 * `projection.<field_name>.<options>` - расширенные свойства поля [расширенного партиционирования данных](../../../../concepts/query_execution/federated_query/s3/partition_projection.md).
 {% endif %}
 
-При чтении из [топика](../../../../concepts/datamodel/topic.md) в [потоковых запросах](../../../../dev/streaming-query/index.md) можно указывать параметры водяных знаков:
+При чтении из [топика](../../../../concepts/datamodel/topic.md) в [потоковых запросах](../../../../dev/streaming-query/index.md) можно указывать параметры вотермарок:
 
 {% include notitle [x](../../../../_includes/watermark_parameters.md) %}
 

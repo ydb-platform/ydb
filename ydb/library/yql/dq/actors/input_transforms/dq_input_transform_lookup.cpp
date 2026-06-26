@@ -50,6 +50,7 @@ public:
         , InputIndex(args.InputIndex)
         , InputFlow(args.InputFlow)
         , ComputeActorId(args.ComputeActorId)
+        , StatsLevel(args.StatsLevel)
         , TaskCounters(taskCounters)
         , Factory(factory)
         , Settings(std::move(settings))
@@ -186,6 +187,7 @@ private: //IDqComputeActorAsyncInput
                 .SecureParams = SecureParams,
                 .MaxKeysInRequest = 1000, // TODO configure me
                 .IsMultiMatches = IsMultiMatches,
+                .StatsLevel = StatsLevel,
             };
             auto [lookupSource, lookupSourceActor] = Factory->CreateDqLookupSource(Settings.GetRightSource().GetProviderName(), std::move(lookupSourceArgs));
             MaxKeysInRequest = lookupSource->GetMaxSupportedKeysInRequest();
@@ -254,6 +256,7 @@ protected:
     ui64 InputIndex; // NYql::NDq::IDqComputeActorAsyncInput
     NUdf::TUnboxedValue InputFlow;
     const NActors::TActorId ComputeActorId;
+    TCollectStatsLevel StatsLevel;
     ::NMonitoring::TDynamicCounterPtr TaskCounters;
     IDqAsyncIoFactory::TPtr Factory;
     NDqProto::TDqInputTransformLookupSettings Settings;

@@ -65,7 +65,8 @@ public:
             }
         }
         if constexpr (std::is_same_v<T, TGUID>) {
-            const auto* ptr = reinterpret_cast<const char*>(&data.GetValues<T>(1)[index]);
+            const auto byteOffset = (data.offset + static_cast<int64_t>(index)) * static_cast<int64_t>(sizeof(T));
+            const auto* ptr = reinterpret_cast<const char*>(data.GetValues<uint8_t>(1, byteOffset));
             return TBlockItem(TStringRef(ptr, sizeof(T)));
         } else {
             return static_cast<TDerived*>(this)->MakeBlockItem(data.GetValues<T>(1)[index]);
@@ -126,7 +127,14 @@ public:
             out.PushChar(1);
         }
 
-        out.PushNumber(data.GetValues<T>(1)[index]);
+        if constexpr (std::is_same_v<T, NYql::NDecimal::TInt128> || std::is_same_v<T, TGUID>) {
+            T value;
+            const auto byteOffset = (data.offset + static_cast<int64_t>(index)) * static_cast<int64_t>(sizeof(T));
+            std::memcpy(&value, data.GetValues<uint8_t>(1, byteOffset), sizeof(T));
+            out.PushNumber(value);
+        } else {
+            out.PushNumber(data.GetValues<T>(1)[index]);
+        }
     }
 
     void SaveScalarItem(const arrow::Scalar& scalar, TOutputBuffer& out) const final {

@@ -119,12 +119,13 @@ arrow::Datum DoConvertScalar(TType* type, const T& value, arrow::MemoryPool& poo
             case NUdf::EDataSlot::Utf8:
             case NUdf::EDataSlot::Yson:
             case NUdf::EDataSlot::Json:
-            case NUdf::EDataSlot::JsonDocument: {
+            case NUdf::EDataSlot::JsonDocument:
+            case NUdf::EDataSlot::DyNumber: {
                 const auto& str = value.AsStringRef();
                 std::shared_ptr<arrow::Buffer> buffer(ARROW_RESULT(arrow::AllocateBuffer(str.Size(), &pool)));
                 std::memcpy(buffer->mutable_data(), str.Data(), str.Size());
                 std::shared_ptr<arrow::Scalar> scalar;
-                if (slot == NUdf::EDataSlot::String || slot == NUdf::EDataSlot::Yson || slot == NUdf::EDataSlot::JsonDocument) {
+                if (slot == NUdf::EDataSlot::String || slot == NUdf::EDataSlot::Yson || slot == NUdf::EDataSlot::JsonDocument || slot == NUdf::EDataSlot::DyNumber) {
                     scalar = std::make_shared<arrow::BinaryScalar>(buffer, arrow::binary());
                 } else {
                     // NOTE: Do not use |arrow::BinaryScalar| for utf8 and json types directly.

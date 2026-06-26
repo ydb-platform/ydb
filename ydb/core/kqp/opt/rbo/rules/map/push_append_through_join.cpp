@@ -3,6 +3,26 @@
 namespace NKikimr {
 namespace NKqp {
 
+// Main shape this handles:
+// A: Map [ x := l, y := f(r) ]  == becomes ==>  Join
+// B: `- Join                                      |- Map [ x := l ]
+// C:    |- left                                   |  `- left
+// D:    `- right                                  `- Map [ y := f(r) ]
+// E:                                                  `- right
+//
+// Caveats:
+// 1.
+// A: Map [ x := f(l) ]      -- expression appends move only below a side
+// B: `- Join                   whose rows are preserved by the join. After
+// C:    |- left                right joins are rewritten, the right side is
+// D:    `- right               preserved only for Inner/Cross joins.
+//
+// 2.
+// A: Map [ x := l ]         -- move prevented if Join B or the chosen input
+// B: `- Join                   has multiple consumers; pushing below it would
+// C:    |- left                require cloning the shared node.
+// D:    `- right
+
 namespace {
 
 enum class EPushTarget {
@@ -16,7 +36,7 @@ bool IsLeftPreserved(const TString& joinKind) {
 }
 
 bool IsRightPreserved(const TString& joinKind) {
-    return joinKind == "Inner" || joinKind == "Cross" || joinKind == "Right" || joinKind == "RightOnly" || joinKind == "RightSemi";
+    return joinKind == "Inner" || joinKind == "Cross";
 }
 
 EPushTarget SelectAliasJoinPushTarget(
@@ -92,7 +112,7 @@ TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const T
 
     TVector<TMapElement> leftMapElements;
     TVector<TMapElement> rightMapElements;
-    TVector<std::pair<TMapElement, EPushTarget>> classifiedElements;
+    TVector<TMapElement> topMapElements;
 
     for (const auto& mapElement : topMap->MapElements) {
         EPushTarget target = EPushTarget::Top;
@@ -107,44 +127,28 @@ TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const T
             leftMapElements.push_back(mapElement);
         } else if (target == EPushTarget::Right) {
             rightMapElements.push_back(mapElement);
+        } else {
+            topMapElements.push_back(mapElement);
         }
-        classifiedElements.emplace_back(mapElement, target);
     }
 
     if (leftMapElements.empty() && rightMapElements.empty()) {
         return input;
     }
 
-    bool pushLeft = !leftMapElements.empty();
-    bool pushRight = !rightMapElements.empty();
-
-    TVector<TMapElement> topMapElements;
-    for (const auto& [mapElement, target] : classifiedElements) {
-        if (target == EPushTarget::Top) {
-            topMapElements.push_back(mapElement);
-        }
-    }
-
-    if (topMapElements.empty()) {
-        if (pushLeft) {
-            auto leftMap = MakeIntrusive<TOpMap>(originalLeftInput, topMap->Pos, leftMapElements);
-            join->SetLeftInput(leftMap);
-        }
-        if (pushRight) {
-            auto rightMap = MakeIntrusive<TOpMap>(originalRightInput, topMap->Pos, rightMapElements);
-            join->SetRightInput(rightMap);
-        }
-        return join;
-    }
-
-    if (pushLeft) {
+    if (!leftMapElements.empty()) {
         auto leftMap = MakeIntrusive<TOpMap>(originalLeftInput, topMap->Pos, leftMapElements);
         join->SetLeftInput(leftMap);
     }
-    if (pushRight) {
+    if (!rightMapElements.empty()) {
         auto rightMap = MakeIntrusive<TOpMap>(originalRightInput, topMap->Pos, rightMapElements);
         join->SetRightInput(rightMap);
     }
+
+    if (topMapElements.empty()) {
+        return join;
+    }
+
     return MakeIntrusive<TOpMap>(join, topMap->Pos, topMapElements, topMap->Ordered);
 }
 

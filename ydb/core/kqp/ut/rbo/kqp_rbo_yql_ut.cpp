@@ -4385,7 +4385,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             leftRead,
             rightRead,
             pos,
-            "Right",
+            "Left",
             TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
         );
         auto appendMap = MakeIntrusive<TOpMap>(join, pos, TVector<TMapElement>{
@@ -4401,12 +4401,12 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Join, root.PlanToString(testContext.ExprCtx));
         auto rewrittenJoin = CastOperator<TOpJoin>(root.GetInput());
-        UNIT_ASSERT_C(rewrittenJoin->GetLeftInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
-        UNIT_ASSERT_C(rewrittenJoin->GetRightInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(rewrittenJoin->GetLeftInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(rewrittenJoin->GetRightInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
 
-        auto rightMap = CastOperator<TOpMap>(rewrittenJoin->GetRightInput());
-        UNIT_ASSERT_VALUES_EQUAL(rightMap->MapElements.size(), 1);
-        UNIT_ASSERT(rightMap->MapElements.front().GetElementName() == TInfoUnit("one"));
+        auto leftMap = CastOperator<TOpMap>(rewrittenJoin->GetLeftInput());
+        UNIT_ASSERT_VALUES_EQUAL(leftMap->MapElements.size(), 1);
+        UNIT_ASSERT(leftMap->MapElements.front().GetElementName() == TInfoUnit("one"));
     }
 
     Y_UNIT_TEST(PushAppendExpressionConstantStaysAboveFullJoin) {

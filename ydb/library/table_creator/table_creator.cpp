@@ -447,7 +447,7 @@ private:
     }
 
     void BuildAlterTable(NKikimrSchemeOp::TModifyScheme& modifyScheme) const {
-        BuildTableOperation(*modifyScheme.MutableAlterTable());
+        BuildTableOperation(*modifyScheme.MutableAlterTable(), false);
     }
 
     void BuildModifyACL(NKikimrSchemeOp::TModifyScheme& modifyScheme) const {

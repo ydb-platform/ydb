@@ -3259,12 +3259,10 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         // Each successful SQS request generates 3 billing records (2 traffic + 1 request)
         auto json = CreateQueue({{"QueueName", "MeteringTestQueue"}});
 
-        // Wait for billing records from the successful CreateQueue request
-        TVector<NSc::TValue> records;
-        while (records.size() != 3) {
-            Sleep(TDuration::Seconds(1));
-            records = loadBillingRecords(meteringLogFilePath);
-        }
+        // Wait for metering flush interval to pass (flush interval is 100ms, wait 2 seconds to be safe)
+        Sleep(TDuration::Seconds(2));
+        TVector<NSc::TValue> records = loadBillingRecords(meteringLogFilePath);
+
         const size_t baselineRecordCount = records.size();
 
         // Disable authorization so that subsequent requests are sent without an
@@ -3291,11 +3289,11 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         EnableAuthorization();
         CreateQueue({{"QueueName", "AuthReenabledQueue"}});
 
+        // Wait for metering flush interval to pass (flush interval is 100ms, wait 2 seconds to be safe)
+        Sleep(TDuration::Seconds(2));
         const size_t expectedAfterReenable = baselineRecordCount + 3;
-        while (records.size() != expectedAfterReenable) {
-            Sleep(TDuration::Seconds(1));
-            records = loadBillingRecords(meteringLogFilePath);
-        }
+        records = loadBillingRecords(meteringLogFilePath);
+
         UNIT_ASSERT_VALUES_EQUAL_C(records.size(), expectedAfterReenable,
             "Metering should resume after authorization is re-enabled, but got "
             << records.size() << " records instead of " << expectedAfterReenable);
@@ -3321,12 +3319,10 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         // First, create a queue with valid auth (via JSON API) to generate baseline billing records
         auto json = CreateQueue({{"QueueName", "MeteringTestQueue"}});
 
-        // Wait for billing records from the successful CreateQueue request
-        TVector<NSc::TValue> records;
-        while (records.size() != 3) {
-            Sleep(TDuration::Seconds(1));
-            records = loadBillingRecords(meteringLogFilePath);
-        }
+        // Wait for metering flush interval to pass (flush interval is 100ms, wait 2 seconds to be safe)
+        Sleep(TDuration::Seconds(2));
+        TVector<NSc::TValue> records = loadBillingRecords(meteringLogFilePath);
+
         const size_t baselineRecordCount = records.size();
 
         // Disable authorization so that subsequent requests are sent without an
@@ -3355,10 +3351,11 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         CreateQueueXml({{"QueueName", "XmlAuthReenabledQueue"}});
 
         const size_t expectedAfterReenable = baselineRecordCount + 3;
-        while (records.size() != expectedAfterReenable) {
-            Sleep(TDuration::Seconds(1));
-            records = loadBillingRecords(meteringLogFilePath);
-        }
+
+        // Wait for metering flush interval to pass (flush interval is 100ms, wait 2 seconds to be safe)
+        Sleep(TDuration::Seconds(2));
+        records = loadBillingRecords(meteringLogFilePath);
+
         UNIT_ASSERT_VALUES_EQUAL_C(records.size(), expectedAfterReenable,
             "Metering should resume after authorization is re-enabled, but got "
             << records.size() << " records instead of " << expectedAfterReenable);

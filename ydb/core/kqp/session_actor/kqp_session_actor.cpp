@@ -1823,11 +1823,6 @@ public:
             }
         }
 
-        if (QueryState->GetFormatsSettings().IsArrowFormat() && !AppData()->FeatureFlags.GetEnableArrowResultSetFormat()) {
-            ReplyQueryError(Ydb::StatusIds::BAD_REQUEST, "Arrow result set format is not enabled. Please set EnableArrowResultSetFormat feature flag to true.");
-            return true;
-        }
-
         auto& txCtx = *QueryState->TxCtx;
         bool literal = tx && tx->IsLiteralTx();
         const bool hasLocks = txCtx.TxManager->HasLocks();

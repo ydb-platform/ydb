@@ -10,8 +10,8 @@ bool TPushRenameIntoMapProducerRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
     }
 
     auto topMap = CastOperator<TOpMap>(input);
-    const auto candidate = NMapRules::FindRenameCandidate(topMap, props);
-    if (!candidate || !NMapRules::CanStartLocalRenamePush(topMap, *candidate, props)) {
+    const auto candidate = NMapRules::FindRenameCandidate(topMap);
+    if (!candidate || !NMapRules::CanStartLocalRenamePush(topMap, *candidate)) {
         return false;
     }
 
@@ -22,7 +22,7 @@ bool TPushRenameIntoMapProducerRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
     auto map = CastOperator<TOpMap>(topMap->GetInput());
     auto* outputElement = map->FindOutputElement(candidate->From);
     if (!map->IsSingleConsumer() || !outputElement ||
-        !NMapRules::CanRenameOutput(map, candidate->From, candidate->To, props)) {
+        !NMapRules::CanRenameOutput(map, candidate->From, candidate->To)) {
         return false;
     }
     if (!outputElement->IsRename() &&
@@ -39,7 +39,7 @@ bool TPushRenameIntoMapProducerRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
     if (MakeInfoUnitSet(output).size() != output.size()) {
         return false;
     }
-    if (!NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
+    if (!NMapRules::CanFinishRenamePush(topMap, *candidate, output)) {
         return false;
     }
 

@@ -35,6 +35,7 @@ TVector<TInfoUnit> BuildUnaryOutput(const TIntrusivePtr<IUnaryOperator>& unary, 
 TIntrusivePtr<IOperator>
 TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
+    Y_UNUSED(props);
 
     if (input->Kind != EOperator::Map) {
         return input;
@@ -99,7 +100,7 @@ TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
     auto pushedMap = MakeIntrusive<TOpMap>(unaryInput, topMap->Pos, pushedElements);
 
     if (topElements.empty()) {
-        if (!IUSetIntersect(unaryOutput, GetForbidden(props, topMap.get())).empty()) {
+        if (!IUSetIntersect(unaryOutput, GetForbidden(topMap.get())).empty()) {
             return input;
         }
         pushedMap->Props.OutputIUs = pushedOutput;
@@ -110,7 +111,7 @@ TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
 
     const auto newTopOutput = BuildMapOutput(unaryOutput, topElements);
     if (MakeInfoUnitSet(newTopOutput).size() != newTopOutput.size() ||
-        !IUSetIntersect(newTopOutput, GetForbidden(props, topMap.get())).empty()) {
+        !IUSetIntersect(newTopOutput, GetForbidden(topMap.get())).empty()) {
         return input;
     }
 

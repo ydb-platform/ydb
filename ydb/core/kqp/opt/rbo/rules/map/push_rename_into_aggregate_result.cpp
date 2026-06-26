@@ -32,8 +32,8 @@ bool TPushRenameIntoAggregateResultRule::MatchAndApply(TIntrusivePtr<IOperator>&
     }
 
     auto topMap = CastOperator<TOpMap>(input);
-    const auto candidate = NMapRules::FindRenameCandidate(topMap, props);
-    if (!candidate || !NMapRules::CanStartLocalRenamePush(topMap, *candidate, props)) {
+    const auto candidate = NMapRules::FindRenameCandidate(topMap);
+    if (!candidate || !NMapRules::CanStartLocalRenamePush(topMap, *candidate)) {
         return false;
     }
 
@@ -43,7 +43,7 @@ bool TPushRenameIntoAggregateResultRule::MatchAndApply(TIntrusivePtr<IOperator>&
 
     auto aggregate = CastOperator<TOpAggregate>(topMap->GetInput());
     if (!aggregate->IsSingleConsumer() || !ProducesAggregateResult(aggregate, candidate->From) ||
-        !NMapRules::CanRenameOutput(aggregate, candidate->From, candidate->To, props)) {
+        !NMapRules::CanRenameOutput(aggregate, candidate->From, candidate->To)) {
         return false;
     }
 
@@ -57,7 +57,7 @@ bool TPushRenameIntoAggregateResultRule::MatchAndApply(TIntrusivePtr<IOperator>&
 
     const auto output = BuildAggregateOutput(*aggregate, newTraits);
     if (MakeInfoUnitSet(output).size() != output.size() ||
-        !NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
+        !NMapRules::CanFinishRenamePush(topMap, *candidate, output)) {
         return false;
     }
 

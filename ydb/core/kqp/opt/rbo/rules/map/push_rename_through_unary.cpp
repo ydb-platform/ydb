@@ -42,8 +42,8 @@ bool TPushRenameThroughTransparentUnaryRule::MatchAndApply(TIntrusivePtr<IOperat
     }
 
     auto topMap = CastOperator<TOpMap>(input);
-    const auto candidate = NMapRules::FindRenameCandidate(topMap, props);
-    if (!candidate || !NMapRules::CanStartLocalRenamePush(topMap, *candidate, props)) {
+    const auto candidate = NMapRules::FindRenameCandidate(topMap);
+    if (!candidate || !NMapRules::CanStartLocalRenamePush(topMap, *candidate)) {
         return false;
     }
 
@@ -63,7 +63,7 @@ bool TPushRenameThroughTransparentUnaryRule::MatchAndApply(TIntrusivePtr<IOperat
 
     auto unary = CastOperator<IUnaryOperator>(topMap->GetInput());
     if (!unary->IsSingleConsumer() || !IsTransparentUnary(unary, candidate->From) ||
-        !NMapRules::CanRenameOutput(unary, candidate->From, candidate->To, props)) {
+        !NMapRules::CanRenameOutput(unary, candidate->From, candidate->To)) {
         return false;
     }
 
@@ -76,7 +76,7 @@ bool TPushRenameThroughTransparentUnaryRule::MatchAndApply(TIntrusivePtr<IOperat
 
     const auto output = BuildUnaryOutput(unary, pushedOutput);
     if (MakeInfoUnitSet(output).size() != output.size() ||
-        !NMapRules::CanFinishRenamePush(topMap, *candidate, output, props)) {
+        !NMapRules::CanFinishRenamePush(topMap, *candidate, output)) {
         return false;
     }
 

@@ -11,7 +11,7 @@ class TLogicalNameConstraints: public INameConstraintsContext {
 public:
     void Run(TOpRoot& root) {
         for (const auto& iter : root) {
-            iter.Current->Props.NameConstraints.Clear();
+            iter.Current->Props.Analysis.NameConstraints.Clear();
         }
 
         bool changed = true;
@@ -28,7 +28,7 @@ public:
     TInfoUnitSet GetIncomingForbidden(IOperator* op) const override {
         TInfoUnitSet result;
         for (const auto& [parent, childIdx] : op->Parents) {
-            AddInfoUnits(result, op->Props.NameConstraints.GetForbiddenOut(parent, childIdx, op));
+            AddInfoUnits(result, op->Props.Analysis.NameConstraints.GetForbiddenOut(parent, childIdx, op));
         }
         return result;
     }
@@ -39,7 +39,7 @@ public:
         }
         Y_ENSURE(childIdx < parent->Children.size());
         auto child = parent->Children[childIdx];
-        return child->Props.NameConstraints.AddForbiddenOut(parent, childIdx, child.get(), forbidden);
+        return child->Props.Analysis.NameConstraints.AddForbiddenOut(parent, childIdx, child.get(), forbidden);
     }
 };
 
@@ -165,27 +165,23 @@ void ComputePlanNameConstraints(TOpRoot& root) {
 }
 
 const TInfoUnitSet& GetForbidden(
-    const TPlanProps& props,
     IOperator* from,
     IOperator* to)
 {
-    Y_UNUSED(props);
     const ui32 childIdx = ResolveChildIdx(from, to);
-    return from->Props.NameConstraints.GetForbiddenOut(to, childIdx, from);
+    return from->Props.Analysis.NameConstraints.GetForbiddenOut(to, childIdx, from);
 }
 
 TInfoUnitSet GetForbidden(
-    const TPlanProps& props,
     IOperator* op)
 {
-    Y_UNUSED(props);
     TInfoUnitSet result;
     if (!op) {
         return result;
     }
 
     for (const auto& [parent, childIdx] : op->Parents) {
-        AddInfoUnits(result, op->Props.NameConstraints.GetForbiddenOut(parent, childIdx, op));
+        AddInfoUnits(result, op->Props.Analysis.NameConstraints.GetForbiddenOut(parent, childIdx, op));
     }
     return result;
 }

@@ -6,6 +6,7 @@ namespace NKqp {
 
 bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
+    Y_UNUSED(props);
 
     if (input->Kind != EOperator::Map) {
         return false;
@@ -25,12 +26,12 @@ bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
         }
     }
 
-    auto newElements = KeepLiveMapElements(map, *liveOut, props, keepKeyColumns);
+    auto newElements = KeepLiveMapElements(map, *liveOut, keepKeyColumns);
 
     if (newElements.empty()) {
         const auto& replacementOutput = map->GetInput()->GetOutputIUs();
         if (MakeInfoUnitSet(replacementOutput).size() != replacementOutput.size() ||
-            !IUSetIntersect(replacementOutput, GetForbidden(props, map.get())).empty()) {
+            !IUSetIntersect(replacementOutput, GetForbidden(map.get())).empty()) {
             return false;
         }
         input = map->GetInput();
@@ -41,7 +42,7 @@ bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
 
         auto newOutput = BuildMapOutput(map, newElements);
         if (MakeInfoUnitSet(newOutput).size() != newOutput.size() ||
-            !IUSetIntersect(newOutput, GetForbidden(props, map.get())).empty()) {
+            !IUSetIntersect(newOutput, GetForbidden(map.get())).empty()) {
             return false;
         }
         map->MapElements = std::move(newElements);

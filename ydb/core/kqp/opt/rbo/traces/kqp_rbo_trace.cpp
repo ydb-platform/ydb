@@ -379,7 +379,7 @@ std::vector<TForbiddenOutEntry> BuildForbiddenOutEntries(const IOperator& op) {
 
     std::vector<TForbiddenOutEntry> entries;
     for (const auto& [label, parent, childIdx] : parents) {
-        const auto& forbidden = op.Props.NameConstraints.GetForbiddenOut(parent, childIdx, const_cast<IOperator*>(&op));
+        const auto& forbidden = op.Props.Analysis.NameConstraints.GetForbiddenOut(parent, childIdx, const_cast<IOperator*>(&op));
         if (forbidden.empty()) {
             continue;
         }
@@ -887,8 +887,8 @@ optimizer_trace::Node BuildPlanNode(
         }
     }
 
-    if (op->Props.LiveOut) {
-        AddInfoUnitField(node, "LiveOut", "Live out", SortInfoUnitSet(*op->Props.LiveOut));
+    if (op->Props.Analysis.LiveOut) {
+        AddInfoUnitField(node, "LiveOut", "Live out", SortInfoUnitSet(*op->Props.Analysis.LiveOut));
     }
 
     const auto usedIUs = SortInfoUnits(UniqueInfoUnits(op->GetUsedIUs(planProps)));
@@ -896,8 +896,8 @@ optimizer_trace::Node BuildPlanNode(
         AddInfoUnitField(node, "UsedIUs", "Used IUs", usedIUs, op.Get());
     }
 
-    if (op->Props.Aliases) {
-        const auto rows = BuildAliasRows(*op->Props.Aliases);
+    if (op->Props.Analysis.Aliases) {
+        const auto rows = BuildAliasRows(*op->Props.Analysis.Aliases);
         if (!rows.empty()) {
             node.field("Aliases", FormatPairSummary(rows))
                 .detail(BuildColumnTable("Aliases at output", rows));

@@ -29,14 +29,14 @@ void TLogicalOutputPruningStage::RunStage(TOpRoot& root, TRBOContext& ctx) {
                 continue;
             }
 
-            auto newElements = KeepLiveMapElements(map, *liveOut, root.PlanProps);
+            auto newElements = KeepLiveMapElements(map, *liveOut);
             if (newElements.size() == map->MapElements.size()) {
                 continue;
             }
 
             auto newOutput = BuildMapOutput(map, newElements);
             if (MakeInfoUnitSet(newOutput).size() != newOutput.size() ||
-                !IUSetIntersect(newOutput, GetForbidden(root.PlanProps, map.get())).empty()) {
+                !IUSetIntersect(newOutput, GetForbidden(map.get())).empty()) {
                 continue;
             }
 

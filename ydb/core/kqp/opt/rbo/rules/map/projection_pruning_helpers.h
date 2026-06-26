@@ -5,7 +5,7 @@
 namespace NKikimr {
 namespace NKqp {
 
-TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const TInfoUnitSet& liveOut, const TPlanProps& props, const TInfoUnitSet& keepKeyColumns = {});
+TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const TInfoUnitSet& liveOut, const TInfoUnitSet& keepKeyColumns = {});
 TVector<TInfoUnit> KeepLiveColumns(const TVector<TInfoUnit>& columns, const TInfoUnitSet& liveOut, const TInfoUnitSet& keepKeyColumns = {});
 TVector<TInfoUnit> BuildMapOutput(const TVector<TInfoUnit>& inputOutput, const TVector<TMapElement>& elements);
 TVector<TInfoUnit> BuildMapOutput(const TIntrusivePtr<TOpMap>& map, const TVector<TMapElement>& elements);

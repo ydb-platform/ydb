@@ -35,6 +35,7 @@ bool TryAppendToBottomMap(
 TIntrusivePtr<IOperator>
 TPushAppendIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     Y_UNUSED(ctx);
+    Y_UNUSED(props);
 
     if (input->Kind != EOperator::Map) {
         return input;
@@ -69,7 +70,7 @@ TPushAppendIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& inpu
     }
 
     if (topElements.empty()) {
-        if (!IUSetIntersect(bottomOutput, GetForbidden(props, topMap.get())).empty()) {
+        if (!IUSetIntersect(bottomOutput, GetForbidden(topMap.get())).empty()) {
             return input;
         }
         bottomMap->MapElements = std::move(bottomElements);
@@ -79,7 +80,7 @@ TPushAppendIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& inpu
 
     const auto newTopOutput = BuildMapOutput(bottomOutput, topElements);
     if (MakeInfoUnitSet(newTopOutput).size() != newTopOutput.size() ||
-        !IUSetIntersect(newTopOutput, GetForbidden(props, topMap.get())).empty()) {
+        !IUSetIntersect(newTopOutput, GetForbidden(topMap.get())).empty()) {
         return input;
     }
 

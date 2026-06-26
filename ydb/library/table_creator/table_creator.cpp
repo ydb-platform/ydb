@@ -129,6 +129,10 @@ public:
                     auto& modifyScheme = *getModifyScheme(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
                     auto& indexedTable = *modifyScheme.MutableCreateIndexedTable();
                     BuildCreateIndexedTable(indexedTable);
+
+                    if (TableAclDiff) {
+                        BuildModifyACL(modifyScheme);
+                    }
                 } else {
                     auto& modifyScheme = *getModifyScheme(NKikimrSchemeOp::ESchemeOpCreateTable);
                     BuildCreateTable(modifyScheme);

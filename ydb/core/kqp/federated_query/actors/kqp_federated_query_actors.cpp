@@ -16,7 +16,7 @@ void RegisterDescribeSecretsActor(
     const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database,
     const std::vector<TString>& secretIds,
-    TActorSystem* actorSystem
+    NActors::TActorSystem* actorSystem
 ) {
     TVector<TString> secretNames{secretIds.begin(), secretIds.end()};
     auto future = NSecret::DescribeSecret(secretNames, userToken, database, actorSystem);
@@ -29,7 +29,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
     const NKikimrSchemeOp::TAuth& authDescription,
     const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database,
-    TActorSystem* actorSystem
+    NActors::TActorSystem* actorSystem
 ) {
     switch (authDescription.identity_case()) {
         case NKikimrSchemeOp::TAuth::kServiceAccount: {
@@ -279,14 +279,14 @@ NThreading::TFuture<TEvDescribeResourceIdResponse::TDescription> DescribeExterna
     bool ssl,
     const TString& caCert,
     const TString& token,
-    TActorSystem* actorSystem
+    NActors::TActorSystem* actorSystem
 ) {
     auto promise = NThreading::NewPromise<TEvDescribeResourceIdResponse::TDescription>();
     actorSystem->Send(MakeKqpDescribeResourceIdServiceId(), new TDescribeResourceIdService::TEvDescribeResourceId(endpoint, database, ssl, caCert, token, promise));
     return promise.GetFuture();
 }
 
-IActor* CreateDescribeResourceIdServiceActor(const std::shared_ptr<NYdb::TDriver>& driver) {
+NActors::IActor* CreateDescribeResourceIdServiceActor(const std::shared_ptr<NYdb::TDriver>& driver) {
     return new TDescribeResourceIdService(driver);
 }
 

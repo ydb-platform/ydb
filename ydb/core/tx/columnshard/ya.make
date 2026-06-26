@@ -106,4 +106,7 @@ RECURSE(
 RECURSE_FOR_TESTS(
     ut_rw
     ut_schema
+    backup
+    data_accessor
+    export
 )

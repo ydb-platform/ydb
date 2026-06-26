@@ -29,9 +29,13 @@ protected:
         return ++TxCounter;
     }
 
+    bool SendTabletTransaction(std::unique_ptr<NTabletFlatExecutor::ITransaction>&& tx);
+
 protected:
     void ExecuteTransaction(std::unique_ptr<NTabletFlatExecutor::ITransaction>&& tx) {
-        AFL_VERIFY(Send<TEvExecuteGeneralLocalTransaction>(TabletActorId, std::move(tx)));
+        if (!SendTabletTransaction(std::move(tx))) {
+            PassAway();
+        }
     }
 
     void SaveSessionProgress();

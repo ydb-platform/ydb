@@ -117,8 +117,8 @@
 
 ## См. также
 
+- [Резервное копирование и восстановление](../devops/backup-and-recovery/index.md) — практическое руководство
 - [Коллекции резервных копий](datamodel/backup-collection.md) — архитектура и ограничения
-- [Резервное копирование системных таблеток](#system-tablet-backup) — метаданные кластера
 - [Рецепты для резервного копирования системных таблеток](../recipes/system-tablet-backup/index.md) — включение и восстановление
 - [Резервное копирование и восстановление](../devops/backup-and-recovery/index.md) — практическое руководство
 - [Справочник export/import](../reference/ydb-cli/export-import/index.md) — команды CLI

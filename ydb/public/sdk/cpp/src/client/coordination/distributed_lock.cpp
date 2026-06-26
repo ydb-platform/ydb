@@ -1,248 +1,318 @@
-#include "distributed_lock_internal.h"
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/distributed_lock.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/session_pool.h>
 
 #include <util/system/hostname.h>
 
 #include <atomic>
-#include <functional>
 #include <memory>
 #include <mutex>
+#include <optional>
 
 namespace NYdb {
 namespace NCoordination {
 
-using NPrivate::ISessionSource;
-using NPrivate::TSessionLease;
-
 namespace {
 
-TSessionSettings MakeLockSessionSettings(TDuration timeout, std::function<void()> onLost) {
-    return TSessionSettings()
-        .Timeout(timeout)
-        .OnStateChanged([onLost](ESessionState state) {
-            if (state == ESessionState::EXPIRED) {
-                onLost();
-            }
-        })
-        .OnStopped(std::move(onLost));
+void CloseSession(TSession& session) noexcept {
+    try {
+        if (session) {
+            session.Close().GetValueSync();
+        }
+    } catch (...) {
+    }
+    session = {};
 }
 
-class TClientSessionSource final : public ISessionSource {
+class TLockLossState {
 public:
-    TClientSessionSource(TClient& client, std::string path, TDuration timeout)
-        : Client_(client)
-        , Path_(std::move(path))
-        , Timeout_(timeout)
-    {
+    std::stop_token GetStopToken() const {
+        std::lock_guard guard(Lock_);
+        return StopSource_.get_token();
     }
 
-    bool Checkout(TSessionLease& lease, std::function<void()> onLost) noexcept override {
-        return StartSession(lease, std::move(onLost));
+    void Reset() {
+        std::lock_guard guard(Lock_);
+        StopSource_ = std::stop_source{};
     }
 
-    bool Replace(TSessionLease& lease, std::function<void()> onLost) noexcept override {
-        NPrivate::CloseSession(lease.Session);
-        return StartSession(lease, std::move(onLost));
+    void SetSuppress(bool suppress) {
+        std::lock_guard guard(Lock_);
+        Suppress_ = suppress;
     }
 
-    void Checkin(TSessionLease&& lease, bool close) noexcept override {
-        if (close || lease.Session) {
-            NPrivate::CloseSession(lease.Session);
+    void RequestStop() {
+        std::lock_guard guard(Lock_);
+        if (!Suppress_) {
+            StopSource_.request_stop();
         }
     }
 
-    bool IsPersistent() const noexcept override {
-        return true;
+    void ForceStop() {
+        std::lock_guard guard(Lock_);
+        StopSource_.request_stop();
     }
 
 private:
-    bool StartSession(TSessionLease& lease, std::function<void()> onLost) noexcept {
-        try {
-            auto result = Client_.StartSession(Path_, MakeLockSessionSettings(Timeout_, std::move(onLost))).GetValueSync();
-            if (!result.IsSuccess()) {
-                lease = {};
-                return false;
-            }
-            lease.Session = result.GetResult();
-            lease.PooledState.reset();
-            return true;
-        } catch (...) {
-            lease = {};
-            return false;
-        }
+    mutable std::mutex Lock_;
+    std::stop_source StopSource_;
+    bool Suppress_ = false;
+};
+
+class TSuppressLockLoss {
+public:
+    explicit TSuppressLockLoss(const std::shared_ptr<TLockLossState>& state)
+        : State_(state)
+    {
+        State_->SetSuppress(true);
     }
 
-    TClient Client_;
-    std::string Path_;
-    TDuration Timeout_;
+    ~TSuppressLockLoss() {
+        State_->SetSuppress(false);
+    }
+
+private:
+    std::shared_ptr<TLockLossState> State_;
 };
 
 } // namespace
 
-std::stop_token TDistributedLock::TImpl::GetStopToken() const {
-    std::lock_guard guard(StopSourceLock_);
-    return StopSource_.get_token();
-}
-
-std::function<void()> TDistributedLock::TImpl::MakeOnLost() {
-    return [this] {
-        SessionReady_.store(false);
-        if (!SuppressLockLossNotify_.load()) {
-            RequestStop();
-        }
+struct TDistributedLock::TImpl {
+    enum class EAcquireResult {
+        Acquired,
+        NotAcquired,
+        NoSession,
+        Failed,
     };
-}
 
-void TDistributedLock::TImpl::RequestStop() {
-    std::lock_guard guard(StopSourceLock_);
-    StopSource_.request_stop();
-}
-
-void TDistributedLock::TImpl::ResetStopSource() {
-    std::lock_guard guard(StopSourceLock_);
-    StopSource_ = std::stop_source{};
-}
-
-bool TDistributedLock::TImpl::TryStartSession() noexcept {
-    if (!SessionSource_->Checkout(Session_, MakeOnLost())) {
-        SessionReady_.store(false);
-        return false;
-    }
-    SessionReady_.store(true);
-    return true;
-}
-
-bool TDistributedLock::TImpl::EnsureSession() noexcept {
-    return SessionReady_.load() || TryStartSession();
-}
-
-bool TDistributedLock::TImpl::ResetSession(bool lockLost) noexcept {
-    if (lockLost) {
-        RequestStop();
-    }
-    SuppressLockLossNotify_.store(true);
-    SessionReady_.store(false);
-    if (!SessionSource_->Replace(Session_, MakeOnLost())) {
-        SuppressLockLossNotify_.store(false);
-        return false;
-    }
-    SessionReady_.store(true);
-    SuppressLockLossNotify_.store(false);
-    return true;
-}
-
-void TDistributedLock::TImpl::ReturnSession() noexcept {
-    if (!Session_.Session) {
-        return;
-    }
-    SuppressLockLossNotify_.store(true);
-    SessionReady_.store(false);
-    SessionSource_->Checkin(std::move(Session_), false);
-    Session_ = {};
-    SuppressLockLossNotify_.store(false);
-}
-
-void TDistributedLock::TImpl::ReturnSessionIfNeeded() noexcept {
-    if (!SessionSource_->IsPersistent()) {
-        ReturnSession();
-    }
-}
-
-TDistributedLock::TImpl::EAcquireResult TDistributedLock::TImpl::TryAcquire() noexcept try {
-    if (!EnsureSession()) {
-        return EAcquireResult::NoSession;
-    }
-
-    auto acquireFuture = Session_.Session.AcquireSemaphore(Name_, Settings_);
-    if (!acquireFuture.Wait(Timeout_)) {
-        ResetSession();
-        ReturnSessionIfNeeded();
-        return EAcquireResult::Failed;
-    }
-
-    const auto result = acquireFuture.GetValue();
-    if (!result.IsSuccess()) {
-        ResetSession();
-        ReturnSessionIfNeeded();
-        return EAcquireResult::Failed;
-    }
-
-    if (!result.GetResult()) {
-        ReturnSessionIfNeeded();
-        return EAcquireResult::NotAcquired;
-    }
-
-    ResetStopSource();
-    Locked_ = true;
-    return EAcquireResult::Acquired;
-} catch (...) {
-    ReturnSessionIfNeeded();
-    return EAcquireResult::Failed;
-}
-
-TDistributedLock::TImpl::~TImpl() {
-    SuppressLockLossNotify_.store(true);
-    if (Session_.Session) {
-        SessionSource_->Checkin(std::move(Session_), Locked_ || SessionSource_->IsPersistent());
-    }
-}
-
-TDistributedLock::TImpl::TImpl(
-        std::unique_ptr<ISessionSource> source,
-        const TDistributedLockSettings& lockSettings,
-        bool startSession)
-    : Name_(lockSettings.Name_)
-    , Timeout_(lockSettings.Timeout_)
-    , SessionSource_(std::move(source))
-{
-    Settings_ = TAcquireSemaphoreSettings()
-        .Exclusive()
-        .Data(FQDNHostName())
-        .Ephemeral()
-        .Timeout(Timeout_);
-    if (startSession && !TryStartSession()) {
-        throw TYdbLockException("Failed to start session");
-    }
-}
-
-bool TDistributedLock::TImpl::try_lock() noexcept {
-    return TryAcquire() == EAcquireResult::Acquired;
-}
-
-void TDistributedLock::TImpl::lock() {
-    switch (TryAcquire()) {
-        case EAcquireResult::Acquired:
-            return;
-        case EAcquireResult::NoSession:
+    TImpl(TClient& client, const TDistributedLockSettings& lockSettings)
+        : Client_(client)
+        , Name_(lockSettings.Name_)
+        , Path_(lockSettings.Path_)
+        , Timeout_(lockSettings.Timeout_)
+        , DirectSessionReady_(std::make_shared<std::atomic<bool>>(false))
+        , LockLossState_(std::make_shared<TLockLossState>())
+    {
+        if (!TryStartDirectSession()) {
             throw TYdbLockException("Failed to start session");
-        case EAcquireResult::NotAcquired:
-        case EAcquireResult::Failed:
-            throw TYdbLockException("Failed to acquire semaphore");
-    }
-}
-
-void TDistributedLock::TImpl::unlock() noexcept try {
-    auto releaseFuture = Session_.Session.ReleaseSemaphore(Name_);
-    if (releaseFuture.Wait(Timeout_)) {
-        const auto result = releaseFuture.GetValue();
-        if (!result.IsSuccess() || !result.GetResult()) {
-            ResetSession(true);
         }
-    } else {
-        ResetSession(true);
     }
-    Locked_ = false;
-    ReturnSessionIfNeeded();
-} catch (...) {
-    ResetSession(true);
-    Locked_ = false;
-    ReturnSessionIfNeeded();
-}
+
+    TImpl(TCoordinationSessionPool pool, const TDistributedLockSettings& lockSettings)
+        : Pool_(std::move(pool))
+        , Name_(lockSettings.Name_)
+        , Timeout_(lockSettings.Timeout_)
+        , LockLossState_(std::make_shared<TLockLossState>())
+    {
+    }
+
+    ~TImpl() {
+        if (Pool_) {
+            if (Session_) {
+                if (Locked_) {
+                    Pool_->Replace(std::move(Session_));
+                } else {
+                    Pool_->Return(std::move(Session_));
+                }
+            }
+            return;
+        }
+
+        TSuppressLockLoss suppress(LockLossState_);
+        CloseSession(Session_);
+    }
+
+    std::stop_token GetStopToken() const {
+        return LockLossState_->GetStopToken();
+    }
+
+    bool try_lock() noexcept {
+        return TryAcquire(TDuration::Zero()) == EAcquireResult::Acquired;
+    }
+
+    void lock() {
+        switch (TryAcquire(Timeout_)) {
+            case EAcquireResult::Acquired:
+                return;
+            case EAcquireResult::NoSession:
+                throw TYdbLockException("Failed to start session");
+            case EAcquireResult::NotAcquired:
+            case EAcquireResult::Failed:
+                throw TYdbLockException("Failed to acquire semaphore");
+        }
+    }
+
+    void unlock() noexcept {
+        if (!Session_) {
+            Locked_ = false;
+            return;
+        }
+
+        bool releaseFailed = false;
+        try {
+            auto releaseFuture = Session_.ReleaseSemaphore(Name_);
+            if (releaseFuture.Wait(Timeout_)) {
+                const auto result = releaseFuture.GetValue();
+                releaseFailed = !result.IsSuccess() || !result.GetResult();
+            } else {
+                releaseFailed = true;
+            }
+        } catch (...) {
+            releaseFailed = true;
+        }
+
+        if (releaseFailed) {
+            LockLossState_->ForceStop();
+            ReplaceCurrentSession();
+        } else {
+            ReturnPooledSessionIfNeeded();
+        }
+        Locked_ = false;
+    }
+
+private:
+    TSessionSettings MakeDirectSessionSettings() {
+        std::weak_ptr<TLockLossState> weakLockLoss = LockLossState_;
+        auto sessionReady = DirectSessionReady_;
+        return TSessionSettings()
+            .Timeout(Timeout_)
+            .OnStateChanged([weakLockLoss, sessionReady](ESessionState state) {
+                if (state == ESessionState::EXPIRED) {
+                    sessionReady->store(false);
+                    if (auto lockLoss = weakLockLoss.lock()) {
+                        lockLoss->RequestStop();
+                    }
+                }
+            })
+            .OnStopped([weakLockLoss, sessionReady] {
+                sessionReady->store(false);
+                if (auto lockLoss = weakLockLoss.lock()) {
+                    lockLoss->RequestStop();
+                }
+            });
+    }
+
+    bool TryStartDirectSession() noexcept {
+        try {
+            auto sessionResult = Client_->StartSession(Path_, MakeDirectSessionSettings()).GetValueSync();
+            if (!sessionResult.IsSuccess()) {
+                DirectSessionReady_->store(false);
+                return false;
+            }
+            Session_ = sessionResult.GetResult();
+            DirectSessionReady_->store(true);
+            return true;
+        } catch (...) {
+            DirectSessionReady_->store(false);
+            return false;
+        }
+    }
+
+    bool CheckoutPooledSession() noexcept {
+        std::weak_ptr<TLockLossState> weakLockLoss = LockLossState_;
+        auto maybeSession = Pool_->GetAny([weakLockLoss] {
+            if (auto lockLoss = weakLockLoss.lock()) {
+                lockLoss->RequestStop();
+            }
+        });
+        if (!maybeSession) {
+            Session_ = {};
+            return false;
+        }
+        Session_ = std::move(*maybeSession);
+        return true;
+    }
+
+    bool EnsureSession() noexcept {
+        if (Pool_) {
+            return bool(Session_) || CheckoutPooledSession();
+        }
+        return DirectSessionReady_->load() || TryStartDirectSession();
+    }
+
+    bool ResetDirectSession(bool lockLost) noexcept {
+        if (lockLost) {
+            LockLossState_->ForceStop();
+        }
+
+        TSuppressLockLoss suppress(LockLossState_);
+        DirectSessionReady_->store(false);
+        CloseSession(Session_);
+        return TryStartDirectSession();
+    }
+
+    TAcquireSemaphoreSettings MakeAcquireSettings(TDuration acquireTimeout) const {
+        return TAcquireSemaphoreSettings()
+            .Exclusive()
+            .Data(FQDNHostName())
+            .Ephemeral()
+            .Timeout(acquireTimeout);
+    }
+
+    void ReplaceCurrentSession() noexcept {
+        if (Pool_) {
+            Pool_->Replace(std::move(Session_));
+            Session_ = {};
+            return;
+        }
+        ResetDirectSession(false);
+    }
+
+    void ReturnPooledSessionIfNeeded() noexcept {
+        if (Pool_ && Session_) {
+            Pool_->Return(std::move(Session_));
+            Session_ = {};
+        }
+    }
+
+    EAcquireResult TryAcquire(TDuration acquireTimeout) noexcept try {
+        if (!EnsureSession()) {
+            return EAcquireResult::NoSession;
+        }
+
+        LockLossState_->Reset();
+        auto acquireFuture = Session_.AcquireSemaphore(Name_, MakeAcquireSettings(acquireTimeout));
+        if (!acquireFuture.Wait(Timeout_)) {
+            ReplaceCurrentSession();
+            return EAcquireResult::Failed;
+        }
+
+        const auto result = acquireFuture.GetValue();
+        if (!result.IsSuccess()) {
+            ReplaceCurrentSession();
+            return EAcquireResult::Failed;
+        }
+
+        if (!result.GetResult()) {
+            ReturnPooledSessionIfNeeded();
+            return EAcquireResult::NotAcquired;
+        }
+
+        Locked_ = true;
+        return EAcquireResult::Acquired;
+    } catch (...) {
+        ReplaceCurrentSession();
+        return EAcquireResult::Failed;
+    }
+
+private:
+    std::optional<TClient> Client_;
+    std::optional<TCoordinationSessionPool> Pool_;
+    TSession Session_;
+    std::string Name_;
+    std::string Path_;
+    TDuration Timeout_;
+    std::shared_ptr<std::atomic<bool>> DirectSessionReady_;
+    std::shared_ptr<TLockLossState> LockLossState_;
+    bool Locked_ = false;
+};
 
 TDistributedLock::TDistributedLock(TClient& client, const TDistributedLockSettings& settings)
-    : TDistributedLock(std::make_unique<TImpl>(
-        std::make_unique<TClientSessionSource>(client, settings.Path_, settings.Timeout_),
-        settings,
-        true))
+    : TDistributedLock(std::make_unique<TImpl>(client, settings))
+{
+}
+
+TDistributedLock::TDistributedLock(TCoordinationSessionPool pool, const TDistributedLockSettings& settings)
+    : TDistributedLock(std::make_unique<TImpl>(std::move(pool), settings))
 {
 }
 
@@ -251,9 +321,10 @@ TDistributedLock::TDistributedLock(std::unique_ptr<TImpl> impl)
 {
 }
 
-    TDistributedLock TClient::CreateDistributedLock(const TDistributedLockSettings& settings) {
-        return TDistributedLock(*this, settings);
-    }
+TDistributedLock TClient::CreateDistributedLock(const TDistributedLockSettings& settings)
+{
+    return TDistributedLock(*this, settings);
+}
 
 TDistributedLock::~TDistributedLock() = default;
 
@@ -280,5 +351,6 @@ bool TDistributedLock::try_lock() noexcept {
 std::stop_token TDistributedLock::GetStopToken() const {
     return Impl_->GetStopToken();
 }
-}
-}
+
+} // namespace NCoordination
+} // namespace NYdb

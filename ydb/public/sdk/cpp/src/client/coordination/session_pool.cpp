@@ -1,20 +1,69 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/session_pool.h>
 
-#include "distributed_lock_internal.h"
-
 #include <deque>
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <unordered_map>
 
 namespace NYdb {
 namespace NCoordination {
 
 namespace {
 
-using NPrivate::ISessionSource;
-using NPrivate::TPooledSessionState;
-using NPrivate::TSessionLease;
+void CloseSession(TSession& session) noexcept {
+    try {
+        if (session) {
+            session.Close().GetValueSync();
+        }
+    } catch (...) {
+    }
+    session = {};
+}
+
+class TPooledSessionState {
+public:
+    bool SetOnLost(TCoordinationSessionPool::TSessionLostCallback onLost) {
+        std::lock_guard guard(Lock_);
+        if (Lost_) {
+            return false;
+        }
+        OnLost_ = std::move(onLost);
+        return true;
+    }
+
+    bool ClearOnLost() {
+        std::lock_guard guard(Lock_);
+        OnLost_ = {};
+        return Lost_;
+    }
+
+    bool IsLost() const {
+        std::lock_guard guard(Lock_);
+        return Lost_;
+    }
+
+    void NotifyLost() {
+        TCoordinationSessionPool::TSessionLostCallback onLost;
+        {
+            std::lock_guard guard(Lock_);
+            if (Lost_) {
+                return;
+            }
+            Lost_ = true;
+            onLost = std::move(OnLost_);
+            OnLost_ = {};
+        }
+        if (onLost) {
+            onLost();
+        }
+    }
+
+private:
+    mutable std::mutex Lock_;
+    TCoordinationSessionPool::TSessionLostCallback OnLost_;
+    bool Lost_ = false;
+};
 
 struct TPooledSession {
     TSession Session;
@@ -47,57 +96,102 @@ struct TCoordinationSessionPool::TImpl {
         CloseAll();
     }
 
-    bool Checkout(TSessionLease& lease, std::function<void()> onLost) noexcept {
+    std::optional<TSession> GetAny(TSessionLostCallback onLost) noexcept {
+        while (auto pooled = PopIdleSession()) {
+            if (pooled->State->IsLost() || !pooled->State->SetOnLost(onLost)) {
+                CloseSession(pooled->Session);
+                pooled = StartSession();
+                if (!pooled) {
+                    return std::nullopt;
+                }
+                if (!pooled->State->SetOnLost(onLost)) {
+                    CloseSession(pooled->Session);
+                    return std::nullopt;
+                }
+            }
+
+            auto session = pooled->Session;
+            {
+                std::lock_guard guard(Lock_);
+                CheckedOut_[session.GetSessionId()] = std::move(*pooled);
+            }
+            return session;
+        }
+
+        return std::nullopt;
+    }
+
+    void Return(TSession session) noexcept {
+        auto pooled = TakeCheckedOut(session);
+        if (!pooled) {
+            return;
+        }
+
+        const bool lost = pooled->State->ClearOnLost();
+        if (lost) {
+            CloseSession(pooled->Session);
+            pooled = StartSession();
+            if (!pooled) {
+                return;
+            }
+        }
+
+        std::lock_guard guard(Lock_);
+        Sessions_.push_back(std::move(*pooled));
+    }
+
+    bool Replace(TSession session) noexcept {
+        auto pooled = TakeCheckedOut(session);
+        if (!pooled) {
+            return false;
+        }
+
+        pooled->State->ClearOnLost();
+        CloseSession(pooled->Session);
+
+        auto replacement = StartSession();
+        if (!replacement) {
+            return false;
+        }
+
+        std::lock_guard guard(Lock_);
+        Sessions_.push_back(std::move(*replacement));
+        return true;
+    }
+
+    size_t Size() const noexcept {
+        std::lock_guard guard(Lock_);
+        return Sessions_.size();
+    }
+
+private:
+    std::optional<TPooledSession> PopIdleSession() noexcept {
         std::lock_guard guard(Lock_);
         if (Sessions_.empty()) {
-            lease = {};
-            return false;
+            return std::nullopt;
         }
 
         auto session = std::move(Sessions_.front());
         Sessions_.pop_front();
-        session.State->SetOnLost(std::move(onLost));
-        lease.Session = std::move(session.Session);
-        lease.PooledState = std::move(session.State);
-        return true;
+        return session;
     }
 
-    bool Replace(TSessionLease& lease, std::function<void()> onLost) noexcept {
-        NPrivate::CloseSession(lease.Session);
-        auto session = StartSession();
+    std::optional<TPooledSession> TakeCheckedOut(TSession session) noexcept {
         if (!session) {
-            lease = {};
-            return false;
-        }
-
-        session->State->SetOnLost(std::move(onLost));
-        lease.Session = std::move(session->Session);
-        lease.PooledState = std::move(session->State);
-        return true;
-    }
-
-    void Checkin(TSessionLease&& lease, bool close) noexcept {
-        if (lease.PooledState) {
-            lease.PooledState->ClearOnLost();
-        }
-
-        if (close) {
-            NPrivate::CloseSession(lease.Session);
-            return;
-        }
-
-        if (!lease.Session) {
-            return;
+            return std::nullopt;
         }
 
         std::lock_guard guard(Lock_);
-        Sessions_.push_back(TPooledSession{
-            .Session = std::move(lease.Session),
-            .State = std::move(lease.PooledState),
-        });
+        auto it = CheckedOut_.find(session.GetSessionId());
+        if (it == CheckedOut_.end()) {
+            return std::nullopt;
+        }
+
+        auto pooled = std::move(it->second);
+        CheckedOut_.erase(it);
+        return pooled;
     }
 
-private:
     std::optional<TPooledSession> StartSession() noexcept {
         auto state = std::make_shared<TPooledSessionState>();
         auto settings = Settings_.SessionSettings_;
@@ -105,18 +199,18 @@ private:
         auto userOnStopped = settings.OnStopped_;
         settings
             .OnStateChanged([state, userOnStateChanged = std::move(userOnStateChanged)](ESessionState sessionState) {
-                if (userOnStateChanged) {
-                    userOnStateChanged(sessionState);
-                }
                 if (sessionState == ESessionState::EXPIRED) {
                     state->NotifyLost();
                 }
+                if (userOnStateChanged) {
+                    userOnStateChanged(sessionState);
+                }
             })
             .OnStopped([state, userOnStopped = std::move(userOnStopped)] {
+                state->NotifyLost();
                 if (userOnStopped) {
                     userOnStopped();
                 }
-                state->NotifyLost();
             });
 
         try {
@@ -135,13 +229,20 @@ private:
 
     void CloseAll() noexcept {
         std::deque<TPooledSession> sessions;
+        std::unordered_map<uint64_t, TPooledSession> checkedOut;
         {
             std::lock_guard guard(Lock_);
             sessions.swap(Sessions_);
+            checkedOut.swap(CheckedOut_);
         }
+
         for (auto& session : sessions) {
             session.State->ClearOnLost();
-            NPrivate::CloseSession(session.Session);
+            CloseSession(session.Session);
+        }
+        for (auto& [_, session] : checkedOut) {
+            session.State->ClearOnLost();
+            CloseSession(session.Session);
         }
     }
 
@@ -149,8 +250,9 @@ private:
     TClient Client_;
     std::string Path_;
     TCoordinationSessionPoolSettings Settings_;
-    std::mutex Lock_;
+    mutable std::mutex Lock_;
     std::deque<TPooledSession> Sessions_;
+    std::unordered_map<uint64_t, TPooledSession> CheckedOut_;
 };
 
 TCoordinationSessionPool::TCoordinationSessionPool() = default;
@@ -161,6 +263,33 @@ TCoordinationSessionPool::TCoordinationSessionPool(std::shared_ptr<TImpl> impl)
 }
 
 TCoordinationSessionPool::~TCoordinationSessionPool() = default;
+
+std::optional<TSession> TCoordinationSessionPool::GetAny(TSessionLostCallback onLost) {
+    if (!Impl_) {
+        return std::nullopt;
+    }
+    return Impl_->GetAny(std::move(onLost));
+}
+
+void TCoordinationSessionPool::Return(TSession session) {
+    if (Impl_) {
+        Impl_->Return(std::move(session));
+    }
+}
+
+bool TCoordinationSessionPool::Replace(TSession session) {
+    if (!Impl_) {
+        return false;
+    }
+    return Impl_->Replace(std::move(session));
+}
+
+size_t TCoordinationSessionPool::Size() const {
+    if (!Impl_) {
+        return 0;
+    }
+    return Impl_->Size();
+}
 
 TCoordinationSessionPool TClient::CreateSessionPool(
     const std::string& path,
@@ -173,38 +302,7 @@ TDistributedLock TCoordinationSessionPool::CreateDistributedLock(const TDistribu
     if (!Impl_) {
         throw TYdbLockException("Session pool is not initialized");
     }
-
-    class TPoolSessionSource final : public ISessionSource {
-    public:
-        explicit TPoolSessionSource(std::shared_ptr<TCoordinationSessionPool::TImpl> pool)
-            : Pool_(std::move(pool))
-        {
-        }
-
-        bool Checkout(TSessionLease& lease, std::function<void()> onLost) noexcept override {
-            return Pool_->Checkout(lease, std::move(onLost));
-        }
-
-        bool Replace(TSessionLease& lease, std::function<void()> onLost) noexcept override {
-            return Pool_->Replace(lease, std::move(onLost));
-        }
-
-        void Checkin(TSessionLease&& lease, bool close) noexcept override {
-            Pool_->Checkin(std::move(lease), close);
-        }
-
-        bool IsPersistent() const noexcept override {
-            return false;
-        }
-
-    private:
-        std::shared_ptr<TCoordinationSessionPool::TImpl> Pool_;
-    };
-
-    return TDistributedLock(std::make_unique<TDistributedLock::TImpl>(
-        std::make_unique<TPoolSessionSource>(Impl_),
-        settings,
-        false));
+    return TDistributedLock(*this, settings);
 }
 
 } // namespace NCoordination

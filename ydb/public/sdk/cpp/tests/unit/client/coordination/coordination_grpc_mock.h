@@ -50,7 +50,9 @@ public:
     // Zero means unlimited pong responses; set to a positive value to stop responding
     // after N pings (used by SessionPingTimeout).
     std::atomic<size_t> MaxPingResponses{0};
+    std::atomic<bool> StopNextSessionAfterStart{false};
     std::atomic<size_t> StartedSessions{0};
+    std::atomic<uint64_t> LastAcquireTimeoutMillis{0};
 
     grpc::Status Session(
             grpc::ServerContext* context,
@@ -79,6 +81,12 @@ public:
             started->set_timeout_millis(start.timeout_millis());
             stream->Write(response);
         }
+        if (StopNextSessionAfterStart.exchange(false)) {
+            Ydb::Coordination::SessionResponse response;
+            response.mutable_session_stopped();
+            stream->Write(response);
+            return grpc::Status::OK;
+        }
         request.Clear();
 
         size_t pingsReceived = 0;
@@ -93,6 +101,7 @@ public:
                 }
             } else if (request.has_acquire_semaphore()) {
                 const auto& acquire = request.acquire_semaphore();
+                LastAcquireTimeoutMillis.store(acquire.timeout_millis());
                 Ydb::Coordination::SessionResponse response;
                 auto* result = response.mutable_acquire_semaphore_result();
                 result->set_req_id(acquire.req_id());

@@ -13,6 +13,7 @@
 
 #include <mutex>
 #include <optional>
+#include <limits>
 
 using namespace NYdb;
 using namespace NYdb::NCoordination;
@@ -111,7 +112,9 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
         auto lockA = MakeLock(env);
         auto lockB = MakeLock(env);
         lockA.lock();
+        env.CoordinationService.LastAcquireTimeoutMillis.store(std::numeric_limits<uint64_t>::max());
         UNIT_ASSERT(!lockB.try_lock());
+        UNIT_ASSERT_VALUES_EQUAL(env.CoordinationService.LastAcquireTimeoutMillis.load(), 0u);
         lockA.unlock();
     }
 
@@ -138,8 +141,76 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
     Y_UNIT_TEST(SessionPoolStartsConfiguredSessions) {
         TTestEnv env;
         auto pool = MakePool(env, 3);
-        Y_UNUSED(pool);
         UNIT_ASSERT_VALUES_EQUAL(env.CoordinationService.StartedSessions.load(), 3u);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 3u);
+    }
+
+    Y_UNIT_TEST(SessionPoolGetAnyDrainsPool) {
+        TTestEnv env;
+        auto pool = MakePool(env, 2);
+
+        auto sessionA = pool.GetAny();
+        UNIT_ASSERT(sessionA);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 1u);
+
+        auto sessionB = pool.GetAny();
+        UNIT_ASSERT(sessionB);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 0u);
+
+        UNIT_ASSERT(!pool.GetAny());
+
+        pool.Return(std::move(*sessionA));
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 1u);
+        pool.Return(std::move(*sessionB));
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 2u);
+    }
+
+    Y_UNIT_TEST(SessionPoolReturnMakesSessionAvailable) {
+        TTestEnv env;
+        auto pool = MakePool(env);
+
+        auto session = pool.GetAny();
+        UNIT_ASSERT(session);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 0u);
+
+        pool.Return(std::move(*session));
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 1u);
+
+        auto returnedSession = pool.GetAny();
+        UNIT_ASSERT(returnedSession);
+        pool.Return(std::move(*returnedSession));
+    }
+
+    Y_UNIT_TEST(SessionPoolReplacePreservesCapacity) {
+        TTestEnv env;
+        auto pool = MakePool(env);
+
+        auto session = pool.GetAny();
+        UNIT_ASSERT(session);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 0u);
+
+        UNIT_ASSERT(pool.Replace(std::move(*session)));
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 1u);
+        UNIT_ASSERT_VALUES_EQUAL(env.CoordinationService.StartedSessions.load(), 2u);
+    }
+
+    Y_UNIT_TEST(SessionPoolNotifiesCheckedOutConsumerOnSessionLoss) {
+        TTestEnv env;
+        auto pool = MakePool(env);
+        auto lostPromise = NThreading::NewPromise();
+        auto lostFuture = lostPromise.GetFuture();
+
+        auto session = pool.GetAny([lostPromise]() mutable {
+            lostPromise.SetValue();
+        });
+        UNIT_ASSERT(session);
+
+        env.CoordinationService.MaxPingResponses.store(2);
+        UNIT_ASSERT(lostFuture.Wait(TDuration::Seconds(5)));
+
+        env.CoordinationService.MaxPingResponses.store(0);
+        pool.Return(std::move(*session));
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 1u);
     }
 
     Y_UNIT_TEST(PooledLockUnlock) {
@@ -148,7 +219,9 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
         auto lock = pool.CreateDistributedLock(
             TDistributedLockSettings().Name(SEMAPHORE_NAME).Timeout(TEST_TIMEOUT));
         lock.lock();
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 0u);
         lock.unlock();
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 1u);
     }
 
     Y_UNIT_TEST(PooledTryLockFailsWhenPoolIsEmpty) {
@@ -160,8 +233,10 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
             TDistributedLockSettings().Name("another-lock").Timeout(TEST_TIMEOUT));
 
         lockA.lock();
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 0u);
         UNIT_ASSERT(!lockB.try_lock());
         lockA.unlock();
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 1u);
 
         UNIT_ASSERT(lockB.try_lock());
         lockB.unlock();
@@ -183,6 +258,31 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
         UNIT_ASSERT_VALUES_EQUAL(env.CoordinationService.StartedSessions.load(), 1u);
     }
 
+    Y_UNIT_TEST(PooledLockReplacesIdleLostSession) {
+        TTestEnv env;
+        env.CoordinationService.StopNextSessionAfterStart.store(true);
+        auto stoppedPromise = NThreading::NewPromise();
+        auto stoppedFuture = stoppedPromise.GetFuture();
+        auto pool = env.Client->CreateSessionPool(
+            COORD_PATH,
+            TCoordinationSessionPoolSettings()
+                .PoolSize(1)
+                .SessionSettings(TSessionSettings()
+                    .Timeout(TEST_TIMEOUT)
+                    .OnStopped([stoppedPromise]() mutable {
+                        stoppedPromise.SetValue();
+                    })));
+
+        UNIT_ASSERT(stoppedFuture.Wait(TDuration::Seconds(5)));
+        UNIT_ASSERT_VALUES_EQUAL(env.CoordinationService.StartedSessions.load(), 1u);
+
+        auto lock = pool.CreateDistributedLock(
+            TDistributedLockSettings().Name(SEMAPHORE_NAME).Timeout(TEST_TIMEOUT));
+        lock.lock();
+        lock.unlock();
+        UNIT_ASSERT_VALUES_EQUAL(env.CoordinationService.StartedSessions.load(), 2u);
+    }
+
     Y_UNIT_TEST(PooledLockAcquireFailureReturnsUsableSession) {
         TTestEnv env;
         auto pool = MakePool(env);
@@ -191,6 +291,7 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
 
         env.CoordinationService.FailNextAcquire.store(true);
         UNIT_ASSERT_EXCEPTION(lock.lock(), TYdbLockException);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 1u);
 
         lock.lock();
         lock.unlock();
@@ -207,10 +308,30 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
         env.CoordinationService.FailNextRelease.store(true);
         lock.unlock();
         UNIT_ASSERT(token.stop_requested());
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 1u);
 
         lock.lock();
         UNIT_ASSERT(!lock.GetStopToken().stop_requested());
         lock.unlock();
+    }
+
+    Y_UNIT_TEST(PooledLockSessionExpiryWhileHoldingLock) {
+        TTestEnv env;
+        auto pool = MakePool(env);
+        auto lock = pool.CreateDistributedLock(
+            TDistributedLockSettings().Name(SEMAPHORE_NAME).Timeout(TEST_TIMEOUT));
+
+        lock.lock();
+        env.CoordinationService.MaxPingResponses.store(2);
+        const TInstant deadline = TInstant::Now() + TDuration::Seconds(5);
+        while (!lock.GetStopToken().stop_requested() && TInstant::Now() < deadline) {
+            Sleep(TDuration::MilliSeconds(50));
+        }
+        UNIT_ASSERT(lock.GetStopToken().stop_requested());
+
+        env.CoordinationService.MaxPingResponses.store(0);
+        lock.unlock();
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 1u);
     }
 
     Y_UNIT_TEST(OwnerDataIsHostName) {

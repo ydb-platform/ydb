@@ -23,7 +23,7 @@ struct TDistributedLockSettings {
 };
 
 // Distributed exclusive lock backed by a YDB coordination semaphore.
-// Satisfies BasicLockable (lock/unlock) for std::lock_guard; not a blocking Lockable.
+// Provides lock/unlock for std::lock_guard-style usage with bounded acquire failures.
 class TDistributedLock {
 public:
     TDistributedLock(TClient& client, const TDistributedLockSettings& settings);
@@ -58,6 +58,7 @@ private:
 
     friend class TCoordinationSessionPool;
 
+    TDistributedLock(TCoordinationSessionPool pool, const TDistributedLockSettings& settings);
     explicit TDistributedLock(std::unique_ptr<TImpl> impl);
 
 private:

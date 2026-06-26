@@ -2564,7 +2564,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
     Y_UNIT_TEST_TWIN(BatchOperation_SecondaryIndex, EnableIndexStreamWrite) {
         auto appConfig = GetAppConfig(false, false);
-        appConfig.MutableTableServiceConfig()->SetEableIndexStreamWrite(EnableIndexStreamWrite);
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);
@@ -2615,7 +2615,7 @@ Y_UNIT_TEST_SUITE(KqpCost) {
 
     Y_UNIT_TEST_TWIN(WriteRowWithIndex, EnableIndexStreamWrite) {
         auto appConfig = GetAppConfig(false, false);
-        appConfig.MutableTableServiceConfig()->SetEableIndexStreamWrite(EnableIndexStreamWrite);
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         auto settings = TKikimrSettings(appConfig)
             .SetWithSampleTables(false);

@@ -61,6 +61,4 @@ TIcebergTestData CreateIcebergSa(const TString& dataSourceName = NYql::NConnecto
                                  const TString& database = NYql::NConnector::NTest::DEFAULT_DATABASE, 
                                  const TString& token = NYql::NConnector::NTest::DEFAULT_PASSWORD);
 
-std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> CreateCredentialsFactory(const TString& token = NYql::NConnector::NTest::DEFAULT_PASSWORD);
-
 } // NTestUtils

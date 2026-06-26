@@ -174,39 +174,49 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
     return std::make_shared<TKikimrRunner>(settings);
 }
 
-class TStaticCredentialsProvider: public NYdb::ICredentialsProvider {
-public:
-    TStaticCredentialsProvider(const TString& yqlToken)
-        : YqlToken_(yqlToken)
-    {
-    }
+    class TStaticCredentialsProvider: public NYdb::ICredentialsProvider {
+    public:
+        TStaticCredentialsProvider(const TString& token)
+            : Token_(token)
+        {
+        }
 
-    std::string GetAuthInfo() const override {
-        return YqlToken_;
-    }
+        std::string GetAuthInfo() const override {
+            return Token_;
+        }
 
-    bool IsValid() const override {
-        return true;
-    }
+        bool IsValid() const override {
+            return true;
+        }
 
-private:
-    std::string YqlToken_;
-};
+    private:
+        std::string Token_;
+    };
 
-class TStaticSecuredCredentialsFactory: public NYql::ISecuredServiceAccountCredentialsFactory {
-public:
-    TStaticSecuredCredentialsFactory(const TString& yqlToken)
-        : YqlToken_(yqlToken)
-    {
-    }
+    class TStaticSecuredCredentialsFactory: public NYql::IStructuredTokenCredentialsFactory {
+    public:
+        explicit TStaticSecuredCredentialsFactory(const TString& token)
+            : Token_(token)
+        {
+        }
 
-    std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString&, const TString&) override {
-        return std::make_shared<TStaticCredentialsProviderFactory>(YqlToken_);
-    }
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> Create(const TString& structuredTokenJson, bool) override {
+            if (NYql::IsStructuredTokenJson(structuredTokenJson)) {
+                NYql::TStructuredTokenParser parser = NYql::CreateStructuredTokenParser(structuredTokenJson);
+                if (parser.HasIamAuth()) {
+                    // the same validation as in KikimrIamAuthCredentialsProviderFactory
+                    if (!NKikimr::AppData()->FeatureFlags.GetEnableExternalDataSourceAuthMethodIam()) {
+                        throw yexception() << "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it";
+                    }
+                }
+            }
 
-private:
-    TString YqlToken_;
-};
+            return std::make_shared<TStaticCredentialsProviderFactory>(Token_);
+        }
+
+    private:
+        const TString Token_;
+    };
 
 std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> CreateCredentialsFactory(const TString& token) {
     return std::make_shared<TStaticSecuredCredentialsFactory>(token);

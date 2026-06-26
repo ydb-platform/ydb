@@ -59,8 +59,10 @@ message Node {
     uint32 port = 3;
     Ydb.Discovery.NodeLocation location = 4;
     ItemState state = 5;
-    // type is the node's base kind: a static storage node or a dynamic (compute)
-    // node serving a tenant. Exactly one is set.
+    // Type is the node's base kind:
+    // - a static storage node;
+    // - or a dynamic (compute) node serving a tenant.
+    // Exactly one is set.
     oneof type {
         StorageNode storage = 6;
         DynamicNode dynamic = 7;

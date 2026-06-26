@@ -2,10 +2,10 @@
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/services/secret/describe_schema_secrets_service.h>
 
-namespace NKikimr::NKqp {
-    using TDescriptionPromise = NThreading::TPromise<TEvDescribeSecretsResponse::TDescription>;
+namespace NKikimr::NSecret {
+    using TDescriptionPromise = NThreading::TPromise<NKqp::TEvDescribeSecretsResponse::TDescription>;
 
     void CreateSchemaSecret(const TString& secretName, const TString& secretValue, NYdb::NTable::TSession& session) {
         auto query = "CREATE SECRET `" + secretName + "` WITH (value = \"" + secretValue + "\");";
@@ -28,11 +28,11 @@ namespace NKikimr::NKqp {
     TDescriptionPromise
     ResolveSecrets(
         const TVector<TString>& secretNames,
-        TKikimrRunner& kikimr,
+        NKqp::TKikimrRunner& kikimr,
         const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
         TDescribeSecretSettings settings)
     {
-        auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
+        auto promise = NThreading::NewPromise<NKqp::TEvDescribeSecretsResponse::TDescription>();
         const auto evResolveSecret = new TDescribeSchemaSecretsService::TEvResolveSecret(
             userToken, "/Root", secretNames, promise, std::move(settings));
         auto actorSystem = kikimr.GetTestServer().GetRuntime()->GetActorSystem(0);
@@ -43,7 +43,7 @@ namespace NKikimr::NKqp {
     TDescriptionPromise
     ResolveSecret(
         const TString& secretName,
-        TKikimrRunner& kikimr,
+        NKqp::TKikimrRunner& kikimr,
         const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
         TDescribeSecretSettings settings)
     {
@@ -140,4 +140,4 @@ namespace NKikimr::NKqp {
         return record.GetStatus();
     }
 
-} // NKikimr::NKqp
+} // NKikimr::NSecret

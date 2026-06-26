@@ -1,16 +1,18 @@
 #include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/core/kqp/common/simple/services.h>
-#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
-#include <ydb/core/kqp/federated_query/actors/ut_service/common/helpers.h>
+#include <ydb/services/secret/describe_schema_secrets_service.h>
+
+#include <ydb/services/secret/ut/common/helpers.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <limits>
 
-namespace NKikimr::NKqp {
+namespace NKikimr::NSecret {
 
-using TDescriptionPromise = NThreading::TPromise<TEvDescribeSecretsResponse::TDescription>;
+using NKqp::TKikimrRunner;
+using NKqp::TKikimrSettings;
+using TDescriptionPromise = NThreading::TPromise<NKqp::TEvDescribeSecretsResponse::TDescription>;
 
 Y_UNIT_TEST_SUITE(DescribeSchemaSecretsServiceSlow) {
     Y_UNIT_TEST(SchemeCacheRecoverAfterLookupErrorFails) {

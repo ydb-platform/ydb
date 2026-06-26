@@ -45,6 +45,8 @@ struct TFinishInfo {
 
     bool IsFinished() const;
 
+    bool IsSuccess() const;
+
     bool IsFailed() const;
 
     std::optional<Ydb::StatusIds::StatusCode> Status;

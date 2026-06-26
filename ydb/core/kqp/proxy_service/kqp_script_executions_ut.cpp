@@ -109,6 +109,7 @@ struct TScriptExecutionsYdbSetup {
         Client = MakeHolder<Tests::TClient>(*ServerSettings);
 
         GetRuntime()->SetLogPriority(NKikimrServices::KQP_PROXY, NActors::NLog::PRI_DEBUG);
+        GetRuntime()->SetLogPriority(NKikimrServices::KQP_EXECUTER, NActors::NLog::PRI_DEBUG);
         GetRuntime()->SetDispatchTimeout(TestTimeout);
         Server->EnableGRpc(GrpcPort);
         Client->InitRootScheme();
@@ -277,13 +278,25 @@ struct TScriptExecutionsYdbSetup {
         }
     }
 
-    NPrivate::TEvPrivate::TEvLeaseCheckResult::TPtr CheckLeaseStatus(const TString& executionId) {
+    void FinalizeScriptLease(TString executionId, bool entryExists = true) {
         constexpr ui32 node = 0;
-        TActorId edgeActor = GetRuntime()->AllocateEdgeActor(node);
-        GetRuntime()->Register(NPrivate::CreateCheckLeaseStatusActor(TestDatabase, executionId), node, 0, TMailboxType::Simple, 0, edgeActor);
+        const auto& edgeActor = GetRuntime()->AllocateEdgeActor(node);
+        GetRuntime()->Register(NPrivate::CreateFinalizeScriptLeaseActor(edgeActor, TestDatabase, std::move(executionId)), node);
+
+        auto reply = GetRuntime()->GrabEdgeEvent<NPrivate::TEvPrivate::TEvFinalizeScriptLeaseResult>(edgeActor, TestTimeout);
+        UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Status, Ydb::StatusIds::SUCCESS, reply->Get()->Issues.ToOneLineString());
+        UNIT_ASSERT_VALUES_EQUAL(reply->Get()->Info.ExecutionEntryExists, entryExists);
+    }
+
+    NPrivate::TEvPrivate::TEvLeaseCheckResult::TPtr CheckLeaseStatus(TString executionId) {
+        FinalizeScriptLease(executionId);
+
+        constexpr ui32 node = 0;
+        const auto& edgeActor = GetRuntime()->AllocateEdgeActor(node);
+        GetRuntime()->Register(NPrivate::CreateCheckLeaseStatusActor(TestDatabase, std::move(executionId)), node, 0, TMailboxType::Simple, 0, edgeActor);
 
         auto reply = GetRuntime()->GrabEdgeEvent<NPrivate::TEvPrivate::TEvLeaseCheckResult>(edgeActor, TestTimeout);
-        UNIT_ASSERT(reply->Get()->Status == Ydb::StatusIds::SUCCESS);
+        UNIT_ASSERT_VALUES_EQUAL_C(reply->Get()->Status, Ydb::StatusIds::SUCCESS, reply->Get()->Issues.ToOneLineString());
         return reply;
     }
 
@@ -354,6 +367,8 @@ struct TScriptExecutionsYdbSetup {
     }
 
     TEvGetScriptExecutionOperationResponse::TPtr GetScriptExecutionOperation(const TString& executionId) {
+        FinalizeScriptLease(executionId);
+
         const auto edgeActor = GetRuntime()->AllocateEdgeActor();
         GetRuntime()->Send(
             MakeKqpProxyID(GetRuntime()->GetFirstNodeId()),

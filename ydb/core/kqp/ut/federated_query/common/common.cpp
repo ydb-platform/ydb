@@ -36,7 +36,8 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
                 return op;
             }
 
-            UNIT_ASSERT_C(op.Status().IsSuccess(), TStringBuilder() << op.Status().GetStatus() << ":" << op.Status().GetIssues().ToString());
+            const auto& status = op.Status();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), NYdb::EStatus::SUCCESS, status.GetIssues().ToString());
             Sleep(TDuration::MilliSeconds(10));
         }
     }

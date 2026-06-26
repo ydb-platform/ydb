@@ -21,6 +21,10 @@ bool TFinishInfo::IsFinished() const {
     return Status.has_value();
 }
 
+bool TFinishInfo::IsSuccess() const {
+    return Status.has_value() && *Status == Ydb::StatusIds::SUCCESS;
+}
+
 bool TFinishInfo::IsFailed() const {
     return Status.has_value() && *Status != Ydb::StatusIds::SUCCESS;
 }

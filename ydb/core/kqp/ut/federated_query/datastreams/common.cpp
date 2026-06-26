@@ -689,6 +689,7 @@ NKikimrKqp::TQueryPhysicalGraph TStreamingTestFixture::LoadPhysicalGraph(const s
 
     const auto& graphProto = graph->Get()->PhysicalGraph;
     UNIT_ASSERT(graphProto);
+    UNIT_ASSERT_VALUES_EQUAL(graphProto->GetPreparedQuery().GetVersion(), static_cast<ui32>(NKikimrKqp::TPreparedQuery::VERSION_PHYSICAL_V1));
 
     return *graphProto;
 }

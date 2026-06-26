@@ -42,11 +42,6 @@ namespace {
 using namespace NPrivate;
 
 class TRunScriptActor final : public TActorBootstrapped<TRunScriptActor>, IActorExceptionHandler {
-    struct TSessionState {
-        bool SessionOpen = false;
-        bool WaitClose = false;
-    };
-
     struct TActorState {
         bool WaitStop = false;
         TActorId Id;
@@ -67,12 +62,10 @@ public:
     TRunScriptActor(const NKikimrKqp::TEvQueryRequest& request, TKqpRunScriptActorSettings&& settings, NKikimrConfig::TQueryServiceConfig queryServiceConfig)
         : Ctx(CreateExecutionContext(request, settings, queryServiceConfig))
         , QueryServiceConfig(queryServiceConfig)
-        , PhysicalGraph(std::move(settings.PhysicalGraph))
         , QueryRequest(CreateQueryRequest(request, settings, queryServiceConfig, *Ctx))
     {}
 
     void Bootstrap() {
-        Ctx->UserRequestContext->RunScriptActorId = SelfId();
         LOG_I("Bootstrap, StreamingDisposition: " << (Ctx->UserRequestContext->StreamingDisposition ? Ctx->UserRequestContext->StreamingDisposition->DebugString() : "null"));
         Become(&TThis::StateFuncCreating);
     }
@@ -111,7 +104,7 @@ private:
         ev->SetUserRequestContext(ctx.UserRequestContext);
 
         if (settings.PhysicalGraph) {
-            ev->SetQueryPhysicalGraph(*settings.PhysicalGraph);
+            ev->SetQueryPhysicalGraph(std::move(*settings.PhysicalGraph));
         }
 
         if (request.GetRequest().GetCollectStats() >= Ydb::Table::QueryStatsCollection::STATS_COLLECTION_FULL) {
@@ -135,7 +128,7 @@ private:
 
     void HandleCreatingFinished() {
         LOG_I("Script execution metadata saved, creating new session");
-        Become(&TThis::StateFuncInitialise);
+        Become(&TThis::StateFuncInitialize);
 
         ScriptLeaseWatcherActor.Id = RegisterWithSameMailbox(CreateScriptLeaseWatcherActor(Ctx));
         LOG_I("Started ScriptLeaseWatcherActor: " << ScriptLeaseWatcherActor.Id);
@@ -151,14 +144,14 @@ private:
     }
 
     // Create new kqp session
-    STRICT_STFUNC(StateFuncInitialise,
-        hFunc(TEvKqp::TEvCreateSessionResponse, HandleInitialise);
+    STRICT_STFUNC(StateFuncInitialize,
+        hFunc(TEvKqp::TEvCreateSessionResponse, HandleInitialize);
         hFunc(TEvRunScriptPrivate::TEvScriptLeaseWatcherFinished, HandleLeaseWatcherFinished);
         hFunc(TEvKqp::TEvCancelScriptExecutionRequest, HandleCancellation);
         hFunc(TEvCheckAliveRequest, HandleCheckAlive);
     )
 
-    void HandleInitialise(TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
+    void HandleInitialize(TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
         const auto& record = ev->Get()->Record;
         if (const auto status = record.GetYdbStatus(); status != Ydb::StatusIds::SUCCESS) {
             const auto resourceExhausted = record.GetResourceExhausted();
@@ -175,9 +168,10 @@ private:
             return;
         }
 
-        SessionState.SessionOpen = true;
+        SessionOpen = true;
         const auto& session = record.GetResponse();
         Ctx->UserRequestContext->SessionId = session.GetSessionId();
+        QueryRequest->Record.MutableRequest()->SetSessionId(Ctx->UserRequestContext->SessionId);
 
         if (session.GetNodeId() != SelfId().NodeId()) {
             LOG_E("New session started on unexpected node: " << session.GetNodeId());
@@ -185,23 +179,28 @@ private:
             return;
         }
 
-        ScriptResultHandlerActor.Id = RegisterWithSameMailbox(CreateScriptResultHandlerActor(Ctx, std::move(PhysicalGraph), QueryServiceConfig));
-        LOG_D("Started ScriptResultHandlerActor: " << ScriptResultHandlerActor.Id << ", starting query, has physical graph: " << PhysicalGraph.has_value());
+        Become(&TThis::StateFuncExecute);
 
-        QueryRequest->Record.MutableRequest()->SetSessionId(Ctx->UserRequestContext->SessionId);
-        ActorIdToProto(SelfId(), QueryRequest->Record.MutableRequestActorId());
+        const auto& physicalGraph = QueryRequest->GetQueryPhysicalGraph();
+        ScriptResultHandlerActor.Id = RegisterWithSameMailbox(CreateScriptResultHandlerActor(Ctx, physicalGraph ? std::optional(*physicalGraph) : std::nullopt, QueryServiceConfig));
+        LOG_D("Started ScriptResultHandlerActor: " << ScriptResultHandlerActor.Id << ", starting query, has physical graph: " << (physicalGraph ? "YES" : "NO"));
+
+        Ctx->UserRequestContext->RunScriptActorId = ScriptResultHandlerActor.Id;
+        ActorIdToProto(ScriptResultHandlerActor.Id, QueryRequest->Record.MutableRequestActorId());
         Send(MakeKqpProxyID(SelfId().NodeId()), QueryRequest.release());
     }
 
     void HandleLeaseWatcherFinished(TEvRunScriptPrivate::TEvScriptLeaseWatcherFinished::TPtr& ev) {
-        if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
-            LOG_E("Got lease watcher finished: " << ev->Sender << " with status " << status << ", issues: " << ev->Get()->Issues.ToOneLineString());
+        ScriptLeaseWatcherActor.Id = {};
+
+        if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS || !FinishInfo.IsFinished()) {
+            const auto& issues = ev->Get()->Issues;
+            LOG_E("Got lease watcher finished: " << ev->Sender << " with status " << status << ", issues: " << issues.ToOneLineString());
+            Finish(status, AddRootIssue("Script lease watcher error", issues));
         } else {
             LOG_I("Got lease watcher finished: " << ev->Sender);
+            Finish();
         }
-
-        ScriptLeaseWatcherActor.Id = {};
-        Finish(ev->Get()->Status, AddRootIssue("Script lease watcher error", ev->Get()->Issues));
     }
 
     void HandleCancellation(TEvKqp::TEvCancelScriptExecutionRequest::TPtr& ev) {
@@ -217,40 +216,44 @@ private:
 
     // Wait query execution
     STRICT_STFUNC(StateFuncExecute,
-        hFunc(TEvKqp::TEvCloseSessionResponse, HandleExecute);
+        IgnoreFunc(TEvKqp::TEvCloseSessionResponse);
+        hFunc(TEvKqp::TEvQueryResponse, HandleExecute);
         hFunc(TEvRunScriptPrivate::TEvScriptLeaseWatcherFinished, HandleLeaseWatcherFinished);
         hFunc(TEvRunScriptPrivate::TEvScriptResultHandlerFinished, HandleResultHandlerFinished);
         hFunc(TEvKqp::TEvCancelScriptExecutionRequest, HandleCancellation);
         hFunc(TEvCheckAliveRequest, HandleCheckAlive);
     )
 
-    void HandleExecute(TEvKqp::TEvCloseSessionResponse::TPtr& ev) {
-        const auto& record = ev->Get()->Record;
-        NYql::TIssues issues;
-        NYql::IssuesFromMessage(record.GetIssues(), issues);
-        LOG_I("Got close session response: " << ev->Sender << " with status " << record.GetStatus() << ", issues: " << issues.ToOneLineString());
-
-        SessionState.SessionOpen = false;
-
-        if (FinishInfo.IsFinished()) {
-            Finish();
+    void HandleExecute(TEvKqp::TEvQueryResponse::TPtr& ev) {
+        if (!ScriptResultHandlerActor.Id) {
+            const auto& record = ev->Get()->Record;
+            const auto& response = record.GetResponse();
+            NYql::TIssues issues;
+            NYql::IssuesFromMessage(response.GetQueryIssues(), issues);
+            LOG_W("Ignored query response from " << ev->Sender << ", execution already finished, status: " << record.GetYdbStatus() << ", issues: " << issues.ToOneLineString());
+            return;
         }
+
+        LOG_D("Forward query response from " << ev->Sender << " to result handler");
+        Forward(ev, ScriptResultHandlerActor.Id);
     }
 
     void HandleResultHandlerFinished(TEvRunScriptPrivate::TEvScriptResultHandlerFinished::TPtr& ev) {
+        ScriptResultHandlerActor.Id = {};
+
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             LOG_E("Got result handler finished: " << ev->Sender << " with status " << status << ", issues: " << ev->Get()->Issues.ToOneLineString());
         } else {
             LOG_I("Got result handler finished: " << ev->Sender);
         }
 
-        ScriptResultHandlerActor = {};
         ExecutionInfo = std::move(ev->Get()->Info);
         Finish(ev->Get()->Status, std::move(ev->Get()->Issues));
     }
 
     // Wait query finalization
     STRICT_STFUNC(StateFuncFinalize,
+        IgnoreFunc(TEvKqp::TEvQueryResponse);
         hFunc(TEvScriptExecutionFinished, HandleFinalize);
         hFunc(TEvKqp::TEvCancelScriptExecutionRequest, HandleCancellation);
         hFunc(TEvCheckAliveRequest, HandleCheckAlive);
@@ -274,8 +277,6 @@ private:
                 .AlreadyStopped = info.AlreadyStopped,
             }, issues), /* flags */ 0, request->Cookie);
         }
-
-        PassAway();
     }
 
     void Finish() {
@@ -300,15 +301,12 @@ private:
             return;
         }
 
-        if (SessionState.SessionOpen) {
-            if (!SessionState.WaitClose) {
-                LOG_D("Close session");
-                auto ev = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
-                ev->Record.MutableRequest()->SetSessionId(Ctx->UserRequestContext->SessionId);
-                Send(MakeKqpProxyID(SelfId().NodeId()), ev.release());
-                SessionState.WaitClose = true;
-            }
-            return;
+        if (SessionOpen) {
+            SessionOpen = true;
+            LOG_D("Close session");
+            auto ev = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
+            ev->Record.MutableRequest()->SetSessionId(Ctx->UserRequestContext->SessionId);
+            Send(MakeKqpProxyID(SelfId().NodeId()), ev.release());
         }
 
         if (ScriptLeaseWatcherActor.Id) {
@@ -318,6 +316,7 @@ private:
 
         if (!WaitFinalizationRequest) {
             LOG_I("Start script execution finalization");
+            Become(&TThis::StateFuncFinalize);
 
             const auto cancelledByUser = !CancelRequests.empty();
             if (FinishInfo.IsFailed() && cancelledByUser) {
@@ -353,11 +352,10 @@ private:
 
     const TScriptExecutionContext::TPtr Ctx;
     const NKikimrConfig::TQueryServiceConfig QueryServiceConfig;
-    std::optional<NKikimrKqp::TQueryPhysicalGraph> PhysicalGraph;
     std::unique_ptr<TEvKqp::TEvQueryRequest> QueryRequest;
     TFinishInfo FinishInfo;
     TExecutionInfo ExecutionInfo;
-    TSessionState SessionState;
+    bool SessionOpen = false;
     TActorState ScriptLeaseWatcherActor;
     TActorState ScriptResultHandlerActor;
     std::forward_list<TEvKqp::TEvCancelScriptExecutionRequest::TPtr> CancelRequests;

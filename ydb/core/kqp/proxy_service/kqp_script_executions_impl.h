@@ -93,7 +93,10 @@ enum class ELeaseState {
 // If lease duration is zero, default one will be taken.
 IActor* CreateCreateScriptOperationQueryActor(TString executionId, const TActorId& runScriptActorId, NKikimrKqp::TEvQueryRequest record, NKikimrKqp::TScriptExecutionOperationMeta meta);
 
+// Get current status of execution
+IActor* CreateCheckLeaseStatusActor(TString database, TString executionId);
+
 // Checks lease of execution, finishes execution if its lease is off, returns current status
-IActor* CreateCheckLeaseStatusActor(TString database, TString executionId, const ui64 cookie = 0);
+IActor* CreateFinalizeScriptLeaseActor(const TActorId& replyActorId, TString database, TString executionId);
 
 } // namespace NKikimr::NKqp::NPrivate

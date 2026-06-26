@@ -136,6 +136,12 @@ class TScriptResultHandlerActor final : public TActorBootstrapped<TScriptResultH
             });
         }
 
+        bool HasResultsToSave() const {
+            return std::any_of(ResultSetInfos.begin(), ResultSetInfos.end(), [](const TResultSetInfo& info) {
+                return !info.PendingResult.rows().empty();
+            });
+        }
+
         TInstant GetExpireAt(const TScriptExecutionContext& ctx) {
             if (!ExpireAt && ctx.ResultsTtl) {
                 ExpireAt = TInstant::Now() + ctx.ResultsTtl;
@@ -588,7 +594,7 @@ private:
         }
 
         // Check success exit condition
-        if (FinishInfo.IsFinished()) {
+        if (!SaveResultsState.WaitSaveResult && FinishInfo.IsFinished()) {
             return Finish();
         }
     }
@@ -596,12 +602,19 @@ private:
     void TryToDrainResults() {
         Y_VALIDATE(!SaveResultsState.WaitSaveResult, "Unexpected call");
 
+        if (FinishInfo.IsFailed()) {
+            // Skip results saving after failure
+            return;
+        }
+
         const auto freeSpaceBytes = SaveResultsState.GetFreeSpaceBytes();
-        LOG_T("Try to drain results, free space: " << freeSpaceBytes);
+        const auto forceSaveResults = FinishInfo.IsSuccess() || freeSpaceBytes <= 0; 
+        LOG_T("Try to drain results, free space: " << freeSpaceBytes << ", force save: " << forceSaveResults);
 
         // We save results when:
         // - Where is large enough result batch
         // - No free space in buffer
+        // - Query is finished
 
         std::optional<ui64> resultToSave;
         ui64 maxResultSetBytes = 0;
@@ -612,7 +625,8 @@ private:
                 break;
             }
 
-            if (const auto resultSize = info.GetBytesToSave(); freeSpaceBytes <= 0 && resultSize > maxResultSetBytes) {
+            const auto resultSize = info.GetBytesToSave();
+            if (forceSaveResults && (resultSize > maxResultSetBytes || (!resultToSave && info.PendingResult.rows_size()))) {
                 resultToSave = i;
                 maxResultSetBytes = resultSize;
             }
@@ -664,7 +678,6 @@ private:
 
     void UpdateScriptProgress() {
         Y_VALIDATE(SaveProgressState.QueryStatsChanged && !SaveProgressState.WaitSave, "Unexpected call");
-        Y_VALIDATE(ExecutionInfo.QueryPlan || ExecutionInfo.QueryAst, "Plan ot ast should be set");
         SaveProgressState.QueryStatsChanged = false;
 
         const auto& updaterId = Register(CreateScriptProgressActor(
@@ -699,6 +712,7 @@ private:
         if (QueryIsRunning) {
             // We should abort query before finish
             FinishInfo.Update(Ydb::StatusIds::CANCELLED, {NYql::TIssue("Query was cancelled")});
+            LOG_I("Wait for query finish, started cancel: " << QueryIsCancelling);
 
             if (!QueryIsCancelling) {
                 auto ev = MakeHolder<TEvKqp::TEvCancelQueryRequest>();
@@ -709,11 +723,18 @@ private:
             return;
         }
 
-        if (HasOperationInflight()) {
-            // Wait for all inflight queries to complete
+        if (FinishInfo.IsSuccess() && SaveResultsState.HasResultsToSave()) {
+            LOG_D("Wait for results to save");
+            ContinueExecute();
             return;
         }
 
+        if (HasOperationInflight()) {
+            LOG_D("Wait for inflight queries to complete");
+            return;
+        }
+
+        LOG_I("Exit, send response to " << Owner);
         Send(Owner, new TEvRunScriptPrivate::TEvScriptResultHandlerFinished(*FinishInfo.Status, std::move(ExecutionInfo), std::move(FinishInfo.Issues)));
         PassAway();
     }

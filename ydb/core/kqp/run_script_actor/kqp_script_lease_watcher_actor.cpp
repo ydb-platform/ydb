@@ -45,7 +45,7 @@ public:
     explicit TScriptLeaseWatcherActor(TScriptExecutionContext::TPtr ctx)
         : Ctx(std::move(ctx))
     {
-        Y_VALIDATE(Ctx && Ctx->UserRequestContext && Ctx->Counters, "Missing script execution context");
+        Y_VALIDATE(Ctx && Ctx->UserRequestContext, "Missing script execution context");
     }
 
     void Bootstrap() {
@@ -72,7 +72,10 @@ private:
     )
 
     void Handle(const TEvScriptLeaseUpdateResponse::TPtr& ev) {
-        Ctx->Counters->ReportLeaseUpdateLatency(TInstant::Now() - LeaseUpdateStartTime);
+        if (const auto& counters = Ctx->Counters) {
+            counters->ReportLeaseUpdateLatency(TInstant::Now() - LeaseUpdateStartTime);
+        }
+
         LeaseUpdateStartTime = TInstant::Zero();
 
         const auto& issues = ev->Get()->Issues;
@@ -112,7 +115,10 @@ private:
         LOG_D("Run lease updater " << updaterId);
 
         LeaseUpdateStartTime = TInstant::Now();
-        Ctx->Counters->ReportRunActorLeaseUpdateBacklog(TInstant::Now() - LeaseUpdateScheduleTime);
+
+        if (const auto& counters = Ctx->Counters) {
+            counters->ReportRunActorLeaseUpdateBacklog(TInstant::Now() - LeaseUpdateScheduleTime);
+        }
     }
 
     void Finish() {

@@ -493,6 +493,9 @@ public:
 
 private:
     void OnRunQuery() override {
+        const auto metaTtl = std::min(MaxRunTime.MicroSeconds(), NYql::NUdf::MAX_TIMESTAMP - 1);
+        KQP_PROXY_LOG_D("Creating query in database, meta ttl: " << TDuration::MicroSeconds(metaTtl));
+
         constexpr char sql[] = R"(
             -- TCreateScriptOperationQuery::OnRunQuery
             DECLARE $database AS Text;
@@ -577,7 +580,7 @@ private:
                 .Interval(static_cast<i64>(std::min(NProtoInterop::CastFromProto(Meta.GetLeaseDuration()).MicroSeconds(), NYql::NUdf::MAX_TIMESTAMP - 1)))
                 .Build()
             .AddParam("$execution_meta_ttl")
-                .Interval(std::min(MaxRunTime.MicroSeconds(), NYql::NUdf::MAX_TIMESTAMP - 1))
+                .Interval(metaTtl)
                 .Build()
             .AddParam("$retry_state")
                 .JsonDocument(NProtobufJson::Proto2Json(RetryState, NProtobufJson::TProto2JsonConfig()))
@@ -851,7 +854,10 @@ private:
             return;
         }
 
-        if (LeaseExists = ValidateLease(ResultSets[0], ELeaseState::ScriptRunning)) {
+        LeaseExists = false;
+
+        if (ValidateLease(ResultSets[0], ELeaseState::ScriptRunning)) {
+            LeaseExists = true;
             UpdateLease();
         }
     }
@@ -2079,6 +2085,7 @@ private:
             SELECT
                 operation_status,
                 execution_status,
+                finalization_status,
                 query_text,
                 syntax,
                 execution_mode,
@@ -2202,6 +2209,8 @@ private:
                 LeaseStatus = static_cast<ELeaseState>(result.ColumnParser("lease_state").GetOptionalInt32().value_or(static_cast<i32>(ELeaseState::ScriptRunning)));
                 if (*LeaseStatus == ELeaseState::WaitRetry) {
                     SuspendedUntil = *leaseDeadline;
+                } else if (*LeaseStatus == ELeaseState::ScriptFinalizing) {
+                    Metadata.set_exec_status(Ydb::Query::EXEC_STATUS_RUNNING); // Waiting for finalization
                 }
             } else if (!OperationStatus) {
                 Finish(Ydb::StatusIds::INTERNAL_ERROR, "Unexpected operation state, lease not found for running query");
@@ -2220,7 +2229,9 @@ private:
         bool ready = !!OperationStatus;
         if (LeaseStatus && OperationStatus) {
             ready = false;
-            OperationIssues.AddIssue(TStringBuilder() << "Execution finished with status " << *OperationStatus << " and wait " << *LeaseStatus);
+            NYql::TIssue finalizationIssue(TStringBuilder() << "Execution finished with status " << *OperationStatus << " and wait " << (*LeaseStatus == ELeaseState::ScriptFinalizing ? "finalization" : "retry"));
+            finalizationIssue.SetCode(NYql::DEFAULT_ERROR, NYql::TSeverityIds::S_INFO);
+            OperationIssues.AddIssue(finalizationIssue);
             OperationStatus = std::nullopt;
         }
 
@@ -3842,8 +3853,9 @@ private:
             DECLARE $lease_generation AS Int64;
 
             UPSERT INTO `.metadata/script_executions` (
-                database, execution_id, operation_status, execution_status, finalization_status, issues,
-                plan_compressed, plan_compression_method, end_ts, stats, ast_compressed, ast_compression_method,
+                database, execution_id, operation_status, execution_status,
+                finalization_status,
+                issues, plan_compressed, plan_compression_method, end_ts, stats, ast_compressed, ast_compression_method,
                 expire_at,
                 customer_supplied_id,
                 script_sinks,
@@ -3852,8 +3864,7 @@ private:
             ) VALUES (
                 $database, $execution_id, $operation_status, $execution_status,
                 IF($applicate_script_external_effect_required, $finalization_status, NULL),
-                $issues,
-                $plan_compressed, $plan_compression_method, CurrentUtcTimestamp(), $stats, $ast_compressed, $ast_compression_method,
+                $issues, $plan_compressed, $plan_compression_method, CurrentUtcTimestamp(), $stats, $ast_compressed, $ast_compression_method,
                 IF($operation_ttl > CAST(0 AS Interval), CurrentUtcTimestamp() + $operation_ttl, NULL),
                 IF($applicate_script_external_effect_required, $customer_supplied_id, NULL),
                 IF($applicate_script_external_effect_required, $script_sinks, NULL),
@@ -3900,12 +3911,14 @@ private:
             serializedStats = statsStream.Str();
         }
 
+        const auto operationTtl = std::min(OperationTtl.MicroSeconds(), NYql::NUdf::MAX_TIMESTAMP - 1);
         KQP_PROXY_LOG_D("Do finalization with status " << Request.OperationStatus
             << ", exec status: " << Ydb::Query::ExecStatus_Name(Request.ExecStatus)
             << ", finalization status (applicate effect: " << Response->ApplicateScriptExternalEffectRequired << "): " << static_cast<ui64>(Request.FinalizationStatus)
             << ", issues: " << Request.Issues.ToOneLineString()
             << ", retry deadline: " << retryDeadline
-            << ", lease state: " << static_cast<i32>(leaseState));
+            << ", lease state: " << static_cast<i32>(leaseState)
+            << ", operation_ttl: " << TDuration::MicroSeconds(operationTtl));
 
         auto params = CreateParams();
         params
@@ -3937,7 +3950,7 @@ private:
                 .OptionalUtf8(Request.QueryAstCompressionMethod)
                 .Build()
             .AddParam("$operation_ttl")
-                .Interval(std::min(OperationTtl.MicroSeconds(), NYql::NUdf::MAX_TIMESTAMP - 1))
+                .Interval(operationTtl)
                 .Build()
             .AddParam("$customer_supplied_id")
                 .Utf8(Response->CustomerSuppliedId)
@@ -4212,9 +4225,7 @@ public:
         , QueryPlan(std::move(queryPlan))
         , QueryAst(std::move(ast))
         , Compressor(queryServiceConfig.GetQueryArtifactsCompressionMethod(), queryServiceConfig.GetQueryArtifactsCompressionMinSize())
-    {
-        Y_VALIDATE(QueryPlan || QueryAst, "Plan ot ast should be set");
-    }
+    {}
 
 private:
     void OnRunQuery() override {
@@ -4697,8 +4708,12 @@ IActor* CreateCreateScriptOperationQueryActor(TString executionId, const TActorI
     return new TCreateScriptOperationQuery(std::move(executionId), runScriptActorId, std::move(record), std::move(meta), TDuration::Max(), {}, std::nullopt, {}, nullptr, 1);
 }
 
-IActor* CreateCheckLeaseStatusActor(TString database, TString executionId, const ui64 cookie) {
-    return new TCheckLeaseStatusQueryActor(std::move(database), std::move(executionId), {.Cookie = cookie});
+IActor* CreateCheckLeaseStatusActor(TString database, TString executionId) {
+    return new TCheckLeaseStatusQueryActor(std::move(database), std::move(executionId), {});
+}
+
+IActor* CreateFinalizeScriptLeaseActor(const TActorId& replyActorId, TString database, TString executionId) {
+    return new TFinalizeScriptLeaseActor(replyActorId, std::move(database), std::move(executionId), {}, nullptr, {});
 }
 
 } // namespace NPrivate

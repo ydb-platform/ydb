@@ -179,7 +179,7 @@ struct TEvScriptLeaseUpdateResponse : public TEventLocal<TEvScriptLeaseUpdateRes
         , Issues(std::move(issues))
     {}
 
-    const bool ExecutionEntryExists = false;
+    const bool ExecutionEntryExists = true;
     const TInstant CurrentDeadline;
     const Ydb::StatusIds::StatusCode Status = Ydb::StatusIds::STATUS_CODE_UNSPECIFIED;
     const NYql::TIssues Issues;

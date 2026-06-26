@@ -17,14 +17,14 @@
 namespace NKikimr::NKqp {
 
 std::string ScriptExecutionOperationFromExecutionId(const std::string& executionId) {
-    return OperationIdFromExecutionId(executionId).ToString();
-}
-
-NOperationId::TOperationId OperationIdFromExecutionId(const std::string& executionId) {
     NOperationId::TOperationId operationId;
     operationId.SetKind(NOperationId::TOperationId::SCRIPT_EXECUTION);
     operationId.AddOptionalValue("id", executionId);
-    return operationId;
+    return operationId.ToString();
+}
+
+NOperationId::TOperationId OperationIdFromExecutionId(const std::string& executionId) {
+    return NOperationId::TOperationId(ScriptExecutionOperationFromExecutionId(executionId));
 }
 
 std::optional<TString> ScriptExecutionIdFromOperation(const std::string& operationId, TString& error) try {

@@ -124,8 +124,9 @@ namespace NKikimr {
                 , Entries({{ToPermissions(permissions), attributes}})
             {}
 
-            TEvAuthorizeTicket(const TString& ticket, const TVector<std::pair<TString, TString>>& attributes, const TVector<TPermission>& permissions)
+            TEvAuthorizeTicket(const TString& ticket, const TString& peerName, const TVector<std::pair<TString, TString>>& attributes, const TVector<TPermission>& permissions)
                 : Ticket(ticket)
+                , PeerName(peerName)
                 , Entries({{permissions, attributes}})
             {}
 

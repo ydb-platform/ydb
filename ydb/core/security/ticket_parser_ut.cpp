@@ -2100,6 +2100,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         // Authorization successful.
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
                                            userToken,
+                                           "192.168.0.101",
                                            {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
                                            TVector<TEvTicketParser::TEvAuthorizeTicket::TPermission>{TEvTicketParser::TEvAuthorizeTicket::Optional("something.read"), TEvTicketParser::TEvAuthorizeTicket::Optional("something.write")})), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -2110,6 +2111,7 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         // Authorization failure with not enough permissions.
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(
                                            userToken,
+                                           "192.168.0.101",
                                            {{"folder_id", "aaaa1234"}, {"database_id", "bbbb4554"}},
                                            TVector<TEvTicketParser::TEvAuthorizeTicket::TPermission>{TEvTicketParser::TEvAuthorizeTicket::Optional("something.read"), TEvTicketParser::TEvAuthorizeTicket::Required("something.write")})), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);

@@ -915,7 +915,8 @@ private:
                 if (IsQueryAllowedToLog(text)) {
                     auto userSID = QueryState->RequestEv->GetUserToken()->GetUserSID();
                     CollectQueryStats(ctx, stats, queryDuration, text,
-                        userSID, QueryState->RequestEv->GetParametersSize(), database, type, requestUnits);
+                        userSID, QueryState->RequestEv->GetParametersSize(), database, type, requestUnits,
+                        QueryState->RequestEv->GetTraceId());
                 }
                 break;
             }

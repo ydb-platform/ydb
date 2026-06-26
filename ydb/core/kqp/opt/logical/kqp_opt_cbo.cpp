@@ -58,7 +58,7 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<TRelOptimizerNode>& no
 
     if (readMatch) {
         if (readMatch->FlatMap && !IsPassthroughFlatMap(readMatch->FlatMap.Cast(), nullptr)) {
-            baseTableMatch = false;
+            return false;
         } else {
             auto read = readMatch->Read.Cast<TKqlReadTable>();
             tablePath = read.Table().Path().StringValue();
@@ -79,7 +79,7 @@ bool IsLookupJoinApplicableDetailed(const std::shared_ptr<TRelOptimizerNode>& no
         readMatch = MatchRead<TKqlReadTableRangesBase>(expr);
         if (readMatch) {
             if (readMatch->FlatMap && !IsPassthroughFlatMap(readMatch->FlatMap.Cast(), nullptr)) {
-                baseTableMatch = false;
+                return false;
             } else {
                 auto read = readMatch->Read.Cast<TKqlReadTableRangesBase>();
                 tablePath = read.Table().Path().StringValue();

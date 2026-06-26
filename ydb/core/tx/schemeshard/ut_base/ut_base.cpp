@@ -580,6 +580,119 @@ Y_UNIT_TEST_SUITE(TSchemeShardTest) {
             }
         }
 
+        // Verify the ConnectDatabase right handling in TEffectiveACL::Update
+        {
+            auto aclHasRight = [](const TString& serialized, NACLib::EAccessRights right) {
+                NACLib::TACL acl(serialized);
+                for (const auto& ace : acl.GetACE()) {
+                    if (ace.GetAccessRight() == (ui32)right) {
+                        return true;
+                    }
+                }
+                return false;
+            };
+            auto aclHasConnect = [&](const TString& serialized) {
+                return aclHasRight(serialized, NACLib::ConnectDatabase);
+            };
+            auto aclHasRead = [&](const TString& serialized) {
+                return aclHasRight(serialized, NACLib::GenericRead);
+            };
+
+            TEffectiveACL parentACL;
+            {
+                NACLib::TDiffACL diff;
+                diff.AddAccess(NACLib::EAccessType::Allow, NACLib::ConnectDatabase, "user1@staff",
+                    NACLib::DefaultInheritanceType);
+
+                NACLib::TACL input;
+                input.ApplyDiff(diff);
+
+                parentACL.Init(input.SerializeAsString());
+            }
+
+            UNIT_ASSERT(aclHasConnect(parentACL.GetForSelf()));
+            UNIT_ASSERT(aclHasConnect(parentACL.GetForChildren(/*isContainer*/ true)));
+            UNIT_ASSERT(aclHasConnect(parentACL.GetForChildren(/*isContainer*/ false)));
+
+            const TString ownACL = [] {
+                NACLib::TDiffACL diff;
+                diff.AddAccess(NACLib::EAccessType::Allow, NACLib::GenericRead, "user1@staff",
+                    NACLib::DefaultInheritanceType);
+
+                NACLib::TACL input;
+                input.ApplyDiff(diff);
+                return input.SerializeAsString();
+            }();
+            const TString emptyOwnACL;
+
+            for (bool isContainer : {true, false}) {
+                // Case 1: tenant root, empty self acl (InheritFrom branch).
+                // connect right stays in ForSelf but is stripped from children.
+                {
+                    TEffectiveACL tenantRootACL;
+                    tenantRootACL.Update(parentACL, emptyOwnACL, isContainer, /*isTenantRoot*/ true);
+
+                    UNIT_ASSERT_C(aclHasConnect(tenantRootACL.GetForSelf()),
+                        "connect right must be present in tenant root ForSelf, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(!aclHasConnect(tenantRootACL.GetForChildren(/*isContainer*/ true)),
+                        "connect right must be stripped from tenant root ForContainers, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(!aclHasConnect(tenantRootACL.GetForChildren(/*isContainer*/ false)),
+                        "connect right must be stripped from tenant root ForObjects, isContainer=" << isContainer);
+                }
+
+                // Case 2: tenant root, non-empty self acl (MergeWithParent branch).
+                // connect right stays in ForSelf and is stripped from children, but the tenant's own
+                // ordinary read right keeps propagating to children.
+                {
+                    TEffectiveACL tenantRootACL;
+                    tenantRootACL.Update(parentACL, ownACL, isContainer, /*isTenantRoot*/ true);
+
+                    UNIT_ASSERT_C(aclHasConnect(tenantRootACL.GetForSelf()),
+                        "connect right must be present in tenant root ForSelf, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(!aclHasConnect(tenantRootACL.GetForChildren(/*isContainer*/ true)),
+                        "connect right must be stripped from tenant root ForContainers, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(!aclHasConnect(tenantRootACL.GetForChildren(/*isContainer*/ false)),
+                        "connect right must be stripped from tenant root ForObjects, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasRead(tenantRootACL.GetForChildren(/*isContainer*/ true)),
+                        "read right must survive in ForContainers, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasRead(tenantRootACL.GetForChildren(/*isContainer*/ false)),
+                        "read right must survive in ForObjects, isContainer=" << isContainer);
+                }
+
+                // Case 3: in-domain path (not tenant root), empty self acl (InheritFrom branch).
+                // connect right keeps propagating down to children.
+                {
+                    TEffectiveACL childACL;
+                    childACL.Update(parentACL, emptyOwnACL, isContainer, /*isTenantRoot*/ false);
+
+                    UNIT_ASSERT_C(aclHasConnect(childACL.GetForSelf()),
+                        "connect right must be present in ForSelf, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasConnect(childACL.GetForChildren(/*isContainer*/ true)),
+                        "connect right must keep propagating to containers, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasConnect(childACL.GetForChildren(/*isContainer*/ false)),
+                        "connect right must keep propagating to objects, isContainer=" << isContainer);
+                }
+
+                // Case 4: in-domain path (not tenant root), non-empty self acl (MergeWithParent branch).
+                // connect right keeps propagating down and the own ordinary read right propagates too.
+                {
+                    TEffectiveACL childACL;
+                    childACL.Update(parentACL, ownACL, isContainer, /*isTenantRoot*/ false);
+
+                    UNIT_ASSERT_C(aclHasConnect(childACL.GetForSelf()),
+                        "connect right must be present in ForSelf, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasConnect(childACL.GetForChildren(/*isContainer*/ true)),
+                        "connect right must keep propagating to containers, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasConnect(childACL.GetForChildren(/*isContainer*/ false)),
+                        "connect right must keep propagating to objects, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasRead(childACL.GetForChildren(/*isContainer*/ true)),
+                        "ordinary right read right must survive in ForContainers, isContainer=" << isContainer);
+                    UNIT_ASSERT_C(aclHasRead(childACL.GetForChildren(/*isContainer*/ false)),
+                        "ordinary right read right must survive in ForObjects, isContainer=" << isContainer);
+                }
+            }
+        }
+
     }
 
     Y_UNIT_TEST(ModifyACL) {

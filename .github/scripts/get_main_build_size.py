@@ -26,7 +26,7 @@ def get_build_size(time_of_current_commit):
             select git_commit_time,github_sha,size_bytes,size_stripped_bytes,build_preset
             from binary_size 
             where 
-            github_workflow like "Postcommit%" and 
+            (github_workflow = "Postmerge" OR github_workflow like "Postcommit%") and 
             github_ref_name="{branch}" and 
             build_preset="{build_preset}" and
             git_commit_time <= DateTime::FromSeconds({time_of_current_commit})
@@ -54,7 +54,7 @@ def get_build_size(time_of_current_commit):
                 }
             else:
                 print(
-                    f"Error: Cant get binary size in db with params: github_workflow like 'Postcommit%', github_ref_name='{branch}', build_preset='{build_preset}, git_commit_time <= DateTime::FromSeconds({time_of_current_commit})'",
+                    f"Error: Cant get binary size in db with params: github_workflow Postmerge / Postcommit%, github_ref_name='{branch}', build_preset='{build_preset}, git_commit_time <= DateTime::FromSeconds({time_of_current_commit})'",
                     file=sys.stderr
                 )
                 return 0

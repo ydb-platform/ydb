@@ -1,8 +1,8 @@
--- All PR-check failures (latest run per PR) with no postcommit/regression filter + PR data and mute policy.
+-- All PR-check failures (latest run per PR) with no postmerge/regression filter + PR data and mute policy.
 --
--- Unlike pr_blocked_by_failed_tests_rich: we do not filter out tests that failed in regression/postcommit.
+-- Unlike pr_blocked_by_failed_tests_rich: we do not filter out tests that failed in regression/postmerge.
 -- Here the result set includes all PR-check failures from the latest run per PR — including flaky tests
--- and tests that already fail in postcommit. So mute rule checks (met_mute_criteria, raw, raw_custom)
+-- and tests that already fail in postmerge. So mute rule checks (met_mute_criteria, raw, raw_custom)
 -- give meaningful results: you can see which failures would have qualified for mute.
 --
 -- Logic:
@@ -25,7 +25,7 @@ $mute_custom_high_runs_bound = 5;
 $mute_custom_fail_threshold_low = 1;
 $mute_custom_fail_threshold_high = 2;
 
--- All PR-check failures with pr_number (no regression/postcommit filter)
+-- All PR-check failures with pr_number (no regression/postmerge filter)
 $all_failures_with_pr_base = (
     SELECT
         base.suite_folder || '/' || base.test_name AS full_name,
@@ -229,6 +229,7 @@ $raw_runs_for_window = (
             'Regression-run_Small_and_Medium',
             'Regression-run_compatibility',
             'Regression-whitelist-run',
+            'Postmerge',
             'Postcommit_relwithdebinfo',
             'Postcommit_asan'
         )
@@ -261,7 +262,7 @@ $raw_mute_window = (
         k.run_date
 );
 
--- Runs that are not regression/postcommit (PR-check, Run-tests, etc.) in the same window — counts only for context.
+-- Runs that are not regression/postmerge (PR-check, Run-tests, etc.) in the same window — counts only for context.
 $non_regression_runs_for_window = (
     SELECT
         branch,
@@ -280,6 +281,7 @@ $non_regression_runs_for_window = (
             'Regression-run_Small_and_Medium',
             'Regression-run_compatibility',
             'Regression-whitelist-run',
+            'Postmerge',
             'Postcommit_relwithdebinfo',
             'Postcommit_asan'
         )

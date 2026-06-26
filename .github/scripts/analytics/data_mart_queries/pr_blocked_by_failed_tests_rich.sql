@@ -2,7 +2,7 @@
 --
 -- Logic:
 --   1. Take all PR-check test failures in the last $pr_check_lookback_days days.
---   2. For each failed test, look at regression/nightly/postcommit runs
+--   2. For each failed test, look at regression/nightly/postmerge runs
 --      in the $regression_window_days days before the PR-check failure.
 --   3. Keep only tests that in that window:
 --      - have at least one passed in regression/nightly
@@ -49,7 +49,7 @@ $pr_check_failures_1d = (
         run_timestamp
 );
 
--- Regression/postcommit runs with full_name precomputed (JOIN only on column equalities for YDB)
+-- Regression/postmerge runs with full_name precomputed (JOIN only on column equalities for YDB)
 $regression_runs = (
     SELECT
         branch,
@@ -68,6 +68,7 @@ $regression_runs = (
             'Regression-run_Small_and_Medium',
             'Regression-run_compatibility',
             'Regression-whitelist-run',
+            'Postmerge',
             'Postcommit_relwithdebinfo',
             'Postcommit_asan'
         )

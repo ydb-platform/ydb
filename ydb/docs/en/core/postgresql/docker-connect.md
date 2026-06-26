@@ -4,7 +4,7 @@
 
 ## Running {{ ydb-short-name }} with PostgreSQL compatibility enabled
 
-PostgreSQL wire protocol support (pgwire) and related PostgreSQL compatibility features are **disabled by default** in the local {{ ydb-short-name }} Docker image, as well as on `ydbd` nodes. Set `YDB_EXPERIMENTAL_PG=1` when starting the container to enable the pgwire listener on port 5432, PostgreSQL SQL dialect support, and related feature flags. The examples below include this variable.
+Currently, the PostgreSQL compatibility feature is available for testing in the Docker image: `ghcr.io/ydb-platform/local-ydb:nightly`.
 
 Commands for starting a local Docker container with {{ ydb-short-name }} and open ports for PostgreSQL and Embedded UI:
 

@@ -24,7 +24,6 @@
 || [{#T}](host_configs.md) | Нет | Типовые конфигурации хостов для узлов кластера ||
 || [{#T}](hosts.md) | Да | Конфигурация статических узлов кластера ||
 || [{#T}](kafka_proxy_config.md) | Нет | Конфигурация [Kafka Proxy](../../reference/kafka-api/index.md) ||
-|| [{#T}](local_pg_wire_config.md) | Нет | Конфигурация [сетевого протокола PostgreSQL](../../postgresql/intro.md) (pgwire) ||
 || [{#T}](log_config.md) | Нет | Конфигурация и параметры логирования ||
 || [{#T}](memory_controller_config.md) | Нет | Распределение памяти и лимиты для компонентов базы данных ||
 || [{#T}](monitoring_config.md) | Нет | Параметры [YDB Monitoring](../embedded-ui/ydb-monitoring.md) ||

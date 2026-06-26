@@ -29,8 +29,6 @@ items:
   href: hosts.md
 - name: kafka_proxy_config
   href: kafka_proxy_config.md
-- name: local_pg_wire_config
-  href: local_pg_wire_config.md
 - name: log_config
   href: log_config.md
 - name: memory_controller_config

@@ -29,6 +29,8 @@ To disable SelfHeal, run the command:
 ydb-dstool -e <bs_endpoint> cluster set --disable-self-heal
 ```
 
+{% endlist %}
+
 ## SelfHeal settings {#settings}
 
 You can configure SelfHeal in **Viewer** → **Cluster Management System** → **CmsConfigItems**.

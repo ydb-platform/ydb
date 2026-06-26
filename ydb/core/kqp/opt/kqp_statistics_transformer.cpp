@@ -190,7 +190,14 @@ void InferStatisticsForKqpTable(
     }
 
     double nRows = tableData.Metadata->RecordsCount;
+    if (tableData.Metadata->RecordsCount == 0) {
+        nRows = 1000.0;
+    }
+    
     double byteSize = tableData.Metadata->DataSize;
+    if (tableData.Metadata->DataSize == 0) {
+        byteSize = 100000.0;
+    }
     int nAttrs = tableData.Metadata->Columns.size();
 
     auto keyColumns = TIntrusivePtr<TOptimizerStatistics::TKeyColumns>(new TOptimizerStatistics::TKeyColumns(tableData.Metadata->KeyColumnNames));
@@ -424,7 +431,7 @@ void InferStatisticsForRowsSourceSettings(
 
     int nAttrs = sourceSettings.Columns().Size();
 
-    double sizePerRow = inputStats->ByteSize / (inputRows==0?1:inputRows);
+    double sizePerRow = inputStats->ByteSize / (inputRows==0?100:inputRows);
     double byteSize = nRows * sizePerRow * (nAttrs / (double)inputStats->Ncols);
     double cost = inputStats->Cost;
 

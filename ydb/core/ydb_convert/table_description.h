@@ -9,6 +9,10 @@
 #include <ydb/core/scheme/scheme_type_info.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
 
+namespace NYql{
+    struct TKikimrTableMetadata;
+}
+
 namespace NKikimr {
 
 enum class EAlterOperationKind {
@@ -41,9 +45,9 @@ bool BuildAlterTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKiki
     const TTableProfiles& profiles, const TPathId& resolvedPathId,
     Ydb::StatusIds::StatusCode& status, TString& error);
 bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
-    NKikimrSchemeOp::TModifyScheme* modifyScheme, Ydb::StatusIds::StatusCode& status, TString& error);
-bool BuildAlterColumnTableModifyScheme(
-    const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme, Ydb::StatusIds::StatusCode& status, TString& error);
+    NKikimrSchemeOp::TModifyScheme* modifyScheme, const TIntrusivePtr<NYql::TKikimrTableMetadata>& alteredTable, Ydb::StatusIds::StatusCode& status, TString& error);
+bool BuildAlterColumnTableModifyScheme(const Ydb::Table::AlterTableRequest* req, NKikimrSchemeOp::TModifyScheme* modifyScheme,
+     const TIntrusivePtr<NYql::TKikimrTableMetadata>& alteredTable, Ydb::StatusIds::StatusCode& status, TString& error);
 
 bool FillAlterTableSettingsDesc(NKikimrSchemeOp::TTableDescription& out,
     const Ydb::Table::AlterTableRequest& in, const TTableProfiles& profiles,

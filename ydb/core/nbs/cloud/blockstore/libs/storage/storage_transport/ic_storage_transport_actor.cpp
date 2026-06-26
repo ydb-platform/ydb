@@ -17,6 +17,7 @@ constexpr TStringBuf DestroyErrorMessage =
     "TICStorageTransportActor is destroyed";
 constexpr TStringBuf CantAcquireDataErrorMessage = "can't acquire data";
 constexpr TStringBuf UndeliveryErrorMessage = "Undelivered";
+constexpr TStringBuf SessionBrokenErrorMessage = "Session broken";
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -75,6 +76,32 @@ void SetUndeliveryError(T& record)
         NKikimrBlobStorage::NDDisk::TReplyStatus::ERROR,
         UndeliveryErrorMessage,
         record);
+}
+
+template <typename T>
+void SetSessionBrokenError(T& record)
+{
+    SetErrorStatus(
+        NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED,
+        SessionBrokenErrorMessage,
+        record);
+}
+
+template <typename TEvent, typename TMap>
+void RejectRequestsForNode(TMap& map, ui32 nodeId)
+{
+    for (auto it = map.begin(); it != map.end();) {
+        auto& request = it->second;
+        if (request->ServiceId.NodeId() == nodeId) {
+            TEvent event;
+            SetSessionBrokenError(event.Record);
+            request->Promise.SetValue(std::move(event.Record));
+
+            map.erase(it++);
+        } else {
+            ++it;
+        }
+    }
 }
 
 }   // namespace
@@ -1094,6 +1121,13 @@ void TICStorageTransportActor::PassAway()
     NActors::IActor::PassAway();
 }
 
+void TICStorageTransportActor::RejectAllSessionRequestsForNode(ui32 nodeId)
+{
+    RejectRequestsForNode<NDDisk::TEvReadResult>(ReadFromDDiskRequests, nodeId);
+    RejectRequestsForNode<NDDisk::TEvWriteResult>(WriteToDDiskRequests, nodeId);
+    RejectRequestsForNode<NDDisk::TEvSyncResult>(FlushFromPBufferRequests, nodeId);
+}
+
 void TICStorageTransportActor::HandleICNodeDisconnected(
     const TEvInterconnect::TEvNodeDisconnected::TPtr& ev,
     const TActorContext& ctx)
@@ -1116,6 +1150,8 @@ void TICStorageTransportActor::HandleICNodeDisconnected(
         }
         ICSubscribedNodes.erase(it);
     }
+
+    RejectAllSessionRequestsForNode(nodeId);
 }
 
 void TICStorageTransportActor::HandleICNodeConnected(

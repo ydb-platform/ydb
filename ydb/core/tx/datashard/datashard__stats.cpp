@@ -362,18 +362,18 @@ public:
 
             if (tableInfo.TableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact ||
                 tableInfo.TableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance) {
-                // For now, only allow to split compact fulltext index table by __ydb_token
+                // For now, only allow to split compact fulltext index table by prefix + __ydb_token
                 auto pb = Result->Record.MutableTableStats();
                 if (pb->GetSplitBySizeSuggestedKey().size()) {
                     TSerializedCellVec key(pb->GetSplitBySizeSuggestedKey());
-                    if (key.GetCells().size() > 1) {
-                        pb->SetSplitBySizeSuggestedKey(TSerializedCellVec::Serialize({key.GetCells()[0]}));
+                    if (key.GetCells().size() > tableInfo.KeyColumnIds.size()-2) {
+                        pb->SetSplitBySizeSuggestedKey(TSerializedCellVec::Serialize(key.GetCells().Slice(0, tableInfo.KeyColumnIds.size()-2)));
                     }
                 }
                 if (pb->GetSplitByLoadSuggestedKey().size()) {
                     TSerializedCellVec key(pb->GetSplitByLoadSuggestedKey());
                     if (key.GetCells().size() > 1) {
-                        pb->SetSplitByLoadSuggestedKey(TSerializedCellVec::Serialize({key.GetCells()[0]}));
+                        pb->SetSplitByLoadSuggestedKey(TSerializedCellVec::Serialize(key.GetCells().Slice(0, tableInfo.KeyColumnIds.size()-2)));
                     }
                 }
             }

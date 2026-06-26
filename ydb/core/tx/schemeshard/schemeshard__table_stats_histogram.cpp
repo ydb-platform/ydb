@@ -417,9 +417,9 @@ bool TTxPartitionHistogram::Execute(TTransactionContext& txc, const TActorContex
 
     if ((tableInfo->TableDescription.GetTableType() == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact ||
         tableInfo->TableDescription.GetTableType() == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance) &&
-        splitKey.GetCells().size() > 1) {
-        // For now, only allow to split compact fulltext index table by __ydb_token
-        splitKey = TSerializedCellVec(splitKey.GetCells().Slice(0, 1));
+        splitKey.GetCells().size() > tableInfo->KeyColumnIds.size()-2) {
+        // For now, only allow to split compact fulltext index table by prefix + __ydb_token
+        splitKey = TSerializedCellVec(splitKey.GetCells().Slice(0, tableInfo->KeyColumnIds.size()-2));
     }
 
     if (splitKey.GetBuffer().empty()) {

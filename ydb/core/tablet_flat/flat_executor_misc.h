@@ -42,7 +42,7 @@ namespace NTabletFlatExecutor {
         ui32 FulltextAddedTag = Max<ui32>();
         ui32 FulltextSegmentTag = Max<ui32>();
         ui32 FulltextMaxSegment = 10000;
-        // Key column positions are always: [0]=token, [1]=generation, [2]=max_id
+        // Key column positions are always: [prefix+0]=token, [prefix+1]=generation, [prefix+2]=max_id
 
         // Non-empty when compaction also needs to produce a tx status table part
         TVector<TIntrusiveConstPtr<NTable::TMemTable>> Frozen;

@@ -92,7 +92,9 @@ namespace NTabletFlatExecutor {
             void Restore(NTable::TRowState& out) const {
                 out.Init(Slots.size());
                 out.Touch(Op);
-                if (Op == NTable::ERowOp::Erase || Op == NTable::ERowOp::Reset) return;
+                if (Op == NTable::ERowOp::Erase || Op == NTable::ERowOp::Reset) {
+                    return;
+                }
                 for (ui32 i = 0; i < Slots.size(); i++) {
                     if (Slots[i].CellOp != NTable::ECellOp::Empty) {
                         TCell cell;
@@ -144,9 +146,11 @@ namespace NTabletFlatExecutor {
         };
 
         // Fulltext compaction state
+        TSerializedCellVec FtCurrentPrefix;
         TString FtCurrentToken;
         TVector<TFtKeyBuf> FtTokenBuf;  // all keys for current token
         TFtKeyBuf FtCurKey;             // key currently being built
+        ui32 PrefixSize = 0;            // prefix column count
         ui32 FtAddedPos = 0;            // position of __ydb_added in Scheme->Cols
         ui32 FtSegmentPos = 0;          // position of __ydb_segment in Scheme->Cols
         TVector<ui32> FtKeyColPos;      // keyOrder -> Cols position
@@ -175,6 +179,8 @@ namespace NTabletFlatExecutor {
                     FtKeyColPos[col.Key] = col.Pos;
                 }
             }
+            Y_ENSURE(FtKeyColPos.size() >= 3);
+            PrefixSize = FtKeyColPos.size()-3;
             FtMinRowVersion = Conf->Layout.MinRowVersion;
         }
 
@@ -194,20 +200,20 @@ namespace NTabletFlatExecutor {
         void BeginKey(TArrayRef<const TCell> key)
         {
             // Check if token changed
-            TStringBuf newToken = key.size() > 0 && !key[0].IsNull()
-                ? key[0].AsBuf() : TStringBuf();
-
+            Y_ENSURE(key.size() == FtKeyColPos.size());
+            TStringBuf newToken = !key[PrefixSize].IsNull() ? key[PrefixSize].AsBuf() : TStringBuf();
             if (newToken != FtCurrentToken) {
                 FlushFulltextToken();
             }
+            FtCurrentPrefix = TSerializedCellVec(key.Slice(0, PrefixSize));
             FtCurrentToken = TString(newToken);
 
             // Start buffering a new key (DON'T call Writer->BeginKey)
             FtCurKey = {};
-            FtCurKey.Gen = key[1].AsValue<NTableIndex::NFulltext::TGen>();
+            FtCurKey.Gen = key[PrefixSize+1].AsValue<NTableIndex::NFulltext::TGen>();
             FtCurKey.MaxId = Conf->FulltextKeySize == 8
-                ? key[2].AsValue<ui64>()
-                : key[2].AsValue<ui32>();
+                ? key[PrefixSize+2].AsValue<ui64>()
+                : key[PrefixSize+2].AsValue<ui32>();
         }
 
         void SetLock(ELockMode mode, ui64 txId)
@@ -303,7 +309,7 @@ namespace NTabletFlatExecutor {
 
         // Replay a buffered key through Writer as-is (pass-through)
         void ReplayKey(const TFtKeyBuf& key) {
-            TSmallVec<TCell> cells;
+            TSmallVec<TCell> cells(FtCurrentPrefix.GetCells().begin(), FtCurrentPrefix.GetCells().end());
             cells.emplace_back(FtCurrentToken);
             cells.emplace_back(TCell::Make(key.Gen));
             cells.emplace_back((const char*)&key.MaxId, Conf->FulltextKeySize);
@@ -340,7 +346,7 @@ namespace NTabletFlatExecutor {
             NTableIndex::NFulltext::TGen gen = Max<NTableIndex::NFulltext::TGen>();
 
             // Build key cells: (token, gen, maxId) — gen before maxId
-            TSmallVec<TCell> keyCells;
+            TSmallVec<TCell> keyCells(FtCurrentPrefix.GetCells().begin(), FtCurrentPrefix.GetCells().end());
             keyCells.push_back(TCell(FtCurrentToken.data(), FtCurrentToken.size()));
             keyCells.push_back(TCell::Make(gen));
             keyCells.push_back(TCell((const char*)&maxId, Conf->FulltextKeySize));

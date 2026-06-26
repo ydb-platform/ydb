@@ -32,6 +32,7 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/base/hive.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/control/lib/immediate_control_board_impl.h>
 #include <ydb/core/protos/memory_controller_config.pb.h>
@@ -4933,18 +4934,22 @@ ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)
     comp->Layout.Groups.resize(rowScheme->Families.size());
     comp->Writer.Groups.resize(rowScheme->Families.size());
 
-    // Detect fulltext compact tables (ESpecialTableTypeFulltextCompact=1, ESpecialTableTypeFulltextCompactRelevance=2)
-    if (tableInfo->SpecialTableType == 1 || tableInfo->SpecialTableType == 2) {
+    // Detect fulltext compact tables
+    if (tableInfo->SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact ||
+        tableInfo->SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance) {
         comp->IsFulltextCompact = true;
-        comp->FulltextWithRelevance = (tableInfo->SpecialTableType == 2);
+        comp->FulltextWithRelevance = (tableInfo->SpecialTableType == NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance);
         // Resolve column tags by name from tableInfo->Columns
         for (const auto& [id, col] : tableInfo->Columns) {
-            if (col.Name == "__ydb_added") comp->FulltextAddedTag = id;
-            else if (col.Name == "__ydb_segment") comp->FulltextSegmentTag = id;
+            if (col.Name == NTableIndex::NFulltext::AddedColumn) {
+                comp->FulltextAddedTag = id;
+            } else if (col.Name == NTableIndex::NFulltext::SegmentColumn) {
+                comp->FulltextSegmentTag = id;
+            }
         }
-        // Determine if key type is signed from key column[2] (max_id)
+        // Determine if key type is signed from the last key column (__ydb_max_id)
         if (tableInfo->KeyColumns.size() >= 3) {
-            auto maxIdColId = tableInfo->KeyColumns[2];
+            auto maxIdColId = tableInfo->KeyColumns.back();
             auto keyTypeId = tableInfo->Columns.at(maxIdColId).PType.GetTypeId();
             comp->FulltextKeySigned = (keyTypeId == NScheme::NTypeIds::Int64 || keyTypeId == NScheme::NTypeIds::Int32);
             comp->FulltextKeySize = (keyTypeId == NScheme::NTypeIds::Int64 || keyTypeId == NScheme::NTypeIds::Uint64 ? 8 : 4);

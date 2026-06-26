@@ -46,7 +46,6 @@
 using namespace NKikimr;
 
 namespace {
-    constexpr ui64 channelBufferSize = 1_MB; // XXX FIXME
 template <typename T>
 T ExtractFromConstFuture(const NThreading::TFuture<T>& f) {
     // We want to avoid making a copy of data stored in a future.
@@ -83,10 +82,13 @@ namespace NYql::NDq {
     using namespace NActors;
 
     namespace {
-        constexpr ui32 RetriesLimit = 15; // TODO lookup parameters or PRAGMA?
+        // TODO lookup parameters or PRAGMA?
+        constexpr ui32 RetriesLimit = 15;
         constexpr TDuration MinRetryDelay = TDuration::MilliSeconds(10);
-        constexpr TDuration MaxRetryDelay = TDuration::Seconds(30); // TODO lookup parameters or PRAGMA?
-                                                                    // = at most 6 minutes
+        constexpr TDuration MaxRetryDelay = TDuration::Seconds(30);
+        // = retry for at most 6 minutes
+        constexpr ui64 ChannelBufferSize = 1_MB;
+
         const NKikimr::NMiniKQL::TStructType* MergeStructTypes(const NKikimr::NMiniKQL::TTypeEnvironment& env, const NKikimr::NMiniKQL::TStructType* t1, const NKikimr::NMiniKQL::TStructType* t2) {
             Y_ABORT_UNLESS(t1);
             Y_ABORT_UNLESS(t2);
@@ -396,7 +398,7 @@ namespace NYql::NDq {
             Y_DEBUG_ABORT_UNLESS(request->empty() == (fullscanLimit > 0));
             LOG_D("Got LookupRequest for " << request->size() << " keys");
             Y_ABORT_IF((request->empty() == (fullscanLimit == 0)) || request->size() > MaxKeysInRequest);
-            if (Count) {
+            if (InFlight) { // all counters tied
                 Count->Inc();
                 InFlight->Inc();
                 Keys->Add(request->size());
@@ -419,24 +421,28 @@ namespace NYql::NDq {
         void SendRequest(TLookupState::TPtr state) {
             auto startCycleCount = GetCycleCountFast();
 
-            if (!state->SessionState) { // reuse or create session
+            while (!state->SessionState) { // reuse or create session
                 if (Sessions.empty()) {
                     SendCreateSession(std::move(state));
                     return;
                 }
-                state->SessionState = std::move(Sessions.back());
+                auto sessionState = std::move(Sessions.back());
                 Sessions.pop_back();
+                if (!sessionState->SessionId.empty()) {
+                    state->SessionState = sessionState;
+                }
             }
 
             using TRequest = Ydb::Query::ExecuteQueryRequest;
             using TResponse = Ydb::Query::ExecuteQueryResponsePart;
             using TRpcRequest = NGRpcService::TGrpcRequestNoOperationCall<TRequest, TResponse>;
-            state->StreamProcessor = NRpcService::DoLocalRpcStreamSameMailbox<TRpcRequest>(FillQuery(state), /*database*/AppData()->TenantName, /*token=*/Nothing(), ActorContext(), false, channelBufferSize);
+            state->StreamProcessor = NRpcService::DoLocalRpcStreamSameMailbox<TRpcRequest>(FillQuery(state), /*database*/AppData()->TenantName, /*token=*/Nothing(), ActorContext(), false, ChannelBufferSize);
             ReadNextResponsePart(state);
             auto cputime = GetCpuTimeDelta(startCycleCount).MicroSeconds();
             if (CpuTime) {
                 CpuTime->Add(cputime);
             }
+            LOG_T("SendRequest cputime " << cputime);
         }
 
         void ReadNextResponsePart(TLookupState::TPtr state) {
@@ -481,7 +487,7 @@ namespace NYql::NDq {
             using TRpcRequest = NGRpcService::TGrpcRequestNoOperationCall<TRequest, TResponse>;
             TRequest request;
             request.set_session_id(session->SessionId);
-            session->StreamProcessor = NRpcService::DoLocalRpcStreamSameMailbox<TRpcRequest>(std::move(request), /*database*/AppData()->TenantName, /*token=*/Nothing(), ActorContext(), false, channelBufferSize);
+            session->StreamProcessor = NRpcService::DoLocalRpcStreamSameMailbox<TRpcRequest>(std::move(request), /*database*/AppData()->TenantName, /*token=*/Nothing(), ActorContext(), false, ChannelBufferSize);
             if (ActiveSessions) {
                 ActiveSessions->Inc();
             }
@@ -631,13 +637,13 @@ namespace NYql::NDq {
                     }
                 }
             }
-            if (ResultBytes) {
+            if (ResultBytes) { // all counters tied
                 ResultBytes->Add(resultSet.data().size());
                 ResultChunks->Inc();
             }
             NKikimr::NArrow::NSerialization::TSerializerContainer deser = NKikimr::NArrow::NSerialization::TSerializerContainer::GetDefaultSerializer(); // todo move to class' member
             Y_ENSURE(resultSet.format() == Ydb::ResultSet::FORMAT_ARROW);
-            const auto& data = deser->Deserialize(resultSet.data(), state->Schema);
+            const auto& data = state->Schema ? deser->Deserialize(resultSet.data(), state->Schema) : deser->Deserialize(resultSet.data());
             Y_ENSURE(data.ok(), data.status().ToString());
             const auto& value = data.ValueOrDie();
             Y_ENSURE(static_cast<ui32>(value->num_columns()) == ColumnDestinations.size(), value->num_columns() << " == " << ColumnDestinations.size());
@@ -648,13 +654,10 @@ namespace NYql::NDq {
             }
 
             auto height = columns[0].size();
-            Y_DEBUG_ABORT_UNLESS(state->FullscanLimit == 0 || state->FullscanLimit > state->ResultRows);
+            Y_DEBUG_ABORT_UNLESS(state->FullscanLimit == 0 || state->FullscanLimit >= state->ResultRows);
             if (state->FullscanLimit > 0 && height > state->FullscanLimit - state->ResultRows) {
+                CleanupStreamProcessor(state);
                 Y_VALIDATE(false, "Result count exceed requested limit " << state->FullscanLimit); // unlike generic lookup/connector, this is an internal bug
-                height = state->FullscanLimit - state->ResultRows;
-                if (!state->StreamProcessor->IsFinished()) {
-                    state->StreamProcessor->Cancel();
-                }
             }
             for (size_t i = 0; i != height; ++i) {
                 NUdf::TUnboxedValue* keyItems;
@@ -672,7 +675,8 @@ namespace NYql::NDq {
                 } else if (auto it = request->find(key); it != request->end()) {
                     v = &(it->second);
                 } else {
-                    continue;
+                    CleanupStreamProcessor(state);
+                    Y_VALIDATE(false, "SELECT returned unrequested keys, should not have happened"); // unlike generic lookup/connector, this is an internal bug
                 }
                 if (IsMultiMatches) {
                     *v = HolderFactory.CreateDirectListHolder((*v ? *NKikimr::NMiniKQL::GetDefaultListRepresentation(*v) : NKikimr::NMiniKQL::TDefaultListRepresentation{}).Append(std::move(output)));
@@ -682,7 +686,7 @@ namespace NYql::NDq {
             }
             state->ResultRows += height;
             auto cputime = GetCpuTimeDelta(startCycleCount).MicroSeconds();
-            if (CpuTime) {
+            if (CpuTime) { // all counters tied
                 CpuTime->Add(cputime);
                 ResultRows->Add(height);
             }
@@ -697,7 +701,7 @@ namespace NYql::NDq {
             --LocalInFlight;
             auto guard = Guard(*Alloc);
             LOG_D("Sending lookup results for " << state->ResultRows << " rows");
-            if (AnswerTime) {
+            if (InFlight) { // all counters tied
                 AnswerTime->Add((TInstant::Now() - state->SentTime).MicroSeconds());
                 InFlight->Dec();
             }
@@ -851,6 +855,7 @@ namespace NYql::NDq {
             request.set_exec_mode(Ydb::Query::EXEC_MODE_EXECUTE);
             request.set_result_set_format(Ydb::ResultSet::FORMAT_ARROW);
             request.mutable_arrow_format_settings()->mutable_compression_codec()->set_type(Ydb::Formats::ArrowFormatSettings::CompressionCodec::TYPE_NONE); // local RPC, avoid compression
+            request.set_response_part_limit_bytes(ChannelBufferSize);
             // request.set_pool_id(...); // TODO: pass workload manager pool from caller
             request.set_schema_inclusion_mode(Ydb::Query::SCHEMA_INCLUSION_MODE_FIRST_ONLY);
             {

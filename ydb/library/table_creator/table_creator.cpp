@@ -175,6 +175,13 @@ public:
             return;
         }
 
+        if (!TableIndexes.empty() || !TableSequences.empty()) {
+            if (!HasRequestedIndexedSchema(existingIndexes, existingSequences)) {
+                Fail("Existing table schema does not match requested indexes or sequences");
+                return;
+            }
+        }
+
         ExcludeExistingColumns(existingColumns);
         bool aclChanged = false;
 
@@ -185,10 +192,6 @@ public:
         }
 
         if (Columns.empty() && !aclChanged) {
-            if (!HasRequestedIndexedSchema(existingIndexes, existingSequences)) {
-                Fail("Existing table schema does not match requested indexes or sequences");
-                return;
-            }
             Success();
             return;
         }

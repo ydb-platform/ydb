@@ -112,7 +112,8 @@ namespace NYql::NDq {
         struct TLookupState {
             using TPtr = std::shared_ptr<TLookupState>;
             std::weak_ptr<NYql::NDq::IDqAsyncLookupSource::TUnboxedValueMap> Request;
-            // ^^^ must not be lock()ed without bound mkql allocator (e.g. in future handlers)
+            // ^^^ must not be lock()ed without bound mkql allocator
+            // ^^^ (and allocator must not be bound outside actor context)
             TBackoff Backoff;
             TInstant SentTime;
             size_t FullscanLimit = 0;
@@ -158,6 +159,7 @@ namespace NYql::NDq {
                     Response.set_status(Ydb::StatusIds::INTERNAL_ERROR);
                     auto& issue = *Response.add_issues();
                     issue.set_message(TStringBuilder() << "Got unexpected exception: " << ex.what());
+                    // severity is FATAL by default
                 }
             }
 
@@ -218,6 +220,11 @@ namespace NYql::NDq {
             , IsMultiMatches(isMultiMatches)
         {
             InitMonCounters(taskCounters);
+            {
+                TStringBuilder out;
+                MakeSelect(out);
+                SelectBody = std::move(out);
+            }
             {
                 TStringBuilder out;
                 MakeSelectWithKeys(out);
@@ -416,7 +423,7 @@ namespace NYql::NDq {
             SendRequest(std::move(state));
         }
 
-        // must be called with bound Alloc
+        // must be called in actor context
         void SendRequest(TLookupState::TPtr state) {
             auto startCycleCount = GetCycleCountFast();
 
@@ -605,6 +612,7 @@ namespace NYql::NDq {
             // don't wait for results
         }
 
+        // must be called in actor context
         void ProcessReceivedData(Ydb::Query::ExecuteQueryResponsePart& result, TLookupState::TPtr state) {
             Y_ENSURE(result.result_set_index() == 0);
             ProcessReceivedData(result.result_set(), std::move(state));
@@ -612,6 +620,7 @@ namespace NYql::NDq {
             LOG_D("query stats: " << result.exec_stats().DebugString());
         }
 
+        // must be called in actor context
         void ProcessReceivedData(const Ydb::ResultSet& resultSet, TLookupState::TPtr state) {
             auto startCycleCount = GetCycleCountFast();
             auto guard = Guard(*Alloc);
@@ -754,6 +763,8 @@ namespace NYql::NDq {
         }
 
         void MakeSelectWithKeys(TStringBuilder& out) {
+            Y_DEBUG_ABORT_UNLESS(!SelectBody.empty());
+
             auto columnsCount = KeyType->GetMembersCount();
             Y_ENSURE(columnsCount > 0);
             out << "PRAGMA AnsiInForEmptyOrNullableItemsCollections;\n";
@@ -772,7 +783,7 @@ namespace NYql::NDq {
                 out << '>';
             }
             out << ">;\n";
-            MakeSelect(out);
+            out << SelectBody;
             out << "\n WHERE ";
             if (columnsCount != 1) {
                 out << "AsTuple(";
@@ -790,15 +801,19 @@ namespace NYql::NDq {
         }
 
         void MakeSelectWithLimit(TStringBuilder& out, ui64 limit, ui64 offset = 0) {
-            MakeSelect(out);
+            Y_DEBUG_ABORT_UNLESS(!SelectBody.empty());
+
+            out << SelectBody;
             out << " LIMIT " << limit;
             if (offset) {
                 out << " OFFSET " << offset;
             }
         }
 
-        // must be called with bound Alloc
+        // must be called only in actor context
         void FillKeyTupleList(Ydb::TypedValue& keyTupleList, TLookupState::TPtr& state) {
+            auto guard = Guard(*Alloc);
+
             auto keyColumnsCount = KeyType->GetMembersCount();
             if (keyColumnsCount != 1) {
                 auto& keyTupleTypes = *keyTupleList.mutable_type()->mutable_list_type()->mutable_item()->mutable_tuple_type();
@@ -823,7 +838,7 @@ namespace NYql::NDq {
             }
         }
 
-        // must be called with bound Alloc
+        // must be called only in actor context
         Ydb::Query::ExecuteQueryRequest FillQuery(TLookupState::TPtr state) {
             Ydb::Query::ExecuteQueryRequest request;
             if (state->FullscanLimit > 0) {
@@ -839,7 +854,8 @@ namespace NYql::NDq {
             request.set_session_id(state->SessionState->SessionId);
             request.set_exec_mode(Ydb::Query::EXEC_MODE_EXECUTE);
             request.set_result_set_format(Ydb::ResultSet::FORMAT_ARROW);
-            request.mutable_arrow_format_settings()->mutable_compression_codec()->set_type(Ydb::Formats::ArrowFormatSettings::CompressionCodec::TYPE_NONE); // as local rpc
+            request.mutable_arrow_format_settings()->mutable_compression_codec()->set_type(Ydb::Formats::ArrowFormatSettings::CompressionCodec::TYPE_NONE); // local RPC, avoid compression
+            // request.set_pool_id(...); // TODO: pass workload manager pool from caller
             request.set_schema_inclusion_mode(Ydb::Query::SCHEMA_INCLUSION_MODE_FIRST_ONLY);
             {
                 auto& tx_control = *request.mutable_tx_control();
@@ -869,6 +885,7 @@ namespace NYql::NDq {
         static inline constexpr std::string_view KeyTupleListName = "$keyTupleList"sv;
         NYql::NUdf::ITypeInfoHelper::TPtr TypeInfoHelper = new NKikimr::NMiniKQL::TTypeInfoHelper();
         TString SelectWithKeys;
+        TString SelectBody;
         TVector<TSessionState::TPtr> Sessions;
 
         ::NMonitoring::TDynamicCounters::TCounterPtr Count;

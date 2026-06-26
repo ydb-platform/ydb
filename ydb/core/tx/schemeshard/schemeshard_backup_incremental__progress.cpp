@@ -110,13 +110,13 @@ public:
         auto tabletId = TTabletId(record.GetTabletId());
         ui32 partitionId = record.GetPartitionId();
 
-        LOG_D("OnOffloadStatus id# " << id
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "OnOffloadStatus id# " << id
             << ", tabletId# " << tabletId
             << ", partitionId# " << partitionId);
 
         auto shardIdx = Self->GetShardIdx(tabletId);
         if (shardIdx == InvalidShardIdx) {
-            LOG_E("Shard index for tabletId# " << tabletId << " not found");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Shard index for tabletId# " << tabletId << " not found");
             return;
         }
 
@@ -128,7 +128,7 @@ public:
         const auto& topic = Self->Topics.at(shardInfo.PathId);
 
         if (!topic->Partitions.contains(partitionId)) {
-            LOG_E("Partition with id# " << partitionId << " not found in topic with pathId# " << shardInfo.PathId);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Partition with id# " << partitionId << " not found in topic with pathId# " << shardInfo.PathId);
             return;
         }
 
@@ -138,21 +138,21 @@ public:
         }
 
         if (!Self->IncrementalBackups.contains(id)) {
-            LOG_E("Incremental backup with id# " << id << " not found");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Incremental backup with id# " << id << " not found");
             TryStartOrphanCleaner(shardInfo.PathId);
             return;
         }
 
         auto& backupInfo = *Self->IncrementalBackups.at(id);
         if (backupInfo.IsFinished()) {
-            LOG_E("Incremental backup with id# " << id << " is already finished");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Incremental backup with id# " << id << " is already finished");
             return;
         }
 
         Y_ABORT_UNLESS(Self->PathsById.contains(shardInfo.PathId));
         auto itemPathId = Self->PathsById.at(shardInfo.PathId)->ParentPathId;
         if (!backupInfo.Items.contains(itemPathId)) {
-            LOG_E("Incremental backup item with pathId# " << itemPathId << " not found in backup with id# " << id);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Incremental backup item with pathId# " << itemPathId << " not found in backup with id# " << id);
             return;
         }
 
@@ -173,7 +173,7 @@ public:
         auto success = CleanerResult->Get()->Success;
         auto error = CleanerResult->Get()->Error;
 
-        LOG_D("OnCleanerResult id# " << id
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "OnCleanerResult id# " << id
             << ", itemPathId# " << itemPathId
             << ", success# " << success
             << ", error# " << error);
@@ -181,29 +181,29 @@ public:
         Self->RunningContinuousBackupCleaners.erase(CleanerResult->Sender);
 
         if (!success) {
-            LOG_E("Continuous backup cleaner has failed: " << error);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Continuous backup cleaner has failed: " << error);
             return;
         }
 
         if (!Self->IncrementalBackups.contains(id)) {
-            LOG_E("Incremental backup with id# " << id << " not found");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Incremental backup with id# " << id << " not found");
             return;
         }
 
         auto& backupInfo = *Self->IncrementalBackups.at(id);
         if (backupInfo.IsFinished()) {
-            LOG_E("Incremental backup with id# " << id << " is already finished");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Incremental backup with id# " << id << " is already finished");
             return;
         }
 
         if (!backupInfo.Items.contains(itemPathId)) {
-            LOG_E("Incremental backup item with pathId# " << itemPathId << " not found in backup with id# " << id);
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Incremental backup item with pathId# " << itemPathId << " not found in backup with id# " << id);
             return;
         }
 
         auto& item = backupInfo.Items.at(itemPathId);
         if (item.State != TIncrementalBackupInfo::TItem::EState::Dropping) {
-            LOG_E("Incremental backup item with pathId# " << itemPathId
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Incremental backup item with pathId# " << itemPathId
                 << " in backup with id# " << id
                 << " is not in Dropping state, but in " << item.State);
             return;
@@ -213,16 +213,16 @@ public:
     }
 
     void Resume(TTransactionContext& txc) {
-        LOG_D("Resume id# " << Id);
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Resume id# " << Id);
 
         if (!Self->IncrementalBackups.contains(Id)) {
-            LOG_E("Incremental backup with id# " << Id << " not found");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Incremental backup with id# " << Id << " not found");
             return;
         }
 
         auto& backupInfo = *Self->IncrementalBackups.at(Id);
         if (backupInfo.IsFinished()) {
-            LOG_E("Incremental backup with id# " << Id << " is already finished");
+            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Incremental backup with id# " << Id << " is already finished");
             return;
         }
 

@@ -38,7 +38,7 @@ public:
             issue.set_message(errorMessage);
         }
 
-        LOG_D("Reply " << Response->Record.ShortDebugString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Reply " << Response->Record.ShortDebugString());
 
         SideEffects.Send(Request->Sender, std::move(Response), 0, Request->Cookie);
         return true;
@@ -46,7 +46,7 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
-        LOG_D("Execute " << record.ShortDebugString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Execute " << record.ShortDebugString());
 
         Response = MakeHolder<TEvBackup::TEvGetBackupCollectionRestoreResponse>();
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
@@ -91,7 +91,7 @@ public:
         Response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
 
         // Don't go through Reply() — it would clobber the per-entry Status that Fill just set.
-        LOG_D("Reply " << Response->Record.ShortDebugString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Reply " << Response->Record.ShortDebugString());
         SideEffects.Send(Request->Sender, std::move(Response), 0, Request->Cookie);
         return true;
     }

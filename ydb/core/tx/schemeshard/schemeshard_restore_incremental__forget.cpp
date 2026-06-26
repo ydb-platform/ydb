@@ -32,7 +32,7 @@ public:
             issue.set_message(errorMessage);
         }
 
-        LOG_D("Reply " << Response->Record.ShortDebugString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Reply " << Response->Record.ShortDebugString());
 
         SideEffects.Send(Request->Sender, std::move(Response), 0, Request->Cookie);
         return true;
@@ -40,14 +40,14 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
-        LOG_D("Execute " << record.ShortDebugString());
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Execute " << record.ShortDebugString());
 
         Response = MakeHolder<TEvBackup::TEvForgetBackupCollectionRestoreResponse>();
         Response->Record.SetTxId(record.GetTxId());
 
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
         if (!database.IsResolved()) {
-            LOG_I("FORGET DEBUG: Database not resolved: " << record.GetDatabaseName());
+            LOG_INFO_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "FORGET DEBUG: Database not resolved: " << record.GetDatabaseName());
             return Reply(
                 Ydb::StatusIds::NOT_FOUND,
                 TStringBuilder() << "Database " << record.GetDatabaseName() << " is not found"
@@ -118,11 +118,11 @@ public:
 
         // Clean up IncrementalRestoreState table
         db.Table<Schema::IncrementalRestoreState>().Key(restoreId).Delete();
-        LOG_I("Cleaned up IncrementalRestoreState for operation: " << restoreId);
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Cleaned up IncrementalRestoreState for operation: " << restoreId);
 
         // Clean up IncrementalRestoreOperations table
         db.Table<Schema::IncrementalRestoreOperations>().Key(restoreId).Delete();
-        LOG_I("Cleaned up IncrementalRestoreOperations for operation: " << restoreId);
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Cleaned up IncrementalRestoreOperations for operation: " << restoreId);
 
         auto opIt = Self->IncrementalRestoreOperationToState.begin();
         while (opIt != Self->IncrementalRestoreOperationToState.end()) {
@@ -133,7 +133,7 @@ public:
                 ++opIt;
             }
         }
-        LOG_I("Cleaned up remaining mappings for operation: " << restoreId);
+        LOG_INFO_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Cleaned up remaining mappings for operation: " << restoreId);
 
         Response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
 

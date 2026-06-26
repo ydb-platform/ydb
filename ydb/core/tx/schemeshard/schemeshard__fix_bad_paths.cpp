@@ -4,8 +4,6 @@
 #error log macro redefinition
 #endif
 
-#define SS_LOG_W(ctx, stream) LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, stream)
-
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -32,13 +30,13 @@ struct TSchemeShard::TTxFixBadPaths : public TTransactionBase<TSchemeShard> {
                 pathEl->CreateTxId = TTxId(1);
                 Self->PersistCreateTxId(db, pathId, pathEl->CreateTxId);
 
-                SS_LOG_W(ctx, "Fix CreateTxId, self# " << Self->TabletID() << ", pathId# " << pathId);
+                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Fix CreateTxId, self# " << Self->TabletID() << ", pathId# " << pathId);
             }
             if (pathId != Self->RootPathId() && pathEl->StepCreated == InvalidStepId) {
                 pathEl->StepCreated = TStepId(1);
                 Self->PersistCreateStep(db, pathId, pathEl->StepCreated);
 
-                SS_LOG_W(ctx, "Fix StepCreated, self# " << Self->TabletID() << ", pathId# " << pathId);
+                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Fix StepCreated, self# " << Self->TabletID() << ", pathId# " << pathId);
             }
         }
 

@@ -31,7 +31,7 @@ public:
         }
 
         const auto& settings = request.GetSettings();
-        LOG_N("DoExecute " << request.ShortDebugString());
+        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "DoExecute " << request.ShortDebugString());
 
         if (Self->SetColumnConstraintOperations.contains(BuildId)) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()

@@ -128,21 +128,19 @@ public:
             case NKikimrSchemeOp::ESchemeOpCreateTable: {
                 TableCreateAttempted = true;
                 const bool useIndexedTable = !TableSequences.empty() || !TableIndexes.empty();
+                auto& modifyScheme = *getModifyScheme(useIndexedTable
+                    ? NKikimrSchemeOp::ESchemeOpCreateIndexedTable
+                    : NKikimrSchemeOp::ESchemeOpCreateTable);
+
                 if (useIndexedTable) {
-                    auto& modifyScheme = *getModifyScheme(NKikimrSchemeOp::ESchemeOpCreateIndexedTable);
                     auto& indexedTable = *modifyScheme.MutableCreateIndexedTable();
                     BuildCreateIndexedTable(indexedTable);
-
-                    if (TableAclDiff) {
-                        BuildModifyACL(modifyScheme);
-                    }
                 } else {
-                    auto& modifyScheme = *getModifyScheme(NKikimrSchemeOp::ESchemeOpCreateTable);
                     BuildCreateTable(modifyScheme);
+                }
 
-                    if (TableAclDiff) {
-                        BuildModifyACL(modifyScheme);
-                    }
+                if (TableAclDiff) {
+                    BuildModifyACL(modifyScheme);
                 }
 
                 break;

@@ -29,44 +29,49 @@ public:
 
     const TInfoUnitSet& GetLiveOut(IOperator* op) const override {
         Y_ENSURE(op);
-        Y_ENSURE(op->Props.Analysis.LiveOut.has_value(), "Liveness requested for an operator that has no live output");
+        Y_ENSURE(
+            op->Props.Analysis.LiveOut.has_value(),
+            "Liveness requested for an operator without computed liveness, kind: " << static_cast<ui32>(op->Kind));
         return *op->Props.Analysis.LiveOut;
     }
 
     bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TVector<TInfoUnit>& columns) override {
+        const bool firstVisit = !op->Props.Analysis.LiveOut;
         bool changed = false;
-        if (!op->Props.Analysis.LiveOut) {
+        if (firstVisit) {
             op->Props.Analysis.LiveOut.emplace();
         }
         auto& live = *op->Props.Analysis.LiveOut;
         for (const auto& column : columns) {
             changed |= AddInfoUnit(live, column);
         }
-        if (changed) {
+        if (firstVisit || changed) {
             Enqueue(op);
         }
-        return changed;
+        return firstVisit || changed;
     }
 
     bool AddLiveColumns(const TIntrusivePtr<IOperator>& op, const TInfoUnitSet& columns) override {
+        const bool firstVisit = !op->Props.Analysis.LiveOut;
         bool changed = false;
-        if (!op->Props.Analysis.LiveOut) {
+        if (firstVisit) {
             op->Props.Analysis.LiveOut.emplace();
         }
         auto& live = *op->Props.Analysis.LiveOut;
         for (const auto& column : columns) {
             changed |= AddInfoUnit(live, column);
         }
-        if (changed) {
+        if (firstVisit || changed) {
             Enqueue(op);
         }
-        return changed;
+        return firstVisit || changed;
     }
 
     void AddExpressionDeps(const TExpression& expr, TInfoUnitSet& target) override {
-        AddInfoUnits(target, expr.GetInputIUs(false, true));
+        const auto expression = TExpression(expr.Node, expr.Ctx, &Props);
+        AddInfoUnits(target, expression.GetInputIUs(false, true));
 
-        for (const auto& iu : expr.GetInputIUs(true, false)) {
+        for (const auto& iu : expression.GetInputIUs(true, false)) {
             if (!iu.IsSubplanContext()) {
                 continue;
             }
@@ -257,15 +262,12 @@ void ComputePlanLiveness(TOpRoot& root) {
     TLogicalLiveness(root.PlanProps).Run(root);
 }
 
-const TInfoUnitSet* GetLiveOut(IOperator* op) {
-    return op && op->Props.Analysis.LiveOut ? &*op->Props.Analysis.LiveOut : nullptr;
-}
-
-const TInfoUnitSet& GetLiveOutOrEmpty(IOperator* op) {
-    if (const auto* liveOut = GetLiveOut(op)) {
-        return *liveOut;
-    }
-    return EmptyInfoUnitSet();
+const TInfoUnitSet& GetLiveOut(IOperator* op) {
+    Y_ENSURE(op);
+    Y_ENSURE(
+        op->Props.Analysis.LiveOut.has_value(),
+        "Liveness requested for an operator without computed liveness, kind: " << static_cast<ui32>(op->Kind));
+    return *op->Props.Analysis.LiveOut;
 }
 
 } // namespace NKqp

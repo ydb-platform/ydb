@@ -137,7 +137,7 @@ bool TryBuildRenameCandidate(
 } // anonymous namespace
 
 std::optional<TRenameCandidate> FindRenameCandidate(const TIntrusivePtr<TOpMap>& topMap) {
-    const auto& liveOut = GetLiveOutOrEmpty(topMap.get());
+    const auto& liveOut = GetLiveOut(topMap.get());
 
     for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
         TRenameCandidate candidate;

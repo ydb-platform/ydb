@@ -13,10 +13,7 @@ bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
     }
 
     auto map = CastOperator<TOpMap>(input);
-    const auto* liveOut = GetLiveOut(map.get());
-    if (!liveOut) {
-        return false;
-    }
+    const auto& liveOut = GetLiveOut(map.get());
 
     // If we need to keep key columns, add them to keep list
     TInfoUnitSet keepKeyColumns;
@@ -26,7 +23,7 @@ bool TPruneDeadMapElementsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
         }
     }
 
-    auto newElements = KeepLiveMapElements(map, *liveOut, keepKeyColumns);
+    auto newElements = KeepLiveMapElements(map, liveOut, keepKeyColumns);
 
     if (newElements.empty()) {
         const auto& replacementOutput = map->GetInput()->GetOutputIUs();
@@ -61,10 +58,7 @@ bool TPruneDeadReadColumnsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
     }
 
     auto read = CastOperator<TOpRead>(input);
-    const auto* liveOut = GetLiveOut(read.get());
-    if (!liveOut) {
-        return false;
-    }
+    const auto& liveOut = GetLiveOut(read.get());
 
     // If we need to keep key columns, add them to keep list
     TInfoUnitSet keepKeyColumns;
@@ -74,7 +68,7 @@ bool TPruneDeadReadColumnsRule::MatchAndApply(TIntrusivePtr<IOperator>& input, T
         }
     }
 
-    const auto liveOutput = KeepLiveColumns(read->GetOutputIUs(), *liveOut, keepKeyColumns);
+    const auto liveOutput = KeepLiveColumns(read->GetOutputIUs(), liveOut, keepKeyColumns);
     return NarrowReadColumns(read, liveOutput);
 }
 
@@ -87,13 +81,10 @@ bool TPruneDeadAggregateTraitsRule::MatchAndApply(TIntrusivePtr<IOperator>& inpu
     }
 
     auto aggregate = CastOperator<TOpAggregate>(input);
-    const auto* liveOut = GetLiveOut(aggregate.get());
-    if (!liveOut) {
-        return false;
-    }
+    const auto& liveOut = GetLiveOut(aggregate.get());
 
     // Key columns will be preserved in the aggregate anyway
-    const auto liveOutput = KeepLiveColumns(aggregate->GetOutputIUs(), *liveOut);
+    const auto liveOutput = KeepLiveColumns(aggregate->GetOutputIUs(), liveOut);
     return PruneAggregateTraits(aggregate, liveOutput);
 }
 

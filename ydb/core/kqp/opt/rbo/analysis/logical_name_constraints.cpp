@@ -7,11 +7,23 @@ namespace NKqp {
 
 namespace {
 
+const TPlanNameConstraints& GetComputedNameConstraints(IOperator* op) {
+    Y_ENSURE(op);
+    Y_ENSURE(op->Props.Analysis.NameConstraints.has_value(), "Name constraints requested for an operator without computed constraints");
+    return *op->Props.Analysis.NameConstraints;
+}
+
+TPlanNameConstraints& GetMutableComputedNameConstraints(IOperator* op) {
+    Y_ENSURE(op);
+    Y_ENSURE(op->Props.Analysis.NameConstraints.has_value(), "Name constraints update requested for an operator without computed constraints");
+    return *op->Props.Analysis.NameConstraints;
+}
+
 class TLogicalNameConstraints: public INameConstraintsContext {
 public:
     void Run(TOpRoot& root) {
         for (const auto& iter : root) {
-            iter.Current->Props.Analysis.NameConstraints.Clear();
+            iter.Current->Props.Analysis.NameConstraints.emplace();
         }
 
         bool changed = true;
@@ -28,7 +40,7 @@ public:
     TInfoUnitSet GetIncomingForbidden(IOperator* op) const override {
         TInfoUnitSet result;
         for (const auto& [parent, childIdx] : op->Parents) {
-            AddInfoUnits(result, op->Props.Analysis.NameConstraints.GetForbiddenOut(parent, childIdx, op));
+            AddInfoUnits(result, GetComputedNameConstraints(op).GetForbiddenOut(parent, childIdx, op));
         }
         return result;
     }
@@ -39,7 +51,7 @@ public:
         }
         Y_ENSURE(childIdx < parent->Children.size());
         auto child = parent->Children[childIdx];
-        return child->Props.Analysis.NameConstraints.AddForbiddenOut(parent, childIdx, child.get(), forbidden);
+        return GetMutableComputedNameConstraints(child.get()).AddForbiddenOut(parent, childIdx, child.get(), forbidden);
     }
 };
 
@@ -169,19 +181,17 @@ const TInfoUnitSet& GetForbidden(
     IOperator* to)
 {
     const ui32 childIdx = ResolveChildIdx(from, to);
-    return from->Props.Analysis.NameConstraints.GetForbiddenOut(to, childIdx, from);
+    return GetComputedNameConstraints(from).GetForbiddenOut(to, childIdx, from);
 }
 
 TInfoUnitSet GetForbidden(
     IOperator* op)
 {
-    TInfoUnitSet result;
-    if (!op) {
-        return result;
-    }
+    Y_ENSURE(op);
 
+    TInfoUnitSet result;
     for (const auto& [parent, childIdx] : op->Parents) {
-        AddInfoUnits(result, op->Props.Analysis.NameConstraints.GetForbiddenOut(parent, childIdx, op));
+        AddInfoUnits(result, GetComputedNameConstraints(op).GetForbiddenOut(parent, childIdx, op));
     }
     return result;
 }

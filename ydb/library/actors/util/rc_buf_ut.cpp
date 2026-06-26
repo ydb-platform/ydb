@@ -63,11 +63,23 @@ Y_UNIT_TEST_SUITE(TRcBuf) {
     Y_UNIT_TEST(Detach) {
         TRcBuf data = TRcBuf::Copy(TString("test"));
         TRcBuf data2 = data;
+        UNIT_ASSERT_EQUAL(data.GetData(), data2.GetData());
         char* res = data2.Detach();
         UNIT_ASSERT_UNEQUAL(data.GetData(), data2.GetData());
         UNIT_ASSERT_EQUAL(res, data2.GetData());
         UNIT_ASSERT_EQUAL(::memcmp(res, "test", 4), 0);
         UNIT_ASSERT_EQUAL(::memcmp(data.GetData(), "test", 4), 0);
+    }
+
+    Y_UNIT_TEST(DetachAndDestroySrc) {
+        TRcBuf data = TRcBuf::Copy(TString("test"));
+        TRcBuf data2 = data;
+        data = {};
+        UNIT_ASSERT_EQUAL(data2.GetSize(), 4);
+        char* res = data2.Detach();
+        UNIT_ASSERT_EQUAL(data2.GetSize(), 4);
+        UNIT_ASSERT_EQUAL(res, data2.GetData());
+        UNIT_ASSERT_EQUAL(::memcmp(res, "test", 4), 0);
     }
 
     Y_UNIT_TEST(Resize) {

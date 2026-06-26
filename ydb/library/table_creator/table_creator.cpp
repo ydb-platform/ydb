@@ -113,7 +113,7 @@ public:
             auto* modifyScheme = request->Record.MutableTransaction()->MutableModifyScheme();
             modifyScheme->SetWorkingDir(CanonizePath(pathComponents));
             LOG_DEBUG_S(*TlsActivationContext, LogService, 
-                LogPrefix << "Created " << NKikimrSchemeOp::EOperationType_Name(OperationType) << " transaction for path: " << modifyScheme->GetWorkingDir() << "/" << TableName());
+                LogPrefix << "Created " << NKikimrSchemeOp::EOperationType_Name(operationType) << " transaction for path: " << modifyScheme->GetWorkingDir() << "/" << TableName());
 
             modifyScheme->SetOperationType(operationType);
             modifyScheme->SetInternal(true);
@@ -405,6 +405,31 @@ private:
         }
         config.MutableKeyColumnNames()->Assign(
             index.GetKeyColumnNames().begin(), index.GetKeyColumnNames().end());
+        config.MutableDataColumnNames()->Assign(
+            index.GetDataColumnNames().begin(), index.GetDataColumnNames().end());
+        config.MutableIndexImplTableDescriptions()->Assign(
+            index.GetIndexImplTableDescriptions().begin(),
+            index.GetIndexImplTableDescriptions().end());
+
+        switch (index.GetSpecializedIndexDescriptionCase()) {
+            case NKikimrSchemeOp::TIndexDescription::kVectorIndexKmeansTreeDescription:
+                *config.MutableVectorIndexKmeansTreeDescription() =
+                    index.GetVectorIndexKmeansTreeDescription();
+                break;
+            case NKikimrSchemeOp::TIndexDescription::kFulltextIndexDescription:
+                *config.MutableFulltextIndexDescription() = index.GetFulltextIndexDescription();
+                break;
+            case NKikimrSchemeOp::TIndexDescription::kBloomFilterDescription:
+                *config.MutableBloomFilterDescription() = index.GetBloomFilterDescription();
+                break;
+            case NKikimrSchemeOp::TIndexDescription::kBloomNGrammFilterDescription:
+                *config.MutableBloomNGrammFilterDescription() =
+                    index.GetBloomNGrammFilterDescription();
+                break;
+            default:
+                break;
+        }
+
         return config;
     }
 

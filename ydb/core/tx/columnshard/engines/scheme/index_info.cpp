@@ -173,16 +173,6 @@ std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldOptional(const ui32 colu
     return ArrowSchemaWithSpecials()->GetFieldByIndexVerified(*index);
 }
 
-std::optional<ui32> TIndexInfo::FindUnknownColumnId(const std::vector<ui32>& columnIds) const {
-    for (ui32 columnId : columnIds) {
-        if (!HasColumnId(columnId)) {
-            return columnId;
-        }
-    }
-
-    return {};
-}
-
 std::shared_ptr<arrow::Field> TIndexInfo::GetColumnFieldVerified(const ui32 columnId) const {
     auto result = GetColumnFieldOptional(columnId);
     // Write without MvccSnapshot uses ApplyToSnapshot=Max in restore, while column IDs come from

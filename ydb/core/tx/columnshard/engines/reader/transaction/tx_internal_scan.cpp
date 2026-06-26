@@ -76,15 +76,13 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         {
             auto readSchema = read.TableMetadataAccessor->GetSnapshotSchemaVerified(
                 Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedSchemas(), read.GetSnapshot());
-            if (auto unknownColumnId = readSchema->GetIndexInfo().FindUnknownColumnId(read.ColumnIds)) {
-                TStringBuilder details;
-                details << "column_id=" << *unknownColumnId << " not in schema version " << readSchema->GetVersion();
-                if (request.SchemaVersion) {
-                    details << "; request_schema_version=" << *request.SchemaVersion;
-                }
-
-                details << "; snapshot=" << read.GetSnapshot();
-                return SendError("column not found in schema", details, ctx);
+            // Write without MvccSnapshot uses ApplyToSnapshot=Max, while SchemaVersion comes from ActualSchema
+            // captured at write start. If ALTER commits before internal scan is processed, snapshot resolves
+            // to a newer schema than the one used to build column ids.
+            if (request.SchemaVersion && readSchema->GetVersion() != *request.SchemaVersion) {
+                return SendError("schema version mismatch",
+                    TStringBuilder() << "request_schema_version=" << *request.SchemaVersion
+                                     << "; snapshot_schema_version=" << readSchema->GetVersion() << "; snapshot=" << read.GetSnapshot(), ctx);
             }
 
             TProgramContainer pContainer;

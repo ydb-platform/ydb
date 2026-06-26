@@ -3127,14 +3127,14 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
             runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
         }
 
-        UNIT_ASSERT_C(!capturedScanErrors.empty(), "Internal scan must fail gracefully when column was dropped from schema");
+        UNIT_ASSERT_C(!capturedScanErrors.empty(), "Internal scan must fail gracefully on schema version mismatch");
         const auto* scanError = TryGetPrivateEvent<NKqp::TEvKqpCompute::TEvScanError>(capturedScanErrors.front());
         UNIT_ASSERT(scanError);
         UNIT_ASSERT_VALUES_EQUAL(scanError->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST);
         const TString issuesText = NYql::IssuesFromMessageAsString(scanError->Record.GetIssues());
-        UNIT_ASSERT_C(issuesText.Contains("column_id=7"), issuesText);
-        UNIT_ASSERT_C(issuesText.Contains("not in schema version"), issuesText);
+        UNIT_ASSERT_C(issuesText.Contains("schema version mismatch"), issuesText);
         UNIT_ASSERT_C(issuesText.Contains("request_schema_version=1"), issuesText);
+        UNIT_ASSERT_C(issuesText.Contains("snapshot_schema_version=2"), issuesText);
     }
 }
 

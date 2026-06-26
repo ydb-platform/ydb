@@ -132,11 +132,14 @@ namespace NTabletFlatExecutor {
             TVector<TVersion> Versions;
 
             bool IsMergeable(TRowVersion minVer) const {
-                if (SavedDeltas.size() > 0 || LockMode != ELockMode::None)
+                if (SavedDeltas.size() > 0 || LockMode != ELockMode::None) {
                     return false;
-                for (const auto& v : Versions)
-                    if (v.Ver > minVer)
+                }
+                for (const auto& v : Versions) {
+                    if (v.Ver > minVer) {
                         return false;
+                    }
+                }
                 return true;
             }
 
@@ -289,8 +292,7 @@ namespace NTabletFlatExecutor {
                     FtMerger.Start();
                     ui64 docId = 0;
                     ui32 freq = 0;
-                    bool hasData;
-                    while ((hasData = FtMerger.Read(docId, freq))) {
+                    while (FtMerger.Read(docId, freq)) {
                         FtWriter.Add(docId, freq);
                         if (FtWriter.GetCount() >= Conf->FulltextMaxSegment) {
                             // Flush current segment
@@ -396,8 +398,7 @@ namespace NTabletFlatExecutor {
             FtMerger.Start();
             ui64 docId = 0;
             ui32 freq = 0;
-            bool hasData;
-            while ((hasData = FtMerger.Read(docId, freq))) {
+            while (FtMerger.Read(docId, freq)) {
                 FtWriter.Add(docId, freq);
                 if (FtWriter.GetCount() >= Conf->FulltextMaxSegment) {
                     // Flush current segment

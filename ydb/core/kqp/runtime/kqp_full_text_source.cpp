@@ -1018,7 +1018,7 @@ public:
     }
 
     TDocId GetMaxKey() const override {
-        return (TDocId)CurDocId + 1;
+        return (TDocId)CurDocId;
     }
 
     std::pair<ui64, ui64> GetStats() const override {
@@ -1244,14 +1244,7 @@ public:
         return stream->GetMaxKey();
     }
 
-    virtual void FinishTokenStream(ui64 tokenIndex) {
-        YQL_ENSURE(tokenIndex < Streams.size(), "Token index out of bounds");
-        auto& stream = Streams[tokenIndex];
-        stream->SetReadFinished();
-        if (stream->IsEof()) {
-            FinishedTokens++;
-        }
-    }
+    virtual void FinishTokenStream(ui64 tokenIndex) = 0;
 
     virtual bool Done() const = 0;
 
@@ -1488,6 +1481,18 @@ public:
         bool wasEmpty = stream->GetUnprocessedDocumentCount() == 0;
         stream->AddResult(std::move(msg));
         if (wasEmpty && stream->GetUnprocessedDocumentCount() > 0) {
+            MergeQueue.push(THeapEntry(tokenIndex, stream->GetLeastDocId()));
+        }
+    }
+
+    void FinishTokenStream(ui64 tokenIndex) override {
+        YQL_ENSURE(tokenIndex < Streams.size(), "Token index out of bounds");
+        auto& stream = Streams[tokenIndex];
+        bool wasEmpty = stream->GetUnprocessedDocumentCount() == 0;
+        stream->SetReadFinished();
+        if (stream->IsEof()) {
+            FinishedTokens++;
+        } else if (wasEmpty && stream->GetUnprocessedDocumentCount() > 0) {
             MergeQueue.push(THeapEntry(tokenIndex, stream->GetLeastDocId()));
         }
     }

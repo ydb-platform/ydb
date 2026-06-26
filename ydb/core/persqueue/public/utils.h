@@ -5,7 +5,6 @@
 #include <ydb/core/protos/pqconfig.pb.h>
 
 #include <util/datetime/base.h>
-#include <util/generic/hash_set.h>
 #include <util/string/builder.h>
 
 #include <functional>
@@ -35,12 +34,6 @@ ui64 PutUnitsSize(const ui64 size);
 TString SourceIdHash(const TString& sourceId);
 
 void Migrate(NKikimrPQ::TPQTabletConfig& config);
-
-THashSet<TString> CollectDlqTopicPaths(
-    const NKikimrPQ::TPQTabletConfig& config,
-    const TString& database,
-    bool onlyConsumersAddedAtCurrentVersion
-);
 
 bool HasConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName);
 const NKikimrPQ::TPQTabletConfig::TConsumer* GetConsumer(const NKikimrPQ::TPQTabletConfig& config, const TString& consumerName);

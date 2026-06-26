@@ -8,7 +8,6 @@
 #include <ydb/core/base/tx_processing.h>
 #include <ydb/core/docapi/traits.h>
 #include <ydb/core/persqueue/public/config.h>
-#include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/auth.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>

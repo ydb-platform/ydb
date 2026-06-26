@@ -2,6 +2,7 @@
 #include "constants.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/protos/pqconfig.pb.h>
 
 #include <util/generic/hash_set.h>
@@ -73,6 +74,37 @@ const NKikimrPQ::TPQTabletConfig_TPartition* GetPartitionConfigFromAllPartitions
         }
     }
     return nullptr;
+}
+
+THashSet<TString> CollectDlqTopicPaths(
+    const NKikimrPQ::TPQTabletConfig& config,
+    const TString& database,
+    bool onlyConsumersAddedAtCurrentVersion
+) {
+    THashSet<TString> result;
+    const ui64 topicConfigVersion = config.GetTopicConfigVersion();
+
+    for (const auto& consumer : config.GetConsumers()) {
+        if (onlyConsumersAddedAtCurrentVersion && consumer.GetAddedAtTopicConfigVersion() != topicConfigVersion) {
+            continue;
+        }
+        if (consumer.GetType() != NKikimrPQ::TPQTabletConfig::CONSUMER_TYPE_MLP) {
+            continue;
+        }
+        if (consumer.GetDeadLetterPolicy() != NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE
+            || !consumer.GetDeadLetterPolicyEnabled()) {
+            continue;
+        }
+
+        const auto& dlq = consumer.GetDeadLetterQueue();
+        if (dlq.empty() || dlq.StartsWith("sqs://"sv)) {
+            continue;
+        }
+
+        result.insert(NKikimr::NormalizePath(NKikimr::CanonizePath(database), NKikimr::CanonizePath(dlq)));
+    }
+
+    return result;
 }
 
 bool IsTopicMessagesBatchingEnabled(const NActors::TActorContext& ctx) {

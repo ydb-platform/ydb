@@ -1827,8 +1827,6 @@ Y_UNIT_TEST_SUITE(Transfer)
         MessageField_Partition("ROW", true);
     }
 
-<<<<<<< HEAD
-=======
     Y_UNIT_TEST(CheckCurrentDateTime) {
         MainTestCase testCase(std::nullopt, "ROW");
 
@@ -1942,6 +1940,5 @@ Y_UNIT_TEST_SUITE(Transfer)
         testCase.DropTable();
         testCase.DropTopic();
     }
->>>>>>> 19eb44c9cea (Invalidate purecalc caches for correct CurrentUtcDatetime (#44425))
 }
 

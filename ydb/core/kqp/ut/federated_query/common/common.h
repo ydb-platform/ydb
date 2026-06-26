@@ -1,6 +1,7 @@
 #pragma once
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/library/yql/providers/generic/connector/libcpp/ut_helpers/defaults.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/query/query.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/operation/operation.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
@@ -18,7 +19,7 @@ void WaitResourcesPublish(ui32 nodeId, ui32 expectedNodeCount);
 void WaitResourcesPublish(const TKikimrRunner& kikimrRunner);
 
 std::shared_ptr<NYql::IStructuredTokenCredentialsFactory> CreateCredentialsFactory(
-    const TString& token = BUILTIN_ACL_ROOT);
+    const TString& token = NYql::NConnector::NTest::DEFAULT_PASSWORD);
 
 struct TKikimrRunnerOptions {
     TString DomainRoot = "Root";

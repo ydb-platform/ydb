@@ -68,7 +68,7 @@ TPqSession::TPqSession(const TString& sessionId, const TString& username, const 
     , CmConnections(cmConnections)
     , YdbDriver(ydbDriver)
     , ClusterConfigs(clusterConfigs)
-    , CredentialsProvider(credentialsFactory)
+    , CredentialsFactory(credentialsFactory)
     , LocalTopicClientFactory(std::move(localTopicClientFactory))
 {}
 
@@ -80,7 +80,7 @@ NPq::NConfigurationManager::TAsyncDescribePathResult TPqSession::DescribePath(co
 
     YQL_ENSURE(config->GetEndpoint(), "Can't describe topic `" << cluster << "`.`" << path << "`: no endpoint");
 
-    std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CredentialsProvider->Create(token, config->GetAddBearerToToken());
+    std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CredentialsFactory->Create(token, config->GetAddBearerToToken());
     with_lock (Mutex) {
         if (config->GetClusterType() == TPqClusterConfig::CT_PERS_QUEUE) {
             const NPq::NConfigurationManager::IClient::TPtr& client = GetConfigManagerClient(cluster, *config, credentialsProviderFactory);
@@ -115,7 +115,7 @@ NThreading::TFuture<IPqGateway::TListStreams> TPqSession::ListStreams(const TStr
 
     YQL_ENSURE(config->GetEndpoint(), "Can't get list topics for " << cluster << ": no endpoint");
 
-    std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CredentialsProvider->Create(token, config->GetAddBearerToToken());
+    std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CredentialsFactory->Create(token, config->GetAddBearerToToken());
     with_lock (Mutex) {
         if (config->GetClusterType() == TPqClusterConfig::CT_PERS_QUEUE) {
             const NPq::NConfigurationManager::IClient::TPtr& client = GetConfigManagerClient(cluster, *config, credentialsProviderFactory);
@@ -168,7 +168,7 @@ IPqGateway::TAsyncDescribeFederatedTopicResult TPqSession::DescribeFederatedTopi
         path = requestedPath.substr(pos + 1);
     }
 
-    std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CredentialsProvider->Create(token, config->GetAddBearerToToken());
+    std::shared_ptr<ICredentialsProviderFactory> credentialsProviderFactory = CredentialsFactory->Create(token, config->GetAddBearerToToken());
     if (!config->GetEndpoint() && LocalTopicClientFactory) {
         NYdb::NTopic::TDescribeTopicSettings settings;
         settings.IncludeStats(true);

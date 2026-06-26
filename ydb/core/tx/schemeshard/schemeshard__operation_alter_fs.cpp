@@ -6,6 +6,8 @@
 #include <ydb/core/filestore/core/filestore.h>
 #include <ydb/core/mind/hive/hive.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -38,9 +40,9 @@ public:
     {
         const auto ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << " HandleReply TEvUpdateConfigResponse"
-            << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvUpdateConfigResponse",
+            {"debugHint", DebugHint()},
+            {"atSchemeshard", ssId});
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -59,10 +61,10 @@ public:
             << ", at schemeshard: " << ssId);
 
         if (status == NKikimrFileStore::ERROR_UPDATE_IN_PROGRESS) {
-            LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                DebugHint() << " Reconfiguration is in progress. We'll try to finish it later."
-                << " tx " << OperationId
-                << " tablet " << tabletId);
+            YDB_LOG_ERROR_CTX(context.Ctx, "Reconfiguration is in progress. We'll try to finish it later. tx tablet",
+                {"debugHint", DebugHint()},
+                {"operationId", OperationId},
+                {"tabletId", tabletId});
             return false;
         }
 
@@ -84,9 +86,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         const auto ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << " ProgressState"
-            << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"debugHint", DebugHint()},
+            {"atSchemeshard", ssId});
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -148,10 +150,10 @@ public:
         const auto step = TStepId(ev->Get()->StepId);
         const auto ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << " HandleReply TEvOperationPlan"
-            << ", step: " << step
-            << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
+            {"debugHint", DebugHint()},
+            {"step", step},
+            {"atSchemeshard", ssId});
 
         auto* txState = context.SS->FindTx(OperationId);
         if (!txState) {
@@ -193,9 +195,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         const auto ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << " ProgressState"
-            << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"debugHint", DebugHint()},
+            {"atSchemeshard", ssId});
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -221,11 +223,10 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TAlterFileStore AbortUnsafe"
-            << ", opId: " << OperationId
-            << ", forceDropId: " << forceDropTxId
-            << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterFileStore AbortUnsafe",
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"atSchemeshard", context.SS->TabletID()});
 
         context.OnComplete.DoneOperation(OperationId);
     }
@@ -302,12 +303,12 @@ THolder<TProposeResponse> TAlterFileStore::Propose(
         ? context.SS->MakeLocalId(operation.GetPathId())
         : InvalidPathId;
 
-    LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "TAlterFileStore Propose"
-        << ", path: " << parentPathStr << "/" << name
-        << ", pathId: " << pathId
-        << ", opId: " << OperationId
-        << ", at schemeshard: " << ssId);
+    YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterFileStore Propose /",
+        {"path", parentPathStr},
+        {"name", name},
+        {"pathId", pathId},
+        {"opId", OperationId},
+        {"atSchemeshard", ssId});
 
     auto result = MakeHolder<TProposeResponse>(
         NKikimrScheme::StatusAccepted,
@@ -479,9 +480,9 @@ TTxState& TAlterFileStore::PrepareChanges(
         context.SS->PersistShardTx(db, shardIdx, operationId.GetTxId());
     }
 
-    LOG_DEBUG(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "AlterFileStore txid# %" PRIu64 ", AlterVersion %" PRIu64,
-        operationId.GetTxId(), fs->AlterVersion);
+    YDB_LOG_DEBUG_CTX(context.Ctx, "AlterFileStore AlterVersion",
+        {"txid", operationId.GetTxId()},
+        {"#_fs->AlterVersion", fs->AlterVersion});
 
     context.SS->PersistAddFileStoreAlter(db, item->PathId, fs);
     context.SS->PersistTxState(db, operationId);

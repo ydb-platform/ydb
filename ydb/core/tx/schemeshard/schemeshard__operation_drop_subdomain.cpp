@@ -4,6 +4,8 @@
 
 #include <ydb/core/base/subdomain.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -41,10 +43,10 @@ public:
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvOperationPlan"
-                               << ", step: " << step
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
+            {"debugHint", DebugHint()},
+            {"step", step},
+            {"atSchemeshard", ssId});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxDropSubDomain);
@@ -74,9 +76,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"debugHint", DebugHint()},
+            {"atSchemeshard", ssId});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -125,12 +127,12 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = drop.GetName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TDropSubdomain Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", pathId: " << drop.GetId()
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropSubdomain Propose /",
+            {"path", parentPathStr},
+            {"name", name},
+            {"pathId", drop.GetId()},
+            {"opId", OperationId},
+            {"atSchemeshard", ssId});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 

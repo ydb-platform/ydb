@@ -2,6 +2,8 @@
 
 #include "schemeshard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -42,10 +44,9 @@ void TParentDomainLink::SendSync(const TActorContext &ctx) {
         return;
     }
 
-    LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-               "Send TEvSyncTenantSchemeShard"
-               << ", to parent: " << Self->ParentDomainId
-               << ", from: " << Self->TabletID());
+    YDB_LOG_DEBUG_CTX(ctx, "Send TEvSyncTenantSchemeShard",
+        {"toParent", Self->ParentDomainId},
+        {"from", Self->TabletID()});
 
     if (!Pipe) {
         Pipe = ctx.Register(NTabletPipe::CreateClient(ctx.SelfID, Self->ParentDomainId.OwnerId, PipeClientConfig));
@@ -91,10 +92,9 @@ bool TSubDomainsLinks::Sync(TEvSchemeShard::TEvSyncTenantSchemeShard::TPtr &ev, 
         TLink& link = ActiveLink.at(pathId);
 
         if (link.Generation > generation) {
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "Ignore TEvSyncTenantSchemeShard with obsolete generation"
-                       << ", msg: " << record.ShortDebugString()
-                       << ", at schemeshard: " << Self->TabletID());
+            YDB_LOG_INFO_CTX(ctx, "Ignore TEvSyncTenantSchemeShard with obsolete generation",
+                {"msg", record},
+                {"atSchemeshard", Self->TabletID()});
             return false;
         }
     }

@@ -3,6 +3,8 @@
 #include <ydb/core/tx/schemeshard/schemeshard__operation_part.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -28,10 +30,10 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         TStepId step = TStepId(ev->Get()->StepId);
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvOperationPlan"
-                               << ", step: " << step
-                               << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
+            {"debugHint", DebugHint()},
+            {"step", step},
+            {"atSchemeshard", context.SS->TabletID()});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -141,9 +143,9 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"debugHint", DebugHint()},
+            {"atSchemeshard", context.SS->TabletID()});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -190,13 +192,12 @@ public:
         const TString& srcName = moving.GetSrcPath();
         const TString& dstName = moving.GetDstPath();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TMoveLocalIndex Propose"
-                         << ", table: " << mainTableStr
-                         << ", src: " << srcName
-                         << ", dst: " << dstName
-                         << ", operationId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TMoveLocalIndex Propose",
+            {"table", mainTableStr},
+            {"src", srcName},
+            {"dst", dstName},
+            {"operationId", OperationId},
+            {"atSchemeshard", ssId});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -368,18 +369,16 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TMoveLocalIndex AbortPropose"
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TMoveLocalIndex AbortPropose",
+            {"opId", OperationId},
+            {"atSchemeshard", context.SS->TabletID()});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TMoveLocalIndex AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TMoveLocalIndex AbortUnsafe",
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"atSchemeshard", context.SS->TabletID()});
 
         context.OnComplete.DoneOperation(OperationId);
     }

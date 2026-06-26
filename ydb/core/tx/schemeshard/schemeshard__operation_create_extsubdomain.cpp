@@ -6,6 +6,8 @@
 
 #include <ydb/core/base/subdomain.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -51,11 +53,11 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = settings.GetName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateExtSubDomain Propose"
-                         << ", path" << parentPathStr << "/" << name
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateExtSubDomain Propose path /",
+            {"parentPathStr", parentPathStr},
+            {"name", name},
+            {"opId", OperationId},
+            {"atSchemeshard", ssId});
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -273,11 +275,10 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateExtSubDomain AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateExtSubDomain AbortUnsafe",
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"atSchemeshard", context.SS->TabletID()});
 
         context.OnComplete.DoneOperation(OperationId);
     }

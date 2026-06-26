@@ -3,6 +3,8 @@
 
 #include <ydb/core/base/auth.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -27,10 +29,11 @@ public:
         const auto& acl = op.GetDiffACL();
         const auto& owner = op.GetNewOwner();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TModifyACL Propose"
-            << ", path: " << parentPathStr << "/" << name
-            << ", operationId: " << OperationId
-            << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TModifyACL Propose /",
+            {"path", parentPathStr},
+            {"name", name},
+            {"operationId", OperationId},
+            {"atSchemeshard", ssId});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusSuccess, ui64(OperationId.GetTxId()), ui64(ssId));
 

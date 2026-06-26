@@ -7,6 +7,8 @@
 #include <ydb/core/mind/hive/hive.h>
 #include <ydb/core/persqueue/public/config.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -213,11 +215,11 @@ public:
                 operation.GetVolumeConfig());
         const ui64 shardsToCreate = defaultPartitionCount + 1;
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateBlockStoreVolume Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateBlockStoreVolume Propose /",
+            {"path", parentPathStr},
+            {"name", name},
+            {"opId", OperationId},
+            {"atSchemeshard", ssId});
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -392,11 +394,10 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateBlockStoreVolume AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateBlockStoreVolume AbortUnsafe",
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"atSchemeshard", context.SS->TabletID()});
 
         context.OnComplete.DoneOperation(OperationId);
     }

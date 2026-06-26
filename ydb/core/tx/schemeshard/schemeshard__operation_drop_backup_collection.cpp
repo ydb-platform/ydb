@@ -6,6 +6,8 @@
 
 #include <algorithm>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 namespace {
@@ -16,18 +18,18 @@ struct TDropPlan {
         TString StreamName;
         TString TablePath;
     };
-    
+
     struct TTableCdcStreams {
         TPathId TablePathId;
         TString TablePath;
         TVector<TString> StreamNames;
     };
-    
+
     THashMap<TPathId, TTableCdcStreams> CdcStreamsByTable;  // Grouped by table
     TVector<TPath> BackupTables;
     TVector<TPath> BackupTopics;
     TPathId BackupCollectionId;
-    
+
     bool HasExternalObjects() const {
         return !CdcStreamsByTable.empty() || !BackupTables.empty() || !BackupTopics.empty();
     }
@@ -36,16 +38,18 @@ struct TDropPlan {
 THolder<TDropPlan> CollectExternalObjects(TOperationContext& context, const TPath& bcPath) {
     auto plan = MakeHolder<TDropPlan>();
     plan->BackupCollectionId = bcPath.Base()->PathId;
-    
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << "DropPlan: Starting collection for backup collection: " << bcPath.PathString());
-    
+
+    YDB_LOG_INFO_CTX(context.Ctx, "DropPlan: Starting collection for backup",
+        {"tabletId", context.SS->TabletID()},
+        {"collection", bcPath.PathString()});
+
     // 1. Find CDC streams on source tables (these are OUTSIDE the backup collection)
     // Group them by table for efficient multi-stream drops
     for (const auto& [pathId, cdcStreamInfo] : context.SS->CdcStreams) {
         if (!context.SS->PathsById.contains(pathId)) {
             continue;
         }
-        
+
         auto streamPath = context.SS->PathsById.at(pathId);
         if (!streamPath || streamPath->Dropped()) {
             continue;
@@ -59,14 +63,14 @@ THolder<TDropPlan> CollectExternalObjects(TOperationContext& context, const TPat
             if (!context.SS->PathsById.contains(streamPath->ParentPathId)) {
                 continue;
             }
-            
+
             auto tablePath = context.SS->PathsById.at(streamPath->ParentPathId);
             if (!tablePath || !tablePath->IsTable() || tablePath->Dropped()) {
                 continue;
             }
-            
+
             TString tablePathStr = TPath::Init(streamPath->ParentPathId, context.SS).PathString();
-            
+
             auto& tableEntry = plan->CdcStreamsByTable[streamPath->ParentPathId];
             if (tableEntry.StreamNames.empty()) {
                 tableEntry.TablePathId = streamPath->ParentPathId;
@@ -75,16 +79,16 @@ THolder<TDropPlan> CollectExternalObjects(TOperationContext& context, const TPat
             tableEntry.StreamNames.push_back(streamPath->Name);
         }
     }
-    
+
     // 2. Find backup tables and topics UNDER the collection path recursively
     TVector<TPath> toVisit = {bcPath};
     while (!toVisit.empty()) {
         TPath current = toVisit.back();
         toVisit.pop_back();
-        
+
         for (const auto& [childName, childPathId] : current.Base()->GetChildren()) {
             TPath childPath = current.Child(childName);
-            
+
             if (childPath.Base()->IsTable()) {
                 plan->BackupTables.push_back(childPath);
             } else if (childPath.Base()->IsPQGroup()) {
@@ -94,7 +98,7 @@ THolder<TDropPlan> CollectExternalObjects(TOperationContext& context, const TPat
             }
         }
     }
-    
+
     return plan;
 }
 
@@ -103,15 +107,15 @@ TTxTransaction CreateCdcDropTransaction(const TDropPlan::TTableCdcStreams& table
     TPath tablePath = TPath::Init(tableStreams.TablePathId, context.SS);
     cdcDropTx.SetWorkingDir(tablePath.Parent().PathString());
     cdcDropTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropCdcStream);
-    
+
     auto* cdcDrop = cdcDropTx.MutableDropCdcStream();
     cdcDrop->SetTableName(tablePath.LeafName());
-    
+
     // Add all streams for this table using the new repeated field functionality
     for (const auto& streamName : tableStreams.StreamNames) {
         cdcDrop->AddStreamName(streamName);
     }
-    
+
     return cdcDropTx;
 }
 
@@ -119,16 +123,18 @@ TTxTransaction CreateTableDropTransaction(const TPath& tablePath) {
     TTxTransaction tableDropTx;
     tableDropTx.SetWorkingDir(tablePath.Parent().PathString());
     tableDropTx.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
-    
+
     auto* drop = tableDropTx.MutableDrop();
     drop->SetName(tablePath.LeafName());
-    
+
     return tableDropTx;
 }
 
 // TODO: replace UGLY scan
 void CleanupIncrementalRestoreState(const TPathId& backupCollectionPathId, TOperationContext& context, NIceDb::TNiceDb& db) {
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << "CleanupIncrementalRestoreState for backup collection pathId: " << backupCollectionPathId);
+    YDB_LOG_INFO_CTX(context.Ctx, "CleanupIncrementalRestoreState for backup collection",
+        {"tabletId", context.SS->TabletID()},
+        {"pathId", backupCollectionPathId});
 
     TVector<ui64> statesToCleanup;
 
@@ -172,7 +178,9 @@ void CleanupIncrementalRestoreState(const TPathId& backupCollectionPathId, TOper
         }
     }
 
-    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << "CleanupIncrementalRestoreState: Cleaned up " << statesToCleanup.size() << " incremental restore states");
+    YDB_LOG_INFO_CTX(context.Ctx, "CleanupIncrementalRestoreState: Cleaned up incremental restore states",
+        {"tabletId", context.SS->TabletID()},
+        {"#_statesToCleanup.size", statesToCleanup.size()});
 }
 
 class TPropose : public TSubOperationState {
@@ -182,7 +190,9 @@ public:
     {}
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"tabletId", context.SS->TabletID()},
+            {"debugHint", DebugHint()});
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -194,7 +204,10 @@ public:
 
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const TStepId step = TStepId(ev->Get()->StepId);
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << DebugHint() << "HandleReply TEvOperationPlan: step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
+            {"tabletId", context.SS->TabletID()},
+            {"debugHint", DebugHint()},
+            {"step", step});
 
         const TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -348,7 +361,11 @@ public:
         const TString& rootPathStr = Transaction.GetWorkingDir();
         const auto& dropDescription = Transaction.GetDropBackupCollection();
         const TString& name = dropDescription.GetName();
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << "TDropBackupCollection Propose: opId# " << OperationId << ", path# " << rootPathStr << "/" << name);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropBackupCollection Propose: /",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"path", rootPathStr},
+            {"name", name});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted,
                                                    static_cast<ui64>(OperationId.GetTxId()),
@@ -383,24 +400,26 @@ public:
 
                 // Check for active backup/restore operations
                 if (HasActiveBackupOperations(dstPath, context)) {
-                    result->SetError(NKikimrScheme::StatusPreconditionFailed, 
+                    result->SetError(NKikimrScheme::StatusPreconditionFailed,
                                    "Cannot drop backup collection while backup or restore operations are active. Please wait for them to complete.");
                     return result;
                 }
-                
+
                 // Check for concurrent operations on the same path
                 // This catches the race condition where another drop operation is in progress
                 // but hasn't yet marked the path as "under deleting"
-                
+
                 for (const auto& [txId, txState] : context.SS->TxInFlight) {
-                    LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << "DropPlan: Found TxInFlight - txId: " << txId.GetTxId() 
-                         << ", targetPathId: " << txState.TargetPathId 
-                         << ", txType: " << (int)txState.TxType);
-                         
-                    if (txState.TargetPathId == dstPath.Base()->PathId && 
+                    YDB_LOG_INFO_CTX(context.Ctx, "DropPlan: Found TxInFlight -",
+                        {"tabletId", context.SS->TabletID()},
+                        {"txId", txId.GetTxId()},
+                        {"targetPathId", txState.TargetPathId},
+                        {"txType", (int)txState.TxType});
+
+                    if (txState.TargetPathId == dstPath.Base()->PathId &&
                         txId.GetTxId() != OperationId.GetTxId()) {
-                        result->SetError(NKikimrScheme::StatusMultipleModifications, 
-                                       TStringBuilder() << "Check failed: path: '" << dstPath.PathString() 
+                        result->SetError(NKikimrScheme::StatusMultipleModifications,
+                                       TStringBuilder() << "Check failed: path: '" << dstPath.PathString()
                                        << "', error: another operation is already in progress for this backup collection");
                         result->SetPathDropTxId(ui64(txId.GetTxId()));
                         result->SetPathId(dstPath.Base()->PathId.LocalPathId);
@@ -446,11 +465,16 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << "TDropBackupCollection AbortPropose: opId# " << OperationId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropBackupCollection AbortPropose",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << "TDropBackupCollection AbortUnsafe: opId# " << OperationId << ", txId# " << forceDropTxId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropBackupCollection AbortUnsafe",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"txId", forceDropTxId});
         context.OnComplete.DoneOperation(OperationId);
     }
 };
@@ -464,27 +488,32 @@ public:
     {}
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"tabletId", context.SS->TabletID()},
+            {"debugHint", DebugHint()});
 
         NIceDb::TNiceDb db(context.GetDB());
-        
+
         TVector<ui64> operationsToCleanup;
-        
+
         for (const auto& [opId, restoreState] : context.SS->IncrementalRestoreStates) {
             if (restoreState.BackupCollectionPathId == BackupCollectionPathId) {
                 operationsToCleanup.push_back(opId);
             }
         }
-        
+
         for (ui64 opId : operationsToCleanup) {
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << DebugHint() << "Cleaning up incremental restore state for operation: " << opId);
-            
+            YDB_LOG_INFO_CTX(context.Ctx, "Cleaning up incremental restore state",
+                {"tabletId", context.SS->TabletID()},
+                {"debugHint", DebugHint()},
+                {"operation", opId});
+
             db.Table<Schema::IncrementalRestoreOperations>()
                 .Key(opId)
                 .Delete();
-            
+
             context.SS->IncrementalRestoreStates.erase(opId);
-            
+
             auto txIt = context.SS->TxIdToIncrementalRestore.begin();
             while (txIt != context.SS->TxIdToIncrementalRestore.end()) {
                 if (txIt->second == opId) {
@@ -495,7 +524,7 @@ public:
                     ++txIt;
                 }
             }
-            
+
             auto opIt = context.SS->IncrementalRestoreOperationToState.begin();
             while (opIt != context.SS->IncrementalRestoreOperationToState.end()) {
                 if (opIt->second == opId) {
@@ -507,9 +536,12 @@ public:
                 }
             }
         }
-        
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << DebugHint() << "Cleaned up " << operationsToCleanup.size() << " incremental restore operations");
-        
+
+        YDB_LOG_INFO_CTX(context.Ctx, "Cleaned up incremental restore operations",
+            {"tabletId", context.SS->TabletID()},
+            {"debugHint", DebugHint()},
+            {"#_operationsToCleanup.size", operationsToCleanup.size()});
+
         return true;
     }
 
@@ -520,7 +552,7 @@ public:
 private:
     TOperationId OperationId;
     TPathId BackupCollectionPathId;
-    
+
     TString DebugHint() const override {
         return TStringBuilder()
             << "TIncrementalRestoreCleanup"
@@ -536,12 +568,12 @@ TVector<ISubOperation::TPtr> CreateDropBackupCollectionCascade(TOperationId next
 
     auto dropOperation = tx.GetDropBackupCollection();
     const TString parentPathStr = tx.GetWorkingDir();
-    
+
     // Check for empty backup collection name
     if (dropOperation.GetName().empty()) {
         return {CreateReject(nextId, NKikimrScheme::StatusInvalidParameter, "Backup collection name cannot be empty")};
     }
-    
+
     // Use the same validation logic as ResolveBackupCollectionPaths to be consistent
     auto proposeResult = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, static_cast<ui64>(nextId.GetTxId()), static_cast<ui64>(context.SS->SelfTabletId()));
     auto bcPaths = NBackup::ResolveBackupCollectionPaths(parentPathStr, dropOperation.GetName(), false, context, proposeResult);
@@ -563,9 +595,9 @@ TVector<ISubOperation::TPtr> CreateDropBackupCollectionCascade(TOperationId next
             .IsCommonSensePath();
 
         if (!checks) {
-            if (dstPath.IsResolved() && dstPath.Base()->IsBackupCollection() && 
+            if (dstPath.IsResolved() && dstPath.Base()->IsBackupCollection() &&
                 (dstPath.Base()->PlannedToDrop() || dstPath.Base()->Dropped())) {
-                
+
                 auto errorResult = MakeHolder<TProposeResponse>(checks.GetStatus(), static_cast<ui64>(nextId.GetTxId()), static_cast<ui64>(context.SS->SelfTabletId()));
                 errorResult->SetError(checks.GetStatus(), checks.GetError());
                 errorResult->SetPathDropTxId(ui64(dstPath.Base()->DropTxId));
@@ -578,20 +610,20 @@ TVector<ISubOperation::TPtr> CreateDropBackupCollectionCascade(TOperationId next
     }
 
     const TPathId& pathId = dstPath.Base()->PathId;
-    
+
     // Check if any backup or restore operations are active for this collection
     for (const auto& [txId, txState] : context.SS->TxInFlight) {
-        if (txState.TargetPathId == pathId && 
-            (txState.TxType == TTxState::TxBackup || 
+        if (txState.TargetPathId == pathId &&
+            (txState.TxType == TTxState::TxBackup ||
              txState.TxType == TTxState::TxRestore)) {
             return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed,
                 "Cannot drop backup collection while backup or restore operations are active. Please wait for them to complete.")};
         }
     }
-    
+
     // Check for active incremental restore operations in IncrementalRestoreStates
     for (const auto& [opId, restoreState] : context.SS->IncrementalRestoreStates) {
-        if (restoreState.BackupCollectionPathId == pathId && 
+        if (restoreState.BackupCollectionPathId == pathId &&
             restoreState.State != TIncrementalRestoreState::EState::Completed) {
             return {CreateReject(nextId, NKikimrScheme::StatusPreconditionFailed,
                 "Cannot drop backup collection while incremental restore operations are active. Please wait for them to complete.")};
@@ -612,7 +644,7 @@ TVector<ISubOperation::TPtr> CreateDropBackupCollectionCascade(TOperationId next
                 if (i > 0) streamList << ", ";
                 streamList << tableStreams.StreamNames[i];
             }
-            
+
             TTxTransaction cdcDropTx = CreateCdcDropTransaction(tableStreams, context);
             if (!CreateDropCdcStream(nextId, cdcDropTx, context, result)) {
                 return result;
@@ -627,7 +659,7 @@ TVector<ISubOperation::TPtr> CreateDropBackupCollectionCascade(TOperationId next
             }
         }
     }
-    
+
     return result;
 }
 

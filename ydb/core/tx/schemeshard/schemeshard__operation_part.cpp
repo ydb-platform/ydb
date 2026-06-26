@@ -15,6 +15,8 @@
 #include <ydb/core/tx/sequenceshard/public/events.h>
 #include <ydb/core/tx/tx_processing.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 template <typename T>
@@ -86,7 +88,10 @@ static TString LogMessage(const TString& ev, TOperationContext& context, bool ig
 #define DefaultHandleReply(NS, TEvType, ...) \
     bool ISubOperationState::HandleReply(::NKikimr::NS::TEvType ## __HandlePtr& ev, TOperationContext& context) { \
         const auto msg = LogMessage(DebugReply(ev), context, false); \
-        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg); \
+        YDB_LOG_CRIT_CTX(context.Ctx, "", \
+            {"#_num_0", "HandleReply " #NS}, \
+            {"#_#TEvType", #TEvType}, \
+            {"msg", msg}); \
         Y_FAIL_S(msg); \
     } \
     \
@@ -94,10 +99,18 @@ static TString LogMessage(const TString& ev, TOperationContext& context, bool ig
         const bool ignore = MsgToIgnore.contains(NS::TEvType::EventType); \
         const auto msg = LogMessage(DebugReply(ev), context, ignore); \
         if (ignore) { \
-            LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg << " debug: " << DebugHint()); \
+            YDB_LOG_INFO_CTX(context.Ctx, "", \
+                {"#_num_0", "HandleReply " #NS}, \
+                {"#_#TEvType", #TEvType}, \
+                {"msg", msg}, \
+                {"debug", DebugHint()}); \
             return false; \
         } \
-        LOG_CRIT_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "HandleReply " #NS << "::" << #TEvType << " " << msg << " debug: " << DebugHint()); \
+        YDB_LOG_CRIT_CTX(context.Ctx, "", \
+            {"#_num_0", "HandleReply " #NS}, \
+            {"#_#TEvType", #TEvType}, \
+            {"msg", msg}, \
+            {"debug", DebugHint()}); \
         Y_FAIL_S(msg); \
     } \
     \

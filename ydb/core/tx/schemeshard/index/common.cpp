@@ -1,5 +1,7 @@
 #include <ydb/core/tx/schemeshard/index/common.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -22,8 +24,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> LockPropose(
     modifyScheme.MutableLockConfig()->SetName(path.LeafName());
     modifyScheme.MutableLockConfig()->SetLockTxId(ui64(buildInfo.LockTxId));
 
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "LockPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+    YDB_LOG_NOTICE("LockPropose",
+        {"buildInfoId", buildInfo.Id},
+        {"buildInfoState", buildInfo.State},
+        {"propose", propose->Record});
 
     return propose;
 }
@@ -58,8 +62,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> UnlockPropose(
         }
     }
 
-    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
-        "UnlockPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+    YDB_LOG_NOTICE("UnlockPropose",
+        {"buildInfoId", buildInfo.Id},
+        {"buildInfoState", buildInfo.State},
+        {"propose", propose->Record});
 
     return propose;
 }

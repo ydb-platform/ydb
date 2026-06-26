@@ -6,6 +6,8 @@
 
 #include <ydb/core/tx/tx_processing.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -168,9 +170,8 @@ void TSideEffects::Dependence(TTxId parent, TTxId child) {
 }
 
 void TSideEffects::ApplyOnExecute(TSchemeShard* ss, NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& ctx) {
-    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TSideEffects ApplyOnExecute"
-                << " at tablet# " << ss->TabletID());
+    YDB_LOG_TRACE_CTX(ctx, "TSideEffects ApplyOnExecute",
+        {"atTablet", ss->TabletID()});
 
     DoDoneParts(ss, ctx);
     DoSetBarriers(ss, ctx);
@@ -211,9 +212,8 @@ void TSideEffects::Barrier(TOperationId opId, TString barrierName) {
 
 
 void TSideEffects::ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx) {
-    LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                "TSideEffects ApplyOnComplete"
-                    << " at tablet# " << ss->TabletID());
+    YDB_LOG_TRACE_CTX(ctx, "TSideEffects ApplyOnComplete",
+        {"atTablet", ss->TabletID()});
 
     DoCoordinatorAck(ss, ctx);
     DoMediatorsAck(ss, ctx);
@@ -244,47 +244,45 @@ void TSideEffects::ApplyOnComplete(TSchemeShard* ss, const TActorContext& ctx) {
 void TSideEffects::DoActivateOps(TSchemeShard* ss, const TActorContext& ctx) {
     for (auto txId: ActivationOps) {
         if (!ss->Operations.contains(txId)) {
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "Unable to activate " << txId);
+            YDB_LOG_INFO_CTX(ctx, "Unable to activate",
+                {"txId", txId});
             continue;
         }
 
         auto operation = ss->Operations.at(txId);
 
         if (operation->WaitOperations.size()) {
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "Delay activating"
-                           << ", operation: " << txId
-                           << ", there is await operations num " << operation->WaitOperations.size());
+            YDB_LOG_INFO_CTX(ctx, "Delay activating there is await operations num",
+                {"operation", txId},
+                {"#_operation->WaitOperations.size", operation->WaitOperations.size()});
             continue;
         }
 
         for (ui32 partIdx = 0; partIdx < operation->Parts.size(); ++partIdx) {
-            LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Activate send for " << TOperationId(txId, partIdx));
+            YDB_LOG_TRACE_CTX(ctx, "Activate send",
+                {"#_TOperationId(txId, partIdx)", TOperationId(txId, partIdx)});
             ctx.Send(ctx.SelfID, new TEvPrivate::TEvProgressOperation(ui64(txId), partIdx));
         }
     }
 
     for (auto& opPart: ActivationParts) {
         if (!ss->Operations.contains(opPart.GetTxId())) {
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "Unable to activate " << opPart);
+            YDB_LOG_INFO_CTX(ctx, "Unable to activate",
+                {"opPart", opPart});
             continue;
         }
 
         auto operation = ss->Operations.at(opPart.GetTxId());
 
         if (operation->WaitOperations.size()) {
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "Delay activating"
-                           << ", operation part: " << opPart
-                           << ", there is await operations num " << operation->WaitOperations.size());
+            YDB_LOG_INFO_CTX(ctx, "Delay activating operation there is await operations num",
+                {"part", opPart},
+                {"#_operation->WaitOperations.size", operation->WaitOperations.size()});
             continue;
         }
 
-        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Activate send for " << opPart);
+        YDB_LOG_TRACE_CTX(ctx, "Activate send",
+            {"opPart", opPart});
         ctx.Send(ctx.SelfID, new TEvPrivate::TEvProgressOperation(ui64(opPart.GetTxId()), opPart.GetSubTxId()));
     }
 }
@@ -373,9 +371,8 @@ void TSideEffects::DoMediatorsAck(TSchemeShard* ss, const TActorContext& ctx) {
         TStepId step;
         std::tie(mediator, step) = rec;
 
-        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Ack mediator"
-                    << " stepId#" << step);
+        YDB_LOG_TRACE_CTX(ctx, "Ack mediator",
+            {"stepId", step});
 
         ctx.Send(mediator, new TEvTxProcessing::TEvPlanStepAccepted(
                      ss->TabletID(),
@@ -401,11 +398,10 @@ void TSideEffects::DoCoordinatorAck(TSchemeShard* ss, const TActorContext& ctx) 
             auto step = byStep.first;
             TSet<TTxId>& txIds = byStep.second;
 
-            LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Ack coordinator"
-                        << " stepId#" << step
-                        << " first txId#" << *txIds.begin()
-                        << " countTxs#" << txIds.size());
+            YDB_LOG_TRACE_CTX(ctx, "Ack coordinator",
+                {"stepId", step},
+                {"firstTxId", *txIds.begin()},
+                {"countTxs", txIds.size()});
 
             ctx.Send(coordinator, new TEvTxProcessing::TEvPlanStepAck(
                          ss->TabletID(),
@@ -420,10 +416,9 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
         Y_ABORT_UNLESS(ss->PathsById.contains(pathId));
 
         if (!ss->PathsById.at(pathId)->IsExternalSubDomainRoot()) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "DoUpdateTenant no IsExternalSubDomainRoot"
-                           << ", pathId: : " << pathId
-                           << ", at schemeshard: " << ss->TabletID());
+            YDB_LOG_DEBUG_CTX(ctx, "DoUpdateTenant no IsExternalSubDomainRoot",
+                {"#_pathId:", pathId},
+                {"atSchemeshard", ss->TabletID()});
             continue;
         }
 
@@ -433,10 +428,9 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
         TSubDomainInfo::TPtr& subDomain = ss->SubDomains.at(pathId);
 
         if (!ss->SubDomainsLinks.IsActive(pathId)) {
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "DoUpdateTenant no IsActiveChild"
-                           << ", pathId: : " << pathId
-                           << ", at schemeshard: " << ss->TabletID());
+            YDB_LOG_INFO_CTX(ctx, "DoUpdateTenant no IsActiveChild",
+                {"#_pathId:", pathId},
+                {"atSchemeshard", ss->TabletID()});
             continue;
         }
 
@@ -582,24 +576,22 @@ void TSideEffects::DoUpdateTenant(TSchemeShard* ss, NTabletFlatExecutor::TTransa
         }
 
         if (!hasChanges) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "DoUpdateTenant no hasChanges"
-                           << ", pathId: " << pathId
-                           << ", tenantLink: " << tenantLink
-                           << ", subDomain->GetVersion(): " << subDomain->GetVersion()
-                           << ", actualEffectiveACLVersion: " << actualEffectiveACLVersion
-                           << ", actualUserAttrsVersion: " << actualUserAttrsVersion
-                           << ", tenantHive: " << subDomain->GetTenantHiveID()
-                           << ", tenantSysViewProcessor: " << subDomain->GetTenantSysViewProcessorID()
-                           << ", at schemeshard: " << ss->TabletID());
+            YDB_LOG_DEBUG_CTX(ctx, "DoUpdateTenant no hasChanges",
+                {"pathId", pathId},
+                {"tenantLink", tenantLink},
+                {"#_subDomain->GetVersion", subDomain->GetVersion()},
+                {"actualEffectiveACLVersion", actualEffectiveACLVersion},
+                {"actualUserAttrsVersion", actualUserAttrsVersion},
+                {"tenantHive", subDomain->GetTenantHiveID()},
+                {"tenantSysViewProcessor", subDomain->GetTenantSysViewProcessorID()},
+                {"atSchemeshard", ss->TabletID()});
             continue;
         }
 
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "Send TEvUpdateTenantSchemeShard"
-                       << ", to actor: " << tenantLink.ActorId
-                       << ", msg: " << message->Record.ShortDebugString()
-                       << ", at schemeshard: " << ss->TabletID());
+        YDB_LOG_INFO_CTX(ctx, "Send TEvUpdateTenantSchemeShard",
+            {"toActor", tenantLink.ActorId},
+            {"msg", message->Record},
+            {"atSchemeshard", ss->TabletID()});
 
         Send(tenantLink.ActorId, message.Release());
     }
@@ -611,8 +603,8 @@ void TSideEffects::DoPersistPublishPaths(TSchemeShard* ss, NTabletFlatExecutor::
     for (const auto& kv : PublishPaths) {
         const TTxId txId = kv.first;
         if (!ss->Operations.contains(txId)) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Cannot publish paths for unknown operation id#" << txId);
+            YDB_LOG_DEBUG_CTX(ctx, "Cannot publish paths for unknown operation",
+                {"id", txId});
             continue;
         }
 
@@ -649,12 +641,11 @@ void TSideEffects::DoSend(TSchemeShard* ss, const TActorContext& ctx) {
         ui32 flags;
         std::tie(actor, message, cookie, flags) = rec;
 
-        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Send "
-                        << " to actor: " << actor
-                        << " msg type: " << message->Type()
-                        << " msg: " << message->ToString().substr(0, 1000)
-                        << " at schemeshard: " << ss->TabletID());
+        YDB_LOG_TRACE_CTX(ctx, "Send msg",
+            {"toActor", actor},
+            {"type", message->Type()},
+            {"msg", message->ToString().substr(0, 1000)},
+            {"atSchemeshard", ss->TabletID()});
 
         ctx.Send(actor, message.Release(), flags, cookie);
     }
@@ -670,13 +661,12 @@ void TSideEffects::DoBindMsg(TSchemeShard *ss, const TActorContext &ctx) {
 
         const ui32 msgType = message->Type();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Send tablet strongly msg"
-                        << " operationId: " << opId
-                        << " from tablet: " << ss->TabletID()
-                        << " to tablet: " << tablet
-                        << " cookie: " << cookie
-                        << " msg type: " << msgType);
+        YDB_LOG_DEBUG_CTX(ctx, "Send tablet strongly msg msg",
+            {"operationId", opId},
+            {"fromTablet", ss->TabletID()},
+            {"toTablet", tablet},
+            {"cookie", cookie},
+            {"type", msgType});
 
         Y_ABORT_UNLESS(message->IsSerializable());
 
@@ -712,12 +702,11 @@ void TSideEffects::DoBindMsgAcks(TSchemeShard *ss, const TActorContext &ctx) {
         TPipeMessageId cookie;
         std::tie(opId, tablet, cookie) = ack;
 
-        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Ack tablet strongly msg"
-                        << " opId: " << opId
-                        << " from tablet: " << ss->TabletID()
-                        << " to tablet: " << tablet
-                        << " cookie: " << cookie);
+        YDB_LOG_TRACE_CTX(ctx, "Ack tablet strongly msg",
+            {"opId", opId},
+            {"fromTablet", ss->TabletID()},
+            {"toTablet", tablet},
+            {"cookie", cookie});
 
         if (!ss->Operations.contains(opId.GetTxId())) {
             continue;
@@ -929,8 +918,8 @@ void TSideEffects::DoDoneParts(TSchemeShard *ss, const TActorContext &ctx) {
         TTxId txId = opId.GetTxId();
 
         if (!ss->Operations.contains(txId)) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Part operation has been done before id#" << opId);
+            YDB_LOG_DEBUG_CTX(ctx, "Part operation has been done before",
+                {"id", opId});
             continue;
         }
 
@@ -957,10 +946,10 @@ void TSideEffects::DoDoneParts(TSchemeShard *ss, const TActorContext &ctx) {
             }
         }
 
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Part operation is done"
-                        << " id#" << opId
-                        << " progress is " << operation->DoneParts.size() << "/" << operation->Parts.size());
+        YDB_LOG_INFO_CTX(ctx, "Part operation is done progress is /",
+            {"id", opId},
+            {"#_operation->DoneParts.size", operation->DoneParts.size()},
+            {"#_operation->Parts.size", operation->Parts.size()});
 
         if (!operation->IsReadyToDone(ctx)) {
             continue;
@@ -972,11 +961,10 @@ void TSideEffects::DoDoneParts(TSchemeShard *ss, const TActorContext &ctx) {
 
 void TSideEffects::DoFireFullBackupItemDone(TSchemeShard* ss, const TActorContext& ctx) {
     for (auto& [id, dstPathId, success] : PendingFullBackupItemDone) {
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Fire TEvFullBackupItemDone"
-                        << " fullBackupId#" << id
-                        << " dstPathId#" << dstPathId
-                        << " success#" << success);
+        YDB_LOG_INFO_CTX(ctx, "Fire TEvFullBackupItemDone",
+            {"fullBackupId", id},
+            {"dstPathId", dstPathId},
+            {"success", success});
         ctx.Send(ss->SelfId(),
             new TEvPrivate::TEvFullBackupItemDone(id, dstPathId, success));
     }
@@ -1013,10 +1001,9 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
         }
 
         for (auto& dependent: operation->DependentOperations) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Remove dependency"
-                            << ", parent tx: " << txId
-                            << ", dependent tx: " << dependent);
+            YDB_LOG_DEBUG_CTX(ctx, "Remove dependency parent dependent",
+                {"tx", txId},
+                {"#_tx", dependent});
 
             ss->PersistRemoveTxDependency(db, txId, dependent);
 
@@ -1044,25 +1031,22 @@ void TSideEffects::DoDoneTransactions(TSchemeShard *ss, NTabletFlatExecutor::TTr
         }
 
         for (ui32 partId = 0; partId < operation->Parts.size(); ++partId) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "Operation and all the parts is done"
-                             << ", operation id: " << TOperationId(txId, partId));
+            YDB_LOG_NOTICE_CTX(ctx, "Operation and all the parts is done operation",
+                {"id", TOperationId(txId, partId)});
             ss->RemoveTx(ctx, db, TOperationId(txId, partId), nullptr);
         }
 
         if (!operation->IsPublished()) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "Publication still in progress"
-                             << ", tx: " << txId
-                             << ", publications: " << operation->Publications.size()
-                             << ", subscribers: " << operation->Subscribers.size());
+            YDB_LOG_NOTICE_CTX(ctx, "Publication still in progress",
+                {"tx", txId},
+                {"publications", operation->Publications.size()},
+                {"subscribers", operation->Subscribers.size()});
 
             for (const auto& pub : operation->Publications) {
-                LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Publication details: "
-                        << " tx: " << txId
-                        << ", " << pub.first
-                        << ", " << pub.second);
+                YDB_LOG_DEBUG_CTX(ctx, "Publication details",
+                    {"tx", txId},
+                    {"#_pub.first", pub.first},
+                    {"#_pub.second", pub.second});
             }
 
             ss->Publications[txId] = {
@@ -1126,13 +1110,12 @@ void TSideEffects::DoSetBarriers(TSchemeShard *ss, const TActorContext &ctx) {
             auto& operation = it->second;
             operation->RegisterBarrier(opId.GetSubTxId(), name);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "Set barrier"
-                             << ", OperationId: " << opId
-                             << ", name: " << name
-                             << ", done: " << operation->DoneParts.size()
-                             << ", blocked: " << operation->Barriers.at(name).size()
-                             << ", parts count: " << operation->Parts.size());
+            YDB_LOG_DEBUG_CTX(ctx, "Set barrier parts",
+                {"operationId", opId},
+                {"name", name},
+                {"done", operation->DoneParts.size()},
+                {"blocked", operation->Barriers.at(name).size()},
+                {"count", operation->Parts.size()});
         }
     }
 }
@@ -1172,11 +1155,10 @@ void TSideEffects::DoCheckBarriers(TSchemeShard *ss, NTabletFlatExecutor::TTrans
         auto name = operation->Barriers.begin()->first;
         const auto& blockedParts = operation->Barriers.begin()->second;
 
-        LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "All parts have reached barrier"
-                         << ", tx: " << txId
-                         << ", done: " << operation->DoneParts.size()
-                         << ", blocked: " << blockedParts.size());
+        YDB_LOG_NOTICE_CTX(ctx, "All parts have reached barrier",
+            {"tx", txId},
+            {"done", operation->DoneParts.size()},
+            {"blocked", blockedParts.size()});
 
         TMemoryChanges memChanges;
         TStorageChanges dbChanges;

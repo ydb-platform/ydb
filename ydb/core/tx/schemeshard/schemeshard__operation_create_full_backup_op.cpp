@@ -4,6 +4,8 @@
 #include "schemeshard__operation_states.h"
 #include "schemeshard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 // Control op for BackupBackupCollection: Propose -> Done, no shard talk. It
@@ -118,15 +120,17 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << "TCreateFullBackupOp AbortPropose"
-            << ": opId# " << OperationId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateFullBackupOp AbortPropose",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
         // Do not use forceDropTxId here - the backup id == OperationId.GetTxId().
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << "TCreateFullBackupOp AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", forceDropTxId# " << forceDropTxId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateFullBackupOp AbortUnsafe",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"forceDropTxId", forceDropTxId});
 
         auto* infoPtr = context.SS->FullBackups.FindPtr(ui64(OperationId.GetTxId()));
         if (infoPtr && (*infoPtr)->State == TFullBackupInfo::EState::Transferring) {

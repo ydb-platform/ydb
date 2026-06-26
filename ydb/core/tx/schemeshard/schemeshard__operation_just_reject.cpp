@@ -2,6 +2,8 @@
 #include "schemeshard__operation_part.h"
 #include "schemeshard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -40,11 +42,10 @@ public:
 
         const auto ssId = context.SS->SelfTabletId();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TReject Propose"
-                         << ", opId: " << OperationId
-                         << ", explain: " << Response->Record.GetReason()
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TReject Propose",
+            {"opId", OperationId},
+            {"explain", Response->Record.GetReason()},
+            {"atSchemeshard", ssId});
 
         Response->Record.SetTxId(ui64(OperationId.GetTxId()));
         Response->Record.SetSchemeshardId(ui64(ssId));

@@ -7,14 +7,17 @@
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/scheme/scheme_types_proto.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 TVector<ISubOperation::TPtr> CreateNewContinuousBackup(TOperationId opId, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateContinuousBackup);
 
-    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << "CreateNewContinuousBackup"
-        << ": opId# " << opId
-        << ", tx# " << tx.ShortDebugString());
+    YDB_LOG_DEBUG_CTX(context.Ctx, "CreateNewContinuousBackup",
+        {"tabletId", context.SS->TabletID()},
+        {"opId", opId},
+        {"tx", tx});
 
     const auto acceptExisted = !tx.GetFailOnExist();
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);

@@ -4,6 +4,8 @@
 #include <ydb/core/tablet/tablet_exception.h>
 #include <ydb/core/tablet_flat/flat_cxx_database.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -23,11 +25,9 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
     void DeleteShard(TTabletId tabletId, const TActorContext &ctx) {
         auto shardIdx = Self->GetShardIdx(tabletId);
         if (shardIdx == InvalidShardIdx) {
-            LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "TTxShardStateChanged DoExecute"
-                           << "Unknown shardIdx for tabletId,"
-                           << ", tabletId: " << tabletId
-                           << ", state: " << DatashardStateName(NDataShard::TShardState::Offline));
+            YDB_LOG_WARN_CTX(ctx, "TTxShardStateChanged DoExecute Unknown shardIdx for tabletId,",
+                {"tabletId", tabletId},
+                {"state", DatashardStateName(NDataShard::TShardState::Offline)});
             return;
         }
 
@@ -37,11 +37,9 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
     void ProgressDependentOperation(TTabletId tabletId, const TActorContext &ctx) {
         for(auto txIdNum: Self->PipeTracker.FindTx(ui64(tabletId))) {
             auto txId = TTxId(txIdNum);
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "TTxShardStateChanged DoExecute"
-                            << "Operation should be restarted in case missing one of shard"
-                            << ", txId: " << txId
-                            << ", tabletId: " << tabletId);
+            YDB_LOG_DEBUG_CTX(ctx, "TTxShardStateChanged DoExecute Operation should be restarted in case missing one of shard",
+                {"txId", txId},
+                {"tabletId", tabletId});
 
             if (!Self->Operations.contains(txId)) {
                 continue;
@@ -70,12 +68,10 @@ struct TSchemeShard::TTxShardStateChanged : public TSchemeShard::TRwTxBase {
         auto tabletId = TTabletId(Ev->Get()->Record.GetTabletId());
         auto state = Ev->Get()->Record.GetState();
 
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   "TTxShardStateChanged DoExecute"
-                       << ", datashard informs about state changing"
-                       << ", datashardId: " << tabletId
-                       << ", state: " << DatashardStateName(state)
-                       << ", at schemeshard: " << Self->TabletID());
+        YDB_LOG_INFO_CTX(ctx, "TTxShardStateChanged DoExecute datashard informs about state changing",
+            {"datashardId", tabletId},
+            {"state", DatashardStateName(state)},
+            {"atSchemeshard", Self->TabletID()});
 
         // Ack state change notification
         auto event = MakeHolder<TEvDataShard::TEvStateChangedResult>(Self->TabletID(), state);

@@ -114,7 +114,7 @@ bool TTxStoreStats<TEvent>::Execute(NTabletFlatExecutor::TTransactionContext& tx
     PersistStatsPending = false;
 
     if (Queue.Empty()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxStoreStats::Execute empty");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxStoreStats::Execute empty");
         return true;
     }
 

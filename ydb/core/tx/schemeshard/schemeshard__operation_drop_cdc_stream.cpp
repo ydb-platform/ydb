@@ -3,6 +3,8 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_part.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 namespace NCdc {
@@ -24,7 +26,9 @@ public:
     }
 
     bool ProgressState(TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << DebugHint() << "ProgressState");
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"tabletId", context.SS->TabletID()},
+            {"debugHint", DebugHint()});
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -37,8 +41,10 @@ public:
     bool HandleReply(TEvPrivate::TEvOperationPlan::TPtr& ev, TOperationContext& context) override {
         const auto step = TStepId(ev->Get()->StepId);
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << DebugHint() << "HandleReply TEvOperationPlan"
-            << ": step# " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
+            {"tabletId", context.SS->TabletID()},
+            {"debugHint", DebugHint()},
+            {"step", step});
 
         const auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -107,9 +113,11 @@ public:
         const auto& op = Transaction.GetDrop();
         const auto& streamName = op.GetName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << "TDropCdcStream Propose"
-            << ": opId# " << OperationId
-            << ", stream# " << workingDir << "/" << streamName);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropCdcStream Propose /",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"stream", workingDir},
+            {"streamName", streamName});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
@@ -129,7 +137,7 @@ public:
             // Allow processing streams that are being deleted/operated on by the same transaction
             // (coordinated multi-stream drop within same transaction)
             bool isSameTransaction = false;
-            
+
             if (streamPath.Base()->PathState == TPathElement::EPathState::EPathStateDrop) {
                 // Check if the stream is being dropped by the same transaction
                 isSameTransaction = (streamPath.Base()->DropTxId == OperationId.GetTxId());
@@ -137,7 +145,7 @@ public:
                     checks.NotUnderDeleting();
                 }
             }
-            
+
             // Check if stream is under operation by same transaction
             // Allow if it's any suboperation of the same transaction
             if (streamPath.Base()->LastTxId != InvalidTxId) {
@@ -208,9 +216,10 @@ public:
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << "TDropCdcStream AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", txId# " << txId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropCdcStream AbortUnsafe",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"txId", txId});
         context.OnComplete.DoneOperation(OperationId);
     }
 
@@ -245,9 +254,9 @@ protected:
             }
             streamPathIds.push_back(childPathId);
         }
-        
+
         Y_VERIFY_S(!streamPathIds.empty(), "No CDC streams planned for drop");
-        
+
         for (const auto& streamId : streamPathIds) {
             streamId.ToProto(notice.AddStreamPathId());
         }
@@ -347,10 +356,12 @@ public:
         const auto& op = Transaction.GetDropCdcStream();
         const auto& tableName = op.GetTableName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << "TDropCdcStreamAtTable Propose"
-            << ": opId# " << OperationId
-            << ", table# " << workingDir << "/" << tableName 
-            << ", streams# " << StreamNames.size());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropCdcStreamAtTable Propose /",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"table", workingDir},
+            {"tableName", tableName},
+            {"streams", StreamNames.size()});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), context.SS->TabletID());
 
@@ -440,7 +451,7 @@ public:
             streamPath.Base()->PathState = TPathElement::EPathState::EPathStateDrop;
             streamPath.Base()->DropTxId = OperationId.GetTxId();
             streamPath.Base()->LastTxId = OperationId.GetTxId();
-            
+
             context.SS->TabletCounters->Simple()[COUNTER_CDC_STREAMS_COUNT].Sub(1);
             context.SS->ClearDescribePathCaches(streamPath.Base());
             context.OnComplete.PublishToSchemeBoard(OperationId, streamPath.Base()->PathId);
@@ -468,14 +479,16 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << "TDropCdcStreamAtTable AbortPropose"
-            << ": opId# " << OperationId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropCdcStreamAtTable AbortPropose",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId});
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << "TDropCdcStreamAtTable AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", txId# " << txId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TDropCdcStreamAtTable AbortUnsafe",
+            {"tabletId", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"txId", txId});
         context.OnComplete.DoneOperation(OperationId);
     }
 
@@ -655,38 +668,39 @@ bool CreateDropCdcStream(TOperationId opId, const TTxTransaction& tx, TOperation
 
     const auto& op = tx.GetDropCdcStream();
     const auto& tableName = op.GetTableName();
-    
+
     TVector<TString> streamNames;
     for (const auto& name : op.GetStreamName()) {
         streamNames.push_back(name);
     }
-    
-    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << "CreateDropCdcStream"
-        << ": opId# " << opId
-        << ", table# " << tableName
-        << ", streams# " << streamNames.size()
-        << ", tx# " << tx.ShortDebugString());
+
+    YDB_LOG_DEBUG_CTX(context.Ctx, "CreateDropCdcStream",
+        {"tabletId", context.SS->TabletID()},
+        {"opId", opId},
+        {"table", tableName},
+        {"streams", streamNames.size()},
+        {"tx", tx});
 
     const auto workingDirPath = TPath::Resolve(tx.GetWorkingDir(), context.SS);
 
     // Validate all streams exist on the same table
     TVector<TPath> streamPaths;
-    
+
     if (streamNames.empty()) {
-        result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter, 
+        result = {CreateReject(opId, NKikimrScheme::StatusInvalidParameter,
                              "At least one StreamName must be specified")};
         return false;
     }
-    
+
     const auto firstStreamChecksResult = DoDropStreamPathChecks(opId, workingDirPath, tableName, streamNames[0]);
     if (std::holds_alternative<ISubOperation::TPtr>(firstStreamChecksResult)) {
         result = {std::get<ISubOperation::TPtr>(firstStreamChecksResult)};
         return false;
     }
-    
+
     const auto [tablePath, firstStreamPath] = std::get<TStreamPaths>(firstStreamChecksResult);
     streamPaths.push_back(firstStreamPath);
-    
+
     for (size_t i = 1; i < streamNames.size(); ++i) {
         const auto checksResult = DoDropStreamPathChecks(opId, workingDirPath, tableName, streamNames[i]);
         if (std::holds_alternative<ISubOperation::TPtr>(checksResult)) {
@@ -712,11 +726,11 @@ bool CreateDropCdcStream(TOperationId opId, const TTxTransaction& tx, TOperation
 
         const auto streamLockTxId = stream->State == TCdcStreamInfo::EState::ECdcStreamStateScan
             ? streamPath.Base()->CreateTxId : InvalidTxId;
-            
+
         if (lockTxId == InvalidTxId) {
             lockTxId = streamLockTxId;
         } else if (lockTxId != streamLockTxId) {
-            result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed, 
+            result = {CreateReject(opId, NKikimrScheme::StatusPreconditionFailed,
                                  "Cannot drop CDC streams with different lock states in single operation")};
             return false;
         }

@@ -11,6 +11,8 @@
 
 #include "checks.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 using namespace NKikimr;
 using namespace NKikimr::NSchemeShard;
 
@@ -62,9 +64,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                   << " at tabletId# " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"debugHint", DebugHint()},
+            {"atTabletId", ssId});
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore);
         TOlapStoreInfo::TPtr pendingInfo = context.SS->OlapStores[txState->TargetPathId];
@@ -111,10 +113,9 @@ public:
                 Y_ABORT("unexpected tablet type");
             }
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " ProgressState"
-                                    << " Propose modify scheme on shard"
-                                    << " tabletId: " << tabletId);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState Propose modify scheme on shard",
+                {"debugHint", DebugHint()},
+                {"tabletId", tabletId});
         }
 
         txState->UpdateShardsInProgress();
@@ -145,10 +146,10 @@ public:
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply TEvOperationPlan"
-                     << " at tablet: " << ssId
-                     << ", stepId: " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
+            {"debugHint", DebugHint()},
+            {"atTablet", ssId},
+            {"stepId", step});
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore);
 
@@ -189,9 +190,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " ProgressState"
-                     << " at tablet: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"debugHint", DebugHint()},
+            {"atTablet", ssId});
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore);
 
@@ -241,9 +242,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " ProgressState"
-                     << " at tablet: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"debugHint", DebugHint()},
+            {"atTablet", ssId});
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateOlapStore);
         txState->ClearShardsInProgress();
@@ -263,10 +264,9 @@ public:
                 }
             }
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " ProgressState"
-                                    << " wait for NotifyTxCompletionResult"
-                                    << " tabletId: " << tabletId);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState wait for NotifyTxCompletionResult",
+                {"debugHint", DebugHint()},
+                {"tabletId", tabletId});
         }
 
         return false;
@@ -325,11 +325,11 @@ public:
         auto& createDescription = Transaction.GetCreateColumnStore();
         const TString& name = createDescription.GetName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateOlapStore Propose"
-                        << ", path: " << parentPathStr << "/" << name
-                        << ", opId: " << OperationId
-                        << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateOlapStore Propose /",
+            {"path", parentPathStr},
+            {"name", name},
+            {"opId", OperationId},
+            {"atSchemeshard", ssId});
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(OperationId.GetTxId()), ui64(ssId));
@@ -527,11 +527,10 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateOlapStore AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateOlapStore AbortUnsafe",
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"atSchemeshard", context.SS->TabletID()});
 
         context.OnComplete.DoneOperation(OperationId);
     }

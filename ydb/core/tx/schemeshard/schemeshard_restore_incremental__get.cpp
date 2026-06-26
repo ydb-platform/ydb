@@ -4,6 +4,8 @@
 
 #include <ydb/core/backup/impl/logging.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONTINUOUS_BACKUP
+
 namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
@@ -38,7 +40,9 @@ public:
             issue.set_message(errorMessage);
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Reply " << Response->Record.ShortDebugString());
+        YDB_LOG_DEBUG("Reply",
+            {"logPrefix", GetLogPrefix()},
+            {"response", Response->Record});
 
         SideEffects.Send(Request->Sender, std::move(Response), 0, Request->Cookie);
         return true;
@@ -46,7 +50,9 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Execute " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Execute",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", record});
 
         Response = MakeHolder<TEvBackup::TEvGetBackupCollectionRestoreResponse>();
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
@@ -77,7 +83,7 @@ public:
                 TStringBuilder() << "Incremental restore with id " << restoreId << " references invalid backup collection"
             );
         }
-        
+
         if (backupCollectionPath.GetPathIdForDomain() != domainPathId) {
             return Reply(
                 Ydb::StatusIds::NOT_FOUND,
@@ -91,7 +97,9 @@ public:
         Response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
 
         // Don't go through Reply() — it would clobber the per-entry Status that Fill just set.
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Reply " << Response->Record.ShortDebugString());
+        YDB_LOG_DEBUG("Reply",
+            {"logPrefix", GetLogPrefix()},
+            {"response", Response->Record});
         SideEffects.Send(Request->Sender, std::move(Response), 0, Request->Cookie);
         return true;
     }

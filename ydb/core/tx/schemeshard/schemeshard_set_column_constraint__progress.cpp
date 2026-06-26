@@ -10,6 +10,8 @@
 
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -79,14 +81,18 @@ public:
 
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         if (!operationInfoPtr) {
-            LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyAllocate: operation not found"
-                ", cookie# " << AllocateResult->Cookie
-                << ", txId# " << txId);
+            YDB_LOG_INFO("",
+                {"logPrefix", LogPrefix},
+                {"cookie", AllocateResult->Cookie},
+                {"txId", txId});
             return true;
         }
 
         auto& operationInfo = *operationInfoPtr->get();
-        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyAllocate, id# " << BuildId << ", txId# " << txId);
+        YDB_LOG_INFO("TTxReplyAllocate,",
+            {"logPrefix", LogPrefix},
+            {"id", BuildId},
+            {"txId", txId});
 
         NIceDb::TNiceDb db(txc.DB);
         switch (operationInfo.OperationState) {
@@ -144,8 +150,10 @@ public:
     void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
         TIndexBuildInfo* /*operationInfo*/, const std::exception& exc) override
     {
-        LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyAllocate: OnUnhandledException"
-            ", id# " << BuildId << ", exception: " << exc.what());
+        YDB_LOG_ERROR("",
+            {"logPrefix", LogPrefix},
+            {"id", BuildId},
+            {"exception", exc.what()});
     }
 };
 
@@ -172,11 +180,12 @@ public:
             AddIssue(response.MutableIssues(), operationInfo.GetIssue());
         }
 
-        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyModify: ReplyOnCreation"
-              << ", id: " << operationInfo.Id
-              << ", status: " << Ydb::StatusIds::StatusCode_Name(status)
-              << ", error: " << operationInfo.GetIssue()
-              << ", replyTo: " << operationInfo.CreateSender.ToString());
+        YDB_LOG_NOTICE("TTxReplyModify: ReplyOnCreation",
+            {"logPrefix", LogPrefix},
+            {"id", operationInfo.Id},
+            {"status", Ydb::StatusIds::StatusCode_Name(status)},
+            {"error", operationInfo.GetIssue()},
+            {"replyTo", operationInfo.CreateSender});
 
         Send(operationInfo.CreateSender, std::move(responseEv), 0, operationInfo.SenderCookie);
     }
@@ -187,22 +196,28 @@ public:
 
         auto* operationIdPtr = Self->TxIdToSetColumnConstraintOperations.FindPtr(txId);
         if (!operationIdPtr) {
-            LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyModify: operation not found, txId# " << txId);
+            YDB_LOG_INFO("TTxReplyModify: operation not found,",
+                {"logPrefix", LogPrefix},
+                {"txId", txId});
             return true;
         }
 
         BuildId = *operationIdPtr;
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         if (!operationInfoPtr) {
-            LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyModify: operation not found by BuildId"
-                ", id# " << BuildId << ", txId# " << txId);
+            YDB_LOG_INFO("",
+                {"logPrefix", LogPrefix},
+                {"id", BuildId},
+                {"txId", txId});
             return true;
         }
 
         auto& operationInfo = *operationInfoPtr->get();
-        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyModify, id# " << BuildId
-            << ", txId# " << txId
-            << ", status# " << NKikimrScheme::EStatus_Name(record.GetStatus()));
+        YDB_LOG_INFO("TTxReplyModify,",
+            {"logPrefix", LogPrefix},
+            {"id", BuildId},
+            {"txId", txId},
+            {"status", NKikimrScheme::EStatus_Name(record.GetStatus())});
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -252,8 +267,10 @@ public:
     void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
         TIndexBuildInfo* /*operationInfo*/, const std::exception& exc) override
     {
-        LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyModify: OnUnhandledException"
-            ", id# " << BuildId << ", exception: " << exc.what());
+        YDB_LOG_ERROR("",
+            {"logPrefix", LogPrefix},
+            {"id", BuildId},
+            {"exception", exc.what()});
     }
 };
 
@@ -272,20 +289,27 @@ public:
 
         auto* operationIdPtr = Self->TxIdToSetColumnConstraintOperations.FindPtr(txId);
         if (!operationIdPtr) {
-            LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyCompleted: operation not found, txId# " << txId);
+            YDB_LOG_INFO("TTxReplyCompleted: operation not found,",
+                {"logPrefix", LogPrefix},
+                {"txId", txId});
             return true;
         }
 
         BuildId = *operationIdPtr;
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         if (!operationInfoPtr) {
-            LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyCompleted: operation not found by BuildId"
-                ", id# " << BuildId << ", txId# " << txId);
+            YDB_LOG_INFO("",
+                {"logPrefix", LogPrefix},
+                {"id", BuildId},
+                {"txId", txId});
             return true;
         }
 
         auto& operationInfo = *operationInfoPtr->get();
-        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyCompleted, id# " << BuildId << ", txId# " << txId);
+        YDB_LOG_INFO("TTxReplyCompleted,",
+            {"logPrefix", LogPrefix},
+            {"id", BuildId},
+            {"txId", txId});
 
         NIceDb::TNiceDb db(txc.DB);
         if (operationInfo.OperationState == TSetColumnConstraintOperationInfo::EOperationState::Locking) {
@@ -317,8 +341,10 @@ public:
     void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
         TIndexBuildInfo* /*operationInfo*/, const std::exception& exc) override
     {
-        LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyCompleted: OnUnhandledException"
-            ", id# " << BuildId << ", exception: " << exc.what());
+        YDB_LOG_ERROR("",
+            {"logPrefix", LogPrefix},
+            {"id", BuildId},
+            {"exception", exc.what()});
     }
 };
 
@@ -339,14 +365,18 @@ public:
         const auto& record = Response->Get()->Record;
         const TTabletId tabletId = TTabletId(record.GetTabletId());
 
-        LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyValidateRowCondition: operationId# " << BuildId
-            << ", tabletId# " << tabletId
-            << ", status# " << record.GetStatus()
-            << ", isValid# " << record.GetIsValid());
+        YDB_LOG_INFO("TTxReplyValidateRowCondition",
+            {"logPrefix", LogPrefix},
+            {"operationId", BuildId},
+            {"tabletId", tabletId},
+            {"status", record.GetStatus()},
+            {"isValid", record.GetIsValid()});
 
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         if (!operationInfoPtr) {
-            LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyValidateRowCondition: operation not found, id# " << BuildId);
+            YDB_LOG_WARN("TTxReplyValidateRowCondition: operation not found,",
+                {"logPrefix", LogPrefix},
+                {"id", BuildId});
             return true;
         }
 
@@ -363,7 +393,9 @@ public:
         }
 
         if (!found) {
-            LOG_WARN_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyValidateRowCondition: shard not found for tabletId# " << tabletId);
+            YDB_LOG_WARN("TTxReplyValidateRowCondition: shard not found",
+                {"logPrefix", LogPrefix},
+                {"tabletId", tabletId});
             return true;
         }
 
@@ -373,8 +405,10 @@ public:
         // Therefore, we should ignore extra responses so that
         // `DoneValidationShards` does not end up containing duplicates.
         if (!operationInfo.InProgressValidationShards.contains(shardIdx)) {
-            LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyValidateRowCondition: superfluous shard event, id# " << BuildId
-                << ", shardIdx# " << shardIdx);
+            YDB_LOG_NOTICE("TTxReplyValidateRowCondition: superfluous shard event,",
+                {"logPrefix", LogPrefix},
+                {"id", BuildId},
+                {"shardIdx", shardIdx});
             return true;
         }
 
@@ -396,7 +430,9 @@ public:
 
         if (record.GetStatus() == NKikimrSetColumnConstraint::EValidateStatus::DONE) {
             if (!record.GetIsValid()) {
-                LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyValidateRowCondition: validation failed on shard# " << shardIdx);
+                YDB_LOG_NOTICE("TTxReplyValidateRowCondition: validation failed",
+                    {"logPrefix", LogPrefix},
+                    {"onShard", shardIdx});
                 operationInfo.ValidationFailed = true;
             }
 
@@ -406,8 +442,10 @@ public:
             Progress(BuildId);
 
         } else if (record.GetStatus() == NKikimrSetColumnConstraint::EValidateStatus::BAD_REQUEST) {
-            LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyValidateRowCondition: error on shard# " << shardIdx
-                << ", status# " << record.GetStatus());
+            YDB_LOG_ERROR("TTxReplyValidateRowCondition: error",
+                {"logPrefix", LogPrefix},
+                {"onShard", shardIdx},
+                {"status", record.GetStatus()});
 
             operationInfo.ValidationFailed = true;
 
@@ -417,8 +455,10 @@ public:
             Progress(BuildId);
 
         } else {
-            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyValidateRowCondition: shard# " << shardIdx
-                << " still in progress, status# " << record.GetStatus());
+            YDB_LOG_DEBUG("TTxReplyValidateRowCondition: still in progress,",
+                {"logPrefix", LogPrefix},
+                {"shard", shardIdx},
+                {"status", record.GetStatus()});
         }
 
         {
@@ -440,12 +480,15 @@ public:
         TIndexBuildInfo* operationInfo, const std::exception& exc) override
     {
         if (!operationInfo) {
-            LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyValidateRowCondition: OnUnhandledException: id not found"
-                ", id# " << BuildId);
+            YDB_LOG_NOTICE("",
+                {"logPrefix", LogPrefix},
+                {"id", BuildId});
             return;
         }
-        LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyValidateRowCondition: OnUnhandledException"
-            ", id# " << BuildId << ", exception: " << exc.what());
+        YDB_LOG_ERROR("",
+            {"logPrefix", LogPrefix},
+            {"id", BuildId},
+            {"exception", exc.what()});
     }
 };
 
@@ -463,29 +506,35 @@ public:
     bool DoExecute([[maybe_unused]] TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& shardIdx = Self->GetShardIdx(ShardId);
 
-        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyRetrySetColumnConstraint: PipeRetry"
-            << ", id# " << BuildId
-            << ", shardId# " << ShardId
-            << ", shardIdx# " << shardIdx);
+        YDB_LOG_NOTICE("TTxReplyRetrySetColumnConstraint: PipeRetry",
+            {"logPrefix", LogPrefix},
+            {"id", BuildId},
+            {"shardId", ShardId},
+            {"shardIdx", shardIdx});
 
         auto* operationInfoPtr = Self->SetColumnConstraintOperations.FindPtr(BuildId);
         if (!operationInfoPtr) {
-            LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyRetrySetColumnConstraint: operation not found, id# " << BuildId);
+            YDB_LOG_INFO("TTxReplyRetrySetColumnConstraint: operation not found,",
+                {"logPrefix", LogPrefix},
+                {"id", BuildId});
             return true;
         }
 
         auto& operationInfo = *operationInfoPtr->get();
 
         if (operationInfo.OperationState != TSetColumnConstraintOperationInfo::EOperationState::Validating) {
-            LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyRetrySetColumnConstraint: superfluous event, id# " << BuildId
-                << ", state# " << ToString(operationInfo.OperationState));
+            YDB_LOG_INFO("TTxReplyRetrySetColumnConstraint: superfluous event,",
+                {"logPrefix", LogPrefix},
+                {"id", BuildId},
+                {"state", ToString(operationInfo.OperationState)});
             return true;
         }
 
         if (!operationInfo.ValidationShards.contains(shardIdx)) {
-            LOG_INFO_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyRetrySetColumnConstraint: shard not found in ValidationShards"
-                << ", id# " << BuildId
-                << ", shardIdx# " << shardIdx);
+            YDB_LOG_INFO("TTxReplyRetrySetColumnConstraint: shard not found in ValidationShards",
+                {"logPrefix", LogPrefix},
+                {"id", BuildId},
+                {"shardIdx", shardIdx});
             return true;
         }
 
@@ -505,8 +554,10 @@ public:
     void OnUnhandledException(TTransactionContext& /*txc*/, const TActorContext& /*ctx*/,
         TIndexBuildInfo* /*operationInfo*/, const std::exception& exc) override
     {
-        LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxReplyRetrySetColumnConstraint: OnUnhandledException"
-            ", id# " << BuildId << ", exception: " << exc.what());
+        YDB_LOG_ERROR("",
+            {"logPrefix", LogPrefix},
+            {"id", BuildId},
+            {"exception", exc.what()});
     }
 };
 
@@ -521,14 +572,18 @@ private:
     TMap<TTabletId, THolder<IEventBase>> ToTabletSend;
 
     bool InitiateValidationShards(TSetColumnConstraintOperationInfo& operationInfo) {
-        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "InitiateValidationShards, id# " << BuildId);
+        YDB_LOG_DEBUG("InitiateValidationShards,",
+            {"logPrefix", LogPrefix},
+            {"id", BuildId});
 
         Y_ENSURE(operationInfo.ToValidateShards.empty());
         Y_ENSURE(operationInfo.InProgressValidationShards.empty());
 
         TPath path = TPath::Init(operationInfo.TablePathId, Self);
         if (!path.IsLocked()) {
-            LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "InitiateValidationShards: table is not locked, id# " << BuildId);
+            YDB_LOG_ERROR("InitiateValidationShards: table is not locked,",
+                {"logPrefix", LogPrefix},
+                {"id", BuildId});
             return false;
         }
         Y_ENSURE(path.LockedBy() == operationInfo.LockTxId);
@@ -551,7 +606,9 @@ private:
             Y_ENSURE(emplaced);
 
             operationInfo.ToValidateShards.emplace_back(partition->ShardIdx);
-            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "InitiateValidationShards: added shard " << partition->ShardIdx);
+            YDB_LOG_DEBUG("InitiateValidationShards: added shard",
+                {"logPrefix", LogPrefix},
+                {"#_partition->ShardIdx", partition->ShardIdx});
         }
 
         return true;
@@ -577,7 +634,9 @@ private:
             record.AddNotNullColumns(TString(columnName));
         }
 
-        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxProgressSetColumnConstraint: TEvValidateRowConditionRequest: " << record.ShortDebugString());
+        YDB_LOG_NOTICE("TTxProgressSetColumnConstraint",
+            {"logPrefix", LogPrefix},
+            {"TEvValidateRowConditionRequest", record});
 
         ToTabletSend.emplace(shardId, std::move(ev));
     }
@@ -596,7 +655,9 @@ private:
     }
 
     bool DriveToSendMessageToPartOfShards(TSetColumnConstraintOperationInfo& operationInfo) {
-        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "DriveToSendMessageToPartOfShards Start, id# " << BuildId);
+        YDB_LOG_DEBUG("DriveToSendMessageToPartOfShards Start,",
+            {"logPrefix", LogPrefix},
+            {"id", BuildId});
 
         if (operationInfo.NeedToCalculateValidationShards) {
             operationInfo.NeedToCalculateValidationShards = false;
@@ -610,7 +671,9 @@ private:
         }) && operationInfo.DoneValidationShards.size() == operationInfo.ValidationShards.size();
 
         if (done) {
-            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "DriveToSendMessageToPartOfShards Done, id# " << BuildId);
+            YDB_LOG_DEBUG("DriveToSendMessageToPartOfShards Done,",
+                {"logPrefix", LogPrefix},
+                {"id", BuildId});
         }
 
         return done;
@@ -626,7 +689,10 @@ public:
         Y_ENSURE(operationInfoPtr);
         auto& operationInfo = *operationInfoPtr->get();
 
-        LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxProgressSetColumnConstraint::DoExecute, id# " << BuildId << "; OperationState = " << ToString(operationInfo.OperationState));
+        YDB_LOG_DEBUG("TTxProgressSetColumnConstraint::DoExecute,",
+            {"logPrefix", LogPrefix},
+            {"id", BuildId},
+            {"operationState", ToString(operationInfo.OperationState)});
 
         switch (operationInfo.OperationState) {
             case TSetColumnConstraintOperationInfo::EOperationState::Invalid: {
@@ -718,13 +784,15 @@ public:
         TIndexBuildInfo* operationInfo, const std::exception& exc) override
     {
         if (!operationInfo) {
-            LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxProgressSetColumnConstraint: OnUnhandledException: id not found"
-                ", id# " << BuildId);
+            YDB_LOG_NOTICE("",
+                {"logPrefix", LogPrefix},
+                {"id", BuildId});
             return;
         }
-        LOG_ERROR_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "TTxProgressSetColumnConstraint: OnUnhandledException"
-            ", id# " << BuildId
-            << ", exception: " << exc.what());
+        YDB_LOG_ERROR("",
+            {"logPrefix", LogPrefix},
+            {"id", BuildId},
+            {"exception", exc.what()});
     }
 };
 

@@ -6,6 +6,8 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/subdomain.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -381,10 +383,10 @@ public:
     bool HandleReply(TEvDataShard::TEvProposeTransactionResult::TPtr& ev, TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvProposeTransactionResult"
-                               << ", at schemeshard: " << ssId
-                               << " message# " << ev->Get()->Record.ShortDebugString());
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvProposeTransactionResult",
+            {"debugHint", DebugHint()},
+            {"atSchemeshard", ssId},
+            {"message", ev->Get()->Record});
 
         return NTableState::CollectProposeTransactionResults(OperationId, ev, context);
     }
@@ -392,9 +394,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"debugHint", DebugHint()},
+            {"atSchemeshard", ssId});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -406,8 +408,10 @@ public:
             auto idx = txState->Shards[i].Idx;
             auto datashardId = context.SS->ShardInfos[idx].TabletID;
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        "Propose modify scheme on datashard " << datashardId << " txid: " << OperationId << " at schemeshard" << ssId);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Propose modify scheme on datashard at schemeshard",
+                {"datashardId", datashardId},
+                {"txid", OperationId},
+                {"ssId", ssId});
 
             const auto seqNo = context.SS->StartRound(*txState);
             const auto txBody = context.SS->FillAlterTableTxBody(txState->TargetPathId, idx, seqNo);
@@ -441,11 +445,10 @@ public:
         TTabletId ssId = context.SS->SelfTabletId();
         const auto& evRecord = ev->Get()->Record;
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvSchemaChanged"
-                               << " triggers early"
-                               << ", at schemeshard: " << ssId
-                               << " message# " << evRecord.ShortDebugString());
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvSchemaChanged triggers early",
+            {"debugHint", DebugHint()},
+            {"atSchemeshard", ssId},
+            {"message", evRecord});
 
         NTableState::CollectSchemaChanged(OperationId, ev, context);
         return false;
@@ -455,11 +458,11 @@ public:
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvOperationPlan"
-                               << ", operationId: " << OperationId
-                               << ", stepId: " << step
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
+            {"debugHint", DebugHint()},
+            {"operationId", OperationId},
+            {"stepId", step},
+            {"atSchemeshard", ssId});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -518,9 +521,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"debugHint", DebugHint()},
+            {"atSchemeshard", ssId});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -605,12 +608,12 @@ public:
                 : context.SS->MakeLocalId(alter.GetId_Deprecated());
         }
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterTable Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", pathId: " << pathId
-                         << ", opId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterTable Propose /",
+            {"path", parentPathStr},
+            {"name", name},
+            {"pathId", pathId},
+            {"opId", OperationId},
+            {"atSchemeshard", ssId});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -781,11 +784,10 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TAlterTable AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TAlterTable AbortUnsafe",
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"atSchemeshard", context.SS->TabletID()});
 
         context.OnComplete.DoneOperation(OperationId);
     }

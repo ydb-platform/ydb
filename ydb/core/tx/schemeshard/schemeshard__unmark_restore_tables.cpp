@@ -1,5 +1,7 @@
 #include "schemeshard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
@@ -46,12 +48,10 @@ struct TSchemeShard::TTxUnmarkRestoreTables : public TTransactionBase<TSchemeSha
 
     void Complete(const TActorContext &ctx) override {
         if (UnmarkedCount) {
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, 
-                "TTxUnmarkRestoreTables Complete"
-                << ", done for " << UnmarkedCount << " tables"
-                << ", left " << RestoreTablesToUnmark.size()
-                << ", at schemeshard: "<< Self->TabletID()
-            );
+            YDB_LOG_NOTICE_CTX(ctx, "TTxUnmarkRestoreTables Complete done for tables left",
+                {"unmarkedCount", UnmarkedCount},
+                {"#_RestoreTablesToUnmark.size", RestoreTablesToUnmark.size()},
+                {"atSchemeshard", Self->TabletID()});
         }
 
         if (RestoreTablesToUnmark) {

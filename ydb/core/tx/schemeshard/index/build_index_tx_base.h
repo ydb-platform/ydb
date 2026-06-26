@@ -102,9 +102,13 @@ public:
         }
 
         if (IsMutableOperation) {
-            LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "Reply " << Response->Record.ShortDebugString());
+            YDB_LOG_NOTICE_COMP(NKikimrServices::BUILD_INDEX, "Reply",
+                {"logPrefix", LogPrefix},
+                {"response", Response->Record});
         } else {
-            LOG_DEBUG_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "Reply " << Response->Record.ShortDebugString());
+            YDB_LOG_DEBUG_COMP(NKikimrServices::BUILD_INDEX, "Reply",
+                {"logPrefix", LogPrefix},
+                {"response", Response->Record});
         }
 
         Send(Request->Sender, std::move(Response), 0, Request->Cookie);

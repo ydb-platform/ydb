@@ -8,6 +8,8 @@
 
 #include <util/generic/xrange.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::IMPORT
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -453,18 +455,18 @@ void TSchemeShard::ResumeImports(const TVector<ui64>& ids, const TActorContext& 
 }
 
 void TSchemeShard::WaitForTableProfiles(ui64 importId, ui32 itemIdx) {
-    LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::IMPORT, "Wait for table profiles"
-        << ": id# " << importId
-        << ", itemIdx# " << itemIdx);
+    YDB_LOG_NOTICE("Wait for table profiles",
+        {"id", importId},
+        {"itemIdx", itemIdx});
     TableProfilesWaiters.insert(std::make_pair(importId, itemIdx));
 }
 
 void TSchemeShard::LoadTableProfiles(const NKikimrConfig::TTableProfilesConfig* config, const TActorContext& ctx) {
     if (config) {
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::IMPORT, "Load table profiles");
+        YDB_LOG_NOTICE("Load table profiles");
         TableProfiles.Load(*config);
     } else {
-        LOG_WARN_S(*TlsActivationContext, NKikimrServices::IMPORT, "Table profiles were not loaded");
+        YDB_LOG_WARN("Table profiles were not loaded");
     }
 
     TableProfilesLoaded = true;

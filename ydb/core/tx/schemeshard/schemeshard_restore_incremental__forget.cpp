@@ -3,6 +3,8 @@
 
 #include <ydb/core/backup/impl/logging.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CONTINUOUS_BACKUP
+
 namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
@@ -32,7 +34,9 @@ public:
             issue.set_message(errorMessage);
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Reply " << Response->Record.ShortDebugString());
+        YDB_LOG_DEBUG("Reply",
+            {"logPrefix", GetLogPrefix()},
+            {"response", Response->Record});
 
         SideEffects.Send(Request->Sender, std::move(Response), 0, Request->Cookie);
         return true;
@@ -40,14 +44,18 @@ public:
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Execute " << record.ShortDebugString());
+        YDB_LOG_DEBUG("Execute",
+            {"logPrefix", GetLogPrefix()},
+            {"ev", record});
 
         Response = MakeHolder<TEvBackup::TEvForgetBackupCollectionRestoreResponse>();
         Response->Record.SetTxId(record.GetTxId());
 
         TPath database = TPath::Resolve(record.GetDatabaseName(), Self);
         if (!database.IsResolved()) {
-            LOG_INFO_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "FORGET DEBUG: Database not resolved: " << record.GetDatabaseName());
+            YDB_LOG_INFO("FORGET DEBUG: Database not",
+                {"logPrefix", GetLogPrefix()},
+                {"resolved", record.GetDatabaseName()});
             return Reply(
                 Ydb::StatusIds::NOT_FOUND,
                 TStringBuilder() << "Database " << record.GetDatabaseName() << " is not found"
@@ -73,7 +81,7 @@ public:
                 TStringBuilder() << "Incremental restore with id " << restoreId << " references invalid backup collection"
             );
         }
-        
+
         if (backupCollectionPath.GetPathIdForDomain() != domainPathId) {
             return Reply(
                 Ydb::StatusIds::NOT_FOUND,
@@ -101,7 +109,7 @@ public:
         // State==Finalizing blocks Forget; State==Completed/Failed means the long-op is already released.
         bool canForget = !mainOperationActive && stateAllowsForget
                       && !hasActiveIncrementalOperations;
-        
+
         if (!canForget) {
             return Reply(
                 Ydb::StatusIds::PRECONDITION_FAILED,
@@ -118,11 +126,15 @@ public:
 
         // Clean up IncrementalRestoreState table
         db.Table<Schema::IncrementalRestoreState>().Key(restoreId).Delete();
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Cleaned up IncrementalRestoreState for operation: " << restoreId);
+        YDB_LOG_INFO("Cleaned up IncrementalRestoreState",
+            {"logPrefix", GetLogPrefix()},
+            {"operation", restoreId});
 
         // Clean up IncrementalRestoreOperations table
         db.Table<Schema::IncrementalRestoreOperations>().Key(restoreId).Delete();
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Cleaned up IncrementalRestoreOperations for operation: " << restoreId);
+        YDB_LOG_INFO("Cleaned up IncrementalRestoreOperations",
+            {"logPrefix", GetLogPrefix()},
+            {"operation", restoreId});
 
         auto opIt = Self->IncrementalRestoreOperationToState.begin();
         while (opIt != Self->IncrementalRestoreOperationToState.end()) {
@@ -133,7 +145,9 @@ public:
                 ++opIt;
             }
         }
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::CONTINUOUS_BACKUP, GetLogPrefix() << "Cleaned up remaining mappings for operation: " << restoreId);
+        YDB_LOG_INFO("Cleaned up remaining mappings",
+            {"logPrefix", GetLogPrefix()},
+            {"operation", restoreId});
 
         Response->Record.SetStatus(Ydb::StatusIds::SUCCESS);
 

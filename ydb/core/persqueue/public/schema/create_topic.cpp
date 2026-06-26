@@ -169,6 +169,8 @@ TResult ApplyChangesInt(
         return result;
     }
 
+    InitTopicConfigVersion(*pqTabletConfig);
+
     const auto supportedClientServiceTypes = GetSupportedClientServiceTypes();
     for (const auto& consumer : request.consumers()) {
         auto result = AddConsumer(

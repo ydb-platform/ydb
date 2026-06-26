@@ -419,6 +419,7 @@ message TPQTabletConfig {
         optional string DeadLetterQueue = 17; // For MLP consumers
         optional uint32 DefaultDelayMessageTimeMs = 18 [default = 0]; // For MLP consumers
         optional uint32 DefaultReceiveMessageWaitTimeMs = 19 [default = 0]; // For MLP consumers
+        optional uint64 AddedAtTopicConfigVersion = 20 [default = 0];
 
         optional uint32 MetricsLevel = 21;
         // The ID of the Monitoring project that will be used as the value of `project` label for detailed metrics level.
@@ -503,6 +504,8 @@ message TPQTabletConfig {
     optional string TimestampType = 42;
 
     optional bool ContentBasedDeduplication = 43 [default = false];
+    // Incremented on each topic alter via Topic API / PQv1. Used for DLQ ACL checks.
+    optional uint64 TopicConfigVersion = 44 [default = 0];
 }
 
 message THeartbeat {

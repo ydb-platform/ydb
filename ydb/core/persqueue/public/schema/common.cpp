@@ -412,7 +412,24 @@ TResult AddConsumer(
         consumersAdvancedMonitoringSettings->UpdateConsumerConfig(consumerConfig.name(), *consumer);
     }
 
+    MarkConsumerAddedAtCurrentTopicConfigVersion(*consumer, *config);
+
     return TResult();
+}
+
+void InitTopicConfigVersion(NKikimrPQ::TPQTabletConfig& config) {
+    config.SetTopicConfigVersion(0);
+}
+
+void BumpTopicConfigVersion(NKikimrPQ::TPQTabletConfig& config) {
+    config.SetTopicConfigVersion(config.GetTopicConfigVersion() + 1);
+}
+
+void MarkConsumerAddedAtCurrentTopicConfigVersion(
+    NKikimrPQ::TPQTabletConfig_TConsumer& consumer,
+    const NKikimrPQ::TPQTabletConfig& config
+) {
+    consumer.SetAddedAtTopicConfigVersion(config.GetTopicConfigVersion());
 }
 
 } // namespace NKikimr::NPQ::NSchema

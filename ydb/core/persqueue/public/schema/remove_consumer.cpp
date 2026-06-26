@@ -33,6 +33,7 @@ struct TRemoveConsumerStrategy: public IAlterTopicStrategy {
         CopyConfig(targetConfig, sourceConfig);
 
         auto* config = targetConfig.MutablePQTabletConfig();
+        BumpTopicConfigVersion(*config);
         config->ClearConsumers();
 
         bool removed = false;

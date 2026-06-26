@@ -113,6 +113,8 @@ TResult AddConsumerImpl(
         consumersAdvancedMonitoringSettings->UpdateConsumerConfig(rr.consumer_name(), *consumer);
     }
 
+    MarkConsumerAddedAtCurrentTopicConfigVersion(*consumer, *config);
+
     return {};
 }
 
@@ -345,6 +347,10 @@ TResult ApplyChangesInt( // create and alter
         error = TStringBuilder() << "read rules count cannot be more than "
                                  << NPQ::MAX_READ_RULES_COUNT << ", provided " << settings.read_rules().size();
         return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
+    }
+
+    if (operation == EOperation::Create) {
+        InitTopicConfigVersion(*pqTabletConfig);
     }
 
     for (const auto& rr : settings.read_rules()) {

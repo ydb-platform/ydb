@@ -33,6 +33,7 @@ struct TAddConsumerStrategy: public IAlterTopicStrategy {
         CopyConfig(targetConfig, sourceConfig);
 
         auto* config = targetConfig.MutablePQTabletConfig();
+        BumpTopicConfigVersion(*config);
         return AddConsumer(config, Consumer, GetSupportedClientServiceTypes(), true, nullptr);
     }
 

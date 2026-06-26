@@ -256,6 +256,12 @@ TResult ApplyChangesInt(
 
     const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes();
 
+    THashMap<TString, ui64> addedAtTopicConfigVersionByConsumer;
+    for (const auto& c : pqTabletConfig->GetConsumers()) {
+        addedAtTopicConfigVersionByConsumer[c.GetName()] = c.GetAddedAtTopicConfigVersion();
+    }
+    BumpTopicConfigVersion(*pqTabletConfig);
+
     std::vector<std::pair<bool, Ydb::Topic::Consumer>> consumers;
 
     i32 dropped = 0;
@@ -328,6 +334,13 @@ TResult ApplyChangesInt(
         );
         if (!result) {
             return result;
+        }
+    }
+    for (auto& consumer : *pqTabletConfig->MutableConsumers()) {
+        if (const auto* addedAtVersion = addedAtTopicConfigVersionByConsumer.FindPtr(consumer.GetName())) {
+            consumer.SetAddedAtTopicConfigVersion(*addedAtVersion);
+        } else {
+            MarkConsumerAddedAtCurrentTopicConfigVersion(consumer, *pqTabletConfig);
         }
     }
     if (auto errorCode = consumersAdvancedMonitoringSettings.CheckForUnknownConsumers(error); errorCode != Ydb::StatusIds::SUCCESS) {

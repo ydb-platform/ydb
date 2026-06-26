@@ -33,10 +33,18 @@ namespace {
 
 using TPQTabletConfig = NKikimrPQ::TPQTabletConfig;
 
-THashSet<TString> CollectDlqTopicPaths(const TPQTabletConfig& config, const TString& database) {
+THashSet<TString> CollectDlqTopicPaths(
+    const TPQTabletConfig& config,
+    const TString& database,
+    bool onlyConsumersAddedAtCurrentVersion
+) {
     THashSet<TString> result;
+    const ui64 topicConfigVersion = config.GetTopicConfigVersion();
 
     for (const auto& consumer : config.GetConsumers()) {
+        if (onlyConsumersAddedAtCurrentVersion && consumer.GetAddedAtTopicConfigVersion() != topicConfigVersion) {
+            continue;
+        }
         if (consumer.GetType() != TPQTabletConfig::CONSUMER_TYPE_MLP) {
             continue;
         }
@@ -812,7 +820,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         const NKikimrSchemeOp::TModifyScheme& pbModifyScheme,
         const TPQTabletConfig& config
     ) {
-        const auto dlqPaths = CollectDlqTopicPaths(config, GetRequestProto().GetDatabaseName());
+        const auto dlqPaths = CollectDlqTopicPaths(config, GetRequestProto().GetDatabaseName(), true);
         for (const auto& dlqPath : dlqPaths) {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = SplitPath(dlqPath);

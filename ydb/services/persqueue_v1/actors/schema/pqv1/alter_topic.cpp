@@ -35,6 +35,12 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
 
         const auto& pqConfig = AppData()->PQConfig;
         const auto& sourceTabletConfig = sourceConfig.GetPQTabletConfig();
+
+        THashMap<TString, ui64> addedAtTopicConfigVersionByConsumer;
+        for (const auto& c : sourceTabletConfig.GetConsumers()) {
+            addedAtTopicConfigVersionByConsumer[c.GetName()] = c.GetAddedAtTopicConfigVersion();
+        }
+
         for (const auto& readRule : Request.settings().read_rules()) {
             const auto consumerName = NPersQueue::ConvertNewConsumerName(readRule.consumer_name(), pqConfig);
             for (const auto& existingConsumer : sourceTabletConfig.GetConsumers()) {
@@ -56,6 +62,15 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         }
 
         auto& targetTabletConfig = *targetConfig.MutablePQTabletConfig();
+        targetTabletConfig.SetTopicConfigVersion(sourceTabletConfig.GetTopicConfigVersion() + 1);
+        for (auto& consumer : *targetTabletConfig.MutableConsumers()) {
+            if (const auto* addedAtVersion = addedAtTopicConfigVersionByConsumer.FindPtr(consumer.GetName())) {
+                consumer.SetAddedAtTopicConfigVersion(*addedAtVersion);
+            } else {
+                NPQ::NSchema::MarkConsumerAddedAtCurrentTopicConfigVersion(consumer, targetTabletConfig);
+            }
+        }
+
         targetTabletConfig.SetLocalDC(sourceTabletConfig.GetLocalDC());
         targetTabletConfig.SetDC(sourceTabletConfig.GetDC());
         targetTabletConfig.SetProducer(sourceTabletConfig.GetProducer());

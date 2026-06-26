@@ -5,6 +5,7 @@ import botocore
 
 import random
 import logging
+import re
 import requests
 import time
 import uuid
@@ -35,6 +36,12 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
         config_generator.yaml_config['sqs_config']['enable_dead_letter_queues'] = True
         config_generator.yaml_config['sqs_config']['account_settings_defaults'] = {'max_queues_count': 40}
         config_generator.yaml_config['sqs_config']['background_metrics_update_time_ms'] = 1000
+        config_generator.yaml_config['http_proxy_config'] = {
+            'enabled': True,
+            'ymq_enabled': True,
+            'yandex_cloud_mode': True,
+            'yandex_cloud_service_region': ['ru-central1'],
+        }
 
         cls.event_output_file = yatest.common.output_path("events-%s.txt" % random.randint(1, 10000000))
         config_generator.yaml_config['sqs_config']['yc_search_events_config'] = {
@@ -80,13 +87,13 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
     def _get_queue_arn(self, queue_url):
         return self._sqs_api.get_queue_attributes(queue_url, ['QueueArn'])['QueueArn']
 
-    def _make_boto_client(self, access_key_id, secret_access_key, url):
+    def _make_boto_client(self, access_key_id, secret_access_key, url, session_token='unused'):
         session = boto3.session.Session()
         return session.client(
             service_name='sqs',
             aws_access_key_id=access_key_id,  # service account
             aws_secret_access_key=secret_access_key,
-            aws_session_token='unused',
+            aws_session_token=session_token,
             endpoint_url=url,
             region_name='ru-central1'
         )
@@ -94,6 +101,11 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
     def _make_server_url(self):
         host = self.cluster.nodes[1].host
         port = self.cluster_nodes[0].sqs_port
+        return 'http://{}:{}'.format(host, port)
+
+    def _make_json_proxy_server_url(self):
+        host = self.cluster.nodes[1].host
+        port = self.cluster_nodes[0].http_proxy_port
         return 'http://{}:{}'.format(host, port)
 
     def test_empty_auth_header(self):
@@ -104,27 +116,25 @@ class TestSqsYandexCloudMode(get_test_with_sqs_tenant_installation(KikimrSqsTest
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_retryable_iam_error(self, tables_format):
         self._init_with_params(tables_format=tables_format)
-        url = self._make_server_url()
+        url = self._make_server_url()  # raw sqs_port: IAM retry behavior lives in the query-format protocol
 
-        boto_client = self._make_boto_client('TEST_ID_FOR_RETRYIES', 'SECRET', url)
-
-        def list_queues():
-            boto_client.list_queues()
-
-        assert_that(
-            list_queues,
-            raises(
-                botocore.exceptions.ClientError,
-                pattern='ServiceUnavailable.+IAM authorization error'
-            )
+        r = requests.post(
+            url,
+            data='Action=ListQueues',
+            headers={
+                'Authorization': 'AWS4-HMAC-SHA256 Credential=TEST_ID_FOR_RETRYIES/20180101/ru-central1/sqs/aws4_request',
+                'X-Amz-Date': '2018-01-01T10:44:19Z',
+            },
         )
+        assert_that(r.status_code, equal_to(503))
+        assert re.search(r'ServiceUnavailable.+IAM authorization error', r.text)
 
     @pytest.mark.parametrize(**TABLES_FORMAT_PARAMS)
     def test_empty_access_key_id(self, tables_format):
         self._init_with_params(tables_format=tables_format)
-        url = self._make_server_url()
+        url = self._make_json_proxy_server_url()
 
-        boto_client = self._make_boto_client('sa_' + self._username, 'SECRET', url)
+        boto_client = self._make_boto_client('sa_' + self._username, 'SECRET', url, session_token=self.iam_token)
 
         # basic sanity check
         queue_url = boto_client.create_queue(QueueName=self.queue_name)['QueueUrl']

@@ -14,6 +14,7 @@ from ydb.tests.library.common.helpers import wrap_in_list
 logger = logging.getLogger(__name__)
 
 DEFAULT_DATE = '20180101'
+DEFAULT_DATETIME = '2018-01-01T10:44:19Z'
 REQUEST_TIMEOUT = 180  # teamcity is very slow
 
 
@@ -28,14 +29,14 @@ def to_bytes(v):
 
 
 def auth_string(user):
-    return "AWS4-HMAC-SHA256 Credential={user}/{date}/yandex/sqs/aws4_request".format(
+    return "AWS4-HMAC-SHA256 Credential={user}/{date}/ru-central1/sqs/aws4_request".format(
         user=user, date=DEFAULT_DATE
     )
 
 
 def auth_headers(user, security_token=None, iam_token=None):
     headers = {
-        'X-Amz-Date': '{}T104419Z'.format(DEFAULT_DATE),
+        'X-Amz-Date': DEFAULT_DATETIME,
         'Authorization': auth_string(user)
     }
     if security_token is not None:

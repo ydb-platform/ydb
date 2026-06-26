@@ -1,5 +1,6 @@
 #include "common.h"
 
+#include <ydb/core/base/counters.h>
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
@@ -115,6 +116,7 @@ std::shared_ptr<TKikimrRunner> TStreamingTestFixture::GetKikimrRunner() {
             .LogSettings = LogSettings,
             .UseLocalCheckpointsInStreamingQueries = true,
             .InternalInitFederatedQuerySetupFactory = InternalInitFederatedQuerySetupFactory,
+            .NeedsStatsCollectors = NeedsStatsCollectors,
             .StoragePoolTypes = StoragePoolTypes,
         });
 
@@ -193,6 +195,10 @@ void TStreamingTestFixture::KillTopicPqrbTablet(const std::string& topicPath) {
 
     const auto& persQueueGroup = describeResult->Record.GetPathDescription().GetPersQueueGroup();
     tabletClient->KillTablet(GetKikimrRunner()->GetTestServer(), persQueueGroup.GetBalancerTabletID());
+}
+
+TIntrusivePtr<NMonitoring::TDynamicCounters> TStreamingTestFixture::GetCounters(const TString& svc, ui32 nodeIdx) {
+    return NKikimr::GetServiceCounters(GetRuntime().GetAppData(nodeIdx).Counters, svc);
 }
 
 // External YDB recipe

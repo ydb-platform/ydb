@@ -26,12 +26,16 @@ void TLocalSnapshotsStorage::Clear() {
 }
 
 const TLocalSnapshotInfo* TLocalSnapshotsStorage::TView::Next() {
-    while (Iter != End && (Iter->Snapshot.Step > MaxSnapshotStep || !Iter->AliveFlag->load())) {
+    while (Iter != End) {
+        if (Iter->Snapshot.Step > MaxSnapshotStep) {
+            // LocalSnapshots is ordered by Snapshot (Step primary)
+            Iter = End;
+            break;
+        }
+        if (Iter->AliveFlag->load()) {
+            return &*(Iter++);
+        }
         ++Iter;
-    }
-
-    if (Iter != End) {
-        return &*(Iter++);
     }
     return nullptr;
 }

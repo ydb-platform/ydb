@@ -1,5 +1,9 @@
 #include "config.h"
 
+#include "backend.h"
+
+#include <yt/yt/core/misc/collection_helpers.h>
+
 namespace NYT::NRpc {
 
 using namespace NBus;
@@ -446,6 +450,44 @@ void TOverloadControllerConfig::Register(TRegistrar registrar)
         .Default();
     registrar.Parameter("load_adjusting_period", &TThis::LoadAdjustingPeriod)
         .Default(TDuration::MilliSeconds(100));
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+std::any TProtocolMapConfigBase::GetUntypedConfig(TStringBuf protocol)
+{
+    return GetOrCrash(ProtocolToEntry_, protocol).CurrentConfig;
+}
+
+std::any TProtocolMapConfigBase::FindUntypedConfig(TStringBuf protocol)
+{
+    auto it = ProtocolToEntry_.find(protocol);
+    if (it == ProtocolToEntry_.end()) {
+        return {};
+    }
+    const auto& entry = it->second;
+    if (entry.IsNull(entry.CurrentConfig)) {
+        return {};
+    }
+    return entry.CurrentConfig;
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TMultiProtocolClientConfig::Register(TRegistrar registrar)
+{
+    for (auto* backend : TBackendRegistry::GetBackends()) {
+        backend->RegisterClientConfigField(registrar);
+    }
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+void TMultiProtocolServerConfig::Register(TRegistrar registrar)
+{
+    for (auto* backend : TBackendRegistry::GetBackends()) {
+        backend->RegisterServerConfigField(registrar);
+    }
 }
 
 ////////////////////////////////////////////////////////////////////////////////

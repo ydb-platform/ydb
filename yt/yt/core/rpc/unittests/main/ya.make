@@ -6,6 +6,8 @@ PROTO_NAMESPACE(yt)
 
 SRCS(
     yt/yt/core/rpc/unittests/authentificated_identity_guard_ut.cpp
+    yt/yt/core/rpc/unittests/endpoint_address_ut.cpp
+    yt/yt/core/rpc/unittests/multi_protocol_rpc_ut.cpp
     yt/yt/core/rpc/unittests/overload_controller_ut.cpp
     yt/yt/core/rpc/unittests/handle_channel_failure_ut.cpp
     yt/yt/core/rpc/unittests/roaming_channel_ut.cpp

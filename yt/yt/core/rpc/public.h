@@ -26,6 +26,11 @@ class TCredentialsExt;
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct IBackend;
+constexpr auto DefaultProtocolName = "yt-tcp"_sb;
+DECLARE_REFCOUNTED_STRUCT(TMultiProtocolClientConfig)
+DECLARE_REFCOUNTED_STRUCT(TMultiProtocolServerConfig)
+
 struct TStreamingParameters;
 struct TDirectPlacementTransferParameters;
 struct TStreamingPayload;

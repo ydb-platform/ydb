@@ -1090,7 +1090,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             Ydb::Table::SetColumnConstraintState::STATE_VALIDATING,
             Ydb::Table::SetColumnConstraintState::STATE_APPLYING,
             Ydb::Table::SetColumnConstraintState::STATE_APPLYING,
-            (isShouldBeFailed ? Ydb::Table::SetColumnConstraintState::STATE_DONE_FAILED : Ydb::Table::SetColumnConstraintState::STATE_DONE_SUCCESSFUL)
+            (isShouldBeFailed ? Ydb::Table::SetColumnConstraintState::STATE_CANCELLED : Ydb::Table::SetColumnConstraintState::STATE_DONE)
         };
 
         runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
@@ -1124,7 +1124,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
 
-        // STATE_DONE_SUCCESSFUL/STATE_DONE_FAILED: operation is fully finished.
+        // STATE_DONE/STATE_CANCELLED
         answers.push_back(DoGetRequest(setConstraintTxId, runtime, root).GetState());
 
         UNIT_ASSERT_VALUES_EQUAL_C(

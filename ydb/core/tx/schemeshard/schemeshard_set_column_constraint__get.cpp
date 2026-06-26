@@ -99,8 +99,8 @@ private:
             break;
         case EState::Done:
             proto.SetState(operationInfo.ValidationFailed
-                ? ProtoState::STATE_DONE_FAILED
-                : ProtoState::STATE_DONE_SUCCESSFUL);
+                ? ProtoState::STATE_CANCELLED
+                : ProtoState::STATE_DONE);
             proto.SetProgress(100.0f);
             break;
         case EState::Invalid:

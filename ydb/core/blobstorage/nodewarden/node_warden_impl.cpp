@@ -409,6 +409,9 @@ void TNodeWarden::Bootstrap() {
     DsProxyNodeMonActor = Register(CreateDsProxyNodeMon(DsProxyNodeMon));
     DsProxyPerPoolCounters = new TDsProxyPerPoolCounters(AppData()->Counters);
 
+    CacheFileWriteError = GetServiceCounters(AppData()->Counters, "config")->GetCounter("CacheFileWriteError");
+    CacheFileWriteError->Set(0);
+
     Schedule(TDuration::Seconds(1), new TEvPrivate::TEvUpdateStats);
 
     if (actorSystem && actorSystem->AppData<TAppData>() && actorSystem->AppData<TAppData>()->Icb) {

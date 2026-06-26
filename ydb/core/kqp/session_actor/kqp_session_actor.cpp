@@ -1731,11 +1731,6 @@ public:
     }
 
     void ExecutePartitioned(const TKqpPhyTxHolder::TConstPtr& tx) {
-        if (!Settings.TableService.GetEnableBatchUpdates()) {
-            return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
-                "BATCH operations are not supported at the current time.");
-        }
-
         if (QueryState->TxCtx->HasOlapTable) {
             return ReplyQueryError(Ydb::StatusIds::PRECONDITION_FAILED,
                 "BATCH operations are not supported for column tables at the current time.");

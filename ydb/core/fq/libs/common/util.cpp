@@ -360,7 +360,7 @@ NYql::TIssues ValidateResultSetColumns(const google::protobuf::RepeatedPtrField<
     NYql::TIssues issues;
     for (const auto& column : columns) {
         if (!CheckNestingDepth(column.type(), maxNestingDepth)) {
-            issues.AddIssue(NYql::TIssue(TStringBuilder() << "Nesting depth of type for result column '" << column.name() << "' large than allowed limit " << maxNestingDepth));
+            issues.AddIssue(NYql::TIssue(TStringBuilder() << "Nesting depth of type for result column '" << column.name() << "' larger than allowed limit " << maxNestingDepth));
         }
     }
     return issues;

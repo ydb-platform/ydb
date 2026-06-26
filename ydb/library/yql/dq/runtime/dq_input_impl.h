@@ -165,10 +165,10 @@ public:
     ui64 AddBatch(NKikimr::NMiniKQL::TUnboxedValueBatch&& batch, i64 space) {
         Y_ABORT_UNLESS(batch.Width() == GetWidth());
 
+        ui64 rows = GetRowsCount(batch);
         if (QuotaManager && !QuotaManager->AllocateQuota(space)) {
             throw NKikimr::TMemoryLimitExceededException();
         }
-        ui64 rows = GetRowsCount(batch);
         StoredBytes += space;
         StoredRows += rows;
 

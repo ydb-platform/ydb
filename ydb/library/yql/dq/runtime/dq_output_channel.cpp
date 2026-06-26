@@ -357,6 +357,7 @@ public:
             }
             PackerCurrentChunkCount = 0;
             PackerCurrentRowCount = 0;
+            UpdateQuota();
             return true;
         }
 
@@ -409,8 +410,8 @@ public:
             if (UpdateFillLevel() == NoLimit) {
                 PopStats.Resume();
             }
-            UpdateQuota();
         }
+        UpdateQuota();
         YQL_ENSURE(!HasData());
         return true;
     }

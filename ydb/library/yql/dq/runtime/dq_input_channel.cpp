@@ -81,11 +81,12 @@ private:
             auto& data = DataForDeserialize.front();
             std::visit(TOverloaded {
                 [this](TDqSerializedBatch& data) {
-                    if (QuotaManager) {
-                        QuotaManager->FreeQuota(data.Size());
-                    }
-                    StoredSerializedBytes -= data.Size();
+                    auto size = data.Size();
                     PushImpl(std::move(data));
+                    if (QuotaManager) {
+                        QuotaManager->FreeQuota(size);
+                    }
+                    StoredSerializedBytes -= size;
                 },
                 [this](TInstant watermark) {
                     Impl.PushWatermark(watermark);

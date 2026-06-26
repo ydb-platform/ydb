@@ -143,8 +143,7 @@ TConclusion<bool> TAllocateMemoryStep::DoExecuteInplace(const std::shared_ptr<ID
     const TDuration executionDurationMs = TMonotonic::Now() - start;
     ReportTracing(source, step, executionDurationMs, size);
     FOR_DEBUG_LOG(NKikimrServices::COLUMNSHARD_SCAN_EVLOG, source->AddEvent("smalloc"));
-    NGroupedMemoryManager::TScanMemoryLimiterOperator::SendToAllocation(source->GetContext()->GetProcessMemoryControlId(),
-        source->GetContext()->GetCommonContext()->GetScanId(), source->GetMemoryGroupId(), { allocation }, (ui32)StageIndex);
+    source->GetContext()->SendToGroupedMemoryAllocation(source->GetMemoryGroupId(), { allocation }, (ui32)StageIndex);
     return false;
 }
 

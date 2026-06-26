@@ -67,6 +67,7 @@ TConclusionStatus TReadMetadata::Init(const NColumnShard::TColumnShard* owner, c
 
     StatsMode = readDescription.StatsMode;
     DeduplicationPolicy = readDescription.DeduplicationPolicy;
+    GroupedMemoryLimiterOperator = readDescription.GroupedMemoryLimiterOperator;
     return TConclusionStatus::Success();
 }
 

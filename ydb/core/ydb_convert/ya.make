@@ -24,12 +24,14 @@ PEERDIR(
     ydb/core/scheme
     ydb/core/util
     yql/essentials/types/binary_json
+    yql/essentials/providers/result/expr_nodes
     yql/essentials/types/dynumber
     ydb/library/conclusion
     ydb/library/mkql_proto/protos
     yql/essentials/minikql/dom
     yql/essentials/public/udf
     ydb/public/api/protos
+    ydb/public/api/grpc/draft
 )
 
 GENERATE_ENUM_SERIALIZATION(table_description.h)

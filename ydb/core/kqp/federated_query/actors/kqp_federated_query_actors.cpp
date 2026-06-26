@@ -1,9 +1,12 @@
 #include "kqp_federated_query_actors.h"
 
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/util/backoff.h>
+#include <ydb/library/aclib/aclib.h>
+#include <ydb/library/actors/core/actor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
-#include <ydb/services/secret/resolver.h>
+#include <ydb/services/scheme_secret/resolver.h>
 #include <ydb/library/actors/core/log.h>
 
 namespace NKikimr::NKqp {
@@ -13,7 +16,7 @@ void RegisterDescribeSecretsActor(
     const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database,
     const std::vector<TString>& secretIds,
-    NActors::TActorSystem* actorSystem
+    TActorSystem* actorSystem
 ) {
     TVector<TString> secretNames{secretIds.begin(), secretIds.end()};
     auto future = NSecret::DescribeSecret(secretNames, userToken, database, actorSystem);

@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/services/secret)
+UNITTEST_FOR(ydb/services/scheme_secret)
 
 SIZE(MEDIUM)
 IF (SANITIZER_TYPE)
@@ -8,8 +8,8 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    ydb/services/secret
-    ydb/services/secret/ut/common
+    ydb/services/scheme_secret
+    ydb/services/scheme_secret/ut/common
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy
 )

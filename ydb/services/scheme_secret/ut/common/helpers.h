@@ -1,8 +1,8 @@
 #pragma once
 
 #include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/services/secret/describe_schema_secrets_service.h>
-#include <ydb/services/secret/resolver.h>
+#include <ydb/services/scheme_secret/service.h>
+#include <ydb/services/scheme_secret/resolver.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>

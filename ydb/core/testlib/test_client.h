@@ -32,7 +32,7 @@
 #include <ydb/core/protos/flat_tx_scheme.pb.h>
 #include <ydb/core/kesus/tablet/events.h>
 #include <ydb/core/kqp/common/kqp.h>
-#include <ydb/services/secret/describe_schema_secrets_service.h>
+#include <ydb/services/scheme_secret/service.h>
 #include <ydb/core/kqp/federated_query/kqp_federated_query_helpers.h>
 #include <ydb/core/security/ticket_parser.h>
 #include <ydb/core/security/ticket_parser_settings.h>

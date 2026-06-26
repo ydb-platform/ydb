@@ -1,17 +1,29 @@
 #pragma once
 
 #include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
-
-#include <ydb/library/aclib/aclib.h>
-#include <ydb/library/actors/core/actor.h>
 
 #include <library/cpp/threading/future/future.h>
 
+#include <util/generic/ptr.h>
 #include <util/generic/string.h>
+#include <util/generic/vector.h>
 
 #include <memory>
+
+namespace NActors {
+class IActor;
+struct TActorId;
+class TActorSystem;
+}
+
+namespace NACLib {
+class TUserToken;
+}
+
+namespace NKikimrSchemeOp {
+class TAuth;
+}
 
 namespace NKikimr::NKqp {
 
@@ -27,7 +39,7 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeExternalDa
     const NKikimrSchemeOp::TAuth& authDescription,
     const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database,
-    TActorSystem* actorSystem
+    NActors::TActorSystem* actorSystem
 );
 
 NThreading::TFuture<TEvDescribeResourceIdResponse::TDescription> DescribeExternalDataSourceResourceId(
@@ -36,9 +48,9 @@ NThreading::TFuture<TEvDescribeResourceIdResponse::TDescription> DescribeExterna
     bool ssl,
     const TString& caCert,
     const TString& token,
-    TActorSystem* actorSystem
+    NActors::TActorSystem* actorSystem
 );
 
-IActor* CreateDescribeResourceIdServiceActor(const std::shared_ptr<NYdb::TDriver>& driver);
+NActors::IActor* CreateDescribeResourceIdServiceActor(const std::shared_ptr<NYdb::TDriver>& driver);
 
 }  // namespace NKikimr::NKqp

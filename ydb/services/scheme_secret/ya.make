@@ -1,7 +1,7 @@
 LIBRARY()
 
 SRCS(
-    describe_schema_secrets_service.cpp
+    service.cpp
 )
 
 PEERDIR(

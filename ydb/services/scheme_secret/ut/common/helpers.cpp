@@ -2,7 +2,7 @@
 
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/services/secret/describe_schema_secrets_service.h>
+#include <ydb/services/scheme_secret/service.h>
 
 namespace NKikimr::NSecret {
     using TDescriptionPromise = NThreading::TPromise<NKqp::TEvDescribeSecretsResponse::TDescription>;
@@ -36,7 +36,7 @@ namespace NKikimr::NSecret {
         const auto evResolveSecret = new TDescribeSchemaSecretsService::TEvResolveSecret(
             userToken, "/Root", secretNames, promise, std::move(settings));
         auto actorSystem = kikimr.GetTestServer().GetRuntime()->GetActorSystem(0);
-        actorSystem->Send(MakeKqpDescribeSchemaSecretServiceId(actorSystem->NodeId), evResolveSecret);
+        actorSystem->Send(MakeDescribeSchemaSecretServiceId(actorSystem->NodeId), evResolveSecret);
         return promise;
     }
 

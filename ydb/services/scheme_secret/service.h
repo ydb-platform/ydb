@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/services/secret/resolver.h>
+#include <ydb/services/scheme_secret/resolver.h>
 
 #include <ydb/core/tx/scheme_cache/scheme_cache.h>
 #include <ydb/core/tx/tx_proxy/proxy.h>
@@ -17,8 +17,7 @@
 
 namespace NKikimr::NSecret {
 
-// TODO(yurikiselev): Think about the name!!!!!!!!!!!!!!!!!!!!!!
-inline NActors::TActorId MakeKqpDescribeSchemaSecretServiceId(ui32 nodeId) {
+inline NActors::TActorId MakeDescribeSchemaSecretServiceId(ui32 nodeId) {
     const char name[12] = "kqp_dsc_sec";
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }

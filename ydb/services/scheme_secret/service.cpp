@@ -1,5 +1,5 @@
-#include <ydb/services/secret/describe_schema_secrets_service.h>
-#include <ydb/services/secret/resolver.h>
+#include <ydb/services/scheme_secret/service.h>
+#include <ydb/services/scheme_secret/resolver.h>
 
 #include <ydb/core/base/appdata.h>
 
@@ -590,7 +590,7 @@ NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription> DescribeSecr
     auto promise = NThreading::NewPromise<NKqp::TEvDescribeSecretsResponse::TDescription>();
     if (UseSchemaSecrets(AppData()->FeatureFlags, secretNames)) {
         actorSystem->Send(
-            MakeKqpDescribeSchemaSecretServiceId(actorSystem->NodeId),
+            MakeDescribeSchemaSecretServiceId(actorSystem->NodeId),
             new TDescribeSchemaSecretsService::TEvResolveSecret(userToken, database, secretNames, promise, std::move(settings))
         );
         return promise.GetFuture();

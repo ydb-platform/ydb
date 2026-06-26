@@ -13,7 +13,7 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/actors/core
     ydb/public/sdk/cpp/src/client/driver
-    ydb/services/secret
+    ydb/services/scheme_secret
 )
 
 YQL_LAST_ABI_VERSION()

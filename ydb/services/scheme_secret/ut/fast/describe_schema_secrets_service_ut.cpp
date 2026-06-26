@@ -1,7 +1,7 @@
 #include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/services/secret/describe_schema_secrets_service.h>
+#include <ydb/services/scheme_secret/service.h>
 
-#include <ydb/services/secret/ut/common/helpers.h>
+#include <ydb/services/scheme_secret/ut/common/helpers.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <library/cpp/testing/unittest/registar.h>

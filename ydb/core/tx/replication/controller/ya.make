@@ -5,7 +5,7 @@ PEERDIR(
     ydb/core/discovery
     ydb/core/engine/minikql
     ydb/core/kqp/common/events
-    ydb/services/secret
+    ydb/services/scheme_secret
     ydb/core/protos
     ydb/core/tablet
     ydb/core/tablet_flat

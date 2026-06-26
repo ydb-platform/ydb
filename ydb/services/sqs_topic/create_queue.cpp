@@ -126,89 +126,6 @@ namespace NKikimr::NSqsTopic::V1 {
             }
         }
 
-<<<<<<< HEAD
-=======
-        void CreateTopic() {
-            Ydb::Topic::CreateTopicRequest topicRequest;
-            topicRequest.set_path(TopicPath);
-
-            {
-                auto* partitioningSettings = topicRequest.mutable_partitioning_settings();
-                auto* autoPartitioning = partitioningSettings->mutable_auto_partitioning_settings();
-
-                autoPartitioning->set_strategy(::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
-                partitioningSettings->set_min_active_partitions(DEFAULT_MIN_PARTITION_COUNT);
-                partitioningSettings->set_max_active_partitions(DEFAULT_MAX_PARTITION_COUNT);
-
-                auto* writeSpeed = autoPartitioning->mutable_partition_write_speed();
-                writeSpeed->set_up_utilization_percent(80);
-                writeSpeed->set_down_utilization_percent(20);
-                writeSpeed->mutable_stabilization_window()->set_seconds(30);
-            }
-
-            SetDuration(QueueAttributes.MessageRetentionPeriod.GetOrElse(DEFAULT_MESSAGE_RETENTION_PERIOD), *topicRequest.mutable_retention_period());
-            topicRequest.set_partition_write_speed_bytes_per_second(1_MB);
-            topicRequest.mutable_supported_codecs()->add_codecs(Ydb::Topic::CODEC_RAW);
-
-            topicRequest.set_content_based_deduplication(QueueAttributes.ContentBasedDeduplication.GetOrElse(false));
-            if (QueueAttributes.ContentBasedDeduplication.GetOrElse(false)) {
-                topicRequest.set_partition_write_speed_messages_per_second(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_LIMIT);
-                topicRequest.set_partition_write_burst_messages(NPQ::CONTENT_BASED_DEDUPLICATION_MESSAGE_BURST);
-            }
-
-            AddConsumerToRequest(topicRequest.add_consumers());
-
-            this->RegisterWithSameMailbox(NPQ::NSchema::CreateCreateTopicActor(SelfId(), {
-                .Database = this->Database,
-                .PeerName = Request_->GetPeerName(),
-                .Request = std::move(topicRequest),
-                .UserToken = this->GetUserToken(),
-            }));
-        }
-
-        void AddConsumer() {
-            Ydb::Topic::AlterTopicRequest topicRequest;
-            topicRequest.set_path(TopicPath);
-
-            AddConsumerToRequest(topicRequest.add_add_consumers());
-
-            this->RegisterWithSameMailbox(NPQ::NSchema::CreateAlterTopicActor(SelfId(), {
-                .Database = this->Database,
-                .PeerName = Request_->GetPeerName(),
-                .Request = std::move(topicRequest),
-                .UserToken = this->GetUserToken(),
-            }));
-        }
-
-        void AddConsumerToRequest(Ydb::Topic::Consumer* consumer) {
-            consumer->set_name(ConsumerName);
-            auto* consumerType = consumer->mutable_shared_consumer_type();
-            consumerType->set_keep_messages_order(QueueAttributes.FifoQueue);
-            SetDuration(QueueAttributes.DefaultProcessingTimeout.GetOrElse(TDuration::Seconds(30)), *consumerType->mutable_default_processing_timeout());
-            SetDuration(QueueAttributes.ReceiveMessageDelay.GetOrElse(TDuration::Seconds(0)), *consumerType->mutable_receive_message_delay());
-            SetDuration(QueueAttributes.ReceiveMessageWaitTime.GetOrElse(TDuration::Seconds(0)), *consumerType->mutable_receive_message_wait_time());
-            if (QueueAttributes.MessageRetentionPeriod.Defined()) {
-                SetDuration(*QueueAttributes.MessageRetentionPeriod, *consumer->mutable_availability_period());
-            }
-
-            consumerType->mutable_dead_letter_policy()->set_enabled(QueueAttributes.DeadLetterQueue.Defined() || QueueAttributes.MaxReceiveCount.Defined());
-            if (QueueAttributes.MaxReceiveCount.Defined()) {
-                consumerType->mutable_dead_letter_policy()->mutable_condition()->set_max_processing_attempts(*QueueAttributes.MaxReceiveCount);
-            }
-            if (QueueAttributes.DeadLetterQueue.Defined()) {
-                consumerType->mutable_dead_letter_policy()->mutable_move_action()->set_dead_letter_queue(*QueueAttributes.DeadLetterQueue);
-            }
-        }
-
-        void Handle(NPQ::NSchema::TEvSchemaResponse::TPtr& ev) {
-            const auto* result = ev->Get();
-            if (result->Status != Ydb::StatusIds::SUCCESS) {
-                return ReplyWithError(MakeError(NSQS::NErrors::INTERNAL_FAILURE, result->ErrorMessage));
-            }
-            return ReplyAndDie(ActorContext());
-        }
-
->>>>>>> d1edfe07931 (Changed default values for SQS (#43818))
         void HandleExistingTopic(const TActorContext& ctx) {
             const auto& pqConfig = PQGroup.GetPQTabletConfig();
             const NKikimrPQ::TPQTabletConfig::TConsumer* foundConsumer = FindIfPtr(pqConfig.GetConsumers(), [this](const auto& c) { return c.GetName() == ConsumerName; });
@@ -246,6 +163,9 @@ namespace NKikimr::NSqsTopic::V1 {
                     auto* autoPartitioning = partitioningSettings->mutable_auto_partitioning_settings();
 
                     autoPartitioning->set_strategy(::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
+                    autoPartitioning->mutable_partition_write_speed()->mutable_stabilization_window()->set_seconds(30);
+                    autoPartitioning->mutable_partition_write_speed()->set_up_utilization_percent(80);
+                    autoPartitioning->mutable_partition_write_speed()->set_down_utilization_percent(20);
                     partitioningSettings->set_min_active_partitions(DEFAULT_MIN_PARTITION_COUNT);
                     partitioningSettings->set_max_active_partitions(DEFAULT_MAX_PARTITION_COUNT);
                 }

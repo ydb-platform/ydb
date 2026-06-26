@@ -247,10 +247,18 @@ private:
                 if (Context_.has_value() || SysClock::now() < NextTicketUpdate_) {
                     return true;
                 }
-                FillContext(guard);
+                try {
+                    FillContext(guard);
+                } catch(...) {
+                    LastRequestError_ = TStringBuilder() << "Request failed: " << CurrentExceptionMessage();
+                    ResetContextImpl();
+                }
                 if (NeedStop_) {
                     ResetContextImpl();
                     return false;
+                }
+                if (!Context_.has_value()) {
+                    return true;
                 }
             }
             UpdateTicket();

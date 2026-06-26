@@ -85,6 +85,8 @@ ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_blo
 ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_prestable-26-3_to_stable-26-2-1]
 ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_bloom_filter_index.py.TestBloomFilterIndex.test_bloom_filter_survives_version_change[restart_stable-26-2-1_to_stable-26-2-1]
+ydb/tests/compatibility test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-1-1_to_stable-26-2-1]
+ydb/tests/compatibility test_fulltext_index.py.TestFulltextIndex.test_fulltext_index[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_prestable-26-3_to_prestable-26-3]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_prestable-26-3_to_stable-26-2-1]
 ydb/tests/compatibility test_simple_reader.py.TestSimpleReaderRestartToAnotherVersion.test_simple_reader_version_upgrade[restart_stable-26-1-1_to_stable-26-2-1]

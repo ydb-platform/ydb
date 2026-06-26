@@ -118,7 +118,7 @@ class TPlainIndexedPathTableCreator : public NTableCreator::TMultiTableCreator {
 public:
     explicit TPlainIndexedPathTableCreator(NThreading::TPromise<void> promise)
         : TBase({ GetCreator() })
-        , Promise(promise)
+        , Promise(std::move(promise))
     {}
 
 private:

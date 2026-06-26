@@ -218,6 +218,8 @@ namespace NKikimr::NStorage {
         TControlWrapper EnableSyncLogChunkCompressionSSD;
         TControlWrapper MaxSyncLogChunksInFlightHDD;
         TControlWrapper MaxSyncLogChunksInFlightSSD;
+        TControlWrapper SyncLogMaxDiskAmount;
+        TControlWrapper SyncLogMaxMemAmount;
         TControlWrapper DefaultHugeGarbagePerMille;
         TControlWrapper HugeDefragFreeSpaceBorderPerMille;
         TControlWrapper MaxChunksToDefragInflight;

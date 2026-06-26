@@ -28,17 +28,24 @@ public:
     std::string GetAuthInfo() const override {
         std::string ticket;
         TInstant nextTicketUpdate;
+        auto now = TInstant::Now();
         {
             std::lock_guard lock(Lock_);
+            if (LastErrorMessage_.has_value() && now > ExpiresAt_) {
+                Ticket_.clear();
+            }
             ticket = Ticket_;
             nextTicketUpdate = NextTicketUpdate_;
         }
-        if (TInstant::Now() >= nextTicketUpdate) {
+        if (now >= nextTicketUpdate) {
             GetTicket();
             {
                 std::lock_guard lock(Lock_);
                 ticket = Ticket_;
             }
+        }
+        if (ticket.empty() && LastErrorMessage_.has_value()) {
+            throw yexception() << *LastErrorMessage_;
         }
         return ticket;
     }
@@ -53,6 +60,8 @@ private:
     mutable std::mutex Lock_;
     mutable std::string Ticket_;
     mutable TInstant NextTicketUpdate_;
+    mutable TInstant ExpiresAt_ = TInstant::Zero();
+    mutable std::optional<TString> LastErrorMessage_;
     TDuration RefreshPeriod_;
 
     void GetTicket() const {
@@ -75,18 +84,23 @@ private:
             const auto now = TInstant::Now();
             TInstant nextUpdate;
             TDuration expiresIn;
+            TInstant expiresAt = TInstant::Max();
+            std::optional<std::string> lastError;
             if (auto it = respMap.find("expires_in"); it != respMap.end()) {
                 auto seconds = it->second.GetUInteger();
                 if (seconds > 0) {
                     expiresIn = TDuration::Seconds(seconds);
+                    expiresAt = now + expiresIn;
                 }
             } else if (auto it = respMap.find("expiry"); it != respMap.end()) {
                 try {
                     TInstant expiry;
                     if (TInstant::TryParseIso8601(it->second.GetStringSafe(), expiry) && expiry > now) {
                         expiresIn = expiry - now;
+                        expiresAt = expiry;
                     }
                 } catch (...) {
+                    expiresAt = now;
                 }
             }
             if (expiresIn > TDuration::Zero()) {
@@ -101,8 +115,12 @@ private:
                 std::lock_guard lock(Lock_);
                 Ticket_ = std::move(ticket);
                 NextTicketUpdate_ = nextUpdate;
+                ExpiresAt_ = expiresAt;
+                LastErrorMessage_.reset();
             }
         } catch (...) {
+            std::lock_guard lock(Lock_);
+            LastErrorMessage_ = CurrentExceptionMessage();
         }
     }
 };

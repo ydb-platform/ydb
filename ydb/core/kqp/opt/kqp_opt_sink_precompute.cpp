@@ -44,7 +44,11 @@ public:
                 TNodeOnNodeOwnedMap sinkAndReturningStages = sinkStages;
                 sinkAndReturningStages.insert(returningStages.begin(), returningStages.end());
                 const auto sameTableSinkStages = GatherSameTableSinkStages(sinkAndReturningStages);
-                AFL_ENSURE(sameTableSinkStages.empty())("count", sameTableSinkStages.size()); // Don't allow two writes to the same table to be executed in one query block.
+                if (!sameTableSinkStages.empty()) {
+                    ctx.AddError(TIssue(ctx.GetPosition(outputExpr->Pos()),
+                        "Multiple stream writes to the same table in one query block are not supported"));
+                    return TStatus::Error;
+                }
             }
 
             {

@@ -94,6 +94,30 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
     }
 
     /**
+     * Verify that CREATE TABLE without the detailed metrics level specified works correctly.
+     *
+     * @note This test also verifies that the detailed metrics settings are preserved
+     *       across SchemeShard restarts.
+     *
+     * @note This test is for the variation when the EnableDetailedMetrics feature flag is disabled.
+     */
+    Y_UNIT_TEST(CreateTableNoDetailedMetricsLevelFeatureFlagDisabled) {
+        VerifyCreateTableNoDetailedMetricsLevel(false /* enableDetailedMetrics */);
+    }
+
+    /**
+     * Verify that CREATE TABLE without the detailed metrics level specified works correctly.
+     *
+     * @note This test also verifies that the detailed metrics settings are preserved
+     *       across SchemeShard restarts.
+     *
+     * @note This test is for the variation when the EnableDetailedMetrics feature flag is enabled.
+     */
+    Y_UNIT_TEST(CreateTableNoDetailedMetricsLevelFeatureFlagEnabled) {
+        VerifyCreateTableNoDetailedMetricsLevel(true /* enableDetailedMetrics */);
+    }
+
+    /**
      * Verify that CREATE TABLE with the detailed metrics settings explicitly dropped
      * is not allowed and fails with an error.
      */
@@ -448,6 +472,8 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
      *
      * @note This test also verifies that the detailed metrics settings are preserved
      *       across Scheme Shard restarts.
+     *
+     * @param[in] enableDetailedMetrics Indicates if the corresponding feature flag is enabled
      */
     Y_UNIT_TEST_TWIN(AlterTableSourceNoDetailedMetricsLevelTargetNoDetailedMetricsLevel, EnableDetailedMetrics) {
         TTestBasicRuntime runtime;
@@ -495,6 +521,36 @@ Y_UNIT_TEST_SUITE(TSchemeShardTableDetailedMetricsSettingsTest) {
                     UNIT_ASSERT(!tableDescription.HasDetailedMetricsSettings());
                 },
             }
+        );
+    }
+
+    /**
+     * Verify that ALTER TABLE without the detailed metrics level specified works correctly,
+     * when applied to a table, which does not have any detailed metrics settings configured.
+     *
+     * @note This test also verifies that the detailed metrics settings are preserved
+     *       across Scheme Shard restarts.
+     *
+     * @note This test is for the variation when the EnableDetailedMetrics feature flag is disabled.
+     */
+    Y_UNIT_TEST(AlterTableSourceNoDetailedMetricsLevelTargetNoDetailedMetricsLevelFeatureFlagDisabled) {
+        VerifyAlterTableSourceNoDetailedMetricsLevelTargetNoDetailedMetricsLevel(
+            false /* enableDetailedMetrics */
+        );
+    }
+
+    /**
+     * Verify that ALTER TABLE without the detailed metrics level specified works correctly,
+     * when applied to a table, which does not have any detailed metrics settings configured.
+     *
+     * @note This test also verifies that the detailed metrics settings are preserved
+     *       across Scheme Shard restarts.
+     *
+     * @note This test is for the variation when the EnableDetailedMetrics feature flag is enabled.
+     */
+    Y_UNIT_TEST(AlterTableSourceNoDetailedMetricsLevelTargetNoDetailedMetricsLevelFeatureFlagEnabled) {
+        VerifyAlterTableSourceNoDetailedMetricsLevelTargetNoDetailedMetricsLevel(
+            true /* enableDetailedMetrics */
         );
     }
 

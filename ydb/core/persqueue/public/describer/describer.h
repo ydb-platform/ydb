@@ -37,7 +37,7 @@ struct TAccessRights {
     }
 
    ui32 Access = NACLib::DescribeSchema;
-   TMaybe<ui32> AccessOr;
+   std::optional<ui32> AccessOr;
 };
 
 struct TTopicInfo {

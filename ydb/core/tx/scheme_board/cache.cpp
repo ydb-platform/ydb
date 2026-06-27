@@ -201,14 +201,6 @@ namespace {
             return entry.Access;
         }
 
-        static TMaybe<ui32> GetAccessOr(const TNavigate::TEntry& entry) {
-            return entry.AccessOr;
-        }
-
-        static TMaybe<ui32> GetAccessOr(const TResolve::TEntry& entry) {
-            return entry.AccessOr;
-        }
-
         static void SetErrorAndClear(TNavigateContext* context, TNavigate::TEntry& entry, const bool isDescribeDenied) {
             if (isDescribeDenied) {
                 SetError(context, entry, TNavigate::EStatus::AccessDenied);
@@ -226,6 +218,7 @@ namespace {
             }
 
             entry.Self.Drop();
+            entry.SecurityObject.Drop();
             entry.DomainInfo.Drop();
             entry.Kind = TNavigate::KindUnknown;
             entry.Attributes.clear();
@@ -324,13 +317,7 @@ namespace {
                     }
 
                     const ui32 access = GetAccess(entry);
-                    auto checkAccessResult = securityObject->CheckAccess(access, *token);
-                    if (!checkAccessResult) {
-                        if (const auto accessOr = GetAccessOr(entry); accessOr) {
-                            checkAccessResult = securityObject->CheckAccess(*accessOr, *token);
-                        }
-                    }
-                    if (!checkAccessResult) {
+                    if (!securityObject->CheckAccess(access, *token)) {
                         SBC_LOG_W("Access denied"
                             << ": self# " << this->SelfId()
                             << ", for# " << token->GetUserSID()

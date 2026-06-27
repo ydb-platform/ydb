@@ -49,7 +49,6 @@ public:
 
         auto schemeRequest = std::make_unique<TSchemeCacheNavigate>(1);
         schemeRequest->DatabaseName = DatabasePath;
-        schemeRequest->UserToken = Settings.UserToken;
 
         auto addEntry = [&](const TString& topic) {
             auto split = NKikimr::SplitPath(topic);
@@ -60,8 +59,6 @@ public:
             entry.Operation = TSchemeCacheNavigate::OpList;
             entry.SyncVersion = RetryWithSyncVersion;
             entry.ShowPrivatePath = true;
-            entry.Access = Settings.AccessRights.Access;
-            entry.AccessOr = Settings.AccessRights.AccessOr;
         };
 
         for (const auto& topic : topicPath) {

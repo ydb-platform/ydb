@@ -120,6 +120,8 @@ Y_UNIT_TEST(AlterConsumer) {
             ::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_DELETE));
     }
 
+    client.CreateTopic("/Root/dlq-queue", NYdb::NTopic::TCreateTopicSettings()).GetValueSync();
+
     client.AlterTopic("/Root/topic1", NYdb::NTopic::TAlterTopicSettings()
             .SetRetentionPeriod(TDuration::Seconds(103))
             .BeginAlterConsumer("mlp-consumer")
@@ -334,6 +336,8 @@ Y_UNIT_TEST(ReloadPQTabletAfterAlterConsumer) {
         auto result = GetChangeResponse(runtime);
         UNIT_ASSERT_VALUES_EQUAL(result->Status, Ydb::StatusIds::SUCCESS);
     }
+
+    client.CreateTopic("/Root/dlq-queue", NYdb::NTopic::TCreateTopicSettings()).GetValueSync();
 
     client.AlterTopic("/Root/topic1", NYdb::NTopic::TAlterTopicSettings()
         .SetRetentionPeriod(TDuration::Seconds(103))

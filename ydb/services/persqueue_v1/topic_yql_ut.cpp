@@ -5,6 +5,12 @@ namespace NKikimr::NPersQueueTests {
 
 namespace {
     const static TString DEFAULT_TOPIC_NAME = "rt3.dc1--topic1";
+    const static TString DLQ_TOPIC_PATH = "/Root/PQ/rt3.dc1--dead_letter_queue_97";
+
+    void CreateDlqTopic(NPersQueue::TTestServer& server) {
+        server.AnnoyingClient->RunYqlSchemeQuery(TStringBuilder()
+            << "CREATE TOPIC `" << DLQ_TOPIC_PATH << "`;");
+    }
 }
 
 Y_UNIT_TEST_SUITE(TTopicYqlTest) {
@@ -129,6 +135,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             expectedDescr.MutablePartitionStrategy()->SetMinPartitionCount(3);
             expectedDescr.MutableConsumers(1)->SetReadFromTimestampsMs(1609462861000);
             expectedDescr.MutableConsumers(2)->SetAvailabilityPeriodMs(TDuration::Hours(48).MilliSeconds());
+            expectedDescr.SetTopicConfigVersion(1);
         }
 
         const char *query2 = R"__(
@@ -252,6 +259,8 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
 
         NPersQueue::TTestServer server(settings);
 
+        CreateDlqTopic(server);
+
         {
             const char *query = R"(
                 CREATE TOPIC `/Root/PQ/rt3.dc1--topic_with_shared_consumer`
@@ -261,7 +270,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
                         , default_processing_timeout = Interval('PT31S')
                         , max_processing_attempts = 67
                         , dead_letter_policy = 'move'
-                        , dead_letter_queue = 'dead_letter_queue_97'
+                        , dead_letter_queue = '/Root/PQ/rt3.dc1--dead_letter_queue_97'
                     ))
             )";
 
@@ -283,7 +292,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             UNIT_ASSERT_VALUES_EQUAL(c.GetMaxProcessingAttempts(), 67);
             UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(c.GetDeadLetterPolicy()),
                 ::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name( ::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE));
-            UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterQueue(), "dead_letter_queue_97");
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterQueue(), DLQ_TOPIC_PATH);
         }
     }
 
@@ -324,6 +333,8 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterQueue(), "");
         }
 
+        CreateDlqTopic(server);
+
         {
             const char *query = R"(
                 ALTER TOPIC `/Root/PQ/rt3.dc1--topic_with_shared_consumer`
@@ -331,7 +342,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
                           default_processing_timeout = Interval('PT31S')
                         , max_processing_attempts = 67
                         , dead_letter_policy = 'move'
-                        , dead_letter_queue = 'dead_letter_queue_97'
+                        , dead_letter_queue = '/Root/PQ/rt3.dc1--dead_letter_queue_97'
                     )
             )";
 
@@ -353,7 +364,7 @@ Y_UNIT_TEST_SUITE(TTopicYqlTest) {
             UNIT_ASSERT_VALUES_EQUAL(c.GetMaxProcessingAttempts(), 67);
             UNIT_ASSERT_VALUES_EQUAL(::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name(c.GetDeadLetterPolicy()),
                 ::NKikimrPQ::TPQTabletConfig::EDeadLetterPolicy_Name( ::NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE));
-            UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterQueue(), "dead_letter_queue_97");
+            UNIT_ASSERT_VALUES_EQUAL(c.GetDeadLetterQueue(), DLQ_TOPIC_PATH);
         }
     }
 

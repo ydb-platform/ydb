@@ -1079,13 +1079,28 @@ TRestoreResult TRestoreClient::RestoreFolder(
     }
     LOG_D("List of entries in the backup: " << NJson::WriteJson(ConvertToJson(backupEntries), false));
 
-    for (const auto& [fsPath, dbPath, type] : backupEntries) {
+    auto restoreEntry = [&](const TFsBackupEntry& entry) -> TRestoreResult {
+        const auto& [fsPath, dbPath, type] = entry;
         Y_ENSURE(dbPath.StartsWith(dbRestoreRoot),
             "Implementation error, dbPath: " << dbPath.Quote()
                 << " must be built by appending a relative path to dbRestoreRoot: " << dbRestoreRoot.Quote()
         );
-        if (auto result = Restore(type, fsPath, dbRestoreRoot, dbPath.substr(dbRestoreRoot.size()), settings, true); !result.IsSuccess()) {
-            return result;
+        return Restore(type, fsPath, dbRestoreRoot, dbPath.substr(dbRestoreRoot.size()), settings, true);
+    };
+
+    // DLQ and other standalone topics must exist before changefeed consumers are restored.
+    for (const auto& entry : backupEntries) {
+        if (entry.Type == ESchemeEntryType::Topic) {
+            if (auto result = restoreEntry(entry); !result.IsSuccess()) {
+                return result;
+            }
+        }
+    }
+    for (const auto& entry : backupEntries) {
+        if (entry.Type != ESchemeEntryType::Topic) {
+            if (auto result = restoreEntry(entry); !result.IsSuccess()) {
+                return result;
+            }
         }
     }
 
@@ -1321,6 +1336,7 @@ TRestoreResult TRestoreClient::DropAndRestore(const TFsPath& fsBackupRoot, const
     TVector<size_t> transfers;
     TVector<size_t> externalDataSources;
     THashMap<TString, size_t> externalTables;
+    TVector<size_t> topics;
     // scheme entries that do not require special handling (i.e. cannot have dependents)
     TVector<size_t> regular;
 
@@ -1351,6 +1367,9 @@ TRestoreResult TRestoreClient::DropAndRestore(const TFsPath& fsBackupRoot, const
             case ESchemeEntryType::SysView:
                 systemViews.emplace_back(i);
                 break;
+            case ESchemeEntryType::Topic:
+                topics.emplace_back(i);
+                break;
             default:
                 regular.emplace_back(i);
                 break;
@@ -1373,6 +1392,18 @@ TRestoreResult TRestoreClient::DropAndRestore(const TFsPath& fsBackupRoot, const
 
     if (auto result = DropAndRestoreExternals(backupEntries, externalDataSources, externalTables, dbRestoreRoot, settings); !result.IsSuccess()) {
         return result;
+    }
+
+    for (size_t i : topics) {
+        const auto& [fsPath, dbPath, type] = backupEntries[i];
+        if (ExistingEntries.contains(dbPath)) {
+            if (auto result = Drop(type, dbPath, settings); !result.IsSuccess()) {
+                return result;
+            }
+        }
+        if (auto result = RestoreTopic(fsPath, dbPath, settings); !result.IsSuccess()) {
+            return result;
+        }
     }
 
     if (auto result = DropAndRestoreTablesAndDependents(backupEntries, tables, views, replications, transfers, dbRestoreRoot, settings); !result.IsSuccess()) {

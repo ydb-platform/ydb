@@ -6043,6 +6043,7 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       ServiceType: "data-streams"
       Version: 0
       Type: CONSUMER_TYPE_STREAMING
+      ModificationVersion: 0
     }
     Consumers {
       Name: "consumer"
@@ -6058,8 +6059,10 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
       Version: 567
       Important: true
       Type: CONSUMER_TYPE_STREAMING
+      ModificationVersion: 2
     }
     ContentBasedDeduplication: false
+    TopicConfigVersion: 5
   }
   ErrorCode: OK
 }

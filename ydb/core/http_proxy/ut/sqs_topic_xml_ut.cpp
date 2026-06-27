@@ -116,6 +116,11 @@ namespace {
 
     }
 
+    bool CreateDlqTopic(NYdb::TDriver& driver, const TString& dlqTopicName = "DeadLetterQueue") {
+        NYdb::NTopic::TCreateTopicSettings settings;
+        return CreateTopic(driver, dlqTopicName, settings);
+    }
+
     TMaybe<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent> GetNextDataMessage(const std::shared_ptr<NYdb::NTopic::IReadSession>& reader, TInstant deadline) {
         while (true) {
             reader->WaitEvent().Wait(deadline);
@@ -1045,6 +1050,9 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxyXml) {
         auto consumerName = [](int i) { return std::format("ydb-sqs-consumer-{}", i); };
         auto queueUrlForConsumer = [&](int i) { return std::format("/v1/{}/{}/{}/{}/{}/{}", database.size(), database.c_str(), topicName.size(), topicName.c_str(), consumerName(i).size(), consumerName(i).c_str()); };
         const TDuration retentionPeriod = TDuration::Hours(10);
+        if (params.Dlq) {
+            Y_ENSURE(CreateDlqTopic(driver));
+        }
         {
             NYdb::NTopic::TCreateTopicSettings settings;
             settings.RetentionPeriod(retentionPeriod);

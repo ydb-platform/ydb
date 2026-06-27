@@ -23,6 +23,10 @@ where:
 
 * {% include [x](../_includes/transfer_flush.md) %}
 
+* Authentication settings for the topic database (one of the following):
+
+  {% include [x](_includes/async_replication_authentification.md) %}
+
 ## Permissions
 
 Modifying a transfer requires the `ALTER SCHEMA` [permissions](grant.md#permissions-list).
@@ -57,6 +61,14 @@ The following query modifies the batching parameters:
 ALTER TRANSFER my_transfer SET (
     BATCH_SIZE_BYTES = 1048576,
     FLUSH_INTERVAL = Interval('PT60S')
+);
+```
+
+The following query changes the secret:
+
+```yql
+ALTER TRANSFER my_transfer SET (
+    TOKEN_SECRET_PATH = "my_token"
 );
 ```
 

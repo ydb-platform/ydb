@@ -938,8 +938,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         ComputeLogicalTestProps(root);
 
-        UNIT_ASSERT(GetForbidden(filter.get(), join.get()).contains(TInfoUnit("a")));
-        UNIT_ASSERT(GetForbidden(leftRead.get(), filter.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(filter.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(leftRead.get()).contains(TInfoUnit("a")));
     }
 
     Y_UNIT_TEST(NameConstraintsTransparentUnaryForwardsAbsentForbiddenName) {
@@ -955,8 +955,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         ComputeLogicalTestProps(root);
 
-        UNIT_ASSERT(GetForbidden(filter.get(), join.get()).contains(TInfoUnit("a")));
-        UNIT_ASSERT(GetForbidden(leftRead.get(), filter.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(filter.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(leftRead.get()).contains(TInfoUnit("a")));
     }
 
     Y_UNIT_TEST(NameConstraintsMapRenameHidesForbiddenSource) {
@@ -972,9 +972,55 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         ComputeLogicalTestProps(root);
 
-        UNIT_ASSERT(GetForbidden(leftMap.get(), join.get()).contains(TInfoUnit("a")));
-        UNIT_ASSERT(!GetForbidden(leftRead.get(), leftMap.get()).contains(TInfoUnit("a")));
-        UNIT_ASSERT(GetForbidden(leftRead.get(), leftMap.get()).contains(TInfoUnit("b")));
+        UNIT_ASSERT(GetForbidden(leftMap.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(!GetForbidden(leftRead.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(leftRead.get()).contains(TInfoUnit("b")));
+    }
+
+    Y_UNIT_TEST(NameConstraintsForbidHiddenSharedSourceExposedByJoinSides) {
+        NYql::TExprContext exprCtx;
+        TPlanProps planProps;
+        const auto pos = NYql::TPositionHandle();
+        const auto ignore = TInfoUnit("__kqp_rbo_ignore_arg_0");
+        const auto hidden = TInfoUnit("a1.id2");
+
+        auto read = MakeTestRead({hidden}, pos);
+        auto hiddenMap = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{MakeTestRename(ignore.GetFullName(), hidden.GetFullName(), pos, exprCtx, planProps)});
+        auto limit = MakeIntrusive<TOpLimit>(hiddenMap, pos, MakeConstant("Uint64", "10", pos, &exprCtx), EOpPhase::Undefined);
+        auto leftMap = MakeIntrusive<TOpMap>(limit, pos, TVector<TMapElement>{MakeTestRename("left_id", ignore.GetFullName(), pos, exprCtx, planProps)});
+        auto rightMap = MakeIntrusive<TOpMap>(limit, pos, TVector<TMapElement>{MakeTestRename("right_id", ignore.GetFullName(), pos, exprCtx, planProps)});
+        auto join = MakeIntrusive<TOpJoin>(leftMap, rightMap, pos, "Cross", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        TOpRoot root(join, pos, {"left_id", "right_id"});
+
+        ComputeLogicalTestProps(root);
+
+        UNIT_ASSERT(GetForbidden(hiddenMap.get()).contains(hidden));
+        UNIT_ASSERT(GetForbidden(hiddenMap.get()).contains(TInfoUnit("another_name")));
+        UNIT_ASSERT(!GetForbidden(hiddenMap.get()).contains(ignore));
+        UNIT_ASSERT(!GetForbidden(read.get()).contains(hidden));
+    }
+
+    Y_UNIT_TEST(NameConstraintsDoNotForbidIndependentHiddenJoinSources) {
+        NYql::TExprContext exprCtx;
+        TPlanProps planProps;
+        const auto pos = NYql::TPositionHandle();
+        const auto hidden = TInfoUnit("id");
+
+        auto leftRead = MakeTestRead({hidden}, pos);
+        auto leftMap = MakeIntrusive<TOpMap>(leftRead, pos, TVector<TMapElement>{
+            MakeTestRename("left_id", hidden.GetFullName(), pos, exprCtx, planProps),
+        });
+        auto rightRead = MakeTestRead({hidden}, pos);
+        auto rightMap = MakeIntrusive<TOpMap>(rightRead, pos, TVector<TMapElement>{
+            MakeTestRename("right_id", hidden.GetFullName(), pos, exprCtx, planProps),
+        });
+        auto join = MakeIntrusive<TOpJoin>(leftMap, rightMap, pos, "Cross", TVector<std::pair<TInfoUnit, TInfoUnit>>{});
+        TOpRoot root(join, pos, {"left_id", "right_id"});
+
+        ComputeLogicalTestProps(root);
+
+        UNIT_ASSERT(!GetForbidden(leftMap.get()).contains(hidden));
+        UNIT_ASSERT(!GetForbidden(rightMap.get()).contains(hidden));
     }
 
     Y_UNIT_TEST(NameConstraintsMapForbidsElementOutputsExceptHiddenSources) {
@@ -991,7 +1037,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         ComputeLogicalTestProps(root);
 
-        const auto& forbidden = GetForbidden(read.get(), map.get());
+        const auto forbidden = GetForbidden(read.get());
         UNIT_ASSERT(forbidden.contains(TInfoUnit("c")));
         UNIT_ASSERT(forbidden.contains(TInfoUnit("d")));
         UNIT_ASSERT(!forbidden.contains(TInfoUnit("b")));
@@ -1010,11 +1056,11 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         ComputeLogicalTestProps(root);
 
-        UNIT_ASSERT(GetForbidden(leftMap.get(), join.get()).contains(TInfoUnit("a")));
-        UNIT_ASSERT(GetForbidden(leftRead.get(), leftMap.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(leftMap.get()).contains(TInfoUnit("a")));
+        UNIT_ASSERT(GetForbidden(leftRead.get()).contains(TInfoUnit("a")));
     }
 
-    Y_UNIT_TEST(NameConstraintsJoinEdgesIncludeIncomingForbiddenNames) {
+    Y_UNIT_TEST(NameConstraintsJoinInputsIncludeIncomingForbiddenNames) {
         const auto pos = NYql::TPositionHandle();
 
         auto leftRead = MakeTestRead({TInfoUnit("l")}, pos);
@@ -1026,8 +1072,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         ComputeLogicalTestProps(root);
 
-        const auto& leftForbidden = GetForbidden(leftRead.get(), join.get());
-        const auto& rightForbidden = GetForbidden(rightRead.get(), join.get());
+        const auto leftForbidden = GetForbidden(leftRead.get());
+        const auto rightForbidden = GetForbidden(rightRead.get());
         UNIT_ASSERT(leftForbidden.contains(TInfoUnit("r")));
         UNIT_ASSERT(leftForbidden.contains(TInfoUnit("z")));
         UNIT_ASSERT(!leftForbidden.contains(TInfoUnit("l")));
@@ -3294,6 +3340,52 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(std::find(mapOutput.begin(), mapOutput.end(), TInfoUnit("a_plus")) != mapOutput.end());
     }
 
+    Y_UNIT_TEST(MapOutputPruningKeepsLocalHidesForKeptOutputs) {
+        TMapRuleTestContext testContext;
+        const auto pos = NYql::TPositionHandle();
+        TPlanProps expressionProps;
+
+        auto leftRead = MakeTestRead({
+            TInfoUnit("t1.a"),
+            TInfoUnit("t1.b"),
+            TInfoUnit("t1.c"),
+            TInfoUnit("a"),
+            TInfoUnit("b"),
+            TInfoUnit("c"),
+        }, pos);
+        auto leftMap = MakeIntrusive<TOpMap>(leftRead, pos, TVector<TMapElement>{
+            MakeTestRename("t1.a", "a", pos, testContext.ExprCtx, expressionProps),
+            MakeTestRename("t1.b", "b", pos, testContext.ExprCtx, expressionProps),
+            MakeTestRename("t1.c", "c", pos, testContext.ExprCtx, expressionProps),
+            MakeTestRename("__kqp_rbo_ignore_arg_1", "t1.a", pos, testContext.ExprCtx, expressionProps),
+            MakeTestRename("__kqp_rbo_ignore_arg_2", "t1.b", pos, testContext.ExprCtx, expressionProps),
+            MakeTestRename("__kqp_rbo_ignore_arg_3", "t1.c", pos, testContext.ExprCtx, expressionProps),
+        });
+        auto rightRead = MakeTestRead({TInfoUnit("a"), TInfoUnit("b"), TInfoUnit("c")}, pos);
+        auto join = MakeIntrusive<TOpJoin>(
+            leftMap,
+            rightRead,
+            pos,
+            "Inner",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+        );
+        TOpRoot root(join, pos, {"t1.a"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
+        TRuleBasedStage outputPruning("Focused output pruning", std::move(rules));
+        ComputeLogicalTestProps(root);
+        outputPruning.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(leftMap->MapElements.size(), 6, leftMap->ToString(testContext.ExprCtx));
+        const auto mapOutput = leftMap->GetOutputIUs();
+        TInfoUnitSet mapOutputSet;
+        for (const auto& iu : mapOutput) {
+            mapOutputSet.insert(iu);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(mapOutputSet.size(), mapOutput.size());
+    }
+
     Y_UNIT_TEST(DontEliminateLeftJoinWhenNoPK) {
         TMapRuleTestContext testContext;
         const auto pos = NYql::TPositionHandle();
@@ -4078,6 +4170,97 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_VALUES_EQUAL(topMap->MapElements.size(), 1);
         UNIT_ASSERT(topMap->MapElements.front().IsColumnAccess());
         UNIT_ASSERT(topMap->MapElements.front().GetColumnAccess() == TInfoUnit("b"));
+    }
+
+    Y_UNIT_TEST(RenameToAppendConvertsSafeRename) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("a")}, pos);
+        auto map = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestRename("alias_a", "a", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(map, pos, {"alias_a"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TRenameToAppendRule>());
+        TRuleBasedStage renameToAppend("Focused rename to append", std::move(rules));
+        ComputeLogicalTestProps(root);
+        renameToAppend.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(!map->MapElements.front().IsRename(), root.PlanToString(testContext.ExprCtx));
+    }
+
+    Y_UNIT_TEST(RenameToAppendKeepsGeneratedIgnoreRenameWhenSharedSourceWouldReachJoinConflict) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+        const auto ignore = TInfoUnit("__kqp_rbo_ignore_arg_0");
+        const auto hidden = TInfoUnit("a1.id2");
+
+        auto read = MakeTestRead({hidden}, pos);
+        auto hiddenMap = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestRename(ignore.GetFullName(), hidden.GetFullName(), pos, testContext.ExprCtx, expressionProps),
+        });
+        auto limit = MakeIntrusive<TOpLimit>(hiddenMap, pos, MakeConstant("Uint64", "10", pos, &testContext.ExprCtx), EOpPhase::Undefined);
+        auto leftMap = MakeIntrusive<TOpMap>(limit, pos, TVector<TMapElement>{
+            MakeTestRename("left_id", ignore.GetFullName(), pos, testContext.ExprCtx, expressionProps),
+        });
+        auto rightMap = MakeIntrusive<TOpMap>(limit, pos, TVector<TMapElement>{
+            MakeTestRename("right_id", ignore.GetFullName(), pos, testContext.ExprCtx, expressionProps),
+        });
+        auto join = MakeIntrusive<TOpJoin>(
+            leftMap,
+            rightMap,
+            pos,
+            "Cross",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+        );
+        TOpRoot root(join, pos, {"left_id", "right_id"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TRenameToAppendRule>());
+        TRuleBasedStage renameToAppend("Focused rename to append", std::move(rules));
+        ComputeLogicalTestProps(root);
+        renameToAppend.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(hiddenMap->MapElements.front().IsRename(), root.PlanToString(testContext.ExprCtx));
+    }
+
+    Y_UNIT_TEST(RenameToAppendConvertsOneIndependentHiddenJoinSource) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+        const auto hidden = TInfoUnit("id");
+
+        auto leftRead = MakeTestRead({hidden}, pos);
+        auto leftMap = MakeIntrusive<TOpMap>(leftRead, pos, TVector<TMapElement>{
+            MakeTestRename("left_id", hidden.GetFullName(), pos, testContext.ExprCtx, expressionProps),
+        });
+        auto rightRead = MakeTestRead({hidden}, pos);
+        auto rightMap = MakeIntrusive<TOpMap>(rightRead, pos, TVector<TMapElement>{
+            MakeTestRename("right_id", hidden.GetFullName(), pos, testContext.ExprCtx, expressionProps),
+        });
+        auto join = MakeIntrusive<TOpJoin>(
+            leftMap,
+            rightMap,
+            pos,
+            "Cross",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+        );
+        TOpRoot root(join, pos, {"left_id", "right_id"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TRenameToAppendRule>());
+        TRuleBasedStage renameToAppend("Focused rename to append", std::move(rules));
+        ComputeLogicalTestProps(root);
+        renameToAppend.RunStage(root, testContext.RboCtx);
+
+        const ui32 converted =
+            (leftMap->MapElements.front().IsRename() ? 0 : 1) +
+            (rightMap->MapElements.front().IsRename() ? 0 : 1);
+        UNIT_ASSERT_VALUES_EQUAL_C(converted, 1, root.PlanToString(testContext.ExprCtx));
     }
 
     Y_UNIT_TEST(RewritePreferredAliasUpdatesJoinKeysAndFilters) {

@@ -237,7 +237,7 @@ bool RewriteMapInputs(TOpMap& map, const TInfoUnitSet& liveOut, TRBOContext& ctx
 
     const auto output = BuildMapOutput(inputOutput, elements);
     if (MakeInfoUnitSet(output).size() != output.size() ||
-        !IUSetIntersect(output, GetForbidden(&map)).empty()) {
+        ContainsForbidden(output, GetForbidden(&map))) {
         return false;
     }
 
@@ -401,7 +401,7 @@ bool RewriteAggregateInputs(TOpAggregate& aggregate, const TInfoUnitSet& liveOut
 
     const auto output = BuildAggregateOutput(aggregate.IsDistinctAll(), newKeys, newTraits);
     if (MakeInfoUnitSet(output).size() != output.size() ||
-        !IUSetIntersect(output, GetForbidden(&aggregate)).empty()) {
+        ContainsForbidden(output, GetForbidden(&aggregate))) {
         return false;
     }
 

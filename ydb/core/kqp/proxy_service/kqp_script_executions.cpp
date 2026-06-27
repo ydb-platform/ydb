@@ -2298,7 +2298,7 @@ public:
     TListScriptExecutionOperationsQuery(TString database, std::optional<TString> userSID, TString pageToken, const ui64 pageSize)
         : TQueryWithAccessValidationBase(__func__, {.Database = std::move(database)}, std::move(userSID))
         , PageToken(std::move(pageToken))
-        , PageSize(pageSize)
+        , PageSize(ClampVal<ui64>(pageSize, 1, 100))
     {}
 
 private:

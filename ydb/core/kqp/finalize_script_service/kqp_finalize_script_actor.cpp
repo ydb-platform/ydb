@@ -19,7 +19,7 @@ namespace NKikimr::NKqp {
 namespace {
 
 // Actor for performing finalization of script execution external effects (for example commit / roll back S3 uploads).
-// NOTE: if S3 become unavailable and/or secrets unavailable script execution will be newer finalized and therefore can not be removed.
+// NOTE: if S3 become unavailable and/or secrets unavailable script execution will be never finalized and therefore can not be removed.
 
 class TScriptFinalizerActor : public TActorBootstrapped<TScriptFinalizerActor> {
 public:

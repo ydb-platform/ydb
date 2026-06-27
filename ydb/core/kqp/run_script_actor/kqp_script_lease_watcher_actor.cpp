@@ -84,7 +84,7 @@ private:
         if (const auto status = ev->Get()->Status; status != Ydb::StatusIds::SUCCESS) {
             LOG_E("Lease update " << ev->Sender << " failed " << status << ", issues: " << issues.ToOneLineString() << ", execution entry exists: " << executionEntryExists);
         } else {
-            LOG_D("Lease updated by " << ev->Sender << ", current readline: " << currentDeadline << ", execution entry exists: " << executionEntryExists);
+            LOG_D("Lease updated by " << ev->Sender << ", current deadline: " << currentDeadline << ", execution entry exists: " << executionEntryExists);
         }
 
         if (!executionEntryExists) {

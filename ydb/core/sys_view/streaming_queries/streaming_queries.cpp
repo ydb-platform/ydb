@@ -758,10 +758,10 @@ public:
         }
 
         ResolvedQueriesCount = std::max(ResolvedQueriesCount, ev->Cookie + 1);
-        const bool entyExists = event.ExecutionEntryExists;
-        LOG_D("Get script execution info " << ev->Sender << " finished operation status " << operationStatus << ", ready: " << ready << ", entry exists: " << entyExists << ", query path: " << path << ", remains #" << InflightScriptExecutionInfoResolve);
+        const bool entryExists = event.ExecutionEntryExists;
+        LOG_D("Get script execution info " << ev->Sender << " finished operation status " << operationStatus << ", ready: " << ready << ", entry exists: " << entryExists << ", query path: " << path << ", remains #" << InflightScriptExecutionInfoResolve);
 
-        if (entyExists) {
+        if (entryExists) {
             const auto it = QueriesBatch.find(path);
             if (it == QueriesBatch.end()) {
                 InternalError(TStringBuilder() << "Resolve script execution info for query '" << path << "' which is not in current batch");

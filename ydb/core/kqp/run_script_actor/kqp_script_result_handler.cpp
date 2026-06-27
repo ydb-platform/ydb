@@ -242,7 +242,7 @@ private:
             SaveExternalEffectsState.Requests.emplace(ev->Sender, std::move(description));
             ContinueExecute();
         } else {
-            LOG_D("No external effects to save, reply immediately")
+            LOG_D("No external effects to save, reply immediately");
             Send(ev->Sender, new TEvSaveScriptExternalEffectResponse(Ydb::StatusIds::SUCCESS, {}));
         }
     }
@@ -425,7 +425,7 @@ private:
                 }
             }
         } else {
-            LOG_T("Skip truncated result part with #" << rowsCount << " rows")
+            LOG_T("Skip truncated result part with #" << rowsCount << " rows");
         }
 
         const auto channelId = record.GetChannelId();

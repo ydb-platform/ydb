@@ -164,9 +164,13 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
 
   {% endlist %}
 
+- C#
+
+  This algorithm is used by default.
+
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Java
 
@@ -198,5 +202,9 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
 - Rust
 
   The RandomChoice policy (random endpoint selection among discovery nodes) is enabled **by default** — no extra configuration is required.
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

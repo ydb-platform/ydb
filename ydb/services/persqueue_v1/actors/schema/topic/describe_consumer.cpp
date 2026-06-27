@@ -76,10 +76,10 @@ namespace {
 
                     auto* consumerStats = partition.mutable_partition_consumer_stats();
                     *consumerStats = partitionInfo.Stats.partition_consumer_stats();
-                    consumerStats->set_read_session_id(std::move(partitionInfo.ReadSession.MutableSession()));
+                    consumerStats->set_read_session_id(std::move(*partitionInfo.ReadSession.MutableSession()));
                     SetProtoTime(consumerStats->mutable_partition_read_session_create_time(), partitionInfo.ReadSession.GetTimestampMs());
                     consumerStats->set_connection_node_id(partitionInfo.ReadSession.GetProxyNodeId());
-                    consumerStats->set_reader_name(std::move(partitionInfo.ReadSession.MutableClientNode()));
+                    consumerStats->set_reader_name(std::move(*partitionInfo.ReadSession.MutableClientNode()));
 
                     auto* consumer = Result.mutable_consumer();
                     if (!consumer->has_consumer_stats()) {

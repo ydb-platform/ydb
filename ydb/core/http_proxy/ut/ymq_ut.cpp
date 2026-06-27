@@ -1,9 +1,6 @@
 #include <ydb/core/http_proxy/ut/datastreams_fixture/datastreams_fixture.h>
-<<<<<<< HEAD
 
-=======
 #include <ydb/core/http_proxy/ut/datastreams_fixture/sqs_xml_ut_helpers.h>
->>>>>>> 89b4718445f (LOGBROKER-10505 Add possibility to authenticate via service account i… (#44630))
 #include <ydb/core/http_proxy/http_req.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/ymq/actor/metering.h>

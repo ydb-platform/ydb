@@ -225,55 +225,6 @@ TInfoUnitConstraintSet GetHiddenNamesOnEdge(IOperator* parent, ui32 childIdx) {
     }
 }
 
-class THiddenOnAllPaths {
-public:
-    explicit THiddenOnAllPaths(IOperator* target)
-        : Target(target) {
-    }
-
-    std::optional<TInfoUnitConstraintSet> Compute(IOperator* op) {
-        if (op == Target) {
-            return TInfoUnitConstraintSet{};
-        }
-
-        if (const auto it = Memo.find(op); it != Memo.end()) {
-            return it->second;
-        }
-
-        std::optional<TInfoUnitConstraintSet> result;
-        for (const auto& [parent, childIdx] : op->Parents) {
-            auto parentHidden = Compute(parent);
-            if (!parentHidden) {
-                continue;
-            }
-
-            auto pathHidden = GetHiddenNamesOnEdge(parent, childIdx);
-            pathHidden.Add(*parentHidden);
-            if (result) {
-                result->Intersect(pathHidden);
-            } else {
-                result = std::move(pathHidden);
-            }
-        }
-
-        Memo[op] = result;
-        return result;
-    }
-
-private:
-    IOperator* Target;
-    THashMap<IOperator*, std::optional<TInfoUnitConstraintSet>> Memo;
-};
-
-void CollectProducerSubtree(IOperator* op, THashSet<IOperator*>& result) {
-    if (!result.insert(op).second) {
-        return;
-    }
-    for (const auto& child : op->Children) {
-        CollectProducerSubtree(child.get(), result);
-    }
-}
-
 struct TSideBySideInputBranches {
     TIntrusivePtr<IOperator> First;
     TIntrusivePtr<IOperator> Second;
@@ -293,37 +244,66 @@ std::optional<TSideBySideInputBranches> GetSideBySideInputBranches(IOperator& co
     return std::nullopt;
 }
 
+struct TBranchHiddenState {
+    std::optional<TInfoUnitConstraintSet> First;
+    std::optional<TInfoUnitConstraintSet> Second;
+};
+
+std::optional<TInfoUnitConstraintSet>& GetBranchHidden(TBranchHiddenState& state, ui32 branchIdx) {
+    return branchIdx == 0 ? state.First : state.Second;
+}
+
+bool AddHiddenState(
+    THashMap<IOperator*, TBranchHiddenState>& states,
+    IOperator* op,
+    ui32 branchIdx,
+    TInfoUnitConstraintSet hidden)
+{
+    auto& slot = GetBranchHidden(states[op], branchIdx);
+    if (!slot) {
+        slot = std::move(hidden);
+        return true;
+    }
+    // A name is hidden before this branch only if every path to the branch hides it.
+    return slot->Intersect(hidden);
+}
+
 bool AddSharedProducerConstraints(IOperator& consumer) {
     const auto branches = GetSideBySideInputBranches(consumer);
     if (!branches) {
         return false;
     }
 
-    // If the same producer feeds two side-by-side input branches, a name exposed
-    // by that producer would appear through both branches unless one path hides it.
-    THashSet<IOperator*> firstProducers;
-    THashSet<IOperator*> secondProducers;
-    CollectProducerSubtree(branches->First.get(), firstProducers);
-    CollectProducerSubtree(branches->Second.get(), secondProducers);
+    THashMap<IOperator*, TBranchHiddenState> states;
+    TVector<std::pair<IOperator*, ui32>> queue;
+    auto enqueue = [&states, &queue](IOperator* op, ui32 branchIdx, TInfoUnitConstraintSet hidden) {
+        if (AddHiddenState(states, op, branchIdx, std::move(hidden))) {
+            queue.emplace_back(op, branchIdx);
+        }
+    };
 
-    THiddenOnAllPaths hiddenOnFirstPaths(branches->First.get());
-    THiddenOnAllPaths hiddenOnSecondPaths(branches->Second.get());
+    enqueue(branches->First.get(), 0, {});
+    enqueue(branches->Second.get(), 1, {});
+
+    for (size_t index = 0; index < queue.size(); ++index) {
+        const auto [op, branchIdx] = queue[index];
+        const auto hidden = *GetBranchHidden(states[op], branchIdx);
+        for (ui32 childIdx = 0; childIdx < op->Children.size(); ++childIdx) {
+            auto childHidden = hidden;
+            childHidden.Add(GetHiddenNamesOnEdge(op, childIdx));
+            enqueue(op->Children[childIdx].get(), branchIdx, std::move(childHidden));
+        }
+    }
 
     bool changed = false;
-    for (auto* producer : firstProducers) {
-        if (!secondProducers.contains(producer)) {
+    for (const auto& [producer, state] : states) {
+        if (!state.First || !state.Second) {
             continue;
         }
 
-        auto firstHidden = hiddenOnFirstPaths.Compute(producer);
-        auto secondHidden = hiddenOnSecondPaths.Compute(producer);
-        if (!firstHidden || !secondHidden) {
-            continue;
-        }
-
-        auto allowed = *firstHidden;
-        allowed.Add(*secondHidden);
-        changed |= GetMutableComputedNameConstraints(producer).AddForbidden(allowed.Complement());
+        auto safeToExpose = *state.First;
+        safeToExpose.Add(*state.Second);
+        changed |= GetMutableComputedNameConstraints(producer).AddForbidden(safeToExpose.Complement());
     }
     return changed;
 }

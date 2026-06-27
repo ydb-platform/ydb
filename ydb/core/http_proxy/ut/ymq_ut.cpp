@@ -22,7 +22,6 @@ using namespace NActors;
 
 
 Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
-
     NYdb::TDriver CreateDriver(ui16 kikimrGrpcPort) {
         TString endpoint = TStringBuilder() << "localhost:" << kikimrGrpcPort;
         auto driverConfig = NYdb::TDriverConfig()

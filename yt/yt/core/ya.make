@@ -457,6 +457,7 @@ IF (NOT OS_WINDOWS)
 
     RECURSE_FOR_TESTS(
         bus/tcp/unittests
+        rpc/bus/unittests
         compression/unittests
         crypto/unittests
         json/unittests

@@ -4,7 +4,7 @@
 #include <yt/yt/core/rpc/multi_protocol_channel_factory.h>
 #include <yt/yt/core/rpc/multi_protocol_server.h>
 
-namespace NYT::NRpc {
+namespace NYT::NRpc::NBus {
 namespace {
 
 using namespace NConcurrency;
@@ -99,4 +99,4 @@ TEST_F(TMultiProtocolRpcTest, UnsupportedProtocol)
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace
-} // namespace NYT::NRpc
+} // namespace NYT::NRpc::NBus

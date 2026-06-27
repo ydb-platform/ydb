@@ -85,7 +85,7 @@ class TestS3(object):
             current_number_rows = self.run_atomic_upload_check_query(
                 client, bucket, "ibucket", "insert/", "csv_with_names"
             )
-            logger.info(f"Fetched rows {current_number_rows} / {number_rows}")
+            logger.debug(f"Fetched rows {current_number_rows} / {number_rows}")
 
             if current_number_rows == number_rows:
                 break
@@ -93,7 +93,7 @@ class TestS3(object):
             assert current_number_rows == 0, "Unexpected incomplete result in bucket"
 
             number_uploads = len(list(bucket.multipart_uploads.all()))
-            logger.info(f"Fetched upload {number_uploads}")
+            logger.debug(f"Fetched upload {number_uploads}")
 
             if number_uploads > 0:
                 logger.info("Performing kikimr restart")

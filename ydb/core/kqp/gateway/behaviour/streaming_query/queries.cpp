@@ -1216,12 +1216,12 @@ public:
                 break;
             }
             case EWakeup::CheckAliveSoftTimeout: {
-                LOG_W("Deliver streaming query owner " << Info.PreviousOwner << " check alive request timeouted, retry check alive");
+                LOG_W("Deliver streaming query owner " << Info.PreviousOwner << " check alive request timed out, retry check alive");
                 RetryCheckAlive(/* longDelay */ false);
                 break;
             }
             case EWakeup::CheckAliveHardTimeout: {
-                LOG_W("Deliver streaming query owner " << Info.PreviousOwner << " check alive request timeouted, start lock");
+                LOG_W("Deliver streaming query owner " << Info.PreviousOwner << " check alive request timed out, start lock");
                 StartLockStreamingQueryRequestActor(Info.PreviousOwner);
                 break;
             }

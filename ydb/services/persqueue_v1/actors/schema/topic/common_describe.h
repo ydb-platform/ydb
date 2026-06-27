@@ -7,6 +7,7 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/describer/describer.h>
 #include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/util/backoff.h>
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/core/ydb_convert/ydb_convert.h>
 #include <ydb/library/yverify_stream/yverify_stream.h>
@@ -42,6 +43,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
         using TBase = TGrpcProxyActor<TDerived, TRequest>;
 
         static constexpr NKikimrServices::EServiceKikimr Service = NKikimrServices::EServiceKikimr::PQ_SCHEMA;
+        static constexpr ui64 LocationsRetryWakeupTag = 100;
 
     public:
         TDescribeBaseActor(NGRpcService::IRequestOpCtx* request, NPQ::NDescriber::TAccessRights accessRights)
@@ -160,6 +162,12 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
                 hFunc(NKikimr::TEvPersQueue::TEvReadSessionsInfoResponse, Handle);
                 hFunc(NKikimr::TEvPersQueue::TEvStatusResponse, Handle);
                 sFunc(TEvents::TEvPoison, PassAway);
+            case TEvents::TEvWakeup::EventType:
+                if (ev->Get<TEvents::TEvWakeup>()->Tag == LocationsRetryWakeupTag) {
+                    HandleLocationsRetryWakeup();
+                    return;
+                }
+                [[fallthrough]];
             default:
                 this->StateFuncBase(ev);
             }
@@ -173,9 +181,13 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
             const auto& record = ev->Get()->Record;
             if (!record.GetStatus()) {
-                RequestReadBalancer();
+                LOG_D("PartitionsLocation response status=false");
+                ScheduleLocationsRetry();
                 return;
             }
+
+            LocationsBackoff.Reset();
+            LocationsRetryPending = false;
 
             for (const auto& location : record.GetLocations()) {
                 auto& l = Partitions[location.GetPartitionId()].Location;
@@ -270,7 +282,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             }
 
             if (ev->Get()->TabletId == ReadBalancerTabletId) {
-                RequestReadBalancer();
+                ScheduleLocationsRetry();
             } else {
                 RequestStats(ev->Get()->TabletId);
             }
@@ -319,6 +331,37 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             TabletsInflight.insert(tabletId);
         }
 
+        void FailLocationsUnavailable() {
+            TabletsInflight.erase(ReadBalancerTabletId);
+            this->ReplyWithError(
+                Ydb::StatusIds::UNAVAILABLE,
+                "Partition locations are not available",
+                Ydb::PersQueue::ErrorCode::TABLET_PIPE_DISCONNECTED);
+        }
+
+        void ScheduleLocationsRetry() {
+            if (!LocationsBackoff.HasMore()) {
+                LOG_W("PartitionsLocation retries exceeded");
+                FailLocationsUnavailable();
+                return;
+            }
+            if (LocationsRetryPending) {
+                return;
+            }
+            LocationsRetryPending = true;
+            const auto delay = LocationsBackoff.Next();
+            LOG_D("PartitionsLocation retry " << LocationsBackoff.GetIteration() << " in " << delay);
+            this->Schedule(delay, new TEvents::TEvWakeup(LocationsRetryWakeupTag));
+        }
+
+        void HandleLocationsRetryWakeup() {
+            LocationsRetryPending = false;
+            if (LocationsReceived || !TabletsInflight.contains(ReadBalancerTabletId)) {
+                return;
+            }
+            RequestReadBalancer();
+        }
+
         protected:
             const NPQ::NDescriber::TAccessRights AccessRights;
         
@@ -329,6 +372,8 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
 
             bool LocationsReceived = false;
             bool ReadSessionsReceived = false;
+            bool LocationsRetryPending = false;
+            TBackoff LocationsBackoff = TBackoff(25, TDuration::MilliSeconds(10), TDuration::MilliSeconds(100));
 
             Ydb::Scheme::Entry SelfEntry;
 

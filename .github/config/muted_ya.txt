@@ -20,7 +20,6 @@ ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable-ColumnStore
 ydb/core/kqp/ut/scheme KqpScheme.CreateDropTableMultipleTime
 ydb/core/kqp/ut/scheme KqpScheme.StreamingQueriesOnServerless
 ydb/core/load_test/ut GroupWriteTest.SimpleRdma
-ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/partition_ut TPartitionDirectTest.ShouldRestorePartitionAfterRestart
 ydb/core/persqueue/ut/ut_with_sdk TPersQueueMirrorer.MirrorKafkaBatchesAsBatches
 ydb/core/tx/columnshard/backup/iscan/ut unittest.sole chunk
 ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobs

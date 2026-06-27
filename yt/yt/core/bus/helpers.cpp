@@ -36,7 +36,7 @@ void MaterializeTransferAndReinvoke(
             handler = std::move(handler),
             message = std::move(message),
             replyBus = std::move(replyBus)
-        ] (TErrorOr<std::vector<TSharedRef>>&& partsOrError) {
+        ] (TErrorOr<std::vector<TSharedRef>>&& partsOrError) mutable {
             if (!partsOrError.IsOK()) {
                 // The transfer failed; there is nothing to deliver.
                 return;

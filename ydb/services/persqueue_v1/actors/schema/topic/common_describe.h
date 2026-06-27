@@ -38,7 +38,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
     template<class TDerived, typename TRequest>
     class TDescribeBaseActor: public TGrpcProxyActor<TDerived, TRequest>
                             , protected NPQ::TPipeCacheClient
-                            , protected NPQ::TConstantLogPrefix {
+                            , public NPQ::TConstantLogPrefix {
         using TBase = TGrpcProxyActor<TDerived, TRequest>;
 
         static constexpr NKikimrServices::EServiceKikimr Service = NKikimrServices::EServiceKikimr::PQ_SCHEMA;

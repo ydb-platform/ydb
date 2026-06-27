@@ -200,7 +200,7 @@ namespace NYdb::inline Dev::NTopic::NTests {
                 std::cerr << line << " issues=" << result.GetIssues().ToOneLineString() << std::endl;
 
                 UNIT_ASSERT_EQUAL(resultStatus, status);
-                UNIT_ASSERT_VALUES_EQUAL_C(resultIssue, issue, result.GetIssues().ToOneLineString());
+                UNIT_ASSERT_EQUAL(resultIssue, issue);
                 if (resultStatus == EStatus::SUCCESS) {
                     auto& p = result.GetPartitionDescription().GetPartition();
                     UNIT_ASSERT(p.GetActive());

@@ -189,7 +189,7 @@ void InferStatisticsForKqpTable(
         aliases = MakeSimpleShared<THashSet<TString>>();
     }
 
-    double nRows = tableData.Metadata->RecordsCount;    
+    double nRows = tableData.Metadata->RecordsCount;
     double byteSize = tableData.Metadata->DataSize;
     int nAttrs = tableData.Metadata->Columns.size();
 

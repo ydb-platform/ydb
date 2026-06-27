@@ -17,7 +17,7 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
   Calling `SelfCheck` method:
 
   ```cpp
-  auto settings = TSelfCheckSettings();
+  auto settings = NYdb::NMonitoring::TSelfCheckSettings();
   settings.ReturnVerboseStatus(true);
   auto result = client.SelfCheck(settings).GetValueSync();
   ```
@@ -34,9 +34,15 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
 
   This functionality is not currently supported.
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
-  This functionality is not currently supported in the JavaScript SDK. You can create a monitoring client and call health-check APIs yourself:
+  This functionality is not currently supported.
+
+  You can create a monitoring client and call the check methods yourself:
 
   ```javascript
   const monitoring = driver.createClient(MonitoringServiceDefinition);
@@ -48,6 +54,10 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
+
+- PHP
+
+  This functionality is not currently supported.
 
 {% endlist %}
 
@@ -83,7 +93,7 @@ The complete list of extra parameters is presented below:
 
 - C++
 
-  ```c++
+  ```cpp
   struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>{
       FLUENT_SETTING_OPTIONAL(bool, ReturnVerboseStatus);
       FLUENT_SETTING_OPTIONAL(EStatusFlag, MinimumStatus);
@@ -103,15 +113,23 @@ The complete list of extra parameters is presented below:
 
   This functionality is not currently supported.
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  This functionality is not currently supported.
 
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
+
+- PHP
+
+  This functionality is not currently supported.
 
 {% endlist %}
 

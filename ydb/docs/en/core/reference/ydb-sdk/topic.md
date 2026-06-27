@@ -36,11 +36,43 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
 
   [Examples on GitHub](https://github.com/ydb-platform/ydb-rs-sdk/tree/master/ydb/examples) (`topic-writer`, `topic-reader-retry`, `topic-read-in-transaction-example`).
 
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ## Initializing a connection {#init}
 
 {% list tabs group=lang %}
+
+- C++
+
+  To interact with {{ ydb-short-name }} Topics, create an instance of the {{ ydb-short-name }} driver and topic client.
+
+  The {{ ydb-short-name }} driver lets the app and {{ ydb-short-name }} interact at the transport layer. The driver must exist during the YDB access lifecycle and be initialized before creating a client.
+
+  Topic client ([source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1589)) requires the {{ ydb-short-name }} driver for work. It handles topics and manages read and write sessions.
+
+  App code snippet for driver initialization:
+
+  ```cpp
+  // Create driver instance.
+  auto driverConfig = NYdb::TDriverConfig()
+      .SetEndpoint(opts.Endpoint)
+      .SetDatabase(opts.Database)
+      .SetAuthToken(std::getenv("YDB_TOKEN"));
+
+  NYdb::TDriver driver(driverConfig);
+  ```
+
+  This example uses authentication token from the `YDB_TOKEN` environment variable. For details see [Connecting to a database](../../concepts/connect.md) and [Authentication](../../security/authentication.md) pages.
+
+  App code snippet for creating a client:
+
+  ```cpp
+  NYdb::NTopic::TTopicClient topicClient(driver);
+  ```
 
 - Go
 
@@ -85,33 +117,6 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
   }
   ```
 
-- C++
-
-  To interact with {{ ydb-short-name }} Topics, create an instance of the {{ ydb-short-name }} driver and topic client.
-
-  The {{ ydb-short-name }} driver lets the app and {{ ydb-short-name }} interact at the transport layer. The driver must exist during the YDB access lifecycle and be initialized before creating a client.
-
-  Topic client ([source code](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L1589)) requires the {{ ydb-short-name }} driver for work. It handles topics and manages read and write sessions.
-
-  App code snippet for driver initialization:
-
-  ```cpp
-  auto driverConfig = NYdb::TDriverConfig()
-      .SetEndpoint(opts.Endpoint)
-      .SetDatabase(opts.Database)
-      .SetAuthToken(std::getenv("YDB_TOKEN"));
-
-  NYdb::TDriver driver(driverConfig);
-  ```
-
-  This example uses authentication token from the `YDB_TOKEN` environment variable. For details see [Connecting to a database](../../concepts/connect.md) and [Authentication](../../security/authentication.md) pages.
-
-  App code snippet for creating a client:
-
-  ```cpp
-  NYdb::NTopic::TTopicClient topicClient(driver);
-  ```
-
 - Java
 
   To interact with {{ ydb-short-name }} Topics, create an instance of the {{ ydb-short-name }} transport and topic client.
@@ -149,37 +154,23 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
 
 - C#
 
-  To interact with {{ ydb-short-name }} Topics, create an instance of the {{ ydb-short-name }} driver and topic client.
-
-  The {{ ydb-short-name }} transport allows the app and {{ ydb-short-name }} to interact at the transport layer. The transport must exist during the {{ ydb-short-name }} access lifecycle and be initialized before creating a client.
-
-  App code snippet for transport initialization:
-
-  ```c#
-  var config = new DriverConfig(
-      endpoint: "grpc://localhost:2136",
-      database: "/local"
-  );
-
-  await using var driver = await Driver.CreateInitialized(
-      config: config,
-      loggerFactory: loggerFactory
-  );
-  ```
+  To work with topics, it is enough to pass the connection string directly to the constructor of the required client.
 
   This example uses anonymous authentication. For details, see [Connecting to a database](../../concepts/connect.md) and [Authentication](../../security/authentication.md).
 
-  App code snippet for creating various clients:
+  App code snippet for creating various topic clients:
 
   ```c#
-  var topicClient = new TopicClient(driver);
+  const string connectionString = "Host=localhost;Port=2136;Database=/local";
 
-  await using var writer = new WriterBuilder<string>(driver, topicName)
+  await using var topicClient = new TopicClient(connectionString);
+
+  await using var writer = new WriterBuilder<string>(connectionString, topicName)
   {
       ProducerId = "ProducerId_Example"
   }.Build();
 
-  await using var reader = new ReaderBuilder<string>(driver)
+  await using var reader = new ReaderBuilder<string>(connectionString)
   {
       ConsumerName = "Consumer_Example",
       SubscribeSettings = { new SubscribeSettings(topicName) }
@@ -260,6 +251,10 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
       Ok(())
   }
   ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -347,7 +342,7 @@ The topic path is mandatory. Other parameters are optional.
                   .build());
   ```
 
-- С#
+- C#
 
   Example of creating a topic with a list of supported codecs and a minimum number of partitions:
 
@@ -395,6 +390,10 @@ The topic path is mandatory. Other parameters are optional.
       )
       .await?;
   ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -479,6 +478,10 @@ When you update a topic, you must specify the topic path and the parameters to b
                   .build());
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -505,6 +508,10 @@ When you update a topic, you must specify the topic path and the parameters to b
       )
       .await?;
   ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -573,6 +580,10 @@ When you update a topic, you must specify the topic path and the parameters to b
   TopicDescription description = topicDescriptionResult.getValue();
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -596,6 +607,10 @@ When you update a topic, you must specify the topic path and the parameters to b
       )
       .await?;
   ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -663,6 +678,10 @@ To delete a topic, just specify the path to it.
   ```rust
   topic_client.drop_topic("/local/my-topic".into()).await?;
   ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -827,6 +846,10 @@ Only connections with matching [producer and message group](../../concepts/topic
       )
       .await?;
   ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -1022,6 +1045,10 @@ Only connections with matching [producer and message group](../../concepts/topic
   writer.stop().await?;
   ```
 
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ### Message writes with storage confirmation on the server
@@ -1188,6 +1215,10 @@ Only connections with matching [producer and message group](../../concepts/topic
       .await?;
   ```
 
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ### Selecting a codec for message compression {#codec}
@@ -1251,6 +1282,10 @@ For more details on using data compression for topics, see [here](../../concepts
           .build();
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
   ```javascript
@@ -1279,38 +1314,44 @@ For more details on using data compression for topics, see [here](../../concepts
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
 
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ### Writing messages in no-deduplication mode {#nodedup}
 
+For more details on writing without deduplication, see the [corresponding section of the concepts](../../concepts/datamodel/topic#no-dedup).
+
 {% list tabs group=lang %}
 
 - C++
+
   If no ProducerId is specified on write session setup, the session runs in no-deduplication mode. The example below demonstrates such a session setup:
 
   ```cpp
   auto settings = NYdb::NTopic::TWriteSessionSettings()
       .Path(myTopicPath);
+
   auto session = topicClient.CreateWriteSession(settings);
   ```
 
   If, on other hand, you want to ensure deduplication is enabled, you can specify the ProducerId option or call the `DeduplicationEnabled()` method from WriteSessionSettings. The '[Connecting to a topic for message writes](#start-writer)' section has an example of write session that has deduplication enabled.
 
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - Go
+
   In **ydb-go-sdk**, when you create a writer without explicitly passing `topicoptions.WithWriterProducerID`, the SDK still assigns a producer ID (it generates one automatically). A mode equivalent to omitting `ProducerId` in the C++ example above is not available in the current SDK version.
 
 - Java
-  This functionality is not currently supported.
-
-- Python
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - C#
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-- JavaScript
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
@@ -1354,6 +1395,32 @@ All the metadata provided when writing a message is sent to a consumer with the 
   if (auto* readyEvent = std::get_if<NYdb::NTopic::TWriteSessionEvent::TReadyToAcceptEvent>(&*event)) {
       session->Write(std::move(event.ContinuationToken), std::move(message));
   };
+  ```
+
+- Go
+
+  Set metadata in the `Metadata` field of `topicwriter.Message`:
+
+  ```go
+  err := writer.Write(ctx, topicwriter.Message{
+    Data: strings.NewReader("message-data"),
+    Metadata: map[string][]byte{
+      "meta-key":    []byte("meta-value"),
+      "another-key": []byte("value"),
+    },
+  })
+  ```
+
+  When reading, metadata is available on the message:
+
+  ```go
+  msg, err := reader.ReadMessage(ctx)
+  if err != nil {
+    return err
+  }
+  for k, v := range msg.Metadata {
+    fmt.Printf("%s: %s\n", k, string(v))
+  }
   ```
 
 - Java
@@ -1418,32 +1485,6 @@ All the metadata provided when writing a message is sent to a consumer with the 
   );
   ```
 
-- Go
-
-  Set metadata in the `Metadata` field of `topicwriter.Message`:
-
-  ```go
-  err := writer.Write(ctx, topicwriter.Message{
-    Data: strings.NewReader("message-data"),
-    Metadata: map[string][]byte{
-      "meta-key":    []byte("meta-value"),
-      "another-key": []byte("value"),
-    },
-  })
-  ```
-
-  When reading, metadata is available on the message:
-
-  ```go
-  msg, err := reader.ReadMessage(ctx)
-  if err != nil {
-    return err
-  }
-  for k, v := range msg.Metadata {
-    fmt.Printf("%s: %s\n", k, string(v))
-  }
-  ```
-
 - JavaScript
 
   ```javascript
@@ -1459,6 +1500,10 @@ All the metadata provided when writing a message is sent to a consumer with the 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -1514,45 +1559,47 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
   [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_example.py)
 
-  ```python
-  with ydb.QuerySessionPool(driver) as session_pool:
+  {% list tabs %}
 
-      def callee(tx: ydb.QueryTxContext):
-          tx_writer: ydb.TopicTxWriter = driver.topic_client.tx_writer(tx, topic)
+  - Native SDK
 
-          for i in range(message_count):
-              result_stream = tx.execute(query=f"select {i} as res;")
-              for result_set in result_stream:
-                  message = str(result_set.rows[0]["res"])
-                  tx_writer.write(ydb.TopicWriterMessage(message))
-                  print(f"Message {message} was written with tx.")
+    ```python
+    with ydb.QuerySessionPool(driver) as session_pool:
 
-      session_pool.retry_tx_sync(callee)
-  ```
+        def callee(tx: ydb.QueryTxContext):
+            tx_writer: ydb.TopicTxWriter = driver.topic_client.tx_writer(tx, topic)
 
-- Python (asyncio)
+            for i in range(message_count):
+                result_stream = tx.execute(query=f"select {i} as res;")
+                for result_set in result_stream:
+                    message = str(result_set.rows[0]["res"])
+                    tx_writer.write(ydb.TopicWriterMessage(message))
+                    print(f"Message {message} was written with tx.")
 
-  To write to a topic within a transaction, create a transactional writer by calling `topic_client.tx_writer` with the `tx` argument. Once created, you can send messages as usual. There's no need to close the transactional writer manually, as it will be closed automatically when the transaction ends.
+        session_pool.retry_tx_sync(callee)
+    ```
 
-  In the example below, there is no explicit call to `tx.commit()`; it occurs implicitly upon the successful execution of the `callee` lambda.
+  - Native SDK (Asyncio)
 
-  [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
+    [Example on GitHub](https://github.com/ydb-platform/ydb-python-sdk/blob/main/examples/topic/topic_transactions_async_example.py)
 
-  ```python
-  async with ydb.aio.QuerySessionPool(driver) as session_pool:
+    ```python
+    async with ydb.aio.QuerySessionPool(driver) as session_pool:
 
-      async def callee(tx: ydb.aio.QueryTxContext):
-          tx_writer: ydb.TopicTxWriterAsyncIO = driver.topic_client.tx_writer(tx, topic)
+        async def callee(tx: ydb.aio.QueryTxContext):
+            tx_writer: ydb.TopicTxWriterAsyncIO = driver.topic_client.tx_writer(tx, topic)
 
-          for i in range(message_count):
-              async with await tx.execute(query=f"select {i} as res;") as result_stream:
-                  async for result_set in result_stream:
-                      message = str(result_set.rows[0]["res"])
-                      await tx_writer.write(ydb.TopicWriterMessage(message))
-                      print(f"Message {result_set.rows[0]['res']} was written with tx.")
+            for i in range(message_count):
+                async with await tx.execute(query=f"select {i} as res;") as result_stream:
+                    async for result_set in result_stream:
+                        message = str(result_set.rows[0]["res"])
+                        await tx_writer.write(ydb.TopicWriterMessage(message))
+                        print(f"Message {result_set.rows[0]['res']} was written with tx.")
 
-      await session_pool.retry_tx_async(callee)
-  ```
+        await session_pool.retry_tx_async(callee)
+    ```
+
+  {% endlist %}
 
 - Java
 
@@ -1683,15 +1730,23 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -1875,6 +1930,10 @@ Topic can have several Consumers and for each of them server stores its own read
       .await?;
   ```
 
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 Additional options are used to specify multiple topics and other parameters.
@@ -2019,6 +2078,10 @@ To establish a connection to the `my-topic` and `my-specific-topic` topics using
       .await?;
   ```
 
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ### Reading messages {#reading-messages}
@@ -2059,7 +2122,7 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Rust
 
@@ -2069,6 +2132,10 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
   let batch = reader.pop_batch_in_tx(&mut tx).await?;
   // process batch.messages and commit the transaction
   ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -2172,6 +2239,10 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 #### Reading message batches
@@ -2234,13 +2305,6 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
 
   {% endlist %}
 
-- JavaScript
-
-  ```javascript
-  for await (let batch of reader.read()) {
-  }
-  ```
-
 - Java
 
   {% list tabs %}
@@ -2286,11 +2350,22 @@ Data from topics can be read in the context of [transactions](#read-tx). In this
   }
   ```
 
+- JavaScript
+
+  ```javascript
+  for await (let batch of reader.read()) {
+  }
+  ```
+
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -2408,6 +2483,19 @@ If a commit fails with an error, the application should log it and continue; it 
     }
   }
   ```
+
+- Rust
+
+  ```rust
+  let batch = reader.read_batch().await?;
+  reader.commit(batch.get_commit_marker())?;
+  // or with waiting for server acknowledgment:
+  reader.commit_with_ack(batch.get_commit_marker()).await?;
+  ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -2556,6 +2644,10 @@ If a commit fails with an error, the application should log it and continue; it 
   reader.commit_with_ack(batch.get_commit_marker()).await?;
   ```
 
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ### Reading with consumer offset storage on the client side {#client-commit}
@@ -2664,11 +2756,19 @@ Instead of committing messages, the client application may track reading progres
   });
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -2677,6 +2777,24 @@ Instead of committing messages, the client application may track reading progres
 Reading progress is usually saved on a server for each Consumer. However, such progress can't be saved if a reader is created without a specified `Consumer`.
 
 {% list tabs group=lang %}
+
+- C++
+
+  In `NYdb::NTopic::TReadSessionSettings`, call `WithoutConsumer()`:
+
+  ```cpp
+  auto settings = NYdb::NTopic::TReadSessionSettings()
+      .WithoutConsumer()
+      .AppendTopics(
+          NYdb::NTopic::TTopicReadSettings("topic-path")
+              .AppendPartitionIds(0)
+              .AppendPartitionIds(1)
+              .AppendPartitionIds(2));
+
+  auto readSession = topicClient.CreateReadSession(settings);
+  ```
+
+  On reconnect, reading progress on the server is not saved. To avoid starting from the beginning, pass the offset to `TStartPartitionSessionEvent::Confirm` on each partition read session start — see [client-side offset storage](#client-commit).
 
 - Go
 
@@ -2747,15 +2865,23 @@ Reading progress is usually saved on a server for each Consumer. However, such p
   )
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -2953,9 +3079,9 @@ Reading progress is usually saved on a server for each Consumer. However, such p
 
   {% include [java_transaction_requirements](_includes/alerts/java_transaction_requirements.md) %}
 
-- JavaScript
+- C#
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Rust
 
@@ -2965,6 +3091,14 @@ Reading progress is usually saved on a server for each Consumer. However, such p
   let batch = reader.pop_batch_in_tx(&mut tx).await?;
   // process batch.messages and commit the transaction
   ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -3068,9 +3202,13 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
   {% endlist %}
 
+- C#
+
+  No special processing is required.
+
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Rust
 
@@ -3079,6 +3217,10 @@ In case of a _hard interruption_, the client receives a notification that it is 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -3179,9 +3321,13 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Rust
 
@@ -3191,11 +3337,57 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 {% endlist %}
 
 ### Topic autoscaling {#autoscaling}
 
 {% list tabs group=lang %}
+
+- C++
+
+  The SDK supports two topic reading modes with autoscaling enabled: full support mode and compatibility mode. The reading mode is set in the read session creation settings. Compatibility mode is used by default.
+
+  ```cpp
+  auto settings = NYdb::NTopic::TReadSessionSettings()
+      .SetAutoscalingSupport(true); // full support is enabled
+
+  // or
+
+  auto settings = NYdb::NTopic::TReadSessionSettings()
+      .SetAutoscalingSupport(false); // compatibility mode is enabled
+
+  auto readSession = topicClient.CreateReadSession(settings);
+  ```
+
+  In full support mode, once all messages from a partition have been read, a `TEndPartitionSessionEvent` event is delivered. After receiving this event, no new messages will appear in the partition for reading. To continue reading from the child partitions, you must call `Confirm()`, thereby confirming that the application is ready to receive messages from the child partitions. If messages from all partitions are processed in a single thread, `Confirm()` can be called immediately after receiving `TEndPartitionSessionEvent`. If messages from different partitions are processed in different threads, you should finish processing the messages — for example, flush the accumulated batch, commit them, or save the reading position in your own database — and only then call `Confirm()`.
+
+  After receiving `TEndPartitionSessionEvent` and processing all messages, it is recommended to always commit them immediately. This allows the reading of child partitions to be balanced across different read sessions, resulting in an even load distribution across all readers.
+
+  An event loop fragment might look like this:
+
+  ```cpp
+  auto settings = NYdb::NTopic::TReadSessionSettings()
+      .SetAutoscalingSupport(true);
+
+  auto readSession = topicClient.CreateReadSession(settings);
+
+  auto event = readSession->GetEvent(/*block=*/true);
+  if (auto* endPartitionSessionEvent = std::get_if<NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent>(&*event)) {
+      endPartitionSessionEvent->Confirm();
+  } else {
+    // other event types
+  }
+  ```
+
+  In compatibility mode, there is no explicit signal that reading from a partition has finished, and the server tries to heuristically determine that the client has processed the partition to the end. This can cause a delay between finishing reading from the source partition and starting to read from its child partitions.
+
+  If the client commits messages, the signal that processing of a partition's messages is complete is the commit of the last message of that partition. If the client does not commit messages, the server will periodically interrupt reading from the partition and switch to reading in another session (if there are other sessions ready to process the partition). This continues until reading [starts](#client-commit) from the end of the partition.
+
+  It is recommended to verify correct handling of soft reading interruption: the client should process the received messages, commit them or save the reading position in its own database, and only then call `Confirm()` for the `TStopPartitionSessionEvent` event.
 
 - Go
 
@@ -3372,13 +3564,25 @@ In case of a _hard interruption_, the client receives a notification that it is 
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- Java
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#311](https://github.com/ydb-platform/ydb-rs-sdk/issues/311)
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}
 
@@ -3387,6 +3591,38 @@ In case of a _hard interruption_, the client receives a notification that it is 
 Most often, committing is conveniently done within the reader that has read the messages. However, there are scenarios where committing needs to be performed by a separate process. In such cases, a method of committing outside the reader is necessary.
 
 {% list tabs group=lang %}
+
+- C++
+
+  Committing outside the read session is done with the `NYdb::NTopic::TTopicClient::CommitOffset` method:
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/topic/client.h>
+
+  NYdb::NTopic::TTopicClient topicClient(driver);
+
+  NYdb::NStatusHelpers::ThrowOnError(topicClient.CommitOffset(
+      topicPath,
+      partitionId,
+      consumerName,
+      offset).GetValueSync());
+  ```
+
+  If a read session is active when you commit (for example, via `CreateReadSession`), it is recommended to pass its ID using the `ReadSessionId` option in `NYdb::NTopic::TCommitOffsetSettings` so the server does not interrupt the current read session:
+
+  ```cpp
+  // Read session ID
+  std::string sessionId = readSession->GetSessionId();
+
+  NYdb::NStatusHelpers::ThrowOnError(topicClient.CommitOffset(
+      topicPath,
+      partitionId,
+      consumerName,
+      offset,
+      NYdb::NTopic::TCommitOffsetSettings()
+          .ReadSessionId(sessionId)
+  ).GetValueSync());
+  ```
 
 - Go
 
@@ -3459,7 +3695,7 @@ Most often, committing is conveniently done within the reader that has read the 
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Java
 
@@ -3480,10 +3716,18 @@ Most often, committing is conveniently done within the reader that has read the 
   ).join().expectSuccess("Error commit!");
   ```
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

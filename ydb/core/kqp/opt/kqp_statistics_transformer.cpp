@@ -440,7 +440,7 @@ void InferStatisticsForRowsSourceSettings(
 
     int nAttrs = sourceSettings.Columns().Size();
 
-    double sizePerRow = inputStats->ByteSize / (inputRows==0?1000:inputRows);
+    double sizePerRow = inputStats->ByteSize / (inputRows==0?1:inputRows);
     double byteSize = nRows * sizePerRow * (nAttrs / (double)inputStats->Ncols);
     double cost = inputStats->Cost;
 

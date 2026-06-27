@@ -22,7 +22,7 @@
 - [**Vector indexes**](query_execution/vector_search.md): support for storing and searching vector embeddings — ideal for semantic search, similarity matching, and ML use cases.
 - [**Observability**](../reference/observability/index.md): built-in metrics, logs, and dashboards.
 - **Security and audit**: data encryption (at-rest and in-transit), operation auditing, and support for authentication and authorization — see [Security](../security/index.md).
-- **Tools, integrations, and APIs**: [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) for running queries, administration, and debugging. [SDKs](../reference/ydb-sdk/index.md) for C++, C#, Go, Java, Node.js, PHP, Python, and Rust. Integrations with various third-party systems. Learn more in [{#T}](../integrations/index.md) and [{#T}](../reference/languages-and-apis/index.md).
+- **Tools, integrations, and APIs**: [{{ ydb-short-name }} CLI](../reference/ydb-cli/index.md) for running queries, administration, and debugging. [SDKs](../reference/ydb-sdk/index.md) for C++, C#, Go, Java, JavaScript, PHP, Python, and Rust. Integrations with various third-party systems. Learn more in [{#T}](../integrations/index.md) and [{#T}](../reference/languages-and-apis/index.md).
 - **Open architecture**: [source code](https://github.com/ydb-platform/ydb) is available under the [Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0). The system uses the open [gRPC](https://grpc.io/) protocol, enabling client implementations in any programming language.
 
 ### Key Use Cases

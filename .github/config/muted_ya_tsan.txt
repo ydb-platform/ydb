@@ -100,6 +100,7 @@ ydb/core/kqp/proxy_service/ut ScriptExecutionsTest.GetOperationDuringAtomicUploa
 ydb/core/kqp/proxy_service/ut ScriptExecutionsTest.TestSecureScriptExecutions
 ydb/core/kqp/rm_service/ut KqpRm.ConcurrentChannels
 ydb/core/kqp/rm_service/ut KqpRm.ConcurrentTasks
+ydb/core/kqp/ut/batch_operations KqpBatchDelete.ManyPartitions_1
 ydb/core/kqp/ut/batch_operations unittest.[*/*] chunk
 ydb/core/kqp/ut/channels Channels20.InstantFinish1n
 ydb/core/kqp/ut/data_integrity unittest.[*/*] chunk
@@ -136,6 +137,7 @@ ydb/core/kqp/ut/scheme KqpOlapTypes.PgFloat4Column
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublicApi-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql-EnableIndexStreamWrite
+ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexDeniesTableModificationsSql+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexDeniesTableModificationsSql-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme unittest.[*/*] chunk
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
@@ -309,6 +311,7 @@ ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_balance
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_balance_mismatching_size_in_units
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_get_set
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
+ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_add
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_resize
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_group_take_snapshot
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_infer_pdisk_slot_count

@@ -516,14 +516,12 @@ void TBaseCloudAuthRequestProxy::Bootstrap() {
                 return;
             }
         }
-    } else if (IamToken_) {
-        AuthenticateIamToken_ = true;
-        Become(&TThis::ProcessAuthentication);
-        Authenticate();
     } else if (FolderId_) {
         GetCloudIdAndAuthorize();
     } else {
-        Y_ABORT("Unexpected auth state after InitAndValidate");
+        AuthenticateIamToken_ = true;
+        Become(&TThis::ProcessAuthentication);
+        Authenticate();
     }
 };
 

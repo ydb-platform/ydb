@@ -932,7 +932,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
                 auto res = SendSqsRequest(*this, ESqsProtocol::Json, credentials, withFolderId, "GetQueueUrl", std::move(req));
                 const TString label = MatrixCaseLabel(ESqsProtocol::Json, credentials, withFolderId);
 
-                if (credentials == ETestCredentials::UserAccountIam) {
+                if (credentials == ETestCredentials::UserAccountIam && !withFolderId) {
                     AssertAccessDenied(res, label);
                 } else {
                     AssertQueueDoesNotExist(ESqsProtocol::Json, res, label);
@@ -953,7 +953,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
                 auto res = SendSqsRequest(*this, ESqsProtocol::Xml, credentials, withFolderId, "GetQueueUrl", std::move(req));
                 const TString label = MatrixCaseLabel(ESqsProtocol::Xml, credentials, withFolderId);
 
-                if (credentials == ETestCredentials::UserAccountIam) {
+                if (credentials == ETestCredentials::UserAccountIam && !withFolderId) {
                     AssertAccessDenied(res, label);
                 } else {
                     AssertQueueDoesNotExist(ESqsProtocol::Xml, res, label);
@@ -977,7 +977,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
                 auto res = SendSqsRequest(*this, ESqsProtocol::Json, credentials, withFolderId, "SendMessage", std::move(req));
                 const TString label = MatrixCaseLabel(ESqsProtocol::Json, credentials, withFolderId);
 
-                if (credentials == ETestCredentials::UserAccountIam) {
+                if (credentials == ETestCredentials::UserAccountIam && !withFolderId) {
                     AssertAccessDenied(res, label);
                 } else {
                     UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, label << "\n" << res.Body);
@@ -1004,7 +1004,7 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
                 auto res = SendSqsRequest(*this, ESqsProtocol::Xml, credentials, withFolderId, "SendMessage", std::move(req));
                 const TString label = MatrixCaseLabel(ESqsProtocol::Xml, credentials, withFolderId);
 
-                if (credentials == ETestCredentials::UserAccountIam) {
+                if (credentials == ETestCredentials::UserAccountIam && !withFolderId) {
                     AssertAccessDenied(res, label);
                 } else {
                     UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, label << "\n" << res.Body);

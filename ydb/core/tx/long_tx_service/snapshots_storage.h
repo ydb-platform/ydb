@@ -12,7 +12,6 @@ namespace NLongTxService {
 
 struct TLocalSnapshotInfo {
     TRowVersion Snapshot;
-    TInstant CreationTime;
     NActors::TActorId SessionActorId;
     TVector<NKikimr::TTableId> TableIds;
     std::shared_ptr<std::atomic<bool>> AliveFlag = nullptr;
@@ -22,18 +21,16 @@ struct TLocalSnapshotInfo {
     TLocalSnapshotInfo(
         const TRowVersion& snapshot,
         const NActors::TActorId& sessionActorId,
-        TVector<NKikimr::TTableId> tableIds,
-        const TInstant creationTime)
+        TVector<NKikimr::TTableId> tableIds)
         : Snapshot(snapshot)
-        , CreationTime(creationTime)
         , SessionActorId(sessionActorId)
         , TableIds(std::move(tableIds))
         , AliveFlag(std::make_shared<std::atomic<bool>>(true))
     {}
 
-    struct TComparatorByCreateTimeFirst {
+    struct TComparatorBySnapshotAndSessionId {
         bool operator()(const TLocalSnapshotInfo& lhs, const TLocalSnapshotInfo& rhs) const {
-            return std::tie(lhs.CreationTime, lhs.Snapshot, lhs.SessionActorId) < std::tie(rhs.CreationTime, rhs.Snapshot, rhs.SessionActorId);
+            return std::tie(lhs.Snapshot, lhs.SessionActorId) < std::tie(rhs.Snapshot, rhs.SessionActorId);
         }
     };
 };
@@ -70,28 +67,29 @@ public:
         friend class TInputRangeAdaptor<TView>;
         friend class TLocalSnapshotsStorage;
 
-        using TConstIter = TSet<TLocalSnapshotInfo, TLocalSnapshotInfo::TComparatorByCreateTimeFirst>::const_iterator;
+        using TConstIter = TSet<TLocalSnapshotInfo, TLocalSnapshotInfo::TComparatorBySnapshotAndSessionId>::const_iterator;
 
         TView(
                 TConstIter begin,
                 TConstIter end,
-                TInstant maxCreationTime)
+                ui64 maxSnapshotStep)
             : Iter(begin)
             , End(end)
-            , MaxCreationTime(maxCreationTime)
+            , MaxSnapshotStep(maxSnapshotStep)
         {}
 
         const TLocalSnapshotInfo* Next();
 
         TConstIter Iter;
         const TConstIter End;
-        const TInstant MaxCreationTime;
+        const ui64 MaxSnapshotStep;
     };
 
     TView View() const;
+    TView View(TInstant now) const;
 
 private:
-    TSet<TLocalSnapshotInfo, TLocalSnapshotInfo::TComparatorByCreateTimeFirst> LocalSnapshots;
+    TSet<TLocalSnapshotInfo, TLocalSnapshotInfo::TComparatorBySnapshotAndSessionId> LocalSnapshots;
 };
 
 using TLocalSnapshotsStoragePtr = TIntrusivePtr<TLocalSnapshotsStorage>;

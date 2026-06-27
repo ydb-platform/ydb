@@ -739,14 +739,11 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(T
         programsMap[program.Raw()] = newProgram;
     }
 
-    TVector<TExprNode::TPtr> newStages;
-    newStages.reserve(physicalStages.size());
-    for (ui32 i = 0, e = physicalStages.size(); i < e; ++i) {
-        newStages.push_back(ctx.ReplaceNodes(std::move(physicalStages[i]), programsMap));
-    }
-
-    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO After peephole] " << KqpExprToPrettyString(TExprBase(newStages.back()), ctx);
-    return newStages;
+    auto rootStage = ctx.ReplaceNodes(std::move(physicalStages.back()), programsMap);
+    TVector<TExprNode::TPtr> stagesTopSorted;
+    TopologicalSort(TDqPhyStage(rootStage), stagesTopSorted);
+    YQL_CLOG(TRACE, CoreDq) << "[NEW RBO After peephole] " << KqpExprToPrettyString(TExprBase(stagesTopSorted.back()), ctx);
+    return stagesTopSorted;
 }
 
 bool TPhysicalQueryBuilder::IsSuitableToPropagateWideBlocksThroughHashShuffleConnections(const TDqPhyStage& stage) const {

@@ -1836,7 +1836,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDefaultLiteral) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -1886,7 +1885,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDefaultInt) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -1936,7 +1934,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableDropDefault) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -1995,7 +1992,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDefaultNullIsNotAllowed) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2035,7 +2031,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDefaultNullForNotNullColumn) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2067,7 +2062,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDefaultNonExistentColumn) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2099,7 +2093,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableDropDefaultNoExistingDefault) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2131,7 +2124,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDefaultOnSequenceColumn) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2163,7 +2155,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableDropDefaultOnSequenceColumn) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2195,7 +2186,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetAndDropDefaultOnNotNullColumn) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2283,7 +2273,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(ShowCreateTableAfterSetDefault) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2333,7 +2322,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDropDefaultMultipleColumns) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2397,7 +2385,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(ShowCreateTableAfterDropDefault) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2447,7 +2434,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDefaultOnColumnTable) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2554,7 +2540,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableDropDefaultOnColumnTable) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2588,7 +2573,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDefaultOnPK) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2642,7 +2626,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableDropDefaultOnPK) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2716,7 +2699,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDefaultUnsupportedValue) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2761,7 +2743,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDropDefaultBulkUpsert) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2836,7 +2817,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDropDefaultAsyncIndexOnColumn) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2931,7 +2911,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDropDefaultAsyncIndexCoverColumn) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -3026,7 +3005,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableDefaultConstantExpression) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -3109,7 +3087,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableDefaultUndeterministicExpression) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -3276,7 +3253,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(AlterTableSetDropDefaultWithChangefeed) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -3446,73 +3422,8 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(AlterTableSetDefaultDisabled) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(false);
-
-        TKikimrRunner kikimr(TKikimrSettings(appConfig)
-            .SetWithSampleTables(false));
-
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            auto query = R"(
-                CREATE TABLE `/Root/SetDefaultTestDisabled` (
-                    Key Int32,
-                    Value String,
-                    PRIMARY KEY (Key)
-                );
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            auto query = R"(
-                ALTER TABLE `/Root/SetDefaultTestDisabled` ALTER COLUMN Value SET DEFAULT "hello"u;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Set/drop default value is not enabled");
-        }
-    }
-
-    Y_UNIT_TEST(AlterTableDropDefaultDisabled) {
-        NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(false);
-
-        TKikimrRunner kikimr(TKikimrSettings(appConfig)
-            .SetWithSampleTables(false));
-
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            auto query = R"(
-                CREATE TABLE `/Root/DropDefaultTestDisabled` (
-                    Key Int32,
-                    Value String DEFAULT "original"u,
-                    PRIMARY KEY (Key)
-                );
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
-        }
-
-        {
-            auto query = R"(
-                ALTER TABLE `/Root/DropDefaultTestDisabled` ALTER COLUMN Value DROP DEFAULT;
-            )";
-            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(result.GetIssues().ToString(), "Set/drop default value is not enabled");
-        }
-    }
-
     Y_UNIT_TEST_TWIN(SetDefaultNullableColumn_InsertOrReplace, IsInsert) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -3633,7 +3544,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST_TWIN(SetDefaultNotNullColumn_InsertOrReplace, IsInsert) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -3749,7 +3659,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST_TWIN(DropDefaultNullableColumn_InsertOrReplace, IsInsert) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -3872,7 +3781,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST_TWIN(DropDefaultNotNullColumn_InsertOrReplace, IsInsert) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -3979,7 +3887,6 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
 
     Y_UNIT_TEST(SetDefaultMultipleTimes) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableFeatureFlags()->SetEnableSetDropDefaultValue(true);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));

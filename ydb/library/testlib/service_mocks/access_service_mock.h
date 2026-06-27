@@ -115,7 +115,6 @@ public:
 
     THashMap<TString, TResponse<yandex::cloud::priv::accessservice::v2::AuthenticateResponse>> AuthenticateData;
     THashMap<TString, TResponse<yandex::cloud::priv::accessservice::v2::AuthorizeResponse>> AuthorizeData;
-    THashMap<TString, TResponse<yandex::cloud::priv::accessservice::v2::BulkAuthorizeResponse>> BulkAuthorizeData;
 
     TMutex UserIpMutex;
     TString CapturedXUserIP;
@@ -188,22 +187,29 @@ public:
             CapturedXUserIP = NTestUtils::CaptureXUserIP(ctx);
         }
 
-        TString token = request->signature().access_key_id() + request->iam_token();
         for (const auto& action : request->actions().items()) {
             if (action.resource_path_size() == 0) {
-                continue;
+                return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Permission Denied");
             }
+
             const TString& lastResourceId = action.resource_path(action.resource_path_size() - 1).id();
-            token += "-" + action.permission() + "-" + lastResourceId;
+            const TString& token = request->signature().access_key_id() + request->iam_token() + "-" + action.permission() + "-" + lastResourceId;
+
+            auto it = AuthorizeData.find(token);
+            if (it != AuthorizeData.end() && it->second.Status.ok()) {
+                CheckRequestId(ctx, it->second, token);
+                if (it->second.Response.has_subject()) {
+                    response->mutable_subject()->CopyFrom(it->second.Response.subject());
+                }
+            } else {
+                auto* result_item = response->mutable_results()->add_items();
+                result_item->set_permission(action.permission());
+                result_item->mutable_resource_path()->CopyFrom(action.resource_path());
+                result_item->mutable_permission_denied_error()->set_message((it != AuthorizeData.end()) ? it->second.Status.error_message() : "Permission denied");
+            }
         }
-        auto it = BulkAuthorizeData.find(token);
-        if (it != BulkAuthorizeData.end()) {
-            response->CopyFrom(it->second.Response);
-            CheckRequestId(ctx, it->second, token);
-            return it->second.Status;
-        } else {
-            return grpc::Status(grpc::StatusCode::PERMISSION_DENIED, "Permission Denied");
-        }
+
+        return grpc::Status::OK;
     }
 };
 

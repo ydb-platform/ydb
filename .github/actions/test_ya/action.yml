@@ -192,7 +192,6 @@ runs:
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
           -DUSE_EAT_MY_DATA
           --add-peerdirs-tests all
-          --cleanup-child-processes
         )
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}

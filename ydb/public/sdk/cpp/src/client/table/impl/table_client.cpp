@@ -1158,6 +1158,10 @@ void TTableClient::TImpl::DeleteSession(TKqpSessionCommon* sessionImpl) {
     delete sessionImpl;
 }
 
+void TTableClient::TImpl::PessimizeNode(std::uint64_t nodeId) {
+    DbDriverState_->EndpointPool.BanNodeId(nodeId);
+}
+
 ui32 TTableClient::TImpl::GetSessionRetryLimit() const {
     return Settings_.SessionPoolSettings_.RetryLimit_;
 }

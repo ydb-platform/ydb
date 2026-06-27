@@ -172,6 +172,16 @@ Below are examples of authentication with the metadata service in different {{ y
   await using var driver = await Driver.CreateInitialized(config);
   ```
 
+- Rust
+
+  ```rust
+  use ydb::{ClientBuilder, MetadataUrlCredentials, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      .with_credentials(MetadataUrlCredentials::new())
+      .client()?;
+  ```
+
 - PHP
 
   ```php

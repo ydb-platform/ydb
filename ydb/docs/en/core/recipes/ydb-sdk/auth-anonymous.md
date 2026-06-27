@@ -160,6 +160,16 @@ Below are examples of anonymous authentication in different {{ ydb-short-name }}
   await using var driver = await Driver.CreateInitialized(config);
   ```
 
+- Rust
+
+  ```rust
+  use ydb::{AnonymousCredentials, ClientBuilder, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      .with_credentials(AnonymousCredentials::new())
+      .client()?;
+  ```
+
 - PHP
 
   ```php

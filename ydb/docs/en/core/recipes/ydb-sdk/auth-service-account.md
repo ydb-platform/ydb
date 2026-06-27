@@ -188,6 +188,16 @@ Below are examples of authentication with a service account file in different {{
   await using var driver = await Driver.CreateInitialized(config);
   ```
 
+- Rust
+
+  ```rust
+  use ydb::{ClientBuilder, ServiceAccountCredentials, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string(std::env::var("YDB_CONNECTION_STRING")?)?
+      .with_credentials(ServiceAccountCredentials::from_env()?)
+      .client()?;
+  ```
+
 - PHP
 
   ```php

@@ -199,6 +199,16 @@ Below are examples of authentication with a token in different {{ ydb-short-name
   await using var driver = await Driver.CreateInitialized(config);
   ```
 
+- Rust
+
+  ```rust
+  use ydb::{AccessTokenCredentials, ClientBuilder, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      .with_credentials(AccessTokenCredentials::from(std::env::var("YDB_TOKEN")?))
+      .client()?;
+  ```
+
 - PHP
 
   ```php

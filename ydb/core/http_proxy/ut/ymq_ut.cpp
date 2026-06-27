@@ -22,8 +22,6 @@ using namespace NActors;
 
 Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
 
-<<<<<<< HEAD
-=======
     NYdb::TDriver CreateDriver(ui16 kikimrGrpcPort) {
         TString endpoint = TStringBuilder() << "localhost:" << kikimrGrpcPort;
         auto driverConfig = NYdb::TDriverConfig()
@@ -285,7 +283,6 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         Sleep(TDuration::Seconds(1));
     }
 
->>>>>>> 89b4718445f (LOGBROKER-10505 Add possibility to authenticate via service account i… (#44630))
     Y_UNIT_TEST_F(TestCreateQueue, THttpProxyTestMock) {
         CreateQueue({{"QueueName", "ExampleQueueName"}});
     }
@@ -459,8 +456,6 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
     }
 
     Y_UNIT_TEST_F(TestGetQueueUrlWithIAM, THttpProxyTestMock) {
-<<<<<<< HEAD
-=======
         PrepareConfigs(KikimrServer.Get());
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
@@ -501,7 +496,6 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(false);
         KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(false);
 
->>>>>>> 89b4718445f (LOGBROKER-10505 Add possibility to authenticate via service account i… (#44630))
         auto req = CreateSqsGetQueueUrlRequest();
         req["QueueName"] = "not-existing-queue";
         auto res = SendHttpRequest("/Root?folderId=XXX", "AmazonSQS.GetQueueUrl", std::move(req), "X-YaCloud-SubjectToken: Bearer proxy_sa@builtin");

@@ -342,7 +342,7 @@ public:
         return found;
     }
 
-    bool AddCluster(const std::pair<TString, TString>& table, IKikimrGateway::TTableMetadataResult& res, TExprNode::TPtr input, TExprContext& ctx) {
+    bool AddCluster(const std::pair<TString, TString>& table, IKikimrGateway::TTableMetadataResult& res, TExprNode::TPtr input, TExprContext& ctx, bool isShowCreate) {
         const auto& metadata = *res.Metadata;
         if (metadata.Kind != EKikimrTableKind::External) {
             return true;
@@ -351,7 +351,7 @@ public:
         // SHOW CREATE rewrites the read to point at the .sys/show_create
         // system view in a later step, so it does not need the external
         // data source to be available through ExternalSourceFactory.
-        if (ContainsShowCreateSetting(*input)) {
+        if (isShowCreate) {
             return true;
         }
 
@@ -397,6 +397,7 @@ public:
         YQL_ENSURE(AsyncFuture.HasValue());
 
         auto gatheredAttributes = GatherReadAttributes(*input, ctx);
+        const bool isShowCreate = ContainsShowCreateSetting(*input);
         for (auto& it : LoadResults) {
             const auto& table = it.first;
             IKikimrGateway::TTableMetadataResult& res = *it.second;
@@ -445,7 +446,7 @@ public:
                     }
                 }
 
-                if (!AddCluster(table, res, input, ctx)) {
+                if (!AddCluster(table, res, input, ctx, isShowCreate)) {
                     LoadResults.clear();
                     return TStatus::Error;
                 }

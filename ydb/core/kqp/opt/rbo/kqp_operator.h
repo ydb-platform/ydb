@@ -157,14 +157,6 @@ public:
     virtual void AddExpressionDeps(const TExpression& expr, TInfoUnitSet& target) = 0;
 };
 
-class INameConstraintsContext {
-public:
-    virtual ~INameConstraintsContext() = default;
-
-    virtual TInfoUnitSet GetIncomingForbidden(IOperator* op) const = 0;
-    virtual bool AddForbiddenToChild(IOperator* parent, ui32 childIdx, const TInfoUnitSet& forbidden) = 0;
-};
-
 /**
  * Interface for the operator
  */
@@ -231,7 +223,7 @@ public:
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) = 0;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) = 0;
     virtual void PropagateLiveness(ILivenessContext& ctx);
-    virtual bool PropagateNameConstraints(INameConstraintsContext& ctx);
+    virtual bool PropagateNameConstraints();
     virtual TPlanAliases::TAliasMap ComputeAliases();
 
     virtual TString GetExplainName() const = 0;
@@ -296,7 +288,7 @@ public:
     virtual void ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
-    virtual bool PropagateNameConstraints(INameConstraintsContext& ctx) override;
+    virtual bool PropagateNameConstraints() override;
 };
 
 class IBinaryOperator: public IOperator {
@@ -419,7 +411,7 @@ public:
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
     virtual TVector<std::reference_wrapper<TExpression>> GetComplexExpressions();
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
-    virtual bool PropagateNameConstraints(INameConstraintsContext& ctx) override;
+    virtual bool PropagateNameConstraints() override;
     virtual TPlanAliases::TAliasMap ComputeAliases() override;
     TVector<std::pair<TInfoUnit, TInfoUnit>> GetRenames() const;
     TInfoUnitSet GetRenameSources() const;
@@ -503,7 +495,7 @@ public:
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
-    virtual bool PropagateNameConstraints(INameConstraintsContext& ctx) override;
+    virtual bool PropagateNameConstraints() override;
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
@@ -573,7 +565,7 @@ public:
     virtual TVector<TInfoUnit> GetUsedIUs(TPlanProps& props) override;
     virtual TVector<std::reference_wrapper<TExpression>> GetExpressions() override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
-    virtual bool PropagateNameConstraints(INameConstraintsContext& ctx) override;
+    virtual bool PropagateNameConstraints() override;
     virtual TPlanAliases::TAliasMap ComputeAliases() override;
 
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
@@ -599,7 +591,7 @@ public:
                 TVector<TInfoUnit> columns, bool ordered = false);
     virtual TVector<TInfoUnit> GetOutputIUs() override;
     virtual void PropagateLiveness(ILivenessContext& ctx) override;
-    virtual bool PropagateNameConstraints(INameConstraintsContext& ctx) override;
+    virtual bool PropagateNameConstraints() override;
     void RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList = {}) override;
     virtual TString ToString(TExprContext& ctx) override;

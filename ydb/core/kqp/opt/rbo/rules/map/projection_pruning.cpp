@@ -53,30 +53,44 @@ void AddReadOriginalPredicateDeps(const TOpRead& read, TInfoUnitSet& requiredCol
 }
 
 TVector<TMapElement> KeepLiveMapElements(const TIntrusivePtr<TOpMap>& map, const TInfoUnitSet& liveOut, const TInfoUnitSet& keepKeyColumns = {}) {
-    TVector<TMapElement> newElements;
-    newElements.reserve(map->MapElements.size());
+    TVector<bool> keep(map->MapElements.size(), false);
+    for (size_t idx = 0; idx < map->MapElements.size(); ++idx) {
+        const auto& mapElement = map->MapElements[idx];
+        const auto to = mapElement.GetElementName();
+        if (liveOut.contains(to) || keepKeyColumns.contains(to)) {
+            keep[idx] = true;
+            continue;
+        }
 
-    auto isShadowedByKeptOutput = [&](const TInfoUnit& source) {
-        for (const auto& mapElement : map->MapElements) {
-            const auto output = mapElement.GetElementName();
-            if (output == source && (liveOut.contains(output) || keepKeyColumns.contains(output))) {
-                return true;
+        if (mapElement.IsRename() && GetForbidden(map.get()).contains(mapElement.GetRename())) {
+            keep[idx] = true;
+        }
+    }
+
+    bool changed = true;
+    while (changed) {
+        changed = false;
+        TInfoUnitSet keptOutputs;
+        for (size_t idx = 0; idx < map->MapElements.size(); ++idx) {
+            if (keep[idx]) {
+                AddInfoUnit(keptOutputs, map->MapElements[idx].GetElementName());
             }
         }
-        return false;
-    };
 
-    for (const auto& mapElement : map->MapElements) {
-        const auto to = mapElement.GetElementName();
-        if (mapElement.IsRename()) {
-            const auto from = mapElement.GetRename();
-            if (liveOut.contains(to) || keepKeyColumns.contains(to) ||
-                GetForbidden(map.get()).contains(from) ||
-                isShadowedByKeptOutput(from))
-            {
-                newElements.push_back(mapElement);
+        for (size_t idx = 0; idx < map->MapElements.size(); ++idx) {
+            const auto& mapElement = map->MapElements[idx];
+            if (!keep[idx] && mapElement.IsRename() && keptOutputs.contains(mapElement.GetRename())) {
+                keep[idx] = true;
+                changed = true;
             }
-        } else if (liveOut.contains(to) || keepKeyColumns.contains(to)) {
+        }
+    }
+
+    TVector<TMapElement> newElements;
+    newElements.reserve(map->MapElements.size());
+    for (size_t idx = 0; idx < map->MapElements.size(); ++idx) {
+        if (keep[idx]) {
+            const auto& mapElement = map->MapElements[idx];
             newElements.push_back(mapElement);
         }
     }

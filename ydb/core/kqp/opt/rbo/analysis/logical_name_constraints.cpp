@@ -2,10 +2,40 @@
 #include <ydb/core/kqp/opt/rbo/kqp_operator.h>
 #include <ydb/core/kqp/opt/rbo/kqp_rbo_utils.h>
 
+#include <optional>
+
 namespace NKikimr {
 namespace NKqp {
 
 namespace {
+
+bool SameInfoUnitSet(const TInfoUnitSet& lhs, const TInfoUnitSet& rhs) {
+    if (lhs.size() != rhs.size()) {
+        return false;
+    }
+    for (const auto& iu : lhs) {
+        if (!rhs.contains(iu)) {
+            return false;
+        }
+    }
+    return true;
+}
+
+TInfoUnitSet IntersectInfoUnitSets(const TInfoUnitSet& lhs, const TInfoUnitSet& rhs) {
+    const auto* smaller = &lhs;
+    const auto* larger = &rhs;
+    if (smaller->size() > larger->size()) {
+        std::swap(smaller, larger);
+    }
+
+    TInfoUnitSet result;
+    for (const auto& iu : *smaller) {
+        if (larger->contains(iu)) {
+            AddInfoUnit(result, iu);
+        }
+    }
+    return result;
+}
 
 const TPlanNameConstraints& GetComputedNameConstraints(IOperator* op) {
     Y_ENSURE(op);
@@ -19,7 +49,16 @@ TPlanNameConstraints& GetMutableComputedNameConstraints(IOperator* op) {
     return *op->Props.Analysis.NameConstraints;
 }
 
-class TLogicalNameConstraints: public INameConstraintsContext {
+bool AddSharedProducerConstraints(IOperator& consumer);
+
+bool PropagateForbidden(const TIntrusivePtr<IOperator>& op, const TInfoUnitConstraintSet& forbidden) {
+    if (forbidden.Empty()) {
+        return false;
+    }
+    return GetMutableComputedNameConstraints(op.get()).AddForbidden(forbidden);
+}
+
+class TLogicalNameConstraints {
 public:
     void Run(TOpRoot& root) {
         for (const auto& iter : root) {
@@ -31,87 +70,281 @@ public:
         while (changed) {
             changed = false;
             for (const auto& iter : root) {
-                changed |= iter.Current->PropagateNameConstraints(*this);
+                changed |= iter.Current->PropagateNameConstraints();
+            }
+            for (const auto& iter : root) {
+                changed |= AddSharedProducerConstraints(*iter.Current);
             }
             Y_ENSURE(++iteration < 1000, "Name constraint propagation did not converge");
         }
     }
-
-    TInfoUnitSet GetIncomingForbidden(IOperator* op) const override {
-        TInfoUnitSet result;
-        for (const auto& [parent, childIdx] : op->Parents) {
-            AddInfoUnits(result, GetComputedNameConstraints(op).GetForbiddenOut(parent, childIdx, op));
-        }
-        return result;
-    }
-
-    bool AddForbiddenToChild(IOperator* parent, ui32 childIdx, const TInfoUnitSet& forbidden) override {
-        if (forbidden.empty()) {
-            return false;
-        }
-        Y_ENSURE(childIdx < parent->Children.size());
-        auto child = parent->Children[childIdx];
-        return GetMutableComputedNameConstraints(child.get()).AddForbiddenOut(parent, childIdx, child.get(), forbidden);
-    }
 };
-
-ui32 ResolveChildIdx(IOperator* from, IOperator* to) {
-    Y_ENSURE(from);
-    Y_ENSURE(to);
-
-    ui32 result = 0;
-    ui32 matches = 0;
-    for (ui32 childIdx = 0; childIdx < to->Children.size(); ++childIdx) {
-        if (to->Children[childIdx].get() == from) {
-            result = childIdx;
-            ++matches;
-        }
-    }
-
-    Y_ENSURE(matches == 1, "Expected exactly one edge from producer to consumer");
-    return result;
-}
 
 } // anonymous namespace
 
-void TPlanNameConstraints::Clear() {
-    ForbiddenOut.clear();
+bool TInfoUnitConstraintSet::Add(const TInfoUnit& iu) {
+    if (AllExcept_) {
+        return Units_.erase(iu) != 0;
+    }
+    return Units_.insert(iu).second;
 }
 
-bool TPlanNameConstraints::AddForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child, const TInfoUnit& iu) {
-    Y_ENSURE(child);
-    return ForbiddenOut[TPlanEdgeKey{parent, childIdx, child}].insert(iu).second;
-}
-
-bool TPlanNameConstraints::AddForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child, const TInfoUnitSet& ius) {
+bool TInfoUnitConstraintSet::Add(const TInfoUnitSet& ius) {
     bool changed = false;
     for (const auto& iu : ius) {
-        changed |= AddForbiddenOut(parent, childIdx, child, iu);
+        changed |= Add(iu);
     }
     return changed;
 }
 
-const TInfoUnitSet& TPlanNameConstraints::GetForbiddenOut(IOperator* parent, ui32 childIdx, IOperator* child) const {
-    const auto it = ForbiddenOut.find(TPlanEdgeKey{parent, childIdx, child});
-    return it == ForbiddenOut.end() ? EmptyInfoUnitSet() : it->second;
+bool TInfoUnitConstraintSet::Add(const TInfoUnitConstraintSet& other) {
+    if (!other.AllExcept_) {
+        return Add(other.Units_);
+    }
+
+    TInfoUnitSet newUnits;
+    if (AllExcept_) {
+        newUnits = IntersectInfoUnitSets(Units_, other.Units_);
+    } else {
+        newUnits = other.Units_;
+        for (const auto& iu : Units_) {
+            newUnits.erase(iu);
+        }
+    }
+
+    const bool changed = !AllExcept_ || !SameInfoUnitSet(Units_, newUnits);
+    AllExcept_ = true;
+    Units_ = std::move(newUnits);
+    return changed;
 }
 
-bool IOperator::PropagateNameConstraints(INameConstraintsContext& ctx) {
-    Y_UNUSED(ctx);
+bool TInfoUnitConstraintSet::Remove(const TInfoUnit& iu) {
+    if (AllExcept_) {
+        return Units_.insert(iu).second;
+    }
+    return Units_.erase(iu) != 0;
+}
+
+bool TInfoUnitConstraintSet::Remove(const TInfoUnitSet& ius) {
+    bool changed = false;
+    for (const auto& iu : ius) {
+        changed |= Remove(iu);
+    }
+    return changed;
+}
+
+bool TInfoUnitConstraintSet::Intersect(const TInfoUnitConstraintSet& other) {
+    TInfoUnitConstraintSet result;
+    if (!AllExcept_ && !other.AllExcept_) {
+        result.Units_ = IntersectInfoUnitSets(Units_, other.Units_);
+    } else if (!AllExcept_ && other.AllExcept_) {
+        result.Units_ = Units_;
+        for (const auto& iu : other.Units_) {
+            result.Units_.erase(iu);
+        }
+    } else if (AllExcept_ && !other.AllExcept_) {
+        result.Units_ = other.Units_;
+        for (const auto& iu : Units_) {
+            result.Units_.erase(iu);
+        }
+    } else {
+        result.AllExcept_ = true;
+        result.Units_ = Units_;
+        AddInfoUnits(result.Units_, other.Units_);
+    }
+
+    const bool changed = AllExcept_ != result.AllExcept_ || !SameInfoUnitSet(Units_, result.Units_);
+    *this = std::move(result);
+    return changed;
+}
+
+TInfoUnitConstraintSet TInfoUnitConstraintSet::Complement() const {
+    if (AllExcept_) {
+        TInfoUnitConstraintSet result;
+        result.Units_ = Units_;
+        return result;
+    }
+    return TInfoUnitConstraintSet::AllExcept(Units_);
+}
+
+void TPlanNameConstraints::Clear() {
+    Forbidden = {};
+}
+
+bool TPlanNameConstraints::AddForbidden(const TInfoUnitConstraintSet& forbidden) {
+    return Forbidden.Add(forbidden);
+}
+
+const TInfoUnitConstraintSet& TPlanNameConstraints::GetForbidden() const {
+    return Forbidden;
+}
+
+namespace {
+
+bool OutputsLeft(const TString& joinKind) {
+    return joinKind != "RightOnly" && joinKind != "RightSemi";
+}
+
+bool OutputsRight(const TString& joinKind) {
+    return joinKind != "LeftOnly" && joinKind != "LeftSemi";
+}
+
+TInfoUnitConstraintSet MakeAllNamesConstraint() {
+    return TInfoUnitConstraintSet::AllExcept({});
+}
+
+TInfoUnitConstraintSet GetMapHiddenInputNames(const TOpMap& map) {
+    TInfoUnitConstraintSet result;
+    for (const auto& mapElement : map.MapElements) {
+        if (mapElement.IsRename()) {
+            result.Add(mapElement.GetRename());
+        }
+    }
+    return result;
+}
+
+TInfoUnitConstraintSet GetHiddenNamesOnEdge(IOperator* parent, ui32 childIdx) {
+    switch (parent->Kind) {
+        case EOperator::Map:
+            return GetMapHiddenInputNames(*static_cast<TOpMap*>(parent));
+        case EOperator::Aggregate:
+            return TInfoUnitConstraintSet::AllExcept(MakeInfoUnitSet(static_cast<TOpAggregate*>(parent)->GetKeyColumns()));
+        case EOperator::UnionAll:
+            return MakeAllNamesConstraint();
+        case EOperator::Join: {
+            const auto* join = static_cast<TOpJoin*>(parent);
+            if ((childIdx == 0 && OutputsLeft(join->JoinKind)) ||
+                (childIdx == 1 && OutputsRight(join->JoinKind)))
+            {
+                return {};
+            }
+            return MakeAllNamesConstraint();
+        }
+        default:
+            return {};
+    }
+}
+
+class THiddenOnAllPaths {
+public:
+    explicit THiddenOnAllPaths(IOperator* target)
+        : Target(target) {
+    }
+
+    std::optional<TInfoUnitConstraintSet> Compute(IOperator* op) {
+        if (op == Target) {
+            return TInfoUnitConstraintSet{};
+        }
+
+        if (const auto it = Memo.find(op); it != Memo.end()) {
+            return it->second;
+        }
+
+        std::optional<TInfoUnitConstraintSet> result;
+        for (const auto& [parent, childIdx] : op->Parents) {
+            auto parentHidden = Compute(parent);
+            if (!parentHidden) {
+                continue;
+            }
+
+            auto pathHidden = GetHiddenNamesOnEdge(parent, childIdx);
+            pathHidden.Add(*parentHidden);
+            if (result) {
+                result->Intersect(pathHidden);
+            } else {
+                result = std::move(pathHidden);
+            }
+        }
+
+        Memo[op] = result;
+        return result;
+    }
+
+private:
+    IOperator* Target;
+    THashMap<IOperator*, std::optional<TInfoUnitConstraintSet>> Memo;
+};
+
+void CollectProducerSubtree(IOperator* op, THashSet<IOperator*>& result) {
+    if (!result.insert(op).second) {
+        return;
+    }
+    for (const auto& child : op->Children) {
+        CollectProducerSubtree(child.get(), result);
+    }
+}
+
+struct TSideBySideInputBranches {
+    TIntrusivePtr<IOperator> First;
+    TIntrusivePtr<IOperator> Second;
+};
+
+std::optional<TSideBySideInputBranches> GetSideBySideInputBranches(IOperator& consumer) {
+    if (consumer.Kind == EOperator::Join) {
+        auto& join = static_cast<TOpJoin&>(consumer);
+        if (OutputsLeft(join.JoinKind) && OutputsRight(join.JoinKind)) {
+            return TSideBySideInputBranches{
+                join.GetLeftInput(),
+                join.GetRightInput()
+            };
+        }
+    }
+
+    return std::nullopt;
+}
+
+bool AddSharedProducerConstraints(IOperator& consumer) {
+    const auto branches = GetSideBySideInputBranches(consumer);
+    if (!branches) {
+        return false;
+    }
+
+    // If the same producer feeds two side-by-side input branches, a name exposed
+    // by that producer would appear through both branches unless one path hides it.
+    THashSet<IOperator*> firstProducers;
+    THashSet<IOperator*> secondProducers;
+    CollectProducerSubtree(branches->First.get(), firstProducers);
+    CollectProducerSubtree(branches->Second.get(), secondProducers);
+
+    THiddenOnAllPaths hiddenOnFirstPaths(branches->First.get());
+    THiddenOnAllPaths hiddenOnSecondPaths(branches->Second.get());
+
+    bool changed = false;
+    for (auto* producer : firstProducers) {
+        if (!secondProducers.contains(producer)) {
+            continue;
+        }
+
+        auto firstHidden = hiddenOnFirstPaths.Compute(producer);
+        auto secondHidden = hiddenOnSecondPaths.Compute(producer);
+        if (!firstHidden || !secondHidden) {
+            continue;
+        }
+
+        auto allowed = *firstHidden;
+        allowed.Add(*secondHidden);
+        changed |= GetMutableComputedNameConstraints(producer).AddForbidden(allowed.Complement());
+    }
+    return changed;
+}
+
+} // anonymous namespace
+
+bool IOperator::PropagateNameConstraints() {
     return false;
 }
 
-bool IUnaryOperator::PropagateNameConstraints(INameConstraintsContext& ctx) {
-    auto childForbidden = ctx.GetIncomingForbidden(this);
+bool IUnaryOperator::PropagateNameConstraints() {
+    auto childForbidden = GetForbidden(this);
     if (Kind == EOperator::AddDependencies) {
-        AddInfoUnits(childForbidden, static_cast<TOpAddDependencies*>(this)->Dependencies);
+        childForbidden.Add(MakeInfoUnitSet(static_cast<TOpAddDependencies*>(this)->Dependencies));
     }
 
-    return ctx.AddForbiddenToChild(this, 0, childForbidden);
+    return PropagateForbidden(GetInput(), childForbidden);
 }
 
-bool TOpMap::PropagateNameConstraints(INameConstraintsContext& ctx) {
-    auto childForbidden = ctx.GetIncomingForbidden(this);
+bool TOpMap::PropagateNameConstraints() {
+    auto childForbidden = GetForbidden(this);
     TInfoUnitSet renameSources;
     TInfoUnitSet mapElementOutputs;
     for (const auto& mapElement : MapElements) {
@@ -122,53 +355,49 @@ bool TOpMap::PropagateNameConstraints(INameConstraintsContext& ctx) {
     }
 
     for (const auto& iu : renameSources) {
-        childForbidden.erase(iu);
+        childForbidden.Remove(iu);
     }
     for (const auto& iu : mapElementOutputs) {
         if (!renameSources.contains(iu)) {
-            AddInfoUnit(childForbidden, iu);
+            childForbidden.Add(iu);
         }
     }
 
-    return ctx.AddForbiddenToChild(this, 0, childForbidden);
+    return PropagateForbidden(GetInput(), childForbidden);
 }
 
-bool TOpAggregate::PropagateNameConstraints(INameConstraintsContext& ctx) {
-    Y_UNUSED(ctx);
+bool TOpAggregate::PropagateNameConstraints() {
     return false;
 }
 
-bool TOpJoin::PropagateNameConstraints(INameConstraintsContext& ctx) {
-    const bool outputsLeft = JoinKind != "RightOnly" && JoinKind != "RightSemi";
-    const bool outputsRight = JoinKind != "LeftOnly" && JoinKind != "LeftSemi";
+bool TOpJoin::PropagateNameConstraints() {
+    const bool outputsLeft = OutputsLeft(JoinKind);
+    const bool outputsRight = OutputsRight(JoinKind);
 
-    const auto incoming = ctx.GetIncomingForbidden(this);
-    const auto leftOutput = GetLeftInput()->GetOutputIUs();
-    const auto rightOutput = GetRightInput()->GetOutputIUs();
+    const auto incoming = GetForbidden(this);
 
-    TInfoUnitSet leftForbidden;
-    TInfoUnitSet rightForbidden;
+    TInfoUnitConstraintSet leftForbidden;
+    TInfoUnitConstraintSet rightForbidden;
 
     if (outputsLeft) {
-        AddInfoUnits(leftForbidden, incoming);
+        leftForbidden.Add(incoming);
     }
     if (outputsRight) {
-        AddInfoUnits(rightForbidden, incoming);
+        rightForbidden.Add(incoming);
     }
 
     if (outputsLeft && outputsRight) {
-        AddInfoUnits(leftForbidden, rightOutput);
-        AddInfoUnits(rightForbidden, leftOutput);
+        leftForbidden.Add(MakeInfoUnitSet(GetRightInput()->GetOutputIUs()));
+        rightForbidden.Add(MakeInfoUnitSet(GetLeftInput()->GetOutputIUs()));
     }
 
     bool changed = false;
-    changed |= ctx.AddForbiddenToChild(this, 0, leftForbidden);
-    changed |= ctx.AddForbiddenToChild(this, 1, rightForbidden);
+    changed |= PropagateForbidden(GetLeftInput(), leftForbidden);
+    changed |= PropagateForbidden(GetRightInput(), rightForbidden);
     return changed;
 }
 
-bool TOpUnionAll::PropagateNameConstraints(INameConstraintsContext& ctx) {
-    Y_UNUSED(ctx);
+bool TOpUnionAll::PropagateNameConstraints() {
     return false;
 }
 
@@ -176,24 +405,20 @@ void ComputePlanNameConstraints(TOpRoot& root) {
     TLogicalNameConstraints().Run(root);
 }
 
-const TInfoUnitSet& GetForbidden(
-    IOperator* from,
-    IOperator* to)
-{
-    const ui32 childIdx = ResolveChildIdx(from, to);
-    return GetComputedNameConstraints(from).GetForbiddenOut(to, childIdx, from);
-}
-
-TInfoUnitSet GetForbidden(
+TInfoUnitConstraintSet GetForbidden(
     IOperator* op)
 {
     Y_ENSURE(op);
+    return GetComputedNameConstraints(op).GetForbidden();
+}
 
-    TInfoUnitSet result;
-    for (const auto& [parent, childIdx] : op->Parents) {
-        AddInfoUnits(result, GetComputedNameConstraints(op).GetForbiddenOut(parent, childIdx, op));
+bool ContainsForbidden(const TVector<TInfoUnit>& output, const TInfoUnitConstraintSet& forbidden) {
+    for (const auto& iu : output) {
+        if (forbidden.contains(iu)) {
+            return true;
+        }
     }
-    return result;
+    return false;
 }
 
 } // namespace NKqp

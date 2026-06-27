@@ -142,7 +142,7 @@ class TScriptResultHandlerActor final : public TActorBootstrapped<TScriptResultH
             });
         }
 
-        TInstant GetExpireAt(const TScriptExecutionContext& ctx) {
+        std::optional<TInstant> GetExpireAt(const TScriptExecutionContext& ctx) {
             if (!ExpireAt && ctx.ResultsTtl) {
                 ExpireAt = TInstant::Now() + ctx.ResultsTtl;
             }
@@ -150,7 +150,7 @@ class TScriptResultHandlerActor final : public TActorBootstrapped<TScriptResultH
         }
 
     private:
-        TInstant ExpireAt;
+        std::optional<TInstant> ExpireAt;
     };
 
     struct TProducerState {

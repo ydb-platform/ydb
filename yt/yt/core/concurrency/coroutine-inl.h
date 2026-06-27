@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "coroutine.h"
 #endif
-#undef COROUTINE_INL_H_
 
 #include <library/cpp/yt/threading/execution_stack.h>
 

@@ -159,6 +159,7 @@ struct TKqpSessionInfo {
     TActorId AttachedRpcId;
     bool PgWire;
     TString QueryText;
+    TString TraceId;
     TString ClientApplicationName;
     TString ClientSID;
     TString ClientHost;
@@ -237,8 +238,9 @@ public:
         return actors.insert(sessionInfo).second;
     }
 
-    void AttachQueryText(const TKqpSessionInfo* sessionInfo, const TString& queryText) {
+    void AttachQueryText(const TKqpSessionInfo* sessionInfo, const TString& queryText, const TString& traceId) {
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryText = queryText;
+        const_cast<TKqpSessionInfo*>(sessionInfo)->TraceId = traceId;
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryCount++;
         const_cast<TKqpSessionInfo*>(sessionInfo)->State = TKqpSessionInfo::EXECUTING;
         auto curNow = TInstant::Now();
@@ -249,6 +251,7 @@ public:
 
     void DetachQueryText(const TKqpSessionInfo* sessionInfo) {
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryText = TString();
+        const_cast<TKqpSessionInfo*>(sessionInfo)->TraceId = TString();
         const_cast<TKqpSessionInfo*>(sessionInfo)->State = TKqpSessionInfo::IDLE;
         auto curNow = TInstant::Now();
         const_cast<TKqpSessionInfo*>(sessionInfo)->QueryStartAt = TInstant::Zero();

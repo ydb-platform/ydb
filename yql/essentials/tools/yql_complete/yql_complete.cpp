@@ -1,12 +1,12 @@
-#include <yql/essentials/sql/v1/complete/sql_complete.h>
-#include <yql/essentials/sql/v1/complete/name/cluster/static/discovery.h>
-#include <yql/essentials/sql/v1/complete/name/object/simple/static/schema_json.h>
-#include <yql/essentials/sql/v1/complete/name/service/ranking/frequency.h>
-#include <yql/essentials/sql/v1/complete/name/service/ranking/ranking.h>
-#include <yql/essentials/sql/v1/complete/name/service/static/name_service.h>
-#include <yql/essentials/sql/v1/complete/name/service/cluster/name_service.h>
-#include <yql/essentials/sql/v1/complete/name/service/schema/name_service.h>
-#include <yql/essentials/sql/v1/complete/name/service/union/name_service.h>
+#include <yql/essentials/sql/v1/ide/completion/sql_complete.h>
+#include <yql/essentials/sql/v1/ide/completion/name/cluster/static/discovery.h>
+#include <yql/essentials/sql/v1/ide/completion/name/object/simple/static/schema_json.h>
+#include <yql/essentials/sql/v1/ide/completion/name/service/ranking/frequency.h>
+#include <yql/essentials/sql/v1/ide/completion/name/service/ranking/ranking.h>
+#include <yql/essentials/sql/v1/ide/completion/name/service/static/name_service.h>
+#include <yql/essentials/sql/v1/ide/completion/name/service/cluster/name_service.h>
+#include <yql/essentials/sql/v1/ide/completion/name/service/schema/name_service.h>
+#include <yql/essentials/sql/v1/ide/completion/name/service/union/name_service.h>
 
 #include <yql/essentials/sql/v1/lexer/antlr4_pure/lexer.h>
 #include <yql/essentials/sql/v1/lexer/antlr4_pure_ansi/lexer.h>

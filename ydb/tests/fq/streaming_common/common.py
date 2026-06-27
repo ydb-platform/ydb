@@ -8,6 +8,8 @@ import pytest
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
+from ydb.tests.tools.datastreams_helpers.control_plane import create_stream
+from ydb.tests.tools.datastreams_helpers.control_plane import create_read_rule
 from ydb.tests.tools.datastreams_helpers.test_yds_base import TestYdsBase
 from ydb.tests.tools.fq_runner.kikimr_metrics import load_metrics, Sensors
 from ydb.tests.tools.fq_runner.kikimr_runner import plain_or_under_sanitizer_wrapper
@@ -28,8 +30,8 @@ def set_test_env(request):
 
 def get_ydb_config(request):
     param = getattr(request, "param", {})
-    enable_watermarks = param.get("enable_watermarks", False)
-    enable_watermarks_advanced = param.get("enable_watermarks_advanced", False)
+    enable_watermarks = param.get("enable_watermarks", True)
+    enable_watermarks_advanced = param.get("enable_watermarks_advanced", True)
     enable_shared_reading_in_streaming_queries = param.get("enable_shared_reading_in_streaming_queries", True)
     enable_streaming_queries = param.get("enable_streaming_queries", True)
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
@@ -76,8 +78,8 @@ def get_ydb_config(request):
 
 
 class YdbClient:
-    def __init__(self, endpoint: str, database: str):
-        driver_config = ydb.DriverConfig(endpoint, database, auth_token="root@builtin")
+    def __init__(self, endpoint: str, database: str, token: str = "root@builtin"):
+        driver_config = ydb.DriverConfig(endpoint, database, auth_token=token)
         self.driver = ydb.Driver(driver_config)
         self.session_pool = ydb.QuerySessionPool(self.driver)
 
@@ -239,6 +241,35 @@ class StreamingTestBase(TestYdsBase):
             return f"`{self.input_topic}`", f"`{self.output_topic}`", endpoint
         else:
             return f"`{source_name}`.`{self.input_topic}`", f"`{source_name}`.`{self.output_topic}`", endpoint
+
+    def get_write_topics(self, kikimr, name, local_topics, entity_name, topics_count=1, partitions_count=1):
+        """Create an external data source + ``topics_count`` write-target topics, each with a read rule
+        for ``self.consumer_name``. ``partitions_count=1`` keeps message order deterministic.
+
+        Returns ``(endpoint, refs, paths)``: ``refs`` are the SQL names to INSERT into (direct topic when
+        ``local_topics``, ``source``.``topic`` otherwise), ``paths`` are topic paths to read back with
+        ``self.read_stream(count, topic_path=path, endpoint=endpoint)``.
+        """
+        endpoint = self.get_endpoint(kikimr, local_topics)
+        source_name = entity_name(name)
+        self.create_source(kikimr, source_name, endpoint=endpoint)
+        self.consumer_name = f"{source_name}_consumer"
+
+        refs, paths = [], []
+        for i in range(topics_count):
+            path = f"{source_name}_topic{i}"
+            create_stream(path, partitions_count=partitions_count, default_endpoint=endpoint)
+            create_read_rule(path, self.consumer_name, default_endpoint=endpoint)
+            paths.append(path)
+            refs.append(f"`{path}`" if local_topics else f"`{source_name}`.`{path}`")
+        return endpoint, refs, paths
+
+    def get_write_topic(self, kikimr, name, local_topics, entity_name, partitions_count=1):
+        """Single-topic convenience wrapper. Returns ``(endpoint, ref, path)``."""
+        endpoint, refs, paths = self.get_write_topics(
+            kikimr, name, local_topics, entity_name, topics_count=1, partitions_count=partitions_count
+        )
+        return endpoint, refs[0], paths[0]
 
     def roll(self, kikimr):
         all_nodes = [(id, n, "node") for id, n in kikimr.cluster.nodes.items()] + [

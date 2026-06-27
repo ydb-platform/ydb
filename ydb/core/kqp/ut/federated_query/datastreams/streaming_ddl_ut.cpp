@@ -561,6 +561,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
         ReadTopicMessages(outputTopicName, {"key1value1"});
+        Sleep(TDuration::Seconds(2)); // Wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             CREATE OR REPLACE STREAMING QUERY `{query_name}` AS
@@ -614,6 +615,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, "key1value1");
         ReadTopicMessages(outputTopicName, {"key1value1"});
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint
 
         ExecQuery(fmt::format(R"(
             CREATE OR REPLACE STREAMING QUERY `{query_name}` AS
@@ -1056,6 +1058,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             // legal, but nothing to check
             return;
         }
+        NeedsStatsCollectors = true;
         constexpr ui32 combinations = WithFeatureFlag && !WithFullscanFlag ? 2 : 1;
         {
             auto& setupAppConfig = SetupAppConfig();
@@ -1185,6 +1188,13 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         readSession->AddDataReceivedEvent(sampleMessages);
         writeSession->ExpectMessages({"A-P4", "B-P6", "A-P4"});
 
+        auto actorsAlive = GetCounters("utils")->GetSubgroup("execpool", "User")->GetSubgroup("sensor", "ActorsAliveByActivity")->GetNamedCounter("activity", "NYql::NDq::(anonymous namespace)::TInputTransformStreamLookupBase");
+        WaitFor(TDuration::Seconds(10), "ActorsAlive", [&](TString& error) {
+            auto val = actorsAlive->Val();
+            error = TStringBuilder() << "InputTransform actors count is " << val << ", expected 1";
+            return val == 1;
+        });
+
         CheckScriptExecutionsCount(1, 1);
         const auto results = ExecQuery(
             "SELECT ast_compressed FROM `.metadata/script_executions`;"
@@ -1194,6 +1204,21 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             const auto& ast = result.ColumnParser(0).GetOptionalString();
             UNIT_ASSERT(ast);
             UNIT_ASSERT_STRING_CONTAINS(*ast, "DqCnStreamLookup");
+        });
+
+        ExecQuery(fmt::format(R"(
+            ALTER STREAMING QUERY `{query_name}` SET (
+                RUN = FALSE
+            );)",
+            "query_name"_a = queryName
+        ));
+
+        CheckScriptExecutionsCount(1, 0);
+
+        WaitFor(TDuration::Seconds(10), "ActorsAlive", [&](TString& error) {
+            auto val = actorsAlive->Val();
+            error = TStringBuilder() << "InputTransform actors count is " << val << ", expected 0";
+            return val == 0;
         });
 
         if (!WithFullscanFlag) {
@@ -1229,7 +1254,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             EStatus::GENERIC_ERROR,
             "EnableDqSourceStreamLookupJoinFullscan disabled, but FullscanLimit is 123");
 
-            CheckScriptExecutionsCount(2, 1);
+            CheckScriptExecutionsCount(2, 0);
         }
     }
 
@@ -1314,7 +1339,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, R"({"Key": 1})");
         ReadTopicMessage(outputTopicName, "oltp_slj1-oltp1-olap1");
-        Sleep(TDuration::Seconds(1));
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1386,7 +1411,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         WriteTopicMessage(inputTopicName, "message-1");
         ReadTopicMessage(outputTopicName, "message-1-value-1");
-        Sleep(TDuration::Seconds(1));
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1462,6 +1487,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToOneLineString());
             UNIT_ASSERT_VALUES_EQUAL(result.GetList().size(), 0);
         }
+
+        Sleep(TDuration::Seconds(1));  // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1591,7 +1618,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         Sleep(TDuration::Seconds(1));
         WriteTopicMessage(inputTopicName, R"({"key": "key1", "value": "value1"})");
         ReadTopicMessage(outputTopicName, R"({"key": "key1", "value": "value1"})");
-        Sleep(TDuration::Seconds(1));
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -1997,10 +2024,11 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             "query_name"_a = info.QueryName
         ));
         CheckScriptExecutionsCount(2, 1);
-        Sleep(TDuration::Seconds(1));
+        Sleep(TDuration::Seconds(1));  // wait for checkpoint commit
 
         WriteTopicMessage(info.InputTopicName, R"({"time": "2025-08-26T00:00:00.000000Z", "event": "A"})");
         ReadTopicMessage(info.OutputTopicName, "B-2025-08-25T00:00:00.000000Z-1", readDisposition);
+        Sleep(TDuration::Seconds(1));  // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (
@@ -2125,7 +2153,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
 
         connectorClient->LockReading();
         WriteTopicMessage(inputTopicName, R"({"time": 1, "event": "B", "host": "host3.example.com"})");
-        Sleep(TDuration::Seconds(2));
+        Sleep(TDuration::Seconds(2)); // wait for checkpoint commit
         const auto readDisposition = TInstant::Now();
 
         ExecQuery(fmt::format(R"(
@@ -2177,7 +2205,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         Sleep(TDuration::Seconds(1));
 
         WriteTopicMessage(inputTopicName, "data-1");
-        Sleep(TDuration::Seconds(2));
+        Sleep(TDuration::Seconds(2)); // wait for checkpoint commit
         UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(sourceBucket), "data-1");
 
         ExecQuery(fmt::format(R"(
@@ -2261,7 +2289,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             Sleep(TDuration::Seconds(1));
 
             WriteTopicMessage(inputTopicName, R"({"Key": "message1", "Value": "value1"})");
-            Sleep(TDuration::Seconds(1));
+            Sleep(TDuration::Seconds(1)); // wait for checkpoit commit
             CheckTable(*this, ydbTable, {{"message1", "value1"}});
 
             ExecQuery(fmt::format(R"(
@@ -3053,6 +3081,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             check(*resultSet.ColumnParser("Ast").GetOptionalUtf8());
         });
 
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
+
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",
             "query_name"_a = queryName
@@ -3144,6 +3174,8 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         CheckScriptResult(result[0], 1, 1, [&, check = AstChecker(1, 3)](TResultSetParser& resultSet) {
             check(*resultSet.ColumnParser("Ast").GetOptionalUtf8());
         });
+
+        Sleep(TDuration::Seconds(1)); // wait for checkpoint commit
 
         ExecQuery(fmt::format(R"(
             ALTER STREAMING QUERY `{query_name}` SET (RUN = FALSE);)",

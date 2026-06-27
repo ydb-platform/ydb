@@ -304,6 +304,48 @@ Y_UNIT_TEST_SUITE(TSequence) {
         TestLs(runtime, "/MyRoot/Table2", false, NLs::PathNotExist);
     }
 
+    Y_UNIT_TEST(AlterTableDropColumnWithSequence) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        runtime.SetLogPriority(NKikimrServices::FLAT_TX_SCHEMESHARD, NActors::NLog::PRI_TRACE);
+        runtime.SetLogPriority(NKikimrServices::SEQUENCESHARD, NActors::NLog::PRI_TRACE);
+
+        TestCreateIndexedTable(runtime, ++txId, "/MyRoot", R"(
+            TableDescription {
+                Name: "Table"
+                Columns { Name: "key"   Type: "Uint64" }
+                Columns { Name: "value" Type: "Uint64" DefaultFromSequence: "myseq" }
+                KeyColumnNames: ["key"]
+            }
+            SequenceDescription {
+                Name: "myseq"
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/Table/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+
+        // Dropping the serial column drops its backing child sequence in the same operation.
+        TestAlterTable(runtime, ++txId, "/MyRoot", R"(
+            Name: "Table"
+            DropColumns { Name: "value" }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/Table/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathNotExist);
+        TestLs(runtime, "/MyRoot/Table", false, NLs::PathExist);
+
+        // The sequence path is really freed: its name can be reused under the table.
+        TestCreateSequence(runtime, ++txId, "/MyRoot/Table", R"(
+            Name: "myseq"
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/Table/myseq", TDescribeOptionsBuilder().SetShowPrivateTable(true), NLs::PathExist);
+    }
+
     Y_UNIT_TEST(CreateTableWithDefaultFromSequenceAndIndex) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime);

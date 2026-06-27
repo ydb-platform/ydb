@@ -20,6 +20,7 @@ PEERDIR(
     ydb/library/aclib
     ydb/library/persqueue
     ydb/library/persqueue/topic_parser
+    ydb/library/kafka
     ydb/library/cloud_permissions
     ydb/public/api/protos
     ydb/public/lib/base

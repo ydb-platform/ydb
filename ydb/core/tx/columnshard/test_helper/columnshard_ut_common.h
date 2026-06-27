@@ -45,6 +45,13 @@ public:
     static void Setup(TTestActorRuntime& runtime);
 };
 
+// Installs, on every node of the runtime, a stand-in snapshot registry whose OldestCollectionTime tracks
+// the live test clock together with LongTxService margins that reproduce the legacy ~13s cleanup window.
+// Use in test runtimes that exercise TRegistryScanSnapshotGuard-based cleanup but have no LongTxService to
+// keep the registry fresh; otherwise registry freshness collapses to TInstant::Zero() and the cleanup
+// floor never advances (nothing is ever collected).
+void InstallTimingBasedSnapshotRegistry(TTestActorRuntime& runtime);
+
 namespace NTypeIds = NScheme::NTypeIds;
 using TTypeId = NScheme::TTypeId;
 using TTypeInfo = NScheme::TTypeInfo;
@@ -322,6 +329,7 @@ struct TTestSchema {
 
             // schema
             InitSchema(columns, pk, specials, preset->MutableSchema());
+            preset->MutableSchema()->SetVersion(1);
         }
 
         InitTiersAndTtl(specials, table->MutableTtlSettings());
@@ -362,6 +370,7 @@ struct TTestSchema {
         preset->SetId(1);
         preset->SetName("default");
         InitSchema(columns, pk, specials, preset->MutableSchema());
+        preset->MutableSchema()->SetVersion(version);
 
         auto* ttlSettings = table->MutableTtlSettings();
         if (!InitTiersAndTtl(specials, ttlSettings)) {

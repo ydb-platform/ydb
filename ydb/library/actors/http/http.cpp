@@ -640,7 +640,11 @@ THttpIncomingResponsePtr THttpIncomingResponse::Duplicate(THttpOutgoingRequestPt
     }
     for (const auto& [key, value] : extraHeaders.Headers) {
         if (value) {
-            headers.Set(key, value);
+            if (TEqNoCase()(key, "Set-Cookie")) {
+                headers.Add(key, value);
+            } else {
+                headers.Set(key, value);
+            }
         } else {
             headers.Erase(key);
         }
@@ -665,7 +669,11 @@ THttpOutgoingResponsePtr THttpOutgoingResponse::Duplicate(THttpIncomingRequestPt
     }
     for (const auto& [key, value] : extraHeaders.Headers) {
         if (value) {
-            headers.Set(key, value);
+            if (TEqNoCase()(key, "Set-Cookie")) {
+                headers.Add(key, value);
+            } else {
+                headers.Set(key, value);
+            }
         } else {
             headers.Erase(key);
         }
@@ -693,6 +701,8 @@ THttpOutgoingResponsePtr THttpOutgoingResponse::Duplicate(THttpIncomingRequestPt
         if (!response->ContentLength) {
             response->Set<&THttpResponse::ContentLength>("0");
         }
+        response->FinishHeader();
+        response->FinishBody();
     }
     return response;
 }

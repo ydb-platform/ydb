@@ -35,6 +35,12 @@ struct TJsonPathSplitSettings {
 
 TConclusion<TSplittedJsonPath> SplitJsonPath(TJsonPathBuf jsonPath, const TJsonPathSplitSettings& settings = {});
 
+TConclusionStatus ValidateJsonPath(TJsonPathBuf jsonPath);
+
+inline bool IsValidJsonPath(TJsonPathBuf jsonPath) {
+    return ValidateJsonPath(jsonPath).IsSuccess();
+}
+
 TString ToSubcolumnName(TStringBuf path);
 
 

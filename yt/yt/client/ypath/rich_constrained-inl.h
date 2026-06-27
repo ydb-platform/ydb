@@ -3,7 +3,6 @@
 // For the sake of sane code completion.
 #include "rich_constrained.h"
 #endif
-#undef RICH_CONSTRAINED_INL_H_
 
 #include "parser_detail.h"
 
@@ -713,7 +712,7 @@ template <class... TValidator>
 void TRequiredAttributesValidator<AttributeKey...>::operator()(const TConstrainedRichYPath<TValidator...>& path) const
 {
     auto validateOne = [&] (const char* attributeName) {
-        THROW_ERROR_EXCEPTION_IF(!path.Attributes().Contains(attributeName), "YPath %Qv does not have attribute %Qv", path, attributeName);
+        THROW_ERROR_EXCEPTION_IF(!path.Attributes().Contains(attributeName), "YPath %v does not have attribute %Qv", path, attributeName);
     };
     (validateOne(AttributeKey), ...);
 }
@@ -729,7 +728,7 @@ void TWhitelistAttributesValidator<AttributeKey...>::operator()(const TConstrain
             continue;
         }
 
-        THROW_ERROR_EXCEPTION("YPath %Qv has unexpected attribute %Qv", path, key);
+        THROW_ERROR_EXCEPTION("YPath %v has unexpected attribute %Qv", path, key);
     }
 }
 

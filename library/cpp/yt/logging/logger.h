@@ -2,6 +2,8 @@
 
 #include "public.h"
 
+#include <library/cpp/yt/misc/port.h>
+
 #include <library/cpp/yt/string/format.h>
 
 #include <library/cpp/yt/memory/ref.h>

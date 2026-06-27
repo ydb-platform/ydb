@@ -44,12 +44,12 @@ namespace NKikimr {
         , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.Log.Put")
         , HandleClass(handleClass)
     {
-        if (Span) {
-            Span.Attribute("blob_id", id.ToString());
-            Span.Attribute("group_id", vctx->GroupId.GetRawId());
-            Span.Attribute("vdisk_id", vdiskId.ToString());
-            Span.Attribute("storage_pool", config->BaseInfo.StoragePoolName);
-            Span.Attribute("handle_class", NKikimrBlobStorage::EPutHandleClass_Name(handleClass));
+        if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+            wilsonSpan->Attribute("blob_id", id.ToString());
+            wilsonSpan->Attribute("group_id", vctx->GroupId.GetRawId());
+            wilsonSpan->Attribute("vdisk_id", vdiskId.ToString());
+            wilsonSpan->Attribute("storage_pool", config->BaseInfo.StoragePoolName);
+            wilsonSpan->Attribute("handle_class", NKikimrBlobStorage::EPutHandleClass_Name(handleClass));
         }
     }
 
@@ -99,12 +99,12 @@ namespace NKikimr {
         , RecipientCookie(recipientCookie)
         , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.Log.MultiPutItem")
     {
-        if (Span) {
-            Span.Attribute("blob_id", Id.ToString());
-            Span.Attribute("group_id", vctx->GroupId.GetRawId());
-            Span.Attribute("vdisk_id", vdiskId.ToString());
-            Span.Attribute("storage_pool", config->BaseInfo.StoragePoolName);
-            Span.Attribute("handle_class", NKikimrBlobStorage::EPutHandleClass_Name(handleClass));
+        if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+            wilsonSpan->Attribute("blob_id", Id.ToString());
+            wilsonSpan->Attribute("group_id", vctx->GroupId.GetRawId());
+            wilsonSpan->Attribute("vdisk_id", vdiskId.ToString());
+            wilsonSpan->Attribute("storage_pool", config->BaseInfo.StoragePoolName);
+            wilsonSpan->Attribute("handle_class", NKikimrBlobStorage::EPutHandleClass_Name(handleClass));
         }
     }
 
@@ -142,12 +142,12 @@ namespace NKikimr {
         , Ev(ev)
         , Span(TWilson::VDiskInternals, std::move(Ev->TraceId), "VDisk.Log.PutHuge")
     {
-        if (Span) {
-            Span.Attribute("blob_id", Ev->Get()->LogoBlobID.ToString());
-            Span.Attribute("group_id", vctx->GroupId.GetRawId());
-            Span.Attribute("vdisk_id", vdiskId.ToString());
-            Span.Attribute("storage_pool", config->BaseInfo.StoragePoolName);
-            Span.Attribute("handle_class", NKikimrBlobStorage::EPutHandleClass_Name(
+        if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+            wilsonSpan->Attribute("blob_id", Ev->Get()->LogoBlobID.ToString());
+            wilsonSpan->Attribute("group_id", vctx->GroupId.GetRawId());
+            wilsonSpan->Attribute("vdisk_id", vdiskId.ToString());
+            wilsonSpan->Attribute("storage_pool", config->BaseInfo.StoragePoolName);
+            wilsonSpan->Attribute("handle_class", NKikimrBlobStorage::EPutHandleClass_Name(
                     Ev->Get()->HandleClass));
         }
     }
@@ -254,6 +254,9 @@ namespace NKikimr {
         auto replySender = [&ctx, &vCtx] (const TActorId &id, ui64 cookie, NWilson::TTraceId, IEventBase *msg) {
             SendVDiskResponse(ctx, id, msg, cookie, vCtx, {});
         };
+
+        hull.RemoveLocalSyncDataInFlight(
+            OrigEv->Get()->LogoBlobsSize, OrigEv->Get()->BlocksSize, OrigEv->Get()->BarriersSize);
 
 #ifdef UNPACK_LOCALSYNCDATA
         hull.AddSyncDataCmd(ctx, std::move(OrigEv->Get()->Extracted), Seg, replySender);

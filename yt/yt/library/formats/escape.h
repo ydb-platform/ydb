@@ -85,7 +85,7 @@ void EscapeAndWrite(
     IOutputStream* stream,
     const TEscapeTable& escapeTable);
 
-TString Escape(
+std::string Escape(
     TStringBuf string,
     const TEscapeTable& escapeTable);
 

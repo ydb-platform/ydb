@@ -9,6 +9,8 @@
 #include <ydb/services/metadata/secret/snapshot.h>
 #include <ydb/library/actors/core/log.h>
 
+#include <limits>
+
 #define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, stream)
 #define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, stream)
 #define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::SCHEMA_SECRET_CACHE, stream)
@@ -124,6 +126,42 @@ NSchemeCache::TSchemeCacheNavigate::EStatus GetSchemeCacheEntryStatus(
     return entry.Status;
 }
 
+NKikimrScheme::EStatus GetSchemeShardPathStatus(
+    const TDescribeSchemaSecretsService::ISchemeShardStatusGetter* schemeShardStatusGetter,
+    const NKikimrScheme::TEvDescribeSchemeResult& record)
+{
+    if (schemeShardStatusGetter) {
+        return schemeShardStatusGetter->GetStatus(record);
+    }
+    return record.GetStatus();
+}
+
+bool IsRetryableSchemeShardStatus(NKikimrScheme::EStatus status) {
+    return status == NKikimrScheme::EStatus::StatusNotAvailable;
+}
+
+Ydb::StatusIds::StatusCode MapSchemeShardStatus(NKikimrScheme::EStatus status) {
+    switch (status) {
+        case NKikimrScheme::EStatus::StatusNotAvailable:
+            return Ydb::StatusIds::UNAVAILABLE;
+        default:
+            return Ydb::StatusIds::BAD_REQUEST;
+    }
+}
+
+TString MakeSchemeShardErrorMessage(NKikimrScheme::EStatus status, const TString& secretName) {
+    switch (status) {
+        case NKikimrScheme::EStatus::StatusNotAvailable:
+            return "Schemeshard is not available for secret `" + secretName + "`";
+        case NKikimrScheme::EStatus::StatusPathDoesNotExist:
+            return "Secret `" + secretName + "` not found";
+        case NKikimrScheme::EStatus::StatusAccessDenied:
+            return "Access denied to secret `" + secretName + "`";
+        default:
+            return "Failed to resolve secret `" + secretName + "`";
+    }
+}
+
 TString ListSecrets(const TVector<TString>& paths) {
     if (paths.empty()) {
         return "";
@@ -159,13 +197,27 @@ void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr
     ++LastRequestId;
 }
 
-void TDescribeSchemaSecretsService::HandleIncomingRetryRequest(TEvResolveSecretRetry::TPtr& ev) {
-    LOG_D(GetLogLabel("TEvResolveSecretRetry", ev->Get()->InitialRequestId));
+void TDescribeSchemaSecretsService::HandleIncomingSchemeCacheRetryRequest(TEvResolveSecretSchemeCacheRetry::TPtr& ev) {
+    LOG_N(GetLogLabel("TEvResolveSecretSchemeCacheRetry", ev->Get()->InitialRequestId));
 
     const auto it = RequestsInFlight.find(ev->Get()->InitialRequestId);
-    Y_ENSURE(it != RequestsInFlight.end(), "Such request requestId was not registered");
+    Y_ENSURE(it != RequestsInFlight.end(), "Unregistered requestId: " + ToString(ev->Get()->InitialRequestId));
     Y_ENSURE(it->second.Request.Get(), "Initial request was not saved");
     SendSchemeCacheRequests(*it->second.Request.Get(), ev->Get()->InitialRequestId);
+}
+
+void TDescribeSchemaSecretsService::HandleIncomingSchemeShardRetryRequest(TEvResolveSecretSchemeShardRetry::TPtr& ev) {
+    LOG_N(GetLogLabel("TEvResolveSecretSchemeShardRetry", ev->Get()->InitialRequestId)
+        << "secret=" << ev->Get()->SecretPath);
+
+    const auto it = RequestsInFlight.find(ev->Get()->InitialRequestId);
+    if (it == RequestsInFlight.end()) {
+        LOG_N(GetLogLabel("TEvResolveSecretSchemeShardRetry", ev->Get()->InitialRequestId)
+            << "retry handling was skipped due to previous errors");
+        return;
+    }
+    Y_ENSURE(it->second.Request.Get(), "Initial request was not saved");
+    SendSchemeShardRequest(*it->second.Request.Get(), ev->Get()->InitialRequestId, ev->Get()->SecretPath);
 }
 
 void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
@@ -194,18 +246,27 @@ void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(TEvTxProxySchemeCa
             // some secret version is in cache
             ++respIt->second.FilledSecretsCnt;
         } else {
-            // make TxProxy request
-            TAutoPtr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
-            Y_ENSURE(!request->DatabaseName.empty(), "Database name must be set in TxProxy requests");
-            navigateRequest->Record.SetDatabaseName(request->DatabaseName);
-            NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
-            record->SetPath(secretPath);
-            record->MutableOptions()->SetReturnSecretValue(true);
-            Send(MakeTxProxyID(), navigateRequest.Release(), 0, requestId);
+            const auto requestIt = RequestsInFlight.find(requestId);
+            Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " + ToString(requestId));
+            SendSchemeShardRequest(*requestIt->second.Request.Get(), requestId, secretPath);
         }
     }
 
     FillResponseIfFinished(requestId, respIt->second);
+}
+
+void TDescribeSchemaSecretsService::SendSchemeShardRequest(
+    const TEvResolveSecret& ev,
+    const ui64 requestId,
+    const TString& secretPath)
+{
+    TAutoPtr<TEvTxUserProxy::TEvNavigate> navigateRequest(new TEvTxUserProxy::TEvNavigate());
+    Y_ENSURE(!ev.Database.empty(), "Database name must be set in TxProxy requests");
+    navigateRequest->Record.SetDatabaseName(ev.Database);
+    NKikimrSchemeOp::TDescribePath* record = navigateRequest->Record.MutableDescribePath();
+    record->SetPath(secretPath);
+    record->MutableOptions()->SetReturnSecretValue(true);
+    Send(MakeTxProxyID(), navigateRequest.Release(), 0, requestId);
 }
 
 void TDescribeSchemaSecretsService::HandleSchemeShardResponse(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
@@ -213,24 +274,17 @@ void TDescribeSchemaSecretsService::HandleSchemeShardResponse(NSchemeShard::TEvS
     LOG_D(GetLogLabel("TEvDescribeSchemeResult", requestId));
 
     const auto respIt = ResolveInFlight.find(requestId);
-    if (respIt == ResolveInFlight.end()) {        
-        Y_ENSURE(respIt->second.Secrets.size() > 1, "This is possible only for batch requests");
+    if (respIt == ResolveInFlight.end()) {
         LOG_N(GetLogLabel("TEvDescribeSchemeResult", requestId) << "response handling was skipped due to previous errors");
-        // no need to fill response, since it has been filled on the first SchemeShard error
         return;
     }
 
     const auto& rec = ev->Get()->GetRecord();
-    const auto& secretName = CanonizePath(rec.GetPath());
-    if (rec.GetStatus() != NKikimrScheme::EStatus::StatusSuccess) {
-        LOG_N(GetLogLabel("TEvDescribeSchemeResult", requestId) << "SchemeShard error: " << EStatus_Name(rec.GetStatus()));
-        const auto errorStatus =
-            rec.GetStatus() == NKikimrScheme::EStatus::StatusNotAvailable
-            ? Ydb::StatusIds::UNAVAILABLE
-            : Ydb::StatusIds::BAD_REQUEST;
-        FillResponse(requestId, TEvDescribeSecretsResponse::TDescription(errorStatus, { NYql::TIssue("secret `" + secretName + "` not found") }));
+    if (HandleSchemeShardErrorsIfAny(requestId, rec)) {
         return;
     }
+
+    const auto& secretName = CanonizePath(rec.GetPath());
 
     if (const auto it = SchemeBoardSubscribers.find(secretName); it == SchemeBoardSubscribers.end()) {
         SchemeBoardSubscribers[secretName] = Register(CreateSchemeBoardSubscriber(SelfId(), secretName));
@@ -252,6 +306,7 @@ void TDescribeSchemaSecretsService::HandleSchemeShardResponse(NSchemeShard::TEvS
 
 void TDescribeSchemaSecretsService::FillResponse(const ui64& requestId, const TEvDescribeSecretsResponse::TDescription& response) {
     auto respIt = ResolveInFlight.find(requestId);
+    Y_ENSURE(respIt != ResolveInFlight.end(), "Unregistered requestId: " + ToString(requestId));
     respIt->second.Result.SetValue(response);
     ResolveInFlight.erase(respIt);
     RequestsInFlight.erase(requestId);
@@ -376,29 +431,112 @@ bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& req
     return false; // no Scheme Cache errors
 }
 
+bool TDescribeSchemaSecretsService::HandleSchemeShardErrorsIfAny(
+    const ui64& requestId,
+    const NKikimrScheme::TEvDescribeSchemeResult& record)
+{
+    const auto status = GetSchemeShardPathStatus(SchemeShardStatusGetter, record);
+    if (status == NKikimrScheme::EStatus::StatusSuccess) {
+        return false;
+    }
+
+    const auto secretName = CanonizePath(record.GetPath());
+
+    LOG_N(GetLogLabel("TEvDescribeSchemeResult", requestId) << "SchemeShard error: " << EStatus_Name(status));
+    if (IsRetryableSchemeShardStatus(status)) {
+        const auto requestIt = RequestsInFlight.find(requestId);
+        Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " + ToString(requestId));
+        if (requestIt->second.Request->Settings.RetryPolicy) {
+            if (ScheduleSchemeShardRetry(requestId, secretName)) {
+                return true;
+            }
+
+            LOG_N(GetLogLabel("TEvDescribeSchemeResult", requestId)
+                << "retry limit exceeded for secret `" << secretName << "`");
+            FillResponse(
+                requestId,
+                TEvDescribeSecretsResponse::TDescription(
+                    Ydb::StatusIds::UNAVAILABLE,
+                    { NYql::TIssue("Retry limit exceeded for secret `" + secretName + "`") }));
+            return true;
+        }
+    }
+
+    const auto errorStatus = MapSchemeShardStatus(status);
+    FillResponse(
+        requestId,
+        TEvDescribeSecretsResponse::TDescription(
+            errorStatus,
+            { NYql::TIssue(MakeSchemeShardErrorMessage(status, secretName)) }));
+    return true;
+}
+
 bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& requestId, const TString& unresolvedSecretPath) {
     auto requestIt = RequestsInFlight.find(requestId);
     Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " + ToString(requestId));
 
-    if (!requestIt->second.RetryState) {
-        requestIt->second.RetryState = TRetryPolicy::GetExponentialBackoffPolicy(
-            [](){ return ERetryErrorClass::ShortRetry; },
-            /* minDelay */ TDuration::MilliSeconds(100),
-            /* minLongRetryDelay */ TDuration::MilliSeconds(500),
-            /* maxDelay */ TDuration::Seconds(5),
-            /* maxRetries */ 10,
-            /* maxTime */ TDuration::Seconds(10)
-        )->CreateRetryState();
+    if (!requestIt->second.SchemeCacheRetryState) {
+        static const auto defaultSchemeCacheRetryPolicy = MakeShortRetryPolicy();
+        const auto& retryPolicy = requestIt->second.Request->Settings.RetryPolicy
+            ? requestIt->second.Request->Settings.RetryPolicy
+            : defaultSchemeCacheRetryPolicy;
+        requestIt->second.SchemeCacheRetryState = retryPolicy->CreateRetryState();
     }
 
-    if (const auto delay = requestIt->second.RetryState->GetNextRetryDelay()) {
+    if (const auto delay = requestIt->second.SchemeCacheRetryState->GetNextRetryDelay()) {
         LOG_N(GetLogLabel("TEvNavigateKeySetResult", requestId) << "secret `" << unresolvedSecretPath
             << "` not found. Request will be retried in: " << *delay);
-        this->Schedule(*delay, new TEvResolveSecretRetry(requestId));
+        this->Schedule(*delay, new TEvResolveSecretSchemeCacheRetry(requestId));
         return true;
     }
 
     return false;
+}
+
+bool TDescribeSchemaSecretsService::ScheduleSchemeShardRetry(const ui64& requestId, const TString& secretPath) {
+    const auto requestIt = RequestsInFlight.find(requestId);
+    Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " + ToString(requestId));
+
+    const auto& retryPolicy = requestIt->second.Request->Settings.RetryPolicy;
+    if (!retryPolicy) {
+        return false;
+    }
+
+    auto& retryState = requestIt->second.SchemeShardRetryStates[secretPath];
+    if (!retryState) {
+        retryState = retryPolicy->CreateRetryState();
+    }
+
+    if (const auto delay = retryState->GetNextRetryDelay()) {
+        LOG_N(GetLogLabel("TEvDescribeSchemeResult", requestId) << "secret `" << secretPath
+            << "` is unavailable. Request will be retried in: " << *delay);
+        this->Schedule(*delay, new TEvResolveSecretSchemeShardRetry(requestId, secretPath));
+        return true;
+    }
+
+    return false;
+}
+
+IRetryPolicy<>::TPtr MakeShortRetryPolicy() {
+    return IRetryPolicy<>::GetExponentialBackoffPolicy(
+        [](){ return ERetryErrorClass::ShortRetry; },
+        /* minDelay */ TDuration::MilliSeconds(100),
+        /* minLongRetryDelay */ TDuration::MilliSeconds(500),
+        /* maxDelay */ TDuration::Seconds(5),
+        /* maxRetries */ 10,
+        /* maxTime */ TDuration::Seconds(10)
+    );
+}
+
+IRetryPolicy<>::TPtr MakeLongRetryPolicy() {
+    return IRetryPolicy<>::GetExponentialBackoffPolicy(
+        [](){ return ERetryErrorClass::LongRetry; },
+        /* minDelay */ TDuration::Seconds(1),
+        /* minLongRetryDelay */ TDuration::Seconds(10),
+        /* maxDelay */ TDuration::Seconds(30),
+        /* maxRetries */ std::numeric_limits<size_t>::max(),
+        /* maxTime */ TDuration::Minutes(60)
+    );
 }
 
 void TDescribeSchemaSecretsService::FillResponseIfFinished(const ui64& requestId, const TResponseContext& responseCtx) {
@@ -446,13 +584,14 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(
     const TVector<TString>& secretNames,
     const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database,
-    TActorSystem* actorSystem
+    TActorSystem* actorSystem,
+    TDescribeSecretSettings settings
 ) {
     auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
     if (UseSchemaSecrets(AppData()->FeatureFlags, secretNames)) {
         actorSystem->Send(
             MakeKqpDescribeSchemaSecretServiceId(actorSystem->NodeId),
-            new TDescribeSchemaSecretsService::TEvResolveSecret(userToken, database, secretNames, promise)
+            new TDescribeSchemaSecretsService::TEvResolveSecret(userToken, database, secretNames, promise, std::move(settings))
         );
         return promise.GetFuture();
     }
@@ -589,139 +728,160 @@ inline bool IsRetryableError(const NYdb::TStatus status) {
 }
 // XXX end duplicated code
 
-class TDescribeResourceIdActor : public NActors::TActorBootstrapped<TDescribeResourceIdActor> {
+class TDescribeResourceIdService : public NActors::TActor<TDescribeResourceIdService> {
 public:
-    using TRetryPolicy = IRetryPolicy<NYdb::TStatus>;
+    using TBase = NActors::TActor<TDescribeResourceIdService>;
 
-    TDescribeResourceIdActor(
-        const TString& endpoint,
-        const TString& database,
-        bool ssl,
-        const TString& caCert,
-        const TString& token,
-        NThreading::TPromise<TEvDescribeResourceIdResponse::TDescription> promise)
-    : Endpoint(endpoint)
-    , Database(database)
-    , Ssl(ssl)
-    , CaCert(caCert)
-    , Token(token)
-    , Promise(promise) {
-    }
+    enum EDescribeResourceEvents {
+        EvDescribeResourceId = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
+        EvEnd,
+    };
 
-    void Bootstrap() {
-        Become(&TDescribeResourceIdActor::StateFunc);
-        Request();
-        Promise.GetFuture().Subscribe([actorSystem = TlsActivationContext->ActorSystem(), selfId = SelfId()](const auto&) {
-            actorSystem->Send(selfId, new TEvents::TEvPoisonPill());
-        });
+    struct TState {
+        TString Endpoint;
+        TString Database;
+        bool Ssl;
+        TString CaCert;
+        TString Token;
+        NThreading::TPromise<TEvDescribeResourceIdResponse::TDescription> Promise;
+        TBackoff Backoff = TBackoff(/*maxRetries=*/10, /*initialDelay=*/TDuration::MilliSeconds(100), /*maxDelay=*/TDuration::Seconds(10));
+    };
+
+    struct TEvDescribeResourceId : public NActors::TEventLocal<TEvDescribeResourceId, EvDescribeResourceId> {
+    public:
+        TEvDescribeResourceId(
+            const TString& endpoint,
+            const TString& database,
+            bool ssl,
+            const TString& caCert,
+            const TString& token,
+            NThreading::TPromise<TEvDescribeResourceIdResponse::TDescription> promise)
+            : State(std::make_shared<TState>(
+                TState {
+                    .Endpoint = endpoint,
+                    .Database = database,
+                    .Ssl = ssl,
+                    .CaCert = caCert,
+                    .Token = token,
+                    .Promise = std::move(promise)
+                }))
+        {
+        }
+
+        explicit TEvDescribeResourceId(std::shared_ptr<TState> state)
+            : State(std::move(state))
+        {
+        }
+
+    public:
+        std::shared_ptr<TState> State;
+    };
+
+    explicit TDescribeResourceIdService(std::shared_ptr<NYdb::TDriver> driver)
+        : TBase(&TDescribeResourceIdService::StateFunc)
+        , Driver(std::move(driver))
+    {
     }
 
 private:
     STRICT_STFUNC(StateFunc,
-        hFunc(NActors::TEvents::TEvWakeup, Handle)
+        hFunc(TEvDescribeResourceId, Handle)
         sFunc(NActors::TEvents::TEvPoison, PassAway)
     )
 
-    void Handle(NActors::TEvents::TEvWakeup::TPtr&) {
-        Request();
+    void PassAway() override {
+        Driver.reset();
+        TBase::PassAway();
     }
 
-    void Request() {
-        NYdb::NTable::TClientSettings settings;
-        settings
-            .DiscoveryEndpoint(Endpoint)
-            .DiscoveryMode(NYdb::EDiscoveryMode::Async)
-            .Database(Database)
-            .SslCredentials(NYdb::TSslCredentials(Ssl, CaCert))
-            .AuthToken(Token);
-        auto actorSystem = TlsActivationContext->ActorSystem();
-        auto selfId = SelfId();
-        LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
-                "DescribeResourceId: SelfId=" << selfId << " DescribeTable " << Database << " at " << Endpoint << (Ssl ? " (Ssl)" : ""));
-        Y_ABORT_UNLESS(AppData()->YdbDriver);
-        NYdb::NTable::TTableClient tableClient(*AppData()->YdbDriver, settings);
-        tableClient.GetSession().Subscribe([promise = Promise, actorSystem, selfId, backoff = Backoff, database = Database](const NYdb::NTable::TAsyncCreateSessionResult& future) mutable {
-            try {
-                auto& result = future.GetValue();
-                if (!result.IsSuccess()) {
-                    LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " GetSession failed"
-                            << ", status# " << result.GetStatus()
-                            << ", issues# " << result.GetIssues().ToOneLineString()
-                            << ", iteration# " << backoff->GetIteration());
-                    if (IsRetryableError(result) && backoff->HasMore()) {
-                        actorSystem->Schedule(backoff->Next(),
-                                new NActors::IEventHandle(selfId, TActorId(), new TEvents::TEvWakeup()));
-                    } else {
-                        promise.SetValue(
-                                TEvDescribeResourceIdResponse::TDescription(static_cast<Ydb::StatusIds_StatusCode>(result.GetStatus()), NYql::TIssues({NYql::TIssue(result.GetIssues().ToString())})));
+    void Handle(TEvDescribeResourceId::TPtr& ev) {
+        const auto state = std::move(ev->Get()->State);
+        const auto actorSystem = TlsActivationContext->ActorSystem();
+        const auto selfId = SelfId();
+        try {
+            Y_ENSURE(Driver);
+            NYdb::NTable::TClientSettings settings;
+            settings
+                .DiscoveryEndpoint(state->Endpoint)
+                .DiscoveryMode(NYdb::EDiscoveryMode::Async)
+                .Database(state->Database)
+                .SslCredentials(NYdb::TSslCredentials(state->Ssl, state->CaCert))
+                .AuthToken(state->Token);
+            LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
+                    "DescribeResourceId: SelfId=" << selfId << " DescribeTable " << state->Database << " at " << state->Endpoint << (state->Ssl ? " (Ssl)" : ""));
+            NYdb::NTable::TTableClient tableClient(*Driver, settings);
+            tableClient.GetSession().Subscribe([actorSystem, selfId, state](const NYdb::NTable::TAsyncCreateSessionResult& future) mutable {
+                try {
+                    auto& result = future.GetValue();
+                    if (!result.IsSuccess()) {
+                        LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " GetSession failed"
+                                << ", status# " << result.GetStatus()
+                                << ", issues# " << result.GetIssues().ToOneLineString()
+                                << ", iteration# " << state->Backoff.GetIteration());
+                        if (IsRetryableError(result) && state->Backoff.HasMore()) {
+                            auto delay = state->Backoff.Next();
+                            actorSystem->Schedule(delay,
+                                    new NActors::IEventHandle(selfId, TActorId(), new TEvDescribeResourceId(std::move(state))));
+                        } else {
+                            state->Promise.SetValue(
+                                    TEvDescribeResourceIdResponse::TDescription(static_cast<Ydb::StatusIds_StatusCode>(result.GetStatus()), NYql::TIssues({NYql::TIssue(result.GetIssues().ToString())})));
+                        }
+                        return;
                     }
-                    return;
-                }
-                backoff->Reset();
-                result.GetSession()
-                      .DescribeTable(database, {})
-                      .Subscribe([promise, actorSystem, selfId, backoff](const NYdb::NTable::TAsyncDescribeTableResult& future) mutable {
-                          try {
-                              const auto& result = future.GetValue();
-                              if (!result.IsSuccess()) {
-                                  LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " DescribeTable failed"
-                                      << ", status# " << result.GetStatus()
-                                      << ", issues# " << result.GetIssues().ToOneLineString()
-                                      << ", iteration# " << backoff->GetIteration());
+                    state->Backoff.Reset();
+                    result.GetSession()
+                          .DescribeTable(state->Database, {})
+                          .Subscribe([state, actorSystem, selfId](const NYdb::NTable::TAsyncDescribeTableResult& future) {
+                              try {
+                                  const auto& result = future.GetValue();
+                                  if (!result.IsSuccess()) {
+                                      LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " DescribeTable failed"
+                                          << ", status# " << result.GetStatus()
+                                          << ", issues# " << result.GetIssues().ToOneLineString()
+                                          << ", iteration# " << state->Backoff.GetIteration());
 
-                                  if (IsRetryableError(result) && backoff->HasMore()) {
-                                      actorSystem->Schedule(backoff->Next(),
-                                              new NActors::IEventHandle(selfId, TActorId(), new TEvents::TEvWakeup()));
-                                  } else {
-                                      promise.SetValue(
-                                              TEvDescribeResourceIdResponse::TDescription(static_cast<Ydb::StatusIds_StatusCode>(result.GetStatus()), NYql::TIssues({NYql::TIssue(result.GetIssues().ToString())})));
-                                  }
-                                  return;
-                              }
-                              LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
-                                      "DescribeResourceId: SelfId=" << selfId << " Succeed");
-
-                              for (const auto& [k, v] : result.GetTableDescription().GetAttributes()) {
-                                  LOG_TRACE_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
-                                          "DescribeResourceId: SelfId=" << selfId << " key=" << k << " value=" << v);
-                                  if (k == "cloud_id") {
-                                      LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " Resolved ResourceId=" << v);
-                                      promise.SetValue(TString{v});
+                                      if (IsRetryableError(result) && state->Backoff.HasMore()) {
+                                          auto delay = state->Backoff.Next();
+                                          actorSystem->Schedule(delay,
+                                                  new NActors::IEventHandle(selfId, TActorId(), new TEvDescribeResourceId(std::move(state))));
+                                      } else {
+                                          state->Promise.SetValue(
+                                                  TEvDescribeResourceIdResponse::TDescription(static_cast<Ydb::StatusIds_StatusCode>(result.GetStatus()), NYql::TIssues({NYql::TIssue(result.GetIssues().ToString())})));
+                                      }
                                       return;
                                   }
+                                  LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
+                                          "DescribeResourceId: SelfId=" << selfId << " Succeed");
+
+                                  for (const auto& [k, v] : result.GetTableDescription().GetAttributes()) {
+                                      LOG_TRACE_S(*actorSystem, NKikimrServices::KQP_GATEWAY,
+                                              "DescribeResourceId: SelfId=" << selfId << " key=" << k << " value=" << v);
+                                      if (k == "cloud_id") {
+                                          LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " Resolved ResourceId=" << v);
+                                          state->Promise.SetValue(TString{v});
+                                          return;
+                                      }
+                                  }
+                                  LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " cloud_id not found");
+                                  state->Promise.SetValue(TString(""));
+                              } catch(const std::exception& ex) {
+                                  LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " got exception: " << ex.what());
+                                  state->Promise.SetException(std::current_exception());
                               }
-                              LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " cloud_id not found");
-                              promise.SetValue(TString(""));
-                          } catch(const std::exception& ex) {
-                              LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " got exception: " << ex.what());
-                              promise.SetException(std::current_exception());
-                          }
-                      });
-              } catch(const std::exception& ex) {
-                LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " got exception: " << ex.what());
-                promise.SetException(std::current_exception());
-              }
-        });
+                          });
+                  } catch(const std::exception& ex) {
+                    LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " got exception: " << ex.what());
+                    state->Promise.SetException(std::current_exception());
+                  }
+            });
+        } catch(const std::exception& ex) {
+            LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " got exception: " << ex.what());
+            state->Promise.SetException(std::current_exception());
+        }
     }
 private:
-    const TString Endpoint;
-    const TString Database;
-    const bool Ssl;
-    const TString CaCert;
-    const TString Token;
-    NThreading::TPromise<TEvDescribeResourceIdResponse::TDescription> Promise;
-    std::shared_ptr<TBackoff> Backoff = std::make_shared<TBackoff>(10, TDuration::MilliSeconds(100), TDuration::Seconds(10));
+    std::shared_ptr<NYdb::TDriver> Driver;
 };
-
-IActor* CreateDescribeResourceIdActor(
-        const TString& endpoint,
-        const TString& database,
-        bool ssl,
-        const TString& caCert,
-        const TString& token,
-        NThreading::TPromise<TEvDescribeResourceIdResponse::TDescription> promise) {
-    return new TDescribeResourceIdActor(endpoint, database, ssl, caCert, token, promise);
-}
 } // namespace {
 
 NThreading::TFuture<TEvDescribeResourceIdResponse::TDescription> DescribeExternalDataSourceResourceId(
@@ -733,8 +893,12 @@ NThreading::TFuture<TEvDescribeResourceIdResponse::TDescription> DescribeExterna
     TActorSystem* actorSystem
 ) {
     auto promise = NThreading::NewPromise<TEvDescribeResourceIdResponse::TDescription>();
-    actorSystem->Register(CreateDescribeResourceIdActor(endpoint, database, ssl, caCert, token, promise));
+    actorSystem->Send(MakeKqpDescribeResourceIdServiceId(), new TDescribeResourceIdService::TEvDescribeResourceId(endpoint, database, ssl, caCert, token, promise));
     return promise.GetFuture();
+}
+
+IActor* CreateDescribeResourceIdServiceActor(const std::shared_ptr<NYdb::TDriver>& driver) {
+    return new TDescribeResourceIdService(driver);
 }
 
 }  // namespace NKikimr::NKqp

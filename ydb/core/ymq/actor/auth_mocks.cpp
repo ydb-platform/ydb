@@ -47,10 +47,6 @@ public:
         if (++RequestNumber % 3 == 0) {
             result->Status = NYdbGrpc::TGrpcStatus("Unavailable", grpc::StatusCode::UNAVAILABLE, false);
         } else {
-<<<<<<< HEAD
-            if (ev->Get()->Request.Hasiam_token()) {
-                result->Status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
-=======
             if (request.has_iam_token()) {
                 TStringBuf id = request.iam_token();
                 if (id.SkipPrefix(SERVICE_ACCOUNT_PREFIX)) {
@@ -62,7 +58,6 @@ public:
                 } else {
                     status = NYdbGrpc::TGrpcStatus("Auth error", grpc::StatusCode::UNAUTHENTICATED, false);
                 }
->>>>>>> 89b4718445f (LOGBROKER-10505 Add possibility to authenticate via service account i… (#44630))
             } else {
                 TString idStr = ev->Get()->Request.Getsignature().Getaccess_key_id();
 

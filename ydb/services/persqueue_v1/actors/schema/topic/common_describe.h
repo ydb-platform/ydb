@@ -292,8 +292,14 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
                 return;
             }
             if (!LocationsReceived) {
-                LOG_D("PartitionsLocation " << ReadBalancerTabletId);
-                SendToTablet(ReadBalancerTabletId, new TEvPersQueue::TEvGetPartitionsLocation());
+                TVector<ui64> partitionIds;
+                for (const auto& partition : TopicInfo.Info->Description.GetPartitions()) {
+                    if (static_cast<TDerived*>(this)->NeedProcessPartition(partition)) {
+                        partitionIds.push_back(partition.GetPartitionId());
+                    }
+                }
+                LOG_D("PartitionsLocation " << ReadBalancerTabletId << " partitions " << JoinSeq(", ", partitionIds));
+                SendToTablet(ReadBalancerTabletId, new TEvPersQueue::TEvGetPartitionsLocation(partitionIds));
             }
             if (!ReadSessionsReceived && this->GetProtoRequest()->include_stats()) {
                 auto ev = CreateReadSessionsInfoRequest();

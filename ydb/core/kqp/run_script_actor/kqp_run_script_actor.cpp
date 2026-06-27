@@ -297,12 +297,13 @@ private:
         FinishInfo.Update(status, std::move(issues));
 
         if (ScriptResultHandlerActor.Id) {
+            LOG_D("Stop script result handler " << ScriptResultHandlerActor.Id);
             ScriptResultHandlerActor.Stop(SelfId());
             return;
         }
 
         if (SessionOpen) {
-            SessionOpen = true;
+            SessionOpen = false;
             LOG_D("Close session");
             auto ev = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
             ev->Record.MutableRequest()->SetSessionId(Ctx->UserRequestContext->SessionId);
@@ -310,6 +311,7 @@ private:
         }
 
         if (ScriptLeaseWatcherActor.Id) {
+            LOG_D("Stop script lease watcher " << ScriptLeaseWatcherActor.Id);
             ScriptLeaseWatcherActor.Stop(SelfId());
             return;
         }
@@ -326,13 +328,16 @@ private:
                 FinishInfo.Status = Ydb::StatusIds::CANCELLED;
             }
 
-            const auto finalizationStatus = !FinishInfo.IsFailed() || cancelledByUser
+            const auto finalizationStatus = FinishInfo.IsSuccess() || cancelledByUser
                 ? EFinalizationStatus::FS_COMMIT
                 : EFinalizationStatus::FS_ROLLBACK;
 
-            const auto execStatus = !FinishInfo.IsFailed()
-                ? Ydb::Query::EXEC_STATUS_COMPLETED
-                : (cancelledByUser ? Ydb::Query::EXEC_STATUS_CANCELLED : Ydb::Query::EXEC_STATUS_FAILED);
+            auto execStatus = Ydb::Query::EXEC_STATUS_COMPLETED;
+            if ((FinishInfo.IsFailed() && cancelledByUser) || *FinishInfo.Status == Ydb::StatusIds::CANCELLED) {
+                execStatus = Ydb::Query::EXEC_STATUS_CANCELLED;
+            } else if (FinishInfo.IsFailed()) {
+                execStatus = Ydb::Query::EXEC_STATUS_FAILED;
+            }
 
             auto scriptFinalizeRequest = std::make_unique<TEvScriptFinalizeRequest>(
                 finalizationStatus, Ctx->UserRequestContext->CurrentExecutionId, Ctx->UserRequestContext->Database,

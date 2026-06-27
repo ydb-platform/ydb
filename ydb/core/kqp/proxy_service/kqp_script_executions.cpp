@@ -1533,9 +1533,14 @@ private:
 
         const auto finalizationStatus = event.FinalizationStatus.GetOrElse(EFinalizationStatus::FS_ROLLBACK);
         const auto status = event.OperationStatus.GetOrElse(Ydb::StatusIds::UNAVAILABLE);
-        const auto execStatus = event.ExecutionStatus.GetOrElse(Ydb::Query::EXEC_STATUS_ABORTED);
+
+        auto execStatus = Ydb::Query::EXEC_STATUS_ABORTED;
+        if (event.ExecutionStatus && IsIn({Ydb::Query::EXEC_STATUS_ABORTED, Ydb::Query::EXEC_STATUS_CANCELLED, Ydb::Query::EXEC_STATUS_COMPLETED, Ydb::Query::EXEC_STATUS_FAILED}, *event.ExecutionStatus)) {
+            execStatus = *event.ExecutionStatus;
+        }
+
         KQP_PROXY_LOG_W("Script execution lease is expired"
-            << ", FinalizationStatus: " << static_cast<i32>(finalizationStatus)
+            << ", FinalizationStatus: " << finalizationStatus
             << ", Status: " << status
             << ", ExecStatus: " << Ydb::Query::ExecStatus_Name(execStatus)
             << ", Issues: " << issues.ToOneLineString()
@@ -3850,7 +3855,6 @@ private:
             DECLARE $retry_state AS JsonDocument;
             DECLARE $retry_deadline AS Timestamp;
             DECLARE $lease_state AS Int32;
-            DECLARE $lease_generation AS Int64;
 
             UPSERT INTO `.metadata/script_executions` (
                 database, execution_id, operation_status, execution_status,
@@ -3914,10 +3918,10 @@ private:
         const auto operationTtl = std::min(OperationTtl.MicroSeconds(), NYql::NUdf::MAX_TIMESTAMP - 1);
         KQP_PROXY_LOG_D("Do finalization with status " << Request.OperationStatus
             << ", exec status: " << Ydb::Query::ExecStatus_Name(Request.ExecStatus)
-            << ", finalization status (applicate effect: " << Response->ApplicateScriptExternalEffectRequired << "): " << static_cast<ui64>(Request.FinalizationStatus)
+            << ", finalization status (applicate effect: " << Response->ApplicateScriptExternalEffectRequired << "): " << Request.FinalizationStatus
             << ", issues: " << Request.Issues.ToOneLineString()
             << ", retry deadline: " << retryDeadline
-            << ", lease state: " << static_cast<i32>(leaseState)
+            << ", lease state: " << leaseState
             << ", operation_ttl: " << TDuration::MicroSeconds(operationTtl));
 
         auto params = CreateParams();
@@ -4010,7 +4014,7 @@ public:
         NYql::TIssues operationIssues, const i64 leaseGeneration)
         : TScriptFinalizationActorBase(__func__, {.Database = std::move(database), .ExecutionId = std::move(executionId), .LeaseGeneration = leaseGeneration})
         , OperationStatus(operationStatus)
-        , OperationIssues(AddRootIssue("Script finalization failed", operationIssues))
+        , OperationIssues(AddRootIssue("Script finalization failed", operationIssues, /* addEmptyRoot */ false))
     {}
 
 private:
@@ -4417,7 +4421,8 @@ public:
 private:
     void Handle(TEvListExpiredLeasesResponse::TPtr& ev) {
         const auto& leases = ev->Get()->Leases;
-        KQP_PROXY_LOG_D("Got list expired leases response " << ev->Sender << ", found " << leases.size() << " expired leases");
+        ExpiredLeasesCount = leases.size();
+        KQP_PROXY_LOG_D("Got list expired leases response " << ev->Sender << ", found " << ExpiredLeasesCount << " expired leases");
 
         for (const auto& lease : leases) {
             const auto& checkerId = Register(new TFinalizeScriptLeaseActor(SelfId(), lease.Database, lease.ExecutionId, QueryServiceConfig, Counters, {.Cookie = CookieId++}));
@@ -4462,7 +4467,7 @@ private:
         }
 
         KQP_PROXY_LOG_D("Finish, success: " << Success << ", issues: " << Issues.ToOneLineString());
-        Send(ReplyActorId, new TEvRefreshScriptExecutionLeasesResponse(Success, std::move(Issues)));
+        Send(ReplyActorId, new TEvRefreshScriptExecutionLeasesResponse(Success, ExpiredLeasesCount, std::move(Issues)));
         PassAway();
     }
 
@@ -4475,6 +4480,7 @@ private:
     const TIntrusivePtr<TKqpCounters> Counters;
     ui64 CookieId = 0;
     ui64 OperationsToCheck = 0;
+    ui64 ExpiredLeasesCount = 0;
     bool Success = true;
     NYql::TIssues Issues;
 };

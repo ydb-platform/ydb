@@ -544,12 +544,14 @@ struct TEvListExpiredLeasesResponse : public TEventLocal<TEvListExpiredLeasesRes
 };
 
 struct TEvRefreshScriptExecutionLeasesResponse : public TEventLocal<TEvRefreshScriptExecutionLeasesResponse, TKqpScriptExecutionEvents::EvRefreshScriptExecutionLeasesResponse> {
-    TEvRefreshScriptExecutionLeasesResponse(const bool success, NYql::TIssues issues)
+    TEvRefreshScriptExecutionLeasesResponse(const bool success, const ui64 expiredLeasesCount, NYql::TIssues issues)
         : Success(success)
+        , ExpiredLeasesCount(expiredLeasesCount)
         , Issues(std::move(issues))
     {}
 
     const bool Success = true;
+    const ui64 ExpiredLeasesCount = 0;
     const NYql::TIssues Issues;
 };
 

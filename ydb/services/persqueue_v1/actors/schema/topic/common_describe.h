@@ -117,7 +117,7 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
                 };
 
                 return this->ReplyWithError(
-                    Ydb::StatusIds::SCHEME_ERROR,
+                    NPQ::NDescriber::Convert(TopicInfo.Status),
                     NPQ::NDescriber::Description(this->GetProtoRequest()->path(), TopicInfo.Status),
                     asIssueCode(NPQ::NDescriber::Convert(TopicInfo.Status))
                 );
@@ -362,27 +362,27 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             RequestReadBalancer();
         }
 
-        protected:
-            const NPQ::NDescriber::TAccessRights AccessRights;
-        
-            NPQ::NDescriber::TTopicInfo TopicInfo;
+    protected:
+        const NPQ::NDescriber::TAccessRights AccessRights;
 
-            ui64 ReadBalancerTabletId = 0;
-            absl::flat_hash_set<ui64> TabletsInflight;
+        NPQ::NDescriber::TTopicInfo TopicInfo;
 
-            bool LocationsReceived = false;
-            bool ReadSessionsReceived = false;
-            bool LocationsRetryPending = false;
-            TBackoff LocationsBackoff = TBackoff(25, TDuration::MilliSeconds(10), TDuration::MilliSeconds(100));
+        ui64 ReadBalancerTabletId = 0;
+        absl::flat_hash_set<ui64> TabletsInflight;
 
-            Ydb::Scheme::Entry SelfEntry;
+        bool LocationsReceived = false;
+        bool ReadSessionsReceived = false;
+        bool LocationsRetryPending = false;
+        TBackoff LocationsBackoff = TBackoff(25, TDuration::MilliSeconds(10), TDuration::MilliSeconds(100));
 
-            struct TPartitionInfo {
-                Ydb::Topic::PartitionLocation Location;
-                Ydb::Topic::DescribeConsumerResult::PartitionInfo Stats;
-                NKikimrPQ::TReadSessionsInfoResponse::TPartitionInfo ReadSession;
-            };
-            absl::flat_hash_map<ui32, TPartitionInfo> Partitions;
+        Ydb::Scheme::Entry SelfEntry;
+
+        struct TPartitionInfo {
+            Ydb::Topic::PartitionLocation Location;
+            Ydb::Topic::DescribeConsumerResult::PartitionInfo Stats;
+            NKikimrPQ::TReadSessionsInfoResponse::TPartitionInfo ReadSession;
+        };
+        absl::flat_hash_map<ui32, TPartitionInfo> Partitions;
     };
 
 } // namespace NKikimr::NGRpcProxy::V1::NTopic

@@ -114,7 +114,7 @@ bool TBaseCloudAuthRequestProxy::InitAndValidate() {
         }
     }
 
-    if (IamToken_ && FolderId_) {
+    if (IamToken_) {
         // UI
         return true;
     }
@@ -198,7 +198,7 @@ void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessSer
     ChangeCounters([this, &ev](){
         Counters_.IncCounter(
             NCloudAuth::EActionType::Authenticate,
-            NCloudAuth::ECredentialType::Signature,
+            (AccessKeySignature_ ? NCloudAuth::ECredentialType::Signature : NCloudAuth::ECredentialType::IamToken),
             ev->Get()->Status.GRpcStatusCode
         );
         auto now = TActivationContext::Now();
@@ -218,13 +218,30 @@ void TBaseCloudAuthRequestProxy::HandleAuthenticationResult(NCloud::TEvAccessSer
             SendReplyAndDie();
         }
         return;
+<<<<<<< HEAD
     } else if (!ev->Get()->Response.Getsubject().Hasservice_account()) {
         SetError(NErrors::ACCESS_DENIED, "(this error should be unreachable).");
+=======
+    }
+
+    if (!ev->Get()->Response.subject().has_service_account()) {
+        SetError(AuthenticateIamToken_ ? NErrors::INVALID_CLIENT_TOKEN_ID : NErrors::ACCESS_DENIED,
+            AuthenticateIamToken_ ? "Failed to resolve folder id for IAM token." : "(this error should be unreachable).");
+>>>>>>> 89b4718445f (LOGBROKER-10505 Add possibility to authenticate via service account i… (#44630))
         SendReplyAndDie();
         return;
     }
 
+<<<<<<< HEAD
     FolderId_ = ev->Get()->Response.Getsubject().Getservice_account().Getfolder_id();
+=======
+    FolderId_ = ev->Get()->Response.subject().service_account().folder_id();
+    if (AuthenticateIamToken_ && !FolderId_) {
+        SetError(NErrors::ACCESS_DENIED, "Failed to resolve folder id for IAM token.");
+        SendReplyAndDie();
+        return;
+    }
+>>>>>>> 89b4718445f (LOGBROKER-10505 Add possibility to authenticate via service account i… (#44630))
 
     GetCloudIdAndAuthorize();
 }
@@ -382,7 +399,29 @@ void TBaseCloudAuthRequestProxy::Authenticate() {
     FillSignatureProto(*request->Request.mutable_signature());
 
     AuthenticateRequestStartTimestamp_ = TActivationContext::Now();
+<<<<<<< HEAD
     Send(MakeSqsAccessServiceID(), std::move(request));
+=======
+    if (EnableAccessServiceV2Interface_) {
+        auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequestV2>();
+        request->RequestId = RequestId_;
+        if (AccessKeySignature_) {
+            FillSignatureProto(*request->Request.mutable_signature());
+        } else {
+            request->Request.set_iam_token(IamToken_);
+        }
+        Send(MakeSqsAccessServiceID(), std::move(request));
+    } else {
+        auto request = MakeHolder<NCloud::TEvAccessService::TEvAuthenticateRequest>();
+        request->RequestId = RequestId_;
+        if (AccessKeySignature_) {
+            FillSignatureProto(*request->Request.mutable_signature());
+        } else {
+            request->Request.set_iam_token(IamToken_);
+        }
+        Send(MakeSqsAccessServiceID(), std::move(request));
+    }
+>>>>>>> 89b4718445f (LOGBROKER-10505 Add possibility to authenticate via service account i… (#44630))
 }
 
 
@@ -480,8 +519,12 @@ void TBaseCloudAuthRequestProxy::Bootstrap() {
                 return;
             }
         }
-    } else {
+    } else if (FolderId_) {
         GetCloudIdAndAuthorize();
+    } else {
+        AuthenticateIamToken_ = true;
+        Become(&TThis::ProcessAuthentication);
+        Authenticate();
     }
 };
 

@@ -18,6 +18,7 @@ ydb/core/tx/schemeshard/ut_subdomain TSchemeShardSubDomainTest.SimultaneousCreat
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo_db
 ydb/library/actors/interconnect/rdma/ut TRdmaLow/TCqMode.ReadInOneProcessWithQpInterruption/EVENT
+ydb/public/sdk/cpp/tests/unit/client/iam GrpcIamCredentialsProvider.StopDuringFillContextDoesNotHang
 ydb/services/persqueue_v1/ut TPersQueueTest.Cache
 ydb/services/persqueue_v1/ut TPersQueueTest.CacheHead
 ydb/services/ydb/ut TGRpcLdapAuthentication.CanAuthWithValidCredentialsUseSaslExternal

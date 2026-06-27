@@ -1,0 +1,190 @@
+name: Ya-Build-and-Test-Parallel
+# Pilot fork of build_and_test_ya for pr_check_parallel.yml (sharded PR-check).
+# Keeps production build_and_test_ya untouched; merge changes back after the
+# pilot is validated.
+inputs:
+  build_target:
+    type: string
+    default: "ydb/"
+    description: "limit build and test to specific target"
+  build_preset:
+    type: string
+  run_build:
+    type: boolean
+    default: true
+    description: "run build"
+  run_tests:
+    type: boolean
+    default: true
+    description: "run tests"
+  test_threads:
+    type: string
+    default: 28
+    description: "Test threads count"
+  link_threads:
+    type: string
+    default: 12
+    description: "link threads count"
+  test_size:
+    type: string
+    default: "small,medium,large"
+  test_type:
+    type: string
+    default: ""
+    description: "run only specific test types (or all by default)"
+  increment:
+    type: boolean
+    required: true
+    description: If true, compares build graphs between the current and previous commits to find a list of test suites to run. Otherwise, runs all tests.
+  folder_prefix:
+    type: string
+    default: "ya-"
+  put_build_results_to_cache:
+    type: boolean
+    default: true
+  additional_ya_make_args:
+    type: string
+    default: ""
+  test_retry_count:
+    default: ""
+    description: "how many times to retry failed tests"
+  secs:
+    type: string
+    default: ""
+  vars:
+    type: string
+    default: ""
+  custom_branch_name:
+    description: "Custom branch name required when workflow branch != checkout branch"
+    type: string
+    required: false
+  add_vcs_info:
+    type: boolean
+    default: false
+    description: "add ya make vars with git info"
+  collect_coredumps:
+    type: boolean
+    default: false
+    description: "Collect coredumps via enabling ulimit -c unlimited"
+  pull_number:
+    type: string
+    required: false
+    description: "Pull request number (for workflow_call events)"
+  status_sha:
+    type: string
+    required: false
+    default: ""
+    description: "PR head SHA for GitHub commit statuses (workflow_dispatch / workflow_call)"
+  skip_graph_compare:
+    type: boolean
+    default: false
+  prebuilt_graph_path:
+    type: string
+    default: ""
+  prebuilt_context_path:
+    type: string
+    default: ""
+  publish_github_status:
+    type: boolean
+    default: true
+  publish_pr_comment:
+    type: boolean
+    default: true
+  single_attempt:
+    type: boolean
+    default: false
+  start_retry:
+    type: string
+    default: "1"
+  previous_report_path:
+    type: string
+    default: ""
+  save_test_graph:
+    type: boolean
+    default: false
+    description: "Include test nodes in saved graph for sharded test jobs"
+  s3_subdir:
+    type: string
+    default: ""
+    description: "Optional S3 subfolder under preset path (e.g. shard_0)"
+  clean_ya_cache:
+    type: boolean
+    default: true
+    description: "rm -rf ~/.ya before the build (disable when sharing the cache with a concurrent ya process)"
+defaults:
+  run:
+    shell: bash
+runs:
+  using: "composite"
+  steps:
+    - name: Prepare folder prefix
+      id: prepare_prefix
+      shell: bash
+      run: |
+        # Check if custom_branch_name is set and not empty
+        if [ -n "${{ inputs.custom_branch_name }}" ]; then
+          # Extract and sanitize custom_branch_name
+          CUSTOM_BRANCH_NAME="${{ inputs.custom_branch_name }}"
+          # Replace all unsupported characters with hyphens
+          SANITIZED_NAME="${CUSTOM_BRANCH_NAME//[^a-zA-Z0-9-]/-}"
+          # Optionally limit the length to, say, 50 characters
+          SANITIZED_NAME="${SANITIZED_NAME:0:50}"
+          # Assign the sanitized name to the folder_prefix
+          FOLDER_PREFIX="ya-${SANITIZED_NAME}-"
+        else
+          # If the branch name is not provided, use a default prefix
+          FOLDER_PREFIX='ya-'
+        fi
+        # Output the folder_prefix for use in subsequent steps
+        echo "folder_prefix=${FOLDER_PREFIX}" >> $GITHUB_ENV
+        if [ -n "${{ inputs.s3_subdir }}" ]; then
+          echo "S3_SUBDIR=${{ inputs.s3_subdir }}" >> $GITHUB_ENV
+        fi
+
+    - name: Prepare s3cmd
+      uses: ./.github/actions/s3cmd_parallel
+      with:
+        s3_bucket: ${{ fromJSON( inputs.vars ).AWS_BUCKET }}
+        s3_endpoint: ${{ fromJSON( inputs.vars ).AWS_ENDPOINT }}
+        s3_key_id: ${{ fromJSON( inputs.secs ).AWS_KEY_ID }}
+        s3_key_secret: ${{ fromJSON( inputs.secs ).AWS_KEY_VALUE }}
+        folder_prefix: ${{ env.folder_prefix }}
+        build_preset: ${{ inputs.build_preset }}
+        s3_subdir: ${{ inputs.s3_subdir }}
+
+    - name: Run build and tests
+      id: build
+      uses: ./.github/actions/test_ya_parallel
+      with:
+        build_target: ${{ inputs.build_target }}
+        build_preset: ${{ inputs.build_preset }}
+        test_size: ${{ inputs.test_size }}
+        test_type: ${{ inputs.test_type }}
+        run_tests: ${{ inputs.run_tests }}
+        increment: ${{ inputs.increment }}
+        link_threads: ${{ inputs.link_threads }}
+        additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
+        test_threads: ${{ inputs.test_threads }}
+        bazel_remote_uri: ${{  fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}
+        bazel_remote_username: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
+        bazel_remote_password: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_PASSWORD || '' }}
+        put_build_results_to_cache: ${{ inputs.put_build_results_to_cache }}
+        test_retry_count: ${{ inputs.test_retry_count }}
+        custom_branch_name: ${{ inputs.custom_branch_name }}
+        add_vcs_info: ${{ inputs.add_vcs_info }}
+        telegram_ydbot_token:  ${{ fromJSON( inputs.secs ).YDBOT_TELEGRAM_BOT_TOKEN || '' }}
+        telegram_alert_logins: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_LOGINS || '' }}
+        telegram_alert_chat: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_CHAT || '' }}
+        collect_coredumps: ${{ inputs.collect_coredumps }}
+        pull_number: ${{ inputs.pull_number }}
+        status_sha: ${{ inputs.status_sha }}
+        skip_graph_compare: ${{ inputs.skip_graph_compare }}
+        prebuilt_graph_path: ${{ inputs.prebuilt_graph_path }}
+        prebuilt_context_path: ${{ inputs.prebuilt_context_path }}
+        publish_github_status: ${{ inputs.publish_github_status }}
+        publish_pr_comment: ${{ inputs.publish_pr_comment }}
+        single_attempt: ${{ inputs.single_attempt }}
+        start_retry: ${{ inputs.start_retry }}
+        previous_report_path: ${{ inputs.previous_report_path }}
+        save_test_graph: ${{ inputs.save_test_graph }}
+        clean_ya_cache: ${{ inputs.clean_ya_cache }}

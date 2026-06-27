@@ -1,0 +1,251 @@
+name: PR-check-parallel
+# Production-style parallel PR-check: same scope and presets as pr_check.yml,
+# but with the sharded pipeline (pr_check_parallel_core.yml).
+#
+# Automatic pull_request_target trigger is intentionally disabled until rollout.
+# Run manually from Actions → PR-check-parallel → Run workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      pr_number:
+        description: 'PR number to check (e.g. 43351)'
+        required: true
+        type: string
+      mode:
+        description: 'Pipeline mode: auto | single | sharded'
+        required: false
+        type: choice
+        options:
+          - auto
+          - single
+          - sharded
+        default: auto
+      shard_count:
+        description: 'Shard count: auto or a number (sharded mode)'
+        required: false
+        type: string
+        default: auto
+      test_size:
+        description: 'Test sizes: small, medium, large (default: small,medium)'
+        required: false
+        type: string
+        default: small,medium
+      checkout_sha:
+        description: 'Optional pinned commit SHA (overrides PR merge commit)'
+        required: false
+        type: string
+        default: ''
+      disable_peak_cap:
+        description: 'Ignore the peak-hours shard cap'
+        required: false
+        type: boolean
+        default: false
+      publish:
+        description: 'Post build_*/test_* commit statuses and PR test summary comment (like production PR-check)'
+        required: false
+        type: boolean
+        default: false
+      publish_integrated_status:
+        description: 'Update checks_integrated aggregate status (off until parallel PR-check replaces main)'
+        required: false
+        type: boolean
+        default: false
+
+# Future automatic trigger (enable via CHECKS_SWITCH.pr_check_parallel):
+# pull_request_target:
+#   branches: [main, stable-*, prestable-*, stream-nb-*, dev-*, rc-*, q-stable-*]
+#   types: [opened, synchronize, reopened, labeled]
+
+concurrency:
+  group: pr-check-parallel-${{ inputs.pr_number }}
+  cancel-in-progress: true
+
+jobs:
+  gate:
+    runs-on: [self-hosted, tiny-worker]
+    name: Prepare PR #${{ inputs.pr_number }}
+    timeout-minutes: 30
+    outputs:
+      result: ${{ steps.check-is-mergeable.outputs.result }}
+      checkout_ref: ${{ steps.resolve.outputs.checkout_ref }}
+      pr_number: ${{ steps.resolve.outputs.pr_number }}
+      pr_head_sha: ${{ steps.resolve.outputs.pr_head_sha }}
+      history_branch: ${{ steps.resolve.outputs.history_branch }}
+    steps:
+      - name: Resolve PR
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ inputs.pr_number }}
+          CHECKOUT_SHA_INPUT: ${{ inputs.checkout_sha }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$PR_NUMBER" =~ ^[0-9]+$ ]]; then
+            echo "pr_number must be a numeric PR id, got: $PR_NUMBER" >&2
+            exit 1
+          fi
+          pr_json=$(curl --retry 5 --retry-all-errors --retry-delay 5 --fail --show-error -sL \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${PR_NUMBER}")
+          state=$(echo "$pr_json" | jq -r '.state')
+          if [ "$state" != "open" ]; then
+            echo "PR #$PR_NUMBER is not open (state=$state)" >&2
+            exit 1
+          fi
+          merge_sha=$(echo "$pr_json" | jq -r '.merge_commit_sha // empty')
+          head_sha=$(echo "$pr_json" | jq -r '.head.sha')
+          base_ref=$(echo "$pr_json" | jq -r '.base.ref')
+          if [ -z "$merge_sha" ]; then
+            echo "PR #$PR_NUMBER has no merge commit (conflicts?)" >&2
+            exit 1
+          fi
+          checkout_ref="$merge_sha"
+          if [ -n "$CHECKOUT_SHA_INPUT" ]; then
+            echo "Pinning checkout SHA: $CHECKOUT_SHA_INPUT (was: $checkout_ref)"
+            checkout_ref="$CHECKOUT_SHA_INPUT"
+          fi
+          echo "PR #$PR_NUMBER: merge=$checkout_ref head=$head_sha base=$base_ref"
+          echo "checkout_ref=$checkout_ref" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$PR_NUMBER" >> "$GITHUB_OUTPUT"
+          echo "pr_head_sha=$head_sha" >> "$GITHUB_OUTPUT"
+          echo "history_branch=$base_ref" >> "$GITHUB_OUTPUT"
+
+      - name: Reset integrated status
+        if: inputs.publish_integrated_status
+        env:
+          PR_HEAD_SHA: ${{ steps.resolve.outputs.pr_head_sha }}
+        run: |
+          curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{ github.repository }}/statuses/${PR_HEAD_SHA}" \
+            -d '{"state":"pending","description":"Waiting for relevant checks to complete","context":"checks_integrated","target_url":"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'
+
+      - name: Check mergeable
+        id: check-is-mergeable
+        uses: actions/github-script@v8
+        env:
+          PR_NUMBER: ${{ inputs.pr_number }}
+        with:
+          result-encoding: string
+          script: |
+            let pr = await github.rest.pulls.get({
+              ...context.repo,
+              pull_number: Number(process.env.PR_NUMBER),
+            });
+            pr = pr.data;
+            const delay = ms => new Promise(resolve => setTimeout(resolve, ms));
+            const header = `<!-- merge pr=${pr.number} -->\n`;
+            const fail_msg = header + ':red_circle: Unable to merge your PR into the base branch. '
+              + 'Please rebase or merge it with the base branch.';
+            let i = 0;
+            while (pr.mergeable == null && i < 60) {
+              let result = await github.rest.pulls.get({
+                ...context.repo,
+                pull_number: pr.number,
+              });
+              pr = result.data;
+              if (pr.mergeable == null) {
+                await delay(5000);
+              }
+              i += 1;
+            }
+            if (pr.mergeable === null) {
+              core.setFailed("Unable to check if the PR is mergeable, please re-run the check.");
+              return false;
+            }
+            const { data: comments } = await github.rest.issues.listComments({
+              issue_number: pr.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+            });
+            const commentToUpdate = comments.find(comment => comment.body.startsWith(header));
+            if (!pr.mergeable) {
+              let commentParams = {
+                ...context.repo,
+                issue_number: pr.number,
+                body: fail_msg,
+              };
+              if (commentToUpdate) {
+                await github.rest.issues.updateComment({
+                  ...commentParams,
+                  comment_id: commentToUpdate.id,
+                });
+              } else {
+                await github.rest.issues.createComment({ ...commentParams });
+              }
+              core.setFailed("Merge conflict detected");
+              return false;
+            } else if (commentToUpdate) {
+              await github.rest.issues.deleteComment({
+                ...context.repo,
+                issue_number: pr.number,
+                comment_id: commentToUpdate.id,
+              });
+            }
+            return true;
+
+  build_and_test:
+    needs: gate
+    if: needs.gate.outputs.result == 'true' && needs.gate.outputs.checkout_ref != ''
+    strategy:
+      fail-fast: false
+      matrix:
+        build_preset:
+          - relwithdebinfo
+          - release-asan
+    uses: ./.github/workflows/pr_check_parallel_core.yml
+    name: Build and test ${{ matrix.build_preset }}
+    secrets: inherit
+    with:
+      checkout_ref: ${{ needs.gate.outputs.checkout_ref }}
+      test_targets: ydb/
+      build_preset: ${{ matrix.build_preset }}
+      mode: ${{ inputs.mode }}
+      shard_count: ${{ inputs.shard_count }}
+      test_size: ${{ inputs.test_size }}
+      increment: true
+      pr_number: ${{ needs.gate.outputs.pr_number }}
+      history_branch: ${{ needs.gate.outputs.history_branch }}
+      status_sha: ${{ needs.gate.outputs.pr_head_sha }}
+      publish: ${{ inputs.publish }}
+      disable_peak_cap: ${{ inputs.disable_peak_cap }}
+
+  update_integrated_status:
+    runs-on: [self-hosted, tiny-worker]
+    needs:
+      - gate
+      - build_and_test
+    if: always() && needs.gate.outputs.result == 'true' && inputs.publish_integrated_status
+    steps:
+      - name: Gather required checks results
+        shell: bash
+        env:
+          PR_HEAD_SHA: ${{ needs.gate.outputs.pr_head_sha }}
+        run: |
+          integrated_status=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X GET \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{ github.repository }}/commits/${PR_HEAD_SHA}/status" | \
+            jq -cr '
+              .statuses
+              | group_by(.context)
+              | map(.[0])
+              | map(select(.context | (
+                  startswith("build_relwithdebinfo")
+                  or startswith("build_release-asan")
+                  or startswith("test_relwithdebinfo")
+                  or startswith("test_release-asan")
+                )))
+              | if length == 4 and all(.state == "success") then "success" else "failure" end
+            ')
+          curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -L -X POST \
+            -H "Accept: application/vnd.github+json" \
+            -H "Authorization: Bearer ${{ github.token }}" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/repos/${{ github.repository }}/statuses/${PR_HEAD_SHA}" \
+            -d '{"state":"'"$integrated_status"'","description":"All checks completed","context":"checks_integrated","target_url":"${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"}'

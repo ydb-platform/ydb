@@ -1,0 +1,43 @@
+{
+  "conf": {},
+  "inputs": {},
+  "result": [
+    "test-a1",
+    "test-a2",
+    "build-a",
+    "test-b1",
+    "build-b"
+  ],
+  "graph": [
+    {
+      "uid": "test-a1",
+      "node-type": "test",
+      "target_properties": {"module_lang": "py3"},
+      "inputs": ["$(BUILD_ROOT)/ydb/tests/foo/test-results/py3test/chunk0/meta.json"],
+      "deps": ["build-a"]
+    },
+    {
+      "uid": "test-a2",
+      "node-type": "test",
+      "target_properties": {"module_lang": "py3"},
+      "inputs": ["$(BUILD_ROOT)/ydb/tests/foo/test-results/py3test/chunk1/meta.json"],
+      "deps": ["build-a"]
+    },
+    {
+      "uid": "build-a",
+      "target_properties": {"module_dir": "ydb/tests/foo/support", "module_type": "bin"},
+      "deps": []
+    },
+    {
+      "uid": "test-b1",
+      "node-type": "test",
+      "target_properties": {"module_dir": "ydb/tests/bar", "module_type": "py3test"},
+      "deps": ["build-b"]
+    },
+    {
+      "uid": "build-b",
+      "target_properties": {"module_dir": "ydb/tests/bar/deps", "module_type": "bin"},
+      "deps": []
+    }
+  ]
+}

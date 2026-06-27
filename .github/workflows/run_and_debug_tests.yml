@@ -1,115 +1,227 @@
 name: Run and debug tests
+# Driver for the parallel PR-check pipeline (pr_check_parallel_core.yml).
+#
+# Runs the pipeline over a real PR (checkout of its merge commit, like
+# PR-check does) or over a branch, without publishing anything to the PR,
+# and prints a duration summary to compare against the production PR-check
+# run of the same PR.
 
 on:
   workflow_dispatch:
     inputs:
+      ref:
+        description: 'PR number (e.g. "12345") or branch name (e.g. "main")'
+        required: true
+        type: string
+        default: 'main'
       test_targets:
-        description: 'Paths to tests (e.g., "ydb/tests/olap/" or "ydb/tests/olap/, ydb/tests/functional/")'
+        description: 'Test scope (e.g. "ydb/" or "ydb/tests/olap/")'
         required: false
         type: string
-        default: 'ydb/tests/olap/'
+        default: 'ydb/'
+      test_size:
+        description: 'Test sizes: small, medium, large (default: small,medium)'
+        required: false
+        type: string
+        default: small,medium
       build_preset:
-        description: 'Build preset types (comma-separated: "relwithdebinfo, release-asan" or single: "relwithdebinfo")'
+        description: 'Build preset'
+        required: false
+        type: choice
+        options:
+          - relwithdebinfo
+          - release-asan
+        default: 'relwithdebinfo'
+      mode:
+        description: 'Pipeline mode'
+        required: false
+        type: choice
+        options:
+          - auto
+          - single
+          - sharded
+        default: 'auto'
+      shard_count:
+        description: 'Shard count: "auto" (adaptive) or a number'
         required: false
         type: string
-        default: 'relwithdebinfo, release-asan'
-      branches:
-        description: 'Branches to test (comma-separated: "main, stable-25-3" or JSON array: ["main", "stable-25-3"], empty = use branches_config_path)'
+        default: 'auto'
+      increment:
+        description: 'Run only suites affected by the change (graph_compare, like PR-check). Use for PR refs.'
+        required: false
+        type: boolean
+        default: false
+      checkout_sha:
+        description: 'Optional pinned commit SHA (overrides PR merge commit or branch tip for parity runs)'
         required: false
         type: string
         default: ''
-      use_branches_config:
-        description: 'If true, use branches from .github/config/stable_tests_branches.json'
+      disable_peak_cap:
+        description: 'Ignore the peak-hours shard cap'
+        required: false
+        type: boolean
+        default: false
+      publish:
+        description: 'Post test summary comment and commit statuses on the PR (sharded: from merge job)'
         required: false
         type: boolean
         default: false
 
 jobs:
-  prepare:
+  resolve:
     runs-on: ubuntu-latest
+    name: Resolve ref (${{ inputs.ref }})
+    timeout-minutes: 10
     outputs:
-      branches_json: ${{ steps.format-branches.outputs.branches_json }}
-      build_preset_array: ${{ steps.format-build-preset.outputs.build_preset_array }}
+      checkout_ref: ${{ steps.resolve.outputs.checkout_ref }}
+      pr_number: ${{ steps.resolve.outputs.pr_number }}
+      pr_head_sha: ${{ steps.resolve.outputs.pr_head_sha }}
+      history_branch: ${{ steps.resolve.outputs.history_branch }}
     steps:
-      - name: Format branches
-        id: format-branches
+      - name: Resolve PR or branch
+        id: resolve
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REF_INPUT: ${{ inputs.ref }}
+          CHECKOUT_SHA_INPUT: ${{ inputs.checkout_sha }}
         run: |
-          if [ -z "${{ inputs.branches }}" ]; then
-            # Empty - will use branches_config_path or default
-            echo "branches_json=" >> $GITHUB_OUTPUT
-          elif [[ "${{ inputs.branches }}" == \[* ]]; then
-            # Already JSON array
-            echo "branches_json=${{ inputs.branches }}" >> $GITHUB_OUTPUT
+          set -euo pipefail
+          ref="${REF_INPUT#pull/}"
+          ref="${ref#\#}"
+          checkout_ref=""
+          pr_number=""
+          pr_head_sha=""
+          history_branch=""
+          if [[ "$ref" =~ ^[0-9]+$ ]]; then
+            pr_json=$(curl --retry 5 --retry-all-errors --retry-delay 5 --fail --show-error -sL \
+              -H "Accept: application/vnd.github+json" \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/${ref}")
+            merge_sha=$(echo "$pr_json" | jq -r '.merge_commit_sha // empty')
+            head_sha=$(echo "$pr_json" | jq -r '.head.sha')
+            base_ref=$(echo "$pr_json" | jq -r '.base.ref')
+            if [ -z "$merge_sha" ]; then
+              echo "PR #$ref has no merge commit (conflicts or closed?)" >&2
+              exit 1
+            fi
+            checkout_ref="$merge_sha"
+            pr_number="$ref"
+            pr_head_sha="$head_sha"
+            history_branch="$base_ref"
+            echo "PR #$ref: merge=$merge_sha head=$head_sha base=$base_ref"
           else
-            # Comma-separated format: "main, stable-25-3" -> ["main", "stable-25-3"]
-            IFS=',' read -ra BRANCHES <<< "${{ inputs.branches }}"
-            JSON_BRANCHES="["
-            FIRST=true
-            for branch in "${BRANCHES[@]}"; do
-              branch=$(echo "$branch" | xargs)  # trim whitespace
-              if [ -n "$branch" ]; then
-                if [ "$FIRST" = true ]; then
-                  FIRST=false
-                else
-                  JSON_BRANCHES+=", "
-                fi
-                JSON_BRANCHES+="\"$branch\""
-              fi
-            done
-            JSON_BRANCHES+="]"
-            echo "branches_json=$JSON_BRANCHES" >> $GITHUB_OUTPUT
-            echo "Converted '${{ inputs.branches }}' to $JSON_BRANCHES"
+            case "$ref" in
+              main|stable-*|stream-*|prestable-*|release-*) history_branch="$ref" ;;
+              *) history_branch=main ;;
+            esac
+            checkout_ref="$ref"
+            echo "Branch run: $ref (history: $history_branch)"
           fi
+          if [ -n "$CHECKOUT_SHA_INPUT" ]; then
+            echo "Pinning checkout SHA: $CHECKOUT_SHA_INPUT (was: $checkout_ref)"
+            checkout_ref="$CHECKOUT_SHA_INPUT"
+          fi
+          echo "checkout_ref=$checkout_ref" >> "$GITHUB_OUTPUT"
+          echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
+          echo "pr_head_sha=$pr_head_sha" >> "$GITHUB_OUTPUT"
+          echo "history_branch=$history_branch" >> "$GITHUB_OUTPUT"
 
-      - name: Format build presets
-        id: format-build-preset
-        run: |
-          BUILD_PRESET_INPUT="${{ inputs.build_preset }}"
-          if [ -z "$BUILD_PRESET_INPUT" ]; then
-            BUILD_PRESET_INPUT="relwithdebinfo"
-          fi
-          
-          # Check if already JSON array
-          if [[ "$BUILD_PRESET_INPUT" == \[* ]]; then
-            echo "build_preset_array=$BUILD_PRESET_INPUT" >> $GITHUB_OUTPUT
-          else
-            # Comma-separated format: "relwithdebinfo, release-asan" -> ["relwithdebinfo", "release-asan"]
-            IFS=',' read -ra PRESETS <<< "$BUILD_PRESET_INPUT"
-            JSON_PRESETS="["
-            FIRST=true
-            for preset in "${PRESETS[@]}"; do
-              preset=$(echo "$preset" | xargs)  # trim whitespace
-              if [ -n "$preset" ]; then
-                if [ "$FIRST" = true ]; then
-                  FIRST=false
-                else
-                  JSON_PRESETS+=", "
-                fi
-                JSON_PRESETS+="\"$preset\""
-              fi
-            done
-            JSON_PRESETS+="]"
-            echo "build_preset_array=$JSON_PRESETS" >> $GITHUB_OUTPUT
-            echo "Converted '$BUILD_PRESET_INPUT' to $JSON_PRESETS"
-          fi
-
-  main:
-    name: Run and debug tests
-    needs: prepare
-    uses: ./.github/workflows/run_tests.yml
+  run_check:
+    needs: resolve
+    name: Parallel check
+    uses: ./.github/workflows/pr_check_parallel_core.yml
     secrets: inherit
-    strategy:
-      fail-fast: false
-      matrix:
-        build_preset: ${{ fromJson(needs.prepare.outputs.build_preset_array) }}
     with:
+      checkout_ref: ${{ needs.resolve.outputs.checkout_ref }}
       test_targets: ${{ inputs.test_targets }}
-      test_size: small,medium
-      build_preset: ${{ matrix.build_preset }}
-      branches: ${{ needs.prepare.outputs.branches_json || '' }}
-      branches_config_path: ${{ inputs.use_branches_config && '.github/config/stable_tests_branches.json' || '' }}
+      build_preset: ${{ inputs.build_preset }}
+      mode: ${{ inputs.mode }}
+      shard_count: ${{ inputs.shard_count }}
+      test_size: ${{ inputs.test_size }}
+      increment: ${{ inputs.increment }}
+      pr_number: ${{ needs.resolve.outputs.pr_number }}
+      history_branch: ${{ needs.resolve.outputs.history_branch }}
+      status_sha: ${{ needs.resolve.outputs.pr_head_sha }}
+      publish: ${{ inputs.publish }}
+      disable_peak_cap: ${{ inputs.disable_peak_cap }}
 
-  collect_combined_summary:
-    needs: main
-    if: always()
-    uses: ./.github/workflows/collect_combined_summary.yml
+  timing_summary:
+    needs:
+      - resolve
+      - run_check
+    if: always() && needs.resolve.result == 'success'
+    runs-on: ubuntu-latest
+    name: Timing summary
+    timeout-minutes: 10
+    steps:
+      - name: Collect job durations
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ needs.resolve.outputs.pr_number }}
+          PR_HEAD_SHA: ${{ needs.resolve.outputs.pr_head_sha }}
+        run: |
+          set -euo pipefail
+          api="https://api.github.com/repos/${GITHUB_REPOSITORY}"
+          auth=(-H "Accept: application/vnd.github+json" -H "Authorization: Bearer $GH_TOKEN")
+
+          jobs_json=$(curl --retry 5 --retry-all-errors --retry-delay 5 --fail -sL "${auth[@]}" \
+            "$api/actions/runs/${GITHUB_RUN_ID}/jobs?per_page=100")
+
+          {
+            echo "## Duration profile (this run)"
+            echo ""
+            echo "| Job | Status | Started | Duration, min |"
+            echo "|---|---|---|---|"
+            echo "$jobs_json" | jq -r '
+              .jobs[]
+              | select(.name != "Timing summary")
+              | select(.started_at != null)
+              | [
+                  .name,
+                  (.conclusion // .status),
+                  (.started_at | sub("T"; " ") | sub("Z"; "")),
+                  (if .completed_at then
+                     (((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)) / 60 * 10 | round / 10 | tostring)
+                   else "running" end)
+                ]
+              | "| \(.[0]) | \(.[1]) | \(.[2]) | \(.[3]) |"'
+            echo ""
+            run_json=$(curl --retry 5 --retry-all-errors --retry-delay 5 --fail -sL "${auth[@]}" \
+              "$api/actions/runs/${GITHUB_RUN_ID}")
+            start=$(echo "$run_json" | jq -r '.run_started_at | fromdateiso8601')
+            now=$(date +%s)
+            echo "Wall clock so far: $(( (now - start) / 60 )) min (run started $(echo "$run_json" | jq -r '.run_started_at'))"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+          # Best-effort comparison with the production PR-check run of the same PR.
+          if [ -n "$PR_HEAD_SHA" ]; then
+            {
+              echo ""
+              echo "## Production PR-check of PR #$PR_NUMBER (for comparison)"
+              echo ""
+            } >> "$GITHUB_STEP_SUMMARY"
+            runs_json=$(curl --retry 3 --retry-delay 5 -sL "${auth[@]}" \
+              "$api/actions/runs?event=pull_request_target&head_sha=${PR_HEAD_SHA}&per_page=20" || echo '{}')
+            prcheck_run_id=$(echo "$runs_json" | jq -r '[.workflow_runs[]? | select(.name == "PR-check")] | sort_by(.run_started_at) | last | .id // empty')
+            if [ -n "$prcheck_run_id" ]; then
+              pj=$(curl --retry 3 --retry-delay 5 -sL "${auth[@]}" \
+                "$api/actions/runs/${prcheck_run_id}/jobs?per_page=100" || echo '{}')
+              {
+                echo "Run: ${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}/actions/runs/${prcheck_run_id}"
+                echo ""
+                echo "| Job | Status | Duration, min |"
+                echo "|---|---|---|"
+                echo "$pj" | jq -r '
+                  .jobs[]?
+                  | select(.completed_at != null and .started_at != null)
+                  | [
+                      .name,
+                      (.conclusion // .status),
+                      (((.completed_at | fromdateiso8601) - (.started_at | fromdateiso8601)) / 60 * 10 | round / 10 | tostring)
+                    ]
+                  | "| \(.[0]) | \(.[1]) | \(.[2]) |"'
+              } >> "$GITHUB_STEP_SUMMARY"
+            else
+              echo "No PR-check run found for head $PR_HEAD_SHA" >> "$GITHUB_STEP_SUMMARY"
+            fi
+          fi

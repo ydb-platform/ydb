@@ -24,8 +24,11 @@
 #include <util/string/builder.h>
 #include <util/system/types.h>
 
+#include <algorithm>
 #include <exception>
 #include <queue>
+#include <utility>
+#include <vector>
 
 namespace NKikimr::NKqp::NPrivate {
 

@@ -458,6 +458,24 @@ void TBlobManager::DeleteBlobOnComplete(const TTabletId tabletId, const TUnified
     }
 }
 
+TSmallBlobsStat TBlobManager::CalcSmallBlobsToDelete(const ui64 sizeThreshold) const {
+    TSmallBlobsStat result;
+    const auto account = [&](const TUnifiedBlobId& blobId) {
+        if (blobId.BlobSize() <= sizeThreshold) {
+            result.Volume += blobId.BlobSize();
+            ++result.Count;
+        }
+    };
+    // BlobsToDelete and BlobsToDeleteDelayed are disjoint sets
+    for (auto&& i : BlobsToDelete) {
+        account(i.first);
+    }
+    for (auto&& i : BlobsToDeleteDelayed) {
+        account(i.first);
+    }
+    return result;
+}
+
 void TBlobManager::OnGCFinishedOnExecute(const std::optional<TGenStep>& genStep, IBlobManagerDb& db) {
     if (genStep) {
         db.SaveLastGcBarrier(*genStep);

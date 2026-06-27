@@ -187,6 +187,8 @@ public:
         return result;
     }
 
+    TSmallBlobsStat CalcSmallBlobsToDelete(const ui64 sizeThreshold) const;
+
     virtual void OnBlobFree(const TUnifiedBlobId& blobId) override;
 
     const NColumnShard::TBlobsManagerCounters& GetCounters() const {

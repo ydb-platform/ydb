@@ -28,6 +28,11 @@ public:
     virtual void OnBlobFree(const TUnifiedBlobId& blobId) = 0;
 };
 
+struct TSmallBlobsStat {
+    ui64 Volume = 0;
+    ui64 Count = 0;
+};
+
 class IBlobsStorageOperator {
 private:
     YDB_READONLY_DEF(TTabletId, SelfTabletId);
@@ -85,6 +90,12 @@ public:
     const NSplitter::TSplitSettings& GetBlobSplitSettings() const;
 
     virtual TTabletsByBlob GetBlobsToDelete() const = 0;
+
+    virtual TSmallBlobsStat CalcSmallBlobsToDelete(const ui64 sizeThreshold) const {
+        Y_UNUSED(sizeThreshold);
+        return {};
+    }
+
     virtual bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId initiatorTabletId) const = 0;
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const = 0;
 

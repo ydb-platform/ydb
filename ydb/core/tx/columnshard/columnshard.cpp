@@ -11,6 +11,7 @@
 
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/tx/columnshard/bg_tasks/adapter/adapter.h>
+#include <ydb/core/tx/columnshard/blobs_action/abstract/storages_manager.h>
 #include <ydb/core/tx/columnshard/diagnostics/scan_diagnostics_actor.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/data_source_probes.h>
 #include <ydb/core/tx/columnshard/engines/reader/tracing/probes.h>
@@ -414,8 +415,19 @@ void TColumnShard::FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDa
         }
     }
 
+    auto* tableStats = ev->Record.MutableTableStats();
     TTableStatsBuilder statsBuilder(Counters, executor);
-    statsBuilder.FillTotalTableStats(*ev->Record.MutableTableStats());
+    statsBuilder.FillTotalTableStats(*tableStats);
+
+    const ui64 threshold = AppDataVerified().ColumnShardConfig.GetSmallBlobsQuota().GetSmallBlobSizeThresholdBytes();
+    NOlap::TSmallBlobsStat toDelete;
+    for (auto&& i : StoragesManager->GetStorages()) {
+        const auto stat = i.second->CalcSmallBlobsToDelete(threshold);
+        toDelete.Volume += stat.Volume;
+        toDelete.Count += stat.Count;
+    }
+    tableStats->SetSmallBlobsVolume(tableStats->GetSmallBlobsVolume() + toDelete.Volume);
+    tableStats->SetSmallBlobsCount(tableStats->GetSmallBlobsCount() + toDelete.Count);
 }
 
 void TColumnShard::FillColumnTableStats(

@@ -1,5 +1,6 @@
 #include "write_with_blobs.h"
 
+#include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
 
 namespace NKikimr::NOlap {
@@ -30,7 +31,7 @@ void TWritePortionInfoWithBlobsResult::TBlobInfo::RegisterBlobId(TWritePortionIn
 
 TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
     const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, const TInternalPathId granule, const ui64 schemaVersion,
-    const TSnapshot& /*snapshot*/, const std::shared_ptr<IStoragesManager>& operators, const EPortionType type) {
+    const TSnapshot& /*snapshot*/, const std::shared_ptr<IStoragesManager>& operators, const EPortionType type, const TIndexInfo& indexInfo) {
     TPortionAccessorConstructor constructor = [&]() {
         switch (type) {
             case EPortionType::Written:
@@ -40,18 +41,23 @@ TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::Bui
         }
     }();
     constructor.MutablePortionConstructor().SetSchemaVersion(schemaVersion);
-    return BuildByBlobs(std::move(chunks), inplaceChunks, std::move(constructor), operators);
+    return BuildByBlobs(std::move(chunks), inplaceChunks, std::move(constructor), operators, indexInfo);
 }
 
 TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::BuildByBlobs(std::vector<TSplittedBlob>&& chunks,
     const THashMap<ui32, std::shared_ptr<IPortionDataChunk>>& inplaceChunks, TPortionAccessorConstructor&& constructor,
-    const std::shared_ptr<IStoragesManager>& operators) {
+    const std::shared_ptr<IStoragesManager>& operators, const TIndexInfo& indexInfo) {
     TWritePortionInfoWithBlobsConstructor result(std::move(constructor));
+    ui64 bsIndexBlobBytes = 0;
     for (auto&& blob : chunks) {
         auto storage = operators->GetOperatorVerified(blob.GetGroupName());
+        const bool defaultStorageBlob = blob.GetGroupName() == NBlobOperations::TGlobal::DefaultStorageId;
         auto blobInfo = result.StartBlob(storage);
         for (auto&& chunk : blob.GetChunks()) {
             blobInfo.AddChunk(chunk);
+            if (defaultStorageBlob && indexInfo.HasIndexId(chunk->GetEntityId())) {
+                bsIndexBlobBytes += chunk->GetData().size();
+            }
         }
     }
     for (auto&& [_, i] : inplaceChunks) {
@@ -59,6 +65,7 @@ TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::Bui
             TIndexChunk(i->GetEntityId(), i->GetChunkIdxVerified(), i->GetRecordsCountVerified(), i->GetRawBytesVerified(), i->GetData()));
     }
 
+    result.GetPortionConstructor().SetBsIndexBlobBytes(bsIndexBlobBytes);
     return result;
 }
 

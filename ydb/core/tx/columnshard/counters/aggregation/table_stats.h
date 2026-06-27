@@ -13,9 +13,12 @@ private:
     TCountersManager& Counters;
     const NTabletFlatExecutor::NFlatExecutorSetup::IExecutor* Executor;
 
-    void FillPortionStats(::NKikimrTableStats::TTableStats& to, const NOlap::TSimplePortionsGroupInfo& from) const {
+    void FillPortionStats(
+        ::NKikimrTableStats::TTableStats& to, const NOlap::TSimplePortionsGroupInfo& from, const NOlap::TSmallBlobsStat& smallBlobs) const {
         to.SetRowCount(from.GetRecordsCount());
         to.SetDataSize(from.GetBlobBytes());
+        to.SetSmallBlobsVolume(smallBlobs.Volume);
+        to.SetSmallBlobsCount(smallBlobs.Count);
     }
 
 public:
@@ -28,8 +31,9 @@ public:
     void FillTableStats(TInternalPathId pathId, ::NKikimrTableStats::TTableStats& tableStats) {
         Counters.FillTableStats(pathId, tableStats);
 
-        auto diskUsedPortionsStats = Counters.GetPortionIndexCounters()->GetTableStats(pathId, TPortionIndexStats::TDiskUsedPortions());
-        FillPortionStats(tableStats, diskUsedPortionsStats);
+        const auto& portionIndexCounters = Counters.GetPortionIndexCounters();
+        FillPortionStats(tableStats, portionIndexCounters->GetTableStats(pathId, TPortionIndexStats::TDiskUsedPortions()),
+            portionIndexCounters->GetTableSmallBlobs(pathId));
     }
 
     void FillTotalTableStats(::NKikimrTableStats::TTableStats& tableStats) {
@@ -40,8 +44,9 @@ public:
             tableStats.SetHasLoanedParts(Executor->HasLoanedParts());
         }
 
-        auto diskUsedPortionsStats = Counters.GetPortionIndexCounters()->GetTotalStats(TPortionIndexStats::TDiskUsedPortions());
-        FillPortionStats(tableStats, diskUsedPortionsStats);
+        const auto& portionIndexCounters = Counters.GetPortionIndexCounters();
+        FillPortionStats(tableStats, portionIndexCounters->GetTotalStats(TPortionIndexStats::TDiskUsedPortions()),
+            portionIndexCounters->GetTotalSmallBlobs());
     }
 };
 

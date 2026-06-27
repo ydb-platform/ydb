@@ -4,6 +4,9 @@
 
 #include <ydb/core/tx/columnshard/common/path_id.h>
 #include <ydb/core/tx/columnshard/common/portion.h>
+#include <ydb/core/tx/columnshard/engines/portions/portion_info.h>
+
+#include <algorithm>
 
 namespace NKikimr::NColumnShard {
 
@@ -39,6 +42,30 @@ private:
     TStatsByClass TotalStats;
     THashMap<TInternalPathId, TStatsByClass> StatsByPathId;
 
+    // Signed because the value is recomputed on add and on remove, and the runtime smallness
+    // threshold may change in between; GetNormalized() clamps the transient negative back to zero for reporting.
+    struct TSmallBlobsAcc {
+        i64 Volume = 0;
+        i64 Count = 0;
+
+        void Add(const ui64 volume, const ui64 count) {
+            Volume += (i64)volume;
+            Count += (i64)count;
+        }
+
+        void Sub(const ui64 volume, const ui64 count) {
+            Volume -= (i64)volume;
+            Count -= (i64)count;
+        }
+
+        NOlap::TSmallBlobsStat GetNormalized() const {
+            return { .Volume = (ui64)std::max<i64>(0, Volume), .Count = (ui64)std::max<i64>(0, Count) };
+        }
+    };
+
+    TSmallBlobsAcc TotalSmallBlobs;
+    THashMap<TInternalPathId, TSmallBlobsAcc> SmallBlobsByPathId;
+
     static NOlap::TSimplePortionsGroupInfo SelectStats(const TStatsByClass& container, const IStatsSelector& selector) {
         NOlap::TSimplePortionsGroupInfo result;
         for (const auto& [portionClass, stats] : container) {
@@ -60,6 +87,17 @@ public:
     NOlap::TSimplePortionsGroupInfo GetTableStats(const TInternalPathId pathId, const IStatsSelector& selector) const {
         if (auto* findTable = StatsByPathId.FindPtr(pathId)) {
             return SelectStats(*findTable, selector);
+        }
+        return {};
+    }
+
+    NOlap::TSmallBlobsStat GetTotalSmallBlobs() const {
+        return TotalSmallBlobs.GetNormalized();
+    }
+
+    NOlap::TSmallBlobsStat GetTableSmallBlobs(const TInternalPathId pathId) const {
+        if (auto* findTable = SmallBlobsByPathId.FindPtr(pathId)) {
+            return findTable->GetNormalized();
         }
         return {};
     }

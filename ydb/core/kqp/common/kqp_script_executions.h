@@ -57,6 +57,4 @@ TString SequenceToJsonString(const TContainer& container) {
 
 TString CheckScriptExecutionAccess(std::optional<TString>& userSID);
 
-bool GetUserGroupSids(const std::string& serializedUserGroupSids, std::vector<NACLib::TSID>& userGroupSids);
-
 } // namespace NKikimr::NKqp

@@ -42,6 +42,22 @@ namespace {
 using namespace NPrivate;
 
 class TRunScriptActor final : public TActorBootstrapped<TRunScriptActor>, IActorExceptionHandler {
+    struct TSessionState {
+        bool WaitCreation = false;
+        bool SessionOpen = false;
+
+        void Close(const TActorIdentity& actor, const TScriptExecutionContext& ctx) {
+            if (!SessionOpen) {
+                return;
+            }
+
+            auto ev = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
+            ev->Record.MutableRequest()->SetSessionId(ctx.UserRequestContext->SessionId);
+            actor.Send(MakeKqpProxyID(actor.NodeId()), ev.release());
+            SessionOpen = false;
+        }
+    };
+
     struct TActorState {
         bool WaitStop = false;
         TActorId Id;
@@ -124,9 +140,17 @@ private:
     STRICT_STFUNC(StateFuncCreating,
         sFunc(TEvents::TEvWakeup, HandleCreatingFinished);
         sFunc(TEvents::TEvPoison, HandleCreatingFailed);
+        hFunc(TEvKqp::TEvCancelScriptExecutionRequest, HandleCancellation);
+        hFunc(TEvCheckAliveRequest, HandleCheckAlive);
     )
 
     void HandleCreatingFinished() {
+        if (FinishInfo.IsFinished()) {
+            LOG_N("Script execution metadata saved after failure, continue finishing");
+            Finish(); // Continue finishing
+            return;
+        }
+
         LOG_I("Script execution metadata saved, creating new session");
         Become(&TThis::StateFuncInitialize);
 
@@ -137,21 +161,35 @@ private:
         ev->Record.SetTraceId(Ctx->UserRequestContext->TraceId);
         ev->Record.MutableRequest()->SetDatabase(Ctx->UserRequestContext->Database);
         Send(MakeKqpProxyID(SelfId().NodeId()), ev.release());
+        SessionState.WaitCreation = true;
     }
 
     void HandleCreatingFailed() {
         Finish(Ydb::StatusIds::INTERNAL_ERROR, "Failed to save script execution entry");
     }
 
+    void HandleCancellation(TEvKqp::TEvCancelScriptExecutionRequest::TPtr& ev) {
+        LOG_I("Got cancel request: " << ev->Sender);
+        CancelRequests.emplace_front(std::move(ev));
+        Finish(Ydb::StatusIds::CANCELLED);
+    }
+
+    void HandleCheckAlive(TEvCheckAliveRequest::TPtr& ev) {
+        LOG_W("Lease was expired in database, checker actor: " << ev->Sender);
+        Send(ev->Sender, new TEvCheckAliveResponse());
+    }
+
     // Create new kqp session
     STRICT_STFUNC(StateFuncInitialize,
-        hFunc(TEvKqp::TEvCreateSessionResponse, HandleInitialize);
+        hFunc(TEvKqp::TEvCreateSessionResponse, HandleCreateSession);
         hFunc(TEvRunScriptPrivate::TEvScriptLeaseWatcherFinished, HandleLeaseWatcherFinished);
         hFunc(TEvKqp::TEvCancelScriptExecutionRequest, HandleCancellation);
         hFunc(TEvCheckAliveRequest, HandleCheckAlive);
     )
 
-    void HandleInitialize(TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
+    void HandleCreateSession(TEvKqp::TEvCreateSessionResponse::TPtr& ev) {
+        SessionState.WaitCreation = false;
+
         const auto& record = ev->Get()->Record;
         if (const auto status = record.GetYdbStatus(); status != Ydb::StatusIds::SUCCESS) {
             const auto resourceExhausted = record.GetResourceExhausted();
@@ -168,10 +206,16 @@ private:
             return;
         }
 
-        SessionOpen = true;
+        SessionState.SessionOpen = true;
         const auto& session = record.GetResponse();
         Ctx->UserRequestContext->SessionId = session.GetSessionId();
         QueryRequest->Record.MutableRequest()->SetSessionId(Ctx->UserRequestContext->SessionId);
+
+        if (FinishInfo.IsFinished()) {
+            LOG_N("Session created after finish, continue finishing");
+            Finish();
+            return;
+        }
 
         if (session.GetNodeId() != SelfId().NodeId()) {
             LOG_E("New session started on unexpected node: " << session.GetNodeId());
@@ -201,17 +245,6 @@ private:
             LOG_I("Got lease watcher finished: " << ev->Sender);
             Finish();
         }
-    }
-
-    void HandleCancellation(TEvKqp::TEvCancelScriptExecutionRequest::TPtr& ev) {
-        LOG_I("Got cancel request: " << ev->Sender);
-        CancelRequests.emplace_front(std::move(ev));
-        Finish(Ydb::StatusIds::CANCELLED);
-    }
-
-    void HandleCheckAlive(TEvCheckAliveRequest::TPtr& ev) {
-        LOG_W("Lease was expired in database, checker actor: " << ev->Sender);
-        Send(ev->Sender, new TEvCheckAliveResponse());
     }
 
     // Wait query execution
@@ -253,7 +286,9 @@ private:
 
     // Wait query finalization
     STRICT_STFUNC(StateFuncFinalize,
-        IgnoreFunc(TEvKqp::TEvQueryResponse);
+        IgnoreFunc(TEvKqp::TEvCloseSessionResponse);
+        IgnoreFunc(TEvKqp::TEvQueryResponse); // Ignored because result handler either not started or already finished
+        hFunc(TEvKqp::TEvCreateSessionResponse, HandleCreateSession);
         hFunc(TEvScriptExecutionFinished, HandleFinalize);
         hFunc(TEvKqp::TEvCancelScriptExecutionRequest, HandleCancellation);
         hFunc(TEvCheckAliveRequest, HandleCheckAlive);
@@ -302,12 +337,14 @@ private:
             return;
         }
 
-        if (SessionOpen) {
-            SessionOpen = false;
+        if (SessionState.WaitCreation) {
+            LOG_D("Wait for session creation before exit");
+            return;
+        }
+
+        if (SessionState.SessionOpen) {
             LOG_D("Close session");
-            auto ev = std::make_unique<TEvKqp::TEvCloseSessionRequest>();
-            ev->Record.MutableRequest()->SetSessionId(Ctx->UserRequestContext->SessionId);
-            Send(MakeKqpProxyID(SelfId().NodeId()), ev.release());
+            SessionState.Close(SelfId(), *Ctx);
         }
 
         if (ScriptLeaseWatcherActor.Id) {
@@ -360,7 +397,7 @@ private:
     std::unique_ptr<TEvKqp::TEvQueryRequest> QueryRequest;
     TFinishInfo FinishInfo;
     TExecutionInfo ExecutionInfo;
-    bool SessionOpen = false;
+    TSessionState SessionState;
     TActorState ScriptLeaseWatcherActor;
     TActorState ScriptResultHandlerActor;
     std::forward_list<TEvKqp::TEvCancelScriptExecutionRequest::TPtr> CancelRequests;

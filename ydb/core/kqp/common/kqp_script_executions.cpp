@@ -153,24 +153,4 @@ TString CheckScriptExecutionAccess(std::optional<TString>& userSID) {
     return "";
 }
 
-bool GetUserGroupSids(const std::string& serializedUserGroupSids, std::vector<NACLib::TSID>& userGroupSids) {
-    NJson::TJsonValue value;
-    if (!NJson::ReadJsonTree(serializedUserGroupSids, &value) || value.GetType() != NJson::JSON_ARRAY) {
-        return false;
-    }
-
-    const auto sidsSize = value.GetIntegerRobust();
-    userGroupSids.clear();
-    userGroupSids.reserve(sidsSize);
-    for (i64 i = 0; i < sidsSize; ++i) {
-        const NJson::TJsonValue* userSid = nullptr;
-        value.GetValuePointer(i, &userSid);
-        Y_ENSURE(userSid, "Invalid user group sids");
-
-        userGroupSids.emplace_back(userSid->GetString());
-    }
-
-    return true;
-}
-
 } // namespace NKikimr::NKqp

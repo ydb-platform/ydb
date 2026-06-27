@@ -235,6 +235,12 @@ protected:
         });
     }
 
+    std::optional<std::vector<NACLib::TSID>> ParseUserGroupSids(NYdb::TResultSetParser& result) {
+        return ParseJsonArray<NACLib::TSID>(result, "user_group_sids", "User group SIDs are corrupted", [](const NJson::TJsonValue& value, NACLib::TSID& dst) {
+            dst = value.GetString();
+        });
+    }
+
     bool ValidateLease(NYdb::TResultSetParser& result, const ELeaseState expectedLeaseState) {
         Y_VALIDATE(LeaseGeneration, "Lease generation is not set");
 
@@ -1023,15 +1029,12 @@ private:
                 }
             }
 
-            TVector<NACLib::TSID> userGroupSids;
-            if (const auto& serializedUserGroupSids = result.ColumnParser("user_group_sids").GetOptionalJsonDocument()) {
-                if (!GetUserGroupSids(*serializedUserGroupSids, userGroupSids)) {
-                    Finish(Ydb::StatusIds::INTERNAL_ERROR, "User group sids are corrupted");
-                    return;
-                }
-            }
-
             if (const std::optional<TString>& userSID = result.ColumnParser("user_token").GetOptionalUtf8()) {
+                TVector<NACLib::TSID> userGroupSids;
+                if (auto userGroupSids = ParseUserGroupSids(result)) {
+                    userGroupSids = std::move(*userGroupSids);
+                }
+
                 queryRequest.SetUserToken(NACLib::TUserToken(*userSID, userGroupSids).SerializeAsString());
             }
 
@@ -3759,12 +3762,10 @@ private:
 
             if (const auto& userToken = result.ColumnParser("user_token").GetOptionalUtf8()) {
                 TVector<NACLib::TSID> userGroupSids;
-                if (const auto serializedUserGroupSids = result.ColumnParser("user_group_sids").GetOptionalJsonDocument()) {
-                    if (!GetUserGroupSids(*serializedUserGroupSids, userGroupSids)) {
-                        Finish(Ydb::StatusIds::INTERNAL_ERROR, "User group sids are corrupted");
-                        return;
-                    }
+                if (auto userGroupSids = ParseUserGroupSids(result)) {
+                    userGroupSids = std::move(*userGroupSids);
                 }
+
                 Response->UserToken = new NACLib::TUserToken(TString(*userToken), userGroupSids);
             }
 

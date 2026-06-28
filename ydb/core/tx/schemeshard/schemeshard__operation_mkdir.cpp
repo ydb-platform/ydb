@@ -5,6 +5,8 @@
 
 #include <ydb/core/sys_view/common/path.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -29,10 +31,10 @@ public:
         const TStepId step = TStepId(ev->Get()->StepId);
         const TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " HandleReply TEvPrivate::TEvOperationPlan"
-                       << ", step: " << step
-                       << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvPrivate::TEvOperationPlan",
+            {"debugHint", DebugHint()},
+            {"step", step},
+            {"schemeshard", ssId});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -60,9 +62,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         auto ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                               << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"debugHint", DebugHint()},
+            {"schemeshard", ssId});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -110,11 +112,11 @@ public:
         const TString& parentPathStr = Transaction.GetWorkingDir();
         const TString& name = Transaction.GetMkDir().GetName();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TMkDir Propose"
-                         << ", path: " << parentPathStr << "/" << name
-                         << ", operationId: " << OperationId
-                         << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TMkDir Propose ",
+            {"path", parentPathStr},
+            {"name", name},
+            {"operationId", OperationId},
+            {"schemeshard", ssId});
 
         auto result = MakeHolder<TProposeResponse>(NKikimrScheme::StatusAccepted, ui64(OperationId.GetTxId()), ui64(ssId));
 
@@ -257,11 +259,11 @@ public:
         IncParentDirAlterVersionWithRepublishSafeWithUndo(OperationId, dstPath, context.SS, context.OnComplete);
 
         if (Transaction.HasTempDirOwnerActorId()) {
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "Processing create temp directory with Name: " << name
-                    << ", WorkingDir: " << parentPathStr
-                    << ", TempDirOwnerActorId: " << newDir->TempDirOwnerActorId
-                    << ", PathId: " << newDir->PathId);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "Processing create temp directory with",
+                {"name", name},
+                {"workingDir", parentPathStr},
+                {"tempDirOwnerActorId", newDir->TempDirOwnerActorId},
+                {"pathId", newDir->PathId});
             context.OnComplete.UpdateTempDirsToMakeState(
                 newDir->TempDirOwnerActorId, newDir->PathId);
         }
@@ -283,18 +285,16 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                  "MkDir AbortPropose"
-                       << ", opId: " << OperationId
-                       << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_INFO_CTX(context.Ctx, "MkDir AbortPropose",
+            {"opId", OperationId},
+            {"schemeshard", context.SS->TabletID()});
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TMkDir AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TMkDir AbortUnsafe",
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()});
 
         context.OnComplete.DoneOperation(OperationId);
     }

@@ -9,6 +9,8 @@
 
 #include <util/string/join.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 TPath::TChecker::TChecker(const TPath& path, const NCompat::TSourceLocation location)
@@ -1504,13 +1506,12 @@ TPath TPath::ResolveWithInactive(TOperationId opId, const TString path, TSchemeS
                               pathParts.begin()))
         {
             // headOpPath is a prefix of the path
-            LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "ResolveWithInactive: attach to the TargetPath of head operation"
-                         << " path: " << path
-                         << " opId: " << opId
-                         << " head opId: " << headOpId
-                         << " headOpPath: " << headOpPath.PathString()
-                         << " headOpPath id: " << headOpPath->PathId);
+            YDB_LOG_DEBUG("ResolveWithInactive: attach to the TargetPath of head operation head headOpPath",
+                {"path", path},
+                {"opId", opId},
+                {"headOpId", headOpId},
+                {"headOpPath", headOpPath.PathString()},
+                {"id", headOpPath->PathId});
 
             return headOpPath.Child(pathParts.back());
         }

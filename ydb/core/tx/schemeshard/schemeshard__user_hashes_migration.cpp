@@ -8,6 +8,8 @@
 #include <util/random/random.h>
 #include <algorithm>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 
 namespace NKikimr {
 namespace NSchemeShard {
@@ -82,8 +84,8 @@ struct TSchemeShard::TTxUserHashesMigration : public TTransactionBase<TSchemeSha
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxUserHashesMigration Execute at schemeshard: " << Self->TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUserHashesMigration Execute",
+            {"schemeshard", Self->TabletID()});
 
         NIceDb::TNiceDb db(txc.DB);
         for (const auto& [sidName, sid] : Self->LoginProvider.Sids) {
@@ -95,9 +97,9 @@ struct TSchemeShard::TTxUserHashesMigration : public TTransactionBase<TSchemeSha
                     });
 
                     if (response.Error) {
-                        LOG_ERROR_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxUserHashesMigration Execute"
-                            << ", can't set generated password in place unacceptable argon hash: "
-                            << response.Error << ", at schemeshard: "<< Self->TabletID());
+                        YDB_LOG_ERROR_CTX(ctx, "TTxUserHashesMigration Execute can't set generated password in place unacceptable argon",
+                            {"hash", response.Error},
+                            {"schemeshard", Self->TabletID()});
                         continue;
                     }
 
@@ -126,8 +128,8 @@ struct TSchemeShard::TTxUserHashesMigration : public TTransactionBase<TSchemeSha
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "TTxUserHashesMigration Complete, at schemeshard: "<< Self->TabletID());
+        YDB_LOG_INFO_CTX(ctx, "TTxUserHashesMigration Complete,",
+            {"schemeshard", Self->TabletID()});
 
         if (IsLoginProviderModified) {
             Self->PublishToSchemeBoard(TTxId(), {Self->GetCurrentSubDomainPathId()}, ctx);

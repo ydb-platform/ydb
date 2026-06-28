@@ -5,6 +5,8 @@
 
 #include <library/cpp/json/json_writer.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -25,17 +27,16 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
     }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxServerlessStorageBilling.Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxServerlessStorageBilling.Execute");
 
         const TPathElement::TPtr dbRootEl = Self->PathsById.at(Self->RootPathId());
         const TSubDomainInfo::TPtr domainDescr = Self->SubDomains.at(Self->RootPathId());
         const TSubDomainInfo::TDiskSpaceUsage& spaceUsage = domainDescr->GetDiskSpaceUsage();
 
         if (!Self->IsServerlessDomain(TPath::Init(Self->RootPathId(), Self))) {
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxServerlessStorageBilling: unable to make a bill, domain is not a serverless db"
-                         << ", schemeshardId: " << Self->SelfTabletId()
-                         << ", domainId: " << Self->ParentDomainId);
+            YDB_LOG_INFO_CTX(ctx, "TTxServerlessStorageBilling: unable to make a bill, domain is not a serverless db",
+                {"schemeshardId", Self->SelfTabletId()},
+                {"domainId", Self->ParentDomainId});
             return true;
         }
 
@@ -46,11 +47,10 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
         TimeToNextBill = TimeGrid.GetNext(cur).Start;
 
         if (!Self->AllowServerlessStorageBilling) {
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxServerlessStorageBilling: unable to make a bill, AllowServerlessStorageBilling is false"
-                         << ", schemeshardId: " << Self->SelfTabletId()
-                         << ", domainId: " << Self->ParentDomainId
-                         << ", next retry at: " << TimeToNextBill);
+            YDB_LOG_INFO_CTX(ctx, "TTxServerlessStorageBilling: unable to make a bill, AllowServerlessStorageBilling is false next retry",
+                {"schemeshardId", Self->SelfTabletId()},
+                {"domainId", Self->ParentDomainId},
+                {"at", TimeToNextBill});
             return true;
         }
 
@@ -68,11 +68,10 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
         }
 
         if (!cloud_id || !folder_id || !database_id) {
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                         "TTxServerlessStorageBilling: unable to make a bill, neither cloud_id and nor folder_id nor database_id have found in user attributes at the domain"
-                         << ", schemeshardId: " << Self->SelfTabletId()
-                         << ", domainId: " << Self->ParentDomainId
-                         << ", next retry at: " << TimeToNextBill);
+            YDB_LOG_INFO_CTX(ctx, "TTxServerlessStorageBilling: unable to make a bill, neither cloud_id and nor folder_id nor database_id have found in user attributes at the domain next retry",
+                {"schemeshardId", Self->SelfTabletId()},
+                {"domainId", Self->ParentDomainId},
+                {"at", TimeToNextBill});
             return true;
         }
 
@@ -90,12 +89,12 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
             // this is the first run
             // let's make bill time periods according to the grid
             // for that we just skip current grid period
-            LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxServerlessStorageBilling: initiate at first time"
-                        << ", schemeshardId: " << Self->SelfTabletId()
-                        << ", domainId: " << Self->ParentDomainId
-                        << ", now: " << now
-                        << ", set LastBillTime: " << cur.Start
-                        << ", next retry at: " << TimeToNextBill);
+            YDB_LOG_NOTICE_CTX(ctx, "TTxServerlessStorageBilling: initiate at first time set next retry",
+                {"schemeshardId", Self->SelfTabletId()},
+                {"domainId", Self->ParentDomainId},
+                {"now", now},
+                {"lastBillTime", cur.Start},
+                {"at", TimeToNextBill});
 
             Self->ServerlessStorageLastBillTime = cur.Start;
             Self->PersistStorageBillingTime(db);
@@ -106,12 +105,12 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
         auto last = Self->ServerlessStorageLastBillTime;
 
         if (now < last) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxServerlessStorageBilling: unable do anything from the past"
-                        << ", schemeshardId: " << Self->SelfTabletId()
-                        << ", domainId: " << Self->ParentDomainId
-                        << ", now: " << now
-                        << ", LastBillTime: " << last
-                        << ", next retry at: " << TimeToNextBill);
+            YDB_LOG_DEBUG_CTX(ctx, "TTxServerlessStorageBilling: unable do anything from the past next retry",
+                {"schemeshardId", Self->SelfTabletId()},
+                {"domainId", Self->ParentDomainId},
+                {"now", now},
+                {"lastBillTime", last},
+                {"at", TimeToNextBill});
             return true;
         }
 
@@ -119,14 +118,16 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
         auto toBill = TimeGrid.GetPrev(cur);
 
         if (now <= lastBilled.End || toBill.Start <= lastBilled.End) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxServerlessStorageBilling: too soon call, wait until current period ends"
-                        << ", schemeshardId: " << Self->SelfTabletId()
-                        << ", domainId: " << Self->ParentDomainId
-                        << ", now: " << now
-                        << ", LastBillTime: " << last
-                        << ", lastBilled: " << lastBilled.Start << "--" << lastBilled.End
-                        << ", toBill: " << toBill.Start << "--" << toBill.End
-                        << ", next retry at: " << TimeToNextBill);
+            YDB_LOG_DEBUG_CTX(ctx, "TTxServerlessStorageBilling: too soon call, wait until current period ends -- -- next retry",
+                {"schemeshardId", Self->SelfTabletId()},
+                {"domainId", Self->ParentDomainId},
+                {"now", now},
+                {"lastBillTime", last},
+                {"lastBilled", lastBilled.Start},
+                {"#_lastBilled.End", lastBilled.End},
+                {"toBill", toBill.Start},
+                {"#_toBill.End", toBill.End},
+                {"at", TimeToNextBill});
             return true;
         }
 
@@ -134,14 +135,16 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
             // it seems like there is a gap in our billing
             // may be SS were offline
             // skip that gap, just bill the last grid period
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxServerlessStorageBilling: too late call, there are could be gaps in the metric"
-                         << ", schemeshardId: " << Self->SelfTabletId()
-                         << ", domainId: " << Self->ParentDomainId
-                         << ", now: " << now
-                         << ", LastBillTime: " << last
-                         << ", lastBilled: " << lastBilled.Start << "--" << lastBilled.End
-                         << ", toBill: " << toBill.Start << "--" << toBill.End
-                         << ", next retry at: " << TimeToNextBill);
+            YDB_LOG_INFO_CTX(ctx, "TTxServerlessStorageBilling: too late call, there are could be gaps in the metric -- -- next retry",
+                {"schemeshardId", Self->SelfTabletId()},
+                {"domainId", Self->ParentDomainId},
+                {"now", now},
+                {"lastBillTime", last},
+                {"lastBilled", lastBilled.Start},
+                {"#_lastBilled.End", lastBilled.End},
+                {"toBill", toBill.Start},
+                {"#_toBill.End", toBill.End},
+                {"at", TimeToNextBill});
         }
 
         Self->ServerlessStorageLastBillTime = toBill.Start;
@@ -191,15 +194,17 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
         NJson::WriteJson(&billRecord.Out, &json, /*formatOutput=*/false, /*sortkeys=*/false);
         billRecord << Endl;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                    "TTxServerlessStorageBilling: make a bill, record: '" << billRecord << "'"
-                    << ", schemeshardId: " << Self->SelfTabletId()
-                    << ", domainId: " << Self->ParentDomainId
-                    << ", now: " << now
-                    << ", LastBillTime: " << last
-                    << ", lastBilled: " << lastBilled.Start << "--" << lastBilled.End
-                    << ", toBill: " << toBill.Start << "--" << toBill.End
-                    << ", next retry at: " << TimeToNextBill);
+        YDB_LOG_DEBUG_CTX(ctx, "TTxServerlessStorageBilling: make a bill, record: -- -- next retry",
+            {"billRecord", billRecord},
+            {"schemeshardId", Self->SelfTabletId()},
+            {"domainId", Self->ParentDomainId},
+            {"now", now},
+            {"lastBillTime", last},
+            {"lastBilled", lastBilled.Start},
+            {"#_lastBilled.End", lastBilled.End},
+            {"toBill", toBill.Start},
+            {"#_toBill.End", toBill.End},
+            {"at", TimeToNextBill});
 
         auto request = MakeHolder<NMetering::TEvMetering::TEvWriteMeteringJson>(billRecord);
         // send message at Complete stage
@@ -210,7 +215,7 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxServerlessStorageBilling.Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxServerlessStorageBilling.Complete");
 
         if (TimeToNextBill) {
             ctx.Schedule(

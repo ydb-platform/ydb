@@ -4,6 +4,8 @@
 #include "schemeshard__operation_states.h"
 #include "schemeshard_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 using TTag = TSchemeTxTraits<NKikimrSchemeOp::EOperationType::ESchemeOpBackupIncrementalBackupCollection>;
@@ -121,14 +123,16 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << "TCreateLongIncrementalBackupOp AbortPropose"
-            << ": opId# " << OperationId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateLongIncrementalBackupOp AbortPropose",
+            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"opId", OperationId});
     }
 
     void AbortUnsafe(TTxId txId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << "TCreateLongIncrementalBackupOp AbortUnsafe"
-            << ": opId# " << OperationId
-            << ", txId# " << txId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateLongIncrementalBackupOp AbortUnsafe",
+            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"txId", txId});
         context.OnComplete.DoneOperation(OperationId);
     }
 };

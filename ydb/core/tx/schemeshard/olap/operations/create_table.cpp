@@ -12,6 +12,8 @@
 
 #include <util/random/shuffle.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 namespace {
@@ -224,9 +226,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                   DebugHint() << " ProgressState"
-                   << " at tabletId# " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"debugHint", DebugHint()},
+            {"tabletId", ssId});
 
         TTxState* txState = context.SS->FindTxSafe(OperationId, TTxState::TxCreateColumnTable);
 
@@ -306,13 +308,13 @@ public:
                     subDomainPathId);
                 context.OnComplete.BindMsgToPipe(OperationId, tabletId, shard.Idx, event.release());
             } else {
-                LOG_ERROR_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint() << " unexpected tablet type");
+                YDB_LOG_ERROR_CTX(context.Ctx, "Unexpected tablet type",
+                    {"debugHint", DebugHint()});
             }
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " ProgressState"
-                                    << " Propose modify scheme on shard"
-                                    << " tabletId: " << tabletId);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState Propose modify scheme on shard",
+                {"debugHint", DebugHint()},
+                {"tabletId", tabletId});
         }
 
         txState->UpdateShardsInProgress();
@@ -344,10 +346,10 @@ public:
         TStepId step = TStepId(ev->Get()->StepId);
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply TEvOperationPlan"
-                     << " at tablet: " << ssId
-                     << ", stepId: " << step);
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
+            {"debugHint", DebugHint()},
+            {"tablet", ssId},
+            {"stepId", step});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState->TxType == TTxState::TxCreateColumnTable);
@@ -388,9 +390,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " HandleReply ProgressState"
-                     << " at tablet: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply ProgressState",
+            {"debugHint", DebugHint()},
+            {"tablet", ssId});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -448,9 +450,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         TTabletId ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     DebugHint() << " ProgressState"
-                     << " at tablet: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"debugHint", DebugHint()},
+            {"tablet", ssId});
 
         TTxState* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -469,14 +471,14 @@ public:
                     break;
                 }
                 default: {
-                    LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, DebugHint() << " unexpected tablet type");
+                    YDB_LOG_DEBUG_CTX(context.Ctx, "Unexpected tablet type",
+                        {"debugHint", DebugHint()});
                 }
             }
 
-            LOG_DEBUG_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                        DebugHint() << " ProgressState"
-                                    << " wait for NotifyTxCompletionResult"
-                                    << " tabletId: " << tabletId);
+            YDB_LOG_DEBUG_CTX(context.Ctx, "ProgressState wait for NotifyTxCompletionResult",
+                {"debugHint", DebugHint()},
+                {"tabletId", tabletId});
         }
 
         if (txState->NeedUpdateObject) {
@@ -559,11 +561,11 @@ public:
         const ui32 shardsCount = Max(ui32(1), createDescription.GetColumnShardCount());
         auto opTxId = OperationId.GetTxId();
 
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateColumnTable Propose"
-                        << ", path: " << parentPathStr << "/" << name
-                        << ", opId: " << OperationId
-                        << ", at schemeshard: " << ssId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateColumnTable Propose ",
+            {"path", parentPathStr},
+            {"name", name},
+            {"opId", OperationId},
+            {"schemeshard", ssId});
 
         TEvSchemeShard::EStatus status = NKikimrScheme::StatusAccepted;
         auto result = MakeHolder<TProposeResponse>(status, ui64(opTxId), ui64(ssId));
@@ -846,11 +848,10 @@ public:
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                     "TCreateColumnTable AbortUnsafe"
-                         << ", opId: " << OperationId
-                         << ", forceDropId: " << forceDropTxId
-                         << ", at schemeshard: " << context.SS->TabletID());
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TCreateColumnTable AbortUnsafe",
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId},
+            {"schemeshard", context.SS->TabletID()});
 
         context.OnComplete.DoneOperation(OperationId);
     }

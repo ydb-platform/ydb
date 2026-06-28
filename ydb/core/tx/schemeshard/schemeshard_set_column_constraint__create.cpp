@@ -7,6 +7,8 @@
 
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BUILD_INDEX
+
 namespace NKikimr::NSchemeShard {
 
 using namespace NTabletFlatExecutor;
@@ -31,7 +33,9 @@ public:
         }
 
         const auto& settings = request.GetSettings();
-        LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX, LogPrefix << "DoExecute " << request.ShortDebugString());
+        YDB_LOG_NOTICE("DoExecute",
+            {"logPrefix", LogPrefix},
+            {"request", request});
 
         if (Self->SetColumnConstraintOperations.contains(BuildId)) {
             return Reply(Ydb::StatusIds::ALREADY_EXISTS, TStringBuilder()

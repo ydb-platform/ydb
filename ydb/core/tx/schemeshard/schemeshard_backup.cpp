@@ -3,6 +3,8 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_continuous_backup_cleaner.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace NKikimr::NSchemeShard {
 
 void TSchemeShard::Handle(TEvBackup::TEvFetchBackupCollectionsRequest::TPtr& ev, const TActorContext& ctx) {
@@ -74,12 +76,11 @@ void TSchemeShard::Handle(TEvBackup::TEvListFullBackupsRequest::TPtr& ev, const 
 }
 
 void TSchemeShard::Handle(TEvPrivate::TEvFullBackupItemDone::TPtr& ev, const TActorContext& ctx) {
-    LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "Handle(TEvFullBackupItemDone)"
-        << " fullBackupId#" << ev->Get()->FullBackupId
-        << " dstPathId#" << ev->Get()->DstPathId
-        << " success#" << ev->Get()->Success
-        << " tablet#" << TabletID());
+    YDB_LOG_INFO_CTX(ctx, "Handle(TEvFullBackupItemDone)",
+        {"fullBackupId", ev->Get()->FullBackupId},
+        {"dstPathId", ev->Get()->DstPathId},
+        {"success", ev->Get()->Success},
+        {"tablet", TabletID()});
     Execute(CreateTxFullBackupProgress(ev), ctx);
 }
 

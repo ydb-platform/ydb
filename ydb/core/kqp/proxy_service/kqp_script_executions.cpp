@@ -1385,6 +1385,7 @@ private:
                         Finish(Ydb::StatusIds::INTERNAL_ERROR, TStringBuilder() << "Invalid operation state, retry policy must be specified for lease state " << static_cast<i32>(leaseState));
                         return;
                     }
+                    Response->WaitRetry = true;
                     break;
                 }
             }
@@ -1982,9 +1983,9 @@ private:
         ResultSetMetas = std::move(ev->Get()->ResultSetMetas);
         ExecutionEntryExists = ev->Get()->EntryExists;
 
-        if (ExecutionEntryExists && (!ev->Get()->OperationStatus || ev->Get()->FinalizationStatus || ev->Get()->HasRetryPolicy)) {
+        if (ExecutionEntryExists && (!ev->Get()->OperationStatus || ev->Get()->FinalizationStatus || ev->Get()->WaitRetry)) {
             if (Request->Get()->Settings.CancelIfRunning) {
-                KQP_PROXY_LOG_I("Lease check " << ev->Sender << " finished, but operation is still running. Cancel it");
+                KQP_PROXY_LOG_W("Lease check " << ev->Sender << " finished, but operation is still running. Cancel it");
                 Send(MakeKqpProxyID(SelfId().NodeId()), new TEvCancelScriptExecutionOperation(Database, Request->Get()->OperationId, Request->Get()->UserSID, {
                     .FailOnNotFound = false,
                     .FailOnAlreadyStopped = false,

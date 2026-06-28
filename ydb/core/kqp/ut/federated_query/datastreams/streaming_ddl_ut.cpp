@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
@@ -17,6 +18,7 @@ using namespace NYdb::NQuery;
 using namespace fmt::literals;
 using namespace NYql::NConnector::NTest;
 using namespace NTestUtils;
+using namespace NFederatedQueryTest;
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {

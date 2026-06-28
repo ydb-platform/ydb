@@ -436,6 +436,53 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         Sleep(STATS_WAIT_DURATION);
         CheckSysView(rows);
     }
+
+    Y_UNIT_TEST_F(ReaSysViewWithoutScriptExecutionTables, TStreamingSysViewTestFixture) {
+        Setup();
+
+        StartQuery("A");
+        Sleep(STATS_WAIT_DURATION);
+
+        CheckSysView({{.Name = "A", .CheckPlan = true}});
+
+        auto settings = TExecuteQuerySettings();
+        settings.RetrySettings(NYdb::NRetry::TRetryOperationSettings().MaxRetries(0));
+
+        constexpr ui64 checksCount = 5;
+        constexpr char query[] = "SELECT * FROM `.sys/streaming_queries`";
+        std::vector<TAsyncExecuteQueryResult> resultsAsync;
+        TAsyncExecuteQueryResult dropResultAsync;
+        for (ui64 i = 0; i < checksCount; ++i) {
+            resultsAsync.emplace_back(GetQueryClient()->ExecuteQuery(query, TTxControl::NoTx(), settings));
+
+            if (i == checksCount / 2) {
+                dropResultAsync = GetQueryClient()->ExecuteQuery("DROP TABLE `.metadata/script_executions`;", TTxControl::NoTx());
+            }
+        }
+
+        const auto dropResult = dropResultAsync.ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(dropResult.GetStatus(), EStatus::SUCCESS, dropResult.GetIssues().ToOneLineString());
+
+        for (auto& resultAsync : resultsAsync) {
+            const auto result = resultAsync.ExtractValueSync();
+            if (result.GetStatus() == EStatus::SUCCESS) {
+                UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 1);
+
+                auto parser = result.GetResultSetParser(0);
+                UNIT_ASSERT_VALUES_EQUAL(parser.RowsCount(), 1);
+                UNIT_ASSERT(parser.TryNextRow());
+
+                const auto& maybePlan = parser.ColumnParser("Plan").GetOptionalUtf8();
+                UNIT_ASSERT(maybePlan);
+                UNIT_ASSERT_STRING_CONTAINS(*maybePlan, TStringBuilder() << "Write " << PQ_SOURCE);
+            } else {
+                const auto& error = result.GetIssues().ToOneLineString();
+                UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, error);
+                UNIT_ASSERT_STRING_CONTAINS(error, ".metadata/script_executions");
+                UNIT_ASSERT_STRING_CONTAINS(error, "because it does not exist or you do not have access permissions");
+            }
+        }
+    }
 }
 
 } // namespace NKikimr::NKqp

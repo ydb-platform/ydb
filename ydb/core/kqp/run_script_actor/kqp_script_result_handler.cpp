@@ -365,7 +365,7 @@ private:
     void Handle(TEvKqpExecuter::TEvStreamData::TPtr& ev) {
         auto& record = ev->Get()->Record;
         const auto seqNo = record.GetSeqNo();
-        const auto resultSetIndex = record.GetQueryResultIndex();
+        const ui32 resultSetIndex = record.GetQueryResultIndex();
         const auto& resultSet = record.GetResultSet();
         const auto rowsCount = resultSet.rows_size();
         const auto finished = record.GetFinished();
@@ -381,6 +381,7 @@ private:
             // we don't know result set count, so just accept all of them
             // it's possible to have several result sets per script
             // they can arrive in any order and may be missed for some indices
+            Y_VALIDATE(resultSetIndex < std::numeric_limits<ui32>::max(), "Unexpected result set index: " << resultSetIndex);
             resultSetInfos.resize(resultSetIndex + 1);
         }
 

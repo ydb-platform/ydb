@@ -1,6 +1,7 @@
 #include "kqp_run_script_actor_impl.h"
 
 #include <ydb/core/kqp/common/events/script_executions.h>
+#include <ydb/core/kqp/common/kqp_script_executions.h>
 #include <ydb/core/kqp/common/kqp_user_request_context.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
 #include <ydb/core/kqp/proxy_service/kqp_script_executions.h>
@@ -88,7 +89,7 @@ private:
         }
 
         if (!executionEntryExists) {
-            return Finish(Ydb::StatusIds::INTERNAL_ERROR, "Script execution entry was lost");
+            return Finish(Ydb::StatusIds::INTERNAL_ERROR, AddRootIssue("Script execution entry was lost", issues));
         }
 
         if (FinishInfo.IsFinished()) {

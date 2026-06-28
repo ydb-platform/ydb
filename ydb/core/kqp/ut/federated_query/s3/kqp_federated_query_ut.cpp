@@ -3192,6 +3192,86 @@ Y_UNIT_TEST_SUITE(KqpFederatedQuery) {
         UNIT_ASSERT_VALUES_EQUAL(GetUncommittedUploadsCount(BUCKET), 0);
     }
 
+    Y_UNIT_TEST(TestAtomicUploadCommitWithMultipleTransactions) {
+        auto kikimr = NTestUtils::MakeKikimrRunner();
+        auto db = kikimr->GetQueryClient();
+
+        constexpr char BUCKET[] = "test_atomic_upload_commit_with_multiple_transactions";
+        constexpr char EXTERNAL_DATA_SOURCE_NAME[] = "test_bucket";
+        CreateBucket(BUCKET);
+
+        {   // Create external data source
+            const TString query = fmt::format(R"(
+                CREATE EXTERNAL DATA SOURCE `{source_name}` WITH (
+                    SOURCE_TYPE="ObjectStorage",
+                    LOCATION="{location}",
+                    AUTH_METHOD="NONE"
+                ))",
+                "location"_a = GetBucketLocation(BUCKET),
+                "source_name"_a = EXTERNAL_DATA_SOURCE_NAME
+            );
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        constexpr char TABLE_NAME[] = "failure_table";
+
+        {   // Create sample table
+            const TString query = fmt::format(R"(
+                CREATE TABLE `{table_name}` (
+                    Key Int32 NOT NULL,
+                    Value String NOT NULL,
+                    PRIMARY KEY (Key)
+                );)",
+                "table_name"_a = TABLE_NAME
+            );
+            const auto result = db.ExecuteQuery(query, TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+
+        const TString sql = fmt::format(R"(
+                PRAGMA s3.AtomicUploadCommit = "true";
+
+                INSERT INTO `{table_name}` (Key, Value) VALUES (42, "value");
+
+                INSERT INTO `{source_name}`.`f/` WITH (FORMAT = "json_each_row") SELECT 42;
+
+                SELECT * FROM `{table_name}`;
+
+                INSERT INTO `{source_name}`.`x/` WITH (FORMAT = "json_each_row") SELECT 42;
+            )",
+            "source_name"_a=EXTERNAL_DATA_SOURCE_NAME,
+            "table_name"_a=TABLE_NAME
+        );
+
+        auto scriptExecutionOperation = db.ExecuteScript(sql, TExecuteScriptSettings().StatsMode(EStatsMode::Profile)).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(scriptExecutionOperation.Status().GetStatus(), EStatus::SUCCESS, scriptExecutionOperation.Status().GetIssues().ToString());
+        UNIT_ASSERT(!scriptExecutionOperation.Metadata().ExecutionId.empty());
+
+        TScriptExecutionOperation readyOp = WaitScriptExecutionOperation(scriptExecutionOperation.Id(), kikimr->GetDriver());
+        const auto& metadata = readyOp.Metadata();
+        UNIT_ASSERT_VALUES_EQUAL_C(metadata.ExecStatus, EExecStatus::Completed, readyOp.Status().GetIssues().ToOneLineString());
+
+        const auto& ast = metadata.ExecStats.GetAst();
+        UNIT_ASSERT(ast);
+        AstChecker(3, 5)(*ast);
+
+        TFetchScriptResultsResult results = db.FetchScriptResults(scriptExecutionOperation.Id(), 0).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(results.GetStatus(), EStatus::SUCCESS, results.GetIssues().ToString());
+
+        TResultSetParser resultSet(results.ExtractResultSet());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnsCount(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.RowsCount(), 1);
+
+        UNIT_ASSERT(resultSet.TryNextRow());
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("Key").GetInt32(), 42);
+        UNIT_ASSERT_VALUES_EQUAL(resultSet.ColumnParser("Value").GetString(), "value");
+
+        UNIT_ASSERT_VALUES_EQUAL(GetObjectKeys(BUCKET).size(), 2);
+        UNIT_ASSERT_VALUES_EQUAL(GetAllObjects(BUCKET), "{\"column0\":42}\n{\"column0\":42}\n");
+        UNIT_ASSERT_VALUES_EQUAL(GetUncommittedUploadsCount(BUCKET), 0);
+    }
+
     Y_UNIT_TEST(TestScriptExecutionsDisabled) {
         const TString bucket = "test_bucket1";
         CreateBucket(bucket);

@@ -835,23 +835,6 @@ void TStreamingTestFixture::SetupMockConnectorTableData(std::shared_ptr<TConnect
     }
 }
 
-// Other helpers
-
-std::function<void(const std::string&)> TStreamingTestFixture::AstChecker(ui64 txCount, ui64 stagesCount) {
-    const auto stringCounter = [](const std::string& str, const std::string& subStr) {
-        ui64 count = 0;
-        for (size_t i = str.find(subStr); i != std::string::npos; i = str.find(subStr, i + subStr.size())) {
-            ++count;
-        }
-        return count;
-    };
-
-    return [txCount, stagesCount, stringCounter](const std::string& ast) {
-        UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "KqpPhysicalTx"), txCount);
-        UNIT_ASSERT_VALUES_EQUAL(stringCounter(ast, "DqPhyStage"), stagesCount);
-    };
-}
-
 void TStreamingTestFixture::EnsureNotInitialized(const std::string& info) {
     UNIT_ASSERT_C(!Kikimr, "Kikimr runner is already initialized, can not setup " << info);
 }

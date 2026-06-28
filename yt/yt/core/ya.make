@@ -464,6 +464,7 @@ IF (NOT OS_WINDOWS)
         logging/unittests
         phoenix/unittests
         profiling/unittests
+        rpc/grpc/unittests
         rpc/unittests
         ypath/unittests
         ytree/unittests

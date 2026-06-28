@@ -76,6 +76,11 @@ and timeout (by default, the maximum response time from healthcheck). Documentat
 * 25538:added basic monitoring tests and separate events file [#25538](https://github.com/ydb-platform/ydb/pull/25538) ([Andrei Rykov](https://github.com/StekPerepolnen))
 * 25458:Сейчас при автопартициронировании топиков учитывается скорость записи различными producer-ами: партиция делится не пополам, а стараемся разделить партицию таким образом, что бы producer-ы распределились по новым партициям равномерно с учетом скорости записи. [#25458](https://github.com/ydb-platform/ydb/pull/25458) ([Nikolay Shestakov](https://github.com/nshestakov))
 * 25387:Change the audit logging logic from AllowedList checking to DenyList checking [#25387](https://github.com/ydb-platform/ydb/pull/25387) ([Andrei Rykov](https://github.com/StekPerepolnen))
+* 44578:Удалено ограничение на кол-во партиции в одном топике. Раньше было 20000 партиции на топик. [#44578](https://github.com/ydb-platform/ydb/pull/44578) ([Nikolay Shestakov](https://github.com/nshestakov))
+* 44306:`ALTER TOPIC SET (MIN_ACTIVE_PARTITIONS =<new_value>);`
+- if new value is bigger than current active partition count then split existing partitions to match the requested value [#44306](https://github.com/ydb-platform/ydb/pull/44306) ([Sergey](https://github.com/shokhor))
+* 43478:This PR adds configurable `link_parameter_mappings` for Meta support links.
+It allows a support link entry to map a generated link parameter from a request parameter, from cluster info, or from a static value. [#43478](https://github.com/ydb-platform/ydb/pull/43478) ([Andrei Rykov](https://github.com/StekPerepolnen))
 
 ### Bug fixes
 
@@ -146,12 +151,8 @@ https://github.com/ydb-platform/ydb/issues/25454 [#25536](https://github.com/ydb
 * 25515:Fixed fault for checkpoint on not drained channels [#25515](https://github.com/ydb-platform/ydb/pull/25515) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
 * 25412:https://github.com/ydb-platform/ydb/issues/23180 [#25412](https://github.com/ydb-platform/ydb/pull/25412) ([Vasily Gerasimov](https://github.com/UgnineSirdis))
 * 25408:Fixed tests:
-
-* TestRetryLimiter 
-* RestoreScriptPhysicalGraphOnRetry 
-* CreateStreamingQueryMatchRecognize 
-
-Also increased default test logs level [#25408](https://github.com/ydb-platform/ydb/pull/25408) ([Pisarenko Grigoriy](https://github.com/GrigoriyPA))
+* None:CreateStreamingQueryMatchRecognize
+* 44428:fix #38739 an issue where a combination of state storage issue and node load issue led to GOOD overall status being reported [#44428](https://github.com/ydb-platform/ydb/pull/44428) ([vporyadke](https://github.com/vporyadke))
 
 ### YDB UI
 

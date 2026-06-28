@@ -112,12 +112,22 @@ bool TBackupTransactionOperator::ExecuteOnAbort(TColumnShard& owner, NTabletFlat
         auto control = ExportTask->BuildAbortControl();
         TxAbort = owner.GetBackgroundSessionsManager()->TxApplyControl(control);
     }
+    if (!TxAbort) {
+        return true;
+    }
     return TxAbort->Execute(txc, NActors::TActivationContext::AsActorContext());
 }
 
-bool TBackupTransactionOperator::CompleteOnAbort(TColumnShard& /*owner*/, const TActorContext& ctx) {
+bool TBackupTransactionOperator::CompleteOnAbort(TColumnShard& owner, const TActorContext& ctx) {
     if (TxAbort) {
         TxAbort->Complete(ctx);
+    }
+    for (TActorId subscriber : NotifySubscribers) {
+        auto event = MakeHolder<TEvColumnShard::TEvNotifyTxCompletionResult>(owner.TabletID(), GetTxId());
+        auto& opResult = *event->Record.MutableOpResult();
+        opResult.SetSuccess(false);
+        opResult.SetExplain("Cancelled");
+        ctx.Send(subscriber, event.Release(), 0, 0);
     }
     return true;
 }

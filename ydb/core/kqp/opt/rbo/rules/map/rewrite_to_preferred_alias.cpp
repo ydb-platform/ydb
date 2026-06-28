@@ -236,8 +236,7 @@ bool RewriteMapInputs(TOpMap& map, const TInfoUnitSet& liveOut, TRBOContext& ctx
     }
 
     const auto output = BuildMapOutput(inputOutput, elements);
-    if (MakeInfoUnitSet(output).size() != output.size() ||
-        ContainsForbidden(output, GetForbidden(&map))) {
+    if (MakeInfoUnitSet(output).size() != output.size()) {
         return false;
     }
 

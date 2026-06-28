@@ -12,9 +12,15 @@ namespace NYql {
 
 namespace NYdb::NDump {
 
+// When `db` is empty, the leading `-- database:` comment is omitted.
+// When `ifNotExists` is false, the `IF NOT EXISTS` modifier is omitted.
+// Dump/restore callers should leave the defaults; SHOW CREATE callers
+// pass an empty db and ifNotExists=false so the output matches the
+// canonical SHOW CREATE style used for tables and views.
 TString BuildCreateExternalDataSourceQuery(
     const Ydb::Table::DescribeExternalDataSourceResult& description,
-    const TString& db);
+    const TString& db,
+    bool ifNotExists = true);
 
 bool RewriteCreateExternalDataSourceQueryNoSecrets(
     TString& query,

@@ -922,13 +922,7 @@ TVector<TKiDataQueryBlock> MakeKiDataQueryBlocks(TExprBase node, const TKiExplor
 }
 
 TString GetShowCreateType(const TExprNode& settings) {
-    if (HasSetting(settings, "showCreateTable")) {
-        return "showCreateTable";
-    }
-    if (HasSetting(settings, "showCreateView")) {
-        return "showCreateView";
-    }
-    return "";
+    return GetShowCreateSetting(settings);
 }
 
 } // anonymous namespace
@@ -1014,8 +1008,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
         if (auto maybeReadTable = currentNode.Maybe<TKiReadTable>()) {
             auto readTable = maybeReadTable.Cast();
             for (auto setting : readTable.Settings()) {
-                auto name = setting.Name().Value();
-                if (name == "showCreateTable" || name == "showCreateView") {
+                if (IsShowCreateSettingName(setting.Name().Value())) {
                     showCreateReadReplacements[input.Get()] = nullptr;
                 }
             }
@@ -1091,7 +1084,7 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
                             auto name = tuple.Cast().Name().Value();
                             if (name == "sysViewRewritten") {
                                 isSysViewRewritten = true;
-                            } else if (name == "showCreateTable" || name == "showCreateView") {
+                            } else if (IsShowCreateSettingName(name)) {
                                 isShowCreate = true;
                             }
                         }
@@ -1116,11 +1109,8 @@ TExprNode::TPtr KiBuildQuery(TExprBase node, TExprContext& ctx, TStringBuf datab
                     if (name == "sysViewRewritten") {
                         path = tuple.Cast().Value().Cast().Cast<TCoAtom>().StringValue();
                     }
-                    if (name == "showCreateTable") {
-                        pathType = "Table";
-                    }
-                    if (name == "showCreateView") {
-                        pathType = "View";
+                    if (auto pt = ShowCreateSettingToPathType(name); !pt.empty()) {
+                        pathType = TString(pt);
                     }
                 }
             }

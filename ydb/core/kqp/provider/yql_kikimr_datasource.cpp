@@ -106,9 +106,7 @@ bool IsShowCreate(const TExprNode& read) {
     if (read.ChildrenSize() <= TKiReadTable::idx_Settings) {
         return false;
     }
-    const auto& settings = *read.Child(TKiReadTable::idx_Settings);
-    return HasSetting(settings, "showCreateTable")
-        || HasSetting(settings, "showCreateView");
+    return !GetShowCreateSetting(*read.Child(TKiReadTable::idx_Settings)).empty();
 }
 
 class TKiSourceIntentDeterminationTransformer: public TKiSourceVisitorTransformer {
@@ -324,9 +322,36 @@ public:
         return AsyncFuture;
     }
 
-    bool AddCluster(const std::pair<TString, TString>& table, IKikimrGateway::TTableMetadataResult& res, TExprNode::TPtr input, TExprContext& ctx) {
+    // Walks the AST and returns true if it contains any SHOW CREATE
+    // setting. SHOW CREATE is always a standalone statement, so an
+    // occurrence anywhere in the query means we are servicing a SHOW
+    // CREATE and can skip table-load wiring that is only needed for
+    // executing actual data reads.
+    bool ContainsShowCreateSetting(const TExprNode& input) {
+        bool found = false;
+        VisitExpr(input, [&](const TExprNode& node) -> bool {
+            if (found) {
+                return false;
+            }
+            if (node.IsAtom() && IsShowCreateSettingName(node.Content())) {
+                found = true;
+                return false;
+            }
+            return true;
+        });
+        return found;
+    }
+
+    bool AddCluster(const std::pair<TString, TString>& table, IKikimrGateway::TTableMetadataResult& res, TExprNode::TPtr input, TExprContext& ctx, bool isShowCreate) {
         const auto& metadata = *res.Metadata;
         if (metadata.Kind != EKikimrTableKind::External) {
+            return true;
+        }
+
+        // SHOW CREATE rewrites the read to point at the .sys/show_create
+        // system view in a later step, so it does not need the external
+        // data source to be available through ExternalSourceFactory.
+        if (isShowCreate) {
             return true;
         }
 
@@ -372,6 +397,7 @@ public:
         YQL_ENSURE(AsyncFuture.HasValue());
 
         auto gatheredAttributes = GatherReadAttributes(*input, ctx);
+        const bool isShowCreate = ContainsShowCreateSetting(*input);
         for (auto& it : LoadResults) {
             const auto& table = it.first;
             IKikimrGateway::TTableMetadataResult& res = *it.second;
@@ -420,7 +446,7 @@ public:
                     }
                 }
 
-                if (!AddCluster(table, res, input, ctx)) {
+                if (!AddCluster(table, res, input, ctx, isShowCreate)) {
                     LoadResults.clear();
                     return TStatus::Error;
                 }
@@ -782,6 +808,14 @@ public:
         if (key.GetKeyType() == TKikimrKey::Type::Table) {
             YQL_ENSURE(tableDesc.Metadata);
             if (tableDesc.Metadata->Kind == EKikimrTableKind::External) {
+                // SHOW CREATE EXTERNAL DATA SOURCE reads have no associated table —
+                // they are rewritten downstream into reads of .sys/show_create.
+                if (IsShowCreate(*read)) {
+                    auto newRead = ctx.RenameNode(*read, newName);
+                    auto retChildren = node->ChildrenList();
+                    retChildren[0] = newRead;
+                    return ctx.ChangeChildren(*node, std::move(retChildren));
+                }
                 if (tableDesc.Metadata->ExternalSource.SourceType == ESourceType::ExternalDataSource && tableDesc.Metadata->TableType == NYql::ETableType::Unknown) {
                     ctx.AddError(TIssue(node->Pos(ctx),
                                         TStringBuilder() << "Attempt to read from external data source \"" << tablePath << "\" without table. Please specify table to read from"));

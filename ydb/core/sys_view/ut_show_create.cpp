@@ -7,6 +7,8 @@
 
 #include <ydb/public/lib/ydb_cli/dump/util/query_utils.h>
 
+#include <util/string/subst.h>
+
 namespace NKikimr {
 namespace NSysView {
 
@@ -43,6 +45,24 @@ public:
 
     std::string ShowCreateTable(NQuery::TSession& session, const std::string& tableName) {
         return ShowCreate(session, "TABLE", tableName);
+    }
+
+    std::string ShowCreateExternalDataSource(NQuery::TSession& session, const std::string& dataSourceName) {
+        return ShowCreate(session, "EXTERNAL DATA SOURCE", dataSourceName);
+    }
+
+    void CheckShowCreateExternalDataSource(const std::string& dataSourceName, const std::string& expectedQuery = "") {
+        auto showCreateQuery = ShowCreateExternalDataSource(Session, dataSourceName);
+
+        if (!expectedQuery.empty()) {
+            TString normalizedExpected = NormalizeWhitespaceInQuery(UnescapeC(expectedQuery));
+            TString normalizedActual = NormalizeWhitespaceInQuery(UnescapeC(showCreateQuery));
+            UNIT_ASSERT_STRINGS_EQUAL(normalizedExpected, normalizedActual);
+        }
+
+        // The output must contain the canonical SQL header.
+        UNIT_ASSERT_C(showCreateQuery.find("CREATE EXTERNAL DATA SOURCE") != std::string::npos,
+            "SHOW CREATE EXTERNAL DATA SOURCE output must contain the CREATE statement: " << showCreateQuery);
     }
 
     void CheckShowCreateTable(const std::string& query, const std::string& tableName, TString formatQuery = "", bool temporary = false, bool initialScan = false) {
@@ -191,8 +211,12 @@ private:
             if (column.Name == "Path") {
                 UNIT_ASSERT_VALUES_EQUAL(value, path);
             } else if (column.Name == "PathType") {
-                auto actualType = to_upper(TString(value));
-                UNIT_ASSERT_VALUES_EQUAL(actualType, type);
+                TString actualType = to_upper(TString(value));
+                TString expectedType = TString(type);
+                // The "EXTERNAL DATA SOURCE" SQL keyword maps to a single
+                // CamelCase enum name "ExternalDataSource" in the column.
+                SubstGlobal(expectedType, " ", "");
+                UNIT_ASSERT_VALUES_EQUAL(actualType, expectedType);
             } else if (column.Name == "CreateQuery") {
                 createQuery = value;
             } else {
@@ -2742,6 +2766,39 @@ Y_UNIT_TEST(TableColumnLocalBloomFilterIndex) {
             );
         )"
     );
+}
+
+Y_UNIT_TEST(ExternalDataSource) {
+    TTestEnv env(1, 4, {.StoragePools = 3, .ShowCreateTable = true});
+
+    env.GetServer().GetRuntime()->SetLogPriority(NKikimrServices::SYSTEM_VIEWS, NActors::NLog::PRI_DEBUG);
+
+    TShowCreateChecker checker(env);
+
+    // The checker's constructor creates `tier1` as an S3-style external data source
+    // with AWS authentication. The output must round-trip back through the same
+    // SOURCE_TYPE / LOCATION / AUTH_METHOD properties.
+    checker.CheckShowCreateExternalDataSource("tier1");
+
+    auto session = NQuery::TQueryClient(env.GetDriver()).GetSession().GetValueSync().GetSession();
+
+    ExecuteQuery(session, R"(
+        CREATE EXTERNAL DATA SOURCE `eds_none` WITH (
+            SOURCE_TYPE = "ObjectStorage",
+            LOCATION = "http://fake.fake/no-auth",
+            AUTH_METHOD = "NONE"
+        );
+    )");
+    auto noAuthQuery = checker.ShowCreateExternalDataSource(session, "eds_none");
+    UNIT_ASSERT_C(noAuthQuery.find("SOURCE_TYPE = 'ObjectStorage'") != std::string::npos, noAuthQuery);
+    UNIT_ASSERT_C(noAuthQuery.find("LOCATION = 'http://fake.fake/no-auth'") != std::string::npos, noAuthQuery);
+    UNIT_ASSERT_C(noAuthQuery.find("AUTH_METHOD = 'NONE'") != std::string::npos, noAuthQuery);
+
+    // Round-trip: drop and recreate using the SHOW CREATE output.
+    ExecuteQuery(session, "DROP EXTERNAL DATA SOURCE `eds_none`;");
+    ExecuteQuery(session, noAuthQuery);
+    auto roundTripQuery = checker.ShowCreateExternalDataSource(session, "eds_none");
+    UNIT_ASSERT_VALUES_EQUAL(noAuthQuery, roundTripQuery);
 }
 
 Y_UNIT_TEST(TableColumnLocalBloomNgramFilterIndex) {

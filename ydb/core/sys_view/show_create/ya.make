@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    create_external_data_source_formatter.cpp
     create_table_formatter.cpp
     create_view_formatter.cpp
     formatters_common.cpp

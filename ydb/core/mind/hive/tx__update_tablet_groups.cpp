@@ -65,7 +65,7 @@ public:
         }
         YDB_LOG_DEBUG("THive::TTxUpdateTabletGroups::Execute{",
             {"logPrefix", GetLogPrefix()},
-            {"this" (ui64)this},
+            {"this", static_cast<void*>(this)},
             {"tabletId", tablet->Id},
             {"reassignReason", tablet->ChannelProfileReassignReason},
             {"groups", Groups});
@@ -78,7 +78,7 @@ public:
         if (tablet->ChannelProfileNewGroup.count() != Groups.size() && !Groups.empty()) {
             YDB_LOG_ERROR("THive::TTxUpdateTabletGroups::Execute{ tablet ChannelProfileNewGroup has incorrect size",
                 {"logPrefix", GetLogPrefix()},
-                {"this" (ui64)this},
+                {"this", static_cast<void*>(this)},
                 {"tabletId", tablet->Id});
             db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(ETabletState::ReadyToWork);
             tablet->State = ETabletState::ReadyToWork;
@@ -89,7 +89,7 @@ public:
         if (!tablet->ChannelProfileNewGroup.any()) {
             YDB_LOG_WARN("THive::TTxUpdateTabletGroups::Execute{ tablet ChannelProfileNewGroup is empty",
                 {"logPrefix", GetLogPrefix()},
-                {"this" (ui64)this},
+                {"this", static_cast<void*>(this)},
                 {"tabletId", tablet->Id});
             db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(ETabletState::ReadyToWork);
             tablet->State = ETabletState::ReadyToWork;
@@ -115,7 +115,7 @@ public:
             if (lastChangeTimestamp && Self->GetMinPeriodBetweenReassign() && timeSinceLastReassign < Self->GetMinPeriodBetweenReassign()) {
                 YDB_LOG_WARN("THive::TTxUpdateTabletGroups::Execute{ tablet SpaceReassign was too soon - ignored",
                     {"logPrefix", GetLogPrefix()},
-                    {"this" (ui64)this},
+                    {"this", static_cast<void*>(this)},
                     {"tabletId", tablet->Id});
                 db.Table<Schema::Tablet>().Key(tablet->Id).Update<Schema::Tablet::State>(ETabletState::ReadyToWork);
                 tablet->State = ETabletState::ReadyToWork;
@@ -142,7 +142,7 @@ public:
                 if (group == nullptr) {
                     YDB_LOG_ERROR("THive::TTxUpdateTabletGroups::Execute{ tablet could not find a group for channel pool",
                         {"logPrefix", GetLogPrefix()},
-                        {"this" (ui64)this},
+                        {"this", static_cast<void*>(this)},
                         {"tabletId", tablet->Id},
                         {"channelId", channelId},
                         {"storagePoolName", tablet->GetChannelStoragePoolName(channelId)});
@@ -158,7 +158,7 @@ public:
                 } else {
                     YDB_LOG_DEBUG("THive::TTxUpdateTabletGroups::Execute{ tablet channel assigned to group",
                         {"logPrefix", GetLogPrefix()},
-                        {"this" (ui64)this},
+                        {"this", static_cast<void*>(this)},
                         {"tabletId", tablet->Id},
                         {"channelId", channelId},
                         {"groupId", group->GetGroupID()});
@@ -180,7 +180,7 @@ public:
             if (MaySkipChannelReassign(tablet, channel, group)) {
                 YDB_LOG_DEBUG("THive::TTxUpdateTabletGroups::Execute{ tablet skipped reassign of channel",
                     {"logPrefix", GetLogPrefix()},
-                    {"this" (ui64)this},
+                    {"this", static_cast<void*>(this)},
                     {"tabletId", tablet->Id},
                     {"channelId", channelId});
                 continue;
@@ -257,7 +257,7 @@ public:
             if (tablet->ChannelProfileNewGroup.any()) {
                 YDB_LOG_WARN("THive::TTxUpdateTabletGroups::Execute{ tablet was partially changed",
                     {"logPrefix", GetLogPrefix()},
-                    {"this" (ui64)this},
+                    {"this", static_cast<void*>(this)},
                     {"tabletId", tablet->Id});
             }
 
@@ -265,7 +265,7 @@ public:
                 if (tablet->ChannelProfileNewGroup.test(channelId)) {
                     YDB_LOG_WARN("THive::TTxUpdateTabletGroups::Execute{ tablet skipped channel",
                         {"logPrefix", GetLogPrefix()},
-                        {"this" (ui64)this},
+                        {"this", static_cast<void*>(this)},
                         {"tabletId", tablet->Id},
                         {"channelId", channelId});
                     db.Table<Schema::TabletChannel>().Key(tablet->Id, channelId).Update<Schema::TabletChannel::NeedNewGroup>(false);
@@ -290,7 +290,7 @@ public:
         } else {
             YDB_LOG_WARN("THive::TTxUpdateTabletGroups::Execute{ tablet wasn't changed",
                 {"logPrefix", GetLogPrefix()},
-                {"this" (ui64)this},
+                {"this", static_cast<void*>(this)},
                 {"tabletId", tablet->Id});
             if (hasEmptyChannel) {
                 // we can't continue with partial/unsuccessfull reassign on 0 generation
@@ -301,7 +301,7 @@ public:
                     if (tablet->ChannelProfileNewGroup.test(channelId)) {
                         YDB_LOG_WARN("THive::TTxUpdateTabletGroups::Execute{ tablet skipped channel",
                             {"logPrefix", GetLogPrefix()},
-                            {"this" (ui64)this},
+                            {"this", static_cast<void*>(this)},
                             {"tabletId", tablet->Id},
                             {"channelId", channelId});
                         db.Table<Schema::TabletChannel>().Key(tablet->Id, channelId).Update<Schema::TabletChannel::NeedNewGroup>(false);
@@ -330,14 +330,14 @@ public:
                 if (!tablet->InitiateBlockStorage(SideEffects)) {
                     YDB_LOG_WARN("THive::TTxUpdateTabletGroups{",
                         {"logPrefix", GetLogPrefix()},
-                        {"this" (ui64)this},
+                        {"this", static_cast<void*>(this)},
                         {"tabletId", TabletId});
                 }
             } else if (tablet->IsReadyToWork()) {
                 if (!tablet->InitiateStop(SideEffects)) {
                     YDB_LOG_WARN("THive::TTxUpdateTabletGroups{",
                         {"logPrefix", GetLogPrefix()},
-                        {"this" (ui64)this},
+                        {"this", static_cast<void*>(this)},
                         {"tabletId", TabletId});
                 }
             } else if (tablet->IsBootingSuppressed()) {
@@ -353,7 +353,7 @@ public:
         if (!tablet->TryToBoot()) {
             YDB_LOG_NOTICE("THive::TTxUpdateTabletGroups{",
                 {"logPrefix", GetLogPrefix()},
-                {"this" (ui64)this},
+                {"this", static_cast<void*>(this)},
                 {"tabletId", TabletId});
         }
         return true;
@@ -362,7 +362,7 @@ public:
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG("THive::TTxUpdateTabletGroups{ )::Complete",
             {"logPrefix", GetLogPrefix()},
-            {"this" (ui64)this},
+            {"this", static_cast<void*>(this)},
             {"tabletId", TabletId},
             {"sideEffects", SideEffects});
         SideEffects.Complete(ctx);

@@ -3,6 +3,7 @@
 #include <ydb/core/base/events.h>
 #include <ydb/core/scheme/scheme_pathid.h>
 #include <ydb/core/protos/statistics.pb.h>
+#include <ydb/core/protos/analyze_operation.pb.h>
 #include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/library/actors/core/events.h>
 #include <yql/essentials/public/issue/yql_issue.h>
@@ -127,6 +128,16 @@ struct TEvStatistics {
         EvAnalyzeActorResult,
 
         EvAnalyzeCancel,
+
+        EvAnalyzeOpListRequest,
+        EvAnalyzeOpListResponse,
+        EvAnalyzeOpGetRequest,
+        EvAnalyzeOpGetResponse,
+        EvAnalyzeOpCancelRequest,
+        EvAnalyzeOpCancelResponse,
+        EvAnalyzeOpForgetRequest,
+        EvAnalyzeOpForgetResponse,
+        EvAnalyzeActorProgress,
 
         EvEnd
     };
@@ -340,6 +351,93 @@ struct TEvStatistics {
         {}
 
         explicit TEvAnalyzeActorResult(EStatus status) : Status(status), Final(true) {}
+    };
+
+    struct TEvAnalyzeOpListRequest : public TEventPB<
+        TEvAnalyzeOpListRequest,
+        NKikimrAnalyzeOp::TEvListRequest,
+        EvAnalyzeOpListRequest>
+    {
+        TEvAnalyzeOpListRequest() = default;
+        explicit TEvAnalyzeOpListRequest(const TString& dbName, ui64 pageSize, const TString& pageToken) {
+            Record.SetDatabaseName(dbName);
+            Record.SetPageSize(pageSize);
+            Record.SetPageToken(pageToken);
+        }
+    };
+
+    struct TEvAnalyzeOpListResponse : public TEventPB<
+        TEvAnalyzeOpListResponse,
+        NKikimrAnalyzeOp::TEvListResponse,
+        EvAnalyzeOpListResponse>
+    {};
+
+    struct TEvAnalyzeOpGetRequest : public TEventPB<
+        TEvAnalyzeOpGetRequest,
+        NKikimrAnalyzeOp::TEvGetRequest,
+        EvAnalyzeOpGetRequest>
+    {
+        TEvAnalyzeOpGetRequest() = default;
+        TEvAnalyzeOpGetRequest(const TString& dbName, const TString& operationId) {
+            Record.SetDatabaseName(dbName);
+            Record.SetOperationId(operationId);
+        }
+    };
+
+    struct TEvAnalyzeOpGetResponse : public TEventPB<
+        TEvAnalyzeOpGetResponse,
+        NKikimrAnalyzeOp::TEvGetResponse,
+        EvAnalyzeOpGetResponse>
+    {};
+
+    struct TEvAnalyzeOpCancelRequest : public TEventPB<
+        TEvAnalyzeOpCancelRequest,
+        NKikimrAnalyzeOp::TEvCancelRequest,
+        EvAnalyzeOpCancelRequest>
+    {
+        TEvAnalyzeOpCancelRequest() = default;
+        TEvAnalyzeOpCancelRequest(const TString& dbName, const TString& operationId) {
+            Record.SetDatabaseName(dbName);
+            Record.SetOperationId(operationId);
+        }
+    };
+
+    struct TEvAnalyzeOpCancelResponse : public TEventPB<
+        TEvAnalyzeOpCancelResponse,
+        NKikimrAnalyzeOp::TEvCancelResponse,
+        EvAnalyzeOpCancelResponse>
+    {};
+
+    struct TEvAnalyzeOpForgetRequest : public TEventPB<
+        TEvAnalyzeOpForgetRequest,
+        NKikimrAnalyzeOp::TEvForgetRequest,
+        EvAnalyzeOpForgetRequest>
+    {
+        TEvAnalyzeOpForgetRequest() = default;
+        TEvAnalyzeOpForgetRequest(const TString& dbName, const TString& operationId) {
+            Record.SetDatabaseName(dbName);
+            Record.SetOperationId(operationId);
+        }
+    };
+
+    struct TEvAnalyzeOpForgetResponse : public TEventPB<
+        TEvAnalyzeOpForgetResponse,
+        NKikimrAnalyzeOp::TEvForgetResponse,
+        EvAnalyzeOpForgetResponse>
+    {};
+
+    struct TEvAnalyzeActorProgress : public TEventLocal<TEvAnalyzeActorProgress, EvAnalyzeActorProgress> {
+        TString OperationId;   // binary ULID
+        TPathId PathId;
+        ui32 ShardsTotal = 0;
+        ui32 ShardsDone  = 0;
+
+        TEvAnalyzeActorProgress(TString operationId, TPathId pathId, ui32 shardsTotal, ui32 shardsDone)
+            : OperationId(std::move(operationId))
+            , PathId(pathId)
+            , ShardsTotal(shardsTotal)
+            , ShardsDone(shardsDone)
+        {}
     };
 };
 

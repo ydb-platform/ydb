@@ -12,6 +12,19 @@ message TMetaConfig {
 
     message TSupportLinksConfig {
         message TSupportLinkEntry {
+            message TLinkParameterMapping {
+                // Target parameter name in the generated link.
+                optional string Parameter = 1;
+                oneof SourceValue {
+                    // Request parameter name used as the mapping source.
+                    string FromRequest = 10;
+                    // Cluster info column name used as the mapping source.
+                    string FromClusterInfo = 11;
+                    // Constant value used as the mapping source.
+                    string StaticValue = 12;
+                }
+            }
+
             // Link source identifier (for example: grafana/dashboard/search).
             optional string Source = 1;
             // Optional display name shown in UI.
@@ -22,7 +35,11 @@ message TMetaConfig {
             repeated string Tag = 4;
             // Grafana folder UID filters (for source=grafana/dashboard/search).
             repeated string Folder = 5;
+            // Optional override for source-specific generated link parameters.
+            // When omitted, source defaults are used.
+            repeated TLinkParameterMapping LinkParameterMappings = 6;
         }
+
         // Support links resolved for cluster entity.
         repeated TSupportLinkEntry Cluster = 1;
         // Support links resolved for database entity.

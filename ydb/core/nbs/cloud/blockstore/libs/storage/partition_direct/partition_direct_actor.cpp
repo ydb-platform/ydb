@@ -338,6 +338,77 @@ void TPartitionActor::HandleFastPathServiceReady(
         LoadActorAdapter.ToString().c_str());
 }
 
+void TPartitionActor::HandleFastPathServiceShutdown(
+    const TEvPartitionDirectPrivate::TEvFastPathServiceShutdown::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    Y_UNUSED(ev);
+
+    if (!FastPathService) {
+        LOG_INFO(
+            ctx,
+            NKikimrServices::NBS_PARTITION,
+            "%s FastPathService is not started",
+            LogTitle.GetWithTime().c_str());
+        Send(
+            ctx.SelfID,
+            std::make_unique<
+                TEvPartitionDirectPrivate::TEvFastPathServiceStopped>(),
+            0,   //   flags
+            ev->Cookie);
+
+        Reply(
+            ctx,
+            *ev,
+            std::make_unique<
+                TEvPartitionDirectPrivate::TEvFastPathServiceStopped>());
+
+        return;
+    }
+
+    auto onStop = FastPathService->Stop();
+    onStop.Subscribe(
+        [actorSystem = TActivationContext::ActorSystem(),
+         selfId = ctx.SelfID,
+         recipient = ev->Sender,
+         cookie = ev->Cookie]   //
+        (const NThreading::TFuture<void>& f)
+        {
+            Y_UNUSED(f);
+            {
+                auto event = std::make_unique<
+                    TEvPartitionDirectPrivate::TEvFastPathServiceStopped>();
+                actorSystem->Send(
+                    selfId,
+                    event.release(),
+                    0,   // flags
+                    cookie);
+            }
+            {
+                auto event = std::make_unique<
+                    TEvPartitionDirectPrivate::TEvFastPathServiceStopped>();
+                actorSystem->Send(
+                    recipient,
+                    event.release(),
+                    0,   // flags
+                    cookie);
+            }
+        });
+}
+
+void TPartitionActor::HandleFastPathServiceStopped(
+    const TEvPartitionDirectPrivate::TEvFastPathServiceStopped::TPtr& ev,
+    const NActors::TActorContext& ctx)
+{
+    Y_UNUSED(ev);
+
+    LOG_INFO(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "%s FastPathService stopped",
+        LogTitle.GetWithTime().c_str());
+}
+
 void TPartitionActor::HandleControllerAllocateDDiskBlockGroupResult(
     const TEvBlobStorage::TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
     const NActors::TActorContext& ctx)
@@ -497,6 +568,14 @@ STFUNC(TPartitionActor::StateWork)
         HFunc(
             TEvPartitionDirectPrivate::TEvFastPathServiceReady,
             HandleFastPathServiceReady);
+
+        HFunc(
+            TEvPartitionDirectPrivate::TEvFastPathServiceShutdown,
+            HandleFastPathServiceShutdown);
+
+        HFunc(
+            TEvPartitionDirectPrivate::TEvFastPathServiceStopped,
+            HandleFastPathServiceStopped);
 
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {

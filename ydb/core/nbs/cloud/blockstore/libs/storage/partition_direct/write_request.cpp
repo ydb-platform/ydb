@@ -26,14 +26,16 @@ TWriteRequestExecutor::TWriteRequestExecutor(
     , LogTitle(logTitle.GetChildWithTags(
           GetCycleCount(),
           {{"t", ToString(WriteMode)},
-           {"r", bundle->GetVChunkRange().Print()}}))
+           {"lsn", ToString(bundle->GetLsn())},
+           {"r", bundle->GetRange().Print()},
+           {"rv", bundle->GetVChunkRange().Print()}}))
     , VChunkConfig(vChunkConfig)
     , DirectBlockGroup(std::move(directBlockGroup))
     , Bundle(std::move(bundle))
     , HedgingDelay(DirectBlockGroup->GetOracle()->GetWriteHedgingDelay())
     , RequestTimeout(DirectBlockGroup->GetOracle()->GetWriteRequestTimeout())
     , IndirectWriteReplyTimeout(
-          DirectBlockGroup->GetOracle()->GetPBufferReplyTimeout())
+          DirectBlockGroup->GetOracle()->GetIndirectWriteReplyTimeout())
 {}
 
 TWriteRequestExecutor::~TWriteRequestExecutor()
@@ -64,11 +66,11 @@ void TWriteRequestExecutor::Run()
     ScheduleHedging();
 
     switch (WriteMode) {
-        case EWriteMode::PBufferReplication: {
+        case EWriteMode::IndirectWrite: {
             SendIndirectWriteRequest(hosts);
             break;
         }
-        case EWriteMode::DirectPBuffersFilling: {
+        case EWriteMode::DirectWrite: {
             for (auto host: hosts) {
                 SendDirectWriteRequest(host);
             }
@@ -466,11 +468,11 @@ void TWriteRequestExecutor::OnHedgingTimeout()
         ExtendedDebugState().c_str());
 
     switch (WriteMode) {
-        case EWriteMode::PBufferReplication: {
+        case EWriteMode::IndirectWrite: {
             SendAdditionalDirectWrites();
             break;
         }
-        case EWriteMode::DirectPBuffersFilling: {
+        case EWriteMode::DirectWrite: {
             SendDirectWriteRequestsToHandoffs(GetQuorumDeficit());
             break;
         }

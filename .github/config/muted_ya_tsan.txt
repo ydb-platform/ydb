@@ -103,7 +103,6 @@ ydb/core/kqp/rm_service/ut KqpRm.ConcurrentTasks
 ydb/core/kqp/ut/batch_operations KqpBatchDelete.ManyPartitions_1
 ydb/core/kqp/ut/batch_operations unittest.[*/*] chunk
 ydb/core/kqp/ut/channels Channels20.InstantFinish1n
-ydb/core/kqp/ut/data_integrity unittest.[*/*] chunk
 ydb/core/kqp/ut/opt unittest.[*/*] chunk
 ydb/core/kqp/ut/query KqpAnalyze.AnalyzeTable+ColumnStore
 ydb/core/kqp/ut/query KqpAnalyzeOperations.AnalyzeOperationsLifecycle
@@ -141,7 +140,6 @@ ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexDeniesTableModificationsSql+En
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexDeniesTableModificationsSql-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme unittest.[*/*] chunk
 ydb/core/kqp/ut/service KqpQueryService.FlowControllOnHugeRealTable-LongRow
-ydb/core/kqp/ut/service KqpQueryService.TableSink_ReplaceFromSelectLargeOlap
 ydb/core/kqp/ut/service unittest.[*/*] chunk
 ydb/core/kqp/ut/tli KqpTli.BasicWithWilsonTracing
 ydb/core/kqp/ut/tli KqpTli.ConcurrentUpsertSelect2Node
@@ -197,7 +195,6 @@ ydb/core/transfer/ut/column_table Transfer_ColumnTable.WriteNullToColumn
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.WriteNullToKeyColumn
 ydb/core/transfer/ut/column_table unittest.sole chunk
 ydb/core/transfer/ut/functional Transfer.BaseScenario_Local
-ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Local
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/transfer/ut/functional unittest.sole chunk
@@ -258,7 +255,6 @@ ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3_and_stable-26-2-1-column-date64]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3_and_stable-26-2-1-column]
-ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3_and_stable-26-2-1-row]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-26-2-1-column-date64]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-26-2-1-column]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_stable-26-2-1_and_stable-26-1-1-column]
@@ -311,7 +307,6 @@ ydb/tests/functional/benchmarks_init test_generator.py.TestTpcdsGenerator.test_s
 ydb/tests/functional/benchmarks_init test_generator.py.TestTpcdsGenerator.test_s1_state_and_parts
 ydb/tests/functional/dstool py3test.sole chunk
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_capacity_metrics
-ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_balance
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_balance_mismatching_size_in_units
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_cluster_get_set
 ydb/tests/functional/dstool test_canonical_requests.py.Test.test_essential
@@ -331,7 +326,6 @@ ydb/tests/functional/kqp/kqp_query_session KqpQuerySession.NoLocalAttach
 ydb/tests/functional/kqp/kqp_query_svc NodeIdDescribe.HasDistribution
 ydb/tests/functional/nbs py3test.sole chunk
 ydb/tests/functional/nbs test_nbs.py.TestNbs.test_nbs_500gb_disk_read_write
-ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_mixed
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_read
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write
 ydb/tests/functional/nbs test_nbs_load_actor.py.TestNbsLoadActor.test_nbs_load_actor_write_then_read
@@ -995,7 +989,6 @@ ydb/tests/olap/min_max_index test_min_max_index.py.TestYdbMinMaxIndex.test_minma
 ydb/tests/olap/scenario py3test.[*/*] chunk
 ydb/tests/olap/scenario test_alter_tiering.py.TestAlterTiering.test_multi[many_tables]
 ydb/tests/olap/scenario test_insert.py.TestInsert.test_multi[read_data_during_bulk_upsert]
-ydb/tests/sql py3test.sole chunk
 ydb/tests/sql test_inserts.py.TestYdbInsertsOperations.test_insert_multiple_empty_rows
 ydb/tests/stress/backup/tests py3test.sole chunk
 ydb/tests/stress/backup/tests test_workload.py.TestYdbBackupWorkload.test

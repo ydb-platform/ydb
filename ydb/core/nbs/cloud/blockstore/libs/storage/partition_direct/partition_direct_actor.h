@@ -8,6 +8,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/tablet.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_pool.h>
@@ -21,6 +22,10 @@
 
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/services/services.pb.h>
+
+#include <util/generic/hash.h>
+
+#include <optional>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -51,6 +56,18 @@ private:
     NActors::TActorId LoadActorAdapter;
     bool DdiskBlockGroupAllocated = false;
     std::shared_ptr<TFastPathService> FastPathService;
+
+    TDirectBlockGroupsConnections DirectBlockGroupsConnections;
+
+    struct TAddHostInFlight
+    {
+        size_t DirectBlockGroupId = 0;
+        THostIndex NewHostIndex = InvalidHostIndex;
+        NActors::TActorId BSPipeClient;
+    };
+
+    // At most one add-host runs at a time across the whole partition.
+    std::optional<TAddHostInFlight> AddHostInFlight;
 
 public:
     TPartitionActor(
@@ -96,6 +113,11 @@ private:
 
     void AllocateDDiskBlockGroup(const NActors::TActorContext& ctx);
 
+    void SendAllocateDDiskForAddHost(
+        const NActors::TActorContext& ctx,
+        size_t dbgId,
+        THostIndex newHostIndex);
+
     void HandleControllerAllocateDDiskBlockGroupResult(
         const NKikimr::TEvBlobStorage::
             TEvControllerAllocateDDiskBlockGroupResult::TPtr& ev,
@@ -125,6 +147,38 @@ private:
     void HandleFastPathServiceStopped(
         const TEvPartitionDirectPrivate::TEvFastPathServiceStopped::TPtr& ev,
         const NActors::TActorContext& ctx);
+
+    void HandleAddHostToDBG(
+        const TEvPartitionDirectPrivate::TEvAddHostToDBG::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    // Rejects (logs + notifies the DBG) and returns false if the AddHost
+    // request is invalid; true if it may proceed.
+    bool ValidateAddHostToDBGRequest(
+        const NActors::TActorContext& ctx,
+        size_t dbgId);
+
+    // Returns a retriable error if BSController did not grant the DDisk
+    // (overall status or a per-group error), or {} on success.
+    NProto::TError ValidateAddHostAllocation(
+        const NKikimr::TEvBlobStorage::
+            TEvControllerAllocateDDiskBlockGroupResult& msg,
+        size_t dbgId) const;
+
+    // Extracts the newly allocated DDisk/PBuffer from a granted response,
+    // asserting its structural invariants.
+    void ExtractAddHostDDisks(
+        const NKikimr::TEvBlobStorage::
+            TEvControllerAllocateDDiskBlockGroupResult& msg,
+        size_t dbgId,
+        ui32 expectedCurrent,
+        NKikimrBlobStorage::NDDisk::TDDiskId& newDDiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId& newPBufferId) const;
+
+    void RejectAddHost(
+        const NActors::TActorContext& ctx,
+        size_t dbgId,
+        const TString& message);
 
     void Start(
         const NActors::TActorContext& ctx,

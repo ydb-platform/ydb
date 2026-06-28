@@ -35,14 +35,19 @@ using TDDiskId = NBsController::TDDiskId;
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TVector<TDDiskId> MakeDDiskIds(ui32 baseNodeId)
+TVector<TDDiskId> MakeDDiskIds(ui32 baseNodeId, ui32 count)
 {
     TVector<TDDiskId> ids;
-    ids.reserve(DirectBlockGroupHostCount);
-    for (ui32 i = 0; i < DirectBlockGroupHostCount; ++i) {
+    ids.reserve(count);
+    for (ui32 i = 0; i < count; ++i) {
         ids.emplace_back(baseNodeId + i, 1, i);
     }
     return ids;
+}
+
+TVector<TDDiskId> MakeDDiskIds(ui32 baseNodeId)
+{
+    return MakeDDiskIds(baseNodeId, DirectBlockGroupHostCount);
 }
 
 TStorageConfigPtr MakeStorageConfig()
@@ -381,6 +386,36 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             UNIT_ASSERT_VALUES_EQUAL(1, credentials.size());
             UNIT_ASSERT_VALUES_EQUAL(0, credentials[0].DDiskSessionSeqNo);
         }
+    }
+
+    Y_UNIT_TEST_F(ShouldRequestAddHostThroughService, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+        auto dbg = MakeDirectBlockGroup(
+            executor,
+            std::make_unique<TStorageTransportMock>(),
+            100);
+
+        TPartitionDirectServiceMock service(true);
+        auto initialReady = dbg->Run(&service);
+        initialReady.Wait(WaitTimeout);
+        UNIT_ASSERT(initialReady.HasValue());
+
+        UNIT_ASSERT_VALUES_EQUAL(0u, service.AddHostRequests.size());
+
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                dbg->RequestAddHost();
+                return true;
+            })
+            .GetValue(WaitTimeout);
+
+        UNIT_ASSERT_VALUES_EQUAL(1u, service.AddHostRequests.size());
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<size_t>(0),
+            service.AddHostRequests[0]);
     }
 }
 

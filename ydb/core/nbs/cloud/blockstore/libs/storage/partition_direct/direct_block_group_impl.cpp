@@ -89,10 +89,10 @@ TDirectBlockGroup::TDirectBlockGroup(
               .Generation = TabletGeneration,
               .DirectBlockGroupIndex = DirectBlockGroupIndex,
           })
-    , Oracle(StorageConfig, this)
+    , Oracle(StorageConfig, this, ddisksIds.size())
 {
-    Y_ASSERT(pbufferIds.size() == DirectBlockGroupHostCount);
-    Y_ASSERT(ddisksIds.size() == DirectBlockGroupHostCount);
+    Y_ASSERT(pbufferIds.size() >= DirectBlockGroupHostCount);
+    Y_ASSERT(ddisksIds.size() >= DirectBlockGroupHostCount);
 
     auto addDDiskConnections = [&](const TVector<NBsController::TDDiskId>& ids,
                                    TVector<TDDiskConnection>& connections,
@@ -1071,6 +1071,109 @@ void TDirectBlockGroup::SetHostState(
     }
 }
 
+void TDirectBlockGroup::RequestAddHost()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(Service);
+
+    // No gate here: the authoritative MaxHostCount check is in the partition
+    // (the DBG's DDiskConnections count lags). The DBG just forwards.
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s RequestAddHost dbgIndex=%zu",
+        LogTitle.GetWithTime().c_str(),
+        DirectBlockGroupIndex);
+
+    Service->RequestAddHost(DirectBlockGroupIndex);
+}
+
+void TDirectBlockGroup::OnAddHostFailed(const TString& reason)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    LOG_WARN(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s AddHost request did not go through: %s",
+        LogTitle.GetWithTime().c_str(),
+        reason.c_str());
+}
+
+size_t TDirectBlockGroup::GetHostCount() const
+{
+    return DDiskConnections.size();
+}
+
+void TDirectBlockGroup::AddHost(
+    THostIndex newHostIndex,
+    NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+    NKikimrBlobStorage::NDDisk::TDDiskId pbufferId)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(
+        static_cast<size_t>(newHostIndex) == DDiskConnections.size(),
+        "AddHost expects appending at the end (newHostIndex %lu vs size %lu)",
+        static_cast<size_t>(newHostIndex),
+        DDiskConnections.size());
+    Y_ABORT_UNLESS(DDiskConnections.size() == PBufferConnections.size());
+    Y_ABORT_UNLESS(DDiskConnections.size() < MaxHostCount);
+    Y_ABORT_UNLESS(!DDiskConnections.empty());
+
+    LOG_INFO(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s AddHost newHostIndex=%u",
+        LogTitle.GetWithTime().c_str(),
+        static_cast<ui32>(newHostIndex));
+
+    const ui32 generation =
+        DDiskConnections.front().HostConnection.Credentials.Generation;
+
+    NBsController::TDDiskId ddiskIdNative(ddiskId);
+    NBsController::TDDiskId pbufferIdNative(pbufferId);
+
+    DDiskConnections.push_back(TDDiskConnection{
+        .HostConnection = NTransport::THostConnection{
+            .ConnectionType = EConnectionType::DDisk,
+            .DDiskId = ddiskIdNative,
+            .Credentials = NDDisk::TQueryCredentials::ToDDisk(
+                TabletId,
+                generation,
+                InitialDDiskSessionSeqNo,
+                std::nullopt)}});
+
+    PBufferConnections.push_back(TDDiskConnection{
+        .HostConnection = NTransport::THostConnection{
+            .ConnectionType = EConnectionType::PBuffer,
+            .DDiskId = pbufferIdNative,
+            .Credentials = NDDisk::TQueryCredentials::ToPersistentBuffer(
+                TabletId,
+                generation,
+                std::nullopt)}});
+
+    Y_ABORT_UNLESS(
+        PBufferIdToHostIndex.insert({pbufferId, newHostIndex}).second);
+
+    NotifyVChunksAboutNewHost(DDiskConnections.size());
+
+    Oracle.OnHostAdded();
+
+    DoEstablishConnection(newHostIndex, EConnectionType::DDisk);
+    DoEstablishConnection(newHostIndex, EConnectionType::PBuffer);
+}
+
+void TDirectBlockGroup::NotifyVChunksAboutNewHost(size_t newHostCount)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    for (const auto& weakVChunk: VChunks) {
+        if (auto vChunk = weakVChunk.lock()) {
+            vChunk->OnHostAppended(newHostCount);
+        }
+    }
+}
+
 ui64 TDirectBlockGroup::GetHostPBufferUsedSize(THostIndex hostIndex) const
 {
     ui64 result = 0;
@@ -1190,6 +1293,14 @@ void TDirectBlockGroup::OnConnectionEstablished(
             connection.ConfirmedSessionSeqNo = seqNo;
         }
         // INVARIANT: PBuffer does NOT require a session/lock
+    } else if (Initialized) {
+        LOG_ERROR(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s connection failed for host %zu (post-init): %s",
+            LogTitle.GetWithTime().c_str(),
+            index,
+            error.GetMessage().c_str());
     } else {
         // TODO (future phase): handle the error code/BLOCKED, transition to
         // Broken/suicide.
@@ -1204,6 +1315,7 @@ void TDirectBlockGroup::OnConnectionEstablished(
     if (!InitialReadyPromise.HasValue() && HasLockedQuorum() &&
         HasPBufferQuorum())
     {
+        Initialized = true;
         InitialReadyPromise.SetValue();
         LOG_INFO(
             *ActorSystem,

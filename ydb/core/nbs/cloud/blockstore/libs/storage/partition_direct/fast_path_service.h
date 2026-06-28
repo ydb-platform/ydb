@@ -76,6 +76,12 @@ public:
     NThreading::TFuture<void> Run();
     NThreading::TFuture<void> Stop();
 
+    [[nodiscard]] const TVector<IDirectBlockGroupPtr>&
+    GetDirectBlockGroups() const
+    {
+        return DirectBlockGroups;
+    }
+
     // IStorage implementation
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
         TCallContextPtr callContext,
@@ -101,6 +107,8 @@ public:
         NYdb::NBS::TCallback callback) override;
 
     void UpdateVChunkConfig(const TVChunkConfig& cfg) override;
+
+    void RequestAddHost(size_t directBlockGroupId) override;
 
     ui64 GenerateLsn() override;
 

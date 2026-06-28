@@ -302,6 +302,112 @@ Y_UNIT_TEST_SUITE(TVChunkTest)
         onStop.GetValue(TDuration::Seconds(10));
     }
 
+    Y_UNIT_TEST_F(ShouldAppendHostAndGrowDirtyMap, TBaseFixture)
+    {
+        Init();
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            PartitionDirectService.get(),
+            VChunkConfig,
+            DirectBlockGroup,
+            3,
+            DefaultVChunkSize,
+            Counters);
+        vchunk->Start();
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount,
+            AccessConfig(*vchunk).GetHostCount());
+
+        {
+            TPromise<void> ready = NewPromise();
+            auto wait = ready.GetFuture();
+            DirectBlockGroup->GetExecutor()->ExecuteSimple(
+                [&]()
+                {
+                    vchunk->OnHostAppended(DirectBlockGroupHostCount + 1);
+                    ready.SetValue();
+                });
+            wait.GetValue(TDuration::Seconds(10));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount,
+            AccessConfig(*vchunk).GetHostCount());
+
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState(),
+            "H5-{Disabled,0,0}");
+
+        {
+            UNIT_ASSERT_VALUES_EQUAL(1, ScheduledTasks.size());
+            auto task = RunScheduledTasks();
+            task.Wait(TDuration::Seconds(10));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount + 1,
+            AccessConfig(*vchunk).GetHostCount());
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessConfig(*vchunk).DebugPrint(),
+            "PBuffer{Primary;Primary;Primary;HandOff;HandOff;None}");
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessConfig(*vchunk).DebugPrint(),
+            "DDisk{Primary;Primary;Primary;None;None;None}");
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessConfig(*vchunk).DebugPrint(),
+            "Enabled{+++++-}");
+
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState(),
+            "H5-{Disabled,0,0}");
+
+        auto onStop = vchunk->Stop();
+        onStop.GetValue(TDuration::Seconds(10));
+    }
+
+    // On recovery the DBG comes up with N+1 connections (a committed AddHost)
+    // while a vchunk's persisted config can still lag at N. The vchunk catches
+    // itself up to the DBG's host count when it starts.
+    Y_UNIT_TEST_F(ShouldCatchUpToDbgHostCountOnStart, TBaseFixture)
+    {
+        Init();
+
+        // The DBG already has one host more than the vchunk's (lagging) config.
+        DirectBlockGroup->HostCount = DirectBlockGroupHostCount + 1;
+
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            PartitionDirectService.get(),
+            VChunkConfig,
+            DirectBlockGroup,
+            3,   // syncRequestsBatchSize
+            DefaultVChunkSize,
+            Counters);
+        vchunk->Start();
+        DrainExecutor(DirectBlockGroup->GetExecutor());
+
+        // DoStart grew the dirty map to the DBG's host count.
+        UNIT_ASSERT_STRING_CONTAINS(
+            AccessBlocksDirtyMap(*vchunk).DebugPrintDDiskState(),
+            "H5-{Disabled,0,0}");
+
+        // The config catch-up is persisted via a scheduled task.
+        {
+            UNIT_ASSERT_VALUES_EQUAL(1, ScheduledTasks.size());
+            auto task = RunScheduledTasks();
+            task.Wait(TDuration::Seconds(10));
+        }
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            DirectBlockGroupHostCount + 1,
+            AccessConfig(*vchunk).GetHostCount());
+
+        auto onStop = vchunk->Stop();
+        onStop.GetValue(TDuration::Seconds(10));
+    }
+
     Y_UNIT_TEST_F(ShouldSwitchHostToOfflineAndBack, TBaseFixture)
     {
         Init();

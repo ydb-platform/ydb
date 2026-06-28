@@ -4,6 +4,8 @@
 
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 
+#include <util/generic/vector.h>
+
 namespace NYdb::NBS::NBlockStore {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -44,6 +46,13 @@ struct TPartitionDirectServiceMock: public IPartitionDirectService
         const NStorage::NPartitionDirect::TVChunkConfig& cfg) override
     {
         Y_UNUSED(cfg);
+    }
+
+    TVector<size_t> AddHostRequests;
+
+    void RequestAddHost(size_t directBlockGroupId) override
+    {
+        AddHostRequests.push_back(directBlockGroupId);
     }
 
     ui64 LsnGenerator = 0;

@@ -147,6 +147,14 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
         Y_ABORT_UNLESS(false, "Should set DumpHandler");
         return NThreading::TFuture<TDBGDumpResponse>();
     };
+    AddHostHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set AddHostHandler");
+    };
+    OnAddHostFailedHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set OnAddHostFailedHandler");
+    };
 }
 
 void TDirectBlockGroupMock::Register(TVChunkWeakPtr vChunk)
@@ -328,6 +336,24 @@ NThreading::TFuture<TListPBufferResponse> TDirectBlockGroupMock::ListPBuffers(
 NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroupMock::Dump()
 {
     return DumpHandler();
+}
+
+void TDirectBlockGroupMock::AddHost(
+    THostIndex newHostIndex,
+    NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+    NKikimrBlobStorage::NDDisk::TDDiskId pbufferId)
+{
+    AddHostHandler(newHostIndex, std::move(ddiskId), std::move(pbufferId));
+}
+
+void TDirectBlockGroupMock::OnAddHostFailed(const TString& reason)
+{
+    OnAddHostFailedHandler(reason);
+}
+
+size_t TDirectBlockGroupMock::GetHostCount() const
+{
+    return HostCount;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -123,6 +123,9 @@ public:
 
     virtual IOraclePtr GetOracle() = 0;
 
+    // Number of hosts (DDisk connections) the group currently has.
+    virtual size_t GetHostCount() const = 0;
+
     virtual void Schedule(TDuration delay, TCallback callback) = 0;
 
     virtual std::shared_ptr<NWilson::TSpan> CreateChildSpan(
@@ -215,6 +218,14 @@ public:
 
     // Query dump for DirectBlockGroup and VChunks.
     virtual NThreading::TFuture<TDBGDumpResponse> Dump() = 0;
+
+    virtual void AddHost(
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) = 0;
+
+    // The partition rejected the DBG's AddHost request (e.g. at MaxHostCount).
+    virtual void OnAddHostFailed(const TString& reason) = 0;
 };
 
 using IDirectBlockGroupPtr = std::shared_ptr<IDirectBlockGroup>;

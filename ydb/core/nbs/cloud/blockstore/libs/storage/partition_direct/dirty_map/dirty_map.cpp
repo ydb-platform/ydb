@@ -320,6 +320,16 @@ void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
     }
 }
 
+void TBlocksDirtyMap::ResizeHosts(size_t newHostCount)
+{
+    Y_ABORT_UNLESS(newHostCount <= MaxHostCount);
+    Y_ABORT_UNLESS(newHostCount >= PBufferCounters.size());
+    Y_ABORT_UNLESS(newHostCount >= DDiskStates.size());
+
+    PBufferCounters.resize(newHostCount);
+    DDiskStates.resize(newHostCount);
+}
+
 TBlocksDirtyMap::~TBlocksDirtyMap()
 {
     Inflight.Enumerate(
@@ -685,6 +695,7 @@ std::optional<ui64> TBlocksDirtyMap::GetSafeBarrierForErase() const
 const TPBufferCounters& TBlocksDirtyMap::GetPBufferCounters(
     THostIndex host) const
 {
+    Y_ABORT_UNLESS(host < PBufferCounters.size());
     return PBufferCounters[host];
 }
 

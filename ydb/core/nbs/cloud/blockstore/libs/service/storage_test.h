@@ -47,6 +47,11 @@ public:
         Y_UNUSED(cfg);
     }
 
+    void RequestAddHost(size_t directBlockGroupId) override
+    {
+        Y_UNUSED(directBlockGroupId);
+    }
+
     ui64 LsnGenerator = 0;
 
     ui64 GenerateLsn() override

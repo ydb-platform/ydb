@@ -10,6 +10,7 @@ SRCS(
     fast_path_service.cpp
     flush_request.cpp
     load_actor_adapter.cpp
+    part_addhosttodbg.cpp
     part_database.cpp
     part_initschema.cpp
     part_loadstate.cpp

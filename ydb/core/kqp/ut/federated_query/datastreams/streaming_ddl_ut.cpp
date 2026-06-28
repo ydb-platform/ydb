@@ -3,12 +3,41 @@
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
 #include <ydb/core/sys_view/common/registry.h>
+#include <ydb/library/actors/core/mon.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
 
 #include <fmt/format.h>
 
 #include <random>
+
+namespace {
+
+struct TMockMonHttpRequest : NMonitoring::IMonHttpRequest {
+    TCgiParameters Params_;
+
+    explicit TMockMonHttpRequest(const TString& params) {
+        Params_.Scan(params);
+    }
+
+    const TCgiParameters& GetParams() const override { return Params_; }
+    IOutputStream& Output() override { Y_ABORT("Not implemented"); }
+    HTTP_METHOD GetMethod() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPath() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPathInfo() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetUri() const override { Y_ABORT("Not implemented"); }
+    const TCgiParameters& GetPostParams() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetPostContent() const override { Y_ABORT("Not implemented"); }
+    const THttpHeaders& GetHeaders() const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetHeader(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TStringBuf GetCookie(TStringBuf) const override { Y_ABORT("Not implemented"); }
+    TString GetRemoteAddr() const override { Y_ABORT("Not implemented"); }
+    TString GetServiceTitle() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonPage* GetPage() const override { Y_ABORT("Not implemented"); }
+    NMonitoring::IMonHttpRequest* MakeChild(NMonitoring::IMonPage*, const TString&) const override { Y_ABORT("Not implemented"); }
+};
+
+} // namespace
 
 namespace NKikimr::NKqp {
 
@@ -1240,12 +1269,15 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             // legal, but nothing to check
             return;
         }
+        LogSettings
+            .AddLogPriority(NKikimrServices::KQP_COMPUTE, NLog::PRI_TRACE);
         {
             auto& setupAppConfig = SetupAppConfig();
             setupAppConfig.MutableQueryServiceConfig()->SetProgressStatsPeriodMs(0);
             setupAppConfig.MutableTableServiceConfig()->SetEnableDqSourceStreamLookupJoin(true);
             setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinLocalLookups(WithFeatureFlag);
             setupAppConfig.MutableFeatureFlags()->SetEnableDqSourceStreamLookupJoinFullscan(WithFullscanFlag);
+            setupAppConfig.MutableFeatureFlags()->SetEnableNodeShutdownHints(true);
         }
 
         const auto pqGateway = SetupMockPqGateway();
@@ -1342,6 +1374,27 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ));
         readSession->AddDataReceivedEvent(sampleMessages);
         writeSession->ExpectMessages({"A-P4", "B-P6", "A-P4", "C-P5"});
+
+        {
+            TMockMonHttpRequest monReq("force_shutdown=all");
+            auto edgeActor = GetRuntime().AllocateEdgeActor();
+            auto kqpProxy = NKikimr::NKqp::MakeKqpProxyID(GetRuntime().GetNodeId(0));
+            GetRuntime().Send(kqpProxy, edgeActor, new NActors::NMon::TEvHttpInfo(monReq));
+            GetRuntime().template GrabEdgeEvent<NActors::NMon::TEvHttpInfoRes>(edgeActor, TDuration::Seconds(5));
+        }
+
+        Sleep(TDuration::Seconds(2));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host1.example.com", "P7"))",
+            "table"_a = ydbTable
+        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host2.example.com", "P8"))",
+            "table"_a = ydbTable
+        ));
+        ExecQuery(fmt::format(R"(UPSERT INTO `{table}` (fqdn, payload) VALUES ("host3.example.com", "P9"))",
+            "table"_a = ydbTable
+        ));
+        readSession->AddDataReceivedEvent(sampleMessages);
+        writeSession->ExpectMessages({"A-P7", "B-P9", "A-P7", "C-P8"});
 
         CheckScriptExecutionsCount(1, 1);
         const auto results = ExecQuery(

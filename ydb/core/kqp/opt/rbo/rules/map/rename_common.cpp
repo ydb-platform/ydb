@@ -156,8 +156,7 @@ bool CanStartLocalRenamePush(const TIntrusivePtr<TOpMap>& topMap, const TRenameC
     }
 
     const auto output = SimulateTopMapOutputAfterPush(topMap, candidate.Index, candidate.From, candidate.To);
-    return MakeInfoUnitSet(output).size() == output.size() &&
-        !ContainsForbidden(output, GetForbidden(topMap.get()));
+    return MakeInfoUnitSet(output).size() == output.size();
 }
 
 TMapElement MakeRenameElement(const TRenameCandidate& candidate, const TIntrusivePtr<TOpMap>& topMap) {
@@ -172,13 +171,11 @@ bool CanFinishRenamePush(
 {
     const auto residualElements = BuildResidualTopMapElements(topMap, candidate.Index, candidate.From, candidate.To);
     if (residualElements.empty()) {
-        return MakeInfoUnitSet(pushedInputOutput).size() == pushedInputOutput.size() &&
-            !ContainsForbidden(pushedInputOutput, GetForbidden(topMap.get()));
+        return MakeInfoUnitSet(pushedInputOutput).size() == pushedInputOutput.size();
     }
 
     const auto output = BuildMapOutput(pushedInputOutput, residualElements);
-    return MakeInfoUnitSet(output).size() == output.size() &&
-        !ContainsForbidden(output, GetForbidden(topMap.get()));
+    return MakeInfoUnitSet(output).size() == output.size();
 }
 
 bool FinishRenamePush(

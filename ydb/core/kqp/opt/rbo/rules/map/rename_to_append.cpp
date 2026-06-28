@@ -5,8 +5,9 @@ namespace NKqp {
 
 namespace {
 
-bool ConversionExposesRenameSource(const TIntrusivePtr<TOpMap>& map, size_t renameIdx) {
-    const auto source = map->MapElements[renameIdx].GetRename();
+bool WillExposeRenameSource(const TIntrusivePtr<TOpMap>& map, size_t renameIdx) {
+    const auto& element = map->MapElements[renameIdx];
+    const auto source = element.GetRename();
     if (!ContainsInfoUnit(map->GetInput()->GetOutputIUs(), source)) {
         return false;
     }
@@ -32,11 +33,11 @@ bool CanConvertRenameToAppend(const TIntrusivePtr<TOpMap>& map, size_t renameIdx
         return false;
     }
 
-    if (ConversionExposesRenameSource(map, renameIdx)) {
-        return !ContainsInfoUnit(map->GetOutputIUs(), source) && !GetForbidden(map.get()).contains(source);
+    if (!WillExposeRenameSource(map, renameIdx)) {
+        return true;
     }
 
-    return true;
+    return !ContainsInfoUnit(map->GetOutputIUs(), source) && !GetForbidden(map.get()).contains(source);
 }
 
 } // anonymous namespace

@@ -167,8 +167,8 @@ void TOpJoin::PropagateLiveness(ILivenessContext& ctx) {
     TInfoUnitSet leftLive;
     TInfoUnitSet rightLive;
 
-    const bool outputsLeft = JoinKind != "RightOnly" && JoinKind != "RightSemi";
-    const bool outputsRight = JoinKind != "LeftOnly" && JoinKind != "LeftSemi";
+    const bool outputsLeft = JoinOutputsLeft(JoinKind);
+    const bool outputsRight = JoinOutputsRight(JoinKind);
 
     if (outputsLeft) {
         for (const auto& iu : leftOutput) {

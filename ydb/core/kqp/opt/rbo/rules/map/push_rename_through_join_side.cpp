@@ -17,10 +17,10 @@ TIntrusivePtr<IOperator> SelectJoinInputForRename(const TIntrusivePtr<TOpJoin>& 
 }
 
 TVector<TInfoUnit> BuildJoinOutput(const TString& joinKind, TVector<TInfoUnit> leftOutput, TVector<TInfoUnit> rightOutput) {
-    if (joinKind == "LeftOnly" || joinKind == "LeftSemi") {
+    if (!JoinOutputsRight(joinKind)) {
         rightOutput.clear();
     }
-    if (joinKind == "RightOnly" || joinKind == "RightSemi") {
+    if (!JoinOutputsLeft(joinKind)) {
         leftOutput.clear();
     }
 

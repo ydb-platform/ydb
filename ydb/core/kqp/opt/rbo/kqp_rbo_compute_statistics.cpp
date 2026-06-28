@@ -54,12 +54,12 @@ void ComputeAlisesForJoin(const TIntrusivePtr<IOperator>& left, const TIntrusive
 
 TVector<TInfoUnit> ComputeKeysAfterJoin(TOpJoin* join) {
     auto leftKeys = join->GetLeftInput()->Props.Metadata->KeyColumns;
-    if (join->JoinKind == "LeftSemi" || join->JoinKind == "LeftOnly") {
+    if (!JoinOutputsRight(join->JoinKind)) {
         return leftKeys;
     }
 
     auto rightKeys = join->GetRightInput()->Props.Metadata->KeyColumns;
-    if (join->JoinKind == "RightSemi" || join->JoinKind == "RightOnly") {
+    if (!JoinOutputsLeft(join->JoinKind)) {
         return rightKeys;
     }
     
@@ -526,9 +526,9 @@ void TOpJoin::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Metadata->StorageType = CBOStats.StorageType;
     Props.Metadata->Type = CBOStats.Type;
 
-    if (JoinKind == "LeftOnly" || JoinKind == "LeftSemi") {
+    if (!JoinOutputsRight(JoinKind)) {
         Props.Metadata->ColumnLineage = GetLeftInput()->Props.Metadata->ColumnLineage;
-    } else if (JoinKind == "RightOnly" || JoinKind == "RightSemi") {
+    } else if (!JoinOutputsLeft(JoinKind)) {
         Props.Metadata->ColumnLineage = GetRightInput()->Props.Metadata->ColumnLineage;
     } else {
         Props.Metadata->ColumnLineage = GetLeftInput()->Props.Metadata->ColumnLineage;

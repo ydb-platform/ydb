@@ -642,10 +642,10 @@ TVector<TInfoUnit> TOpJoin::GetOutputIUs() {
     auto leftInputIUs = GetLeftInput()->GetOutputIUs();
     auto rightInputIUs = GetRightInput()->GetOutputIUs();
 
-    if (JoinKind == "LeftOnly" || JoinKind == "LeftSemi") {
+    if (!JoinOutputsRight(JoinKind)) {
         rightInputIUs = {};
     }
-    if (JoinKind == "RightOnly" || JoinKind == "RightSemi") {
+    if (!JoinOutputsLeft(JoinKind)) {
         leftInputIUs = {};
     }
 

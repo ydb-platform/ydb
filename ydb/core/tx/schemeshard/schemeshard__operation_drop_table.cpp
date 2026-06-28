@@ -37,7 +37,9 @@ void DropPath(NIceDb::TNiceDb& db,
     context.SS->TabletCounters->Simple()[COUNTER_USER_ATTRIBUTES_COUNT].Sub(path->UserAttrs->Size());
     context.SS->PersistUserAttributes(db, path->PathId, path->UserAttrs, nullptr);
 
-    const auto isBackupTable = context.SS->IsBackupTable(path->PathId);
+    // IsBackupObject covers export-backup tables (IsBackup) and backup-collection objects, so the
+    // decrement category matches the create-time classification (no backup-counter drift).
+    const auto isBackupTable = context.SS->IsBackupObject(path.Base());
     const EPathCategory pathCategory = isBackupTable ? EPathCategory::Backup : EPathCategory::Regular;
 
     auto domainInfo = context.SS->ResolveDomainInfo(path->PathId);

@@ -157,10 +157,14 @@ public:
         path->SetDropped(step, OperationId.GetTxId());
         context.SS->PersistDropStep(db, pathId, step, OperationId);
 
-        const EPathCategory pathCategory = path->IsSystemDirectory() ? EPathCategory::System : EPathCategory::Regular;
+        // Per-run backup directories are accounted as Backup; match that at drop to avoid counter drift.
+        const bool isBackupDir = context.SS->IsBackupObject(path);
+        const EPathCategory pathCategory = path->IsSystemDirectory()
+            ? EPathCategory::System
+            : (isBackupDir ? EPathCategory::Backup : EPathCategory::Regular);
         auto domainInfo = context.SS->ResolveDomainInfo(pathId);
         domainInfo->DecPathsInside(context.SS, 1, pathCategory);
-        DecAliveChildrenDirect(OperationId, parentDir, context); // for correct discard of ChildrenExist prop
+        DecAliveChildrenDirect(OperationId, parentDir, context, isBackupDir); // for correct discard of ChildrenExist prop
 
         ++parentDir->DirAlterVersion;
         context.SS->PersistPathDirAlterVersion(db, parentDir);

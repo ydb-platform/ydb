@@ -4715,7 +4715,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             path->IncShardsInside();
 
             auto domainInfo = Self->ResolveDomainInfo(pathId); //domain should't be dropped?
-            domainInfo->AddInternalShard(shardIdx, Self, Self->IsBackupTable(pathId));
+            domainInfo->AddInternalShard(shardIdx, Self, Self->IsBackupObject(path));
 
             switch (si.second.TabletType) {
             case ETabletType::DataShard:
@@ -4827,7 +4827,7 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
             }
 
             if (!path->IsRoot()) {
-                bool isBackupTable = Self->IsBackupTable(item.first);
+                bool isBackupTable = Self->IsBackupObject(path);
                 EPathCategory pathCategory;
                 if (isBackupTable) {
                     pathCategory = EPathCategory::Backup;

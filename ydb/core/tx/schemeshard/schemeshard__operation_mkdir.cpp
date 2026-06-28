@@ -266,15 +266,20 @@ public:
                 newDir->TempDirOwnerActorId, newDir->PathId);
         }
 
+        // Per-run backup directories live inside a backup collection; account them as Backup so the
+        // accumulating backup storage does not consume the user object/path quota.
+        const bool isBackupDir = context.SS->IsBackupObject(dstPath.Base());
         EPathCategory pathCategory;
         if (isSystemDir) {
             pathCategory = EPathCategory::System;
+        } else if (isBackupDir) {
+            pathCategory = EPathCategory::Backup;
         } else {
             pathCategory = EPathCategory::Regular;
         }
 
         dstPath.DomainInfo()->IncPathsInside(context.SS, 1, pathCategory);
-        IncAliveChildrenSafeWithUndo(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
+        IncAliveChildrenSafeWithUndo(OperationId, parentPath, context, isBackupDir); // for correct discard of ChildrenExist prop
 
         context.OnComplete.ActivateTx(OperationId);
 

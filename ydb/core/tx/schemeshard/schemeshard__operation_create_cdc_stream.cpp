@@ -679,10 +679,12 @@ void DoCreatePqPart(
         const TString& streamName,
         TTableInfo::TCPtr table,
         const TVector<TString>& boundaries,
-        const bool acceptExisted)
+        const bool acceptExisted,
+        const bool omitObjectLimitChecks)
 {
     auto outTx = TransactionTemplate(streamPath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpCreatePersQueueGroup);
     outTx.SetFailOnExist(!acceptExisted);
+    outTx.SetOmitObjectLimitChecks(omitObjectLimitChecks);
 
     auto& desc = *outTx.MutableCreatePersQueueGroup();
     desc.SetName("streamImpl");

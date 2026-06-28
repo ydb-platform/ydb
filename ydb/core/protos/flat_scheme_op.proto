@@ -2119,6 +2119,11 @@ message TModifyScheme {
 
     optional TCreateFullBackupOp CreateFullBackupOp = 95;
 
+    // Internal marker: skip schemeshard object/path limit checks for this operation. Set only by
+    // system-generated decomposed sub-operations (e.g. the per-increment CDC stream and PQ topic of an
+    // incremental backup), never by direct user requests. Like Internal (field 36), not user-generated.
+    optional bool OmitObjectLimitChecks = 96 [default = false];
+
     // Some entries are grouped by semantics, so are out of order
 }
 

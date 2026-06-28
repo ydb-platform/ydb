@@ -505,6 +505,11 @@ public:
         const TString acl = Transaction.GetModifyACL().GetDiffACL();
 
         NSchemeShard::TPath dstPath = parentPath.Child(name);
+        // The incremental backup decomposition marks its sub-operations with OmitObjectLimitChecks so
+        // creating an incremental backup is never blocked by the schemeshard object/path limits. The
+        // table itself stays a regular, readable table (no IsBackup), matching the full backup-collection
+        // table; it is accounted as Regular. This is an internal-only marker (never set by user requests).
+        const bool omitObjectLimitChecks = Transaction.GetOmitObjectLimitChecks();
         {
             NSchemeShard::TPath::TChecker checks = dstPath.Check();
             checks.IsAtLocalSchemeShard();
@@ -520,17 +525,23 @@ public:
             }
 
             if (checks) {
-                if (!parentPath.Base()->IsTableIndex()) {
+                if (!parentPath.Base()->IsTableIndex() && !omitObjectLimitChecks) {
                     checks.DepthLimit();
                 }
 
                 checks
-                    .IsValidLeafName(context.UserToken.Get())
-                    .PathsLimit()
-                    .DirChildrenLimit()
+                    .IsValidLeafName(context.UserToken.Get());
+
+                if (!omitObjectLimitChecks) {
+                    checks
+                        .PathsLimit()
+                        .DirChildrenLimit();
+                }
+
+                checks
                     .IsValidACL(acl);
 
-                if (!Transaction.GetInternal()) {
+                if (!Transaction.GetInternal() && !omitObjectLimitChecks) {
                     checks
                         .ShardsLimit(shardsToCreate)
                         .PathShardsLimit(shardsToCreate);
@@ -787,11 +798,18 @@ public:
         context.OnComplete.PublishToSchemeBoard(OperationId, dstPath.Base()->PathId);
 
         Y_ABORT_UNLESS(shardsToCreate == txState.Shards.size());
-        dstPath.DomainInfo()->IncPathsInside(context.SS);
-        dstPath.DomainInfo()->AddInternalShards(txState, context.SS);
+        // Objects stored inside a backup collection are accounted as EPathCategory::Backup so they do
+        // not consume the user-visible path/children/shard quota (otherwise accumulating increments
+        // would eventually block the user's own DDL). The classification is structural (derived from the
+        // persisted path tree), so drop/uncount and restart rebuild derive the same category and the
+        // accounting stays symmetric.
+        const bool isBackupObject = context.SS->IsBackupObject(dstPath.Base());
+        const EPathCategory pathCategory = isBackupObject ? EPathCategory::Backup : EPathCategory::Regular;
+        dstPath.DomainInfo()->IncPathsInside(context.SS, 1, pathCategory);
+        dstPath.DomainInfo()->AddInternalShards(txState, context.SS, isBackupObject);
 
         dstPath.Base()->IncShardsInside(shardsToCreate);
-        IncAliveChildrenDirect(OperationId, parentPath, context); // for correct discard of ChildrenExist prop
+        IncAliveChildrenDirect(OperationId, parentPath, context, isBackupObject); // for correct discard of ChildrenExist prop
 
         LOG_TRACE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "TCreateTable Propose creating new table"

@@ -172,6 +172,96 @@ Y_UNIT_TEST_SUITE(TBackupWithRebootsTests) {
                     NLs::CheckPathState(NKikimrSchemeOp::EPathStateNoChanges),
                     NLs::Finished,
                 });
+
+                // The incremental backup table must stay a regular, readable table (NOT IsBackup) across
+                // reboots; the limit bypass uses the transient OmitObjectLimitChecks marker at create
+                // time and does not change the persisted table at all.
+                TestDescribeResult(DescribePath(runtime,
+                    "/MyRoot/.backups/collections/MyCollection1/19700101000001Z_incremental/Table1",
+                    false, false, true), {
+                    NLs::PathExist,
+                    NLs::IsBackupTable(false),
+                });
+            }
+        });
+    }
+
+    // Verifies that an incremental backup is never blocked by the schemeshard object/path limits across
+    // reboots: the in-collection table + dir are not counted (EPathCategory::Backup) and the
+    // under-source-table CDC stream + PQ topic/streamImpl are check-skipped (OmitObjectLimitChecks).
+    // MaxShards/MaxPQPartitions are pinned to current usage (only the new topic adds those), so the
+    // backup can only succeed if the topic bypasses them; the reboot framework replays this at every
+    // persistence point, also catching any backup-counter drift.
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(IncrementalBackupBypassesLimitsAcrossReboots, 2, 1, false) {
+        t.GetTestEnvOptions() = TTestEnvOptions().EnableBackupService(true);
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            {
+                TInactiveZone inactive(activeZone);
+
+                TestMkDir(runtime, ++t.TxId, "/MyRoot", ".backups/collections");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateBackupCollection(runtime, ++t.TxId, "/MyRoot/.backups/collections", R"(
+                    Name: "MyCollection1"
+                    ExplicitEntryList {
+                        Entries {
+                            Type: ETypeTable
+                            Path: "/MyRoot/Table1"
+                        }
+                    }
+                    Cluster {}
+                    IncrementalBackupConfig {}
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "Table1"
+                    Columns { Name: "key" Type: "Uint32" }
+                    Columns { Name: "value" Type: "Uint32" }
+                    KeyColumnNames: ["key"]
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                TestBackupBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                    R"(Name: ".backups/collections/MyCollection1")");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                // Pin limits to current usage so the incremental backup can only succeed by bypassing
+                // them. MaxShards/MaxPQPartitions are consumed only by the (under-source-table) topic.
+                auto domain = DescribePath(runtime, "/MyRoot").GetPathDescription().GetDomainDescription();
+                TSchemeLimits limits;
+                limits.MaxShards = domain.GetShardsInside();
+                limits.MaxPQPartitions = domain.GetPQPartitionsInside();
+                limits.MaxPaths = domain.GetPathsInside() + 2; // small headroom for the per-run dir
+                SetSchemeshardSchemaLimits(runtime, limits);
+
+                runtime.AdvanceCurrentTime(TDuration::Seconds(1));
+            }
+
+            TestBackupIncrementalBackupCollection(runtime, ++t.TxId, "/MyRoot",
+                R"(Name: ".backups/collections/MyCollection1")");
+            const ui64 backupId = t.TxId;
+            t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+            {
+                TInactiveZone inactive(activeZone);
+
+                WaitForIncrementalBackupDone(runtime, t.TestEnv.Get(), backupId, "/MyRoot");
+
+                TestDescribeResult(DescribePath(runtime, "/MyRoot/.backups/collections/MyCollection1"), {
+                    NLs::PathExist,
+                    NLs::IsBackupCollection,
+                    NLs::ChildrenCount(2),
+                    NLs::Finished,
+                });
+
+                // The increment table is readable (not IsBackup) and was created despite the pinned limits.
+                TestDescribeResult(DescribePath(runtime,
+                    "/MyRoot/.backups/collections/MyCollection1/19700101000001Z_incremental/Table1",
+                    false, false, true), {
+                    NLs::PathExist,
+                    NLs::IsBackupTable(false),
+                });
             }
         });
     }

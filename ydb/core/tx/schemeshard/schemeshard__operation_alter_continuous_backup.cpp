@@ -41,6 +41,9 @@ void DoCreateIncrBackupTable(const TOperationId& opId, const TPath& dst, NKikimr
     // outTx.SetFailOnExist(!acceptExisted);
 
     outTx.SetAllowAccessToPrivatePaths(true);
+    // Bypass schemeshard object/path limits for the incremental backup table without marking it
+    // IsBackup, so it stays a readable table (matching the full backup-collection table).
+    outTx.SetOmitObjectLimitChecks(true);
 
     auto& desc = *outTx.MutableCreateTable();
     desc.CopyFrom(tableDesc);
@@ -183,7 +186,10 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
 
         rotateCdcStreamOp.MutableNewStream()->CopyFrom(createCdcStreamOp);
 
-        NCdc::DoRotateStream(result, rotateCdcStreamOp, opId, workingDirPath, tablePath);
+        // All incremental backup objects (destination table, per-increment CDC stream and PQ topic)
+        // bypass the schemeshard object/path limits via the internal OmitObjectLimitChecks marker, so
+        // the backup is never blocked. They stay regular, readable paths accounted as Regular.
+        NCdc::DoRotateStream(result, rotateCdcStreamOp, opId, workingDirPath, tablePath, /* omitObjectLimitChecks */ true);
         DoCreateIncrBackupTable(opId, backupTablePath, schema, result);
         DoAlterPqPart(opId, backupTablePath, topicPath, topic, result);
 
@@ -198,7 +204,7 @@ bool CreateAlterContinuousBackup(TOperationId opId, const TTxTransaction& tx, TO
             }
         }
 
-        NCdc::DoCreatePqPart(result, createCdcStreamOp, opId, newStreamPath, newStreamName, table, boundaries, false);
+        NCdc::DoCreatePqPart(result, createCdcStreamOp, opId, newStreamPath, newStreamName, table, boundaries, false, /* omitObjectLimitChecks */ true);
     } else if (cbOp.GetActionCase() == NKikimrSchemeOp::TAlterContinuousBackup::kStop) {
         NKikimrSchemeOp::TAlterCdcStream alterCdcStreamOp;
         alterCdcStreamOp.SetTableName(tableName);

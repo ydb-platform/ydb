@@ -204,9 +204,15 @@ public:
 
             if (checks) {
                 checks
-                    .IsValidLeafName(context.UserToken.Get())
-                    .PathsLimit()
-                    .DirChildrenLimit();
+                    .IsValidLeafName(context.UserToken.Get());
+
+                // Incremental backup rotates a CDC stream per increment; skip the object/path limits so
+                // the backup is not blocked (the stream is accounted as Regular, like full-backup streams).
+                if (!Transaction.GetOmitObjectLimitChecks()) {
+                    checks
+                        .PathsLimit()
+                        .DirChildrenLimit();
+                }
             }
 
             if (!checks) {
@@ -682,11 +688,13 @@ void DoRotateStream(
         const NKikimrSchemeOp::TRotateCdcStream& op,
         const TOperationId& opId,
         const TPath& workingDirPath,
-        const TPath& tablePath)
+        const TPath& tablePath,
+        const bool omitObjectLimitChecks)
 {
     {
         auto outTx = TransactionTemplate(tablePath.PathString(), NKikimrSchemeOp::EOperationType::ESchemeOpRotateCdcStreamImpl);
         outTx.MutableRotateCdcStream()->CopyFrom(op);
+        outTx.SetOmitObjectLimitChecks(omitObjectLimitChecks);
         result.push_back(CreateRotateCdcStreamImpl(NextPartId(opId, result), outTx));
     }
 

@@ -3210,7 +3210,8 @@ TDataDecompressionInfo<UseMigrationProtocol>::BuildDecompressedData(TIntrusivePt
                 meta,
                 messageMeta,
                 messageData.uncompressed_size(),
-                messageData.message_group_id()
+                messageData.message_group_id(),
+                GetReadMessageCount(messageData, batch.codec())
         );
 
         minOffset = Min(minOffset, static_cast<i64>(messageData.offset()));

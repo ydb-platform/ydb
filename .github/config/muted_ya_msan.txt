@@ -35,6 +35,7 @@ ydb/core/transfer/ut/functional Transfer.AlterLambdaOnWork
 ydb/core/transfer/ut/functional Transfer.AlterTargetDirectory
 ydb/core/transfer/ut/functional Transfer.Alter_WithSecret
 ydb/core/transfer/ut/functional Transfer.CheckCurrentDateTime
+ydb/core/transfer/ut/functional Transfer.CheckCurrentDateTime_withParams
 ydb/core/transfer/ut/functional Transfer.CreateAndAlterTransferInDirectory
 ydb/core/transfer/ut/functional Transfer.CreateTransferSourceDirNotExists
 ydb/core/transfer/ut/functional Transfer.CreateTransferSourceDirNotExists_LocalTopic
@@ -100,6 +101,7 @@ ydb/tests/compatibility test_stress.py.TestStress.test_log[mixed_stable-26-2-1_a
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3_and_stable-26-2-1-column-date64]
 ydb/tests/compatibility test_stress.py.TestStress.test_tpch1[mixed_prestable-26-3_and_stable-26-2-1-column]
 ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityRestart.test_create_alter_drop_columns_on_one_version_continue_on_another[restart_prestable-26-3_to_prestable-26-3]
+ydb/tests/compatibility test_table_schema_compatibility.py.TestTableSchemaCompatibilityRestart.test_create_table_on_one_version_read_on_another[restart_prestable-26-3_to_prestable-26-3]
 ydb/tests/compatibility test_topic.py.TestTopicRollingDowngrade.test_write_and_read_with_availability_period[rolling_stable-26-1-1_to_stable-26-2-1]
 ydb/tests/compatibility test_topic.py.TestTopicRollingDowngrade.test_write_and_read_with_availability_period[rolling_stable-26-2-1_to_prestable-26-3]
 ydb/tests/compatibility test_topic.py.TestTopicRollingUpdate.test_write_and_read[rolling_stable-26-1-1_to_stable-26-2-1]
@@ -486,7 +488,6 @@ ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRate
 ydb/tests/functional/sqs/with_quotas test_quoting.py.TestSqsQuotingWithLocalRateLimiter.test_send_message_rate[tables_format_v1]
 ydb/tests/functional/tpc/large py3test.[test_tpcds.py] chunk
 ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1.test_tpcds[98]
-ydb/tests/functional/tpc/large test_tpcds.py.TestTpcdsS0_1DecimalNative.test_tpcds[1]
 ydb/tests/olap/column_compression/fast test_incorrect.py.TestIncorrectCompression.test_create_with_wrong_compression[only_level-level=3-specified without an algorithm]
 ydb/tests/stress/kafka/tests test_kafka_streams.py.TestYdbTopicWorkload.test
 ydb/tests/stress/oltp_workload/tests py3test.sole chunk

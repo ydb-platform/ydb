@@ -71,12 +71,24 @@ void TRegion::Run()
     }
 }
 
-void TRegion::Stop()
+NThreading::TFuture<void> TRegion::Stop()
 {
+    TVector<NThreading::TFuture<void>> stopFutures;
     for (const auto& vChunk: VChunks) {
-        vChunk->Stop();
+        stopFutures.push_back(vChunk->Stop());
     }
-    VChunks.clear();
+    auto result = WaitAll(stopFutures);
+    result.Subscribe(
+        [weakSelf = weak_from_this()]   //
+        (const NThreading::TFuture<void>& f)
+        {
+            Y_UNUSED(f);
+
+            if (auto self = weakSelf.lock()) {
+                self->OnVChunksStopped();
+            }
+        });
+    return result;
 }
 
 NThreading::TFuture<TReadBlocksLocalResponse> TRegion::ReadBlocksLocal(
@@ -103,6 +115,11 @@ NThreading::TFuture<TWriteBlocksLocalResponse> TRegion::WriteBlocksLocal(
         std::move(callContext),
         std::move(request),
         traceId);
+}
+
+void TRegion::OnVChunksStopped()
+{
+    VChunks.clear();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -318,6 +318,7 @@ void TVChunk::OnBelatedWriteBlocksResponse(
         bundle->GetVChunkRange());
 
     DoErase(false, TBlocksDirtyMap::EEraseType::Belated);
+    ScheduleCleaningUp();
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -370,6 +371,8 @@ void TVChunk::DoStop()
         return;
     }
 
+    Stopped = true;
+
     for (const auto& [_, copier]: Copiers) {
         copier->Stop();
     }
@@ -386,6 +389,12 @@ void TVChunk::DoReadBlocksLocal(
     std::shared_ptr<NWilson::TSpan> span)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (Stopped) {
+        promise.SetValue(TReadBlocksLocalResponse{
+            .Error = MakeError(E_CANCELLED, "VChunk is stopped")});
+        return;
+    }
 
     WaitForDirtyMapReady();
 
@@ -466,8 +475,7 @@ void TVChunk::DoReadBlocksLocal(
             auto value = UnsafeExtractValue(f);
 
             if (auto self = weakSelf.lock()) {
-                bool ok = !HasError(value.Error);
-                self->Counters.RequestFinished(EVChunkOperation::Read, ok);
+                self->OnReadBlocksResponse(value);
             }
 
             promise.SetValue(
@@ -478,9 +486,23 @@ void TVChunk::DoReadBlocksLocal(
     requestExecutor->Run();
 }
 
+void TVChunk::OnReadBlocksResponse(
+    const IReadRequestExecutor::TResponse& response)
+{
+    bool ok = !HasError(response.Error);
+    Counters.RequestFinished(EVChunkOperation::Read, ok);
+    ScheduleCleaningUp();
+}
+
 void TVChunk::DoWriteBlocksLocal(std::shared_ptr<TWriteRequestBundle> bundle)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    if (Stopped) {
+        bundle->SendFinalReply(TWriteBlocksLocalResponse{
+            .Error = MakeError(E_CANCELLED, "VChunk is stopped")});
+        return;
+    }
 
     WaitForDirtyMapReady();
 
@@ -668,6 +690,7 @@ void TVChunk::OnEraseResponse(const TEraseRequestExecutor::TResponse& response)
     }
 
     UpdatePendingCounters();
+    ScheduleCleaningUp();
 }
 
 void TVChunk::OnEraseBelatedResponse(
@@ -683,17 +706,14 @@ void TVChunk::OnEraseBelatedResponse(
     }
 
     UpdatePendingCounters();
+    ScheduleCleaningUp();
 }
 
 void TVChunk::ScheduleCleaningUp()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    if (CleaningUpScheduled || InflightFlushesCount || InflightWritesCount) {
-        return;
-    }
-
-    if (!BlocksDirtyMap.NeedFlush() && !BlocksDirtyMap.NeedErase()) {
+    if (CleaningUpScheduled) {
         return;
     }
 

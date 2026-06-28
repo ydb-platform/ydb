@@ -37,7 +37,7 @@ namespace NKikimr {
             const NMatrix::TVectorType becameOk = prevCorrupted & ~corrupted;
             const NMatrix::TVectorType becameCorrupted = corrupted & ~prevCorrupted;
 
-            YDB_LOG_CTX(becameCorrupted.Empty() ? PRI_NOTICE : PRI_ERROR, GetActorContext(), VDISKP(LogPrefix, "huge blob corrupted state updated"),
+            YDB_LOG_CTX(GetActorContext(), becameCorrupted.Empty() ? PRI_NOTICE : PRI_ERROR, VDISKP(LogPrefix, "huge blob corrupted state updated"),
                 {"marker", "VDS41"},
                 {"blobId", fullId},
                 {"unreadablePartsBefore", prevCorrupted},

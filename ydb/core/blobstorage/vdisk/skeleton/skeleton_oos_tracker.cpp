@@ -60,7 +60,7 @@ namespace NKikimr {
                     break;
             }
 
-            YDB_LOG_CTX(priority, ctx, "ZONE",
+            YDB_LOG_CTX(ctx, priority, "ZONE",
                 {"VDiskLogPrefix", VCtx->VDiskLogPrefix},
                 {"TDskSpaceTrackerActor", zone},
                 {"marker", "BSVSOOST01"});

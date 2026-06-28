@@ -18,9 +18,19 @@ namespace NKikimr::NKqp {
     void DropSchemaSecret(const TString& secretName, NYdb::NTable::TSession& session);
 
     TDescriptionPromise
-    ResolveSecrets(const TVector<TString>& secretNames, TKikimrRunner& kikimr, const TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr);
+    ResolveSecrets(
+        const TVector<TString>& secretNames,
+        TKikimrRunner& kikimr,
+        const TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr,
+        TDescribeSecretSettings settings = {}
+    );
     TDescriptionPromise
-    ResolveSecret(const TString& secretName, TKikimrRunner& kikimr, const TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr);
+    ResolveSecret(
+        const TString& secretName,
+        TKikimrRunner& kikimr,
+        const TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr,
+        TDescribeSecretSettings settings = {}
+    );
 
     void AssertBadRequest(TDescriptionPromise promise, const TString& err, Ydb::StatusIds::StatusCode status = Ydb::StatusIds::BAD_REQUEST);
 
@@ -33,7 +43,8 @@ namespace NKikimr::NKqp {
     public:
         TTestDescribeSchemaSecretsServiceFactory(
             TDescribeSchemaSecretsService::ISecretUpdateListener* secretUpdateListener,
-            TDescribeSchemaSecretsService::ISchemeCacheStatusGetter* schemeCacheStatusGetter
+            TDescribeSchemaSecretsService::ISchemeCacheStatusGetter* schemeCacheStatusGetter,
+            TDescribeSchemaSecretsService::ISchemeShardStatusGetter* schemeShardStatusGetter = nullptr
         );
 
         NActors::IActor* CreateService() override;
@@ -41,6 +52,7 @@ namespace NKikimr::NKqp {
     private:
         TDescribeSchemaSecretsService::ISecretUpdateListener* SecretUpdateListener;
         TDescribeSchemaSecretsService::ISchemeCacheStatusGetter* SchemeCacheStatusGetter;
+        TDescribeSchemaSecretsService::ISchemeShardStatusGetter* SchemeShardStatusGetter;
     };
 
     class TTestSchemeCacheStatusGetter : public TDescribeSchemaSecretsService::ISchemeCacheStatusGetter {
@@ -61,6 +73,20 @@ namespace NKikimr::NKqp {
     private:
         EFailProbability FailProbability;
         mutable std::mt19937 RandomGen;
+    };
+
+    class TTestSchemeShardStatusGetter : public TDescribeSchemaSecretsService::ISchemeShardStatusGetter {
+    public:
+        TTestSchemeShardStatusGetter(
+            const ui32 statusOverwriteRemainingCount,
+            const NKikimrScheme::EStatus overwrittenStatus);
+
+        NKikimrScheme::EStatus GetStatus(
+            const NKikimrScheme::TEvDescribeSchemeResult& record) const override;
+
+    private:
+        const NKikimrScheme::EStatus OverwrittenStatus;
+        mutable ui32 StatusOverwriteRemainingCount = 0;
     };
 
 } // NKikimr::NKqp

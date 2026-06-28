@@ -313,6 +313,40 @@ namespace {
         row.FreeText(freeText);
     }
 
+    TPrettyTable MakeTable(const NYdb::NTable::TAnalyzeOperation&) {
+        return TPrettyTable({"id", "ready", "status", "state", "progress", "paths", "in_progress", "done"});
+    }
+
+    void PrettyPrint(const NYdb::NTable::TAnalyzeOperation& operation, TPrettyTable& table) {
+        const auto& status = operation.Status();
+        const auto& metadata = operation.Metadata();
+
+        auto joinPaths = [](const std::vector<std::string>& v) {
+            TStringBuilder out;
+            for (size_t i = 0; i < v.size(); ++i) {
+                if (i) out << ";";
+                out << v[i];
+            }
+            return out;
+        };
+
+        auto& row = table.AddRow();
+        row
+            .Column(0, operation.Id().ToString())
+            .Column(1, operation.Ready() ? "true" : "false")
+            .Column(2, status.GetStatus() == NYdb::EStatus::STATUS_UNDEFINED ? "" : ToString(status.GetStatus()))
+            .Column(3, metadata.State)
+            .Column(4, FloatToString(metadata.Progress, PREC_POINT_DIGITS, 2) + "%")
+            .Column(5, joinPaths(metadata.Paths))
+            .Column(6, joinPaths(metadata.InProgressPaths))
+            .Column(7, joinPaths(metadata.DonePaths));
+
+        TStringBuilder freeText;
+        AppendIssues(status, freeText);
+        AppendOperationInfo(operation, freeText);
+        row.FreeText(freeText);
+    }
+
     TPrettyTable MakeTable(const NYdb::NTable::TCompactionOperation&) {
         return TPrettyTable({"id", "ready", "status", "state", "progress", "table", "cascade", "max inflight", "total", "done"});
     }
@@ -590,6 +624,14 @@ void PrintOperation(const NYdb::NTable::TCompactionOperation& operation, EDataFo
 }
 
 void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TCompactionOperation>& operations, EDataFormat format) {
+    PrintOperationsListImpl(operations, format);
+}
+
+void PrintOperation(const NYdb::NTable::TAnalyzeOperation& operation, EDataFormat format) {
+    PrintOperationImpl(operation, format);
+}
+
+void PrintOperationsList(const NOperation::TOperationsList<NYdb::NTable::TAnalyzeOperation>& operations, EDataFormat format) {
     PrintOperationsListImpl(operations, format);
 }
 

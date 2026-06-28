@@ -710,7 +710,7 @@ namespace NKikimr {
                     auto pri = NActors::NLog::PRI_INFO;
                     if (Decision->BadDecision())
                         pri = NActors::NLog::PRI_ERROR;
-                    YDB_LOG_CTX(pri, ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: DECISION: %s", Decision->ToString().data()));
+                    YDB_LOG_CTX(ctx, pri, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: DECISION: %s", Decision->ToString().data()));
                     SUBLOGLINE(NotifyId, ctx, {
                         stream << "GuidRecovery: DECISION: " << Decision->ToString();
                     });
@@ -762,7 +762,7 @@ namespace NKikimr {
                 auto pri = NActors::NLog::PRI_INFO;
                 if (outcome.BadDecision())
                     pri = NActors::NLog::PRI_ERROR;
-                YDB_LOG_CTX(pri, ctx, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: FINISH: %s", outcome.ToString().data()));
+                YDB_LOG_CTX(ctx, pri, VDISKP(VCtx->VDiskLogPrefix, "TVDiskGuidRecoveryActor: FINISH: %s", outcome.ToString().data()));
                 SUBLOGLINE(NotifyId, ctx, {
                     stream << "GuidRecovery: FINISH: " << outcome.ToString();
                 });

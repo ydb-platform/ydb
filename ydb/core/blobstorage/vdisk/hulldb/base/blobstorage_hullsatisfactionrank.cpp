@@ -91,7 +91,7 @@ namespace NKikimr {
         NActors::NLog::EPriority pri = res.Status == NKikimrProto::OK ?
                 NActors::NLog::PRI_DEBUG : NActors::NLog::PRI_ERROR;
 
-        YDB_LOG_CTX(pri, ctx, VDISKP(VCtx->VDiskLogPrefix, "TDynamicPDiskWeightsManager: " "response from Yard: msg# %s", res.ToString().data()));
+        YDB_LOG_CTX(ctx, pri, VDISKP(VCtx->VDiskLogPrefix, "TDynamicPDiskWeightsManager: " "response from Yard: msg# %s", res.ToString().data()));
     }
 
     void TDynamicPDiskWeightsManager::RenderHtml(IOutputStream &str) const {

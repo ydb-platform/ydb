@@ -387,10 +387,10 @@ TFuture<void> TTransaction::Abort(const TTransactionAbortOptions& options)
     return DoAbort(&guard, options);
 }
 
-void TTransaction::FutureModifyRows(
+void TTransaction::ModifyRows(
     const TYPath& path,
     TNameTablePtr nameTable,
-    TSharedRange<NFuture::TRowModification> modifications,
+    TSharedRange<TRowModification> modifications,
     const TModifyRowsOptions& options)
 {
     ValidateTabletTransactionId(GetId());
@@ -398,10 +398,10 @@ void TTransaction::FutureModifyRows(
     for (const auto& modification : modifications) {
         // TODO(sandello): handle versioned rows
         Visit(modification,
-            [] (const NFuture::NRowModifications::TWriteRow&) { },
-            [] (const NFuture::NRowModifications::TDeleteRow&) { },
-            [] (const NFuture::NRowModifications::TWriteAndLockRow&) { },
-            [] (const NFuture::NRowModifications::TVersionedWriteRow&) {
+            [] (const NRowModifications::TWriteRow&) { },
+            [] (const NRowModifications::TDeleteRow&) { },
+            [] (const NRowModifications::TWriteAndLockRow&) { },
+            [] (const NRowModifications::TVersionedWriteRow&) {
                 YT_ABORT();
             });
     }
@@ -426,11 +426,11 @@ void TTransaction::FutureModifyRows(
     bool usedStrongLocks = false;
     bool usedWideLocks = false;
     for (const auto& modification : modifications) {
-        if (!std::holds_alternative<NFuture::NRowModifications::TWriteAndLockRow>(modification)) {
+        if (!std::holds_alternative<NRowModifications::TWriteAndLockRow>(modification)) {
             continue;
         }
 
-        auto mask = std::get<NFuture::NRowModifications::TWriteAndLockRow>(modification).Locks;
+        auto mask = std::get<NRowModifications::TWriteAndLockRow>(modification).Locks;
         usedWideLocks |= mask.GetSize() > TLegacyLockMask::MaxCount;
         if (usedWideLocks) {
             break;
@@ -477,22 +477,22 @@ void TTransaction::FutureModifyRows(
 
     for (const auto& modification : modifications) {
         Visit(modification,
-            [&req, &rows, &fillCorrespondingLock] (const NFuture::NRowModifications::TWriteRow& modification) {
+            [&req, &rows, &fillCorrespondingLock] (const NRowModifications::TWriteRow& modification) {
                 rows.emplace_back(modification.Row);
                 req->add_row_modification_types(NProto::ERowModificationType::RMT_WRITE);
                 fillCorrespondingLock(TLockMask{});
             },
-            [&req, &rows, &fillCorrespondingLock] (const NFuture::NRowModifications::TDeleteRow& modification) {
+            [&req, &rows, &fillCorrespondingLock] (const NRowModifications::TDeleteRow& modification) {
                 rows.emplace_back(modification.Key);
                 req->add_row_modification_types(NProto::ERowModificationType::RMT_DELETE);
                 fillCorrespondingLock(TLockMask{});
             },
-            [&req, &rows, &fillCorrespondingLock] (const NFuture::NRowModifications::TWriteAndLockRow& writeAndLockModification) {
+            [&req, &rows, &fillCorrespondingLock] (const NRowModifications::TWriteAndLockRow& writeAndLockModification) {
                 rows.emplace_back(writeAndLockModification.Row);
                 req->add_row_modification_types(NProto::ERowModificationType::RMT_MODIFY);
                 fillCorrespondingLock(writeAndLockModification.Locks);
             },
-            [] (const NFuture::NRowModifications::TVersionedWriteRow&) {
+            [] (const NRowModifications::TVersionedWriteRow&) {
                 // NB: Checked above.
                 YT_ABORT();
             });

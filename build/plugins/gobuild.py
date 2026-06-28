@@ -1,4 +1,3 @@
-import base64
 import itertools
 from hashlib import md5
 import os
@@ -207,29 +206,13 @@ def _GO_PROCESS_SRCS(unit: ymake.Unit):
 
     # Go coverage instrumentation (NOTE! go_files list is modified here)
     if is_test_module and unit.enabled('GO_TEST_COVER'):
-        if unit.enabled('GO_COVERAGE_PER_PKG'):
-            go_giles = []
-            for go_file in go_files:
-                if go_file.endswith('_test.go'):
-                    continue
-                go_giles.append(unit.resolve_arc_path(go_file))
-            unit.set(['GO_COVER_MODE', 'set'])  # Enable Go coverage with mode="set"
-            unit.on_go_gen_cover([go_package_name(unit), *go_files])
-        else:  # deprecated
-            cover_info = []
-
-            for f in go_files:
-                if f.endswith('_test.go'):
-                    continue
-                cover_var = 'GoCover' + base64.b32encode(f.encode('utf-8')).decode('utf-8').rstrip('=')
-                cover_file = unit.resolve_arc_path(f)
-                cover_file_output = '{}/{}'.format(unit_path, os.path.basename(f))
-                unit.on_go_gen_cover_go([cover_file, cover_file_output, cover_var])
-                if cover_file.startswith('$S/'):
-                    cover_file = arc_project_prefix + cover_file[3:]
-                cover_info.append('{}:{}'.format(cover_var, cover_file))
-
-            unit.set(['GO_COVER_INFO_VALUE', ' '.join(cover_info)])
+        go_giles = []
+        for go_file in go_files:
+            if go_file.endswith('_test.go'):
+                continue
+            go_giles.append(unit.resolve_arc_path(go_file))
+        unit.set(['GO_COVER_MODE', 'set'])  # Enable Go coverage with mode="set"
+        unit.on_go_gen_cover([go_package_name(unit), *go_files])
 
         # go_files should be empty now since the initial list shouldn't contain
         # any non-go or go test file. The value of go_files list will be used later

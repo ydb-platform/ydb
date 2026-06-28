@@ -79,6 +79,7 @@ public:
     bool UseRealThreads = true;
     bool EnableForceFollowers = false;
     bool EnableScriptExecutionBackgroundChecks = true;
+    bool NeedsStatsCollectors = false;
     TDuration KeepSnapshotTimeout = TDuration::Zero();
     IOutputStream* LogStream = nullptr;
     TVector<TString> StoragePoolTypes;
@@ -125,6 +126,7 @@ public:
     TKikimrSettings& SetQueryReplayBackendFactory(std::shared_ptr<NKqp::IQueryReplayBackendFactory> value) { QueryReplayBackendFactory = std::move(value); return *this; };
     TKikimrSettings& SetUseRealThreads(bool value) { UseRealThreads = value; return *this; };
     TKikimrSettings& SetEnableForceFollowers(bool value) { EnableForceFollowers = value; return *this; };
+    TKikimrSettings& SetNeedsStatsCollectors(bool value) { NeedsStatsCollectors = value; return *this; };
     TKikimrSettings& SetS3ActorsFactory(std::shared_ptr<NYql::NDq::IS3ActorsFactory> value) { S3ActorsFactory = std::move(value); return *this; };
     TKikimrSettings& SetControls(const NKikimrConfig::TImmediateControlsConfig& value) { Controls = value; return *this; }
     TKikimrSettings& SetColumnShardReaderClassName(const TString& value) { AppConfig.MutableColumnShardConfig()->SetReaderClassName(value); return *this; }

@@ -192,9 +192,8 @@ public:
 
     // Batch operation to erase a list of PBuffer entries.
     virtual NThreading::TFuture<TDBGEraseResponse> BatchEraseFromPBuffer(
-        ui32 vChunkIndex,
         THostIndex hostIndex,
-        const TVector<TPBufferSegment>& segments,
+        const TEraseSegments& segments,
         const NWilson::TTraceId& traceId) = 0;
 
     virtual void BarrierEraseFromPBuffer(ui64 lsn) = 0;

@@ -210,8 +210,12 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             ui32 chunkId = HugeSlot.GetChunkId();
             ui32 offset = HugeSlot.GetOffset();
             HugeKeeperCtx->LsmHullGroup.LsmHugeBytesWritten() += partsPtr->ByteSize();
-            YDB_LOG_DEBUG_CTX_COMP(ctx, BS_HULLHUGE, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix, "Writer: bootstrap: id# %s storedBlobSize# %u writtenSize# %u blobId# %s wId# %" PRIu64, HugeSlot.ToString().data(), storedBlobSize, writtenSize, Item->LogoBlobId.ToString().data(), WriteId));
-            Span && Span.Event("Send_TEvChunkWrite", {{"ChunkId", chunkId}, {"Offset", offset}, {"WrittenSize", writtenSize}});
+            YDB_LOG_DEBUG_CTX(ctx, VDISKP(HugeKeeperCtx->VCtx->VDiskLogPrefix,
+                "Writer: bootstrap: id# %s storedBlobSize# %u writtenSize# %u blobId# %s wId# %" PRIu64,
+                HugeSlot.ToString().data(), storedBlobSize, writtenSize, Item->LogoBlobId.ToString().data(), WriteId));
+            if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                wilsonSpan->Event("Send_TEvChunkWrite", {{"ChunkId", chunkId}, {"Offset", offset}, {"WrittenSize", writtenSize}});
+            }
             auto ev = std::make_unique<NPDisk::TEvChunkWrite>(HugeKeeperCtx->PDiskCtx->Dsk->Owner,
                         HugeKeeperCtx->PDiskCtx->Dsk->OwnerRound, chunkId, offset,
                         partsPtr, Cookie, true, GetWritePriority(), Item->WriteSource, false);
@@ -231,7 +235,11 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             if (ev->Get()->Status == NKikimrProto::OK) {
                 Span.EndOk();
             } else {
-                Span.EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(ev->Get()->Status));
+                if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                    wilsonSpan->EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(ev->Get()->Status));
+                } else if (TNamedSpan* retroSpan = Span.GetRetroSpanPtr()) {
+                    retroSpan->EndError();
+                }
             }
             CHECK_PDISK_RESPONSE(HugeKeeperCtx->VCtx, ev, ctx);
             ctx.Send(NotifyID, new TEvHullHugeWritten(HugeSlot));
@@ -277,8 +285,8 @@ LWTRACE_USING(BLOBSTORAGE_PROVIDER);
             , DiskAddr()
             , Span(TWilson::VDiskInternals, std::move(traceId), "VDisk.HugeBlobKeeper.Write")
         {
-            if (Span) {
-                Span.Attribute("blob_id", Item->LogoBlobId.ToString());
+            if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                wilsonSpan->Attribute("blob_id", Item->LogoBlobId.ToString());
             }
         }
     };

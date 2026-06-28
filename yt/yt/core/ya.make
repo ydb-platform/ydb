@@ -437,6 +437,16 @@ IF (NOT OPENSOURCE AND OS_LINUX)
     )
 ENDIF()
 
+IF (NOT OPENSOURCE AND OS_LINUX)
+    RECURSE(
+        bus/ucx
+    )
+
+    RECURSE_FOR_TESTS(
+        bus/ucx/unittests
+    )
+ENDIF()
+
 RECURSE_FOR_TESTS(
     actions/unittests
     concurrency/unittests

@@ -14,6 +14,7 @@
 
 #include <ydb/core/tx/tx_proxy/proxy.h>
 #include <ydb/core/tx/tx_proxy/upload_rows.h>
+#include <ydb/core/tx/sequenceproxy/public/events.h>
 
 #include <yql/essentials/public/issue/yql_issue_message.h>
 
@@ -21,7 +22,10 @@
 #include <ydb/core/ydb_convert/table_description.h>
 
 #include <util/generic/algorithm.h>
+#include <util/generic/bitops.h>
 #include <util/string/builder.h>
+
+#include <deque>
 
 namespace NKikimr::NDataShard {
 
@@ -70,6 +74,13 @@ bool BuildExtraColumns(TVector<TCell>& cells, const NKikimrIndexBuilder::TColumn
     for (size_t i = 0; i < buildSettings.columnSize(); i++) {
         const auto& column = buildSettings.column(i);
 
+        auto& back = cells.emplace_back();
+
+        if (!column.default_from_sequence().empty()) {
+            // Sequence-default columns are filled per-row in Feed() from TEvNextValResult.
+            continue;
+        }
+
         NScheme::TTypeInfo typeInfo;
         i32 typeMod = -1;
         Ydb::StatusIds::StatusCode status;
@@ -83,7 +94,6 @@ bool BuildExtraColumns(TVector<TCell>& cells, const NKikimrIndexBuilder::TColumn
             return false;
         }
 
-        auto& back = cells.emplace_back();
         if (!CellFromProtoVal(typeInfo, typeMod, &column.default_from_literal().value(), false, back, err, valueDataPool)) {
             return false;
         }
@@ -311,7 +321,7 @@ public:
         return EScan::Feed;
     }
 
-private:
+protected:
     STFUNC(StateWork) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvTxUserProxy::TEvUploadRowsResponse, Handle);
@@ -455,6 +465,36 @@ class TBuildColumnsScan final: public TBuildScanUpload<NKikimrServices::TActivit
     TVector<TCell> Value;
     TString ValueSerialized;
 
+    struct TSequenceColumn {
+        size_t ColumnIdx;
+        TString SequencePath;
+        bool BitReverse = false;
+        std::deque<ui64> Buffer;
+        ui32 InFlight = 0;
+        ui64 LastValue = 0; // stable storage for the TCell::Make pointer
+    };
+    TVector<TSequenceColumn> SequenceColumns;
+    bool ScanWaitingForSequences = false;
+
+    // When Feed cannot make progress because the sequence buffer is empty, we copy
+    // the current row's key here and return EScan::Sleep. The flat-scan framework
+    // calls Iter->Next() before each Feed, so on resume the iterator has already
+    // advanced past this row. We drain PendingKeys from HandleNextVal (or below in
+    // Feed if values are now available) so the row is not lost.
+    //
+    // Multiple keys can pile up if the scan is woken from a non-sequence source
+    // (e.g. TEvUploadRowsResponse) while the sequence buffer is still empty: every
+    // such wake-up advances Iter past another row, and each must be remembered.
+    std::deque<TSerializedCellVec> PendingKeys;
+
+    // True iff Exhausted() was called while PendingKeys was non-empty. We returned
+    // Sleep instead of Reset so the scan would not finalize before those rows had
+    // a chance to be written. Cleared and the driver re-touched once the queue is
+    // drained.
+    bool ExhaustedWaitingForDrain = false;
+
+    static constexpr ui32 SequenceBatchTarget = 256;
+
 public:
     TBuildColumnsScan(ui64 buildIndexId,
                       const TString& databaseName,
@@ -474,10 +514,77 @@ public:
         TMemoryPool valueDataPool(256);
         TString err;
         Y_ENSURE(BuildExtraColumns(Value, columnBuildSettings, err, valueDataPool));
-        ValueSerialized = TSerializedCellVec::Serialize(Value);
+
+        for (size_t i = 0; i < static_cast<size_t>(columnBuildSettings.columnSize()); ++i) {
+            const auto& column = columnBuildSettings.column(i);
+            if (!column.default_from_sequence().empty()) {
+                SequenceColumns.push_back({
+                    .ColumnIdx = i,
+                    .SequencePath = column.default_from_sequence(),
+                    .BitReverse = column.bit_reverse_sequence_value(),
+                });
+            }
+        }
+
+        if (SequenceColumns.empty()) {
+            ValueSerialized = TSerializedCellVec::Serialize(Value);
+        }
+    }
+
+    TInitialState Prepare(IDriver* driver, TIntrusiveConstPtr<TScheme> scheme) override {
+        auto state = TBuildScanUpload::Prepare(driver, scheme);
+        if (SequenceColumns.empty()) {
+            return state;
+        }
+        // Switch to a StateWork that also handles TEvNextValResult.
+        this->Become(&TBuildColumnsScan::SequenceStateFunc);
+        ScanWaitingForSequences = true;
+        TopUpSequenceRequests();
+        return {EScan::Sleep, {}};
+    }
+
+    EScan Exhausted() override {
+        // If Feed had to defer rows because the sequence buffer was empty, the
+        // iterator may exhaust before those rows are written. Returning Reset
+        // here (the default) would land in Seek(seq > 0) → Final and lose them.
+        // Wait until HandleNextVal drains the queue.
+        if (!PendingKeys.empty()) {
+            ExhaustedWaitingForDrain = true;
+            ScanWaitingForSequences = true;
+            return EScan::Sleep;
+        }
+        return TBuildScanUpload<NKikimrServices::TActivity::BUILD_COLUMNS_SCAN_ACTOR>::Exhausted();
     }
 
     EScan Feed(TArrayRef<const TCell> key, const TRow& row) final {
+        if (!SequenceColumns.empty()) {
+            // Drain any keys deferred from earlier sleeps before processing this row.
+            DrainPendingIfReady();
+
+            for (auto& s : SequenceColumns) {
+                if (s.Buffer.empty()) {
+                    // Buffer is empty — Iter will advance past this row before
+                    // Feed is called again, so queue the key for later processing.
+                    PendingKeys.emplace_back(key);
+                    ScanWaitingForSequences = true;
+                    return EScan::Sleep;
+                }
+            }
+            for (auto& s : SequenceColumns) {
+                s.LastValue = s.Buffer.front();
+                s.Buffer.pop_front();
+                Value[s.ColumnIdx] = TCell::Make<ui64>(s.LastValue);
+            }
+            TopUpSequenceRequests();
+            TString valueSerialized = TSerializedCellVec::Serialize(Value);
+            return FeedImpl(key, row, [&] {
+                ReadBuf.AddRow(
+                    key,
+                    Value,
+                    std::move(valueSerialized),
+                    key);
+            });
+        }
         return FeedImpl(key, row, [&] {
             auto valueSerializedCopy = ValueSerialized;
             ReadBuf.AddRow(
@@ -486,6 +593,113 @@ public:
                 std::move(valueSerializedCopy),
                 key);
         });
+    }
+
+private:
+    STFUNC(SequenceStateFunc) {
+        switch (ev->GetTypeRewrite()) {
+            hFunc(NSequenceProxy::TEvSequenceProxy::TEvNextValResult, HandleNextVal);
+            default:
+                this->StateWork(ev);
+        }
+    }
+
+    // If rows were deferred via PendingKeys when Feed had to sleep, consume sequence
+    // values for them now and add them to ReadBuf. Drains greedily until either the
+    // queue is empty or any sequence column's buffer runs out.
+    void DrainPendingIfReady() {
+        while (!PendingKeys.empty()) {
+            for (auto& s : SequenceColumns) {
+                if (s.Buffer.empty()) {
+                    return;
+                }
+            }
+            for (auto& s : SequenceColumns) {
+                s.LastValue = s.Buffer.front();
+                s.Buffer.pop_front();
+                Value[s.ColumnIdx] = TCell::Make<ui64>(s.LastValue);
+            }
+            TopUpSequenceRequests();
+            auto pendingKey = std::move(PendingKeys.front());
+            PendingKeys.pop_front();
+            TConstArrayRef<TCell> pendingKeyCells = pendingKey.GetCells();
+            TString pendingSerialized = TSerializedCellVec::Serialize(Value);
+            ReadBuf.AddRow(
+                pendingKeyCells,
+                Value,
+                std::move(pendingSerialized),
+                pendingKeyCells);
+        }
+    }
+
+    void TopUpSequenceRequests() {
+        for (size_t i = 0; i < SequenceColumns.size(); ++i) {
+            auto& seqCol = SequenceColumns[i];
+            ui32 total = static_cast<ui32>(seqCol.Buffer.size()) + seqCol.InFlight;
+            while (total < SequenceBatchTarget) {
+                this->Send(NSequenceProxy::MakeSequenceProxyServiceID(),
+                    new NSequenceProxy::TEvSequenceProxy::TEvNextVal(DatabaseName, seqCol.SequencePath),
+                    0, i);
+                ++seqCol.InFlight;
+                ++total;
+            }
+        }
+    }
+
+    void HandleNextVal(NSequenceProxy::TEvSequenceProxy::TEvNextValResult::TPtr& ev) {
+        const size_t colIdx = ev->Cookie;
+        Y_ENSURE(colIdx < SequenceColumns.size());
+        auto& seqCol = SequenceColumns[colIdx];
+        if (seqCol.InFlight > 0) {
+            --seqCol.InFlight;
+        }
+
+        if (ev->Get()->Status != Ydb::StatusIds::SUCCESS) {
+            UploadStatus.StatusCode = ev->Get()->Status;
+            UploadStatus.Issues.AddIssues(ev->Get()->Issues);
+            UploadStatus.Issues.AddIssue(NYql::TIssue(TStringBuilder()
+                << "Failed to allocate sequence value for build scan, sequence: " << seqCol.SequencePath));
+            if (Driver) {
+                Driver->Touch(EScan::Final);
+            }
+            return;
+        }
+
+        ui64 val = static_cast<ui64>(ev->Get()->Value);
+        if (seqCol.BitReverse) {
+            val = ReverseBits(val);
+        }
+        seqCol.Buffer.push_back(val);
+
+        // Drain any pending row first so we don't lose it when the scan resumes
+        // (Iter will advance past it on the next Process iteration).
+        DrainPendingIfReady();
+
+        if (ScanWaitingForSequences) {
+            bool shouldWake = false;
+            if (ExhaustedWaitingForDrain && PendingKeys.empty()) {
+                // We held the scan in Exhausted-Sleep because rows were queued;
+                // now that the queue is empty, let the scan finalize via
+                // Seek(seq > 0) which will flush ReadBuf and upload.
+                ExhaustedWaitingForDrain = false;
+                shouldWake = true;
+            } else if (!ExhaustedWaitingForDrain) {
+                bool allReady = true;
+                for (auto& s : SequenceColumns) {
+                    if (s.Buffer.empty()) {
+                        allReady = false;
+                        break;
+                    }
+                }
+                shouldWake = allReady;
+            }
+            if (shouldWake) {
+                ScanWaitingForSequences = false;
+                if (Driver) {
+                    Driver->Touch(EScan::Feed);
+                }
+            }
+        }
     }
 };
 

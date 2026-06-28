@@ -41,7 +41,7 @@
 #include <yql/essentials/protos/yql_mount.pb.h>
 #include <yql/essentials/protos/pg_ext.pb.h>
 #include <yql/essentials/sql/settings/translation_settings.h>
-#include <yql/essentials/sql/v1/complete/check/check_complete.h>
+#include <yql/essentials/sql/v1/ide/completion/check/check_complete.h>
 #include <yql/essentials/sql/v1/format/sql_format.h>
 #include <yql/essentials/sql/v1/format/check/check_format.h>
 #include <yql/essentials/sql/v1/sql.h>
@@ -672,7 +672,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
                 }
 
                 constexpr auto convergence = NSQLFormat::EConvergenceRequirement::Double;
-                if (TIssues issues; testFormat && !NSQLFormat::CheckedFormat(query, settings, issues, convergence)) {
+                if (TIssues issues; testFormat && !NSQLFormat::CheckedFormat(query, ast.Root, settings, issues, convergence)) {
                     auto issue = TIssue(TPosition(0, 0, fileName), "Format failed");
                     for (const auto& i : issues) {
                         issue.AddSubIssue(MakeIntrusive<TIssue>(i));
@@ -859,7 +859,7 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         if (!fail && RunOptions_.TestSqlFormat && 1 == RunOptions_.SyntaxVersion) {
             TIssues issues;
             constexpr auto convergence = NSQLFormat::EConvergenceRequirement::Double;
-            if (!NSQLFormat::CheckedFormat(program->GetSourceCode(), settings, issues, convergence)) {
+            if (!NSQLFormat::CheckedFormat(program->GetSourceCode(), program->AstRoot(), settings, issues, convergence)) {
                 *RunOptions_.ErrStream << "Format failed" << Endl;
                 issues.PrintTo(*RunOptions_.ErrStream);
                 return -1;

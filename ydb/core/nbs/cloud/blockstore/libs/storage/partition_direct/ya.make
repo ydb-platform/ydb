@@ -5,7 +5,6 @@ GENERATE_ENUM_SERIALIZATION(ddisk_data_copier.h)
 SRCS(
     ddisk_data_copier.cpp
     direct_block_group_impl.cpp
-    direct_block_group_mock.cpp
     direct_block_group.cpp
     erase_request.cpp
     fast_path_service.cpp
@@ -28,8 +27,6 @@ SRCS(
     vchunk.cpp
     write_request_bundle.cpp
     write_request.cpp
-    write_with_direct_replication_request.cpp
-    write_with_pb_replication_request.cpp
 )
 
 PEERDIR(

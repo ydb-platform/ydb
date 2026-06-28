@@ -1,15 +1,21 @@
 #include "kafka_produce_actor.h"
 #include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/core/kafka_proxy/kafka_metrics.h>
+#include <ydb/library/kafka/kafka_records.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/util/time_util.h>
 
 #include <ydb/core/persqueue/public/utils.h>
+#include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
+#include <limits>
 #include <util/string/join.h>
 
 namespace NKafka {
+
+namespace {
 
 static constexpr TDuration WAKEUP_INTERVAL = TDuration::Seconds(1);
 static constexpr TDuration TOPIC_OK_EXPIRATION_INTERVAL = TDuration::Minutes(15);
@@ -17,6 +23,61 @@ static constexpr TDuration TOPIC_NOT_FOUND_EXPIRATION_INTERVAL = TDuration::Seco
 static constexpr TDuration TOPIC_UNATHORIZED_EXPIRATION_INTERVAL = TDuration::Minutes(1);
 static constexpr TDuration REQUEST_EXPIRATION_INTERVAL = TDuration::Seconds(30);
 static constexpr TDuration WRITER_EXPIRATION_INTERVAL = TDuration::Minutes(5);
+
+NPersQueueCommon::ECodec KafkaBatchCodec() {
+    return static_cast<NPersQueueCommon::ECodec>(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1);
+}
+
+bool IsRecordBatchV2OrNewer(const TKafkaBatchHeader& header) {
+    return header.Magic >= TKafkaRecordBatch::MagicMeta::Default;
+}
+
+ECompressionType CompressionType(const TKafkaBatchHeader& header) {
+    return static_cast<ECompressionType>(header.Attributes & 0x07);
+}
+
+bool IsRawRecordBatch(const TKafkaBatchHeader& header) {
+    return CompressionType(header) == ECompressionType::NONE;
+}
+
+bool CanStoreRawRecords(const TKafkaBatchHeader& header, bool batchingEnabled) {
+    return batchingEnabled && (IsRecordBatchV2OrNewer(header) || IsRawRecordBatch(header));
+}
+
+EKafkaErrors ValidateBatchCompression(const TKafkaBatchHeader& header, bool batchingEnabled) {
+    if (!IsRecordBatchV2OrNewer(header) && !IsRawRecordBatch(header)) {
+        KAFKA_LOG_ERROR("Compressed legacy Kafka record batches are not supported. Magic="
+            << header.Magic << ", compressionType=" << static_cast<int>(CompressionType(header)));
+        return EKafkaErrors::UNSUPPORTED_COMPRESSION_TYPE;
+    }
+
+    if (!batchingEnabled && !IsRawRecordBatch(header)) {
+        KAFKA_LOG_ERROR("Compressed Kafka record batches are not supported when topic messages batching is disabled. Magic="
+            << header.Magic << ", compressionType=" << static_cast<int>(CompressionType(header)));
+        return EKafkaErrors::UNSUPPORTED_COMPRESSION_TYPE;
+    }
+
+    return EKafkaErrors::NONE_ERROR;
+}
+
+TStringBuf AsStringBuf(const TKafkaBytes& records) {
+    if (!records) {
+        return {};
+    }
+    return TStringBuf(records->data(), records->size());
+}
+
+TString MakeSourceId(const TString& transactionalId, i64 producerId) {
+    TString sourceId;
+    TBuffer buf;
+    buf.Reserve(transactionalId.size() + sizeof(producerId));
+    buf.Append(transactionalId.data(), transactionalId.size());
+    buf.Append(static_cast<const char*>(static_cast<const void*>(&producerId)), sizeof(producerId));
+    buf.AsString(sourceId);
+    return Base64Encode(sourceId);
+}
+
+} // namespace
 
 NActors::IActor* CreateKafkaProduceActor(const TContext::TPtr context) {
     return new TKafkaProduceActor(context);
@@ -300,26 +361,71 @@ size_t TKafkaProduceActor::EnqueueInitialization() {
     return canProcess;
 }
 
+struct TParsedProduceRecords {
+    TStringBuf Records;
+    std::optional<TKafkaBatchHeader> BatchHeader;
+    TKafkaRecordBatch Batch;
+    bool StoreRawRecords = false;
+    size_t RecordsCount = 0;
+    i64 ProducerId = TKafkaRecordBatch::ProducerIdMeta::Default;
+    i16 ProducerEpoch = TKafkaRecordBatch::ProducerEpochMeta::Default;
+};
+
+std::pair<EKafkaErrors, TParsedProduceRecords> ParseProduceRecords(
+    const TKafkaBytes& records,
+    bool batchingEnabled
+) {
+    TParsedProduceRecords result;
+    result.Records = AsStringBuf(records);
+    if (result.Records.empty()) {
+        return {EKafkaErrors::INVALID_RECORD, result};
+    }
+
+    result.BatchHeader = ReadKafkaBatchHeader(result.Records);
+    if (result.BatchHeader) {
+        if (const auto error = ValidateBatchCompression(*result.BatchHeader, batchingEnabled);
+            error != EKafkaErrors::NONE_ERROR) {
+            return {error, result};
+        }
+    }
+
+    result.StoreRawRecords = result.BatchHeader && CanStoreRawRecords(*result.BatchHeader, batchingEnabled);
+    if (result.StoreRawRecords) {
+        result.RecordsCount = result.BatchHeader->RecordsCount;
+        result.ProducerId = result.BatchHeader->ProducerId;
+        result.ProducerEpoch = result.BatchHeader->ProducerEpoch;
+    } else {
+        result.Batch = ReadRecordBatch(result.Records);
+        result.RecordsCount = result.Batch.Records.size();
+        result.ProducerId = result.Batch.ProducerId;
+        result.ProducerEpoch = result.Batch.ProducerEpoch;
+    }
+
+    return {EKafkaErrors::NONE_ERROR, std::move(result)};
+}
+
 std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
     const TString& transactionalId,
     const TProduceRequestData::TTopicProduceData::TPartitionProduceData& data,
+    const TParsedProduceRecords& parsedRecords,
     const TString& topicName,
     ui64 cookie,
     const TString& clientDC,
     bool ruPerRequest
 ) {
+    if (!data.Records) {
+        return {EKafkaErrors::INVALID_RECORD, nullptr};
+    }
+
     auto ev = MakeHolder<TEvPartitionWriter::TEvWriteRequest>();
     auto& request = ev->Record;
 
-    const auto& batch = data.Records;
-
-    TString sourceId;
-    TBuffer buf;
-    buf.Reserve(transactionalId.size() + sizeof(batch->ProducerId));
-    buf.Append(transactionalId.data(), transactionalId.size());
-    buf.Append(static_cast<const char*>(static_cast<const void*>(&batch->ProducerId)), sizeof(batch->ProducerId));
-    buf.AsString(sourceId);
-    sourceId = Base64Encode(sourceId);
+    const TStringBuf records = parsedRecords.Records;
+    const auto& batchHeader = parsedRecords.BatchHeader;
+    const auto& batch = parsedRecords.Batch;
+    const i64 producerId = parsedRecords.ProducerId;
+    const i16 producerEpoch = parsedRecords.ProducerEpoch;
+    const TString sourceId = MakeSourceId(transactionalId, producerId);
 
     auto* partitionRequest = request.MutablePartitionRequest();
     partitionRequest->SetTopic(topicName);
@@ -331,52 +437,99 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
 
     ui64 totalSize = 0;
 
-    for (ui64 batchIndex = 0; batchIndex < batch->Records.size(); ++batchIndex) {
-        const auto& record = batch->Records[batchIndex];
+    if (parsedRecords.StoreRawRecords) {
+        if (batchHeader->RecordsCount <= 0) {
+            return {EKafkaErrors::INVALID_RECORD, nullptr};
+        }
 
-        NKikimrPQClient::TDataChunk proto = MakeDataChunk(record);
+        auto [error, seqNo] = GetBatchBaseSeqNo(*batchHeader);
+        if (error != EKafkaErrors::NONE_ERROR) {
+            return {error, nullptr};
+        }
+        auto [maxSeqNoError, maxSeqNo] = GetBatchMaxSeqNo(*batchHeader, seqNo);
+        if (maxSeqNoError != EKafkaErrors::NONE_ERROR) {
+            return {maxSeqNoError, nullptr};
+        }
+
+        NKikimrPQClient::TDataChunk proto;
+        proto.SetChunkType(NKikimrPQClient::TDataChunk::REGULAR);
+        proto.SetCodec(KafkaBatchCodec());
+        proto.SetData(records.data(), records.size());
 
         TString str;
-        bool res = proto.SerializeToString(&str);
-        Y_ABORT_UNLESS(res);
+        const bool res = proto.SerializeToString(&str);
+        if (!res) {
+            KAFKA_LOG_ERROR("Produce actor: Failed to serialize TDataChunk to string: " << proto.DebugString());
+
+            return {EKafkaErrors::INVALID_RECORD, nullptr};
+        }
 
         auto w = partitionRequest->AddCmdWrite();
         w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));
 
-        bool enableKafkaDeduplication = batch->ProducerId >= 0;
+        const bool enableKafkaDeduplication = producerId >= 0;
         w->SetEnableKafkaDeduplication(enableKafkaDeduplication);
-        if (batch->ProducerEpoch >= 0) {
-            w->SetProducerEpoch(batch->ProducerEpoch);
-        } else if (batch->ProducerEpoch == -1) {
-            // Kafka accepts messages with producer epoch == -1, as long as it's the first "epoch" for this producer ID,
-            // and ignores sequence numbers. I.e. you can send seqnos in any order with epoch == -1.
-        } else if (batch->ProducerEpoch < -1) {
+        if (producerEpoch >= 0) {
+            w->SetProducerEpoch(producerEpoch);
+        } else if (producerEpoch < -1) {
             return {EKafkaErrors::INVALID_PRODUCER_EPOCH, nullptr};
         }
 
-        // set seqno
-        if (enableKafkaDeduplication) {
-            if (batch->BaseSequence >= 0) {
-                // Handle int32 overflow.
-                w->SetSeqNo((static_cast<ui64>(batch->BaseSequence) + batchIndex) % (static_cast<ui64>(std::numeric_limits<i32>::max()) + 1));
-            } else {
-                KAFKA_LOG_ERROR("Idempotent producer enabled and batch base sequence is less then zero: " << batch->BaseSequence);
-                return {EKafkaErrors::INVALID_RECORD, nullptr};
-            }
-        } else {
-            w->SetSeqNo(batch->BaseOffset + record.OffsetDelta);
-        }
-
+        w->SetSeqNo(seqNo);
+        w->SetMaxSeqNo(maxSeqNo);
+        w->SetLogicalMessageCount(batchHeader->RecordsCount);
+        w->SetIsBatch(true);
         w->SetData(str);
-        ui64 createTime = batch->BaseTimestamp + record.TimestampDelta;
-        w->SetCreateTimeMS(createTime ? createTime : TInstant::Now().MilliSeconds());
+        w->SetCreateTimeMS(batchHeader->BaseTimestamp > 0 ? batchHeader->BaseTimestamp : TInstant::Now().MilliSeconds());
         w->SetDisableDeduplication(true);
-        w->SetUncompressedSize(record.Value ? record.Value->size() : 0);
+        w->SetUncompressedSize(records.size());
         w->SetClientDC(clientDC);
         w->SetIgnoreQuotaDeadline(true);
         w->SetExternalOperation(true);
 
-        totalSize += record.Value ? record.Value->size() : 0;
+        totalSize += records.size();
+    } else {
+        for (ui64 batchIndex = 0; batchIndex < batch.Records.size(); ++batchIndex) {
+            const auto& record = batch.Records[batchIndex];
+
+            NKikimrPQClient::TDataChunk proto = MakeDataChunk(record);
+
+            TString str;
+            bool res = proto.SerializeToString(&str);
+            Y_ABORT_UNLESS(res);
+
+            auto w = partitionRequest->AddCmdWrite();
+            w->SetSourceId(NPQ::NSourceIdEncoding::EncodeSimple(sourceId));
+
+            bool enableKafkaDeduplication = batch.ProducerId >= 0;
+            w->SetEnableKafkaDeduplication(enableKafkaDeduplication);
+            if (batch.ProducerEpoch >= 0) {
+                w->SetProducerEpoch(batch.ProducerEpoch);
+            } else if (batch.ProducerEpoch == -1) {
+                // Kafka accepts messages with producer epoch == -1, as long as it's the first "epoch" for this producer ID,
+                // and ignores sequence numbers. I.e. you can send seqnos in any order with epoch == -1.
+            } else if (batch.ProducerEpoch < -1) {
+                return {EKafkaErrors::INVALID_PRODUCER_EPOCH, nullptr};
+            }
+
+            // set seqno
+            if (enableKafkaDeduplication && batch.BaseSequence < 0) {
+                KAFKA_LOG_ERROR("Idempotent producer enabled and batch base sequence is less then zero: " << batch.BaseSequence);
+                return {EKafkaErrors::INVALID_RECORD, nullptr};
+            }
+            w->SetSeqNo(GetRecordSeqNo(batch, batchIndex, record));
+
+            w->SetData(str);
+            ui64 createTime = batch.BaseTimestamp + record.TimestampDelta;
+            w->SetCreateTimeMS(createTime ? createTime : TInstant::Now().MilliSeconds());
+            w->SetDisableDeduplication(true);
+            w->SetUncompressedSize(record.Value ? record.Value->size() : 0);
+            w->SetClientDC(clientDC);
+            w->SetIgnoreQuotaDeadline(true);
+            w->SetExternalOperation(true);
+
+            totalSize += record.Value ? record.Value->size() : 0;
+        }
     }
 
     partitionRequest->SetPutUnitsSize(NPQ::PutUnitsSize(totalSize));
@@ -614,7 +767,7 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                 const auto& partitionData = topicData.PartitionData[j];
                 auto& partitionResponse = topicResponse.PartitionResponses[j];
                 const auto& result = pendingRequest->Results[position++];
-                size_t recordsCount = partitionData.Records.has_value() ? partitionData.Records->Records.size() : 0;
+                size_t recordsCount = result.RecordsCount;
                 partitionResponse.Index = partitionData.Index;
                 if (EKafkaErrors::NONE_ERROR != result.ErrorCode) {
                     KAFKA_LOG_ERROR("Produce actor: Partition result with error: ErrorCode=" << static_cast<int>(result.ErrorCode)
@@ -637,7 +790,7 @@ void TKafkaProduceActor::SendResults(const TActorContext& ctx) {
                         partitionResponse.ErrorCode = EKafkaErrors::NONE_ERROR;
                         auto& writeResults = msg->Record.GetPartitionResponse().GetCmdWriteResult();
                         if (!writeResults.empty()) {
-                            SendMetrics(TStringBuilder() << topicData.Name, writeResults.size(), "successful_messages", ctx);
+                            SendMetrics(TStringBuilder() << topicData.Name, recordsCount, "successful_messages", ctx);
                             auto& lastResult = writeResults.at(writeResults.size() - 1);
                             partitionResponse.LogAppendTimeMs = lastResult.GetWriteTimestampMS();
                             partitionResponse.BaseOffset = writeResults.at(0).GetOffset();
@@ -761,18 +914,40 @@ void TKafkaProduceActor::SendWriteRequest(const TProduceRequestData::TTopicProdu
     auto r = pendingRequest->Request->Get()->Request;
     const TString& topicPath = NormalizePath(Context->DatabasePath, topicName);
     const auto partitionId = partitionData.Index;
-    TProducerInstanceId producerInstanceId{partitionData.Records->ProducerId, partitionData.Records->ProducerEpoch};
+    const bool batchingEnabled = NPQ::IsTopicMessagesBatchingEnabled(ctx);
+
+    auto& result = pendingRequest->Results[position];
+    if (!partitionData.Records) {
+        result.ErrorCode = EKafkaErrors::INVALID_RECORD;
+        return;
+    }
+
+    TParsedProduceRecords parsedRecords;
+    try {
+        auto [parseError, parsed] = ParseProduceRecords(partitionData.Records, batchingEnabled);
+        if (parseError != EKafkaErrors::NONE_ERROR) {
+            result.ErrorCode = parseError;
+            return;
+        }
+        parsedRecords = std::move(parsed);
+        result.RecordsCount = parsedRecords.RecordsCount;
+    } catch (const yexception& e) {
+        KAFKA_LOG_ERROR("Failed to read Kafka records metadata: " << e.what());
+        result.ErrorCode = EKafkaErrors::INVALID_RECORD;
+        return;
+    }
+
+    TProducerInstanceId producerInstanceId{parsedRecords.ProducerId, parsedRecords.ProducerEpoch};
     TMaybe<TString> transactionalId;
     if (r->TransactionalId) {
         transactionalId.ConstructInPlace(r->TransactionalId->c_str());
     }
 
     auto writer = PartitionWriter({topicPath, static_cast<ui32>(partitionId)}, producerInstanceId, transactionalId, ctx);
-    auto& result = pendingRequest->Results[position];
     if (OK == writer.first) {
         auto ownCookie = ++Cookie;
 
-        auto [error, ev] = Convert(transactionalId.GetOrElse(""), partitionData, topicPath, ownCookie, ClientDC, ruPerRequest);
+        auto [error, ev] = Convert(transactionalId.GetOrElse(""), partitionData, parsedRecords, topicPath, ownCookie, ClientDC, ruPerRequest);
         if (error == EKafkaErrors::NONE_ERROR) {
             auto& cookieInfo = Cookies[ownCookie];
             cookieInfo.TopicPath = topicPath;

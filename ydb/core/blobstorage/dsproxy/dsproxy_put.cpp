@@ -9,9 +9,13 @@
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/util/stlog.h>
 
+#include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
+
 #include <util/generic/ymath.h>
 #include <util/system/datetime.h>
 #include <util/system/hp_timer.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT BS_PROXY_PUT
 
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
@@ -471,7 +475,8 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         }
 
         if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(HandleClass)) {
-            YDB_LOG_WARN_COMP(BS_PROXY_PUT, "Long TEvPut request detected",
+            // NRetroTracing::DemandTrace(Span.GetTraceId());
+            YDB_LOG_WARN("Long TEvPut request detected",
                 {"marker", "BPP71"},
                 {"longRequestThreshold", LongRequestThreshold},
                 {"groupId", Info->GroupID},
@@ -574,6 +579,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
                     .Deadline = item.Deadline,
                     .HandleClass = HandleClass,
                     .Tactic = Tactic,
+                    .WriteSource = item.WriteSource,
                     .IssueKeepFlag = item.IssueKeepFlag,
                     .IgnoreBlock = item.IgnoreBlock,
                     .AlreadyEncrypted = item.AlreadyEncrypted,

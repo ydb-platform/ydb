@@ -348,19 +348,31 @@ private:
             };
 
             YQL_ENSURE(Session_->OperationOptions_.AuthenticatedUser);
-            bool hasReadWrite = checkReadWrite(*Session_->OperationOptions_.AuthenticatedUser);
-            if (hasReadWrite) {
+            bool actualUserHasReadWrite = checkReadWrite(*Session_->OperationOptions_.AuthenticatedUser);
+            bool effectiveUserHasReadWrite = *Session_->OperationOptions_.AuthenticatedUser != entry->EffectiveUser
+                ? checkReadWrite(entry->EffectiveUser)
+                : true;
+            if (actualUserHasReadWrite && effectiveUserHasReadWrite) {
                 YQL_CLOG(INFO, ProviderYt) << "Using secure tmp folder " << secureTmpPath;
                 return true;
             }
 
-            // User doesn't have permissions on secure tmp
+            // Actual or effective user doesn't have permissions on secure tmp
             if (!accessRequested) {
                 if constexpr (NPrivate::THasPublicId<TOptions>::value) {
                     SetNodeExecProgress("Waiting for secure temporary folder");
                 }
 
-                RequestSecureTmpAccess(EIdentityType::User, secureTmpPath).GetValueSync();
+                TVector<NThreading::TFuture<void>> requests;
+                if (!actualUserHasReadWrite) {
+                    requests.push_back(RequestSecureTmpAccess(secureTmpPath, *Session_->OperationOptions_.AuthenticatedUser));
+                }
+                if (!effectiveUserHasReadWrite) {
+                    auto accessPeriod = Options_.Config()->_SecureTmpTokenUsersAccessPeriod.Get().GetOrElse(DEFAULT_SECURE_TMP_TOKEN_USERS_ACCESS_PERIOD);
+                    requests.push_back(RequestSecureTmpAccess(secureTmpPath, entry->EffectiveUser, accessPeriod));
+                }
+
+                NThreading::WaitAll(requests).GetValueSync();
                 YQL_CLOG(INFO, ProviderYt) << "Requested permissions for secure tmp folder";
                 accessRequested = true;
             }
@@ -375,13 +387,17 @@ private:
         }
     }
 
-    NThreading::TFuture<void> RequestSecureTmpAccess(EIdentityType type, const TString& path) {
+    NThreading::TFuture<void> RequestSecureTmpAccess(const TString& path, const TString& identity, TMaybe<TDuration> period = {}) {
         auto logCtx = NYql::NLog::CurrentLogContextPath();
-        return Session_->Async([this, logCtx, type, &path] {
+        return Session_->Async([this, logCtx, &path, &identity, period] {
             YQL_LOG_CTX_ROOT_SESSION_SCOPE(logCtx);
             try {
-                YQL_CLOG(INFO, ProviderYt) << "Requesting permissions for secure tmp " << path << " for " << type << " for cluster " << Cluster_;
-                YtAccessProvider->RequestAccess(Clusters_->GetYtName(Cluster_), type, path, Session_->UserName_, Session_->OperationOptions_);
+                YQL_CLOG(INFO, ProviderYt) << "Requesting permissions for secure tmp ("
+                    << "path=" << path
+                    << ", identity=" << identity
+                    << ", period=" << (period ? period->ToString() : "inf")
+                    << ") for cluster " << Cluster_;
+                YtAccessProvider->RequestAccess(Clusters_->GetYtName(Cluster_), path, Session_->UserName_, EIdentityType::User, identity, period);
                 return NThreading::MakeFuture();
             } catch (...) {
                 YQL_CLOG(ERROR, ProviderYt) << CurrentExceptionMessage();

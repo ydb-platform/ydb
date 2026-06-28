@@ -1,9 +1,12 @@
 #include <ydb/core/http_proxy/ut/datastreams_fixture/datastreams_fixture.h>
 #include <ydb/core/http_proxy/http_req.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/core/persqueue/ut/common/sdk_ut_common.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/ymq/actor/metering.h>
 #include <ydb/core/ymq/base/limits.h>
+#include <ydb/library/kafka/ut/ut_common.h>
+#include <ydb/services/sqs_topic/receipt.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
@@ -50,6 +53,16 @@ namespace {
         void SetUp(NUnitTest::TTestContext& ctx) override {
             TWithEnforceUserTokenRequirementFixture::SetUp(ctx);
             DisableAuthorization();
+        }
+    };
+
+    class TWithTopicBatchingFixture: public THttpProxyTestMock {
+    public:
+        void SetUp(NUnitTest::TTestContext&) override {
+            InitAll(TInitParameters{
+                .EnableSqsTopic = true,
+                .EnableTopicMessagesBatching = true,
+            });
         }
     };
 
@@ -598,6 +611,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         Y_UNIT_TEST_F(TestReceiveMessageInvalidQueueUrl, TFixture) {
             auto jsonReceived = ReceiveMessage({{"QueueUrl", "/invalid/queue/url/"}, {"WaitTimeSeconds", 1}}, 400);
             TString resultType = GetByPath<TString>(jsonReceived, "__type");
+            UNIT_ASSERT_VALUES_EQUAL(resultType, "InvalidArgumentException");
         }
 
         Y_UNIT_TEST_F(TestReceiveMessageNonExistingQueue, TFixture) {
@@ -635,6 +649,107 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"][0]["Body"], "MessageBody-0");
             CompareCommonSendAndReceivedAttrubutes(jsonSend, jsonReceived["Messages"][0]);
             // Second call during visibility timeout
+            jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}});
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArray().size(), 0);
+        }
+
+        Y_UNIT_TEST_F(TestReceiveMessageKafkaBatches, TWithTopicBatchingFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+            bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+            UNIT_ASSERT(a);
+
+            NYdb::NTopic::TTopicClient topicClient(driver);
+            constexpr size_t dataSize = 16;
+            NKikimr::NPQ::NTest::WriteKafkaBatchMessages(
+                topicClient,
+                path.TopicPath,
+                "sqs-batch-producer",
+                dataSize,
+                3,
+                {
+                    {1, 3, 'a'},
+                    {4, 3, 'b'},
+                    {7, 3, 'c'},
+                });
+
+            const TVector<char> expectedFills = {'a', 'b', 'c'};
+            size_t receivedCount = 0;
+            while (receivedCount < 3) {
+                auto jsonReceived = ReceiveMessage({
+                    {"QueueUrl", path.QueueUrl},
+                    {"WaitTimeSeconds", 20},
+                    {"MaxNumberOfMessages", 10},
+                });
+                const auto& messages = jsonReceived["Messages"].GetArraySafe();
+                UNIT_ASSERT_C(!messages.empty(), "received " << receivedCount << " messages");
+
+                for (const auto& message : messages) {
+                    UNIT_ASSERT_C(receivedCount < expectedFills.size(), LabeledOutput(receivedCount));
+                    UNIT_ASSERT_VALUES_EQUAL(
+                        message["Attributes"]["BodyEncoding"].GetString(),
+                        ToString(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH)));
+                    NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(message["Body"].GetString()), 3, expectedFills[receivedCount], dataSize);
+                    ++receivedCount;
+                }
+            }
+
+            auto jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}});
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArray().size(), 0);
+        }
+
+        Y_UNIT_TEST_F(TestDeleteKafkaBatchMiddleOffsetDoesNotDeleteBatch, TWithTopicBatchingFixture) {
+            auto driver = MakeDriver(*this);
+            const TSqsTopicPaths path;
+            bool a = CreateTopic(driver, path.TopicName, path.ConsumerName);
+            UNIT_ASSERT(a);
+
+            NYdb::NTopic::TTopicClient topicClient(driver);
+            constexpr size_t dataSize = 16;
+            NKikimr::NPQ::NTest::WriteKafkaBatchMessages(
+                topicClient,
+                path.TopicPath,
+                "sqs-batch-middle-delete-producer",
+                dataSize,
+                3,
+                {
+                    {1, 3, 'a'},
+                });
+
+            auto jsonReceived = ReceiveMessage({
+                {"QueueUrl", path.QueueUrl},
+                {"WaitTimeSeconds", 20},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
+
+            const auto& message = jsonReceived["Messages"][0];
+            const TString receiptHandle = message["ReceiptHandle"].GetString();
+            auto messageId = NKikimr::NSqsTopic::V1::DeserializeReceipt(receiptHandle);
+            UNIT_ASSERT_C(messageId.has_value(), messageId.error());
+
+            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(message["Body"].GetString()), 3, 'a', dataSize);
+
+            const TString middleReceiptHandle = NKikimr::NSqsTopic::V1::SerializeReceipt({
+                .PartitionId = messageId->PartitionId,
+                .Offset = messageId->Offset + 1,
+            });
+            DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", middleReceiptHandle}});
+
+            ChangeMessageVisibility({
+                {"QueueUrl", path.QueueUrl},
+                {"ReceiptHandle", receiptHandle},
+                {"VisibilityTimeout", 0},
+            });
+
+            jsonReceived = ReceiveMessage({
+                {"QueueUrl", path.QueueUrl},
+                {"WaitTimeSeconds", 20},
+            });
+            UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArraySafe().size(), 1);
+            NKafka::NTest::AssertKafkaBatchPayload(Base64Decode(jsonReceived["Messages"][0]["Body"].GetString()), 3, 'a', dataSize);
+
+            DeleteMessage({{"QueueUrl", path.QueueUrl}, {"ReceiptHandle", jsonReceived["Messages"][0]["ReceiptHandle"].GetString()}});
+
             jsonReceived = ReceiveMessage({{"QueueUrl", path.QueueUrl}, {"WaitTimeSeconds", 1}});
             UNIT_ASSERT_VALUES_EQUAL(jsonReceived["Messages"].GetArray().size(), 0);
         }
@@ -1621,6 +1736,35 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
         });
         TString queueUrl = GetPathFromQueueUrlMap(json);
         UNIT_ASSERT(queueUrl.Contains("ExampleQueue.fifo"));
+    }
+
+    Y_UNIT_TEST_F(TestCreateFifoQueueWithoutSuffix, TFixture) {
+        const TString queueName = "CreateQueueWithoutSuffix";
+
+        auto json = CreateQueue({
+            {"QueueName", queueName},
+            {"Attributes", NJson::TJsonMap{{"FifoQueue", "true"}, {"ContentBasedDeduplication", "true"}}}
+        });
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+
+        TString queueUrl = GetPathFromQueueUrlMap(json);
+        Cerr << (TStringBuilder() << "queueUrl: " << queueUrl << Endl);
+        UNIT_ASSERT_C(queueUrl.Contains(queueName), queueUrl);
+
+        json = GetQueueAttributes({{"QueueUrl", queueUrl}, {"AttributeNames", NJson::TJsonArray{"FifoQueue"}}});
+        UNIT_ASSERT_VALUES_EQUAL(json["Attributes"]["FifoQueue"], "true");
+
+        json = GetQueueUrl({{"QueueName", queueName}});
+        UNIT_ASSERT(!GetByPath<TString>(json, "QueueUrl").empty());
+        queueUrl = GetPathFromQueueUrlMap(json);
+        Cerr << (TStringBuilder() << "queueUrl: " << queueUrl << Endl);
+        UNIT_ASSERT_C(queueUrl.Contains(queueName), queueUrl);
+
+        json = SendMessage({{"QueueUrl", queueUrl}, {"MessageBody", "test"}});
+        UNIT_ASSERT(!GetByPath<TString>(json, "MessageId").empty());
+
+        json = ReceiveMessage({{"QueueUrl", queueUrl}});
+        UNIT_ASSERT_VALUES_EQUAL(json["Messages"].GetArray().size(), 1);
     }
 
     Y_UNIT_TEST_F(TestCreateQueueWithAttributes, TFixture) {

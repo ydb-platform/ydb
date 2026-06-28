@@ -14,26 +14,17 @@ namespace {
 
 const ui32 CHUNK_SIZE_PLACEMENT = 0xCCCCCCCC;
 
-static_assert(MESSAGE_COUNT_BITS + MESSAGE_FORMAT_BITS == 32);
-static_assert(static_cast<ui32>(EMessageFormat::COUNT) <= (1u << MESSAGE_FORMAT_BITS));
-
-ui32 PackMessageMetadata(ui32 messageCount, EMessageFormat messageFormat) {
-    AFL_ENSURE(messageCount >= 1 && messageCount <= MAX_MESSAGE_COUNT)("messageCount", messageCount);
-    const ui32 format = static_cast<ui32>(messageFormat);
-    return (messageCount << MESSAGE_FORMAT_BITS) | format;
-}
+static_assert(LOGICAL_MESSAGE_COUNT_BITS + MESSAGE_METADATA_RESERVED_BITS == 32);
 
 ui32 PackMessageMetadata(const TClientBlob& blob) {
-    return PackMessageMetadata(blob.MessageCount, blob.MessageFormat);
+    AFL_ENSURE(blob.LogicalMessageCount >= 1 && blob.LogicalMessageCount <= MAX_LOGICAL_MESSAGE_COUNT)("logicalMessageCount", blob.LogicalMessageCount);
+    return (blob.LogicalMessageCount << MESSAGE_METADATA_RESERVED_BITS) | (blob.IsBatch ? 1 : 0);
 }
 
-std::pair<ui32, EMessageFormat> UnpackMessageMetadata(ui32 metadata) {
-    ui32 messageCount = metadata >> MESSAGE_FORMAT_BITS;
-    if (messageCount == 0) {
-        messageCount = 1;
-    }
-    const ui32 messageFormat = metadata & ((1u << MESSAGE_FORMAT_BITS) - 1);
-    return {messageCount, static_cast<EMessageFormat>(messageFormat)};
+std::pair<ui32, bool> UnpackMessageMetadata(ui32 metadata) {
+    ui32 logicalMessageCount = metadata >> MESSAGE_METADATA_RESERVED_BITS;
+    bool isBatch = metadata & 1;
+    return {logicalMessageCount == 0 ? 1 : logicalMessageCount, isBatch};
 }
 
 
@@ -86,7 +77,7 @@ TMessageFlags InitFlags(const TClientBlob& blob) {
     flags.F.HasPartData = !blob.PartData.Empty();
     flags.F.HasUncompressedSize = blob.UncompressedSize != 0;
     flags.F.HasKinesisData = !blob.PartitionKey.empty();
-    flags.F.HasBatchInfo = blob.MessageCount != 1 || blob.MessageFormat != EMessageFormat::STANDARD;
+    flags.F.HasBatchInfo = blob.LogicalMessageCount != 1 || blob.IsBatch;
     return flags;
 }
 
@@ -151,7 +142,7 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
             hasKinesis = true;
         }
 
-        if (Batch.Blobs[i].MessageCount != 1 || Batch.Blobs[i].MessageFormat != EMessageFormat::STANDARD) {
+        if (Batch.Blobs[i].LogicalMessageCount != 1 || Batch.Blobs[i].IsBatch) {
             hasBatchInfo = true;
         }
     }
@@ -165,7 +156,7 @@ void TBatchSerializer<NKikimrPQ::TBatchHeader::ECompressed>::Pack() {
     for (ui32 i = 0; i < Batch.Blobs.size(); ++i) {
         if (Batch.Blobs[i].IsLastPart()) {
             ++lastPartCount;
-            offsetSpan += Batch.Blobs[i].MessageCount;
+            offsetSpan += Batch.Blobs[i].LogicalMessageCount;
         }
         ++reorderMap[TStringBuf(Batch.Blobs[i].SourceId)];
     }
@@ -481,21 +472,21 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
         uncompressedSize.resize(totalBlobs); //fill with zero-s
     }
 
-    TVector<ui32> messageCounts;
-    TVector<EMessageFormat> messageFormats;
-    messageCounts.reserve(totalBlobs);
-    messageFormats.reserve(totalBlobs);
+    TVector<ui32> logicalMessageCounts;
+    TVector<bool> isBatches;
+    logicalMessageCounts.reserve(totalBlobs);
+    isBatches.reserve(totalBlobs);
     if (data < dataEnd) {
         auto chunk = NScheme::IChunkDecoder::ReadChunk(GetChunk(data, dataEnd), &ui32Codecs);
         auto iter = chunk->MakeIterator();
         for (ui32 i = 0; i < totalBlobs; ++i) {
-            auto [messageCount, messageFormat] = UnpackMessageMetadata(ReadUnaligned<ui32>(iter->Next().Data()));
-            messageCounts.push_back(messageCount);
-            messageFormats.push_back(messageFormat);
+            auto [logicalMessageCount, isBatch] = UnpackMessageMetadata(ReadUnaligned<ui32>(iter->Next().Data()));
+            logicalMessageCounts.push_back(logicalMessageCount);
+            isBatches.push_back(isBatch);
         }
     } else {
-        messageCounts.resize(totalBlobs, 1);
-        messageFormats.resize(totalBlobs, EMessageFormat::STANDARD);
+        logicalMessageCounts.resize(totalBlobs, 1);
+        isBatches.resize(totalBlobs, false);
     }
 
     AFL_ENSURE(data == dataEnd);
@@ -526,8 +517,8 @@ void TBatchDeserializer<NKikimrPQ::TBatchHeader::ECompressed>::Unpack(TVector<TC
         processedBlob.PartitionKey = std::move(partitionKey[i]);
         processedBlob.ExplicitHashKey = std::move(explicitHash[i]);
 
-        processedBlob.MessageCount = messageCounts[pos[i]];
-        processedBlob.MessageFormat = messageFormats[pos[i]];
+        processedBlob.LogicalMessageCount = logicalMessageCounts[pos[i]];
+        processedBlob.IsBatch = isBatches[pos[i]];
 
         if (lastPart) {
             ++currentSID;
@@ -734,12 +725,10 @@ TClientBlob DeserializeClientBlob(const char *data, ui32 size) {
             data += explicitHashKey.size();
     }
 
-    ui32 messageCount = 1;
-    EMessageFormat messageFormat = EMessageFormat::STANDARD;
+    ui32 logicalMessageCount = 1;
+    bool isBatch = false;
     if (flags.F.HasBatchInfo) {
-        const auto messageMetadata = UnpackMessageMetadata(ReadUnaligned<ui32>(data));
-        messageCount = messageMetadata.first;
-        messageFormat = messageMetadata.second;
+        std::tie(logicalMessageCount, isBatch) = UnpackMessageMetadata(ReadUnaligned<ui32>(data));
         data += sizeof(ui32);
     }
 
@@ -770,6 +759,6 @@ TClientBlob DeserializeClientBlob(const char *data, ui32 size) {
 
     return TClientBlob(std::move(sourceId), seqNo, std::move(dt), partData,
                        writeTimestamp, createTimestamp, uncompressedSize,
-                       std::move(partitionKey), std::move(explicitHashKey), messageCount, messageFormat);
+                       std::move(partitionKey), std::move(explicitHashKey), logicalMessageCount, isBatch);
 }
 } //NKikimr :: NPQ

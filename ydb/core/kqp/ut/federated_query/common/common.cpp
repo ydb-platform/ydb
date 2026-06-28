@@ -160,9 +160,14 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
             .SetCheckpointPeriod(options.CheckpointPeriod)
             .SetUseLocalCheckpointsInStreamingQueries(options.UseLocalCheckpointsInStreamingQueries)
             .SetLogSettings(std::move(logSettings))
+            .SetNeedsStatsCollectors(options.NeedsStatsCollectors)
             .SetInitFederatedQuerySetupFactory(options.InternalInitFederatedQuerySetupFactory);
 
         settings.EnableScriptExecutionBackgroundChecks = options.EnableScriptExecutionBackgroundChecks;
+        federatedQuerySetupFactory->SetScriptExecutionSettings({
+            .EnableBackgroundLeaseChecks = options.EnableScriptExecutionBackgroundChecks,
+            .LeaseCheckStartupTimeout = TDuration::Zero(),
+        });
 
         return std::make_shared<TKikimrRunner>(settings);
     }

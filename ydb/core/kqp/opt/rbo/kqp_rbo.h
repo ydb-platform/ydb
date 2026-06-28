@@ -108,6 +108,7 @@ public:
  * we convert it into a final physical representation that directly correpsonds to the execution plan.
  */
 TExprNode::TPtr ConvertToPhysical(TOpRoot& root, TRBOContext& ctx);
+void ComputeRequiredProps(TOpRoot& root, ui32 props, TRBOContext& ctx, TString stageName);
 void ComputePlanLiveness(TOpRoot& root);
 void ComputePlanAliases(TOpRoot& root);
 

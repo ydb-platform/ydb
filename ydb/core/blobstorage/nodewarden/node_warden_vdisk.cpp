@@ -231,6 +231,12 @@ namespace NKikimr::NStorage {
                 if (Cfg->PBufferConfig->HasEnableFastErases()) {
                     pbufferFormat.EnableFastErases = Cfg->PBufferConfig->GetEnableFastErases();
                 }
+                if (Cfg->PBufferConfig->HasWritesBatchingPeriodMicroseconds()) {
+                    pbufferFormat.WritesBatchingPeriodMicroseconds = Cfg->PBufferConfig->GetWritesBatchingPeriodMicroseconds();
+                }
+                if (Cfg->PBufferConfig->HasEnableWritesBatching()) {
+                    pbufferFormat.EnableWritesBatching = Cfg->PBufferConfig->GetEnableWritesBatching();
+                }
             }
             actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbufferFormat),
                 std::move(ddiskConfig), AppData()->Counters));
@@ -265,6 +271,8 @@ namespace NKikimr::NStorage {
             vdiskConfig->MaxActiveCompactionsPerPDisk = MaxActiveCompactionsPerPDisk;
             vdiskConfig->DefragThrottlerBytesRate = DefragThrottlerBytesRate;
             vdiskConfig->EnableLocalSyncLogDataCutting = EnableLocalSyncLogDataCutting;
+            vdiskConfig->SyncLogMaxDiskAmount = SyncLogMaxDiskAmount;
+            vdiskConfig->SyncLogMaxMemAmount = SyncLogMaxMemAmount;
 
             if (deviceType == NPDisk::EDeviceType::DEVICE_TYPE_ROT) {
                 vdiskConfig->EnableSyncLogChunkCompression = EnableSyncLogChunkCompressionHDD;
@@ -290,6 +298,7 @@ namespace NKikimr::NStorage {
             vdiskConfig->EnablePhantomFlagStorage = EnablePhantomFlagStorage;
             vdiskConfig->EnablePersistentPhantomFlagStorage = EnablePersistentPhantomFlagStorage;
             vdiskConfig->PhantomFlagStorageLimit = PhantomFlagStorageLimitPerVDiskBytes;
+            vdiskConfig->VolatilePhantomFlagStorageBlobSizeLimit = VolatilePhantomFlagStorageBlobSizeLimitBytes;
             vdiskConfig->EnableChunkKeeper = EnableChunkKeeper;
 
             vdiskConfig->CostMetricsParametersByMedia = CostMetricsParametersByMedia;
@@ -323,6 +332,8 @@ namespace NKikimr::NStorage {
             vdiskConfig->GroupSizeInUnits = groupInfo->GroupSizeInUnits;
 
             vdiskConfig->EnableDeepScrubbing = EnableDeepScrubbing;
+
+            vdiskConfig->EnableFreshSyncDataThrottling = EnableFreshSyncDataThrottling;
 
             // debug options
             if (Cfg->TinySyncLog) {

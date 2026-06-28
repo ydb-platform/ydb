@@ -1621,6 +1621,25 @@ ui64 AsyncSplitTable(
         TActorId sender,
         const TString& path,
         ui64 sourceTablet,
+        TVector<NKikimrMiniKQL::TValue>&& splitKey)
+{
+    auto request = SchemeTxTemplate(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
+    auto& desc = *request->Record.MutableTransaction()->MutableModifyScheme()->MutableSplitMergeTablePartitions();
+    desc.SetTablePath(path);
+    desc.AddSourceTabletId(sourceTablet);
+    auto& keyPrefix = *desc.AddSplitBoundary()->MutableKeyPrefix();
+    for (auto& keyPart: splitKey) {
+        *keyPrefix.AddTuple()->MutableOptional() = std::move(keyPart);
+    }
+
+    return RunSchemeTx(*server->GetRuntime(), std::move(request), sender, true);
+}
+
+ui64 AsyncSplitTable(
+        Tests::TServer::TPtr server,
+        TActorId sender,
+        const TString& path,
+        ui64 sourceTablet,
         ui32 splitKey)
 {
     NKikimrMiniKQL::TValue protoKey;

@@ -67,6 +67,7 @@ void TFederatedDbObserverImpl::RunFederationDiscoveryImpl() {
     // IAM token is not ready yet), which in turn calls OnFederationDiscovery that
     // tries to acquire Lock.  Holding Lock here would cause a spin-deadlock on
     // the single gRPC event-loop thread.
+    Y_ABORT_UNLESS(!Lock.IsLocked());
 
     NYdbGrpc::IQueueClientContextPtr ctx;
     {
@@ -77,6 +78,7 @@ void TFederatedDbObserverImpl::RunFederationDiscoveryImpl() {
         ctx = Connections_->CreateContext();
         if (!ctx) {
             Stopping = true;
+            FederationDiscoveryDelayContext = nullptr;  // release any previously-held context
             // TODO log DRIVER_IS_STOPPING_DESCRIPTION
             return;
         }

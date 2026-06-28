@@ -391,6 +391,57 @@ Y_UNIT_TEST_SUITE(CopyTable) {
         ProposeSchemaTxFail(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, srcPathId, 1), ++txId);
     }
 
+    Y_UNIT_TEST(RebootBetweenCopyTablePlanStepAndProgress) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+        TActorId sender = runtime.AllocateEdgeActor();
+
+        const ui64 srcPathId = 1;
+        TestTableDescription testTable{};
+        auto planStep = PrepareTablet(runtime, srcPathId, testTable.Schema);
+
+        ui64 txId = 10;
+        int writeId = 10;
+        {
+            std::vector<ui64> writeIds;
+            const bool ok =
+                WriteData(runtime, sender, writeId++, srcPathId, MakeTestBlob({ 0, 100 }, testTable.Schema), testTable.Schema, true, &writeIds);
+            UNIT_ASSERT(ok);
+            planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+            PlanCommit(runtime, sender, planStep, txId);
+        }
+
+        const ui64 dstPathId = 2;
+        const auto copyTxId = ++txId;
+        planStep = ProposeSchemaTx(runtime, sender, TTestSchema::CopyTableTxBody(srcPathId, dstPathId, 1), copyTxId);
+        const auto copyPlanStep = planStep;
+
+        {
+            auto evSubscribe = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(copyTxId);
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evSubscribe.release());
+
+            auto plan = std::make_unique<TEvTxProcessing::TEvPlanStep>(copyPlanStep.Val(), 0, TTestTxConfig::TxTablet0);
+            auto tx = plan->Record.AddTransactions();
+            tx->SetTxId(copyTxId);
+            ActorIdToProto(sender, tx->MutableAckTo());
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, plan.release());
+        }
+
+        RebootTablet(runtime, TTestTxConfig::TxTablet0, sender);
+
+        PlanSchemaTxStepOnly(runtime, sender, { copyPlanStep, copyTxId });
+        WaitSchemaTxCompletion(runtime, sender, copyTxId);
+
+        {
+            TShardReader reader(runtime, TTestTxConfig::TxTablet0, dstPathId, NOlap::TSnapshot(copyPlanStep, copyTxId));
+            reader.SetReplyColumnIds(TTestSchema::ExtractIds(testTable.Schema));
+            auto rb = reader.ReadAll();
+            UNIT_ASSERT(rb);
+            UNIT_ASSERT_EQUAL(rb->num_rows(), 100);
+        }
+    }
+
     Y_UNIT_TEST_DUO(ReadOnlyTableSnapshotIsolation, Reboot) {
         TTestBasicRuntime runtime;
         SetupCopyTableTestRuntime(runtime);

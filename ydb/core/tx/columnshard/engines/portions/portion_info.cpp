@@ -3,8 +3,6 @@
 #include "data_accessor.h"
 #include "portion_info.h"
 
-#include <ydb/core/base/appdata.h>
-#include <ydb/core/protos/config.pb.h>
 #include <ydb/core/tx/columnshard/data_sharing/protos/data.pb.h>
 #include <ydb/core/tx/columnshard/engines/db_wrapper.h>
 #include <ydb/core/tx/columnshard/engines/scheme/index_info.h>
@@ -22,8 +20,7 @@ ui64 TPortionInfo::GetColumnBlobBytes() const {
     return GetMeta().GetColumnBlobBytes();
 }
 
-ui64 TPortionInfo::GetSmallBlobBytesInBlobStorage() const {
-    const ui64 threshold = HasAppData() ? AppData()->ColumnShardConfig.GetSmallBlobsQuota().GetSmallBlobSizeThresholdBytes() : (ui64)64_KB;
+ui64 TPortionInfo::GetSmallBlobBytesInBlobStorage(const ui64 smallBlobThresholdBytes) const {
     const TString& defaultStorageId = NBlobOperations::TGlobal::DefaultStorageId;
 
     const ui64 columnBsBytes = IsDefaultTier(defaultStorageId) ? GetColumnBlobBytes() : 0;
@@ -41,7 +38,7 @@ ui64 TPortionInfo::GetSmallBlobBytesInBlobStorage() const {
     // If both columns and indices are in blob storage, and their total size is less than the threshold,
     // then they are packed into a single blob.
     const ui64 totalBsBytes = columnBsBytes + indexBsBytes;
-    return totalBsBytes <= threshold ? totalBsBytes : 0;
+    return totalBsBytes <= smallBlobThresholdBytes ? totalBsBytes : 0;
 }
 
 TString TPortionInfo::DebugString(const bool withDetails) const {

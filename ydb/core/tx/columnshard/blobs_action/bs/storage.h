@@ -42,8 +42,12 @@ public:
         return Manager->GetBlobsToDeleteAll();
     }
 
-    virtual TSmallBlobsStat CalcSmallBlobsToDelete(const ui64 sizeThreshold) const override {
-        return Manager->CalcSmallBlobsToDelete(sizeThreshold);
+    virtual TSmallBlobsStat CalcSmallBlobsToDelete() const override {
+        return Manager->CalcSmallBlobsToDelete(GetSmallBlobThresholdBytes());
+    }
+
+    virtual std::optional<TBlobStorageGroupType> GetBlobStorageLayout() const override {
+        return Manager->GetBlobStorageGroupType();
     }
 
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const override {

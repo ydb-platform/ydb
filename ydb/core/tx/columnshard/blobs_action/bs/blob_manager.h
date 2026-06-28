@@ -2,6 +2,7 @@
 
 #include "address.h"
 
+#include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/protos/tx_columnshard.pb.h>
 #include <ydb/core/tablet_flat/flat_executor.h>
 #include <ydb/core/tx/columnshard/blob.h>
@@ -188,6 +189,9 @@ public:
     }
 
     TSmallBlobsStat CalcSmallBlobsToDelete(const ui64 sizeThreshold) const;
+
+    // We suppose that all the blob storage groups for a database have the same type
+    TBlobStorageGroupType GetBlobStorageGroupType() const;
 
     virtual void OnBlobFree(const TUnifiedBlobId& blobId) override;
 

@@ -454,7 +454,7 @@ public:
 
     // There can be at most one small blob in blob storage for a portion.
     // If bytes = 0, the portion does not have a small blob in blob storage.
-    ui64 GetSmallBlobBytesInBlobStorage() const;
+    ui64 GetSmallBlobBytesInBlobStorage(const ui64 smallBlobThresholdBytes) const;
 
     ui64 GetTotalRawBytes() const {
         return GetColumnRawBytes() + GetIndexRawBytes();

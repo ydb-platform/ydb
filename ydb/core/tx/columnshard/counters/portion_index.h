@@ -66,6 +66,8 @@ private:
     TSmallBlobsAcc TotalSmallBlobs;
     THashMap<TInternalPathId, TSmallBlobsAcc> SmallBlobsByPathId;
 
+    ui64 SmallBlobThresholdBytes = 0;
+
     static NOlap::TSimplePortionsGroupInfo SelectStats(const TStatsByClass& container, const IStatsSelector& selector) {
         NOlap::TSimplePortionsGroupInfo result;
         for (const auto& [portionClass, stats] : container) {
@@ -77,6 +79,10 @@ private:
     }
 
 public:
+    void SetSmallBlobThresholdBytes(const ui64 value) {
+        SmallBlobThresholdBytes = value;
+    }
+
     void AddPortion(const NOlap::TPortionInfo& portion);
     void RemovePortion(const NOlap::TPortionInfo& portion);
 

@@ -419,15 +419,47 @@ void TColumnShard::FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDa
     TTableStatsBuilder statsBuilder(Counters, executor);
     statsBuilder.FillTotalTableStats(*tableStats);
 
-    const ui64 threshold = AppDataVerified().ColumnShardConfig.GetSmallBlobsQuota().GetSmallBlobSizeThresholdBytes();
     NOlap::TSmallBlobsStat toDelete;
     for (auto&& i : StoragesManager->GetStorages()) {
-        const auto stat = i.second->CalcSmallBlobsToDelete(threshold);
+        const auto stat = i.second->CalcSmallBlobsToDelete();
         toDelete.Volume += stat.Volume;
         toDelete.Count += stat.Count;
     }
     tableStats->SetSmallBlobsVolume(tableStats->GetSmallBlobsVolume() + toDelete.Volume);
-    tableStats->SetSmallBlobsCount(tableStats->GetSmallBlobsCount() + toDelete.Count);
+    tableStats->SetSmallBlobsCount(NormalizeSmallBlobsCount(tableStats->GetSmallBlobsCount() + toDelete.Count));
+}
+
+const std::optional<NKikimr::TBlobStorageGroupType>& TColumnShard::GetBlobStorageLayout() {
+    if (!BlobStorageLayout) {
+        BlobStorageLayout = StoragesManager->GetDefaultOperator()->GetBlobStorageLayout();
+    }
+    return BlobStorageLayout;
+}
+
+ui64 TColumnShard::NormalizeSmallBlobsCount(const ui64 rawCount) {
+    const auto& layout = GetBlobStorageLayout();
+    if (!layout) {
+        return rawCount;
+    }
+    const auto& quota = AppDataVerified().ColumnShardConfig.GetSmallBlobsQuota();
+    ui32 coef = 1;
+    switch (layout->GetErasure()) {
+        case NKikimr::TErasureType::ErasureMirror3dc:
+            coef = quota.GetMirror3dcStorageHardQuotaCoef();
+            break;
+        case NKikimr::TErasureType::Erasure4Plus2Block:
+            coef = quota.GetBlock42StorageHardQuotaCoef();
+            break;
+        default:
+            break;
+    }
+    coef = std::max<ui32>(1, coef);
+    const ui32 vdisks = std::max<ui32>(1, layout->BlobSubgroupSize());
+    // 1. Every vdisk in a group keeps a record for a blob in the index in RAM, so we multiply by the number of vdisks.
+    // 2. Hard storage quota is set in term of "user data", not "actual blob storage consumption".
+    // When the quote is set, it is usually "actual blobs storage allowence" / some coefficient (depending on the eresue).
+    // So, here we take that coefficient into account too.
+    return rawCount * vdisks / coef;
 }
 
 void TColumnShard::FillColumnTableStats(

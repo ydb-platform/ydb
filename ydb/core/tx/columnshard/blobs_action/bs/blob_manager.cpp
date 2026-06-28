@@ -476,6 +476,16 @@ TSmallBlobsStat TBlobManager::CalcSmallBlobsToDelete(const ui64 sizeThreshold) c
     return result;
 }
 
+TBlobStorageGroupType TBlobManager::GetBlobStorageGroupType() const {
+    // We assume here that all the channels have the same group type.
+    // We get [2] because it is the first channel where we store data.
+    // So, just in case, in the future 0, 1 channels be different from the rest, the code will still work.
+    if (TabletInfo && TabletInfo->Channels.size() > 2) {
+        return TabletInfo->Channels[2].Type;
+    }
+    return TBlobStorageGroupType(TBlobStorageGroupType::ErasureNone);
+}
+
 void TBlobManager::OnGCFinishedOnExecute(const std::optional<TGenStep>& genStep, IBlobManagerDb& db) {
     if (genStep) {
         db.SaveLastGcBarrier(*genStep);

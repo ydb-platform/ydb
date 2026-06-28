@@ -4,6 +4,7 @@
 #include "remove.h"
 #include "write.h"
 
+#include <ydb/core/base/blobstorage_grouptype.h>
 #include <ydb/core/tx/columnshard/blobs_action/blob_manager_db.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/remove_gc.h>
 #include <ydb/core/tx/columnshard/blobs_action/counters/storage.h>
@@ -11,6 +12,8 @@
 #include <ydb/core/tx/tiering/abstract/manager.h>
 
 #include <ydb/library/accessor/accessor.h>
+
+#include <optional>
 
 namespace NKikimr::NOlap {
 
@@ -91,10 +94,18 @@ public:
 
     virtual TTabletsByBlob GetBlobsToDelete() const = 0;
 
-    virtual TSmallBlobsStat CalcSmallBlobsToDelete(const ui64 sizeThreshold) const {
-        Y_UNUSED(sizeThreshold);
+    virtual TSmallBlobsStat CalcSmallBlobsToDelete() const {
         return {};
     }
+
+    // Makes sense only for the blob storage.
+    // We assume that all the blob storage groups for a database have the same type.
+    virtual std::optional<TBlobStorageGroupType> GetBlobStorageLayout() const {
+        return std::nullopt;
+    }
+
+    // Makes sense only for the blob storage.
+    ui64 GetSmallBlobThresholdBytes() const;
 
     virtual bool HasToDelete(const TUnifiedBlobId& blobId, const TTabletId initiatorTabletId) const = 0;
     virtual std::shared_ptr<IBlobInUseTracker> GetBlobsTracker() const = 0;

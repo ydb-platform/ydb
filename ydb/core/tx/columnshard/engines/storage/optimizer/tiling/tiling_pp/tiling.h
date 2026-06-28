@@ -206,7 +206,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
             InternalLevel[portionId] = { .Level = level, .Width = measure };
         }
 
-        if (level != 1 && Settings.AgingSettings.Enabled) {
+        if (level >= 2 && Settings.AgingSettings.Enabled) {
             InsertTimeByPortionId[portionId] = now;
             PortionsByTime.insert({ now, portionId });
         }
@@ -271,7 +271,7 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
             if (pit != PortionRegistry.end()) {
                 auto lit = InternalLevel.find(it->second);
                 if (lit != InternalLevel.end()) {
-                    if ((State == EState::BORED && lit->second.Level != 0) || it->first + wait <= currentInstant) {
+                    if ((State == EState::BORED) || it->first + wait <= currentInstant) {
                         expired.push_back(pit->second);
                     }
                 }
@@ -288,27 +288,44 @@ struct Tiling: ICompactionUnit<TKey, TPortion> {
                 continue;
             }
             const ui8 currentLevel = lit->second.Level;
-            std::optional<ui8> nextLevel;
-            if (currentLevel == 0) {
-                // Promote out of accumulator: acc no longer allowed, use natural routing.
-                nextLevel = std::nullopt;
-            } else if (currentLevel >= 2) {
-                // Middle level promotion: force one level lower; acc impossible.
-                nextLevel = static_cast<ui8>(currentLevel - 1);
-            } else {
-                AFL_VERIFY(false)("reason", "last_level_portion_should_not_have_timer")("portion_id", portionId);
-                continue;
-            }
+            AFL_VERIFY(currentLevel >= 2)("reason", "only_middle_levels_should_have_aging_timers")("portion_id", portionId)(
+                "level", (ui32)currentLevel);
+            const auto nextLevel = static_cast<ui8>(currentLevel - 1);
             DoRemovePortion(p);
             Place(p, currentInstant, /*accumulatorAllowed=*/false, nextLevel);
+        }
+
+        if (AreOtherLevelsEmpty() && Accumulator.Portions.size() == 1) {
+            auto it = Accumulator.Portions.begin();
+            auto pit = PortionRegistry.find((*it)->GetPortionId());
+            if (pit != PortionRegistry.end()) {
+                typename TPortion::TPtr p = pit->second;
+                DoRemovePortion(p);
+                Place(p, currentInstant, /*accumulatorAllowed=*/false, /*forcedLevel=*/static_cast<ui8>(1));
+            }
         }
 
         ConsiderState();
     }
 
+    bool AreOtherLevelsEmpty() const {
+        if (!LastLevel.CandidateIds.empty()) {
+            return false;
+        }
+        for (const auto& [_, middleLevel] : MiddleLevels) {
+            if (!middleLevel.PortionById.empty()) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
         TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
-        auto result = Accumulator.DoGetNextOptimizationTask(isLocked);
+        std::optional<CompactionTask<TKey, TPortion>> result;
+        if (!Accumulator.IsBelowThreshold() || AreOtherLevelsEmpty()) {
+            result = Accumulator.DoGetNextOptimizationTask(isLocked);
+        }
         const auto consider = [&result](std::optional<CompactionTask<TKey, TPortion>>&& candidate) {
             if (candidate && (!result || result->Priority < candidate->Priority)) {
                 result = std::move(candidate);

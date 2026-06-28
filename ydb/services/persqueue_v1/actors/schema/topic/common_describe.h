@@ -104,22 +104,36 @@ namespace NKikimr::NGRpcProxy::V1::NTopic {
             LOG_D("Handle TEvDescribeTopicsResponse. Status=" << TopicInfo.Status);
 
             if (TopicInfo.Status != NPQ::NDescriber::EStatus::SUCCESS) {
-                auto asIssueCode = [](Ydb::StatusIds::StatusCode status) {
-                    switch (status) {
-                        case Ydb::StatusIds::SUCCESS:
-                            return Ydb::PersQueue::ErrorCode::OK;
-                        case Ydb::StatusIds::NOT_FOUND:
-                        case Ydb::StatusIds::UNAUTHORIZED:
+                const auto status = [&]() {
+                    switch (TopicInfo.Status) {
+                        case NPQ::NDescriber::EStatus::NOT_FOUND:
+                        case NPQ::NDescriber::EStatus::NOT_TOPIC:
+                        case NPQ::NDescriber::EStatus::UNAUTHORIZED:
+                        case NPQ::NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
+                            return Ydb::StatusIds::SCHEME_ERROR;
+                        case NPQ::NDescriber::EStatus::UNKNOWN_ERROR:
+                            return Ydb::StatusIds::INTERNAL_ERROR;
+                        default:
+                            return Ydb::StatusIds::INTERNAL_ERROR;
+                    }
+                }();
+                const auto issueCode = [&]() {
+                    switch (TopicInfo.Status) {
+                        case NPQ::NDescriber::EStatus::NOT_FOUND:
+                        case NPQ::NDescriber::EStatus::UNAUTHORIZED:
+                        case NPQ::NDescriber::EStatus::UNAUTHORIZED_WITH_DESCRIBE_ACCESS:
                             return Ydb::PersQueue::ErrorCode::ACCESS_DENIED;
+                        case NPQ::NDescriber::EStatus::NOT_TOPIC:
+                            return Ydb::PersQueue::ErrorCode::VALIDATION_ERROR;
                         default:
                             return Ydb::PersQueue::ErrorCode::BAD_REQUEST;
                     }
-                };
+                }();
 
                 return this->ReplyWithError(
-                    NPQ::NDescriber::Convert(TopicInfo.Status),
+                    status,
                     NPQ::NDescriber::Description(this->GetProtoRequest()->path(), TopicInfo.Status),
-                    asIssueCode(NPQ::NDescriber::Convert(TopicInfo.Status))
+                    issueCode
                 );
             }
 

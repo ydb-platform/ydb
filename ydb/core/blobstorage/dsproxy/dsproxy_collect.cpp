@@ -120,9 +120,6 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
         auto msg = std::make_unique<TEvBlobStorage::TEvVCollectGarbage>(TabletId, RecordGeneration, PerGenerationCounter,
             Channel, Collect, CollectGeneration, CollectStep, Hard, Keep.get(), DoNotKeep.get(), vdiskId, Deadline,
             WriteSource);
-        if (IgnoreBlock) {
-            msg->Record.SetIgnoreBlock(true);
-        }
         SendToQueue(std::move(msg), cookie);
         RequestsSent++;
     }

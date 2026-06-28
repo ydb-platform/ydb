@@ -1005,15 +1005,6 @@ struct TEvBlobStorage {
         std::vector<std::pair<ui64, ui32>> ExtraBlockChecks; // (TabletId, Generation) pairs
         std::shared_ptr<TExecutionRelay> ExecutionRelay;
 
-        struct TParameters {
-            TLogoBlobID BlobId;
-            TRope Buffer;
-            TInstant Deadline;
-            NKikimrBlobStorage::EPutHandleClass HandleClass = NKikimrBlobStorage::TabletLog;
-            ETactic Tactic = TacticDefault;
-            TWriteSource WriteSource = UnknownWriteSource();
-        };
-
         TEvPut(const TLogoBlobID &id, TRcBuf &&buffer, TInstant deadline,
                NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog,
                ETactic tactic = TacticDefault, TWriteSource writeSource = UnknownWriteSource())
@@ -1023,17 +1014,6 @@ struct TEvBlobStorage {
             , HandleClass(handleClass)
             , Tactic(tactic)
             , WriteSource(writeSource)
-        {
-            Validate();
-        }
-
-        TEvPut(TParameters parameters)
-            : Id(parameters.BlobId)
-            , Buffer(static_cast<TRcBuf>(parameters.Buffer))
-            , Deadline(parameters.Deadline)
-            , HandleClass(parameters.HandleClass)
-            , Tactic(parameters.Tactic)
-            , WriteSource(parameters.WriteSource)
         {
             Validate();
         }

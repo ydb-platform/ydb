@@ -263,13 +263,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             const TLogoBlobID id(tabletId, gen, step, channel, blobSize, BlobCookie++);
             TRcBuf buffer = GenerateBuffer(id, contentType, nullptr, false, ctx);
             
-            auto ev = std::make_unique<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
-                .BlobId = id,
-                .Buffer = TRope(buffer),
-                .Deadline = TInstant::Max(),
-                .HandleClass = PutHandleClass,
-                .WriteSource = TWriteSource::GroupWriteLoadActor,
-            });
+            auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, std::move(buffer), TInstant::Max(),
+                PutHandleClass, TEvBlobStorage::TEvPut::TacticDefault, TWriteSource::GroupWriteLoadActor);
             InFlightTracker.Request(blobSize);
             return std::move(ev);
         }
@@ -678,13 +673,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             const ui32 lastStep = Max<ui32>();
             const TLogoBlobID id(TabletId, Generation, lastStep, Channel, size, 0);
             TRcBuf buffer = GenerateBuffer(id, ContentType, &Self.BlobData, WriteSettings.RdmaMode > 0, ctx);
-            auto ev = std::make_unique<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
-                .BlobId = id,
-                .Buffer = TRope(std::move(buffer)),
-                .Deadline = TInstant::Max(),
-                .HandleClass = PutHandleClass,
-                .WriteSource = TWriteSource::GroupWriteLoadActor,
-            });
+            auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, std::move(buffer), TInstant::Max(),
+                PutHandleClass, TEvBlobStorage::TEvPut::TacticDefault, TWriteSource::GroupWriteLoadActor);
 
             auto callback = [this] (IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvPutResult *>(event);
@@ -1008,13 +998,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             }
             const TLogoBlobID id(TabletId, Generation, WriteStep, Channel, size, Cookie);
             TRcBuf buffer = GenerateBuffer(id, ContentType, &Self.BlobData, WriteSettings.RdmaMode > 0, ctx);
-            auto ev = std::make_unique<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
-                .BlobId = id,
-                .Buffer = TRope(std::move(buffer)),
-                .Deadline = TInstant::Max(),
-                .HandleClass = putHandleClass,
-                .WriteSource = TWriteSource::GroupWriteLoadActor,
-            });
+            auto ev = std::make_unique<TEvBlobStorage::TEvPut>(id, std::move(buffer), TInstant::Max(),
+                putHandleClass, TEvBlobStorage::TEvPut::TacticDefault, TWriteSource::GroupWriteLoadActor);
             const ui64 writeQueryId = ++WriteQueryId;
 
             auto writeCallback = [this, writeQueryId](IEventBase *event, const TActorContext& ctx) {

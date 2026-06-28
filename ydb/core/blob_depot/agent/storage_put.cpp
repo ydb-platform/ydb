@@ -113,14 +113,9 @@ namespace NKikimr::NBlobDepot {
                     const auto& [id, groupId] = kind.MakeBlobId(Agent, BlobSeqId, type, 0, buffer.size());
                     Y_ABORT_UNLESS(!locator->HasGroupId() || locator->GetGroupId() == groupId);
                     locator->SetGroupId(groupId);
-                    auto ev = std::make_unique<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
-                        .BlobId = id,
-                        .Buffer = std::move(buffer),
-                        .Deadline = Request.Deadline,
-                        .HandleClass = Request.HandleClass,
-                        .Tactic = Request.Tactic,
-                        .WriteSource = Request.WriteSource,
-                    });
+                    auto ev = std::make_unique<TEvBlobStorage::TEvPut>(
+                        id, std::move(buffer), Request.Deadline, Request.HandleClass, Request.Tactic,
+                        Request.WriteSource);
                     ev->ExtraBlockChecks = Request.ExtraBlockChecks;
                     ev->ExtraBlockChecks.emplace_back(Request.Id.TabletID(), Request.Id.Generation());
                     BDEV_QUERY(BDEV10, "TEvPut_sendToProxy", (BlobSeqId, BlobSeqId), (GroupId, groupId), (BlobId, id));

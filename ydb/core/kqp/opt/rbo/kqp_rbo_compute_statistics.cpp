@@ -154,7 +154,7 @@ void TOpRead::ComputeMetadata(TRBOContext& ctx, TPlanProps& planProps) {
     Props.Metadata = TRBOMetadata();
 
     const auto& tableData = ctx.KqpCtx.Tables->ExistingTable(ctx.KqpCtx.Cluster, path.Value());
-    Props.Metadata->ColumnsCount = tableData.Metadata->Columns.size();
+    Props.Metadata->ColumnsCount = Columns.size();
 
     // Record lineage: source can rename its columns, so already we need to record that
     auto outputIUs = GetOutputIUs();
@@ -235,6 +235,12 @@ void TOpRead::ComputeStatistics(TRBOContext& ctx, TPlanProps& planProps) {
                 Props.Statistics->EBytes = byteSize->second.GetDoubleSafe();
             }
         }
+    }
+
+    const auto totalColumns = tableData.Metadata->Columns.size();
+    const auto readColumns = Columns.size();
+    if (totalColumns > 0 && readColumns < totalColumns) {
+        Props.Statistics->EBytes *= static_cast<double>(readColumns) / static_cast<double>(totalColumns);
     }
 
     // Overwrite with selectivity for successfully pushed-down filters within the read operator.

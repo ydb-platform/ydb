@@ -399,6 +399,60 @@ Y_UNIT_TEST(AddMessageToEmptyStorage) {
     AssertMessagesLocks(metrics.MessageLocks, {{0, 1}});
 }
 
+Y_UNIT_TEST(AddBatchedMessageToEmptyStorage) {
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(113);
+
+    TStorage storage(timeProvider, {.MinMessages = 1, .MaxMessages = 8});
+
+    NKikimrPQ::TMLPStorageSnapshot emptySnapshot;
+    storage.SerializeTo(emptySnapshot);
+
+    storage.AddMessage(3, true, 5, writeTimestamp, TDuration::Zero(), 4);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 3);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 7);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), 3);
+
+    auto checkBatchState = [&](TStorage& storage) {
+        auto& metrics = storage.GetMetrics();
+        UNIT_ASSERT_VALUES_EQUAL(metrics.InflightMessageCount, 4);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.UnprocessedMessageCount, 1);
+        UNIT_ASSERT_VALUES_EQUAL(metrics.CommittedMessageCount, 3);
+
+        TStorage::TPosition position;
+        auto read = storage.Next(timeProvider->Now() + TDuration::Seconds(30), position);
+        UNIT_ASSERT(read);
+        UNIT_ASSERT_VALUES_EQUAL(read->Offset, 3);
+
+        auto empty = storage.Next(timeProvider->Now() + TDuration::Seconds(30), position);
+        UNIT_ASSERT(!empty);
+
+        UNIT_ASSERT(storage.Commit(3));
+        UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstUncommittedOffset(), 7);
+    };
+
+    {
+        NKikimrPQ::TMLPStorageSnapshot snapshot;
+        storage.SerializeTo(snapshot);
+
+        TStorage loaded(timeProvider, {.MinMessages = 1, .MaxMessages = 8});
+        loaded.Initialize(snapshot);
+        loaded.InitMetrics();
+        checkBatchState(loaded);
+    }
+
+    {
+        NKikimrPQ::TMLPStorageWAL wal;
+        storage.ExtractBatch().SerializeTo(wal);
+
+        TStorage loaded(timeProvider, {.MinMessages = 1, .MaxMessages = 8});
+        loaded.Initialize(emptySnapshot);
+        loaded.ApplyWAL(wal);
+        loaded.InitMetrics();
+        checkBatchState(loaded);
+    }
+}
+
 Y_UNIT_TEST(AddNotFirstMessageToEmptyStorage) {
     auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
     auto writeTimestamp = timeProvider->Now() - TDuration::Seconds(113);

@@ -153,6 +153,11 @@ namespace NKikimr::NSqsTopic::V1 {
                 autoPartitioning->set_strategy(::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
                 partitioningSettings->set_min_active_partitions(DEFAULT_MIN_PARTITION_COUNT);
                 partitioningSettings->set_max_active_partitions(DEFAULT_MAX_PARTITION_COUNT);
+
+                auto* writeSpeed = autoPartitioning->mutable_partition_write_speed();
+                writeSpeed->set_up_utilization_percent(80);
+                writeSpeed->set_down_utilization_percent(20);
+                writeSpeed->mutable_stabilization_window()->set_seconds(30);
             }
 
             SetDuration(QueueAttributes.MessageRetentionPeriod.GetOrElse(DEFAULT_MESSAGE_RETENTION_PERIOD), *topicRequest.mutable_retention_period());

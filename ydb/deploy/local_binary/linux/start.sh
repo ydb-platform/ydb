@@ -85,8 +85,12 @@ fi
 echo Registering database...
 $YDBD_PATH -s grpc://localhost:2136 admin database /Root/test create ssd:1 > "$LOGS_PATH/db_reg.log" 2>&1
 if [[ $? -ge 1 ]]; then
-  echo Errors found when registering database, cancelling start script, check "$LOGS_PATH/db_reg.log"
-  exit
+  if grep -q ALREADY_EXISTS "$LOGS_PATH/db_reg.log"; then
+    echo Database /Root/test already exists, skipping registration.
+  else
+    echo Errors found when registering database, cancelling start script, check "$LOGS_PATH/db_reg.log"
+    exit 1
+  fi
 fi
 echo Starting database process...
 $YDBD_PATH server --yaml-config "$CONFIG_PATH/$cfg" --tenant /Root/test --node-broker localhost:2136 --grpc-port 31001 --ic-port 31003 --mon-port 31002 \

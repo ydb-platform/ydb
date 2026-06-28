@@ -56,14 +56,12 @@ TReadMultipleLocationRequestExecutor::TReadMultipleLocationRequestExecutor(
         subRequest->Sglist = Request->Sglist.CreateDepender(
             CreateSgListSubRange(guard.Get(), offsetBytes, sizeBytes));
 
-        TReadHint singleHint;
-        singleHint.RangeHints.push_back(std::move(hint));
         auto executor = std::make_shared<TReadSingleLocationRequestExecutor>(
             ActorSystem,
             logTitle,
             VChunkConfig,
             DirectBlockGroup,
-            std::move(singleHint),
+            std::move(hint),
             CallContext,
             subRequest,
             NWilson::TTraceId(TraceId));

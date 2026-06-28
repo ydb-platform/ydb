@@ -208,7 +208,6 @@ public:
         , HttpGateway(std::move(httpGateway))
     {
         Config->SetAntlr4ParserIsAmbiguityError(antlr4ParserIsAmbiguityError);
-        Config->SetEnableBatchUpdates(true);
     }
 
     void Bootstrap() {

@@ -30,6 +30,7 @@ namespace NKikimr::NKqp::NFederatedQueryTest {
         TTestLogSettings LogSettings;
         bool UseLocalCheckpointsInStreamingQueries = false;
         bool InternalInitFederatedQuerySetupFactory = false;
+        bool NeedsStatsCollectors = false;
         TVector<TString> StoragePoolTypes;
     };
 

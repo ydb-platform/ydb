@@ -315,6 +315,16 @@ class TPushFilterUnderMapRule : public ISimplifiedRule {
 };
 
 /**
+ * Extract common conjuncts from OR branches to expose top-level filters.
+ */
+class TExtractCommonConjunctsRule : public ISimplifiedRule {
+  public:
+    TExtractCommonConjunctsRule() : ISimplifiedRule("Extract common conjuncts", ERuleProperties::RequireParents) {}
+
+    virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+};
+
+/**
  * Push down filter through joins, adding join conditions to the join operator and potentially
  * converting left join into inner join
  */

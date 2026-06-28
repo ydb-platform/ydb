@@ -655,13 +655,11 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
     const auto startAt = TMonotonic::Now();
 
     TVector<NKikimr::NDDisk::TBlockSelector> selectors;
-    TVector<ui64> lsns;
     for (const auto& segment: segments) {
         selectors.push_back(NKikimr::NDDisk::TBlockSelector(
             vChunkIndex,
             segment.Range.Start * DefaultBlockSize,
             segment.Range.Size() * DefaultBlockSize));
-        lsns.push_back(segment.Lsn);
     }
 
     auto childSpan = CreateChildSpan(traceId, "NbsPartition.SyncWithPBuffer");
@@ -675,7 +673,7 @@ NThreading::TFuture<TDBGFlushResponse> TDirectBlockGroup::SyncWithPBuffer(
         PBufferConnections[pbufferHostIndex].HostConnection,
         DDiskConnections[ddiskHostIndex].HostConnection,
         std::move(selectors),
-        std::move(lsns),
+        TPBufferSegment::MakeLsnVector(segments),
         childSpan.get());
 
     auto promise = NewPromise<TDBGFlushResponse>();
@@ -771,9 +769,8 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
 }
 
 NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::BatchEraseFromPBuffer(
-    ui32 vChunkIndex,
     THostIndex hostIndex,
-    const TVector<TPBufferSegment>& segments,
+    const TEraseSegments& segments,
     const NWilson::TTraceId& traceId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -783,16 +780,6 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::BatchEraseFromPBuffer(
 
     const auto startAt = TMonotonic::Now();
 
-    TVector<NKikimr::NDDisk::TBlockSelector> selectors;
-    TVector<ui64> lsns;
-    for (const auto& segment: segments) {
-        selectors.push_back(NKikimr::NDDisk::TBlockSelector(
-            vChunkIndex,
-            segment.Range.Start * DefaultBlockSize,
-            segment.Range.Size() * DefaultBlockSize));
-        lsns.push_back(segment.Lsn);
-    }
-
     auto childSpan =
         CreateChildSpan(traceId, "NbsPartition.BatchEraseFromPBuffer");
 
@@ -800,8 +787,7 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::BatchEraseFromPBuffer(
 
     auto future = StorageTransport->BatchEraseFromPBuffer(
         PBufferConnections[hostIndex].HostConnection,
-        std::move(selectors),
-        std::move(lsns),
+        MakeLsnVector(segments),
         childSpan.get());
 
     auto promise = NewPromise<TDBGEraseResponse>();

@@ -1007,8 +1007,17 @@ namespace NKikimr {
                 ParentSpan.EndOk();
                 Span.EndOk();
             } else {
-                ParentSpan.EndError(errorReason);
-                Span.EndError(std::move(errorReason));
+                if (NWilson::TSpan* wilsonSpan = ParentSpan.GetWilsonSpanPtr()) {
+                    wilsonSpan->EndError(errorReason);
+                } else if (TNamedSpan* retroSpan = ParentSpan.GetRetroSpanPtr()) {
+                    retroSpan->EndError();
+                }
+
+                if (NWilson::TSpan* wilsonSpan = Span.GetWilsonSpanPtr()) {
+                    wilsonSpan->EndError(std::move(errorReason));
+                } else if (TNamedSpan* retroSpan = Span.GetRetroSpanPtr()) {
+                    retroSpan->EndError();
+                }
             }
         }
 

@@ -9,7 +9,11 @@ TOLERANCE = 0.1  # percentage points
 
 def line_pct(report_dir: str) -> float:
     html = (Path(report_dir) / "index.html").read_text(encoding="utf-8", errors="replace")
-    match = re.search(r"Lines:</td>\s*<td[^>]*>([\d.]+)\s*%", html, re.I)
+    # New ya/llvm-cov HTML: "Overall coverage" table, project row, "Lines, %" column.
+    match = re.search(r"<div>project</div></td><td[^>]*>.*?>([\d.]+)%", html, re.S)
+    if not match:
+        # Legacy llvm-cov HTML summary row.
+        match = re.search(r"Lines:</td>\s*<td[^>]*>([\d.]+)\s*%", html, re.I)
     if not match:
         raise SystemExit(f"line coverage not found in {report_dir}/index.html")
     return float(match.group(1))

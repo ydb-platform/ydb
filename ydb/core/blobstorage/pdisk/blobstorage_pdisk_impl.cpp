@@ -205,14 +205,14 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
                         Y_VERIFY_S(FormatSectorSize <= buffer->Size(), PCtx->PDiskLogPrefix);
                         memcpy(buffer->Data(), formatSector, FormatSectorSize);
                         ui64 targetOffset = i * FormatSectorSize;
-                        YDB_LOG_P_LOG(PRI_INFO, "PWriteAsync for format restoration",
+                        YDB_LOG_P_LOG(PRI_NOTICE, "PWriteSync for format restoration",
                             {"marker", "BPD46"},
                             {"fromOffset", targetOffset},
                             {"toOffset", targetOffset + FormatSectorSize});
 
                         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer->Data(), FormatSectorSize);
-                        BlockDevice->PwriteAsync(buffer->Data(), FormatSectorSize, targetOffset, buffer,
-                                TReqId(TReqId::RestoreFormatOnRead, 0), {});
+                        BlockDevice->PwriteSync(buffer->Data(), FormatSectorSize, targetOffset,
+                                TReqId(TReqId::RestoreFormatOnRead, 0), nullptr);
                     }
                 }
                 //BlockDevice->FlushAsync(nullptr);

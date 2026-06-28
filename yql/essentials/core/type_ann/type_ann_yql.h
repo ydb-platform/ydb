@@ -19,6 +19,15 @@ IGraphTransformer::TStatus InferYqlImplicitUsingJoinColumns(
     TVector<std::pair<TString, TString>>& implicitUsing,
     TExtContext& ctx);
 
+IGraphTransformer::TStatus InferYqlInferUnionType(
+    TPositionHandle pos,
+    const TExprNode::TListType& children,
+    TColumnOrder& resultColumnOrder,
+    const TStructExprType*& resultStructType,
+    TExtContext& ctx,
+    bool& areColumnsOrdered,
+    bool& isUniversal);
+
 IGraphTransformer::TStatus YqlAggFactoryWrapper(
     const TExprNode::TPtr& input, TExprNode::TPtr& output, TExtContext& ctx);
 

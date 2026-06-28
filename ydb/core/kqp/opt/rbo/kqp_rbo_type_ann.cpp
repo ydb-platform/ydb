@@ -329,6 +329,7 @@ TStatus ComputeTypes(TIntrusivePtr<TOpAggregate> aggregate, TRBOContext& ctx) {
     const bool scalarAggregation = aggregate->KeyColumns.empty();
     TPositionHandle pos = aggregate->Pos;
     const auto aggregationPhase = aggregate->GetAggregationPhase();
+    Y_ENSURE(!aggregate->AggregationTraitsList.empty(), "There are no traits for aggregation.");
 
     TVector<const TItemExprType*> newItemTypes;
     THashMap<TString, const TTypeAnnotationNode*> aggTraitsMap;

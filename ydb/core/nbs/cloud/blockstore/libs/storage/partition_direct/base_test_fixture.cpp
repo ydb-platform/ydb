@@ -204,12 +204,10 @@ void TBaseFixture::Init()
     };
 
     DirectBlockGroup->BatchEraseFromPBufferHandler = [&]   //
-        (ui32 vChunkIndex,
-         THostIndex hostIndex,
-         const TVector<TPBufferSegment>& segments,
+        (THostIndex hostIndex,
+         const TEraseSegments& segments,
          const NWilson::TTraceId& traceId)
     {
-        Y_UNUSED(vChunkIndex);
         Y_UNUSED(hostIndex);
         Y_UNUSED(segments);
         Y_UNUSED(traceId);

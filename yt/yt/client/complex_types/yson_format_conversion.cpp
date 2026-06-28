@@ -1100,7 +1100,7 @@ std::variant<TYsonServerToClientConverter, TYsonClientToServerConverter> CreateY
         return [
             converter=std::move(converter)
         ] (TUnversionedValue value, IYsonConsumer* consumer) {
-            TMemoryInput in(value.Data.String, value.Length);
+            TMemoryInput in(value.AsStringBuf());
             TYsonPullParser parser(&in, EYsonType::Node);
             TYsonPullParserCursor cursor(&parser);
             converter(&cursor, consumer);

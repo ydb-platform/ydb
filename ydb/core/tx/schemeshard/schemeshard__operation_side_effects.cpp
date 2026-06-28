@@ -671,14 +671,12 @@ void TSideEffects::DoBindMsg(TSchemeShard *ss, const TActorContext &ctx) {
         Y_ABORT_UNLESS(message->IsSerializable());
 
         if (!ss->Operations.contains(opId.GetTxId())) {
-            LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-                       "Send tablet strongly msg "
-                           << ", operation already done"
-                           << ", operationId: " << opId
-                           << " from tablet: " << ss->TabletID()
-                           << " to tablet: " << tablet
-                           << " cookie: " << cookie
-                           << " msg type: " << msgType);
+            YDB_LOG_DEBUG_CTX(ctx, "Send tablet strongly msg operation already done from to msg",
+                {"operationId", opId},
+                {"fromTablet", ss->TabletID()},
+                {"toTablet", tablet},
+                {"cookie", cookie},
+                {"type", msgType});
             return;
         }
 

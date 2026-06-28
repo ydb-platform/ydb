@@ -177,7 +177,7 @@ void TSchemeShard::EnqueueBackgroundCompaction(
             {"searchHeight", stats.SearchHeight},
             {"lastFullCompaction", TInstant::Seconds(stats.FullCompactionTs)},
             {"tabletID", TabletID()});
-        
+
         UpdateBackgroundCompactionQueueMetrics();
     } else {
         YDB_LOG_TRACE_CTX(ctx, "[BackgroundCompaction] [Enqueue] Skipped or already exists with at schemeshard",
@@ -235,13 +235,13 @@ void TSchemeShard::UpdateBackgroundCompaction(
             {"lastFullCompaction", TInstant::Seconds(newStats.FullCompactionTs)},
             {"tabletID", TabletID()});
     } else {
-        LOG_TRACE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "[BackgroundCompaction] [Update] Skipped shard# " << shardIdx
-            << " with partCount# " << newStats.PartCount
-            << ", rowCount# " << newStats.RowCount
-            << ", searchHeight# " << newStats.SearchHeight
-            << ", lastFullCompaction# " << TInstant::Seconds(newStats.FullCompactionTs)
-            << " at schemeshard " << TabletID());
+        YDB_LOG_TRACE_CTX(ctx, "[BackgroundCompaction] [Update] Skipped with at schemeshard",
+            {"shard", shardIdx},
+            {"partCount", newStats.PartCount},
+            {"rowCount", newStats.RowCount},
+            {"searchHeight", newStats.SearchHeight},
+            {"lastFullCompaction", TInstant::Seconds(newStats.FullCompactionTs)},
+            {"tabletID", TabletID()});
     }
 
     UpdateBackgroundCompactionQueueMetrics();

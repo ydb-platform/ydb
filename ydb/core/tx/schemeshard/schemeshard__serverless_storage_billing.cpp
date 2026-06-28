@@ -76,10 +76,10 @@ struct TSchemeShard::TTxServerlessStorageBilling : public TTransactionBase<TSche
         }
 
         if (!spaceUsage.Tables.TotalSize) {
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "TTxServerlessStorageBilling: nothing to bill"
-                       << ", schemeshardId: " << Self->SelfTabletId()
-                       << ", domainId: " << Self->ParentDomainId
-                       << ", next retry at: " << TimeToNextBill);
+            YDB_LOG_INFO_CTX(ctx, "TTxServerlessStorageBilling: nothing to bill next retry",
+                {"schemeshardId", Self->SelfTabletId()},
+                {"domainId", Self->ParentDomainId},
+                {"at", TimeToNextBill});
             return true;
         }
 

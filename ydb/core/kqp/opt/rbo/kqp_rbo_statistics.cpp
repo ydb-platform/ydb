@@ -136,6 +136,9 @@ TString TRBOMetadata::ToString(ui32 printOptions) {
             case EStatisticsType::ManyManyJoin:
                 metadataType = "ManyManyJoin";
                 break;
+            case EStatisticsType::Constant:
+                metadataType = "Constant";
+                break;
         default:
             Y_ENSURE(false,"Unknown EStatisticsType");
         }

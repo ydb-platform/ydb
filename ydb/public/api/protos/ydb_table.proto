@@ -449,6 +449,18 @@ message IndexBuildState {
     }
 }
 
+// State of set column constraint operation
+message SetColumnConstraintState {
+    enum State {
+        STATE_UNSPECIFIED = 0;
+        STATE_PREPARING = 1;
+        STATE_VALIDATING = 2;
+        STATE_APPLYING = 3;
+        STATE_DONE = 4;
+        STATE_CANCELLED = 5;
+    }
+}
+
 // Description of index building operation
 message IndexBuildDescription {
     string path = 1;

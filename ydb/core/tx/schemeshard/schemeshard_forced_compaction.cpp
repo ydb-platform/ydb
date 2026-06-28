@@ -344,12 +344,12 @@ void TSchemeShard::HandleForcedCompactionResult(TEvDataShard::TEvCompactTableRes
                 {"status", (int)record.GetStatus()},
                 {"tabletID", TabletID()});
         } else {
-            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[ForcedCompaction] [Finished] Compaction completed "
-                "for pathId# " << pathId << ", datashard# " << tabletId
-                << ", shardIdx# " << shardIdx
-                << " with status# " << (int)record.GetStatus()
-                << " at schemeshard " << TabletID()
-                << " (no ForcedCompactionQueue)");
+            YDB_LOG_INFO_CTX(ctx, "With at schemeshard (no ForcedCompactionQueue)",
+                {"pathId", pathId},
+                {"datashard", tabletId},
+                {"shardIdx", shardIdx},
+                {"status", (int)record.GetStatus()},
+                {"tabletID", TabletID()});
         }
         CompleteForcedCompactionForShard(shardIdx, ctx);
     }

@@ -10,7 +10,7 @@ class TOpRoot;
 
 void ComputePlanNameConstraints(TOpRoot& root);
 
-TInfoUnitConstraintSet GetForbidden(IOperator* op);
+const TInfoUnitConstraintSet& GetForbidden(IOperator* op);
 bool ContainsForbidden(const TVector<TInfoUnit>& output, const TInfoUnitConstraintSet& forbidden);
 
 } // namespace NKqp

@@ -87,12 +87,12 @@ public:
         return Units_;
     }
 
-    bool Add(const TInfoUnit& iu);
-    bool Add(const TInfoUnitSet& ius);
-    bool Add(const TInfoUnitConstraintSet& other);
-    bool Remove(const TInfoUnit& iu);
-    bool Remove(const TInfoUnitSet& ius);
-    bool Intersect(const TInfoUnitConstraintSet& other);
+    bool UnionWith(const TInfoUnit& iu);
+    bool UnionWith(const TInfoUnitSet& ius);
+    bool UnionWith(const TInfoUnitConstraintSet& other);
+    bool Subtract(const TInfoUnit& iu);
+    bool Subtract(const TInfoUnitSet& ius);
+    bool IntersectWith(const TInfoUnitConstraintSet& other);
     TInfoUnitConstraintSet Complement() const;
 
 private:

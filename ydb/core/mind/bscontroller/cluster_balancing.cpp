@@ -524,7 +524,7 @@ namespace NKikimr::NBsController {
             // See TODO about coroutine timeout.
             // if (!ev) {
             //     YDB_LOG_DEBUG("Failed to get BSC config response",
-                       {"marker", "BSCB12"});
+            //           {"marker", "BSCB12"});
             //     return;
             // }
 

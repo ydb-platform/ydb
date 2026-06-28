@@ -1005,7 +1005,7 @@ public:
         for (const auto& [_, domainInfo] : Self->Domains) {
             for (const auto& pool : domainInfo.ShrinkingStoragePools) {
                 auto& poolInfo = Self->GetStoragePool(pool);
-                if (domainInfo.HiveId) {
+                if (domainInfo.HiveId && Self->AreWeRootHive()) {
                     poolInfo.NeedShrinkFromTenant = true;
                 }
                 Self->StartShrinkPool(poolInfo);

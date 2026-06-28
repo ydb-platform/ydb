@@ -74,6 +74,14 @@ public:
             }
             if (tablet->GetLeader().IsBootingSuppressed()) {
                 tablet->InitiateStop(SideEffects);
+                // persist zeroed NodeId so it survives a hive restart
+                if (tablet->IsLeader()) {
+                    db.Table<Schema::Tablet>().Key(tablet->GetLeader().Id)
+                        .Update<Schema::Tablet::LeaderNode>(0);
+                } else {
+                    db.Table<Schema::TabletFollowerTablet>().Key(tablet->GetFullTabletId())
+                        .Update<Schema::TabletFollowerTablet::FollowerNode>(0);
+                }
             }
         };
         for (const NKikimrLocal::TEvSyncTablets_TTabletInfo& ti : SyncTablets.GetInbootTablets()) {

@@ -4221,7 +4221,7 @@ void THive::Handle(TEvHive::TEvShrinkStoragePool::TPtr& ev) {
         {"logPrefix", GetLogPrefix()});
     const auto& record = ev->Get()->Record;
     auto& pool = GetStoragePool(record.GetStoragePool());
-    if (pool.ConsoleVersion < record.GetVersion()) {
+    if (pool.ConsoleVersion <= record.GetVersion()) {
         pool.ConsoleVersion = record.GetVersion();
     } else {
         YDB_LOG_WARN("Got outdated TEvShrinkStoragePool request",
@@ -4518,6 +4518,7 @@ void THive::CheckRemainingHistory(TStoragePoolInfo& pool) {
         {"logPrefix", GetLogPrefix()});
     auto ev = std::make_unique<TEvHive::TEvShrinkStoragePoolDone>();
     ev->Record.SetStoragePool(pool.Name);
+    ev->Record.MutableGroupsToRemove()->Assign(pool.InactiveGroups.begin(), pool.InactiveGroups.end());
     if (AreWeRootHive()) {
         SendToConsolePipe(ev.release());
     } else {

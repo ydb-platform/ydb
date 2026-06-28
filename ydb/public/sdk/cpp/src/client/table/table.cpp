@@ -13,6 +13,7 @@
 
 #include <ydb/public/api/grpc/ydb_table_v1.grpc.pb.h>
 #include <ydb/public/api/protos/ydb_table.pb.h>
+#include <ydb/public/api/protos/ydb_value.pb.h>
 #include <ydb/public/sdk/cpp/src/client/impl/stats/stats.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/proto/accessor.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/value/value.h>
@@ -222,6 +223,24 @@ TCompactionOperation::TCompactionOperation(TStatus &&status, Ydb::Operations::Op
 }
 
 const TCompactionOperation::TMetadata& TCompactionOperation::Metadata() const {
+    return Metadata_;
+}
+
+TAnalyzeOperation::TAnalyzeOperation(TStatus &&status, Ydb::Operations::Operation &&operation)
+    : TOperation(std::move(status), std::move(operation))
+{
+    Ydb::Table::AnalyzeMetadata metadata;
+    GetProto().metadata().UnpackTo(&metadata);
+    Metadata_.State = static_cast<EAnalyzeState>(metadata.state());
+    Metadata_.Progress = metadata.progress();
+    Metadata_.Paths.assign(metadata.paths().begin(), metadata.paths().end());
+    Metadata_.InProgressPaths.assign(metadata.in_progress_paths().begin(),
+                                     metadata.in_progress_paths().end());
+    Metadata_.DonePaths.assign(metadata.done_paths().begin(),
+                               metadata.done_paths().end());
+}
+
+const TAnalyzeOperation::TMetadata& TAnalyzeOperation::Metadata() const {
     return Metadata_;
 }
 
@@ -4211,6 +4230,11 @@ TMetricsSettings::EMetricsLevel TMetricsSettings::GetMetricsLevel() const {
 
 TBulkUpsertResult::TBulkUpsertResult(TStatus&& status)
     : TStatus(std::move(status))
+{}
+
+TReadRowsResult::TReadRowsResult(TStatus&& status)
+    : TStatus(std::move(status))
+    , ResultSet(Ydb::ResultSet{})
 {}
 
 TReadRowsResult::TReadRowsResult(TStatus&& status, TResultSet&& resultSet)

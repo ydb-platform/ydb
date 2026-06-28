@@ -18,13 +18,21 @@
 
 namespace NKikimr::NKqp {
 
+struct TDescribeSecretSettings {
+    IRetryPolicy<>::TPtr RetryPolicy;
+};
+
+IRetryPolicy<>::TPtr MakeShortRetryPolicy();
+IRetryPolicy<>::TPtr MakeLongRetryPolicy();
+
 class TDescribeSchemaSecretsService: public NActors::TActorBootstrapped<TDescribeSchemaSecretsService> {
 public:
     using TRetryPolicy = IRetryPolicy<>;
 
     enum ESecretEvents {
         EvResolveSecret = EventSpaceBegin(TKikimrEvents::ES_PRIVATE),
-        EvResolveSecretRetry,
+        EvResolveSecretSchemeCacheRetry,
+        EvResolveSecretSchemeShardRetry,
         EvEnd,
     };
 
@@ -34,18 +42,20 @@ public:
             const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
             const TString& database,
             const TVector<TString>& secretNames,
-            NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise
+            NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> promise,
+            TDescribeSecretSettings settings = {}
         )
             : UserToken(userToken)
             , Database(database)
             , SecretNames(secretNames)
             , Promise(promise)
+            , Settings(std::move(settings))
         {
             Y_ENSURE(!Database.empty(), "Database name must be set in secret requests");
         }
 
         THolder<TEvResolveSecret> MakeCopy() const {
-            return MakeHolder<TEvResolveSecret>(UserToken, Database, SecretNames, Promise);
+            return MakeHolder<TEvResolveSecret>(UserToken, Database, SecretNames, Promise, Settings);
         }
 
     public:
@@ -53,14 +63,25 @@ public:
         const TString Database;
         const TVector<TString> SecretNames;
         NThreading::TPromise<TEvDescribeSecretsResponse::TDescription> Promise;
+        const TDescribeSecretSettings Settings;
     };
 
-    struct TEvResolveSecretRetry : public NActors::TEventLocal<TEvResolveSecretRetry, EvResolveSecretRetry> {
-        TEvResolveSecretRetry(ui64 initialRequestId)
+    struct TEvResolveSecretSchemeCacheRetry : public NActors::TEventLocal<TEvResolveSecretSchemeCacheRetry, EvResolveSecretSchemeCacheRetry> {
+        TEvResolveSecretSchemeCacheRetry(ui64 initialRequestId)
             : InitialRequestId(initialRequestId)
         {}
 
         const ui64 InitialRequestId = 0;
+    };
+
+    struct TEvResolveSecretSchemeShardRetry : public NActors::TEventLocal<TEvResolveSecretSchemeShardRetry, EvResolveSecretSchemeShardRetry> {
+        TEvResolveSecretSchemeShardRetry(ui64 initialRequestId, TString secretPath)
+            : InitialRequestId(initialRequestId)
+            , SecretPath(std::move(secretPath))
+        {}
+
+        const ui64 InitialRequestId = 0;
+        const TString SecretPath;
     };
 
 private:
@@ -80,7 +101,10 @@ private:
 
     struct TRequestContext {
         THolder<TEvResolveSecret> Request;
-        TRetryPolicy::IRetryState::TPtr RetryState;
+        // SchemeCache support batch requests, so there's a single retry state for the whole batch
+        TRetryPolicy::IRetryState::TPtr SchemeCacheRetryState;
+        // SchemeShard does not support batch requests, so there's a separate retry state for each secret
+        THashMap<TString, TRetryPolicy::IRetryState::TPtr> SchemeShardRetryStates;
 
         TRequestContext(THolder<TEvResolveSecret> request)
             : Request(std::move(request))
@@ -91,7 +115,8 @@ private:
 private:
     STRICT_STFUNC(StateWait,
         hFunc(TEvResolveSecret, HandleIncomingRequest);
-        hFunc(TEvResolveSecretRetry, HandleIncomingRetryRequest);
+        hFunc(TEvResolveSecretSchemeCacheRetry, HandleIncomingSchemeCacheRetryRequest);
+        hFunc(TEvResolveSecretSchemeShardRetry, HandleIncomingSchemeShardRetryRequest);
         hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, HandleSchemeCacheResponse);
         hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, HandleSchemeShardResponse);
         hFunc(TSchemeBoardEvents::TEvNotifyDelete, HandleNotifyDelete);
@@ -100,7 +125,8 @@ private:
     )
 
     void HandleIncomingRequest(TEvResolveSecret::TPtr& ev);
-    void HandleIncomingRetryRequest(TEvResolveSecretRetry::TPtr& ev);
+    void HandleIncomingSchemeCacheRetryRequest(TEvResolveSecretSchemeCacheRetry::TPtr& ev);
+    void HandleIncomingSchemeShardRetryRequest(TEvResolveSecretSchemeShardRetry::TPtr& ev);
     void HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev);
     void HandleSchemeShardResponse(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev);
     void HandleNotifyDelete(TSchemeBoardEvents::TEvNotifyDelete::TPtr& ev);
@@ -109,11 +135,14 @@ private:
     void FillResponse(const ui64& requestId, const TEvDescribeSecretsResponse::TDescription& response);
     void SaveIncomingRequestInfo(const TEvResolveSecret& ev);
     void SendSchemeCacheRequests(const TEvResolveSecret& ev, const ui64 requestId);
+    void SendSchemeShardRequest(const TEvResolveSecret& ev, const ui64 requestId, const TString& secretPath);
     bool LocalCacheHasActualVersion(const TVersionedSecret& secret, const ui64& cacheSecretVersion);
     bool LocalCacheHasActualObject(const TVersionedSecret& secret, const ui64& cacheSecretPathId);
     bool HandleSchemeCacheErrorsIfAny(const ui64& requestId, NSchemeCache::TSchemeCacheNavigate& result);
+    bool HandleSchemeShardErrorsIfAny(const ui64& requestId, const NKikimrScheme::TEvDescribeSchemeResult& record);
     void FillResponseIfFinished(const ui64& requestId, const TResponseContext& responseCtx);
     bool ScheduleSchemeCacheRetry(const ui64& requestId, const TString& unresolvedSecretPath);
+    bool ScheduleSchemeShardRetry(const ui64& requestId, const TString& secretPath);
 
 public:
     TDescribeSchemaSecretsService() = default;
@@ -144,6 +173,18 @@ public:
         SchemeCacheStatusGetter = schemeCacheStatusGetter;
     }
 
+    // For tests only
+    class ISchemeShardStatusGetter : public TThrRefBase {
+    public:
+        virtual NKikimrScheme::EStatus GetStatus(
+            const NKikimrScheme::TEvDescribeSchemeResult& record) const = 0;
+        virtual ~ISchemeShardStatusGetter() = default;
+    };
+    // For tests only
+    void SetSchemeShardStatusGetter(ISchemeShardStatusGetter* schemeShardStatusGetter) {
+        SchemeShardStatusGetter = schemeShardStatusGetter;
+    }
+
 private:
     ui64 LastRequestId = 0;
     THashMap<ui64, TRequestContext> RequestsInFlight;
@@ -152,6 +193,7 @@ private:
     THashMap<TString, TActorId> SchemeBoardSubscribers;
     ISecretUpdateListener* SecretUpdateListener = nullptr;
     ISchemeCacheStatusGetter* SchemeCacheStatusGetter = nullptr;
+    ISchemeShardStatusGetter* SchemeShardStatusGetter = nullptr;
 };
 
 void RegisterDescribeSecretsActor(
@@ -188,7 +230,8 @@ NThreading::TFuture<TEvDescribeSecretsResponse::TDescription> DescribeSecret(
     const TVector<TString>& secretNames,
     const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
     const TString& database,
-    TActorSystem* actorSystem
+    TActorSystem* actorSystem,
+    TDescribeSecretSettings settings = {}
 );
 
 bool UseSchemaSecrets(const NKikimr::TFeatureFlags& flags, const TVector<TString>& secretNames);
@@ -202,5 +245,7 @@ NThreading::TFuture<TEvDescribeResourceIdResponse::TDescription> DescribeExterna
     const TString& token,
     TActorSystem* actorSystem
 );
+
+IActor* CreateDescribeResourceIdServiceActor(const std::shared_ptr<NYdb::TDriver>& driver);
 
 }  // namespace NKikimr::NKqp

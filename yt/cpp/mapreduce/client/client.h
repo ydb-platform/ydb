@@ -466,6 +466,9 @@ public:
         const TReplicaId& replicaId,
         const TAlterTableReplicaOptions& alterTableReplicaOptions) override;
 
+    void CheckClusterLiveness(
+        const TCheckClusterLivenessOptions& options = TCheckClusterLivenessOptions()) override;
+
     ui64 GenerateTimestamp() override;
 
     TAuthorizationInfo WhoAmI() override;

@@ -319,4 +319,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::NonOptimalTableContent(
     return TExprBase(res);
 }
 
-}  // namespace NYql
+} // namespace NYql

@@ -27,6 +27,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/kafka
     ydb/public/sdk/cpp/src/library/grpc/client
     library/cpp/monlib/dynamic_counters
     library/cpp/threading/future/subscription

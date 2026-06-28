@@ -857,7 +857,8 @@ private:
 
 //// Table actions
 
-class TQueryBase : public NKikimr::TQueryBase {
+template<typename TDerived, typename TResponse>
+class TQueryBase : public NKikimr::TQueryBase, public TQueryRetryActorMixin<TDerived, TResponse> {
 public:
     TQueryBase(const TString& operationName, const TString& databaseId, const TString& queryPath)
         : NKikimr::TQueryBase(NKikimrServices::KQP_PROXY)
@@ -983,7 +984,7 @@ protected:
 // Updates OperationName, OperationActorId and OperationStartedAt according to current operation.
 // If OperationActorId already filled, actor will be checked.
 
-class TLockStreamingQueryRequestActor final : public TQueryBase {
+class TLockStreamingQueryRequestActor final : public TQueryBase<TLockStreamingQueryRequestActor, TEvPrivate::TEvLockStreamingQueryResult> {
     static constexpr TDuration LOCK_TIMEOUT = TDuration::Seconds(10);
 
 public:
@@ -995,8 +996,6 @@ public:
         bool CreateLockIfNotExists = false;
         NKikimrKqp::TStreamingQueryState::EStatus DefaultQueryStatus = NKikimrKqp::TStreamingQueryState::STATUS_UNSPECIFIED;
     };
-
-    using TRetry = TQueryRetryActor<TLockStreamingQueryRequestActor, TEvPrivate::TEvLockStreamingQueryResult, TString, TString, TSettings>;
 
     TLockStreamingQueryRequestActor(const TString& databaseId, const TString& queryPath, const TSettings& settings)
         : TQueryBase(__func__, databaseId, queryPath)
@@ -1256,7 +1255,7 @@ private:
             return;
         }
 
-        const auto& lockActorId = Register(new TLockStreamingQueryRequestActor::TRetry(SelfId(), DatabaseId, QueryPath, {
+        const auto& lockActorId = Register(TLockStreamingQueryRequestActor::MakeRetry(SelfId(), DatabaseId, QueryPath, TLockStreamingQueryRequestActor::TSettings{
             .OperationName = Settings.OperationName,
             .OperationStartedAt = Settings.OperationStartedAt,
             .OperationOwner = Settings.OperationOwner,
@@ -1305,10 +1304,8 @@ private:
     bool WaitLock = false;
 };
 
-class TUnlockStreamingQueryRequestActor final : public TQueryBase {
+class TUnlockStreamingQueryRequestActor final : public TQueryBase<TUnlockStreamingQueryRequestActor, TEvPrivate::TEvUnlockStreamingQueryResult> {
 public:
-    using TRetry = TQueryRetryActor<TUnlockStreamingQueryRequestActor, TEvPrivate::TEvUnlockStreamingQueryResult, TString, TString, TActorId>;
-
     TUnlockStreamingQueryRequestActor(const TString& databaseId, const TString& queryPath, const TActorId& operationOwner)
         : TQueryBase(__func__, databaseId, queryPath)
         , OperationOwner(operationOwner)
@@ -1405,10 +1402,8 @@ private:
 
 // Update column "state" of .metadata/streaming/queries table if OperationActorId is not changed
 
-class TUpdateStreamingQueryStateRequestActor final : public TQueryBase {
+class TUpdateStreamingQueryStateRequestActor final : public TQueryBase<TUpdateStreamingQueryStateRequestActor, TEvPrivate::TEvUpdateStreamingQueryResult> {
 public:
-    using TRetry = TQueryRetryActor<TUpdateStreamingQueryStateRequestActor, TEvPrivate::TEvUpdateStreamingQueryResult, TString, TString, NKikimrKqp::TStreamingQueryState>;
-
     TUpdateStreamingQueryStateRequestActor(const TString& databaseId, const TString& queryPath, const NKikimrKqp::TStreamingQueryState& state)
         : TQueryBase(__func__, databaseId, queryPath)
         , State(state)
@@ -1530,7 +1525,7 @@ protected:
 
 private:
     void StartUpdateState(const TString& info) const {
-        const auto& updaterId = Register(new TUpdateStreamingQueryStateRequestActor::TRetry(SelfId(), Context.GetDatabaseId(), QueryPath, State));
+        const auto& updaterId = Register(TUpdateStreamingQueryStateRequestActor::MakeRetry(SelfId(), Context.GetDatabaseId(), QueryPath, State));
         LOG_D("Start TUpdateStreamingQueryStateRequestActor " << updaterId << " (" << info << ")");
     }
 
@@ -1754,7 +1749,7 @@ protected:
 
 private:
     void UpdateQueryState(const TString& info) const {
-        const auto& updaterId = Register(new TUpdateStreamingQueryStateRequestActor::TRetry(SelfId(), Context.GetDatabaseId(), QueryPath, State));
+        const auto& updaterId = Register(TUpdateStreamingQueryStateRequestActor::MakeRetry(SelfId(), Context.GetDatabaseId(), QueryPath, State));
         LOG_D("Start TUpdateStreamingQueryStateRequestActor " << updaterId << " (" << info << ")");
     }
 
@@ -2058,7 +2053,7 @@ protected:
 
 private:
     void UpdateQueryState(const TString& info) const {
-        const auto& updaterId = Register(new TUpdateStreamingQueryStateRequestActor::TRetry(SelfId(), Context.GetDatabaseId(), QueryPath, State));
+        const auto& updaterId = Register(TUpdateStreamingQueryStateRequestActor::MakeRetry(SelfId(), Context.GetDatabaseId(), QueryPath, State));
         LOG_D("Start TUpdateStreamingQueryStateRequestActor " << updaterId << " (" << info << ")");
     }
 
@@ -2308,7 +2303,7 @@ protected:
         }
 
         TBase::Become(&TDerived::StateFunc);
-        const auto& unlockActorId = TBase::Register(new TUnlockStreamingQueryRequestActor::TRetry(TBase::SelfId(), Context.GetDatabaseId(), TBase::QueryPath, TBase::SelfId()));
+        const auto& unlockActorId = TBase::Register(TUnlockStreamingQueryRequestActor::MakeRetry(TBase::SelfId(), Context.GetDatabaseId(), TBase::QueryPath, TBase::SelfId()));
         LOG_D("Start TUnlockStreamingQueryRequestActor " << unlockActorId);
 
         FinalStatus = status;
@@ -2808,7 +2803,7 @@ private:
             QueryState.SetStatus(NKikimrKqp::TStreamingQueryState::STATUS_UNSPECIFIED);
             QueryState.ClearSchemeInfo();
 
-            const auto& updaterId = Register(new TUpdateStreamingQueryStateRequestActor::TRetry(SelfId(), Context.GetDatabaseId(), QueryPath, QueryState));
+            const auto& updaterId = Register(TUpdateStreamingQueryStateRequestActor::MakeRetry(SelfId(), Context.GetDatabaseId(), QueryPath, QueryState));
             LOG_D("Start TUpdateStreamingQueryStateRequestActor " << updaterId);
             return;
         }

@@ -14,7 +14,7 @@ using namespace NYson;
 
 TOperationCache::TOperationCache(
     TAsyncExpiringCacheConfigPtr config,
-    THashSet<TString> attributes,
+    THashSet<std::string> attributes,
     NApi::IClientPtr client,
     NProfiling::TProfiler profiler)
     : TAsyncExpiringCache(

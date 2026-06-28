@@ -153,10 +153,6 @@ private:
             Y_ENSURE(source.ColumnsSize() == source.ColumnTypesSize(), "Columns size and types size should be equal, but got " << source.ColumnsSize() << " columns and " << source.ColumnTypesSize() << " types");
         }
 
-        ~TClientsInfo() {
-            Counters->RemoveSubgroup("query_id", QueryId);
-        }
-
         static TVector<TSchemaColumn> GetColumns(const NYql::NPq::NProto::TDqPqTopicSource& source) {
             TVector<TSchemaColumn> result;
             result.reserve(source.ColumnsSize());

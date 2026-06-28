@@ -75,7 +75,7 @@ Create the file `inventory/50-inventory.yaml` and fill it according to the chose
           system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
           
           # Nodes
-          ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
+          ydb_config: "not_var{{ ansible_config_file | dirname }}/files/config.yaml"
           ydb_version: "system_version"
 
           # Storage
@@ -138,7 +138,7 @@ Create the file `inventory/50-inventory.yaml` and fill it according to the chose
           system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
           
           # Nodes
-          ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
+          ydb_config: "not_var{{ ansible_config_file | dirname }}/files/config.yaml"
           ydb_version: "system_version"
 
           # Storage
@@ -196,7 +196,7 @@ Create the file `inventory/50-inventory.yaml` and fill it according to the chose
           system_ntp_servers: [time.cloudflare.com, time.google.com, ntp.ripe.net, pool.ntp.org]
           
           # Nodes
-          ydb_config: "{{ ansible_config_file | dirname }}/files/config.yaml"
+          ydb_config: "not_var{{ ansible_config_file | dirname }}/files/config.yaml"
           ydb_version: "system_version"
 
           # Storage

@@ -2706,7 +2706,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(ShowCreateTable) {
-        auto serverSettings = TKikimrSettings().SetEnableShowCreate(true);
+        auto serverSettings = TKikimrSettings();
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -2737,39 +2737,8 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(ShowCreateTableDisable) {
-        auto serverSettings = TKikimrSettings().SetEnableShowCreate(false);
-
-        TKikimrRunner kikimr(serverSettings);
-        auto db = kikimr.GetQueryClient();
-        auto session = db.GetSession().GetValueSync().GetSession();
-
-        {
-            auto result = session.ExecuteQuery(R"(
-                CREATE TABLE test_show_create (
-                    Key Uint32,
-                    Value Uint32,
-                    PRIMARY KEY (Key)
-                );
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
-        }
-
-        {
-            auto result = session.ExecuteQuery(R"(
-                SHOW CREATE TABLE `/Root/test_show_create`;
-            )", TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT(!result.IsSuccess());
-
-            UNIT_ASSERT_VALUES_EQUAL("<main>: Error: Type annotation, code: 1030\n    <main>:2:35: Error: At function: KiReadTable!\n        <main>:2:35: Error: SHOW CREATE statement is not supported\n",
-                result.GetIssues().ToString());
-        }
-    }
-
     Y_UNIT_TEST(ShowCreateSysView) {
-        auto serverSettings = TKikimrSettings().SetEnableShowCreate(true
-
-        );
+        auto serverSettings = TKikimrSettings();
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -2815,7 +2784,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(ShowCreateTableNotSuccess) {
-        auto serverSettings = TKikimrSettings().SetEnableShowCreate(true);
+        auto serverSettings = TKikimrSettings();
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -2843,7 +2812,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(ShowCreateTableOnView) {
-        auto serverSettings = TKikimrSettings().SetEnableShowCreate(true);
+        auto serverSettings = TKikimrSettings();
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -2868,7 +2837,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(ShowCreateView) {
-        auto serverSettings = TKikimrSettings().SetEnableShowCreate(true);
+        auto serverSettings = TKikimrSettings();
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();
@@ -2897,7 +2866,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
     }
 
     Y_UNIT_TEST(ShowCreateViewOnTable) {
-        auto serverSettings = TKikimrSettings().SetEnableShowCreate(true);
+        auto serverSettings = TKikimrSettings();
 
         TKikimrRunner kikimr(serverSettings);
         auto db = kikimr.GetQueryClient();

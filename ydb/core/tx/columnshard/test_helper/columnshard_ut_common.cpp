@@ -144,6 +144,11 @@ TPlanStep ProposeSchemaTx(TTestBasicRuntime& runtime, TActorId& sender, const TS
 }
 
 void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap) {
+    PlanSchemaTxStepOnly(runtime, sender, snap);
+    WaitSchemaTxCompletion(runtime, sender, snap.GetTxId());
+}
+
+void PlanSchemaTxStepOnly(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap) {
     auto evSubscribe = std::make_unique<TEvColumnShard::TEvNotifyTxCompletion>(snap.GetTxId());
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, evSubscribe.release());
 
@@ -154,8 +159,11 @@ void PlanSchemaTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSn
 
     ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, plan.release());
     UNIT_ASSERT(runtime.GrabEdgeEvent<TEvTxProcessing::TEvPlanStepAck>(sender));
+}
+
+void WaitSchemaTxCompletion(TTestBasicRuntime& runtime, const TActorId& sender, ui64 txId) {
     auto ev = runtime.GrabEdgeEvent<TEvColumnShard::TEvNotifyTxCompletionResult>(sender);
-    UNIT_ASSERT_EQUAL(ev->Get()->Record.GetTxId(), snap.GetTxId());
+    UNIT_ASSERT_EQUAL(ev->Get()->Record.GetTxId(), txId);
 }
 
 void PlanWriteTx(TTestBasicRuntime& runtime, const TActorId& sender, NOlap::TSnapshot snap, bool waitResult) {
@@ -496,10 +504,9 @@ void TTestSchema::InitSchema(const std::vector<NArrow::NTest::TTestColumn>& colu
         schema->MutableDefaultCompression()->SetLevel(*specials.CompressionLevel);
     }
     if (specials.GetUseForcedCompaction()) {
-        NKikimrSchemeOp::TCompactionPlannerConstructorContainer::TLOptimizer optimizer;
-        *schema->MutableOptions()->MutableCompactionPlannerConstructor()->MutableLBuckets() = optimizer;
-        schema->MutableOptions()->MutableCompactionPlannerConstructor()->SetClassName(
-            "l-buckets");   //TODO use appropriate lc-buckets configuration
+        auto* plannerConstructor = schema->MutableOptions()->MutableCompactionPlannerConstructor();
+        plannerConstructor->SetClassName("tiling++");
+        plannerConstructor->MutableTiling()->SetJson("{}");
     }
 }
 

@@ -51,7 +51,12 @@ class TSecretResolver: public TActorBootstrapped<TSecretResolver> {
             auto userToken = MakeIntrusiveConst<NACLib::TUserToken>(userSID, TVector<TString>());
             const auto actorSystem = ActorContext().ActorSystem();
             const auto replyActorId = SelfId();
-            auto future = NKqp::DescribeSecret(secretNames, userToken, Database, actorSystem);
+            auto future = NKqp::DescribeSecret(
+                secretNames,
+                userToken,
+                Database,
+                actorSystem,
+                {.RetryPolicy = NKqp::MakeLongRetryPolicy()});
             future.Subscribe([actorSystem, replyActorId](const NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription>& result) {
                 actorSystem->Send(replyActorId, new NKqp::TEvDescribeSecretsResponse(result.GetValue()));
             });

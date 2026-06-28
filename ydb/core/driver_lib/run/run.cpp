@@ -195,6 +195,8 @@
 
 #include <ydb/core/blobstorage/base/blobstorage_events.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::GLOBAL
+
 namespace NKikimr {
 
 namespace {
@@ -2273,7 +2275,7 @@ void TKikimrRunner::KikimrStart() {
     ThreadSigmask(SIG_BLOCK);
     if (ActorSystem) {
         ActorSystem->Start();
-        LOG_NOTICE_S(*ActorSystem, NActorsServices::GLOBAL, GetProgramSvnVersion());
+        YDB_LOG_NOTICE_CTX(*ActorSystem, GetProgramSvnVersion());
     }
 
     if (!!Monitoring) {

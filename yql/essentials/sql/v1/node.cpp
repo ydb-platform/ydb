@@ -312,6 +312,10 @@ void INode::DisableSort() {
     DisableSort_ = true;
 }
 
+void INode::PreserveSort() {
+    PreserveSort_ = true;
+}
+
 bool INode::UsedSubquery() const {
     return false;
 }

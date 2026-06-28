@@ -464,10 +464,16 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
     auto& op = *modifyScheme.MutableCreateTable();
 
+    // Fulltext index columns are [prefix..., text]; all but the last are prefix key columns.
+    TVector<TString> prefixColumns;
+    if (buildInfo.IndexColumns.size() > 1) {
+        prefixColumns.assign(buildInfo.IndexColumns.begin(), buildInfo.IndexColumns.end() - 1);
+    }
+
     op = CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
         NKikimrSchemeOp::TTableDescription(),
         std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&buildInfo.SpecializedIndexDescription),
-        buildInfo.IndexType);
+        buildInfo.IndexType, prefixColumns);
 
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
 
@@ -487,8 +493,6 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
 
     auto modifyScheme = AlterMainTableTemplate(ss, buildInfo);
 
-    auto path = TPath::Init(buildInfo.TablePathId, ss);
-
     for (const auto& colInfo : buildInfo.BuildColumns) {
         auto col = modifyScheme.MutableAlterTable()->AddColumns();
         NScheme::TTypeInfo typeInfo;
@@ -503,8 +507,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
         col->SetType(NScheme::TypeName(typeInfo, typeMod));
         col->SetName(colInfo.ColumnName);
         if (colInfo.IsFromSequence()) {
-            // DefaultFromSequence stores the sequence leaf; full path is <tablePath>/<leaf>.
-            *col->MutableDefaultFromSequence() = JoinPath({path.PathString(), colInfo.DefaultFromSequence});
+            // Store the sequence as a table-local leaf name (not an absolute path), matching
+            // the create-table convention and how the path describer / KQP key local
+            // sequences by leaf.
+            *col->MutableDefaultFromSequence() = colInfo.DefaultFromSequence;
         } else {
             col->MutableDefaultFromLiteral()->CopyFrom(colInfo.DefaultFromLiteral);
         }
@@ -1291,6 +1297,13 @@ private:
             buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
         };
 
+        // Fulltext index columns are [prefix..., text]; all but the last are prefix key columns.
+        if (buildInfo.IndexColumns.size() > 1) {
+            for (size_t i = 0; i + 1 < buildInfo.IndexColumns.size(); ++i) {
+                ev->Record.AddPrefixColumns(buildInfo.IndexColumns[i]);
+            }
+        }
+
         bool compact = buildInfo.IsBuildFulltextCompact();
         if (buildInfo.TargetName.empty()) {
             TPath implTable = GetBuildPath(Self, buildInfo, TString(NTableIndex::ImplTable) + (compact ? NTableIndex::NKMeans::BuildSuffix0 : ""));
@@ -1363,6 +1376,14 @@ private:
             ev->Record.SetDictTableName(path.PathString());
         }
 
+        // Fulltext index columns are [prefix..., text]; all but the last are prefix key columns.
+        // The dict scan needs them to skip prefix cells and compact segments per (prefix, token).
+        if (buildInfo.IndexColumns.size() > 1) {
+            for (size_t i = 0; i + 1 < buildInfo.IndexColumns.size(); ++i) {
+                ev->Record.AddPrefixColumns(buildInfo.IndexColumns[i]);
+            }
+        }
+
         const auto& shardStatus = buildInfo.Shards.at(shardIdx);
         if (shardStatus.Range.From.GetCells().size() > 1) {
             // Range start is possibly split in the middle of a token
@@ -1432,8 +1453,9 @@ private:
         TColumnTypes baseColumnTypes;
         TString error;
         Y_ENSURE(ExtractTypes(mainTableInfo, baseColumnTypes, error), error);
-        Y_ENSURE(buildInfo.IndexColumns.size() == 1);
-        auto textColumnInfo = baseColumnTypes.at(buildInfo.IndexColumns[0]);
+        // Fulltext index columns are [prefix..., text]; the text column is always last.
+        Y_ENSURE(!buildInfo.IndexColumns.empty());
+        auto textColumnInfo = baseColumnTypes.at(buildInfo.IndexColumns.back());
 
         auto types = std::make_shared<NTxProxy::TUploadTypes>(2);
         Ydb::Type type;

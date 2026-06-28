@@ -55,6 +55,11 @@ TIntrusivePtr<IOperator> BuildDistinct(const TIntrusivePtr<IOperator>& input, TV
     return MakeIntrusive<TOpAggregate>(input, distAggTraitsList, distColumns, EOpPhase::Undefined, /*distinctAll=*/true, input->Pos);
 }
 
+bool IsDecimalType(const TTypeAnnotationNode* type) {
+    const auto features = NUdf::GetDataTypeInfo(RemoveOptionality(*type).Cast<TDataExprType>()->GetSlot()).Features;
+    return (features & NUdf::EDataTypeFeatures::DecimalType);
+}
+
 const TTypeAnnotationNode* GetAggregationType(const TTypeAnnotationNode* inputType, const TString& aggFunction, TExprContext& ctx) {
     Y_ENSURE(inputType, "Type is nullptr");
     const TTypeAnnotationNode* resultType = inputType;
@@ -65,7 +70,17 @@ const TTypeAnnotationNode* GetAggregationType(const TTypeAnnotationNode* inputTy
     } else if (aggFunction == "sum") {
         Y_ENSURE(GetSumResultType(pos, *inputType, resultType, ctx), "Unsupported type for sum aggregation function");
     } else if (aggFunction == "avg") {
-        Y_ENSURE(false, "Avg not supported for multiple distinct.");
+        // Early: (counter, sum)
+        std::vector<const TTypeAnnotationNode*> tupleTypes;
+        if (IsDecimalType(inputType)) {
+            auto decimalType = inputType->Cast<TDataExprParamsType>();
+            const auto precision = "35";
+            const auto scale = TString(decimalType->GetParamTwo());
+            tupleTypes = {ctx.MakeType<TDataExprParamsType>(EDataSlot::Decimal, precision, scale), ctx.MakeType<TDataExprType>(EDataSlot::Uint64)};
+        } else {
+            tupleTypes = {ctx.MakeType<TDataExprType>(EDataSlot::Double), ctx.MakeType<TDataExprType>(EDataSlot::Uint64)};
+        }
+        return ctx.MakeType<TTupleExprType>(tupleTypes);
     } else if (aggFunction == "variance_1_1") {
         Y_ENSURE(false, "Variacnce not supported for multiple distinct.");
     }
@@ -96,6 +111,11 @@ TIntrusivePtr<IOperator> BuildNullMapElementsExceptOneColumn(const TIntrusivePtr
         auto fieldType = inputStructType->FindItemType(originalColName);
         Y_ENSURE(fieldType, "Aggregation column not found in input type:" << resultColName;);
         if (aggTraitsComparator(aggTraits, realAggTraits)) {
+            const bool needsOptionalWrap = !fieldType->IsOptionalOrNull() || aggTraits.AggFunction == "count";
+            if (!needsOptionalWrap) {
+                continue;
+            }
+
             auto arg = ctx.NewArgument(input->Pos, "arg");
             // clang-format off
             auto body = Build<TCoMember>(ctx, input->Pos)
@@ -107,13 +127,11 @@ TIntrusivePtr<IOperator> BuildNullMapElementsExceptOneColumn(const TIntrusivePtr
             // clang-format on
 
             // Count unwraps optional.
-            if (!fieldType->IsOptionalOrNull() || aggTraits.AggFunction == "count") {
-                // clang-format off
-                body = Build<TCoJust>(ctx, input->Pos)
-                    .Input(body)
-                .Done().Ptr();
-                // clang-format on
-            }
+            // clang-format off
+            body = Build<TCoJust>(ctx, input->Pos)
+                .Input(body)
+            .Done().Ptr();
+            // clang-format on
 
             // clang-format on
             columnExpr = Build<TCoLambda>(ctx, input->Pos).Args({arg}).Body(body).Done().Ptr();
@@ -202,7 +220,17 @@ TIntrusivePtr<IOperator> ExpandMultiDistinct(const TIntrusivePtr<TOpAggregate>& 
             BuildNullMapElementsExceptOneColumn(partialResult, aggregate->GetInput()->Type, aggTraitsList, aggTraits, intermediateColumnPrefix, props, ctx);
 
         if (unionAllResult) {
-            unionAllResult = MakeIntrusive<TOpUnionAll>(unionAllResult, partialResult, aggregate->Pos);
+            TVector<TInfoUnit> columns;
+            columns.reserve(aggregate->GetKeyColumns().size() + aggTraitsList.size());
+            for (const auto& keyColumn : aggregate->GetKeyColumns()) {
+                columns.push_back(keyColumn);
+            }
+            for (const auto& unionAggTraits : aggTraitsList) {
+                const auto column = TInfoUnit(intermediateColumnPrefix + unionAggTraits.ResultColName.GetFullName());
+                columns.push_back(column);
+            }
+
+            unionAllResult = MakeIntrusive<TOpUnionAll>(unionAllResult, partialResult, aggregate->Pos, std::move(columns));
         } else {
             unionAllResult = partialResult;
         }

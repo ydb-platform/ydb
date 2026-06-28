@@ -12,6 +12,8 @@
 #include <yt/yt/library/profiling/sensor.h>
 #include <yt/yt/library/profiling/producer.h>
 
+#include <library/cpp/yt/threading/atomic_object.h>
+
 #include <library/cpp/yt/misc/global.h>
 
 #include <library/cpp/yt/memory/leaky_ref_counted_singleton.h>
@@ -35,6 +37,7 @@ namespace NYT::NProfiling {
 using namespace NYPath;
 using namespace NProfiling;
 using namespace NConcurrency;
+using namespace NThreading;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -257,6 +260,27 @@ public:
         }
     }
 
+    TResourceTrackerTagsGuard RegisterPerThreadExtraTags(
+        const std::string& threadName,
+        const NProfiling::TTagSet& extraTags)
+    {
+        return PerThreadExtraTags_.Transform([&threadName, &extraTags] (auto& storage) {
+            auto [it, inserted] = storage.try_emplace(threadName, extraTags);
+            if (!inserted) {
+                return TResourceTrackerTagsGuard(std::nullopt);
+            }
+
+            return TResourceTrackerTagsGuard(threadName);
+        });
+    }
+
+    void UnregisterPerThreadExtraTags(const std::string& threadName)
+    {
+        PerThreadExtraTags_.Transform([&threadName] (auto& storage) {
+            storage.erase(threadName);
+        });
+    }
+
 private:
     const TCpuCgroupTrackerPtr CpuCgroupTracker_ = New<TCpuCgroupTracker>();
     const TMemoryCgroupTrackerPtr MemoryCgroupTracker_ = New<TMemoryCgroupTracker>();
@@ -283,6 +307,8 @@ private:
     std::atomic<double> LastCpuWait_;
 
     std::atomic<double> MaxThreadPoolUtilization_;
+
+    TAtomicObject<THashMap<std::string, TTagSet>> PerThreadExtraTags_;
 
     void CollectSensors(ISensorWriter* writer) override
     {
@@ -509,6 +535,14 @@ private:
             double totalCpuTime = userCpuTime + systemCpuTime;
 
             TWithTagGuard tagGuard(writer, "thread", profilingKey);
+            PerThreadExtraTags_.Read([&tagGuard, &profilingKey] (const auto& storage) {
+                if (auto it = storage.find(profilingKey); it != storage.end()) {
+                    for (const auto& tag : it->second.Tags()) {
+                        tagGuard.AddTag(tag);
+                    }
+                }
+            });
+
             writer->AddGauge("/user_cpu", userCpuTime);
             writer->AddGauge("/system_cpu", systemCpuTime);
             writer->AddGauge("/total_cpu", totalCpuTime);
@@ -548,6 +582,54 @@ private:
 
 ////////////////////////////////////////////////////////////////////////////////
 
+TResourceTrackerTagsGuard::TResourceTrackerTagsGuard(std::optional<std::string> threadName)
+    : ThreadName_(std::move(threadName))
+{ }
+
+TResourceTrackerTagsGuard::TResourceTrackerTagsGuard(TResourceTrackerTagsGuard&& other) noexcept
+{
+    ThreadName_ = std::move(other.ThreadName_);
+    other.ThreadName_ = std::nullopt;
+}
+
+TResourceTrackerTagsGuard& TResourceTrackerTagsGuard::operator=(TResourceTrackerTagsGuard&& other) noexcept
+{
+    if (this == &other) {
+        return *this;
+    }
+
+    if (ThreadName_) {
+        Release();
+    }
+
+    ThreadName_ = std::move(other.ThreadName_);
+    other.ThreadName_ = std::nullopt;
+    return *this;
+}
+
+TResourceTrackerTagsGuard::~TResourceTrackerTagsGuard()
+{
+    Release();
+}
+
+void TResourceTrackerTagsGuard::Release() noexcept
+{
+    if (ThreadName_) {
+        TResourceTrackerImpl::Get()->UnregisterPerThreadExtraTags(*ThreadName_);
+        ThreadName_ = std::nullopt;
+    }
+}
+
+TResourceTrackerTagsGuard::operator bool() const
+{
+    return ThreadName_.has_value();
+}
+
+const std::optional<std::string>& TResourceTrackerTagsGuard::GetThreadName() const
+{
+    return ThreadName_;
+}
+
 void TResourceTracker::Enable()
 {
     TResourceTrackerImpl::Get()->Enable();
@@ -586,6 +668,13 @@ void TResourceTracker::SetCpuToVCpuFactor(double factor)
 void TResourceTracker::Configure(const TResourceTrackerConfigPtr& config)
 {
     TResourceTrackerImpl::Get()->Configure(config);
+}
+
+TResourceTrackerTagsGuard TResourceTracker::RegisterPerThreadExtraTags(
+    const std::string& threadName,
+    const NProfiling::TTagSet& extraTags)
+{
+    return TResourceTrackerImpl::Get()->RegisterPerThreadExtraTags(threadName, extraTags);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

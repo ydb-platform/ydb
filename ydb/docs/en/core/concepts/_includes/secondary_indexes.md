@@ -1,6 +1,8 @@
 # Secondary Indexes
 
-{{ ydb-short-name }} automatically creates a primary key index, which is why selection by primary key is always efficient, affecting only the rows needed. Selections by criteria applied to one or more non-key columns typically result in a full table scan. To make these selections efficient, use _secondary indexes_.
+{{ ydb-short-name }} automatically creates a primary key index, which is why selection by primary key is always efficient, affecting only the rows needed. Selections by criteria applied to one or more non-key columns typically result in a full table scan. To make these selections efficient, use _secondary indexes_ — global structures backed by a separate index table.
+
+[Local indexes](../glossary.md#local-index) are a separate kind of auxiliary structure: they are stored with table data and applied in the storage layer on read, without materializing a separate index table (see [Local indexes](#bloom-skip-index) below).
 
 The current version of {{ ydb-short-name }} implements _synchronous_ and _asynchronous_ global secondary indexes. Each index is a hidden table that is updated:
 
@@ -21,6 +23,12 @@ Unlike a synchronous index, an asynchronous index doesn't use distributed transa
 
 You can copy the contents of columns into a covering index. This eliminates the need to read data from the main table when performing reads by index and significantly reduces delays. At the same time, such denormalization leads to increased usage of disk space and may slow down inserts and updates due to the need for additional data copying.
 
+## Unique Secondary Index {#unique}
+
+This type of index enforces unique constraint behavior and, just like a regular secondary index, allows efficient point lookup queries. {{ ydb-short-name }} uses it to perform additional checks, ensuring that each distinct value in the indexed column set appears in the table no more than once. If a modifying query violates the constraint, it is aborted with a `PRECONDITION_FAILED` status. Therefore, client code must be prepared to handle this status.
+
+A unique secondary index is a synchronous index, so from a transactional perspective, the update process is the same as for the [synchronous secondary index](#sync) described above.
+
 ## Vector Index
 
 [Vector Index](../../dev/vector-indexes.md) is a special type of secondary index.
@@ -32,6 +40,10 @@ Unlike traditional secondary indexes, which optimize equality or range searches,
 [Fulltext index](../../dev/fulltext-indexes.md) is a special type of secondary index.
 
 Unlike traditional secondary indexes, which optimize equality or range searches, fulltext indexes allow scalable text search by words and phrases (and, with n-grams, by substrings). See also: [Fulltext search](../query_execution/fulltext_search.md).
+
+## Local indexes {#bloom-skip-index}
+
+[Local indexes](../query_execution/local_indexes.md) are auxiliary structures stored together with table data and applied while reading in the storage layer. They do not materialize a separate index table. Currently, [Bloom skip indexes](../../dev/bloom-skip-indexes.md) are implemented; other kinds are planned.
 
 ## Creating a Secondary Index Online {#index-add}
 

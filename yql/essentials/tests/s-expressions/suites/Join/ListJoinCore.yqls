@@ -1,4 +1,3 @@
-# /* custom error:GetCallable(): requirement Callables_.cend() != compiler failed, message: Missed callable: ListJoinCore*/
 (
 (let config (DataSource 'config))
 (let res_sink (DataSink 'result))

@@ -2,7 +2,7 @@
 
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_async_io.h>
 #include <ydb/library/yql/dq/runtime/streaming/dq_source_watermark_tracker.h>
-#include <ydb/library/yql/providers/pq/common/pq_partition_key.h>
+#include <ydb/library/yql/dq/runtime/streaming/partition_key.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/proto/dq_task_params.pb.h>
 
@@ -10,8 +10,6 @@ namespace NYql::NDq::NInternal {
 
 class TDqPqReadActorBase : public IDqComputeActorAsyncInput {
 protected:
-    using TPartitionKey = ::NPq::TPartitionKey;
-
     struct TPartitionInfo {
         std::optional<ui64> Offset;             // offset of next event.
         std::optional<ui64> EndOffset;          // end offset in topic on start.
@@ -20,10 +18,10 @@ protected:
 
         bool IsFinishedInTableMode() {
             if (!EndOffset                      // Not connected yet.
-                && !EndWriteTime) {                         
+                && !EndWriteTime) {
                 return false;
             }
-            bool endByOffset = 
+            bool endByOffset =
                 EndOffset
                 && (*EndOffset == 0             // No data in partition on start.
                     || (Offset && *EndOffset <= *Offset));

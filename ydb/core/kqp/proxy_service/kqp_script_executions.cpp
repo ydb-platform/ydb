@@ -1031,8 +1031,8 @@ private:
 
             if (const std::optional<TString>& userSID = result.ColumnParser("user_token").GetOptionalUtf8()) {
                 TVector<NACLib::TSID> userGroupSids;
-                if (auto userGroupSids = ParseUserGroupSids(result)) {
-                    userGroupSids = std::move(*userGroupSids);
+                if (auto sids = ParseUserGroupSids(result)) {
+                    userGroupSids.assign(std::make_move_iterator(sids->begin()), std::make_move_iterator(sids->end()));
                 }
 
                 queryRequest.SetUserToken(NACLib::TUserToken(*userSID, userGroupSids).SerializeAsString());
@@ -2051,7 +2051,7 @@ private:
     }
 
     const TEvForgetScriptExecutionOperation::TPtr Request;
-    const TString& Database;
+    const TString Database;
     TString ExecutionId;
     std::optional<std::vector<Ydb::Query::ResultSetMeta>> ResultSetMetas;
     bool ExecutionEntryExists = true;
@@ -3762,8 +3762,8 @@ private:
 
             if (const auto& userToken = result.ColumnParser("user_token").GetOptionalUtf8()) {
                 TVector<NACLib::TSID> userGroupSids;
-                if (auto userGroupSids = ParseUserGroupSids(result)) {
-                    userGroupSids = std::move(*userGroupSids);
+                if (auto sids = ParseUserGroupSids(result)) {
+                    userGroupSids.assign(std::make_move_iterator(sids->begin()), std::make_move_iterator(sids->end()));
                 }
 
                 Response->UserToken = new NACLib::TUserToken(TString(*userToken), userGroupSids);

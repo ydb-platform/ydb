@@ -24,6 +24,7 @@ SRCS(
 )
 
 PEERDIR(
+    ydb/library/persqueue/topic_parser
     ydb/library/grpc/server
     ydb/core/base
     ydb/core/client/server

@@ -1,0 +1,126 @@
+name: Ya CI core (build and test)
+description: >
+  Shared checkout (caller must run actions/checkout first), optional blacklist,
+  credentials, and build_and_test_ya. Run parameters are set by the calling workflow.
+
+inputs:
+  build_preset:
+    required: true
+  test_threads:
+    required: false
+    default: '52'
+  test_size:
+    required: false
+    default: 'small,medium'
+  test_type:
+    required: false
+    default: ''
+  link_threads:
+    required: false
+    default: '12'
+  build_target:
+    required: false
+    default: 'ydb/'
+  increment:
+    required: false
+    default: 'true'
+  run_tests:
+    required: false
+    default: 'true'
+  run_build:
+    required: false
+    default: 'true'
+  additional_ya_make_args:
+    required: false
+    default: '-DDEBUGINFO_LINES_ONLY'
+  additional_ya_make_args_append:
+    required: false
+    default: ''
+  blacklist_paths:
+    required: false
+    default: ''
+  test_retry_count:
+    required: false
+    default: ''
+  custom_branch_name:
+    required: false
+    default: ''
+  pull_number:
+    required: false
+    default: ''
+  collect_coredumps:
+    required: false
+    default: 'false'
+  ci_ydb_service_account_key_file_credentials:
+    required: false
+    default: ''
+  ydb_qa_config:
+    required: false
+    default: ''
+  secs:
+    required: false
+    default: ''
+  vars:
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Optional test blacklist file
+      id: blacklist
+      shell: bash
+      env:
+        BLACKLIST_PATHS: ${{ inputs.blacklist_paths }}
+      run: |
+        if [ -z "${BLACKLIST_PATHS}" ]; then
+          echo "extra_ya_args=" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+        BLACKLIST_FILE="${RUNNER_TEMP}/test_blacklist.yaml"
+        > "$BLACKLIST_FILE"
+        while IFS= read -r path; do
+          [ -z "$path" ] && continue
+          echo "- path: $path" >> "$BLACKLIST_FILE"
+        done <<< "$BLACKLIST_PATHS"
+        echo "extra_ya_args=--test-blacklist-path ${BLACKLIST_FILE}" >> "$GITHUB_OUTPUT"
+
+    - name: Merge ya make arguments
+      id: merged_ya
+      shell: bash
+      env:
+        BASE: ${{ inputs.additional_ya_make_args }}
+        APP: ${{ inputs.additional_ya_make_args_append }}
+        BL: ${{ steps.blacklist.outputs.extra_ya_args }}
+      run: |
+        out="${BASE}"
+        [ -n "${APP// }" ] && out="${out} ${APP}"
+        [ -n "${BL// }" ] && out="${out} ${BL}"
+        echo "args=${out}" >> "$GITHUB_OUTPUT"
+
+    - name: Setup ydb access
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ inputs.ci_ydb_service_account_key_file_credentials }}
+        ydb_qa_config: ${{ inputs.ydb_qa_config }}
+
+    - name: Build and test
+      uses: ./.github/actions/build_and_test_ya
+      with:
+        build_preset: ${{ inputs.build_preset }}
+        build_target: ${{ inputs.build_target }}
+        increment: ${{ inputs.increment == 'true' }}
+        run_build: ${{ inputs.run_build == 'true' }}
+        run_tests: ${{ inputs.run_tests == 'true' }}
+        test_size: ${{ inputs.test_size }}
+        test_type: ${{ inputs.test_type }}
+        test_threads: ${{ inputs.test_threads }}
+        link_threads: ${{ inputs.link_threads }}
+        test_retry_count: ${{ inputs.test_retry_count }}
+        custom_branch_name: ${{ inputs.custom_branch_name }}
+        pull_number: ${{ inputs.pull_number }}
+        collect_coredumps: ${{ inputs.collect_coredumps == 'true' }}
+        put_build_results_to_cache: true
+        additional_ya_make_args: ${{ steps.merged_ya.outputs.args }}
+        secs: ${{ inputs.secs }}
+        vars: ${{ inputs.vars }}

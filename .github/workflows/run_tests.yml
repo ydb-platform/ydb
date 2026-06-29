@@ -104,7 +104,7 @@ jobs:
       branch_name_map: ${{ steps.set-branches.outputs.branch_name_map }}
       pr_number_map: ${{ steps.set-branches.outputs.pr_number_map }}
     steps:
-      - name: Checkout ${{ matrix.branch }}
+      - name: Sparse checkout (.github config and scripts)
         uses: actions/checkout@v5
         with:
           sparse-checkout: |
@@ -303,12 +303,6 @@ jobs:
         with:
           ref: ${{ matrix.branch }}
 
-      - name: Setup ydb access
-        uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
-        with:
-          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
-
       - name: Determine branch name and PR number for test history
         id: determine-branch
         run: |
@@ -351,42 +345,25 @@ jobs:
             echo "No PR mapping (regular branch)"
           fi
 
-      - name: Create blacklist file
-        id: create-blacklist
-        if: inputs.blacklist_paths != ''
-        shell: bash
-        env:
-          BLACKLIST_PATHS: ${{ inputs.blacklist_paths }}
-        run: |
-          BLACKLIST_FILE="${{ runner.temp }}/test_blacklist.yaml"
-          > "$BLACKLIST_FILE"
-          while IFS= read -r path; do
-            [ -z "$path" ] && continue
-            echo "- path: $path" >> "$BLACKLIST_FILE"
-          done <<< "$BLACKLIST_PATHS"
-          echo "blacklist_file=$BLACKLIST_FILE" >> $GITHUB_OUTPUT
-          echo "Blacklist file created at $BLACKLIST_FILE with content:"
-          cat "$BLACKLIST_FILE"
-
-      - name: Run YDB Tests
+      - name: Ya CI build and test
         id: run_tests
         timeout-minutes: ${{ fromJson(env.timeout) }}
-        uses: ./.github/actions/build_and_test_ya
+        uses: ./.github/actions/ya_ci_core_build_test
         with:
           build_preset: ${{ inputs.build_preset }}
-          increment: false
-          build_target: ${{ inputs.test_targets }}
-          run_build: true
-          run_tests: true
-          test_retry_count: 3
+          test_threads: ${{ env.threads_count }}
           test_size: ${{ inputs.test_size }}
           test_type: ${{ inputs.test_type }}
-          test_threads: ${{ env.threads_count }}
+          increment: 'false'
+          build_target: ${{ inputs.test_targets }}
+          additional_ya_make_args_append: ${{ inputs.additional_ya_make_args }}
+          blacklist_paths: ${{ inputs.blacklist_paths }}
+          test_retry_count: '3'
           custom_branch_name: ${{ steps.determine-branch.outputs.branch_name }}
-          put_build_results_to_cache: true
-          collect_coredumps: ${{ inputs.collect_coredumps }}
-          additional_ya_make_args: -DDEBUGINFO_LINES_ONLY ${{ inputs.additional_ya_make_args }} ${{ steps.create-blacklist.outputs.blacklist_file && format('--test-blacklist-path {0}', steps.create-blacklist.outputs.blacklist_file) || '' }}
           pull_number: ${{ steps.determine-branch.outputs.pr_number || inputs.pull_number || '' }}
+          collect_coredumps: ${{ inputs.collect_coredumps }}
+          ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+          ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
           secs: ${{ format('{{"AWS_KEY_ID":"{0}","AWS_KEY_VALUE":"{1}","REMOTE_CACHE_USERNAME":"{2}","REMOTE_CACHE_PASSWORD":"{3}","YDBOT_TELEGRAM_BOT_TOKEN":"{4}"}}',
             secrets.AWS_KEY_ID, secrets.AWS_KEY_VALUE, secrets.REMOTE_CACHE_USERNAME, secrets.REMOTE_CACHE_PASSWORD, secrets.YDBOT_TELEGRAM_BOT_TOKEN ) }}
           vars: ${{ format('{{"AWS_BUCKET":"{0}","AWS_ENDPOINT":"{1}","REMOTE_CACHE_URL":"{2}","GH_ALERTS_TG_LOGINS":"{3}","GH_ALERTS_TG_CHAT":"{4}"}}',

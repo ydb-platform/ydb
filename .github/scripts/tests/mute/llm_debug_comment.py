@@ -87,7 +87,8 @@ _JOB_NAMES = (
     'Regression-run_Small_and_Medium',
     'Regression-run_compatibility',
     'Regression-whitelist-run',
-    'Postcommit_relwithdebinfo',
+    'Postmerge',
+    'Postcommit_relwithdebinfo',  # legacy job_name on stable branches
     'Postcommit_asan',
 )
 

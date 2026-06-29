@@ -1141,9 +1141,13 @@ namespace NActors {
         ICPROXY_PROFILED;
 
         const TMonotonic now = TActivationContext::Monotonic();
+        bool dropping = false;
         while (PendingSessionEvents) {
             TPendingSessionEvent& ev = PendingSessionEvents.front();
-            if (now >= ev.Deadline || PendingSessionEventsSize > Common->Settings.MessagePendingSize) {
+            if (dropping || now >= ev.Deadline || PendingSessionEventsSize > Common->Settings.MessagePendingSize) {
+                // Once a pending event is dropped, drop the whole currently pending batch. Keeping later events
+                // may deliver them after an earlier event from the same sender has already been reported undelivered.
+                dropping = true;
                 TAutoPtr<IEventHandle> event(ev.Event.Release());
                 PendingSessionEventsSize -= ev.Size;
                 DropSessionEvent(event);

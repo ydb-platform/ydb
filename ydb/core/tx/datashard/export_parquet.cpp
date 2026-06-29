@@ -127,6 +127,7 @@ TDataFormatParquet(TParquetExportSettings&& settings)
     , WriteProperties(CreateWriteProperties(settings))
     , OutStream(std::make_shared<TCheckpointOutputStream>())
 {
+    Y_ENSURE(RowGroupSize > 0);
 }
 
 ~TDataFormatParquet() = default;

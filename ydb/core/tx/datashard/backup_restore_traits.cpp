@@ -13,6 +13,22 @@ namespace NKikimr {
 namespace NDataShard {
 namespace NBackupRestoreTraits {
 
+namespace {
+
+EDataFormat DataFormatFromExportData(const NKikimrSchemeOp::TExportDataSettings& exportData) {
+    switch (exportData.GetFormatCase()) {
+    case NKikimrSchemeOp::TExportDataSettings::FORMAT_NOT_SET:
+    case NKikimrSchemeOp::TExportDataSettings::kYdbDump:
+        return EDataFormat::YdbDump;
+    case NKikimrSchemeOp::TExportDataSettings::kParquet:
+        return EDataFormat::Parquet;
+    }
+    Y_ENSURE(false, "Unhandled export data format");
+    return EDataFormat::Invalid;
+}
+
+} // namespace
+
 bool TryCodecFromTask(const NKikimrSchemeOp::TBackupTask& task, ECompressionCodec& codec) {
     if (!task.HasCompression()) {
         codec = ECompressionCodec::None;
@@ -39,27 +55,14 @@ ECompressionCodec CodecFromTask(const NKikimrSchemeOp::TBackupTask& task) {
 EDataFormat DataFormatFromTask(const NKikimrSchemeOp::TBackupTask& task) {
     switch (task.GetSettingsCase()) {
     case NKikimrSchemeOp::TBackupTask::kS3Settings:
-        switch (task.GetS3Settings().GetFormatCase()) {
-        case NKikimrSchemeOp::TS3Settings::FORMAT_NOT_SET:
-        case NKikimrSchemeOp::TS3Settings::kYdbDump:
-            return EDataFormat::YdbDump;
-        case NKikimrSchemeOp::TS3Settings::kParquet:
-            return EDataFormat::Parquet;
-        }
-        break;
+        return DataFormatFromExportData(task.GetS3Settings().GetExportDataSettings());
     case NKikimrSchemeOp::TBackupTask::kFSSettings:
-        switch (task.GetFSSettings().GetFormatCase()) {
-        case NKikimrSchemeOp::TFSSettings::FORMAT_NOT_SET:
-        case NKikimrSchemeOp::TFSSettings::kYdbDump:
-            return EDataFormat::YdbDump;
-        case NKikimrSchemeOp::TFSSettings::kParquet:
-            return EDataFormat::Parquet;
-        }
-        break;
+        return DataFormatFromExportData(task.GetFSSettings().GetExportDataSettings());
     case NKikimrSchemeOp::TBackupTask::SETTINGS_NOT_SET:
     case NKikimrSchemeOp::TBackupTask::kYTSettings:
         return EDataFormat::Invalid;
     }
+    return EDataFormat::Invalid;
 }
 
 EDataFormat NextDataFormat(EDataFormat cur) {
@@ -88,10 +91,10 @@ TParquetExportSettings ParquetExportSettingsFromTask(const NKikimrSchemeOp::TBac
     NKikimrSchemeOp::TParquetFormat taskParquetSettings;
     switch(task.GetSettingsCase()) {
     case NKikimrSchemeOp::TBackupTask::kS3Settings:        
-        taskParquetSettings = task.GetS3Settings().GetParquet();
+        taskParquetSettings = task.GetS3Settings().GetExportDataSettings().GetParquet();
         break;
     case NKikimrSchemeOp::TBackupTask::kFSSettings:
-        taskParquetSettings = task.GetFSSettings().GetParquet();
+        taskParquetSettings = task.GetFSSettings().GetExportDataSettings().GetParquet();
         break;
     case NKikimrSchemeOp::TBackupTask::SETTINGS_NOT_SET:
     case NKikimrSchemeOp::TBackupTask::kYTSettings:

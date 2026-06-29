@@ -7,10 +7,7 @@ message TFSSettings {
     optional string BasePath = 1; // Base path on the file system (e.g., /mnt/exports)
     optional string Path = 2; // Relative path for this specific backup/restore operation
 
-    oneof Format {
-        TYdbDumpFormat YdbDump = 3; // CSV
-        TParquetFormat Parquet = 4;
-    }
+    optional TExportDataSettings ExportDataSettings = 5;
 
     message TLimits {
         optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB

@@ -1,8 +1,6 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
 #include "export_data_format.h"
-
-#include "export_data_format.h"
 #include "export_iface.h"
 #include "type_serialization.h"
 

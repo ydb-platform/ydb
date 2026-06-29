@@ -8,3 +8,10 @@ message TYdbDumpFormat {
 message TParquetFormat {
     optional uint32 RowGroupSize = 1 [default = 10000];
 }
+
+message TExportDataSettings {
+    oneof Format {
+        TYdbDumpFormat YdbDump = 1; // CSV
+        TParquetFormat Parquet = 2;
+    }
+}

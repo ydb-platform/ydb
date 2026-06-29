@@ -43,10 +43,7 @@ message TS3Settings {
     optional TSecretableVariable SecretableSecretKey = 14;
     optional bool UseVirtualAddressing = 15 [default = true];
 
-    oneof Format {
-        TYdbDumpFormat YdbDump = 16; // CSV
-        TParquetFormat Parquet = 17;
-    }
+    optional TExportDataSettings ExportDataSettings = 18;
 
     message TLimits {
         optional uint32 ReadBatchSize = 1 [default = 8388608]; // 8 MB

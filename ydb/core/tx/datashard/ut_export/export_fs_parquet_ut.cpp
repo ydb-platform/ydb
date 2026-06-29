@@ -80,7 +80,7 @@ namespace {
             auto& fs = *task.MutableFSSettings();
             fs.SetBasePath("/tmp/exports");
             fs.SetPath("backup");
-            fs.MutableParquet()->SetRowGroupSize(rowGroupSize);
+            fs.MutableExportDataSettings()->MutableParquet()->SetRowGroupSize(rowGroupSize);
 
             TS3Export exportTask(task, columns);
             THolder<NExportScan::IBuffer> buffer(exportTask.CreateBuffer());

@@ -18,10 +18,10 @@ Y_UNIT_TEST_SUITE(BackupRestoreTraitsTest) {
         task.MutableS3Settings();
         UNIT_ASSERT_EQUAL(DataFormatFromTask(task), EDataFormat::YdbDump);
 
-        task.MutableS3Settings()->MutableYdbDump();
+        task.MutableS3Settings()->MutableExportDataSettings()->MutableYdbDump();
         UNIT_ASSERT_EQUAL(DataFormatFromTask(task), EDataFormat::YdbDump);
 
-        task.MutableS3Settings()->MutableParquet();
+        task.MutableS3Settings()->MutableExportDataSettings()->MutableParquet();
         UNIT_ASSERT_EQUAL(DataFormatFromTask(task), EDataFormat::Parquet);
     }
 
@@ -33,10 +33,10 @@ Y_UNIT_TEST_SUITE(BackupRestoreTraitsTest) {
         task.MutableFSSettings();
         UNIT_ASSERT_EQUAL(DataFormatFromTask(task), EDataFormat::YdbDump);
 
-        task.MutableFSSettings()->MutableYdbDump();
+        task.MutableFSSettings()->MutableExportDataSettings()->MutableYdbDump();
         UNIT_ASSERT_EQUAL(DataFormatFromTask(task), EDataFormat::YdbDump);
 
-        task.MutableFSSettings()->MutableParquet();
+        task.MutableFSSettings()->MutableExportDataSettings()->MutableParquet();
         UNIT_ASSERT_EQUAL(DataFormatFromTask(task), EDataFormat::Parquet);
     }
 
@@ -49,21 +49,21 @@ Y_UNIT_TEST_SUITE(BackupRestoreTraitsTest) {
     // ParquetExportSettingsFromTask must read the Parquet sub-message from S3 settings.
     Y_UNIT_TEST(ParquetExportSettingsFromTaskS3) {
         NKikimrSchemeOp::TBackupTask task;
-        task.MutableS3Settings()->MutableParquet()->SetRowGroupSize(123);
+        task.MutableS3Settings()->MutableExportDataSettings()->MutableParquet()->SetRowGroupSize(123);
         UNIT_ASSERT_VALUES_EQUAL(ParquetExportSettingsFromTask(task).RowGroupSize, 123);
     }
 
     // ParquetExportSettingsFromTask must read the Parquet sub-message from FS settings.
     Y_UNIT_TEST(ParquetExportSettingsFromTaskFS) {
         NKikimrSchemeOp::TBackupTask task;
-        task.MutableFSSettings()->MutableParquet()->SetRowGroupSize(456);
+        task.MutableFSSettings()->MutableExportDataSettings()->MutableParquet()->SetRowGroupSize(456);
         UNIT_ASSERT_VALUES_EQUAL(ParquetExportSettingsFromTask(task).RowGroupSize, 456);
     }
 
     // FS Parquet without an explicit RowGroupSize falls back to the proto default.
     Y_UNIT_TEST(ParquetExportSettingsFromTaskFSDefaultRowGroupSize) {
         NKikimrSchemeOp::TBackupTask task;
-        task.MutableFSSettings()->MutableParquet();
+        task.MutableFSSettings()->MutableExportDataSettings()->MutableParquet();
         UNIT_ASSERT_VALUES_EQUAL(ParquetExportSettingsFromTask(task).RowGroupSize,
             NKikimrSchemeOp::TParquetFormat().GetRowGroupSize());
     }

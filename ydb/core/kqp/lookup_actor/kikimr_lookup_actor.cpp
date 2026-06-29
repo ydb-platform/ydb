@@ -283,7 +283,9 @@ namespace NYql::NDq {
         void PassAway() override {
             for (auto&& session: Sessions) {
                 CleanupStreamProcessor(session);
-                SendDeleteSession(std::move(session->SessionId));
+                if (session->SessionId) {
+                    SendDeleteSession(std::move(session->SessionId));
+                }
             }
             Sessions.clear();
             Free();
@@ -312,6 +314,9 @@ namespace NYql::NDq {
                 if (auto request = state->Request.lock()) {
                     request->erase(request->begin(), request->end());
                 } else {
+                    if (state->SessionState) {
+                        Sessions.push_back(std::exchange(state->SessionState, {}));
+                    }
                     LOG_D("Retry: parent MIA");
                     return;
                 }
@@ -321,6 +326,9 @@ namespace NYql::NDq {
                         value = NUdf::TUnboxedValue();
                     }
                 } else {
+                    if (state->SessionState && state->SessionState) {
+                        Sessions.push_back(std::exchange(state->SessionState, {}));
+                    }
                     LOG_D("Retry: parent MIA");
                     return;
                 }
@@ -365,6 +373,9 @@ namespace NYql::NDq {
             CleanupStreamProcessor(state);
             if (auto& session = state->SessionState) {
                 CleanupStreamProcessor(session);
+                if (session->SessionId) {
+                    SendDeleteSession(session->SessionId);
+                }
                 session.reset();
             }
             SendError(status, std::move(issues));
@@ -506,7 +517,7 @@ namespace NYql::NDq {
         void Handle(TEvQuerySessionState::TPtr ev) {
             auto session = std::move(ev->Get()->State);
             auto& response = ev->Get()->Response;
-            LOG_D("TEvQuerySessionState: " << response.DebugString());
+            LOG_D("TEvQuerySessionState (SessionId=" << session->SessionId << "): " << response.DebugString());
             auto status = response.status();
             if (response.has_session_shutdown()) {
                 status = Ydb::StatusIds::SESSION_EXPIRED;
@@ -542,6 +553,7 @@ namespace NYql::NDq {
         }
 
         void FinalizeSession(TSessionState::TPtr state) {
+            LOG_D("FinalizeSession " << state->SessionId);
             state->SessionId.clear();
         }
 
@@ -708,11 +720,14 @@ namespace NYql::NDq {
             LOG_T("AnswerTime " << (TInstant::Now() - state->SentTime));
             auto* ev = new IDqAsyncLookupSource::TEvLookupResult(std::move(state->Request), state->ResultRows, state->FullscanLimit);
             if (auto& session = state->SessionState) {
-                if (session->SessionId) { // return Session to the pool
-                    Sessions.push_back(std::move(state->SessionState));
+                if (session->SessionId) {
+                    LOG_T("Return session to pool: " << session->SessionId);
+                    Sessions.push_back(std::move(session));
+                } else {
+                    CleanupStreamProcessor(session);
                 }
+                session.reset();
             }
-            state->SessionState.reset();
             state.reset();
             TActivationContext::ActorSystem()->Send(new NActors::IEventHandle(ParentId, SelfId(), ev));
         }

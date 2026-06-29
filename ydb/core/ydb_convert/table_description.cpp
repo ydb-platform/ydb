@@ -98,7 +98,7 @@ THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTabl
         ops.emplace(EAlterOperationKind::Compact);
     }
 
-    if (req->set_column_constraint_size()) {
+    if (req->set_not_null_size()) {
         ops.emplace(EAlterOperationKind::SetColumnConstraint);
     }
 
@@ -463,37 +463,20 @@ bool BuildAlterTableSetColumnConstraintRequest(
         return false;
     }
 
-    if (req->set_column_constraint_size() == 0) {
+    if (req->set_not_null_size() == 0) {
         status = Ydb::StatusIds::BAD_REQUEST;
         error = "No column constraints specified";
         return false;
     }
 
-    for (const auto& constraint : req->set_column_constraint()) {
+    for (const auto& constraint : req->set_not_null()) {
         if (!constraint.has_column_name()) {
             status = Ydb::StatusIds::BAD_REQUEST;
             error = "Column name is not specified";
             return false;
         }
 
-        if (!constraint.has_constraint()) {
-            status = Ydb::StatusIds::BAD_REQUEST;
-            error = "Column constraint is not specified";
-            return false;
-        }
-
-        switch (constraint.constraint()) {
-            case Ydb::Table::SetColumnConstraintItem::NOT_NULL: {
-                settings->AddNotNullColumns(constraint.column_name());
-                break;
-            }
-            default:
-            case Ydb::Table::SetColumnConstraintItem::CONSTRAINT_UNSPECIFIED: {
-                status = Ydb::StatusIds::BAD_REQUEST;
-                error = "Unsupported column constraint";
-                return false;
-            }
-        }
+        settings->AddNotNullColumns(constraint.column_name());
     }
 
     settings->SetTablePath(req->path());

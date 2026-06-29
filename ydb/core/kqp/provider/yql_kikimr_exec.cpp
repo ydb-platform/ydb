@@ -2252,9 +2252,8 @@ public:
                         }
 
                         for (const auto& columnName : notNullColumns) {
-                            auto* req = alterTableRequest.add_set_column_constraint();
+                            auto* req = alterTableRequest.add_set_not_null();
                             req->set_column_name(TString(columnName));
-                            req->set_constraint(Ydb::Table::SetColumnConstraintItem::NOT_NULL);
                         }
                     }
                 } else if (name == "addColumnFamilies" || name == "alterColumnFamilies") {

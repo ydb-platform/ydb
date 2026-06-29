@@ -96,9 +96,8 @@ public:
             writerIdentity = protoRequest->writer_identity();
         }
 
-        const auto registryId = NPQ::NDeferredPublish::GetOrCreateDeferredPublishRegistryActorId(
-            TlsActivationContext->ActorSystem());
-        Send(registryId,
+        NPQ::NDeferredPublish::RegisterDeferredPublishRegistryService(TlsActivationContext->ActorSystem());
+        Send(NPQ::NDeferredPublish::MakeDeferredPublishRegistryActorId(),
             [&] {
                 auto* event = new NPQ::NDeferredPublish::TEvBeginPublicationRequest;
                 event->Database = *database;

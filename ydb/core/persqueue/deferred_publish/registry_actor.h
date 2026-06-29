@@ -4,8 +4,12 @@
 
 namespace NKikimr::NPQ::NDeferredPublish {
 
+inline NActors::TActorId MakeDeferredPublishRegistryActorId() {
+    return NActors::TActorId(0, "DefPubReg");
+}
+
 NActors::IActor* CreateDeferredPublishRegistryActor();
 
-NActors::TActorId GetOrCreateDeferredPublishRegistryActorId(NActors::TActorSystem* actorSystem);
+void RegisterDeferredPublishRegistryService(NActors::TActorSystem* actorSystem);
 
 } // namespace NKikimr::NPQ::NDeferredPublish

@@ -7,9 +7,6 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 
-#include <util/generic/hash.h>
-#include <util/system/mutex.h>
-
 namespace NKikimr::NPQ::NDeferredPublish {
 
 namespace {
@@ -140,17 +137,14 @@ NActors::IActor* CreateDeferredPublishRegistryActor() {
     return new TDeferredPublishRegistryActor();
 }
 
-NActors::TActorId GetOrCreateDeferredPublishRegistryActorId(NActors::TActorSystem* actorSystem) {
-    static TMutex Lock;
-    static THashMap<ui32, NActors::TActorId> RegistryByNode;
-
-    with_lock(Lock) {
-        auto& registryId = RegistryByNode[actorSystem->NodeId];
-        if (!registryId) {
-            registryId = actorSystem->Register(new TDeferredPublishRegistryActor());
-        }
-        return registryId;
+void RegisterDeferredPublishRegistryService(NActors::TActorSystem* actorSystem) {
+    const auto serviceId = MakeDeferredPublishRegistryActorId();
+    if (actorSystem->LookupLocalService(serviceId)) {
+        return;
     }
+
+    const auto actorId = actorSystem->Register(CreateDeferredPublishRegistryActor());
+    actorSystem->RegisterLocalService(serviceId, actorId);
 }
 
 } // namespace NKikimr::NPQ::NDeferredPublish

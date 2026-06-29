@@ -420,11 +420,10 @@ void TLongTxServiceActor::Handle(TEvPrivate::TEvAcquireSnapshotFinished::TPtr& e
     Y_ABORT_UNLESS(state && state->ActiveRequests.contains(ev->Cookie), "Unexpected database snapshot state");
 
     if (msg->Status == Ydb::StatusIds::SUCCESS) {
-        const auto now = AppData()->TimeProvider->Now();
         for (auto& userReq : req->UserRequests) {
             auto snapshotHandle = [&]() {
                 if (AppData()->FeatureFlags.GetEnableSnapshotsLocking()) {
-                    TLocalSnapshotInfo snapshotInfo(msg->Snapshot, userReq.Sender, std::move(userReq.TableIds), now);
+                    TLocalSnapshotInfo snapshotInfo(msg->Snapshot, userReq.Sender, std::move(userReq.TableIds));
                     NKqp::TSnapshotHandle snapshotHandle(snapshotInfo.AliveFlag);
                     LocalSnapshotsStorage->Insert(std::move(snapshotInfo));
 

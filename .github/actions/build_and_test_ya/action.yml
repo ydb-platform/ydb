@@ -67,6 +67,16 @@ inputs:
     type: string
     required: false
     description: "Pull request number (for workflow_call events)"
+  analytics_job_name:
+    type: string
+    required: false
+    default: ""
+    description: "test_results.job_name override; default github.workflow"
+  analytics_github_workflow:
+    type: string
+    required: false
+    default: ""
+    description: "binary_size.github_workflow override; default github.workflow"
 defaults:
   run:
     shell: bash
@@ -129,3 +139,5 @@ runs:
         telegram_alert_chat: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_CHAT || '' }}
         collect_coredumps: ${{ inputs.collect_coredumps }}
         pull_number: ${{ inputs.pull_number }}
+        analytics_job_name: ${{ inputs.analytics_job_name }}
+        analytics_github_workflow: ${{ inputs.analytics_github_workflow }}

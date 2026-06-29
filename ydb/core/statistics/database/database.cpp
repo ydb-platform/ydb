@@ -82,7 +82,7 @@ NActors::IActor* CreateStatisticsTableCreator(std::unique_ptr<NActors::IEventBas
 }
 
 
-class TSaveStatisticsQuery : public NKikimr::TQueryBase {
+class TSaveStatisticsQuery : public NKikimr::TQueryBase, public TQueryRetryActorMixin<TSaveStatisticsQuery, TEvStatistics::TEvSaveStatisticsQueryResponse> {
 private:
     const TPathId PathId;
     const std::vector<TStatisticsItem> Items;
@@ -176,10 +176,6 @@ private:
     const std::vector<TStatisticsItem> Items;
 
 public:
-    using TSaveRetryingQuery = TQueryRetryActor<
-        TSaveStatisticsQuery, TEvStatistics::TEvSaveStatisticsQueryResponse,
-        const TString&, const TPathId&, const std::vector<TStatisticsItem>&>;
-
     TSaveStatisticsRetryingQuery(const NActors::TActorId& replyActorId, const TString& database,
         const TPathId& pathId, std::vector<TStatisticsItem>&& items)
         : ReplyActorId(replyActorId)
@@ -189,10 +185,10 @@ public:
     {}
 
     void Bootstrap() {
-        Register(new TSaveRetryingQuery(
+        Register(TSaveStatisticsQuery::MakeRetry(
             SelfId(),
-            TSaveRetryingQuery::IRetryPolicy::GetExponentialBackoffPolicy(
-                TSaveRetryingQuery::Retryable, TDuration::MilliSeconds(10),
+            TQueryRetryActorBase::IRetryPolicy::GetExponentialBackoffPolicy(
+                TQueryRetryActorBase::Retryable, TDuration::MilliSeconds(10),
                 TDuration::MilliSeconds(200), TDuration::Seconds(1),
                 std::numeric_limits<size_t>::max(), TDuration::Seconds(1)),
             Database, PathId, std::move(Items)
@@ -288,7 +284,7 @@ void DispatchLoadStatisticsQuery(
 }
 
 
-class TDeleteStatisticsQuery : public NKikimr::TQueryBase {
+class TDeleteStatisticsQuery : public NKikimr::TQueryBase, public TQueryRetryActorMixin<TDeleteStatisticsQuery, TEvStatistics::TEvDeleteStatisticsQueryResponse> {
 private:
     const TPathId PathId;
 
@@ -343,10 +339,6 @@ private:
     const TPathId PathId;
 
 public:
-    using TDeleteRetryingQuery = TQueryRetryActor<
-        TDeleteStatisticsQuery, TEvStatistics::TEvDeleteStatisticsQueryResponse,
-        const TString&, const TPathId&>;
-
     TDeleteStatisticsRetryingQuery(const NActors::TActorId& replyActorId, const TString& database,
         const TPathId& pathId)
         : ReplyActorId(replyActorId)
@@ -355,10 +347,10 @@ public:
     {}
 
     void Bootstrap() {
-        Register(new TDeleteRetryingQuery(
+        Register(TDeleteStatisticsQuery::MakeRetry(
             SelfId(),
-            TDeleteRetryingQuery::IRetryPolicy::GetExponentialBackoffPolicy(
-                TDeleteRetryingQuery::Retryable, TDuration::MilliSeconds(10),
+            TQueryRetryActorBase::IRetryPolicy::GetExponentialBackoffPolicy(
+                TQueryRetryActorBase::Retryable, TDuration::MilliSeconds(10),
                 TDuration::MilliSeconds(200), TDuration::Seconds(1),
                 std::numeric_limits<size_t>::max(), TDuration::Seconds(1)),
             Database, PathId

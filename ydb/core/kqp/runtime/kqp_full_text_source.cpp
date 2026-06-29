@@ -58,6 +58,7 @@
 #include <ydb/core/base/tablet_pipecache.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/base/fulltext.h>
+#include <ydb/core/base/fulltext_query.h>
 #include <ydb/core/base/table_index.h>
 
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
@@ -581,12 +582,16 @@ public:
     TString Word;
     TOwnedCellVec IndexKey;
 
-    TL1DocumentInfo(typename TDocumentInfo<TDocId>::TPtr& document, TString word)
+    TL1DocumentInfo(typename TDocumentInfo<TDocId>::TPtr& document, TString word, TConstArrayRef<TCell> prefix = {})
         : Document(document)
         , Word(word)
     {
         TCell tokenCell(Word.data(), Word.size());
-        TVector<TCell> point = TVector<TCell>{tokenCell, TCell::Make<TDocId>(document->DocumentNumId)};
+        TVector<TCell> point;
+        point.reserve(prefix.size() + 2);
+        point.insert(point.end(), prefix.begin(), prefix.end());
+        point.push_back(tokenCell);
+        point.push_back(TCell::Make<TDocId>(document->DocumentNumId));
         IndexKey = TOwnedCellVec(point);
     }
 
@@ -663,6 +668,21 @@ public:
         : TTableReader(counters, tableId, tablePath, snapshot, logPrefix, database, poolId, keyColumnTypes, resultColumnTypes, resultColumnIds)
     {}
 
+    // Prefix values are a per-query binding, not table-reader state: they are owned by the source
+    // and threaded into the per-token reads. This parses them once from the settings.
+    // Each value was serialized as a single-cell TSerializedCellVec.
+    static TOwnedCellVec ParsePrefixCells(const NKikimrKqp::TKqpFullTextSourceSettings* settings) {
+        TVector<TCell> prefixCells;
+        TVector<TSerializedCellVec> prefixHolders;
+        for (const auto& prefixColumn : settings->GetQuerySettings().GetPrefixColumns()) {
+            TSerializedCellVec vec(prefixColumn.GetValue());
+            YQL_ENSURE(vec.GetCells().size() == 1);
+            prefixCells.push_back(vec.GetCells()[0]);
+            prefixHolders.push_back(std::move(vec));
+        }
+        return TOwnedCellVec(prefixCells);
+    }
+
     static TIntrusivePtr<TIndexTableImplReader> FromSettings(
         const TIntrusivePtr<TKqpCounters>& counters,
         const IKqpGateway::TKqpSnapshot& snapshot,
@@ -680,6 +700,13 @@ public:
             settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance ||
             settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact);
 
+        // Prefix columns are the leading key columns; they are known constants for this read
+        // and must be excluded from the requested (doc-id) result columns, like the token column.
+        THashSet<TString> prefixColumnNames;
+        for (const auto& prefixColumn : settings->GetQuerySettings().GetPrefixColumns()) {
+            prefixColumnNames.insert(prefixColumn.GetColumn().GetName());
+        }
+
         TVector<NScheme::TTypeInfo> keyColumnTypes;
         TVector<NScheme::TTypeInfo> resultColumnTypes;
         TVector<i32> resultColumnIds;
@@ -688,8 +715,8 @@ public:
         for (const auto& keyColumn : keyColumns) {
             keyColumnTypes.push_back(NScheme::TypeInfoFromProto(
                 keyColumn.GetTypeId(), keyColumn.GetTypeInfo()));
-            if (keyColumn.GetName() == TokenColumn) {
-                // dont request token column because it's not a part of document id
+            if (keyColumn.GetName() == TokenColumn || prefixColumnNames.contains(keyColumn.GetName())) {
+                // don't request token/prefix columns because they are not a part of document id
                 continue;
             }
             resultColumnTypes.push_back(keyColumnTypes.back());
@@ -697,10 +724,12 @@ public:
         }
 
         if (isCompact) {
-            YQL_ENSURE(keyColumns.size() == 3);
-            YQL_ENSURE(keyColumns[0].GetName() == TokenColumn);
-            YQL_ENSURE(keyColumns[1].GetName() == MaxIdColumn);
-            YQL_ENSURE(keyColumns[2].GetName() == GenColumn);
+            // Compact posting key is [prefix..., __ydb_token, __ydb_max_id, __ydb_generation].
+            const int numPrefix = static_cast<int>(prefixColumnNames.size());
+            YQL_ENSURE(keyColumns.size() == numPrefix + 3);
+            YQL_ENSURE(keyColumns[numPrefix].GetName() == TokenColumn);
+            YQL_ENSURE(keyColumns[numPrefix + 1].GetName() == MaxIdColumn);
+            YQL_ENSURE(keyColumns[numPrefix + 2].GetName() == GenColumn);
             auto addCol = [&](const char* str) {
                 for (auto& column: columns) {
                     if (column.GetName() == str) {
@@ -1032,9 +1061,15 @@ public:
     ui32 Frequency = 0;
 
     TCell TokenCell;
+    // Leading prefix key cells of the posting table (a per-query binding owned by the source).
+    // Empty for a non-prefixed index. Prepended to every posting read key.
+    TConstArrayRef<TCell> Prefix;
     TOwnedTableRange WordKeyCells;
     bool L1 = true;
     bool L2 = false;
+    // Set from the `+term` query syntax: a required (Lucene MUST) term that every
+    // matching document must contain. Drives the required-term L1/L2 split.
+    bool Required = false;
     ui32 L2StreamIndex = 0;
     TDocId StartReadKeyFrom = std::numeric_limits<TDocId>::min();
     // at the start we begin with the inclusive boundary
@@ -1042,14 +1077,30 @@ public:
 
     using TPtr = TIntrusivePtr<TWordReadState<TDocId>>;
 
-    explicit TWordReadState(ui64 wordIndex, const TString& word, const TIntrusivePtr<TIndexTableImplReader>& reader)
+    explicit TWordReadState(ui64 wordIndex, const TString& word, const TIntrusivePtr<TIndexTableImplReader>& reader,
+        TConstArrayRef<TCell> prefix)
         : WordIndex(wordIndex)
         , Word(word)
         , Reader(reader)
         , TokenCell(Word.data(), Word.size())
+        , Prefix(prefix)
+        // WordKeyCells is the dictionary-table lookup key (token only, no prefix): the dict table is
+        // global (corpus-wide IDF). The prefix is applied only to posting-table reads (BuildRangesToRead).
         , WordKeyCells(TOwnedTableRange(TVector<TCell>{TokenCell}))
     {
         BuildRangesToRead();
+    }
+
+    // Build [prefix..., token, extra...] key cells.
+    TVector<TCell> MakePrefixedKey(const TCell& tokenCell, const TMaybe<TCell>& extra = {}) const {
+        TVector<TCell> cells;
+        cells.reserve(Prefix.size() + 1 + (extra.Defined() ? 1 : 0));
+        cells.insert(cells.end(), Prefix.begin(), Prefix.end());
+        cells.push_back(tokenCell);
+        if (extra.Defined()) {
+            cells.push_back(*extra);
+        }
+        return cells;
     }
 
     TOwnedTableRange GetWordKeyCells() const {
@@ -1079,8 +1130,8 @@ public:
         RangesToRead.clear();
 
         TCell tokenCell(Word.data(), Word.size());
-        std::vector<TCell> fromCells = {tokenCell, TCell::Make<TDocId>(StartReadKeyFrom)};
-        std::vector<TCell> toCells = {tokenCell};
+        TVector<TCell> fromCells = MakePrefixedKey(tokenCell, TCell::Make<TDocId>(StartReadKeyFrom));
+        TVector<TCell> toCells = MakePrefixedKey(tokenCell);
         auto range = TTableRange(fromCells, StartReadKeyFromInclusive, toCells, false /*toInclusive*/);
 
         auto rangePartition = Reader->GetRangePartitioning(range);
@@ -2465,6 +2516,10 @@ private:
     TIntrusivePtr<TStatsTableReader> StatsTableReader;
     TIntrusivePtr<TUniqueIndexReader> UniqueIndexReader;  // Resolves __ydb_row_id -> PK via unique secondary index
 
+    // Leading prefix key values of the posting table (a per-query binding; empty for a non-prefixed
+    // index). Owned here for the source's lifetime and referenced by each per-token read.
+    TOwnedCellVec PrefixCells;
+
     // True when the fulltext index uses __ydb_row_id as the synthetic doc_id, and the
     // primary key must be resolved through UniqueIndexReader before main-table reads.
     bool UseRowIdAsDocId = false;
@@ -2504,7 +2559,7 @@ private:
 
             size_t wordIndex = 0;
             for (const TString& token : Settings->GetQuerySettings().GetTokens()) {
-                Words.emplace_back(MakeIntrusive<TWordState>(wordIndex++, token, IndexTableReader));
+                Words.emplace_back(MakeIntrusive<TWordState>(wordIndex++, token, IndexTableReader, PrefixCells));
             }
         } else {
             YQL_ENSURE(Settings->GetQuerySettings().GetQuery().size() > 0, "Expected non-empty query");
@@ -2518,9 +2573,11 @@ private:
 
                     if (analyzer.column() == column.GetName()) {
                         size_t wordIndex = 0;
-                        for (const TString& query: NFulltext::BuildSearchTerms(expr, analyzer.analyzers())) {
+                        for (const auto& term: NFulltext::BuildSearchTermsStructured(expr, analyzer.analyzers())) {
                             YQL_ENSURE(IndexTableReader);
-                            Words.emplace_back(MakeIntrusive<TWordState>(wordIndex++, query, IndexTableReader));
+                            auto word = MakeIntrusive<TWordState>(wordIndex++, term.Token, IndexTableReader, PrefixCells);
+                            word->Required = term.Required;
+                            Words.emplace_back(std::move(word));
                         }
                     }
                 }
@@ -2647,7 +2704,46 @@ private:
             return;
         }
 
-        if (IsNgram || MainTableReader->GetWithRelevance()) {
+        // `+term` required-term mode (Lucene MUST). Under the OR operator, terms
+        // marked required must appear in every match while minimum_should_match
+        // applies to the remaining optional terms. Required terms drive the read as
+        // a strict AND (L1); optional terms are verified per candidate (L2,
+        // threshold). When every term is required it degenerates to a strict AND
+        // with no L2 layer. This is mutually exclusive with the imbalance heuristic.
+        size_t requiredCount = 0;
+        for (const auto& word : Words) {
+            if (word->Required) {
+                ++requiredCount;
+            }
+        }
+        const bool hasRequired = defaultOperator == EDefaultOperator::Or && requiredCount >= 1;
+        const bool requiredDriven = hasRequired && requiredCount < Words.size();
+
+        if (hasRequired) {
+            // Order required terms first (L1) and optional terms after (L2); the
+            // reassigned contiguous WordIndex doubles as the L1/L2 stream index.
+            TVector<TWordStatePtr> ordered;
+            ordered.reserve(Words.size());
+            for (auto& word : Words) {
+                if (word->Required) {
+                    word->L1 = true;
+                    word->L2 = false;
+                    ordered.emplace_back(std::move(word));
+                }
+            }
+            for (auto& word : Words) {
+                if (word) { // remaining (optional) terms, required ones were moved out
+                    word->L1 = false;
+                    word->L2 = true;
+                    ordered.emplace_back(std::move(word));
+                }
+            }
+            std::swap(Words, ordered);
+            for (size_t i = 0; i < Words.size(); ++i) {
+                Words[i]->WordIndex = i;
+            }
+            needL2Layer = requiredDriven;
+        } else if (IsNgram || MainTableReader->GetWithRelevance()) {
             // Queries often contain 'imbalanced' ngrams. I.e. some ngrams
             // are really frequent and others aren't, like one with 5.5 million
             // documents and other with 400 documents. In such cases we can
@@ -2697,7 +2793,17 @@ private:
             }
         }
 
-        ui32 minimumShouldMatch = MinimumShouldMatchFromString(Words.size(), defaultOperator, Settings->GetMinimumShouldMatch(), explain);
+        ui32 minimumShouldMatch;
+        if (requiredDriven) {
+            // minimum_should_match counts only the optional (non-required) terms.
+            const size_t optionalCount = Words.size() - requiredCount;
+            minimumShouldMatch = MinimumShouldMatchFromString(optionalCount, defaultOperator, Settings->GetMinimumShouldMatch(), explain);
+        } else if (hasRequired) {
+            // Every term is required -> strict AND; minimum_should_match is moot.
+            minimumShouldMatch = Words.size();
+        } else {
+            minimumShouldMatch = MinimumShouldMatchFromString(Words.size(), defaultOperator, Settings->GetMinimumShouldMatch(), explain);
+        }
         if (!explain.empty()) {
             RuntimeError(explain, NYql::NDqProto::StatusIds::BAD_REQUEST);
             return;
@@ -2735,20 +2841,33 @@ private:
         }
 
         if (l2streams.size() > 0) {
-            YQL_ENSURE(defaultOperator == EDefaultOperator::And);
-
-            L2MergeAlgo = std::make_unique<TAndOptimizedMergeAlgorithm<TDocId>>(
-                std::move(l2streams),
-                minimumShouldMatch,
-                MainTableReader->GetWithRelevance(),
-                MainTableReader->GetKeyColumnTypes()
-            );
+            if (requiredDriven) {
+                // Optional terms: a candidate passes when at least minimum_should_match
+                // of them are present. Threshold merge over the per-candidate lookups.
+                L2MergeAlgo = std::make_unique<TDefaultMergeAlgorithm<TDocId>>(
+                    std::move(l2streams),
+                    minimumShouldMatch,
+                    MainTableReader->GetWithRelevance(),
+                    MainTableReader->GetKeyColumnTypes()
+                );
+            } else {
+                YQL_ENSURE(defaultOperator == EDefaultOperator::And);
+                L2MergeAlgo = std::make_unique<TAndOptimizedMergeAlgorithm<TDocId>>(
+                    std::move(l2streams),
+                    minimumShouldMatch,
+                    MainTableReader->GetWithRelevance(),
+                    MainTableReader->GetKeyColumnTypes()
+                );
+            }
         }
 
-        if (defaultOperator == EDefaultOperator::And) {
+        if (defaultOperator == EDefaultOperator::And || hasRequired) {
+            // Strict AND over the L1 tokens: AND default operator, or the required
+            // terms of a `+term` query (every required term must be present).
+            const ui64 l1MinShouldMatch = hasRequired ? l1streams.size() : minimumShouldMatch;
             L1MergeAlgo = std::make_unique<TAndOptimizedMergeAlgorithm<TDocId>>(
                 std::move(l1streams),
-                minimumShouldMatch,
+                l1MinShouldMatch,
                 MainTableReader->GetWithRelevance(),
                 MainTableReader->GetKeyColumnTypes()
             );
@@ -2841,6 +2960,7 @@ public:
         , DictTableReader(TDictTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
         , StatsTableReader(TStatsTableReader::FromSettings(Counters, Snapshot, LogPrefix, Settings, MainTableReader->GetWithRelevance()))
         , UniqueIndexReader(TUniqueIndexReader::FromSettings(Counters, Snapshot, LogPrefix, Settings))
+        , PrefixCells(TIndexTableImplReader::ParsePrefixCells(Settings))
         , UseRowIdAsDocId(UniqueIndexReader != nullptr)
         , ReadsState(Counters, LogPrefix)
         , DocsReadingQueue(this->SelfId(), ReadsState)
@@ -3446,7 +3566,7 @@ public:
             std::vector<TL1DocInfoPtr> remappedMatches;
             remappedMatches.reserve(l1matched.size());
             for(auto& match: l1matched) {
-                remappedMatches.emplace_back(MakeIntrusive<TL1DocInfo>(match, word->Word));
+                remappedMatches.emplace_back(MakeIntrusive<TL1DocInfo>(match, word->Word, PrefixCells));
             }
 
             L2ReadingQueue.Sequential(IndexTableReader.Get(), EReadKind_Word_L2, remappedMatches, i);
@@ -3773,8 +3893,11 @@ static NScheme::TTypeId GetDocIdTypeId(const NKikimrKqp::TKqpFullTextSourceSetti
     if (settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompact ||
         settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextCompactRelevance ||
         settings->GetIndexType() == NKqpProto::EKqpFullTextIndexType::EKqpFullTextJsonCompact) {
-        YQL_ENSURE(keyColumns.size() == 3);
-        idx = 1; // __ydb_max_id
+        // Compact key is [prefix..., __ydb_token, __ydb_max_id, __ydb_generation]; the doc-id type
+        // is that of __ydb_max_id, which sits right after the prefix columns and the token.
+        const int numPrefix = settings->GetQuerySettings().GetPrefixColumns().size();
+        YQL_ENSURE(keyColumns.size() == numPrefix + 3);
+        idx = numPrefix + 1; // __ydb_max_id
     }
     return static_cast<NScheme::TTypeId>(keyColumns[idx].GetTypeId());
 }

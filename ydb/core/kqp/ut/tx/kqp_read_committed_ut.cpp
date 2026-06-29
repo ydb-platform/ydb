@@ -494,6 +494,46 @@ Y_UNIT_TEST_SUITE(KqpReadCommitted) {
         tester.Execute();
     }
 
+    Y_UNIT_TEST(TMultiStatementsDifferentTables) {
+        TReadCommittedTakesLocks tester(R"(
+            INSERT INTO `/Root/Test2` (Group, Name, Comment) VALUES (1u, "Unknown", "Inserted");
+            INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (1u, "Unknown", "Inserted");
+            )", 1 + 0, 4 + 2, 2 + 1);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TMultiStatementsUpdateInsert) {
+        TReadCommittedTakesLocks tester(R"(
+            UPDATE `/Root/Test` SET Comment = "Updated" WHERE Name == "Paul";
+            INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (2u, "New", "Inserted");
+            )", 1 + 0, 1 + 1 + 1, 2 + 1);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TMultiStatementsSameTable) {
+        TReadCommittedTakesLocks tester(R"(
+            INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (1u, "First", "Inserted");
+            INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (2u, "Second", "Inserted");
+            )", 0 + 0, 1 + 1 + 1, 1 + 1);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
+    Y_UNIT_TEST(TMultiStatementsInsertAndSelect) {
+        TReadCommittedTakesLocks tester(R"(
+            INSERT INTO `/Root/Test` (Group, Name, Comment) VALUES (5u, "ToSelect", "BeforeSelect");
+            SELECT * FROM `/Root/Test` WHERE Group == 5u ORDER BY Name;
+            )", 0 + 1, 1 + 1, 1 + 0);
+        tester.SetIsOlap(false);
+        tester.SetUseRealThreads(false);
+        tester.Execute();
+    }
+
     class TpccPaymentReturningConflict : public TTableDataModificationTester {
     protected:
         void Setup(TKikimrSettings& settings) override {

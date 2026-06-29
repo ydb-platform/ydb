@@ -1,7 +1,6 @@
-import "ydb/public/api/protos/annotations/sensitive.proto";
-
 package NYql.NProto;
 option java_package = "ru.yandex.yql.proto";
+option go_package = "github.com/ydb-platform/ydb/ydb/library/yql/providers/dq/config;config_pb";
 
 message TDqConfig {
     optional uint32 NodeId = 1; // autofilled by yqlworker
@@ -45,7 +44,7 @@ message TDqConfig {
 
     message TSolomon {
         optional string TokenFile = 1;
-        optional string Token = 2 [(Ydb.sensitive) = true];
+        optional string Token = 2;
         optional string Server = 3 [default = "https://solomon.yandex.net"];
         optional string Path = 4 [default = "/api/v2/push"];
         optional int32 Port = 5 [default = 443];
@@ -101,7 +100,7 @@ message TDqConfig {
         optional string UploadPrefix = 6; // deprecated option
         optional string Pool = 7;
         repeated string PoolTrees = 24;
-        optional string Token = 8 [(Ydb.sensitive) = true]; // for internal use only
+        optional string Token = 8; // for internal use only
         optional int64 MemoryLimit = 9;
         optional int64 CpuLimit = 29;
         repeated TAttr VaultEnv = 34;
@@ -166,6 +165,7 @@ message TDqConfig {
         optional bool LimitTasksPerWindow = 5 [default = false];
         optional uint32 LimiterNumerator = 6 [default = 1];
         optional uint32 LimiterDenumerator = 7 [default = 2];
+        optional uint32 MaxRequestsPerTick = 8 [default = 200];
     }
 
     optional TScheduler Scheduler = 10;
@@ -175,6 +175,7 @@ message TDqConfig {
         repeated string IndexedUdfsToWarmup = 2;
         optional bool WaitOnStart = 3 [default = false];
         optional bool EnableStrip = 4 [default = true];
+        optional bool EnableCliqueWarmup = 5 [default = false];
     }
 
     optional TDqControl Control = 11;

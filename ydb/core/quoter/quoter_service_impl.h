@@ -360,10 +360,9 @@ public:
             hFunc(TEvents::TEvWakeup, Handle);
             hFunc(TEvTxProxySchemeCache::TEvNavigateKeySetResult, Handle);
         default:
-            LOG_WARN_S(*TlsActivationContext, NKikimrServices::QUOTER_SERVICE, "TQuoterService::StateFunc unexpected event type# "
-                << ev->GetTypeRewrite()
-                << " event: "
-                << ev->ToString());
+            YDB_LOG_WARN_COMP(NKikimrServices::QUOTER_SERVICE, "TQuoterService::StateFunc unexpected event",
+                {"type", ev->GetTypeRewrite()},
+                {"ev", ev->ToString()});
             break;
         }
 

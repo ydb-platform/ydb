@@ -460,6 +460,7 @@ private:
 
         for (const auto& tx : PreparedQuery->GetTransactions()) {
             for (const auto& stage : tx->GetStages()) {
+                AFL_ENSURE(stage.OutputTransformsSize() == 0);
                 for (const auto& sink : stage.GetSinks()) {
                     if (sink.GetTypeCase() == NKqpProto::TKqpSink::kInternalSink && sink.GetInternalSink().GetSettings().Is<NKikimrKqp::TKqpTableSinkSettings>()) {
                         YQL_ENSURE(sink.GetInternalSink().GetSettings().UnpackTo(&settings), "Failed to unpack settings");

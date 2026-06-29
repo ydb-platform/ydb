@@ -4,6 +4,7 @@
 #include <ydb/core/statistics/events.h>
 #include <util/generic/size_literals.h>
 #include <util/string/vector.h>
+#include <algorithm>
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
 
@@ -263,6 +264,10 @@ void TAnalyzeActor::Handle(TEvPrivate::TEvRequestTableDistribution::TPtr&) {
         new TEvPipeCache::TEvForward(req.release(), HiveId, true));
 }
 
+void TAnalyzeActor::SendProgressEvent(ui32 shardsTotal, ui32 shardsDone) {
+    Send(Parent, new TEvStatistics::TEvAnalyzeActorProgress(OperationId, PathId, shardsTotal, shardsDone));
+}
+
 void TAnalyzeActor::Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev) {
     const auto& msg = ev->Get()->Record;
     for (const auto& node : msg.GetNodes()) {
@@ -281,6 +286,10 @@ void TAnalyzeActor::Handle(TEvHive::TEvResponseTabletDistribution::TPtr& ev) {
         TryScheduleHiveRetry("Unable to locate some tablets.");
         return;
     }
+
+    // Report initial progress: shards known, none done yet
+    ui32 shardsTotal = IsColumnTable ? static_cast<ui32>(TabletId2NodeId.size()) : 1;
+    SendProgressEvent(shardsTotal, 0);
 
     Send(MakePipePerNodeCacheID(EPipePerNodeCache::Leader), new TEvPipeCache::TEvUnlink(0));
     StartColumnStatEvalTasks();
@@ -310,6 +319,7 @@ void TAnalyzeActor::StartColumnStatEvalTasks() {
     Y_ENSURE(NodeId2State.empty());
     Y_ENSURE(InProgressTasks.empty());
     Y_ENSURE(!PendingTasks.empty());
+
 
     if (IsColumnTable) {
         for (const auto& [tabletId, nodeId] : TabletId2NodeId) {
@@ -415,6 +425,13 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     const ui32 tabletNodeId = actorIt->second.TabletNodeId;
     ScanActorsInFlight.erase(actorIt);
 
+    ++ScansCompletedTotal;
+    const ui32 shardsTotal = IsColumnTable ? static_cast<ui32>(TabletId2NodeId.size()) : 1;
+    // Cap intermediate progress below 100%: simple-stats and stage-2 rounds share
+    // ScansCompletedTotal, so 100% is only emitted from the final-result branch.
+    const ui32 shardsDoneCap = shardsTotal > 0 ? shardsTotal - 1 : 0;
+    SendProgressEvent(shardsTotal, std::min(ScansCompletedTotal, shardsDoneCap));
+
     auto& result = *ev->Get();
     if (result.Status != Ydb::StatusIds::SUCCESS) {
         NYql::TIssue error(TStringBuilder() << "Statistics calculation query failed with " << result.Status);
@@ -509,6 +526,8 @@ void TAnalyzeActor::HandleImpl(TEvPrivate::TEvAnalyzeScanResult::TPtr& ev) {
     Send(Parent, response.release());
 
     if (isFinalResult) {
+        // Only emit 100% once, when all scan rounds are done.
+        SendProgressEvent(shardsTotal, shardsTotal);
         PassAway();
     } else {
         StartColumnStatEvalTasks();

@@ -23,7 +23,6 @@ class TColumnShardScan: public TActorBootstrapped<TColumnShardScan>, NArrow::IRo
                         NColumnShard::TMonitoringObjectsCounter<TColumnShardScan> {
 private:
     TActorId ResourceSubscribeActorId;
-    TActorId ReadCoordinatorActorId;
     const std::shared_ptr<IStoragesManager> StoragesManager;
     const std::shared_ptr<NDataAccessorControl::IDataAccessorsManager> DataAccessorsManager;
     const std::shared_ptr<NColumnFetching::TColumnDataManager> ColumnDataManager;

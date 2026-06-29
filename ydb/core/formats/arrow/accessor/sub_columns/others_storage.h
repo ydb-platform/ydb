@@ -5,7 +5,7 @@
 #include <ydb/core/formats/arrow/accessor/common/binary_json_value_view.h>
 #include <ydb/core/formats/arrow/accessor/sub_columns/json_value_path.h>
 #include <ydb/core/formats/arrow/arrow_helpers.h>
-#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/container/container.h>
 
 #include <ydb/library/accessor/accessor.h>
 

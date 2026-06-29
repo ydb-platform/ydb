@@ -21,11 +21,7 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
             return true;
         }
 
-        TDuration time = TDuration::Zero();
-        if (!Self->ForceTraversals.empty()) {
-            time = ctx.Now() - Self->ForceTraversals.front().CreatedAt;
-        }
-        Self->TabletCounters->Simple()[COUNTER_FORCE_TRAVERSAL_INFLIGHT_MAX_TIME].Set(time.MicroSeconds());
+        Self->RecalcForceTraversalInflightMaxTimeCounter(ctx.Now());
 
         if (Self->TraversalPathId) {
             YDB_LOG_TRACE("TTxScheduleTraversal::Execute. Traverse is in progress. PathId",

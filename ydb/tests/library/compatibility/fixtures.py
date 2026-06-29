@@ -37,16 +37,21 @@ def string_version_to_tuple(s):
     return tuple(result)
 
 
-def prepare_feature_flags(extra_feature_flags):
+def prepare_feature_flags(extra_feature_flags, disabled_feature_flags):
+    disabled_feature_flags = copy.copy(disabled_feature_flags)
+    assert isinstance(disabled_feature_flags, list), "Feature flags must be list"
+    disabled_feature_flags.append("enable_graceful_shutdown")
+
     extra_feature_flags = copy.copy(extra_feature_flags)
     assert isinstance(extra_feature_flags, list), "Feature flags must be list"
     extra_feature_flags.append("suppress_compatibility_check")
 
-    # We want to drain tablets before stopping, to prevent "Failed to resolve tablet: 72075186224037909 after several retries"
-    # By default draining is not enabled to faster tests
-    extra_feature_flags.append("enable_drain_on_shutdown")
+    if "enable_drain_on_shutdown" not in disabled_feature_flags:
+        # We want to drain tablets before stopping, to prevent "Failed to resolve tablet: 72075186224037909 after several retries"
+        # By default draining is not enabled for faster tests
+        extra_feature_flags.append("enable_drain_on_shutdown")
 
-    return extra_feature_flags
+    return extra_feature_flags, disabled_feature_flags
 
 
 current_binary_path = os.environ.get('YDB_CURRENT_BINARY_PATH', yatest.common.binary_path("ydb/tests/library/compatibility/binaries/ydbd-target"))
@@ -106,6 +111,11 @@ class RestartToAnotherVersionFixture:
         self.all_binary_paths = request.param
         self.versions = [path_to_version[path] for path in self.all_binary_paths]
 
+    def stop_driver(self):
+        if self.driver is not None:
+            self.driver.stop()
+            self.driver = None
+
     def create_driver(self):
         driver = ydb.Driver(
             ydb.DriverConfig(
@@ -117,12 +127,13 @@ class RestartToAnotherVersionFixture:
         return driver
 
     def setup_cluster(self, tenant_db=None, **kwargs):
-        extra_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []))
+        extra_feature_flags, disabled_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []), kwargs.pop("disabled_feature_flags", []))
         self.config = KikimrConfigGenerator(
             erasure=kwargs.pop("erasure", Erasure.MIRROR_3_DC),
             binary_paths=[self.all_binary_paths[self.current_binary_paths_index]],
             use_in_memory_pdisks=kwargs.pop("use_in_memory_pdisks", False),
             extra_feature_flags=extra_feature_flags,
+            disabled_feature_flags=disabled_feature_flags,
             **kwargs,
         )
 
@@ -140,14 +151,18 @@ class RestartToAnotherVersionFixture:
             self.driver = self.create_driver()
             yield
 
+        self.stop_driver()
         self.cluster.stop()
 
     def change_cluster_version(self):
         self.current_binary_paths_index = (self.current_binary_paths_index + 1) % len(self.all_binary_paths)
         new_binary_paths = self.all_binary_paths[self.current_binary_paths_index]
         self.config.set_binary_paths([new_binary_paths])
+
+        self.stop_driver()
         self.cluster.update_configurator_and_restart(self.config)
         self.driver = self.create_driver()
+
         # TODO: remove sleep
         # without sleep there are errors like
         # ydb.issues.Unavailable: message: "Failed to resolve tablet: 72075186224037909 after several retries." severity: 1 (server_code: 400050)
@@ -174,6 +189,11 @@ class MixedClusterFixture:
         self.all_binary_paths = request.param
         self.versions = list([path_to_version[path] for path in self.all_binary_paths])
 
+    def stop_driver(self):
+        if self.driver is not None:
+            self.driver.stop()
+            self.driver = None
+
     def create_driver(self):
         driver = ydb.Driver(
             ydb.DriverConfig(
@@ -185,7 +205,7 @@ class MixedClusterFixture:
         return driver
 
     def setup_cluster(self, tenant_db=None, **kwargs):
-        extra_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []))
+        extra_feature_flags, disabled_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []), kwargs.pop("disabled_feature_flags", []))
         all_versions_numbered = all(
             # +inf == current will be float, all other versions are int
             isinstance(item, int)
@@ -197,6 +217,7 @@ class MixedClusterFixture:
             binary_paths=self.all_binary_paths,
             suppress_version_check=not all_versions_numbered,
             extra_feature_flags=extra_feature_flags,
+            disabled_feature_flags=disabled_feature_flags,
             **kwargs,
         )
 
@@ -214,6 +235,7 @@ class MixedClusterFixture:
             self.driver = self.create_driver()
             yield
 
+        self.stop_driver()
         self.cluster.stop()
 
 
@@ -234,6 +256,11 @@ class RollingUpgradeAndDowngradeFixture:
     def base_setup(self, request):
         self.all_binary_paths = request.param
         self.versions = list([path_to_version[path] for path in self.all_binary_paths])
+
+    def stop_driver(self):
+        if self.driver is not None:
+            self.driver.stop()
+            self.driver = None
 
     def create_driver(self):
         driver = ydb.Driver(
@@ -274,12 +301,13 @@ class RollingUpgradeAndDowngradeFixture:
             session_pool.execute_with_retries(query)
 
     def setup_cluster(self, tenant_db=None, **kwargs):
-        extra_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []))
+        extra_feature_flags, disabled_feature_flags = prepare_feature_flags(kwargs.pop("extra_feature_flags", []), kwargs.pop("disabled_feature_flags", []))
         self.config = KikimrConfigGenerator(
             erasure=kwargs.pop("erasure", Erasure.MIRROR_3_DC),
             binary_paths=[self.all_binary_paths[0]],
             use_in_memory_pdisks=kwargs.pop("use_in_memory_pdisks", False),
             extra_feature_flags=extra_feature_flags,
+            disabled_feature_flags=disabled_feature_flags,
             **kwargs,
         )
 
@@ -301,6 +329,7 @@ class RollingUpgradeAndDowngradeFixture:
             self.driver = self.create_driver()
             yield
 
+        self.stop_driver()
         self.cluster.stop()
 
     def roll(self):
@@ -311,8 +340,16 @@ class RollingUpgradeAndDowngradeFixture:
         yield
         for node_id, node, role in all_nodes:
             logger.info(f"upgrading {role} {node_id}")
+
+            if self.recreate_driver:
+                # All gRPC channels to the ydbd must be stopped before the node is stopped.
+                # Otherwise, the graceful shutdown time for the gRPC server in ydbd is 20-30 seconds,
+                # since the channels on the python client side do not close quickly in this case.
+                self.stop_driver()
             node.stop()
+
             node.binary_path = self.all_binary_paths[1]
+            node.set_log_file_prefix("logfile_upgraded_")
             node.start()
             self._wait_for_readiness()
             yield
@@ -320,8 +357,13 @@ class RollingUpgradeAndDowngradeFixture:
         # from new to old
         for node_id, node, role in all_nodes:
             logger.info(f"downgrading {role} {node_id}")
+
+            if self.recreate_driver:
+                self.stop_driver()
             node.stop()
+
             node.binary_path = self.all_binary_paths[0]
+            node.set_log_file_prefix("logfile_downgraded_")
             node.start()
             self._wait_for_readiness()
             yield

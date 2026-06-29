@@ -11,6 +11,11 @@ namespace NKikimr::NStat {
 struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
     TEvStatistics::TEvAnalyze::TPtr Event;
     TActorId ReplyToActorId;
+    // When set, Complete() replays the terminal status to the sender instead of
+    // scheduling a new traversal. Populated when a retry arrives for an operation
+    // that already finished.
+    std::optional<NKikimrStat::TEvAnalyzeResponse::EStatus> TerminalReplay;
+    NYql::TIssues TerminalReplayIssues;
 
     TTxAnalyze(TSelf* self, TEvStatistics::TEvAnalyze::TPtr ev)
         : TTxBase(self)
@@ -36,12 +41,47 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
 
         const TString operationId = Record().GetOperationId();
 
-        // check existing force traversal with the same OperationId
-        const auto existingOperation = Self->ForceTraversalOperation(operationId);
+        // Check existing force traversal with the same (OperationId, DatabaseName).
+        // A serverless shared SA can see the same opId from different tenants. Only
+        // treat the existing op as "the same one" when both opId and database match.
+        // If the opId matches but the database doesn't, drop the older entry — keeping
+        // two ops with the same opId in ForceTraversals would corrupt every internal
+        // opId-only lookup (Current*, MarkFinished, etc.).
+        auto* existingOperation = Self->ForceTraversalOperation(operationId);
+        if (existingOperation && existingOperation->DatabaseName != Record().GetDatabase()) {
+            YDB_LOG_WARN("now",
+                {"tabletId", Self->TabletID()},
+                {"operationId", operationId},
+                {"#_existingOperation->DatabaseName", existingOperation->DatabaseName},
+                {"#_Record().GetDatabase", Record().GetDatabase()});
+            Self->DeleteForceTraversalOperation(operationId, db);
+            existingOperation = nullptr;
+        }
 
         // update existing force traversal
         if (existingOperation) {
-            if (existingOperation->ReplyToActorId == Event->Sender) {
+            if (IsTerminalAnalyzeState(existingOperation->State)) {
+                // Idempotent retry: the operation already finished. Don't redo the
+                // analyze; replay the cached terminal status in Complete() so the
+                // requester sees a stable result and the history entry is preserved.
+                YDB_LOG_DEBUG("TTxAnalyze::Execute. Replay terminal response. OperationId ReplyToActorId",
+                    {"tabletId", Self->TabletID()},
+                    {"operationId", operationId},
+                    {"replyToActorId", ReplyToActorId});
+                switch (existingOperation->State) {
+                    case Ydb::Table::AnalyzeState::STATE_DONE:
+                        TerminalReplay = NKikimrStat::TEvAnalyzeResponse::STATUS_SUCCESS;
+                        break;
+                    case Ydb::Table::AnalyzeState::STATE_CANCELLED:
+                        TerminalReplay = NKikimrStat::TEvAnalyzeResponse::STATUS_CANCELLED;
+                        break;
+                    default: // STATE_FAILED
+                        TerminalReplay = NKikimrStat::TEvAnalyzeResponse::STATUS_ERROR;
+                        break;
+                }
+                TerminalReplayIssues = existingOperation->Issues;
+                return true;
+            } else if (existingOperation->ReplyToActorId == Event->Sender) {
                 YDB_LOG_DEBUG("TTxAnalyze::Execute. Reattach to existing force traversal. OperationId ReplyToActorId",
                     {"tabletId", Self->TabletID()},
                     {"operationId", operationId},
@@ -83,6 +123,7 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
                 table.GetColumnTags().begin(),table.GetColumnTags().end());
             const TString columnTagsStr = JoinVectorIntoString(columnTags, ",");
             const auto status = TForceTraversalTable::EStatus::None;
+            const TString path = table.GetPath();
 
             YDB_LOG_DEBUG("TTxAnalyze::Execute. Create new force traversal table",
                 {"tabletId", Self->TabletID()},
@@ -90,10 +131,10 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
                 {"pathId", pathId},
                 {"columnTags", columnTagsStr});
 
-            // create new force traversal
             TForceTraversalTable operationTable {
                 .PathId = pathId,
                 .ColumnTags = std::move(columnTags),
+                .Path = path,
                 .Status = status
             };
             operation.Tables.emplace_back(operationTable);
@@ -103,12 +144,13 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
                 NIceDb::TUpdate<Schema::ForceTraversalTables::OwnerId>(pathId.OwnerId),
                 NIceDb::TUpdate<Schema::ForceTraversalTables::LocalPathId>(pathId.LocalPathId),
                 NIceDb::TUpdate<Schema::ForceTraversalTables::ColumnTags>(columnTagsStr),
-                NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)status)
+                NIceDb::TUpdate<Schema::ForceTraversalTables::Status>((ui64)status),
+                NIceDb::TUpdate<Schema::ForceTraversalTables::Path>(path)
             );
         }
 
         Self->ForceTraversals.emplace_back(operation);
-        Self->TabletCounters->Simple()[COUNTER_FORCE_TRAVERSALS_INFLIGHT_SIZE].Set(Self->ForceTraversals.size());
+        Self->RecalcForceTraversalsInflightSizeCounter();
 
         db.Table<Schema::ForceTraversalOperations>().Key(operationId).Update(
             NIceDb::TUpdate<Schema::ForceTraversalOperations::OperationId>(operationId),
@@ -124,6 +166,17 @@ struct TStatisticsAggregator::TTxAnalyze : public TTxBase {
     void Complete(const TActorContext& ctx) override {
         YDB_LOG_DEBUG("TTxAnalyze::Complete",
             {"tabletId", Self->TabletID()});
+
+        if (TerminalReplay && ReplyToActorId) {
+            auto response = std::make_unique<TEvStatistics::TEvAnalyzeResponse>();
+            response->Record.SetOperationId(Record().GetOperationId());
+            response->Record.SetStatus(*TerminalReplay);
+            for (const auto& issue : TerminalReplayIssues) {
+                NYql::IssueToMessage(issue, response->Record.AddIssues());
+            }
+            ctx.Send(ReplyToActorId, response.release());
+            return;
+        }
 
         ctx.Send(Self->SelfId(), new TEvPrivate::TEvScheduleTraversal());
     }

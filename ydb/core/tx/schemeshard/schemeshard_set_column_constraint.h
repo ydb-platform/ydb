@@ -7,10 +7,16 @@
 namespace NKikimr {
 namespace NSchemeShard {
 
+TString SerializeSetColumnConstraintColumnNames(const std::vector<TString>& columns);
+std::vector<TString> DeserializeSetColumnConstraintColumnNames(const TString& serialized);
+
+
 struct TEvSetColumnConstraint {
     enum EEv {
         EvCreateRequest = EventSpaceBegin(TKikimrEvents::ES_SET_COLUMN_CONSTRAINT),
         EvCreateResponse,
+        EvGetRequest,
+        EvGetResponse,
 
         EvEnd
     };
@@ -41,6 +47,17 @@ struct TEvSetColumnConstraint {
             Record.SetTxId(txId);
         }
     };
+
+    struct TEvGetRequest: public TEventPB<TEvGetRequest, NKikimrSetColumnConstraint::TEvGetRequest, EvGetRequest> {
+        TEvGetRequest() = default;
+
+        explicit TEvGetRequest(const TString& dbName, ui64 operationId) {
+            Record.SetDatabaseName(dbName);
+            Record.SetOperationId(operationId);
+        }
+    };
+
+    struct TEvGetResponse: public TEventPB<TEvGetResponse, NKikimrSetColumnConstraint::TEvGetResponse, EvGetResponse> {};
 }; // TEvSetColumnConstraint
 
 } // NSchemeShard

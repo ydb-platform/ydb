@@ -123,7 +123,8 @@ namespace NKikimr {
             false,
             TControlWrapper(0, 0, 1),
             false,
-            TControlWrapper(20'000'000, 1, 100'000'000'000));
+            TControlWrapper(20'000'000, 1, 100'000'000'000),
+            TControlWrapper(1'000'000, 1, 10'000'000));
 
         State = std::make_unique<TSyncLogKeeperState>(slCtx, std::move(repaired), syncLogMaxMemAmount, syncLogMaxDiskAmount,
                 syncLogMaxEntryPointSize);

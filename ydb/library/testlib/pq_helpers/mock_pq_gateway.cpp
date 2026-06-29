@@ -62,7 +62,7 @@ class TMockPqReadSession final : private TMockSessionBase, public IMockPqReadSes
         void Commit(uint64_t /*startOffset*/, uint64_t /*endOffset*/) override final {
         }
 
-        void ConfirmCreate(std::optional<uint64_t> /*readOffset*/, std::optional<uint64_t> /*commitOffset*/) override final {
+        void ConfirmCreate(std::optional<uint64_t> /*readOffset*/, std::optional<uint64_t> /*commitOffset*/, std::optional<uint64_t> /*maxOffset*/) override final {
         }
 
         void ConfirmDestroy() override final {

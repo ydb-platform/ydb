@@ -841,8 +841,12 @@ private:
         YQL_ENSURE(Operations_.contains(taskInfo.OperationId));
         auto& currentTaskIdsForOperation = Operations_[taskInfo.OperationId];
         currentTaskIdsForOperation.TaskIds.erase(taskId);
-        if (currentTaskIdsForOperation.TaskIds.empty()) {
-            // All task for operation are cleared, can clear it
+        currentTaskIdsForOperation.AllTaskIds.erase(taskId);
+        if (currentTaskIdsForOperation.AllTaskIds.empty()) {
+            // All tasks across all stages for this operation are cleared, can clear it.
+            // Using AllTaskIds (not TaskIds) because TaskIds only tracks the current stage:
+            // after a stage transition TaskIds is cleared and refilled, so it can be empty
+            // while tasks from prior stages are still present in Tasks_.
             Operations_.erase(taskInfo.OperationId);
         }
         Tasks_.erase(taskId);

@@ -59,9 +59,11 @@ When working with large tables, repeatedly creating full backups can be too cost
 
 Incremental backups are organized into a **chain**:
 
+
 ```text
 Full copy → Increment₁ → Increment₂ → ... → Incrementₙ
 ```
+
 
 For recovery, the entire chain is required: first, the full copy is applied, then all increments sequentially. Recovery is performed to the state at the time of the last increment in the chain.
 

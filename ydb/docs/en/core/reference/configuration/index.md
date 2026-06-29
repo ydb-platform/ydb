@@ -1,4 +1,3 @@
-
 # {{ ydb-short-name }} Cluster Configuration
 
 The cluster configuration is specified in the YAML file passed in the `--yaml-config` parameter when the cluster nodes are run. This article provides an overview of the main configuration sections and links to detailed documentation for each section.
@@ -7,7 +6,7 @@ Each configuration section serves a specific purpose in defining how the {{ ydb-
 
 ## Configuration Sections
 
-The following top-level configuration sections are available, listed in alphabetical order:
+The following configuration sections are available, listed in alphabetical order:
 
 #|
 || **Section** | **Required** | **Description** ||
@@ -43,10 +42,9 @@ While this documentation section focuses on complete reference documentation for
 
 - As part of the initial {{ ydb-short-name }} cluster deployment:
 
-    - [Ansible](../../devops/deployment-options/ansible/initial-deployment/index.md)
-    - [Kubernetes](../../devops/deployment-options/kubernetes/initial-deployment.md)
-    - [Manual](../../devops/deployment-options/manual/initial-deployment/index.md)
-
+  - [Ansible](../../devops/deployment-options/ansible/initial-deployment/index.md)
+  - [Kubernetes](../../devops/deployment-options/kubernetes/initial-deployment.md)
+  - [Manual](../../devops/deployment-options/manual/initial-deployment/index.md)
 - As part of [troubleshooting](../../troubleshooting/index.md)
 - As part of [security hardening](../../security/index.md)
 

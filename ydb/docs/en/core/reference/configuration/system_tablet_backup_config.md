@@ -4,6 +4,7 @@ The [system tablet backup](../../concepts/backup.md#system-tablet-backup) mechan
 
 ## Syntax
 
+
 ```yaml
 system_tablet_backup_config:
     filesystem:
@@ -13,10 +14,11 @@ system_tablet_backup_config:
     max_backups_limit: 3
 ```
 
+
 ## Parameters
 
 | Parameter | Default | Description |
-|---|---|---|
+| --- | --- | --- |
 | `filesystem.path` | — | Absolute path to a directory on the host local file system for storing backups. The directory must be writable by the {{ ydb-short-name }} process on every host that runs system tablets. Only local file systems are supported; network file systems such as NFS are not supported. |
 | `exclude_tablet_ids` | — | List of system tablet IDs to exclude from backup, for example to reduce disk load or save space. |
 | `max_backups_limit` | `3` | Maximum number of backup copies of one tablet stored on a host. After a new copy is created successfully, the oldest copy is automatically deleted when the limit is exceeded. |

@@ -160,8 +160,6 @@ message CreateDatabaseRequest {
     DatabaseQuotas database_quotas = 10;
     // Optional scale recommender policies
     ScaleRecommenderPolicies scale_recommender_policies = 11;
-    // Current database attributes
-    map<string, string> attributes = 12;
 }
 
 message CreateDatabaseResponse {
@@ -218,6 +216,8 @@ message GetDatabaseStatusResult {
     // Outstanding problems related to database resources
     // (e.g. storage pool allocation failures).
     repeated Ydb.Issue.IssueMessage issues = 12;
+    // Current database attributes
+    map<string, string> attributes = 13;
 }
 
 // Change resources allocated for database.

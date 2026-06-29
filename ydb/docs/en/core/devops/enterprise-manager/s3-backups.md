@@ -10,7 +10,7 @@ S3 backup configuration consists of three parts:
 
 {% note info %}
 
-This article describes automated backup configuration through YDB EM. For general information about backup options in {{ ydb-short-name }}, see [{#T}](../../concepts/backup.md) and [{#T}](../backup-and-recovery.md).
+This article describes automated backup configuration through YDB EM. For general information about backup options in {{ ydb-short-name }}, see [{#T}](../../concepts/backup.md) and [{#T}](../backup-and-recovery/index.md).
 
 {% endnote %}
 

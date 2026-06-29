@@ -78,7 +78,7 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         YDB_LOG_NOTICE_CTX(ctx, "Bootstrap called, will read",
-            {"TReadIteratorPoints", Id},
+            {"id", Id},
             {"keys", Points.size()});
 
         Become(&TReadIteratorPoints::StateFunc);
@@ -403,7 +403,7 @@ private:
             AllColumnIds.push_back(column.GetId());
         }
 
-        YDB_LOG_INFO_CTX(ctx, "Will work with with with resolved for / with",
+        YDB_LOG_INFO_CTX(ctx, "Resolved target table for scenario",
             {"readIteratorLoadScenario", Id},
             {"tablet", TabletId},
             {"ownerId", OwnerId},

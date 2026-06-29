@@ -374,8 +374,8 @@ private:
             AllColumnIds.push_back(column.GetId());
         }
 
-        YDB_LOG_INFO_CTX(ctx, "Will work with with with resolved for / with",
-            {"TKqpSelectActorMultiSession", Id},
+        YDB_LOG_INFO_CTX(ctx, "Resolved target table for actor",
+            {"id", Id},
             {"tablet", TabletId},
             {"ownerId", OwnerId},
             {"tableId", TableId},

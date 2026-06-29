@@ -449,7 +449,7 @@ private:
             SendTestResult(ctx);
         }
 
-        YDB_LOG_DEBUG_CTX(ctx, "LoadActor has been finifshed",
+        YDB_LOG_DEBUG_CTX(ctx, "LoadActor has been finished",
             {"tag", Tag});
         Die(ctx);
     }

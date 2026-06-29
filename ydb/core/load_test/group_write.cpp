@@ -807,7 +807,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         void SetKeepFlagsOnInitialAllocation(const TActorContext& ctx) {
             auto ev = InitialAllocation.ManageKeepFlags(TabletId, Generation, GarbageCollectStep, Channel, true);
 
-            YDB_LOG_DEBUG_CTX(ctx, "Going to set keep flags on initally allocated blobs,",
+            YDB_LOG_DEBUG_CTX(ctx, "Going to set keep flags on initially allocated blobs,",
                 {"printMe", PrintMe()},
                 {"ev", ev->Print(false)});
             auto callback = [this](IEventBase *event, const TActorContext& ctx) {

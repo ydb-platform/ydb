@@ -698,7 +698,7 @@ public:
                 << " ErrorReason# " << msg.GetErrorReason();
             YDB_LOG_ERROR_CTX(ctx, "TEvWriteResult error",
                 {"status", NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())},
-                {"erorReason", msg.GetErrorReason()});
+                {"errorReason", msg.GetErrorReason()});
             FinishAndDie(ctx, str.Str());
             return;
         }

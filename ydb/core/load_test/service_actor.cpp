@@ -1036,7 +1036,7 @@ public:
             auto record = ParseMessage<NKikimr::TEvLoadTestRequest>(request, params.Get("config"));
             YDB_LOG_INFO("Received proto parse",
                 {"config", params.Get("config")},
-                {"success", std::to_string(bool{record})});
+                {"success", bool{record}});
 
             ui64 tag = 0;
             TString uuid;

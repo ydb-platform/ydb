@@ -475,7 +475,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             SendReply(std::move(result), blobIdx);
         }
 
-        if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold)) {
+        if (TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) {
             if (PopAllowToken(HandleClass)) {
                 YDB_LOG_WARN("Long TEvPut request detected",
                     {"marker", "BPP71"},

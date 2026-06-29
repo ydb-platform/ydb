@@ -103,7 +103,6 @@ TNodeWarden::TNodeWarden(const TIntrusivePtr<TNodeWardenConfig> &cfg)
     , EnableFreshSyncDataThrottling(0, 0, 1)
     , EnableStorageRetroTraceGeneration(DefaultEnableStorageRetroTraceGeneration, false, true)
     , EnableStorageRetroTraceCollectionSlowRequests(DefaultEnableStorageRetroTraceCollectionSlowRequests, false, true)
-    , RootRetroTraceBatchIntervalSec(DefaultRootRetroTraceBatchInterval.Seconds(), 1, 3600)
 {
     Y_ABORT_UNLESS(Cfg->BlobStorageConfig.GetServiceSet().AvailabilityDomainsSize() <= 1);
     AvailDomainId = 1;
@@ -527,8 +526,6 @@ void TNodeWarden::Bootstrap() {
                 icb->RetroTracingControls.EnableStorageGeneration);
         TControlBoard::RegisterSharedControl(EnableStorageRetroTraceCollectionSlowRequests,
                 icb->RetroTracingControls.EnableStorageCollectionSlowRequests);
-        TControlBoard::RegisterSharedControl(RootRetroTraceBatchIntervalSec,
-                icb->RetroTracingControls.RootBatchIntervalSec);
     }
 
     // start replication broker

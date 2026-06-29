@@ -297,7 +297,6 @@ namespace NKikimr::NStorage {
         // retro-tracing controls
         TControlWrapper EnableStorageRetroTraceGeneration;
         TControlWrapper EnableStorageRetroTraceCollectionSlowRequests;
-        TControlWrapper RootRetroTraceBatchIntervalSec;
 
     public:
         struct TGroupRecord;

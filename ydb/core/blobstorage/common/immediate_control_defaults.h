@@ -16,7 +16,6 @@ constexpr TDuration DefaultMaxPutTimeout = TDuration::Seconds(60);
 
 constexpr bool DefaultEnableStorageRetroTraceGeneration = false;
 constexpr bool DefaultEnableStorageRetroTraceCollectionSlowRequests = false;
-constexpr TDuration DefaultRootRetroTraceBatchInterval = TDuration::Seconds(2);
 
 extern TControlWrapper SlowDiskThresholdDefaultControl;
 extern TControlWrapper PredictedDelayMultiplierDefaultControl;

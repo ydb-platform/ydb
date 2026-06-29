@@ -407,7 +407,6 @@ class TBlobStorageGroupGetRequest : public TBlobStorageGroupRequestActor {
                 success);
         DSP_LOG_LOG_S(success ? NLog::PRI_INFO : NLog::PRI_NOTICE, "BPG68", "Result# " << evResult->Print(false) <<" GroupId# " << Info->GroupID);
 
-
         if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold)) {
             if (PopAllowToken(handleClass)) {
                 YDB_LOG_WARN_COMP(BS_PROXY_GET, "Long TEvGet request detected",

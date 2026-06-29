@@ -358,7 +358,7 @@ namespace NKikimr::NStorage {
         std::vector<std::tuple<TActorId, TString, ui64>> ConsoleConfigValidationQ;
 
         // retro trace root-side batching
-        TControlWrapper RootRetroTraceBatchIntervalSec = TControlWrapper(2, 1, 3600);
+        TControlWrapper RootRetroTraceBatchIntervalSec = TControlWrapper(10, 1, 3600);
         std::vector<NWilson::TTraceId> PendingRetroTraceIds;
         bool RetroTraceBatchFlushScheduled = false;
 

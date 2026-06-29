@@ -62,6 +62,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                             .Controls = TBlobStorageProxyControlWrappers{
                                 .EnablePutBatching = EnablePutBatching,
                                 .EnableVPatch = EnableVPatch,
+                                .LongRequestThresholdMs = LongRequestThresholdMs,
                                 .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
                                 .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
                                 .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
@@ -90,6 +91,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
                         .Controls = TBlobStorageProxyControlWrappers{
                             .EnablePutBatching = EnablePutBatching,
                             .EnableVPatch = EnableVPatch,
+                            .LongRequestThresholdMs = LongRequestThresholdMs,
                             .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
                             .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
                             .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,
@@ -108,6 +110,7 @@ void TNodeWarden::StartLocalProxy(ui32 groupId) {
             .Controls = TBlobStorageProxyControlWrappers{
                 .EnablePutBatching = EnablePutBatching,
                 .EnableVPatch = EnableVPatch,
+                .LongRequestThresholdMs = LongRequestThresholdMs,
                 .MaxPutTimeoutSeconds = MaxPutTimeoutSeconds,
                 .EnableStorageRetroTraceGeneration = EnableStorageRetroTraceGeneration,
                 .EnableStorageRetroTraceCollectionSlowRequests = EnableStorageRetroTraceCollectionSlowRequests,

@@ -179,7 +179,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         provider.CreateUser({.User = "user1", .Password = "password1"});
         auto loginResponse = provider.LoginUser({.User = "user1", .Password = "password1"});
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
 
@@ -226,7 +229,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
 
@@ -400,7 +406,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TActorId sender = runtime->AllocateEdgeActor();
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(provider.GetSecurityState())), 0);
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("Login bad-token")), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = "Login bad-token",
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
 
@@ -447,7 +456,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
 
@@ -464,7 +476,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         Sleep(TDuration::Seconds(10));
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
@@ -482,7 +497,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         Sleep(TDuration::Seconds(10));
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
@@ -536,7 +554,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
 
@@ -550,7 +571,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvUpdateLoginSecurityState(provider.GetSecurityState())), 0);
         Sleep(TDuration::Seconds(7));
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
@@ -599,7 +623,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         UNIT_ASSERT_VALUES_EQUAL(loginResponse.Error, "");
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
 
@@ -616,7 +643,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         Sleep(TDuration::Seconds(10));
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(loginResponse.Token)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = loginResponse.Token,
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
 
@@ -657,7 +687,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TString emptyUserToken = "";
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(emptyUserToken)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = emptyUserToken,
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
 
@@ -694,7 +727,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = TString(clientCert.Certificate),
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -733,7 +769,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = TString(clientCert.Certificate),
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -784,7 +823,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = TString(clientCert.Certificate),
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -837,7 +879,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = TString(clientCert.Certificate),
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -888,7 +933,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = TString(clientCert.Certificate),
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -932,7 +980,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = TString(clientCert.Certificate),
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -976,7 +1027,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = TString(clientCert.Certificate),
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1021,7 +1075,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         client.InitRootScheme();
         TTestActorRuntime* runtime = server.GetRuntime();
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(TString(clientCert.Certificate))), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = TString(clientCert.Certificate),
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1065,7 +1122,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket("Bearer " + userToken)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = "Bearer " + userToken,
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1129,7 +1189,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         builder.AddListeningPort(accessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&accessServiceMock);
         std::unique_ptr<grpc::Server> accessServer(builder.BuildAndStart());
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket(userToken)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), runtime->AllocateEdgeActor(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         TAutoPtr<IEventHandle> handle;
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1198,7 +1261,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TActorId sender = runtime->AllocateEdgeActor();
         TAutoPtr<IEventHandle> handle;
 
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(userToken)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .PeerName = "192.168.0.101",
+        })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
         UNIT_ASSERT_VALUES_EQUAL(result->Token->GetUserSID(), "login1@passport");
@@ -1252,7 +1318,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         accessServiceMock.UnavailableTokens.insert(userToken);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(userToken)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .PeerName = "192.168.0.101",
+        })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
         UNIT_ASSERT(result->Error.Retryable);
@@ -1318,9 +1387,15 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature retrySignature = signature;
 
         if (IsSignatureSupported<TAccessServiceMock>()) {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", {})), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Signature = std::move(signature),
+                .PeerName = "192.168.0.101",
+            })), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1")), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = "user1",
+                .PeerName = "192.168.0.101",
+            })), 0);
         }
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
@@ -1332,9 +1407,15 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         Sleep(TDuration::Seconds(10));
 
         if (IsSignatureSupported<TAccessServiceMock>()) {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(retrySignature), "", {})), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Signature = std::move(retrySignature),
+                .PeerName = "192.168.0.101",
+            })), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1")), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = "user1",
+                .PeerName = "192.168.0.101",
+            })), 0);
         }
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
@@ -1401,9 +1482,15 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature retrySignature = signature;
 
         if (IsSignatureSupported<TAccessServiceMock>()) {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", {})), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Signature = std::move(signature),
+                .PeerName = "192.168.0.101",
+            })), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(TString("user1"))), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = TString("user1"),
+                .PeerName = "192.168.0.101",
+            })), 0);
         }
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
@@ -1413,9 +1500,15 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         Sleep(TDuration::Seconds(2));
 
         if (IsSignatureSupported<TAccessServiceMock>()) {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(retrySignature), "", {})), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Signature = std::move(retrySignature),
+                .PeerName = "192.168.0.101",
+            })), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(TString("user1"))), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = TString("user1"),
+                .PeerName = "192.168.0.101",
+            })), 0);
         }
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
@@ -1488,9 +1581,17 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                                                                     }};
 
         if (IsSignatureSupported<TAccessServiceMock>()) {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Signature = std::move(signature),
+                .PeerName = "192.168.0.101",
+                .Entries = entries,
+            })), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", "", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = "user1",
+                .PeerName = "192.168.0.101",
+                .Entries = entries,
+            })), 0);
         }
 
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1503,9 +1604,17 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         Sleep(TDuration::Seconds(10));
 
         if (IsSignatureSupported<TAccessServiceMock>()) {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(retrySignature), "", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Signature = std::move(retrySignature),
+                .PeerName = "192.168.0.101",
+                .Entries = entries,
+            })), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", "", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = "user1",
+                .PeerName = "192.168.0.101",
+                .Entries = entries,
+            })), 0);
         }
 
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1583,9 +1692,17 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
                                                                     }};
 
         if (IsSignatureSupported<TAccessServiceMock>()) {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Signature = std::move(signature),
+                .PeerName = "192.168.0.101",
+                .Entries = entries,
+            })), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", "", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = "user1",
+                .PeerName = "192.168.0.101",
+                .Entries = entries,
+            })), 0);
         }
 
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1596,9 +1713,17 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         Sleep(TDuration::Seconds(2));
 
         if (IsSignatureSupported<TAccessServiceMock>()) {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(retrySignature), "", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Signature = std::move(retrySignature),
+                .PeerName = "192.168.0.101",
+                .Entries = entries,
+            })), 0);
         } else {
-            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket("user1", "", entries)), 0);
+            runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = "user1",
+                .PeerName = "192.168.0.101",
+                .Entries = entries,
+            })), 0);
         }
 
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -1664,7 +1789,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         accessServiceMock.UnavailableTokens.insert(userToken);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(userToken)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .PeerName = "192.168.0.101",
+        })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
         UNIT_ASSERT(!result->Error.Retryable);
@@ -1710,7 +1838,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
 
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature signature {.AccessKeyId = "AKIAIOSFODNN7EXAMPLE"};
         TEvTicketParser::TEvAuthorizeTicket::TAccessKeySignature retrySignature = signature;
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(std::move(signature), "", {})), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Signature = std::move(signature),
+            .PeerName = "192.168.0.101",
+        })), 0);
 
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
@@ -1756,7 +1887,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         accessServiceMock.UnavailableTokens.insert(userToken);
-        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket(userToken)), 0);
+        runtime->Send(new IEventHandle(MakeTicketParserID(), sender, new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = userToken,
+            .PeerName = "192.168.0.101",
+        })), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());
         UNIT_ASSERT(!result->Error.Retryable);
@@ -2611,7 +2745,10 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         TAutoPtr<IEventHandle> handle;
 
         runtime->Send(new IEventHandle(MakeTicketParserID(), sender,
-            new TEvTicketParser::TEvAuthorizeTicket("user@builtin")), 0);
+            new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = "user@builtin",
+                .PeerName = "192.168.0.101",
+            })), 0);
 
         TEvTicketParser::TEvAuthorizeTicketResult* result =
             runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
@@ -2676,7 +2813,11 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(
             MakeTicketParserID(),
             sender,
-            new TEvTicketParser::TEvAuthorizeTicket(userToken, testPeerName, entries)
+            new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = userToken,
+                .PeerName = testPeerName,
+                .Entries = entries,
+            })
         ), 0);
         TEvTicketParser::TEvAuthorizeTicketResult* result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(!result->HasError());
@@ -2698,7 +2839,11 @@ Y_UNIT_TEST_SUITE(TTicketParserTest) {
         runtime->Send(new IEventHandle(
             MakeTicketParserID(),
             sender,
-            new TEvTicketParser::TEvAuthorizeTicket(userToken, testPeerName, entries)
+            new TEvTicketParser::TEvAuthorizeTicket({
+                .Ticket = userToken,
+                .PeerName = testPeerName,
+                .Entries = entries,
+            })
         ), 0);
         result = runtime->GrabEdgeEvent<TEvTicketParser::TEvAuthorizeTicketResult>(handle);
         UNIT_ASSERT(result->HasError());

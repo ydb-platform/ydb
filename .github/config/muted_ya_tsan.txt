@@ -79,6 +79,7 @@ ydb/core/blobstorage/ut_blobstorage/ut_vdisk_internals unittest.[*/*] chunk
 ydb/core/blobstorage/ut_mirror3of4 Mirror3of4.ReplicationHuge
 ydb/core/blobstorage/ut_mirror3of4 Mirror3of4.ReplicationSmall
 ydb/core/blobstorage/ut_mirror3of4 unittest.sole chunk
+ydb/core/blobstorage/ut_vdisk unittest.[*/*] chunk
 ydb/core/blobstorage/vdisk/synclog/ut_real_pdisk TBlobStorageSyncLogRealPDisk.LocalSyncDataUnsuccessfulFullRecoveryDoesNotExhaustLogChunks
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery01
 ydb/core/kqp/executer_actor/ut TKqpTasksGraphBuild.TpchQuery03
@@ -133,6 +134,8 @@ ydb/core/kqp/ut/scheme KqpOlapScheme.AddColumnSimpleReader
 ydb/core/kqp/ut/scheme KqpOlapScheme.TenThousandColumns
 ydb/core/kqp/ut/scheme KqpOlapTypes.Decimal35
 ydb/core/kqp/ut/scheme KqpOlapTypes.PgFloat4Column
+ydb/core/kqp/ut/scheme KqpOlapTypes.PgInt2Column
+ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublicApi+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsPublicApi-EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql+EnableIndexStreamWrite
 ydb/core/kqp/ut/scheme KqpScheme.BuildingUniqIndexAllowsTableModificationsSql-EnableIndexStreamWrite
@@ -159,6 +162,7 @@ ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/ut TVChunkTest.Shoul
 ydb/core/nbs/cloud/blockstore/libs/vhost/ut TServerTest.ShouldCancelRequestsInFlightWhenStopEndpointOrStopServer
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_DoubleSplit_3min
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_MixedGroup_PartialOverlap
+ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_NoSplit_NoGroup
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_TripleSplit
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_TripleSplit_6min
 ydb/core/persqueue/pqtablet/partition/mlp/ut TMLPConsumerFIFOWithSplitDedup.Dedup_WithGroup_PartialOverlap
@@ -196,8 +200,11 @@ ydb/core/transfer/ut/column_table Transfer_ColumnTable.Upsert_OneBatch
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.WriteNullToColumn
 ydb/core/transfer/ut/column_table Transfer_ColumnTable.WriteNullToKeyColumn
 ydb/core/transfer/ut/column_table unittest.sole chunk
+ydb/core/transfer/ut/functional Transfer.AlterBatchSize
+ydb/core/transfer/ut/functional Transfer.AlterFlushInterval
 ydb/core/transfer/ut/functional Transfer.BaseScenario_Local
 ydb/core/transfer/ut/functional Transfer.CheckCommittedOffsetEmptyBatch_Remote
+ydb/core/transfer/ut/functional Transfer.CreateTransferSourceNotExists
 ydb/core/transfer/ut/functional Transfer.LocalTopic_BigMessage
 ydb/core/transfer/ut/functional unittest.sole chunk
 ydb/core/transfer/ut/row_table Transfer_RowTable.ColumnType_Date
@@ -980,6 +987,7 @@ ydb/tests/functional/tpc/medium/tpch test_s_float.py.TestTpchS0_5.test_tpch[6]
 ydb/tests/functional/tpc/medium/tpch test_s_float.py.TestTpchS0_5.test_tpch[7]
 ydb/tests/functional/tpc/medium/tpch test_s_float.py.TestTpchS0_5.test_tpch[8]
 ydb/tests/functional/tpc/medium/tpch test_s_float.py.TestTpchS0_5.test_tpch[9]
+ydb/tests/olap/column_compression/alter alter_compression.py.TestAlterColumnCompression.test_alter_to_compression[zstd_11_compression-algorithm=zstd,level=11]
 ydb/tests/olap/column_compression/alter alter_compression.py.TestAlterColumnCompression.test_alter_to_compression[zstd_20_compression-algorithm=zstd,level=20]
 ydb/tests/olap/column_compression/alter alter_compression.py.TestAlterColumnCompression.test_alter_zstd_level_from_0_to_19_compression
 ydb/tests/olap/column_compression/create set_compression.py.TestCreateWithColumnCompression.test_add_with_compression[zstd_12_compression-algorithm=zstd,level=12-2]
@@ -1012,6 +1020,7 @@ ydb/tests/stress/kv/tests test_workload.py.TestYdbKvWorkload.test[row]
 ydb/tests/stress/kv_volume/tests py3test.sole chunk
 ydb/tests/stress/kv_volume/tests test_workload.py.TestYdbKvVolumeWorkload.test[v1-ydb/tests/stress/kv_volume/tests/configs/common_channel_read.textproto]
 ydb/tests/stress/kv_volume/tests test_workload.py.TestYdbKvVolumeWorkload.test[v1-ydb/tests/stress/kv_volume/tests/configs/inline_channel_read.textproto]
+ydb/tests/stress/kv_volume/tests test_workload.py.TestYdbKvVolumeWorkload.test[v2-ydb/tests/stress/kv_volume/tests/configs/write_read_delete.textproto]
 ydb/tests/stress/kv_volume_tool/tests py3test.sole chunk
 ydb/tests/stress/kv_volume_tool/tests test_workload.py.TestKvVolumeTool.test_write_read
 ydb/tests/stress/log/tests test_workload.py.TestYdbLogWorkload.test[column]

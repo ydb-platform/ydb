@@ -552,7 +552,6 @@ bool TSchemeShard::TIndexBuilder::TTxBase::OnUnhandledExceptionSafe(TTransaction
             {"logPrefix", LogPrefix},
             {"#_TypeName(handleExc)", TypeName(handleExc)},
             {"#_handleExc.what", handleExc.what()},
-            {"endl", Endl},
             {"#_TBackTrace::FromCurrentException().PrintToString", TBackTrace::FromCurrentException().PrintToString()});
         return false;
     }

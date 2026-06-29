@@ -406,6 +406,7 @@ public:
         InitSharedReading();
         InitCheckpointStorage();
         InitDescribeResourceIdService();
+        InitCachingIamServiceProvider();
 
         Become(&TKqpProxyService::MainState);
         StartCollectPeerProxyData();

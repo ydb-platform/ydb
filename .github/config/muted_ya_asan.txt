@@ -158,6 +158,7 @@ ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestGetQueueUrl
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestGetQueueUrlOfNotExistingQueue
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestGetQueueUrlOfNotExistingQueue_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestGetQueueUrlWithIAM
+ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestGetQueueUrlWithIAMWithoutFolderId
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestGetQueueUrlWithIAM_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestGetQueueUrl_TableImplementation
 ydb/core/http_proxy/ut/inside_ydb_ut TestYmqHttpProxy.TestListDeadLetterSourceQueues
@@ -436,6 +437,7 @@ ydb/core/kqp/ut/rbo KqpRboYql.ColumnStatistics-ColumnStore
 ydb/core/kqp/ut/rbo KqpRboYql.TPCDS_YQL
 ydb/core/kqp/ut/rbo KqpRboYql.TPCH_YDB_PERF
 ydb/core/kqp/ut/rbo unittest.[*/*] chunk
+ydb/core/kqp/ut/runtime KqpScanLogs.GraceJoin-EnabledLogs
 ydb/core/kqp/ut/runtime KqpScanLogs.WideCombine-EnabledLogs
 ydb/core/kqp/ut/runtime unittest.[*/*] chunk
 ydb/core/kqp/ut/scheme KqpAcl.AclCreateTableAs+IsOlap+UseAdmin
@@ -532,6 +534,7 @@ ydb/core/tx/columnshard/backup/iscan/ut IScan.MultiExport
 ydb/core/tx/columnshard/backup/iscan/ut unittest.sole chunk
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.BuildToBuildWithKeyRange
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.BuildToBuildWithOverlap
+ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.BuildToBuild_Ranges
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.EmptyEmbeddingSkipped
 ydb/core/tx/datashard/build_index/ut TTxDataShardLocalKMeansScan.MainToPostingWithKeyRange
 ydb/core/tx/datashard/build_index/ut TTxDataShardPrefixKMeansScan.BadRequest
@@ -582,6 +585,8 @@ ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.Spli
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitMergePreservesMultipleBloomPrefixes[TabletRebootsBucket0]
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitMergePreservesMultipleBloomPrefixes[TabletRebootsBucket1]
 ydb/core/tx/schemeshard/ut_split_merge_reboots TSchemeShardSplitTestReboots.SplitWithTxInFlightWithReboots[TabletRebootsBucket0]
+ydb/core/tx/tx_proxy/ut_ext_tenant TExtSubDomainTest.CreateTableInsideAndAlterDomainAndTable-AlterDatabaseCreateHiveFirst-false
+ydb/core/tx/tx_proxy/ut_ext_tenant unittest.[*/*] chunk
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_query_long_multipart
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
 ydb/core/viewer/ut Viewer.PutRecordViewer

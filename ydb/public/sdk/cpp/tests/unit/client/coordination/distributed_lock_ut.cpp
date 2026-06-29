@@ -260,6 +260,7 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
         TTestEnv env;
         env.CoordinationService.StopNextSessionAfterStart.store(true);
         auto stoppedPromise = NThreading::NewPromise();
+        std::atomic_bool stopped = false;
         auto stoppedFuture = stoppedPromise.GetFuture();
         auto pool = env.Client->CreateSessionPool(
             COORD_PATH,
@@ -267,8 +268,9 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
                 .PoolSize(1)
                 .SessionSettings(TSessionSettings()
                     .Timeout(TEST_TIMEOUT)
-                    .OnStopped([stoppedPromise]() mutable {
-                        stoppedPromise.SetValue();
+                    .OnStopped([stoppedPromise, &stopped]() mutable {
+                        if (!stopped) stoppedPromise.SetValue();
+                        stopped = true;
                     })));
 
         UNIT_ASSERT(stoppedFuture.Wait(TDuration::Seconds(5)));

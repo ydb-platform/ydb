@@ -85,6 +85,7 @@ public:
             Ydb::Coordination::SessionResponse response;
             response.mutable_session_stopped();
             stream->Write(response);
+            ReleaseSemaphoresForSession(sessionId);
             return grpc::Status::OK;
         }
         request.Clear();
@@ -167,6 +168,7 @@ public:
                 Ydb::Coordination::SessionResponse response;
                 response.mutable_session_stopped();
                 stream->Write(response);
+                ReleaseSemaphoresForSession(sessionId);
                 return grpc::Status::OK;
             } else {
                 Y_ABORT_UNLESS(false, "Unexpected session request: %s", request.ShortDebugString().c_str());
@@ -174,19 +176,21 @@ public:
             request.Clear();
         }
 
-        {
-            std::lock_guard guard(SemaphoreLock_);
-            for (auto& [name, sem] : Semaphores_) {
-                if (sem.OwnerSessionId == sessionId) {
-                    sem = {};
-                }
-            }
-        }
+        ReleaseSemaphoresForSession(sessionId);
 
         return grpc::Status::OK;
     }
 
 private:
+    void ReleaseSemaphoresForSession(uint64_t sessionId) {
+        std::lock_guard guard(SemaphoreLock_);
+        for (auto& [name, sem] : Semaphores_) {
+            if (sem.OwnerSessionId == sessionId) {
+                sem = {};
+            }
+        }
+    }
+
     struct TSemaphoreState {
         bool Held = false;
         uint64_t OwnerSessionId = 0;

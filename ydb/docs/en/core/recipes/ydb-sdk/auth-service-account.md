@@ -6,6 +6,58 @@ Below are examples of authentication with a service account file in different {{
 
 {% list tabs %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/iam/iam.h>
+
+    NYdb::TDriver CreateDriverWithServiceAccountKeyFile(
+        const std::string& connectionString,
+        const std::string& saKeyFilePath,
+        const std::string& internalCA)
+    {
+        auto config = NYdb::TDriverConfig(connectionString)
+            .UseSecureConnection(internalCA)
+            .SetCredentialsProviderFactory(NYdb::CreateIamJwtFileCredentialsProviderFactory({
+                .JwtFilename = saKeyFilePath,
+            }));
+
+        return NYdb::TDriver(config);
+    }
+    ```
+
+  - userver
+
+    {% cut "secdist" %}
+
+    `<PEM>` - Yandex Cloud certificates.
+
+    ```json
+    {
+      "ydb_settings": {
+        "db": {
+          "iam_jwt_params": {
+            "id": "...",
+            "service_account_id": "...",
+            "private_key": "..."
+          },
+          "secure_connection_cert": "<PEM>"
+        }
+      }
+    }
+    ```
+
+    {% endcut %}
+
+    Initialization of `ydb::YdbComponent`, obtaining `ydb::TableClient`, and starting `components::MinimalServerComponentList` — as in the example from [init.md](./init.md).
+
+  {% endlist %}
+
 - Go
 
   {% list tabs %}
@@ -165,28 +217,17 @@ Below are examples of authentication with a service account file in different {{
 
   {% endlist %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
-  using Ydb.Sdk.Yc;
+  using Ydb.Sdk.Ado;
 
-  const string endpoint = "grpc://localhost:2136";
-  const string database = "/local";
-
-  var saProvider = new ServiceAccountProvider(
-      saFilePath: "path/to/sa_file.json" // Path to file with service account JSON info);
-  );
-  await saProvider.Initialize();
-
-  var config = new DriverConfig(
-      endpoint: endpoint,
-      database: database,
-      credentials: saProvider
-  );
-
-  await using var driver = await Driver.CreateInitialized(config);
+  await using var dataSource = new YdbDataSource(
+      "Host=ydb.serverless.yandexcloud.net;Port=2135;Database=/ru-central1/<folder-id>/<database-id>;ServiceAccountKeyFilePath=path/to/sa_file.json");
+  await using var connection = await dataSource.OpenConnectionAsync();
   ```
+
+  For Entity Framework and linq2db, use the same connection string.
 
 - Rust
 

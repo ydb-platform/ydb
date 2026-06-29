@@ -196,7 +196,7 @@ Each issue has a nesting `level`. The higher the `level`, the deeper the issue i
 
 ![issues_hierarchy](./_assets/hc_types_hierarchy.png)
 
-#### Database check result {#selfcheck-result}
+### Database check result {#selfcheck-result}
 
 The most general status of the database. It can have the following values:
 
@@ -290,7 +290,7 @@ The status (severity) of the current issue:
 
 ### VDISK
 
-#### System tablet BSC did not provide known status
+#### System tablet BSC didn't provide known status
 
 **Description:** This situation is not expected; it is an internal issue.
 
@@ -395,7 +395,7 @@ The status (severity) of the current issue:
 
 **Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the `Nodes` tab. Check the `Uptime` and the nodes' statuses. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
 
-#### Tablets/Followers are dead
+#### Tablets are dead, Followers are dead
 
 **Description:** Tablets are not running (likely cannot be started).
 

@@ -1388,11 +1388,12 @@ void RenderTabletForm(IOutputStream& str, const TString& nbsTabletListHtml) {
                         max_inflight_lsns:       ctx.val("max-inflight-lsns") || "4096",
                         disable_replication:     disableRepl ? "1" : "0"
                     };
-                    if (targetsCsv) {
-                        params.targets = targetsCsv;
-                    } else {
-                        params.tablet_id = String(ctx.tabletId);
-                    }
+                    // Route every run (single- and multi-tablet) through the
+                    // targets path so the load actor starts on the tablet's own
+                    // node (co-located), avoiding the cross-node hop. Falls back
+                    // to nid=0 (local) only if the node is unknown.
+                    params.targets = targetsCsv ||
+                        (String(ctx.tabletId) + ":" + (Number(ctx.nodeId) || 0));
                     $.ajax({
                         url: "",
                         data: params,

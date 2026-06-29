@@ -1013,8 +1013,7 @@ void TClusterInfo::GenerateSysTabletsNodesCheckers() {
 }
 
 void TClusterInfo::GenerateNodesWithRunningSystemTablet() {
-    for (const auto &kv : NodeToTabletTypes) {
-        const ui32 nodeId = kv.first;
+    for (const auto &[nodeId, _] : NodeToTabletTypes) {
         auto nodeIt = Nodes.find(nodeId);
         if (nodeIt == Nodes.end()) {
             continue;
@@ -1029,7 +1028,8 @@ void TClusterInfo::GenerateNodesWithRunningSystemTablet() {
             const TTabletInfo &tablet = tabletIt->second;
             if (tablet.Leader
                 && tablet.State == NKikimrWhiteboard::TTabletStateInfo::Active
-                && SystemTabletTypes.contains(tablet.Type)) {
+                && SystemTabletTypes.contains(tablet.Type)) 
+            {
                 NodesWithRunningSystemTablet.insert(nodeId);
                 break;
             }

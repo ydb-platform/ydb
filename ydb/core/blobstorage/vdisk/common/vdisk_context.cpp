@@ -7,7 +7,7 @@ namespace NKikimr {
     static TLogger ActorSystemLogger(TActorSystem *as) {
         Y_ABORT_UNLESS(as);
         auto logger = [as] (NLog::EPriority p, NLog::EComponent c, const TString &s) {
-            YDB_LOG_CTX_COMP(p, *as, c, s);
+            YDB_LOG_CTX_COMP(*as, p, c, s);
         };
         return logger;
     }

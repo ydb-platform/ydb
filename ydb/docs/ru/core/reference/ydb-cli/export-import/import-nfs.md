@@ -1,0 +1,158 @@
+# Загрузка из NFS
+
+Команда `import nfs` запускает на стороне сервера процесс загрузки из сетевой файловой системы ([Network File System](https://ru.wikipedia.org/wiki/Network_File_System), NFS) хостов кластера {{ ydb-short-name }} данных и информации об объектах схемы, в описанном в статье [Файловая структура](./file-structure.md) формате:
+
+```bash
+{{ ydb-cli }} [connection options] import nfs [options]
+```
+
+{% include [conn_options_ref.md](../commands/_includes/conn_options_ref.md) %}
+
+В отличие от [команды `tools restore`](./tools-restore.md), команда `import nfs` всегда создает объекты целиком, поэтому для её успешного выполнения ни один из загружаемых объектов (ни директорий, ни таблиц) не должен существовать.
+
+При необходимости догрузки данных в существующие таблицы воспользуйтесь [командой `tools restore`](./tools-restore.md) непосредственно на смонтированной NFS-директории.
+
+## Параметры командной строки {#pars}
+
+`[options]` - параметры команды:
+
+### Параметры NFS {#nfs-params}
+
+Команда загрузки из NFS требует указания монтированной директории (или поддиректории) общей для всех объектов, участвующих в загрузке. Так как загрузка производится в асинхронном режиме на всех хостах {{ ydb-short-name }}, указанная директория должна быть на каждом хосте {{ ydb-short-name }} и смонтирована в NFS.
+
+`--fs-path PATH`: путь до монтированной директории (или поддиректории).
+
+### Загружаемые объекты схемы базы данных {#objects}
+
+{% include [import-objects-params.md](_includes/import-objects-params.md) %}
+
+{% cut "Альтернативный способ" %}
+
+{% include [import-alternative-syntax.md](_includes/import-alternative-syntax.md) %}
+
+- `source`, `src` или `s` — путь в NFS (относительно `fs-path`) с загружаемой директорией или таблицей.
+- `destination`, `dst`, или `d` —  путь в базе данных для размещения загружаемой директории или таблицы. Конечный элемент пути не должен существовать. Все директории на пути будут созданы, если не существуют.
+
+{% include [import-alternative-syntax-warning.md](_includes/import-alternative-syntax-warning.md) %}
+
+{% endcut %}
+
+### Дополнительные параметры {#aux}
+
+| Параметр | Описание |
+| --- | --- |
+| `--description STRING` | Текстовое описание операции, сохраняемое в истории операций. |
+| `--retries NUM` | Количество повторных попыток загрузки, которые будет предпринимать сервер.<br/>Значение по умолчанию: `10`. |
+| `--skip-checksum-validation` | Пропустить этап валидации [контрольных сумм](./file-structure.md#checksums) загружаемых объектов. |
+| `--encryption-key-file PATH` | Путь к файлу, содержащему ключ шифрования (только для зашифрованных выгрузок). Данный файл является бинарным и должен содержать точное количество байт, соответствующее длине ключа в выбранном алгоритме шифрования (16 байт для `AES-128-GCM`, 32 байта для `AES-256-GCM` и `ChaCha20-Poly1305`). Ключ также может быть передан через переменную окружения `YDB_ENCRYPTION_KEY`, в шестнадцатеричном строковом представлении. |
+| `--format STRING` | Формат вывода результата.<br/>Допустимые значения:<br/><ul><li>`pretty` — человекочитаемый формат (по умолчанию);</li><li>`proto-json-base64` — [Protocol Buffers](https://ru.wikipedia.org/wiki/Protocol_Buffers) в формате [JSON](https://ru.wikipedia.org/wiki/JSON), бинарные строки закодированы в [Base64](https://ru.wikipedia.org/wiki/Base64).</li></ul> |
+
+## Выполнение загрузки {#exec}
+
+{% include [server-import-workflow.md](_includes/server-import-workflow.md) %}
+
+### Результат запуска {#result}
+
+При успешном исполнении команда `import nfs` выводит сводную информацию о поставленной в очередь операции загрузки из NFS, в заданном опцией `--format` формате. Фактическая загрузка производится сервером асинхронно. В сводной информации выводится ID операции, который может быть использован в дальнейшем для проверки статуса и действий с операцией:
+
+{% include [import-operation-result-pretty-intro.md](_includes/import-operation-result-pretty-intro.md) %}
+
+  ```text
+  ┌───────────────────────────────────────────┬───────┬─────...
+  | id                                        | ready | stat...
+  ├───────────────────────────────────────────┼───────┼─────...
+  | ydb://import/8?id=281474976788395&kind=fs | true  | SUCC...
+  ├╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴┴╴╴╴╴╴...
+  | Items:
+  ...
+  ```
+
+{% include [import-operation-result-json-intro.md](_includes/import-operation-result-json-intro.md) %}
+
+  ```json
+  {"id":"ydb://import/8?id=281474976788395&kind=fs","ready":true, ... }
+  ```
+
+### Статус загрузки {#status}
+
+{% include [import-operation-status-intro.md](_includes/import-operation-status-intro.md) %}
+
+```bash
+{{ ydb-cli }} -p quickstart operation get "ydb://import/8?id=281474976788395&kind=fs"
+```
+
+{% include [import-operation-status-after-get.md](_includes/import-operation-status-after-get.md) %}
+
+### Завершение операции загрузки {#forget}
+
+{% include [import-operation-forget-intro.md](_includes/import-operation-forget-intro.md) %}
+
+```bash
+{{ ydb-cli }} -p quickstart operation forget "ydb://import/8?id=281474976788395&kind=fs"
+```
+
+### Список операций загрузки {#list}
+
+Для получения списка операций загрузки воспользуйтесь командой `operation list import/nfs`:
+
+```bash
+{{ ydb-cli }} -p quickstart operation list import/nfs
+```
+
+{% include [import-operation-list-tail.md](_includes/import-operation-list-tail.md) %}
+
+## Примеры {#examples}
+
+{% include [ydb-cli-profile.md](../../../_includes/ydb-cli-profile.md) %}
+
+### Загрузка в корень базы данных {#example-full-db}
+
+Загрузка в корень базы данных содержимого директории `/mnt/nfs/backups/export1` на файловой системе:
+
+```bash
+{{ ydb-cli }} -p quickstart import nfs \
+  --fs-path /mnt/nfs/backups/export1
+```
+
+### Загрузка нескольких директорий {#example-specific-dirs}
+
+Загрузка объектов из директорий `dir1` и `dir2` выгрузки, расположенной в `/mnt/nfs/backups/export1` на файловой системе, в одноименные директории базы данных:
+
+```bash
+{{ ydb-cli }} -p quickstart import nfs \
+  --fs-path /mnt/nfs/backups/export1 \
+  --include dir1 --include dir2
+```
+
+### Загрузка зашифрованной выгрузки {#example-encryption}
+
+Загрузка одной таблицы, которая была выгружена по пути `dir/my_table`, в путь `dir1/dir/my_table` из зашифрованной выгрузки, расположенной в `/mnt/nfs/backups/export1` на файловой системе, с использованием секретного ключа из файла `~/my_secret_key`.
+
+```bash
+{{ ydb-cli }} -p quickstart import nfs \
+  --fs-path /mnt/nfs/backups/export1 --destination-path dir1 \
+  --include dir/my_table \
+  --encryption-key-file ~/my_secret_key
+```
+
+### Получение идентификаторов операций {#example-list-oneline}
+
+Для получения перечня идентификаторов операций загрузки в удобном для обработки в скриптах bash формате вы можете применить утилиту [jq](https://stedolan.github.io/jq/download/):
+
+```bash
+{{ ydb-cli }} -p quickstart operation list import/nfs --format proto-json-base64 | jq -r ".operations[].id"
+```
+
+Вы получите вывод, где в каждой новой строке находится идентификатор операции, например:
+
+```text
+ydb://import/8?id=281474976789577&kind=fs
+ydb://import/8?id=281474976789526&kind=fs
+ydb://import/8?id=281474976788779&kind=fs
+```
+
+По этим идентификаторам может быть, например, запущен цикл для завершения всех текущих операций:
+
+```bash
+{{ ydb-cli }} -p quickstart operation list import/nfs --format proto-json-base64 | jq -r ".operations[].id" | while read line; do {{ ydb-cli }} -p quickstart operation forget $line;done
+```

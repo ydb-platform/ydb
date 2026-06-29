@@ -1,5 +1,4 @@
 #include <ydb/core/kqp/opt/rbo/rules/map/rename_common.h>
-#include <ydb/core/kqp/opt/rbo/rules/map/map_output_utils.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -37,18 +36,7 @@ bool TPushRenameThroughPassThroughMapRule::MatchAndApply(TIntrusivePtr<IOperator
     // A pass-through map can perform this rename itself. Adding the element to the
     // lower map is progress; inserting another single-rename map below it would only
     // commute independent renames back and forth.
-    auto elements = map->MapElements;
-    elements.push_back(NMapRules::MakeRenameElement(*candidate, topMap));
-
-    auto output = BuildMapOutput(map, elements);
-    if (MakeInfoUnitSet(output).size() != output.size()) {
-        return false;
-    }
-    if (!NMapRules::CanFinishRenamePush(topMap, *candidate, output)) {
-        return false;
-    }
-
-    map->MapElements = std::move(elements);
+    map->MapElements.push_back(NMapRules::MakeRenameElement(*candidate, topMap));
     return NMapRules::FinishRenamePush(input, topMap, *candidate, ctx, props);
 }
 

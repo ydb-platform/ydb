@@ -23,11 +23,6 @@ bool CanStartLocalRenamePush(const TIntrusivePtr<TOpMap>& topMap, const TRenameC
 
 TMapElement MakeRenameElement(const TRenameCandidate& candidate, const TIntrusivePtr<TOpMap>& topMap);
 
-bool CanFinishRenamePush(
-    const TIntrusivePtr<TOpMap>& topMap,
-    const TRenameCandidate& candidate,
-    const TVector<TInfoUnit>& pushedInputOutput);
-
 bool FinishRenamePush(
     TIntrusivePtr<IOperator>& input,
     const TIntrusivePtr<TOpMap>& topMap,

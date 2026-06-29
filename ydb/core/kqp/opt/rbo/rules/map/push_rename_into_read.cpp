@@ -3,19 +3,6 @@
 namespace NKikimr {
 namespace NKqp {
 
-namespace {
-
-TVector<TInfoUnit> ReplaceOutputName(TVector<TInfoUnit> output, const TInfoUnit& from, const TInfoUnit& to) {
-    for (auto& iu : output) {
-        if (iu == from) {
-            iu = to;
-        }
-    }
-    return output;
-}
-
-} // anonymous namespace
-
 bool TPushRenameIntoReadRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     if (input->Kind != EOperator::Map) {
         return false;
@@ -36,13 +23,12 @@ bool TPushRenameIntoReadRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRB
         return false;
     }
 
-    const auto output = ReplaceOutputName(read->OutputIUs, candidate->From, candidate->To);
-    if (MakeInfoUnitSet(output).size() != output.size() ||
-        !NMapRules::CanFinishRenamePush(topMap, *candidate, output)) {
-        return false;
+    for (auto& output : read->OutputIUs) {
+        if (output == candidate->From) {
+            output = candidate->To;
+            break;
+        }
     }
-
-    read->OutputIUs = output;
     return NMapRules::FinishRenamePush(input, topMap, *candidate, ctx, props);
 }
 

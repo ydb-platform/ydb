@@ -1,5 +1,4 @@
 #include <ydb/core/kqp/opt/rbo/rules/map/rename_common.h>
-#include <ydb/core/kqp/opt/rbo/rules/map/map_output_utils.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -14,18 +13,6 @@ TIntrusivePtr<IOperator> SelectJoinInputForRename(const TIntrusivePtr<TOpJoin>& 
     }
 
     return leftHas ? join->GetLeftInput() : join->GetRightInput();
-}
-
-TVector<TInfoUnit> BuildJoinOutput(const TString& joinKind, TVector<TInfoUnit> leftOutput, TVector<TInfoUnit> rightOutput) {
-    if (!JoinOutputsRight(joinKind)) {
-        rightOutput.clear();
-    }
-    if (!JoinOutputsLeft(joinKind)) {
-        leftOutput.clear();
-    }
-
-    leftOutput.insert(leftOutput.end(), rightOutput.begin(), rightOutput.end());
-    return leftOutput;
 }
 
 } // anonymous namespace
@@ -51,27 +38,12 @@ bool TPushRenameThroughJoinSideRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
     }
 
     const auto selectedInput = SelectJoinInputForRename(join, candidate->From);
-    if (!selectedInput || !selectedInput->IsSingleConsumer() ||
-        !NMapRules::CanRenameOutput(selectedInput, candidate->From, candidate->To)) {
+    if (!selectedInput || !NMapRules::CanRenameOutput(selectedInput, candidate->From, candidate->To)) {
         return false;
     }
 
     const bool pushLeft = selectedInput == join->GetLeftInput();
     const TVector<TMapElement> pushedElements{NMapRules::MakeRenameElement(*candidate, topMap)};
-    const auto pushedOutput = BuildMapOutput(selectedInput->GetOutputIUs(), pushedElements);
-    if (MakeInfoUnitSet(pushedOutput).size() != pushedOutput.size()) {
-        return false;
-    }
-
-    const auto output = BuildJoinOutput(
-        join->JoinKind,
-        pushLeft ? pushedOutput : join->GetLeftInput()->GetOutputIUs(),
-        pushLeft ? join->GetRightInput()->GetOutputIUs() : pushedOutput);
-    if (MakeInfoUnitSet(output).size() != output.size() ||
-        !NMapRules::CanFinishRenamePush(topMap, *candidate, output)) {
-        return false;
-    }
-
     auto pushedMap = MakeIntrusive<TOpMap>(selectedInput, topMap->Pos, pushedElements);
     if (pushLeft) {
         join->SetLeftInput(pushedMap);

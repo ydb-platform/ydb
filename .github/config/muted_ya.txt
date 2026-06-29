@@ -90,6 +90,7 @@ ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSet
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-3_to_stable-26-2-1-0-2048-ROW]
 ydb/tests/compatibility/result_set_format test_result_set_arrow.py.TestResultSetArrow.test_schema_inclusion_mode[restart_prestable-26-3_to_stable-26-2-1-0-8388608-COLUMN]
 ydb/tests/compatibility/streaming test_scalar_topic_write.py.TestScalarTopicWriteRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3-False]
+ydb/tests/compatibility/streaming test_streaming.py.TestStreamingMixedCluster.test_mixed_cluster[mixed_prestable-26-3_and_stable-26-2-1-False]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3-False]
 ydb/tests/compatibility/streaming test_streaming.py.TestStreamingRollingUpgradeAndDowngrade.test_rolling_upgrade[rolling_stable-26-2-1_to_prestable-26-3-True]
 ydb/tests/datashard/truncate/concurrency py3test.[test_truncate_table_concurrency.py */*] chunk

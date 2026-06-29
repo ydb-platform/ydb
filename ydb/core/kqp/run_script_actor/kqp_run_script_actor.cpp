@@ -170,8 +170,12 @@ private:
 
     void HandleCancellation(TEvKqp::TEvCancelScriptExecutionRequest::TPtr& ev) {
         LOG_I("Got cancel request: " << ev->Sender);
+
         CancelRequests.emplace_front(std::move(ev));
-        Finish(Ydb::StatusIds::CANCELLED);
+
+        if (!FinishInfo.IsSuccess()) {
+            Finish(Ydb::StatusIds::CANCELLED);
+        }
     }
 
     void HandleCheckAlive(TEvCheckAliveRequest::TPtr& ev) {
@@ -306,10 +310,12 @@ private:
             LOG_I("Got finalize: " << ev->Sender << ", already finished: " << info.AlreadyStopped << ", execution entry exists: " << info.ExecutionEntryExists);
         }
 
+        const auto alreadyStopped = info.AlreadyStopped || FinishInfo.IsSuccess();
+
         for (auto& request : CancelRequests) {
             Send(request->Sender, new TEvKqp::TEvCancelScriptExecutionResponse(status, {
                 .ExecutionEntryExists = info.ExecutionEntryExists,
-                .AlreadyStopped = info.AlreadyStopped,
+                .AlreadyStopped = alreadyStopped,
             }, issues), /* flags */ 0, request->Cookie);
         }
     }

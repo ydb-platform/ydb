@@ -1210,9 +1210,13 @@ public:
         switch (static_cast<EWakeup>(ev->Get()->Tag)) {
             case EWakeup::RetryCheckAlive: {
                 WaitRetryCheckAlive = false;
-                LOG_D("Retry check alive request for " << Info.PreviousOwner);
-                Send(Info.PreviousOwner, new TEvPrivate::TEvCheckAliveRequest(), CheckAliveFlags);
-                Schedule(CHECK_ALIVE_REQUEST_SOFT_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveSoftTimeout)));
+                if (WaitLock) {
+                    LOG_N("Skipped retry check alive, already waiting query lock");
+                } else {
+                    LOG_D("Retry check alive request for " << Info.PreviousOwner);
+                    Send(Info.PreviousOwner, new TEvPrivate::TEvCheckAliveRequest(), CheckAliveFlags);
+                    Schedule(CHECK_ALIVE_REQUEST_SOFT_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveSoftTimeout)));
+                }
                 break;
             }
             case EWakeup::CheckAliveSoftTimeout: {

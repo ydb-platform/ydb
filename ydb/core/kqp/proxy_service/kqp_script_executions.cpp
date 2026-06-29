@@ -1592,10 +1592,14 @@ private:
         switch (static_cast<EWakeup>(ev->Get()->Tag)) {
             case EWakeup::RetryCheckAlive:
                 WaitRetryCheckAlive = false;
-                CheckAliveRetries++;
-                KQP_PROXY_LOG_D("Start check alive request #" << CheckAliveRetries + 1);
-                Send(RunScriptActorId, new TEvCheckAliveRequest(), CheckAliveFlags);
-                Schedule(CHECK_ALIVE_REQUEST_SOFT_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveSoftTimeout)));
+                if (WaitFinishQuery) {
+                    KQP_PROXY_LOG_N("Skipped retry check alive query, already waiting finish query");
+                } else {
+                    CheckAliveRetries++;
+                    KQP_PROXY_LOG_D("Start check alive request #" << CheckAliveRetries + 1);
+                    Send(RunScriptActorId, new TEvCheckAliveRequest(), CheckAliveFlags);
+                    Schedule(CHECK_ALIVE_REQUEST_SOFT_TIMEOUT, new TEvents::TEvWakeup(static_cast<ui64>(EWakeup::CheckAliveSoftTimeout)));
+                }
                 break;
             case EWakeup::CheckAliveSoftTimeout:
                 KQP_PROXY_LOG_W("Deliver TRunScriptActor check alive request soft timeout, retry check alive");

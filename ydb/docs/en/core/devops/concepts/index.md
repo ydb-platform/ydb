@@ -13,4 +13,8 @@ See also:
 * [{#T}](../deployment-options/index.md)
 * [{#T}](../configuration-management/index.md)
 * [{#T}](../observability/index.md)
+<<<<<<< HEAD
 * [{#T}](../backup-and-recovery.md)
+=======
+* [{#T}](../backup-and-recovery.md)
+>>>>>>> e2e301d6dc0 (docs(ru): add SQLGlot plugin article, group SQL dialect conversion docs (#44184))

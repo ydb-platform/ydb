@@ -67,6 +67,7 @@ NKikimrSchemeOp::TModifyScheme MoveTableIndexTask(NKikimr::NSchemeShard::TPath& 
 NKikimrSchemeOp::TModifyScheme MoveLocalIndexTask(const TString& tablePath, const TString& srcIndexPath, const TString& dstIndexName);
 
 THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TOperationContext& context);
+THolder<TEvHive::TEvCreateTablet> CreateEvCreateTablet(TPathElement::TPtr targetPath, TShardIdx shardIdx, TSchemeShard* ss);
 
 void AbortUnsafeDropOperation(const TOperationId& operationId, const TTxId& txId, TOperationContext& context);
 

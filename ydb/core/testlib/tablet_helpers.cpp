@@ -1405,6 +1405,15 @@ namespace NKikimr {
 
             ctx.Send(ev->Sender, new TEvHive::TEvCreateTabletReply(status, key.first,
                 key.second, it->second.TabletId, TabletID()), 0, ev->Cookie);
+            if (status == NKikimrProto::OK) {
+                // Real Hive sends TEvTabletCreationResult only to actors registered in
+                // ActorsToNotify, and only after the tablet actually boots. This fake
+                // Hive boots tablets synchronously, so for any consumer that registered
+                // as the sender (the common pattern) emitting the result right after the
+                // reply is the closest faithful approximation. Tests that don't expect
+                // this event should simply drop it.
+                ctx.Send(ev->Sender, new TEvHive::TEvTabletCreationResult(status, it->second.TabletId), 0, ev->Cookie);
+            }
         }
 
         void TraceAdoptingCases(const std::pair<ui64, ui64> prevKey,

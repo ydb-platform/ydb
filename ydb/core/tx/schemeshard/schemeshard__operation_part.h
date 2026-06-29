@@ -70,6 +70,7 @@
     action(NSchemeShard::TEvPrivate, TEvOperationPlan,       NSchemeShard::TXTYPE_PLAN_STEP)                             \
     action(NSchemeShard::TEvPrivate, TEvCompletePublication, NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_PUBLICATION) \
     action(NSchemeShard::TEvPrivate, TEvCompleteBarrier,     NSchemeShard::TXTYPE_NOTIFY_OPERATION_COMPLETE_BARRIER)     \
+    action(NSchemeShard::TEvPrivate, TEvSolomonRollingUpdateDone, NSchemeShard::TXTYPE_PROGRESS_OP)                     \
 \
     action(TEvDataShard, TEvProposeTransactionAttachResult, NSchemeShard::TXTYPE_PERSQUEUE_PROPOSE_ATTACH_RESULT)
 

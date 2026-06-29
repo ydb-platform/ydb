@@ -57,6 +57,7 @@ namespace TEvPrivate {
         EvProgressTablePartitionsFormatSweep,
         EvFullBackupItemDone,
         EvProgressForcedCompaction,
+        EvSolomonRollingUpdateDone,
         EvEnd
     };
 
@@ -81,6 +82,18 @@ namespace TEvPrivate {
         TEvOperationPlan(ui64 step, ui64 txId)
             : StepId(step)
             , TxId(txId)
+        {}
+    };
+
+    struct TEvSolomonRollingUpdateDone: public TEventLocal<TEvSolomonRollingUpdateDone, EvSolomonRollingUpdateDone> {
+        const TOperationId OperationId;
+        const bool Success;
+        const TString Error;
+
+        TEvSolomonRollingUpdateDone(TOperationId operationId, bool success = true, TString error = {})
+            : OperationId(operationId)
+            , Success(success)
+            , Error(std::move(error))
         {}
     };
 

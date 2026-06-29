@@ -4192,6 +4192,83 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(!map->MapElements.front().IsRename(), root.PlanToString(testContext.ExprCtx));
     }
 
+    Y_UNIT_TEST(RenameToAppendConvertsSafeRenameWithMultipleConsumers) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+        const auto source = TInfoUnit("a");
+        const auto alias = TInfoUnit("alias_a");
+
+        auto read = MakeTestRead({source}, pos);
+        auto map = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestRename(alias.GetFullName(), source.GetFullName(), pos, testContext.ExprCtx, expressionProps),
+        });
+        auto filter = MakeIntrusive<TOpFilter>(
+            map,
+            pos,
+            MakeColumnAccess(alias, pos, &testContext.ExprCtx, &expressionProps)
+        );
+        auto join = MakeIntrusive<TOpJoin>(
+            map,
+            filter,
+            pos,
+            "LeftSemi",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+        );
+        TOpRoot root(join, pos, {alias.GetFullName()});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TRenameToAppendRule>());
+        TRuleBasedStage renameToAppend("Focused rename to append", std::move(rules));
+        ComputeLogicalTestProps(root);
+
+        UNIT_ASSERT_C(!map->IsSingleConsumer(), root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(!GetForbidden(map.get()).contains(source), root.PlanToString(testContext.ExprCtx));
+
+        renameToAppend.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(!map->MapElements.front().IsRename(), root.PlanToString(testContext.ExprCtx));
+    }
+
+    Y_UNIT_TEST(RenameToAppendKeepsMultiConsumerRenameWhenSourceIsForbidden) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+        const auto source = TInfoUnit("a");
+        const auto alias = TInfoUnit("alias_a");
+
+        auto read = MakeTestRead({source}, pos);
+        auto map = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestRename(alias.GetFullName(), source.GetFullName(), pos, testContext.ExprCtx, expressionProps),
+        });
+        auto leftMap = MakeIntrusive<TOpMap>(map, pos, TVector<TMapElement>{
+            MakeTestRename("left_alias", alias.GetFullName(), pos, testContext.ExprCtx, expressionProps),
+        });
+        auto rightMap = MakeIntrusive<TOpMap>(map, pos, TVector<TMapElement>{
+            MakeTestRename("right_alias", alias.GetFullName(), pos, testContext.ExprCtx, expressionProps),
+        });
+        auto join = MakeIntrusive<TOpJoin>(
+            leftMap,
+            rightMap,
+            pos,
+            "Cross",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{}
+        );
+        TOpRoot root(join, pos, {"left_alias", "right_alias"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TRenameToAppendRule>());
+        TRuleBasedStage renameToAppend("Focused rename to append", std::move(rules));
+        ComputeLogicalTestProps(root);
+
+        UNIT_ASSERT_C(!map->IsSingleConsumer(), root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(GetForbidden(map.get()).contains(source), root.PlanToString(testContext.ExprCtx));
+
+        renameToAppend.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(map->MapElements.front().IsRename(), root.PlanToString(testContext.ExprCtx));
+    }
+
     Y_UNIT_TEST(RenameToAppendKeepsGeneratedIgnoreRenameWhenSharedSourceWouldReachJoinConflict) {
         TMapRuleTestContext testContext;
         TPlanProps expressionProps;

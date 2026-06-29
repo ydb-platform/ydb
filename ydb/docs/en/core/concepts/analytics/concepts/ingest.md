@@ -16,5 +16,5 @@ For loading large volumes of historical data, exports from other systems, or the
 
 * [BulkUpsert](../../../recipes/ydb-sdk/bulk-upsert.md) - the most performant method for batch inserts. BulkUpsert is a specialized API optimized for maximum throughput. It requires fewer resources compared to transactional operations, allowing you to load large datasets at maximum speed.
 * [Federated queries](../../query_execution/federated_query/index.md) to data in S3 / Data Lakes - {{ydb-short-name}} allows you to execute SQL queries directly against data stored in S3-compatible object storage or other external systems. This is a convenient way to load data without using separate ETL tools.
-* [Apache Spark connector](../../../integrations/ingestion/spark.md) saves data directly to {{ydb-short-name}} tables in multi-threaded mode for the most performant writes.
+* [Apache Spark connector](../../../integrations/query-engines/spark.md) saves data directly to {{ydb-short-name}} tables in multi-threaded mode for the most performant writes.
 * [JDBC driver](../../../reference/languages-and-apis/jdbc-driver/index.md) and [native SDKs](../../../reference/languages-and-apis/index.md)- with these, you can connect any applications or pipelines, including Apache Spark, Apache NiFi, and other solutions.

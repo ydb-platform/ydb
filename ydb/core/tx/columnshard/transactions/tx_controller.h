@@ -522,10 +522,7 @@ public:
     void FinishProposeOnComplete(ITransactionOperator& txOperator, const TActorContext& ctx);
     void FinishProposeOnComplete(const ui64 txId, const TActorContext& ctx);
 
-    void WriteTxOperatorInfo(NTabletFlatExecutor::TTransactionContext& txc, const ui64 txId, const TString& data) {
-        NIceDb::TNiceDb db(txc.DB);
-        NColumnShard::Schema::UpdateTxInfoBody(db, txId, data);
-    }
+    void WriteTxOperatorInfo(NTabletFlatExecutor::TTransactionContext& txc, const ui64 txId, const TString& data);
 
     bool ExecuteOnCancel(const ui64 txId, NTabletFlatExecutor::TTransactionContext& txc);
     bool CompleteOnCancel(const ui64 txId, const TActorContext& ctx);

@@ -113,6 +113,12 @@ std::shared_ptr<TTxController::ITransactionOperator> TTxController::UpdateTxSour
     return op;
 }
 
+void TTxController::WriteTxOperatorInfo(NTabletFlatExecutor::TTransactionContext& txc, const ui64 txId, const TString& data) {
+    const auto op = GetTxOperatorVerified(txId);
+    NIceDb::TNiceDb db(txc.DB);
+    Schema::SaveTxInfo(db, op->GetTxInfo(), data);
+}
+
 TTxController::TTxInfo TTxController::RegisterTx(const std::shared_ptr<TTxController::ITransactionOperator>& txOperator, const TString& txBody,
     NTabletFlatExecutor::TTransactionContext& txc) {
     NIceDb::TNiceDb db(txc.DB);

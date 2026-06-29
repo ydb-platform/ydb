@@ -502,7 +502,7 @@ private:
 
         NYql::TIssues issues;
         NYql::IssuesFromMessage(response.GetQueryIssues(), issues);
-        issues = TruncateIssues(issues);
+        issues = NFq::TruncateIssues(issues);
 
         const auto status = record.GetYdbStatus();
         if (status == Ydb::StatusIds::SUCCESS) {

@@ -94,7 +94,7 @@ class Workload:
         subcmds = [
             'write',
             '-s', str(self.duration),
-            '--workers', '2',
+            '--workers', '50',
             '--sqs-endpoint',  self.sqs_endpoint,
             '--topic', self.topic_name,
             '--consumer', 'shared_consumer',
@@ -109,7 +109,7 @@ class Workload:
         subcmds = [
             'read',
             '-s', str(self.duration),
-            '--workers', '5',
+            '--workers', '500',
             '--sqs-endpoint',  self.sqs_endpoint,
             '--topic', self.topic_name,
             '--consumer', 'shared_consumer',

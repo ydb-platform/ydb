@@ -2660,9 +2660,16 @@ TNodeResult TSqlExpression::SelectSubExpr(const TRule_select_subexpr& node) {
             SmartParenthesisMode_);
     }
 
+    if (node.HasBlock1()) {
+        Token(node.GetBlock1().GetRule_cte_with_clause1().GetToken1());
+        Ctx_.Error() << "WITH CTE is available only with YqlSelect";
+        return std::unexpected(ESQLError::Basic);
+    }
+
     TNodeResult result = std::unexpected(ESQLError::Basic);
     if (IsOnlySubExpr(node)) {
-        result = SelectOrExpr(node.GetRule_select_subexpr_intersect1()
+        result = SelectOrExpr(node.GetRule_select_subexpr_core2()
+                                  .GetRule_select_subexpr_intersect1()
                                   .GetRule_select_or_expr1());
     } else {
         result = Wrap(TSqlSelect(*this).BuildSubSelect(node));

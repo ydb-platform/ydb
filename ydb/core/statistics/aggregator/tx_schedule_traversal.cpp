@@ -2,8 +2,6 @@
 
 #include <ydb/core/tx/datashard/datashard.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
-
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
@@ -16,32 +14,24 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
 
         if (!Self->EnableColumnStatistics) {
-            YDB_LOG_TRACE("Column statistics disabled won't schedule traversals",
-                {"tabletId", Self->TabletID()});
+            SA_LOG_T("[" << Self->TabletID() << "] Column statistics disabled"
+                << ", won't schedule traversals");
             return true;
         }
 
-        TDuration time = TDuration::Zero();
-        if (!Self->ForceTraversals.empty()) {
-            time = ctx.Now() - Self->ForceTraversals.front().CreatedAt;
-        }
-        Self->TabletCounters->Simple()[COUNTER_FORCE_TRAVERSAL_INFLIGHT_MAX_TIME].Set(time.MicroSeconds());
+        Self->RecalcForceTraversalInflightMaxTimeCounter(ctx.Now());
 
         if (Self->TraversalPathId) {
-            YDB_LOG_TRACE("TTxScheduleTraversal::Execute. Traverse is in progress. PathId",
-                {"tabletId", Self->TabletID()},
-                {"traversalPathId", Self->TraversalPathId});
+            SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTraversal::Execute. Traverse is in progress. PathId " << Self->TraversalPathId);
             return true;
         }
 
         if (Self->ScheduleTraversals.empty()) {
-            YDB_LOG_TRACE("TTxScheduleTraversal. No info from schemeshard",
-                {"tabletId", Self->TabletID()});
+            SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTraversal. No info from schemeshard");
             return true;
         }
 
-        YDB_LOG_TRACE("TTxScheduleTraversal::Execute",
-            {"tabletId", Self->TabletID()});
+        SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTraversal::Execute");
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -57,8 +47,7 @@ struct TStatisticsAggregator::TTxScheduleTraversal : public TTxBase {
     }
 
     void Complete(const TActorContext&) override {
-        YDB_LOG_TRACE("TTxScheduleTraversal::Complete",
-            {"tabletId", Self->TabletID()});
+        SA_LOG_T("[" << Self->TabletID() << "] TTxScheduleTraversal::Complete");
 
         Self->Schedule(Self->TraversalPeriod, new TEvPrivate::TEvScheduleTraversal());
     }

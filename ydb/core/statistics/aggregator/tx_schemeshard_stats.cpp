@@ -1,7 +1,5 @@
 #include "aggregator_impl.h"
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
-
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
@@ -22,12 +20,11 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
         NKikimrStat::TSchemeShardStats statRecord;
         Y_PROTOBUF_SUPPRESS_NODISCARD statRecord.ParseFromString(stats);
 
-        YDB_LOG_DEBUG("TTxSchemeShardStats::Execute: schemeshard stats byte entries are all stats",
-            {"tabletId", Self->TabletID()},
-            {"id", schemeShardId},
-            {"size", stats.size()},
-            {"count", statRecord.GetEntries().size()},
-            {"full", statRecord.GetAreAllStatsFull()});
+        SA_LOG_D("[" << Self->TabletID() << "] TTxSchemeShardStats::Execute: "
+            << "schemeshard id: " << schemeShardId
+            << ", stats byte size: " << stats.size()
+            << ", entries count: " << statRecord.GetEntries().size()
+            << ", are all stats full: " << statRecord.GetAreAllStatsFull());
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -133,8 +130,7 @@ struct TStatisticsAggregator::TTxSchemeShardStats : public TTxBase {
     }
 
     void Complete(const TActorContext&) override {
-        YDB_LOG_DEBUG("TTxSchemeShardStats::Complete",
-            {"tabletId", Self->TabletID()});
+        SA_LOG_D("[" << Self->TabletID() << "] TTxSchemeShardStats::Complete");
         Self->BaseStatistics[Record.GetSchemeShardId()].Committed = UpdatedStats;
         Self->ReportBaseStatisticsCounters();
     }

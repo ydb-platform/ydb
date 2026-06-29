@@ -2,8 +2,6 @@
 
 #include <ydb/core/statistics/service/service.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
-
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
@@ -26,8 +24,7 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_AGGR_STAT_RESPONSE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("TTxAggregateStatisticsResponse::Execute",
-            {"tabletId", Self->TabletID()});
+        SA_LOG_D("[" << Self->TabletID() << "] TTxAggregateStatisticsResponse::Execute");
 
         ++Self->KeepAliveSeqNo; // cancel timeout events
 
@@ -76,8 +73,7 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
             auto error = tablet.GetError();
             switch (error) {
             case NKikimrStat::TEvAggregateStatisticsResponse::TYPE_UNSPECIFIED:
-                YDB_LOG_CRIT("Unspecified TEvAggregateStatisticsResponse status",
-                    {"tabletId", Self->TabletID()});
+                SA_LOG_CRIT("[" << Self->TabletID() << "] Unspecified TEvAggregateStatisticsResponse status");
                 return false;
 
             case NKikimrStat::TEvAggregateStatisticsResponse::TYPE_UNAVAILABLE_NODE:
@@ -125,8 +121,7 @@ struct TStatisticsAggregator::TTxAggregateStatisticsResponse : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("TTxAggregateStatisticsResponse::Complete",
-            {"tabletId", Self->TabletID()});
+        SA_LOG_D("[" << Self->TabletID() << "] TTxAggregateStatisticsResponse::Complete");
 
         switch (Action) {
         case EAction::SendReqDistribution:

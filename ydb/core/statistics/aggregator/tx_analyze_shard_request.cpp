@@ -3,13 +3,11 @@
 #include <ydb/core/protos/hive.pb.h>
 #include <ydb/core/statistics/service/service.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
-
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxAnalyzeShardRequest : public TTxBase {
     std::vector<std::unique_ptr<IEventBase>> Events;
-
+    
     TTxAnalyzeShardRequest(TSelf* self)
         : TTxBase(self)
     {}
@@ -28,8 +26,7 @@ struct TStatisticsAggregator::TTxAnalyzeShardRequest : public TTxBase {
     }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        YDB_LOG_TRACE("TTxAnalyzeShardRequest::Execute",
-            {"tabletId", Self->TabletID()});
+        SA_LOG_T("[" << Self->TabletID() << "] TTxAnalyzeShardRequest::Execute");
 
         for (TForceTraversalOperation& operation : Self->ForceTraversals) {
             for (TForceTraversalTable& operationTable : operation.Tables) {
@@ -40,27 +37,24 @@ struct TStatisticsAggregator::TTxAnalyzeShardRequest : public TTxBase {
 
                             auto request = MakeRequest(operation.OperationId, operationTable);
                             Events.push_back(std::make_unique<TEvPipeCache::TEvForward>(request.release(), analyzedShard.ShardTabletId, true));
-
+                            
                             if (Events.size() == SendAnalyzeCount)
                                 return true;
                         }
                     }
                 }
             }
-        }
+        }        
 
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
         if (Events.size()) {
-            YDB_LOG_DEBUG("TTxAnalyzeShardRequest::Complete. Send events",
-                {"tabletId", Self->TabletID()},
-                {"eventsCount", Events.size()});
+            SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeShardRequest::Complete. Send " << Events.size() << " events.");
         }
         else {
-            YDB_LOG_TRACE("TTxAnalyzeShardRequest::Complete",
-                {"tabletId", Self->TabletID()});
+            SA_LOG_T("[" << Self->TabletID() << "] TTxAnalyzeShardRequest::Complete.");
         }
 
         for (auto& ev : Events) {

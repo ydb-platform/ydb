@@ -40,6 +40,7 @@ namespace NSchemeShardUT_Private {
         OPTION(bool, EnablePipeRetries, true);
         OPTION(bool, RunFakeConfigDispatcher, false);
         OPTION(bool, InitYdbDriver, false);
+        OPTION(bool, EnableFulltextIndexPrefix, true);
         OPTION(std::optional<bool>, EnablePersistentQueryStats, std::nullopt);
         OPTION(std::optional<bool>, EnablePersistentPartitionStats, std::nullopt);
         OPTION(std::optional<bool>, AllowUpdateChannelsBindingOfSolomonPartitions, std::nullopt);

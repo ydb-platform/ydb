@@ -15,7 +15,7 @@ namespace NYT::NTabletClient {
 
 ////////////////////////////////////////////////////////////////////////////////
 
-extern const std::vector<TErrorCode> TableMountCacheRetryableCodes;
+extern const THashSet<TErrorCode> TableMountCacheRetryableCodes;
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -62,7 +62,8 @@ public:
     void InvalidateTablet(TTabletId tabletId) override;
     TInvalidationResult InvalidateOnError(
         const TError& error,
-        bool forceRetry) override;
+        bool forceRetry,
+        TTabletId tabletIdHint = {}) override;
 
     void Clear() override;
 

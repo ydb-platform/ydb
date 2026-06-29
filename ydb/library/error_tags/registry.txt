@@ -1,0 +1,44 @@
+# YDB user-facing error code registry.
+#
+# Source of truth for all YDBE-XXXXX error labels printed to users.
+# Format: each non-empty, non-comment line starts with the error code,
+# followed by any whitespace, followed by a short one-line description.
+#
+# Lines starting with '#' and empty lines are ignored.
+# See README.md for the format, the component ranges and the dev process.
+# Validated in CI by validate_error_tags.py.
+
+# 02 — interconnect (library/actors/interconnect)
+YDBE-02001 Interconnect handshake failed, connection transits to error state
+
+# 10 — config / init (core/config, core/driver_lib, library/yaml_config)
+YDBE-10001 Failed to parse YAML config: syntax error
+YDBE-10002 Unknown field(s) in YAML config
+YDBE-10003 Invalid value in YAML config
+YDBE-10004 Invalid configuration in YAML config
+YDBE-10005 Failed to parse YAML config
+YDBE-10006 TWithDefault accessed through GetRef() while holding a default value
+YDBE-10007 DomainsConfig is not provided
+YDBE-10008 ChannelProfileConfig is not provided
+YDBE-10009 Cannot detect host name for static node
+YDBE-10010 No static node entry for this host in cluster configuration
+YDBE-10011 NodeBrokerPort must be defined
+YDBE-10012 YAML config is not provided for static node and no seed nodes given
+YDBE-10013 Config validation failed
+YDBE-10014 List of Node Broker endpoints is empty
+YDBE-10015 Invalid format in seed nodes file: non-scalar item in the list
+YDBE-10016 Invalid format in seed nodes file: root is not a list
+YDBE-10017 Failed to read or parse seed nodes file
+YDBE-10018 Seed nodes file not found
+YDBE-10019 Seed nodes file provided, but config dir path is not set
+YDBE-10020 Failed to fetch config from seed nodes for static node
+YDBE-10021 No main YAML config provided from seed nodes for static node
+YDBE-10022 Failed to save configs fetched from seed nodes
+YDBE-10023 No seed nodes provided
+YDBE-10024 Failed to parse protobuf config file
+YDBE-10025 Config file does not exist
+YDBE-10026 Config file is not readable
+
+# 21 — distconf / nodewarden (core/blobstorage/nodewarden)
+YDBE-21001 Local node cannot join cluster: no accepted interconnect sessions to configured remote nodes
+YDBE-21002 Local node cannot join cluster: peers reachable but distconf bind/quorum failing

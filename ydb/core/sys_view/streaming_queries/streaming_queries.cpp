@@ -82,7 +82,7 @@ struct TEvPrivate {
     };
 };
 
-class TStreamingQueryFetcherActor final : public TQueryBase {
+class TStreamingQueryFetcherActor final : public TQueryBase, public TQueryRetryActorMixin<TStreamingQueryFetcherActor, TEvPrivate::TEvFetchStreamingQueriesResult> {
     using TBase = TQueryBase;
 
     static constexpr ui64 MAX_STREAMING_QUERIES_COUNT = 1000;
@@ -100,8 +100,6 @@ public:
         std::optional<TString> PageToken;
         ui64 FreeSpace = 0;
     };
-
-    using TRetry = TQueryRetryActor<TStreamingQueryFetcherActor, TEvPrivate::TEvFetchStreamingQueriesResult, TString, TSettings>;
 
     TStreamingQueryFetcherActor(const TString& databaseId, const TSettings& settings)
         : TBase(NKikimrServices::SYSTEM_VIEWS)
@@ -1081,7 +1079,7 @@ private:
             }
         }
 
-        const auto& fetcher = Register(new TStreamingQueryFetcherActor::TRetry(SelfId(), DatabaseId, settings));
+        const auto& fetcher = Register(TStreamingQueryFetcherActor::MakeRetry(SelfId(), DatabaseId, settings));
         YDB_LOG_DEBUG("[StreamingQueries] [SysView] Start streaming query fetcher",
             {"logPrefix", LogPrefix()},
             {"fetcher", fetcher});

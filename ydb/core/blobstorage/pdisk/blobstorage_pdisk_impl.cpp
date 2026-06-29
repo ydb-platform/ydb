@@ -203,12 +203,12 @@ TCheckDiskFormatResult TPDisk::ReadChunk0Format(ui8* formatSectors, const NPDisk
                         Y_VERIFY_S(FormatSectorSize <= buffer->Size(), PCtx->PDiskLogPrefix);
                         memcpy(buffer->Data(), formatSector, FormatSectorSize);
                         ui64 targetOffset = i * FormatSectorSize;
-                        P_LOG(PRI_INFO, BPD46, "PWriteAsync for format restoration",
+                        P_LOG(PRI_NOTICE, BPD46, "PWriteSync for format restoration",
                                 (fromOffset, targetOffset), (toOffset, targetOffset + FormatSectorSize));
 
                         REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(buffer->Data(), FormatSectorSize);
-                        BlockDevice->PwriteAsync(buffer->Data(), FormatSectorSize, targetOffset, buffer,
-                                TReqId(TReqId::RestoreFormatOnRead, 0), {});
+                        BlockDevice->PwriteSync(buffer->Data(), FormatSectorSize, targetOffset, 
+                                TReqId(TReqId::RestoreFormatOnRead, 0), nullptr);
                     }
                 }
                 //BlockDevice->FlushAsync(nullptr);
@@ -4575,7 +4575,7 @@ void TPDisk::ProgressShredState() {
                 while (ShredLogPaddingInFlight < 2) {
                     TRcBuf data = TRcBuf::Uninitialized(2<<20);
                     memset(data.GetDataMut(), 0, data.Size());
-                    TEvLog evLog(OwnerUnallocated, 0, {}, data, {}, 0);
+                    TEvLog evLog(OwnerUnallocated, 0, {}, data, {}, 0, TWriteSource::ShredPadding);
                     double burstMs;
                     TLogWrite* request = ReqCreator.CreateLogWrite(evLog, PCtx->PDiskActor, burstMs, {});
                     request->Orbit = std::move(evLog.Orbit);

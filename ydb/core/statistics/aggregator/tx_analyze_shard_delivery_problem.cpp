@@ -3,8 +3,6 @@
 #include <ydb/core/protos/hive.pb.h>
 #include <ydb/core/statistics/service/service.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
-
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxAnalyzeShardDeliveryProblem : public TTxBase {
@@ -15,28 +13,24 @@ struct TStatisticsAggregator::TTxAnalyzeShardDeliveryProblem : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_ANALYZE_SHARD_DELIVERY_PROBLEM; }
 
     bool Execute(TTransactionContext&, const TActorContext&) override {
-        YDB_LOG_TRACE("TTxAnalyzeShardDeliveryProblem::Execute",
-            {"tabletId", Self->TabletID()});
+        SA_LOG_T("[" << Self->TabletID() << "] TTxAnalyzeShardDeliveryProblem::Execute");
 
         for (TForceTraversalOperation& operation : Self->ForceTraversals) {
             for (TForceTraversalTable& operationTable : operation.Tables) {
                 for(TAnalyzedShard& analyzedShard : operationTable.AnalyzedShards) {
                     if (analyzedShard.Status == TAnalyzedShard::EStatus::DeliveryProblem) {
-                        YDB_LOG_DEBUG("Reset DeliveryProblem",
-                            {"tabletId", Self->TabletID()},
-                            {"toColumnShard", analyzedShard.ShardTabletId});
+                        SA_LOG_D("[" << Self->TabletID() << "] Reset DeliveryProblem to ColumnShard=" << analyzedShard.ShardTabletId);
                         analyzedShard.Status = TAnalyzedShard::EStatus::None;
                     }
                 }
             }
-        }
+        }        
 
         return true;
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_TRACE("TTxAnalyzeShardDeliveryProblem::Complete",
-            {"tabletId", Self->TabletID()});
+        SA_LOG_T("[" << Self->TabletID() << "] TTxAnalyzeShardDeliveryProblem::Complete");
 
         ctx.Schedule(AnalyzeDeliveryProblemPeriod, new TEvPrivate::TEvAnalyzeDeliveryProblem());
     }

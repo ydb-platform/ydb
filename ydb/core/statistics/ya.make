@@ -1,6 +1,7 @@
 LIBRARY()
 
 SRCS(
+    common.h
     events.h
 )
 

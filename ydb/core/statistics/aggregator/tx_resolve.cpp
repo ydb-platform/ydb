@@ -3,8 +3,6 @@
 #include <ydb/core/base/hive.h>
 #include <ydb/core/tx/datashard/datashard.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
-
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxResolve : public TTxBase {
@@ -20,8 +18,7 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_RESOLVE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("TTxResolve::Execute",
-            {"tabletId", Self->TabletID()});
+        SA_LOG_D("[" << Self->TabletID() << "] TTxResolve::Execute");
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -34,7 +31,8 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
             if (entry.Status == NSchemeCache::TSchemeCacheRequest::EStatus::PathErrorNotExist) {
                 Self->DeleteStatisticsFromTable();
             } else {
-                Self->FinishTraversal(db, /*finishAllForceTraversalTables=*/true);
+                // Resolve failure -> mark the operation FAILED.
+                Self->FinishTraversal(db, Ydb::Table::AnalyzeState::STATE_FAILED);
             }
             return true;
         }
@@ -63,7 +61,9 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
         }
 
         if (Self->TraversalIsColumnTable && Self->TabletsForReqDistribution.empty()) {
-            Self->FinishTraversal(db, /*finishAllForceTraversalTables=*/false);
+            // Natural completion of an empty table — pass nullopt so FinishTraversal marks only the
+            // current table done; the operation flips to STATE_DONE when all its tables are done.
+            Self->FinishTraversal(db, std::nullopt);
             StartColumnShardEventDistribution = false;
         }
 
@@ -71,8 +71,7 @@ struct TStatisticsAggregator::TTxResolve : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("TTxResolve::Complete",
-            {"tabletId", Self->TabletID()});
+        SA_LOG_D("[" << Self->TabletID() << "] TTxResolve::Complete");
 
         if (Cancelled) {
             return;

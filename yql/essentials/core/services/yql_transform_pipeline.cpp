@@ -80,9 +80,13 @@ TTransformationPipeline& TTransformationPipeline::AddExpressionEvaluation(const 
     return *this;
 }
 
-TTransformationPipeline& TTransformationPipeline::AddPreTypeAnnotation(EYqlIssueCode issueCode) {
+TTransformationPipeline& TTransformationPipeline::AddPreTypeAnnotation(bool expandCons, EYqlIssueCode issueCode) {
     auto& typeCtx = *TypeAnnotationContext_;
-    Transformers_.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApply), "ExpandApply", issueCode));
+    if (expandCons) {
+        Transformers_.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApply), "ExpandApply", issueCode));
+    } else {
+        Transformers_.push_back(TTransformStage(CreateFunctorTransformer(&ExpandApplyWithoutCons), "ExpandApply", issueCode));
+    }
     Transformers_.push_back(TTransformStage(CreateFunctorTransformer(
                                                 [&](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) {
                                                     return ValidateProviders(input, output, ctx, typeCtx);

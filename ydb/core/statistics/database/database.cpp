@@ -1,12 +1,11 @@
 #include "database.h"
 
+#include <ydb/core/statistics/common.h>
 #include <ydb/core/statistics/events.h>
 
 #include <ydb/library/table_creator/table_creator.h>
 #include <ydb/library/query_actor/query_actor.h>
 #include <ydb/public/lib/scheme_types/scheme_type_id.h>
-
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
 
 namespace NKikimr::NStat {
 
@@ -82,7 +81,7 @@ NActors::IActor* CreateStatisticsTableCreator(std::unique_ptr<NActors::IEventBas
 }
 
 
-class TSaveStatisticsQuery : public NKikimr::TQueryBase {
+class TSaveStatisticsQuery : public NKikimr::TQueryBase, public TQueryRetryActorMixin<TSaveStatisticsQuery, TEvStatistics::TEvSaveStatisticsQueryResponse> {
 private:
     const TPathId PathId;
     const std::vector<TStatisticsItem> Items;
@@ -176,10 +175,6 @@ private:
     const std::vector<TStatisticsItem> Items;
 
 public:
-    using TSaveRetryingQuery = TQueryRetryActor<
-        TSaveStatisticsQuery, TEvStatistics::TEvSaveStatisticsQueryResponse,
-        const TString&, const TPathId&, const std::vector<TStatisticsItem>&>;
-
     TSaveStatisticsRetryingQuery(const NActors::TActorId& replyActorId, const TString& database,
         const TPathId& pathId, std::vector<TStatisticsItem>&& items)
         : ReplyActorId(replyActorId)
@@ -189,10 +184,10 @@ public:
     {}
 
     void Bootstrap() {
-        Register(new TSaveRetryingQuery(
+        Register(TSaveStatisticsQuery::MakeRetry(
             SelfId(),
-            TSaveRetryingQuery::IRetryPolicy::GetExponentialBackoffPolicy(
-                TSaveRetryingQuery::Retryable, TDuration::MilliSeconds(10),
+            TQueryRetryActorBase::IRetryPolicy::GetExponentialBackoffPolicy(
+                TQueryRetryActorBase::Retryable, TDuration::MilliSeconds(10),
                 TDuration::MilliSeconds(200), TDuration::Seconds(1),
                 std::numeric_limits<size_t>::max(), TDuration::Seconds(1)),
             Database, PathId, std::move(Items)
@@ -220,11 +215,9 @@ NActors::IActor* CreateSaveStatisticsQuery(const NActors::TActorId& replyActorId
 void DispatchLoadStatisticsQuery(
         const TActorId& replyToActor, ui64 queryId,
         const TString& database, const TPathId& pathId, EStatType statType, std::optional<ui32> columnTag) {
-    YDB_LOG_DEBUG("[DispatchLoadStatisticsQuery] QueryId[ PathId[ StatType[ ColumnTag[",
-        {"queryId", queryId},
-        {"pathId", pathId},
-        {"statType", static_cast<ui32>(statType)},
-        {"columnTag", columnTag});
+    SA_LOG_D("[DispatchLoadStatisticsQuery] QueryId[ " << queryId
+        << " ], PathId[ " << pathId << " ], " << " StatType[ " << static_cast<ui32>(statType)
+        << " ], ColumnTag[ " << columnTag << " ]");
 
     const auto statisticsTablePath = CanonizePath(
         TStringBuilder() << database << '/' << STATISTICS_TABLE);
@@ -263,8 +256,7 @@ void DispatchLoadStatisticsQuery(
             Y_ABORT_UNLESS(rowsCount < 2);
 
             if (rowsCount == 0) {
-                YDB_LOG_WARN("[ReadRowsResponse] QueryId[ RowsCount[ 0",
-                    {"queryId", queryId});
+                SA_LOG_W("[ReadRowsResponse] QueryId[ " << queryId << " ], RowsCount[ 0 ]");
             }
 
             query_response->Success = rowsCount > 0;
@@ -277,9 +269,8 @@ void DispatchLoadStatisticsQuery(
                     : col.GetString();
                 }
         } else {
-            YDB_LOG_ERROR("[ReadRowsResponse] QueryId[",
-                {"queryId", queryId},
-                {"issues", NYql::IssuesFromMessageAsString(response.issues())});
+            SA_LOG_E("[ReadRowsResponse] QueryId[ "
+                << queryId << " ] " << NYql::IssuesFromMessageAsString(response.issues()));
             query_response->Success = false;
         }
 
@@ -288,7 +279,7 @@ void DispatchLoadStatisticsQuery(
 }
 
 
-class TDeleteStatisticsQuery : public NKikimr::TQueryBase {
+class TDeleteStatisticsQuery : public NKikimr::TQueryBase, public TQueryRetryActorMixin<TDeleteStatisticsQuery, TEvStatistics::TEvDeleteStatisticsQueryResponse> {
 private:
     const TPathId PathId;
 
@@ -343,10 +334,6 @@ private:
     const TPathId PathId;
 
 public:
-    using TDeleteRetryingQuery = TQueryRetryActor<
-        TDeleteStatisticsQuery, TEvStatistics::TEvDeleteStatisticsQueryResponse,
-        const TString&, const TPathId&>;
-
     TDeleteStatisticsRetryingQuery(const NActors::TActorId& replyActorId, const TString& database,
         const TPathId& pathId)
         : ReplyActorId(replyActorId)
@@ -355,10 +342,10 @@ public:
     {}
 
     void Bootstrap() {
-        Register(new TDeleteRetryingQuery(
+        Register(TDeleteStatisticsQuery::MakeRetry(
             SelfId(),
-            TDeleteRetryingQuery::IRetryPolicy::GetExponentialBackoffPolicy(
-                TDeleteRetryingQuery::Retryable, TDuration::MilliSeconds(10),
+            TQueryRetryActorBase::IRetryPolicy::GetExponentialBackoffPolicy(
+                TQueryRetryActorBase::Retryable, TDuration::MilliSeconds(10),
                 TDuration::MilliSeconds(200), TDuration::Seconds(1),
                 std::numeric_limits<size_t>::max(), TDuration::Seconds(1)),
             Database, PathId

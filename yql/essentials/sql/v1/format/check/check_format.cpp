@@ -22,19 +22,23 @@ namespace NSQLFormat {
 
 bool ValidateAST(
     const TString& original,
+    TMaybe<const NYql::TAstNode*> originalRes,
     const TString& formatted,
-    NSQLTranslation::TTranslationSettings settings,
+    const NSQLTranslation::TTranslationSettings& settings,
     const NSQLTranslationV1::TLexers& lexers,
     const NSQLTranslationV1::TParsers& parsers,
     NYql::TIssues& issues)
 {
-    settings.MarkQueryTextAtomWithIgnoredContent = true;
+    NYql::TAstParseResult originalResHolder;
+    if (!originalRes.Defined()) {
+        originalResHolder = NSQLTranslationV1::SqlToYql(lexers, parsers, original, settings);
+        originalRes = originalResHolder.Root;
+    }
 
-    auto originalRes = NSQLTranslationV1::SqlToYql(lexers, parsers, original, settings);
-    auto formattedRes = NSQLTranslationV1::SqlToYql(lexers, parsers, formatted, settings);
+    const NYql::TAstNode* expectedYQLs = *originalRes;
 
+    NYql::TAstParseResult formattedRes = NSQLTranslationV1::SqlToYql(lexers, parsers, formatted, settings);
     const NYql::TAstNode* formattedYQLs = formattedRes.Root;
-    const NYql::TAstNode* expectedYQLs = originalRes.Root;
 
     const bool formattedIsOk = static_cast<bool>(formattedYQLs);
     const bool expectedIsOk = static_cast<bool>(expectedYQLs);
@@ -112,15 +116,14 @@ bool ValidateConvergence(
 
 TMaybe<TString> CheckedFormat(
     const TString& query,
-    const NSQLTranslation::TTranslationSettings& settings,
+    TMaybe<const NYql::TAstNode*> ast,
+    NSQLTranslation::TTranslationSettings settings,
     NYql::TIssues& issues,
     EConvergenceRequirement convergence)
 {
-    if (NSQLTranslation::TTranslationSettings effective;
-        !NSQLTranslation::ParseTranslationSettings(query, effective, issues))
-    {
+    if (!NSQLTranslation::ParseTranslationSettings(query, settings, issues)) {
         return Nothing();
-    } else if (effective.PgParser) {
+    } else if (settings.PgParser) {
         return query;
     }
 
@@ -141,7 +144,7 @@ TMaybe<TString> CheckedFormat(
         return Nothing();
     }
 
-    if (!ValidateAST(query, formatted, settings, lexers, parsers, issues)) {
+    if (!ValidateAST(query, ast, formatted, settings, lexers, parsers, issues)) {
         return Nothing();
     }
 

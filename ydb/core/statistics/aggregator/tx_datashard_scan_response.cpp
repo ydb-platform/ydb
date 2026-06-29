@@ -2,8 +2,6 @@
 
 #include <ydb/core/tx/datashard/datashard.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
-
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxDatashardScanResponse : public TTxBase {
@@ -18,8 +16,7 @@ struct TStatisticsAggregator::TTxDatashardScanResponse : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_SCAN_RESPONSE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("TTxDatashardScanResponse::Execute",
-            {"tabletId", Self->TabletID()});
+        SA_LOG_D("[" << Self->TabletID() << "] TTxDatashardScanResponse::Execute");
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -69,8 +66,7 @@ struct TStatisticsAggregator::TTxDatashardScanResponse : public TTxBase {
     }
 
     void Complete(const TActorContext&) override {
-        YDB_LOG_DEBUG("TTxDatashardScanResponse::Complete",
-            {"tabletId", Self->TabletID()});
+        SA_LOG_D("[" << Self->TabletID() << "] TTxDatashardScanResponse::Complete");
 
         if (IsCorrectShardId && !Self->DatashardRanges.empty()) {
             Self->DatashardRanges.pop_front();

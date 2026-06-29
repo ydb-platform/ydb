@@ -227,10 +227,21 @@ namespace NKikimr::NBlobDepot {
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsOk;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsError;
         NMonitoring::TDynamicCounters::TCounterPtr S3GetsSlowDown;
+        NMonitoring::TDynamicCounters::TCounterPtr S3GetsInFlightCounter;
+        NMonitoring::TDynamicCounters::TCounterPtr S3GetsMaxInFlightCounter;
+        NMonitoring::TDynamicCounters::TCounterPtr S3GetsPendingQueueSizeCounter;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutBytesOk;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsOk;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsError;
         NMonitoring::TDynamicCounters::TCounterPtr S3PutsSlowDown;
+        NMonitoring::TDynamicCounters::TCounterPtr S3PutsInFlightCounter;
+
+        NMonitoring::TDynamicCounterPtr S3Counters;
+        THashMap<std::pair<TString, int>, NMonitoring::TDynamicCounters::TCounterPtr> S3HttpErrorCounters;
+
+        NMonitoring::TDynamicCounters::TCounterPtr AllocateIdFailures;
+        NMonitoring::TDynamicCounters::TCounterPtr PendingEventQueueOverflows;
+        NMonitoring::TDynamicCounters::TCounterPtr PendingEventQueueTimeouts;
 
         enum class EMode {
             None,
@@ -647,6 +658,7 @@ namespace NKikimr::NBlobDepot {
         ui32 CurrentMaxS3GetsInFlight = MaxS3GetsInFlight;
         ui32 ConsecutiveSuccessfulGetBatches = 0;
         ui32 S3GetsInFlight = 0;
+        ui32 S3PutsInFlight = 0;
         std::deque<TPendingS3Read> PendingS3Reads;
 
         void IssueOrEnqueueS3Read(TPendingS3Read&& read);
@@ -655,6 +667,8 @@ namespace NKikimr::NBlobDepot {
         void OnS3GetCompleted(bool success, ui64 bytes);
         void RunPendingS3ReadsIfPossible();
         void HandleS3GetThrottleWakeup();
+
+        void IncS3HttpErrorCounter(const TString& operation, int httpCode);
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
         // Metrics
@@ -666,8 +680,5 @@ namespace NKikimr::NBlobDepot {
 
         void HandlePushMetrics();
     };
-
-#define BDEV_QUERY(MARKER, TEXT, ...) BDEV(MARKER, TEXT, (VG, Agent.VirtualGroupId), (BDT, Agent.TabletId), \
-                                      (G, Agent.BlobDepotGeneration), (Q, QueryId), __VA_ARGS__)
 
 } // NKikimr::NBlobDepot

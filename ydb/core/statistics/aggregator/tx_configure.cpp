@@ -2,8 +2,6 @@
 
 #include <ydb/core/tx/tx.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
-
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxConfigure : public TTxBase {
@@ -19,9 +17,8 @@ struct TStatisticsAggregator::TTxConfigure : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_CONFIGURE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        YDB_LOG_DEBUG("TTxConfigure::Execute",
-            {"tabletId", Self->TabletID()},
-            {"database", Record.GetDatabase()});
+        SA_LOG_D("[" << Self->TabletID() << "] TTxConfigure::Execute: "
+            << "database# " << Record.GetDatabase());
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -36,8 +33,7 @@ struct TStatisticsAggregator::TTxConfigure : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        YDB_LOG_DEBUG("TTxConfigure::Complete",
-            {"tabletId", Self->TabletID()});
+        SA_LOG_D("[" << Self->TabletID() << "] TTxConfigure::Complete");
 
         ctx.Send(Sender, new TEvSubDomain::TEvConfigureStatus(
             NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, Self->TabletID()));

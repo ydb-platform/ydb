@@ -4,10 +4,13 @@
 
 #include <ydb/core/protos/statistics.pb.h>
 #include <ydb/core/protos/counters_statistics_aggregator.pb.h>
+#include <ydb/core/protos/analyze_operation.pb.h>
+#include <ydb/public/api/protos/ydb_table.pb.h>
 
 #include <ydb/core/base/hive.h>
 #include <ydb/core/base/tablet_pipe.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/statistics/common.h>
 #include <ydb/core/statistics/events.h>
 
 #include <ydb/core/cms/console/configs_dispatcher.h>
@@ -25,6 +28,12 @@
 #include <random>
 
 namespace NKikimr::NStat {
+
+inline bool IsTerminalAnalyzeState(Ydb::Table::AnalyzeState::State state) {
+    return state == Ydb::Table::AnalyzeState::STATE_DONE
+        || state == Ydb::Table::AnalyzeState::STATE_CANCELLED
+        || state == Ydb::Table::AnalyzeState::STATE_FAILED;
+}
 
 class TStatisticsAggregator : public TActor<TStatisticsAggregator>, public NTabletFlatExecutor::TTabletExecutedFlat {
 public:
@@ -58,6 +67,10 @@ private:
     struct TTxAggregateStatisticsResponse;
     struct TTxResponseTabletDistribution;
     struct TTxAckTimeout;
+    struct TTxAnalyzeOpList;
+    struct TTxAnalyzeOpGet;
+    struct TTxAnalyzeOpCancel;
+    struct TTxAnalyzeOpForget;
 
     struct TEvPrivate {
         enum EEv {
@@ -153,6 +166,11 @@ private:
     void Handle(TEvPrivate::TEvAnalyzeDeliveryProblem::TPtr& ev);
     void Handle(TEvPrivate::TEvAnalyzeDeadline::TPtr& ev);
     void Handle(TEvStatistics::TEvAnalyzeCancel::TPtr& ev);
+    void Handle(TEvStatistics::TEvAnalyzeOpListRequest::TPtr& ev);
+    void Handle(TEvStatistics::TEvAnalyzeOpGetRequest::TPtr& ev);
+    void Handle(TEvStatistics::TEvAnalyzeOpCancelRequest::TPtr& ev);
+    void Handle(TEvStatistics::TEvAnalyzeOpForgetRequest::TPtr& ev);
+    void Handle(TEvStatistics::TEvAnalyzeActorProgress::TPtr& ev);
 
     void PassAway() final;
 
@@ -176,7 +194,10 @@ private:
     void ScheduleNextAnalyze(NIceDb::TNiceDb& db, const TActorContext& ctx);
     void ScheduleNextBackgroundTraversal(NIceDb::TNiceDb& db);
     void StartTraversal(NIceDb::TNiceDb& db);
-    void FinishTraversal(NIceDb::TNiceDb& db, bool finishAllForceTraversalTables);
+    void FinishTraversal(
+        NIceDb::TNiceDb& db,
+        std::optional<Ydb::Table::AnalyzeState::State> forceTerminalState,
+        NYql::TIssues issues = {});
 
     void ReportBaseStatisticsCounters();
 
@@ -184,6 +205,8 @@ private:
     std::optional<bool> IsColumnTable(const TPathId& pathId) const;
 
     TString LastTraversalWasForceString() const;
+
+    static constexpr TDuration AnalyzeOpHistoryRetention = TDuration::Days(7);
 
     STFUNC(StateInit) {
         StateInitImpl(ev, SelfId());
@@ -228,11 +251,16 @@ private:
             hFunc(TEvPrivate::TEvAnalyzeDeliveryProblem, Handle);
             hFunc(TEvPrivate::TEvAnalyzeDeadline, Handle);
             hFunc(TEvStatistics::TEvAnalyzeCancel, Handle);
+            hFunc(TEvStatistics::TEvAnalyzeOpListRequest, Handle);
+            hFunc(TEvStatistics::TEvAnalyzeOpGetRequest, Handle);
+            hFunc(TEvStatistics::TEvAnalyzeOpCancelRequest, Handle);
+            hFunc(TEvStatistics::TEvAnalyzeOpForgetRequest, Handle);
+            hFunc(TEvStatistics::TEvAnalyzeActorProgress, Handle);
 
             default:
                 if (!HandleDefaultEvents(ev, SelfId())) {
-                    YDB_LOG_CRIT_CTX_COMP(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS, "TStatisticsAggregator StateWork unexpected event 0x%08x",
-                        {"eventType", ev->GetTypeRewrite()});
+                    LOG_CRIT(TlsActivationContext->AsActorContext(), NKikimrServices::STATISTICS,
+                        "TStatisticsAggregator StateWork unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
                 }
         }
     }
@@ -396,6 +424,9 @@ private: // stored in local db
         TPathId PathId;
         TVector<ui32> ColumnTags;
         std::vector<TAnalyzedShard> AnalyzedShards;
+        TString Path;            // full table path, persisted in ForceTraversalTables
+        ui32 ShardsTotal = 0;   // set by TEvAnalyzeActorProgress; 1 for row tables
+        ui32 ShardsDone  = 0;   // incremented per scan completion (current batch)
 
         enum class EStatus : ui8 {
             None,
@@ -414,8 +445,15 @@ private: // stored in local db
         std::vector<TForceTraversalTable> Tables;
         TString Types;
         TActorId ReplyToActorId;
-        bool RequestingActorReattached = false; // True if the requesting actor reached this tablet instance
+        bool RequestingActorReattached = false;
         TInstant CreatedAt;
+        // Terminal state (STATE_UNSPECIFIED means non-terminal; live state is derived at read time)
+        Ydb::Table::AnalyzeState::State State = Ydb::Table::AnalyzeState::STATE_UNSPECIFIED;
+        TInstant EndTime;
+        // Issues attached to a terminal operation (cancellation reason, deadline message, scan errors).
+        // In-memory only; lost on tablet restart (acceptable: the original requester already received
+        // the issues via TEvAnalyzeResponse).
+        NYql::TIssues Issues;
     };
     std::list<TForceTraversalOperation> ForceTraversals;
 
@@ -424,9 +462,45 @@ private:
     TForceTraversalOperation* ForceTraversalOperation(const TString& operationId);
     void DeleteForceTraversalOperation(const TString& operationId, NIceDb::TNiceDb& db);
 
+    // ForceTraversals now retains terminal entries as 7-day history; the "INFLIGHT"
+    // counters must exclude them so monitoring/alerts based on those counters remain
+    // accurate.
+    size_t InflightForceTraversalCount() const;
+    void RecalcForceTraversalsInflightSizeCounter();
+    void RecalcForceTraversalInflightMaxTimeCounter(TInstant now);
+
     TForceTraversalTable* ForceTraversalTable(const TString& operationId, const TPathId& pathId);
     TForceTraversalTable* CurrentForceTraversalTable();
     void UpdateForceTraversalTableStatus(const TForceTraversalTable::EStatus status, const TString& operationId, TStatisticsAggregator::TForceTraversalTable& table, NIceDb::TNiceDb& db);
+
+    // Mark a force-traversal operation as terminal (DONE/CANCELLED).
+    // Persists State and EndTime, does NOT remove from ForceTraversals.
+    // Idempotent: if the operation is already terminal, returns immediately without overwriting
+    // — protects against races (e.g., deadline marks CANCELLED, then a late AnalyzeActor result
+    // tries to mark DONE for the same op).
+    void MarkForceTraversalOperationFinished(
+        const TString& operationId,
+        Ydb::Table::AnalyzeState::State state,
+        TInstant endTime,
+        NIceDb::TNiceDb& db,
+        NYql::TIssues issues = {});
+
+    // Populate TAnalyzeOperation proto from in-memory TForceTraversalOperation.
+    void FillAnalyzeOperationProto(
+        const TForceTraversalOperation& op,
+        NKikimrAnalyzeOp::TAnalyzeOperation& proto) const;
+
+    // Build and send an UNSUPPORTED response for a long-running ANALYZE request
+    // when EnableAnalyzeLongRunningOperation is off.
+    template<typename TResponse>
+    void SendAnalyzeLongRunningOpDisabled(const TActorId& recipient, ui64 cookie) {
+        auto response = MakeHolder<TResponse>();
+        response->Record.SetStatus(Ydb::StatusIds::UNSUPPORTED);
+        auto& issue = *response->Record.AddIssues();
+        issue.set_severity(NYql::TSeverityIds::S_ERROR);
+        issue.set_message("ANALYZE long-running operation is disabled");
+        Send(recipient, response.Release(), 0, cookie);
+    }
 };
 
 } // NKikimr::NStat

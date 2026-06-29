@@ -697,7 +697,7 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
             PRIMARY KEY(id)
         ) PARTITION BY HASH (`id`) 
         WITH ( STORE = COLUMN );
-        ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=min_max_ts, TYPE=MIN_MAX, FEATURES=`{"inherit_portion_storage": false, "column_name": "ts"}`);
+        ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` ADD INDEX `min_max_ts` LOCAL USING min_max ON(`ts`);
         )").GetValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(createStatus.GetStatus(), NYdb::EStatus::SUCCESS, createStatus.GetIssues().ToString());
 

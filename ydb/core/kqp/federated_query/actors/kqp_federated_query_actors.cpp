@@ -858,12 +858,12 @@ private:
                                               "DescribeResourceId: SelfId=" << selfId << " key=" << k << " value=" << v);
                                       if (k == "cloud_id") {
                                           LOG_DEBUG_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " Resolved ResourceId=" << v);
-                                          state->Promise.SetValue(TString{v});
+                                          state->Promise.SetValue(TEvDescribeResourceIdResponse::TDescription(TString(v)));
                                           return;
                                       }
                                   }
                                   LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " cloud_id not found");
-                                  state->Promise.SetValue(TString(""));
+                                  state->Promise.SetValue(TEvDescribeResourceIdResponse::TDescription(""));
                               } catch(const std::exception& ex) {
                                   LOG_WARN_S(*actorSystem, NKikimrServices::KQP_GATEWAY, "DescribeResourceId: SelfId=" << selfId << " got exception: " << ex.what());
                                   state->Promise.SetException(std::current_exception());

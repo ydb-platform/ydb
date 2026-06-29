@@ -628,12 +628,9 @@ Y_UNIT_TEST_SUITE(ConfigGRPCServiceAuth) {
 
     template <class TServer>
     void ConfigureAuth(TServer& server, const TVector<TString>& adminSids, bool enableDatabaseAdmin) {
-        auto* runtime = server.GetRuntime();
-        for (ui32 i = 0; i < runtime->GetNodeCount(); ++i) {
-            auto& appData = runtime->GetAppData(i);
-            appData.AdministrationAllowedSIDs = adminSids;
-            appData.FeatureFlags.SetEnableDatabaseAdmin(enableDatabaseAdmin);
-        }
+        auto& appData = server.GetRuntime()->GetAppData(0);
+        appData.AdministrationAllowedSIDs = adminSids;
+        appData.FeatureFlags.SetEnableDatabaseAdmin(enableDatabaseAdmin);
     }
 
     template <class TServer>
@@ -771,86 +768,77 @@ config:
     }
 
     Y_UNIT_TEST(AnonymousClusterConfigAllowedWhenAdminSidsEmpty) {
-        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
         TServerWithAuth server;
-        ConfigureAuth(server, {}, false);
+        // empty AdministrationAllowedSIDs, so there is no admin restriction and everyone is a cluster admin
+        ConfigureAuth(server, /*adminSids*/ {}, /*enableDatabaseAdmin*/ false);
         CheckClusterConfigAccess(server.GetChannel(), std::nullopt, /*allowed*/ true);
     }
 
     Y_UNIT_TEST(UserClusterConfigAllowedWhenAdminSidsEmpty) {
-        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
         TServerWithAuth server;
-        ConfigureAuth(server, {}, false);
+        // empty AdministrationAllowedSIDs, so there is no admin restriction and everyone is a cluster admin
+        ConfigureAuth(server, /*adminSids*/ {}, /*enableDatabaseAdmin*/ false);
         CheckClusterConfigAccess(server.GetChannel(), "user@builtin", /*allowed*/ true);
     }
 
     Y_UNIT_TEST(AnonymousClusterConfigDeniedWhenAdminSidsNotEmpty) {
-        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
         TServerWithAuth server;
-        ConfigureAuth(server, {"root@builtin"}, false);
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ false);
         CheckClusterConfigAccess(server.GetChannel(), std::nullopt, /*allowed*/ false);
     }
 
     Y_UNIT_TEST(UserClusterConfigDeniedWhenNotInAdminSids) {
-        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
         TServerWithAuth server;
-        ConfigureAuth(server, {"root@builtin"}, false);
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ false);
         CheckClusterConfigAccess(server.GetChannel(), "user@builtin", /*allowed*/ false);
     }
 
     Y_UNIT_TEST(UserClusterConfigAllowedWhenInAdminSids) {
-        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
         TServerWithAuth server;
-        ConfigureAuth(server, {"user@builtin"}, false);
+        ConfigureAuth(server, /*adminSids*/ {"user@builtin"}, /*enableDatabaseAdmin*/ false);
         CheckClusterConfigAccess(server.GetChannel(), "user@builtin", /*allowed*/ true);
     }
 
     Y_UNIT_TEST(DatabaseConfigDeniedForOwnerWhenDatabaseAdminDisabled) {
-        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
         TServerWithAuthDynamicPools server;
         const TString database = CreateDatabaseWithOwner(server, "db_owner_user", "user@builtin");
-        ConfigureAuth(server, {"root@builtin"}, /*enableDatabaseAdmin*/ false);
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ false);
         CheckDatabaseConfigAccess(server.GetChannel(), "user@builtin", database, /*allowed*/ false,
             NOT_CLUSTER_ADMIN_MSG);
     }
 
     Y_UNIT_TEST(DatabaseConfigAllowedForOwnerWhenDatabaseAdminEnabled) {
-        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
         TServerWithAuthDynamicPools server;
         const TString database = CreateDatabaseWithOwner(server, "db_owner_user", "user@builtin");
-        ConfigureAuth(server, {"root@builtin"}, /*enableDatabaseAdmin*/ true);
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ true);
         CheckDatabaseConfigAccess(server.GetChannel(), "user@builtin", database, /*allowed*/ true);
     }
 
     Y_UNIT_TEST(DatabaseConfigDeniedForNonOwnerWhenDatabaseAdminDisabled) {
-        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
         TServerWithAuthDynamicPools server;
         const TString database = CreateDatabaseWithOwner(server, "db_owner_root", "root@builtin");
-        ConfigureAuth(server, {"root@builtin"}, /*enableDatabaseAdmin*/ false);
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ false);
         CheckDatabaseConfigAccess(server.GetChannel(), "user@builtin", database, /*allowed*/ false, NOT_CLUSTER_ADMIN_MSG);
     }
 
     Y_UNIT_TEST(DatabaseConfigDeniedForNonOwnerWhenDatabaseAdminEnabled) {
-        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
         TServerWithAuthDynamicPools server;
         const TString database = CreateDatabaseWithOwner(server, "db_owner_root", "root@builtin");
-        ConfigureAuth(server, {"root@builtin"}, /*enableDatabaseAdmin*/ true);
+        ConfigureAuth(server, /*adminSids*/ {"root@builtin"}, /*enableDatabaseAdmin*/ true);
         CheckDatabaseConfigAccess(server.GetChannel(), "user@builtin", database, /*allowed*/ false, NOT_DATABASE_ADMIN_MSG);
     }
 
     Y_UNIT_TEST(DatabaseConfigAllowedForClusterAdminWhenDatabaseAdminDisabled) {
-        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
         TServerWithAuthDynamicPools server;
         const TString database = CreateDatabaseWithOwner(server, "db_owner_root", "root@builtin");
-        ConfigureAuth(server, {"user@builtin"}, /*enableDatabaseAdmin*/ false);
+        ConfigureAuth(server, /*adminSids*/ {"user@builtin"}, /*enableDatabaseAdmin*/ false);
         CheckDatabaseConfigAccess(server.GetChannel(), "user@builtin", database, /*allowed*/ true);
     }
 
     Y_UNIT_TEST(DatabaseConfigAllowedForClusterAdminWhenDatabaseAdminEnabled) {
-        NKikimr::TTestActorRuntimeBase::ResetFirstNodeId();
         TServerWithAuthDynamicPools server;
         const TString database = CreateDatabaseWithOwner(server, "db_owner_root", "root@builtin");
-        ConfigureAuth(server, {"user@builtin"}, /*enableDatabaseAdmin*/ true);
+        ConfigureAuth(server, /*adminSids*/ {"user@builtin"}, /*enableDatabaseAdmin*/ true);
         CheckDatabaseConfigAccess(server.GetChannel(), "user@builtin", database, /*allowed*/ true);
     }
 

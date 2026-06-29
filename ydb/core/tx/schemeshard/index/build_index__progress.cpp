@@ -307,6 +307,10 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
 
     auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
     propose->Record.SetFailOnExist(true);
+    if (AppData()->AlwaysSetSystemOwner) {
+        propose->Record.SetOwner(BUILTIN_ACL_BASIC_OWNER);
+    }
+
     NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
     modifyScheme.SetInternal(true);
 

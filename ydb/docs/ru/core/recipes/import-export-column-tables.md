@@ -125,7 +125,11 @@ SELECT * FROM `external/backup/lineitem_sql`;
 
 ## Экспорт и импорт с помощью Apache Spark™ {#spark}
 
+<<<<<<< HEAD
 Использование **[коннектора](../integrations/ingestion/spark.md)** {{ ydb-short-name }} для Apache Spark™ является гибким и масштабируемым решением для экспорта и импорта больших объемов данных.
+=======
+Использование [коннектора](../integrations/query-engines/spark.md) {{ ydb-short-name }} для Apache Spark™ является гибким и масштабируемым решением для экспорта и импорта больших объемов данных.
+>>>>>>> 33b897a6107 (DOCSUP-132181: [YDBDOCS-2325] Data ingestion и Data migration исправления меню. [Tech Doc] Рефакторинг  (#44060))
 
 ### Предварительные требования
 

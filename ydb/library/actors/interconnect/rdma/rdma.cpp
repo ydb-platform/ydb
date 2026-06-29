@@ -48,10 +48,11 @@ public:
     virtual ~TSimpleCq() {
         // For simple polling mode CQ, we just can destroy ibv CQ without any issues just aftre joining to the thread
         Cont.store(false, std::memory_order_relaxed);
-        if (Thread.Running())
+        if (Thread.Running()) {
             Thread.Join();
+        }
 
-        DestroyCq();
+        Y_UNUSED(DestroyCq());
     }
 };
 
@@ -139,22 +140,23 @@ public:
         // 3. Send signal to the thread to interrupt waiting on the read syscall ()
         // NOTE: There is a tiny chanse the signal was send before thread blocked on the read syscall
         // so in this case repeat send signal until cq thread finished
-        while (!Finished.load(std::memory_order_relaxed)) {
-            Awake();
-            if (Finished.load(std::memory_order_relaxed)) {
-                break;
+        if (Thread.Running()) {
+            while (!Finished.load(std::memory_order_relaxed)) {
+                Awake();
+                if (Finished.load(std::memory_order_relaxed)) {
+                    break;
+                }
+                ThreadYield();
             }
-            ThreadYield();
+
+            // 4. As usual, join and destroy CQ
+            Thread.Join();
         }
 
-        // 4. As usual, join and destroy CQ
-        if (Thread.Running())
-            Thread.Join();
-
-        DestroyCq();
+        const int destroyErr = DestroyCq();
 
         // 5. Destroy completion event channel
-        if (ibv_destroy_comp_channel(CompChannel)) {
+        if (!destroyErr && CompChannel && ibv_destroy_comp_channel(CompChannel)) {
             // https://www.rdmamojo.com/2012/10/26/ibv_destroy_comp_channel
             Cerr << "Unable to destroy completion event channel, errno: " << errno << Endl;
             // it should not happen, but if it happens it is not a fatal error for production
@@ -162,7 +164,7 @@ public:
         }
     }
 private:
-    ibv_comp_channel* CompChannel;
+    ibv_comp_channel* CompChannel = nullptr;
 };
 
 ICq::TPtr CreateSimpleCq(const TRdmaCtx* ctx, NActors::TActorSystem* as, TRdmaRuntimeParams runtimeParams, std::shared_ptr<IMemPool> memPool, NMonitoring::TDynamicCounters* counter) noexcept {

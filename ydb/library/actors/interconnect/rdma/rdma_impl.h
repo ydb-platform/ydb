@@ -404,7 +404,10 @@ public:
             return errno;
         }
         if (params.MaxSrqWr > 0) {
-            if (auto err = Srq.Init(ctx, params, std::move(memPool))) {
+            if (const int err = Srq.Init(ctx, params, std::move(memPool))) {
+                if (const int destroyErr = DestroyCq()) {
+                    return destroyErr;
+                }
                 return err;
             }
         }
@@ -419,13 +422,19 @@ public:
         SpinLockPause();
     }
 
-    void DestroyCq () noexcept {
+    int DestroyCq() noexcept {
         if (const int err = Srq.Destroy()) {
-            Y_UNUSED(err);
+            return err;
         }
         if (Cq) {
-            ibv_destroy_cq(Cq);
+            if (const int err = ibv_destroy_cq(Cq)) {
+                Cerr << "Unable to destroy CQ, err: " << err << ", errno: " << errno << Endl;
+                Y_DEBUG_ABORT_UNLESS(false);
+                return err;
+            }
+            Cq = nullptr;
         }
+        return 0;
     }
 
 protected:

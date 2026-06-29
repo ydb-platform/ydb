@@ -7920,8 +7920,6 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
 
     Y_UNIT_TEST(MessageMetadata) {
         auto server = SetupLbFederationServerWithTopic("topic1", 1, {"user", "debug"});
-        // Topic is created at /Root/LbAccount/account/topic1 and addressed by its
-        // federation short name (no rt3-dc naming).
         const TString topicPath = "account/topic1";
 
         NYdb::TDriverConfig driverCfg;

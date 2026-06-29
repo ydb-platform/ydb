@@ -120,7 +120,7 @@ jobs:
               CURRENT_TSC_ARGS="$CURRENT_TSC_ARGS --current-table-service-config $opt"
             fi
           done
-          ./ydb/tests/stress/compare_index_performance.sh \
+          python3 ./ydb/tests/stress/compare_index_performance.py \
             --duration "$INPUT_DURATION" \
             --build-preset "$INPUT_BUILD_PRESET" \
             --ref "$INPUT_REF" \

@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 import requests
 
-
 requests.packages.urllib3.disable_warnings()
 
 DATABASE = '/Root'
@@ -38,7 +37,7 @@ def test_viewer_config_access_controls(ydb_cluster_with_external_access_controls
     node = ydb_cluster_with_external_access_controls.nodes[1]
     base_url = f'https://{node.host}:{node.mon_port}'
 
-    for ep in ['/viewer/config', '/viewer/json/config', '/viewer/json/sysinfo']:
+    for ep in ['/viewer/config', '/viewer/json/config']:
         _assert_status(base_url, ep, 'database@builtin', 403)
         _assert_not_status(base_url, ep, 'viewer@builtin', 403)
         _assert_not_status(base_url, ep, 'monitoring@builtin', 403)
@@ -56,9 +55,14 @@ def test_viewer_v2_aliases_access_controls(ydb_cluster_with_external_access_cont
         _assert_not_status(base_url, ep, 'monitoring@builtin', 403)
         _assert_not_status(base_url, ep, 'root@builtin', 403)
 
-    for ep in ['/viewer/v2/json/sysinfo', '/viewer/v2/json/sysinfo' + db_qs]:
-        _assert_status(base_url, ep, 'database@builtin', 403)
+    for ep in ['/viewer/sysinfo', '/viewer/json/sysinfo', '/viewer/v2/json/sysinfo']:
+        # no database CGI-param for database_allowed_sids level
+        _assert_status(base_url, ep, 'database@builtin', 400)
+        # with database CGI-param for database_allowed_sids level
+        _assert_not_status(base_url, ep + db_qs, 'database@builtin', 403)
+
         _assert_not_status(base_url, ep, 'viewer@builtin', 403)
+        _assert_not_status(base_url, ep + db_qs, 'viewer@builtin', 403)
         _assert_not_status(base_url, ep, 'monitoring@builtin', 403)
         _assert_not_status(base_url, ep, 'root@builtin', 403)
 

@@ -16,6 +16,7 @@ SRCS(
     part_storepartitionids.cpp
     part_storevolumeconfig.cpp
     part_updatevchunkconfig.cpp
+    part_monitoring.cpp
     partition_direct_actor.cpp
     partition_direct.cpp
     range_translate.cpp
@@ -36,6 +37,7 @@ PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/storage/core
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model
+    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos
     ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport
     ydb/core/nbs/cloud/storage/core/libs/coroutine
@@ -53,6 +55,7 @@ END()
 RECURSE(
     dirty_map
     model
+    mon_page
 )
 
 RECURSE_FOR_TESTS(

@@ -33,12 +33,12 @@ bool TPushRenameThroughJoinSideRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
     }
 
     auto join = CastOperator<TOpJoin>(topMap->GetInput());
-    if (!join->IsSingleConsumer() || !NMapRules::CanRenameOutput(join, candidate->From, candidate->To)) {
+    if (!join->IsSingleConsumer()) {
         return false;
     }
 
     const auto selectedInput = SelectJoinInputForRename(join, candidate->From);
-    if (!selectedInput || !NMapRules::CanRenameOutput(selectedInput, candidate->From, candidate->To)) {
+    if (!selectedInput) {
         return false;
     }
 

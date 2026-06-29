@@ -19,7 +19,7 @@ bool TPushRenameIntoReadRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRB
     }
 
     auto read = CastOperator<TOpRead>(topMap->GetInput());
-    if (!read->IsSingleConsumer() || !NMapRules::CanRenameOutput(read, candidate->From, candidate->To)) {
+    if (!read->IsSingleConsumer()) {
         return false;
     }
 

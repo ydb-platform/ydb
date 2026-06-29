@@ -28,8 +28,7 @@ bool TPushRenameThroughPassThroughMapRule::MatchAndApply(TIntrusivePtr<IOperator
     }
 
     auto map = CastOperator<TOpMap>(topMap->GetInput());
-    if (!map->IsSingleConsumer() || !IsPassThroughMap(map, candidate->From) ||
-        !NMapRules::CanRenameOutput(map, candidate->From, candidate->To)) {
+    if (!map->IsSingleConsumer() || !IsPassThroughMap(map, candidate->From)) {
         return false;
     }
 

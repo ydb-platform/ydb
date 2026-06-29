@@ -31,8 +31,7 @@ bool TPushRenameIntoAggregateResultRule::MatchAndApply(TIntrusivePtr<IOperator>&
     }
 
     auto aggregate = CastOperator<TOpAggregate>(topMap->GetInput());
-    if (!aggregate->IsSingleConsumer() || !ProducesAggregateResult(aggregate, candidate->From) ||
-        !NMapRules::CanRenameOutput(aggregate, candidate->From, candidate->To)) {
+    if (!aggregate->IsSingleConsumer() || !ProducesAggregateResult(aggregate, candidate->From)) {
         return false;
     }
 

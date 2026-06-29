@@ -48,16 +48,11 @@ bool TPushRenameThroughAggregateKeyRule::MatchAndApply(TIntrusivePtr<IOperator>&
     }
 
     auto aggregate = CastOperator<TOpAggregate>(topMap->GetInput());
-    if (!aggregate->IsSingleConsumer() || !ProducesAggregateKey(aggregate, candidate->From) ||
-        !NMapRules::CanRenameOutput(aggregate, candidate->From, candidate->To)) {
+    if (!aggregate->IsSingleConsumer() || !ProducesAggregateKey(aggregate, candidate->From)) {
         return false;
     }
 
     const auto oldInput = aggregate->GetInput();
-    if (!NMapRules::CanRenameOutput(oldInput, candidate->From, candidate->To)) {
-        return false;
-    }
-
     const TVector<TMapElement> pushedElements{NMapRules::MakeRenameElement(*candidate, topMap)};
     auto pushedMap = MakeIntrusive<TOpMap>(oldInput, topMap->Pos, pushedElements);
     aggregate->SetInput(pushedMap);

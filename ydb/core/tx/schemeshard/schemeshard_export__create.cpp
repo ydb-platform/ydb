@@ -1205,9 +1205,11 @@ private:
                     }
 
                     if (exportInfo->State == EState::CopyTables && isMultipleMods) {
+                        bool sourcePathMissing = false;
                         for (const auto& item : exportInfo->Items) {
                             if (!Self->PathsById.contains(item.SourcePathId)) {
                                 exportInfo->DependencyTxIds.clear();
+                                sourcePathMissing = true;
                                 break;
                             }
 
@@ -1223,6 +1225,10 @@ private:
 
                         if (!exportInfo->DependencyTxIds.empty()) {
                             return;
+                        }
+
+                        if (!sourcePathMissing) {
+                            return AllocateTxId(*exportInfo);
                         }
                     }
 

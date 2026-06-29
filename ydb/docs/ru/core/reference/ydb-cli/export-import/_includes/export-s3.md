@@ -47,7 +47,7 @@
 
 ### Дополнительные параметры {#aux}
 
-{% include [export-additional-params.md](./export-additional-params.md) %}
+{% include [export-additional-params.md](export-additional-params.md) %}
 
 ## Выполнение выгрузки {#exec}
 

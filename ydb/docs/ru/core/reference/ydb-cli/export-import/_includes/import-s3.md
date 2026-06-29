@@ -45,9 +45,9 @@
 
 ### Дополнительные параметры {#aux}
 
-{% include [import-additional-params.md](./import-additional-params.md) %}
+{% include [import-additional-params.md](import-additional-params.md) %}
 
-`--list`: Перечислить объекты в существующей выгрузке.
+- `--list`: Перечислить объекты в существующей выгрузке.
 
 ## Выполнение загрузки {#exec}
 

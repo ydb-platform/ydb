@@ -173,11 +173,13 @@ TSmallBlobsQuotas TSubDomainInfo::GetSmallBlobsQuotas() const {
 
     const auto& config = AppData()->ColumnShardConfig.GetSmallBlobsQuota();
 
+    const double softRatio = std::clamp(config.GetSoftRatio(), 0.0, 0.999);
+
     TSmallBlobsQuotas quotas;
     quotas.VolumeHardQuota = static_cast<ui64>(storageUnits * config.GetVolumeBytesPer10TiB());
     quotas.CountHardQuota = static_cast<ui64>(storageUnits * config.GetCountPer10TiB());
-    quotas.VolumeSoftQuota = static_cast<ui64>(quotas.VolumeHardQuota * config.GetSoftRatio());
-    quotas.CountSoftQuota = static_cast<ui64>(quotas.CountHardQuota * config.GetSoftRatio());
+    quotas.VolumeSoftQuota = static_cast<ui64>(quotas.VolumeHardQuota * softRatio);
+    quotas.CountSoftQuota = static_cast<ui64>(quotas.CountHardQuota * softRatio);
     return quotas;
 }
 
@@ -342,11 +344,11 @@ void TSubDomainInfo::CountDiskSpaceQuotas(IQuotaCounters* counters, const TDiskS
 
 void TSubDomainInfo::AggrSmallBlobsUsage(IQuotaCounters* counters, i64 bytesDelta, i64 countDelta) {
     if (bytesDelta != 0) {
-        DiskSpaceUsage.Tables.SmallBlobsBytes += bytesDelta;
+        DiskSpaceUsage.Tables.SmallBlobsBytes = std::max<i64>(0, static_cast<i64>(DiskSpaceUsage.Tables.SmallBlobsBytes) + bytesDelta);
         counters->ChangeSmallBlobsVolumeBytes(bytesDelta);
     }
     if (countDelta != 0) {
-        DiskSpaceUsage.Tables.SmallBlobsCount += countDelta;
+        DiskSpaceUsage.Tables.SmallBlobsCount = std::max<i64>(0, static_cast<i64>(DiskSpaceUsage.Tables.SmallBlobsCount) + countDelta);
         counters->ChangeSmallBlobsCount(countDelta);
     }
 }
@@ -2294,8 +2296,10 @@ void TTableAggregatedStats::UpdateShardStats(TDiskSpaceUsageDelta* diskSpaceUsag
         Aggregated.IndexSize += delta.IndexSize;
     }
 
-    Aggregated.SmallBlobsBytes += (static_cast<i64>(newStats.SmallBlobsBytes) - static_cast<i64>(oldStats.SmallBlobsBytes));
-    Aggregated.SmallBlobsCount += (static_cast<i64>(newStats.SmallBlobsCount) - static_cast<i64>(oldStats.SmallBlobsCount));
+    Aggregated.SmallBlobsBytes = std::max<i64>(
+        0, static_cast<i64>(Aggregated.SmallBlobsBytes) + (static_cast<i64>(newStats.SmallBlobsBytes) - static_cast<i64>(oldStats.SmallBlobsBytes)));
+    Aggregated.SmallBlobsCount = std::max<i64>(
+        0, static_cast<i64>(Aggregated.SmallBlobsCount) + (static_cast<i64>(newStats.SmallBlobsCount) - static_cast<i64>(oldStats.SmallBlobsCount)));
 
     // second, aggregation of space separated by storage pool kinds
     for (const auto& [poolKind, newStoragePoolStats] : newStats.StoragePoolsStats) {

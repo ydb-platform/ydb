@@ -65,7 +65,8 @@ TWritePortionInfoWithBlobsConstructor TWritePortionInfoWithBlobsConstructor::Bui
             TIndexChunk(i->GetEntityId(), i->GetChunkIdxVerified(), i->GetRecordsCountVerified(), i->GetRawBytesVerified(), i->GetData()));
     }
 
-    result.GetPortionConstructor().SetBsIndexBlobBytes(bsIndexBlobBytes);
+    AFL_VERIFY(bsIndexBlobBytes <= Max<ui32>());
+    result.GetPortionConstructor().SetBsIndexBlobBytes(static_cast<ui32>(bsIndexBlobBytes));
     return result;
 }
 

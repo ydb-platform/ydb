@@ -382,10 +382,50 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
     CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", checkCount, true, DEBUG_HINT);
     UNIT_ASSERT_C(sawBandNotBlockedGoingUp, "usage never observed inside the soft..hard band while unblocked; " << DEBUG_HINT);
 
+    // The quota calibration above (perPortionBytes -> VolumeBytesPer10TiB and the hard/soft volume quotas) assumes
+    // each identical batch produces a portion of ~perPortionBytes of small blobs. Cross-check that assumption
+    // against what the shard actually reports (volume / count == per-portion volume, independent of which quota is
+    // under test) so that a change in Arrow serialization/encoding fails here with a clear message instead of
+    // silently miscalibrating the test into a hang or premature exit.
+    UNIT_ASSERT_C(reportedSmallBlobsCount > 0, DEBUG_HINT);
+    const ui64 actualPerPortionBytes = reportedSmallBlobsVolume / reportedSmallBlobsCount;
+    UNIT_ASSERT_C(actualPerPortionBytes > perPortionBytes * 0.9 && actualPerPortionBytes < perPortionBytes * 1.1,
+        "per-portion small-blobs volume " << actualPerPortionBytes << " deviates >10% from the hardcoded perPortionBytes "
+            << perPortionBytes << "; update the constant (and the quota calibration); " << DEBUG_HINT);
+
     {   // With the quota exceeded, a further write must be refused. The shard does not reject it outright - it
         // throttles it by holding the request in its write queue (the same way it handles the local
         // BadPortions/compaction overload) and only fails it with OVERLOADED once the request timeout elapses. We
         // pass a short timeout so the blocked write fails fast instead of waiting in the queue indefinitely.
+        std::vector<ui64> writeIds;
+        ++txId;
+        AFL_VERIFY(!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
+            NEvWrite::EModificationType::Upsert, txId, TDuration::Seconds(1)));
+        NTxUT::ProposeCommitFail(runtime, sender, shardId, txId, writeIds, txId);
+    }
+
+    {   // Enforcement is gated by EnableSmallBlobsQuotaEnforcement. With the flag off, the very same write must go
+        // through even though the quota is still exceeded (the shard simply stops consulting the quota). We restore
+        // the flag right after so the rest of the test keeps exercising enforcement.
+        runtime.GetAppData().FeatureFlags.SetEnableSmallBlobsQuotaEnforcement(false);
+        std::vector<ui64> writeIds;
+        ++txId;
+        UNIT_ASSERT_C(NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
+                          NEvWrite::EModificationType::Upsert, txId),
+            "write must be accepted while enforcement is disabled; " << DEBUG_HINT);
+        planStep = NTxUT::ProposeCommit(runtime, sender, shardId, txId, writeIds, txId);
+        NTxUT::PlanCommit(runtime, sender, shardId, planStep, {txId});
+        runtime.GetAppData().FeatureFlags.SetEnableSmallBlobsQuotaEnforcement(true);
+    }
+
+    {   // Persistence across restarts. The "exceeded" flags live in the SubDomains table (SchemeShard) and in the
+        // shard's local state, so neither a SchemeShard nor a ColumnShard restart may silently reset them - writes
+        // must stay blocked. Restart SchemeShard first and confirm it reloaded the persisted flag...
+        GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+        CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", checkCount, true, DEBUG_HINT);
+
+        // ...then restart the ColumnShard and confirm it reloaded its persisted flag and still refuses writes.
+        GracefulRestartTablet(runtime, shardId, sender);
         std::vector<ui64> writeIds;
         ++txId;
         AFL_VERIFY(!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,

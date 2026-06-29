@@ -2356,7 +2356,13 @@ void WriteCommonTablesInfo(NJsonWriter::TBuf& writer, TMap<TString, TTableInfo>&
 
             for (auto& read : table.Reads) {
                 writer.BeginObject();
-                writer.WriteKey("type").WriteString(ToString(read.Type));
+                // DEMO ONLY (DO NOT MERGE): intentional query-replay regression test.
+                // Report Lookup reads as Scan to trigger read_types_mismatch on replay.
+                EPlanTableReadType planReadType = read.Type;
+                if (planReadType == EPlanTableReadType::Lookup) {
+                    planReadType = EPlanTableReadType::Scan;
+                }
+                writer.WriteKey("type").WriteString(ToString(planReadType));
 
                 if (!read.LookupBy.empty()) {
                     writer.WriteKey("lookup_by");

@@ -63,6 +63,12 @@ inputs:
   vars:
     required: false
     default: ''
+  analytics_job_name:
+    required: false
+    default: ''
+  analytics_github_workflow:
+    required: false
+    default: ''
 
 runs:
   using: composite
@@ -124,3 +130,5 @@ runs:
         additional_ya_make_args: ${{ steps.merged_ya.outputs.args }}
         secs: ${{ inputs.secs }}
         vars: ${{ inputs.vars }}
+        analytics_job_name: ${{ inputs.analytics_job_name }}
+        analytics_github_workflow: ${{ inputs.analytics_github_workflow }}

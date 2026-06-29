@@ -440,6 +440,7 @@ ENDIF()
 IF (NOT OPENSOURCE AND OS_LINUX)
     RECURSE(
         bus/ucx
+        rpc/ucx
     )
 
     RECURSE_FOR_TESTS(

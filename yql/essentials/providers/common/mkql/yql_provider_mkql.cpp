@@ -1864,9 +1864,22 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto& rightTypeNode = *node.Child(5);
         const auto& joinLambda = *node.Child(6);
 
+        using TColumnsVec = TVector<std::pair<const ui32, const ui32>>;
+
+        auto buildKeyMap = [&](const TExprNode& keyTypeNode) {
+            const auto keyType = keyTypeNode.GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            const ui32 keySize = keyType->GetKind() == ETypeAnnotationKind::Tuple
+                                     ? keyType->Cast<TTupleExprType>()->GetSize()
+                                     : 1U;
+            TColumnsVec cols(Reserve(keySize));
+            for (ui32 outIdx = 0U; outIdx < keySize; outIdx++) {
+                const auto inIdx = *GetFieldPosition(*inputStructType, TString::Join(YqlListJoinCoreKeyPrefix, ToString(outIdx)));
+                cols.emplace_back(inIdx, outIdx);
+            }
+            return cols;
+        };
         auto buildColumnMap = [&](const TExprNode& structTypeNode, const TStringBuf prefix) {
             const auto& items = structTypeNode.GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()->GetItems();
-            using TColumnsVec = TVector<std::pair<const ui32, const ui32>>;
             TColumnsVec cols(Reserve(items.size()));
             for (ui32 outIdx = 0U; outIdx < items.size(); outIdx++) {
                 const auto inIdx = *GetFieldPosition(*inputStructType, TString::Join(prefix, items[outIdx]->GetName()));
@@ -1879,9 +1892,9 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         const auto leftArgType = ctx.BuildType(leftTypeNode, *leftTypeNode.GetTypeAnn());
         const auto rightArgType = ctx.BuildType(rightTypeNode, *rightTypeNode.GetTypeAnn());
 
-        const auto keyColumns = buildColumnMap(keyTypeNode, "_yql_ljc_key_");
-        const auto leftColumns = buildColumnMap(leftTypeNode, "_yql_ljc_left_input_");
-        const auto rightColumns = buildColumnMap(rightTypeNode, "_yql_ljc_right_input_");
+        const auto keyColumns = buildKeyMap(keyTypeNode);
+        const auto leftColumns = buildColumnMap(leftTypeNode, YqlListJoinCoreLeftInputPrefix);
+        const auto rightColumns = buildColumnMap(rightTypeNode, YqlListJoinCoreRightInputPrefix);
 
         const auto returnType = ctx.BuildType(node, *node.GetTypeAnn());
 

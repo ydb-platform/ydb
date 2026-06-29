@@ -206,4 +206,8 @@ static constexpr TStringBuf YqlCanaryColumnName = "_yql_canary_";
 static constexpr TStringBuf YqlJoinKeyColumnName = "_yql_join_key";
 
 bool IsNoPullColumn(TStringBuf columnName);
+
+static constexpr TStringBuf YqlListJoinCoreKeyPrefix = "_yql_ljc_key_";
+static constexpr TStringBuf YqlListJoinCoreLeftInputPrefix = "_yql_ljc_left_";
+static constexpr TStringBuf YqlListJoinCoreRightInputPrefix = "_yql_ljc_right_";
 }

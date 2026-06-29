@@ -9,6 +9,7 @@
 #include <yql/essentials/core/yql_opt_range.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 #include <yql/essentials/core/yql_opt_window.h>
+#include <yql/essentials/core/yql_sql_combine_expander.h>
 #include <yql/essentials/core/yql_opt_match_recognize.h>
 #include <yql/essentials/core/yql_join.h>
 #include <yql/essentials/core/expr_nodes/yql_expr_nodes.h>
@@ -9424,6 +9425,7 @@ struct TPeepHoleRules {
         {"LMap", &ExpandLMapOrShuffleByKeysAtCommonStage},
         {"OrderedLMap", &ExpandLMapOrShuffleByKeysAtCommonStage},
         {"ShuffleByKeys", &ExpandLMapOrShuffleByKeysAtCommonStage},
+        {"SqlCombine", &ExpandSqlCombine},
     };
 
     const TPeepHoleOptimizerMap SimplifyStageRules = {

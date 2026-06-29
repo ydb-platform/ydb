@@ -5310,12 +5310,12 @@ TRuntimeNode TProgramBuilder::ListJoinCore(TRuntimeNode stream,
                     "Key column is out of bounds of input row");
         MKQL_ENSURE(outColumn == 0U, "Key column has to be 0 for the single key");
     } else {
-        MKQL_ENSURE(keyType->IsStruct(), "Expected Struct as a key type");
-        const auto keyStructType = AS_TYPE(TStructType, keyType);
+        MKQL_ENSURE(keyType->IsTuple(), "Expected Tuple as a key type");
+        const auto keyTupleType = AS_TYPE(TTupleType, keyType);
         for (const auto [inColumn, outColumn] : keyColumns) {
             MKQL_ENSURE(inColumn < inputStructType->GetMembersCount(),
                         "Key column is out of input row bounds");
-            MKQL_ENSURE(outColumn < keyStructType->GetMembersCount(),
+            MKQL_ENSURE(outColumn < keyTupleType->GetElementsCount(),
                         "Key column is out of key structure bounds");
         }
     }

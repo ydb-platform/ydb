@@ -199,15 +199,6 @@ private:
     ///
     template<typename TStore>
     bool TryResolve(const TString& poolId, TStore& store, const TString& resolver) {
-        if (to_lower(poolId) == NResourcePool::REJECT_POOL_ID) {
-            store = TReject{
-                .Code = Ydb::StatusIds::ABORTED,
-                .Message = TStringBuilder() << "Query is rejected, resolved by: " << resolver,
-                .Resolver = resolver
-            };
-            return true;
-        }
-
         auto poolInfo = FindPool(poolId);
 
         if (!poolInfo) {

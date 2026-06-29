@@ -7,6 +7,7 @@ bool TResourcePoolClassifierSnapshot::DoDeserializeFromResultSet(const Ydb::Tabl
     Y_ABORT_UNLESS(rawData.result_sets().size() == 1);
     ParseSnapshotObjects<TResourcePoolClassifierConfig>(rawData.result_sets()[0], [this](TResourcePoolClassifierConfig&& config) {
         ResourcePoolClassifierConfigs[config.GetDatabase()].emplace(config.GetName(), config);
+        ResourcePoolClassifierConfigsByRank[config.GetDatabase()].emplace(config.GetRank(), config);
     });
     return true;
 }

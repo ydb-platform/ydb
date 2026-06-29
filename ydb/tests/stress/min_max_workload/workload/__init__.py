@@ -160,6 +160,7 @@ class MinMaxWorkload:
         self._stop = threading.Event()
         self._rows_inserted = 0
         self._queries_run = 0
+        self._threads = []
 
     def __enter__(self):
         self.driver.wait(timeout=30)
@@ -167,8 +168,11 @@ class MinMaxWorkload:
         return self
 
     def __exit__(self, *_args):
+        self._stop.set()
         self.pool.stop()
         self.driver.stop()
+        for t in self._threads:
+            t.join(timeout=60)
 
     def _setup(self):
         try:
@@ -231,6 +235,8 @@ class MinMaxWorkload:
                 with self._lock:
                     self._rows_inserted += self.batch_size
             except Exception as e:
+                if self._stop.is_set():
+                    break
                 logger.error(f"Insert error (start={start}): {e}")
                 raise
 
@@ -264,19 +270,21 @@ class MinMaxWorkload:
                     self._queries_run += 1
                 logger.info(f"query({query})\n target_id={target_id} max_id={max_id} count={cnt}")
             except Exception as e:
+                if self._stop.is_set():
+                    break
                 logger.error(f"Query({query})\n error (target_id={target_id}): {e}")
                 raise
 
     def run(self):
-        threads = []
+        self._threads = []
         for _ in range(self.insert_threads):
             t = threading.Thread(target=self._insert_loop, daemon=True)
             t.start()
-            threads.append(t)
+            self._threads.append(t)
         for _ in range(self.query_threads):
             t = threading.Thread(target=self._query_loop, daemon=True)
             t.start()
-            threads.append(t)
+            self._threads.append(t)
 
         started_at = time.time()
         while time.time() - started_at < self.duration:
@@ -291,5 +299,3 @@ class MinMaxWorkload:
             time.sleep(30)
 
         self._stop.set()
-        for t in threads:
-            t.join(timeout=60)

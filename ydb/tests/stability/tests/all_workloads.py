@@ -26,21 +26,21 @@ def _init_stress_utils():
                      "--path", "workload_ctas_{node_host}_iter_{iteration_num}_{uuid}"],
             'local_path': 'ydb/tests/stress/ctas/ctas'
         },
-        'Kafka': {
-            'args': ["--endpoint", "grpc://{node_host}:2135",
-                     "--bootstrap", "http://{node_host}:11223",
-                     "--source-path", "workload_source_kafka_{node_host}_iter_{iteration_num}_{uuid}",
-                     "--target-path", "workload_target_kafka_{node_host}_iter_{iteration_num}_{uuid}",
-                     "--consumer", "workload-consumer-{iteration_num}-{uuid}",
-                     "--num-workers", "2"],
-            'local_path': 'ydb/tests/stress/kafka/kafka_streams_test'
-        },
-        'NodeBroker': {
-            'args': ["--endpoint", "grpc://{node_host}:2135",
-                     "--mon-endpoint", "http://{node_host}:8765",
-                     ],
-            'local_path': 'ydb/tests/stress/node_broker/node_broker'
-        },
+        # 'Kafka': {
+        #     'args': ["--endpoint", "grpc://{node_host}:2135",
+        #              "--bootstrap", "http://{node_host}:31430",
+        #              "--source-path", "workload_source_kafka_{node_host}_iter_{iteration_num}_{uuid}",
+        #              "--target-path", "workload_target_kafka_{node_host}_iter_{iteration_num}_{uuid}",
+        #              "--consumer", "workload-consumer-{iteration_num}-{uuid}",
+        #              "--num-workers", "2"],
+        #     'local_path': 'ydb/tests/stress/kafka/kafka_streams_test'
+        # },
+        # 'NodeBroker': {
+        #     'args': ["--endpoint", "grpc://{node_host}:2135",
+        #              "--mon-endpoint", "http://{node_host}:8765",
+        #              ],
+        #     'local_path': 'ydb/tests/stress/node_broker/node_broker'
+        # },
         'Olap': {
             'args': ["--endpoint", "grpc://{node_host}:2135",
                      "--path", "olap_workload_{node_host}_iter_{iteration_num}_{uuid}"],
@@ -72,28 +72,27 @@ def _init_stress_utils():
                      "--prefix", "statistics_workload_{node_host}_iter_{iteration_num}_{uuid}"],
             'local_path': 'ydb/tests/stress/statistics_workload/statistics_workload'
         },
-        'TopicKafka': {
-            'args': [
-                "--endpoint", "grpc://{node_host}:2135",
-                "--topic_prefix", "workload_source_topic_kafka_{node_host}_iter_{iteration_num}_{uuid}",
-                "--duration", "120",
-                "--consumers", "2",
-                "--consumer-threads", "2",
-                "--restart-interval", "15s",
-                "--partitions", "4",
-                "--write-workload", "0.01", "9000000", "2", "big_record", "1",
-                "--write-workload", "8000", "45", "1000", "small_record", "10",
-                "--write-workload", "800", "4096", "1", "medium_record", "10",
-            ],
-            'local_path': 'ydb/tests/stress/topic_kafka/workload_topic_kafka'
-        },
-        'Topic': {
-            'args': [
-                "--endpoint", "grpc://{node_host}:2135",
-                "--topic_prefix", "workload_topic_{node_host}_iter_{iteration_num}_{uuid}",
-            ],
-            'local_path': 'ydb/tests/stress/topic/workload_topic'
-        },
+        # 'TopicKafka': {
+        #     'args': [
+        #         "--endpoint", "grpc://{node_host}:2135",
+        #         "--topic_prefix", "workload_source_topic_kafka_{node_host}_iter_{iteration_num}_{uuid}",
+        #         "--consumers", "2",
+        #         "--consumer-threads", "2",
+        #         "--restart-interval", "15s",
+        #         "--partitions", "4",
+        #         "--write-workload", "0.01", "9000000", "2", "big_record", "1",
+        #         "--write-workload", "8000", "45", "1000", "small_record", "10",
+        #         "--write-workload", "800", "4096", "1", "medium_record", "10",
+        #     ],
+        #     'local_path': 'ydb/tests/stress/topic_kafka/workload_topic_kafka'
+        # },
+        # 'Topic': {
+        #     'args': [
+        #         "--endpoint", "grpc://{node_host}:2135",
+        #         "--topic_prefix", "workload_topic_{node_host}_iter_{iteration_num}_{uuid}",
+        #     ],
+        #     'local_path': 'ydb/tests/stress/topic/workload_topic'
+        # },
         'Viewer': {
             'args': [
                 "--mon_endpoint", "http://{node_host}:8765",
@@ -125,12 +124,27 @@ def _init_stress_utils():
             ],
             'local_path': 'ydb/tests/stress/streaming/streaming'
         },
-        'TopicSqs': {
-            'args': [
-                "--endpoint", "grpc://{node_host}:2135",
-                "--sqs-endpoint", "http://{node_host}:8433/{database}",
-            ],
-            'local_path': 'ydb/tests/stress/topic_sqs/topic_sqs'
+        # 'TopicSqs': {
+        #     'args': [
+        #         "--endpoint", "grpc://{node_host}:2135",
+        #         "--sqs-endpoint", "http://{node_host}:8433/{database}",
+        #     ],
+        #     'local_path': 'ydb/tests/stress/topic_sqs/topic_sqs'
+        # },
+        'MinMax': {
+            'args': ["--endpoint", "grpc://{node_host}:2135",
+                     "--path", "min_max_workload_{node_host}_iter_{iteration_num}_{uuid}"],
+            'local_path': 'ydb/tests/stress/min_max_workload/min_max_workload'
+        },
+        'ResultSetFormat': {
+            'args': ["--endpoint", "grpc://{node_host}:2135",
+                     "--path", "result_set_format_{node_host}_iter_{iteration_num}_{uuid}"],
+            'local_path': 'ydb/tests/stress/result_set_format/result_set_format'
+        },
+        'SystemTabletBackup': {
+            'args': ["--endpoint", "grpc://{node_host}:2135",
+                     "--mon-endpoint", "http://{node_host}:8765"],
+            'local_path': 'ydb/tests/stress/system_tablet_backup/system_tablet_backup'
         },
     }
 

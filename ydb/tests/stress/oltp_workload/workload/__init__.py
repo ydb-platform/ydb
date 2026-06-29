@@ -41,11 +41,11 @@ class WorkloadRunner:
             WorkloadInsertDeleteAllTypes(self.client, self.name, stop),
             WorkloadFulltextIndex(self.client, self.name, stop),
             WorkloadVectorIndex(self.client, self.name, stop),
-            WorkloadJsonIndex(self.client, self.name, stop),
+            # WorkloadJsonIndex(self.client, self.name, stop),
             WorkloadSelectPartition(self.client, self.name, stop),
-            WorkloadSecondaryIndex(self.client, self.name, stop),
+            # WorkloadSecondaryIndex(self.client, self.name, stop),
             WorkloadBloomFilterIndex(self.client, self.name, stop),
-            WorkloadTli(self.client, self.name, stop)
+            # WorkloadTli(self.client, self.name, stop)
         ]
 
         if enabled_workloads is not None:

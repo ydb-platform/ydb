@@ -1228,7 +1228,7 @@ public:
 
         auto& constraintResult = *record.MutableSetColumnConstraint();
         const Ydb::Table::SetColumnConstraintState::State state = constraintResult.GetState();
-        const Ydb::StatusIds::StatusCode constraintStatus = state == Ydb::Table::SetColumnConstraintState::STATE_DONE_SUCCESSFUL
+        const Ydb::StatusIds::StatusCode constraintStatus = state == Ydb::Table::SetColumnConstraintState::STATE_DONE
             ? Ydb::StatusIds::SUCCESS
             : Ydb::StatusIds::PRECONDITION_FAILED;
         return ReplyErrorAndDie(constraintStatus, record.MutableIssues());

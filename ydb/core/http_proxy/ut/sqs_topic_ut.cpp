@@ -282,7 +282,7 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             const TString topicPath = TStringBuilder() << "federation/" << topicName;
             const TString consumerName = "my@consumer";
             const TString consumerInQueueName = "my/consumer";
-            Y_ENSURE(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
+            UNIT_ASSERT(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
                 .AddAttribute("_federation_account", "account1")
                 .BeginAddSharedConsumer(consumerName)
                     .KeepMessagesOrder(false)
@@ -314,6 +314,102 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
 
         Y_UNIT_TEST_F(TestGetQueueUrlWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
             TestGetQueueUrlWithAtSignInConsumerNameInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestDeleteQueueInFederation, TNonFirstClassCitizenFixture) {
+            auto driver = MakeDriver(*this);
+
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+            const TString topicPath = "federation/my_topic";
+            UNIT_ASSERT(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
+                .AddAttribute("_federation_account", "account1")
+                .BeginAddSharedConsumer("my@consumer")
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(20))
+                .EndAddConsumer()));
+
+            auto getUrlRes = SendHttpRequest(
+                database,
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", "my_topic@my/consumer"}},
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(getUrlRes.HttpCode, 200, getUrlRes.Body);
+            NJson::TJsonMap getUrlJson;
+            UNIT_ASSERT(NJson::ReadJsonTree(getUrlRes.Body, &getUrlJson, true));
+            const TString queueUrl = GetByPath<TString>(getUrlJson, "QueueUrl");
+
+            auto deleteRes = SendHttpRequest(
+                database,
+                "AmazonSQS.DeleteQueue",
+                NJson::TJsonMap{{"QueueUrl", queueUrl}},
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(deleteRes.HttpCode, 400, deleteRes.Body);
+            NJson::TJsonMap deleteJson;
+            UNIT_ASSERT(NJson::ReadJsonTree(deleteRes.Body, &deleteJson, true));
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(deleteJson, "__type"), "AWS.SimpleQueueService.UnsupportedOperation");
+
+            auto verifyRes = SendHttpRequest(
+                database,
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", "my_topic@my/consumer"}},
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(verifyRes.HttpCode, 200, verifyRes.Body);
+        }
+
+        Y_UNIT_TEST_F(TestCreateQueueInFederation, TNonFirstClassCitizenFixture) {
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+
+            auto assertUnsupported = [&](const TString& queueName) {
+                auto res = SendHttpRequest(
+                    database,
+                    "AmazonSQS.CreateQueue",
+                    NJson::TJsonMap{{"QueueName", queueName}},
+                    FormAuthorizationStr("ru-central1"));
+                UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 400, res.Body);
+                NJson::TJsonMap json;
+                UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+                UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.UnsupportedOperation");
+            };
+
+            assertUnsupported("my_topic");
+            assertUnsupported("my_topic@my/consumer");
+            assertUnsupported("my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestSetQueueAttributesInFederation, TNonFirstClassCitizenFixture) {
+            auto driver = MakeDriver(*this);
+
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+            const TString topicPath = "federation/my_topic";
+            UNIT_ASSERT(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
+                .AddAttribute("_federation_account", "account1")
+                .BeginAddSharedConsumer("my@consumer")
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(20))
+                .EndAddConsumer()));
+
+            auto getUrlRes = SendHttpRequest(
+                database,
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", "my_topic@my/consumer"}},
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(getUrlRes.HttpCode, 200, getUrlRes.Body);
+            NJson::TJsonMap getUrlJson;
+            UNIT_ASSERT(NJson::ReadJsonTree(getUrlRes.Body, &getUrlJson, true));
+            const TString queueUrl = GetByPath<TString>(getUrlJson, "QueueUrl");
+
+            auto setAttrsRes = SendHttpRequest(
+                database,
+                "AmazonSQS.SetQueueAttributes",
+                NJson::TJsonMap{
+                    {"QueueUrl", queueUrl},
+                    {"Attributes", NJson::TJsonMap{{"VisibilityTimeout", "30"}}},
+                },
+                FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(setAttrsRes.HttpCode, 400, setAttrsRes.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(setAttrsRes.Body, &json, true));
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.UnsupportedOperation");
         }
 
         Y_UNIT_TEST_F(TestListQueues, TFixture) {

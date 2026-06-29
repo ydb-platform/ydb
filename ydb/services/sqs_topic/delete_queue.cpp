@@ -4,6 +4,7 @@
 #include "error.h"
 #include "request.h"
 
+#include <ydb/core/base/appdata.h>
 #include <ydb/core/http_proxy/events.h>
 #include <ydb/core/persqueue/public/schema/schema.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -77,6 +78,10 @@ namespace NKikimr::NSqsTopic::V1 {
             }
             if (!FormalValidQueueUrl()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Invalid QueueUrl"));
+            }
+            if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+                return ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION,
+                    "DeleteQueue is not supported"));
             }
 
             DescribeTopic(NACLib::UpdateRow); // TODO почему update row?

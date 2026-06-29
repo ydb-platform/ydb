@@ -292,6 +292,8 @@ private:
     STRICT_STFUNC(StateFuncFinalize,
         IgnoreFunc(TEvKqp::TEvCloseSessionResponse);
         IgnoreFunc(TEvKqp::TEvQueryResponse); // Ignored because result handler either not started or already finished
+        sFunc(TEvents::TEvWakeup, HandleCreatingFinished);
+        sFunc(TEvents::TEvPoison, HandleCreatingFailed);
         hFunc(TEvKqp::TEvCreateSessionResponse, HandleCreateSession);
         hFunc(TEvScriptExecutionFinished, HandleFinalize);
         hFunc(TEvKqp::TEvCancelScriptExecutionRequest, HandleCancellation);

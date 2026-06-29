@@ -11,8 +11,9 @@ void TFinishInfo::Update(const Ydb::StatusIds::StatusCode status, NYql::TIssues 
 
     if (*Status == Ydb::StatusIds::SUCCESS) {
         Status = status;
-        Issues.AddIssues(issues);
     }
+
+    Issues.AddIssues(issues);
 
     return;
 }

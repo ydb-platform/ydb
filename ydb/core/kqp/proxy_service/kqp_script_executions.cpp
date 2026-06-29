@@ -4157,6 +4157,7 @@ private:
             DECLARE $issues AS JsonDocument;
             DECLARE $retry_state AS JsonDocument;
             DECLARE $retry_deadline AS Timestamp;
+            DECLARE $lease_state AS Int32;
 
             UPSERT INTO `.metadata/script_executions` (
                 database, execution_id, operation_status, execution_status,

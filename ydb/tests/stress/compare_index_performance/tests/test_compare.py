@@ -3,10 +3,13 @@
 # Compare vector/fulltext workload performance between a baseline ydbd and the
 # current (locally built) ydbd, in a single py3test.
 #
-# The current ydbd comes from the build harness (kikimr_driver_path). The
-# baseline ydbd is either supplied as a path (compare_baseline_ydbd) or
-# downloaded as a prebuilt binary from S3 (ydb-builds bucket) by
-# compare_ref / compare_build_preset.
+# The current ydbd is resolved as: an explicit path (compare_current_ydbd), else
+# an S3 ref (compare_current_ref), else the locally built ydbd from the build
+# harness. The baseline ydbd is resolved as: an explicit path
+# (compare_baseline_ydbd), else an S3 download by compare_ref. Both S3 downloads
+# use compare_build_preset. Setting compare_ref and compare_current_ref (or
+# explicit paths) lets you compare two arbitrary prebuilt binaries (e.g. main vs
+# main, or two different refs) without a local build.
 #
 # For each iteration the test starts an in-process KiKiMR cluster on each
 # binary, runs the corresponding workload binary against it, parses the
@@ -150,10 +153,13 @@ def extract_total_txs_sec(log_file):
 class TestCompareIndexPerformance:
     @pytest.fixture(autouse=True)
     def setup(self):
-        # Binaries
-        self.current_ydbd = kikimr_driver_path()
+        # Binaries. Each side can be overridden with an explicit path; otherwise
+        # the baseline is downloaded from S3 (compare_ref/compare_build_preset)
+        # and the current binary comes from the local build harness.
         self.baseline_ydbd_param = yatest.common.get_param('compare_baseline_ydbd', default='')
+        self.current_ydbd_param = yatest.common.get_param('compare_current_ydbd', default='')
         self.ref = yatest.common.get_param('compare_ref', default='main')
+        self.current_ref = yatest.common.get_param('compare_current_ref', default='')
         self.build_preset = yatest.common.get_param('compare_build_preset', default='relwithdebinfo')
 
         # Workload knobs (kept as strings: the workload CLIs accept them as-is)
@@ -176,17 +182,35 @@ class TestCompareIndexPerformance:
 
         self.workload = yatest.common.get_param('compare_workload', default='all')
 
-    # --- baseline binary resolution ---
-    def _baseline_ydbd(self):
-        if self.baseline_ydbd_param:
-            return self.baseline_ydbd_param
-        dst = yatest.common.output_path(f"ydbd-{self.ref}-{self.build_preset}")
+    # --- binary resolution ---
+    def _download_ydbd(self, ref):
+        # Download (and cache) a prebuilt ydbd for the given S3 ref + preset.
+        dst = yatest.common.output_path(f"ydbd-{ref}-{self.build_preset}")
         if not os.path.isfile(dst):
-            s3_url = f"{S3_BASE_URL}/{self.ref}/{self.build_preset}/ydbd"
-            print(f"Downloading baseline ydbd from {s3_url}")
+            s3_url = f"{S3_BASE_URL}/{ref}/{self.build_preset}/ydbd"
+            print(f"Downloading ydbd from {s3_url}")
             urllib.request.urlretrieve(s3_url, dst)
             os.chmod(dst, 0o755)
         return dst
+
+    def _baseline_ydbd(self):
+        # Explicit path wins; otherwise download from S3 (compare_ref/preset).
+        if self.baseline_ydbd_param:
+            return self.baseline_ydbd_param
+        return self._download_ydbd(self.ref)
+
+    def _current_ydbd(self):
+        # Explicit path wins (e.g. comparing two prebuilt binaries); then an S3
+        # ref (compare_current_ref); otherwise the locally built ydbd.
+        if self.current_ydbd_param:
+            return self.current_ydbd_param
+        if self.current_ref:
+            return self._download_ydbd(self.current_ref)
+        return kikimr_driver_path()
+
+    def _current_label(self):
+        # Label the current side by its S3 ref when downloaded, else "current".
+        return f"current({self.current_ref})" if self.current_ref else "current"
 
     # --- cluster lifecycle + single workload run ---
     def _run_one(self, label, ydbd_path, flags, tsc, run_workload, log_name):
@@ -241,19 +265,20 @@ class TestCompareIndexPerformance:
         return res
 
     def _report(self, slug, workload_name, res):
+        current_label = self._current_label()
         print("")
         print("==========================================")
-        print(f"  {workload_name} comparison: {self.ref} vs current")
+        print(f"  {workload_name} comparison: {self.ref} vs {current_label}")
         print(f"  Build preset: {self.build_preset} | Iterations: {self.iterations} (median reported)")
         print("==========================================")
         print("%-20s %18s %18s %10s" % ("Workload", f"{self.ref} (Txs/Sec)",
-                                         "current (Txs/Sec)", "Diff"))
+                                        f"{current_label} (Txs/Sec)", "Diff"))
         print("%-20s %18s %18s %10s" % ("-" * 20, "-" * 18, "-" * 18, "-" * 10))
         print("%-20s %18s %18s %10s" % (workload_name, fmt_num(res["main_txs"]),
                                         fmt_num(res["current_txs"]), res["diff"]))
         print(f"  {self.ref}:   {res['main_detail']}  "
               f"(mean={fmt_num(res['main_mean'])}, σ={fmt_num(res['main_stddev'])})")
-        print(f"  current: {res['current_detail']}  "
+        print(f"  {current_label}: {res['current_detail']}  "
               f"(mean={fmt_num(res['current_mean'])}, σ={fmt_num(res['current_stddev'])})")
         print(f"  3σ test: {res['significance']}")
 
@@ -262,10 +287,10 @@ class TestCompareIndexPerformance:
         # overwrite the first.
         report_file = yatest.common.output_path(f"report_{slug}.md")
         with open(report_file, "w") as f:
-            f.write(f"## Performance Comparison: `{self.ref}` vs `current` ({workload_name})\n\n")
+            f.write(f"## Performance Comparison: `{self.ref}` vs `{current_label}` ({workload_name})\n\n")
             f.write(f"**Build preset:** `{self.build_preset}` | **Duration:** {self.duration}s "
                     f"per workload | **Iterations:** {self.iterations} (median reported)\n\n")
-            f.write(f"| Workload | {self.ref} (Txs/Sec) | current (Txs/Sec) | Diff | 3σ significance |\n")
+            f.write(f"| Workload | {self.ref} (Txs/Sec) | {current_label} (Txs/Sec) | Diff | 3σ significance |\n")
             f.write("|---|---|---|---|---|\n")
             f.write(f"| {workload_name} | {res['main_detail']} | {res['current_detail']} "
                     f"| {res['diff']} | {res['significance']} |\n")
@@ -277,6 +302,7 @@ class TestCompareIndexPerformance:
             pytest.skip(f"compare_workload={self.workload} excludes vector")
 
         baseline_ydbd = self._baseline_ydbd()
+        current_ydbd = self._current_ydbd()
         data_dir = yatest.common.output_path("vector_data")
 
         main_values = []
@@ -307,7 +333,7 @@ class TestCompareIndexPerformance:
                 self.ref, baseline_ydbd, self.baseline_flags, self.baseline_tsc,
                 baseline_workload, f"vector_main_{i}.log"))
             collect_value(current_values, self._run_one(
-                "current", self.current_ydbd, self.current_flags, self.current_tsc,
+                "current", current_ydbd, self.current_flags, self.current_tsc,
                 current_workload, f"vector_current_{i}.log"))
 
         self._report("vector", "vector select", self._summarize(main_values, current_values))
@@ -317,6 +343,7 @@ class TestCompareIndexPerformance:
             pytest.skip(f"compare_workload={self.workload} excludes fulltext")
 
         baseline_ydbd = self._baseline_ydbd()
+        current_ydbd = self._current_ydbd()
 
         # Fulltext requires the feature flag enabled on both clusters.
         baseline_flags = self.baseline_flags + ["enable_fulltext_index"]
@@ -337,7 +364,7 @@ class TestCompareIndexPerformance:
                 self.ref, baseline_ydbd, baseline_flags, self.baseline_tsc,
                 fulltext_workload, f"fulltext_main_{i}.log"))
             collect_value(current_values, self._run_one(
-                "current", self.current_ydbd, current_flags, self.current_tsc,
+                "current", current_ydbd, current_flags, self.current_tsc,
                 fulltext_workload, f"fulltext_current_{i}.log"))
 
         self._report("fulltext", "fulltext select", self._summarize(main_values, current_values))

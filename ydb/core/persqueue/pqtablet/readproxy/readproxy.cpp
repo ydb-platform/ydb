@@ -2,15 +2,30 @@
 
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/dread_cache_service/caching_service.h>
+#include <ydb/core/persqueue/pqtablet/batching/batch_processor.h>
 #include <ydb/core/persqueue/pqtablet/common/constants.h>
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/msgbus_pq.pb.h>
 #include <ydb/public/lib/base/msgbus_status.h>
 
+#include <util/generic/algorithm.h>
+
+#include <limits>
+
 namespace NKikimr::NPQ {
 
 using namespace NActors;
+
+namespace {
+
+bool HasBatchMessages(const NKikimrClient::TCmdReadResult& readResult) {
+    return AnyOf(readResult.GetResult(), [](const auto& result) {
+        return result.GetIsBatch();
+    });
+}
+
+} // namespace
 
 class TReadProxy : public TBaseTabletActor<TReadProxy>, private TConstantLogPrefix {
 public:
@@ -19,13 +34,17 @@ public:
     }
 
     TReadProxy(const TActorId& sender, const ui64 tabletId, const TActorId& tablet, ui64 tabletGeneration,
-               const TDirectReadKey& directReadKey, const NKikimrClient::TPersQueueRequest& request)
+               const TDirectReadKey& directReadKey, const NKikimrClient::TPersQueueRequest& request,
+               const TActorId& batchProcessorActor)
         : TBaseTabletActor(tabletId, tablet, NKikimrServices::PERSQUEUE)
         , Sender(sender)
         , TabletGeneration(tabletGeneration)
         , Request(request)
         , Response(new TEvPersQueue::TEvResponse)
         , DirectReadKey(directReadKey)
+        , InitialReadOffset(request.GetPartitionRequest().GetCmdRead().GetOffset())
+        , CanReadBatches(request.GetPartitionRequest().GetCmdRead().GetCanReadBatches())
+        , BatchProcessorActor(batchProcessorActor)
     {
         AFL_ENSURE(Request.HasPartitionRequest() && Request.GetPartitionRequest().HasCmdRead());
         AFL_ENSURE(Request.GetPartitionRequest().GetCmdRead().GetPartNo() == 0); //partial request are not allowed, otherwise remove ReadProxy
@@ -45,6 +64,71 @@ public:
     }
 
 private:
+    void SendResponse(const TActorContext& ctx, bool isDirectRead, const NKikimrClient::TCmdReadResult& readResult,
+                      const NKikimrClient::TPersQueuePartitionResponse& partitionResponse)
+    {
+        if (isDirectRead) {
+            auto* prepareResponse = Response->Record.MutablePartitionResponse()->MutableCmdPrepareReadResult();
+            auto sizeEstimate = Request.GetPartitionRequest().GetCmdRead().GetSizeEstimate();
+            sizeEstimate = sizeEstimate ? sizeEstimate : PreparedResponse->GetPartitionResponse().ByteSize();
+            PreparedResponse->MutablePartitionResponse()->MutableCmdPrepareReadResult()->SetBytesSizeEstimate(sizeEstimate);
+            prepareResponse->SetBytesSizeEstimate(sizeEstimate);
+            prepareResponse->SetDirectReadId(DirectReadKey.ReadId);
+            prepareResponse->SetReadOffset(readResult.GetRealReadOffset());
+            prepareResponse->SetLastOffset(readResult.GetLastOffset());
+            prepareResponse->SetEndOffset(readResult.GetEndOffset());
+
+            prepareResponse->SetSizeLag(readResult.GetSizeLag());
+            Response->Record.MutablePartitionResponse()->SetCookie(partitionResponse.GetCookie());
+            if (readResult.ResultSize()) {
+                prepareResponse->SetWriteTimestampMS(readResult.GetResult(readResult.ResultSize() - 1).GetWriteTimestampMS());
+            }
+            Response->Record.SetStatus(PreparedResponse->GetStatus());
+            Response->Record.SetErrorCode(PreparedResponse->GetErrorCode());
+            ctx.Send(
+                MakePQDReadCacheServiceActorId(),
+                new TEvPQ::TEvStageDirectReadData(DirectReadKey, TabletGeneration, PreparedResponse)
+            );
+        }
+        ctx.Send(Sender, Response.Release());
+        PassAway();
+    }
+
+    void TryProcessBatchOrSendResponse(const TActorContext& ctx, bool isDirectRead,
+                                       const NKikimrClient::TCmdReadResult& readResult,
+                                       const NKikimrClient::TPersQueuePartitionResponse& partitionResponse)
+    {
+        const auto& responseRecord = isDirectRead ? *PreparedResponse : Response->Record;
+        AFL_ENSURE(responseRecord.HasPartitionResponse() && responseRecord.GetPartitionResponse().HasCmdReadResult());
+        const auto& cmdReadResult = responseRecord.GetPartitionResponse().GetCmdReadResult();
+
+        if (!CanReadBatches && HasBatchMessages(cmdReadResult)) {
+            PendingDirectRead = isDirectRead;
+            PendingPartitionResponse.CopyFrom(partitionResponse);
+
+            auto proxyEvent = MakeHolder<TEvPQ::TEvProxyResponse>(0, false);
+            proxyEvent->Response->CopyFrom(responseRecord);
+
+            const auto& cmdRead = Request.GetPartitionRequest().GetCmdRead();
+            ctx.Send(BatchProcessorActor, new NBatching::TEvProcessBatch(NBatching::TReadProcessingContext{
+                .User = cmdRead.GetClientId(),
+                .PartitionId = static_cast<ui32>(Request.GetPartitionRequest().GetPartition()),
+                .Destination = 0,
+                .Offset = InitialReadOffset,
+                .Count = cmdRead.HasCount() ? static_cast<ui32>(cmdRead.GetCount()) : std::numeric_limits<ui32>::max(),
+                .LastOffset = cmdRead.GetLastOffset() > 0 ? static_cast<ui64>(cmdRead.GetLastOffset()) : 0,
+                .PartNo = 0,
+                .Size = static_cast<ui64>(proxyEvent->Response->ByteSize()),
+                .IsInternal = false,
+                .ReplyTo = TActorId{},
+                .ResponseActor = SelfId(),
+                .Event = std::move(proxyEvent)}));
+            return;
+        }
+
+        SendResponse(ctx, isDirectRead, readResult, partitionResponse);
+    }
+
     void Handle(TEvPersQueue::TEvResponse::TPtr& ev, const TActorContext& ctx)
     {
         AFL_ENSURE(Response);
@@ -59,7 +143,7 @@ private:
 
             Response->Record.CopyFrom(record);
             ctx.Send(Sender, Response.Release());
-            Die(ctx);
+            PassAway();
             return;
         }
         AFL_ENSURE(record.HasPartitionResponse() && record.GetPartitionResponse().HasCmdReadResult());
@@ -91,8 +175,9 @@ private:
                 readRes->SetReadFromTimestampMs(readFromTimestampMs);
             }
         }
-        if (record.GetPartitionResponse().HasCookie())
+        if (record.GetPartitionResponse().HasCookie()) {
             responseRecord.MutablePartitionResponse()->SetCookie(record.GetPartitionResponse().GetCookie());
+        }
 
         auto partResp = responseRecord.MutablePartitionResponse()->MutableCmdReadResult();
 
@@ -255,39 +340,34 @@ private:
                 result->CopyFrom(rec);
             }
         }
-        if (isDirectRead) {
-            auto* prepareResponse = Response->Record.MutablePartitionResponse()->MutableCmdPrepareReadResult();
-            auto sizeEstimate = Request.GetPartitionRequest().GetCmdRead().GetSizeEstimate();
-            sizeEstimate = sizeEstimate ? sizeEstimate : PreparedResponse->GetPartitionResponse().ByteSize();
-            PreparedResponse->MutablePartitionResponse()->MutableCmdPrepareReadResult()->SetBytesSizeEstimate(sizeEstimate);
-            prepareResponse->SetBytesSizeEstimate(sizeEstimate);
-            prepareResponse->SetDirectReadId(DirectReadKey.ReadId);
-            prepareResponse->SetReadOffset(readResult.GetRealReadOffset());
-            prepareResponse->SetLastOffset(readResult.GetLastOffset());
-            prepareResponse->SetEndOffset(readResult.GetEndOffset());
+        TryProcessBatchOrSendResponse(ctx, isDirectRead, readResult, record.GetPartitionResponse());
+    }
 
-            prepareResponse->SetSizeLag(readResult.GetSizeLag());
-            Response->Record.MutablePartitionResponse()->SetCookie(record.GetPartitionResponse().GetCookie());
-            if (readResult.ResultSize()) {
-                prepareResponse->SetWriteTimestampMS(readResult.GetResult(readResult.ResultSize() - 1).GetWriteTimestampMS());
-            }
-            Response->Record.SetStatus(responseRecord.GetStatus());
-            Response->Record.SetErrorCode(responseRecord.GetErrorCode());
-            ctx.Send(
-                MakePQDReadCacheServiceActorId(),
-                new TEvPQ::TEvStageDirectReadData(DirectReadKey, TabletGeneration, PreparedResponse)
-            );
-            ctx.Send(Sender, Response.Release());
-        } else {
-            ctx.Send(Sender, Response.Release());
+    void Handle(NBatching::TEvProcessBatchResult::TPtr& ev, const TActorContext& ctx)
+    {
+        auto context = std::move(ev->Get()->Context);
+        auto* proxyResponse = static_cast<TEvPQ::TEvProxyResponse*>(context.Event.Get());
+        AFL_ENSURE(proxyResponse);
+
+        if (PendingDirectRead) {
+            PreparedResponse = proxyResponse->Response;
+            SendResponse(
+                ctx,
+                true,
+                PreparedResponse->GetPartitionResponse().GetCmdReadResult(),
+                PendingPartitionResponse);
+            return;
         }
 
-        Die(ctx);
+        Response->Record.CopyFrom(*proxyResponse->Response);
+        ctx.Send(Sender, Response.Release());
+        PassAway();
     }
 
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvPersQueue::TEvResponse, Handle);
+            HFunc(NBatching::TEvProcessBatchResult, Handle);
         default:
             break;
         };
@@ -299,15 +379,21 @@ private:
     THolder<TEvPersQueue::TEvResponse> Response;
     std::shared_ptr<NKikimrClient::TResponse> PreparedResponse;
     TDirectReadKey DirectReadKey;
+    const ui64 InitialReadOffset;
+    const bool CanReadBatches;
+    const TActorId BatchProcessorActor;
     bool InitialRequest = true;
     TMaybe<ui64> LastSkipOffset;
+    bool PendingDirectRead = false;
+    NKikimrClient::TPersQueuePartitionResponse PendingPartitionResponse;
 };
 
 
 IActor* CreateReadProxy(const TActorId& sender, ui64 tabletId, const TActorId& tablet, ui32 tabletGeneration,
-                         const TDirectReadKey& directReadKey, const NKikimrClient::TPersQueueRequest& request)
+                         const TDirectReadKey& directReadKey, const NKikimrClient::TPersQueueRequest& request,
+                         const TActorId& batchProcessorActor)
 {
-    return new TReadProxy(sender, tabletId, tablet, tabletGeneration, directReadKey, request);
+    return new TReadProxy(sender, tabletId, tablet, tabletGeneration, directReadKey, request, batchProcessorActor);
 }
 
 }

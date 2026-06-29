@@ -141,8 +141,38 @@ public:
             if (!Self->MakeBasicPoolCheck(kind, size, code, error))
                 return Error(code, error, ctx);
 
-            PoolsToAdd[kind] += size;
+            PoolsToChange[kind] += size;
             newGroups += size;
+        }
+
+        // Check removed storage resource units
+        for (const auto &unit : rec.storage_units_to_remove()) {
+            if (Tenant->AreResourcesShared) {
+                return Error(Ydb::StatusIds::UNSUPPORTED,
+                            Sprintf("Database '%s' is shared, cannot remove storage units", path.data()), ctx);
+            }
+            if (Tenant->SharedDomainId) {
+                return Error(Ydb::StatusIds::UNSUPPORTED,
+                            Sprintf("Database '%s' is serverless, cannot remove storage units", path.data()), ctx);
+            }
+
+            const auto &kind = unit.unit_kind();
+            auto poolIt = Tenant->StoragePools.find(kind);
+            if (poolIt == Tenant->StoragePools.end()) {
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                             Sprintf("Unsupported storage unit kind '%s'.", kind.data()), ctx);
+            }
+            if (poolIt->second->Borrowed) {
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                            Sprintf("Pool '%s' is borrowed, cannot alter", kind.data()), ctx);
+            }
+            if (std::cmp_less_equal(static_cast<i64>(poolIt->second->GetGroups()) + PoolsToChange[kind], unit.count())) {
+                return Error(Ydb::StatusIds::BAD_REQUEST,
+                             Sprintf("Not enough units of kind '%s' to remove",
+                                     kind.data()),
+                             ctx);
+            }
+            PoolsToChange[kind] -= unit.count();
         }
 
         // Check deregistered computational units.
@@ -279,7 +309,7 @@ public:
         }
 
         // Apply storage units changes.
-        for (auto &pr : PoolsToAdd) {
+        for (auto &pr : PoolsToChange) {
             TStoragePool::TPtr pool;
             auto &kind = pr.first;
             auto size = pr.second;
@@ -287,7 +317,7 @@ public:
                 auto cur = Tenant->StoragePools.at(kind);
                 Y_ABORT_UNLESS(!cur->Borrowed);
                 pool = new TStoragePool(*cur);
-                pool->AddRequiredGroups(size);
+                pool->ChangeRequiredGroups(size);
                 pool->State = TStoragePool::NOT_UPDATED;
             } else {
                 Y_ABORT_UNLESS(!Tenant->AreResourcesShared);
@@ -397,20 +427,24 @@ public:
                 Self->Counters.Inc(pr.second.Kind, COUNTER_REGISTERED_UNITS);
                 Tenant->RegisteredComputationalUnits[pr.first] = pr.second;
             }
-            for (auto &pr : PoolsToAdd) {
+            for (auto &pr : PoolsToChange) {
                 TStoragePool::TPtr pool;
                 auto &kind = pr.first;
                 auto size = pr.second;
                 if (Tenant->StoragePools.contains(kind)) {
                     pool = Tenant->StoragePools.at(kind);
-                    pool->AddRequiredGroups(size);
+                    pool->ChangeRequiredGroups(size);
                     pool->State = TStoragePool::NOT_UPDATED;
                 } else {
                     pool = Self->MakeStoragePool(Tenant, kind, size);
                     Tenant->StoragePools.emplace(std::make_pair(kind, pool));
                 }
 
-                Self->Counters.Inc(kind, COUNTER_REQUESTED_STORAGE_UNITS, size);
+                if (size >= 0) {
+                    Self->Counters.Inc(kind, COUNTER_REQUESTED_STORAGE_UNITS, size);
+                } else {
+                    Self->Counters.Dec(kind, COUNTER_REQUESTED_STORAGE_UNITS, -size);
+                }
             }
             if (SchemaOperationQuotas) {
                 Tenant->SchemaOperationQuotas.ConstructInPlace(*SchemaOperationQuotas);
@@ -441,7 +475,7 @@ private:
     THashMap<std::pair<TString, TString>, ui64> NewComputationalUnits;
     THashMap<std::pair<TString, ui32>, TAllocatedComputationalUnit> UnitsToRegister;
     THashSet<std::pair<TString, ui32>> UnitsToDeregister;
-    THashMap<TString, ui64> PoolsToAdd;
+    THashMap<TString, i64> PoolsToChange;
     TMaybe<Ydb::Cms::SchemaOperationQuotas> SchemaOperationQuotas;
     TMaybe<Ydb::Cms::DatabaseQuotas> DatabaseQuotas;
     TMaybe<Ydb::Cms::ScaleRecommenderPolicies> ScaleRecommenderPolicies;

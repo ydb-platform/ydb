@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/testlib/pg
     ydb/core/tx
     ydb/core/tx/schemeshard/ut_helpers
+    ydb/public/api/protos
     yql/essentials/public/udf/service/exception_policy
 )
 

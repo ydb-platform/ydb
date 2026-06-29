@@ -66,6 +66,7 @@ PEERDIR(
     ydb/core/raw_socket
     ydb/core/security/sasl
     ydb/services/persqueue_v1
+    ydb/core/persqueue/public
 )
 
 END()

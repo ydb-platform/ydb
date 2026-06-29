@@ -36,6 +36,8 @@ namespace NKikimr::NBlobDepot {
     private:
         void Init();
         void HandleYellowChannels();
+        void SwitchSpaceColor(NKikimrBlobStorage::TPDiskSpaceColor::E oldColor,
+            NKikimrBlobStorage::TPDiskSpaceColor::E newColor);
     };
 
 } // NKikimr::NBlobDepot

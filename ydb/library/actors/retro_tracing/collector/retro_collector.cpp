@@ -50,6 +50,10 @@ NActors::IActor* CreateRetroCollector() {
 }
 
 void DemandTrace(const NWilson::TTraceId& traceId) {
+    if (!traceId.IsRetroTrace()) {
+        return;
+    }
+
     NActors::TActivationContext::Send(std::make_unique<NActors::IEventHandle>(
             MakeRetroCollectorId(), NActors::TActorId{},
             new TEvCollectRetroTrace(traceId)));

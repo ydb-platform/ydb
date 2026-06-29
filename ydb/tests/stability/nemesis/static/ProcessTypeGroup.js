@@ -43,6 +43,31 @@ export default {
 
     const hasParams = computed(() => paramSchema.value.length > 0)
 
+    const PARAMS_STORAGE_KEY = 'nemesis:last-run-params'
+
+    function loadAllSavedParams() {
+      try {
+        const raw = localStorage.getItem(PARAMS_STORAGE_KEY)
+        return raw ? JSON.parse(raw) : {}
+      } catch {
+        return {}
+      }
+    }
+
+    function saveParamsForType(type, params) {
+      try {
+        const all = loadAllSavedParams()
+        all[type] = params
+        localStorage.setItem(PARAMS_STORAGE_KEY, JSON.stringify(all))
+      } catch (err) {
+        console.warn('Failed to save nemesis params', err)
+      }
+    }
+
+    function defaultParamValue(schema) {
+      return schema.default !== undefined ? schema.default : (schema.type === 'bool' ? false : '')
+    }
+
     // Initialize custom interval from schedule status or default
     const initializeCustomInterval = () => {
       const scheduleData = props.scheduleStatus[props.type]
@@ -63,13 +88,15 @@ export default {
       }
     })
 
-    function resetParamValues() {
-      // Reset the reactive object to schema defaults.
+    function initParamValues() {
+      const saved = loadAllSavedParams()[props.type] || {}
       for (const k of Object.keys(paramValues)) {
         delete paramValues[k]
       }
       for (const p of paramSchema.value) {
-        paramValues[p.name] = p.default !== undefined ? p.default : (p.type === 'bool' ? false : '')
+        paramValues[p.name] = saved[p.name] !== undefined
+          ? saved[p.name]
+          : defaultParamValue(p)
       }
     }
 
@@ -79,7 +106,7 @@ export default {
         startSchedule({})
         return
       }
-      resetParamValues()
+      initParamValues()
       showParamsModal.value = true
     }
 
@@ -114,6 +141,7 @@ export default {
         }
         collected[p.name] = v
       }
+      saveParamsForType(props.type, collected)
       showParamsModal.value = false
       startSchedule(collected)
     }

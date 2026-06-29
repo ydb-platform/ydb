@@ -29,6 +29,13 @@ items:
   href: vector-indexes-kmeans-tree-type.md
 - name: Полнотекстовые индексы
   href: fulltext-indexes.md
+- name: Локальные индексы
+  href: local-indexes/index.md
+  include:
+    mode: link
+    path: local-indexes/toc_p.yaml
+- name: Гибридный поиск
+  href: hybrid-search.md
 - name: Оптимизация выполнения запросов
   href: query-execution-optimization/index.md
   include:

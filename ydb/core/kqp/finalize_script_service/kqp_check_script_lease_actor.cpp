@@ -133,7 +133,7 @@ private:
     }
 
     TString LogPrefix() const {
-        return TStringBuilder() << "[ScriptExecutions] [TScriptExecutionLeaseCheckActor] ";
+        return "[ScriptExecutions] [TScriptExecutionLeaseCheckActor] ";
     }
 
 private:

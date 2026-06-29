@@ -6,7 +6,26 @@
 
 #include <util/random/random.h>
 
+#include <cstring>
+
 namespace NYT::NObjectClient {
+
+////////////////////////////////////////////////////////////////////////////////
+
+Y_FORCE_INLINE bool operator==(const TVersionedObjectId& lhs, const TVersionedObjectId& rhs)
+{
+    return ::memcmp(&lhs, &rhs, sizeof(TVersionedObjectId)) == 0;
+}
+
+Y_FORCE_INLINE bool operator<(const TVersionedObjectId& lhs, const TVersionedObjectId& rhs)
+{
+    return ::memcmp(&lhs, &rhs, sizeof(TVersionedObjectId)) < 0;
+}
+
+inline void FormatValue(TStringBuilderBase* builder, const TVersionedObjectId& id, TStringBuf /*spec*/)
+{
+    builder->AppendFormat("%v:%v", id.ObjectId, id.TransactionId);
+}
 
 ////////////////////////////////////////////////////////////////////////////////
 

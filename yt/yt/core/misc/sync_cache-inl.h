@@ -114,6 +114,14 @@ template <class TKey, class TValue, class THash>
 typename TSyncSlruCacheBase<TKey, TValue, THash>::TValuePtr
 TSyncSlruCacheBase<TKey, TValue, THash>::Find(const TKey& key)
 {
+    return Find<TKey>(key);
+}
+
+template <class TKey, class TValue, class THash>
+template <class THeterogenousKey>
+typename TSyncSlruCacheBase<TKey, TValue, THash>::TValuePtr
+TSyncSlruCacheBase<TKey, TValue, THash>::Find(const THeterogenousKey& key)
+{
     auto* shard = GetShardByKey(key);
 
     auto readerGuard = ReaderGuard(shard->SpinLock);
@@ -366,7 +374,8 @@ bool TSyncSlruCacheBase<TKey, TValue, THash>::TryRemove(const TValuePtr& value)
 }
 
 template <class TKey, class TValue, class THash>
-auto TSyncSlruCacheBase<TKey, TValue, THash>::GetShardByKey(const TKey& key) const -> TShard*
+template <class THeterogenousKey>
+auto TSyncSlruCacheBase<TKey, TValue, THash>::GetShardByKey(const THeterogenousKey& key) const -> TShard*
 {
     return &Shards_[THash()(key) % Config_->ShardCount];
 }
@@ -546,6 +555,13 @@ int TSimpleLruCache<TKey, TValue, THash>::GetSize() const
 template <class TKey, class TValue, class THash>
 const TValue& TSimpleLruCache<TKey, TValue, THash>::Get(const TKey& key)
 {
+    return Get<TKey>(key);
+}
+
+template <class TKey, class TValue, class THash>
+template <class THeterogenousKey>
+const TValue& TSimpleLruCache<TKey, TValue, THash>::Get(const THeterogenousKey& key)
+{
     auto it = ItemMap_.find(key);
     YT_VERIFY(it != ItemMap_.end());
     UpdateLruList(it);
@@ -554,6 +570,13 @@ const TValue& TSimpleLruCache<TKey, TValue, THash>::Get(const TKey& key)
 
 template <class TKey, class TValue, class THash>
 TValue* TSimpleLruCache<TKey, TValue, THash>::Find(const TKey& key)
+{
+    return Find<TKey>(key);
+}
+
+template <class TKey, class TValue, class THash>
+template <class THeterogenousKey>
+TValue* TSimpleLruCache<TKey, TValue, THash>::Find(const THeterogenousKey& key)
 {
     auto it = ItemMap_.find(key);
     if (it == ItemMap_.end()) {
@@ -565,6 +588,13 @@ TValue* TSimpleLruCache<TKey, TValue, THash>::Find(const TKey& key)
 
 template <class TKey, class TValue, class THash>
 TValue* TSimpleLruCache<TKey, TValue, THash>::FindNoTouch(const TKey& key)
+{
+    return FindNoTouch<TKey>(key);
+}
+
+template <class TKey, class TValue, class THash>
+template <class THeterogenousKey>
+TValue* TSimpleLruCache<TKey, TValue, THash>::FindNoTouch(const THeterogenousKey& key)
 {
     auto it = ItemMap_.find(key);
     if (it == ItemMap_.end()) {
@@ -654,6 +684,13 @@ int TMultiLruCache<TKey, TValue, THash>::GetSize() const
 template <class TKey, class TValue, class THash>
 const TValue& TMultiLruCache<TKey, TValue, THash>::Get(const TKey& key)
 {
+    return Get<TKey>(key);
+}
+
+template <class TKey, class TValue, class THash>
+template <class THeterogenousKey>
+const TValue& TMultiLruCache<TKey, TValue, THash>::Get(const THeterogenousKey& key)
+{
     auto* value = Find(key);
     YT_VERIFY(value != nullptr);
     return *value;
@@ -661,6 +698,13 @@ const TValue& TMultiLruCache<TKey, TValue, THash>::Get(const TKey& key)
 
 template <class TKey, class TValue, class THash>
 TValue* TMultiLruCache<TKey, TValue, THash>::Find(const TKey& key)
+{
+    return Find<TKey>(key);
+}
+
+template <class TKey, class TValue, class THash>
+template <class THeterogenousKey>
+TValue* TMultiLruCache<TKey, TValue, THash>::Find(const THeterogenousKey& key)
 {
     auto it = ItemMap_.find(key);
     if (it == ItemMap_.end()) {

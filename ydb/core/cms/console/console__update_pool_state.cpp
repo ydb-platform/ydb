@@ -72,8 +72,9 @@ public:
     void Complete(const TActorContext &executorCtx) override
     {
         auto ctx = executorCtx.MakeFor(Self->SelfId());
-        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdatePoolState complete",
-            {"poolName", Pool->Config.GetName()});
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdatePoolState complete for tenant state",
+            {"name", Pool->Config.GetName()},
+            {"state", Tenant->State});
 
         if (Update) {
             Self->Counters.Inc(Pool->Kind, COUNTER_ALLOCATED_STORAGE_UNITS,
@@ -88,7 +89,13 @@ public:
                 Self->TxProcessor->ProcessTx(Self->CreateTxUpdateTenantState(Tenant->Path, TTenant::CREATING_SUBDOMAIN), ctx);
             else if (Tenant->State == TTenant::REMOVING_POOLS && !Tenant->HasPoolsToDelete())
                 Self->TxProcessor->ProcessTx(Self->CreateTxRemoveTenantDone(Tenant), ctx);
-            else if (Tenant->State == TTenant::RUNNING)
+            else if (Tenant->State == TTenant::REMOVING_GROUPS) {
+                if (!Pool->GroupsToDecommit.empty()) {
+                    Self->ProcessTenantActions(Tenant, ctx);
+                } else if (!Tenant->HasPoolsToCreate()) {
+                    Self->TxProcessor->ProcessTx(Self->CreateTxUpdateTenantState(Tenant->Path, TTenant::RUNNING), ctx);
+                }
+            } else if (Tenant->State == TTenant::RUNNING)
                 Self->ProcessTenantActions(Tenant, ctx);
         }
 

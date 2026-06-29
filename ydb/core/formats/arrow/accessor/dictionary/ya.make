@@ -2,6 +2,7 @@ LIBRARY()
 
 PEERDIR(
     ydb/core/formats/arrow/accessor/abstract
+    ydb/core/formats/arrow/filter
     ydb/core/tx/columnshard/engines/protos
     ydb/library/formats/arrow
     ydb/library/formats/arrow/protos

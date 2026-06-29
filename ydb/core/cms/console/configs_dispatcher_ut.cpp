@@ -6,6 +6,11 @@
 #include <ydb/core/tablet/bootstrapper.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/testlib/tablet_helpers.h>
+#include <ydb/core/cms/console/ut_configs_dispatcher/ut_private_database_config.pb.h>
+#include <ydb/library/fyamlcpp/fyamlcpp.h>
+#include <ydb/library/yaml_config/yaml_config_parser.h>
+#include <ydb/library/yaml_config/yaml_config_helpers.h>
+#include <library/cpp/protobuf/json/json2proto.h>
 
 #include <library/cpp/json/json_reader.h>
 #include <library/cpp/monlib/service/mon_service_http_request.h>
@@ -168,6 +173,8 @@ struct TEvPrivate {
         EvSetSubscription,
         EvGotNotification,
         EvComplete,
+        EvParsedPrivateDatabaseConfig,
+        EvResetPrivateDatabaseConfig,
         EvEnd
     };
 
@@ -208,6 +215,19 @@ struct TEvPrivate {
     };
 
     struct TEvComplete : public TEventLocal<TEvComplete, EvComplete> {};
+
+
+    // Carries the secret_port the end-node subscriber read from the dispatcher-
+    // parsed TUtPrivateDatabaseConfig (OpaqueConfigs), proving the dispatcher did the parse.
+    struct TEvParsedPrivateDatabaseConfig : public TEventLocal<TEvParsedPrivateDatabaseConfig, EvParsedPrivateDatabaseConfig> {
+        ui32 SecretPort = 0;
+    };
+
+    // Emitted when the subscriber received a notification for its subscribed
+    // opaque kind but OpaqueConfigs carried no parsed payload — i.e. the
+    // dispatcher signaled "section absent / cleared".
+    struct TEvResetPrivateDatabaseConfig : public TEventLocal<TEvResetPrivateDatabaseConfig, EvResetPrivateDatabaseConfig> {
+    };
 };
 
 class TTestSubscriber : public TActorBootstrapped<TTestSubscriber> {
@@ -1694,6 +1714,371 @@ selector_config: []
             "labels": []
         })json");
         UNIT_ASSERT_C(expected == actual, jsonBody);
+    }
+}
+
+Y_UNIT_TEST_SUITE(TConfigsDispatcherOpaqueConfigTests) {
+
+    // End-node subscriber: subscribes to the opaque kind PrivateDatabaseConfigItem
+    // and reads the already-parsed TUtPrivateDatabaseConfig from the notification's OpaqueConfigs
+    class TPrivateDatabaseConfigSubscriber : public TActorBootstrapped<TPrivateDatabaseConfigSubscriber> {
+        TActorId Sink;
+    public:
+        // No trust to the runtime.SetObserverFunc() - fires multiple times per delivery
+        // for ES_PRIVATE events that share a numeric id with other unrelated private events;
+        // ev->Sender + ev->Recipient filter not help.
+        std::atomic<int> parsedCnt{0};
+        std::atomic<int> resetCnt{0};
+
+        TPrivateDatabaseConfigSubscriber(TActorId sink)
+            : Sink(sink)
+        {}
+
+        void Bootstrap(const TActorContext &ctx) {
+            Become(&TThis::StateWork);
+            ctx.Send(MakeConfigsDispatcherID(ctx.SelfID.NodeId()),
+                new TEvConfigsDispatcher::TEvSetConfigSubscriptionRequest(
+                    (ui32)NKikimrConsole::TConfigItem::PrivateDatabaseConfigItem, ctx.SelfID));
+        }
+
+        void Handle(TEvConsole::TEvConfigNotificationRequest::TPtr &ev, const TActorContext &ctx) {
+            auto &rec = ev->Get()->Record;
+            const auto &opaqueConfigs = ev->Get()->OpaqueConfigs;
+
+            if (auto it = opaqueConfigs.find((ui32)NKikimrConsole::TConfigItem::PrivateDatabaseConfigItem);
+                it != opaqueConfigs.end() && it->second)
+            {
+                NKikimrOpaqueConfigUt::TUtPrivateDatabaseConfig impl;
+                impl.CopyFrom(*it->second);                 // descriptor-checked, no RTTI
+                auto *event = new TEvPrivate::TEvParsedPrivateDatabaseConfig;
+                event->SecretPort = impl.GetSecretPort();
+                parsedCnt++;
+                ctx.Send(Sink, event);
+            } else {
+                // Notification arrived for subscribed kind but no parsed
+                // opaque payload — section became absent / was cleared
+                resetCnt++;
+                ctx.Send(Sink, new TEvPrivate::TEvResetPrivateDatabaseConfig);
+            }
+            ctx.Send(ev->Sender, new TEvConsole::TEvConfigNotificationResponse(rec), 0, ev->Cookie);
+        }
+
+        STFUNC(StateWork) {
+            switch (ev->GetTypeRewrite()) {
+                HFunc(TEvConsole::TEvConfigNotificationRequest, Handle);
+                IgnoreFunc(TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse);
+            }
+        }
+    };
+
+    void DoTestDispatcherParseAndSendOpaquePrivateDatabaseConfig(bool withParser) {
+        const TString mainYaml0 = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 0
+config:
+  yaml_config_enabled: true
+  feature_flags:
+    database_yaml_config_allowed: true
+)";
+        const TString mainYaml1 = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: 1
+config:
+  yaml_config_enabled: true
+  feature_flags:
+    database_yaml_config_allowed: true
+  private_database_config:
+    secret_port: 666
+)";
+        const TString databaseYamlTemplate = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: VERSION
+config:
+  private_database_config:
+    secret_port: VALUE
+)";
+
+        // Set the end-node parser for the opaque kind into the dispatcher.
+        NKikimrConfig::TAppConfig appcfg;
+        auto *label = appcfg.AddLabels();
+        label->SetName("tenant");
+        label->SetValue(TENANT1_1_NAME);
+        appcfg.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+
+        TTenantTestConfig testConfig = DefaultConsoleTestConfig();
+        if (withParser) {
+            auto parser = std::bind(NKikimr::NYaml::DefaultOpaqueConfigParser<NKikimrOpaqueConfigUt::TUtPrivateDatabaseConfig>, std::placeholders::_1, true);
+            testConfig.OpaqueConfigParsers[(ui32)NKikimrConsole::TConfigItem::PrivateDatabaseConfigItem] = parser;
+        }
+
+        TTenantTestRuntime runtime(testConfig, appcfg);
+
+        // The end-node consumer subscribes to the private kind.
+        auto subscriber = new TPrivateDatabaseConfigSubscriber(runtime.Sender);
+        TActorId subscriberId = runtime.Register(subscriber);
+        runtime.EnableScheduleForActor(subscriberId, true);
+
+        // Init cluster with main config without private_database_config
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, mainYaml0);
+
+        // No private_database_config yet.
+        // The subscriber must report nothing.
+        runtime.DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
+        UNIT_ASSERT_VALUES_EQUAL(subscriber->parsedCnt.load(), 0);
+
+        // The OpaqueConfig marker makes the cluster accept config.private_database_config
+        // WITHOUT allow_unknown_fields.
+        // The dispatcher resolves it and pulls config.private_database_config from the resolved
+        // YAML for the injected parser.
+
+        // Set the opaque section in the main config.
+        //  withParser: The subscriber reports secret_port read from the dispatcher-parsed config.
+        // !withParser: The subscriber must report nothing.
+        {
+            subscriber->parsedCnt = 0;
+            CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, mainYaml1);
+            TAutoPtr<IEventHandle> handle;
+            if (withParser) {
+                auto ev = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvParsedPrivateDatabaseConfig>(handle, TDuration::Seconds(1));
+                UNIT_ASSERT_C(ev, "No PrivateDatabaseConfig received and processed by subscriber");
+                UNIT_ASSERT_VALUES_EQUAL(ev->SecretPort, 666);
+                UNIT_ASSERT_VALUES_EQUAL(subscriber->parsedCnt.load(), 1);
+            }
+            else {
+                runtime.DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
+                UNIT_ASSERT_VALUES_EQUAL(subscriber->parsedCnt.load(), 0);
+            }
+        }
+
+        // Set the opaque section in the database config.
+        //  withParser: The subscriber reports secret_port read from the dispatcher-parsed config.
+        // !withParser: The subscriber must report nothing.
+        // Run several times to ensure opaque-only change is passed to subscriber.
+        subscriber->parsedCnt = 0;
+        for (int i = 0; i < 5; i++ ) {
+            auto databaseYaml = databaseYamlTemplate;
+
+            SubstGlobal(databaseYaml, "VERSION", ToString(i));
+            SubstGlobal(databaseYaml, "VALUE", ToString(i+1));
+
+            CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, databaseYaml);
+            {
+                TAutoPtr<IEventHandle> handle;
+                if (withParser) {
+                    auto ev = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvParsedPrivateDatabaseConfig>(handle, TDuration::Seconds(1));
+                    UNIT_ASSERT_C(ev, "No PrivateDatabaseConfig received and processed by subscriber");
+                    UNIT_ASSERT_VALUES_EQUAL(subscriber->parsedCnt.load(), i+1);
+                    UNIT_ASSERT_VALUES_EQUAL(ev->SecretPort, i+1);
+                }
+                else {
+                    runtime.DispatchEvents(TDispatchOptions(), TDuration::Seconds(1));
+                    UNIT_ASSERT_VALUES_EQUAL(subscriber->parsedCnt.load(), 0);
+                }
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(subscriber->parsedCnt.load(), withParser ? 5 : 0);
+    }
+
+    Y_UNIT_TEST(TestDispatcherOmitsOpaquePrivateDatabaseConfigWithoutParser) {
+        DoTestDispatcherParseAndSendOpaquePrivateDatabaseConfig(/*withParser=*/false);
+    }
+
+    Y_UNIT_TEST(TestDispatcherParseAndSendOpaquePrivateDatabaseConfigWithParser) {
+        DoTestDispatcherParseAndSendOpaquePrivateDatabaseConfig(/*withParser=*/true);
+    }
+
+    // Test every transition of the opaque configs changes Edge cases:
+    //   absent -> absent             (init, no dispatch)
+    //   absent -> non-empty          (added - dispatch, parsed payload)
+    //   non-empty -> non-empty       (same value - no dispatch)
+    //   non-empty(A) -> non-empty(B) (mutated - dispatch, parsed payload)
+    //   non-empty -> absent          (removed - dispatch, reset / no payload)
+    //   absent -> non-empty          (re-added via database yaml - dispatch, parsed)
+    //   non-empty -> non-empty       (mutated via database yaml - dispatch, parsed)
+    Y_UNIT_TEST(TestOpaquePrivateDatabaseConfigEdgeCases) {
+        // No private_database_config - opaque section absent.
+        const TString mainYamlAbsent = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: VERSION
+config:
+  yaml_config_enabled: true
+  feature_flags:
+    database_yaml_config_allowed: true
+)";
+        // With private_database_config.secret_port = VALUE.
+        const TString mainYamlWithOpaque = R"(
+---
+metadata:
+  kind: MainConfig
+  cluster: ""
+  version: VERSION
+config:
+  yaml_config_enabled: true
+  feature_flags:
+    database_yaml_config_allowed: true
+  private_database_config:
+    secret_port: VALUE
+)";
+        const TString databaseYamlTemplate = R"(
+---
+metadata:
+  kind: DatabaseConfig
+  database: "/dc-1/users/tenant-1"
+  version: VERSION
+config:
+  private_database_config:
+    secret_port: VALUE
+)";
+        auto subst = [](TString tmpl, ui64 version, ui64 value) {
+            SubstGlobal(tmpl, "VERSION", ToString(version));
+            SubstGlobal(tmpl, "VALUE", ToString(value));
+            return tmpl;
+        };
+
+        NKikimrConfig::TAppConfig appcfg;
+        auto *label = appcfg.AddLabels();
+        label->SetName("tenant");
+        label->SetValue(TENANT1_1_NAME);
+        appcfg.MutableFeatureFlags()->SetDatabaseYamlConfigAllowed(true);
+
+        TTenantTestConfig testConfig = DefaultConsoleTestConfig();
+        auto parser = std::bind(NKikimr::NYaml::DefaultOpaqueConfigParser<NKikimrOpaqueConfigUt::TUtPrivateDatabaseConfig>, std::placeholders::_1, true);
+        testConfig.OpaqueConfigParsers[(ui32)NKikimrConsole::TConfigItem::PrivateDatabaseConfigItem] = parser;
+
+        TTenantTestRuntime runtime(testConfig, appcfg);
+
+        auto subscriber = new TPrivateDatabaseConfigSubscriber(runtime.Sender);
+        TActorId subscriberId = runtime.Register(subscriber);
+        runtime.EnableScheduleForActor(subscriberId, true);
+
+        // No trust to the runtime.SetObserverFunc() - fires multiple times per delivery
+        // for ES_PRIVATE events that share a numeric id with other unrelated private events;
+        // ev->Sender + ev->Recipient filter not help.
+        auto pollOneOfEither = [&](TDuration timeout) -> ui32 {
+            TAutoPtr<IEventHandle> handle;
+            auto [parsed, reset] = runtime.GrabEdgeEventsRethrow<
+                TEvPrivate::TEvParsedPrivateDatabaseConfig,
+                TEvPrivate::TEvResetPrivateDatabaseConfig>(handle, timeout);
+            if (parsed) {
+                return TEvPrivate::EvParsedPrivateDatabaseConfig;
+            }
+            if (reset) {
+                return TEvPrivate::EvResetPrivateDatabaseConfig;
+            }
+            return 0;
+        };
+
+        int mainVersion = 0;
+
+        // Case 1: absent -> absent (initial state). No opaque dispatch
+        // expected. There may be an initial subscription notification that
+        // arrives empty — observed via subscriber->resetQuan.
+        subscriber->parsedCnt = 0;
+        subscriber->resetCnt = 0;
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, subst(mainYamlAbsent, mainVersion++, 0));
+        {
+            TAutoPtr<IEventHandle> handle;
+            auto ev = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvResetPrivateDatabaseConfig>(handle, TDuration::Seconds(1));
+            UNIT_ASSERT_C(ev, "absent -> absent must produce the initial reset notification");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(subscriber->parsedCnt.load(), 0);
+        // No subscriber->resetQuan.load() check - the subscriber-init notification always
+        // dispatches once on the dispatcher side, so subscriber->resetQuan may have grown.
+
+        // Case 2: absent -> non-empty (added). Expect one parsed event.
+        subscriber->parsedCnt = 0;
+        subscriber->resetCnt = 0;
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, subst(mainYamlWithOpaque, mainVersion++, 666));
+        {
+            TAutoPtr<IEventHandle> handle;
+            auto ev = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvParsedPrivateDatabaseConfig>(handle, TDuration::Seconds(1));
+            UNIT_ASSERT_C(ev, "absent -> non-empty must dispatch a parsed opaque config");
+            UNIT_ASSERT_VALUES_EQUAL(ev->SecretPort, 666);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(subscriber->parsedCnt.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(subscriber->resetCnt.load(), 0);
+
+        // Case 3: non-empty -> non-empty (same value, version bumped).
+        // The opaque RawJson is byte-identical so no opaque-driven dispatch;
+        // and the proto truncation for this kind is unchanged so the regular
+        // path also does not fire. Expect zero new events.
+        subscriber->parsedCnt = 0;
+        subscriber->resetCnt = 0;
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, subst(mainYamlWithOpaque, mainVersion++, 666));
+        {
+            UNIT_ASSERT_VALUES_EQUAL_C(pollOneOfEither(TDuration::Seconds(1)), 0u,
+                                      "identical opaque must not redispatch");
+        }
+        UNIT_ASSERT_VALUES_EQUAL_C(subscriber->parsedCnt.load(), 0, "identical opaque must not redispatch");
+        UNIT_ASSERT_VALUES_EQUAL_C(subscriber->resetCnt.load(), 0, "identical opaque must not redispatch");
+
+        // Case 4: non-empty(666) -> non-empty(777). RawJson differs:
+        // expect exactly one parsed event carrying the new value.
+        subscriber->parsedCnt = 0;
+        subscriber->resetCnt = 0;
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, subst(mainYamlWithOpaque, mainVersion++, 777));
+        {
+            TAutoPtr<IEventHandle> handle;
+            auto ev = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvParsedPrivateDatabaseConfig>(handle, TDuration::Seconds(1));
+            UNIT_ASSERT_C(ev, "non-empty A -> non-empty B must dispatch a parsed opaque config");
+            UNIT_ASSERT_VALUES_EQUAL(ev->SecretPort, 777);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(subscriber->parsedCnt.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(subscriber->resetCnt.load(), 0);
+
+        // Case 5: non-empty -> absent (removed). Expect one reset event
+        // and no parsed event.
+        subscriber->parsedCnt = 0;
+        subscriber->resetCnt = 0;
+        CheckReplaceConfig(runtime, Ydb::StatusIds::SUCCESS, subst(mainYamlAbsent, mainVersion++, 0));
+        {
+            TAutoPtr<IEventHandle> handle;
+            auto ev = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvResetPrivateDatabaseConfig>(handle, TDuration::Seconds(1));
+            UNIT_ASSERT_C(ev, "non-empty -> absent must dispatch a reset notification");
+        }
+        UNIT_ASSERT_VALUES_EQUAL(subscriber->parsedCnt.load(), 0);
+        UNIT_ASSERT_VALUES_EQUAL(subscriber->resetCnt.load(), 1);
+
+        int databaseVersion = 0;
+
+        // Case 6: absent -> non-empty via database yaml. The opaque
+        // section reappears with a different value.
+        subscriber->parsedCnt = 0;
+        subscriber->resetCnt = 0;
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, subst(databaseYamlTemplate, databaseVersion++, 888));
+        {
+            TAutoPtr<IEventHandle> handle;
+            auto ev = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvParsedPrivateDatabaseConfig>(handle, TDuration::Seconds(1));
+            UNIT_ASSERT_C(ev, "absent -> non-empty (via db yaml) must dispatch parsed opaque config");
+            UNIT_ASSERT_VALUES_EQUAL(ev->SecretPort, 888);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(subscriber->parsedCnt.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(subscriber->resetCnt.load(), 0);
+
+        // Case 7: non-empty(888) -> non-empty(999) via database yaml.
+        subscriber->parsedCnt = 0;
+        subscriber->resetCnt = 0;
+        CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, subst(databaseYamlTemplate, databaseVersion++, 999));
+        {
+            TAutoPtr<IEventHandle> handle;
+            auto ev = runtime.GrabEdgeEventRethrow<TEvPrivate::TEvParsedPrivateDatabaseConfig>(handle, TDuration::Seconds(1));
+            UNIT_ASSERT_C(ev, "non-empty A -> non-empty B (via db yaml) must dispatch parsed opaque config");
+            UNIT_ASSERT_VALUES_EQUAL(ev->SecretPort, 999);
+        }
+        UNIT_ASSERT_VALUES_EQUAL(subscriber->parsedCnt.load(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(subscriber->resetCnt.load(), 0);
     }
 }
 

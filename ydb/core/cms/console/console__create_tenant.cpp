@@ -197,7 +197,7 @@ public:
 
                 if (Tenant->StoragePools.contains(kind)) {
                     auto pool = Tenant->StoragePools.at(kind);
-                    pool->AddRequiredGroups(size);
+                    pool->ChangeRequiredGroups(size);
                 } else {
                     if (!Self->MakeBasicPoolCheck(kind, size, code, error))
                         return Error(code, error, ctx);

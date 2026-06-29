@@ -65,7 +65,10 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
     for (const auto& [tableNode, indexDesc] : indexes) {
         if (useStreamIndex
                 && (indexDesc->Type == TIndexDescription::EType::GlobalSync
-                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique)) {
+                    || indexDesc->Type == TIndexDescription::EType::GlobalSyncUnique
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompact
+                    || indexDesc->Type == TIndexDescription::EType::GlobalFulltextCompactRelevance
+                    || indexDesc->Type == TIndexDescription::EType::GlobalJsonCompact)) {
             continue;
         }
         THashSet<TStringBuf> indexTableColumnsSet;
@@ -81,6 +84,11 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
                 indexTableColumns.emplace_back(column);
             }
         }
+
+        // Fulltext indexes that use __ydb_row_id as doc-id need it read from the base table
+        // so postings/docs/stats are deleted by the stored doc-id (it is neither an index
+        // KeyColumn nor part of the PK).
+        AddFulltextDocIdColumns(indexDesc, indexTableColumns, indexTableColumnsSet);
 
         auto deleteIndexKeys = project(indexTableColumns);
 
@@ -120,11 +128,18 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
                     auto dictRows = BuildFulltextDictRows(deleteIndexKeys, false /*useSum*/, true /*useStage*/, del.Pos(), ctx);
                     effects.emplace_back(BuildFulltextDictUpsert(dictTable, dictRows, del.Pos(), ctx));
                     // Rows in deleteIndexKeys include __ydb_freq, but we don't need it for delete keys
-                    deleteIndexKeys = BuildFulltextPostingKeys(table, deleteIndexKeys, del.Pos(), ctx);
-                    // Delete document rows
+                    deleteIndexKeys = BuildFulltextPostingKeys(table, indexDesc, deleteIndexKeys, del.Pos(), ctx);
+                    // Delete document rows. The docs table is keyed by the doc-id, which is
+                    // __ydb_row_id when the index uses UseRowIdAsDocId, otherwise the main-table PK.
                     const auto& docsTable = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, TStringBuilder() << del.Table().Path().Value()
                         << "/" << indexDesc->Name << "/" << NKikimr::NTableIndex::NFulltext::DocsTable);
-                    auto docsKeys = project(TVector<TStringBuf>(pk.begin(), pk.end())); // TVector<TString> to TVector<TStringBuf>
+                    TVector<TStringBuf> docIdColumns;
+                    if (FulltextUsesRowIdAsDocId(indexDesc)) {
+                        docIdColumns.emplace_back(NKikimr::NTableIndex::NFulltext::RowIdColumn);
+                    } else {
+                        docIdColumns.assign(pk.begin(), pk.end());
+                    }
+                    auto docsKeys = project(docIdColumns);
                     effects.emplace_back(Build<TKqlDeleteRows>(ctx, del.Pos())
                         .Table(BuildTableMeta(docsTable, del.Pos(), ctx))
                         .Input(docsKeys)
@@ -233,6 +248,10 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
     for (const auto& pair : indexes) {
         for (const auto& col : pair.second->KeyColumns) {
             keyColumns.emplace(col);
+        }
+        // Fulltext __ydb_row_id doc-id must be read from the base table to delete postings by it.
+        if (FulltextUsesRowIdAsDocId(pair.second)) {
+            keyColumns.emplace(NKikimr::NTableIndex::NFulltext::RowIdColumn);
         }
     }
 

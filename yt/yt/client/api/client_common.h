@@ -185,7 +185,7 @@ struct TSelectRowsOptions
     //! If null then connection defaults are used.
     std::optional<i64> OutputRowLimit;
     //! Execution pool.
-    std::optional<TString> ExecutionPool;
+    std::optional<std::string> ExecutionPool;
     //! Used to prioritize requests.
     TUserWorkloadDescriptor WorkloadDescriptor;
     //! Memory limit per execution node.

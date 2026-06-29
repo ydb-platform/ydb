@@ -56,7 +56,7 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpCreateIndexBuild);
 
     const auto& op = tx.GetInitiateIndexBuild();
-    const auto& indexDesc = op.GetIndex();
+    NKikimrSchemeOp::TIndexCreationConfig indexDesc = op.GetIndex();
 
     switch (GetIndexType(indexDesc)) {
         case NKikimrSchemeOp::EIndexTypeGlobal:
@@ -142,9 +142,13 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             << ", intention to create new children: " << aliveIndices + 1)};
     }
 
+    TString errStr;
+    if (!NTableIndex::MaybeEnableFulltextRowIdMode(tableInfo, table.Base()->GetChildren(), context.SS->Indexes, indexDesc, errStr)) {
+        return {CreateReject(opId, NKikimrScheme::EStatus::StatusInvalidParameter, errStr)};
+    }
+
     NTableIndex::TTableColumns implTableColumns;
     NKikimrScheme::EStatus status;
-    TString errStr;
     if (!NTableIndex::CommonCheck(tableInfo, indexDesc, domainInfo->GetSchemeLimits(), false, implTableColumns, status, errStr)) {
         return {CreateReject(opId, status, errStr)};
     }
@@ -244,9 +248,11 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
             auto implTableDesc = compact
                 ? CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
-                    indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType)
+                    indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType,
+                    NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames()))
                 : CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
-                    indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType);
+                    indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType,
+                    NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames()));
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
             result.push_back(createImplTable(std::move(implTableDesc)));
             break;
@@ -265,12 +271,14 @@ TVector<ISubOperation::TPtr> CreateBuildIndex(TOperationId opId, const TTxTransa
             const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
             auto implTableDesc = compact
                 ? CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
-                    indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType)
+                    indexTableDesc, &indexDesc.GetFulltextIndexDescription(), indexType,
+                    NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames()))
                 : CalcFulltextImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns,
-                    indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType);
+                    indexTableDesc, indexDesc.GetFulltextIndexDescription(), indexType,
+                    NTableIndex::GetFulltextPrefixColumns(indexDesc.GetKeyColumnNames()));
             implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
             result.push_back(createImplTable(std::move(implTableDesc)));
-            result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc)));
+            result.push_back(createImplTable(CalcFulltextDocsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, docsTableDesc, indexDesc.GetFulltextIndexDescription())));
             result.push_back(createImplTable(CalcFulltextDictImplTableDesc(tableInfo, tableInfo->PartitionConfig(), dictTableDesc, indexDesc.GetFulltextIndexDescription())));
             result.push_back(createImplTable(CalcFulltextStatsImplTableDesc(tableInfo, tableInfo->PartitionConfig(), statsTableDesc)));
             break;

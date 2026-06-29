@@ -73,4 +73,4 @@ TVector<NYT::TRawTableReaderPtr> MakeTextYsonInputs(const TVector<std::pair<TStr
     return rawReaders;
 }
 
-} //namespace NYql::NFile
+} // namespace NYql::NFile

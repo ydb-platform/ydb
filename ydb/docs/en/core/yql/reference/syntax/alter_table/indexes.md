@@ -8,6 +8,7 @@
 ALTER TABLE `<table_name>`
   ADD INDEX `<index_name>`
     [GLOBAL|LOCAL]
+    [UNIQUE]
     [SYNC|ASYNC]
     [USING <index_type>]
     ON ( <index_columns> )
@@ -39,13 +40,29 @@ Parameters specific to fulltext indexes:
 
 {% include [fulltext_index_parameters.md](../_includes/fulltext_index_parameters.md) %}
 
+### Local Bloom skip index parameters {#local-bloom}
+
+{% include [bloom_skip_index_parameters.md](../_includes/bloom_skip_index_parameters.md) %}
+
 {% if backend_name == "YDB" %}
 
 You can also add a secondary index using the {{ ydb-short-name }} CLI [table index](../../../../reference/ydb-cli/commands/secondary_index.md#add) command.
 
 {% endif %}
 
-{% include [not_allow_for_olap](../../../../_includes/not_allow_for_olap_note.md) %}
+### Limitations
+
+The `ADD INDEX` operation for creating global secondary (`GLOBAL`, `UNIQUE`, and so on) and vector indexes is supported only for row-oriented tables. For [column-oriented tables](../../../../concepts/datamodel/table.md#column-oriented-tables), `ADD INDEX` [supports only local Bloom skip indexes](#local-bloom).
+
+Local Bloom skip index behavior:
+
+{% include [bloom_skip_index_features.md](../_includes/bloom_skip_index_features.md) %}
+
+{% note info "Limitations" %}
+
+{% include [bloom_skip_index_limitations.md](../_includes/bloom_skip_index_limitations.md) %}
+
+{% endnote %}
 
 ### Examples
 
@@ -77,6 +94,28 @@ ALTER TABLE `series`
   WITH (tokenizer=standard, use_filter_lowercase=true);
 ```
 
+A bloom index:
+
+```yql
+ALTER TABLE `/Root/Table`
+  ADD INDEX idx_bloom LOCAL USING bloom_filter
+  ON (resource_id)
+  WITH (false_positive_probability = 0.01);
+```
+
+A bloom ngram index:
+
+```yql
+ALTER TABLE `/Root/Table`
+  ADD INDEX idx_ngram LOCAL USING bloom_ngram_filter
+  ON (message)
+  WITH (
+    ngram_size = 3,
+    false_positive_probability = 0.01,
+    case_sensitive = true
+  );
+```
+
 ## Altering an index {#alter-index}
 
 Indexes have type-specific parameters that can be tuned. Global indexes, whether [synchronous]({{ concept_secondary_index }}#sync) or [asynchronous]({{ concept_secondary_index }}#async), are implemented as hidden tables, and their automatic partitioning and followers settings can be adjusted just like those of regular tables.
@@ -94,19 +133,22 @@ ALTER TABLE <table_name> ALTER INDEX <index_name> SET (<setting_name_1> = <value
 
 * `<table_name>`: The name of the table whose index is to be modified.
 * `<index_name>`: The name of the index to be modified.
-* `<setting_name>`: The name of the setting to be modified, which should be one of the following:
-
-    * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
-    * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
-    * [AUTO_PARTITIONING_PARTITION_SIZE_MB]({{ concept_table }}#auto_partitioning_partition_size_mb)
-    * [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_min_partitions_count)
-    * [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_max_partitions_count)
-    * [READ_REPLICAS_SETTINGS]({{ concept_table }}#read_only_replicas)
+* `<setting_name>`: The name of the setting to be modified. Allowed settings depend on the index type:
+    * for global secondary indexes:
+        * [AUTO_PARTITIONING_BY_SIZE]({{ concept_table }}#auto_partitioning_by_size)
+        * [AUTO_PARTITIONING_BY_LOAD]({{ concept_table }}#auto_partitioning_by_load)
+        * [AUTO_PARTITIONING_PARTITION_SIZE_MB]({{ concept_table }}#auto_partitioning_partition_size_mb)
+        * [AUTO_PARTITIONING_MIN_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_min_partitions_count)
+        * [AUTO_PARTITIONING_MAX_PARTITIONS_COUNT]({{ concept_table }}#auto_partitioning_max_partitions_count)
+        * [READ_REPLICAS_SETTINGS]({{ concept_table }}#read_only_replicas)
+    * for local Bloom skip indexes (see [Local Bloom skip index parameters](#local-bloom)):
+        * `FALSE_POSITIVE_PROBABILITY`
+        * `NGRAM_SIZE` and `CASE_SENSITIVE` (for `bloom_ngram_filter` only)
 
 
 {% note info %}
 
-These settings cannot be reset.
+`RESET` is not supported for `ALTER INDEX`.
 
 {% endnote %}
 
@@ -114,6 +156,9 @@ These settings cannot be reset.
     * `ENABLED` or `DISABLED` for the `AUTO_PARTITIONING_BY_SIZE` and `AUTO_PARTITIONING_BY_LOAD` settings
     * `"PER_AZ:<count>"` or `"ANY_AZ:<count>"` where `<count>` is the number of replicas for the `READ_REPLICAS_SETTINGS`
     * An integer of `Uint64` type for the other settings
+    * A floating-point value in `(0, 1)` for `FALSE_POSITIVE_PROBABILITY`; smaller values usually reduce false positives but increase index size
+    * An integer value from `3` to `8` for `NGRAM_SIZE` (a typical starting point is `3`)
+    * `true` or `false` for `CASE_SENSITIVE`
 
 ### Example
 
@@ -125,6 +170,16 @@ ALTER TABLE `series` ALTER INDEX `title_index` SET (
     AUTO_PARTITIONING_BY_LOAD = ENABLED,
     AUTO_PARTITIONING_MIN_PARTITIONS_COUNT = 5,
     READ_REPLICAS_SETTINGS = "PER_AZ:1"
+);
+```
+
+For local Bloom skip indexes, you can also alter index-specific parameters, for example:
+
+```yql
+ALTER TABLE `/Root/Table` ALTER INDEX idx_ngram SET (
+    ngram_size = 4,
+    false_positive_probability = 0.005,
+    case_sensitive = false
 );
 ```
 
@@ -150,7 +205,9 @@ If an index with the new name exists, an error is returned.
 
 {% if backend_name == "YDB" %}
 
-Replacement of atomic indexes under load is supported by the command [{{ ydb-cli }} table index rename](../../../../reference/ydb-cli/commands/secondary_index.md#rename) in the {{ ydb-short-name }} CLI and by {{ ydb-short-name }} SDK ad-hoc methods.
+Atomically replacing an index under load is supported by the [{{ ydb-cli }} table index rename](../../../../reference/ydb-cli/commands/secondary_index.md#rename) command in the {{ ydb-short-name }} CLI and by {{ ydb-short-name }} SDK methods.
+
+This applies to global secondary indexes (the hidden index table and the `--replace` mode). Local Bloom skip indexes are not covered by this atomic under-load replacement flow.
 
 {% endif %}
 

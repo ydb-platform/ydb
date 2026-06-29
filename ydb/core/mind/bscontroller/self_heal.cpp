@@ -434,10 +434,13 @@ namespace NKikimr::NBsController {
                     auto& group = it->second;
                     if (const auto it = group.Content.VDisks.find(item.VDiskId); it != group.Content.VDisks.end()) {
                         auto& vdisk = it->second;
-                        vdisk.OnlyPhantomsRemain = item.OnlyPhantomsRemain.value_or(vdisk.OnlyPhantomsRemain);
                         vdisk.IsReady = item.IsReady.value_or(vdisk.IsReady);
                         vdisk.ReadySince = item.ReadySince.value_or(vdisk.ReadySince);
                         vdisk.VDiskStatus = item.VDiskStatus.value_or(vdisk.VDiskStatus);
+                        vdisk.OnlyPhantomsRemain = item.OnlyPhantomsRemain.value_or(vdisk.OnlyPhantomsRemain);
+                        if (vdisk.VDiskStatus != NKikimrBlobStorage::EVDiskStatus::REPLICATING) {
+                            vdisk.OnlyPhantomsRemain = false;
+                        }
                     }
                 }
             }
@@ -645,7 +648,7 @@ namespace NKikimr::NBsController {
 
         void Handle(NMon::TEvRemoteHttpInfo::TPtr& ev) {
             TStringStream str;
-            RenderMonPage(str, ev->Cookie);
+            RenderMonPage(str, ev->Cookie, ev->Get()->GetCookie("csrf_token"));
             Send(ev->Sender, new NMon::TEvRemoteHttpInfoRes(str.Str()));
         }
 
@@ -745,7 +748,7 @@ namespace NKikimr::NBsController {
             }
         }
 
-        void RenderMonPage(IOutputStream& out, bool selfHealEnabled) {
+        void RenderMonPage(IOutputStream& out, bool selfHealEnabled, const TString& csrfToken = {}) {
             HTML(out) {
                 TAG(TH2) {
                     out << "BlobStorage Controller";
@@ -763,6 +766,18 @@ namespace NKikimr::NBsController {
                             out << "<input type='hidden' name='page' value='SelfHeal'>" << Endl;
                             out << "<input type='hidden' name='disable' value='1'>" << Endl;
                             out << "<input type='hidden' name='action' value='disableSelfHeal'>" << Endl;
+                            out << "<input type='hidden' name='csrf_token' value='";
+                            for (char c : csrfToken) {
+                                switch (c) {
+                                    case '&': out << "&amp;"; break;
+                                    case '<': out << "&lt;"; break;
+                                    case '>': out << "&gt;"; break;
+                                    case '\'': out << "&#39;"; break;
+                                    case '"': out << "&quot;"; break;
+                                    default: out << c; break;
+                                }
+                            }
+                            out << "'>" << Endl;
                             out << "<input class='btn btn-primary' type='submit' value='DISABLE NOW'/>" << Endl;
                             out << "</form>";
                         }
@@ -1043,7 +1058,7 @@ namespace NKikimr::NBsController {
                     .UnavailabilityRisk = slot->PDisk->BadInTermsOfSelfHeal(),
                     .Decommitted =  slot->PDisk->Decommitted(),
                     .IsSelfHealReasonDecommit = slot->PDisk->IsSelfHealReasonDecommit(),
-                    .OnlyPhantomsRemain = slot->OnlyPhantomsRemain,
+                    .OnlyPhantomsRemain = slot->IsReplicatingWithPhantomsOnly(),
                     .IsReady = slot->IsReady,
                     .ReadySince = TMonotonic::Zero(),
                     .VDiskStatus = slot->GetStatus(),
@@ -1093,7 +1108,7 @@ namespace NKikimr::NBsController {
                         pdiskInfo ? pdiskInfo->BadInTermsOfSelfHeal() : false,
                         pdiskInfo ? pdiskInfo->Decommitted() : false,
                         pdiskInfo ? pdiskInfo->IsSelfHealReasonDecommit() : false,
-                        false, /* OnlyPhantomsRemain */
+                        info.IsReplicatingWithPhantomsOnly(), /* OnlyPhantomsRemain */
                         true, /* IsReady; decision is based on ReadySince */
                         info.ReadySince,
                         info.VDiskStatus.value_or(NKikimrBlobStorage::EVDiskStatus::ERROR),
@@ -1118,13 +1133,15 @@ namespace NKikimr::NBsController {
         for (const auto& m : s) {
             const TVSlotId vslotId(m.GetNodeId(), m.GetPDiskId(), m.GetVSlotId());
             const auto vdiskId = VDiskIDFromVDiskID(m.GetVDiskId());
+            const bool onlyPhantomsRemain = m.GetStatus() == NKikimrBlobStorage::EVDiskStatus::REPLICATING &&
+                m.GetOnlyPhantomsRemain();
             if (TVSlotInfo *slot = FindVSlot(vslotId); slot && !slot->IsBeingDeleted() &&
                     slot->PDisk->Guid == m.GetPDiskGuid() && vdiskId.SameExceptGeneration(slot->GetVDiskId())) {
                 const bool was = slot->IsOperational();
                 if (const TGroupInfo *group = slot->Group) {
                     const bool wasReady = slot->IsReady;
-                    if (slot->GetStatus() != m.GetStatus() || slot->OnlyPhantomsRemain != m.GetOnlyPhantomsRemain()) {
-                        slot->SetStatus(m.GetStatus(), mono, now, m.GetOnlyPhantomsRemain(), this);
+                    if (slot->GetStatus() != m.GetStatus() || slot->OnlyPhantomsRemain != onlyPhantomsRemain) {
+                        slot->SetStatus(m.GetStatus(), mono, now, onlyPhantomsRemain, this);
                         if (slot->IsReady != wasReady) {
                             ScrubState.UpdateVDiskState(slot);
                             if (wasReady) {
@@ -1135,7 +1152,7 @@ namespace NKikimr::NBsController {
                     }
                     updates.push_back({
                         .VDiskId = vdiskId,
-                        .OnlyPhantomsRemain = slot->OnlyPhantomsRemain,
+                        .OnlyPhantomsRemain = slot->IsReplicatingWithPhantomsOnly(),
                         .IsReady = slot->IsReady,
                         .VDiskStatus = slot->GetStatus(),
                     });
@@ -1159,6 +1176,7 @@ namespace NKikimr::NBsController {
                     vdiskId.SameExceptGeneration(it->second.VDiskId)) {
                 auto& vslot = it->second;
                 vslot.VDiskStatus = m.GetStatus();
+                vslot.OnlyPhantomsRemain = onlyPhantomsRemain;
                 if (vslot.VDiskStatus == NKikimrBlobStorage::EVDiskStatus::READY) {
                     vslot.ReadySince = Min(vslot.ReadySince, mono + ReadyStablePeriod);
                 } else {
@@ -1166,6 +1184,7 @@ namespace NKikimr::NBsController {
                 }
                 updates.push_back({
                     .VDiskId = vslot.VDiskId,
+                    .OnlyPhantomsRemain = vslot.IsReplicatingWithPhantomsOnly(),
                     .ReadySince = vslot.ReadySince,
                     .VDiskStatus = vslot.VDiskStatus,
                 });

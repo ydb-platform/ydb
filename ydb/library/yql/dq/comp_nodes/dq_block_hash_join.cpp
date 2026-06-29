@@ -41,6 +41,8 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
                             const TDqBlockJoinContext* meta,
                             TSides<std::unique_ptr<IBlockLayoutConverter>>& converters, ESide side)
         : Side_(side)
+        , Meta_(meta)
+        , ArrowPool_(&ctx.ArrowMemoryPool)
         , Stream_(stream.SelectSide(side))
         , StreamValues_(Stream_->GetValue(ctx))
         , Buff_(ctx.MutableValues.get() + meta->TempStateIndes.SelectSide(side), meta->InputTypes.SelectSide(side).size())
@@ -77,6 +79,7 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
             }
             columns = std::move(permuted);
         }
+        NormalizeScalarColumns(columns);
         IBlockLayoutConverter::TPackResult result;
         ArrowBlockToInternalConverter_->Pack(columns, result);
         return One{std::move(result)};
@@ -91,8 +94,34 @@ class TBlockPackedTupleSource : public NNonCopyable::TMoveOnly {
         return arrow;
     }
 
+    void NormalizeScalarColumns(TVector<arrow::Datum>& columns) {
+        bool hasScalar = false;
+        for (const auto& column : columns) {
+            if (column.is_scalar()) {
+                hasScalar = true;
+                break;
+            }
+        }
+        if (!hasScalar) {
+            return;
+        }
+
+        const ui64 blockLen = GetBlockCount(Buff_[UserDataCols()]);
+        MKQL_ENSURE(blockLen > 0, "Got a scalar column in a zero-length block");
+
+        const auto& inputTypes = Meta_->InputTypes.SelectSide(Side_);
+        for (size_t j = 0; j < columns.size(); ++j) {
+            if (columns[j].is_scalar()) {
+                TType* itemType = inputTypes[j]->GetItemType();
+                columns[j] = MakeArrayFromScalar(*columns[j].scalar(), blockLen, itemType, *ArrowPool_);
+            }
+        }
+    }
+
     bool Finished_ = false;
-    [[maybe_unused]]ESide Side_;
+    ESide Side_;
+    const TDqBlockJoinContext* Meta_;
+    arrow::MemoryPool* ArrowPool_;
     IComputationNode* Stream_;
     NYql::NUdf::TUnboxedValue StreamValues_;
     std::span<NYql::NUdf::TUnboxedValue> Buff_;
@@ -271,9 +300,9 @@ template <EJoinKind Kind> class TBlockHashJoinWrapper : public TMutableComputati
             i64 rows = Output_.SizeTuples();
             TVector<arrow::Datum> arrowOutput = Output_.FlushAndApplyRenames();
             for (int colIndex = 0; colIndex < Output_.Columns(); ++colIndex) {
-                output[colIndex] = Ctx_->HolderFactory.CreateArrowBlock(std::move(arrowOutput[colIndex]));
+                output[colIndex] = Ctx_->HolderFactory.CreateArrowBlock(std::move(arrowOutput[colIndex]), Ctx_->RuntimeSettings.DatumValidation.Get());
             }
-            output[Output_.Columns()] = Ctx_->HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(rows)));
+            output[Output_.Columns()] = Ctx_->HolderFactory.CreateArrowBlock(arrow::Datum(static_cast<uint64_t>(rows)), Ctx_->RuntimeSettings.DatumValidation.Get());
 
             MKQL_ENSURE(Output_.SizeTuples() == 0, "something left after flush??");
             return NYql::NUdf::EFetchStatus::Ok;

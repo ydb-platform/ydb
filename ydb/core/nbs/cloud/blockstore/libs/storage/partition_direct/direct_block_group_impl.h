@@ -11,6 +11,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ddisk_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
@@ -132,6 +133,8 @@ public:
         NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
         NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
 
+    NThreading::TFuture<TDbgSnapshot> BuildMonSnapshot() override;
+
     // IHostStateController implementation
     void SetHostState(
         THostIndex hostIndex,
@@ -246,6 +249,8 @@ private:
     [[nodiscard]] bool WaitForSessionLock(THostIndex hostIndex);
 
     TDBGDumpResponse DoDebugPrintDirtyMap();
+
+    TDbgSnapshot DoBuildMonSnapshot();
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;

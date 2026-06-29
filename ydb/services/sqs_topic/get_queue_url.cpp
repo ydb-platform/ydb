@@ -6,6 +6,9 @@
 #include "request.h"
 #include "utils.h"
 
+#include <ydb/core/base/appdata.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
+
 #include <ydb/core/http_proxy/events.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/core/ymq/base/limits.h>
@@ -131,10 +134,12 @@ namespace NKikimr::NSqsTopic::V1 {
         void ReplyAndDie(const TActorContext& ctx) {
             Ydb::Ymq::V1::GetQueueUrlResult result;
 
+            const TString consumerInUrl = NPersQueue::ConvertOldConsumerName(ConsumerConfig->GetName(), ctx);
+
             const TRichQueueUrl queueUrl{
                 .Database = this->Database,
                 .TopicPath = this->TopicPath,
-                .Consumer = this->ConsumerName,
+                .Consumer = consumerInUrl,
                 .Fifo = QueueName.EndsWith(".fifo"),
             };
 

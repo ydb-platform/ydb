@@ -66,6 +66,18 @@ namespace {
         }
     };
 
+    class TNonFirstClassCitizenFixture: public THttpProxyTestMock {
+    public:
+        static constexpr TStringBuf FederationDatabase = "/Root/federation";
+
+        void SetUp(NUnitTest::TTestContext&) override {
+            InitAll(TInitParameters{
+                .EnableSqsTopic = true,
+                .TopicsAreFirstClassCitizen = false,
+            });
+        }
+    };
+
     using NYdb::TDriver;
     using NYdb::NTopic::TTopicClient;
 
@@ -257,6 +269,51 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             }, 400);
             TString resultType = GetByPath<TString>(json, "__type");
             UNIT_ASSERT_VALUES_EQUAL(resultType, "AWS.SimpleQueueService.NonExistentQueue");
+        }
+
+        void TestGetQueueUrlWithAtSignInConsumerNameInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            auto driver = MakeDriver(fixture);
+
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+            const TString topicName = "my_topic";
+            const TString topicPath = TStringBuilder() << "federation/" << topicName;
+            const TString consumerName = "my@consumer";
+            const TString consumerInQueueName = "my/consumer";
+            Y_ENSURE(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
+                .AddAttribute("_federation_account", "account1")
+                .BeginAddSharedConsumer(consumerName)
+                    .KeepMessagesOrder(false)
+                    .DefaultProcessingTimeout(TDuration::Seconds(20))
+                .EndAddConsumer()));
+
+            const TString expectedQueueUrl = std::format(
+                "/v1/{}/{}/{}/{}/{}/{}",
+                database.size(),
+                database.c_str(),
+                topicName.size(),
+                topicName.c_str(),
+                consumerInQueueName.size(),
+                consumerInQueueName.c_str());
+            auto res = fixture.SendHttpRequest(
+                database,
+                "AmazonSQS.GetQueueUrl",
+                NJson::TJsonMap{{"QueueName", requestQueueName}},
+                fixture.FormAuthorizationStr("ru-central1"));
+            UNIT_ASSERT_VALUES_EQUAL_C(res.HttpCode, 200, res.Body);
+            NJson::TJsonMap json;
+            UNIT_ASSERT(NJson::ReadJsonTree(res.Body, &json, true));
+            UNIT_ASSERT_VALUES_EQUAL(expectedQueueUrl, GetPathFromQueueUrlMap(json));
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueUrlWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestGetQueueUrlWithAtSignInConsumerNameInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueUrlWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestGetQueueUrlWithAtSignInConsumerNameInFederationImpl(*this, "my_topic@/my/consumer");
         }
 
         Y_UNIT_TEST_F(TestListQueues, TFixture) {

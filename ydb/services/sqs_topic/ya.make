@@ -57,3 +57,7 @@ RECURSE(
     protos
     queue_url
 )
+
+RECURSE_FOR_TESTS(
+    ut
+)

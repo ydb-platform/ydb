@@ -56,16 +56,25 @@ When performing an export, a directory named `export_*` is created in the root d
 
 {% endnote %}
 
+## Backup collections {#backup-collections}
+
+Backup collections provide incremental backup and point-in-time recovery for production workloads. For conceptual information and architecture details, see [Backup collections](../../concepts/datamodel/backup-collection.md).
+
+Backup collections are recommended for production environments with regular backup schedules and large datasets where incremental changes are significantly smaller than the total volume. For simpler scenarios (one-off migrations, development environments, small databases), consider using [export/import](#s3) or [dump/restore](#files).
+
+For step-by-step instructions on setting up and using backup collections, see:
+
+- [Backup collections](../../concepts/datamodel/backup-collection.md) — architecture, concepts, and limitations
+- [Backup collection recipes](../../recipes/backup-collections/index.md) — typical scenarios and examples
+
 {% include [_includes/backup_and_recovery/cli_overlay.md](../_includes/backup_and_recovery/cli_overlay.md) %}
 
 {% include [_includes/backup_and_recovery/others_overlay.md](../_includes/backup_and_recovery/others_overlay.md) %}
 
 ## Backup of system tablets {#system-tablet-backup}
 
-The backup mechanism for system tablets, such as [Hive](../../concepts/glossary.md#hive), [BSController](../../concepts/glossary.md#ds-controller), and [SchemeShard](../../concepts/glossary.md#scheme-shard), provides incremental copying of cluster metadata to the cluster's local file system.
+The system tablet backup mechanism provides incremental copying of cluster metadata to the local file system of the cluster hosts.
 
-This mechanism is designed to restore cluster metadata when other recovery methods are unavailable — for example, when a database backup is missing or the database size is too large to restore from a backup in an acceptable time. The mechanism allows restoring metadata in an existing cluster without needing to recreate the cluster and restore databases from backups.
+For conceptual information and how it works, see [Backup concepts](../../concepts/backup.md#system-tablet-backup).
 
-If you can restore the cluster using the [export/import](#s3) or [dump/restore](#files) commands, it is recommended to use these methods.
-
-For conceptual information about system tablet backup, see [Backup concepts](../../concepts/backup.md#system-tablet-backup).
+For step-by-step instructions on enabling backup and recovery, see [System tablet backup recipes](../../recipes/system-tablet-backup/index.md).

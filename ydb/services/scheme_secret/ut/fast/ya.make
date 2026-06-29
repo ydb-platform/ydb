@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/core/kqp/federated_query/actors)
+UNITTEST_FOR(ydb/services/scheme_secret)
 
 SIZE(MEDIUM)
 IF (SANITIZER_TYPE)
@@ -8,14 +8,14 @@ ELSE()
 ENDIF()
 
 PEERDIR(
-    ydb/core/kqp/federated_query/actors
-    ydb/core/kqp/federated_query/actors/ut_service/common
+    ydb/services/scheme_secret
+    ydb/services/scheme_secret/ut/common
     ydb/core/kqp/ut/common
     yql/essentials/sql/pg_dummy
 )
 
 SRCS(
-    kqp_federated_query_actors_ut.cpp
+    service_ut.cpp
 )
 
 YQL_LAST_ABI_VERSION()

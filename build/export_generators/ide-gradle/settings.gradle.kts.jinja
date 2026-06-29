@@ -29,7 +29,7 @@ dependencyResolutionManagement {
                 password = bucketPassword
             }
         }
-{%  if crowd_maven_repo %}
+{%- if crowd_maven_repo %}
         maven {
             name = "yandex_qe_assessment"
             url = uri("https://bucket.yandex-team.ru/v1/maven/yandex_qe_assessment")
@@ -38,7 +38,7 @@ dependencyResolutionManagement {
                 password = bucketPassword
             }
         }
-{%  endif %}
+{%- endif %}
     }
 }
 

@@ -513,6 +513,8 @@ ru:
     to: /devops/configuration-management/configuration-v1/cluster-expansion.md
   - from: /concepts/topic.md
     to: /concepts/datamodel/topic.md
+  - from: /devops/backup-and-recovery/system-tablet-backup.md
+    to: /concepts/backup.md#system-tablet-backup
   - from: /reference/ydb-sdk/recipes/debug.md
     to: /reference/ydb-sdk/observability/index.md
   - from: /reference/ydb-sdk/recipes/debug-logs.md

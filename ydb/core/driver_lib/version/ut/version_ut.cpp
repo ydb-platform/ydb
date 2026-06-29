@@ -14,6 +14,7 @@ Y_UNIT_TEST_SUITE(VersionParser) {
     }
 
     Y_UNIT_TEST(CiSmokeUnifiedPrCheck44879) {
+        // Trigger postcommit smoke on ci-test-* branches.
         UNIT_ASSERT(true);
     }
 }

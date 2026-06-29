@@ -98,6 +98,16 @@ void TColumnShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev
     Execute(new TTxPersistSubDomainOutOfSpace(this, outOfSpace), ctx);
 }
 
+void TColumnShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUnavailable::TPtr& ev, const TActorContext& ctx) {
+    const auto* msg = ev->Get();
+    AFL_CRIT(NKikimrServices::TX_COLUMNSHARD)("event", "scheme shard unavailable, will restart to try again")("path_id", msg->PathId);
+    // This event may arrive while the tablet is still in StateInit, with init transactions
+    // in flight. HandlePoison detaches the executor first (so those transactions stop
+    // calling back into this object) and then dies - unlike a bare Die(), which would
+    // leave the executor running against freed memory.
+    HandlePoison(ctx);
+}
+
 static constexpr TDuration MaxFindSubDomainPathIdDelay = TDuration::Minutes(10);
 
 void TSpaceWatcher::StartFindSubDomainPathId(bool delayFirstRequest) {

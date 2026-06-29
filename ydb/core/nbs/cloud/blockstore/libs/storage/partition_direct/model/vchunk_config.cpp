@@ -169,7 +169,20 @@ EHostRole TVChunkConfig::GetDDiskRole(THostIndex hostIndex) const
 
 THostMask TVChunkConfig::GetDesiredPBuffers() const
 {
-    return Filter(PBufferHosts, EnabledHosts, EHostRole::Primary);
+    THostMask result = Filter(PBufferHosts, EnabledHosts, EHostRole::Primary);
+    if (result.Count() >= QuorumDirectBlockGroupHostCount) {
+        return result;
+    }
+
+    // Add hand-off hosts if primary is not enough for a quorum.
+    for (auto host: GetSecondaryPBuffers()) {
+        result.Set(host);
+        if (result.Count() >= QuorumDirectBlockGroupHostCount) {
+            break;
+        }
+    }
+
+    return result;
 }
 
 THostMask TVChunkConfig::GetSecondaryPBuffers() const

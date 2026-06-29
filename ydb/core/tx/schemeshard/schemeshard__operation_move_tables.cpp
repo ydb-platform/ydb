@@ -85,8 +85,12 @@ TVector<ISubOperation::TPtr> CreateConsistentMoveTable(TOperationId nextId, cons
         const bool isLocalIndex = context.SS->Indexes.contains(srcChildPath.Base()->PathId) &&
             TTableIndexInfo::IsLocalIndex(context.SS->Indexes.at(srcChildPath.Base()->PathId)->Type);
         if (isLocalIndex) {
-            const TString srcIndexPath = srcPath.PathString() + "/" + name;
-            result.push_back(CreateMoveLocalIndex(NextPartId(nextId, result), MoveLocalIndexTask(dstPath.PathString(), srcIndexPath, name)));
+            if (srcPath.Base()->IsColumnTable()) {
+                const TString srcIndexPath = srcPath.PathString() + "/" + name;
+                result.push_back(CreateMoveColumnTableLocalIndex(NextPartId(nextId, result), MoveLocalIndexTask(dstPath.PathString(), srcIndexPath, name)));
+            } else {
+                result.push_back(CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcChildPath, dstIndexPath)));
+            }
             continue;
         } else {
             result.push_back(CreateMoveTableIndex(NextPartId(nextId, result), MoveTableIndexTask(srcChildPath, dstIndexPath)));

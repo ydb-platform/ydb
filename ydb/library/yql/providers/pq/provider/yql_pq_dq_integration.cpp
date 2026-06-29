@@ -6,6 +6,7 @@
 
 #include <ydb/library/yql/dq/expr_nodes/dq_expr_nodes.h>
 #include <ydb/library/yql/dq/proto/dq_tasks.pb.h>
+#include <ydb/library/yql/dq/runtime/streaming/partition_key.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 #include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 #include <ydb/library/yql/providers/generic/connector/api/service/protos/connector.pb.h>
@@ -156,13 +157,15 @@ public:
             const auto& pqReadTopic = maybePqReadTopic.Cast();
             YQL_ENSURE(pqReadTopic.Ref().GetTypeAnn(), "No type annotation for node " << pqReadTopic.Ref().Content());
 
+            const auto pqTopic = pqReadTopic.Topic();
+
             const auto rowType = pqReadTopic.Ref().GetTypeAnn()
                 ->Cast<TTupleExprType>()->GetItems().back()->Cast<TListExprType>()
                 ->GetItemType()->Cast<TStructExprType>();
             const auto& clusterName = pqReadTopic.DataSource().Cluster().StringValue();
             const auto token = "cluster:default_" + clusterName;
 
-            const auto& typeItems = pqReadTopic.Topic().RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()->GetItems();
+            const auto& typeItems = pqTopic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>()->GetItems();
             const auto pos = read->Pos();
 
             TExprNode::TListType colNames;
@@ -178,6 +181,9 @@ public:
                 return {};
             }
             const auto settings = maybeSettings.Cast();
+            const bool useSharedReading = AnyOf(settings, [](const TCoNameValueTuple& setting) {
+                return Name(setting) == SharedReading && FromString<bool>(Value(setting));
+            });
 
             const auto maybeWatermark = pqReadTopic.Watermark().Maybe<TCoLambda>();
 
@@ -206,7 +212,7 @@ public:
             TExprBase result = Build<TDqSourceWrap>(ctx, pos)
                 .Input<TDqPqTopicSource>()
                     .World(pqReadTopic.World())
-                    .Topic(pqReadTopic.Topic())
+                    .Topic(pqTopic)
                     .Columns(std::move(columnNames))
                     .Settings(settings)
                     .Token<TCoSecureParam>()
@@ -225,7 +231,7 @@ public:
                 .Settings(BuildDqSourceWrapSettings(pqReadTopic, pos, ctx))
                 .Done();
 
-            if (maybeWatermark && "advanced" == wrSettings.WatermarksMode.GetOrElse("disable")) {
+            if (maybeWatermark && "advanced" == wrSettings.WatermarksMode.GetOrElse("disable") && !useSharedReading) {
                 const auto watermark = maybeWatermark.Cast();
 
                 auto watermarkSettingsBuilder = Build<TCoNameValueTupleList>(ctx, pos);
@@ -239,6 +245,30 @@ public:
                         watermarkSettingsBuilder.Add<TCoNameValueTuple>().InitFrom(nameValue).Build();
                     }
                 }
+                for (const auto& nameValue : pqTopic.Props()) {
+                    if (const auto name = nameValue.Name().Value();
+                        FederatedClustersProp == name) {
+                        auto federatedClusters = nameValue.Value().Cast<TDqPqFederatedClusterList>();
+
+                        TVector<TCoAtom> newFederatedClusters;
+                        for (const auto& federatedCluster : federatedClusters) {
+                            const auto cluster = federatedCluster.Name();
+                            const auto partitionsCount = federatedCluster.PartitionsCount();
+
+                            TString newFederatedCluster;
+                            TStringOutput ss(newFederatedCluster);
+                            ss << NDq::TPartitionKey {
+                                .Cluster = TString{cluster.Value()},
+                                .PartitionId = partitionsCount ? FromString<ui32>(partitionsCount.Cast().Value()) : 0,
+                            };
+                            newFederatedClusters.push_back(Build<TCoAtom>(ctx, federatedClusters.Pos()).Value(newFederatedCluster).Done());
+                        }
+                        watermarkSettingsBuilder.Add<TCoNameValueTuple>()
+                            .Name<TCoAtom>().Build(name)
+                            .Value<TCoAtomList>().Add(newFederatedClusters).Build()
+                            .Build();
+                    }
+                }
                 const TCoNameValueTupleList watermarkSettings = watermarkSettingsBuilder.Done();
 
                 // The partition id metadata column is exposed at the expr level under the user-facing
@@ -246,18 +276,34 @@ public:
                 const TString partitionIdColumn = State_->ForbidYqlSysColumnsAndSystemMetadata
                     ? "__ydb_partition_id"
                     : "_yql_sys_partition_id";
+                const TString clusterColumn = State_->ForbidYqlSysColumnsAndSystemMetadata
+                    ? "__ydb_cluster"
+                    : "_yql_sys_cluster";
 
                 result = Build<TDqPhyWatermarkGenerator>(ctx, pos)
                     .Input(result)
                     .WatermarkExtractor(watermark)
-                    .PartitionIdExtractor<TCoLambda>()
+                    .PartitionKeyExtractor<TCoLambda>()
                         .Args({"arg"})
-                        .Body<TCoMember>()
-                            .Struct("arg")
-                            .Name().Build(partitionIdColumn)
+                        .Body<TCoAsStruct>()
+                            .Add<TCoNameValueTuple>()
+                                .Name<TCoAtom>().Build("cluster")
+                                .Value<TCoMember>()
+                                    .Struct("arg")
+                                    .Name().Build(clusterColumn)
+                                    .Build()
+                                .Build()
+                            .Add<TCoNameValueTuple>()
+                                .Name<TCoAtom>().Build("partition_id")
+                                .Value<TCoMember>()
+                                    .Struct("arg")
+                                    .Name().Build(partitionIdColumn)
+                                    .Build()
+                                .Build()
                             .Build()
                         .Build()
                     .WatermarkSettings(watermarkSettings.Ptr())
+                    .PartitionKeys<TCoVoid>().Build()
                     .Done();
             }
 
@@ -683,10 +729,6 @@ private:
         }
     }
 
-    static bool UseSharedReading(const TPqClusterConfigurationSettings* clusterConfiguration, std::string_view format) {
-        return clusterConfiguration->SharedReading && (format == "json_each_row"sv || format == "raw"sv);
-    }
-
 public:
     TMaybeNode<TCoNameValueTupleList> BuildTopicReadSettings(
         const TPqReadTopic& pqReadTopic,
@@ -881,14 +923,14 @@ public:
 
         if (const auto watermarksMode = wrSettings.WatermarksMode.GetOrElse("disable");
             watermarksMode != "disable" && maybeWatermark) {
-            Add(props, WatermarksEnableSetting, ToString("default" == watermarksMode), pos, ctx);
+            Add(props, WatermarksEnableSetting, ToString("default" == watermarksMode || useSharedReading), pos, ctx);
             Add(props, WatermarksGranularityUsSetting,
                 ToString(watermarksGranularityUs.GetOrElse(TDuration::MilliSeconds(wrSettings.WatermarksGranularityMs.GetOrElse(TDqSettings::TDefault::WatermarksGranularityMs)).MicroSeconds())), pos, ctx);
             Add(props, WatermarksLateArrivalDelayUsSetting,
                 ToString(watermarksLateArrivalDelayUs.GetOrElse(TDuration::MilliSeconds(wrSettings.WatermarksLateArrivalDelayMs.GetOrElse(TDqSettings::TDefault::WatermarksLateArrivalDelayMs)).MicroSeconds())), pos, ctx);
 
             const auto lateEventsPolicy = watermarksLateEventsPolicy
-                .GetOrElse("adjust");
+                .GetOrElse("drop");
             Add(props, WatermarksLateEventsPolicySetting, lateEventsPolicy, pos, ctx);
 
             if (wrSettings.WatermarksEnableIdlePartitions.GetOrElse(true)) {

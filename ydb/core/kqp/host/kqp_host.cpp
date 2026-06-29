@@ -1658,6 +1658,7 @@ private:
             YQL_ENSURE(*settings.ConcurrentResults || queryType == EKikimrQueryType::Query);
             SessionCtx->Query().ConcurrentResults = *settings.ConcurrentResults;
         }
+        SessionCtx->Query().IsolateEffects = settings.UsePessimisticLocks;
         if (settings.RuntimeParameterSizeLimitSatisfied) {
             SessionCtx->Query().RuntimeParameterSizeLimitSatisfied = settings.RuntimeParameterSizeLimitSatisfied;
         }

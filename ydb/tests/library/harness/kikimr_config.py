@@ -350,6 +350,7 @@ class KikimrConfigGenerator(object):
 
         if os.getenv('PGWIRE_LISTENING_PORT', ''):
             self.yaml_config["local_pg_wire_config"] = {}
+            self.yaml_config["local_pg_wire_config"]["enable_local_pg_wire"] = True
             self.yaml_config["local_pg_wire_config"]["listening_port"] = os.getenv('PGWIRE_LISTENING_PORT')
 
         # dirty hack for internal ydbd flavour
@@ -571,7 +572,8 @@ class KikimrConfigGenerator(object):
             if "local_pg_wire_config" not in self.yaml_config:
                 self.yaml_config["local_pg_wire_config"] = {}
 
-            ydb_pgwire_port = self.port_allocator.get_node_port_allocator(node_id).pgwire_port
+            self.yaml_config['local_pg_wire_config']['enable_local_pg_wire'] = True
+            ydb_pgwire_port = self.port_allocator.get_node_port_allocator(self.__node_ids[0]).pgwire_port
             self.yaml_config['local_pg_wire_config']['listening_port'] = ydb_pgwire_port
 
             # https://github.com/ydb-platform/ydb/issues/5152

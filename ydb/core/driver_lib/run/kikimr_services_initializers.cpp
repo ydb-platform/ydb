@@ -259,6 +259,7 @@
 #include <ydb/library/actors/interconnect/load.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/core/retro_tracing_impl/distributed_collector/distributed_retro_collector.h>
@@ -586,6 +587,14 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.CollectSubscriptionStackTrace = config.GetCollectSubscriptionStackTrace();
     }
 
+    if (config.HasUseUring()) {
+        result.UseUring = config.GetUseUring();
+    }
+
+    if (config.HasEnableUringSQPOLL()) {
+        result.EnableUringSQPOLL = config.GetEnableUringSQPOLL();
+    }
+
     return result;
 }
 
@@ -701,6 +710,11 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             // create poller actor (whether platform supports it)
             setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(
                 CreatePollerActor(schedulerConfig.MonCounters), TMailboxType::ReadAsFilled, systemPoolId));
+
+            if (settings.UseUring && TUringContext::IsSupported()) {
+                setup->LocalServices.emplace_back(MakeUringPollerActorId(), TActorSetupCmd(
+                    CreateUringPollerActor(settings.EnableUringSQPOLL), TMailboxType::ReadAsFilled, systemPoolId));
+            }
 
             auto destructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>(0);
 
@@ -2436,6 +2450,7 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
 
             TVector<NActors::TActorId> notifyActorIds = {
                 NKqp::MakeKqpRmServiceID(NodeId),
+                NKqp::MakeKqpProxyID(NodeId),
                 MakeGRpcServersManagerId(NodeId),
                 NGRpcService::CreateGrpcPublisherServiceActorId(),
             };
@@ -3181,6 +3196,10 @@ TLocalPgWireServiceInitializer::TLocalPgWireServiceInitializer(const TKikimrRunC
 }
 
 void TLocalPgWireServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    if (!Config.GetLocalPgWireConfig().GetEnableLocalPgWire()) {
+        return;
+    }
+
     setup->LocalServices.emplace_back(
         NLocalPgWire::CreateLocalPgWireProxyId(),
         TActorSetupCmd(NLocalPgWire::CreateLocalPgWireProxy(), TMailboxType::HTSwap, appData->UserPoolId)

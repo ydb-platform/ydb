@@ -1,5 +1,8 @@
 #include "flush_request.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+
+#include <ydb/core/nbs/cloud/storage/core/libs/common/format.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/common/future_helper.h>
 
 #include <ydb/library/actors/core/log.h>
@@ -28,6 +31,7 @@ TFlushRequestExecutor::TFlushRequestExecutor(
     , Span(std::move(span))
     , Route(route)
     , Hint(std::move(hint))
+    , RequestTimeout(DirectBlockGroup->GetOracle()->GetFlushRequestTimeout())
 {
     Y_ABORT_UNLESS(Route.SourceHostIndex != InvalidHostIndex);
     Y_ABORT_UNLESS(Route.DestinationHostIndex != InvalidHostIndex);
@@ -48,6 +52,8 @@ TFlushRequestExecutor::~TFlushRequestExecutor()
 
 void TFlushRequestExecutor::Run()
 {
+    ScheduleRequestTimeout();
+
     auto future = DirectBlockGroup->SyncWithPBuffer(
         VChunkConfig.GetVChunkIndex(),
         Route.SourceHostIndex,
@@ -67,16 +73,8 @@ TString TFlushRequestExecutor::Print()
 {
     TStringBuilder result;
     result << LogTitle.GetWithTime();
-    result << "{";
-    bool first = true;
-    for (const auto& segment: Hint.Segments) {
-        if (!first) {
-            result << ",";
-        }
-        result << " " << segment.Lsn;
-        first = false;
-    }
-    result << "}";
+    result << Hint.DebugPrint(true);
+    result << (Promise.IsReady() ? ",Replied" : ",NotReplied");
     return result;
 }
 
@@ -121,6 +119,44 @@ void TFlushRequestExecutor::Reply(
         .Route = Route,
         .FlushOk = std::move(flushOk),
         .FlushFailed = std::move(flushFailed)});
+}
+
+void TFlushRequestExecutor::ScheduleRequestTimeout()
+{
+    if (!RequestTimeout) {
+        return;
+    }
+
+    LOG_DEBUG(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s Schedule OnRequestTimeout %s",
+        LogTitle.GetWithTime().c_str(),
+        FormatDuration(RequestTimeout).c_str());
+
+    DirectBlockGroup->Schedule(
+        RequestTimeout,
+        [weakSelf = weak_from_this()]()
+        {
+            if (auto self = weakSelf.lock()) {
+                self->OnRequestTimeout();
+            }
+        });
+}
+
+void TFlushRequestExecutor::OnRequestTimeout()
+{
+    if (Promise.IsReady()) {
+        return;
+    }
+
+    LOG_WARN(
+        *ActorSystem,
+        NKikimrServices::NBS_PARTITION,
+        "%s OnRequestTimeout.",
+        LogTitle.GetWithTime().c_str());
+
+    Reply({}, MakeLsnVector(Hint.Segments));
 }
 
 ////////////////////////////////////////////////////////////////////////////////

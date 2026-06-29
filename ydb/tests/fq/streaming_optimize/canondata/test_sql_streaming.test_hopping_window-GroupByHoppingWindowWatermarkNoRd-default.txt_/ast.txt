@@ -18,7 +18,7 @@
 (let $17 '('"Endpoint" '"<pq_pq_endpoint>"))
 (let $18 '('"SharedReading" '0))
 (let $19 '('"UseSsl" '"1"))
-(let $20 '('('"Consumer" '"test_client") $17 $18 '('"ReconnectPeriod" '"") '('"Format" '"json_each_row") '('"ReadGroup" '"fqrun") $19 '('"WatermarksEnable" '"1") '('"WatermarksGranularityUs" '"11000000") '('"WatermarksLateArrivalDelayUs" '"8000000") '('"WatermarksLateEventsPolicy" '"adjust")))
+(let $20 '('('"Consumer" '"test_client") $17 $18 '('"ReconnectPeriod" '"") '('"Format" '"json_each_row") '('"ReadGroup" '"fqrun") $19 '('"WatermarksEnable" '"1") '('"WatermarksGranularityUs" '"11000000") '('"WatermarksLateArrivalDelayUs" '"8000000") '('"WatermarksLateEventsPolicy" '"drop")))
 (let $21 (SecureParam '"cluster:default_pq"))
 (let $22 (DataType 'Timestamp))
 (let $23 (StructType '('"__ydb_write_time" $22) $9 $12 $13))

@@ -57,6 +57,7 @@ private:
     const i64 MaxBatchSize_;
     const ELogLevel Level_;
 
+    // TODO(babenko): migrate to std::string
     TString BatchYson_;
     TStringOutput BatchOutputStream_{BatchYson_};
     NYson::TYsonWriter BatchYsonWriter_{

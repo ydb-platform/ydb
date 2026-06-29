@@ -1,6 +1,17 @@
 {
   "sensors": [
     {
+      "kind": "RATE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "client": "total",
+        "important": "0",
+        "topic": "rt3.dc1--asdfgs--topic",
+        "sensor": "PQ/ConsumerBatchProcessorCPUUsage"
+      },
+      "value": 0
+    },
+    {
       "kind": "GAUGE",
       "labels": {
         "user_counters": "PersQueue",
@@ -298,6 +309,17 @@
       "value": 5009
     },
     {
+      "kind": "RATE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "client": "total",
+        "important": "total",
+        "topic": "rt3.dc1--asdfgs--topic",
+        "sensor": "PQ/ConsumerBatchProcessorCPUUsage"
+      },
+      "value": 0
+    },
+    {
       "kind": "GAUGE",
       "labels": {
         "user_counters": "PersQueue",
@@ -595,6 +617,17 @@
       "value": 5009
     },
     {
+      "kind": "RATE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "client": "total",
+        "important": "total",
+        "topic": "total",
+        "sensor": "PQ/ConsumerBatchProcessorCPUUsage"
+      },
+      "value": 0
+    },
+    {
       "kind": "GAUGE",
       "labels": {
         "user_counters": "PersQueue",
@@ -892,6 +925,17 @@
       "value": 5009
     },
     {
+      "kind": "RATE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "client": "user",
+        "important": "0",
+        "topic": "rt3.dc1--asdfgs--topic",
+        "sensor": "PQ/ConsumerBatchProcessorCPUUsage"
+      },
+      "value": 0
+    },
+    {
       "kind": "GAUGE",
       "labels": {
         "user_counters": "PersQueue",
@@ -1189,6 +1233,17 @@
       "value": 5009
     },
     {
+      "kind": "RATE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "client": "user",
+        "important": "0",
+        "topic": "total",
+        "sensor": "PQ/ConsumerBatchProcessorCPUUsage"
+      },
+      "value": 0
+    },
+    {
       "kind": "GAUGE",
       "labels": {
         "user_counters": "PersQueue",
@@ -1484,6 +1539,17 @@
         "sensor": "PQ/WriteTimeLagMsByLastReadOld"
       },
       "value": 5009
+    },
+    {
+      "kind": "RATE",
+      "labels": {
+        "user_counters": "PersQueue",
+        "client": "user",
+        "important": "total",
+        "topic": "total",
+        "sensor": "PQ/ConsumerBatchProcessorCPUUsage"
+      },
+      "value": 0
     },
     {
       "kind": "GAUGE",

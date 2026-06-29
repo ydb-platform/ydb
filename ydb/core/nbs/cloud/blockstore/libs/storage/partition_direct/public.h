@@ -35,6 +35,10 @@ using TWriteRequestBundlePtr = std::shared_ptr<TWriteRequestBundle>;
 struct IWriteClient;
 using IWriteClientWeakPtr = std::weak_ptr<IWriteClient>;
 
+struct IRequestExecutor;
+using IRequestExecutorPtr = std::shared_ptr<IRequestExecutor>;
+using IRequestExecutorWeakPtr = std::weak_ptr<IRequestExecutor>;
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

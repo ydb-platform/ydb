@@ -21,7 +21,7 @@ namespace {
 
 bool HasBatchMessages(const NKikimrClient::TCmdReadResult& readResult) {
     return AnyOf(readResult.GetResult(), [](const auto& result) {
-        return result.GetMessageFormat() != NKikimrClient::STANDARD;
+        return result.GetIsBatch();
     });
 }
 
@@ -112,6 +112,7 @@ private:
             const auto& cmdRead = Request.GetPartitionRequest().GetCmdRead();
             ctx.Send(BatchProcessorActor, new NBatching::TEvProcessBatch(NBatching::TReadProcessingContext{
                 .User = cmdRead.GetClientId(),
+                .PartitionId = static_cast<ui32>(Request.GetPartitionRequest().GetPartition()),
                 .Destination = 0,
                 .Offset = InitialReadOffset,
                 .Count = cmdRead.HasCount() ? static_cast<ui32>(cmdRead.GetCount()) : std::numeric_limits<ui32>::max(),

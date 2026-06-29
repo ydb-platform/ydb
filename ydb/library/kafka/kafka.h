@@ -69,6 +69,58 @@ inline TKafkaRawBytes ToRawBytes(const TString& str) {
     return TKafkaRawBytes(str.data(), str.size());
 }
 using TKafkaBytes = std::optional<TKafkaRawBytes>;
+
+class TKafkaBytesHolder {
+public:
+    TKafkaBytesHolder() = default;
+    TKafkaBytesHolder(std::nullopt_t)
+        : Data(std::nullopt)
+    {}
+
+    TKafkaBytesHolder(TString data)
+        : Data(std::move(data))
+    {}
+
+    TKafkaBytesHolder(TKafkaRawBytes data)
+        : Data(TString(data.data(), data.size()))
+    {}
+
+    TKafkaBytesHolder& operator=(std::nullopt_t) {
+        Data = std::nullopt;
+        return *this;
+    }
+
+    TKafkaBytesHolder& operator=(TString data) {
+        Data = std::move(data);
+        return *this;
+    }
+
+    bool has_value() const {
+        return Data.has_value();
+    }
+
+    explicit operator bool() const {
+        return Data.has_value();
+    }
+
+    const TString& value() const {
+        return Data.value();
+    }
+
+    const TString& operator*() const {
+        return *Data;
+    }
+
+    const TString* operator->() const {
+        return &*Data;
+    }
+
+    bool operator==(const TKafkaBytesHolder& other) const = default;
+
+private:
+    std::optional<TString> Data;
+};
+
 using TKafkaRecords = std::optional<TKafkaRecordBatch>;
 
 using TKafkaVersion = i16;
@@ -147,6 +199,7 @@ struct TKafkaBytesDesc {
     static constexpr bool FixedLength = false;
 
     inline static bool IsNull(const TKafkaBytes& value) { return !value; };
+    inline static bool IsNull(const TKafkaBytesHolder& value) { return !value; };
 };
 
 struct TKafkaRecordsDesc {

@@ -170,7 +170,7 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include notitle [work-in-progress](../../_includes/work-in-progress.md) %}
 
 - Java
 
@@ -196,5 +196,11 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
     In Spring Boot, ORMs, and other JDBC wrappers, use the same JDBC URL and balancing settings as with the driver directly (for example `spring.datasource.url` or `DataSource` properties).
 
   {% endlist %}
+
+- Rust
+
+  {% include notitle [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for Rust SDK support: [ydb-rs-sdk#239](https://github.com/ydb-platform/ydb-rs-sdk/issues/239)
 
 {% endlist %}

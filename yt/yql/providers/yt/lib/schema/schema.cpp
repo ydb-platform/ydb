@@ -1154,4 +1154,28 @@ TString GetColumnGroupSpecFromSchema(const NYT::TNode& schema) {
     return {};
 }
 
+TMap<TString, TString> GetExpressionColumnsFromSchema(const NYT::TNode& schema) {
+    TMap<TString, TString> expressionColumns;
+    for (const auto& entry : schema.AsList()) {
+        for (const auto& it : entry.AsMap()) {
+            if (it.first != "expression") {
+                continue;
+            }
+
+            if (it.second.IsEntity()) {
+                continue;
+            }
+
+            auto* fieldName = entry.AsMap().FindPtr("name");
+            if (!fieldName) {
+                YQL_LOG_CTX_THROW yexception() << "No 'name' in schema tuple";
+            }
+
+            expressionColumns[fieldName->AsString()] = it.second.AsString();
+        }
+    }
+
+    return expressionColumns;
+}
+
 } // NYql

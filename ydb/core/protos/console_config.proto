@@ -149,6 +149,7 @@ message TConfigItem {
         WorkloadManagerConfigItem = 90;
         CompGroupedMemoryLimiterConfig = 92;
         BlockstoreConfigItem = 93;
+        PrivateDatabaseConfigItem = 94;
 
         NamedConfigsItem = 100;
         ClusterYamlConfigItem = 101;

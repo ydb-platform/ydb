@@ -15,6 +15,22 @@ namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+template <typename T>
+TVector<ui64> DoMakeLsnVector(std::span<const T> segments)
+{
+    TVector<ui64> result;
+    result.reserve(segments.size());
+    for (const auto& segment: segments) {
+        result.push_back(segment.Lsn);
+    }
+    return result;
+}
+
+}   // namespace
+
+////////////////////////////////////////////////////////////////////////////////
+
 TReadRangeHint::TReadRangeHint(
     THostMask hostMask,
     ui64 lsn,
@@ -55,12 +71,29 @@ TString TReadHint::DebugPrint() const
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString TPBufferSegment::DebugPrint() const
+// static
+TVector<ui64> TPBufferSegment::MakeLsnVector(
+    std::span<const TPBufferSegment> segments)
 {
+    TVector<ui64> result;
+    result.reserve(segments.size());
+    for (const auto& segment: segments) {
+        result.push_back(segment.Lsn);
+    }
+    return result;
+}
+
+TString TPBufferSegment::DebugPrint(bool brief) const
+{
+    if (brief) {
+        return ToString(Lsn);
+    }
     return TStringBuilder() << Lsn << Range.Print();
 }
 
-TString TFlushHint::DebugPrint() const
+////////////////////////////////////////////////////////////////////////////////
+
+TString TFlushHint::DebugPrint(bool brief) const
 {
     TStringBuilder builder;
     bool first = true;
@@ -68,7 +101,7 @@ TString TFlushHint::DebugPrint() const
         if (!first) {
             builder << ",";
         }
-        builder << segment.DebugPrint();
+        builder << segment.DebugPrint(brief);
         first = false;
     }
     return builder;
@@ -107,14 +140,22 @@ TString TFlushHints::DebugPrint() const
 {
     TStringBuilder builder;
     for (const auto& [route, hint]: Hints) {
-        builder << route.DebugPrint() << ":" << hint.DebugPrint() << ";";
+        builder << route.DebugPrint() << ":" << hint.DebugPrint(false) << ";";
     }
     return builder;
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 
-TString TEraseHint::DebugPrint() const
+TString TEraseSegment::DebugPrint(bool brief) const
+{
+    if (brief) {
+        return ToString(Lsn);
+    }
+    return TStringBuilder() << Generation << ":" << Lsn;
+}
+
+TString TEraseHint::DebugPrint(bool brief) const
 {
     TStringBuilder builder;
     bool first = true;
@@ -122,15 +163,17 @@ TString TEraseHint::DebugPrint() const
         if (!first) {
             builder << ",";
         }
-        builder << segment.DebugPrint();
+        builder << segment.DebugPrint(brief);
         first = false;
     }
     return builder;
 }
 
-void TEraseHints::AddHint(THostIndex host, ui64 lsn, TBlockRange64 range)
+void TEraseHints::AddHint(THostIndex host, ui64 lsn)
 {
-    Hints[host].Segments.emplace_back(lsn, range);
+    Hints[host].Segments.emplace_back(
+        0,   // TODO(drbasic)
+        lsn);
 }
 
 bool TEraseHints::Empty() const
@@ -152,7 +195,7 @@ TString TEraseHints::DebugPrint() const
 {
     TStringBuilder builder;
     for (const auto& [host, hint]: Hints) {
-        builder << PrintHostIndex(host) << ":" << hint.DebugPrint() << ";";
+        builder << PrintHostIndex(host) << ":" << hint.DebugPrint(false) << ";";
     }
     return builder;
 }
@@ -260,10 +303,11 @@ void TBlocksDirtyMap::UpdateConfig(const TVChunkConfig& vChunkConfig)
     const THostMask added = vChunkConfig.GetDDisks().Exclude(DesiredDDisks);
     const THostMask removed = DesiredDDisks.Exclude(vChunkConfig.GetDDisks());
 
-    DesiredPBuffers = vChunkConfig.GetDesiredPBuffers();
     DesiredDDisks = vChunkConfig.GetDDisks();
     DisabledHosts = vChunkConfig.GetDisabledHosts();
 
+    // When a new disk appears, it doesn't have all the data. Need to set its
+    // watermark level.
     for (auto indx: added) {
         const auto watermark = vChunkConfig.GetWatermark(indx);
         DDiskStates[indx].Init(
@@ -340,9 +384,8 @@ TReadHint TBlocksDirtyMap::MakeReadHint(TBlockRange64 range)
         return result;
     }
 
-    auto nonOverlappingRanges = SplitOnNonOverlappingContinuousRanges(
-        TBlockRange64::MakeClosedInterval(range.Start, range.End),
-        ranges);
+    auto nonOverlappingRanges =
+        SplitOnNonOverlappingContinuousRanges(range, ranges);
     result.RangeHints.reserve(nonOverlappingRanges.size());
 
     ui64 offsetBlocks{};
@@ -384,17 +427,14 @@ TFlushHints TBlocksDirtyMap::MakeFlushHint(size_t batchSize)
         return result;
     }
 
+    if (!DesiredDDisks.LogicalAnd(DisabledHosts).Empty()) {
+        // We can't make a flush while DDisk is unavailable. Will wait until it
+        // becomes available or is excluded.
+        return result;
+    }
+
     TSet<ui64> readyToFlush;
     readyToFlush.swap(ReadyToFlush);
-
-    auto countReadyToFlush = [&](TBlockRange64 range)
-    {
-        size_t result = 0;
-        for (THostIndex destination: DesiredDDisks) {
-            result += DDiskStates[destination].NeedFlushToDDisk(range) ? 1 : 0;
-        }
-        return result;
-    };
 
     for (ui64 lsn: readyToFlush) {
         auto item = Inflight.GetValue(lsn);
@@ -403,12 +443,6 @@ TFlushHints TBlocksDirtyMap::MakeFlushHint(size_t batchSize)
 
         if (InflightDDiskReads.HasOverlaps(item->Range)) {
             // Can't flush to DDisk during reading from overlapped range.
-            ReadyToFlush.insert(lsn);
-            continue;
-        }
-
-        if (countReadyToFlush(item->Range) < QuorumDirectBlockGroupHostCount) {
-            // Can't flush to DDisk when disks to flush less then quorum.
             ReadyToFlush.insert(lsn);
             continue;
         }
@@ -458,7 +492,7 @@ TEraseHints TBlocksDirtyMap::MakeEraseHint(size_t batchSize)
                         rangeRemoved = true;
                     }
                 } else {
-                    result.AddHint(host, item->Key, item->Range);
+                    result.AddHint(host, item->Key);
                 }
             }
             Y_ABORT_IF(rangeRemoved && !result.Empty());
@@ -476,9 +510,8 @@ TEraseHints TBlocksDirtyMap::MakeEraseBelatedHint()
     readyToEraseBelated.swap(ReadyToEraseBelated);
     for (const auto& item: readyToEraseBelated) {
         auto hostMask = item.Hosts;
-        auto range = item.Range;
         for (auto host: hostMask) {
-            result.AddHint(host, item.Lsn, range);
+            result.AddHint(host, item.Lsn);
         }
     }
 
@@ -930,6 +963,18 @@ bool TBlocksDirtyMap::TInfoEraseBelated::operator<(
         return Hosts < other.Hosts;
     }
     return TBlockRangeComparator{}(Range, other.Range);
+}
+
+////////////////////////////////////////////////////////////////////////////////
+
+TVector<ui64> MakeLsnVector(std::span<const TPBufferSegment> segments)
+{
+    return DoMakeLsnVector<TPBufferSegment>(segments);
+}
+
+TVector<ui64> MakeLsnVector(std::span<const TEraseSegment> segments)
+{
+    return DoMakeLsnVector<TEraseSegment>(segments);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

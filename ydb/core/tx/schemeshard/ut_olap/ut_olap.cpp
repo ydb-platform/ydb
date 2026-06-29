@@ -8,7 +8,6 @@
 #include <ydb/core/formats/arrow/arrow_batch_builder.h>
 #include <ydb/core/protos/table_stats.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
-#include <ydb/core/tx/long_tx_service/public/snapshot_registry.h>
 
 using namespace NKikimr::NSchemeShard;
 using namespace NKikimr;
@@ -1046,15 +1045,9 @@ Y_UNIT_TEST_SUITE(TOlap) {
         appData.SchemeShardConfig.SetStatsMaxBatchSize(0);
         runtime.GetAppData().ColumnShardConfig.SetDefaultCompactionPreset("tiling");
 
-        {
-            auto builder = CreateImmutableSnapshotRegistryBuilder();
-            auto holder = CreateImmutableSnapshotRegistryHolder();
-            holder->Set(std::move(*builder).Build());
-            appData.SnapshotRegistryHolder = holder;
-            appData.LongTxServiceConfig.SetLocalSnapshotPromotionTimeSeconds(1);
-            appData.LongTxServiceConfig.SetSnapshotsExchangeIntervalSeconds(1);
-            appData.LongTxServiceConfig.SetSnapshotsRegistryUpdateIntervalSeconds(1);
-        }
+        // No LongTxService keeps a live registry here, so install a stand-in whose OldestCollectionTime
+        // tracks the clock; otherwise the cleanup floor stays at 0 and deleted data is never collected.
+        NKikimr::NTxUT::InstallTimingBasedSnapshotRegistry(runtime);
 
         // apply config via reboot
         TActorId sender = runtime.AllocateEdgeActor();
@@ -1213,6 +1206,18 @@ Y_UNIT_TEST_SUITE(TOlap) {
 
         WaitTableStats(runtime, shardId);
         CheckQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
+    }
+
+    Y_UNIT_TEST(MoveNonExistentTable) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestMoveTable(runtime, ++txId, "/MyRoot/MyDir/non_existent", "/MyRoot/MyDir/something",
+            {NKikimrScheme::StatusPathDoesNotExist});
     }
 
     Y_UNIT_TEST(MoveTableStats) {
@@ -2406,6 +2411,75 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
         // Move to existing name without overwrite -> error
         TestMoveIndex(runtime, ++txId, "/MyRoot/TestTable", "bloom_key_renamed", "bloom_data", false,
             {NKikimrScheme::StatusSchemeError});
+    }
+
+    Y_UNIT_TEST(AlterOwnerAfterReadOnlyCopy) {
+        TTestBasicRuntime runtime;
+        TTestEnv env(runtime);
+        ui64 txId = 100;
+
+        TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCreateColumnTable(runtime, ++txId, "/MyRoot/MyDir", R"(
+            Name: "ColumnTable"
+            ColumnShardCount: 1
+            Schema {
+                Columns { Name: "key1" Type: "Uint32" NotNull: true }
+                Columns { Name: "key2" Type: "Utf8" NotNull: true }
+                Columns { Name: "Value" Type: "Utf8" }
+                KeyColumnNames: ["key1", "key2"]
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        TestCopyColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy", "/MyRoot/MyDir/ColumnTable");
+        env.TestWaitNotification(runtime, txId);
+
+        TestLs(runtime, "/MyRoot/MyDir/Copy", false, NLs::All(
+            NLs::PathExist));
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot/MyDir", R"(
+            Name: "ColumnTable"
+            AlterSchema {
+                AddColumns { Name: "add_1" Type: "Uint64" }
+            }
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        auto hasColumn = [](const NKikimrScheme::TEvDescribeSchemeResult& descr, const TString& columnName) {
+            const auto& schema = descr.GetPathDescription().GetColumnTableDescription().GetSchema();
+            for (const auto& col : schema.GetColumns()) {
+                if (col.GetName() == columnName) {
+                    return true;
+                }
+            }
+            return false;
+        };
+
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/MyDir/ColumnTable");
+            UNIT_ASSERT(hasColumn(descr, "add_1"));
+            TestDescribeResult(descr, {NLs::HasColumnTableSchemaVersion(2)});
+        }
+        {
+            auto descr = DescribePrivatePath(runtime, "/MyRoot/MyDir/Copy");
+            UNIT_ASSERT(!hasColumn(descr, "add_1"));
+            TestDescribeResult(descr, {NLs::HasColumnTableSchemaVersion(1)});
+        }
+
+        TestAlterColumnTable(runtime, ++txId, "/MyRoot/MyDir", R"(
+            Name: "Copy"
+            AlterSchema {
+                AddColumns { Name: "add_2" Type: "Uint64" }
+            }
+        )", {{NKikimrScheme::StatusSchemeError, "path is a read-only copy column table; only Copy and Drop are allowed"}});
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "Copy");
+        env.TestWaitNotification(runtime, txId);
+
+        TestDropColumnTable(runtime, ++txId, "/MyRoot/MyDir", "ColumnTable");
+        env.TestWaitNotification(runtime, txId);
     }
 
     // Case 1: dropping the read-only copy (non-owner) leaves the source's

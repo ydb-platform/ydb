@@ -2,7 +2,7 @@
 
 #include "stats.h"
 
-#include <ydb/core/formats/arrow/common/container.h>
+#include <ydb/core/formats/arrow/container/container.h>
 
 #include <ydb/library/accessor/accessor.h>
 
@@ -22,7 +22,7 @@ public:
     TConclusion<std::shared_ptr<TJsonPathAccessor>> GetPathAccessor(const std::string_view path) const {
         auto jsonPathAccessorTrie = std::make_shared<NKikimr::NArrow::NAccessor::NSubColumns::TJsonPathAccessorTrie>();
         for (ui32 i = 0; i < Stats.GetColumnsCount(); ++i) {
-            auto insertResult = jsonPathAccessorTrie->Insert(ToSubcolumnName(Stats.GetColumnName(i)), Records->GetColumnVerified(i));
+            auto insertResult = jsonPathAccessorTrie->Insert(ToJsonPath(Stats.GetColumnName(i)), Records->GetColumnVerified(i));
             AFL_VERIFY(insertResult.IsSuccess())("error", insertResult.GetErrorMessage());
         }
         return jsonPathAccessorTrie->GetAccessor(path);

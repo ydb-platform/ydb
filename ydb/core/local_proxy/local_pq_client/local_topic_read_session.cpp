@@ -62,15 +62,17 @@ class TLocalTopicReadSessionActor final
         };
 
         struct TEvConfirmCreate : public TEventLocal<TEvConfirmCreate, EvConfirmCreate> {
-            TEvConfirmCreate(i64 partitionSessionId, std::optional<ui64> readOffset, std::optional<ui64> commitOffset)
+            TEvConfirmCreate(i64 partitionSessionId, std::optional<ui64> readOffset, std::optional<ui64> commitOffset, std::optional<ui64> maxOffset)
                 : PartitionSessionId(partitionSessionId)
                 , ReadOffset(readOffset)
                 , CommitOffset(commitOffset)
+                , MaxOffset(maxOffset)
             {}
 
             const i64 PartitionSessionId;
             const std::optional<ui64> ReadOffset;
             const std::optional<ui64> CommitOffset;
+            const std::optional<ui64> MaxOffset;
         };
 
         struct TEvConfirmDestroy : public TEventLocal<TEvConfirmDestroy, EvConfirmDestroy> {
@@ -116,8 +118,8 @@ class TLocalTopicReadSessionActor final
             ActorSystem->Send(SelfId, new TEvPartition::TEvOffsetsCommitRequest(PartitionSessionId, startOffset, endOffset));
         }
 
-        void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset) final {
-            ActorSystem->Send(SelfId, new TEvPartition::TEvConfirmCreate(PartitionSessionId, readOffset, commitOffset));
+        void ConfirmCreate(std::optional<uint64_t> readOffset, std::optional<uint64_t> commitOffset, std::optional<uint64_t> maxOffset) final {
+            ActorSystem->Send(SelfId, new TEvPartition::TEvConfirmCreate(PartitionSessionId, readOffset, commitOffset, maxOffset));
         }
 
         void ConfirmDestroy() final {
@@ -313,11 +315,15 @@ private:
         const auto partitionSessionId = ev->Get()->PartitionSessionId;
         const auto readOffset = ev->Get()->ReadOffset;
         const auto commitOffset = ev->Get()->CommitOffset;
+        const auto maxOffset = ev->Get()->MaxOffset;
+
         YDB_LOG_DEBUG("Partition confirmed read commit",
             {"logPrefix", LogPrefix()},
             {"session", partitionSessionId},
             {"readOffset", (readOffset ? ToString(*readOffset) : "null")},
-            {"commitOffset", (commitOffset ? ToString(*commitOffset) : "null")});
+            {"commitOffset", (commitOffset ? ToString(*commitOffset) : "null")},
+            {"maxOffset", (maxOffset ? ToString(*maxOffset) : "null")},
+        );
 
         TRpcIn message;
 
@@ -328,6 +334,9 @@ private:
         }
         if (commitOffset) {
             startResponse.set_commit_offset(*commitOffset);
+        }
+        if (maxOffset) {
+            startResponse.set_max_offset(*maxOffset);
         }
 
         AddSessionEvent(std::move(message));
@@ -401,17 +410,24 @@ private:
                 messagesSize += sizeof(TWriteSessionMeta);
 
                 for (auto& event : *batch.mutable_message_data()) {
-                    std::string decompressedData;
+                    TDecompressionResult codecResult;
                     std::exception_ptr decompressionException;
                     if (!IsIn({Ydb::Topic::CODEC_RAW, Ydb::Topic::CODEC_UNSPECIFIED}, static_cast<Ydb::Topic::Codec>(batch.codec()))) {
                         try {
                             const ICodec* codecImpl = TCodecMap::GetTheCodecMap().GetOrThrow(static_cast<ui32>(batch.codec()));
-                            decompressedData = codecImpl->Decompress(event.data());
+                            codecResult = codecImpl->DecompressData(event.data());
                         } catch (...) {
                             decompressionException = std::current_exception();
+                            codecResult.Messages.push_back(TDecompressedMessage{
+                                .Data = std::string(event.data()),
+                                .Meta = std::nullopt,
+                            });
                         }
                     } else {
-                        decompressedData = std::move(*event.mutable_data());
+                        codecResult.Messages.push_back(TDecompressedMessage{
+                            .Data = std::move(*event.mutable_data()),
+                            .Meta = std::nullopt,
+                        });
                     }
 
                     auto messageMeta = MakeIntrusive<TMessageMeta>();
@@ -421,20 +437,31 @@ private:
                         messageMeta->Fields.emplace_back(std::move(*item.mutable_key()), std::move(*item.mutable_value()));
                     }
 
-                    messagesSize += decompressedData.size() + producerId.size() + sizeof(TMessageMeta) + event.message_group_id().size();
-                    Counters->BytesRead->Add(decompressedData.size());
+                    for (const auto& decompressedMsg : codecResult.Messages) {
+                        ui64 offset = event.offset();
+                        ui64 seqNo = event.seq_no();
+                        TInstant createTime = NProtoInterop::CastFromProto(event.created_at());
+                        if (decompressedMsg.Meta) {
+                            offset = static_cast<ui64>(event.offset()) + static_cast<ui64>(decompressedMsg.Meta->OffsetDelta);
+                            seqNo = static_cast<ui64>(*codecResult.BatchBaseSequence) + static_cast<ui64>(decompressedMsg.Meta->SequenceDelta);
+                            createTime = TInstant::MilliSeconds(*codecResult.BatchBaseTimestampMs + decompressedMsg.Meta->TimestampDelta);
+                        }
 
-                    messages.emplace_back(std::move(decompressedData), std::move(decompressionException), TReadSessionEvent::TDataReceivedEvent::TMessageInformation(
-                        event.offset(),
-                        producerId,
-                        event.seq_no(),
-                        NProtoInterop::CastFromProto(event.created_at()),
-                        writtenAt,
-                        writeSessionMeta,
-                        std::move(messageMeta),
-                        event.uncompressed_size(),
-                        std::move(*event.mutable_message_group_id())
-                    ), partitionSession);
+                        messagesSize += decompressedMsg.Data.size() + producerId.size() + sizeof(TMessageMeta) + event.message_group_id().size();
+                        Counters->BytesRead->Add(decompressedMsg.Data.size());
+
+                        messages.emplace_back(decompressedMsg.Data, decompressionException, TReadSessionEvent::TDataReceivedEvent::TMessageInformation(
+                            offset,
+                            producerId,
+                            seqNo,
+                            createTime,
+                            writtenAt,
+                            writeSessionMeta,
+                            messageMeta,
+                            event.uncompressed_size(),
+                            event.message_group_id()
+                        ), partitionSession);
+                    }
                 }
             }
 

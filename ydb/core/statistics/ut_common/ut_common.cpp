@@ -399,7 +399,7 @@ TTableInfo PrepareColumnTableWithIndexes(TTestEnv& env, const TString& databaseN
     runtime.SimulateSleep(TDuration::Seconds(1));
 
     ExecuteYqlScript(env, Sprintf(R"(
-        ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`l-buckets`);
+        ALTER OBJECT `%s` (TYPE TABLE) SET (ACTION=UPSERT_OPTIONS, `COMPACTION_PLANNER.CLASS_NAME`=`tiling++`);
     )", fullTableName.c_str()));
     runtime.SimulateSleep(TDuration::Seconds(1));
 
@@ -642,6 +642,58 @@ void WaitForRowCount(
         runtime.SimulateSleep(TDuration::Seconds(1));
     }
     UNIT_ASSERT_C(false, "timed out, last row count: " << lastRowCount);
+}
+
+NKikimrAnalyzeOp::TEvListResponse TestListAnalyzeOps(
+    TTestActorRuntime& runtime, ui64 saTabletId,
+    const TString& dbName, ui64 pageSize, const TString& pageToken,
+    Ydb::StatusIds::StatusCode expectedStatus)
+{
+    auto sender = runtime.AllocateEdgeActor();
+    runtime.SendToPipe(saTabletId, sender,
+        new TEvStatistics::TEvAnalyzeOpListRequest(dbName, pageSize, pageToken));
+    auto ev = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeOpListResponse>(sender);
+    UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Record.GetStatus(), expectedStatus, ev->Get()->Record.ShortDebugString());
+    return ev->Get()->Record;
+}
+
+NKikimrAnalyzeOp::TEvGetResponse TestGetAnalyzeOp(
+    TTestActorRuntime& runtime, ui64 saTabletId,
+    const TString& dbName, const TString& binaryOpId,
+    Ydb::StatusIds::StatusCode expectedStatus)
+{
+    auto sender = runtime.AllocateEdgeActor();
+    runtime.SendToPipe(saTabletId, sender,
+        new TEvStatistics::TEvAnalyzeOpGetRequest(dbName, binaryOpId));
+    auto ev = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeOpGetResponse>(sender);
+    UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Record.GetStatus(), expectedStatus, ev->Get()->Record.ShortDebugString());
+    return ev->Get()->Record;
+}
+
+NKikimrAnalyzeOp::TEvCancelResponse TestCancelAnalyzeOp(
+    TTestActorRuntime& runtime, ui64 saTabletId,
+    const TString& dbName, const TString& binaryOpId,
+    Ydb::StatusIds::StatusCode expectedStatus)
+{
+    auto sender = runtime.AllocateEdgeActor();
+    runtime.SendToPipe(saTabletId, sender,
+        new TEvStatistics::TEvAnalyzeOpCancelRequest(dbName, binaryOpId));
+    auto ev = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeOpCancelResponse>(sender);
+    UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Record.GetStatus(), expectedStatus, ev->Get()->Record.ShortDebugString());
+    return ev->Get()->Record;
+}
+
+NKikimrAnalyzeOp::TEvForgetResponse TestForgetAnalyzeOp(
+    TTestActorRuntime& runtime, ui64 saTabletId,
+    const TString& dbName, const TString& binaryOpId,
+    Ydb::StatusIds::StatusCode expectedStatus)
+{
+    auto sender = runtime.AllocateEdgeActor();
+    runtime.SendToPipe(saTabletId, sender,
+        new TEvStatistics::TEvAnalyzeOpForgetRequest(dbName, binaryOpId));
+    auto ev = runtime.GrabEdgeEventRethrow<TEvStatistics::TEvAnalyzeOpForgetResponse>(sender);
+    UNIT_ASSERT_VALUES_EQUAL_C(ev->Get()->Record.GetStatus(), expectedStatus, ev->Get()->Record.ShortDebugString());
+    return ev->Get()->Record;
 }
 
 } // NStat

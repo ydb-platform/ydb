@@ -119,6 +119,34 @@ class XDGMixin(PlatformDirsABC):
         return super().user_desktop_dir
 
     @property
+    def user_projects_dir(self) -> str:
+        """:returns: projects directory tied to the user, from ``$XDG_PROJECTS_DIR`` if set, else platform default"""
+        if path := os.environ.get("XDG_PROJECTS_DIR", "").strip():
+            return os.path.expanduser(path)  # noqa: PTH111  # API returns str, not Path
+        return super().user_projects_dir
+
+    @property
+    def user_publicshare_dir(self) -> str:
+        """:returns: public share directory tied to the user, from ``$XDG_PUBLICSHARE_DIR`` if set, else platform default"""
+        if path := os.environ.get("XDG_PUBLICSHARE_DIR", "").strip():
+            return os.path.expanduser(path)  # noqa: PTH111  # API returns str, not Path
+        return super().user_publicshare_dir
+
+    @property
+    def user_templates_dir(self) -> str:
+        """:returns: templates directory tied to the user, from ``$XDG_TEMPLATES_DIR`` if set, else platform default"""
+        if path := os.environ.get("XDG_TEMPLATES_DIR", "").strip():
+            return os.path.expanduser(path)  # noqa: PTH111  # API returns str, not Path
+        return super().user_templates_dir
+
+    @property
+    def user_fonts_dir(self) -> str:
+        """:returns: fonts directory tied to the user, from ``$XDG_DATA_HOME/fonts`` if set, else platform default"""
+        if path := os.environ.get("XDG_DATA_HOME", "").strip():
+            return f"{os.path.expanduser(path)}/fonts"  # noqa: PTH111  # API returns str, not Path
+        return super().user_fonts_dir
+
+    @property
     def user_applications_dir(self) -> str:
         """:returns: applications directory tied to the user, from ``$XDG_DATA_HOME`` if set, else platform default"""
         if path := os.environ.get("XDG_DATA_HOME", "").strip():

@@ -380,7 +380,7 @@ message TTableServiceConfig {
 
     optional bool EnableSnapshotIsolationRW = 76 [default = true, (InvalidateCompileCache) = true];
     optional bool EnableStreamWrite = 77 [default = false, (InvalidateCompileCache) = true];
-    optional bool EnableBatchUpdates = 78 [default = true];
+    optional bool EnableBatchUpdates = 78 [default = true, deprecated = true];
 
     optional bool AllowMultiBroadcasts = 79 [default = true, (InvalidateCompileCache) = true];
 
@@ -514,7 +514,7 @@ message TTableServiceConfig {
 
     optional bool EnableWatermarksAdvanced = 130 [default = false, (InvalidateCompileCache) = true];
 
-    optional bool EnableCompileCacheWarmup = 131 [default = false, (InvalidateCompileCache) = false];
+    optional bool EnableCompileCacheWarmup = 131 [default = true, (InvalidateCompileCache) = false];
 
     optional bool EnableChannelMemoryTracking = 132 [default = true];
 

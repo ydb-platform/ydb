@@ -82,71 +82,26 @@ public:
         return res;
     }
 
-    template <typename T>
-    TUniversalSpanWilsonApi& Name(T&& name) {
+    TUniversalSpanWilsonApi& Name(const char* name) {
         if constexpr (std::is_same_v<TRetroSpanType, TNamedSpan>) {
             std::visit(TOverloaded{
                 [&](NWilson::TSpan& span) -> void {
-                    span.Name(std::forward<T>(name));
+                    span.Name(name);
                 },
                 [&](TRetroSpanType& span) -> void {
-                    span.SetName(std::forward<T>(name));
+                    span.SetName(name);
                 },
                 [&](const std::monostate&) -> void {},
             }, this->Span);
         } else {
             std::visit(TOverloaded{
                 [&](NWilson::TSpan& span) -> void {
-                    span.Name(std::forward<T>(name));
+                    span.Name(name);
                 },
                 [&](const TRetroSpanType&) -> void {},
                 [&](const std::monostate&) -> void {},
             }, this->Span);
         }
-        return *this;
-    }
-
-    template<typename T, typename T1>
-    TUniversalSpanWilsonApi& Attribute(T&& name, T1&& value) {
-        std::visit(TOverloaded{
-            [&](NWilson::TSpan& span) -> void {
-                span.Attribute(std::forward<T>(name), std::forward<T1>(value));
-            },
-            [&](const TRetroSpanType&) -> void {},
-            [&](const std::monostate&) -> void {},
-        }, this->Span);
-        return *this;
-    }
-
-    template<typename T, typename T1 =
-            std::initializer_list<std::pair<const char*, NWilson::TAttributeValue>>>
-    TUniversalSpanWilsonApi& Event(T&& name, T1&& attributes) {
-        std::visit(TOverloaded{
-            [&](NWilson::TSpan& span) -> void {
-                span.Event(std::forward<T>(name), std::forward<T1>(attributes));
-            },
-            [&](const TRetroSpanType&) -> void {},
-            [&](const std::monostate&) -> void {},
-        }, this->Span);
-        return *this;
-    }
-
-    TUniversalSpanWilsonApi& Link(const NWilson::TTraceId& traceId) {
-        std::visit(TOverloaded{
-            [&](NWilson::TSpan& span) -> void { span.Link(traceId); },
-            [&](const TRetroSpanType&) -> void {},
-            [&](const std::monostate&) -> void {},
-        }, this->Span);
-        return *this;
-    }
-
-    template<typename T = std::initializer_list<std::pair<TString, NWilson::TAttributeValue>>>
-    TUniversalSpanWilsonApi& Link(const NWilson::TTraceId& traceId, T&& attributes) {
-        std::visit(TOverloaded{
-            [&](NWilson::TSpan& span) -> void { span.Link(traceId, std::forward<T>(attributes)); },
-            [&](const TRetroSpanType&) -> void {},
-            [&](const std::monostate&) -> void {},
-        }, this->Span);
         return *this;
     }
 };

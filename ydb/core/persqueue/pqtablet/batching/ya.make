@@ -12,6 +12,7 @@ PEERDIR(
     ydb/core/persqueue/events
     ydb/core/persqueue/public/codecs
     ydb/library/kafka
+    ydb/library/persqueue/counter_time_keeper
     ydb/core/persqueue/public/write_meta
     ydb/core/protos
 )

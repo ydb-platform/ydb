@@ -9,6 +9,8 @@
 #include <ydb/core/blobstorage/lwtrace_probes/blobstorage_probes.h>
 #include <ydb/core/util/stlog.h>
 
+#include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
+
 #include <util/generic/ymath.h>
 #include <util/system/datetime.h>
 #include <util/system/hp_timer.h>
@@ -471,6 +473,7 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
         }
 
         if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(HandleClass)) {
+            // NRetroTracing::DemandTrace(Span.GetTraceId());
             STLOG(PRI_WARN, BS_PROXY_PUT, BPP71, "Long TEvPut request detected",
                     (LongRequestThreshold, LongRequestThreshold),
                     (GroupId, Info->GroupID),

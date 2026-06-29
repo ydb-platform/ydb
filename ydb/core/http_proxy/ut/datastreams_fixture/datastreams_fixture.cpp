@@ -885,7 +885,9 @@ void THttpProxyTestMock::InitAccessServiceService(bool enableAccessServiceV2Inte
     const auto setupAccessServiceMock = [&](auto& asMock) {
         asMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
         asMock.AuthenticateData["kinesis"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
-        // asMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+        asMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
+        asMock.AuthenticateData["proxy_sa@builtin"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
+        asMock.AuthenticateData["user@builtin"].Response.mutable_subject()->mutable_user_account()->set_id("user1_id");
 
         asMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
         asMock.AuthenticateData["sqs"].Response.mutable_subject()->mutable_service_account()->set_folder_id("folder4");
@@ -897,15 +899,15 @@ void THttpProxyTestMock::InitAccessServiceService(bool enableAccessServiceV2Inte
         asMock.AuthorizeData["proxy_sa@builtin-ydb.databases.list-database4"].Response.mutable_subject()->mutable_service_account()->set_id("Service1_id");
     };
 
-    if (enableAccessServiceV2Interface) {
-        // V2 mock setup
-        setupAccessServiceMock(AccessServiceMockV2);
-        builder.AddListeningPort(AccessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&AccessServiceMockV2);
-    } else {
-        // V1 mock setup
+    builder.AddListeningPort(AccessServiceEndpoint, grpc::InsecureServerCredentials());
+
+    if (!enableAccessServiceV2Interface) {
         setupAccessServiceMock(AccessServiceMock);
-        builder.AddListeningPort(AccessServiceEndpoint, grpc::InsecureServerCredentials()).RegisterService(&AccessServiceMock);
+        builder.RegisterService(&AccessServiceMock);
     }
+    // We always should setup v2, because bulkAuthorization works only in v2 and EnableBulkAuthorization=true will call it
+    setupAccessServiceMock(AccessServiceMockV2);
+    builder.RegisterService(&AccessServiceMockV2);
 
     AccessServiceServer = builder.BuildAndStart();
 }

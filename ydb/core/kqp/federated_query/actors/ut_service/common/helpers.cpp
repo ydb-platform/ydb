@@ -26,17 +26,28 @@ namespace NKikimr::NKqp {
     }
 
     TDescriptionPromise
-    ResolveSecrets(const TVector<TString>& secretNames, TKikimrRunner& kikimr, const TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
+    ResolveSecrets(
+        const TVector<TString>& secretNames,
+        TKikimrRunner& kikimr,
+        const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+        TDescribeSecretSettings settings)
+    {
         auto promise = NThreading::NewPromise<TEvDescribeSecretsResponse::TDescription>();
-        const auto evResolveSecret = new TDescribeSchemaSecretsService::TEvResolveSecret(userToken, "/Root", secretNames, promise);
+        const auto evResolveSecret = new TDescribeSchemaSecretsService::TEvResolveSecret(
+            userToken, "/Root", secretNames, promise, std::move(settings));
         auto actorSystem = kikimr.GetTestServer().GetRuntime()->GetActorSystem(0);
         actorSystem->Send(MakeKqpDescribeSchemaSecretServiceId(actorSystem->NodeId), evResolveSecret);
         return promise;
     }
 
     TDescriptionPromise
-    ResolveSecret(const TString& secretName, TKikimrRunner& kikimr, const TIntrusiveConstPtr<NACLib::TUserToken> userToken) {
-        return ResolveSecrets(TVector<TString>{secretName}, kikimr, userToken);
+    ResolveSecret(
+        const TString& secretName,
+        TKikimrRunner& kikimr,
+        const TIntrusiveConstPtr<NACLib::TUserToken> userToken,
+        TDescribeSecretSettings settings)
+    {
+        return ResolveSecrets(TVector<TString>{secretName}, kikimr, userToken, std::move(settings));
     }
 
     void AssertBadRequest(TDescriptionPromise promise, const TString& err, Ydb::StatusIds::StatusCode status) {
@@ -64,10 +75,12 @@ namespace NKikimr::NKqp {
 
     TTestDescribeSchemaSecretsServiceFactory::TTestDescribeSchemaSecretsServiceFactory(
         TDescribeSchemaSecretsService::ISecretUpdateListener* secretUpdateListener,
-        TDescribeSchemaSecretsService::ISchemeCacheStatusGetter* schemeCacheStatusGetter
+        TDescribeSchemaSecretsService::ISchemeCacheStatusGetter* schemeCacheStatusGetter,
+        TDescribeSchemaSecretsService::ISchemeShardStatusGetter* schemeShardStatusGetter
     )
         : SecretUpdateListener(secretUpdateListener)
         , SchemeCacheStatusGetter(schemeCacheStatusGetter)
+        , SchemeShardStatusGetter(schemeShardStatusGetter)
     {
     }
 
@@ -75,6 +88,7 @@ namespace NKikimr::NKqp {
         auto* service = new TDescribeSchemaSecretsService();
         service->SetSecretUpdateListener(SecretUpdateListener);
         service->SetSchemeCacheStatusGetter(SchemeCacheStatusGetter);
+        service->SetSchemeShardStatusGetter(SchemeShardStatusGetter);
         return service;
     }
 
@@ -105,6 +119,25 @@ namespace NKikimr::NKqp {
 
     void TTestSchemeCacheStatusGetter::SetFailProbability(EFailProbability failProbability) {
         FailProbability = failProbability;
+    }
+
+    TTestSchemeShardStatusGetter::TTestSchemeShardStatusGetter(
+        const ui32 statusOverwriteRemainingCount,
+        const NKikimrScheme::EStatus overwrittenStatus
+    )
+        : OverwrittenStatus(overwrittenStatus)
+        , StatusOverwriteRemainingCount(statusOverwriteRemainingCount)
+    {
+    }
+
+    NKikimrScheme::EStatus TTestSchemeShardStatusGetter::GetStatus(
+        const NKikimrScheme::TEvDescribeSchemeResult& record) const
+    {
+        if (StatusOverwriteRemainingCount > 0) {
+            --StatusOverwriteRemainingCount;
+            return OverwrittenStatus;
+        }
+        return record.GetStatus();
     }
 
 } // NKikimr::NKqp

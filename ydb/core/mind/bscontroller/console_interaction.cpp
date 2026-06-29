@@ -180,7 +180,7 @@ namespace NKikimr::NBsController {
                 if (record.GetProposedConfigVersion() + 1 < record.GetConsoleConfigVersion()) {
                     // console has a newer config, possibly updated during older version of server running
                     if (Self.StorageYamlConfig) {
-                        YDB_LOG_ERROR("Console has newer config, but BSC has dedicated storage" yaml config section, config not updated",
+                        YDB_LOG_ERROR("Console has newer config, but BSC has dedicated storage yaml config section, config not updated",
                             {"marker", "BSC30"});
                     } else if (record.HasYAML()) {
                         overwriteConfig();

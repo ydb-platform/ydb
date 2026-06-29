@@ -446,8 +446,7 @@ private:
                         PostponePumpDelay = Min(PostponePumpDelay * 2, TDuration::Seconds(1));
                     }
 
-<<<<<<< HEAD
-                    QLOG_CRIT_S("BSQ06", "T# " << TypeName<TEv>()
+                    QLOG_NOTICE_S("BSQ06", "T# " << TypeName<TEv>()
                         << " failed message"
                         << " deviceType# " << NPDisk::DeviceTypeStr(DeviceType, false)
                         << " status# " << NKikimrProto::EReplyStatus_Name(status)
@@ -462,29 +461,6 @@ private:
                         << " timeSinceLastPostpone# " << timeSinceLastPostpone
                         << " PostponePump# " << PostponePump
                         << " PostponePumpDelay# " << PostponePumpDelay);
-=======
-                    YDB_LOG_NOTICE_CTX(ctx, "Failed message",
-                        {"logPrefix", LogPrefix},
-                        {"func", __func__},
-                        {"t", TypeName<TEv>()},
-                        {"deviceType", NPDisk::DeviceTypeStr(DeviceType, false)},
-                        {"status", NKikimrProto::EReplyStatus_Name(status)},
-                        {"ws", NKikimrBlobStorage::TWindowFeedback_EStatus_Name(ws)},
-                        {"msgId", msgId},
-                        {"sequenceId", sequenceId},
-                        {"expectedMsgId", expectedMsgId},
-                        {"expectedSequenceId", expectedSequenceId},
-                        {"actualWindowSize", actualWindowSize},
-                        {"maxWindowSize", maxWindowSize},
-                        {"inFlightCost", Queue.GetInFlightCost()},
-                        {"inFlightCount", Queue.InFlightCount()},
-                        {"itemsWaiting", Queue.GetItemsWaiting()},
-                        {"bytesWaiting", Queue.GetBytesWaiting()},
-                        {"timeSinceLastPostpone", timeSinceLastPostpone},
-                        {"postponePump", PostponePump},
-                        {"postponePumpDelay", PostponePumpDelay},
-                        {"marker", "BSQ06"});
->>>>>>> ec11543e052 (Reduce severity of a log message in queue_backpressure_client (#44869))
 
                     switch (ws) {
                         case NKikimrBlobStorage::TWindowFeedback::IncorrectMsgId:

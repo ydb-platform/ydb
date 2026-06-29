@@ -54,6 +54,12 @@ class WorkloadCacheMiss(WorkloadBase):
     def get_workload_thread_funcs(self):
         return [self._cache_miss_loop for x in range(0, self.THREADS)]
 
+    def _post_stop(self):
+        # Close the shared requests.Session to release pooled connections
+        # and avoid a resource leak after the workload finishes.
+        self.session.close()
+        return True
+
 
 class WorkloadRegisterNode(WorkloadBase):
     def __init__(self, client, stop):
@@ -137,5 +143,5 @@ class WorkloadRunner:
         stop.set()
         print("Waiting for stop...")
         for w in workloads:
-            w.join()
+            w.wait_stop()
         print("Stopped")

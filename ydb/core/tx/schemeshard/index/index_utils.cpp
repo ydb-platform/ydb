@@ -26,16 +26,20 @@ TIndexObjectCounts GetIndexObjectCounts(const NKikimrSchemeOp::TIndexCreationCon
         }
         case NKikimrSchemeOp::EIndexTypeGlobalJson:
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextPlain:
-        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact: {
             res.IndexTableCount = 1;
             break;
-        }
+        case NKikimrSchemeOp::EIndexTypeGlobalJsonCompact:
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompact:
+            res.IndexTableCount = 1;
+            res.SequenceCount = 1;
+            break;
         case NKikimrSchemeOp::EIndexTypeGlobalFulltextRelevance:
-        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance: {
             res.IndexTableCount = 4;
             break;
-        }
+        case NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance:
+            res.IndexTableCount = 4;
+            res.SequenceCount = 1;
+            break;
         case NKikimrSchemeOp::EIndexTypeLocalBloomFilter:
         case NKikimrSchemeOp::EIndexTypeLocalBloomNgramFilter:
         case NKikimrSchemeOp::EIndexTypeLocalMinMax: {
@@ -435,7 +439,8 @@ auto CalcFulltextCompactImplTableDescImpl(
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
     const NKikimrSchemeOp::EIndexType indexType,
-    const TVector<TString>& prefixColumns)
+    const TVector<TString>& prefixColumns,
+    bool isBuild)
 {
     auto tableColumns = ExtractInfo(baseTable);
     THashSet<TString> indexColumns;
@@ -477,20 +482,23 @@ auto CalcFulltextCompactImplTableDescImpl(
 
     {
         auto col = implTableDesc.AddColumns();
+        col->SetName(NFulltext::GenColumn);
+        col->SetType(NScheme::TypeName(NFulltext::GenType));
+        col->SetTypeId(NFulltext::GenType);
+        col->SetNotNull(true);
+        if (!isBuild) {
+            col->SetDefaultFromSequence(NFulltext::GenSequence);
+        }
+        implTableDesc.AddKeyColumnNames(NFulltext::GenColumn);
+    }
+
+    {
+        auto col = implTableDesc.AddColumns();
         col->SetName(NFulltext::MaxIdColumn);
         col->SetType(NScheme::TypeName(idType));
         col->SetTypeId(idType);
         col->SetNotNull(true);
         implTableDesc.AddKeyColumnNames(NFulltext::MaxIdColumn);
-    }
-
-    {
-        auto col = implTableDesc.AddColumns();
-        col->SetName(NFulltext::GenColumn);
-        col->SetType(NScheme::TypeName(NFulltext::GenType));
-        col->SetTypeId(NFulltext::GenType);
-        col->SetNotNull(true);
-        implTableDesc.AddKeyColumnNames(NFulltext::GenColumn);
     }
 
     {
@@ -510,7 +518,11 @@ auto CalcFulltextCompactImplTableDescImpl(
     }
 
     implTableDesc.SetSystemColumnNamesAllowed(true);
-    implTableDesc.SetIndexImplType(indexType);
+    if (indexType == NKikimrSchemeOp::EIndexTypeGlobalFulltextCompactRelevance) {
+        implTableDesc.SetTableType(NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompactRelevance);
+    } else {
+        implTableDesc.SetTableType(NKikimrSchemeOp::ESpecialTableType::ESpecialTableTypeFulltextCompact);
+    }
 
     return implTableDesc;
 }
@@ -854,9 +866,10 @@ NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
     const NKikimrSchemeOp::EIndexType indexType,
-    const TVector<TString>& prefixColumns)
+    const TVector<TString>& prefixColumns,
+    bool isBuild)
 {
-    return CalcFulltextCompactImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexTableDesc, indexDesc, indexType, prefixColumns);
+    return CalcFulltextCompactImplTableDescImpl(baseTableInfo, baseTablePartitionConfig, indexTableDesc, indexDesc, indexType, prefixColumns, isBuild);
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
@@ -865,9 +878,10 @@ NKikimrSchemeOp::TTableDescription CalcFulltextCompactImplTableDesc(
     const NKikimrSchemeOp::TTableDescription& indexTableDesc,
     const NKikimrSchemeOp::TFulltextIndexDescription* indexDesc,
     const NKikimrSchemeOp::EIndexType indexType,
-    const TVector<TString>& prefixColumns)
+    const TVector<TString>& prefixColumns,
+    bool isBuild)
 {
-    return CalcFulltextCompactImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexTableDesc, indexDesc, indexType, prefixColumns);
+    return CalcFulltextCompactImplTableDescImpl(baseTableDescr, baseTablePartitionConfig, indexTableDesc, indexDesc, indexType, prefixColumns, isBuild);
 }
 
 NKikimrSchemeOp::TTableDescription CalcFulltextDocsImplTableDesc(

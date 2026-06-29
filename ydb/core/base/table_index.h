@@ -146,12 +146,14 @@ namespace NFulltext {
 
     inline constexpr const char* FullTextRelevanceColumn = "__ydb_full_text_relevance";
 
-    using TGen = ui32;
-    inline constexpr auto GenType = Ydb::Type::UINT32;
+    using TGen = ui64;
+    inline constexpr auto GenType = Ydb::Type::UINT64;
     inline constexpr const char* MaxIdColumn = "__ydb_max_id";
     inline constexpr const char* GenColumn = "__ydb_generation";
     inline constexpr const char* AddedColumn = "__ydb_added";
     inline constexpr const char* SegmentColumn = "__ydb_segment";
+
+    inline constexpr const char* GenSequence = "__ydb_gen_sequence";
 
     // Impl table positions in partitioning setting list
     inline constexpr const int DictTablePosition = 0;

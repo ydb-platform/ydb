@@ -258,8 +258,6 @@ public:
                 newTabletState = ETabletState::ReadyToWork;
             }
 
-            Self->UpdateCounterTabletsReassigning(-1);
-
             if (tablet->IsBootingSuppressed()) {
                 // Tablet will never boot, so will notify about creation right after commit
                 for (const TActorId& actor : tablet->ActorsToNotify) {
@@ -289,6 +287,12 @@ public:
                     SideEffects.Send(actor, new TEvPrivate::TEvRestartCancelled(tablet->GetFullTabletId()));
                 }
                 newTabletState = ETabletState::ReadyToWork;
+            }
+        }
+
+        if (tablet->ChannelProfileNewGroup.none()) {
+            if (std::exchange(tablet->IsMarkedForReassign, false)) {
+                Self->UpdateCounterTabletsReassigning(-1);
             }
         }
 

@@ -20,6 +20,29 @@
 
 namespace NKikimr::NPQ::NMLP {
 
+    class TOrderedMessageGroupIdHash: public TIntrusiveListItem<TOrderedMessageGroupIdHash> {
+        ui32 GroupIdHash;
+
+    public:
+
+        /* implicit */ TOrderedMessageGroupIdHash(ui32 groupIdHash);
+
+        explicit operator ui32() const;
+
+        TOrderedMessageGroupIdHash(const TOrderedMessageGroupIdHash& other) = delete;
+        TOrderedMessageGroupIdHash(TOrderedMessageGroupIdHash&& other);
+        TOrderedMessageGroupIdHash& operator=(const TOrderedMessageGroupIdHash& other) = delete;
+        TOrderedMessageGroupIdHash& operator=(TOrderedMessageGroupIdHash&& other) = delete;
+
+        bool operator==(const TOrderedMessageGroupIdHash& other) const;
+
+        template <typename H>
+        friend H AbslHashValue(H h, const TOrderedMessageGroupIdHash& c) {
+            return H::combine(std::move(h), c.GroupIdHash);
+        }
+    };
+
+
 class TStorage {
     static constexpr size_t MAX_MESSAGES = 120000;
     static constexpr size_t MIN_MESSAGES = 100;
@@ -359,14 +382,25 @@ private:
         ui64 LastOffset;
     };
 
-    struct TMessageGroups {
+    class TMessageGroups {
+    public:
+        bool UnlockedMessageGroupsIdContains(const ui32 messageGroupIdHash) const;
+        size_t UnlockedMessageGroupsIdSize() const;
+        bool UnlockedMessageGroupsIdErase(const ui32 messageGroupIdHash);
+        void UpdateLockedMaps(const TLockedGroup& locked, ui32 messageGroupIdHash);
+        void Clear();
+        ~TMessageGroups();
+
+    public:
         absl::flat_hash_map<ui32, TSingleMessageGroupIdInfo> Groups;
-        absl::flat_hash_set<ui32> UnlockedMessageGroupsId; // without parents
         absl::flat_hash_set<ui32> LockedMessageGroupsId; // without parents
         absl::flat_hash_set<ui64> UnorderedOffsets; // Groupless
 
-        void Clear();
+    private:
+        absl::flat_hash_set<TOrderedMessageGroupIdHash> UnlockedMessageGroupsId; // without parents
+        TIntrusiveList<TOrderedMessageGroupIdHash> UnlockedMessageGroupsIdViewOrder;
     };
+
     TMessageGroups MessageGroups;
 
     std::deque<TDLQMessage> DLQQueue;

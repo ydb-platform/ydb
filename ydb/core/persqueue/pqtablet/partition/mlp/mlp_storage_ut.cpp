@@ -2920,6 +2920,15 @@ Y_UNIT_TEST(NextFromBlacklistedStorage) {
         UNIT_ASSERT(!result.has_value());
     }
 }
+
+Y_UNIT_TEST(TOrderedMessageGroupIdHash) {
+    TOrderedMessageGroupIdHash a(500);
+    TOrderedMessageGroupIdHash b(500);
+    TOrderedMessageGroupIdHash c(600);
+    UNIT_ASSERT_EQUAL(a, b);
+    UNIT_ASSERT_UNEQUAL(a, c);
+    UNIT_ASSERT_UNEQUAL(b, c);
+}
 }
 
 } // namespace NKikimr::NPQ::NMLP

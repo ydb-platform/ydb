@@ -25,7 +25,6 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
     const bool Hard;
     const bool Collect;
     const bool Decommission;
-    const bool IgnoreBlock;
     const TWriteSource WriteSource;
 
     TGroupQuorumTracker QuorumTracker;
@@ -128,7 +127,7 @@ class TBlobStorageGroupCollectGarbageRequest : public TBlobStorageGroupRequestAc
         ++*Mon->NodeMon->RestartCollectGarbage;
         auto ev = std::make_unique<TEvBlobStorage::TEvCollectGarbage>(TabletId, RecordGeneration, PerGenerationCounter,
             Channel, Collect, CollectGeneration, CollectStep, Keep.release(), DoNotKeep.release(), Deadline, false, WriteSource,
-            Hard, IgnoreBlock);
+            Hard);
         ev->RestartCounter = counter;
         ev->Decommission = Decommission;
         return ev;
@@ -157,7 +156,6 @@ public:
         , Hard(params.Common.Event->Hard)
         , Collect(params.Common.Event->Collect)
         , Decommission(params.Common.Event->Decommission)
-        , IgnoreBlock(params.Common.Event->IgnoreBlock)
         , WriteSource(params.Common.Event->WriteSource)
         , QuorumTracker(Info.Get())
     {}

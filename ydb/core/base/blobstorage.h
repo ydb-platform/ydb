@@ -1015,22 +1015,18 @@ struct TEvBlobStorage {
             , Tactic(tactic)
             , WriteSource(writeSource)
         {
-            Validate();
-        }
-
-        void Validate() const {
             Y_ABORT_UNLESS(Id, "EvPut invalid: LogoBlobId must have non-zero tablet field, id# %s", Id.ToString().c_str());
             Y_ABORT_UNLESS(Buffer.size() < (40 * 1024 * 1024),
                    "EvPut invalid: LogoBlobId# %s buffer.Size# %zu",
-                   Id.ToString().data(), Buffer.size());
-            Y_ABORT_UNLESS(Buffer.size() == Id.BlobSize(),
+                   id.ToString().data(), Buffer.size());
+            Y_ABORT_UNLESS(Buffer.size() == id.BlobSize(),
                    "EvPut invalid: LogoBlobId# %s buffer.Size# %zu",
-                   Id.ToString().data(), Buffer.size());
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&Id, sizeof(Id));
+                   id.ToString().data(), Buffer.size());
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&id, sizeof(id));
             REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(Buffer.GetContiguousSpan().Data(), Buffer.size());
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&Deadline, sizeof(Deadline));
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&HandleClass, sizeof(HandleClass));
-            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&Tactic, sizeof(Tactic));
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&deadline, sizeof(deadline));
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&handleClass, sizeof(handleClass));
+            REQUEST_VALGRIND_CHECK_MEM_IS_DEFINED(&tactic, sizeof(tactic));
         }
 
         TEvPut(const TLogoBlobID &id, const TString &buffer, TInstant deadline,
@@ -2209,7 +2205,6 @@ struct TEvBlobStorage {
         bool IsMultiCollectAllowed;
         bool IsMonitored = true;
 
-        bool IgnoreBlock = false;
         bool Decommission = false;
 
         ui32 RestartCounter = 0;
@@ -2227,8 +2222,7 @@ struct TEvBlobStorage {
         TEvCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 perGenerationCounter, ui32 channel,
                 bool collect, ui32 collectGeneration,
                 ui32 collectStep, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep, TInstant deadline,
-                bool isMultiCollectAllowed, TWriteSource writeSource, bool hard = false,
-                bool ignoreBlock = false)
+                bool isMultiCollectAllowed, TWriteSource writeSource, bool hard = false)
             : TabletId(tabletId)
             , RecordGeneration(recordGeneration)
             , PerGenerationCounter(perGenerationCounter)
@@ -2241,17 +2235,7 @@ struct TEvBlobStorage {
             , Hard(hard)
             , Collect(collect)
             , IsMultiCollectAllowed(isMultiCollectAllowed)
-            , IgnoreBlock(ignoreBlock)
             , WriteSource(writeSource)
-        {}
-
-        // Keep compatibility with the pre-TWriteSource argument order.
-        TEvCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 perGenerationCounter, ui32 channel,
-                bool collect, ui32 collectGeneration,
-                ui32 collectStep, TVector<TLogoBlobID> *keep, TVector<TLogoBlobID> *doNotKeep, TInstant deadline,
-                bool isMultiCollectAllowed, bool hard, bool ignoreBlock = false)
-            : TEvCollectGarbage(tabletId, recordGeneration, perGenerationCounter, channel, collect, collectGeneration,
-                    collectStep, keep, doNotKeep, deadline, isMultiCollectAllowed, UnknownWriteSource(), hard, ignoreBlock)
         {}
 
         TEvCollectGarbage(ui64 tabletId, ui32 recordGeneration, ui32 channel, bool collect, ui32 collectGeneration,
@@ -2269,7 +2253,6 @@ struct TEvBlobStorage {
             , Hard(false)
             , Collect(collect)
             , IsMultiCollectAllowed(true)
-            , IgnoreBlock(false)
             , WriteSource(writeSource)
         {}
 
@@ -2278,7 +2261,7 @@ struct TEvBlobStorage {
                 TWriteSource writeSource = UnknownWriteSource()) {
             return MakeHolder<TEvCollectGarbage>(tabletId, recordGeneration, perGenerationCounter, channel,
                     true /*collect*/, collectGeneration, collectStep, nullptr /*keep*/, nullptr /*doNotKeep*/,
-                    deadline, false /*isMultiCollectAllowed*/, writeSource, true /*hard*/, false /*ignoreBlock*/);
+                    deadline, false /*isMultiCollectAllowed*/, writeSource, true /*hard*/);
         }
 
         TString Print(bool isFull) const {

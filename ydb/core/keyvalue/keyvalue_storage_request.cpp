@@ -709,7 +709,7 @@ public:
                         iter += logoBlobId.BlobSize();
                         THolder<TEvBlobStorage::TEvPut> put(new TEvBlobStorage::TEvPut(
                             logoBlobId,
-                            static_cast<TRcBuf>(TRope(begin, iter)),
+                            TRcBuf(TRope(begin, iter)),
                             IntermediateResults->Deadline,
                             request.HandleClass,
                             request.Tactic,

@@ -269,7 +269,7 @@ namespace NKikimr::NBlobDepot {
                 STLOG(PRI_DEBUG, BLOB_DEPOT, BDT91, "going to TEvPut", (Id, Self->GetLogId()), (Sender, Ev->Sender),
                     (Cookie, Ev->Cookie), (Key, key), (BlobId, id));
                 SendToBSProxy(SelfId(), channel.GroupId, new TEvBlobStorage::TEvPut(
-                        id, static_cast<TRcBuf>(std::move(buffer)), TInstant::Max(), NKikimrBlobStorage::TabletLog,
+                        id, TRcBuf(buffer), TInstant::Max(), NKikimrBlobStorage::TabletLog,
                         TEvBlobStorage::TEvPut::TacticDefault, TWriteSource::BlobDepotPut),
                     (ui64)keep | (ui64)doNotKeep << 1);
                 const bool inserted = channel.AssimilatedBlobsInFlight.insert(value).second; // prevent from barrier advancing

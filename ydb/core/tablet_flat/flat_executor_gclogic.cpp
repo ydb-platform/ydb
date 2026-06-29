@@ -373,7 +373,6 @@ void TExecutorGCLogic::TChannelInfo::SendCollectGarbageEntry(
             TInstant::Max(),
             true,
             TWriteSource::FlatCollectGarbage,
-            false,
             false);
     GcCounter += ev->PerGenerationCounterStepSize();
     SendToBSProxy(ctx, bsgroup, ev.Release());

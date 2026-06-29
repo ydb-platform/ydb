@@ -551,8 +551,8 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
             ev->Bunch.emplace_back(new IEventHandle(
                 TActorId() /*recipient*/,
                 item.Recipient,
-                put = new TEvBlobStorage::TEvPut(item.BlobId, static_cast<TRcBuf>(std::move(item.Buffer)),
-                    item.Deadline, HandleClass, Tactic, item.WriteSource),
+                put = new TEvBlobStorage::TEvPut(item.BlobId, TRcBuf(item.Buffer), item.Deadline, HandleClass, Tactic,
+                    item.WriteSource),
                 0 /*flags*/,
                 item.Cookie,
                 nullptr /*forwardOnNondelivery*/,

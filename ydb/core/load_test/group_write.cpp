@@ -295,7 +295,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
 
             return std::make_unique<TEvBlobStorage::TEvCollectGarbage>(tabletId, gen, step, channel,
                     !keep, gen, step, blobsToKeep.release(), blobsToCollect.release(), TInstant::Max(), false,
-                    TWriteSource::GroupWriteLoadActor, false, false);
+                    TWriteSource::GroupWriteLoadActor, false);
         }
 
         TLogoBlobID GetRandomBlobId() {

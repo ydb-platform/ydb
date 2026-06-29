@@ -7,7 +7,6 @@ from typing import Optional
 from ydb.tests.fq.streaming_common.common import Kikimr, StreamingTestBase, YdbClient, set_test_env
 from ydb.tests.library.common.types import Erasure
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
-from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
 
 import pytest
 import yatest.common
@@ -84,7 +83,7 @@ def get_all_cgi_params(url):
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_precompute_recovery(self, kikimr_udfs, local_topics, entity_name):
         inp, out, endpoint = self.get_io_names(kikimr_udfs, "test_precompute_recovery", local_topics, entity_name)
-        path = f"/Root/test_precompute_recovery_query"
+        path = "/Root/test_precompute_recovery_query"
 
         test_table = "test_table"
         kikimr_udfs.ydb_client.query(f"""
@@ -99,7 +98,7 @@ def get_all_cgi_params(url):
         """)
 
         def validate_query(text: str, previous_ids: int, status: str = "RUNNING", check_issues: bool = True, suffix: Optional[str] = None):
-            result_sets = kikimr_udfs.ydb_client.query(f"""
+            result_sets = kikimr_udfs.ydb_client.query("""
                 SELECT
                     Path,
                     Status,
@@ -126,7 +125,7 @@ def get_all_cgi_params(url):
             assert row.Path == path
             assert row.Status == status
             assert row.Text.strip() in text.strip()
-            assert row.Run == True
+            assert row.Run
             assert row.ResourcePool == "default"
             assert row.RetryCount == 0
             assert row.LastFailAt is None
@@ -212,7 +211,7 @@ END DO
         validate_query(sql, tests_count)
         logger.info("Checked final query info")
 
-        assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0] == f"test_data_final"
+        assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0] == "test_data_final"
         logger.info("Checked checkpoint recovery")
 
         time.sleep(5)

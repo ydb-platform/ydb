@@ -523,17 +523,18 @@ private:
             DECLARE $graph_compressed AS Optional<String>;
             DECLARE $graph_compression_method AS Optional<Text>;
             DECLARE $lease_generation AS Int64;
+            DECLARE $result_set_metas AS JsonDocument;
 
             UPSERT INTO `.metadata/script_executions` (
                 database, execution_id, run_script_actor_id, execution_status, execution_mode, start_ts,
                 query_text, syntax, meta, streaming_disposition, expire_at, retry_state,
                 user_token, user_group_sids, parameters,
-                graph_compressed, graph_compression_method, lease_generation
+                graph_compressed, graph_compression_method, lease_generation, result_set_metas
             ) VALUES (
                 $database, $execution_id, $run_script_actor_id, $execution_status, $execution_mode, CurrentUtcTimestamp(),
                 $query_text, $syntax, $meta, $streaming_disposition, CurrentUtcTimestamp() + $execution_meta_ttl, $retry_state,
                 $user_sid, $user_group_sids, $parameters,
-                $graph_compressed, $graph_compression_method, $lease_generation
+                $graph_compressed, $graph_compression_method, $lease_generation, $result_set_metas
             );
 
             UPSERT INTO `.metadata/script_execution_leases` (
@@ -611,6 +612,9 @@ private:
                 .Build()
             .AddParam("$lease_generation")
                 .Int64(LeaseGeneration)
+                .Build()
+            .AddParam("$result_set_metas")
+                .JsonDocument("[]")
                 .Build();
 
         RunDataQuery(sql, &params);

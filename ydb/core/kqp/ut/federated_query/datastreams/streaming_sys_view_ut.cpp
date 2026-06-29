@@ -437,7 +437,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesSysView) {
         CheckSysView(rows);
     }
 
-    Y_UNIT_TEST_F(ReaSysViewWithoutScriptExecutionTables, TStreamingSysViewTestFixture) {
+    Y_UNIT_TEST_F(ReadSysViewWithoutScriptExecutionTables, TStreamingSysViewTestFixture) {
         Setup();
 
         StartQuery("A");

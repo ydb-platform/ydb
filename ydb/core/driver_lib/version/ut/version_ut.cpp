@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(VersionParser) {
     }
 
     Y_UNIT_TEST(CiSmokeUnifiedPrCheck44879) {
-        // Trigger postcommit smoke on ci-test-* branches.
+        // Postcommit smoke on ci-test-*: ydb/ diff required for increment graph.
         UNIT_ASSERT(true);
     }
 }

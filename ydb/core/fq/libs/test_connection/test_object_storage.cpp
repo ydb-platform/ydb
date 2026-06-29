@@ -98,11 +98,11 @@ public:
 
     void Bootstrap() {
         Become(&TTestObjectStorageConnectionActor::StateFunc);
-        YDB_LOG_DEBUG("Starting test object storage connection actor. Actor",
+        YDB_LOG_DEBUG("Starting test object storage connection actor",
             {"scope", Scope},
             {"user", User},
             {"ticket", NKikimr::MaskTicket(Token)},
-            {"id", SelfId()});
+            {"selfId", SelfId()});
         try {
             SendDiscover();
         } catch (...) {
@@ -203,7 +203,7 @@ private:
     }
 
     void ReplyOk(const TString& requestId) {
-        YDB_LOG_TRACE("Access is valid for object storage connection, request id",
+        YDB_LOG_TRACE("Access is valid for object storage connection",
             {"scope", Scope},
             {"user", User},
             {"ticket", NKikimr::MaskTicket(Token)},

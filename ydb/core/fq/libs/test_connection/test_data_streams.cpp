@@ -128,11 +128,11 @@ public:
     static constexpr char ActorName[] = "YQ_TEST_DATA_STREAMS_CONNECTION";
 
     void Bootstrap() {
-        YDB_LOG_DEBUG("Starting test data stream connection actor. Actor",
+        YDB_LOG_DEBUG("Starting test data stream connection actor",
             {"scope", Scope},
             {"user", User},
             {"ticket", NKikimr::MaskTicket(Token)},
-            {"id", SelfId()});
+            {"selfId", SelfId()});
         YDB_LOG_TRACE("Dump bootstrap details",
             {"scope", Scope},
             {"user", User},
@@ -177,7 +177,7 @@ private:
     void Handler(TEvPrivate::TEvResolveDbResponse::TPtr& ev) {
         const auto& response = ev->Get()->Result;
         if (!response.Success) {
-            YDB_LOG_TRACE("Resolve datababse error",
+            YDB_LOG_TRACE("Resolve datababse",
                 {"scope", Scope},
                 {"user", User},
                 {"ticket", NKikimr::MaskTicket(Token)},
@@ -198,7 +198,7 @@ private:
             return;
         }
 
-        YDB_LOG_TRACE("Resolve datababse id",
+        YDB_LOG_TRACE("Resolve datababse",
             {"scope", Scope},
             {"user", User},
             {"ticket", NKikimr::MaskTicket(Token)},
@@ -224,15 +224,15 @@ private:
     void Handler(TEvPrivate::TEvOpenSessionResponse::TPtr& ev) {
         const auto& response = *ev->Get();
         if (!response.IsSuccess) {
-            YDB_LOG_TRACE("Open session error",
+            YDB_LOG_TRACE("Open session",
                 {"scope", Scope},
                 {"user", User},
                 {"ticket", NKikimr::MaskTicket(Token)},
-                {"errorMessage", response.ErrorMessage});
+                {"error", response.ErrorMessage});
             ReplyError(response.ErrorMessage);
             return;
         }
-        YDB_LOG_TRACE("Open session: ok",
+        YDB_LOG_TRACE("Open session",
             {"scope", Scope},
             {"user", User},
             {"ticket", NKikimr::MaskTicket(Token)});
@@ -253,15 +253,15 @@ private:
     void Handler(TEvPrivate::TEvCheckListStreamsResponse::TPtr& ev) {
         const auto& response = *ev->Get();
         if (!response.IsSuccess) {
-            YDB_LOG_TRACE("Check list streams error",
+            YDB_LOG_TRACE("Check list streams",
                 {"scope", Scope},
                 {"user", User},
                 {"ticket", NKikimr::MaskTicket(Token)},
-                {"errorMessage", response.ErrorMessage});
+                {"error", response.ErrorMessage});
             ReplyError(response.ErrorMessage);
             return;
         }
-        YDB_LOG_TRACE("Check list streams: ok",
+        YDB_LOG_TRACE("Check list streams",
             {"scope", Scope},
             {"user", User},
             {"ticket", NKikimr::MaskTicket(Token)});

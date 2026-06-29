@@ -215,7 +215,7 @@ public:
             YDB_LOG_DEBUG("Create read rule deleter actor",
                 {"queryId", QueryId},
                 {"topicPath", Topics[i].topic_path()},
-                {"i", i});
+                {"index", i});
             Children.push_back(Register(new TSingleReadRuleDeleter(SelfId(), QueryId, YdbDriver, PqGateway, Topics[i], Credentials[i], i, MaxRetries)));
         }
     }

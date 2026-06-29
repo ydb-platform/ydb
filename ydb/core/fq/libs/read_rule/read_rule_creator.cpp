@@ -241,7 +241,7 @@ public:
             YDB_LOG_DEBUG("Create read rule creation actor",
                 {"queryId", QueryId},
                 {"topicPath", TopicConsumers[i].topic_path()},
-                {"i", i});
+                {"index", i});
             Children.push_back(Register(new TSingleReadRuleCreator(SelfId(), QueryId, YdbDriver, PqGateway, TopicConsumers[i], Credentials[i], i)));
         }
     }

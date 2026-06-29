@@ -65,11 +65,11 @@ public:
     static constexpr char ActorName[] = "YQ_TEST_MONITORING_CONNECTION";
 
     void Bootstrap() {
-        YDB_LOG_DEBUG("Starting test monitoring connection actor. Actor",
+        YDB_LOG_DEBUG("Starting test monitoring connection actor",
             {"scope", Scope},
             {"user", User},
             {"ticket", NKikimr::MaskTicket(Token)},
-            {"id", SelfId()});
+            {"selfId", SelfId()});
         Become(&TTestMonitoringConnectionActor::StateFunc);
 
         try {

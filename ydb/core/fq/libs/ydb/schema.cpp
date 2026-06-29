@@ -159,7 +159,7 @@ protected:
             return;
         }
 
-        YDB_LOG_ERROR("Create entity error",
+        YDB_LOG_ERROR("Create",
             {"entityName", GetEntityName()},
             {"error", ev->Get()->Result.GetStatus()},
             {"issues", ev->Get()->Result.GetIssues().ToOneLineString()});
@@ -305,12 +305,12 @@ protected:
 
     void Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev) override {
         if (ev->Get()->Result.IsSuccess()) {
-            YDB_LOG_DEBUG("Create. Create session OK",
+            YDB_LOG_DEBUG("Create session",
                 {"entityName", GetEntityName()});
             Session = ev->Get()->Result.GetSession();
             CallAndSubscribe();
         } else {
-            YDB_LOG_WARN("Create. Create session",
+            YDB_LOG_WARN("Create session",
                 {"entityName", GetEntityName()},
                 {"error", ev->Get()->Result.GetIssues().ToOneLineString()});
             if (!ScheduleNextAttempt(ev)) {
@@ -472,7 +472,7 @@ private:
 
     bool OnCurrentRequestChanged() override {
         if (CurrentRequest == 0 && !Limits[0]) {
-            YDB_LOG_WARN("Create. Attempt to create rate limiter resource root without limit",
+            YDB_LOG_WARN("Create rate limiter resource without limit",
                 {"entityName", TRecursiveCreateActorBase<TCreateRateLimiterResourceRequestDesc>::GetEntityName()});
             NYdb::NIssue::TIssues issues;
             issues.AddIssue(TStringBuilder() << "Internal error: attempt to create rate limiter resource root \"" << RequestsPath[0].Path << "\" without limit");

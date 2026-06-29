@@ -115,7 +115,7 @@ private:
         if (DataQuery->TxControl.SnapshotRead) {
             tx.SnapshotRead(true);
         }
-        YDB_LOG_TRACE("Run query commit",
+        YDB_LOG_TRACE("Run query",
             {"logPrefix", LogPrefix()},
             {"sql", DataQuery->Sql},
             {"commit", tx.Commit_});

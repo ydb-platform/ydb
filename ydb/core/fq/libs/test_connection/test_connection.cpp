@@ -142,7 +142,7 @@ public:
 
     void Bootstrap() {
         YDB_LOG_DEBUG("Starting yandex query test connection",
-            {"actorId", SelfId()});
+            {"selfId", SelfId()});
 
         NLwTraceMonPage::ProbeRegistry().AddProbesList(LWTRACE_GET_PROBES(YQ_TEST_CONNECTION_PROVIDER));
 
@@ -180,8 +180,8 @@ public:
             return;
         }
 
-        YDB_LOG_TRACE("Dump testConnectionRequest, user, ticket, request",
-            {"testConnectionRequest", scope},
+        YDB_LOG_TRACE("TestConnectionRequest",
+            {"scope", scope},
             {"user", user},
             {"ticket", NKikimr::MaskTicket(token)},
             {"request", request.DebugString()});

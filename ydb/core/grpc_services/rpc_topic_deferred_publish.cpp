@@ -74,7 +74,7 @@ public:
         }
 
         const auto database = Request->GetDatabaseName();
-        if (!database) {
+        if (!database || database->empty()) {
             Request->RaiseIssue(NYql::TIssue("Database name is not set"));
             Ydb::Topic::DeferredPublish::BeginPublicationResult result;
             Request->SendResult(result, Ydb::StatusIds::BAD_REQUEST);

@@ -176,7 +176,10 @@ Y_UNIT_TEST(BeginPublicationRejectsMissingDatabase) {
     Ydb::Topic::DeferredPublish::BeginPublicationResponse response;
     const auto rpcStatus = MakeStub(server)->BeginPublication(&context, request, &response);
 
-    UNIT_ASSERT(!rpcStatus.ok() || response.operation().status() == Ydb::StatusIds::BAD_REQUEST);
+    UNIT_ASSERT(rpcStatus.ok());
+    UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST);
+    UNIT_ASSERT_GT(response.operation().issues_size(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(response.operation().issues(0).message(), "Database name is not set");
 }
 
 Y_UNIT_TEST(BeginPublicationAssignsDistinctIntIds) {

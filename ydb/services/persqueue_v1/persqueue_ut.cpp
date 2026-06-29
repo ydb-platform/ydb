@@ -8032,11 +8032,9 @@ Y_UNIT_TEST_SUITE(TPersQueueTest) {
         wSettings.DirectWriteToPartition(false);
 
         TVector<std::shared_ptr<NYdb::NTopic::ISimpleBlockingWriteSession>> writers;
-        for (auto i = 0u; i < 3; i++) {
+        for (auto i = 0u; i < 9; i++) {
             auto writer = topicClient.CreateSimpleBlockingWriteSession(wSettings);
-            for (auto j = 0u; j < 3; j++) {
-                writer->Write(TString("MyData") + ToString(i) + ToString(j));
-            }
+            writer->Write(TString("MyData") + ToString(i));
             writers.push_back(writer);
         }
 

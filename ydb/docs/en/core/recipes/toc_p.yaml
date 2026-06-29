@@ -4,11 +4,6 @@ items:
   include:
     mode: link
     path: backup-collections/toc_p.yaml
-- name: System tablet backup recipes
-  href: system-tablet-backup/index.md
-  include:
-    mode: link
-    path: system-tablet-backup/toc_p.yaml
 - name: YDB SDK
   include:
     mode: link

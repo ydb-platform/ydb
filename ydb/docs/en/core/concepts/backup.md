@@ -59,11 +59,9 @@ When working with large tables, repeatedly creating full backups can be too cost
 
 Incremental backups are organized into a **chain**:
 
-
 ```text
 Full copy → Increment₁ → Increment₂ → ... → Incrementₙ
 ```
-
 
 For recovery, the entire chain is required: first, the full copy is applied, then all increments sequentially. Recovery is performed to the state at the time of the last increment in the chain.
 
@@ -89,6 +87,12 @@ This mechanism is used to restore cluster metadata when [recovery from database 
 
 If the database volume allows standard recovery, use [export/import](#s3) or [dump/restore](#dump) first. System tablet backup should be used as a specialized mechanism when you need to restore cluster metadata specifically and reduce the scope of recovery operations.
 
+{% note info %}
+
+For practical instructions on enabling backup and recovery, see [System tablet backup recipes](../recipes/system-tablet-backup/index.md).
+
+{% endnote %}
+
 {% note warning %}
 
 Backups of different system tablets are created independently of each other and are not coordinated. After recovery, the state of the tablets may be inconsistent, which can negatively affect cluster operation.
@@ -110,7 +114,7 @@ Because writes are asynchronous, recent changes that did not make it into the ba
 
 Backups are created **locally on the host where the tablet is currently running**. Therefore, the most up-to-date copy is on the host where the tablet was running immediately before the failure.
 
-The number of backup copies stored on a host is limited in the cluster [configuration](../reference/configuration/index.md). After a snapshot is successfully taken, the oldest copy is automatically deleted when the limit is exceeded. Incomplete copies (without a fully written snapshot) are deleted when a new backup copy is created.
+The number of backup copies stored on a host is limited in the [configuration](../reference/configuration/system_tablet_backup_config.md). After a snapshot is successfully taken, the oldest copy is automatically deleted when the limit is exceeded. Incomplete copies (without a fully written snapshot) are deleted when a new backup copy is created.
 
 ## Comparison of approaches {#comparison}
 
@@ -126,7 +130,9 @@ The number of backup copies stored on a host is limited in the cluster [configur
 
 ## See also
 
+- [Backup and recovery](../devops/backup-and-recovery/index.md) — practical guide
 - [Backup collections](datamodel/backup-collection.md) — architecture and limitations
+- [System tablet backup recipes](../recipes/system-tablet-backup/index.md) — enabling and recovery
 - [Backup and recovery](../devops/backup-and-recovery/index.md) — practical guide
 - [Export/import reference](../reference/ydb-cli/export-import/index.md) — CLI commands
 - YQL reference:

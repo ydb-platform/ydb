@@ -68,4 +68,4 @@ This mechanism is designed to restore cluster metadata when other recovery metho
 
 If you can restore the cluster using the [export/import](#s3) or [dump/restore](#files) commands, it is recommended to use these methods.
 
-For conceptual information about system tablet backup, see [Backup concepts](../../concepts/backup.md).
+For conceptual information about system tablet backup, see [Backup concepts](../../concepts/backup.md#system-tablet-backup).

@@ -75,6 +75,43 @@ Currently, only [row tables](datamodel/table.md#row-oriented-tables) are support
 
 {% endnote %}
 
+## Backup of system tablets {#system-tablet-backup}
+
+{% note info %}
+
+Currently, only cluster-level system tablets are supported for backup. Database system tablet backup is not supported.
+
+{% endnote %}
+
+The system tablet backup mechanism provides incremental copying of cluster metadata — such as [Hive](glossary.md#hive), [BSController](glossary.md#ds-controller), and [SchemeShard](glossary.md#scheme-shard) — to the local file system of the cluster hosts.
+
+This mechanism is used to restore cluster metadata when [recovery from database backups](#full-backup) is technically possible but unsuitable in terms of time or workload. A typical scenario is when the aggregate volume of databases in the cluster is large due to their number, the size of individual databases, or both; a full `import`/`restore` of all data to a new cluster in this case leads to prolonged downtime. In this scenario, you can restore system tablets and return the cluster to an operational state without performing a mass restore of user data on a new cluster.
+
+If the database volume allows standard recovery, use [export/import](#s3) or [dump/restore](#dump) first. System tablet backup should be used as a specialized mechanism when you need to restore cluster metadata specifically and reduce the scope of recovery operations.
+
+{% note warning %}
+
+Backups of different system tablets are created independently of each other and are not coordinated. After recovery, the state of the tablets may be inconsistent, which can negatively affect cluster operation.
+
+{% endnote %}
+
+### How it works {#system-tablet-backup-how-it-works}
+
+Backup consists of two components:
+
+- **Snapshot** — on each run, the tablet scans all its tables and writes its full state to the backup copy, including the data schema. Scanning is performed from a snapshot and does not block tablet operation.
+- **Changelog** — on each change to data or schema, the tablet asynchronously writes the change to the log in parallel with writing to distributed storage. When the log size exceeds the snapshot size, the tablet automatically creates a new snapshot.
+
+{% note warning %}
+
+Because writes are asynchronous, recent changes that did not make it into the backup before a failure may be lost.
+
+{% endnote %}
+
+Backups are created **locally on the host where the tablet is currently running**. Therefore, the most up-to-date copy is on the host where the tablet was running immediately before the failure.
+
+The number of backup copies stored on a host is limited in the cluster [configuration](../reference/configuration/index.md). After a snapshot is successfully taken, the oldest copy is automatically deleted when the limit is exceeded. Incomplete copies (without a fully written snapshot) are deleted when a new backup copy is created.
+
 ## Comparison of approaches {#comparison}
 
 #|
@@ -84,6 +121,7 @@ Currently, only [row tables](datamodel/table.md#row-oriented-tables) are support
 || [Export to S3-compatible storage](#s3) | S3-compatible storage | No | Disaster recovery, migration, archiving ||
 || [Export to NFS](#nfs) | Network file system (NFS) | No | Disaster recovery, migration, archiving ||
 || [Incremental backup](#incremental-backup) | In the cluster ([exported](datamodel/backup-collection.md#external-storage) to S3 or file system) | Yes | Regular backups of large production databases ||
+|| [Backup of system tablets](#system-tablet-backup) | Local file system of cluster hosts | Yes | Restoring cluster metadata in emergency situations ||
 |#
 
 ## See also

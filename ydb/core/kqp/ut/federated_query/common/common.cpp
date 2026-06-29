@@ -193,6 +193,21 @@ private:
     std::string Token_;
 };
 
+class TStaticCredentialsProviderFactory: public NYdb::ICredentialsProviderFactory {
+public:
+    explicit TStaticCredentialsProviderFactory(const TString& token)
+        : Token_(token)
+    {
+    }
+
+    std::shared_ptr<NYdb::ICredentialsProvider> CreateProvider() const override {
+        return std::make_shared<TStaticCredentialsProvider>(Token_);
+    }
+
+private:
+    const TString Token_;
+};
+
 class TStaticSecuredCredentialsFactory: public NYql::IStructuredTokenCredentialsFactory {
 public:
     explicit TStaticSecuredCredentialsFactory(const TString& token)

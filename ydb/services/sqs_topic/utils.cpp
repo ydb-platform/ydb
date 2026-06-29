@@ -1,7 +1,6 @@
 #include "utils.h"
 
 #include <ydb/core/base/appdata.h>
-#include <ydb/library/actors/core/actor.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/core/persqueue/public/mlp/mlp.h>
 #include <ydb/core/protos/config.pb.h>
@@ -15,6 +14,14 @@
 #include <format>
 
 namespace NKikimr::NSqsTopic {
+
+    namespace {
+
+        TString ConvertOldConsumerName(const TString& consumer) {
+            return NPersQueue::ConvertOldConsumerName(consumer, AppData()->PQConfig);
+        }
+
+    } // namespace
 
     TQueueNameWithConsumer SplitExtendedQueueName(TStringBuf queueNameExt) {
         TQueueNameWithConsumer result;
@@ -60,10 +67,6 @@ namespace NKikimr::NSqsTopic {
             res << (EqualToOneOf(i, 4, 6, 8, 10) ? "-" : "") << Hex(digest[i], HF_FULL);
         }
         return res;
-    }
-
-    TString ConvertOldConsumerName(const TString& consumer) {
-        return NPersQueue::ConvertOldConsumerName(consumer, TlsActivationContext->AsActorContext());
     }
 
     TVector<std::pair<TString, TString>> GetMetricsLabels(

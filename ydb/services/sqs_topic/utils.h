@@ -30,8 +30,6 @@ namespace NKikimr::NSqsTopic {
 
     TString GenerateMessageId(const TString& database, const TString& topicPath, const NPQ::NMLP::TMessageId& pos);
 
-    TString ConvertOldConsumerName(const TString& consumer);
-
     TVector<std::pair<TString, TString>> GetMetricsLabels(
         const TString& databasePath,
         const TString& topicPath,

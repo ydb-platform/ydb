@@ -53,7 +53,7 @@ items:
   href: system-views.md
 - name: Change Data Capture
   href: cdc.md
-- name: Разделяемый читатель топика: устройство и ограничения
+- name: Устройство и ограничения разделяемого читателя топика
   href: shared-consumer-internals.md
 - name: Terraform
   href: terraform.md

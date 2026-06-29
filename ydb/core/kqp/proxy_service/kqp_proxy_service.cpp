@@ -234,7 +234,9 @@ public:
             VectorIndexLevelsCache, GetKqpResourceManager(), TableServiceConfig.GetResourceManager()));
         FeatureFlags = AppData()->FeatureFlags;
         WorkloadManagerConfig = AppData()->WorkloadManagerConfig;
-        WarmupGateOpen = !(TableServiceConfig.GetEnableCompileCacheWarmup() && !AppData()->TenantName.empty());
+        WarmupApplicable = IsCompileCacheWarmupEnabled(TableServiceConfig, AppData()->TenantName,
+            AppData()->DomainsInfo->Domain ? AppData()->DomainsInfo->Domain->Name : TString());
+        WarmupGateOpen = !WarmupApplicable;
         // NOTE: some important actors are constructed within next call
         FederatedQuerySetup = FederatedQuerySetupFactory->Make(ctx.ActorSystem());
         AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory, VectorIndexLevelsCache);
@@ -1040,7 +1042,7 @@ public:
             // Keep fast-polling until we've actually sent TEvStartWarmup (after peer resources gather), not just until the board converges.
             bool fastPoll = false;
             if (!WarmupStarted
-                && TableServiceConfig.GetEnableCompileCacheWarmup()
+                && WarmupApplicable
                 && PeerProxyNodeResources.size() <= 1)
             {
                 auto rm = TryGetKqpResourceManager(SelfId().NodeId());
@@ -1105,7 +1107,7 @@ public:
             return;
         }
 
-        if (!TableServiceConfig.GetEnableCompileCacheWarmup()) {
+        if (!WarmupApplicable) {
             return;
         }
 
@@ -2065,6 +2067,7 @@ private:
     bool ServerWorkerBalancerComplete = false;
     bool WarmupStarted = false;
     bool WarmupGateOpen = true;
+    bool WarmupApplicable = false;  // warmup runs on this node (tenant DB with warmup enabled; not the root domain)
     std::optional<TString> SelfDataCenterId;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     std::vector<ui64> LocalDatacenterProxies;

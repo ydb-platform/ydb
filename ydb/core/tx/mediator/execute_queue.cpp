@@ -29,20 +29,28 @@ namespace NTxMediator {
             return Buckets[bucketIdx];
         }
 
+        TString DumpTxIds(const TVector<TTx>& tx) {
+            TStringBuilder ss;
+            for (const auto &x : tx) {
+                if (!ss.empty()) {
+                    ss << " ";
+                }
+                ss << x.TxId;
+            }
+            return (TString)ss;
+        }
+
         template<typename TEv>
         void SendStepToBucket(TTabletId tablet, TStepId step, TVector<TTx> &tx, const TActorContext &ctx) {
             TBucket &bucket = SelectBucket(tablet);
             Sort(tx.begin(), tx.end(), TTx::TCmpOrderId());
 
-            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_PRIVATE, [&]() {
-                TStringBuilder ss;
-                ss << "Mediator exec queue [" << MediatorId << "], step# " << step << " for tablet [" << tablet << "]. TxIds:";
-                for (const auto &x : tx)
-                    ss << " txid# " << x.TxId;
-                ss << " marker# M2";
-                return (TString)ss;
-            }());
-
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_PRIVATE, "Mediator exec queue",
+                {"mediatorId", MediatorId},
+                {"step", step},
+                {"forTablet", tablet},
+                {"txIds", DumpTxIds(tx)},
+                {"marker", "M2"});
 
             YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_EXEC_QUEUE, "SEND Ev",
                 {"actor", ctx.SelfID},
@@ -50,13 +58,7 @@ namespace NTxMediator {
                 {"to", bucket.ActiveActor},
                 {"step", step},
                 {"forTablet", tablet},
-                {"txId", [&]() {
-                        TStringBuilder ss;
-                        for (const auto &x : tx)
-                            ss << " txid# " << x.TxId;
-                        ss << " marker# M3";
-                        return (TString)ss;
-                    }()},
+                {"txIds", DumpTxIds(tx)},
                 {"marker", "M3"});
             ctx.Send(bucket.ActiveActor, new TEv(step, tablet, tx));
         }
@@ -123,7 +125,7 @@ namespace NTxMediator {
             } while (activeTablet != Max<ui64>());
 
             for (const TBucket &bucket : Buckets) {
-                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_EXEC_QUEUE, "SEND TEvStepPlanComplete bucket.ActiveActor",
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_EXEC_QUEUE, "SEND TEvStepPlanComplete to bucket.ActiveActor",
                     {"actor", ctx.SelfID},
                     {"mediatorId", MediatorId},
                     {"to", bucket.ActiveActor},
@@ -173,7 +175,7 @@ namespace NTxMediator {
                 {"mediatorId", MediatorId});
 
             for (ui32 bucketIdx : record.GetBucket()) {
-                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_EXEC_QUEUE, "SEND TEvWatchBucket bucket.ActiveActor",
+                YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_MEDIATOR_EXEC_QUEUE, "SEND TEvWatchBucket to bucket.ActiveActor",
                     {"actor", ctx.SelfID},
                     {"mediatorId", MediatorId},
                     {"to", Buckets[bucketIdx].ActiveActor});

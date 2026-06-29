@@ -154,7 +154,7 @@ struct TScaleRecommenderPolicies {
 };
 
 using TResourcesKind = std::variant<std::monostate, TResources, TSharedResources, TServerlessResources>;
-using TUserAttributes = std::map<std::string, std::string>;
+using TAttributes = std::map<std::string, std::string>;
 
 class TGetDatabaseStatusResult : public TStatus {
 public:
@@ -169,7 +169,7 @@ public:
     const TSchemaOperationQuotas& GetSchemaOperationQuotas() const;
     const TDatabaseQuotas& GetDatabaseQuotas() const;
     const TScaleRecommenderPolicies& GetScaleRecommenderPolicies() const;
-    const TUserAttributes& GetUserAttributes() const;
+    const TAttributes& GetAttributes() const;
 
     // Fills CreateDatabaseRequest proto from this database status
     void SerializeTo(Ydb::Cms::CreateDatabaseRequest& request) const;
@@ -184,7 +184,7 @@ private:
     TSchemaOperationQuotas SchemaOperationQuotas_;
     TDatabaseQuotas DatabaseQuotas_;
     TScaleRecommenderPolicies ScaleRecommenderPolicies_;
-    TUserAttributes UserAttributes_;
+    TAttributes Attributes_;
 };
 
 using TAsyncGetDatabaseStatusResult = NThreading::TFuture<TGetDatabaseStatusResult>;
@@ -209,7 +209,7 @@ struct TAlterDatabaseSettings : public TOperationRequestSettings<TAlterDatabaseS
     void SerializeTo(Ydb::Cms::AlterDatabaseRequest& request) const;
 
     // Empty value drops the attribute.
-    FLUENT_SETTING(TUserAttributes, AlterAttributes);
+    FLUENT_SETTING(TAttributes, AlterAttributes);
 };
 
 class TCmsClient {

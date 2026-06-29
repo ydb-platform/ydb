@@ -1,0 +1,24 @@
+The output format `operation get` is also set by the `--format` option.
+
+Although the operation ID is in URL format, it is not guaranteed to be preserved in the future. It should be interpreted only as a string.
+
+Upload completion is tracked by the change in the "progress" attribute:
+
+- In the `pretty` output mode (default), a successfully completed operation is indicated by the value "Done" in the `progress` field highlighted with pseudographics:
+
+
+  ```text
+  ┌───── ... ──┬───────┬─────────┬──────────┬─...
+  | id         | ready | status  | progress | ...
+  ├──────... ──┼───────┼─────────┼──────────┼─...
+  | ydb://...   | true  | SUCCESS | Done     | ...
+  ├╴╴╴╴╴ ... ╴╴┴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴╴╴╴┴╴...
+  ...
+  ```
+
+- In the `proto-json-base64` output mode, a completed operation is indicated by the value `PROGRESS_DONE` of the `progress` attribute:
+
+
+  ```json
+  {"id":"ydb://...", ...,"progress":"PROGRESS_DONE",... }
+  ```

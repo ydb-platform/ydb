@@ -786,7 +786,7 @@ public:
                 ReplyProcessError(Ydb::StatusIds::BAD_SESSION, error, requestId);
                 return;
             }
-            LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery());
+            LocalSessions->AttachQueryText(sessionInfo, ev->Get()->GetQuery(), traceId);
 
             // Pass WmState from session to the event
             Y_ABORT_UNLESS(sessionInfo->WmState, "WmState must be initialized in session constructor");
@@ -1026,15 +1026,16 @@ public:
     void Handle(TEvPrivate::TEvCollectPeerProxyData::TPtr&) {
         if (!ShutdownRequested) {
             TDuration d;
-            // Fast-poll only while warmup may still fire and RM board hasn't converged
-            // (post-convergence the warmup actor self-skips, so 2s polling is pointless).
+            // Board convergence alone mustn't stop fast-poll: the warmup actor blocks
+            // on TEvStartWarmup, which we only send once peer resources are gathered.
             bool fastPoll = false;
             if (!WarmupStarted
                 && TableServiceConfig.GetEnableCompileCacheWarmup()
                 && PeerProxyNodeResources.size() <= 1)
             {
                 auto rm = TryGetKqpResourceManager(SelfId().NodeId());
-                fastPoll = !rm || !rm->GetInitialBoardSyncDone();
+                fastPoll = !rm || !rm->GetInitialBoardSyncDone()
+                    || rm->GetInitialBoardNodeIds().size() > 1;
             }
             if (fastPoll) {
                 d = TDuration::Seconds(2);
@@ -1109,6 +1110,11 @@ public:
                 << " proxy nodes, starting warmup");
             Send(MakeKqpWarmupActorId(SelfId().NodeId()), new TEvStartWarmup(PeerProxyNodeResources.size(), std::move(nodeIds)));
         }
+    }
+
+    // Warmup done (often a skip) — stop fast-polling and don't send to a dead actor.
+    void Handle(NKqp::TEvKqpWarmupComplete::TPtr&) {
+        WarmupStarted = true;
     }
 
     bool ShouldStartBalancing(const TSimpleResourceStats& stats, const double minResourceThreshold, const double currentResourceUsage) const {
@@ -1383,6 +1389,7 @@ public:
             hFunc(TEvInterconnect::TEvNodeInfo, Handle);
             hFunc(NMon::TEvHttpInfo, Handle);
             hFunc(TEvPrivate::TEvCollectPeerProxyData, Handle);
+            hFunc(NKqp::TEvKqpWarmupComplete, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
@@ -1796,19 +1803,19 @@ private:
 
     void Handle(NKqp::TEvForgetScriptExecutionOperation::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::ForgetScriptExecutionOperation)) {
-            Register(CreateForgetScriptExecutionOperationActor(std::move(ev), QueryServiceConfig, Counters), TMailboxType::HTSwap, AppData()->SystemPoolId);
+            Register(CreateForgetScriptExecutionOperationActor(std::move(ev)), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
 
     void Handle(NKqp::TEvGetScriptExecutionOperation::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::GetScriptExecutionOperation)) {
-            Register(CreateGetScriptExecutionOperationActor(std::move(ev), QueryServiceConfig, Counters), TMailboxType::HTSwap, AppData()->SystemPoolId);
+            Register(CreateGetScriptExecutionOperationActor(std::move(ev)), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
 
     void Handle(NKqp::TEvListScriptExecutionOperations::TPtr& ev) {
         if (CheckScriptExecutionsTablesReady(ev, EDelayedRequestType::ListScriptExecutionOperations)) {
-            Register(CreateListScriptExecutionOperationsActor(std::move(ev), QueryServiceConfig, Counters), TMailboxType::HTSwap, AppData()->SystemPoolId);
+            Register(CreateListScriptExecutionOperationsActor(std::move(ev)), TMailboxType::HTSwap, AppData()->SystemPoolId);
         }
     }
 

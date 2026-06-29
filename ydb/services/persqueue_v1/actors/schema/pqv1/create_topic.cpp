@@ -44,7 +44,7 @@ public:
         Become(&TCreateTopicActor::StateWork);
 
         Register(NPQ::NSchema::CreateCreateTopicOperationActor(SelfId(), {
-            .Database = this->Request_->GetDatabaseName().GetOrElse(""),
+            .Database = GetDatabase(),
             .PeerName = Request_->GetPeerName(),
             .UserToken = GetUserToken(),
             .Strategy = std::make_unique<TCreateTopicStrategy>(*GetProtoRequest()),

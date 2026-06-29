@@ -239,8 +239,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         ValidateReadResult(runtime, std::move(readFuture), 10);
 
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Reads, 1);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Continues, 2);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->EvGets, 2);
+        UNIT_ASSERT_GE(iteratorCounter->Continues, 2);
+        UNIT_ASSERT_LE(iteratorCounter->Continues, 10); // can be up to total blobs in response due ShouldStopByElapsedTime() time limit
+        UNIT_ASSERT_GE(iteratorCounter->EvGets, 2);
+        UNIT_ASSERT_LE(iteratorCounter->EvGets, 10); // can be up to total requested blobs
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->BlobsRequested, 10);
     }
 
@@ -320,8 +322,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         UNIT_ASSERT_EQUAL(resultSet.rows_size(), 10);
 
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Reads, 1);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Continues, 2);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->EvGets, 2);
+        UNIT_ASSERT_GE(iteratorCounter->Continues, 2);
+        UNIT_ASSERT_LE(iteratorCounter->Continues, 10); // can be up to total blobs in response due ShouldStopByElapsedTime() time limit
+        UNIT_ASSERT_GE(iteratorCounter->EvGets, 2);
+        UNIT_ASSERT_LE(iteratorCounter->EvGets, 10); // can be up to total requested blobs
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->BlobsRequested, 10);
     }
 
@@ -369,8 +373,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         ValidateReadResult(runtime, std::move(readFuture), 3, 7);
 
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Reads, 1);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Continues, 0);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->EvGets, 1);
+        UNIT_ASSERT_GE(iteratorCounter->Continues, 0);
+        UNIT_ASSERT_LE(iteratorCounter->Continues, 3); // can be up to total blobs in response due ShouldStopByElapsedTime() time limit
+        UNIT_ASSERT_GE(iteratorCounter->EvGets, 1);
+        UNIT_ASSERT_LE(iteratorCounter->EvGets, 3); // can be up to total requested blobs
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->BlobsRequested, 3);
     }
 
@@ -418,8 +424,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         ValidateReadResult(runtime, std::move(readFuture), 3);
 
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Reads, 1);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Continues, 0);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->EvGets, 1);
+        UNIT_ASSERT_GE(iteratorCounter->Continues, 0);
+        UNIT_ASSERT_LE(iteratorCounter->Continues, 3); // can be up to total blobs in response due ShouldStopByElapsedTime() time limit
+        UNIT_ASSERT_GE(iteratorCounter->EvGets, 1);
+        UNIT_ASSERT_LE(iteratorCounter->EvGets, 3); // can be up to total requested blobs
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->BlobsRequested, 3);
     }
 
@@ -474,8 +482,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         ValidateReadResult(runtime, std::move(readFuture), {1, 5, 6, 7, 8, 9});
 
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Reads, 1);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Continues, 1);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->EvGets, 2);
+        UNIT_ASSERT_GE(iteratorCounter->Continues, 1);
+        UNIT_ASSERT_LE(iteratorCounter->Continues, 6); // can be up to total blobs in response due ShouldStopByElapsedTime() time limit
+        UNIT_ASSERT_GE(iteratorCounter->EvGets, 2);
+        UNIT_ASSERT_LE(iteratorCounter->EvGets, 6); // can be up to total requested blobs
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->BlobsRequested, 6);
     }
 
@@ -630,8 +640,10 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
         ValidateReadResult(runtime, std::move(readFuture), 10, 0, 2);
 
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Reads, 1);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->Continues, 3);
-        UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->EvGets, 4);
+        UNIT_ASSERT_GE(iteratorCounter->Continues, 3);
+        UNIT_ASSERT_LE(iteratorCounter->Continues, 20); // can be up to total blobs in response due ShouldStopByElapsedTime() time limit
+        UNIT_ASSERT_GE(iteratorCounter->EvGets, 4);
+        UNIT_ASSERT_LE(iteratorCounter->EvGets, 20); // can be up to total requested blobs
         UNIT_ASSERT_VALUES_EQUAL(iteratorCounter->BlobsRequested, 20);
     }
 
@@ -722,7 +734,12 @@ Y_UNIT_TEST_SUITE(ReadIteratorExternalBlobs) {
 
             auto& expectedResult = expectedResults[test];
 
-            UNIT_ASSERT_VALUES_EQUAL_C(*iteratorCounter, expectedResult, "test " << test);
+            UNIT_ASSERT_VALUES_EQUAL_C(iteratorCounter->Reads, expectedResult.Reads, "test " << test);
+            UNIT_ASSERT_GE_C(iteratorCounter->Continues, expectedResult.Continues, "test " << test);
+            UNIT_ASSERT_LE_C(iteratorCounter->Continues, 20, "test " << test); // can be up to total blobs in response due ShouldStopByElapsedTime() time limit
+            UNIT_ASSERT_GE_C(iteratorCounter->EvGets, expectedResult.EvGets, "test " << test);
+            UNIT_ASSERT_LE_C(iteratorCounter->EvGets, expectedResult.BlobsRequested, "test " << test); // can be up to total requested blobs
+            UNIT_ASSERT_VALUES_EQUAL_C(iteratorCounter->BlobsRequested, expectedResult.BlobsRequested, "test " << test);
         }
     }
 

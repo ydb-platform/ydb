@@ -5,7 +5,7 @@
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/persqueue/writer/source_id_encoding.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/library/persqueue/topic_parser/counters.h>
 #include <ydb/public/lib/base/msgbus.h>
 
@@ -28,7 +28,7 @@ static constexpr TDuration REWIND_COMMIT_INTERVAL = TDuration::Minutes(4);
 namespace {
 
 struct TBatchInfo {
-    ui32 MessageCount = 1;
+    ui32 LogicalMessageCount = 1;
     std::optional<ui64> MaxSeqNo;
 };
 
@@ -42,21 +42,25 @@ TBatchInfo GetBatchInfo(const TPersQueueReadEvent::TDataReceivedEvent::TCompress
         return {};
     }
 
-    const ui32 messageCount = static_cast<ui32>(header->RecordsCount);
+    const ui32 logicalMessageCount = static_cast<ui32>(header->RecordsCount);
     const auto [error, maxSeqNo] = NKafka::GetBatchMaxSeqNo(*header, message.GetSeqNo());
     if (error != NKafka::EKafkaErrors::NONE_ERROR) {
         return {};
     }
     return {
-        .MessageCount = messageCount,
+        .LogicalMessageCount = logicalMessageCount,
         .MaxSeqNo = maxSeqNo,
     };
+}
+
+ui64 GetLogicalMessageCount(const TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage& message) {
+    return GetBatchInfo(message).LogicalMessageCount;
 }
 
 ui64 GetWriteRequestEndOffset(const NKikimrClient::TPersQueuePartitionRequest& request) {
     ui64 offset = request.GetCmdWriteOffset();
     for (const auto& cmd : request.GetCmdWrite()) {
-        offset += cmd.GetMessageCount();
+        offset += cmd.GetLogicalMessageCount();
     }
     return offset;
 }
@@ -168,8 +172,8 @@ bool TMirrorer::AddToWriteRequest(
     write->SetUncompressedSize(message.GetUncompressedSize());
 
     const auto batchInfo = GetBatchInfo(message);
-    if (batchInfo.MessageCount > 1) {
-        write->SetMessageCount(batchInfo.MessageCount);
+    if (batchInfo.LogicalMessageCount > 1) {
+        write->SetLogicalMessageCount(batchInfo.LogicalMessageCount);
         write->SetMaxSeqNo(*batchInfo.MaxSeqNo);
     }
     return true;
@@ -241,11 +245,11 @@ void TMirrorer::ProcessWriteResponse(
         ui64 offset = writtenMessageInfo.GetOffset();
         PQ_ENSURE((ui64)result.GetOffset() == offset);
         PQ_ENSURE(EndOffset <= offset)("EndOffset", EndOffset)("offset", offset);
-        const ui64 messageCount = GetBatchInfo(writtenMessageInfo).MessageCount;
-        EndOffset = offset + messageCount;
+        const ui64 logicalMessageCount = GetLogicalMessageCount(writtenMessageInfo);
+        EndOffset = offset + logicalMessageCount;
         BytesInFlight -= writtenMessageInfo.GetData().size();
 
-        deferredCommit.Add(writtenMessageInfo.GetPartitionSession(), offset, offset + messageCount);
+        deferredCommit.Add(writtenMessageInfo.GetPartitionSession(), offset, offset + logicalMessageCount);
         WriteInFlight.pop_front();
     }
 
@@ -595,7 +599,7 @@ void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceive
         Counters.Cumulative()[COUNTER_PQ_TABLET_NETWORK_BYTES_USAGE].Increment(messageSize);
         BytesInFlight += messageSize;
 
-        OffsetToRead = offset + 1;
+        OffsetToRead = offset + GetLogicalMessageCount(msg);
         Queue.emplace_back(std::move(msg));
     }
 }

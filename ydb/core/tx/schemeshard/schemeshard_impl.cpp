@@ -5931,6 +5931,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         //namespace NIndexBuilder {
         HFuncTraced(TEvSetColumnConstraint::TEvCreateRequest, Handle);
+        HFuncTraced(TEvSetColumnConstraint::TEvGetRequest, Handle);
         HFuncTraced(TEvDataShard::TEvValidateRowConditionResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvCreateRequest, Handle);
         HFuncTraced(TEvIndexBuilder::TEvGetRequest, Handle);

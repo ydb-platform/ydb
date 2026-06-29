@@ -412,95 +412,6 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
             UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(json, "__type"), "AWS.SimpleQueueService.UnsupportedOperation");
         }
 
-        void TestGetQueueAttributesInFederationImpl(
-            TNonFirstClassCitizenFixture& fixture,
-            const TString& requestQueueName)
-        {
-            auto driver = MakeDriver(fixture);
-
-            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
-            const TString topicName = "my_topic";
-            const TString topicPath = TStringBuilder() << "federation/" << topicName;
-            const TString consumerName = "my@consumer";
-            UNIT_ASSERT(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
-                .AddAttribute("_federation_account", "account1")
-                .BeginAddSharedConsumer(consumerName)
-                    .KeepMessagesOrder(false)
-                    .DefaultProcessingTimeout(TDuration::Seconds(20))
-                .EndAddConsumer()));
-
-            auto getUrlRes = fixture.SendHttpRequest(
-                database,
-                "AmazonSQS.GetQueueUrl",
-                NJson::TJsonMap{{"QueueName", requestQueueName}},
-                fixture.FormAuthorizationStr("ru-central1"));
-            UNIT_ASSERT_VALUES_EQUAL_C(getUrlRes.HttpCode, 200, getUrlRes.Body);
-            NJson::TJsonMap getUrlJson;
-            UNIT_ASSERT(NJson::ReadJsonTree(getUrlRes.Body, &getUrlJson, true));
-            const TString queueUrl = GetByPath<TString>(getUrlJson, "QueueUrl");
-
-            auto attrsRes = fixture.SendHttpRequest(
-                database,
-                "AmazonSQS.GetQueueAttributes",
-                NJson::TJsonMap{
-                    {"QueueUrl", queueUrl},
-                    {"AttributeNames", NJson::TJsonArray{"All"}},
-                },
-                fixture.FormAuthorizationStr("ru-central1"));
-            UNIT_ASSERT_VALUES_EQUAL_C(attrsRes.HttpCode, 200, attrsRes.Body);
-            NJson::TJsonMap attrsJson;
-            UNIT_ASSERT(NJson::ReadJsonTree(attrsRes.Body, &attrsJson, true));
-            UNIT_ASSERT(attrsJson["Attributes"].IsDefined());
-            UNIT_ASSERT_VALUES_EQUAL(attrsJson["Attributes"]["VisibilityTimeout"], "20");
-            UNIT_ASSERT_VALUES_EQUAL(attrsJson["Attributes"]["FifoQueue"], "false");
-            UNIT_ASSERT_GT(attrsJson["Attributes"].GetMapSafe().size(), 3);
-        }
-
-        Y_UNIT_TEST_F(TestGetQueueAttributesWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
-            TestGetQueueAttributesInFederationImpl(*this, "my_topic@my/consumer");
-        }
-
-        Y_UNIT_TEST_F(TestGetQueueAttributesWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
-            TestGetQueueAttributesInFederationImpl(*this, "my_topic@/my/consumer");
-        }
-
-        Y_UNIT_TEST_F(TestGetQueueAttributesNonExistentConsumerInFederation, TNonFirstClassCitizenFixture) {
-            auto driver = MakeDriver(*this);
-
-            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
-            const TString topicName = "my_topic";
-            const TString topicPath = TStringBuilder() << "federation/" << topicName;
-            const TString wrongConsumer = "wrong/consumer";
-            UNIT_ASSERT(CreateTopic(driver, topicPath, NYdb::NTopic::TCreateTopicSettings()
-                .AddAttribute("_federation_account", "account1")
-                .BeginAddSharedConsumer("my@consumer")
-                    .KeepMessagesOrder(false)
-                    .DefaultProcessingTimeout(TDuration::Seconds(20))
-                .EndAddConsumer()));
-
-            const TString wrongQueueUrl = std::format(
-                "/v1/{}/{}/{}/{}/{}/{}",
-                database.size(),
-                database.c_str(),
-                topicName.size(),
-                topicName.c_str(),
-                wrongConsumer.size(),
-                wrongConsumer.c_str());
-
-            auto attrsRes = SendHttpRequest(
-                database,
-                "AmazonSQS.GetQueueAttributes",
-                NJson::TJsonMap{
-                    {"QueueUrl", wrongQueueUrl},
-                    {"AttributeNames", NJson::TJsonArray{"All"}},
-                },
-                FormAuthorizationStr("ru-central1"));
-            UNIT_ASSERT_VALUES_EQUAL_C(attrsRes.HttpCode, 400, attrsRes.Body);
-            NJson::TJsonMap attrsJson;
-            UNIT_ASSERT(NJson::ReadJsonTree(attrsRes.Body, &attrsJson, true));
-            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(attrsJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
-        }
-
         struct TFederationQueueContext {
             TString Database;
             TString QueueUrl;
@@ -920,6 +831,52 @@ Y_UNIT_TEST_SUITE(TestSqsTopicHttpProxy) {
                 }},
             }, 400);
             UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(changeJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
+        }
+
+        void TestGetQueueAttributesInFederationImpl(
+            TNonFirstClassCitizenFixture& fixture,
+            const TString& requestQueueName)
+        {
+            const auto queue = SetupFederationQueue(fixture, requestQueueName);
+            const TString expectedQueueArnSuffix = std::format(
+                "/v1/{}/{}/{}/{}/{}/{}",
+                queue.Database.size(),
+                queue.Database.c_str(),
+                8,
+                "my_topic",
+                11,
+                "my/consumer");
+
+            auto attrsJson = FederationSqsRequest(fixture, queue.Database, "GetQueueAttributes", {
+                {"QueueUrl", queue.QueueUrl},
+                {"AttributeNames", NJson::TJsonArray{"All"}},
+            });
+            UNIT_ASSERT(attrsJson["Attributes"].IsDefined());
+            UNIT_ASSERT_VALUES_EQUAL(attrsJson["Attributes"]["VisibilityTimeout"], "20");
+            UNIT_ASSERT_VALUES_EQUAL(attrsJson["Attributes"]["FifoQueue"], "false");
+            UNIT_ASSERT_C(
+                GetByPath<TString>(attrsJson["Attributes"], "QueueArn").EndsWith(expectedQueueArnSuffix),
+                attrsJson["Attributes"]["QueueArn"].GetString());
+            UNIT_ASSERT_GT(attrsJson["Attributes"].GetMapSafe().size(), 3);
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueAttributesWithAtSignInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestGetQueueAttributesInFederationImpl(*this, "my_topic@my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueAttributesWithLeadingSlashInConsumerNameInFederation, TNonFirstClassCitizenFixture) {
+            TestGetQueueAttributesInFederationImpl(*this, "my_topic@/my/consumer");
+        }
+
+        Y_UNIT_TEST_F(TestGetQueueAttributesNonExistentConsumerInFederation, TNonFirstClassCitizenFixture) {
+            CreateFederationTopicWithConsumer(*this);
+            const TString database = TString{TNonFirstClassCitizenFixture::FederationDatabase};
+
+            auto attrsJson = FederationSqsRequest(*this, database, "GetQueueAttributes", {
+                {"QueueUrl", MakeFederationWrongQueueUrl()},
+                {"AttributeNames", NJson::TJsonArray{"All"}},
+            }, 400);
+            UNIT_ASSERT_VALUES_EQUAL(GetByPath<TString>(attrsJson, "__type"), "AWS.SimpleQueueService.NonExistentQueue");
         }
 
         Y_UNIT_TEST_F(TestListQueues, TFixture) {

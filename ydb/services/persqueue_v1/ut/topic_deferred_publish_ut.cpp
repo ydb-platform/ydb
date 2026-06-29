@@ -89,10 +89,21 @@ bool SchemePathExists(NPersQueue::TTestServer& server, const TString& path) {
     return response && response->Record.GetSchemeStatus() == NKikimrScheme::StatusSuccess;
 }
 
-NPersQueue::TTestServer MakeServerWithDeferredPublishEnabled() {
+NPersQueue::TTestServer MakeServerWithDeferredPublishEnabled(
+    bool forbidRequestsToStaticNodesWithoutDatabase = true)
+{
     auto settings = NKikimr::NPersQueueTests::PQSettings();
     settings.FeatureFlags.SetEnableTopicDeferredPublish(true);
+    settings.FeatureFlags.SetForbidRequestsToStaticNodesWithoutDatabase(
+        forbidRequestsToStaticNodesWithoutDatabase);
     return NPersQueue::TTestServer(settings);
+}
+
+TBeginPublicationOutcome CallBeginPublicationWithEmptyDatabaseHeader(
+    Ydb::Topic::DeferredPublish::V1::TopicDeferredPublishService::Stub& stub,
+    const TString& extPublicationId = "pub-no-db")
+{
+    return CallBeginPublication(stub, "", extPublicationId);
 }
 
 } // namespace
@@ -163,23 +174,24 @@ Y_UNIT_TEST(BeginPublicationRejectsEmptyExtPublicationId) {
     UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.issues(0).message(), "ext_publication_id must not be empty");
 }
 
-Y_UNIT_TEST(BeginPublicationRejectsMissingDatabase) {
-    auto server = MakeServerWithDeferredPublishEnabled();
+Y_UNIT_TEST(BeginPublicationRejectsEmptyDatabaseAtGrpcProxy) {
+    auto server = MakeServerWithDeferredPublishEnabled(true);
     server.AnnoyingClient->GrantConnect("root@builtin");
 
-    grpc::ClientContext context;
-    context.AddMetadata(NYdb::YDB_DATABASE_HEADER, "");
-    context.AddMetadata(NYdb::YDB_AUTH_TICKET_HEADER, "root@builtin");
+    const auto outcome = CallBeginPublicationWithEmptyDatabaseHeader(*MakeStub(server));
+    UNIT_ASSERT(!outcome.RpcStatus.ok());
+    UNIT_ASSERT_VALUES_EQUAL(outcome.RpcStatus.error_code(), grpc::StatusCode::UNAUTHENTICATED);
+}
 
-    Ydb::Topic::DeferredPublish::BeginPublicationRequest request;
-    request.set_ext_publication_id("pub-no-db");
-    Ydb::Topic::DeferredPublish::BeginPublicationResponse response;
-    const auto rpcStatus = MakeStub(server)->BeginPublication(&context, request, &response);
+Y_UNIT_TEST(BeginPublicationRejectsEmptyDatabaseInHandler) {
+    auto server = MakeServerWithDeferredPublishEnabled(false);
+    server.AnnoyingClient->GrantConnect("root@builtin");
 
-    UNIT_ASSERT(rpcStatus.ok());
-    UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST);
-    UNIT_ASSERT_GT(response.operation().issues_size(), 0);
-    UNIT_ASSERT_VALUES_EQUAL(response.operation().issues(0).message(), "Database name is not set");
+    const auto outcome = CallBeginPublicationWithEmptyDatabaseHeader(*MakeStub(server));
+    UNIT_ASSERT(outcome.RpcStatus.ok());
+    UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::BAD_REQUEST);
+    UNIT_ASSERT_GT(outcome.Operation.issues_size(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.issues(0).message(), "Database name is not set");
 }
 
 Y_UNIT_TEST(BeginPublicationAssignsDistinctIntIds) {

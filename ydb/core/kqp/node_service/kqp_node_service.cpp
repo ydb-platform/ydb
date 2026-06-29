@@ -276,6 +276,8 @@ private:
             FORCE_VALUE(PublishStatisticsIntervalSec);
             FORCE_VALUE(MaxTotalChannelBuffersSize);
             FORCE_VALUE(MinChannelBufferSize);
+            // TODO(YDBAPPTEAM-773): revert this override after the ticket is closed.
+            FORCE_VALUE(ChannelChunkSizeLimit);
             FORCE_VALUE(MinMemAllocSize);
             FORCE_VALUE(MinMemFreeSize);
 #undef FORCE_VALUE

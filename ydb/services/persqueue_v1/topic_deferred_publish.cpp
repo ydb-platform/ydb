@@ -24,14 +24,14 @@ void TGRpcTopicDeferredPublishService::SetupIncomingRequests(NYdbGrpc::TLoggerPt
 #error SETUP_TOPIC_DEFERRED_PUBLISH_METHOD macro already defined
 #endif
 
-#define SETUP_TOPIC_DEFERRED_PUBLISH_METHOD(methodName, methodCallback) \
-    SETUP_METHOD(methodName, methodCallback, RLSWITCH(Rps), UNSPECIFIED, topic_deferred_publish, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml), EEmptyDatabaseMode::EmptyDatabaseForbidden)
+#define SETUP_TOPIC_DEFERRED_PUBLISH_METHOD(methodName, methodCallback, auditMode) \
+    SETUP_METHOD(methodName, methodCallback, RLSWITCH(Rps), UNSPECIFIED, topic_deferred_publish, auditMode, EEmptyDatabaseMode::EmptyDatabaseForbidden)
 
-    SETUP_TOPIC_DEFERRED_PUBLISH_METHOD(BeginPublication, DoBeginPublicationRequest);
-    SETUP_TOPIC_DEFERRED_PUBLISH_METHOD(Publish, DoPublishRequest);
-    SETUP_TOPIC_DEFERRED_PUBLISH_METHOD(CancelPublication, DoCancelPublicationRequest);
-    SETUP_TOPIC_DEFERRED_PUBLISH_METHOD(ListPublications, DoListPublicationsRequest);
-    SETUP_TOPIC_DEFERRED_PUBLISH_METHOD(DescribePublication, DoDescribePublicationRequest);
+    SETUP_TOPIC_DEFERRED_PUBLISH_METHOD(BeginPublication, DoBeginPublicationRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
+    SETUP_TOPIC_DEFERRED_PUBLISH_METHOD(Publish, DoPublishRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
+    SETUP_TOPIC_DEFERRED_PUBLISH_METHOD(CancelPublication, DoCancelPublicationRequest, TAuditMode::Modifying(TAuditMode::TLogClassConfig::Dml));
+    SETUP_TOPIC_DEFERRED_PUBLISH_METHOD(ListPublications, DoListPublicationsRequest, TAuditMode::NonModifying());
+    SETUP_TOPIC_DEFERRED_PUBLISH_METHOD(DescribePublication, DoDescribePublicationRequest, TAuditMode::NonModifying());
 
 #undef SETUP_TOPIC_DEFERRED_PUBLISH_METHOD
 }

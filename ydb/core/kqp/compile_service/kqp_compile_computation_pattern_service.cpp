@@ -62,7 +62,7 @@ private:
             timer.Reset();
 
             patternToCompile.Entry->Pattern->Compile({}, nullptr);
-            patternCache->NotifyPatternCompiled(patternToCompile.SerializedProgram);
+            patternCache->NotifyPatternCompiled(patternToCompile.Key);
             patternToCompile.Entry = nullptr;
 
             Counters->CompiledComputationPatterns->Inc();
@@ -84,12 +84,12 @@ private:
             return;
         }
 
-        THashMap<TString, std::shared_ptr<NMiniKQL::TPatternCacheEntry>> patternsToCompile;
+        THashMap<NMiniKQL::TProgramKey, std::shared_ptr<NMiniKQL::TPatternCacheEntry>> patternsToCompile;
         patternCache->GetPatternsToCompile(patternsToCompile);
 
         TVector<std::pair<TPatternToCompile, size_t>> patternsToCompileWithAccessTimes;
-        for (auto& [serializedProgram, entry] : patternsToCompile) {
-            patternsToCompileWithAccessTimes.emplace_back(TPatternToCompile{serializedProgram, entry}, entry->AccessTimes.load());
+        for (auto& [key, entry] : patternsToCompile) {
+            patternsToCompileWithAccessTimes.emplace_back(TPatternToCompile{key, entry}, entry->AccessTimes.load());
         }
 
         std::sort(patternsToCompileWithAccessTimes.begin(), patternsToCompileWithAccessTimes.end(), [](auto & lhs, auto & rhs) {
@@ -115,7 +115,7 @@ private:
     TIntrusivePtr<TKqpCounters> Counters;
 
     struct TPatternToCompile {
-        TString SerializedProgram;
+        NMiniKQL::TProgramKey Key;
         std::shared_ptr<NMiniKQL::TPatternCacheEntry> Entry;
     };
 

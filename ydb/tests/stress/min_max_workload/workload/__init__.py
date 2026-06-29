@@ -169,10 +169,12 @@ class MinMaxWorkload:
 
     def __exit__(self, *_args):
         self._stop.set()
-        self.pool.stop()
-        self.driver.stop()
-        for t in self._threads:
-            t.join(timeout=60)
+        try:
+            for t in self._threads:
+                t.join(timeout=60)
+        finally:
+            self.pool.stop()
+            self.driver.stop()
 
     def _setup(self):
         try:

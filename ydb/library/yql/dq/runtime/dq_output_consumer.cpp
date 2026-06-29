@@ -293,19 +293,15 @@ public:
     }
 
     EDqFillLevel GetFillLevel() const override {
-        EDqFillLevel result = SoftLimit;
+        // multi consumer has to process soft limit as no limit to avoid deadlocks
+        // in underlying hash shuffle, it differs from hash shuffles itselves where
+        // soft limit may be propagated to task runner and block output
         for (auto consumer : Consumers) {
-            switch(consumer->GetFillLevel()) {
-                case HardLimit:
-                    return HardLimit;
-                case SoftLimit:
-                    break;
-                case NoLimit:
-                    result = NoLimit;
-                    break;
+            if (consumer->GetFillLevel() == HardLimit) {
+                return HardLimit;
             }
         }
-        return result;
+        return NoLimit;
     }
 
     void WideConsume(TUnboxedValue* values, ui32 count) override {

@@ -288,7 +288,6 @@ jobs:
         test_size: ${{ matrix.test_size }}
         test_threads: ${{ matrix.threads_count }}
         put_build_results_to_cache: true
-        additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
         secs: ${{ env.CI_SECS }}
         vars: ${{ env.CI_VARS }}
   postcommit_build_and_test:
@@ -331,7 +330,6 @@ jobs:
         test_size: small,medium
         test_threads: 52
         put_build_results_to_cache: true
-        additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
         analytics_job_name: ${{ matrix.analytics_job_name }}
         secs: ${{ env.CI_SECS }}
         vars: ${{ env.CI_VARS }}

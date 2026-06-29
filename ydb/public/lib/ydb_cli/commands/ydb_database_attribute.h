@@ -9,22 +9,22 @@
 namespace NYdb {
 namespace NConsoleClient {
 
-class TCommandDatabaseUserAttribute : public TClientCommandTree {
+class TCommandDatabaseAttribute : public TClientCommandTree {
 public:
-    TCommandDatabaseUserAttribute();
+    TCommandDatabaseAttribute();
 };
 
-class TCommandDatabaseUserAttributeGet : public TYdbReadOnlyCommand {
+class TCommandDatabaseAttributeGet : public TYdbReadOnlyCommand {
 public:
-    TCommandDatabaseUserAttributeGet();
+    TCommandDatabaseAttributeGet();
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
     int Run(TConfig& config) override;
 };
 
-class TCommandDatabaseUserAttributeSet : public TYdbCommand {
+class TCommandDatabaseAttributeSet : public TYdbCommand {
 public:
-    TCommandDatabaseUserAttributeSet();
+    TCommandDatabaseAttributeSet();
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
     int Run(TConfig& config) override;
@@ -33,9 +33,9 @@ private:
     TMap<TString, TString> Attributes;
 };
 
-class TCommandDatabaseUserAttributeDel : public TYdbCommand {
+class TCommandDatabaseAttributeDel : public TYdbCommand {
 public:
-    TCommandDatabaseUserAttributeDel();
+    TCommandDatabaseAttributeDel();
     void Config(TConfig& config) override;
     void Parse(TConfig& config) override;
     int Run(TConfig& config) override;

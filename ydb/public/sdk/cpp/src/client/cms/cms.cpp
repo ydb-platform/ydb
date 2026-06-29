@@ -204,7 +204,7 @@ TGetDatabaseStatusResult::TGetDatabaseStatusResult(TStatus&& status, const Ydb::
     , SchemaOperationQuotas_(proto.schema_operation_quotas())
     , DatabaseQuotas_(proto.database_quotas())
     , ScaleRecommenderPolicies_(proto.scale_recommender_policies())
-    , UserAttributes_(proto.attributes().begin(), proto.attributes().end())
+    , Attributes_(proto.attributes().begin(), proto.attributes().end())
 {
     switch (proto.resources_kind_case()) {
         case Ydb::Cms::GetDatabaseStatusResult::kRequiredResources:
@@ -258,8 +258,8 @@ const TScaleRecommenderPolicies& TGetDatabaseStatusResult::GetScaleRecommenderPo
     return ScaleRecommenderPolicies_;
 }
 
-const TUserAttributes& TGetDatabaseStatusResult::GetUserAttributes() const {
-    return UserAttributes_;
+const TAttributes& TGetDatabaseStatusResult::GetAttributes() const {
+    return Attributes_;
 }
 
 void TGetDatabaseStatusResult::SerializeTo(Ydb::Cms::CreateDatabaseRequest& request) const {

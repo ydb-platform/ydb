@@ -2127,7 +2127,7 @@ Y_UNIT_TEST_SUITE(TConfigsDispatcherDatabaseConfigSelectorsTests) {
         return res;
     }
 
-    const TString PermissiveTenantUserAttribute = TString(NConsole::TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS);
+    const TString PermissiveTenantAttribute = TString(NConsole::TENANT_ATTR_ALLOW_DATABASE_CONFIG_SELECTORS);
 
     Y_UNIT_TEST(TestEndToEndSelectorsResolution) {
         const TString mainConfig = R"(
@@ -2238,7 +2238,7 @@ selector_config:
                               TEvPrivate::TEvParsedPrivateDatabaseConfig>(runtime);
 
                 CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-                    PermissiveTenantUserAttribute, "true");
+                    PermissiveTenantAttribute, "true");
                 opaqueSubscriber->parsedCnt = 0;
                 opaqueSubscriber->resetCnt = 0;
                 CheckReplaceDatabaseConfig(runtime, Ydb::StatusIds::SUCCESS, dbConfig);
@@ -2357,7 +2357,7 @@ selector_config:
         SubstGlobal(dbConfigWithSelectors, "VERSION", ToString(dbVersion++));
         SubstGlobal(dbConfigWithSelectors, "VALUE", "3");
         CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-            PermissiveTenantUserAttribute, "true");
+            PermissiveTenantAttribute, "true");
 
         Cerr << ">>>>> LINE " << __LINE__ << Endl;
 
@@ -2393,7 +2393,7 @@ selector_config:
         SubstGlobal(dbConfig, "VERSION", ToString(dbVersion));
         SubstGlobal(dbConfig, "VALUE", "4");
         CheckSetTenantAttribute(runtime, TENANT1_1_NAME, Ydb::StatusIds::SUCCESS,
-            PermissiveTenantUserAttribute, "");
+            PermissiveTenantAttribute, "");
 
         opaqueSubscriber->parsedCnt = 0;
         opaqueSubscriber->resetCnt = 0;

@@ -382,10 +382,14 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
     CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", checkCount, true, DEBUG_HINT);
     UNIT_ASSERT_C(sawBandNotBlockedGoingUp, "usage never observed inside the soft..hard band while unblocked; " << DEBUG_HINT);
 
-    {   // With the quota exceeded, a further write must be refused.
+    {   // With the quota exceeded, a further write must be refused. The shard does not reject it outright - it
+        // throttles it by holding the request in its write queue (the same way it handles the local
+        // BadPortions/compaction overload) and only fails it with OVERLOADED once the request timeout elapses. We
+        // pass a short timeout so the blocked write fails fast instead of waiting in the queue indefinitely.
         std::vector<ui64> writeIds;
         ++txId;
-        AFL_VERIFY(!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds, NEvWrite::EModificationType::Upsert, txId));
+        AFL_VERIFY(!NTxUT::WriteData(runtime, sender, shardId, ++writeId, pathId, data, defaultYdbSchema, &writeIds,
+            NEvWrite::EModificationType::Upsert, txId, TDuration::Seconds(1)));
         NTxUT::ProposeCommitFail(runtime, sender, shardId, txId, writeIds, txId);
     }
 

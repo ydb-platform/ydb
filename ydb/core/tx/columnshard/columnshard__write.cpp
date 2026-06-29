@@ -63,6 +63,9 @@ void TColumnShard::OverloadWriteFail(const EOverloadStatus overloadReason, const
 }
 
 TColumnShard::EOverloadStatus TColumnShard::CheckOverloadedWait(const TInternalPathId pathId) const {
+    if (AppDataVerified().FeatureFlags.GetEnableSmallBlobsQuotaEnforcement() && SpaceWatcher->SubDomainSmallBlobsQuotaExceeded) {
+        return EOverloadStatus::SmallBlobsQuota;
+    }
     Counters.GetCSCounters().OnIndexMetadataLimit(NOlap::IColumnEngine::GetMetadataLimit());
     if (TablesManager.GetPrimaryIndex()) {
         if (TablesManager.GetPrimaryIndex()->IsOverloadedByMetadata(NOlap::IColumnEngine::GetMetadataLimit())) {
@@ -531,19 +534,12 @@ void TColumnShard::Handle(NEvents::TDataEvents::TEvWrite::TPtr& ev, const TActor
 
     const bool isDelete = *mType == NEvWrite::EModificationType::Delete;
     const bool outOfSpace = SpaceWatcher->SubDomainOutOfSpace && !isDelete;
-    const bool enforceSmallBlobsQuota = AppDataVerified().FeatureFlags.GetEnableSmallBlobsQuotaEnforcement();
-    const bool smallBlobsQuotaExceeded = enforceSmallBlobsQuota && SpaceWatcher->SubDomainSmallBlobsQuotaExceeded;
     if (outOfSpace) {
         AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_writing")("reason", "quota_exceeded")("source", "dataevent");
     }
-    if (smallBlobsQuotaExceeded) {
-        AFL_WARN(NKikimrServices::TX_COLUMNSHARD)("event", "skip_writing")("reason", "small_blobs_quota_exceeded")("source", "dataevent");
-    }
-    auto overloadStatus = outOfSpace                ? TOverloadStatus{ EOverloadStatus::Disk,
+    auto overloadStatus = outOfSpace ? TOverloadStatus{ EOverloadStatus::Disk,
         "The disk quota has been exhausted. Please increase the available database disk resources or delete unused data." }
-                          : smallBlobsQuotaExceeded ? TOverloadStatus{ EOverloadStatus::SmallBlobsQuota,
-                                "The database is temporarily unavailable for writes. Please retry later." }
-                                                    : CheckOverloadedImmediate(*internalPathId);
+                                     : CheckOverloadedImmediate(*internalPathId);
     if (overloadStatus.Status == EOverloadStatus::None) {
         overloadStatus = ResourcesStatusToOverloadStatus(Counters.GetWritesMonitor()->OnStartWrite(arrowData->GetSize()));
     }

@@ -77,10 +77,7 @@ private:
     STRICT_STFUNC(Handle, {
         HFunc(TEvAllocateWorkersResponse, OnAllocateWorkersResponse)
         cFunc(TEvents::TEvPoison::EventType, PassAway)
-        hFunc(TEvInterconnect::TEvNodeConnected, [this](TEvInterconnect::TEvNodeConnected::TPtr& ev) {
-            // Store GWM NodeId. Auto-unsubscribe on actor-death
-            Subscribe(ev->Get()->NodeId);
-        })
+        IgnoreFunc(TEvInterconnect::TEvNodeConnected)
         cFunc(TEvInterconnect::TEvNodeDisconnected::EventType, [this]() {
             Fail((ui64)-1, "GWM Disconnected");
         })
@@ -260,15 +257,16 @@ private:
         if (backoff) {
             TActivationContext::Schedule(backoff, new IEventHandle(
                 MakeWorkerManagerActorID(nodeId), SelfId(), request.Release(),
-                IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered,
+                IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered | IEventHandle::FlagSubscribeOnSession,
                 node.ResourceId));
         } else {
             Send(
                 MakeWorkerManagerActorID(nodeId),
                 request.Release(),
-                IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered,
+                IEventHandle::FlagTrackDelivery | IEventHandle::FlagGenerateUnsureUndelivered | IEventHandle::FlagSubscribeOnSession,
                 node.ResourceId);
         }
+        Subscribe(nodeId);
     }
 
     void Fail(const ui64 cookie, const TString& reason) {

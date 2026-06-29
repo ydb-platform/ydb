@@ -37,10 +37,9 @@ std::shared_ptr<TResourcePoolClassifierSnapshot> MakeClassifierSnapshot(
 {
     auto snapshot = std::make_shared<TResourcePoolClassifierSnapshot>(TInstant::Now());
     for (const auto& cfg : configs) {
-        snapshot->MutableResourcePoolClassifierConfigs()[db]
-            .emplace(cfg.GetName(), cfg);
-        snapshot->MutableResourcePoolClassifierConfigsByRank()[db]
-            .emplace(cfg.GetRank(), cfg);
+        auto& info = snapshot->MutableResourcePoolClassifierConfigs()[db];
+        info.ByName.emplace(cfg.GetName(), cfg);
+        info.ByRank.emplace(cfg.GetRank(), cfg);
     }
     return snapshot;
 }

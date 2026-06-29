@@ -496,22 +496,7 @@ private:
 };
 
 class TResourcePoolsCache {
-    struct TClassifierInfo {
-        const std::optional<TString> MemberName;
-        const TString PoolId;
-        const i64 Rank;
-
-        TClassifierInfo(const NResourcePool::TClassifierSettings& classifierSettings)
-            : MemberName(classifierSettings.MemberName)
-            , PoolId(classifierSettings.ResourcePool)
-            , Rank(classifierSettings.Rank)
-        {}
-    };
-
     struct TDatabaseInfo {
-        std::unordered_map<TString, TResourcePoolClassifierConfig> ResourcePoolsClassifiers = {};  // Classifier name to config
-        std::map<i64, TClassifierInfo> RankToClassifierInfo = {};  // Classifier rank to config
-        std::unordered_map<TString, std::pair<TString, i64>> UserToResourcePool = {};  // UserSID to (resource pool, classifier rank)
         bool Serverless = false;
     };
 
@@ -584,22 +569,10 @@ public:
 
     void UpdateResourcePoolClassifiersInfo(std::shared_ptr<TResourcePoolClassifierSnapshot> snapshot, TActorContext actorContext) {
         LastClassifierSnapshot = snapshot;
-
-        auto resourcePoolClassifierConfigs = snapshot->GetResourcePoolClassifierConfigs();
-
-        for (auto& [databaseId, databaseInfo] : DatabasesCache) {
-            auto it = resourcePoolClassifierConfigs.find(databaseId);
-            if (it != resourcePoolClassifierConfigs.end()) {
-                UpdateDatabaseResourcePoolClassifiers(databaseId, databaseInfo, std::move(it->second), actorContext);
-                resourcePoolClassifierConfigs.erase(it);
-            } else if (!databaseInfo.ResourcePoolsClassifiers.empty()) {
-                databaseInfo.ResourcePoolsClassifiers.clear();
-                databaseInfo.RankToClassifierInfo.clear();
-                databaseInfo.UserToResourcePool.clear();
+        for (const auto& [databaseId, info] : snapshot->GetResourcePoolClassifierConfigs()) {
+            for (const auto& [_, classifier] : info.ByName) {
+                (void)GetPoolInfo(databaseId, classifier.GetClassifierSettings().ResourcePool, actorContext);
             }
-        }
-        for (auto& [databaseId, configsMap] : resourcePoolClassifierConfigs) {
-            UpdateDatabaseResourcePoolClassifiers(databaseId, *GetOrCreateDatabaseInfo(databaseId), std::move(configsMap), actorContext);
         }
     }
 
@@ -641,21 +614,6 @@ private:
         if (!SubscribedOnResourcePoolClassifiers && NMetadata::NProvider::TServiceOperator::IsEnabled()) {
             SubscribedOnResourcePoolClassifiers = true;
             actorContext.Send(NMetadata::NProvider::MakeServiceId(actorContext.SelfID.NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(std::make_shared<TResourcePoolClassifierSnapshotsFetcher>()));
-        }
-    }
-
-    void UpdateDatabaseResourcePoolClassifiers(const TString& databaseId, TDatabaseInfo& databaseInfo, std::unordered_map<TString, TResourcePoolClassifierConfig>&& configsMap, TActorContext actorContext) {
-        if (databaseInfo.ResourcePoolsClassifiers == configsMap) {
-            return;
-        }
-
-        databaseInfo.ResourcePoolsClassifiers.swap(configsMap);
-        databaseInfo.UserToResourcePool.clear();
-        databaseInfo.RankToClassifierInfo.clear();
-        for (const auto& [_, classifier] : databaseInfo.ResourcePoolsClassifiers) {
-            const auto& classifierSettings = classifier.GetClassifierSettings();
-            databaseInfo.RankToClassifierInfo.insert({classifier.GetRank(), TClassifierInfo(classifierSettings)});
-            (void)GetPoolInfo(databaseId, classifierSettings.ResourcePool, actorContext);
         }
     }
 

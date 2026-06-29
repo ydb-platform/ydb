@@ -1629,6 +1629,7 @@ value {
     void ExportImportOnSupportedDatatypesImpl(bool encrypted, bool commonPrefix, bool emptyTable = false) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
         runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
         ui64 txId = 100;
 
@@ -1864,6 +1865,7 @@ value {
     Y_UNIT_TEST(ZeroLengthEncryptedFileTreatedAsCorrupted) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableParameterizedDecimal(true));
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
         runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
         ui64 txId = 100;
 

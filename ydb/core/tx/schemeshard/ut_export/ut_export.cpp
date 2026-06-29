@@ -262,6 +262,7 @@ namespace {
             UNIT_ASSERT(google::protobuf::TextFormat::ParseFromString(requestStr, &request));
 
             Env(); // Init test env
+            Runtime().GetAppData().FeatureFlags.SetEnableExportFiltering(true);
             Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
 
             Run(Runtime(), Env(), tables, requestStr, expectedStatus, "/MyRoot", false);
@@ -325,6 +326,7 @@ namespace {
             Runtime().SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_DEBUG);
 
             if (encryptionBlock) {
+                Runtime().GetAppData().FeatureFlags.SetEnableExportFiltering(true);
                 Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
             }
 

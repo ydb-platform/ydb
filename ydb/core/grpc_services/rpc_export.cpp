@@ -7,6 +7,7 @@
 
 #include <ydb/public/api/protos/ydb_export.pb.h>
 #include <ydb/core/backup/common/encryption.h>
+#include <ydb/core/backup/common/feature_flags.h>
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/base/path.h>
 #include <ydb/core/tx/schemeshard/schemeshard_export.h>
@@ -602,9 +603,12 @@ public:
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
             }
         } else {
-            const bool encryptedExportFeatureFlag = AppData()->FeatureFlags.GetEnableEncryptedExport();
+            const bool exportFilteringEnabled = NBackup::IsExportFilteringEnabled(*AppData());
             const bool commonDestSpecified = TTraits::HasDestination(settings);
-            if (!encryptedExportFeatureFlag) {
+            if (!exportFilteringEnabled) {
+                if (!settings.exclude_regexps().empty()) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export filtering is not supported in current configuration");
+                }
                 // Check that no new fields are specified
                 if constexpr (IsS3Export) {
                     if (commonDestSpecified) {
@@ -613,9 +617,6 @@ public:
                 }
                 if (!settings.source_path().empty()) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Source path is not supported in current configuration");
-                }
-                if (settings.has_encryption_settings()) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
                 }
                 if constexpr (IsFsExport) {
                     if (settings.items().empty()) {
@@ -641,6 +642,12 @@ public:
         }
         if constexpr (TTraits::HasEncryption) {
             if (settings.has_encryption_settings()) { // Validate that it is possible to encrypt with these settings
+                if (!NBackup::IsExportFilteringEnabled(*AppData())) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export filtering must be enabled for encrypted export");
+                }
+                if (!NBackup::IsEncryptedExportEnabled(*AppData())) {
+                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
+                }
                 if (!TTraits::HasDestination(settings)) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "No destination prefix specified for encrypted export");
                 }

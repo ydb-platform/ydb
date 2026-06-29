@@ -4762,6 +4762,7 @@ Y_UNIT_TEST_SUITE(BackupRestoreS3) {
         );
 
         // Enable destination prefix in rpc_export
+        testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableExportFiltering(true);
         testEnv.GetServer().GetRuntime()->GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
 
         TSchemeClient schemeClient(testEnv.GetDriver());

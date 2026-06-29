@@ -7,6 +7,7 @@
 
 #include <ydb/public/api/protos/ydb_import.pb.h>
 
+#include <ydb/core/backup/common/feature_flags.h>
 #include <ydb/core/backup/regexp/regexp.h>
 #include <ydb/core/tx/schemeshard/schemeshard_import.h>
 
@@ -127,33 +128,34 @@ public:
         }
 
         const auto& settings = request.settings();
+        const bool exportFilteringEnabled = NBackup::IsExportFilteringEnabled(*AppData());
+        const bool encryptedExportEnabled = NBackup::IsEncryptedExportEnabled(*AppData());
         try {
             // Validate regexps
             NBackup::CombineRegexps(settings.exclude_regexps());
         } catch (const std::exception& ex) {
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Invalid regexp: " << ex.what());
         }
+        if (!exportFilteringEnabled && !settings.exclude_regexps().empty()) {
+            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Import filtering is not supported in current configuration");
+        }
 
-        const bool encryptedExportFeatureFlag = AppData()->FeatureFlags.GetEnableEncryptedExport();
         const bool commonSourcePathSpecified = !TTraits::GetCommonSourcePath(settings).empty();
         if constexpr (IsS3Import) {
-            if (!encryptedExportFeatureFlag) {
+            if (!exportFilteringEnabled) {
                 if (commonSourcePathSpecified) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Source prefix is not supported in current configuration");
                 }
             }
         }
-        if (!encryptedExportFeatureFlag) {
+        if (!exportFilteringEnabled) {
             if (!settings.destination_path().empty()) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Destination path is not supported in current configuration");
-            }
-            if (settings.has_encryption_settings()) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
             }
         }
         if (settings.items().empty() && !commonSourcePathSpecified) {
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No source prefix specified. Don't know where to import from");
-        } else if (settings.items().empty() && !encryptedExportFeatureFlag) {
+        } else if (settings.items().empty() && !exportFilteringEnabled) {
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No items to import. Don't know where to import from");
         }
         for (const auto& item : settings.items()) {
@@ -163,11 +165,18 @@ public:
             }
             if constexpr (IsS3Import) {
                 if (!item.source_path().empty()) {
-                    if (!encryptedExportFeatureFlag) {
+                    if (!exportFilteringEnabled) {
                         return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Item source path is not supported in current configuration");
                     }
                     if (!commonSourcePathSpecified) {
                         return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Common source prefix must be specified for filtering by source path");
+                    }
+                }
+            }
+            if constexpr (IsFsImport) {
+                if (!item.source_path_db().empty()) {
+                    if (!exportFilteringEnabled) {
+                        return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Item source path is not supported in current configuration");
                     }
                 }
             }
@@ -176,6 +185,12 @@ public:
             }
         }
         if (settings.has_encryption_settings()) {
+            if (!exportFilteringEnabled) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export filtering must be enabled for encrypted import");
+            }
+            if (!encryptedExportEnabled) {
+                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
+            }
             if (settings.encryption_settings().symmetric_key().key().empty()) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "No encryption key specified");
             }

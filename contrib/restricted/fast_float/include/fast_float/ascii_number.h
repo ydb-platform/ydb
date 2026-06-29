@@ -781,9 +781,27 @@ parse_int_string(UC const *p, UC const *pend, T &value,
   }
   // this check can be eliminated for all other types, but they will all require
   // a max_digits(base) equivalent
-  if (digit_count == max_digits && i < min_safe_u64(base)) {
-    answer.ec = std::errc::result_out_of_range;
-    return answer;
+  if (digit_count == max_digits) {
+    // At the max_digits boundary the accumulator `i` may have wrapped around
+    // 2^64. A plain `i < min_safe_u64(base)` test is not sufficient: for any
+    // base whose max_digits-length range exceeds 2^64 (base 10 reaches
+    // ~5.4 * 2^64 at 20 digits) the value can wrap a whole multiple of 2^64 and
+    // land back above min_safe, slipping through. Decide exactly in O(1) using
+    // the leading digit, following the approach used in simdjson:
+    //   ms   == min_safe_u64(base) == base^(max_digits-1), the smallest
+    //           max_digits-length value.
+    //   dmax == the largest leading digit whose number can still fit in u64.
+    // The leading-digit band [d*ms, (d+1)*ms) has width ms < 2^64, so within
+    // the single band where d == dmax the value straddles 2^64 at most once,
+    // and a single threshold separates wrapped from non-wrapped values. A
+    // leading digit above dmax always overflows; below dmax always fits.
+    uint64_t const ms = min_safe_u64(base);
+    uint64_t const dmax = (std::numeric_limits<uint64_t>::max)() / ms;
+    uint64_t const lead = ch_to_digit(*start_digits);
+    if (lead > dmax || (lead == dmax && i < dmax * ms)) {
+      answer.ec = std::errc::result_out_of_range;
+      return answer;
+    }
   }
 
   // check other types overflow

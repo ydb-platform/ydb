@@ -410,12 +410,12 @@ TKqpNewRBOTransformer::TKqpNewRBOTransformer(TIntrusivePtr<TKqpOptimizeContext>&
 }
 
 void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
-    auto addMapAliasRules = [](TVector<std::unique_ptr<IRule>>& rules, bool pushAppendsUnderFilter) {
+    auto addMapAliasRules = [](TVector<std::unique_ptr<IRule>>& rules) {
         rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
         rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>(false));
         rules.emplace_back(std::make_unique<TRenameToAppendRule>());
         rules.emplace_back(std::make_unique<TPushAppendIntoMapRule>());
-        rules.emplace_back(std::make_unique<TPushAppendThroughUnaryRule>(pushAppendsUnderFilter));
+        rules.emplace_back(std::make_unique<TPushAppendThroughUnaryRule>());
         rules.emplace_back(std::make_unique<TPushAppendThroughAggregateRule>());
         rules.emplace_back(std::make_unique<TPushAppendThroughJoinRule>());
         rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
@@ -457,7 +457,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     // Normalize aliases and simple maps before the broader logical rewrites start.
     TVector<std::unique_ptr<IRule>> mapAliasRules;
-    addMapAliasRules(mapAliasRules, /*pushAppendsUnderFilter*/ true);
+    addMapAliasRules(mapAliasRules);
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Normalize maps and aliases", std::move(mapAliasRules)));
 
     // Logical state I
@@ -470,7 +470,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
 
     // Logical stage II.
     TVector<std::unique_ptr<IRule>> logicalStage_II_Rules;
-    addMapAliasRules(logicalStage_II_Rules, /*pushAppendsUnderFilter*/ false);
+    addMapAliasRules(logicalStage_II_Rules);
     logicalStage_II_Rules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TFuseFiltersRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());

@@ -53,6 +53,10 @@ bool TPushRenameThroughAggregateKeyRule::MatchAndApply(TIntrusivePtr<IOperator>&
     }
 
     const auto oldInput = aggregate->GetInput();
+    if (ContainsInfoUnit(oldInput->GetOutputIUs(), candidate->To)) {
+        return false;
+    }
+
     const TVector<TMapElement> pushedElements{NMapRules::MakeRenameElement(*candidate, topMap)};
     auto pushedMap = MakeIntrusive<TOpMap>(oldInput, topMap->Pos, pushedElements);
     aggregate->SetInput(pushedMap);

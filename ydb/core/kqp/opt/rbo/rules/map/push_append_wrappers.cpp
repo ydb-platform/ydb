@@ -9,7 +9,7 @@ TIntrusivePtr<IOperator> TPushAppendRule::SimpleMatchAndApply(const TIntrusivePt
         return result;
     }
 
-    result = TPushAppendThroughUnaryRule(PushUnderFilter).SimpleMatchAndApply(input, ctx, props);
+    result = TPushAppendThroughUnaryRule().SimpleMatchAndApply(input, ctx, props);
     if (result != input) {
         return result;
     }
@@ -28,7 +28,7 @@ TIntrusivePtr<IOperator> TPushAppendExpressionRule::SimpleMatchAndApply(const TI
         return result;
     }
 
-    result = TPushAppendThroughUnaryRule(PushUnderFilter).SimpleMatchAndApply(input, ctx, props);
+    result = TPushAppendThroughUnaryRule().SimpleMatchAndApply(input, ctx, props);
     if (result != input) {
         return result;
     }

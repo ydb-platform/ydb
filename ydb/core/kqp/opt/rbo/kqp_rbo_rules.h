@@ -138,10 +138,14 @@ class TPushAppendIntoMapRule : public ISimplifiedRule {
 
 class TPushAppendThroughUnaryRule : public ISimplifiedRule {
   public:
-    TPushAppendThroughUnaryRule()
-        : ISimplifiedRule("Push map elements through unary", ERuleProperties::RequireParents) {}
+    explicit TPushAppendThroughUnaryRule(bool pushExpressions = false)
+        : ISimplifiedRule("Push map elements through unary", ERuleProperties::RequireParents)
+        , PushExpressions(pushExpressions) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
+
+  private:
+    bool PushExpressions;
 };
 
 class TPushAppendThroughAggregateRule : public ISimplifiedRule {

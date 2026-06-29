@@ -415,7 +415,7 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
         rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>(false));
         rules.emplace_back(std::make_unique<TRenameToAppendRule>());
         rules.emplace_back(std::make_unique<TPushAppendIntoMapRule>());
-        rules.emplace_back(std::make_unique<TPushAppendThroughUnaryRule>());
+        rules.emplace_back(std::make_unique<TPushAppendThroughUnaryRule>(/*pushExpressions*/ false));
         rules.emplace_back(std::make_unique<TPushAppendThroughAggregateRule>());
         rules.emplace_back(std::make_unique<TPushAppendThroughJoinRule>());
         rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
@@ -469,8 +469,11 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
     RBO.AddStage(std::make_unique<TRuleBasedStage>("Logical rewrites I", std::move(logicalStage_I_Rules)));
 
     // Logical stage II.
+    TVector<std::unique_ptr<IRule>> mapAliasRulesII;
+    addMapAliasRules(mapAliasRulesII);
+    RBO.AddStage(std::make_unique<TRuleBasedStage>("Normalize maps and aliases II", std::move(mapAliasRulesII)));
+
     TVector<std::unique_ptr<IRule>> logicalStage_II_Rules;
-    addMapAliasRules(logicalStage_II_Rules);
     logicalStage_II_Rules.emplace_back(std::make_unique<TInlineJoinFiltersRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TFuseFiltersRule>());
     logicalStage_II_Rules.emplace_back(std::make_unique<TExtractJoinExpressionsRule>());

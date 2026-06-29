@@ -412,7 +412,13 @@ common:
   - from: /integrations/fluent-bit.md
     to: /integrations/ingestion/fluent-bit.md
   - from: /integrations/import-jdbc.md
-    to: /integrations/ingestion/import-jdbc.md
+    to: /integrations/data-migration/import-jdbc.md
+  - from: /integrations/ingestion/import-jdbc.md
+    to: /integrations/data-migration/import-jdbc.md
+  - from: /integrations/ingestion/import-mysql.md
+    to: /integrations/data-migration/import-mysql.md
+  - from: /integrations/ingestion/spark.md
+    to: /integrations/query-engines/spark.md
   - from: /integrations/logstash.md
     to: /integrations/ingestion/logstash.md
   - from: /integrations/spring-data-jdbc.md

@@ -13,8 +13,8 @@ namespace NKqp {
 // Caveats:
 // 1.
 // A: Map [ a := f(b) ]      -- expression appends move only through filters
-// B: `- Sort                   when push-under-filter is enabled; alias appends
-// C:    `- input               and semantic renames may move through Limit and Sort.
+// B: `- Sort                   or with shadowing renames; alias appends and
+// C:    `- input               semantic renames may move through Limit and Sort.
 //
 // 2.
 // A: Map [ a := b ]         -- move prevented if Unary B has multiple consumers;
@@ -24,76 +24,24 @@ namespace NKqp {
 // E: `- Unary B
 //
 // 3.
-// A: Map [ x <- a ]         -- semantic rename move prevented if Map A has
-// B: `- Unary                  multiple consumers; changing the name below B
-// C:    `- input               would affect every consumer of A.
+// A: Map [ a := b, x <- a ] -- append and shadowing rename move together so
+// B: `- Unary                  the source name exposed below Unary B is still
+// C:    `- input               hidden above it.
 
 namespace {
 
 using TRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>;
 
-bool CanPushThroughUnary(const TIntrusivePtr<IOperator>& op, bool pushUnderFilter, bool isExpressionAppend = false) {
+bool CanPushThroughUnary(const TIntrusivePtr<IOperator>& op) {
     Y_ENSURE(op);
 
     switch (op->Kind) {
         case EOperator::Filter:
-            return pushUnderFilter;
         case EOperator::Limit:
         case EOperator::Sort:
-            return !isExpressionAppend;
+            return true;
         default:
             return false;
-    }
-}
-
-void FindRenamesToPush(
-    const TIntrusivePtr<TOpMap>& topMap,
-    THashSet<size_t>& pushAsRename,
-    TRenameMap& renameMap)
-{
-    if (!topMap->IsSingleConsumer()) {
-        return;
-    }
-
-    TInfoUnitSet renameSources;
-    TInfoUnitSet renameTargets;
-    auto hasRenameOverlap = [&renameSources, &renameTargets](const TInfoUnit& from, const TInfoUnit& to) {
-        return renameSources.contains(from) ||
-            renameTargets.contains(to) ||
-            renameSources.contains(to) ||
-            renameTargets.contains(from);
-    };
-
-    for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
-        const auto& mapElement = topMap->MapElements[idx];
-        if (!mapElement.IsRename()) {
-            continue;
-        }
-
-        const auto from = mapElement.GetRename();
-        const auto to = mapElement.GetElementName();
-        if (from == to ||
-            hasRenameOverlap(from, to)) {
-            continue;
-        }
-
-        pushAsRename.insert(idx);
-        renameSources.insert(from);
-        renameTargets.insert(to);
-        renameMap.emplace(from, to);
-    }
-
-    for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
-        if (pushAsRename.contains(idx)) {
-            continue;
-        }
-        const auto& mapElement = topMap->MapElements[idx];
-        if (mapElement.IsRename() &&
-            (renameSources.contains(mapElement.GetRename()) || renameTargets.contains(mapElement.GetRename()))) {
-            pushAsRename.clear();
-            renameMap.clear();
-            return;
-        }
     }
 }
 
@@ -106,7 +54,7 @@ TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
     }
 
     auto topMap = CastOperator<TOpMap>(input);
-    if (!CanPushThroughUnary(topMap->GetInput(), PushUnderFilter)) {
+    if (!CanPushThroughUnary(topMap->GetInput())) {
         return input;
     }
 
@@ -116,23 +64,33 @@ TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
     }
 
     const auto unaryInput = unary->GetInput();
-    THashSet<size_t> pushAsRename;
+
+    TInfoUnitSet movedRenameSources;
     TRenameMap renameMap;
-    FindRenamesToPush(topMap, pushAsRename, renameMap);
+    for (const auto& mapElement : topMap->MapElements) {
+        if (mapElement.IsRename() && mapElement.GetRename() != mapElement.GetElementName()) {
+            movedRenameSources.insert(mapElement.GetRename());
+            renameMap.emplace(mapElement.GetRename(), mapElement.GetElementName());
+        }
+    }
 
     TVector<TMapElement> pushedElements;
     TVector<TMapElement> topElements;
 
-    for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
-        const auto& mapElement = topMap->MapElements[idx];
-        if (pushAsRename.contains(idx)) {
-            const auto expr = mapElement.GetExpression();
-            pushedElements.emplace_back(mapElement.GetElementName(), mapElement.GetRename(), topMap->Pos, expr.Ctx, expr.PlanProps, true);
+    for (const auto& mapElement : topMap->MapElements) {
+        if (mapElement.IsRename()) {
+            if (mapElement.GetRename() != mapElement.GetElementName()) {
+                pushedElements.push_back(mapElement);
+                continue;
+            }
+
+            topElements.push_back(mapElement);
             continue;
         }
 
-        if (topMap->IsExtractableAppend(mapElement) &&
-            (mapElement.IsColumnAccess() || unary->Kind == EOperator::Filter)) {
+        if (mapElement.IsColumnAccess() ||
+            unary->Kind == EOperator::Filter ||
+            movedRenameSources.contains(mapElement.GetElementName())) {
             pushedElements.push_back(mapElement);
             continue;
         }

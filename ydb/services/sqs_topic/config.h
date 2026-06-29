@@ -11,4 +11,6 @@ namespace NKikimr::NSqsTopic::V1 {
         const NKikimrPQ::TPQTabletConfig& pqConfig,
         const TStringBuf consumerName,
         const NActors::TActorContext& ctx);
+
+    TString ResolveConsumerNameFromQueueUrl(const TStringBuf consumerFromUrl, const NActors::TActorContext& ctx);
 } // namespace NKikimr::NSqsTopic::V1

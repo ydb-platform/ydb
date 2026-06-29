@@ -10,10 +10,7 @@ namespace NKikimr::NSqsTopic::V1 {
         const TStringBuf consumerName,
         const NActors::TActorContext& ctx)
     {
-        TString resolvedConsumerName(consumerName);
-        if (!NKikimr::AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
-            resolvedConsumerName = NPersQueue::ConvertNewConsumerName(resolvedConsumerName, ctx);
-        }
+        auto resolvedConsumerName = NPersQueue::ConvertNewConsumerName(TString{consumerName}, ctx);
         auto normalizedConsumerName = NPersQueue::ConvertOldConsumerName(resolvedConsumerName, ctx);
         for (const auto& consumer : pqConfig.GetConsumers()) {
             if (NPersQueue::ConvertOldConsumerName(consumer.GetName(), ctx) == normalizedConsumerName) {
@@ -21,6 +18,10 @@ namespace NKikimr::NSqsTopic::V1 {
             }
         }
         return Nothing();
+    }
+
+    TString ResolveConsumerNameFromQueueUrl(const TStringBuf consumerFromUrl, const NActors::TActorContext& ctx) {
+        return NPersQueue::ConvertNewConsumerName(TString{consumerFromUrl}, ctx);
     }
 
 } // namespace NKikimr::NSqsTopic::V1

@@ -237,7 +237,7 @@
 
 Для работы с топиками используется {{ ydb-short-name }} SDK (см. [Работа с топиками](../../reference/ydb-sdk/topic.md)).
 
-Также ограниченно поддержан протокол Kafka API версии 3.4.0. (см. [Работа с Kafka API](../../reference/kafka-api/index.md)).
+Также ограниченно поддержаны протоколы Kafka API версии 3.4.0. (см. [Работа с Kafka API](../../reference/kafka-api/index.md)) и Amazon SQS (см. [Работа с Amazon SQS](../../reference/sqs-api/index.md)).
 
 ## Транзакции с участием топиков {#topic-transactions}
 

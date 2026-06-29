@@ -38,14 +38,73 @@ TStorageTransportMock::GetConnectCredentials(
     return {};
 }
 
+void TStorageTransportMock::FireDisconnect(
+    EConnectionType type,
+    const TDDiskId& ddiskId,
+    ui32 nodeId)
+{
+    const auto key = MakeKey(type, ddiskId);
+
+    if (auto it = StoredDisconnectCBs.find(key);
+        it != StoredDisconnectCBs.end())
+    {
+        auto cb = std::move(it->second);
+        StoredDisconnectCBs.erase(it);
+        cb(nodeId);
+    }
+
+    if (auto it = PendingReadsFromDDisk.find(key);
+        it != PendingReadsFromDDisk.end())
+    {
+        TEvReadResult err;
+        err.SetStatus(TReplyStatus::OUTDATED);
+        err.SetErrorReason("Session broken");
+        auto promise = std::move(it->second);
+        PendingReadsFromDDisk.erase(it);
+        promise.SetValue(std::move(err));
+    }
+
+    if (auto it = PendingWritesToDDisk.find(key);
+        it != PendingWritesToDDisk.end())
+    {
+        TEvWriteResult err;
+        err.SetStatus(TReplyStatus::OUTDATED);
+        err.SetErrorReason("Session broken");
+        auto promise = std::move(it->second);
+        PendingWritesToDDisk.erase(it);
+        promise.SetValue(std::move(err));
+    }
+}
+
+TStorageTransportMock::TReadPromise
+TStorageTransportMock::SetPendingReadFromDDisk(
+    EConnectionType type,
+    const TDDiskId& ddiskId)
+{
+    auto promise = NThreading::NewPromise<TEvReadResult>();
+    PendingReadsFromDDisk[MakeKey(type, ddiskId)] = promise;
+    return promise;
+}
+
+TStorageTransportMock::TWritePromise
+TStorageTransportMock::SetPendingWriteToDDisk(
+    EConnectionType type,
+    const TDDiskId& ddiskId)
+{
+    auto promise = NThreading::NewPromise<TEvWriteResult>();
+    PendingWritesToDDisk[MakeKey(type, ddiskId)] = promise;
+    return promise;
+}
+
 NThreading::TFuture<TEvConnectResult> TStorageTransportMock::Connect(
     const THostConnection& connection,
     TDisconnectCB disconnectCB)
 {
-    Y_UNUSED(disconnectCB);
-
     const auto key = MakeKey(connection);
     ConnectCredentials[key].push_back(connection.Credentials);
+    if (disconnectCB) {
+        StoredDisconnectCBs[key] = std::move(disconnectCB);
+    }
     if (auto it = PendingConnects.find(key); it != PendingConnects.end()) {
         return it->second.GetFuture();
     }
@@ -76,7 +135,14 @@ NThreading::TFuture<TEvReadResult> TStorageTransportMock::ReadFromDDisk(
     const TGuardedSgList& data,
     NWilson::TSpan* span)
 {
-    Y_UNUSED(connection, selector, instruction, data, span);
+    Y_UNUSED(selector, instruction, data, span);
+
+    const auto key = MakeKey(connection);
+    if (auto it = PendingReadsFromDDisk.find(key);
+        it != PendingReadsFromDDisk.end())
+    {
+        return it->second.GetFuture();
+    }
 
     TEvReadResult result;
     result.SetStatus(ReadFromDDiskStatus);
@@ -131,7 +197,14 @@ NThreading::TFuture<TEvWriteResult> TStorageTransportMock::WriteToDDisk(
     const TGuardedSgList& data,
     NWilson::TSpan* span)
 {
-    Y_UNUSED(connection, selector, instruction, data, span);
+    Y_UNUSED(selector, instruction, data, span);
+
+    const auto key = MakeKey(connection);
+    if (auto it = PendingWritesToDDisk.find(key);
+        it != PendingWritesToDDisk.end())
+    {
+        return it->second.GetFuture();
+    }
 
     TEvWriteResult result;
     result.SetStatus(WriteToDDiskStatus);

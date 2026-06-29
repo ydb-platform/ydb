@@ -1125,7 +1125,9 @@ void TICStorageTransportActor::RejectAllSessionRequestsForNode(ui32 nodeId)
 {
     RejectRequestsForNode<NDDisk::TEvReadResult>(ReadFromDDiskRequests, nodeId);
     RejectRequestsForNode<NDDisk::TEvWriteResult>(WriteToDDiskRequests, nodeId);
-    RejectRequestsForNode<NDDisk::TEvSyncResult>(FlushFromPBufferRequests, nodeId);
+    RejectRequestsForNode<NDDisk::TEvSyncResult>(
+        FlushFromPBufferRequests,
+        nodeId);
 }
 
 void TICStorageTransportActor::HandleICNodeDisconnected(

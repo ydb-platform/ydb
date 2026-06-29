@@ -63,6 +63,12 @@ TDirectBlockGroup::TDDiskConnection::GetFuture() const
 
 void TDirectBlockGroup::TDDiskConnection::ResetSession()
 {
+    // Wake up everyone waiting on the old session future with an error, so that
+    // coroutines blocked in WaitForSessionLock don't hang forever.
+    if (!ConnectPromise.HasValue()) {
+        ConnectPromise.SetValue(MakeError(E_REJECTED, "DDisk session reset"));
+    }
+
     ConnectPromise = NThreading::NewPromise<NProto::TError>();
     ConnectFuture = ConnectPromise.GetFuture();
     SessionState = EDDiskSessionState::NotLocked;

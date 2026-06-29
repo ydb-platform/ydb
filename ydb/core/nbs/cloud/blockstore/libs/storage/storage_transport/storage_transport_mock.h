@@ -32,6 +32,9 @@ public:
     using TReplyStatusE = NKikimrBlobStorage::NDDisk::TReplyStatus_E;
     using TDDiskId = NKikimr::NBsController::TDDiskId;
     using TConnectPromise = NThreading::TPromise<TEvConnectResult>;
+    using TReadPromise = NThreading::TPromise<TEvReadResult>;
+    using TWritePromise = NThreading::TPromise<TEvWriteResult>;
+    using TDisconnectCB = IStorageTransport::TDisconnectCB;
 
     // Default reply status used for immediate (non-pending) responses.
     TReplyStatusE DefaultConnectStatus = TReplyStatus::OK;
@@ -60,6 +63,28 @@ public:
 
     [[nodiscard]] TVector<NKikimr::NDDisk::TQueryCredentials>
     GetConnectCredentials(EConnectionType type, const TDDiskId& ddiskId) const;
+
+    // Simulates an IC break for the given host. Invokes the stored
+    // disconnectCB (registered during Connect) with the given nodeId and then
+    // rejects every in-flight Read/Write to that host with a "Session broken"
+    // error. Reproduces the chain HandleICNodeDisconnected -> disconnectCB ->
+    // OnNodeDisconnected -> ReEstablishDDiskConnection.
+    void FireDisconnect(
+        EConnectionType type,
+        const TDDiskId& ddiskId,
+        ui32 nodeId = 1);
+
+    // Marks the next ReadFromDDisk(type, ddiskId) as pending: it returns an
+    // unresolved future. The returned promise can be resolved by the test, or
+    // is rejected automatically by FireDisconnect.
+    TReadPromise SetPendingReadFromDDisk(
+        EConnectionType type,
+        const TDDiskId& ddiskId);
+
+    // Same as SetPendingReadFromDDisk but for WriteToDDisk.
+    TWritePromise SetPendingWriteToDDisk(
+        EConnectionType type,
+        const TDDiskId& ddiskId);
 
     NThreading::TFuture<TEvConnectResult> Connect(
         const THostConnection& connection,
@@ -148,6 +173,13 @@ private:
     // ConnectCredentials stores the credentials of every Connect() call
     // observed for the given (type, ddiskId), ordered by call.
     TMap<TKey, TVector<NKikimr::NDDisk::TQueryCredentials>> ConnectCredentials;
+
+    // disconnectCB stored per host during Connect(); invoked by FireDisconnect.
+    TMap<TKey, TDisconnectCB> StoredDisconnectCBs;
+
+    // In-flight pending DDisk reads/writes; rejected by FireDisconnect.
+    TMap<TKey, TReadPromise> PendingReadsFromDDisk;
+    TMap<TKey, TWritePromise> PendingWritesToDDisk;
 };
 
 ////////////////////////////////////////////////////////////////////////////////

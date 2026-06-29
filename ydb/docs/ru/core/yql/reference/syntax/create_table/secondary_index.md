@@ -6,7 +6,7 @@
 CREATE TABLE `<table_name>` (
   ...
     INDEX `<index_name>`
-    [GLOBAL|LOCAL]
+    GLOBAL
     [UNIQUE]
     [SYNC|ASYNC]
     [USING <index_type>]

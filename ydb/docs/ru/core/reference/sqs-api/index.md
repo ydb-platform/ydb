@@ -49,6 +49,7 @@
 
 ## Разделы документации
 
-- [Аутентификация](auth.md)
-- [Примеры](examples.md)
+- [{#T}](auth.md)
+- [{#T}](examples.md)
 - [Создание очереди с помощью YQL](../../yql/reference/syntax/alter-topic.md#add-consumer)
+- [{#T}](../../dev/shared-consumer-internals.md)

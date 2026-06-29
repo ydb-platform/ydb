@@ -389,6 +389,24 @@ TFastPathServiceInfo TFastPathService::GetMonInfo() const
     };
 }
 
+size_t TFastPathService::RequestMonSnapshots(
+    NActors::TActorId replyTo,
+    ui64 cookie,
+    std::optional<size_t> dbgIndex) const
+{
+    if (dbgIndex) {
+        if (*dbgIndex >= DirectBlockGroups.size()) {
+            return 0;
+        }
+        DirectBlockGroups[*dbgIndex]->RequestMonSnapshot(replyTo, cookie);
+        return 1;
+    }
+    for (const auto& dbg: DirectBlockGroups) {
+        dbg->RequestMonSnapshot(replyTo, cookie);
+    }
+    return DirectBlockGroups.size();
+}
+
 void TFastPathService::MaybeTriggerPBufferCleanup(ui64 lsn)
 {
     const ui64 step = StorageConfig->GetPBufferCleanupLsnStep();

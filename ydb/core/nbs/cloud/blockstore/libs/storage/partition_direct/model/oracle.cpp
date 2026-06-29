@@ -282,6 +282,28 @@ TString TOracle::Dump() const
     return sb;
 }
 
+TVector<TOracleHostStat> TOracle::BuildHostStats(TInstant now) const
+{
+    TVector<TOracleHostStat> stats;
+    stats.reserve(HostStatistics.size());
+    for (THostIndex hostIndex = 0; hostIndex < HostStatistics.size();
+         ++hostIndex)
+    {
+        TOracleHostStat stat;
+        stat.Index = hostIndex;
+        stat.State = HostStates[hostIndex].State;
+        stat.Health = HostsHealths[hostIndex];
+        stat.Errors = HostStatistics[hostIndex].GetErrorsInfo(now);
+        stat.PBufferUsedSize = HostStates[hostIndex].PBufferUsedSize;
+        for (size_t op = 0; op < OperationCount; ++op) {
+            stat.InflightByOp[op] = HostStatistics[hostIndex].InflightCount(
+                static_cast<EOperation>(op));
+        }
+        stats.push_back(stat);
+    }
+    return stats;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

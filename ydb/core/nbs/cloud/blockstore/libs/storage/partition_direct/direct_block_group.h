@@ -17,6 +17,7 @@
 
 #include <ydb/core/protos/blobstorage_ddisk.pb.h>
 
+#include <ydb/library/actors/core/actorid.h>
 #include <ydb/library/actors/wilson/wilson_span.h>
 
 #include <functional>
@@ -215,6 +216,11 @@ public:
 
     // Query dump for DirectBlockGroup and VChunks.
     virtual NThreading::TFuture<TDBGDumpResponse> Dump() = 0;
+
+    // Asynchronously gathers a monitoring snapshot of this DBG (per-host
+    // health / inflight / errors) and sends TEvMonDbgSnapshotReady with the
+    // given cookie to `replyTo` from the executor thread.
+    virtual void RequestMonSnapshot(NActors::TActorId replyTo, ui64 cookie) = 0;
 };
 
 using IDirectBlockGroupPtr = std::shared_ptr<IDirectBlockGroup>;

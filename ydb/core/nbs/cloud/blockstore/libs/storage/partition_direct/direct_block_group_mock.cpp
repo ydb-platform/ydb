@@ -330,6 +330,14 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroupMock::Dump()
     return DumpHandler();
 }
 
+void TDirectBlockGroupMock::RequestMonSnapshot(
+    NActors::TActorId replyTo,
+    ui64 cookie)
+{
+    Y_UNUSED(replyTo);
+    Y_UNUSED(cookie);
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

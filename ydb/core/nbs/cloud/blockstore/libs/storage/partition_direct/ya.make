@@ -48,6 +48,8 @@ PEERDIR(
 
     ydb/core/mind/bscontroller
     contrib/libs/opentelemetry-proto
+
+    library/cpp/cgiparam
 )
 
 END()

@@ -30,32 +30,30 @@ struct TCopyConstraints {
 
 TStatus ConstraintDqCnValue(const TExprNode::TPtr& input, TExprContext& ctx) {
     const TDqConnection connection(input);
-    const auto output = connection.Output();
-    if (output.Ref().GetConstraint<TStreamingConstraintNode>()) {
+    if (connection.Output().Ref().GetConstraint<TStreamingConstraintNode>()) {
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Converting streaming input to value is not supported"));
         return TStatus::Error;
     }
 
-    TCopyConstraints::Do<TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode>(output.Ref(), connection.MutableRef());
+    connection.MutableRef().CopyConstraints(connection.Output().Ref());
     return TStatus::Ok;
 }
 
 TStatus ConstraintDqCnMerge(const TExprNode::TPtr& input, TExprContext& ctx, bool disableCheck) {
     const TDqConnection connection(input);
-    const auto output = connection.Output();
-    if (output.Ref().GetConstraint<TStreamingConstraintNode>()) {
+
+    if (connection.Output().Ref().GetConstraint<TStreamingConstraintNode>()) {
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Streaming input is not supported for merge connection"));
         return TStatus::Error;
     }
 
-    if (const auto outSorted = output.Ref().GetConstraint<TSortedConstraintNode>()) {
-        input->AddConstraint(outSorted);
-    } else if (!disableCheck) {
+    if (const auto outSorted = connection.Output().Ref().GetConstraint<TSortedConstraintNode>();
+        !outSorted && !disableCheck) {
         ctx.AddError(TIssue(ctx.GetPosition(input->Pos()), "Expected sorted constraint on stage output."));
         return TStatus::Error;
     }
 
-    TCopyConstraints::Do<TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode>(output.Ref(), connection.MutableRef());
+    TCopyConstraints::Do<TSortedConstraintNode, TPartOfSortedConstraintNode, TChoppedConstraintNode, TPartOfChoppedConstraintNode, TEmptyConstraintNode, TUniqueConstraintNode, TPartOfUniqueConstraintNode, TDistinctConstraintNode, TPartOfDistinctConstraintNode, TVarIndexConstraintNode, TMultiConstraintNode>(connection.Output().Ref(), connection.MutableRef());
     return TStatus::Ok;
 }
 
@@ -192,27 +190,27 @@ TStatus ConstraintDqStage(const TExprNode::TPtr& input, TExprContext& ctx) {
         return status;
     }
 
-    TCopyConstraints::Do<TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode, TStreamingConstraintNode, TMultiConstraintNode>(stage.Program().Ref(), stage.MutableRef());
+    stage.MutableRef().CopyConstraints(stage.Program().Ref());
     return TStatus::Ok;
 }
 
 TStatus ConstraintDqOutput(const TExprNode::TPtr& input, TExprContext& /* ctx */) {
     const TDqOutput output(input);
-    const auto& stage = output.Stage().Ref();
-    if (const auto* multi = stage.GetConstraint<TMultiConstraintNode>()) {
+    if (const auto* multi = output.Stage().Ref().GetConstraint<TMultiConstraintNode>()) {
         if (const auto* constraints = multi->GetItem(FromString<ui32>(output.Index().Value()))) {
             input->SetConstraints(*constraints);
         }
     } else {
-        input->CopyConstraints(stage);
+        output.MutableRef().CopyConstraints(output.Stage().Ref());
     }
 
     return TStatus::Ok;
 }
 
-TStatus ConstraintDqConnection(const TExprNode::TPtr& input, TExprContext& /* ctx */) {
+TStatus ConstraintDqConnection(const TExprNode::TPtr& input, TExprContext& ctx) {
+    Y_UNUSED(ctx);
     const TDqConnection connection(input);
-    TCopyConstraints::Do<TUniqueConstraintNode, TDistinctConstraintNode, TEmptyConstraintNode, TStreamingConstraintNode, TMultiConstraintNode>(connection.Output().Ref(), connection.MutableRef());
+    connection.MutableRef().CopyConstraints(connection.Output().Ref());
     return TStatus::Ok;
 }
 

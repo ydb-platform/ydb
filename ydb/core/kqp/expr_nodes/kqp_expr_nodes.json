@@ -561,7 +561,7 @@
             "Children": [
                 {"Index": 0, "Name": "Lambda", "Type": "TCoLambda"},
                 {"Index": 1, "Name": "ArgsType", "Type": "TExprBase"},
-                {"Index": 2, "Name": "ArgsConstraints", "Type": "TCoAtomList", "Optional": true}
+                {"Index": 2, "Name": "ArgsConstraints", "Type": "TCoAtomList"}
             ]
         },
         {

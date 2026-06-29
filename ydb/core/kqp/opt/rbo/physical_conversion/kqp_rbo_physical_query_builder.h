@@ -24,7 +24,7 @@ private:
     TVector<NYql::TExprNode::TPtr> PeepHoleOptimizePhysicalStages(TVector<NYql::TExprNode::TPtr>&& physicalStages);
     TVector<NYql::TExprNode::TPtr> EnableWideChannelsPhysicalStages(TVector<NYql::TExprNode::TPtr>&& physicalStages);
     NYql::TExprNode::TPtr BuildPhysicalQuery(TVector<NYql::TExprNode::TPtr>&& physicalStages);
-    NYql::TExprNode::TPtr PeepHoleOptimize(NYql::TExprNode::TPtr input, const TVector<const NYql::TTypeAnnotationNode*>& argsType) const;
+    NYql::TExprNode::TPtr PeepHoleOptimize(NYql::TExprNode::TPtr input, const TVector<const NYql::TTypeAnnotationNode*>& argsType, NYql::TExprNode::TListType&& argsConstraints) const;
     bool CanApplyPeepHole(NYql::TExprNode::TPtr input, const std::initializer_list<std::string_view>& callableNames) const;
     NYql::TExprNode::TPtr BuildDqPhyStage(const TVector<NYql::TExprNode::TPtr>& inputs, const TVector<NYql::TExprNode::TPtr>& args, NYql::TExprNode::TPtr physicalStageBody,
         NYql::NNodes::TCoNameValueTupleList&& setings, NYql::TExprContext& ctx, NYql::TPositionHandle pos) const;
@@ -32,10 +32,11 @@ private:
     void TopologicalSort(NYql::NNodes::TDqPhyStage&& dqStage, TVector<NYql::TExprNode::TPtr>& result) const;
     void KeepTypeAnnotationForStageAndFirstLevelChilds(NYql::NNodes::TDqPhyStage& newStage, const NYql::NNodes::TDqPhyStage& oldStage) const;
     TVector<const NYql::TTypeAnnotationNode*> GetArgsType(NYql::TExprNode::TPtr input) const;
+    NYql::TExprNode::TListType GetArgsConstraints(NYql::TExprNode::TPtr input, NYql::TExprContext& ctx) const;
     bool IsCompatibleWithBlocks(const NYql::TStructExprType& type, NYql::TPositionHandle pos) const;
     bool IsSuitableToPropagateWideBlocksThroughConnection(const NYql::NNodes::TDqOutput& output) const;
     bool IsSuitableToPropagateWideBlocksThroughHashShuffleConnections(const NYql::NNodes::TDqPhyStage& stage) const;
-    NYql::TExprNode::TPtr TypeAnnotateProgram(NYql::TExprNode::TPtr input, const TVector<const NYql::TTypeAnnotationNode*>& argsType);
+    NYql::TExprNode::TPtr TypeAnnotateProgram(NYql::TExprNode::TPtr input, const TVector<const NYql::TTypeAnnotationNode*>& argsType, NYql::TExprNode::TListType&& argsConstraints);
     void TypeAnnotate(NYql::TExprNode::TPtr& input);
     NYql::TKqpPhyQuerySettings GetPhysicalQuerySettings() const;
     NYql::TKqpPhyTxSettings GetPhysicalTxSettings() const;

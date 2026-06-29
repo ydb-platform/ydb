@@ -55,36 +55,19 @@ TStatus ConstraintKqpWriteConstraint(const TExprNode::TPtr& input, TExprContext&
 
 TStatus ConstraintKqpProgram(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto& lambda = input->ChildRef(TKqpProgram::idx_Lambda);
-    const auto args = lambda->Child(TCoLambda::idx_Args);
+    const auto argsConstraints = input->Child(TKqpProgram::idx_ArgsConstraints);
 
     std::vector<TConstraintNode::TListType> constraints;
-    const auto status = [&]() -> TStatus {
-        if (input->ChildrenSize() > TKqpProgram::idx_ArgsConstraints) {
-            const auto argsConstraints = input->Child(TKqpProgram::idx_ArgsConstraints);
-
-            constraints.reserve(argsConstraints->ChildrenSize());
-            for (const auto& argsConstraint : argsConstraints->Children()) {
-                try {
-                    auto set = ctx.MakeConstraintSet(NYT::NodeFromYsonString(argsConstraint->Content()));
-                    constraints.push_back(set.GetAllConstraints());
-                } catch (...) {
-                    ctx.AddError(TIssue(ctx.GetPosition(argsConstraint->Pos()), TStringBuilder()
-                        << "Bad KqpProgram ArgsConstraints yson-value: " << CurrentExceptionMessage()));
-                    return TStatus::Error;
-                }
-            }
-            return TStatus::Ok;
-        } else {
-            constraints.reserve(args->ChildrenSize());
-            for (const auto& arg : args->Children()) {
-                constraints.push_back(arg->GetAllConstraints());
-            }
-            return TStatus::Ok;
+    constraints.reserve(argsConstraints->ChildrenSize());
+    for (const auto& argsConstraint : argsConstraints->Children()) {
+        try {
+            auto set = ctx.MakeConstraintSet(NYT::NodeFromYsonString(argsConstraint->Content()));
+            constraints.push_back(set.GetAllConstraints());
+        } catch (...) {
+            ctx.AddError(TIssue(ctx.GetPosition(argsConstraint->Pos()), TStringBuilder()
+                << "Bad KqpProgram ArgsConstraints yson-value: " << CurrentExceptionMessage()));
+            return TStatus::Error;
         }
-    }();
-
-    if (status != TStatus::Ok) {
-        return status;
     }
 
     return UpdateLambdaConstraints(lambda, ctx, constraints);

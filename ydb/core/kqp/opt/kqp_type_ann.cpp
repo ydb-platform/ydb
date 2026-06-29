@@ -2016,7 +2016,13 @@ TStatus AnnotateKqpPredicateClosure(const TExprNode::TPtr& node, TExprContext& c
 }
 
 TStatus AnnotateKqpProgram(const TExprNode::TPtr& node, TExprContext& ctx) {
-    if (!EnsureMinMaxArgsCount(*node, 2, 3, ctx)) {
+    if (!EnsureArgsCount(*node, 3, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto* argsConstraints = node->Child(TKqpProgram::idx_ArgsConstraints);
+
+    if (!EnsureTupleOfAtoms(*argsConstraints, ctx)) {
         return TStatus::Error;
     }
 
@@ -2044,12 +2050,6 @@ TStatus AnnotateKqpProgram(const TExprNode::TPtr& node, TExprContext& ctx) {
 
     auto& lambda = node->ChildRef(TKqpProgram::idx_Lambda);
     if (!EnsureLambda(*lambda, ctx)) {
-        return TStatus::Error;
-    }
-
-    if (node->ChildrenSize() > TKqpProgram::idx_ArgsConstraints
-        && !EnsureTupleOfAtoms(*node->Child(TKqpProgram::idx_ArgsConstraints), ctx))
-    {
         return TStatus::Error;
     }
 
@@ -2731,8 +2731,7 @@ TStatus AnnotateSublinkBase(const TExprNode::TPtr& node, TExprContext& ctx) {
         auto& lambda = node->ChildRef(TKqpInSublink::idx_InLambda);
         auto outerTypeNode = node->Child(TKqpInSublink::idx_OuterType);
         auto outerType = outerTypeNode->GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
-      
-        
+
         TVector<const TItemExprType*> newItemTypes;
         // Need to modify the outer type to remove _alias prefix
         for (auto itemType : outerType->GetItems()) {
@@ -2988,8 +2987,8 @@ TStatus AnnotateOpFilter(const TExprNode::TPtr& input, TExprContext& ctx) {
 }
 
 bool IsSupportedJoinKind(const TString &joinKind) {
-    return joinKind == "Left" || joinKind == "LeftSemi" || joinKind == "LeftOnly" || 
-        joinKind == "Right" || joinKind == "RightSemi" || joinKind == "RightOnly" || 
+    return joinKind == "Left" || joinKind == "LeftSemi" || joinKind == "LeftOnly" ||
+        joinKind == "Right" || joinKind == "RightSemi" || joinKind == "RightOnly" ||
         joinKind == "Inner" || joinKind == "Cross" || joinKind == "Full";
 }
 
@@ -3001,13 +3000,13 @@ const TStructExprType* JoinResultType(const TTypeAnnotationNode* leftType, const
     const bool rightJoin = (joinKind == "Right" || joinKind == "RightSemi" || joinKind == "RightOnly");
     const bool semiOrOnlyJoin = (joinKind == "LeftSemi" || joinKind == "LeftOnly" || joinKind == "RightSemi" || joinKind == "RightOnly");
     const bool isFullJoin = (joinKind == "Full");
-    
+
     if (rightJoin) {
         std::swap(leftItemType, rightItemType);
     }
 
     TVector<const TItemExprType*> structItemTypes;
-    
+
     for (const auto *item : leftItemType->Cast<TStructExprType>()->GetItems()){
         if (item->GetItemType()->IsOptionalOrNull() || !isFullJoin) {
             structItemTypes.push_back(item);
@@ -3036,7 +3035,7 @@ const TStructExprType* JoinResultType(const TTypeAnnotationNode* leftType, const
 TStatus AnnotateOpJoinFilter(const TExprNode::TPtr& input, TExprContext& ctx) {
     auto leftInputType = input->ChildPtr(TKqpOpJoinFilter::idx_LeftInput)->GetTypeAnn();
     auto rightInputType = input->ChildPtr(TKqpOpJoinFilter::idx_RightInput)->GetTypeAnn();
-    
+
     // Join filters operate on top of potenially joined tuples, so inner join is the right semantics
     auto itemType = JoinResultType(leftInputType, rightInputType, "Inner", ctx);
 

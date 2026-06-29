@@ -708,7 +708,7 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(T
                     // clang-format on
 
                     // Update the type to `Blocks`, which should be easy since it only works on the lambda and not the entire graph.
-                    newProgram = PeepHoleOptimize(newProgram, GetArgsType(program.Ptr()));
+                    newProgram = PeepHoleOptimize(newProgram, GetArgsType(program.Ptr()), GetArgsConstraints(newProgram, ctx));
                     Y_ENSURE(newProgram->GetTypeAnn());
 
                     newStageArg->SetTypeAnn(newProgram->GetTypeAnn());
@@ -726,14 +726,7 @@ TVector<TExprNode::TPtr> TPhysicalQueryBuilder::PeepHoleOptimizePhysicalStages(T
         .Done().Ptr();
         // clang-format on
 
-        TVector<const TTypeAnnotationNode*> argsType;
-        for (const auto& arg : stageArgs) {
-            const TTypeAnnotationNode* argTypeAnn = arg->GetTypeAnn();
-            Y_ENSURE(argTypeAnn);
-            argsType.push_back(argTypeAnn);
-        }
-
-        newProgram = PeepHoleOptimize(newProgram, argsType);
+        newProgram = PeepHoleOptimize(newProgram, GetArgsType(newProgram), GetArgsConstraints(newProgram, ctx));
         Y_ENSURE(newProgram);
         // Collect program after peephole.
         programsMap[program.Raw()] = newProgram;
@@ -800,13 +793,31 @@ TVector<const TTypeAnnotationNode*> TPhysicalQueryBuilder::GetArgsType(TExprNode
     return argsTypes;
 }
 
-TExprNode::TPtr TPhysicalQueryBuilder::TypeAnnotateProgram(TExprNode::TPtr input, const TVector<const TTypeAnnotationNode*>& argsType) {
+TExprNode::TListType TPhysicalQueryBuilder::GetArgsConstraints(TExprNode::TPtr input, TExprContext& ctx) const {
+    Y_ENSURE(input->IsLambda());
+    auto lambda = TCoLambda(input);
+
+    TExprNode::TListType argConstraints;
+    argConstraints.reserve(lambda.Args().Size());
+    for (const auto& arg : lambda.Args()) {
+        argConstraints.push_back(ctx.NewAtom(
+            input->Pos(),
+            NYT::NodeToYsonString(arg.Ref().GetConstraintSet().ToYson(), NYson::EYsonFormat::Text),
+            TNodeFlags::MultilineContent
+        ));
+    }
+
+    return argConstraints;
+}
+
+TExprNode::TPtr TPhysicalQueryBuilder::TypeAnnotateProgram(TExprNode::TPtr input, const TVector<const TTypeAnnotationNode*>& argsType, TExprNode::TListType&& argsConstraints) {
     auto lambda = TCoLambda(input);
     auto& ctx = RBOCtx.ExprCtx;
     // clang-format off
     auto program = Build<TKqpProgram>(ctx, input->Pos())
         .Lambda(ctx.DeepCopyLambda(*input.Get()))
         .ArgsType(ExpandType(input->Pos(), *ctx.MakeType<TTupleExprType>(argsType), ctx))
+        .ArgsConstraints(ctx.NewList(input->Pos(), std::move(argsConstraints)))
     .Done().Ptr();
     // clang-format on
 
@@ -814,7 +825,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::TypeAnnotateProgram(TExprNode::TPtr input
     return TKqpProgram(program).Lambda().Ptr();
 }
 
-TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, const TVector<const TTypeAnnotationNode*>& argsType) const {
+TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, const TVector<const TTypeAnnotationNode*>& argsType, TExprNode::TListType&& argsConstraints) const {
     auto lambda = TCoLambda(input);
     auto& ctx = RBOCtx.ExprCtx;
 
@@ -823,6 +834,7 @@ TExprNode::TPtr TPhysicalQueryBuilder::PeepHoleOptimize(TExprNode::TPtr input, c
     auto program = Build<TKqpProgram>(ctx, input->Pos())
         .Lambda(ctx.DeepCopyLambda(*input.Get()))
         .ArgsType(ExpandType(input->Pos(), *ctx.MakeType<TTupleExprType>(argsType), ctx))
+        .ArgsConstraints(ctx.NewList(input->Pos(), std::move(argsConstraints)))
     .Done();
     // clang-format on
 

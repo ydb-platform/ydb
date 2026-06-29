@@ -126,6 +126,8 @@ public:
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
+    ui64 GetDDiskSessionSeqNo(size_t index) const;
+
     // IHostStateController implementation
     void SetHostState(
         THostIndex hostIndex,
@@ -159,16 +161,17 @@ private:
 
         EDDiskSessionState SessionState = EDDiskSessionState::NotLocked;
 
+        ui64 ConfirmedSessionSeqNo = 0;
+
         [[nodiscard]] const TFuture& GetFuture() const;
     };
 
     void DoEstablishConnections();
-    void DoEstablishConnection(
-        size_t index,
-        const TDDiskConnection& connection);
+    void DoEstablishConnection(size_t index, EConnectionType connectionType);
     void OnConnectionEstablished(
         EConnectionType connectionType,
         size_t index,
+        ui64 seqNo,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
 
     [[nodiscard]] bool HasPBufferQuorum() const;
@@ -224,6 +227,7 @@ private:
     const TExecutorPtr Executor;
     const TThreadChecker ExecutorThreadChecker{Executor};
     const ui64 TabletId;
+    const ui32 TabletGeneration;
     const size_t DirectBlockGroupIndex;
     const std::unique_ptr<NTransport::IStorageTransport> StorageTransport;
 

@@ -136,7 +136,7 @@ std::shared_ptr<TKikimrRunner> MakeKikimrRunner(
         NYql::NDq::CreateReadActorFactoryConfig(s3Config),
         nullptr,
         NYql::TPqGatewayConfig{},
-        options.PqGateway ? NYql::CreatePqFileGatewayFactory(options.PqGateway) : NKqp::MakePqGatewayFactory(driver),
+        options.PqGateway ? NYql::CreatePqFileGatewayFactory(options.PqGateway) : NKqp::MakePqGatewayFactory(driver, options.CredentialsFactory),
         nullptr,
         driver);
 

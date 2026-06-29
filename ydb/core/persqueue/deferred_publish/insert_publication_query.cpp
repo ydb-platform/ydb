@@ -117,7 +117,6 @@ NActors::IActor* CreateInsertPublicationQueryActor(
     const TMaybe<TString>& writerIdentity,
     const TString& createdBy)
 {
-    Y_UNUSED(replyTo);
     return new TInsertPublicationQuery(replyTo, database, extPublicationId, writerIdentity, createdBy);
 }
 

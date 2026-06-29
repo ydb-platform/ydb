@@ -51,6 +51,10 @@
 
 {% include notitle [Содержание](vectorsearch/_includes/toc-table.md) %}
 
+## Конвертация SQL-диалектов {#sql-translation}
+
+{% include notitle [Содержание](sql-translation/_includes/toc-table.md) %}
+
 ## Смотрите также
 
 * [{#T}](../reference/ydb-sdk/index.md)

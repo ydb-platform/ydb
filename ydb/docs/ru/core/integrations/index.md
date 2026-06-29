@@ -31,9 +31,17 @@
 
 {% include notitle [Содержание](ingestion/_includes/toc-table-streaming.md) %}
 
-## Миграции данных {#schema_migration}
+## Миграции данных {#data_migration}
+
+{% include notitle [Содержание](data-migration/_includes/toc-table.md) %}
+
+## Миграции схемы {#schema_migration}
 
 {% include notitle [Содержание](migration/_includes/toc-table.md) %}
+
+## Движки выполнения запросов {#query_engines}
+
+{% include notitle [Содержание](query-engines/_includes/toc-table.md) %}
 
 ## Объектно-реляционное отображение (ORM) {#orm}
 

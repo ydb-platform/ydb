@@ -3,7 +3,10 @@ items:
   href: fluent-bit.md
 - name: Logstash plugins
   href: logstash.md
+<<<<<<< HEAD
 - name: Importing from JDBC data sources
   href: import-jdbc.md
 - name: Apache Spark™
   href: spark.md
+=======
+>>>>>>> 33b897a6107 (DOCSUP-132181: [YDBDOCS-2325] Data ingestion и Data migration исправления меню. [Tech Doc] Рефакторинг  (#44060))

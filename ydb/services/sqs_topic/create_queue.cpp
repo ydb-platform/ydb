@@ -6,7 +6,6 @@
 #include "request.h"
 #include "utils.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/http_proxy/events.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/schema/schema.h>

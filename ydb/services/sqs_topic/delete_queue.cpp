@@ -4,7 +4,6 @@
 #include "error.h"
 #include "request.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/core/http_proxy/events.h>
 #include <ydb/core/persqueue/public/schema/schema.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
@@ -127,7 +126,7 @@ namespace NKikimr::NSqsTopic::V1 {
 
             const auto& pqGroup = topicInfo.Info->Description;
 
-            auto consumerConfig = GetConsumerConfig(pqGroup.GetPQTabletConfig(), QueueUrl_->Consumer);
+            auto consumerConfig = GetConsumerConfig(pqGroup.GetPQTabletConfig(), QueueUrl_->Consumer, ActorContext());
             if (!consumerConfig) {
                 return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE,
                     std::format("The specified queue doesn't exist (consumer: \"{}\")", QueueUrl_->Consumer.c_str())));

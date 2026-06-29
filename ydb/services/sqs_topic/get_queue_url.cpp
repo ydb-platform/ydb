@@ -6,7 +6,6 @@
 #include "request.h"
 #include "utils.h"
 
-#include <ydb/core/base/appdata.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
 #include <ydb/core/http_proxy/events.h>
@@ -121,7 +120,7 @@ namespace NKikimr::NSqsTopic::V1 {
             Y_ABORT_UNLESS(response.PQGroupInfo);
             PQGroup = response.PQGroupInfo->Description;
             SelfInfo = response.Self->Info;
-            ConsumerConfig = GetConsumerConfig(PQGroup.GetPQTabletConfig(), ConsumerName);
+            ConsumerConfig = GetConsumerConfig(PQGroup.GetPQTabletConfig(), ConsumerName, ActorContext());
             if (!ConsumerConfig) {
                 return ReplyWithError(MakeError(NKikimr::NSQS::NErrors::NON_EXISTENT_QUEUE, std::format("The specified queue doesn't exist (consumer: \"{}\")", ConsumerName.c_str())));
             }

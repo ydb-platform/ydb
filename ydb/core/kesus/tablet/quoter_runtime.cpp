@@ -29,11 +29,11 @@ public:
         auto* info = ev->Record.AddResourcesInfo();
         info->SetResourceId(resourceId);
         TEvKesus::FillError(info->MutableStateNotification(), status, reason);
-        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Dump #_Kesus->TabletID, actor, cookie, data",
-            {"tabletID", Kesus->TabletID()},
-            {"actor", Actor},
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TEvResourcesAllocated",
+            {"tabletId", Kesus->TabletID()},
+            {"actorId", Actor},
             {"cookie", 0},
-            {"data", ev->Record});
+            {"ev", ev->Record});
         Kesus->Send(Actor, std::move(ev));
     }
 

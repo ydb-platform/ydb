@@ -175,6 +175,7 @@ public:
 
     void ProcessTablet(TLeaderTabletInfo& tablet) {
         if (tablet.IsReadyToAssignGroups()) {
+            Self->UpdateCounterTabletsReassigning(+1);
             tablet.InitiateAssignTabletGroups();
         } else if (tablet.IsBootingSuppressed()) {
             // Tablet will never boot, so notify about creation right now

@@ -35,6 +35,9 @@ public:
             BLOG_D("THive::TTxReassignGroups(" << tablet->Id << "," << ChannelProfileNewGroup << ")::Execute");
             if (tablet->IsReadyToReassignTablet()) {
                 NIceDb::TNiceDb db(txc.DB);
+                if (!tablet->ChannelProfileNewGroup.any()) {
+                    Self->UpdateCounterTabletsReassigning(+1);
+                }
                 tablet->ChannelProfileNewGroup |= ChannelProfileNewGroup;
                 tablet->ActorsToNotify.push_back(Sender);
                 db.Table<Schema::Tablet>().Key(tablet->Id).Update(

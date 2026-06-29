@@ -912,7 +912,10 @@ public:
             for (const TTabletInfo& follower : it->second.Followers) {
                 ++tabletsTotal;
                 if (follower.IsLeader()) {
-                    follower.AsLeader();
+                    auto& leader =  follower.AsLeader();
+                    if (leader.ChannelProfileNewGroup.any()) {
+                        Self->UpdateCounterTabletsReassigning(+1);
+                    }
                 } else {
                     follower.AsFollower();
                 }

@@ -262,11 +262,6 @@ jobs:
       with:
         ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
         fetch-depth: 2
-    - name: Setup ydb access
-      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
-      with:
-        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-        ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
     - name: Build and test (PR-check)
       if: |
           (matrix.build_preset == 'release-asan') || 
@@ -288,6 +283,8 @@ jobs:
         test_size: ${{ matrix.test_size }}
         test_threads: ${{ matrix.threads_count }}
         put_build_results_to_cache: true
+        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+        ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
         secs: ${{ env.CI_SECS }}
         vars: ${{ env.CI_VARS }}
   postcommit_build_and_test:
@@ -312,11 +309,6 @@ jobs:
       uses: actions/checkout@v5
       with:
         fetch-depth: 2
-    - name: Setup ydb access
-      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
-      with:
-        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-        ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
     - name: Build and test (Postcommit)
       if: >-
         (matrix.build_preset == 'relwithdebinfo' && fromJSON(vars.CHECKS_SWITCH).postcommit_relwithdebinfo == true)
@@ -331,6 +323,8 @@ jobs:
         test_threads: 52
         put_build_results_to_cache: true
         analytics_job_name: ${{ matrix.analytics_job_name }}
+        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+        ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
         secs: ${{ env.CI_SECS }}
         vars: ${{ env.CI_VARS }}
   update_integrated_status:

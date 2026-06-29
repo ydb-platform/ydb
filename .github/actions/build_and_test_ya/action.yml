@@ -77,12 +77,29 @@ inputs:
     required: false
     default: ""
     description: "Override job_name in test_results and github_workflow in binary_size; default github.workflow"
+  ci_ydb_service_account_key_file_credentials:
+    type: string
+    required: false
+    default: ""
+    description: "YDB SA JSON for upload_tests_results / binary_size; runs setup when set"
+  ydb_qa_config:
+    type: string
+    required: false
+    default: ""
+    description: "YDB QA table paths JSON (vars.YDB_QA_CONFIG); runs setup when set"
 defaults:
   run:
     shell: bash
 runs:
   using: "composite"
   steps:
+    - name: Setup ydb access
+      if: inputs.ci_ydb_service_account_key_file_credentials != '' || inputs.ydb_qa_config != ''
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ inputs.ci_ydb_service_account_key_file_credentials }}
+        ydb_qa_config: ${{ inputs.ydb_qa_config }}
+
     - name: Prepare folder prefix
       id: prepare_prefix
       shell: bash

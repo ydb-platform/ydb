@@ -328,6 +328,17 @@ inline const TNbsDbgLikeFinishStats* GetNbsDbgLikeFinishStats(
     return std::get_if<TNbsDbgLikeFinishStats>(&*ev.WorkerStats);
 }
 
+// Non-const overload: allows std::move of the contained stats without
+// resorting to const_cast (TNbsDbgLikeFinishStats is move-only).
+inline TNbsDbgLikeFinishStats* GetNbsDbgLikeFinishStats(
+    TEvLoad::TEvLoadTestFinished& ev)
+{
+    if (!ev.WorkerStats) {
+        return nullptr;
+    }
+    return std::get_if<TNbsDbgLikeFinishStats>(&*ev.WorkerStats);
+}
+
 inline void SetNbsDbgLikeFinishStats(
     TEvLoad::TEvLoadTestFinished& ev,
     TNbsDbgLikeFinishStats stats)

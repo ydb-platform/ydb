@@ -1286,6 +1286,12 @@ private:
 
 // Reconstruct a TNbsDbgLikeFinishStats from the wire stats carried by a remote
 // child's TEvNodeFinishResponse (counters + serialized latency histograms).
+// Note: TNbsDbgLikeNodeStats does not carry full-run totals (WritesOkTotal,
+// WriteBytesTotal, ReadsIssuedTotal, ReadsOkTotal, ReadBytesTotal, RunningMs,
+// WritesIssued), so those fields remain 0 for remote children. This affects
+// only the per-actor diagnostic log and HTML summary, not the user-facing JSON
+// metrics (rps/latency percentiles) which are computed from the measurement-
+// window counters and histograms that are on the wire.
 TNbsDbgLikeFinishStats StatsFromNodeProto(
     const NKikimr::TEvNodeFinishResponse::TNbsDbgLikeNodeStats& ns)
 {
@@ -1377,9 +1383,12 @@ public:
             auto childCmd = Cmd;
             childCmd.ClearTargets();
             childCmd.SetNbsDbgLikeTabletId(child.TabletId);
-            const ui64 childTag = Tag * 1000 + i;
-            childCmd.SetTag(childTag);
-            childCmd.MutableWorkloadConfig()->SetTag(childTag);
+            // Use a cluster-unique child tag: encodes this coordinator's node id
+            // so two coordinators on different UI nodes never assign the same tag
+            // to children that end up on the same remote load service.
+            child.ChildTag = MakeChildTag(SelfId().NodeId(), Tag, i);
+            childCmd.SetTag(child.ChildTag);
+            childCmd.MutableWorkloadConfig()->SetTag(child.ChildTag);
 
             maxDurationSeconds = Max(maxDurationSeconds,
                 childCmd.GetWorkloadConfig().GetDurationSeconds());
@@ -1391,17 +1400,17 @@ public:
                     ? Counters->GetSubgroup("tablet", ToString(i))
                     : nullptr;
                 child.ActorId = Register(
-                    CreateNbsDbgLikeLoadActor(childCmd, SelfId(), childCounters, childTag));
+                    CreateNbsDbgLikeLoadActor(childCmd, SelfId(), childCounters, child.ChildTag));
                 LOG_D("Multi local child Tag# " << Tag
                     << " TabletId# " << child.TabletId
-                    << " ChildTag# " << childTag
+                    << " ChildTag# " << child.ChildTag
                     << " Actor# " << child.ActorId);
             } else {
                 child.Uuid = CreateGuidAsString();
                 auto req = std::make_unique<TEvLoad::TEvLoadTestRequest>();
                 auto& rec = req->Record;
                 *rec.MutableNbsDbgLikeLoad() = childCmd;
-                rec.SetTag(childTag);
+                rec.SetTag(child.ChildTag);
                 rec.SetUuid(child.Uuid);
                 rec.SetTimestamp(TInstant::Now().Seconds());
                 rec.SetCookie(child.NodeId);
@@ -1409,7 +1418,7 @@ public:
                 LOG_D("Multi remote child Tag# " << Tag
                     << " TabletId# " << child.TabletId
                     << " NodeId# " << child.NodeId
-                    << " ChildTag# " << childTag
+                    << " ChildTag# " << child.ChildTag
                     << " Uuid# " << child.Uuid);
             }
 
@@ -1427,10 +1436,22 @@ public:
         Become(&TNbsDbgLikeMultiLoadActor::StateWork);
     }
 
+    // Bit-pack coordinator's node id, coordinator tag, and child index into a
+    // cluster-unique child tag so two coordinators on different UI nodes never
+    // send the same child tag to a shared remote load service (which would trip
+    // its duplicate-tag guard and crash the remote node).
+    // Layout: node id (bits 44-63) | coordTag (bits 16-43) | index (bits 0-15).
+    static ui64 MakeChildTag(ui32 nodeId, ui64 coordTag, int i) {
+        return (ui64(nodeId) << 44)
+             | ((coordTag & 0xFFFFFFFULL) << 16)
+             | (ui64(i) & 0xFFFF);
+    }
+
 private:
     struct TChild {
         ui64 TabletId = 0;
         ui32 NodeId = 0;
+        ui64 ChildTag = 0;     // cluster-unique tag assigned to this child
         TActorId ActorId;      // set for local children
         TString Uuid;          // set for remote children
         bool Finished = false;
@@ -1453,8 +1474,8 @@ private:
             return;
         }
         child->ErrorReason = ev->Get()->ErrorReason;
-        if (const auto* s = GetNbsDbgLikeFinishStats(*ev->Get())) {
-            child->Stats = std::move(const_cast<TNbsDbgLikeFinishStats&>(*s));
+        if (auto* s = GetNbsDbgLikeFinishStats(*ev->Get())) {
+            child->Stats = std::move(*s);
             child->HasStats = true;
         }
         FinishChild(*child);
@@ -1488,12 +1509,14 @@ private:
         if (rec.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
             LOG_E("Multi remote rejected child Tag# " << Tag
                 << " Cookie# " << rec.GetCookie()
+                << " RejectedTag# " << rec.GetTag()
                 << " Reason# " << rec.GetErrorReason());
-            // Mark the matching unstarted remote child (by node id == cookie) as
-            // failed so the run can still complete.
-            const ui32 nodeId = static_cast<ui32>(rec.GetCookie());
+            // Match by the echoed child tag (the ack carries back rec.SetTag from
+            // the request). Matching by node id (cookie) would incorrectly mark
+            // only the first unfinished child when multiple tablets share a node.
+            const ui64 rejectedTag = rec.GetTag();
             for (auto& c : Children) {
-                if (!c.Finished && !c.Uuid.empty() && c.NodeId == nodeId && !c.HasStats) {
+                if (!c.Finished && !c.Uuid.empty() && c.ChildTag == rejectedTag && !c.HasStats) {
                     c.ErrorReason = rec.HasErrorReason()
                         ? rec.GetErrorReason()
                         : TString("remote node rejected run");
@@ -1520,11 +1543,13 @@ private:
                 auto req = std::make_unique<TEvLoad::TEvLoadTestRequest>();
                 auto& rec = req->Record;
                 // Stop.Tag selects the child load actor to kill on the remote
-                // node; the request's own Tag must be distinct from the child
+                // node. The request's own Tag must be distinct from the child
                 // tag (still in the remote's RequestSender map) to pass its
-                // duplicate-tag guard.
-                rec.MutableStop()->SetTag(Tag * 1000 + i);
-                rec.SetTag(Tag * 1000000 + i + 1);
+                // duplicate-tag guard; set the top bit so it never collides
+                // with any MakeChildTag value (which uses at most 64 bits with
+                // top bit clear since node ids fit in 20 bits in practice).
+                rec.MutableStop()->SetTag(c.ChildTag);
+                rec.SetTag(c.ChildTag | (1ULL << 63));
                 rec.SetUuid(CreateGuidAsString());
                 rec.SetTimestamp(TInstant::Now().Seconds());
                 Send(MakeLoadServiceID(c.NodeId), req.release());
@@ -1581,6 +1606,7 @@ private:
             Merged.ReadsPbBytes     = s.ReadsPbBytes;
             Merged.ReadsErr         = s.ReadsErr;
             Merged.ReadsDDiskOk     = s.ReadsDDiskOk;
+            Merged.ReadsDDiskBytes  = s.ReadsDDiskBytes;
             Merged.WritesOkTotal    = s.WritesOkTotal;
             Merged.WriteBytesTotal  = s.WriteBytesTotal;
             Merged.ReadsIssuedTotal = s.ReadsIssuedTotal;
@@ -1601,6 +1627,7 @@ private:
         Merged.ReadsPbBytes     += s.ReadsPbBytes;
         Merged.ReadsErr         += s.ReadsErr;
         Merged.ReadsDDiskOk     += s.ReadsDDiskOk;
+        Merged.ReadsDDiskBytes  += s.ReadsDDiskBytes;
         Merged.WritesOkTotal    += s.WritesOkTotal;
         Merged.WriteBytesTotal  += s.WriteBytesTotal;
         Merged.ReadsIssuedTotal += s.ReadsIssuedTotal;

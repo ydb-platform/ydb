@@ -47,8 +47,6 @@
 
 {% include [import-additional-params.md](./import-additional-params.md) %}
 
-Дополнительно для команды `import s3` доступна опция:
-
 `--list`: Перечислить объекты в существующей выгрузке.
 
 ## Выполнение загрузки {#exec}

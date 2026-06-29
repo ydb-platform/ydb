@@ -300,7 +300,7 @@ When creating a semaphore, you can specify its limit. The limit determines the m
 
 {% list tabs %}
 
-- С++
+- C++
 
     ```cpp
     session

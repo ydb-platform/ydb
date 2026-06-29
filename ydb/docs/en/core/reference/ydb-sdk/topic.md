@@ -1114,23 +1114,41 @@ Only connections with matching [producer and message group](../../concepts/topic
   - `flush()` - waits until all the messages previously written to the internal buffer are acknowledged.
   - `write_with_ack(...)` - sends a message and waits for the acknowledgement of its delivery from the server. This method is slow when you are sending multiple messages in a row.
 
-  ```python
-  # Put multiple messages to the internal buffer and then wait
-  # until all of them are delivered to the server.
-  for mess in messages:
-      writer.write(mess)
+  {% list tabs %}
 
-  writer.flush()
+  - Native SDK
 
-  # You can send multiple messages and wait for an acknowledgment for the entire group.
-  writer.write_with_ack(["mess-1", "mess-2"])
+    ```python
+    # Put multiple messages to the internal buffer and then wait
+    # until all of them are delivered to the server.
+    for mess in messages:
+        writer.write(mess)
 
-  # Waiting on sending each message: this method will return the result only after an
-  # acknowledgment from the server.
-  # This is the slowest message delivery option; use it when this mode is
-  # absolutely needed.
-  writer.write_with_ack("message")
-  ```
+    writer.flush()
+
+    # You can send multiple messages and wait for an acknowledgment for the entire group.
+    writer.write_with_ack(["mess-1", "mess-2"])
+
+    # Waiting on sending each message: this method will return the result only after an
+    # acknowledgment from the server.
+    # This is the slowest message delivery option; use it when this mode is
+    # absolutely needed.
+    writer.write_with_ack("message")
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    for mess in messages:
+        await writer.write(mess)
+
+    await writer.flush()
+
+    await writer.write_with_ack(["mess-1", "mess-2"])
+    await writer.write_with_ack("message")
+    ```
+
+  {% endlist %}
 
 - Java
 
@@ -1463,10 +1481,23 @@ All the metadata provided when writing a message is sent to a consumer with the 
 
   To write a message that includes metadata, create the `TopicWriterMessage` object with the `metadata_items` argument as shown below:
 
-  ```python
-  message = ydb.TopicWriterMessage(data=f"message-data", metadata_items={"meta-key": "meta-value"})
-  writer.write(message)
-  ```
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    message = ydb.TopicWriterMessage(data=f"message-data", metadata_items={"meta-key": "meta-value"})
+    writer.write(message)
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    message = ydb.TopicWriterMessage(data="message-data", metadata_items={"meta-key": "meta-value"})
+    await writer.write(message)
+    ```
+
+  {% endlist %}
 
   While reading, retrieve metadata from the `metadata_items` field of the `PublicMessage` object:
 
@@ -1792,9 +1823,21 @@ Topic can have several Consumers and for each of them server stores its own read
 
   To establish a connection to the existing `my-topic` topic using the added `my-consumer` consumer, use the following code:
 
-  ```python
-  reader = driver.topic_client.reader(topic="my-topic", consumer="my-consumer")
-  ```
+  {% list tabs %}
+
+  - Native SDK
+
+    ```python
+    reader = driver.topic_client.reader(topic="my-topic", consumer="my-consumer")
+    ```
+
+  - Native SDK (Asyncio)
+
+    ```python
+    reader = driver.topic_client.reader(topic="my-topic", consumer="my-consumer")
+    ```
+
+  {% endlist %}
 
 - Java
 
@@ -2678,6 +2721,20 @@ Instead of committing messages, the client application may track reading progres
   Also, `TReadSessionSettings` has a `ReadFromTimestamp` setting for reading only messages newer than the given timestamp. This setting is intended to skip some messages, not for precise reading start positioning. Several first-received messages may still have timestamps less than the specified one.
 
 - Go
+
+   {% note tip %}
+
+   In the default reader mode, offsets up to the position specified via `res.StartFrom` are committed to the server. After that, re-reading the same messages by moving the position back is no longer possible. To disable automatic commits, use the no-commit mode when creating the reader.
+
+   ```go
+   reader, err := db.Topic().StartReader(
+     consumerName,
+     topicoptions.ReadTopic(topicName),
+     topicoptions.WithReaderCommitMode(topicoptions.CommitModeNone),
+   )
+   ```
+
+   {% endnote %}
 
    ```go
    func ReadWithExplicitPartitionStartStopHandlerAndOwnReadProgressStorage(ctx context.Context, db ydb.Connection) error {

@@ -6,6 +6,35 @@ Below are examples of anonymous authentication in different {{ ydb-short-name }}
 
 {% list tabs %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    Anonymous authentication is the default.
+    You can enable it explicitly as follows:
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/types/credentials/credentials.h>
+
+    NYdb::TDriver CreateDriverAnonymous() {
+        auto config = NYdb::TDriverConfig("grpc://localhost:2136/local")
+            .SetCredentialsProviderFactory(NYdb::CreateInsecureCredentialsProviderFactory());
+
+        return NYdb::TDriver(config);
+    }
+    ```
+
+  - userver
+
+    If you don't set `credentials-provider` in the static config, don't specify `databases.*.credentials`, and don't put `token`, `iam_jwt_params`, or a `user`/`password` pair into secdist for this database, the driver uses the anonymous mode by default.
+
+    Initialization of `ydb::YdbComponent`, obtaining `ydb::TableClient`, and starting `components::MinimalServerComponentList` — as in the example from [init.md](./init.md).
+
+  {% endlist %}
+
 - Go
 
   {% list tabs %}
@@ -142,23 +171,16 @@ Below are examples of anonymous authentication in different {{ ydb-short-name }}
 
   {% endlist %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
-  using Ydb.Sdk.Auth;
+  using Ydb.Sdk.Ado;
 
-  const string endpoint = "grpc://localhost:2136";
-  const string database = "/local";
-
-  var config = new DriverConfig(
-      endpoint: endpoint,
-      database: database,
-      credentials: new AnonymousProvider()
-  );
-
-  await using var driver = await Driver.CreateInitialized(config);
+  await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
+  await using var connection = await dataSource.OpenConnectionAsync();
   ```
+
+  For Entity Framework and linq2db, use the same connection string.
 
 - Rust
 

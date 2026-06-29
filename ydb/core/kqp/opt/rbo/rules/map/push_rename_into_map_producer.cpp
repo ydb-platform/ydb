@@ -1,5 +1,4 @@
 #include <ydb/core/kqp/opt/rbo/rules/map/rename_common.h>
-#include <ydb/core/kqp/opt/rbo/rules/map/map_output_utils.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -25,25 +24,15 @@ bool TPushRenameIntoMapProducerRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
         !NMapRules::CanRenameOutput(map, candidate->From, candidate->To)) {
         return false;
     }
+    // Do not turn `from := to` into `to := to` inside the same map. The target
+    // name may be hidden there by another semantic rename.
     if (!outputElement->IsRename() &&
         outputElement->IsColumnAccess() &&
         outputElement->GetColumnAccess() == candidate->To) {
         return false;
     }
 
-    const auto outputElementIdx = outputElement - map->MapElements.data();
-    auto elements = map->MapElements;
-    elements[outputElementIdx].SetElementName(candidate->To);
-
-    auto output = BuildMapOutput(map, elements);
-    if (MakeInfoUnitSet(output).size() != output.size()) {
-        return false;
-    }
-    if (!NMapRules::CanFinishRenamePush(topMap, *candidate, output)) {
-        return false;
-    }
-
-    map->MapElements = std::move(elements);
+    outputElement->SetElementName(candidate->To);
     return NMapRules::FinishRenamePush(input, topMap, *candidate, ctx, props);
 }
 

@@ -1,5 +1,4 @@
 #include <ydb/core/kqp/opt/rbo/rules/map/rename_common.h>
-#include <ydb/core/kqp/opt/rbo/rules/map/map_output_utils.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -8,21 +7,6 @@ namespace {
 
 bool ProducesAggregateKey(const TIntrusivePtr<TOpAggregate>& aggregate, const TInfoUnit& iu) {
     return ContainsInfoUnit(aggregate->KeyColumns, iu);
-}
-
-TVector<TInfoUnit> BuildAggregateOutput(
-    const TVector<TInfoUnit>& keyColumns,
-    const TVector<TOpAggregationTraits>& traitsList,
-    bool distinctAll)
-{
-    TVector<TInfoUnit> output;
-    if (!distinctAll) {
-        output = keyColumns;
-    }
-    for (const auto& traits : traitsList) {
-        output.push_back(traits.ResultColName);
-    }
-    return output;
 }
 
 void RenameAggregate(
@@ -70,25 +54,14 @@ bool TPushRenameThroughAggregateKeyRule::MatchAndApply(TIntrusivePtr<IOperator>&
     }
 
     const auto oldInput = aggregate->GetInput();
+    if (!NMapRules::CanRenameOutput(oldInput, candidate->From, candidate->To)) {
+        return false;
+    }
+
     const TVector<TMapElement> pushedElements{NMapRules::MakeRenameElement(*candidate, topMap)};
-    const auto pushedOutput = BuildMapOutput(oldInput->GetOutputIUs(), pushedElements);
-    if (MakeInfoUnitSet(pushedOutput).size() != pushedOutput.size()) {
-        return false;
-    }
-
-    auto newKeys = aggregate->KeyColumns;
-    auto newTraits = aggregate->AggregationTraitsList;
-    RenameAggregate(newKeys, newTraits, candidate->From, candidate->To);
-    const auto output = BuildAggregateOutput(newKeys, newTraits, aggregate->IsDistinctAll());
-    if (MakeInfoUnitSet(output).size() != output.size() ||
-        !NMapRules::CanFinishRenamePush(topMap, *candidate, output)) {
-        return false;
-    }
-
     auto pushedMap = MakeIntrusive<TOpMap>(oldInput, topMap->Pos, pushedElements);
     aggregate->SetInput(pushedMap);
-    aggregate->KeyColumns = std::move(newKeys);
-    aggregate->AggregationTraitsList = std::move(newTraits);
+    RenameAggregate(aggregate->KeyColumns, aggregate->AggregationTraitsList, candidate->From, candidate->To);
     return NMapRules::FinishRenamePush(input, topMap, *candidate, ctx, props);
 }
 

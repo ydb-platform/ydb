@@ -1,25 +1,24 @@
 #include <ydb/core/kqp/opt/rbo/rules/map/rename_common.h>
-#include <ydb/core/kqp/opt/rbo/rules/map/map_output_utils.h>
 
 namespace NKikimr {
 namespace NKqp {
 namespace NMapRules {
 
 bool CanRenameOutput(const TIntrusivePtr<IOperator>& op, const TInfoUnit& from, const TInfoUnit& to) {
-    const auto output = op->GetOutputIUs();
-    return ContainsInfoUnit(output, from) && !ContainsInfoUnit(output, to);
+    const auto& output = op->GetOutputIUs();
+    size_t fromCount = 0;
+    for (const auto& iu : output) {
+        if (iu == to) {
+            return false;
+        }
+        if (iu == from) {
+            ++fromCount;
+        }
+    }
+    return fromCount == 1;
 }
 
 namespace {
-
-TVector<TInfoUnit> ReplaceOutputName(TVector<TInfoUnit> output, const TInfoUnit& from, const TInfoUnit& to) {
-    for (auto& iu : output) {
-        if (iu == from) {
-            iu = to;
-        }
-    }
-    return output;
-}
 
 bool CanRewriteResidualTopMap(const TIntrusivePtr<TOpMap>& topMap, size_t renameIdx, const TInfoUnit& from, const TInfoUnit& to) {
     for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
@@ -28,9 +27,7 @@ bool CanRewriteResidualTopMap(const TIntrusivePtr<TOpMap>& topMap, size_t rename
         }
 
         const auto& element = topMap->MapElements[idx];
-        if (element.GetElementName() == to) {
-            return false;
-        }
+        // A residual semantic rename from either name would hide the pushed output.
         if (element.IsRename() && (element.GetRename() == from || element.GetRename() == to)) {
             return false;
         }
@@ -39,63 +36,21 @@ bool CanRewriteResidualTopMap(const TIntrusivePtr<TOpMap>& topMap, size_t rename
     return true;
 }
 
-TVector<TInfoUnit> SimulateTopMapOutputAfterPush(const TIntrusivePtr<TOpMap>& topMap, size_t renameIdx, const TInfoUnit& from, const TInfoUnit& to) {
-    auto result = ReplaceOutputName(topMap->GetInput()->GetOutputIUs(), from, to);
-
-    TInfoUnitSet renameSources;
-    for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
-        if (idx == renameIdx) {
-            continue;
-        }
-
-        const auto& element = topMap->MapElements[idx];
-        if (element.IsRename()) {
-            AddInfoUnit(renameSources, element.GetRename());
-        }
-    }
-
-    if (!renameSources.empty()) {
-        TVector<TInfoUnit> kept;
-        kept.reserve(result.size());
-        for (const auto& iu : result) {
-            if (!renameSources.contains(iu)) {
-                kept.push_back(iu);
-            }
-        }
-        result = std::move(kept);
-    }
-
-    for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
-        if (idx != renameIdx) {
-            result.push_back(topMap->MapElements[idx].GetElementName());
-        }
-    }
-
-    return result;
-}
-
 TVector<TMapElement> BuildResidualTopMapElements(const TIntrusivePtr<TOpMap>& topMap, size_t renameIdx, const TInfoUnit& from, const TInfoUnit& to) {
     THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction> renameMap{{from, to}};
 
     TVector<TMapElement> residualElements;
     residualElements.reserve(topMap->MapElements.size() - 1);
     for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
-        if (idx != renameIdx) {
-            residualElements.push_back(topMap->MapElements[idx]);
+        if (idx == renameIdx) {
+            continue;
         }
-    }
 
-    for (auto& element : residualElements) {
-        if (element.IsRename()) {
-            auto from = element.GetRename();
-            if (const auto it = renameMap.find(from); it != renameMap.end()) {
-                from = it->second;
-            }
-            const auto expr = element.GetExpression();
-            element = TMapElement(element.GetElementName(), from, topMap->Pos, expr.Ctx, expr.PlanProps, true);
-        } else {
+        auto element = topMap->MapElements[idx];
+        if (!element.IsRename()) {
             element.SetExpression(element.GetExpression().ApplyRenames(renameMap));
         }
+        residualElements.push_back(std::move(element));
     }
 
     return residualElements;
@@ -150,32 +105,13 @@ std::optional<TRenameCandidate> FindRenameCandidate(const TIntrusivePtr<TOpMap>&
 }
 
 bool CanStartLocalRenamePush(const TIntrusivePtr<TOpMap>& topMap, const TRenameCandidate& candidate) {
-    if (!topMap->IsSingleConsumer() ||
-        !CanRewriteResidualTopMap(topMap, candidate.Index, candidate.From, candidate.To)) {
-        return false;
-    }
-
-    const auto output = SimulateTopMapOutputAfterPush(topMap, candidate.Index, candidate.From, candidate.To);
-    return MakeInfoUnitSet(output).size() == output.size();
+    return topMap->IsSingleConsumer() &&
+        CanRewriteResidualTopMap(topMap, candidate.Index, candidate.From, candidate.To);
 }
 
 TMapElement MakeRenameElement(const TRenameCandidate& candidate, const TIntrusivePtr<TOpMap>& topMap) {
     const auto expr = topMap->MapElements[candidate.Index].GetExpression();
     return TMapElement(candidate.To, candidate.From, topMap->Pos, expr.Ctx, expr.PlanProps, true);
-}
-
-bool CanFinishRenamePush(
-    const TIntrusivePtr<TOpMap>& topMap,
-    const TRenameCandidate& candidate,
-    const TVector<TInfoUnit>& pushedInputOutput)
-{
-    const auto residualElements = BuildResidualTopMapElements(topMap, candidate.Index, candidate.From, candidate.To);
-    if (residualElements.empty()) {
-        return MakeInfoUnitSet(pushedInputOutput).size() == pushedInputOutput.size();
-    }
-
-    const auto output = BuildMapOutput(pushedInputOutput, residualElements);
-    return MakeInfoUnitSet(output).size() == output.size();
 }
 
 bool FinishRenamePush(

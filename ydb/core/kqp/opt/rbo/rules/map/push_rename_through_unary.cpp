@@ -1,5 +1,4 @@
 #include <ydb/core/kqp/opt/rbo/rules/map/rename_common.h>
-#include <ydb/core/kqp/opt/rbo/rules/map/map_output_utils.h>
 
 namespace NKikimr {
 namespace NKqp {
@@ -21,17 +20,6 @@ bool IsTransparentUnary(const TIntrusivePtr<IOperator>& op, const TInfoUnit& fro
         default:
             return false;
     }
-}
-
-TVector<TInfoUnit> BuildUnaryOutput(const TIntrusivePtr<IUnaryOperator>& unary, const TVector<TInfoUnit>& inputOutput) {
-    if (unary->Kind != EOperator::AddDependencies) {
-        return inputOutput;
-    }
-
-    auto output = inputOutput;
-    const auto addDependencies = CastOperator<TOpAddDependencies>(unary);
-    output.insert(output.end(), addDependencies->Dependencies.begin(), addDependencies->Dependencies.end());
-    return output;
 }
 
 } // anonymous namespace
@@ -69,17 +57,6 @@ bool TPushRenameThroughTransparentUnaryRule::MatchAndApply(TIntrusivePtr<IOperat
 
     const auto oldInput = unary->GetInput();
     const TVector<TMapElement> pushedElements{NMapRules::MakeRenameElement(*candidate, topMap)};
-    const auto pushedOutput = BuildMapOutput(oldInput->GetOutputIUs(), pushedElements);
-    if (MakeInfoUnitSet(pushedOutput).size() != pushedOutput.size()) {
-        return false;
-    }
-
-    const auto output = BuildUnaryOutput(unary, pushedOutput);
-    if (MakeInfoUnitSet(output).size() != output.size() ||
-        !NMapRules::CanFinishRenamePush(topMap, *candidate, output)) {
-        return false;
-    }
-
     auto pushedMap = MakeIntrusive<TOpMap>(oldInput, topMap->Pos, pushedElements);
     unary->SetInput(pushedMap);
     unary->RenameIUs({{candidate->From, candidate->To}}, ctx.ExprCtx);

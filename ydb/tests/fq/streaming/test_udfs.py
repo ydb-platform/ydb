@@ -83,9 +83,9 @@ def get_all_cgi_params(url):
     @pytest.mark.parametrize("local_topics", [True, False])
     def test_precompute_recovery(self, kikimr_udfs, local_topics, entity_name):
         inp, out, endpoint = self.get_io_names(kikimr_udfs, "test_precompute_recovery", local_topics, entity_name)
-        path = "/Root/test_precompute_recovery_query"
+        path = f"/Root/{entity_name('test_precompute_recovery_query')}"
 
-        test_table = "test_table"
+        test_table = entity_name("test_table")
         kikimr_udfs.ydb_client.query(f"""
             CREATE TABLE `{test_table}` (
                 Key Uint64,
@@ -138,7 +138,7 @@ def get_all_cgi_params(url):
                 assert self.read_stream(1, topic_path=self.output_topic, endpoint=endpoint)[0] == f"test_data{suffix}"
 
         tests_count = 20
-        for i in range(20):
+        for i in range(tests_count):
             sql = f"""
                 CREATE OR REPLACE STREAMING QUERY `{path}` AS DO BEGIN
                     -- Revision {i}

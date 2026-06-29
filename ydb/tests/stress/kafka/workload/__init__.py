@@ -76,7 +76,8 @@ class Workload(unittest.TestCase):
 
         print("Running workload topic run")
         processes = [
-            subprocess.Popen([self.cli_path, "-e", self.endpoint, "-d", self.database, "workload", "topic", "run", "write", "--topic", self.test_topic_path, "-s", "10", "--message-rate", "100"], start_new_session=True)
+            subprocess.Popen([self.cli_path, "-e", self.endpoint, "-d", self.database, "workload", "topic", "run", "write",
+                             "--topic", self.test_topic_path, "-s", "10", "--message-rate", "100"], start_new_session=True)
         ]
         print("NumWorkers: ", self.num_workers)
         print("Bootstrap:", self.bootstrap, "Endpoint:", self.endpoint, "Database:", self.database)
@@ -89,7 +90,7 @@ class Workload(unittest.TestCase):
                 processes.append(subprocess.Popen([java_path, "-jar", jar_file_path, self.bootstrap,
                                                    f"streams-store-{i * self.num_workers + j}", self.test_topic_path,
                                                    targetTopicName, f"workload-consumer-{i}", use_transactions, use_idempotence],
-                                                   start_new_session=True))
+                                                  start_new_session=True))
         processes[0].wait()
         assert processes[0].returncode == 0
 
@@ -127,10 +128,10 @@ class Workload(unittest.TestCase):
                   "totalMessCountTarget = {totalMessCountTarget}")
             if i >= 1:
                 assert totalMessCountTest <= totalMessCountTarget, f"Source message count is greater than the target {self.target_topic_path}-{i} topic's message count:" + \
-                       f"{totalMessCountTest} and {totalMessCountTarget} respectively."
+                    f"{totalMessCountTest} and {totalMessCountTarget} respectively."
             else:
                 assert totalMessCountTest == totalMessCountTarget, f"Source and target {self.target_topic_path}-{i} topics total messages count are not equal:" + \
-                       f"{totalMessCountTest} and {totalMessCountTarget} respectively."
+                    f"{totalMessCountTest} and {totalMessCountTarget} respectively."
             print(f"Total num of messages: {totalMessCountTest}")
         return
 

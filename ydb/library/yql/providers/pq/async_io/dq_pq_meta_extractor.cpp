@@ -11,7 +11,7 @@ namespace {
 
 const std::unordered_map<TString, TPqMetaExtractorLambda> ExtractorsMap = {
     {
-        "create_time", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
+        "create_time", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message, const TString& /*cluster*/) {
             using TDataType = NUdf::TDataType<NUdf::TTimestamp>;
             return std::make_pair(
                 NUdf::TUnboxedValuePod(static_cast<TDataType::TLayout>(message.GetCreateTime().MicroSeconds())),
@@ -20,7 +20,7 @@ const std::unordered_map<TString, TPqMetaExtractorLambda> ExtractorsMap = {
         }
     },
     {
-        "write_time", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
+        "write_time", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message, const TString& /*cluster*/) {
             using TDataType = NUdf::TDataType<NUdf::TTimestamp>;
             return std::make_pair(
                 NUdf::TUnboxedValuePod(static_cast<TDataType::TLayout>(message.GetWriteTime().MicroSeconds())),
@@ -29,7 +29,7 @@ const std::unordered_map<TString, TPqMetaExtractorLambda> ExtractorsMap = {
         }
     },
     {
-        "partition_id", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
+        "partition_id", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message, const TString& /*cluster*/) {
             using TDataType = NUdf::TDataType<ui64>;
             return std::make_pair(
                 NUdf::TUnboxedValuePod(static_cast<TDataType::TLayout>(message.GetPartitionSession()->GetPartitionId())),
@@ -38,7 +38,7 @@ const std::unordered_map<TString, TPqMetaExtractorLambda> ExtractorsMap = {
         }
     },
     {
-        "offset", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
+        "offset", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message, const TString& /*cluster*/) {
             using TDataType = NUdf::TDataType<ui64>;
             return std::make_pair(
                 NUdf::TUnboxedValuePod(static_cast<TDataType::TLayout>(message.GetOffset())),
@@ -46,7 +46,7 @@ const std::unordered_map<TString, TPqMetaExtractorLambda> ExtractorsMap = {
         }
     },
     {
-        "message_group_id", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
+        "message_group_id", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message, const TString& /*cluster*/) {
             const auto& data = message.GetMessageGroupId();
             return std::make_pair(
                 NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(data.data(), data.size())),
@@ -55,7 +55,7 @@ const std::unordered_map<TString, TPqMetaExtractorLambda> ExtractorsMap = {
         }
     },
     {
-        "seq_no", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
+        "seq_no", [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message, const TString& /*cluster*/) {
             using TDataType = NUdf::TDataType<ui64>;
             return std::make_pair(
                 NUdf::TUnboxedValuePod(static_cast<TDataType::TLayout>(message.GetSeqNo())),
@@ -80,7 +80,7 @@ TPqMetaExtractorLambda CreatePqMetaExtractorLambda(
         NKikimr::NMiniKQL::TType* stringDataType = typeBuilder.NewDataType(NUdf::EDataSlot::String);
         NKikimr::NMiniKQL::TType* messageMetaDictType = typeBuilder.NewDictType(stringDataType, stringDataType, false);
         const auto* holderFactoryPtr = &holderFactory;
-        return [holderFactoryPtr, messageMetaDictType](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message) {
+        return [holderFactoryPtr, messageMetaDictType](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& message, const TString& /*cluster*/) {
             auto dictBuilder = holderFactoryPtr->NewDict(messageMetaDictType, 0);
             i64 usedSpace = 0;
             if (const auto& metaPtr = message.GetMessageMeta()) {
@@ -93,6 +93,15 @@ TPqMetaExtractorLambda CreatePqMetaExtractorLambda(
             }
             NUdf::TUnboxedValue dictValue = dictBuilder->Build();
             return std::make_pair(dictValue.Release(), usedSpace);
+        };
+    }
+
+    if (*key == "cluster") {
+        return [](const NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage& /*message*/, const TString& cluster) {
+            return std::make_pair(
+                NKikimr::NMiniKQL::MakeString(NUdf::TStringRef(cluster.data(), cluster.size())),
+                static_cast<i64>(cluster.size())
+            );
         };
     }
 

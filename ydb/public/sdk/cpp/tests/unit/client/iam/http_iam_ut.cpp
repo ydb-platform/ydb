@@ -56,7 +56,7 @@ TEST(IamCredentialsProvider, ServerError) {
     auto factory = CreateIamCredentialsProviderFactory(params);
     auto provider = factory->CreateProvider();
 
-    EXPECT_EQ(provider->GetAuthInfo(), "");
+    EXPECT_THROW(provider->GetAuthInfo(), yexception);
 }
 
 TEST(IamCredentialsProvider, ConcurrentAccess) {

@@ -1,6 +1,8 @@
 #include "load_actor_impl.h"
 #include "scheme.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT TEST_SHARD
+
 namespace NKikimr::NTestShard {
 
     class TLoadActor::TValidationActor : public TActorBootstrapped<TValidationActor> {
@@ -72,7 +74,9 @@ namespace NKikimr::NTestShard {
                 StateReadComplete = true;
             }
             IssueNextReadRangeQuery();
-            STLOG(PRI_INFO, TEST_SHARD, TS07, "starting read&validate", (TabletId, TabletId));
+            YDB_LOG_INFO("Starting read&validate",
+                {"marker", "TS07"},
+                {"tabletId", TabletId});
             Become(&TThis::StateFunc);
         }
 
@@ -87,7 +91,9 @@ namespace NKikimr::NTestShard {
             if (ev->Get()->Connected) {
                 IssueNextStateServerQuery();
             } else {
-                STLOG(PRI_ERROR, TEST_SHARD, TS05, "state server disconnected", (TabletId, TabletId));
+                YDB_LOG_ERROR("State server disconnected",
+                    {"marker", "TS05"},
+                    {"tabletId", TabletId});
                 TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
                 PassAway();
             }
@@ -153,8 +159,11 @@ namespace NKikimr::NTestShard {
             } else {
                 WaitedReadRangesViaEvResponse--;
                 if (r.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
-                    STLOG(PRI_ERROR, TEST_SHARD, TS17, "CmdRangeRead failed", (TabletId, TabletId), (Status, r.GetStatus()),
-                        (ErrorReason, r.GetErrorReason()));
+                    YDB_LOG_ERROR("CmdRangeRead failed",
+                        {"marker", "TS17"},
+                        {"tabletId", TabletId},
+                        {"status", r.GetStatus()},
+                        {"errorReason", r.GetErrorReason()});
                     return IssueNextReadRangeQuery();
                 }
                 Y_ABORT_UNLESS(r.ReadRangeResultSize() == 1);
@@ -169,7 +178,9 @@ namespace NKikimr::NTestShard {
                     KeysPending.push_back(key);
                 }
                 if (res.GetPair().empty()) {
-                    STLOG(PRI_INFO, TEST_SHARD, TS11, "finished reading from KeyValue tablet", (TabletId, TabletId));
+                    YDB_LOG_INFO("Finished reading from KeyValue tablet",
+                        {"marker", "TS11"},
+                        {"tabletId", TabletId});
                     KeyValueReadComplete = true;
                 } else {
                     IssueNextReadRangeQuery();
@@ -212,7 +223,10 @@ namespace NKikimr::NTestShard {
             const TString& key = PopQueryByCookie(cookie);
 
             if (outcome == EReadOutcome::IMMEDIATE_RETRY) {
-                STLOG(PRI_ERROR, TEST_SHARD, TS23, "read immediate retry", (TabletId, TabletId), (Message, message));
+                YDB_LOG_ERROR("Read immediate retry",
+                    {"marker", "TS23"},
+                    {"tabletId", TabletId},
+                    {"message", message});
                 KeysPending.push_back(key);
                 return;
             }
@@ -220,8 +234,11 @@ namespace NKikimr::NTestShard {
             if (outcome == EReadOutcome::RETRY && RetryCount < 32) {
                 const bool inserted = KeyReadsWaitingForRetry.insert(key).second;
                 Y_ABORT_UNLESS(inserted);
-                STLOG(PRI_ERROR, TEST_SHARD, TS24, "read key failed -- going to retry", (TabletId, TabletId),
-                    (Key, key), (Message, message));
+                YDB_LOG_ERROR("Read key failed -- going to retry",
+                    {"marker", "TS24"},
+                    {"tabletId", TabletId},
+                    {"key", key},
+                    {"message", message});
             } else {
                 Y_VERIFY_S(outcome == EReadOutcome::OK, "Message# " << message << " Key# " << key << " Outcome# "
                     << (int)outcome << " RetryCount# " << RetryCount);
@@ -236,7 +253,10 @@ namespace NKikimr::NTestShard {
                 Y_VERIFY_S(value == data, "TabletId# " << TabletId << " Key# " << key << " value mismatch"
                     << " value.size# " << value.size());
 
-                STLOG(PRI_DEBUG, TEST_SHARD, TS25, "read key", (TabletId, TabletId), (Key, key));
+                YDB_LOG_DEBUG("Read key",
+                    {"marker", "TS25"},
+                    {"tabletId", TabletId},
+                    {"key", key});
             }
         }
 
@@ -246,8 +266,11 @@ namespace NKikimr::NTestShard {
             const NKikimrKeyValue::Statuses::ReplyStatus status = record.status();
 
             if (status == NKikimrKeyValue::Statuses::RSTATUS_TIMEOUT) {
-                STLOG(PRI_ERROR, TEST_SHARD, TS19, "CmdRangeRead failed", (TabletId, TabletId), (Status, status),
-                    (ErrorReason, record.msg()));
+                YDB_LOG_ERROR("CmdRangeRead failed",
+                    {"marker", "TS19"},
+                    {"tabletId", TabletId},
+                    {"status", status},
+                    {"errorReason", record.msg()});
                 return IssueNextReadRangeQuery();
             }
 
@@ -262,7 +285,9 @@ namespace NKikimr::NTestShard {
                 KeysPending.push_back(key);
             }
             if (!record.pair_size()) {
-                STLOG(PRI_INFO, TEST_SHARD, TS20, "finished reading from KeyValue tablet", (TabletId, TabletId));
+                YDB_LOG_INFO("Finished reading from KeyValue tablet",
+                    {"marker", "TS20"},
+                    {"tabletId", TabletId});
                 KeyValueReadComplete = true;
             } else {
                 IssueNextReadRangeQuery();
@@ -318,7 +343,9 @@ namespace NKikimr::NTestShard {
         }
 
         void Handle(TEvStateServerReadResult::TPtr ev) {
-            STLOG(PRI_INFO, TEST_SHARD, TS13, "received TEvStateServerReadResult", (TabletId, TabletId));
+            YDB_LOG_INFO("Received TEvStateServerReadResult",
+                {"marker", "TS13"},
+                {"tabletId", TabletId});
             auto& r = ev->Get()->Record;
             switch (r.GetStatus()) {
                 case ::NTestShard::TStateServer::OK:
@@ -328,7 +355,9 @@ namespace NKikimr::NTestShard {
                     Y_FAIL_S("ERROR from StateServer TabletId# " << TabletId);
 
                 case ::NTestShard::TStateServer::RACE:
-                    STLOG(PRI_ERROR, TEST_SHARD, TS22, "received RACE in TEvStateServerReadResult", (TabletId, TabletId));
+                    YDB_LOG_ERROR("Received RACE in TEvStateServerReadResult",
+                        {"marker", "TS22"},
+                        {"tabletId", TabletId});
                     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
                     PassAway();
                     return;
@@ -338,13 +367,18 @@ namespace NKikimr::NTestShard {
             }
 
             if (!r.ItemsSize()) {
-                STLOG(PRI_INFO, TEST_SHARD, TS10, "finished reading from state server", (TabletId, TabletId));
+                YDB_LOG_INFO("Finished reading from state server",
+                    {"marker", "TS10"},
+                    {"tabletId", TabletId});
                 StateReadComplete = true;
                 FinishIfPossible();
             } else {
                 for (const auto& item : r.GetItems()) {
-                    STLOG(PRI_DEBUG, TEST_SHARD, TS21, "read state", (TabletId, TabletId), (Key, item.GetKey()),
-                        (State, item.GetState()));
+                    YDB_LOG_DEBUG("Read state",
+                        {"marker", "TS21"},
+                        {"tabletId", TabletId},
+                        {"key", item.GetKey()},
+                        {"state", item.GetState()});
                     const auto& [it, inserted] = State.try_emplace(item.GetKey(), item.GetState());
                     Y_ABORT_UNLESS(inserted);
                 }
@@ -373,7 +407,9 @@ namespace NKikimr::NTestShard {
                     StateValidated = true;
                 }
                 if (TransitionInFlight.empty()) {
-                    STLOG(PRI_INFO, TEST_SHARD, TS08, "finished read&validate", (TabletId, TabletId));
+                    YDB_LOG_INFO("Finished read&validate",
+                        {"marker", "TS08"},
+                        {"tabletId", TabletId});
                     for (auto& [key, info] : Keys) {
                         Y_ABORT_UNLESS(info.ConfirmedState == info.PendingState);
                         Y_ABORT_UNLESS(info.ConfirmedState == ::NTestShard::TStateServer::CONFIRMED);
@@ -486,7 +522,9 @@ namespace NKikimr::NTestShard {
                     Y_FAIL_S("ERROR from StateServer TabletId# " << TabletId);
 
                 case ::NTestShard::TStateServer::RACE:
-                    STLOG(PRI_ERROR, TEST_SHARD, TS32, "received RACE in TEvStateServerWriteResult", (TabletId, TabletId));
+                    YDB_LOG_ERROR("Received RACE in TEvStateServerWriteResult",
+                        {"marker", "TS32"},
+                        {"tabletId", TabletId});
                     TActivationContext::Send(new IEventHandle(TEvents::TSystem::Poison, 0, TabletActorId, SelfId(), nullptr, 0));
                     PassAway();
                     return;
@@ -674,7 +712,12 @@ namespace NKikimr::NTestShard {
             cmdRead->SetOffset(offset);
             cmdRead->SetSize(size);
             items.emplace_back(offset, size);
-            STLOG(PRI_INFO, TEST_SHARD, TS16, "reading key", (TabletId, TabletId), (Key, key), (Offset, offset), (Size, size));
+            YDB_LOG_INFO("Reading key",
+                {"marker", "TS16"},
+                {"tabletId", TabletId},
+                {"key", key},
+                {"offset", offset},
+                {"size", size});
         };
 
         if (len) {
@@ -736,8 +779,13 @@ namespace NKikimr::NTestShard {
             Y_ABORT_UNLESS(index < items.size());
             auto& [offset, size] = items[index++];
 
-            STLOG(PRI_INFO, TEST_SHARD, TS18, "read key", (TabletId, TabletId), (Key, key), (Offset, offset), (Size, size),
-                (Status, NKikimrProto::EReplyStatus_Name(result.GetStatus())));
+            YDB_LOG_INFO("Read key",
+                {"marker", "TS18"},
+                {"tabletId", TabletId},
+                {"key", key},
+                {"offset", offset},
+                {"size", size},
+                {"status", NKikimrProto::EReplyStatus_Name(result.GetStatus())});
 
             Y_ABORT_UNLESS(result.GetStatus() == NKikimrProto::OK || result.GetStatus() == NKikimrProto::ERROR ||
                 result.GetStatus() == NKikimrProto::OVERRUN);

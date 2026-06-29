@@ -105,6 +105,8 @@ public:
 
     void KillTopicPqrbTablet(const std::string& topicPath);
 
+    TIntrusivePtr<NMonitoring::TDynamicCounters> GetCounters(const TString& svc = "kqp", ui32 nodeIdx = 0);
+
     // External YDB recipe
 
     std::shared_ptr<NYdb::TDriver> GetExternalDriver();
@@ -220,6 +222,7 @@ protected:
     TTestLogSettings LogSettings;
     bool InternalInitFederatedQuerySetupFactory = false;
     TVector<TString> StoragePoolTypes;
+    bool NeedsStatsCollectors = false;
     NYdb::NQuery::TClientSettings QueryClientSettings = NYdb::NQuery::TClientSettings().AuthToken(BUILTIN_ACL_ROOT);
     NYdb::NTopic::TTopicClientSettings TopicClientSettings = NYdb::NTopic::TTopicClientSettings().AuthToken(BUILTIN_ACL_ROOT);
 

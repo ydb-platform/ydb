@@ -557,7 +557,9 @@ public:
 
         const auto srcTable = context.SS->ColumnTables.GetVerified(srcPath.Base()->PathId);
         {
-            auto tableInfo = context.SS->ColumnTables.BuildNew(dstPath.Base()->PathId, srcTable.GetPtr());
+            auto tableInfo = context.SS->ColumnTables.BuildNew(
+                dstPath.Base()->PathId,
+                std::make_shared<TColumnTableInfo>(*srcTable));
             tableInfo->AlterVersion += 1;
             tableInfo->IsReadOnly = true;
             context.SS->SetPartitioning(dstPath.Base()->PathId, tableInfo.GetPtr());

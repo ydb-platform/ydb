@@ -219,8 +219,6 @@ private:
 public:
     static constexpr ui32 DefaultPQTabletPartitionsCount = 1;
     static constexpr ui32 MaxPQTabletPartitionsCount = 1000;
-    static constexpr ui32 MaxPQGroupTabletsCount = 10*1000;
-    static constexpr ui32 MaxPQGroupPartitionsCount = 20*1000;
     static constexpr ui32 MaxPQWriteSpeedPerPartition = 50*1024*1024;
     static constexpr ui32 MaxPQLifetimeSeconds = 31 * 86400;
     static constexpr ui32 PublishChunkSize = 1000;
@@ -1928,6 +1926,7 @@ public:
 
         class TTxCreateSetColumnConstraint;
         struct TTxProgressSetColumnConstraint;
+        struct TTxGetSetColumnConstraint;
     };
 
     NTabletFlatExecutor::ITransaction* CreateTxCreate(TEvIndexBuilder::TEvCreateRequest::TPtr& ev);
@@ -1979,8 +1978,10 @@ public:
 
     // Begin SetColumnConstraint
     void Handle(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev, const TActorContext& ctx);
+    void Handle(TEvSetColumnConstraint::TEvGetRequest::TPtr& ev, const TActorContext& ctx);
     void Handle(TEvDataShard::TEvValidateRowConditionResponse::TPtr& ev, const TActorContext& ctx);
     NTabletFlatExecutor::ITransaction* CreateTxCreateSetColumnConstraint(TEvSetColumnConstraint::TEvCreateRequest::TPtr& ev);
+    NTabletFlatExecutor::ITransaction* CreateTxGetSetColumnConstraint(TEvSetColumnConstraint::TEvGetRequest::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxSetColumnConstraintProgress(TIndexBuildId id);
     NTabletFlatExecutor::ITransaction* CreateTxReplyAllocateSetColumnConstraint(TEvTxAllocatorClient::TEvAllocateResult::TPtr& ev);
     NTabletFlatExecutor::ITransaction* CreateTxReplyModifySetColumnConstraint(TEvSchemeShard::TEvModifySchemeTransactionResult::TPtr& ev);

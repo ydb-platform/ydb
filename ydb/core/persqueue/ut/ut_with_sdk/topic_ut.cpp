@@ -920,6 +920,93 @@ Y_UNIT_TEST_SUITE(WithSDK) {
         UNIT_ASSERT(session->Close(TDuration::Seconds(5)));
     }
 
+    Y_UNIT_TEST(KafkaCompressedBatchCommitUsesLogicalMessageCount) {
+        auto runTest = [&](bool commitDataEvent) {
+            auto serverSettings = TTopicSdkTestSetup::MakeServerSettings();
+            serverSettings.FeatureFlags.SetEnableTopicMessagesBatching(true);
+            serverSettings.FeatureFlags.SetEnableTopicWriteOffsetDeltaInKeys(true);
+
+            const TString testCaseName = TStringBuilder()
+                << TEST_CASE_NAME << (commitDataEvent ? "_DataEvent" : "_Message");
+            TTopicSdkTestSetup setup{testCaseName, serverSettings, false};
+            setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 1);
+
+            constexpr ui32 partitionId = 0;
+            constexpr ui64 logicalMessageCount = 3;
+
+            const ui64 tabletId = GetPQTabletId(setup, setup.GetFullTopicPath(), partitionId);
+            const auto edge = setup.GetRuntime().AllocateEdgeActor();
+            const TString ownerCookie = NPQ::CmdSetOwner(&setup.GetRuntime(), tabletId, edge, partitionId).first;
+
+            WriteKafkaBatch(
+                setup,
+                tabletId,
+                edge,
+                partitionId,
+                ownerCookie,
+                0,
+                "sourceid_kafka_batch_commit",
+                1,
+                {"value-0", "value-1", "value-2"},
+                0);
+
+            TTopicClient client(setup.MakeDriver());
+            TReadSessionSettings settings;
+            settings.ConsumerName(TEST_CONSUMER);
+            settings.AppendTopics(TTopicReadSettings().Path(TEST_TOPIC));
+            settings.Decompress(false);
+
+            auto session = client.CreateReadSession(settings);
+
+            bool dataCommitted = false;
+            bool commitAcknowledged = false;
+            const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
+            while ((!dataCommitted || !commitAcknowledged) && TInstant::Now() < deadline) {
+                UNIT_ASSERT_C(session->WaitEvent().Wait(TDuration::Seconds(5)),
+                    "Read session event timeout");
+                auto event = session->GetEvent(false);
+                UNIT_ASSERT(event.has_value());
+
+                if (auto* start = std::get_if<TStartPartitionEvent>(&*event)) {
+                    UNIT_ASSERT_VALUES_EQUAL(start->GetCommittedOffset(), 0u);
+                    start->Confirm();
+                    continue;
+                }
+                if (auto* stop = std::get_if<TStopPartitionEvent>(&*event)) {
+                    stop->Confirm();
+                    continue;
+                }
+                if (auto* commit = std::get_if<TCommitOffsetAcknowledgementEvent>(&*event)) {
+                    UNIT_ASSERT_VALUES_EQUAL(commit->GetCommittedOffset(), logicalMessageCount);
+                    commitAcknowledged = true;
+                    continue;
+                }
+                if (auto* data = std::get_if<TDataEvent>(&*event)) {
+                    UNIT_ASSERT(data->HasCompressedMessages());
+                    UNIT_ASSERT_VALUES_EQUAL(data->GetCompressedMessages().size(), 1u);
+
+                    auto& message = data->GetCompressedMessages().front();
+                    UNIT_ASSERT_VALUES_EQUAL(message.GetOffset(), 0u);
+                    UNIT_ASSERT_VALUES_EQUAL(message.GetLogicalMessageCount(), logicalMessageCount);
+
+                    if (commitDataEvent) {
+                        data->Commit();
+                    } else {
+                        message.Commit();
+                    }
+                    dataCommitted = true;
+                }
+            }
+
+            UNIT_ASSERT_C(dataCommitted, "Compressed batch was not read");
+            UNIT_ASSERT_C(commitAcknowledged, "Commit acknowledgement was not received");
+            UNIT_ASSERT(session->Close(TDuration::Seconds(5)));
+        };
+
+        runTest(false);
+        runTest(true);
+    }
+
     Y_UNIT_TEST(WithPartitionMaxInFlightBytesSetting_ManyPartitions) {
         TTopicSdkTestSetup setup = CreateSetup();
         setup.CreateTopic(TEST_TOPIC, TEST_CONSUMER, 3, 3);

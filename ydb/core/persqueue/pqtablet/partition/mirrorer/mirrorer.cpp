@@ -53,6 +53,10 @@ TBatchInfo GetBatchInfo(const TPersQueueReadEvent::TDataReceivedEvent::TCompress
     };
 }
 
+ui64 GetLogicalMessageCount(const TPersQueueReadEvent::TDataReceivedEvent::TCompressedMessage& message) {
+    return GetBatchInfo(message).LogicalMessageCount;
+}
+
 ui64 GetWriteRequestEndOffset(const NKikimrClient::TPersQueuePartitionRequest& request) {
     ui64 offset = request.GetCmdWriteOffset();
     for (const auto& cmd : request.GetCmdWrite()) {
@@ -241,7 +245,7 @@ void TMirrorer::ProcessWriteResponse(
         ui64 offset = writtenMessageInfo.GetOffset();
         PQ_ENSURE((ui64)result.GetOffset() == offset);
         PQ_ENSURE(EndOffset <= offset)("EndOffset", EndOffset)("offset", offset);
-        const ui64 logicalMessageCount = GetBatchInfo(writtenMessageInfo).LogicalMessageCount;
+        const ui64 logicalMessageCount = GetLogicalMessageCount(writtenMessageInfo);
         EndOffset = offset + logicalMessageCount;
         BytesInFlight -= writtenMessageInfo.GetData().size();
 
@@ -595,7 +599,7 @@ void TMirrorer::AddMessagesToQueue(std::vector<TPersQueueReadEvent::TDataReceive
         Counters.Cumulative()[COUNTER_PQ_TABLET_NETWORK_BYTES_USAGE].Increment(messageSize);
         BytesInFlight += messageSize;
 
-        OffsetToRead = offset + 1;
+        OffsetToRead = offset + GetLogicalMessageCount(msg);
         Queue.emplace_back(std::move(msg));
     }
 }

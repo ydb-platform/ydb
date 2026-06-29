@@ -6,6 +6,8 @@
 
 #include <library/cpp/testing/unittest/registar.h>
 
+#include <limits>
+
 namespace NKikimr::NKqp {
 
 using TDescriptionPromise = NThreading::TPromise<TEvDescribeSecretsResponse::TDescription>;
@@ -55,6 +57,33 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsServiceSlow) {
         for (int i = 0; i < SECRETS_CNT; ++i) {
             AssertSecretValue(secrets[i].second, promises[i]);
         }
+    }
+
+    Y_UNIT_TEST(SchemeShardRecoverAfterNotAvailableFails) {
+        TKikimrSettings settings;
+        auto schemeShardStatusGetter = MakeHolder<TTestSchemeShardStatusGetter>(
+            /* statusOverwriteRemainingCount */ std::numeric_limits<ui32>::max(),
+            NKikimrScheme::EStatus::StatusNotAvailable);
+        auto factory = std::make_shared<TTestDescribeSchemaSecretsServiceFactory>(
+            /* secretUpdateListener */ nullptr,
+            /* schemeCacheStatusGetter */ nullptr,
+            schemeShardStatusGetter.Get());
+        settings.SetDescribeSchemaSecretsServiceFactory(factory);
+        TKikimrRunner kikimr(settings);
+        kikimr.GetTestServer().GetRuntime()->GetAppData(0).FeatureFlags.SetEnableSchemaSecrets(true);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+
+        const TString secretName = "/Root/secret-name";
+        CreateSchemaSecret(secretName, "secret-value", session);
+
+        TDescribeSecretSettings describeSettings;
+        describeSettings.RetryPolicy = MakeShortRetryPolicy();
+        auto promise = ResolveSecret(secretName, kikimr, /* userToken */ nullptr, describeSettings);
+        AssertBadRequest(
+            promise,
+            "<main>: Error: Retry limit exceeded for secret `/Root/secret-name`\n",
+            Ydb::StatusIds::UNAVAILABLE);
     }
 }
 

@@ -37,6 +37,11 @@ items:
   include:
     mode: link
     path: kafka-api/toc_p.yaml
+- name: SQS API
+  href: sqs-api/index.md
+  include:
+    mode: link
+    path: sqs-api/toc_p.yaml
 - name: Конфигурация
   href: configuration/index.md
   include:

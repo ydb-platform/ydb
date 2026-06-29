@@ -1956,7 +1956,7 @@ public:
 
     void SetDisclosing() {
         ENSURE_NOT_DELETED
-        Y_ENSURE(Type() == TExprNode::List, "Must be list.");
+        Y_ABORT_UNLESS(Type() == TExprNode::List, "Must be list.");
         ShallBeDisclosed_ = true;
     }
 
@@ -1995,7 +1995,7 @@ public:
     void Ref() {
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
-        Y_ENSURE(RefCount_ < Max<ui32>());
+        Y_ABORT_UNLESS(RefCount_ < Max<ui32>());
         ++RefCount_;
     }
 
@@ -2045,70 +2045,70 @@ public:
 
     TExprNode* Child(ui32 index) const {
         ENSURE_NOT_DELETED
-        Y_ENSURE(index < Children_.size(), "index out of range");
+        Y_ABORT_UNLESS(index < Children_.size(), "index out of range");
         return Children_[index].Get();
     }
 
     TPtr ChildPtr(ui32 index) const {
         ENSURE_NOT_DELETED
-        Y_ENSURE(index < Children_.size(), "index out of range");
+        Y_ABORT_UNLESS(index < Children_.size(), "index out of range");
         return Children_[index];
     }
 
     TPtr& ChildRef(ui32 index) {
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
-        Y_ENSURE(index < Children_.size(), "index out of range");
+        Y_ABORT_UNLESS(index < Children_.size(), "index out of range");
         return Children_[index];
     }
 
     const TExprNode& Head() const {
         ENSURE_NOT_DELETED
-        Y_ENSURE(!Children_.empty(), "no children");
+        Y_ABORT_UNLESS(!Children_.empty(), "no children");
         return *Children_.front();
     }
 
     TExprNode& Head() {
         ENSURE_NOT_DELETED
-        Y_ENSURE(!Children_.empty(), "no children");
+        Y_ABORT_UNLESS(!Children_.empty(), "no children");
         return *Children_.front();
     }
 
     TPtr HeadPtr() const {
         ENSURE_NOT_DELETED
-        Y_ENSURE(!Children_.empty(), "no children");
+        Y_ABORT_UNLESS(!Children_.empty(), "no children");
         return Children_.front();
     }
 
     TPtr& HeadRef() {
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
-        Y_ENSURE(!Children_.empty(), "no children");
+        Y_ABORT_UNLESS(!Children_.empty(), "no children");
         return Children_.front();
     }
 
     const TExprNode& Tail() const {
         ENSURE_NOT_DELETED
-        Y_ENSURE(!Children_.empty(), "no children");
+        Y_ABORT_UNLESS(!Children_.empty(), "no children");
         return *Children_.back();
     }
 
     TExprNode& Tail() {
         ENSURE_NOT_DELETED
-        Y_ENSURE(!Children_.empty(), "no children");
+        Y_ABORT_UNLESS(!Children_.empty(), "no children");
         return *Children_.back();
     }
 
     TPtr TailPtr() const {
         ENSURE_NOT_DELETED
-        Y_ENSURE(!Children_.empty(), "no children");
+        Y_ABORT_UNLESS(!Children_.empty(), "no children");
         return Children_.back();
     }
 
     TPtr& TailRef() {
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
-        Y_ENSURE(!Children_.empty(), "no children");
+        Y_ABORT_UNLESS(!Children_.empty(), "no children");
         return Children_.back();
     }
 
@@ -2147,8 +2147,8 @@ public:
     void NormalizeAtomFlags(const TExprNode& otherAtom) {
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
-        Y_ENSURE(Type_ == Atom && otherAtom.Type_ == Atom, "Expected atoms");
-        Y_ENSURE((Flags_ & TNodeFlags::BinaryContent) ==
+        Y_ABORT_UNLESS(Type_ == Atom && otherAtom.Type_ == Atom, "Expected atoms");
+        Y_ABORT_UNLESS((Flags_ & TNodeFlags::BinaryContent) ==
                      (otherAtom.Flags_ & TNodeFlags::BinaryContent), "Mismatch binary atom flags");
         if (!(Flags_ & TNodeFlags::BinaryContent)) {
             Flags_ = Min(Flags_, otherAtom.Flags_);
@@ -2162,34 +2162,34 @@ public:
 
     const TConstraintNode* GetConstraint(TStringBuf name) const {
         ENSURE_NOT_DELETED
-        Y_ENSURE(static_cast<EState>(State_) >= EState::ConstrComplete);
+        Y_ABORT_UNLESS(static_cast<EState>(State_) >= EState::ConstrComplete);
         return Constraints_.GetConstraint(name);
     }
 
     template <class TConstraintType>
     const TConstraintType* GetConstraint() const {
         ENSURE_NOT_DELETED
-        Y_ENSURE(static_cast<EState>(State_) >= EState::ConstrComplete);
+        Y_ABORT_UNLESS(static_cast<EState>(State_) >= EState::ConstrComplete);
         return Constraints_.GetConstraint<TConstraintType>();
     }
 
     const TConstraintNode::TListType& GetAllConstraints() const {
         ENSURE_NOT_DELETED
-        Y_ENSURE(static_cast<EState>(State_) >= EState::ConstrComplete);
+        Y_ABORT_UNLESS(static_cast<EState>(State_) >= EState::ConstrComplete);
         return Constraints_.GetAllConstraints();
     }
 
     const TConstraintSet& GetConstraintSet() const {
         ENSURE_NOT_DELETED
-        Y_ENSURE(static_cast<EState>(State_) >= EState::ConstrComplete);
+        Y_ABORT_UNLESS(static_cast<EState>(State_) >= EState::ConstrComplete);
         return Constraints_;
     }
 
     void AddConstraint(const TConstraintNode* node) {
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
-        Y_ENSURE(static_cast<EState>(State_) >= EState::TypeComplete);
-        Y_ENSURE(static_cast<EState>(State_) < EState::ExecutionRequired);
+        Y_ABORT_UNLESS(static_cast<EState>(State_) >= EState::TypeComplete);
+        Y_ABORT_UNLESS(static_cast<EState>(State_) < EState::ExecutionRequired);
         Constraints_.AddConstraint(node);
         State_ = EState::ConstrComplete;
     }
@@ -2197,7 +2197,7 @@ public:
     void CopyConstraints(const TExprNode& node) {
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
-        Y_ENSURE(static_cast<EState>(State_) >= EState::TypeComplete);
+        Y_ABORT_UNLESS(static_cast<EState>(State_) >= EState::TypeComplete);
         Constraints_ = node.Constraints_;
         State_ = EState::ConstrComplete;
     }
@@ -2205,7 +2205,7 @@ public:
     void SetConstraints(const TConstraintSet& constraints) {
         ENSURE_NOT_DELETED
         ENSURE_NOT_FROZEN
-        Y_ENSURE(static_cast<EState>(State_) >= EState::TypeComplete);
+        Y_ABORT_UNLESS(static_cast<EState>(State_) >= EState::TypeComplete);
         Constraints_ = constraints;
         State_ = EState::ConstrComplete;
     }
@@ -2281,7 +2281,7 @@ public:
 
     TPtr ChangeChild(ui64 newUniqueId, ui32 index, TPtr&& child) const {
         ENSURE_NOT_DELETED
-        Y_ENSURE(index < Children_.size(), "index out of range");
+        Y_ABORT_UNLESS(index < Children_.size(), "index out of range");
         TListType newChildren(Children_);
         newChildren[index] = std::move(child);
         return Make(Position_, (EType)Type_, std::move(newChildren), Content(), Flags_, newUniqueId);
@@ -2446,11 +2446,11 @@ private:
     void VisitNodePtrs(TExprNode*& root);
 
     static TPtr Make(TPositionHandle position, EType type, TListType&& children, const TStringBuf& content, ui32 flags, ui64 uniqueId) {
-        Y_ENSURE(flags <= TNodeFlags::FlagsMask);
-        Y_ENSURE(children.size() <= Max<ui32>());
-        Y_ENSURE(content.size() <= Max<ui32>());
+        Y_ABORT_UNLESS(flags <= TNodeFlags::FlagsMask);
+        Y_ABORT_UNLESS(children.size() <= Max<ui32>());
+        Y_ABORT_UNLESS(content.size() <= Max<ui32>());
         for (size_t i = 0; i < children.size(); ++i) {
-            Y_ENSURE(children[i], "Unable to create node " << content << ": " << i << "th child is null");
+            Y_ABORT_UNLESS(children[i]);
         }
         return TPtr(new TExprNode(position, type, std::move(children), content.data(), ui32(content.size()), flags, uniqueId));
     }

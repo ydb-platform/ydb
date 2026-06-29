@@ -2042,8 +2042,8 @@ TStreamingConstraintNode::TStreamingConstraintNode(TExprContext& ctx, const NYT:
     try {
         YQL_ENSURE(serialized.IsList() && serialized.Size() == 2U, "Unexpected serialized content of " << Name() << " constraint");
         EventTime_ = TEventTimeDescriptor{
-            .Hash=FromString<ui64>(serialized[0].AsString()),
-            .Bindings={},
+            .Hash = FromString<ui64>(serialized[0].AsString()),
+            .Bindings = {},
         };
 
         YQL_ENSURE(serialized[1].IsList(), "Event time bindings should be a list");
@@ -2069,6 +2069,19 @@ bool TStreamingConstraintNode::Equals(const TConstraintNode& node) const {
     }
     const auto that = dynamic_cast<const TStreamingConstraintNode*>(&node);
     return that && this->GetEventTime() == that->GetEventTime();
+}
+
+bool TStreamingConstraintNode::Includes(const TConstraintNode& node) const {
+    const auto that = dynamic_cast<const TStreamingConstraintNode*>(&node);
+    if (!that) {
+        return false;
+    }
+
+    if (!that->GetEventTime().Defined()) {
+        return true;
+    }
+
+    return this->GetEventTime() == that->GetEventTime();
 }
 
 void TStreamingConstraintNode::TEventTimeDescriptor::Out(IOutputStream& out) const {
@@ -2156,8 +2169,8 @@ void TStreamingConstraintNode::FilterUncompleteReferences(TSetType& references) 
 
     const auto& eventTimeRef = *EventTime_;
     if (!AllOf(eventTimeRef.Bindings, [&references](const TPathType& path) {
-        return references.contains(path);
-    })) {
+            return references.contains(path);
+        })) {
         references.clear();
     }
 }
@@ -2189,7 +2202,7 @@ const TConstraintWithFieldsNode* TStreamingConstraintNode::DoRenameFields(TExprC
         }
         bindings.emplace_back(std::move(renamed.front()));
     }
-    return ctx.MakeConstraint<TStreamingConstraintNode>(TEventTimeDescriptor{.Hash=eventTimeRef.Hash, .Bindings=std::move(bindings)});
+    return ctx.MakeConstraint<TStreamingConstraintNode>(TEventTimeDescriptor{.Hash = eventTimeRef.Hash, .Bindings = std::move(bindings)});
 }
 
 const TConstraintWithFieldsNode* TStreamingConstraintNode::DoGetComplicatedForType(const TTypeAnnotationNode&, TExprContext&) const {

@@ -537,6 +537,7 @@ public:
     TSetType GetFullSet() const;
     void FilterUncompleteReferences(TSetType& references) const override;
     bool Equals(const TConstraintNode& node) const final;
+    bool Includes(const TConstraintNode& node) const final;
     void Out(IOutputStream& out) const override;
     void ToJson(NJson::TJsonWriter& out) const final;
     NYT::TNode ToYson() const final;

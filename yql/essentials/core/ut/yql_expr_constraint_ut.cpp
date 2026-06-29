@@ -3618,7 +3618,7 @@ Y_UNIT_TEST(HOP) {
     (let interval (Interval '1000000))
     (let map (lambda '(item) (AsStruct)))
     (let reduce (lambda '(lhs rhs) (AsStruct)))
-    (let streamingRow (AssumeConstraints (Iterator row) '"{\"Streaming\" = [\"13114689477735243722\"; [[\"time\"]]]}"))
+    (let streamingRow (AssumeConstraints (Iterator row) '"{\"Streaming\" = [\"4671346594719102766\"; [[\"time\"]]]}"))
     (let hopping (MultiHoppingCore streamingRow keySelector sortKeySelector interval interval interval 'true map reduce map map reduce (lambda '(key state time) (AsStruct '('_yql_time time) '('"data" (Nth key '"0")) '('group0 (Nth key '"1")))) '"0" '"_yql_time"))
     (return (ForwardList (FlatMap hopping (lambda '(row) (Just (AsStruct '('_yql_time (Member row '_yql_time)) '('"data" (Unpickle (NullType) (Member row '"data"))) '('group0 (Unpickle (ListType (DataType 'Int32)) (Member row 'group0)))))))))
 )))))
@@ -3632,7 +3632,7 @@ Y_UNIT_TEST(HOP) {
     const auto exprRoot = ParseAndAnnotate(s, exprCtx);
     CheckConstraint<TDistinctConstraintNode>(exprRoot, "MultiHoppingCore", "Distinct((data,group0))");
     CheckConstraint<TUniqueConstraintNode>(exprRoot, "MultiHoppingCore", "Unique((data,group0))");
-    CheckConstraint<TStreamingConstraintNode>(exprRoot, "MultiHoppingCore", "Streaming(4671346594719102766,(_yql_time))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "MultiHoppingCore", "Streaming");
 }
 
 Y_UNIT_TEST(HoppingWindow) {
@@ -3649,7 +3649,7 @@ Y_UNIT_TEST(HoppingWindow) {
     (let interval (Interval '1000000))
     (let map (lambda '(item) (AsStruct)))
     (let reduce (lambda '(lhs rhs) (AsStruct)))
-    (let streamingRow (AssumeConstraints (Iterator row) '"{\"Streaming\" = [\"13114689477735243722\"; [[\"time\"]]]}"))
+    (let streamingRow (AssumeConstraints (Iterator row) '"{\"Streaming\" = [\"4671346594719102766\"; [[\"time\"]]]}"))
     (let hopping (MultiHoppingCore streamingRow keySelector sortKeySelector interval interval interval 'true map reduce map map reduce (lambda '(key state time) (AsStruct '('_yql_time time) '('"data" (Nth key '"0")) '('group0 (Nth key '"1")))) '"0" 'group0))
     (return (ForwardList (FlatMap hopping (lambda '(row) (Just (AsStruct '('_yql_time (Member row '_yql_time)) '('"data" (Unpickle (NullType) (Member row '"data"))) '('group0 (Unpickle (ListType (DataType 'Int32)) (Member row 'group0)))))))))
 )))))
@@ -3718,7 +3718,7 @@ Y_UNIT_TEST(HoppingWindowCascade) {
 
     TExprContext exprCtx;
     const auto exprRoot = ParseAndAnnotate(s, exprCtx);
-    CheckConstraint<TStreamingConstraintNode>(exprRoot, "WatermarkGenerator", "Streaming(13114689477735243722,(time))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "WatermarkGenerator", "Streaming(4671346594719102766,(time))");
     CheckConstraints<TStreamingConstraintNode>(
         exprRoot,
         "MultiHoppingCore",
@@ -3727,6 +3727,130 @@ Y_UNIT_TEST(HoppingWindowCascade) {
         exprRoot,
         "Map",
         {"Streaming(4671346594719102766,(time))", "Streaming(4671346594719102766,(time))"});
+}
+
+Y_UNIT_TEST(HoppingWindowAfterTimestampCastProjection) {
+    const TStringBuf s = R"((
+        (let data (AsList
+            (AsStruct '('ts (String '2024-01-01T00:00:01Z)) '('value (String 'x)))
+            (AsStruct '('ts (String '2024-01-01T00:00:02Z)) '('value (String 'y)))
+        ))
+        (let streaming (AssumeConstraints data '"{\"Streaming\" = #}"))
+        (let timeSelector (lambda '(row) (SafeCast (Member row 'ts) (OptionalType (DataType 'Timestamp)))))
+        (let watermarked (WatermarkGenerator streaming timeSelector))
+        (let projected (Map watermarked (lambda '(row) (AsStruct
+            '('event_time (SafeCast (Member row 'ts) (OptionalType (DataType 'Timestamp))))
+            '('value (Member row 'value))
+        ))))
+
+        (let interval (Interval '1000000))
+        (let map (lambda '(item) (AsStruct)))
+        (let reduce (lambda '(lhs rhs) (AsStruct)))
+        (let keySelector (lambda '(row) (Uint32 '0)))
+        (let eventTimeSelector (lambda '(row) (Member row 'event_time)))
+        (let hopping (MultiHoppingCore (Iterator projected) keySelector eventTimeSelector interval interval interval 'true map reduce map map reduce
+            (lambda '(key state time) (AsStruct
+                '('group0 time)
+                '('value (String 'out))
+            ))
+            '"0" 'group0
+        ))
+
+        (let res (DataSink 'result))
+        (let world (Write! world res (Key) (ForwardList hopping) '()))
+        (return (Commit! world res))
+    ))";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "WatermarkGenerator", "Streaming(4671346594719102766,(ts))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Map", "Streaming(4671346594719102766,(event_time))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "MultiHoppingCore", "Streaming(4671346594719102766,(group0))");
+}
+
+Y_UNIT_TEST(HoppingWindowAfterExpandedStructCastProjection) {
+    const TStringBuf s = R"((
+        (let data (AsList
+            (AsStruct '('ts (String '2024-01-01T00:00:01Z)) '('value (String 'x)))
+            (AsStruct '('ts (String '2024-01-01T00:00:02Z)) '('value (String 'y)))
+        ))
+        (let streaming (AssumeConstraints data '"{\"Streaming\" = #}"))
+        (let timeSelector (lambda '(row) (SafeCast (Member row 'ts) (OptionalType (DataType 'Timestamp)))))
+        (let watermarked (WatermarkGenerator streaming timeSelector))
+        (let projected (Map watermarked (lambda '(row) (AsStruct
+            '('event_time (SafeCast (Member row 'ts) (OptionalType (DataType 'Timestamp))))
+            '('value (Member row 'value))
+        ))))
+
+        (let interval (Interval '1000000))
+        (let map (lambda '(item) (AsStruct)))
+        (let reduce (lambda '(lhs rhs) (AsStruct)))
+        (let keySelector (lambda '(row) (Uint32 '0)))
+        (let eventTimeSelector (lambda '(row) (Member
+            (AsStruct '('event_time (SafeCast (Member row 'event_time) (OptionalType (DataType 'Timestamp)))))
+            'event_time
+        )))
+        (let hopping (MultiHoppingCore (Iterator projected) keySelector eventTimeSelector interval interval interval 'true map reduce map map reduce
+            (lambda '(key state time) (AsStruct
+                '('group0 time)
+                '('value (String 'out))
+            ))
+            '"0" 'group0
+        ))
+
+        (let res (DataSink 'result))
+        (let world (Write! world res (Key) (ForwardList hopping) '()))
+        (return (Commit! world res))
+    ))";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "WatermarkGenerator", "Streaming(4671346594719102766,(ts))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "Map", "Streaming(4671346594719102766,(event_time))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "MultiHoppingCore", "Streaming(4671346594719102766,(group0))");
+}
+
+Y_UNIT_TEST(HoppingWindowAfterTimestampCastOptionalProjection) {
+    const TStringBuf s = R"((
+        (let data (AsList
+            (AsStruct '('pass (Just (Uint64 '1))) '('ts (String '2024-01-01T00:00:01Z)) '('value (String 'x)))
+            (AsStruct '('pass (Just (Uint64 '1))) '('ts (String '2024-01-01T00:00:02Z)) '('value (String 'y)))
+        ))
+        (let streaming (AssumeConstraints data '"{\"Streaming\" = #}"))
+        (let timeSelector (lambda '(row) (SafeCast (Member row 'ts) (OptionalType (DataType 'Timestamp)))))
+        (let watermarked (WatermarkGenerator streaming timeSelector))
+        (let extracted (ExtractMembers watermarked '('pass 'ts)))
+        (let projected (FlatMap extracted (lambda '(row) (block '(
+            (let ts (Member row 'ts))
+            (return (OptionalIf (Coalesce (> (Member row 'pass) (Uint64 '0)) (Bool 'false)) (AsStruct
+                '('event_time (SafeCast ts (OptionalType (DataType 'Timestamp))))
+                '('ts ts)
+            )))
+        )))))
+
+        (let interval (Interval '1000000))
+        (let map (lambda '(item) (AsStruct)))
+        (let reduce (lambda '(lhs rhs) (AsStruct)))
+        (let keySelector (lambda '(row) (Uint32 '0)))
+        (let eventTimeSelector (lambda '(row) (Member row 'event_time)))
+        (let hopping (MultiHoppingCore (Iterator projected) keySelector eventTimeSelector interval interval interval 'true map reduce map map reduce
+            (lambda '(key state time) (AsStruct
+                '('group0 time)
+                '('value (String 'out))
+            ))
+            '"0" 'group0
+        ))
+
+        (let res (DataSink 'result))
+        (let world (Write! world res (Key) (ForwardList hopping) '()))
+        (return (Commit! world res))
+    ))";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "WatermarkGenerator", "Streaming(4671346594719102766,(ts))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "FlatMap", "Streaming(4671346594719102766,(event_time))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "MultiHoppingCore", "Streaming(4671346594719102766,(group0))");
 }
 
 Y_UNIT_TEST(EmptyHoppingWindow) {
@@ -3741,7 +3865,7 @@ Y_UNIT_TEST(EmptyHoppingWindow) {
     (let interval (Interval '1000000))
     (let map (lambda '(item) (AsStruct)))
     (let reduce (lambda '(lhs rhs) (AsStruct)))
-    (let streamingRow (AssumeConstraints (Iterator row) '"{\"Streaming\" = [\"13114689477735243722\"; [[\"time\"]]]}"))
+    (let streamingRow (AssumeConstraints (Iterator row) '"{\"Streaming\" = [\"4671346594719102766\"; [[\"time\"]]]}"))
     (let hopping (MultiHoppingCore streamingRow keySelector sortKeySelector interval interval interval 'true map reduce map map reduce (lambda '(key state time) (AsStruct '('_yql_time time) '('"data" (Nth key '"0")) '('group0 (Nth key '"1")))) '"0" '"_yql_time"))
     (return (ForwardList (FlatMap hopping (lambda '(row) (Just (AsStruct '('_yql_time (Member row '_yql_time)) '('"data" (Unpickle (NullType) (Member row '"data"))) '('group0 (Unpickle (ListType (DataType 'Int32)) (Member row 'group0)))))))))
 )))))
@@ -3765,7 +3889,7 @@ Y_UNIT_TEST(HoppingWindowNegative) {
             (let interval (Interval '1000000))
             (let map (lambda '(item) (AsStruct)))
             (let reduce (lambda '(lhs rhs) (AsStruct)))
-            (let hopping (MultiHoppingCore (Iterator streaming) keySelector timeSelector interval interval interval 'true map reduce map map reduce (lambda '(key state time) (AsStruct '('_yql_time time))) '"0" '"_yql_time"))
+            (let hopping (MultiHoppingCore (Iterator streaming) keySelector timeSelector interval interval interval 'true map reduce map map reduce (lambda '(key state time) (AsStruct '('group0 time))) '"0" 'group0))
             (let res (DataSink 'result))
             (let world (Write! world res (Key) (ForwardList hopping) '()))
             (return (Commit! world res))
@@ -3785,7 +3909,27 @@ Y_UNIT_TEST(HoppingWindowNegative) {
             (let interval (Interval '1000000))
             (let map (lambda '(item) (AsStruct)))
             (let reduce (lambda '(lhs rhs) (AsStruct)))
-            (let hopping (MultiHoppingCore (Iterator watermarked) keySelector timeSelector interval interval interval 'true map reduce map map reduce (lambda '(key state time) (AsStruct '('_yql_time time))) '"0" '"_yql_time"))
+            (let hopping (MultiHoppingCore (Iterator watermarked) keySelector timeSelector interval interval interval 'true map reduce map map reduce (lambda '(key state time) (AsStruct '('group0 time))) '"0" 'group0))
+            (let res (DataSink 'result))
+            (let world (Write! world res (Key) (ForwardList hopping) '()))
+            (return (Commit! world res))
+        ))";
+
+        TExprContext exprCtx;
+        ParseAndAnnotate(s, exprCtx, {.ExpectedError = "HoppingWindow time extractor does not match assigned event time"});
+    }
+
+    {
+        const TStringBuf s = R"((
+            (let data (AsList (AsStruct '('ts (String '2024-01-01T00:00:01Z)) '('value (String '2024-01-01T00:00:02Z)))))
+            (let streaming (AssumeConstraints data '"{\"Streaming\" = #}"))
+            (let watermarked (WatermarkGenerator streaming (lambda '(row) (SafeCast (Member row 'ts) (OptionalType (DataType 'Timestamp))))))
+            (let keySelector (lambda '(row) '((Member row 'ts))))
+            (let timeSelector (lambda '(row) (SafeCast (Member row 'value) (OptionalType (DataType 'Timestamp)))))
+            (let interval (Interval '1000000))
+            (let map (lambda '(item) (AsStruct)))
+            (let reduce (lambda '(lhs rhs) (AsStruct)))
+            (let hopping (MultiHoppingCore (Iterator watermarked) keySelector timeSelector interval interval interval 'true map reduce map map reduce (lambda '(key state time) (AsStruct '('group0 time))) '"0" 'group0))
             (let res (DataSink 'result))
             (let world (Write! world res (Key) (ForwardList hopping) '()))
             (return (Commit! world res))
@@ -4429,6 +4573,11 @@ Y_UNIT_TEST(StreamingConstraintEventTimeProjection) {
              {
                  "(let projected (Map watermarked (lambda '(row) (AsStruct '('ts (SafeCast (Member row 'ts) (OptionalType (DataType 'Timestamp))))))))",
                  "Map",
+                 "Streaming(3961604860353241876,(ts))",
+             },
+             {
+                 "(let projected (Map watermarked (lambda '(row) (AsStruct '('ts (ToString (Member row 'ts)))))))",
+                 "Map",
                  "Streaming",
              },
              {
@@ -4491,6 +4640,47 @@ Y_UNIT_TEST(StreamingConstraintEventTimeProjection) {
         const auto exprRoot = ParseAndAnnotate(s, exprCtx);
         CheckConstraint<TStreamingConstraintNode>(exprRoot, callable, constraint);
     };
+}
+
+Y_UNIT_TEST(StreamingConstraintEventTimeWideCastProjection) {
+    const TStringBuf s = R"((
+        (let data (AsList (AsStruct '('ts (String '2024-01-01T00:00:01Z)) '('value (String 'x)))))
+        (let streaming (AssumeConstraints data '"{\"Streaming\" = #}"))
+        (let watermarked (WatermarkGenerator streaming (lambda '(row) (SafeCast (Member row 'ts) (OptionalType (DataType 'Timestamp))))))
+        (let expanded (ExpandMap (ToFlow watermarked) (lambda '(row) (Member row 'ts) (Member row 'value))))
+        (let projectedWide (WideMap expanded (lambda '(ts value) (SafeCast ts (OptionalType (DataType 'Timestamp))) ts)))
+        (let narrowed (NarrowMap projectedWide (lambda '(event_time ts) (AsStruct '('event_time event_time) '('ts ts)))))
+        (let projected (Collect narrowed))
+
+        (let res (DataSink 'result))
+        (let world (Write! world res (Key) projected '()))
+        (return (Commit! world res))
+    ))";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "WatermarkGenerator", "Streaming(4671346594719102766,(ts))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "WideMap", "Streaming(4671346594719102766,(0))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "NarrowMap", "Streaming(4671346594719102766,(event_time))");
+}
+
+Y_UNIT_TEST(StreamingConstraintEventTimeFlatMapPreservesRawTime) {
+    const TStringBuf s = R"((
+        (let data (AsList (AsStruct '('time (Uint64 '1)) '('level (String 'error)))))
+        (let streaming (AssumeConstraints data '"{\"Streaming\" = #}"))
+        (let watermarked (WatermarkGenerator streaming (lambda '(row) (SafeCast (Member row 'time) (OptionalType (DataType 'Timestamp))))))
+        (let filtered (FlatMap watermarked (lambda '(row) (OptionalIf (== (Member row 'level) (String 'error)) row))))
+        (let projected (Collect filtered))
+
+        (let res (DataSink 'result))
+        (let world (Write! world res (Key) projected '()))
+        (return (Commit! world res))
+    ))";
+
+    TExprContext exprCtx;
+    const auto exprRoot = ParseAndAnnotate(s, exprCtx);
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "WatermarkGenerator", "Streaming(4671346594719102766,(time))");
+    CheckConstraint<TStreamingConstraintNode>(exprRoot, "FlatMap", "Streaming(4671346594719102766,(time))");
 }
 
 } // Y_UNIT_TEST_SUITE(TYqlExprConstraints)

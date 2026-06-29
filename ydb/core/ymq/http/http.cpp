@@ -471,6 +471,7 @@ void THttpRequest::ParseRequest(THttpInput& input) {
     case EAction::NAME: {                                                        \
         Y_CAT(Setup, NAME)(requestHolder->Y_CAT(Mutable, NAME)());               \
         CopyCredentials(requestHolder->Y_CAT(Mutable, NAME)(), Parent_->Config); \
+        SetupAuth(requestHolder->Y_CAT(Mutable, NAME)());                        \
         break;                                                                   \
     }
 
@@ -485,6 +486,7 @@ void THttpRequest::ParseRequest(THttpInput& input) {
         }                                                                        \
         Y_CAT(SetupPrivate, NAME)(requestHolder->Y_CAT(Mutable, NAME)());        \
         CopyCredentials(requestHolder->Y_CAT(Mutable, NAME)(), Parent_->Config); \
+        SetupAuth(requestHolder->Y_CAT(Mutable, NAME)());                        \
         break;                                                                   \
     }
 
@@ -582,7 +584,8 @@ bool THttpRequest::SetupRequest() {
         .Counters = Parent_->CloudAuthCounters_.Get(),
         .AWSSignature = std::move(AwsSignature_),
         .IAMToken = IamToken_,
-        .FolderID = FolderId_
+        .FolderID = FolderId_,
+        .SourceAddress = SourceAddress_,
     };
 
     AppData(Parent_->ActorSystem_)->SqsAuthFactory->RegisterAuthActor(
@@ -594,7 +597,6 @@ bool THttpRequest::SetupRequest() {
 
 void THttpRequest::SetupChangeMessageVisibility(TChangeMessageVisibilityRequest* const req) {
     req->SetQueueName(QueueName_);
-    req->MutableAuth()->SetUserName(UserName_);
 
     if (QueryParams_.ReceiptHandle) {
         req->SetReceiptHandle(CGIEscapeRet(*QueryParams_.ReceiptHandle));
@@ -605,7 +607,6 @@ void THttpRequest::SetupChangeMessageVisibility(TChangeMessageVisibilityRequest*
 }
 
 void THttpRequest::SetupChangeMessageVisibilityBatch(TChangeMessageVisibilityBatchRequest* const req) {
-    req->MutableAuth()->SetUserName(UserName_);
     req->SetQueueName(QueueName_);
 
     for (const auto& item : QueryParams_.BatchEntries) {
@@ -626,8 +627,6 @@ void THttpRequest::SetupChangeMessageVisibilityBatch(TChangeMessageVisibilityBat
 
 void THttpRequest::SetupCreateQueue(TCreateQueueRequest* const req) {
     req->SetQueueName(QueueName_);
-    req->MutableAuth()->SetUserName(UserName_);
-    req->SetSourceAddress(SourceAddress_);
 
     if (QueryParams_.CreateTimestampSeconds) {
         req->SetCreatedTimestamp(QueryParams_.CreateTimestampSeconds.GetRef());
@@ -650,8 +649,6 @@ void THttpRequest::SetupCreateQueue(TCreateQueueRequest* const req) {
 }
 
 void THttpRequest::SetupCreateUser(TCreateUserRequest* const req) {
-    req->MutableAuth()->SetUserName(UserName_);
-
     if (QueryParams_.UserName) {
         req->SetUserName(*QueryParams_.UserName);
     }
@@ -659,7 +656,6 @@ void THttpRequest::SetupCreateUser(TCreateUserRequest* const req) {
 
 void THttpRequest::SetupDeleteMessage(TDeleteMessageRequest* const req) {
     req->SetQueueName(QueueName_);
-    req->MutableAuth()->SetUserName(UserName_);
 
     if (QueryParams_.ReceiptHandle) {
         req->SetReceiptHandle(CGIEscapeRet(*QueryParams_.ReceiptHandle));
@@ -667,7 +663,6 @@ void THttpRequest::SetupDeleteMessage(TDeleteMessageRequest* const req) {
 }
 
 void THttpRequest::SetupDeleteMessageBatch(TDeleteMessageBatchRequest* const req) {
-    req->MutableAuth()->SetUserName(UserName_);
     req->SetQueueName(QueueName_);
 
     for (const auto& item : QueryParams_.BatchEntries) {
@@ -685,8 +680,6 @@ void THttpRequest::SetupDeleteMessageBatch(TDeleteMessageBatchRequest* const req
 
 void THttpRequest::SetupDeleteQueue(TDeleteQueueRequest* const req) {
     req->SetQueueName(QueueName_);
-    req->SetSourceAddress(SourceAddress_);
-    req->MutableAuth()->SetUserName(UserName_);
 }
 
 void THttpRequest::SetupListPermissions(TListPermissionsRequest* const req) {
@@ -697,7 +690,6 @@ void THttpRequest::SetupListPermissions(TListPermissionsRequest* const req) {
 
 void THttpRequest::SetupListDeadLetterSourceQueues(TListDeadLetterSourceQueuesRequest* const req) {
     req->SetQueueName(QueueName_);
-    req->MutableAuth()->SetUserName(UserName_);
 }
 
 void THttpRequest::SetupPrivateDeleteQueueBatch(TDeleteQueueBatchRequest* const req) {
@@ -711,11 +703,9 @@ void THttpRequest::SetupPrivateDeleteQueueBatch(TDeleteQueueBatchRequest* const 
             protoEntry->SetQueueName(ExtractQueueNameFromPath(GetPathAndQuery(*params.QueueUrl)));
         }
     }
-    req->MutableAuth()->SetUserName(UserName_);
 }
 
-void THttpRequest::SetupPrivateCountQueues(TCountQueuesRequest* const req) {
-    req->MutableAuth()->SetUserName(UserName_);
+void THttpRequest::SetupPrivateCountQueues(TCountQueuesRequest* const /* req */) {
 }
 
 void THttpRequest::SetupPrivatePurgeQueueBatch(TPurgeQueueBatchRequest* const req) {
@@ -729,7 +719,6 @@ void THttpRequest::SetupPrivatePurgeQueueBatch(TPurgeQueueBatchRequest* const re
             protoEntry->SetQueueName(ExtractQueueNameFromPath(GetPathAndQuery(*params.QueueUrl)));
         }
     }
-    req->MutableAuth()->SetUserName(UserName_);
 }
 
 void THttpRequest::SetupPrivateGetQueueAttributesBatch(TGetQueueAttributesBatchRequest* const req) {
@@ -746,14 +735,9 @@ void THttpRequest::SetupPrivateGetQueueAttributesBatch(TGetQueueAttributesBatchR
     for (const auto& name : QueryParams_.AttributeNames) {
         req->AddNames(name.second);
     }
-    req->MutableAuth()->SetUserName(UserName_);
 }
 
 void THttpRequest::SetupDeleteUser(TDeleteUserRequest* const req) {
-    req->MutableAuth()->SetUserName(UserName_);
-
-    req->SetSourceAddress(SourceAddress_);
-
     if (QueryParams_.UserName) {
         req->SetUserName(*QueryParams_.UserName);
     }
@@ -761,7 +745,6 @@ void THttpRequest::SetupDeleteUser(TDeleteUserRequest* const req) {
 
 void THttpRequest::SetupGetQueueAttributes(TGetQueueAttributesRequest* const req) {
     req->SetQueueName(QueueName_);
-    req->MutableAuth()->SetUserName(UserName_);
 
     for (const auto& name : QueryParams_.AttributeNames) {
         req->AddNames(name.second);
@@ -770,20 +753,15 @@ void THttpRequest::SetupGetQueueAttributes(TGetQueueAttributesRequest* const req
 
 void THttpRequest::SetupGetQueueUrl(TGetQueueUrlRequest* const req) {
     req->SetQueueName(QueueName_);
-    req->MutableAuth()->SetUserName(UserName_);
 }
 
 void THttpRequest::SetupListQueues(TListQueuesRequest* const req) {
-    req->MutableAuth()->SetUserName(UserName_);
-
     if (QueryParams_.QueueNamePrefix) {
         req->SetQueueNamePrefix(*QueryParams_.QueueNamePrefix);
     }
 }
 
 void THttpRequest::SetupListUsers(TListUsersRequest* const req) {
-    req->MutableAuth()->SetUserName(UserName_);
-
     if (QueryParams_.UserNamePrefix) {
         req->SetUserNamePrefix(*QueryParams_.UserNamePrefix);
     }
@@ -828,12 +806,10 @@ void THttpRequest::SetupModifyPermissions(TModifyPermissionsRequest* const req) 
 
 void THttpRequest::SetupPurgeQueue(TPurgeQueueRequest* const req) {
     req->SetQueueName(QueueName_);
-    req->MutableAuth()->SetUserName(UserName_);
 }
 
 void THttpRequest::SetupReceiveMessage(TReceiveMessageRequest* const req) {
     req->SetQueueName(QueueName_);
-    req->MutableAuth()->SetUserName(UserName_);
 
     if (QueryParams_.MaxNumberOfMessages) {
         req->SetMaxNumberOfMessages(*QueryParams_.MaxNumberOfMessages);
@@ -899,7 +875,6 @@ static TString FormatNames(const TMap<int, TParameters::TMessageAttribute>& mess
 
 void THttpRequest::SetupSendMessage(TSendMessageRequest* const req) {
     req->SetQueueName(QueueName_);
-    req->MutableAuth()->SetUserName(UserName_);
 
     if (QueryParams_.DelaySeconds) {
         req->SetDelaySeconds(*QueryParams_.DelaySeconds);
@@ -936,7 +911,6 @@ void THttpRequest::SetupSendMessage(TSendMessageRequest* const req) {
 }
 
 void THttpRequest::SetupSendMessageBatch(TSendMessageBatchRequest* const req) {
-    req->MutableAuth()->SetUserName(UserName_);
     req->SetQueueName(QueueName_);
 
     for (const auto& item : QueryParams_.BatchEntries) {
@@ -983,7 +957,6 @@ void THttpRequest::SetupSendMessageBatch(TSendMessageBatchRequest* const req) {
 
 void THttpRequest::SetupSetQueueAttributes(TSetQueueAttributesRequest* const req) {
     req->SetQueueName(QueueName_);
-    req->MutableAuth()->SetUserName(UserName_);
 
     for (const auto& attr : QueryParams_.Attributes) {
         auto& target = *req->AddAttributes();
@@ -994,13 +967,10 @@ void THttpRequest::SetupSetQueueAttributes(TSetQueueAttributesRequest* const req
 
 void THttpRequest::SetupListQueueTags(TListQueueTagsRequest* const req) {
     req->SetQueueName(QueueName_);
-    req->MutableAuth()->SetUserName(UserName_);
 }
 
 void THttpRequest::SetupTagQueue(TTagQueueRequest* const req) {
     req->SetQueueName(QueueName_);
-    req->SetSourceAddress(SourceAddress_);
-    req->MutableAuth()->SetUserName(UserName_);
     for (const auto& tag : QueryParams_.Tags) {
         auto& target = *req->AddTags();
         target.SetKey(tag.second.Key.GetOrElse(""));
@@ -1010,8 +980,6 @@ void THttpRequest::SetupTagQueue(TTagQueueRequest* const req) {
 
 void THttpRequest::SetupUntagQueue(TUntagQueueRequest* const req) {
     req->SetQueueName(QueueName_);
-    req->SetSourceAddress(SourceAddress_);
-    req->MutableAuth()->SetUserName(UserName_);
     for (const auto& key : QueryParams_.TagKeys) {
         req->AddTagKeys(key.second);
     }

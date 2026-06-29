@@ -437,9 +437,17 @@ void TBaseCloudAuthRequestProxy::Authorize() {
         signature.Service = "sqs";
         signature.Region = AccessKeySignature_->Region;
         signature.SignedAt = AccessKeySignature_->SignedAt;
-        request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(std::move(signature), "", entries);
+        request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithSignature{
+            .Signature = std::move(signature),
+            .PeerName = PeerName_,
+            .Entries = std::move(entries),
+        });
     } else {
-        request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(IamToken_, "", entries);
+        request = MakeHolder<TEvTicketParser::TEvAuthorizeTicket>(TEvTicketParser::TEvAuthorizeTicket::TInitializationFieldsWithTicket{
+            .Ticket = IamToken_,
+            .PeerName = PeerName_,
+            .Entries = std::move(entries),
+        });
     }
 
     AuthorizeRequestStartTimestamp_ = TActivationContext::Now();

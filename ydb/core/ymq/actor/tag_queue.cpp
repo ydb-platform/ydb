@@ -37,7 +37,7 @@ public:
             map.emplace(t.GetKey(), t.GetValue());
         }
 
-        SourceAddress_ = Request().GetSourceAddress();
+        SourceAddress_ = Request().GetAuth().GetSourceAddress();
         IsCloudEventsEnabled_ = Cfg().HasCloudEventsConfig() && Cfg().GetCloudEventsConfig().GetEnableCloudEvents();
     }
 

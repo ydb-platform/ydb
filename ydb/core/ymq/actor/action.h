@@ -613,6 +613,7 @@ private:
         UserSID_ = request.GetAuth().GetUserSID();
         MaskedToken_ = request.GetAuth().GetMaskedToken();
         AuthType_ = request.GetAuth().GetAuthType();
+        PeerName_ = request.GetAuth().GetSourceAddress();
 
         if (IsCloud() && !FolderId_) {
             auto items = ParseCloudSecurityToken(SecurityToken_);
@@ -646,7 +647,10 @@ private:
     }
 
     void RequestTicketParser() {
-        this->Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket(SecurityToken_));
+        this->Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
+            .Ticket = SecurityToken_,
+            .PeerName = PeerName_,
+        }));
     }
 
     bool IsACLProtectedAccount(const TString& accountName) const {
@@ -930,6 +934,7 @@ protected:
     TString  RootUrl_;
     TString  UserName_;
     TString  SecurityToken_;
+    TString  PeerName_;
     TString  FolderId_;
     size_t SecurityCheckRequestsToWaitFor_ = 2;
     TIntrusivePtr<TSecurityObject> SecurityObject_;

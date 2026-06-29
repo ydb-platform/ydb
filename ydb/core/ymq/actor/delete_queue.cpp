@@ -51,7 +51,7 @@ private:
                 UserSID_,
                 MaskedToken_,
                 AuthType_,
-                Request().GetSourceAddress()
+                Request().GetAuth().GetSourceAddress()
             )
         );
     }

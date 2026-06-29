@@ -174,10 +174,10 @@ private:
                 {"sessionDetail", " Session is created: " + WorkerSession});
             CreateDataQuery(ctx);
         } else {
-            YDB_LOG_ERROR_CTX(ctx, "Worker",
+            YDB_LOG_ERROR_CTX(ctx, "Worker session creation failed",
                 {"tag", ParentTag},
                 {"workerTag", WorkerTag},
-                {"sessionError", " Session creation failed: " + ev->Get()->ToString()});
+                {"ev", ev->Get()->ToString()});
         }
     }
 

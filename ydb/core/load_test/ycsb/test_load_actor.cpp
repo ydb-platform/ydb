@@ -108,7 +108,7 @@ public:
     void CreateSession(const TActorContext& ctx) {
         auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
         YDB_LOG_TRACE_CTX(ctx, "Sends event for session creation",
-            {"TLoad", Tag},
+            {"tload", Tag},
             {"toProxy", kqpProxy});
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();

@@ -435,10 +435,10 @@ namespace NKikimr::NBsController {
             // See TODO about coroutine timeout.
             // if (!ev) {
             //     YDB_LOG_WARN("Failed to get response for reassign",
-                       {"marker", "BSCB08"},
-                       {"groupId", groupId},
-                       {"VDiskIdx", vdiskIdx},
-                       {"VSlotId", vslotId});
+            //         {"marker", "BSCB08"},
+            //         {"groupId", groupId},
+            //         {"VDiskIdx", vdiskIdx},
+            //         {"VSlotId", vslotId});
             //     return ReassignResult::BscIssue;
             // }
 

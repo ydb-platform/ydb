@@ -32,6 +32,7 @@
 
 /ydb/core/fq/ @ydb-platform/fq
 /ydb/core/kqp/ @ydb-platform/qp
+/ydb/core/kqp/federated_query/ @ydb-platform/fq
 /ydb/core/kqp/ut/federated_query @ydb-platform/fq
 /ydb/core/kqp/ut/olap/ @ydb-platform/cs
 /ydb/core/kqp/ut/indexes/ @ydb-platform/qp

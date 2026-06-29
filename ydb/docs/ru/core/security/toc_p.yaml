@@ -1,6 +1,8 @@
 items:
 - name: Аутентификация
   href: authentication.md
+- name: IAM-аутентификация с делегированием сервисному аккаунту
+  href: iam-service-account-auth.md
 - name: Авторизация
   href: authorization.md
 - name: Начальная настройка безопасности

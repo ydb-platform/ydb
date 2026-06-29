@@ -87,8 +87,8 @@ public:
     void Enqueue(STFUNC_SIG) override {
         YDB_LOG_ERROR_COMP(NKikimrServices::TX_ALLOCATOR, "IGNORING message at StateInit",
             {"tablet", TabletID()},
-            {"type", ev->GetTypeRewrite()},
-            {"fromSender", ev->Sender});
+            {"eventType", ev->GetTypeRewrite()},
+            {"sender", ev->Sender});
     }
 
     STFUNC(StateWork) {
@@ -100,8 +100,8 @@ public:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 YDB_LOG_ERROR_COMP(NKikimrServices::TX_ALLOCATOR, "IGNORING message at StateWork",
                     {"tablet", TabletID()},
-                    {"type", ev->GetTypeRewrite()},
-                    {"fromSender", ev->Sender});
+                    {"eventType", ev->GetTypeRewrite()},
+                    {"sender", ev->Sender});
             }
         }
     }

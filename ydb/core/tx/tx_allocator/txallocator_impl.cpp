@@ -57,10 +57,10 @@ void TTxAllocator::Handle(TEvTxAllocator::TEvAllocate::TPtr &ev, const TActorCon
     MonCounters.AllocationsPresence->Inc();
 
     const ui64 requestedSize = ev->Get()->Record.GetRangeSize();
-    YDB_LOG_DEBUG_CTX(ctx, "HANDLE TEvAllocate requested range",
+    YDB_LOG_DEBUG_CTX(ctx, "HANDLE TEvAllocate",
         {"tablet", TabletID()},
         {"sender", ev->Sender},
-        {"size", requestedSize});
+        {"requestedSize", requestedSize});
 
     Execute(CreateTxReserve(ev), ctx);
 }
@@ -68,9 +68,9 @@ void TTxAllocator::Handle(TEvTxAllocator::TEvAllocate::TPtr &ev, const TActorCon
 void TTxAllocator::Reply(const ui64 rangeBegin, const ui64 rangeEnd, const TEvTxAllocator::TEvAllocate::TPtr &ev, const TActorContext &ctx) {
     YDB_LOG_DEBUG_CTX(ctx, "Send TEvAllocateResult",
         {"tablet", TabletID()},
-        {"toSender", ev->Sender},
-        {"from", rangeBegin},
-        {"to", rangeEnd});
+        {"sendTo", ev->Sender},
+        {"rangeBegin", rangeBegin},
+        {"rangeEnd", rangeEnd});
     *MonCounters.Allocated += rangeEnd - rangeBegin;
 
     const ui64 begin = ApplyPrivateMarker(rangeBegin);
@@ -83,7 +83,7 @@ void TTxAllocator::ReplyImposible(const TEvTxAllocator::TEvAllocate::TPtr &ev, c
     static const auto status = NKikimrTx::TEvTxAllocateResult::IMPOSIBLE;
     YDB_LOG_ERROR_CTX(ctx, "Send TEvAllocateResult",
         {"tablet", TabletID()},
-        {"toSender", ev->Sender},
+        {"sendTo", ev->Sender},
         {"status", status});
     ctx.Send(ev->Sender, new TEvTxAllocator::TEvAllocateResult(status), 0, ev->Cookie);
 }

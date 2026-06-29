@@ -100,7 +100,7 @@ public:
     }
 
     void Bootstrap() {
-        YDB_LOG_INFO_COMP(NKikimrServices::YDB_SDK, "Start local topic session,",
+        YDB_LOG_INFO_COMP(NKikimrServices::YDB_SDK, "Start local topic session",
             {"logPrefix", LogPrefix()},
             {"maxMemoryUsage", MaxMemoryUsage});
         StartSession();
@@ -157,7 +157,7 @@ protected:
         const bool success = status == NYdb::EStatus::SUCCESS;
         if (!success) {
             Counters->Errors->Inc();
-            YDB_LOG_ERROR_COMP(NKikimrServices::YDB_SDK, "Closing session with status and",
+            YDB_LOG_ERROR_COMP(NKikimrServices::YDB_SDK, "Closing session with status",
                 {"logPrefix", LogPrefix()},
                 {"status", status},
                 {"issues", issues.ToOneLineString()});
@@ -167,7 +167,7 @@ protected:
         }
 
         if (SessionClosed) {
-            YDB_LOG_WARN_COMP(NKikimrServices::YDB_SDK, "Session already closed, but got status and",
+            YDB_LOG_WARN_COMP(NKikimrServices::YDB_SDK, "Session already closed, but got status",
                 {"logPrefix", LogPrefix()},
                 {"status", status},
                 {"issues", issues.ToOneLineString()});
@@ -258,7 +258,7 @@ protected:
     // Events from local sdk topic session
 
     void Handle(TSessionEvents::TEvExtractReadyEvents::TPtr& ev) {
-        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Got extract ready events request,",
+        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Got extract ready events request",
             {"logPrefix", LogPrefix()},
             {"outgoingEvents", OutgoingEvents.size()});
 
@@ -277,7 +277,7 @@ protected:
 
     void Handle(TSessionEvents::TEvSessionFinished::TPtr& ev) {
         const bool force = ev->Get()->Force;
-        YDB_LOG_INFO_COMP(NKikimrServices::YDB_SDK, "Local topic session finished from client side,",
+        YDB_LOG_INFO_COMP(NKikimrServices::YDB_SDK, "Local topic session finished from client side",
             {"logPrefix", LogPrefix()},
             {"force", force});
 
@@ -409,7 +409,7 @@ protected:
 private:
     void SendSessionEvents() {
         Y_VALIDATE(RpcActor, "RpcActor is not set before read request");
-        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Going to send session events,",
+        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Going to send session events",
             {"logPrefix", LogPrefix()},
             {"pendingRpcResponses", PendingRpcResponses},
             {"rpcResponses", RpcResponses.size()});
@@ -445,7 +445,7 @@ private:
             return;
         }
 
-        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Going to send outgoing events,",
+        YDB_LOG_TRACE_COMP(NKikimrServices::YDB_SDK, "Going to send outgoing events",
             {"logPrefix", LogPrefix()},
             {"outgoingEvents", OutgoingEvents.size()});
 

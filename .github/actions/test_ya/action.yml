@@ -83,12 +83,7 @@ inputs:
     type: string
     required: false
     default: ""
-    description: "test_results.job_name override; default github.workflow"
-  analytics_github_workflow:
-    type: string
-    required: false
-    default: ""
-    description: "binary_size.github_workflow override; default github.workflow"
+    description: "Override job_name in test_results and github_workflow in binary_size; default github.workflow"
 
 outputs:
   success:
@@ -685,8 +680,8 @@ runs:
         set -x
         export build_preset="${{ inputs.build_preset }}"
         export commit_git_sha="$ORIGINAL_HEAD"
-        if [ -n "${{ inputs.analytics_github_workflow }}" ]; then
-          export GITHUB_WORKFLOW="${{ inputs.analytics_github_workflow }}"
+        if [ -n "${{ inputs.analytics_job_name }}" ]; then
+          export GITHUB_WORKFLOW="${{ inputs.analytics_job_name }}"
         fi
 
         python3 .github/scripts/send_build_stats.py

@@ -71,12 +71,7 @@ inputs:
     type: string
     required: false
     default: ""
-    description: "test_results.job_name override; default github.workflow"
-  analytics_github_workflow:
-    type: string
-    required: false
-    default: ""
-    description: "binary_size.github_workflow override; default github.workflow"
+    description: "Override job_name in test_results and github_workflow in binary_size; default github.workflow"
 defaults:
   run:
     shell: bash
@@ -140,4 +135,3 @@ runs:
         collect_coredumps: ${{ inputs.collect_coredumps }}
         pull_number: ${{ inputs.pull_number }}
         analytics_job_name: ${{ inputs.analytics_job_name }}
-        analytics_github_workflow: ${{ inputs.analytics_github_workflow }}

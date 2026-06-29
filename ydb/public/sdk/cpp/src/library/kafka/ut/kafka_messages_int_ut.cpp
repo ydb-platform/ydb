@@ -1,4 +1,4 @@
-#include <ydb/library/kafka/kafka_messages_int.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_messages_int.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

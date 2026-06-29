@@ -24,7 +24,7 @@ PEERDIR(
     ydb/core/persqueue/ut/common
     ydb/core/testlib/default
     ydb/core/tx/schemeshard/ut_helpers
-    ydb/library/kafka
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/public/sdk/cpp/src/library/grpc/client
     ydb/public/sdk/cpp/src/client/topic
     ydb/services/datastreams

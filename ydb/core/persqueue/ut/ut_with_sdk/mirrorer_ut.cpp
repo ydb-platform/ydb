@@ -1,7 +1,7 @@
 #include <ydb/core/persqueue/common/proxy/actor_persqueue_client_iface.h>
 #include <ydb/core/persqueue/ut/common/sdk_ut_common.h>
 
-#include <ydb/library/kafka/ut/ut_common.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/ut/ut_common.h>
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/test_server.h>
 #include <ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils/data_plane_helpers.h>

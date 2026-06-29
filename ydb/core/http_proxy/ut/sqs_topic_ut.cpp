@@ -5,7 +5,7 @@
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/ymq/actor/metering.h>
 #include <ydb/core/ymq/base/limits.h>
-#include <ydb/library/kafka/ut/ut_common.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/ut/ut_common.h>
 #include <ydb/services/sqs_topic/receipt.h>
 #include <ydb/library/testlib/service_mocks/access_service_mock.h>
 #include <ydb/library/testlib/service_mocks/iam_token_service_mock.h>

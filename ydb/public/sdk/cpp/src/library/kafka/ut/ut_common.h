@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

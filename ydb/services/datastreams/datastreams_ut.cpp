@@ -16,7 +16,7 @@
 
 #include <ydb/core/persqueue/ut/common/autoscaling_ut_common.h>
 #include <ydb/core/persqueue/ut/common/sdk_ut_common.h>
-#include <ydb/library/kafka/ut/ut_common.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/ut/ut_common.h>
 
 #include <random>
 

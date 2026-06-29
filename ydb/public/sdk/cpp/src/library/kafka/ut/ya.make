@@ -1,4 +1,4 @@
-UNITTEST_FOR(ydb/library/kafka)
+UNITTEST_FOR(ydb/public/sdk/cpp/src/library/kafka)
 
 SRCS(
     kafka_messages_int_ut.cpp

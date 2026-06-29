@@ -137,14 +137,4 @@ NActors::IActor* CreateDeferredPublishRegistryActor() {
     return new TDeferredPublishRegistryActor();
 }
 
-void RegisterDeferredPublishRegistryService(NActors::TActorSystem* actorSystem) {
-    const auto serviceId = MakeDeferredPublishRegistryActorId();
-    if (actorSystem->LookupLocalService(serviceId)) {
-        return;
-    }
-
-    const auto actorId = actorSystem->Register(CreateDeferredPublishRegistryActor());
-    actorSystem->RegisterLocalService(serviceId, actorId);
-}
-
 } // namespace NKikimr::NPQ::NDeferredPublish

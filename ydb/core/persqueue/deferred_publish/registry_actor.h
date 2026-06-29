@@ -10,6 +10,4 @@ inline NActors::TActorId MakeDeferredPublishRegistryActorId() {
 
 NActors::IActor* CreateDeferredPublishRegistryActor();
 
-void RegisterDeferredPublishRegistryService(NActors::TActorSystem* actorSystem);
-
 } // namespace NKikimr::NPQ::NDeferredPublish

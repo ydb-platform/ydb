@@ -1524,12 +1524,14 @@ namespace Tests {
             Runtime->RegisterService(NPQ::MakePQDReadCacheServiceActorId(), readCacheId, nodeIdx);
         }
         {
-            IActor* deferredPublishRegistry = NPQ::NDeferredPublish::CreateDeferredPublishRegistryActor();
-            TActorId deferredPublishRegistryId = Runtime->Register(deferredPublishRegistry, nodeIdx, userPoolId);
-            Runtime->RegisterService(
-                NPQ::NDeferredPublish::MakeDeferredPublishRegistryActorId(),
-                deferredPublishRegistryId,
-                nodeIdx);
+            if (Settings->FeatureFlags.GetEnableTopicDeferredPublish()) {
+                IActor* deferredPublishRegistry = NPQ::NDeferredPublish::CreateDeferredPublishRegistryActor();
+                TActorId deferredPublishRegistryId = Runtime->Register(deferredPublishRegistry, nodeIdx, userPoolId);
+                Runtime->RegisterService(
+                    NPQ::NDeferredPublish::MakeDeferredPublishRegistryActorId(),
+                    deferredPublishRegistryId,
+                    nodeIdx);
+            }
         }
 
         {

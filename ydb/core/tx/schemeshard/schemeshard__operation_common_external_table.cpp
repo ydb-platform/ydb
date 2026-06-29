@@ -1,4 +1,5 @@
 #include "schemeshard__operation_common_external_table.h"
+#include <ydb/core/external_sources/external_source_factory.h>
 
 #include <ydb/core/scheme/scheme_types_proto.h>
 

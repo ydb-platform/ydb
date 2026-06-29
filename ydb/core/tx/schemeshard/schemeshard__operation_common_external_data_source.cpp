@@ -1,4 +1,5 @@
 #include "schemeshard__operation_common_external_data_source.h"
+#include <ydb/core/external_sources/external_source_factory.h>
 
 #include <utility>
 

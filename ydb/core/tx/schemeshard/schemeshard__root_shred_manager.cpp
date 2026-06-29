@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/counters.h>
 #include <ydb/core/tx/schemeshard/schemeshard_impl.h>
+#include <ydb/core/blobstorage/base/blobstorage_shred_events.h>
 
 namespace NKikimr::NSchemeShard {
 

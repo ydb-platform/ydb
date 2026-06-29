@@ -24,4 +24,4 @@ feature_flags:
 | `enable_topic_compactification_by_key`                   | Включение компактификации топиков в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|
 | `enable_kafka_transactions`                              | Включение транзакций в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|
 | `enable_external_data_sources`                           | Включение [внешних источников данных](../../concepts/datamodel/external_data_source.md)|
-
+| `enable_fs_backups`                                      | Включение операций [резервного копирования и восстановления на сетевую файловую систему](../../concepts/backup.md#nfs) |

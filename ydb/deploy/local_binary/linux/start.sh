@@ -61,6 +61,7 @@ fi
 echo Starting storage process... takes ~10 seconds
 mkdir -p "$LOGS_PATH"
 $YDBD_PATH server --yaml-config "$CONFIG_PATH/$cfg" --node 1 \
+  --ic-port 19001 --mon-port 8765 --grpc-port 2136  \
   --log-file-name "$LOGS_PATH/storage_start.log" > "$LOGS_PATH/storage_start_output.log" 2>"$LOGS_PATH/storage_start_err.log" &
 sleep 10
 grep "$LOGS_PATH/storage_start_err.log" -v -f "$CONFIG_PATH/exclude_err.txt"

@@ -147,6 +147,10 @@ struct Accumulator: ICompactionUnit<TKey, TPortion> {
         return TOptimizationPriority::Normalize(Settings.Trigger.Portions, Settings.OverloadPortions, Portions.size() - locked);
     }
 
+    bool IsBelowThreshold() const {
+        return Portions.size() < Settings.Trigger.Portions;
+    }
+
     std::optional<CompactionTask<TKey, TPortion>> DoGetNextOptimizationTask(
         TFunctionRef<bool(typename TPortion::TConstPtr)> isLocked) const override {
         CompactionTask<TKey, TPortion> result;

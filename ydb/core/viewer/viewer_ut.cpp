@@ -811,12 +811,19 @@ Y_UNIT_TEST_SUITE(Viewer) {
         size_t droppedSystemStateResponses = 0;
         size_t pdiskStateResponses = 0;
 
-        std::shared_ptr<NHttp::THttpEndpointInfo> endpoint = std::make_shared<NHttp::THttpEndpointInfo>();
-        NHttp::THttpIncomingRequestPtr request = new NHttp::THttpIncomingRequest(
-            "GET /viewer/json/nodes?type=static&fields_required=NodeId,PDisks,SystemState,Memory&storage=true&limit=2&offset=0"
-            "&offload_merge=true&offload_merge_attempts=1&dump_original_node_batches=true&timeout=10 HTTP/1.1\r\n\r\n",
-            endpoint,
-            {});
+        THttpRequest httpReq(HTTP_METHOD_GET);
+        httpReq.CgiParameters.emplace("type", "static");
+        httpReq.CgiParameters.emplace("fields_required", "NodeId,PDisks,SystemState,Memory");
+        httpReq.CgiParameters.emplace("storage", "true");
+        httpReq.CgiParameters.emplace("limit", "2");
+        httpReq.CgiParameters.emplace("offset", "0");
+        httpReq.CgiParameters.emplace("offload_merge", "true");
+        httpReq.CgiParameters.emplace("offload_merge_attempts", "1");
+        httpReq.CgiParameters.emplace("dump_original_node_batches", "true");
+        httpReq.CgiParameters.emplace("timeout", "10");
+        auto page = MakeHolder<TMonPage>("viewer", "title");
+        TMonService2HttpRequest monReq(nullptr, &httpReq, nullptr, page.Get(), "/json/nodes", nullptr);
+        auto request = MakeHolder<NMon::TEvHttpInfo>(monReq);
 
         auto observerFunc = [&](TAutoPtr<IEventHandle>& ev) {
             switch (ev->GetTypeRewrite()) {
@@ -853,11 +860,13 @@ Y_UNIT_TEST_SUITE(Viewer) {
         };
         runtime.SetObserverFunc(observerFunc);
 
-        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, new NHttp::TEvHttpProxy::TEvHttpIncomingRequest(request), 0));
-        NHttp::TEvHttpProxy::TEvHttpOutgoingResponse* result = runtime.GrabEdgeEvent<NHttp::TEvHttpProxy::TEvHttpOutgoingResponse>(handle);
+        runtime.Send(new IEventHandle(NKikimr::NViewer::MakeViewerID(0), sender, request.Release(), 0));
+        NMon::TEvHttpInfoRes* result = runtime.GrabEdgeEvent<NMon::TEvHttpInfoRes>(handle);
 
+        size_t pos = result->Answer.find('{');
+        TString jsonResult = result->Answer.substr(pos);
         NJson::TJsonValue json;
-        NJson::ReadJsonTree(result->Response->Body, &json, true);
+        NJson::ReadJsonTree(jsonResult, &json, true);
 
         const auto& nodes = json.GetMap().at("Nodes").GetArray();
         UNIT_ASSERT_VALUES_EQUAL_C(json.GetMap().at("TotalNodes"), "2", NJson::WriteJson(json, false));

@@ -118,7 +118,11 @@ class Kikimr:
 
         self.first_node = list(self.cluster.nodes.values())[0]
         self.endpoint = Endpoint(f"{self.first_node.host}:{self.first_node.port}", f"/{config.domain_name}")
-        self.ydb_client = YdbClient(database=self.endpoint.database, endpoint=f"grpc://{self.endpoint.endpoint}", enable_discovery=enable_discovery)
+        self.ydb_client = YdbClient(
+            database=self.endpoint.database,
+            endpoint=f"grpc://{self.endpoint.endpoint}",
+            enable_discovery=enable_discovery,
+        )
         self.ydb_client.wait_connection()
 
     def stop(self):

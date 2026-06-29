@@ -3,11 +3,6 @@
 
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
 
-template <>
-inline IOutputStream& operator <<(IOutputStream& out, NKikimrHive::TEvReassignTablet::EHiveReassignReason reason) {
-    return out << NKikimrHive::TEvReassignTablet::EHiveReassignReason_Name(reason);
-}
-
 namespace NKikimr {
 namespace NHive {
 

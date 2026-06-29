@@ -32,6 +32,11 @@ items:
   include:
     mode: link
     path: fulltext-search/toc_p.yaml
+- name: Поиск по JSON
+  href: json-search/index.md
+  include:
+    mode: link
+    path: json-search/toc_p.yaml
 - name: Локальные индексы
   href: local-indexes/index.md
   include:

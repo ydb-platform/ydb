@@ -499,6 +499,8 @@ void RunRdmaXdcCatchReplayAfterPartialRdmaRead(EXdcCatchReplayReconnectAction re
 struct THandshakeFailureLogCounters {
     std::atomic<ui32> Notice = 0;
     std::atomic<ui32> Debug = 0;
+    std::atomic<ui32> HoldByErrorNotice = 0;
+    std::atomic<ui32> HoldByErrorDebug = 0;
 };
 
 class TCountingLogBackend : public TLogBackend {
@@ -510,11 +512,9 @@ public:
     void WriteData(const TLogRecord& rec) override {
         const TStringBuf line(rec.Data, rec.Len);
         if (line.Contains("ICP25") && line.Contains("outgoing handshake failed")) {
-            if (rec.Priority == TLOG_NOTICE) {
-                OutgoingHandshakeFailures->Notice.fetch_add(1, std::memory_order_relaxed);
-            } else if (rec.Priority == TLOG_DEBUG) {
-                OutgoingHandshakeFailures->Debug.fetch_add(1, std::memory_order_relaxed);
-            }
+            CountPriority(rec, OutgoingHandshakeFailures->Notice, OutgoingHandshakeFailures->Debug);
+        } else if (line.Contains("ICP32") && line.Contains("transit to hold-by-error state")) {
+            CountPriority(rec, OutgoingHandshakeFailures->HoldByErrorNotice, OutgoingHandshakeFailures->HoldByErrorDebug);
         }
     }
 
@@ -522,6 +522,14 @@ public:
     }
 
 private:
+    static void CountPriority(const TLogRecord& rec, std::atomic<ui32>& notice, std::atomic<ui32>& debug) {
+        if (rec.Priority == TLOG_NOTICE) {
+            notice.fetch_add(1, std::memory_order_relaxed);
+        } else if (rec.Priority == TLOG_DEBUG) {
+            debug.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+
     std::shared_ptr<THandshakeFailureLogCounters> OutgoingHandshakeFailures;
 };
 
@@ -1338,6 +1346,8 @@ Y_UNIT_TEST_SUITE(Interconnect) {
 
         outgoingHandshakeFailures->Notice.store(0, std::memory_order_relaxed);
         outgoingHandshakeFailures->Debug.store(0, std::memory_order_relaxed);
+        outgoingHandshakeFailures->HoldByErrorNotice.store(0, std::memory_order_relaxed);
+        outgoingHandshakeFailures->HoldByErrorDebug.store(0, std::memory_order_relaxed);
         cluster.StopNode(1);
         Sleep(TDuration::Seconds(10));
 
@@ -1348,6 +1358,14 @@ Y_UNIT_TEST_SUITE(Interconnect) {
                 << noticeLogCount);
         UNIT_ASSERT_C(debugLogCount > 0,
             "expected repeated ICP25 outgoing handshake failure log records to be demoted to debug");
+
+        const ui32 holdByErrorNoticeLogCount = outgoingHandshakeFailures->HoldByErrorNotice.load(std::memory_order_relaxed);
+        const ui32 holdByErrorDebugLogCount = outgoingHandshakeFailures->HoldByErrorDebug.load(std::memory_order_relaxed);
+        UNIT_ASSERT_C(holdByErrorNoticeLogCount == 1 || holdByErrorNoticeLogCount == 2,
+            TStringBuilder() << "expected one or two notice-level ICP32 hold-by-error transition log records in 10 seconds, got "
+                << holdByErrorNoticeLogCount);
+        UNIT_ASSERT_C(holdByErrorDebugLogCount > 0,
+            "expected repeated ICP32 hold-by-error transition log records to be demoted to debug");
     }
 
     Y_UNIT_TEST(SetupRdmaSession) {

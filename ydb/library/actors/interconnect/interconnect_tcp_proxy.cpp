@@ -889,7 +889,11 @@ namespace NActors {
     void TInterconnectProxyTCP::TransitToErrorState(TString explanation, bool updateErrorLog) {
         ICPROXY_PROFILED;
 
-        LOG_NOTICE_IC("ICP32", "transit to hold-by-error state Explanation# %s", explanation.data());
+        const auto holdByErrorLogPriority = HoldByErrorWakeupDuration != TDuration::Zero()
+            ? NLog::PRI_DEBUG
+            : NLog::PRI_NOTICE;
+        LOG_LOG_IC(NActorsServices::INTERCONNECT, "ICP32", holdByErrorLogPriority,
+            "transit to hold-by-error state Explanation# %s", explanation.data());
         LOG_INFO(*TlsActivationContext, NActorsServices::INTERCONNECT_STATUS, "[%u] error state: %s", PeerNodeId, explanation.data());
 
         if (updateErrorLog) {

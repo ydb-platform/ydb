@@ -175,7 +175,7 @@ public:
 
     void ProcessTablet(TLeaderTabletInfo& tablet) {
         if (tablet.IsReadyToAssignGroups()) {
-            if (std::exchange(tablet.IsMarkedForReassign, true)) {
+            if (!std::exchange(tablet.IsMarkedForReassign, true)) {
                 Self->UpdateCounterTabletsReassigning(+1);
             }
             tablet.InitiateAssignTabletGroups();

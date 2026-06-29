@@ -35,7 +35,7 @@ public:
             BLOG_D("THive::TTxReassignGroups(" << tablet->Id << "," << ChannelProfileNewGroup << ")::Execute");
             if (tablet->IsReadyToReassignTablet()) {
                 NIceDb::TNiceDb db(txc.DB);
-                if (std::exchange(tablet->IsMarkedForReassign, true)) {
+                if (!std::exchange(tablet->IsMarkedForReassign, true)) {
                     Self->UpdateCounterTabletsReassigning(+1);
                 }
                 tablet->ChannelProfileNewGroup |= ChannelProfileNewGroup;

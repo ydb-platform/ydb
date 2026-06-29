@@ -57,7 +57,7 @@ public:
                     NIceDb::TUpdate<Schema::Tablet::State>(tablet.State),
                     NIceDb::TUpdate<Schema::Tablet::ReassignReason>(tablet.ChannelProfileReassignReason)
                 );
-                if (std::exchange(tablet.IsMarkedForReassign, true)) {
+                if (!std::exchange(tablet.IsMarkedForReassign, true)) {
                     Self->UpdateCounterTabletsReassigning(+1);
                 }
             }

@@ -12,6 +12,7 @@
 #include <ydb/core/protos/console_config.pb.h>
 #include <ydb/core/tx/schemeshard/index/build_index.h>
 #include <ydb/core/tx/schemeshard/schemeshard_forced_compaction.h>
+#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/engine/mkql_proto.h>
 #include <ydb/core/ydb_convert/column_families.h>
 #include <ydb/core/ydb_convert/table_description.h>
@@ -108,7 +109,12 @@ public:
             PrepareAlterTableWithTxId();
             break;
         case EOp::SetColumnConstraint:
-            AlterTable(ctx);
+            if (!BuildAlterTableSetColumnConstraintRequest(req, &SetColumnConstraintSettings, code, error)) {
+                Reply(code, error, NKikimrIssues::TIssuesIds::DEFAULT_ERROR, ctx);
+                return;
+            }
+
+            PrepareAlterTableWithTxId();
             break;
         }
 
@@ -301,6 +307,10 @@ private:
         case EOp::Compact:
             return AlterTableOp(entry, ctx, [this]() {
                 return std::make_unique<NSchemeShard::TEvForcedCompaction::TEvCreateRequest>(TxId, DatabaseName, std::move(ForcedCompactionSettings));
+            });
+        case EOp::SetColumnConstraint:
+            return AlterTableOp(entry, ctx, [this]() {
+                return std::make_unique<NSchemeShard::TEvSetColumnConstraint::TEvCreateRequest>(TxId, DatabaseName, std::move(SetColumnConstraintSettings));
             });
         default:
             TXLOG_E("Got unexpected cache response");
@@ -495,6 +505,7 @@ private:
     EOp OpType;
     NKikimrIndexBuilder::TIndexBuildSettings IndexBuildSettings;
     NKikimrForcedCompaction::TForcedCompactionSettings ForcedCompactionSettings;
+    NKikimrSetColumnConstraint::TSetColumnConstraintSettings SetColumnConstraintSettings;
 };
 
 void DoAlterTableRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {

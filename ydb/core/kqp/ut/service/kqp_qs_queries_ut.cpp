@@ -5501,7 +5501,7 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
                 auto setNotNull = tcSession.ExecuteSchemeQuery(sql).GetValueSync();
                 tcSession.Close();
                 UNIT_ASSERT(!setNotNull.IsSuccess());
-                // I dont undersrand why there is no `PRECONDITION_FAILED`
+                // I dont understand why there is no `PRECONDITION_FAILED`
                 UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::GENERIC_ERROR, setNotNull.GetIssues().ToString());
                 UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(),
                     "Validation failed for SET NOT NULL on table `/Root/test/alterNotNull`: one or more columns contain NULL values");

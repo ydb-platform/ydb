@@ -2113,6 +2113,7 @@ public:
                         alterTableRequest.add_drop_columns(TString(dropColumn.Value()));
                     }
                 } else if (name == "alterColumns") {
+                    std::vector<TString> notNullColumns;
                     auto listNode = action.Value().Cast<TExprList>();
                     for (size_t i = 0; i < listNode.Size(); ++i) {
                         auto item = listNode.Item(i);
@@ -2188,10 +2189,7 @@ public:
                                     return SyncError();
                                 } else {
                                     alterTableRequest.mutable_alter_columns()->RemoveLast();
-                                    auto& req = *alterTableRequest.mutable_set_column_constraint();
-
-                                    req.set_column_name(TString(columnName));
-                                    req.set_constraint(Ydb::Table::SetColumnConstraintItem::NOT_NULL);
+                                    notNullColumns.push_back(TString(columnName));
                                 }
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
@@ -2241,6 +2239,22 @@ public:
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
                                     TStringBuilder() << "Unsupported action to alter column: " << alterColumnAction));
                             return SyncError();
+                        }
+                    }
+
+                    if (notNullColumns.size() > 0) {
+                        if (alterTableRequest.alter_columns_size() != 0) {
+                            ctx.AddError(TIssue(
+                                ctx.GetPosition(listNode.Pos()),
+                                "Multiple ALTER COLUMN operations of different kinds are not allowed in a single statement."
+                            ));
+                            return SyncError();
+                        }
+
+                        for (const auto& columnName : notNullColumns) {
+                            auto* req = alterTableRequest.add_set_column_constraint();
+                            req->set_column_name(TString(columnName));
+                            req->set_constraint(Ydb::Table::SetColumnConstraintItem::NOT_NULL);
                         }
                     }
                 } else if (name == "addColumnFamilies" || name == "alterColumnFamilies") {

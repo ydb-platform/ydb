@@ -1228,10 +1228,14 @@ public:
 
         auto& constraintResult = *record.MutableSetColumnConstraint();
         const Ydb::Table::SetColumnConstraintState::State state = constraintResult.GetState();
-        const Ydb::StatusIds::StatusCode constraintStatus = state == Ydb::Table::SetColumnConstraintState::STATE_DONE
-            ? Ydb::StatusIds::SUCCESS
-            : Ydb::StatusIds::PRECONDITION_FAILED;
-        return ReplyErrorAndDie(constraintStatus, record.MutableIssues());
+
+        if (state == Ydb::Table::SetColumnConstraintState::STATE_DONE) {
+            return ReplyErrorAndDie(Ydb::StatusIds::SUCCESS, record.MutableIssues());
+        } else if (state == Ydb::Table::SetColumnConstraintState::STATE_CANCELLED) {
+            return ReplyErrorAndDie(Ydb::StatusIds::PRECONDITION_FAILED, record.MutableIssues());
+        } else {
+            return ReplyErrorAndDie(Ydb::StatusIds::INTERNAL_ERROR, record.MutableIssues());
+        }
     }
 
     template<typename TEv>

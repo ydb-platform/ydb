@@ -13,7 +13,9 @@ bool TPushRenameRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext
     if (TPushRenameIntoAggregateResultRule().MatchAndApply(input, ctx, props)) {
         return true;
     }
-    if (TPushRenameThroughTransparentUnaryRule(PushAppendAliasesUnderFilter).MatchAndApply(input, ctx, props)) {
+    auto output = TPushAppendThroughUnaryRule(PushAppendAliasesUnderFilter).SimpleMatchAndApply(input, ctx, props);
+    if (output != input) {
+        input = output;
         return true;
     }
     if (TPushRenameThroughPassThroughMapRule().MatchAndApply(input, ctx, props)) {

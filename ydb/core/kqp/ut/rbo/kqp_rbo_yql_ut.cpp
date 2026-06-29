@@ -3886,10 +3886,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             pos,
             MakeColumnAccess(subplanIU, pos, &testContext.ExprCtx, &expressionProps)
         );
-        auto aliasMap = MakeIntrusive<TOpMap>(filter, pos, TVector<TMapElement>{
-            MakeTestAppend("l_a", "a", pos, testContext.ExprCtx, expressionProps),
+        auto renameMap = MakeIntrusive<TOpMap>(filter, pos, TVector<TMapElement>{
+            TMapElement(TInfoUnit("l_a"), TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps, true),
         });
-        TOpRoot root(aliasMap, pos, {"l_a"});
+        TOpRoot root(renameMap, pos, {"l_a"});
 
         auto subplanRead = MakeTestRead({TInfoUnit("rhs")}, pos);
         TSubplanEntry subplanEntry;
@@ -3928,10 +3928,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             pos,
             MakeColumnAccess(subplanIU, pos, &testContext.ExprCtx, &expressionProps)
         );
-        auto aliasMap = MakeIntrusive<TOpMap>(outerFilter, pos, TVector<TMapElement>{
-            MakeTestAppend("l_a", "a", pos, testContext.ExprCtx, expressionProps),
+        auto renameMap = MakeIntrusive<TOpMap>(outerFilter, pos, TVector<TMapElement>{
+            TMapElement(TInfoUnit("l_a"), TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps, true),
         });
-        TOpRoot root(aliasMap, pos, {"l_a"});
+        TOpRoot root(renameMap, pos, {"l_a"});
 
         auto subplanRead = MakeTestRead({TInfoUnit("rhs")}, pos);
         auto addDeps = MakeIntrusive<TOpAddDependencies>(
@@ -4009,7 +4009,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(rewrittenEntry.Tuple.front() == TInfoUnit("a"));
     }
 
-    Y_UNIT_TEST(PushRenameTreatsDeadAppendAliasAsRename) {
+    Y_UNIT_TEST(PushRenamePushesSemanticRenameThroughFilterIntoRead) {
         TMapRuleTestContext testContext;
         TPlanProps expressionProps;
         const auto pos = NYql::TPositionHandle();
@@ -4020,10 +4020,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             pos,
             MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps)
         );
-        auto aliasMap = MakeIntrusive<TOpMap>(filter, pos, TVector<TMapElement>{
-            MakeTestAppend("l_a", "a", pos, testContext.ExprCtx, expressionProps),
+        auto renameMap = MakeIntrusive<TOpMap>(filter, pos, TVector<TMapElement>{
+            TMapElement(TInfoUnit("l_a"), TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps, true),
         });
-        TOpRoot root(aliasMap, pos, {"l_a"});
+        TOpRoot root(renameMap, pos, {"l_a"});
 
         TVector<std::unique_ptr<IRule>> rules;
         rules.emplace_back(std::make_unique<TPushRenameRule>());
@@ -4040,6 +4040,50 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         const auto filterInputs = rewrittenFilter->FilterExpr.GetInputIUs(false, true);
         UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("l_a")) != filterInputs.end());
         UNIT_ASSERT(std::find(filterInputs.begin(), filterInputs.end(), TInfoUnit("a")) == filterInputs.end());
+    }
+
+    Y_UNIT_TEST(PushMapElementsBatchesRenamesThroughUnary) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("a"), TInfoUnit("b"), TInfoUnit("payload")}, pos);
+        auto sort = MakeIntrusive<TOpSort>(
+            read,
+            pos,
+            TVector<TSortElement>{
+                TSortElement(TInfoUnit("a"), true, true),
+                TSortElement(TInfoUnit("b"), true, true),
+            },
+            std::nullopt
+        );
+        auto renameMap = MakeIntrusive<TOpMap>(sort, pos, TVector<TMapElement>{
+            TMapElement(TInfoUnit("l_a"), TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps, true),
+            TMapElement(TInfoUnit("l_b"), TInfoUnit("b"), pos, &testContext.ExprCtx, &expressionProps, true),
+        });
+        TOpRoot root(renameMap, pos, {"l_a", "l_b"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushAppendThroughUnaryRule>());
+        TRuleBasedStage pushMapElements("Focused push map elements through unary", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushMapElements.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Sort, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenSort = CastOperator<TOpSort>(root.GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenSort->SortElements.size(), 2);
+        UNIT_ASSERT(rewrittenSort->SortElements[0].SortColumn == TInfoUnit("l_a"));
+        UNIT_ASSERT(rewrittenSort->SortElements[1].SortColumn == TInfoUnit("l_b"));
+
+        UNIT_ASSERT_C(rewrittenSort->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        auto pushedMap = CastOperator<TOpMap>(rewrittenSort->GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 2);
+        UNIT_ASSERT(pushedMap->MapElements[0].IsRename());
+        UNIT_ASSERT(pushedMap->MapElements[0].GetElementName() == TInfoUnit("l_a"));
+        UNIT_ASSERT(pushedMap->MapElements[0].GetRename() == TInfoUnit("a"));
+        UNIT_ASSERT(pushedMap->MapElements[1].IsRename());
+        UNIT_ASSERT(pushedMap->MapElements[1].GetElementName() == TInfoUnit("l_b"));
+        UNIT_ASSERT(pushedMap->MapElements[1].GetRename() == TInfoUnit("b"));
     }
 
     Y_UNIT_TEST(PushRenameTreatsDeadAppendAliasAsRenameThroughJoin) {
@@ -4467,14 +4511,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             pos,
             MakeColumnAccess(TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps)
         );
-        auto addDeps = MakeIntrusive<TOpAddDependencies>(
-            filter,
-            pos,
-            TVector<TInfoUnit>{TInfoUnit("dep")},
-            TVector<const TTypeAnnotationNode*>{nullptr}
-        );
         auto limit = MakeIntrusive<TOpLimit>(
-            addDeps,
+            filter,
             pos,
             MakeConstant("Uint64", "10", pos, &testContext.ExprCtx),
             EOpPhase::Final
@@ -4487,7 +4525,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto aliasMap = MakeIntrusive<TOpMap>(sort, pos, TVector<TMapElement>{
             MakeTestAppend("l_a", "a", pos, testContext.ExprCtx, expressionProps),
         });
-        TOpRoot root(aliasMap, pos, {"a", "payload", "dep", "l_a"});
+        TOpRoot root(aliasMap, pos, {"a", "payload", "l_a"});
 
         TVector<std::unique_ptr<IRule>> rules;
         rules.emplace_back(std::make_unique<TPushAppendRule>());
@@ -4499,10 +4537,8 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto rewrittenSort = CastOperator<TOpSort>(root.GetInput());
         UNIT_ASSERT_C(rewrittenSort->GetInput()->Kind == EOperator::Limit, root.PlanToString(testContext.ExprCtx));
         auto rewrittenLimit = CastOperator<TOpLimit>(rewrittenSort->GetInput());
-        UNIT_ASSERT_C(rewrittenLimit->GetInput()->Kind == EOperator::AddDependencies, root.PlanToString(testContext.ExprCtx));
-        auto rewrittenDeps = CastOperator<TOpAddDependencies>(rewrittenLimit->GetInput());
-        UNIT_ASSERT_C(rewrittenDeps->GetInput()->Kind == EOperator::Filter, root.PlanToString(testContext.ExprCtx));
-        auto rewrittenFilter = CastOperator<TOpFilter>(rewrittenDeps->GetInput());
+        UNIT_ASSERT_C(rewrittenLimit->GetInput()->Kind == EOperator::Filter, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenFilter = CastOperator<TOpFilter>(rewrittenLimit->GetInput());
         UNIT_ASSERT_C(rewrittenFilter->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
         auto pushedMap = CastOperator<TOpMap>(rewrittenFilter->GetInput());
         UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 1);

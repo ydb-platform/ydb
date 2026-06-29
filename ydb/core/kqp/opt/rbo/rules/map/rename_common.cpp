@@ -4,20 +4,6 @@ namespace NKikimr {
 namespace NKqp {
 namespace NMapRules {
 
-bool CanRenameOutput(const TIntrusivePtr<IOperator>& op, const TInfoUnit& from, const TInfoUnit& to) {
-    const auto& output = op->GetOutputIUs();
-    size_t fromCount = 0;
-    for (const auto& iu : output) {
-        if (iu == to) {
-            return false;
-        }
-        if (iu == from) {
-            ++fromCount;
-        }
-    }
-    return fromCount == 1;
-}
-
 namespace {
 
 bool CanRewriteResidualTopMap(const TIntrusivePtr<TOpMap>& topMap, size_t renameIdx, const TInfoUnit& from, const TInfoUnit& to) {

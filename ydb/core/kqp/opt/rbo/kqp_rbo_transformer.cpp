@@ -422,7 +422,6 @@ void TKqpNewRBOTransformer::InitializeRBOOptimizationStages() {
         rules.emplace_back(std::make_unique<TPushRenameIntoReadRule>());
         rules.emplace_back(std::make_unique<TPushRenameIntoMapProducerRule>());
         rules.emplace_back(std::make_unique<TPushRenameIntoAggregateResultRule>());
-        rules.emplace_back(std::make_unique<TPushRenameThroughTransparentUnaryRule>(pushAppendsUnderFilter));
         rules.emplace_back(std::make_unique<TPushRenameThroughPassThroughMapRule>());
         rules.emplace_back(std::make_unique<TPushRenameThroughAggregateKeyRule>());
         rules.emplace_back(std::make_unique<TPushRenameThroughJoinSideRule>());

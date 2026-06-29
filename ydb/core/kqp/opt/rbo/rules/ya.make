@@ -25,7 +25,7 @@ SRCS(
     map/push_append_into_map.cpp
     map/push_append_through_aggregate.cpp
     map/push_append_through_join.cpp
-    map/push_append_through_unary.cpp
+    map/push_map_elements_through_unary.cpp
     map/push_append_wrappers.cpp
     push_filter_into_join.cpp
     push_filter_under_map.cpp
@@ -43,7 +43,6 @@ SRCS(
     map/push_rename_through_aggregate_key.cpp
     map/push_rename_through_join_side.cpp
     map/push_rename_through_map.cpp
-    map/push_rename_through_unary.cpp
     map/push_rename_wrapper.cpp
     map/rewrite_to_preferred_alias.cpp
     propagate_aggregate_through_stage.cpp

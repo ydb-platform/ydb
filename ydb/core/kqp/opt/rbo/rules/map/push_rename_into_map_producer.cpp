@@ -20,8 +20,7 @@ bool TPushRenameIntoMapProducerRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
 
     auto map = CastOperator<TOpMap>(topMap->GetInput());
     auto* outputElement = map->FindOutputElement(candidate->From);
-    if (!map->IsSingleConsumer() || !outputElement ||
-        !NMapRules::CanRenameOutput(map, candidate->From, candidate->To)) {
+    if (!map->IsSingleConsumer() || !outputElement) {
         return false;
     }
     // Do not turn `from := to` into `to := to` inside the same map. The target

@@ -139,7 +139,7 @@ class TPushAppendIntoMapRule : public ISimplifiedRule {
 class TPushAppendThroughUnaryRule : public ISimplifiedRule {
   public:
     explicit TPushAppendThroughUnaryRule(bool pushUnderFilter = true)
-        : ISimplifiedRule("Push append through unary", ERuleProperties::RequireParents | ERuleProperties::RequireNameConstraints)
+        : ISimplifiedRule("Push map elements through unary", ERuleProperties::RequireParents)
         , PushUnderFilter(pushUnderFilter) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
@@ -203,21 +203,6 @@ class TRenameToAppendRule : public IRule {
         : IRule("Convert safe renames to appends", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
 
     virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
-};
-
-/**
- * Push semantic renames one topology at a time.
- */
-class TPushRenameThroughTransparentUnaryRule : public IRule {
-  public:
-    explicit TPushRenameThroughTransparentUnaryRule(bool pushAppendAliasesUnderFilter = true)
-        : IRule("Push semantic rename through unary", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints)
-        , PushAppendAliasesUnderFilter(pushAppendAliasesUnderFilter) {}
-
-    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
-
-  private:
-    bool PushAppendAliasesUnderFilter;
 };
 
 class TPushRenameThroughPassThroughMapRule : public IRule {

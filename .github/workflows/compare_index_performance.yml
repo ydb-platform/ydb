@@ -92,54 +92,34 @@ jobs:
           INPUT_MAIN_TABLE_SERVICE_CONFIG: ${{ inputs.main_table_service_config || '' }}
           INPUT_CURRENT_TABLE_SERVICE_CONFIG: ${{ inputs.current_table_service_config || '' }}
         run: |
-          MAIN_FLAG_ARGS=""
-          IFS=',' read -ra FLAGS <<< "$INPUT_MAIN_FEATURE_FLAGS"
-          for flag in "${FLAGS[@]}"; do
-            if [[ -n "$flag" ]]; then
-              MAIN_FLAG_ARGS="$MAIN_FLAG_ARGS --main-feature-flag $flag"
-            fi
-          done
-          CURRENT_FLAG_ARGS=""
-          IFS=',' read -ra FLAGS <<< "$INPUT_CURRENT_FEATURE_FLAGS"
-          for flag in "${FLAGS[@]}"; do
-            if [[ -n "$flag" ]]; then
-              CURRENT_FLAG_ARGS="$CURRENT_FLAG_ARGS --current-feature-flag $flag"
-            fi
-          done
-          MAIN_TSC_ARGS=""
-          IFS=',' read -ra OPTS <<< "$INPUT_MAIN_TABLE_SERVICE_CONFIG"
-          for opt in "${OPTS[@]}"; do
-            if [[ -n "$opt" ]]; then
-              MAIN_TSC_ARGS="$MAIN_TSC_ARGS --main-table-service-config $opt"
-            fi
-          done
-          CURRENT_TSC_ARGS=""
-          IFS=',' read -ra OPTS <<< "$INPUT_CURRENT_TABLE_SERVICE_CONFIG"
-          for opt in "${OPTS[@]}"; do
-            if [[ -n "$opt" ]]; then
-              CURRENT_TSC_ARGS="$CURRENT_TSC_ARGS --current-table-service-config $opt"
-            fi
-          done
-          python3 ./ydb/tests/stress/compare_index_performance.py \
-            --duration "$INPUT_DURATION" \
-            --build-preset "$INPUT_BUILD_PRESET" \
-            --ref "$INPUT_REF" \
-            --targets "$INPUT_TARGETS" \
-            --workload "$INPUT_WORKLOAD" \
-            --rows "$INPUT_ROWS" \
-            --iterations "$INPUT_ITERATIONS" \
-            --warmup "$INPUT_WARMUP" \
-            --threads "$INPUT_THREADS" \
-            $MAIN_FLAG_ARGS \
-            $CURRENT_FLAG_ARGS \
-            $MAIN_TSC_ARGS \
-            $CURRENT_TSC_ARGS
+          # The feature-flag / table_service_config inputs are comma-separated
+          # strings; the test splits them itself, so they are passed through as-is.
+          ./ya make --build "$INPUT_BUILD_PRESET" -tA \
+            ydb/tests/stress/compare_index_performance/tests \
+            --test-param compare_duration="$INPUT_DURATION" \
+            --test-param compare_build_preset="$INPUT_BUILD_PRESET" \
+            --test-param compare_ref="$INPUT_REF" \
+            --test-param compare_targets="$INPUT_TARGETS" \
+            --test-param compare_workload="$INPUT_WORKLOAD" \
+            --test-param compare_rows="$INPUT_ROWS" \
+            --test-param compare_iterations="$INPUT_ITERATIONS" \
+            --test-param compare_warmup="$INPUT_WARMUP" \
+            --test-param compare_threads="$INPUT_THREADS" \
+            --test-param compare_baseline_feature_flags="$INPUT_MAIN_FEATURE_FLAGS" \
+            --test-param compare_current_feature_flags="$INPUT_CURRENT_FEATURE_FLAGS" \
+            --test-param compare_baseline_table_service_config="$INPUT_MAIN_TABLE_SERVICE_CONFIG" \
+            --test-param compare_current_table_service_config="$INPUT_CURRENT_TABLE_SERVICE_CONFIG"
 
       - name: Post results to job summary
         if: always()
         run: |
-          if [[ -f benchmark_results/report.md ]]; then
-            cat benchmark_results/report.md >> "$GITHUB_STEP_SUMMARY"
+          RESULTS_DIR=ydb/tests/stress/compare_index_performance/tests/test-results
+          REPORTS=$(find "$RESULTS_DIR" -name 'report_*.md' -path "*/testing_out_stuff/*" 2>/dev/null | sort)
+          if [[ -n "$REPORTS" ]]; then
+            for r in $REPORTS; do
+              cat "$r" >> "$GITHUB_STEP_SUMMARY"
+              echo "" >> "$GITHUB_STEP_SUMMARY"
+            done
           else
             echo "No report generated." >> "$GITHUB_STEP_SUMMARY"
           fi
@@ -149,5 +129,5 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: benchmark-results
-          path: benchmark_results/
+          path: ydb/tests/stress/compare_index_performance/tests/test-results/**/testing_out_stuff/
           retention-days: 30

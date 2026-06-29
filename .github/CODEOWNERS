@@ -117,6 +117,7 @@
 /ydb/core/tx/schemeshard/olap @ydb-platform/cs
 /ydb/core/tx/schemeshard/ut_olap @ydb-platform/cs
 /ydb/core/tx/schemeshard/ut_olap_reboots @ydb-platform/cs
+/ydb/core/tx/tiering @ydb-platform/cs
 
 /ydb/library/actors/core @ydb-platform/blobstorage
 /ydb/library/actors/interconnect @ydb-platform/blobstorage

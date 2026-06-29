@@ -755,6 +755,7 @@ int main(int argc, const char* argv[]) {
     TString outputPath;
     TString valuesDumpPath;
     bool parseNested = false;
+    bool jsonStats = false;
     int zstdLevel = -1;
 
     opts.AddLongOption("input", "Input NDJSON file").Required().StoreResult(&inputPath);
@@ -768,6 +769,9 @@ int main(int argc, const char* argv[]) {
     opts.AddLongOption("values-dump",
         "Dump the newline-separated values array into the given file")
         .Optional().StoreResult(&valuesDumpPath);
+    opts.AddLongOption("json-stats",
+        "Print machine-readable stats as a single JSON line to stdout")
+        .Optional().NoArgument().SetFlag(&jsonStats);
     opts.AddHelpOption();
 
     NLastGetopt::TOptsParseResult parseResult(&opts, argc, argv);
@@ -950,6 +954,48 @@ int main(int argc, const char* argv[]) {
     if (inputFileSize > 0 && outputFileSize > 0) {
         double ioRatio = static_cast<double>(inputFileSize) / static_cast<double>(outputFileSize);
         std::cerr << "Input/Output ratio: " << std::fixed << std::setprecision(2) << ioRatio << "x\n";
+    }
+
+    // Machine-readable stats on stdout (one JSON line) for batch tooling.
+    if (jsonStats) {
+        auto jsonEscape = [](std::string_view s) {
+            std::string r;
+            r.reserve(s.size() + 2);
+            for (char c : s) {
+                switch (c) {
+                    case '"':  r += "\\\""; break;
+                    case '\\': r += "\\\\"; break;
+                    case '\n': r += "\\n";  break;
+                    case '\t': r += "\\t";  break;
+                    case '\r': r += "\\r";  break;
+                    default:   r += c;      break;
+                }
+            }
+            return r;
+        };
+
+        std::ostringstream js;
+        js << "{"
+           << "\"input\":\"" << jsonEscape(std::string_view(inputPath.data(), inputPath.size())) << "\","
+           << "\"rows\":" << docs.size() << ","
+           << "\"keys\":" << keys.size() << ","
+           << "\"values\":" << vals.size() << ","
+           << "\"zstd_level\":" << zstdLevel << ","
+           << "\"sections\":[";
+        for (size_t i = 0; i < sections.size(); ++i) {
+            const auto& s = sections[i];
+            if (i) js << ",";
+            js << "{\"name\":\"" << jsonEscape(s.Name) << "\","
+               << "\"raw\":" << s.RawSize << ","
+               << "\"compressed\":" << s.Data.size() << "}";
+        }
+        js << "],"
+           << "\"total_raw\":" << totalRaw << ","
+           << "\"total_compressed\":" << totalComp << ","
+           << "\"input_file_size\":" << inputFileSize << ","
+           << "\"output_file_size\":" << outputFileSize
+           << "}";
+        std::cout << js.str() << std::endl;
     }
 
     return 0;

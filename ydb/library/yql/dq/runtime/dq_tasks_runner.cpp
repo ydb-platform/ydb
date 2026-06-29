@@ -370,17 +370,12 @@ public:
             optLLVM = "OFF";
         }
 
-<<<<<<<
         auto runtimeSettings = NYql::DeserializeRuntimeSettingsFromProto(task.GetProgram().GetRuntimeSettings());
 
-=======
-        Y_ENSURE(RuntimeSettings, "RuntimeSettings must be set in Prepare stage of TDqTaskRunner");
-    
->>>>>>>
         TComputationPatternOpts opts(alloc.Ref(), typeEnv, taskRunnerFactory,
             Context.FuncRegistry, NUdf::EValidateMode::None, validatePolicy, optLLVM, EGraphPerProcess::Multi,
             AllocatedHolder->ProgramParsed.StatsRegistry.Get(), CollectFull() ? &CountersProvider : nullptr, nullptr,
-            ComputationLogProvider.Get(), task.GetProgram().GetLangVer(), RuntimeSettings);
+            ComputationLogProvider.Get(), task.GetProgram().GetLangVer(), runtimeSettings);
 
         if (!SecureParamsProvider) {
             SecureParamsProvider = MakeSimpleSecureParamsProvider(Settings.SecureParams);
@@ -511,21 +506,19 @@ public:
         bool canBeCached;
         if (UseSeparatePatternAlloc(task) && Context.PatternCache) {
             auto& cache = Context.PatternCache;
-            Y_ENSURE(RuntimeSettings, "RuntimeSettings must be set in Prepare stage of TDqTaskRunner");
-            TProgramKey cacheKey{program.GetLangVer(), StableHashRuntimeSettings(*RuntimeSettings), program.GetRaw()};
-            auto future = cache->FindOrSubscribe(cacheKey);
+            auto future = cache->FindOrSubscribe(program.GetRaw());
             if (!future.HasValue()) {
                 try {
                     entry = CreateComputationPattern(task, program.GetRaw(), true, canBeCached);
                     if (canBeCached && entry->Pattern->GetSuitableForCache()) {
-                        cache->EmplacePattern(cacheKey, entry);
+                        cache->EmplacePattern(task.GetProgram().GetRaw(), entry);
                     } else {
                         cache->IncNotSuitablePattern();
-                        cache->NotifyPatternMissing(cacheKey);
+                        cache->NotifyPatternMissing(program.GetRaw());
                     }
                 } catch (...) {
                     // TODO: not sure if there may be exceptions in the first place.
-                    cache->NotifyPatternMissing(cacheKey);
+                    cache->NotifyPatternMissing(program.GetRaw());
                     throw;
                 }
             } else {
@@ -594,8 +587,6 @@ public:
         TaskId = task.GetId();
         StageId = task.GetStageId();
         LangVer = task.GetProgram().GetLangVer();
-        RuntimeSettings = DeserializeRuntimeSettingsFromProto(task.GetProgram().GetRuntimeSettings());
-
         auto entry = BuildTask(task);
 
         LOG(TStringBuilder() << "Prepare task: " << TaskId);
@@ -1237,8 +1228,6 @@ private:
     std::unique_ptr<NUdf::ISecureParamsProvider> SecureParamsProvider;
     TDqTaskCountersProvider CountersProvider;
     TLangVersion LangVer = MinLangVersion;
-    TRuntimeSettings::TConstPtr RuntimeSettings;
-
     ui64 InputsConsumed = 0;
 
     struct TInputTransformInfo {

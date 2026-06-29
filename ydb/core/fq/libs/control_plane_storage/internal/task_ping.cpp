@@ -218,7 +218,7 @@ TYdbControlPlaneStorageActor::TPingTaskParams TYdbControlPlaneStorageActor::Cons
             try {
                 auto isBillable = IsBillablelStatus(request.status(), internal.status_code());
                 if (!isBillable) {
-                    YDB_LOG_NOTICE_CTX_COMP(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "Query is NOT billable,",
+                    YDB_LOG_NOTICE_CTX_COMP(*actorSystem, ::NKikimrServices::YQ_CONTROL_PLANE_STORAGE, "Query is NOT billable",
                         {"queryId", request.query_id().value()},
                         {"status", FederatedQuery::QueryMeta::ComputeStatus_Name(request.status())},
                         {"statusCode", NYql::NDqProto::StatusIds_StatusCode_Name(internal.status_code())});
@@ -737,13 +737,15 @@ void TControlPlaneStorageBase::Handle(TEvControlPlaneStorage::TEvFinalStatusRepo
     Counters.GetFinalStatusCounters(event.CloudId, event.Scope)->IncByStatus(event.Status);
 
     TStatistics statistics{event.Statistics};
+    TStringBuilder statisticsBuf;
+    statisticsBuf << statistics;
     YDB_LOG_INFO_COMP(::NKikimrServices::YQ_AUDIT, "FinalStatus",
         {"cloudId", event.CloudId},
         {"scope", event.Scope},
         {"queryId", event.QueryId},
         {"jobId", event.JobId},
         {"queryType", FederatedQuery::QueryContent::QueryType_Name(event.QueryType)},
-        {"statistics", statistics},
+        {"statistics", statisticsBuf},
         {"status", FederatedQuery::QueryMeta::ComputeStatus_Name(event.Status)});
 }
 

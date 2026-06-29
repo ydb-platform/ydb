@@ -12,9 +12,9 @@ namespace NKqp {
 
 // Caveats:
 // 1.
-// A: Map [ a := f(b) ]      -- expression appends move only through filters
-// B: `- Sort                   or with shadowing renames; alias appends and
-// C:    `- input               semantic renames may move through Limit and Sort.
+// A: Map [ a := f(b) ]      -- expression appends move through Filter, and move
+// B: `- Sort                   through Limit/Sort only when this rule is
+// C:    `- input               configured to push expressions.
 //
 // 2.
 // A: Map [ a := b ]         -- move prevented if Unary B has multiple consumers;
@@ -24,9 +24,9 @@ namespace NKqp {
 // E: `- Unary B
 //
 // 3.
-// A: Map [ a := b, x <- a ] -- append and shadowing rename move together so
-// B: `- Unary                  the source name exposed below Unary B is still
-// C:    `- input               hidden above it.
+// A: Map [ a := f(b), x <- a ] -- rename x <- a stays above Unary B if a := f(b)
+// B: `- Unary                    stays above it; otherwise x would rename the
+// C:    `- input                 input name that the top expression still needs.
 
 namespace {
 
@@ -64,40 +64,45 @@ TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
     }
 
     const auto unaryInput = unary->GetInput();
+    const bool pushExpressions = PushExpressions || unary->Kind == EOperator::Filter;
 
-    TInfoUnitSet movedRenameSources;
-    TRenameMap renameMap;
+    TInfoUnitSet keptExpressionOutputs;
     for (const auto& mapElement : topMap->MapElements) {
-        if (mapElement.IsRename() && mapElement.GetRename() != mapElement.GetElementName()) {
-            movedRenameSources.insert(mapElement.GetRename());
-            renameMap.emplace(mapElement.GetRename(), mapElement.GetElementName());
+        if (!pushExpressions && !mapElement.IsRename() && !mapElement.IsColumnAccess()) {
+            keptExpressionOutputs.insert(mapElement.GetElementName());
         }
     }
 
     TVector<TMapElement> pushedElements;
     TVector<TMapElement> topElements;
+    TRenameMap renameMap;
 
     for (const auto& mapElement : topMap->MapElements) {
         if (mapElement.IsRename()) {
-            if (mapElement.GetRename() != mapElement.GetElementName()) {
+            if (keptExpressionOutputs.contains(mapElement.GetRename())) {
+                topElements.push_back(mapElement);
+            } else {
                 pushedElements.push_back(mapElement);
-                continue;
+                if (mapElement.GetRename() != mapElement.GetElementName()) {
+                    renameMap.emplace(mapElement.GetRename(), mapElement.GetElementName());
+                }
             }
-
-            topElements.push_back(mapElement);
             continue;
         }
 
-        if (mapElement.IsColumnAccess() ||
-            unary->Kind == EOperator::Filter ||
-            movedRenameSources.contains(mapElement.GetElementName())) {
+        if (mapElement.IsColumnAccess() || pushExpressions) {
             pushedElements.push_back(mapElement);
             continue;
         }
 
         topElements.push_back(mapElement);
-        if (!renameMap.empty() && !topElements.back().IsRename()) {
-            topElements.back().SetExpression(topElements.back().GetExpression().ApplyRenames(renameMap));
+    }
+
+    if (!renameMap.empty()) {
+        for (auto& mapElement : topElements) {
+            if (!mapElement.IsRename()) {
+                mapElement.SetExpression(mapElement.GetExpression().ApplyRenames(renameMap));
+            }
         }
     }
 

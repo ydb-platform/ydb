@@ -369,7 +369,6 @@ TVector<std::unique_ptr<IRule>> MakeMapAliasCleanupRulesForTest() {
 
 TVector<std::unique_ptr<IRule>> MakeLogicalMapRulesForTest() {
     TVector<std::unique_ptr<IRule>> rules;
-    AddMapAliasRulesForTest(rules);
     rules.emplace_back(std::make_unique<TPushFilterUnderMapRule>());
     return rules;
 }
@@ -4084,6 +4083,108 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(pushedMap->MapElements[1].IsRename());
         UNIT_ASSERT(pushedMap->MapElements[1].GetElementName() == TInfoUnit("l_b"));
         UNIT_ASSERT(pushedMap->MapElements[1].GetRename() == TInfoUnit("b"));
+    }
+
+    Y_UNIT_TEST(PushMapElementsPushesIdentityRenameThroughUnary) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("a")}, pos);
+        auto sort = MakeIntrusive<TOpSort>(
+            read,
+            pos,
+            TVector<TSortElement>{TSortElement(TInfoUnit("a"), true, true)},
+            std::nullopt
+        );
+        auto renameMap = MakeIntrusive<TOpMap>(sort, pos, TVector<TMapElement>{
+            TMapElement(TInfoUnit("a"), TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps, true),
+        });
+        TOpRoot root(renameMap, pos, {"a"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushAppendThroughUnaryRule>());
+        TRuleBasedStage pushMapElements("Focused push map elements through unary", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushMapElements.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Sort, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenSort = CastOperator<TOpSort>(root.GetInput());
+        UNIT_ASSERT_C(rewrittenSort->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+
+        auto pushedMap = CastOperator<TOpMap>(rewrittenSort->GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 1);
+        UNIT_ASSERT(pushedMap->MapElements[0].IsRename());
+        UNIT_ASSERT(pushedMap->MapElements[0].GetElementName() == TInfoUnit("a"));
+        UNIT_ASSERT(pushedMap->MapElements[0].GetRename() == TInfoUnit("a"));
+    }
+
+    Y_UNIT_TEST(PushMapElementsKeepsRenameShadowingKeptExpressionOutput) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("a")}, pos);
+        auto sort = MakeIntrusive<TOpSort>(
+            read,
+            pos,
+            TVector<TSortElement>{TSortElement(TInfoUnit("a"), true, true)},
+            std::nullopt
+        );
+        auto map = MakeIntrusive<TOpMap>(sort, pos, TVector<TMapElement>{
+            MakeTestConstantAppend("a", pos, testContext.ExprCtx),
+            TMapElement(TInfoUnit("x"), TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps, true),
+        });
+        TOpRoot root(map, pos, {"a", "x"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushAppendThroughUnaryRule>());
+        TRuleBasedStage pushMapElements("Focused push map elements through unary", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushMapElements.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        auto topMap = CastOperator<TOpMap>(root.GetInput());
+        UNIT_ASSERT_C(topMap->GetInput()->Kind == EOperator::Sort, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_VALUES_EQUAL(topMap->MapElements.size(), 2);
+    }
+
+    Y_UNIT_TEST(PushMapElementsPushesRenameShadowingMovedExpressionOutput) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("a")}, pos);
+        auto sort = MakeIntrusive<TOpSort>(
+            read,
+            pos,
+            TVector<TSortElement>{TSortElement(TInfoUnit("a"), true, true)},
+            std::nullopt
+        );
+        auto map = MakeIntrusive<TOpMap>(sort, pos, TVector<TMapElement>{
+            MakeTestConstantAppend("a", pos, testContext.ExprCtx),
+            TMapElement(TInfoUnit("x"), TInfoUnit("a"), pos, &testContext.ExprCtx, &expressionProps, true),
+        });
+        TOpRoot root(map, pos, {"a", "x"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushAppendThroughUnaryRule>(/*pushExpressions*/ true));
+        TRuleBasedStage pushMapElements("Focused push map elements through unary", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushMapElements.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Sort, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenSort = CastOperator<TOpSort>(root.GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenSort->SortElements.size(), 1);
+        UNIT_ASSERT(rewrittenSort->SortElements[0].SortColumn == TInfoUnit("x"));
+        UNIT_ASSERT_C(rewrittenSort->GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+
+        auto pushedMap = CastOperator<TOpMap>(rewrittenSort->GetInput());
+        UNIT_ASSERT_VALUES_EQUAL(pushedMap->MapElements.size(), 2);
+        UNIT_ASSERT(pushedMap->MapElements[0].GetElementName() == TInfoUnit("a"));
+        UNIT_ASSERT(pushedMap->MapElements[1].IsRename());
+        UNIT_ASSERT(pushedMap->MapElements[1].GetElementName() == TInfoUnit("x"));
+        UNIT_ASSERT(pushedMap->MapElements[1].GetRename() == TInfoUnit("a"));
     }
 
     Y_UNIT_TEST(PushRenameTreatsDeadAppendAliasAsRenameThroughJoin) {

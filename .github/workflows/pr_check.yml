@@ -255,6 +255,16 @@ jobs:
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
     name: Build and test ${{ matrix.build_preset }}
     steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+      with:
+        ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
+        fetch-depth: 2
+    - name: Setup ydb access
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+        ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
     - name: Build and test
       if: |
           (matrix.build_preset == 'release-asan') || 
@@ -267,18 +277,18 @@ jobs:
             (matrix.build_preset == 'release-msan' && 
             contains(github.event.pull_request.labels.*.name, 'run-msan-tests') || 
             contains(github.event.pull_request.labels.*.name, 'run-sanitizer-tests'))
-      uses: ./.github/actions/pr_check_build_test
+      uses: ./.github/actions/build_and_test_ya
       with:
-        checkout_ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
         build_preset: ${{ matrix.build_preset }}
         build_target: ${{ matrix.build_target }}
-        test_threads: ${{ matrix.threads_count }}
-        test_size: ${{ matrix.test_size }}
+        increment: true
         run_tests: ${{ contains(fromJSON('["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]'), matrix.build_preset) }}
-        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-        ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
-        ci_secs: ${{ env.CI_SECS }}
-        ci_vars: ${{ env.CI_VARS }}
+        test_size: ${{ matrix.test_size }}
+        test_threads: ${{ matrix.threads_count }}
+        put_build_results_to_cache: true
+        additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
+        secs: ${{ env.CI_SECS }}
+        vars: ${{ env.CI_VARS }}
   postcommit_build_and_test:
     # Push to mainline: same build path as PR-check; legacy analytics names for mute/BI.
     if: >-
@@ -297,18 +307,32 @@ jobs:
     name: Build and test ${{ matrix.build_preset }}
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}", postcommit ]
     steps:
+    - name: Checkout
+      uses: actions/checkout@v5
+      with:
+        fetch-depth: 2
+    - name: Setup ydb access
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
+        ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
     - name: Build and test
       if: >-
         (matrix.build_preset == 'relwithdebinfo' && fromJSON(vars.CHECKS_SWITCH).postcommit_relwithdebinfo == true)
         || (matrix.build_preset == 'release-asan' && fromJSON(vars.CHECKS_SWITCH).postcommit_asan == true)
-      uses: ./.github/actions/pr_check_build_test
+      uses: ./.github/actions/build_and_test_ya
       with:
         build_preset: ${{ matrix.build_preset }}
+        build_target: "ydb/"
+        increment: true
+        run_tests: true
+        test_size: small,medium
+        test_threads: 52
+        put_build_results_to_cache: true
+        additional_ya_make_args: -DDEBUGINFO_LINES_ONLY
         analytics_job_name: ${{ matrix.analytics_job_name }}
-        ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
-        ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
-        ci_secs: ${{ env.CI_SECS }}
-        ci_vars: ${{ env.CI_VARS }}
+        secs: ${{ env.CI_SECS }}
+        vars: ${{ env.CI_VARS }}
   update_integrated_status:
     runs-on: [self-hosted, tiny-worker]
     needs: build_and_test

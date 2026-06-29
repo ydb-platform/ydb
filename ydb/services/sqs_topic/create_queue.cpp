@@ -163,6 +163,9 @@ namespace NKikimr::NSqsTopic::V1 {
                     auto* autoPartitioning = partitioningSettings->mutable_auto_partitioning_settings();
 
                     autoPartitioning->set_strategy(::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
+                    autoPartitioning->mutable_partition_write_speed()->mutable_stabilization_window()->set_seconds(30);
+                    autoPartitioning->mutable_partition_write_speed()->set_up_utilization_percent(80);
+                    autoPartitioning->mutable_partition_write_speed()->set_down_utilization_percent(20);
                     partitioningSettings->set_min_active_partitions(DEFAULT_MIN_PARTITION_COUNT);
                     partitioningSettings->set_max_active_partitions(DEFAULT_MAX_PARTITION_COUNT);
                 }

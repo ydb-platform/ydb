@@ -92,8 +92,8 @@ bool SchemePathExists(NPersQueue::TTestServer& server, const TString& path) {
 NPersQueue::TTestServer MakeServerWithDeferredPublishEnabled(
     bool forbidRequestsToStaticNodesWithoutDatabase = true)
 {
-    auto settings = NKikimr::NPersQueueTests::PQSettings();
-    settings.FeatureFlags.SetEnableTopicDeferredPublish(true);
+    auto settings = NKikimr::NPersQueueTests::PQSettings()
+        .SetEnableTopicDeferredPublish(true);
     settings.FeatureFlags.SetForbidRequestsToStaticNodesWithoutDatabase(
         forbidRequestsToStaticNodesWithoutDatabase);
     return NPersQueue::TTestServer(settings);

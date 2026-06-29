@@ -8,6 +8,8 @@
 #include <ydb/core/blobstorage/vdisk/hullop/hullcompdelete/blobstorage_hullcompdelete.h>
 #include <ydb/core/blobstorage/vdisk/hulldb/bulksst_add/hulldb_bulksst_add.h>
 
+#include <type_traits>
+
 namespace NKikimr {
 
     ////////////////////////////////////////////////////////////////////////////
@@ -321,6 +323,64 @@ namespace NKikimr {
             ActiveActors.Insert(actorId, __FILE__, __LINE__, ctx, NKikimrServices::BLOBSTORAGE);
         }
 
+        void AccountSelectedStrategy() {
+            auto& group = HullDs->HullCtx->CompactionStrategyGroup;
+
+            if constexpr (std::is_same_v<TKey, TKeyLogoBlob>) {
+                switch (CompactionTask->SelectStrategy) {
+                    case NHullComp::ESelectStrategy::DelSst:
+                        ++group.BlobsDelSst();
+                        break;
+                    case NHullComp::ESelectStrategy::PromoteSsts:
+                        ++group.BlobsPromoteSsts();
+                        break;
+                    case NHullComp::ESelectStrategy::Explicit:
+                        ++group.BlobsExplicit();
+                        break;
+                    case NHullComp::ESelectStrategy::BalanceLevel:
+                        ++group.BlobsBalance();
+                        ++group.BlobsBalanceLevel();
+                        break;
+                    case NHullComp::ESelectStrategy::BalanceFull:
+                        ++group.BlobsBalance();
+                        ++group.BlobsBalanceFull();
+                        break;
+                    case NHullComp::ESelectStrategy::FreeSpace:
+                        ++group.BlobsFreeSpace();
+                        break;
+                    case NHullComp::ESelectStrategy::Squeeze:
+                        ++group.BlobsSqueeze();
+                        break;
+                    case NHullComp::ESelectStrategy::None:
+                        break;
+                }
+            } else if constexpr (std::is_same_v<TKey, TKeyBlock>) {
+                switch (CompactionTask->SelectStrategy) {
+                    case NHullComp::ESelectStrategy::PromoteSsts:
+                        ++group.BlocksPromoteSsts();
+                        break;
+                    case NHullComp::ESelectStrategy::BalanceLevel:
+                    case NHullComp::ESelectStrategy::BalanceFull:
+                        ++group.BlocksBalance();
+                        break;
+                    default:
+                        break;
+                }
+            } else if constexpr (std::is_same_v<TKey, TKeyBarrier>) {
+                switch (CompactionTask->SelectStrategy) {
+                    case NHullComp::ESelectStrategy::PromoteSsts:
+                        ++group.BarriersPromoteSsts();
+                        break;
+                    case NHullComp::ESelectStrategy::BalanceLevel:
+                    case NHullComp::ESelectStrategy::BalanceFull:
+                        ++group.BarriersBalance();
+                        break;
+                    default:
+                        break;
+                }
+            }
+        }
+
         void Handle(typename TSelected::TPtr &ev, const TActorContext &ctx) {
             ActiveActors.Erase(ev->Sender);
             Y_ABORT_UNLESS(RTCtx->LevelIndex->GetCompState() == TLevelIndexBase::StateCompPolicyAtWork);
@@ -346,6 +406,7 @@ namespace NKikimr {
                 case NHullComp::ActDeleteSsts: {
                     Y_ABORT_UNLESS(CompactionTask->GetSstsToAdd().Empty() && !CompactionTask->GetSstsToDelete().Empty());
                     if (CompactionTask->GetHugeBlobsToDelete().Empty() && CompactionTask->GetHugeBlobsAllocated().Empty()) {
+                        AccountSelectedStrategy();
                         ApplyCompactionResult(ctx, {}, {}, 0);
                     } else {
                         // switch compaction state to pre-compaction to block any attempts of concurrent compaction
@@ -362,6 +423,7 @@ namespace NKikimr {
                             Y_ABORT_UNLESS(wId);
                             LOG_DEBUG_S(ctx, NKikimrServices::BS_HULLCOMP, HullDs->HullCtx->VCtx->VDiskLogPrefix
                                 << "got PreCompactResult for ActDeleteSsts, wId# " << wId);
+                            AccountSelectedStrategy();
                             ApplyCompactionResult(ctx, {}, {}, wId);
                             RTCtx->LevelIndex->UpdateLevelStat(LevelStat);
                         });
@@ -371,6 +433,7 @@ namespace NKikimr {
                 }
                 case NHullComp::ActMoveSsts: {
                     Y_ABORT_UNLESS(!CompactionTask->GetSstsToAdd().Empty() && !CompactionTask->GetSstsToDelete().Empty());
+                    AccountSelectedStrategy();
                     ApplyCompactionResult(ctx, {}, {}, 0);
                     break;
                 }
@@ -385,6 +448,7 @@ namespace NKikimr {
                         LOG_DEBUG(ctx, NKikimrServices::BS_HULLCOMP,
                              VDISKP(HullDs->HullCtx->VCtx, "%s: compaction token not needed, starting compaction",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data()));
+                        AccountSelectedStrategy();
                         RunLevelCompaction(ctx, CompactionTask->CompactSsts.CompactionChains, CompactionTask->IsFullCompaction);
                         break;
                     }
@@ -394,6 +458,7 @@ namespace NKikimr {
                         LOG_INFO(ctx, NKikimrServices::BS_HULLCOMP,
                              VDISKP(HullDs->HullCtx->VCtx, "%s: token already acquired (token# %" PRIu64 "), starting compaction",
                                 PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionToken));
+                        AccountSelectedStrategy();
                         RunLevelCompaction(ctx, CompactionTask->CompactSsts.CompactionChains, CompactionTask->IsFullCompaction);
                     } else {
                         LOG_DEBUG(ctx, NKikimrServices::BS_HULLCOMP,

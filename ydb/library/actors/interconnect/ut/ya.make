@@ -10,6 +10,7 @@ ENDIF()
 SRCS(
     channel_scheduler_ut.cpp
     event_holder_pool_ut.cpp
+    event_output_channel_ut.cpp
     interconnect_ut.cpp
     large.cpp
     outgoing_stream_ut.cpp

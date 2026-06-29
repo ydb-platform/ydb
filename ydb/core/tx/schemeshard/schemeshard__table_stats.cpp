@@ -463,11 +463,11 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         }
 
         TOlapStoreInfo::TPtr olapStore = Self->OlapStores[pathId];
-        const i64 prevSmallBlobsBytes = olapStore->Stats.Aggregated.SmallBlobsBytes;
-        const i64 prevSmallBlobsCount = olapStore->Stats.Aggregated.SmallBlobsCount;
+        const ui64 prevSmallBlobsBytes = olapStore->Stats.Aggregated.SmallBlobsBytes;
+        const ui64 prevSmallBlobsCount = olapStore->Stats.Aggregated.SmallBlobsCount;
         olapStore->UpdateShardStats(&diskSpaceUsageDelta, shardIdx, newStats, now);
-        smallBlobsBytesDelta = olapStore->Stats.Aggregated.SmallBlobsBytes - prevSmallBlobsBytes;
-        smallBlobsCountDelta = olapStore->Stats.Aggregated.SmallBlobsCount - prevSmallBlobsCount;
+        smallBlobsBytesDelta = static_cast<i64>(olapStore->Stats.Aggregated.SmallBlobsBytes) - static_cast<i64>(prevSmallBlobsBytes);
+        smallBlobsCountDelta = static_cast<i64>(olapStore->Stats.Aggregated.SmallBlobsCount) - static_cast<i64>(prevSmallBlobsCount);
         updateSubdomainInfo = true;
 
         const auto tables = rec.GetTables();
@@ -505,11 +505,11 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
                    "PersistSingleStats: ColumnTable rec.GetColumnTables() size=" << rec.GetTables().size());
 
         auto columnTable = Self->ColumnTables.GetVerifiedPtr(pathId);
-        const i64 prevSmallBlobsBytes = columnTable->Stats.Aggregated.SmallBlobsBytes;
-        const i64 prevSmallBlobsCount = columnTable->Stats.Aggregated.SmallBlobsCount;
+        const ui64 prevSmallBlobsBytes = columnTable->Stats.Aggregated.SmallBlobsBytes;
+        const ui64 prevSmallBlobsCount = columnTable->Stats.Aggregated.SmallBlobsCount;
         columnTable->UpdateShardStats(&diskSpaceUsageDelta, shardIdx, newStats, now);
-        smallBlobsBytesDelta = columnTable->Stats.Aggregated.SmallBlobsBytes - prevSmallBlobsBytes;
-        smallBlobsCountDelta = columnTable->Stats.Aggregated.SmallBlobsCount - prevSmallBlobsCount;
+        smallBlobsBytesDelta = static_cast<i64>(columnTable->Stats.Aggregated.SmallBlobsBytes) - static_cast<i64>(prevSmallBlobsBytes);
+        smallBlobsCountDelta = static_cast<i64>(columnTable->Stats.Aggregated.SmallBlobsCount) - static_cast<i64>(prevSmallBlobsCount);
         updateSubdomainInfo = true;
 
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,

@@ -284,16 +284,16 @@ bool TSubDomainInfo::CheckSmallBlobsQuotas(IQuotaCounters* counters) {
 }
 
 void TSubDomainInfo::CountSmallBlobsQuotas(IQuotaCounters* counters, const TSmallBlobsQuotas& prev, const TSmallBlobsQuotas& next) {
-    if (const i64 delta = next.VolumeHardQuota - prev.VolumeHardQuota; delta != 0) {
+    if (const i64 delta = static_cast<i64>(next.VolumeHardQuota) - static_cast<i64>(prev.VolumeHardQuota); delta != 0) {
         counters->ChangeSmallBlobsVolumeHardQuotaBytes(delta);
     }
-    if (const i64 delta = next.VolumeSoftQuota - prev.VolumeSoftQuota; delta != 0) {
+    if (const i64 delta = static_cast<i64>(next.VolumeSoftQuota) - static_cast<i64>(prev.VolumeSoftQuota); delta != 0) {
         counters->ChangeSmallBlobsVolumeSoftQuotaBytes(delta);
     }
-    if (const i64 delta = next.CountHardQuota - prev.CountHardQuota; delta != 0) {
+    if (const i64 delta = static_cast<i64>(next.CountHardQuota) - static_cast<i64>(prev.CountHardQuota); delta != 0) {
         counters->ChangeSmallBlobsCountHardQuota(delta);
     }
-    if (const i64 delta = next.CountSoftQuota - prev.CountSoftQuota; delta != 0) {
+    if (const i64 delta = static_cast<i64>(next.CountSoftQuota) - static_cast<i64>(prev.CountSoftQuota); delta != 0) {
         counters->ChangeSmallBlobsCountSoftQuota(delta);
     }
 }

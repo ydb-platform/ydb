@@ -457,7 +457,7 @@ ui64 TColumnShard::NormalizeSmallBlobsCount(const ui64 rawCount) {
     const ui32 vdisks = std::max<ui32>(1, layout->BlobSubgroupSize());
     // 1. Every vdisk in a group keeps a record for a blob in the index in RAM, so we multiply by the number of vdisks.
     // 2. Hard storage quota is set in term of "user data", not "actual blob storage consumption".
-    // When the quote is set, it is usually "actual blobs storage allowence" / some coefficient (depending on the eresue).
+    // When the quota is set, it is usually "actual blobs storage allowance" / some coefficient (depending on the erasure).
     // So, here we take that coefficient into account too.
     return rawCount * vdisks / coef;
 }

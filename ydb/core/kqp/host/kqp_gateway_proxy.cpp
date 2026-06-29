@@ -882,28 +882,6 @@ public:
         return Gateway->LoadTableMetadata(cluster, table, settings);
     }
 
-    TFuture<TGenericResult> SetColumnConstraint(const TString& tableName, TVector<TSetColumnConstraintSettings>&& settings) override {
-        CHECK_PREPARED_DDL(SetColumnConstraint);
-
-        auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
-        auto& phyTx = *phyQuery.AddTransactions();
-        phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
-
-        auto* setColumnConstraintOp = phyTx.MutableSchemeOperation()->MutableSetColumnConstraint();
-        setColumnConstraintOp->SetTablePath(tableName);
-        for (auto& s : settings) {
-            switch (s.GetConstraint()) {
-                case TSetColumnConstraintSettings::NOT_NULL: {
-                    setColumnConstraintOp->AddNotNullColumns(s.GetColumnName());
-                }
-            }
-        }
-
-        TGenericResult result;
-        result.SetSuccess();
-        return MakeFuture(result);
-    }
-
     TGenericResult PrepareAlterDatabase(const TAlterDatabaseSettings& settings, NKikimrSchemeOp::TModifyScheme& modifyScheme) {
         if (TIssue error; !NSchemeHelpers::Validate(settings, error)) {
             TGenericResult result;
@@ -1346,6 +1324,26 @@ public:
                 tablePromise.SetValue(errResult);
                 return tablePromise.GetFuture();
             }
+            TGenericResult result;
+            result.SetSuccess();
+            tablePromise.SetValue(result);
+            return tablePromise.GetFuture();
+        } else if (opType == EAlterOperationKind::SetColumnConstraint) {
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+            auto* setColumnConstraintOp = phyTx.MutableSchemeOperation()->MutableSetColumnConstraint();
+
+            Ydb::StatusIds::StatusCode code;
+            TString error;
+            if (!BuildAlterTableSetColumnConstraintRequest(&req, setColumnConstraintOp, code, error)) {
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue(error));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                tablePromise.SetValue(errResult);
+                return tablePromise.GetFuture();
+            }
+
             TGenericResult result;
             result.SetSuccess();
             tablePromise.SetValue(result);

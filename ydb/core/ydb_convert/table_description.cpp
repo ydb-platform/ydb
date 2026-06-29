@@ -98,6 +98,10 @@ THashSet<EAlterOperationKind> GetAlterOperationKinds(const Ydb::Table::AlterTabl
         ops.emplace(EAlterOperationKind::Compact);
     }
 
+    if (req->has_set_column_constraint()) {
+        ops.emplace(EAlterOperationKind::SetColumnConstraint);
+    }
+
     return ops;
 }
 
@@ -438,6 +442,35 @@ bool BuildAlterTableBloomFilterModifyScheme(const Ydb::Table::AlterTableRequest*
     Ydb::StatusIds::StatusCode& code, TString& error)
 {
     return BuildAlterTableBloomFilterModifyScheme(req->path(), req, modifyScheme, code, error);
+}
+
+bool BuildAlterTableSetColumnConstraintRequest(const Ydb::Table::AlterTableRequest* req, NKikimrSetColumnConstraint::TSetColumnConstraintSettings* settings,
+    Ydb::StatusIds::StatusCode& status, TString& error)
+{
+    const auto ops = GetAlterOperationKinds(req);
+    if (ops.size() != 1 || *ops.begin() != EAlterOperationKind::SetColumnConstraint) {
+        status = Ydb::StatusIds::INTERNAL_ERROR;
+        error = "Unexpected build alter table compact call.";
+        return false;
+    }
+
+    if (!AppData()->FeatureFlags.GetEnableSetColumnConstraint()) {
+        status = Ydb::StatusIds::BAD_REQUEST;
+        error = "Set column constraint is not allowed";
+        return false;
+    }
+
+    if (req->has_set_column_constraint()) {
+        auto column = req->set_column_constraint().column_name();
+
+        if (req->set_column_constraint().constraint() == Ydb::Table::SetColumnConstraintItem::SetColumnConstraintItem::NOT_NULL) {
+            settings->AddNotNullColumns(column);
+        }
+    }
+
+    settings->SetTablePath(req->path());
+
+    return true;
 }
 
 bool BuildAlterTableCompactRequest(const Ydb::Table::AlterTableRequest* req, NKikimrForcedCompaction::TForcedCompactionSettings* settings,

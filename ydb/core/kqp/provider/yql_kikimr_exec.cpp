@@ -1945,7 +1945,6 @@ public:
             NKikimrIndexBuilder::TIndexBuildSettings indexBuildSettings;
             indexBuildSettings.set_source_path(table.Metadata->Name);
 
-            TVector<TSetColumnConstraintSettings> constraintSetObjects;
             auto applyLocalBloomNgramFilterIndex = [](Ydb::Table::LocalBloomNgramFilterIndex* proto,
                                                            const TIndexDescription::TLocalBloomNgramFilterDescription& desc) -> decltype(auto) {
                 if (desc.NgramSize) {
@@ -2189,12 +2188,10 @@ public:
                                     return SyncError();
                                 } else {
                                     alterTableRequest.mutable_alter_columns()->RemoveLast();
+                                    auto& req = *alterTableRequest.mutable_set_column_constraint();
 
-                                    TSetColumnConstraintSettings value;
-                                    value.SetColumnName(TString(columnName));
-                                    value.SetConstraint(TSetColumnConstraintSettings::NOT_NULL);
-
-                                    constraintSetObjects.push_back(std::move(value));
+                                    req.set_column_name(TString(columnName));
+                                    req.set_constraint(Ydb::Table::SetColumnConstraintItem::NOT_NULL);
                                 }
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
@@ -3109,11 +3106,8 @@ public:
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
             bool isTableStore = (table.Metadata->TableType == ETableType::TableStore);  // Doesn't set, so always false
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
-            bool isSetColumnConstraint = (!constraintSetObjects.empty());
 
-            if (isSetColumnConstraint) {
-                future = Gateway->SetColumnConstraint(table.Metadata->Name, std::move(constraintSetObjects));
-            } else if (isTableStore) {
+            if (isTableStore) {
                 AFL_VERIFY(false);
                 if (!isColumn) {
                     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),

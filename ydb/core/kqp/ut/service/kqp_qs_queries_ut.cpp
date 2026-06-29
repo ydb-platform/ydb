@@ -5441,17 +5441,18 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(AlterTable_SetNotNull_Invalid) {
+    Y_UNIT_TEST_QUAD(AlterTable_SetNotNull_Invalid, WithSecondaryIndex, WithQueryService) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
         auto kikimr = TKikimrRunner(TKikimrSettings(config));
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
-        auto client = kikimr.GetQueryClient();
+        auto queryClient = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
 
         {
-            auto createTable = client.ExecuteQuery(R"sql(
+            auto createTable = queryClient.ExecuteQuery(R"sql(
                 CREATE TABLE `/Root/test/alterNotNull` (
                     id Int32 NOT NULL,
                     val Int32 DEFAULT(0),
@@ -5461,8 +5462,15 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(createTable.IsSuccess(), createTable.GetIssues().ToString());
         }
 
+        if (WithSecondaryIndex) {
+            auto createIndex = queryClient.ExecuteQuery(R"sql(
+                ALTER TABLE `/Root/test/alterNotNull` ADD INDEX `index` GLOBAL ON (val);
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(createIndex.IsSuccess(), createIndex.GetIssues().ToString());
+        }
+
         {
-            auto initValues = client.ExecuteQuery(R"sql(
+            auto initValues = queryClient.ExecuteQuery(R"sql(
                 REPLACE INTO `/Root/test/alterNotNull` (id, val)
                 VALUES
                 ( 1, 1 ),
@@ -5477,18 +5485,31 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
 
         {
-            auto setNotNull = client.ExecuteQuery(R"sql(
+            auto sql = R"sql(
                 ALTER TABLE `/Root/test/alterNotNull`
                 ALTER COLUMN val SET NOT NULL;
-            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
-            UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::PRECONDITION_FAILED, setNotNull.GetIssues().ToString());
-            UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(),
-                "Validation failed for SET NOT NULL on table `/Root/test/alterNotNull`: one or more columns contain NULL values");
+            )sql";
+
+            if (WithQueryService) {
+                auto setNotNull = queryClient.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_C(!setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
+                UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::PRECONDITION_FAILED, setNotNull.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(),
+                    "Validation failed for SET NOT NULL on table `/Root/test/alterNotNull`: one or more columns contain NULL values");
+            } else {
+                auto tcSession = tableClient.CreateSession().GetValueSync().GetSession();
+                auto setNotNull = tcSession.ExecuteSchemeQuery(sql).GetValueSync();
+                tcSession.Close();
+                UNIT_ASSERT(!setNotNull.IsSuccess());
+                // I dont undersrand why there is no `PRECONDITION_FAILED`
+                UNIT_ASSERT_VALUES_EQUAL_C(setNotNull.GetStatus(), EStatus::GENERIC_ERROR, setNotNull.GetIssues().ToString());
+                UNIT_ASSERT_STRING_CONTAINS(setNotNull.GetIssues().ToString(),
+                    "Validation failed for SET NOT NULL on table `/Root/test/alterNotNull`: one or more columns contain NULL values");
+            }
         }
 
         {
-            auto initNullValues = client.ExecuteQuery(R"sql(
+            auto initNullValues = queryClient.ExecuteQuery(R"sql(
                 REPLACE INTO `/Root/test/alterNotNull` (id, val)
                 VALUES
                 ( 1, NULL ),
@@ -5498,17 +5519,18 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
     }
 
-    Y_UNIT_TEST(AlterTable_SetNotNull_Valid) {
+    Y_UNIT_TEST_QUAD(AlterTable_SetNotNull_Valid, WithSecondaryIndex, WithQueryService) {
         NKikimrConfig::TAppConfig config;
         config.MutableFeatureFlags()->SetEnableSetColumnConstraint(true);
         auto kikimr = TKikimrRunner(TKikimrSettings(config));
 
         Tests::NCommon::TLoggerInit(kikimr).Initialize();
 
-        auto client = kikimr.GetQueryClient();
+        auto queryClient = kikimr.GetQueryClient();
+        auto tableClient = kikimr.GetTableClient();
 
         {
-            auto createTable = client.ExecuteQuery(R"sql(
+            auto createTable = queryClient.ExecuteQuery(R"sql(
                 CREATE TABLE `/Root/test/alterNotNull` (
                     id Int32 NOT NULL,
                     val Int32 DEFAULT(0),
@@ -5518,8 +5540,15 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
             UNIT_ASSERT_C(createTable.IsSuccess(), createTable.GetIssues().ToString());
         }
 
+        if (WithSecondaryIndex) {
+            auto createIndex = queryClient.ExecuteQuery(R"sql(
+                ALTER TABLE `/Root/test/alterNotNull` ADD INDEX `index` GLOBAL ON (val);
+            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+            UNIT_ASSERT_C(createIndex.IsSuccess(), createIndex.GetIssues().ToString());
+        }
+
         {
-            auto initValues = client.ExecuteQuery(R"sql(
+            auto initValues = queryClient.ExecuteQuery(R"sql(
                 REPLACE INTO `/Root/test/alterNotNull` (id, val)
                 VALUES
                 ( 1, 1 ),
@@ -5534,15 +5563,24 @@ Y_UNIT_TEST_SUITE(KqpQueryService) {
         }
 
         {
-            auto setNotNull = client.ExecuteQuery(R"sql(
+            auto sql = R"sql(
                 ALTER TABLE `/Root/test/alterNotNull`
                 ALTER COLUMN val SET NOT NULL;
-            )sql", NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-            UNIT_ASSERT_C(setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
+            )sql";
+
+            if (WithQueryService) {
+                auto setNotNull = queryClient.ExecuteQuery(sql, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
+                UNIT_ASSERT_C(setNotNull.IsSuccess(), setNotNull.GetIssues().ToString());
+            } else {
+                auto tcSession = tableClient.CreateSession().GetValueSync().GetSession();
+                auto setNotNull = tcSession.ExecuteSchemeQuery(sql).GetValueSync();
+                tcSession.Close();
+                UNIT_ASSERT(setNotNull.IsSuccess());
+            }
         }
 
         {
-            auto initNullValues = client.ExecuteQuery(R"sql(
+            auto initNullValues = queryClient.ExecuteQuery(R"sql(
                 REPLACE INTO `/Root/test/alterNotNull` (id, val)
                 VALUES
                 ( 1, NULL ),

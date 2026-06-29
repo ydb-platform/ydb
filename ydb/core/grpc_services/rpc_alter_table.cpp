@@ -107,6 +107,9 @@ public:
 
             PrepareAlterTableWithTxId();
             break;
+        case EOp::SetColumnConstraint:
+            AlterTable(ctx);
+            break;
         }
 
         Become(&TAlterTableRPC::AlterStateWork);

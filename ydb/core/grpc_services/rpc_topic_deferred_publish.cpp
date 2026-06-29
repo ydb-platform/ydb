@@ -45,7 +45,7 @@ public:
     }
 
 private:
-    IRequestOpCtx* Request;
+    std::unique_ptr<IRequestOpCtx> Request;
 };
 
 template <typename TEvRequest, typename TResult>
@@ -104,7 +104,7 @@ public:
                 event->Database = *database;
                 event->ExtPublicationId = protoRequest->ext_publication_id();
                 event->WriterIdentity = writerIdentity;
-                event->CreatedBy = GetUserSID(Request);
+                event->CreatedBy = GetUserSID(Request.get());
                 return event;
             }());
         Become(&TBeginPublicationRequestActor::StateFunc);
@@ -135,7 +135,7 @@ public:
     }
 
 private:
-    IRequestOpCtx* Request;
+    std::unique_ptr<IRequestOpCtx> Request;
 };
 
 } // namespace

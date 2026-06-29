@@ -418,7 +418,7 @@ private:
                     meta.set_enabled_runtime_results(true);
                     *meta.mutable_columns() = resultSet.columns();
 
-                    if (const auto& issues = NKikimr::NKqp::ValidateResultSetColumns(meta.columns())) {
+                    if (const auto& issues = NFq::ValidateResultSetColumns(meta.columns())) {
                         meta.clear_columns();
                         Finish(Ydb::StatusIds::INTERNAL_ERROR, AddRootIssue(TStringBuilder() << "Invalid result set " << resultSetIndex << " columns, please contact internal support", issues));
                         return;

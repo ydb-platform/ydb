@@ -1,6 +1,7 @@
 #include "fast_path_service.h"
-#include "mon_render.h"
 #include "partition_direct_actor.h"
+
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_render.h>
 
 #include <ydb/library/actors/core/mon.h>
 

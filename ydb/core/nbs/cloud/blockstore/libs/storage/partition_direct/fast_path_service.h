@@ -1,7 +1,6 @@
 #pragma once
 
 #include "direct_block_group.h"
-#include "mon_model.h"
 #include "region.h"
 
 #include <ydb/core/nbs/cloud/blockstore/config/public.h>
@@ -11,6 +10,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 

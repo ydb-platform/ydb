@@ -17,7 +17,6 @@ SRCS(
     part_storepartitionids.cpp
     part_storevolumeconfig.cpp
     part_updatevchunkconfig.cpp
-    mon_render.cpp
     part_monitoring.cpp
     partition_direct_actor.cpp
     partition_direct.cpp
@@ -39,6 +38,7 @@ PEERDIR(
     ydb/core/nbs/cloud/blockstore/libs/storage/core
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/dirty_map
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model
+    ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page
     ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/protos
     ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport
     ydb/core/nbs/cloud/storage/core/libs/coroutine
@@ -49,8 +49,6 @@ PEERDIR(
 
     ydb/core/mind/bscontroller
     contrib/libs/opentelemetry-proto
-
-    library/cpp/monlib/service/pages
 )
 
 END()
@@ -58,6 +56,7 @@ END()
 RECURSE(
     dirty_map
     model
+    mon_page
 )
 
 RECURSE_FOR_TESTS(

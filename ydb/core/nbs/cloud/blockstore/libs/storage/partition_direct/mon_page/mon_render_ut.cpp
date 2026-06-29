@@ -1,4 +1,4 @@
-#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_render.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_render.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 

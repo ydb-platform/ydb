@@ -31,9 +31,9 @@ TVector<ui64> NKikimr::TTxAllocatorClient::AllocateTxIds(ui64 count, const NActo
                << " MaxCapacity: " << MaxCapacity);
 
     if (count >= BatchAllocationWarning) {
-        YDB_LOG_WARN_CTX(ctx, "AllocateTxIds: requested many txIds. Just a warning, request is processed. TxAllocators",
+        YDB_LOG_WARN_CTX(ctx, "AllocateTxIds: requested many txIds. Just a warning, request is processed.",
             {"requested", count},
-            {"count", TxAllocators.size()},
+            {"txAllocatorsCount", TxAllocators.size()},
             {"requestPerAllocator", RequestPerAllocator},
             {"maxCapacity", MaxCapacity},
             {"batchAllocationWarning", BatchAllocationWarning});

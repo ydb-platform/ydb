@@ -307,7 +307,6 @@ public:
 
         // Soft deadline is armed only after the board is up (HandleCheckTopology), so a long board wait on a cold v2 bootstrap doesn't eat the compile budget.
         Schedule(hardDeadline, new TEvPrivate::TEvHardDeadline());
-        SoftDeadlineCookieHolder.Reset(NActors::ISchedulerCookie::Make2Way());
 
         if (Database.empty()) {
             LOG_I("Database is empty, skipping warmup");

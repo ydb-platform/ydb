@@ -96,7 +96,7 @@ public:
     }
 
     void StartRequest() {
-        YDB_LOG_DEBUG("Make request for read rule deletion for topic",
+        YDB_LOG_DEBUG("Make request for read rule deletion",
             {"queryId", QueryId},
             {"topicPath", Topic.topic_path()},
             {"index", Index});
@@ -135,7 +135,7 @@ public:
                 nextRetryDelay = Nothing(); // No topic => OK. Leave just transient issues.
             }
 
-            YDB_LOG_DEBUG("Failed to remove read rule from Retry",
+            YDB_LOG_DEBUG("Failed to remove read rule",
                 {"queryId", QueryId},
                 {"topicPath", Topic.topic_path()},
                 {"statusIssues", status.GetIssues()},

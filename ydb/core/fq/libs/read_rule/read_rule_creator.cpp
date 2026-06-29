@@ -100,7 +100,7 @@ public:
     void StartRequest() {
         Y_ABORT_UNLESS(!RequestInFlight);
         RequestInFlight = true;
-        YDB_LOG_DEBUG("Make request for read rule creation for topic",
+        YDB_LOG_DEBUG("Make request for read rule creation",
             {"queryId", QueryId},
             {"topicPath", TopicConsumer.topic_path()},
             {"index", Index});
@@ -141,7 +141,7 @@ public:
                 nextRetryDelay = Nothing(); // Not retryable
             }
 
-            YDB_LOG_DEBUG("Failed to add read rule, retry",
+            YDB_LOG_DEBUG("Failed to add read rule",
                 {"queryId", QueryId},
                 {"topicPath", TopicConsumer.topic_path()},
                 {"statusIssues", status.GetIssues().ToOneLineString()},

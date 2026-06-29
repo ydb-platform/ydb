@@ -825,9 +825,11 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
         const auto& userTable = **userTableIt;
 
         // 2. Validating request fields
-        if (!request.HasSnapshotStep() || !request.HasSnapshotTxId()) {
-            badRequest(TStringBuilder() << "Missing snapshot");
-        } else {
+        // The snapshot is optional: live-table scans (plain/relevance/compact over the main table)
+        // always carry one, but the compact rowid-mode posting fill scans the transient seq-keyed
+        // row-id source table - a build impl table that is immutable once the prepass completed and so
+        // needs no snapshot (mirrors the dictionary scan over the 0build impl table, fulltext_dict.cpp).
+        if (request.HasSnapshotStep() || request.HasSnapshotTxId()) {
             const TSnapshotKey snapshotKey(pathId, rowVersion.Step, rowVersion.TxId);
             if (!SnapshotManager.FindAvailable(snapshotKey)) {
                 badRequest(TStringBuilder() << "Unknown snapshot for path id " << pathId.OwnerId << ":" << pathId.LocalPathId
@@ -874,6 +876,9 @@ void TDataShard::HandleSafe(TEvDataShard::TEvBuildFulltextIndexRequest::TPtr& ev
             badRequest(TStringBuilder() << "Prefix columns are not supported for JSON indexes");
         }
 
+        // Compact builds scan a table with a single integer key holding the doc id: either the main
+        // table (single-integer-PK case) or, for an arbitrary-PK main table, the row-id source table
+        // built by the rowid-mode prepass (a generic secondary-index build keyed by __ydb_row_id).
         if (request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompact ||
             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::FulltextCompactRelevance ||
             request.GetIndexType() == NKikimrTxDataShard::EFulltextIndexType::JsonCompact) {

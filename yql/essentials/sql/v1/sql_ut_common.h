@@ -12889,6 +12889,152 @@ Y_UNIT_TEST(AtUnarySubexpr) {
     UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
 }
 
+Y_UNIT_TEST(AtCoalesce) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        SELECT (SELECT 1) ?? 2;
+        SELECT 1 ?? (SELECT 2);
+
+        $x = (SELECT * FROM (VALUES (1)) AS x(a)) ?? '';
+
+        DEFINE SUBQUERY $y($x) AS
+            SELECT 1;
+        END DEFINE;
+
+        SELECT * FROM $y($x);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtBitwise) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 1) | 1;       SELECT $a;
+        $b = (SELECT 1) & 1;       SELECT $b;
+        $c = (SELECT 1) ^ 1;       SELECT $c;
+        $d = (SELECT 1) << 1;      SELECT $d;
+        $e = (SELECT 1) >> 1;      SELECT $e;
+        $f = 1 | (SELECT 1);       SELECT $f;
+        SELECT (SELECT 1) | 1;
+        SELECT 1 | (SELECT 1);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtComparison) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 1) = 1;       SELECT $a;
+        $b = (SELECT 1) <> 1;      SELECT $b;
+        $c = (SELECT 1) == 1;      SELECT $c;
+        $d = (SELECT 1) < 1;       SELECT $d;
+        $e = (SELECT 1) >= 1;      SELECT $e;
+        $f = 1 = (SELECT 1);       SELECT $f;
+        SELECT (SELECT 1) = 1;
+        SELECT 1 = (SELECT 1);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtDistinct) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 1) IS DISTINCT FROM 1;         SELECT $a;
+        $b = (SELECT 1) IS NOT DISTINCT FROM 1;     SELECT $b;
+        $c = 1 IS DISTINCT FROM (SELECT 1);         SELECT $c;
+        SELECT (SELECT 1) IS DISTINCT FROM 1;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtIn) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 1) IN (1, 2);     SELECT $a;
+        $b = (SELECT 1) NOT IN (1, 2); SELECT $b;
+        SELECT (SELECT 1) IN (1, 2);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtIsNull) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 1) IS NULL;       SELECT $a;
+        $b = (SELECT 1) IS NOT NULL;   SELECT $b;
+        SELECT (SELECT 1) IS NULL;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtBetween) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 1) BETWEEN 0 AND 2;                 SELECT $a;
+        $b = 1 BETWEEN (SELECT 0) AND (SELECT 2);        SELECT $b;
+        $c = (SELECT 1) NOT BETWEEN 0 AND 2;             SELECT $c;
+        $d = (SELECT 1) BETWEEN SYMMETRIC 2 AND 0;       SELECT $d;
+        SELECT (SELECT 1) BETWEEN 0 AND 2;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtLike) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = (SELECT 'a') LIKE 'a';                  SELECT $a;
+        $b = 'a' LIKE (SELECT 'a');                  SELECT $b;
+        $c = (SELECT 'a') REGEXP 'a';                SELECT $c;
+        $d = 'a' REGEXP (SELECT 'a');                SELECT $d;
+        SELECT (SELECT 'a') LIKE 'a';
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtCase) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = CASE (SELECT 1) WHEN 1 THEN 2 ELSE 3 END;              SELECT $a;
+        $b = CASE WHEN (SELECT 1) = 1 THEN (SELECT 2) ELSE (SELECT 3) END;  SELECT $b;
+        SELECT CASE (SELECT 1) WHEN 1 THEN 2 ELSE 3 END;
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
+Y_UNIT_TEST(AtNestedOperators) {
+    NSQLTranslation::TTranslationSettings settings;
+    settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;
+
+    NYql::TAstParseResult res = SqlToYqlWithSettings(R"sql(
+        $a = ((SELECT 1) | 2) = 3;                   SELECT $a;
+        $b = (SELECT 1) + (SELECT 2) * (SELECT 3);   SELECT $b;
+        $c = NOT ((SELECT 1) = 1);                   SELECT $c;
+        $d = (SELECT 1) ?? (SELECT 2) ?? 3;          SELECT $d;
+        $e = (SELECT 1) = 1 AND (SELECT 2) = 2;      SELECT $e;
+        $f = -(SELECT 1) < ~(SELECT 2);              SELECT $f;
+        SELECT (SELECT 1) BETWEEN (SELECT 0) AND (SELECT 2);
+    )sql", settings);
+    UNIT_ASSERT_C(res.IsOk(), Err2Str(res));
+}
+
 Y_UNIT_TEST(UnionParenthesis) {
     NSQLTranslation::TTranslationSettings settings;
     settings.LangVer = NYql::NFeature::InlineSubquery.MinLangVer;

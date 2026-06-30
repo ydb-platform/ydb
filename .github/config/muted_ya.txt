@@ -20,7 +20,6 @@ ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_exact_
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_40MB_Topic_offset+middle_WithRestart
 ydb/core/persqueue/ut/ut_with_sdk TopicTimestamp.TimestampRead_6MB_Topic_offset+middle
-ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobs
 ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobsMultipleColumns
 ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobsWithCompactingMiddleRows
 ydb/core/tx/datashard/ut_read_iterator ReadIteratorExternalBlobs.ExtBlobsWithSpecificKeys
@@ -28,6 +27,7 @@ ydb/core/tx/schemeshard/ut_shred TenantShredTest.SendPreviousGenerationUncomplet
 ydb/core/tx/schemeshard/ut_shred_reboots ShredReboots.SimpleShredTest
 ydb/core/tx/schemeshard/ut_shred_reboots unittest.[*/*] chunk
 ydb/core/tx/schemeshard/ut_subdomain TSchemeShardSubDomainTest.SimultaneousCreateTenantTable
+ydb/core/tx/tx_proxy/ut_base_tenant TModifyUserTest.ModifyUser
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo
 ydb/core/viewer/tests test.py.TestViewer.test_viewer_tenantinfo_db
 ydb/library/actors/interconnect/rdma/ut TRdmaLow/TCqMode.ReadInOneProcessWithQpInterruption/EVENT
@@ -39,7 +39,6 @@ ydb/services/ydb/ut TGRpcLdapAuthentication.CanAuthWithValidCredentialsUseSaslEx
 ydb/services/ydb/ut YdbLogStore.AlterLogTable
 ydb/tests/fq/streaming py3test.[*/*] chunk
 ydb/tests/fq/streaming test_streaming.py.TestStreamingInYdb.test_read_topic_shared_reading_limit[False-False]
-ydb/tests/fq/yds test_row_dispatcher.py.TestPqRowDispatcher.test_restart_compute_node
 ydb/tests/functional/api test_discovery.py.TestDiscoveryExtEndpoint.test_scenario
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncr.test_full_cycle_local_backup_restore_with_incrementals
 ydb/tests/functional/backup_collection basic_user_scenarios.py.TestFullCycleLocalBackupRestoreWIncrComplSchemaChange.test_full_cycle_local_backup_restore_with_incrementals_complex_schema_changes
@@ -52,7 +51,6 @@ ydb/tests/functional/secrets test_secrets.py.test_alter_without_grants
 ydb/tests/functional/secrets test_secrets.py.test_create_without_grants
 ydb/tests/functional/secrets test_secrets.py.test_drop_without_grants
 ydb/tests/functional/secrets test_secrets_usage.py.test_create_eds_with_single_secret_with_fail
-ydb/tests/functional/tpc/medium py3test.[test_workload_manager.py] chunk
 ydb/tests/stress/testshard_workload/tests test_workload.py.TestYdbTestShardWorkload.test
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestRead
 ydb/tools/stress_tool/ut TDeviceTestTool.AioTestReadWrite

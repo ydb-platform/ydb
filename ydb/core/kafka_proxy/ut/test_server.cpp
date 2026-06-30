@@ -103,6 +103,7 @@ TTestServer<TKikimr, secure>::TTestServer(const TTestServerSettings& settings) {
     }
     KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableKafkaTransactions(true);
     KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicCompactificationByKey(true);
+    KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableTopicMessageLevelParallelism(true);
 
     TClient client(*(KikimrServer->ServerSettings));
     if (secure) {

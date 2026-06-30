@@ -446,7 +446,7 @@ private:
                         PostponePumpDelay = Min(PostponePumpDelay * 2, TDuration::Seconds(1));
                     }
 
-                    QLOG_CRIT_S("BSQ06", "T# " << TypeName<TEv>()
+                    QLOG_NOTICE_S("BSQ06", "T# " << TypeName<TEv>()
                         << " failed message"
                         << " deviceType# " << NPDisk::DeviceTypeStr(DeviceType, false)
                         << " status# " << NKikimrProto::EReplyStatus_Name(status)

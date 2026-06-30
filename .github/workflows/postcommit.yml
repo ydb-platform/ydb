@@ -41,6 +41,7 @@ jobs:
       with:
         build_preset: ${{ matrix.build_preset }}
         increment: true
+        additional_ya_make_args: -DDEBUGINFO_LINES_ONLY  # we don't need full symbols in CI checks
         analytics_job_name: ${{ matrix.analytics_job_name }}
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
         ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}

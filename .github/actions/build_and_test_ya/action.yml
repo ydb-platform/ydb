@@ -39,14 +39,9 @@ inputs:
   put_build_results_to_cache:
     type: boolean
     default: true
-  default_ya_make_args:
-    type: string
-    default: "-DDEBUGINFO_LINES_ONLY"
-    description: "Default ya make flags for CI checks; prepended to additional_ya_make_args. Pass empty to disable."
   additional_ya_make_args:
     type: string
     default: ""
-    description: "Extra ya make flags appended after default_ya_make_args"
   test_retry_count:
     default: ""
     description: "how many times to retry failed tests"
@@ -121,24 +116,6 @@ runs:
         # Output the folder_prefix for use in subsequent steps
         echo "folder_prefix=${FOLDER_PREFIX}" >> $GITHUB_ENV
 
-    - name: Prepare ya make args
-      shell: bash
-      run: |
-        default="${{ inputs.default_ya_make_args }}"
-        additional="${{ inputs.additional_ya_make_args }}"
-        combined=""
-        if [ -n "$default" ]; then
-          combined="$default"
-        fi
-        if [ -n "$additional" ]; then
-          if [ -n "$combined" ]; then
-            combined="$combined $additional"
-          else
-            combined="$additional"
-          fi
-        fi
-        echo "combined_ya_make_args=$combined" >> "$GITHUB_ENV"
-
     - name: Prepare s3cmd
       uses: ./.github/actions/s3cmd
       with:
@@ -160,7 +137,7 @@ runs:
         run_tests: ${{ inputs.run_tests }}
         increment: ${{ inputs.increment }}
         link_threads: ${{ inputs.link_threads }}
-        additional_ya_make_args: ${{ env.combined_ya_make_args }}
+        additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
         test_threads: ${{ inputs.test_threads }}
         bazel_remote_uri: ${{  fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}
         bazel_remote_username: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}

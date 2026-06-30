@@ -648,6 +648,9 @@ public:
 
         if (KqpCtx->Config->GetEnableIndexStreamWrite()) {
             auto collectedEffects = CollectEffects(query.Effects(), ctx, *KqpCtx);
+            if (!collectedEffects) {
+                return TStatus::Error;
+            }
 
             // Build a map from sink-effect stage -> result indices in query.Results() that are RETURNING outputs.
             // RETURNING results are TDqCnUnionAll whose Output().Stage() matches a TKqpSinkEffect's stage.

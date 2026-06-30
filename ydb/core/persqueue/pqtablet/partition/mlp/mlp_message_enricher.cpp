@@ -11,39 +11,34 @@ TMessageEnricherActor::TMessageEnricherActor(ui64 tabletId, ui32 partitionId, co
     , TabletId(tabletId)
     , PartitionId(partitionId)
     , ConsumerName(consumerName)
-    , Replies(std::make_move_iterator(replies.begin()), std::make_move_iterator(replies.end()))
+    , Replies(std::move(replies))
 {
+    size_t messagesCount = 0;
     PendingResponses.resize(Replies.size());
     for (size_t i = 0; i < Replies.size(); ++i) {
         auto& pr = PendingResponses[i];
-        pr.Sender = Replies[i].Sender;
-        pr.Cookie = Replies[i].Cookie;
         pr.TotalMessages = Replies[i].Messages.size();
         pr.EnrichedCount = 0;
         pr.Sent = false;
-    }
-    BuildSortedIndex();
-}
 
-void TMessageEnricherActor::BuildSortedIndex() {
-    for (size_t ri = 0; ri < Replies.size(); ++ri) {
-        auto& msgs = Replies[ri].Messages;
-        for (size_t mi = 0; mi < msgs.size(); ++mi) {
-            SortedEntries.push_back({msgs[mi].Offset, ri, mi, false});
+        messagesCount += pr.TotalMessages;
+    }
+
+    SortedEntries.reserve(messagesCount);
+    for (size_t replyIndex = 0; replyIndex < Replies.size(); ++replyIndex) {
+        auto& msgs = Replies[replyIndex].Messages;
+        for (size_t messageIndex = 0; messageIndex < msgs.size(); ++messageIndex) {
+            SortedEntries.push_back({msgs[messageIndex].Offset, replyIndex, messageIndex, false});
         }
     }
-    std::stable_sort(SortedEntries.begin(), SortedEntries.end(), [](const TOffsetEntry& a, const TOffsetEntry& b) { return a.Offset < b.Offset; });
+    SortBy(SortedEntries, [](const TOffsetEntry& item) { return item.Offset; });
 }
 
 void TMessageEnricherActor::Bootstrap() {
     Become(&TThis::StateWork);
 
     for (size_t i = 0; i < PendingResponses.size(); ++i) {
-        if (PendingResponses[i].TotalMessages == 0) {
-            Send(PendingResponses[i].Sender, new TEvPQ::TEvMLPReadResponse(), 0, PendingResponses[i].Cookie);
-            PendingResponses[i].Sent = true;
-            ++RepliesSent;
-        }
+        TrySendReplyImpl(i, true, true); // send empty results now
     }
 
     ProcessQueue();
@@ -51,39 +46,42 @@ void TMessageEnricherActor::Bootstrap() {
 
 void TMessageEnricherActor::PassAway() {
     LOG_D("PassAway");
-    for (auto& pr : PendingResponses) {
-        if (!pr.Sent) {
-            Send(pr.Sender, new TEvPQ::TEvMLPErrorResponse(PartitionId, Ydb::StatusIds::SCHEME_ERROR, "Shutdown"), 0, pr.Cookie);
-            pr.Sent = true;
+    for (size_t i = 0; i < PendingResponses.size(); ++i) {
+        if (!PendingResponses[i].Sent) {
+            const TReadResult& reply = Replies[i];
+            Send(reply.Sender, new TEvPQ::TEvMLPErrorResponse(PartitionId, Ydb::StatusIds::SCHEME_ERROR, "Shutdown"), 0, reply.Cookie);
+            PendingResponses[i].Sent = true;
+            ++RepliesSent;
         }
     }
-
     Send(MakePipePerNodeCacheID(false), new TEvPipeCache::TEvUnlink(0));
     TBase::PassAway();
 }
 
-void TMessageEnricherActor::EnsureResponse(size_t replyIndex) {
-    auto& pr = PendingResponses[replyIndex];
-    if (!pr.Response) {
-        pr.Response = std::make_unique<TEvPQ::TEvMLPReadResponse>();
-    }
-}
-
-void TMessageEnricherActor::TrySendReply(size_t replyIndex) {
+void TMessageEnricherActor::TrySendReplyImpl(size_t replyIndex, bool waitForCompletion, bool allowEmpty) {
     auto& pr = PendingResponses[replyIndex];
     if (pr.Sent) {
         return;
     }
-    if (!pr.IsComplete()) {
+    if (!pr.IsComplete() && waitForCompletion) {
         return;
     }
-    if (pr.EnrichedCount > 0) {
-        Send(pr.Sender, pr.Response.release(), 0, pr.Cookie);
+    const TReadResult& reply = Replies[replyIndex];
+    if (pr.EnrichedCount > 0 || allowEmpty) {
+        Send(reply.Sender, pr.Response.release(), 0, reply.Cookie);
     } else {
-        Send(pr.Sender, std::make_unique<TEvPQ::TEvMLPErrorResponse>(PartitionId, Ydb::StatusIds::INTERNAL_ERROR, "Messages was not found").release(), 0, pr.Cookie);
+        Send(reply.Sender, std::make_unique<TEvPQ::TEvMLPErrorResponse>(PartitionId, Ydb::StatusIds::INTERNAL_ERROR, "Messages were not found").release(), 0, reply.Cookie);
     }
     pr.Sent = true;
     ++RepliesSent;
+}
+
+void TMessageEnricherActor::TrySendReplyIfComplete(size_t replyIndex) {
+    return TrySendReplyImpl(replyIndex, true, false);
+}
+
+void TMessageEnricherActor::SendPartialReply(size_t replyIndex) {
+    return TrySendReplyImpl(replyIndex, false, false);
 }
 
 void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
@@ -101,8 +99,8 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     }
 
     auto& results = response.GetPartitionResponse().GetCmdReadResult().GetResult();
-    size_t ei = NextEntryIdx;
-    int ri = 0;
+    size_t& entryIndex = NextEntryIdx;
+    int resultIndex = 0;
     int resultsSize = results.size();
     ui64 maxReturnedOffset = 0;
 
@@ -111,25 +109,33 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
     }
 
     // Two-pointer: both SortedEntries and results are sorted by offset
-    while (ei < SortedEntries.size() && ri < resultsSize) {
-        auto& entry = SortedEntries[ei];
+    while (entryIndex < SortedEntries.size() && resultIndex < resultsSize) {
+        auto& entry = SortedEntries[entryIndex];
         if (entry.Processed) {
-            ++ei;
+            ++entryIndex;
             continue;
         }
 
-        auto resultOffset = results[ri].GetOffset();
+        auto resultOffset = results[resultIndex].GetOffset();
 
         if (entry.Offset < resultOffset) {
             entry.Processed = true;
             --PendingResponses[entry.ReplyIndex].TotalMessages;
-            ++ei;
-        } else if (entry.Offset == resultOffset) {
-            auto& result = results[ri];
+            TrySendReplyIfComplete(entry.ReplyIndex);
+            ++entryIndex;
+        } else if (entry.Offset > resultOffset) {
+            // unneeded Offset — advance result pointer
+            ++resultIndex;
+        } else if (PendingResponses[entry.ReplyIndex].Sent) {
+            Y_VERIFY_DEBUG(false, "Response already processed");
+            entry.Processed = true;
+            ++entryIndex;
+        } else {
+            auto& result = results[resultIndex];
             auto& msg = Replies[entry.ReplyIndex].Messages[entry.MessageIndex];
 
-            EnsureResponse(entry.ReplyIndex);
-            auto* message = PendingResponses[entry.ReplyIndex].Response->Record.AddMessage();
+            TEvPQ::TEvMLPReadResponse* readResponse = PendingResponses[entry.ReplyIndex].Response.get();
+            auto* message = readResponse->Record.AddMessage();
             message->MutableId()->SetPartitionId(PartitionId);
             message->MutableId()->SetOffset(entry.Offset);
             message->SetData(result.GetData());
@@ -140,39 +146,28 @@ void TMessageEnricherActor::Handle(TEvPersQueue::TEvResponse::TPtr& ev) {
 
             entry.Processed = true;
             ++PendingResponses[entry.ReplyIndex].EnrichedCount;
-            ++ei;
+            TrySendReplyIfComplete(entry.ReplyIndex);
+            ++entryIndex;
 
-            // Don't advance ri yet — there may be more entries with the same offset (duplicates across replies)
-            if (ei < SortedEntries.size() && SortedEntries[ei].Offset == resultOffset) {
+            // Don't advance resultIndex yet — there may be more entries with the same offset (duplicates across replies)
+            if (entryIndex < SortedEntries.size() && SortedEntries[entryIndex].Offset == resultOffset) [[unlikely]] {
                 continue;
             }
-            ++ri;
-        } else {
-            // entry.Offset > resultOffset — advance result pointer
-            ++ri;
+            ++resultIndex;
         }
     }
 
     // Mark remaining entries whose offsets are <= maxReturnedOffset as missing
     if (resultsSize > 0) {
-        while (ei < SortedEntries.size() && SortedEntries[ei].Offset <= maxReturnedOffset) {
-            auto& entry = SortedEntries[ei];
+        while (entryIndex < SortedEntries.size() && SortedEntries[entryIndex].Offset <= maxReturnedOffset) {
+            auto& entry = SortedEntries[entryIndex];
             if (!entry.Processed) {
                 entry.Processed = true;
                 --PendingResponses[entry.ReplyIndex].TotalMessages;
+                TrySendReplyIfComplete(entry.ReplyIndex);
             }
-            ++ei;
+            ++entryIndex;
         }
-    }
-
-    // Advance NextEntryIdx past all processed entries
-    while (NextEntryIdx < SortedEntries.size() && SortedEntries[NextEntryIdx].Processed) {
-        ++NextEntryIdx;
-    }
-
-    // Try to send completed replies
-    for (size_t i = 0; i < PendingResponses.size(); ++i) {
-        TrySendReply(i);
     }
 
     if (RepliesSent == PendingResponses.size()) {
@@ -201,12 +196,9 @@ void TMessageEnricherActor::ProcessQueue() {
     if (NextEntryIdx >= SortedEntries.size()) {
         // All entries processed — send any remaining unsent replies
         for (size_t i = 0; i < PendingResponses.size(); ++i) {
-            TrySendReply(i);
+            SendPartialReply(i);
         }
-        if (RepliesSent == PendingResponses.size()) {
-            return PassAway();
-        }
-        return;
+        return PassAway();
     }
 
     auto minOffset = SortedEntries[NextEntryIdx].Offset;

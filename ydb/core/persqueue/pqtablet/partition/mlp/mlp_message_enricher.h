@@ -31,11 +31,9 @@ private:
     };
 
     struct TPendingResponse {
-        NActors::TActorId Sender;
-        ui64 Cookie;
-        std::unique_ptr<TEvPQ::TEvMLPReadResponse> Response;
-        size_t TotalMessages = 0;
-        size_t EnrichedCount = 0;
+        std::unique_ptr<TEvPQ::TEvMLPReadResponse> Response = std::make_unique<TEvPQ::TEvMLPReadResponse>();
+        ui32 TotalMessages = 0;
+        ui32 EnrichedCount = 0;
         bool Sent = false;
 
         bool IsComplete() const { return EnrichedCount == TotalMessages; }
@@ -46,9 +44,9 @@ private:
 
     STFUNC(StateWork);
 
-    void BuildSortedIndex();
-    void EnsureResponse(size_t replyIndex);
-    void TrySendReply(size_t replyIndex);
+    void TrySendReplyIfComplete(size_t replyIndex);
+    void SendPartialReply(size_t replyIndex);
+    void TrySendReplyImpl(size_t replyIndex, bool waitForCompletion, bool allowEmpty);
     void ProcessQueue();
     void SendToPQTablet(std::unique_ptr<IEventBase> ev);
 
@@ -56,7 +54,7 @@ private:
     const ui64 TabletId;
     const ui32 PartitionId;
     const TString ConsumerName;
-    std::vector<TReadResult> Replies;
+    std::deque<TReadResult> Replies;
     std::vector<TPendingResponse> PendingResponses;
     std::vector<TOffsetEntry> SortedEntries;
     size_t NextEntryIdx = 0;

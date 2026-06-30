@@ -95,4 +95,5 @@ RECURSE_FOR_TESTS(
     ut_move_pdisk
     ut_vdisk_internals
     ut_oos
+    ut_user_checksumming
 )

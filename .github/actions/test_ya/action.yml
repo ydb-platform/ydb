@@ -574,7 +574,8 @@ runs:
               ;;
           esac
           run_name="${run_name}_attempt_${RETRY}"
-          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
+          ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "${{ github.workflow }}" "${{ inputs.build_preset }}")
+          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${ANALYTICS_JOB_NAME}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break
@@ -672,6 +673,7 @@ runs:
         set -x
         export build_preset="${{ inputs.build_preset }}"
         export commit_git_sha="$ORIGINAL_HEAD"
+        export GITHUB_WORKFLOW=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "${{ github.workflow }}" "${{ inputs.build_preset }}")
 
         python3 .github/scripts/send_build_stats.py
 

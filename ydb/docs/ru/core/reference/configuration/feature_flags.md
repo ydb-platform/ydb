@@ -11,6 +11,8 @@ feature_flags:
 
 | Флаг          | Функция |
 |---------------------------| ----------------------------------------------------|
+| `enable_json_index`                                      | [JSON-индексы](../../dev/json-indexes.md) для ускорения поиска в полях JSON |
+| `enable_json_index_auto_select`                          | Автоматический выбор [JSON-индексов](../../dev/json-indexes.md) при выполнении запросов |
 | `enable_fulltext_index`                                  | [Полнотекстовый индекс](../../dev/fulltext-indexes.md) для полнотекстового поиска |
 | `enable_local_bloom_filter_index`                        | [Локальный Блум-индекс](../../dev/bloom-skip-indexes.md#types) типа `bloom_filter` |
 | `enable_local_bloom_ngram_filter_index`                  | [Локальный Блум-индекс](../../dev/bloom-skip-indexes.md#types) типа `bloom_ngram_filter` |
@@ -28,3 +30,4 @@ feature_flags:
 | `enable_kafka_transactions`                              | Включение транзакций в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|
 | `enable_external_data_sources`                           | Включение [внешних источников данных](../../concepts/datamodel/external_data_source.md)|
 | `enable_grpc_audit`                                      | Включение [аудита](../../security/audit-log.md#grpc-connection) изменений состояния gRPC-соединения |
+| `enable_fs_backups`                                      | Включение операций [резервного копирования и восстановления на сетевую файловую систему](../../concepts/backup.md#nfs) |

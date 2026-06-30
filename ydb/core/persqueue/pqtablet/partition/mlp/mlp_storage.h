@@ -238,7 +238,7 @@ public:
     // https://docs.amazonaws.cn/en_us/AWSSimpleQueueService/latest/APIReference/API_ChangeMessageVisibility.html
     bool ChangeMessageDeadline(ui64 message, TInstant deadline);
     bool Purge(ui64 endOffset);
-    bool AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay = TDuration::Zero());
+    bool AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay = TDuration::Zero(), ui64 logicalMessageCount = 1);
     bool MarkDLQMoved(TDLQMessage message);
     bool WakeUpDLQ();
     struct TUpdateExternalLockedMessageGroupsResult {

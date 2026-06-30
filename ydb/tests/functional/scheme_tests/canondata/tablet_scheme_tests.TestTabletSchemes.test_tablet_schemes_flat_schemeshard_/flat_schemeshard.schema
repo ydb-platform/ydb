@@ -10312,5 +10312,161 @@
                 ]
             }
         }
+    },
+    {
+        "TableId": 138,
+        "TableName": "SetColumnConstraint",
+        "TableKey": [
+            1
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "OperationId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "TableOwnerId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "TableLocalId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "SerializedColumnNames",
+                "ColumnType": "String"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "ValidationFailed",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 6,
+                "ColumnName": "OperationState",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 7,
+                "ColumnName": "SubStateTxId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 8,
+                "ColumnName": "SubStateTxStatus",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 9,
+                "ColumnName": "SubStateTxDone",
+                "ColumnType": "Bool"
+            },
+            {
+                "ColumnId": 10,
+                "ColumnName": "LockTxId",
+                "ColumnType": "Uint64"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5,
+                    6,
+                    7,
+                    8,
+                    9,
+                    10
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
+    },
+    {
+        "TableId": 139,
+        "TableName": "SetColumnConstraintShardStatus",
+        "TableKey": [
+            1,
+            2,
+            3
+        ],
+        "ColumnsAdded": [
+            {
+                "ColumnId": 1,
+                "ColumnName": "OperationId",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 2,
+                "ColumnName": "OwnerShardIdx",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 3,
+                "ColumnName": "LocalShardIdx",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 4,
+                "ColumnName": "Status",
+                "ColumnType": "Uint32"
+            },
+            {
+                "ColumnId": 5,
+                "ColumnName": "Issue",
+                "ColumnType": "Utf8"
+            }
+        ],
+        "ColumnsDropped": [],
+        "ColumnFamilies": {
+            "0": {
+                "Columns": [
+                    1,
+                    2,
+                    3,
+                    4,
+                    5
+                ],
+                "RoomID": 0,
+                "Codec": 0,
+                "InMemory": false,
+                "Cache": 0,
+                "Small": 4294967295,
+                "Large": 4294967295
+            }
+        },
+        "Rooms": {
+            "0": {
+                "Main": 1,
+                "Outer": 1,
+                "Blobs": 1,
+                "ExternalBlobs": [
+                    1
+                ]
+            }
+        }
     }
 ]

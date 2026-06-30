@@ -576,6 +576,9 @@ public:
         } catch (const std::exception& ex) {
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Invalid regexp: " << ex.what());
         }
+        if (!NBackup::IsExportFilteringEnabled(*AppData()) && !settings.exclude_regexps().empty()) {
+            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export filtering is not supported in current configuration");
+        }
 
         if constexpr (IsFsExport) {
             if (!TFsPath(settings.base_path()).IsAbsolute()) {
@@ -606,9 +609,6 @@ public:
             const bool exportFilteringEnabled = NBackup::IsExportFilteringEnabled(*AppData());
             const bool commonDestSpecified = TTraits::HasDestination(settings);
             if (!exportFilteringEnabled) {
-                if (!settings.exclude_regexps().empty()) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export filtering is not supported in current configuration");
-                }
                 // Check that no new fields are specified
                 if constexpr (IsS3Export) {
                     if (commonDestSpecified) {

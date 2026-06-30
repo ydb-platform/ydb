@@ -645,6 +645,18 @@ void CmdWrite(TTestActorRuntime* runtime, ui64 tabletId, const TActorId& sender,
                 continue;
             }
 
+            // After a tablet reboot, the pipe client may resend a write that was already
+            // committed, causing "reorder in requests" BAD_REQUEST. Treat this like
+            // WRONG_COOKIE: reset ownership and retry.
+            if (!treatWrongCookieAsError &&
+                result->Record.GetErrorCode() == NPersQueue::NErrorCode::BAD_REQUEST &&
+                result->Record.GetErrorReason().Contains("reorder in requests")) {
+                cookie = CmdSetOwner(runtime, tabletId, sender, partition).first;
+                msgSeqNo = 0;
+                retriesLeft = 3;
+                continue;
+            }
+
             if (!treatBadOffsetAsError &&
                 result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRITE_ERROR_BAD_OFFSET) {
                 return;
@@ -751,6 +763,19 @@ void CmdReserveBytes(const ui32 partition, TTestContext& tc, const TString& owne
             }
 
             if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::WRONG_COOKIE) {
+                auto p = CmdSetOwner(partition, tc);
+                pipeClient = p.second;
+                cookie = p.first;
+                msgSeqNo = 0;
+                retriesLeft = 3;
+                continue;
+            }
+
+            // After a tablet reboot, the pipe client may resend a reserve request that was
+            // already committed, causing "reorder in reserve requests" BAD_REQUEST.
+            // Treat this like WRONG_COOKIE: reset ownership and retry.
+            if (result->Record.GetErrorCode() == NPersQueue::NErrorCode::BAD_REQUEST &&
+                result->Record.GetErrorReason().Contains("reorder in reserve requests")) {
                 auto p = CmdSetOwner(partition, tc);
                 pipeClient = p.second;
                 cookie = p.first;

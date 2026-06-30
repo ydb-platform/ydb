@@ -3,15 +3,10 @@
 
 #include <util/system/datetime.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
+
 namespace NKikimr {
 namespace NKesus {
-
-#define TRACE_LOG_EVENT(tabletId, protoEventTypeStr, protoRecord, recipient, cookie) \
-    LOG_TRACE_S(                                                                     \
-        TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET,         \
-        "[" << (tabletId) << "] Send " protoEventTypeStr " to " << (recipient)       \
-        << ". Cookie: " << (cookie) << ". Data: " << (protoRecord)                   \
-    )
 
 class TKesusTablet::TQuoterResourceSink : public IResourceSink {
 public:
@@ -34,7 +29,11 @@ public:
         auto* info = ev->Record.AddResourcesInfo();
         info->SetResourceId(resourceId);
         TEvKesus::FillError(info->MutableStateNotification(), status, reason);
-        TRACE_LOG_EVENT(Kesus->TabletID(), "TEvResourcesAllocated", ev->Record, Actor, 0);
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "TEvResourcesAllocated",
+            {"tabletId", Kesus->TabletID()},
+            {"actorId", Actor},
+            {"cookie", 0},
+            {"ev", ev->Record});
         Kesus->Send(Actor, std::move(ev));
     }
 
@@ -90,7 +89,11 @@ void TKesusTablet::TQuoterResourceSessionsAccumulator::SendAll(const TActorConte
     for (auto infoIter = SendInfos.begin(), infoEnd = SendInfos.end(); infoIter != infoEnd; ++infoIter) {
         const TActorId& recipientId = infoIter->first;
         auto& info = infoIter->second;
-        TRACE_LOG_EVENT(tabletId, "TEvResourcesAllocated", info.Event->Record, recipientId, 0);
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Dump tabletId, recipientId, cookie, data",
+            {"tabletId", tabletId},
+            {"recipientId", recipientId},
+            {"cookie", 0},
+            {"data", info.Event->Record});
         ctx.Send(recipientId, std::move(info.Event));
     }
     SendInfos.clear();
@@ -98,7 +101,11 @@ void TKesusTablet::TQuoterResourceSessionsAccumulator::SendAll(const TActorConte
     for (auto infoIter = SendSyncInfos.begin(), infoEnd = SendSyncInfos.end(); infoIter != infoEnd; ++infoIter) {
         const TActorId& recipientId = infoIter->first;
         auto& info = infoIter->second;
-        TRACE_LOG_EVENT(tabletId, "TEvSyncResources", info.Event->Record, recipientId, 0);
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Dump tabletId, recipientId, cookie, data",
+            {"tabletId", tabletId},
+            {"recipientId", recipientId},
+            {"cookie", 0},
+            {"data", info.Event->Record});
         ctx.Send(recipientId, std::move(info.Event));
     }
     SendSyncInfos.clear();
@@ -142,12 +149,17 @@ void TKesusTablet::Handle(TEvKesus::TEvSubscribeOnResources::TPtr& ev) {
         *QuoterResources.GetCounters().UnknownResourceSubscriptions += unknownSubscriptions;
     }
     QuoterTickProcessorQueue.Merge(std::move(queue));
-    TRACE_LOG_EVENT(TabletID(), "TEvSubscribeOnResourcesResult", reply->Record, ev->Sender, ev->Cookie);
+    YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Dump tabletID, #_ev->Sender, cookie, data",
+        {"tabletID", TabletID()},
+       {"sender", ev->Sender},
+        {"cookie", ev->Cookie},
+        {"data", reply->Record});
     Send(ev->Sender, std::move(reply), 0, ev->Cookie);
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET,
-        "[" << TabletID() << "] Subscribe on quoter resources (sender=" << ev->Sender
-            << ", cookie=" << ev->Cookie << ")");
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Subscribe on quoter resources",
+        {"tabletID", TabletID()},
+       {"sender", ev->Sender},
+        {"cookie", ev->Cookie});
 
     HandleQuoterTick();
 }
@@ -186,16 +198,25 @@ void TKesusTablet::Handle(TEvKesus::TEvUpdateConsumptionState::TPtr& ev) {
     }
     QuoterTickProcessorQueue.Merge(std::move(queue));
     if (errors) {
-        TRACE_LOG_EVENT(TabletID(), "TEvResourcesAllocated", errors->Record, ev->Sender, 0);
+        YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Dump tabletID, #_ev->Sender, cookie, data",
+            {"tabletID", TabletID()},
+           {"sender", ev->Sender},
+            {"cookie", 0},
+            {"data", errors->Record});
         Send(ev->Sender, std::move(errors));
     }
     auto ack = MakeHolder<TEvKesus::TEvUpdateConsumptionStateAck>();
-    TRACE_LOG_EVENT(TabletID(), "TEvUpdateConsumptionStateAck", ack->Record, ev->Sender, ev->Cookie);
+    YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Dump tabletID, #_ev->Sender, cookie, data",
+        {"tabletID", TabletID()},
+       {"sender", ev->Sender},
+        {"cookie", ev->Cookie},
+        {"data", ack->Record});
     Send(ev->Sender, std::move(ack), 0, ev->Cookie);
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET,
-        "[" << TabletID() << "] Update quoter resources consumption state (sender=" << ev->Sender
-            << ", cookie=" << ev->Cookie << ")");
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Update quoter resources consumption state",
+        {"tabletID", TabletID()},
+       {"sender", ev->Sender},
+        {"cookie", ev->Cookie});
 
     HandleQuoterTick();
 }
@@ -221,12 +242,17 @@ void TKesusTablet::Handle(TEvKesus::TEvAccountResources::TPtr& ev) {
         }
     }
     QuoterTickProcessorQueue.Merge(std::move(queue));
-    TRACE_LOG_EVENT(TabletID(), "TEvAccountResourcesAck", ack->Record, ev->Sender, ev->Cookie);
+    YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Dump tabletID, #_ev->Sender, cookie, data",
+        {"tabletID", TabletID()},
+       {"sender", ev->Sender},
+        {"cookie", ev->Cookie},
+        {"data", ack->Record});
     Send(ev->Sender, std::move(ack), 0, ev->Cookie);
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET,
-        "[" << TabletID() << "] Account quoter resources (sender=" << ev->Sender
-            << ", cookie=" << ev->Cookie << ")");
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Account quoter resources",
+        {"tabletID", TabletID()},
+       {"sender", ev->Sender},
+        {"cookie", ev->Cookie});
 
     HandleQuoterTick();
 }
@@ -246,12 +272,17 @@ void TKesusTablet::Handle(TEvKesus::TEvReportResources::TPtr& ev) {
         }
     }
     QuoterTickProcessorQueue.Merge(std::move(queue));
-    TRACE_LOG_EVENT(TabletID(), "TEvReportResourcesAck", ack->Record, ev->Sender, ev->Cookie);
+    YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Dump tabletID, #_ev->Sender, cookie, data",
+        {"tabletID", TabletID()},
+       {"sender", ev->Sender},
+        {"cookie", ev->Cookie},
+        {"data", ack->Record});
     Send(ev->Sender, std::move(ack), 0, ev->Cookie);
 
-    LOG_DEBUG_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET,
-        "[" << TabletID() << "] Report quoter resources (sender=" << ev->Sender
-            << ", cookie=" << ev->Cookie << ")");
+    YDB_LOG_DEBUG_CTX(TActivationContext::AsActorContext(), "Report quoter resources",
+        {"tabletID", TabletID()},
+       {"sender", ev->Sender},
+        {"cookie", ev->Cookie});
 
     HandleQuoterTick();
 }
@@ -310,12 +341,17 @@ void TKesusTablet::HandleQuoterTick() {
 void TKesusTablet::Handle(TEvKesus::TEvGetQuoterResourceCounters::TPtr& ev) {
     THolder<TEvKesus::TEvGetQuoterResourceCountersResult> reply = MakeHolder<TEvKesus::TEvGetQuoterResourceCountersResult>();
     QuoterResources.FillCounters(reply->Record);
-    TRACE_LOG_EVENT(TabletID(), "TEvGetQuoterResourceCountersResult", reply->Record, ev->Sender, ev->Cookie);
+    YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Dump tabletID, #_ev->Sender, cookie, data",
+        {"tabletID", TabletID()},
+       {"sender", ev->Sender},
+        {"cookie", ev->Cookie},
+        {"data", reply->Record});
     Send(ev->Sender, std::move(reply), 0, ev->Cookie);
 }
 
 void TKesusTablet::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev) {
-    LOG_TRACE_S(TActivationContext::AsActorContext(), NKikimrServices::KESUS_TABLET, "Got TEvServerDisconnected(" << ev->Get()->ServerId << ")");
+    YDB_LOG_TRACE_CTX(TActivationContext::AsActorContext(), "Got TEvServerDisconnected(",
+        {"serverId", ev->Get()->ServerId});
     QuoterResources.DisconnectSession(ev->Get()->ServerId);
 }
 

@@ -8,6 +8,8 @@
 
 #include <util/string/cast.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
+
 namespace NKikimr {
 namespace NKesus {
 
@@ -27,7 +29,8 @@ struct TKesusTablet::TTxInit : public TTxBase {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::KESUS_TABLET, "[%lu] TTxInit::Execute", Self->TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "[u] TTxInit::Execute",
+            {"tabletId", Self->TabletID()});
 
         Reset();
 
@@ -239,7 +242,8 @@ struct TKesusTablet::TTxInit : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::KESUS_TABLET, "[%lu] TTxInit::Complete", Self->TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "[u] TTxInit::Complete",
+            {"tabletId", Self->TabletID()});
 
         if (PreviousTabletActorID && PreviousTabletActorID != ctx.SelfID) {
             // Attempt to kill previous tablet if it is reachable

@@ -1,5 +1,7 @@
 #include "tablet_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
+
 namespace NKikimr {
 namespace NKesus {
 
@@ -18,9 +20,10 @@ struct TKesusTablet::TTxSessionsDescribe : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_SESSIONS_DESCRIBE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxSessionsDescribe::Execute (sender=" << Sender
-                << ", cookie=" << Cookie << ")");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxSessionsDescribe::Execute",
+            {"tabletId", Self->TabletID()},
+           {"sender", Sender},
+            {"cookie", Cookie});
 
         NIceDb::TNiceDb db(txc.DB);
         if (Self->UseStrictRead()) {
@@ -43,9 +46,10 @@ struct TKesusTablet::TTxSessionsDescribe : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxSessionsDescribe::Complete (sender=" << Sender
-                << ", cookie=" << Cookie << ")");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxSessionsDescribe::Complete",
+            {"tabletId", Self->TabletID()},
+           {"sender", Sender},
+            {"cookie", Cookie});
 
         Y_ABORT_UNLESS(Reply);
         ctx.Send(Sender, Reply.Release(), 0, Cookie);

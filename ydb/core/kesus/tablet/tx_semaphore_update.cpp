@@ -1,5 +1,7 @@
 #include "tablet_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
+
 namespace NKikimr {
 namespace NKesus {
 
@@ -23,9 +25,11 @@ struct TKesusTablet::TTxSemaphoreUpdate : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_SEMAPHORE_UPDATE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxSemaphoreUpdate::Execute (sender=" << Sender
-                << ", cookie=" << Cookie << ", name=" << Record.GetName().Quote() << ")");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxSemaphoreUpdate::Execute",
+            {"tabletId", Self->TabletID()},
+           {"sender", Sender},
+            {"cookie", Cookie},
+            {"name", Record.GetName().Quote()});
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -79,9 +83,10 @@ struct TKesusTablet::TTxSemaphoreUpdate : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxSemaphoreUpdate::Complete (sender=" << Sender
-                << ", cookie=" << Cookie << ")");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxSemaphoreUpdate::Complete",
+            {"tabletId", Self->TabletID()},
+           {"sender", Sender},
+            {"cookie", Cookie});
         Self->RemoveSessionTx(Record.GetSessionId());
 
         for (auto& ev : Events) {

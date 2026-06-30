@@ -2,6 +2,8 @@
 
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
+
 namespace NKikimr {
 namespace NKesus {
 
@@ -72,10 +74,13 @@ struct TKesusTablet::TTxQuoterResourceDescribe : public TTxBase {
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
         Y_UNUSED(txc);
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxQuoterResourceDescribe::Execute (sender=" << Sender
-                << ", cookie=" << Cookie << ", ids=" << FormatIdsToDescribe()
-                << ", paths=" << FormatPathsToDescribe() << ", recursive=" << Record.GetRecursive() << ")");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxQuoterResourceDescribe::Execute",
+            {"tabletId", Self->TabletID()},
+           {"sender", Sender},
+            {"cookie", Cookie},
+            {"ids", FormatIdsToDescribe()},
+            {"paths", FormatPathsToDescribe()},
+            {"recursive", Record.GetRecursive()});
 
         if (NeedToDescribeAll()) {
             for (auto&& [path, resource] : Self->QuoterResources.GetAllResources()) {
@@ -110,9 +115,10 @@ struct TKesusTablet::TTxQuoterResourceDescribe : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << Self->TabletID() << "] TTxQuoterResourceDescribe::Complete (sender=" << Sender
-                << ", cookie=" << Cookie << ")");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxQuoterResourceDescribe::Complete",
+            {"tabletId", Self->TabletID()},
+           {"sender", Sender},
+            {"cookie", Cookie});
 
         Y_ABORT_UNLESS(Reply);
         ctx.Send(Sender, std::move(Reply), 0, Cookie);

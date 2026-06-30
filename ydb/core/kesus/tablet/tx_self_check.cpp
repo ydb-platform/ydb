@@ -5,6 +5,8 @@
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/appdata.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KESUS_TABLET
+
 namespace NKikimr {
 namespace NKesus {
 
@@ -19,7 +21,8 @@ struct TKesusTablet::TTxSelfCheck : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_SELF_CHECK; }
 
     bool Execute(TTransactionContext& txc, const TActorContext& ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::KESUS_TABLET, "[%lu] TTxSelfCheck::Execute", Self->TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "[u] TTxSelfCheck::Execute",
+            {"tabletId", Self->TabletID()});
         Y_ABORT_UNLESS(Self->SelfCheckPending);
 
         NIceDb::TNiceDb db(txc.DB);
@@ -28,7 +31,8 @@ struct TKesusTablet::TTxSelfCheck : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::KESUS_TABLET, "[%lu] TTxSelfCheck::Complete", Self->TabletID());
+        YDB_LOG_DEBUG_CTX(ctx, "[u] TTxSelfCheck::Complete",
+            {"tabletId", Self->TabletID()});
         Y_ABORT_UNLESS(Self->SelfCheckPending);
         Cookie.Detach();
         Self->SelfCheckPending = false;
@@ -71,8 +75,8 @@ void TKesusTablet::Handle(TEvPrivate::TEvSelfCheckTimeout::TPtr& ev) {
     if (msg->Cookie.DetachEvent()) {
         // Try to die as soon as possible
         const auto& ctx = TActivationContext::AsActorContext();
-        LOG_ERROR_S(ctx, NKikimrServices::KESUS_TABLET,
-            "[" << TabletID() << "] Self-check timeout, attempting suicide");
+        YDB_LOG_ERROR_CTX(ctx, "Self-check timeout, attempting suicide",
+            {"tabletID", TabletID()});
         HandlePoison(TActivationContext::ActorContextFor(SelfId()));
     }
 }

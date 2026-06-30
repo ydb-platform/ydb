@@ -237,6 +237,9 @@ namespace NKikimr::NStorage {
                 if (Cfg->PBufferConfig->HasEnableWritesBatching()) {
                     pbufferFormat.EnableWritesBatching = Cfg->PBufferConfig->GetEnableWritesBatching();
                 }
+                if (Cfg->PBufferConfig->HasMinFreeSectorsReserve()) {
+                    pbufferFormat.MinFreeSectorsReserve = Cfg->PBufferConfig->GetMinFreeSectorsReserve();
+                }
             }
             actor.reset(NDDisk::CreateDDiskActor(std::move(baseInfo), groupInfo, std::move(pbufferFormat),
                 std::move(ddiskConfig), AppData()->Counters));

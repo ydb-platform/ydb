@@ -10,8 +10,6 @@
 #include <ydb/core/util/stlog.h>
 #include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
 
-#include <ydb/library/actors/retro_tracing/collector/retro_collector.h>
-
 #include <util/generic/ymath.h>
 #include <util/system/datetime.h>
 #include <util/system/hp_timer.h>

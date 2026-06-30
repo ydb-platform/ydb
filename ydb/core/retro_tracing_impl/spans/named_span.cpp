@@ -28,7 +28,7 @@ std::unique_ptr<NWilson::TSpan> TNamedSpan::MakeWilsonSpan() {
 void TNamedSpan::DemandTraceOnEnd() {
     EnableActionOnEnd();
     if (StatusCode != NWilson::NTraceProto::Status::STATUS_CODE_UNSET) {
-        // span is already ended, call OnEnd() function explicitely
+        // span is already ended, call OnEnd() function explicitly
         OnEnd();
     }
 }

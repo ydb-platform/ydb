@@ -2384,7 +2384,7 @@ message TImmediateControlsConfig {
             Description: "Interval (sec) between root-side (distconf) retro trace batch processing",
             MinValue: 1,
             MaxValue: 3600,
-            DefaultValue: 2 }];
+            DefaultValue: 10 }];
     }
     optional TRetroTracingControls RetroTracingControls = 23;
 };

@@ -395,6 +395,22 @@ private:
         return TargetVector.empty() ? NUdf::EFetchStatus::Finish : NUdf::EFetchStatus::Ok;
     }
 
+    // Insert a child into the round's bounded max-heap of the LevelTop nearest
+    // (keyed by distance, worst at the top for cheap eviction). Once full, a child
+    // no nearer than the current worst is dropped, so the ranking structure never
+    // grows past LevelTop regardless of how many shards contribute.
+    void PushLevelCandidate(TClusterId id, double distance) {
+        auto cmp = [](const auto& a, const auto& b) { return a.second < b.second; };
+        if (LevelCandidates.size() < LevelTop) {
+            LevelCandidates.emplace_back(id, distance);
+            std::push_heap(LevelCandidates.begin(), LevelCandidates.end(), cmp);
+        } else if (distance < LevelCandidates.front().second) {
+            std::pop_heap(LevelCandidates.begin(), LevelCandidates.end(), cmp);
+            LevelCandidates.back() = {id, distance};
+            std::push_heap(LevelCandidates.begin(), LevelCandidates.end(), cmp);
+        }
+    }
+
     void StartLevelRound() {
         LevelCandidates.clear();
         Phase = EPhase::Level;
@@ -418,7 +434,7 @@ private:
                             RuntimeError("Invalid centroids in level table", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
                             return;
                         }
-                        LevelCandidates.emplace_back(row[0].AsValue<ui64>(),
+                        PushLevelCandidate(row[0].AsValue<ui64>(),
                             RankClusters->CalcDistance(centroid, TargetVector));
                     }
                     continue;
@@ -438,18 +454,13 @@ private:
     }
 
     void OnLevelRoundDone() {
-        // Children were ranked incrementally as rows arrived (distance to target
-        // already in LevelCandidates). Keep only the LevelTop nearest via a partial
-        // sort -- equivalent to FindClusters with skipRatio 0.0 (no early exit).
+        // Children were ranked incrementally as rows arrived: LevelCandidates already
+        // holds (at most) the LevelTop nearest as a bounded heap. Hand their ids to
+        // the next round -- parent order does not affect correctness, so no sort.
         CurrentParents.clear();
-        if (!LevelCandidates.empty()) {
-            size_t k = std::min<size_t>(LevelTop, LevelCandidates.size());
-            std::partial_sort(LevelCandidates.begin(), LevelCandidates.begin() + k, LevelCandidates.end(),
-                [](const auto& a, const auto& b) { return a.second < b.second; });
-            CurrentParents.reserve(k);
-            for (size_t i = 0; i < k; ++i) {
-                CurrentParents.push_back(LevelCandidates[i].first);
-            }
+        CurrentParents.reserve(LevelCandidates.size());
+        for (auto& [id, _] : LevelCandidates) {
+            CurrentParents.push_back(id);
         }
         LevelCandidates.clear();
 
@@ -499,13 +510,12 @@ private:
         CachingLevelBatches.clear();
     }
 
-    // Keep the TopK nearest candidate rows by distance and hand them off.
+    // Candidates already holds (at most) the TopK nearest as a bounded heap; sort
+    // them ascending by distance and hand them off in order.
     void FinalizeResults() {
         auto guard = BindAllocator();
-        const size_t keep = std::min<size_t>(TopK, Candidates.size());
-        std::partial_sort(Candidates.begin(), Candidates.begin() + keep, Candidates.end(),
+        std::sort(Candidates.begin(), Candidates.end(),
             [](const TCandidate& a, const TCandidate& b) { return a.Distance < b.Distance; });
-        Candidates.resize(keep);
         for (auto& c : Candidates) {
             ResultRows.push_back(std::move(c.Row));
         }
@@ -1025,7 +1035,7 @@ private:
                 }
                 // Compute the centroid<->target distance now, overlapping the shard
                 // reads still in flight; ranking is deferred to the round barrier.
-                LevelCandidates.emplace_back(child, RankClusters->CalcDistance(centroidRef, TargetVector));
+                PushLevelCandidate(child, RankClusters->CalcDistance(centroidRef, TargetVector));
                 if (auto it = CachingLevelBatches.find(parent); it != CachingLevelBatches.end()) {
                     // Store [id (Uint64), centroid (String)]; Append copies the cells.
                     TCell cells[2] = {
@@ -1081,13 +1091,29 @@ private:
         if (embedding.IsString() || embedding.IsEmbedded()) {
             distance = RankClusters->CalcDistance(TargetVector, embedding.AsStringRef());
         }
+        // Bounded max-heap of the TopK nearest (worst distance at the top). Once full,
+        // a row no nearer than the current worst is dropped before its output holder
+        // is even materialized -- bounding peak memory at ~TopK rows regardless of
+        // shard count (matters most for non-covered reads with large main rows).
+        auto cmp = [](const TCandidate& a, const TCandidate& b) { return a.Distance < b.Distance; };
+        if (Candidates.size() >= TopK && (TopK == 0 || distance >= Candidates.front().Distance)) {
+            return;
+        }
         // Build a fresh output struct holder in OutputColumns order.
         NUdf::TUnboxedValue* items = nullptr;
         auto row = HolderFactory.CreateDirectArrayHolder(Settings.OutputColumnsSize(), items);
         for (ui32 i = 0; i < Settings.OutputColumnsSize(); ++i) {
             items[i] = value.GetElement(i);
         }
-        Candidates.push_back(TCandidate{distance, std::move(row)});
+        if (Candidates.size() < TopK) {
+            Candidates.push_back(TCandidate{distance, std::move(row)});
+            std::push_heap(Candidates.begin(), Candidates.end(), cmp);
+        } else {
+            // Heap full and this row is nearer than the worst: evict the worst.
+            std::pop_heap(Candidates.begin(), Candidates.end(), cmp);
+            Candidates.back() = TCandidate{distance, std::move(row)};
+            std::push_heap(Candidates.begin(), Candidates.end(), cmp);
+        }
     }
 
     void CollectLocks(NYql::NDq::IDqComputeActorAsyncInput* read) {
@@ -1246,11 +1272,12 @@ private:
     // Parents of the current round being read (level phase); a read row's parent
     // must be one of these.
     THashSet<TClusterId> ReadingParents;
-    // Children of the current level round as (id, distance-to-target) pairs. The
-    // distance is computed incrementally as rows arrive (overlapping the shard
-    // reads); the round barrier only partial-sorts to keep the LevelTop nearest.
+    // The current level round's LevelTop nearest children as a bounded max-heap of
+    // (id, distance-to-target) pairs (worst at the front). Distance is computed
+    // incrementally as rows arrive (overlapping the shard reads) and the heap is
+    // kept at <= LevelTop on the fly, so the round barrier just reads out ids.
     // Ranking reuses RankClusters' metric (CalcDistance is SetClusters-independent),
-    // so no centroid bytes are copied into this accumulator.
+    // so no centroid bytes are copied into this accumulator. See PushLevelCandidate.
     TVector<std::pair<TClusterId, double>> LevelCandidates;
 
     // Shared, process-wide cache of immutable level-table rows.
@@ -1278,6 +1305,8 @@ private:
     static constexpr size_t MaxPendingKeys = 16384;    // backpressure posting above this many buffered
     bool DispatchingMain = false;                      // re-entrancy guard for MaybeDispatchMainReads
 
+    // Bounded max-heap (by distance, worst at the front) of the TopK nearest result
+    // rows, kept at <= TopK as rows are added; see AddCandidate / FinalizeResults.
     TVector<TCandidate> Candidates;
     NKikimr::NMiniKQL::TUnboxedValueDeque ResultRows;
 

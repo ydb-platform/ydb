@@ -1129,7 +1129,9 @@ TStringBuf TValuePackerGeneric<Fast>::Pack(const NUdf::TUnboxedValuePod& value) 
 // Transport packer
 template <bool Fast>
 TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* type,
-                                                   EValuePackerVersion valuePackerVersion, TMaybe<size_t> bufferPageAllocSize,
+                                                   EValuePackerVersion valuePackerVersion,
+                                                   NYql::EDatumValidationMode datumValidationMode,
+                                                   TMaybe<size_t> bufferPageAllocSize,
                                                    arrow::MemoryPool* pool, TMaybe<ui8> minFillPercentage)
     : Type_(type)
     , BufferPageAllocSize_(bufferPageAllocSize ? *bufferPageAllocSize : TBufferPage::DefaultPageAllocSize)
@@ -1137,6 +1139,7 @@ TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* typ
     , IncrementalState_(ScanTypeProperties(Type_, /*assumeList=*/true))
     , ArrowPool_(pool ? *pool : *NYql::NUdf::GetYqlMemoryPool())
     , ValuePackerVersion_(valuePackerVersion)
+    , DatumValidationMode_(datumValidationMode)
 {
     MKQL_ENSURE(!stable, "Stable packing is not supported");
     InitBlocks(minFillPercentage);
@@ -1144,16 +1147,9 @@ TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* typ
 
 template <bool Fast>
 TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type,
+                                                   EValuePackerVersion valuePackerVersion,
+                                                   NYql::EDatumValidationMode datumValidationMode,
                                                    TMaybe<size_t> bufferPageAllocSize,
-                                                   arrow::MemoryPool* pool,
-                                                   TMaybe<ui8> minFillPercentage)
-    : TValuePackerTransport(type, EValuePackerVersion::V0, bufferPageAllocSize, pool, minFillPercentage)
-{
-}
-
-template <bool Fast>
-TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type,
-                                                   EValuePackerVersion valuePackerVersion, TMaybe<size_t> bufferPageAllocSize,
                                                    arrow::MemoryPool* pool, TMaybe<ui8> minFillPercentage)
     : Type_(type)
     , BufferPageAllocSize_(bufferPageAllocSize ? *bufferPageAllocSize : TBufferPage::DefaultPageAllocSize)
@@ -1161,23 +1157,9 @@ TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type,
     , IncrementalState_(ScanTypeProperties(Type_, /*assumeList=*/true))
     , ArrowPool_(pool ? *pool : *NYql::NUdf::GetYqlMemoryPool())
     , ValuePackerVersion_(valuePackerVersion)
+    , DatumValidationMode_(datumValidationMode)
 {
     InitBlocks(minFillPercentage);
-}
-
-template <bool Fast>
-TValuePackerTransport<Fast>::TValuePackerTransport(bool stable,
-                                                   const TType* type,
-                                                   TMaybe<size_t> bufferPageAllocSize,
-                                                   arrow::MemoryPool* pool,
-                                                   TMaybe<ui8> minFillPercentage)
-    : TValuePackerTransport(stable,
-                            type,
-                            EValuePackerVersion::V0,
-                            bufferPageAllocSize,
-                            pool,
-                            minFillPercentage)
-{
 }
 
 template <bool Fast>
@@ -1468,11 +1450,11 @@ void TValuePackerTransport<Fast>::UnpackBatchBlocks(TChunkedBuffer&& buf, const 
                     return holderFactory.CreateArrowBlock(
                         ConvertScalar(
                             static_cast<const TBlockType*>(itemType)->GetItemType(), item, ArrowPool_),
-                        NYql::DefaultDatumValidationMode);
+                        DatumValidationMode_);
                 }
-                return holderFactory.CreateArrowBlock(array, NYql::DefaultDatumValidationMode);
+                return holderFactory.CreateArrowBlock(array, DatumValidationMode_);
             }
-            return holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(len)), NYql::DefaultDatumValidationMode);
+            return holderFactory.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(len)), DatumValidationMode_);
         };
 
         if (IsLegacyBlock_) {

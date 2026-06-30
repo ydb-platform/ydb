@@ -62,7 +62,7 @@ class TMiniKQLComputationNodePackTest: public TTestBase {
                                      EValuePackerVersion valuePackerVersion, TMaybe<size_t> bufferPageAllocSize = Nothing(),
                                      arrow::MemoryPool* pool = nullptr, TMaybe<ui8> minFillPercentage = Nothing()) {
         if constexpr (Transport) {
-            return TValuePackerType(stable, type, valuePackerVersion, bufferPageAllocSize, pool, minFillPercentage);
+            return TValuePackerType(stable, type, valuePackerVersion, NYql::DefaultDatumTestValidationMode, bufferPageAllocSize, pool, minFillPercentage);
         } else {
             Y_UNUSED(valuePackerVersion);
             return TValuePackerType(stable, type);

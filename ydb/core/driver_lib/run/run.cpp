@@ -1087,8 +1087,11 @@ TGRpcServers TKikimrRunner::CreateGRpcServers(const TKikimrRunConfig& runConfig)
         if (hasPQv1 || hasTopic) {
             server.AddService(new NGRpcService::V1::TGRpcTopicService(ActorSystem.Get(), Counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(),
                 grpcRequestProxies[0], hasTopic.IsRlAllowed() || hasPQv1.IsRlAllowed()));
+        }
+
+        if (hasTopic) {
             server.AddService(new NGRpcService::V1::TGRpcTopicDeferredPublishService(ActorSystem.Get(), Counters,
-                grpcRequestProxies[0], hasTopic.IsRlAllowed() || hasPQv1.IsRlAllowed()));
+                grpcRequestProxies[0], hasTopic.IsRlAllowed()));
         }
 
         if (hasPQCD) {

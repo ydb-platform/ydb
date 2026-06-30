@@ -4,8 +4,7 @@
 #include "schemeshard__operation_common.h"
 #include "schemeshard__operation_states.h"
 
-#define LOG_I(stream) LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "[" << context.SS->TabletID() << "] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
 
 namespace NKikimr::NSchemeShard {
 
@@ -47,9 +46,9 @@ public:
         const auto& tx = Transaction;
         const TTabletId schemeshardTabletId = context.SS->SelfTabletId();
         
-        LOG_I("TChangePathStateOp Propose"
-            << ", opId: " << OperationId
-        );
+        YDB_LOG_INFO_CTX(context.Ctx, "TChangePathStateOp Propose",
+            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"opId", OperationId});
 
         const auto& changePathState = tx.GetChangePathState();
         TString pathStr = JoinPath({tx.GetWorkingDir(), changePathState.GetPath()});
@@ -91,16 +90,17 @@ public:
     }
 
     void AbortPropose(TOperationContext& context) override {
-        LOG_N("TChangePathStateOp AbortPropose"
-            << ", opId: " << OperationId);
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TChangePathStateOp AbortPropose",
+            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"opId", OperationId});
         // Nothing to cleanup since Propose hasn't committed anything yet
     }
 
     void AbortUnsafe(TTxId forceDropTxId, TOperationContext& context) override {
-        LOG_N("TChangePathStateOp AbortUnsafe"
-            << ", opId: " << OperationId
-            << ", forceDropId: " << forceDropTxId
-        );
+        YDB_LOG_NOTICE_CTX(context.Ctx, "TChangePathStateOp AbortUnsafe",
+            {"#_context.SS->TabletID", context.SS->TabletID()},
+            {"opId", OperationId},
+            {"forceDropId", forceDropTxId});
 
         context.OnComplete.DoneOperation(OperationId);
     }

@@ -13,6 +13,8 @@
 
 #include <library/cpp/time_provider/time_provider.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::IMPORT
+
 using namespace NKikimr::NKqp;
 
 namespace NKikimr::NSchemeShard {
@@ -74,10 +76,9 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
             return Finish(Ydb::StatusIds::GENERIC_ERROR, "empty compile response");
         }
 
-        LOG_D("TSchemeQueryExecutor HandleCompileResponse"
-            << ", self: " << SelfId()
-            << ", status: " << result->Status;
-        );
+        YDB_LOG_DEBUG("TSchemeQueryExecutor HandleCompileResponse",
+            {"self", SelfId()},
+            {"status", result->Status});
 
         if (result->Status != Ydb::StatusIds::SUCCESS) {
             return Finish(result->Status, result->Issues.ToOneLineString());
@@ -117,7 +118,8 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
         auto logMessage = TStringBuilder() << "TSchemeQueryExecutor Reply"
             << ", self: " << SelfId()
             << ", status: " << status;
-        LOG_I(logMessage);
+        YDB_LOG_INFO("",
+            {"logMessage", logMessage});
 
         std::visit([&]<typename T>(T& value) {
             if constexpr (std::is_same_v<T, TString>) {
@@ -125,7 +127,8 @@ class TSchemeQueryExecutor: public TActorBootstrapped<TSchemeQueryExecutor> {
             } else if constexpr (std::is_same_v<T, NKikimrSchemeOp::TModifyScheme>) {
                 logMessage << ", prepared query: " << value.ShortDebugString().Quote();
             }
-            LOG_D(logMessage);
+            YDB_LOG_DEBUG("Dump logMessage",
+                {"logMessage", logMessage});
             Send(ReplyTo, new TEvPrivate::TEvImportSchemeQueryResult(ImportId, ItemIdx, status, std::move(value)));
         }, result);
 

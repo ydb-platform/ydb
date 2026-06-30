@@ -9,6 +9,8 @@
 
 #include <util/generic/ptr.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::EXPORT
+
 namespace NKikimr {
 namespace NSchemeShard {
 
@@ -69,9 +71,8 @@ struct TSchemeShard::TExport::TTxForget: public TSchemeShard::TXxport::TTxBase {
 
             Self->PersistRemoveExport(db, *exportInfo);
         } else {
-            LOG_D("TExport::TTxForget, dropping export tables"
-                << ", info: " << exportInfo->ToString()
-            );
+            YDB_LOG_DEBUG("TExport::TTxForget, dropping export tables",
+                {"info", exportInfo->ToString()});
 
             PrepareDropping(Self, *exportInfo, db);
 

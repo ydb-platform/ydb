@@ -6,6 +6,8 @@
 #include <ydb/core/filestore/core/filestore.h>
 #include <ydb/core/mind/hive/hive.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::FLAT_TX_SCHEMESHARD
+
 namespace {
 
 using namespace NKikimr;
@@ -37,10 +39,10 @@ public:
         const auto step = TStepId(ev->Get()->StepId);
         const auto ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << " HandleReply TEvOperationPlan"
-            << ", step: " << step
-            << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "HandleReply TEvOperationPlan",
+            {"debugHint", DebugHint()},
+            {"step", step},
+            {"schemeshard", ssId});
 
         auto* txState = context.SS->FindTx(OperationId);
         if (!txState) {
@@ -99,9 +101,9 @@ public:
     bool ProgressState(TOperationContext& context) override {
         const auto ssId = context.SS->SelfTabletId();
 
-        LOG_INFO_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            DebugHint() << " ProgressState"
-            << ", at schemeshard: " << ssId);
+        YDB_LOG_INFO_CTX(context.Ctx, "ProgressState",
+            {"debugHint", DebugHint()},
+            {"schemeshard", ssId});
 
         auto* txState = context.SS->FindTx(OperationId);
         Y_ABORT_UNLESS(txState);
@@ -172,12 +174,12 @@ THolder<TProposeResponse> TDropFileStore::Propose(
     const TString& parentPathStr = Transaction.GetWorkingDir();
     const TString& name = operation.GetName();
 
-    LOG_NOTICE_S(context.Ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-        "TDropFileStore Propose"
-        << ", path: " << parentPathStr << "/" << name
-        << ", pathId: " << operation.GetId()
-        << ", opId: " << OperationId
-        << ", at schemeshard: " << ssId);
+    YDB_LOG_NOTICE_CTX(context.Ctx, "TDropFileStore Propose ",
+        {"path", parentPathStr},
+        {"name", name},
+        {"pathId", operation.GetId()},
+        {"opId", OperationId},
+        {"schemeshard", ssId});
 
     auto result = MakeHolder<TProposeResponse>(
         NKikimrScheme::StatusAccepted,

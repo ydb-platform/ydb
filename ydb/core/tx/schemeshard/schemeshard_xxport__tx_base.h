@@ -57,10 +57,9 @@ protected:
             return;
         }
 
-        LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "SendNotifications: "
-                << ": id# " << info->Id
-                << ", subscribers count# " << info->Subscribers.size());
+        YDB_LOG_TRACE_COMP(NKikimrServices::FLAT_TX_SCHEMESHARD, "SendNotifications: subscribers",
+            {"id", info->Id},
+            {"count", info->Subscribers.size()});
 
         TSet<TActorId> toAnswer;
         toAnswer.swap(info->Subscribers);

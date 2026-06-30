@@ -11,6 +11,8 @@
 
 #include <util/stream/format.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SCHEMESHARD_DESCRIBE
+
 namespace {
 
 void FillPartitionConfig(const NKikimrSchemeOp::TPartitionConfig& in, NKikimrSchemeOp::TPartitionConfig& out) {
@@ -507,15 +509,13 @@ void TPathDescriber::DescribeTable(const TActorContext& ctx, TPathId pathId, TPa
             progress->SetDataTotalSize(txState.DataTotalSize);
             progress->SetTxId(ui64(txId));
 
-            LOG_TRACE(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE,
-                      "Add backup process info");
+            YDB_LOG_TRACE_CTX(ctx, "Add backup process info");
             break;
         }
 
         /* Get information about last completed backup */
         for (const auto& iter: tableInfo.BackupHistory) {
-            LOG_TRACE(ctx, NKikimrServices::SCHEMESHARD_DESCRIBE,
-                      "Add last backup info item to history");
+            YDB_LOG_TRACE_CTX(ctx, "Add last backup info item to history");
             auto protoResult = pathDescription->AddLastBackupResult();
             const auto& txId = iter.first;
             const auto& tInfoResult = iter.second;

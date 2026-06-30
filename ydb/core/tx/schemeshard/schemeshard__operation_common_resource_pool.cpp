@@ -4,7 +4,6 @@
 
 #include <ydb/core/resource_pools/resource_pool_settings.h>
 
-
 namespace NKikimr::NSchemeShard::NResourcePool {
 
 namespace {

@@ -152,86 +152,110 @@ bool TStorage::CanReadMessageGroupIdHash(const ui32 messageGroupIdHash) const {
     return MessageGroups.UnlockedMessageGroupsIdContains(messageGroupIdHash);
 }
 
+TReadMessage TStorage::ConvertoToReadMessage(ui64 offset, const TMessage& message) const {
+    return TReadMessage{
+        .Offset = offset,
+        .ApproximateReceiveCount = message.ProcessingCount,
+        .ApproximateFirstReceiveTimestamp = TimeProvider->Now(), // TODO: replace with persisted first-receive timestamp
+    };
+}
+
+static bool RetentionExpired(const TStorage::TMessage& message, const std::optional<ui32> retentionDeadlineDelta) {
+    return retentionDeadlineDelta && message.WriteTimestampDelta <= retentionDeadlineDelta.value();
+};
+
+bool TStorage::IsMessageGroupLocked(const TMessage& message, const absl::flat_hash_set<ui32>& skipMessageGroups) const {
+    return message.HasMessageGroupId && (!CanReadMessageGroupIdHash(message.MessageGroupIdHash) || skipMessageGroups.contains(message.MessageGroupIdHash));
+};
+
+TStorage::TTryGetMessageResult TStorage::TryGetMessage(ui64 offset, const std::optional<ui32> retentionDeadlineDelta, const absl::flat_hash_set<ui32>& skipMessageGroups, const char* caseDescription) {
+    auto isMessageGroupSkipped = [&](const TMessage& message) {
+        return message.HasMessageGroupId && skipMessageGroups.contains(message.MessageGroupIdHash);
+    };
+    // checks if message is eligible for return: it is not expired or skipped
+    const auto& [message, _] = GetMessageInt(offset);
+    AFL_ENSURE(message != nullptr)("offset", offset)("case", caseDescription);
+    AFL_ENSURE(message->GetStatus() == EMessageStatus::Unprocessed)("status", message->GetStatus())("offset", offset)("case", caseDescription);
+    if (RetentionExpired(*message, retentionDeadlineDelta)) {
+        return TTryGetMessageResult{
+            .Message = nullptr,
+            .TryNextInGroup = true,
+        };
+    }
+    if (isMessageGroupSkipped(*message)) {
+        return TTryGetMessageResult{
+            .Message = nullptr,
+            .TryNextInGroup = false,
+        };
+    }
+    return TTryGetMessageResult{
+        .Message = message,
+        .TryNextInGroup = false,
+    };
+}
+TStorage::TNextMessageResult TStorage::SearchForEligibleMessage(const std::optional<ui32> retentionDeadlineDelta, const absl::flat_hash_set<ui32>& skipMessageGroups) {
+    auto& unlockedList = MessageGroups.GetUnlockedMessageGroupsIdViewOrder();
+    for (auto firstIt = unlockedList.begin(); firstIt != unlockedList.end(); ++firstIt) {
+        const ui32 groupId{*firstIt};
+        auto* group = MapFindPtr(MessageGroups.Groups, groupId);
+        AFL_ENSURE(group != nullptr)("groupId", groupId);
+        ui64 offset = group->FirstOffset;
+
+        while (true) {
+            TTryGetMessageResult result = TryGetMessage(offset, retentionDeadlineDelta, skipMessageGroups, "unlocked");
+            if (result.Message) {
+                return TNextMessageResult{
+                    .Message = result.Message,
+                    .Offset = offset,
+                    .OrderIterator = firstIt,
+                };
+            }
+            if (!result.TryNextInGroup) {
+                // TODO: hop inside group
+                break;
+            }
+            break;
+        }
+    }
+    return TNextMessageResult{
+        .Message = nullptr,
+        .Offset = Max<ui64>(),
+        .OrderIterator = unlockedList.end(),
+    };
+};
+
 std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& position, const absl::flat_hash_set<ui32>& skipMessageGroups) {
-    std::optional<ui64> retentionDeadlineDelta = GetRetentionDeadlineDelta();
+    const std::optional<ui64> retentionDeadlineDelta = GetRetentionDeadlineDelta();
 
     if (!position.SlowPosition) {
         position.SlowPosition = SlowMessages.begin();
     }
 
-    auto retentionExpired = [&](const auto& message) {
-        return retentionDeadlineDelta && message.WriteTimestampDelta <= retentionDeadlineDelta.value();
-    };
-
-    auto asResult = [&](auto offset, auto& message) {
-        return TReadMessage{
-            .Offset = offset,
-            .ApproximateReceiveCount = message.ProcessingCount,
-            .ApproximateFirstReceiveTimestamp = TimeProvider->Now(), // TODO: replace with persisted first-receive timestamp
-        };
-    };
-
-    auto isMessageGroupLocked = [&](TMessage& message) {
-        return message.HasMessageGroupId && (!CanReadMessageGroupIdHash(message.MessageGroupIdHash) || skipMessageGroups.contains(message.MessageGroupIdHash));
-    };
-
     if (KeepMessageOrder) {
-        auto isMessageGroupSkipped = [&](const TMessage& message) {
-            return message.HasMessageGroupId && skipMessageGroups.contains(message.MessageGroupIdHash);
-        };
-
-        auto tryGetMessage = [&](ui64 offset, const char* desc) -> TMessage* {
-            // checks if message is eligible for return: it is not expired or skipped
-            const auto& [message, _] = GetMessageInt(offset);
-            AFL_ENSURE(message != nullptr)("offset", offset)("case", desc);
-            AFL_ENSURE(message->GetStatus() == EMessageStatus::Unprocessed)("status", message->GetStatus())("offset", offset)("case", desc);
-            if (retentionExpired(*message)) {
-                return nullptr;
-            }
-            if (isMessageGroupSkipped(*message)) {
-                return nullptr;
-            }
-            return message;
-        };
-
-        auto tryReturn = [&](ui64 offset, const char* desc) -> std::optional<TReadMessage> {
-            auto* message = tryGetMessage(offset, desc);
-            if (!message) {
-                return std::nullopt;
-            }
-            DoLock(offset, *message, deadline);
-            return asResult(offset, *message);
-        };
-
-        auto& unlockedList = MessageGroups.GetUnlockedMessageGroupsIdViewOrder();
-        auto searchForEligibleMessage = [&]() -> std::tuple<TMessage*, ui64, TIntrusiveList<TOrderedMessageGroupIdHash>::iterator> {
-            for (auto firstIt = unlockedList.begin(); firstIt != unlockedList.end(); ++firstIt) {
-                const ui32 groupId{*firstIt};
-                auto* group = MapFindPtr(MessageGroups.Groups, groupId);
-                AFL_ENSURE(group != nullptr)("groupId", groupId);
-                ui64 offset = group->FirstOffset;
-                TMessage* message = tryGetMessage(offset, "unlocked");
-                if (message) {
-                    return std::make_tuple(message, offset, firstIt);
-                }
-            }
-            return std::make_tuple(nullptr, -1, unlockedList.end());
-        };
-
-        auto [message, offset, firstIt] = searchForEligibleMessage();
-        if (message) {
-            if (unlockedList.begin() != firstIt) [[unlikely]] {
+        TNextMessageResult nextMessage = SearchForEligibleMessage(retentionDeadlineDelta, skipMessageGroups);
+        if (nextMessage.Message) {
+            auto& unlockedList = MessageGroups.GetUnlockedMessageGroupsIdViewOrder();
+            if (unlockedList.begin() != nextMessage.OrderIterator) [[unlikely]] {
                 if constexpr (0) {
                     // rotate
                     // move skipped messaged to the end of queue, so they won't be rechecked on the next iteration
                     TIntrusiveList<TOrderedMessageGroupIdHash> cut;
-                    unlockedList.Cut(unlockedList.begin(), firstIt, cut.end());
+                    unlockedList.Cut(unlockedList.begin(), nextMessage.OrderIterator, cut.end());
                     unlockedList.Append(std::move(cut));
                 }
             }
-            DoLock(offset, *message, deadline);
-            return asResult(offset, *message);
+            DoLock(nextMessage.Offset, *nextMessage.Message, deadline);
+            return ConvertoToReadMessage(nextMessage.Offset, *nextMessage.Message);
         }
+
+        auto tryReturn = [&](ui64 offset, const char* desc) -> std::optional<TReadMessage> {
+            TTryGetMessageResult result = TryGetMessage(offset, retentionDeadlineDelta, skipMessageGroups, desc);
+            if (!result.Message) {
+                return std::nullopt;
+            }
+            DoLock(offset, *result.Message, deadline);
+            return ConvertoToReadMessage(offset, *result.Message);
+        };
 
         for (ui64 offset : MessageGroups.UnorderedOffsets) [[unlikely]] {
             if (auto result = tryReturn(offset, "unordered")) {
@@ -245,16 +269,16 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
         auto offset = position.SlowPosition.value()->first;
         auto& message = position.SlowPosition.value()->second;
         if (message.GetStatus() == EMessageStatus::Unprocessed) {
-            if (retentionExpired(message)) {
+            if (RetentionExpired(message, retentionDeadlineDelta)) {
                 continue;
             }
 
-            if (isMessageGroupLocked(message)) {
+            if (IsMessageGroupLocked(message, skipMessageGroups)) {
                 continue;
             }
 
             DoLock(offset, message, deadline);
-            return asResult(offset, message);
+            return ConvertoToReadMessage(offset, message);
         }
     }
 
@@ -262,14 +286,14 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
     for (size_t i = std::max(position.FastPosition, FirstUnlockedOffset) - FirstOffset; i < Messages.size(); ++i) {
         auto& message = Messages[i];
         if (message.GetStatus() == EMessageStatus::Unprocessed) {
-            if (retentionExpired(message)) {
+            if (RetentionExpired(message, retentionDeadlineDelta)) {
                 if (moveUnlockedOffset) {
                     ++FirstUnlockedOffset;
                 }
                 continue;
             }
 
-            if (isMessageGroupLocked(message)) {
+            if (IsMessageGroupLocked(message, skipMessageGroups)) {
                 moveUnlockedOffset = false;
                 continue;
             }
@@ -282,7 +306,7 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
             position.FastPosition = offset + 1;
 
             DoLock(offset, message, deadline);
-            return asResult(offset, message);
+            return ConvertoToReadMessage(offset, message);
         } else if (moveUnlockedOffset) {
             ++FirstUnlockedOffset;
         }

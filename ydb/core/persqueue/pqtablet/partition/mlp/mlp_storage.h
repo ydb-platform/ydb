@@ -334,6 +334,23 @@ private:
     template <class Fn>
     void IterateAllMessagesInOrder(Fn&& fn);
 
+    TReadMessage ConvertoToReadMessage(ui64 offset, const TMessage& message) const;
+    bool IsMessageGroupLocked(const TMessage& message, const absl::flat_hash_set<ui32>& skipMessageGroups) const;
+
+    struct TNextMessageResult {
+        TMessage* Message; // nullable
+        ui64 Offset;
+        TIntrusiveList<TOrderedMessageGroupIdHash>::iterator OrderIterator;
+    };
+
+    struct TTryGetMessageResult {
+        TMessage* Message; // nullable
+        bool TryNextInGroup;
+    };
+
+    TTryGetMessageResult TryGetMessage(ui64 offset, const std::optional<ui32> retentionDeadlineDelta, const absl::flat_hash_set<ui32>& skipMessageGroups, const char* caseDescription);
+    TNextMessageResult SearchForEligibleMessage(const std::optional<ui32> retentionDeadlineDelta, const absl::flat_hash_set<ui32>& skipMessageGroups);
+
 private:
     const TIntrusivePtr<ITimeProvider> TimeProvider;
 

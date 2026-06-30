@@ -19,7 +19,10 @@ namespace NYdb::NBS::NBlockStore::NStorage::NTransport::NTestLib {
 // DDisk/PersistentBuffer stub actors as services and exposes mock-compatible
 // control methods so the DirectBlockGroup disconnect tests exercise the real
 // disconnect path instead of duplicated mock logic.
-class TICStorageTransportTestAdapter: public IStorageTransport
+//
+// All IStorageTransport methods are inherited from TICStorageTransport, so the
+// adapter only adds the test control surface on top of the real transport.
+class TICStorageTransportTestAdapter: public TICStorageTransport
 {
 public:
     using EConnectionType = THostConnection::EConnectionType;
@@ -69,73 +72,6 @@ public:
     void
     FireDisconnect(EConnectionType type, const TDDiskId& ddiskId, ui32 nodeId);
 
-    // --- IStorageTransport (delegates to the real transport) ----------------
-
-    NThreading::TFuture<TEvConnectResult> Connect(
-        const THostConnection& connection,
-        TDisconnectCB disconnectCB) override;
-
-    NThreading::TFuture<TEvReadPersistentBufferResult> ReadFromPBuffer(
-        const THostConnection& connection,
-        const NKikimr::NDDisk::TBlockSelector& selector,
-        const ui64 lsn,
-        const NKikimr::NDDisk::TReadInstruction instruction,
-        const TGuardedSgList& data,
-        NWilson::TSpan* span) override;
-
-    NThreading::TFuture<TEvReadResult> ReadFromDDisk(
-        const THostConnection& connection,
-        const NKikimr::NDDisk::TBlockSelector& selector,
-        const NKikimr::NDDisk::TReadInstruction instruction,
-        const TGuardedSgList& data,
-        NWilson::TSpan* span) override;
-
-    NThreading::TFuture<TEvWritePersistentBufferResult> WriteToPBuffer(
-        const THostConnection& connection,
-        const NKikimr::NDDisk::TBlockSelector& selector,
-        const ui64 lsn,
-        const NKikimr::NDDisk::TWriteInstruction instruction,
-        const TGuardedSgList& data,
-        NWilson::TSpan* span) override;
-
-    void WriteToManyPBuffers(
-        const THostConnection& connection,
-        const NKikimr::NDDisk::TBlockSelector& selector,
-        const ui64 lsn,
-        const NKikimr::NDDisk::TWriteInstruction instruction,
-        TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
-        TDuration replyTimeout,
-        const TGuardedSgList& data,
-        std::shared_ptr<NWilson::TSpan> span,
-        TWriteToManyPBuffersCallback callback) override;
-
-    NThreading::TFuture<TEvWriteResult> WriteToDDisk(
-        const THostConnection& connection,
-        const NKikimr::NDDisk::TBlockSelector& selector,
-        const NKikimr::NDDisk::TWriteInstruction instruction,
-        const TGuardedSgList& data,
-        NWilson::TSpan* span) override;
-
-    NThreading::TFuture<TEvSyncResult> SyncWithPBuffer(
-        const THostConnection& pbufferConnection,
-        const THostConnection& ddiskConnection,
-        TVector<NKikimr::NDDisk::TBlockSelector> selectors,
-        TVector<ui64> lsns,
-        NWilson::TSpan* span) override;
-
-    NThreading::TFuture<TEvErasePersistentBufferResult> BatchEraseFromPBuffer(
-        const THostConnection& connection,
-        TVector<ui64> lsns,
-        NWilson::TSpan* span) override;
-
-    NThreading::TFuture<TEvErasePersistentBufferResult> BarrierEraseFromPBuffer(
-        const THostConnection& connection,
-        ui64 lsn,
-        NWilson::TSpan* span) override;
-
-    NThreading::TFuture<TEvListPersistentBufferResult> ListPBufferEntries(
-        const THostConnection& connection) override;
-
 private:
     struct TKey
     {
@@ -156,11 +92,17 @@ private:
 
     void RegisterStub(EConnectionType type, const TDDiskId& ddiskId);
 
+    // Delegating constructor that receives the already registered transport
+    // actor id so it can both initialize the TICStorageTransport base and
+    // remember the id for the test control surface.
+    TICStorageTransportTestAdapter(
+        NActors::TTestActorRuntime* runtime,
+        NActors::TActorId transportActorId);
+
     NActors::TTestActorRuntime* const Runtime;
     const ui32 NodeId;
     const NActors::TActorId EdgeActor;
     NActors::TActorId TransportActorId;
-    std::unique_ptr<TICStorageTransport> Inner;
 
     TVector<TDDiskId> DDiskIds;
     TVector<TDDiskId> PBufferIds;

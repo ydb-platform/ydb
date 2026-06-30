@@ -16,18 +16,23 @@ using namespace NKikimr;
 
 TICStorageTransportTestAdapter::TICStorageTransportTestAdapter(
     TTestActorRuntime* runtime)
-    : Runtime(runtime)
+    : TICStorageTransportTestAdapter(
+          runtime,
+          // Register the real transport actor inside the runtime and address
+          // it directly from the TICStorageTransport base.
+          runtime->Register(new TICStorageTransportActor(), 0))
+{
+}
+
+TICStorageTransportTestAdapter::TICStorageTransportTestAdapter(
+    TTestActorRuntime* runtime,
+    TActorId transportActorId)
+    : TICStorageTransport(runtime->GetActorSystem(0), transportActorId)
+    , Runtime(runtime)
     , NodeId(runtime->GetNodeId(0))
     , EdgeActor(runtime->AllocateEdgeActor(0))
+    , TransportActorId(transportActorId)
 {
-    // Register the real transport actor inside the runtime and address it
-    // directly from the transport built on the second constructor.
-    TransportActorId = Runtime->Register(new TICStorageTransportActor(), 0);
-
-    Inner = std::make_unique<TICStorageTransport>(
-        Runtime->GetActorSystem(0),
-        TransportActorId);
-
     // Single node: every DDisk/PersistentBuffer lives on the runtime node and
     // is distinguished only by pdisk/slot.
     DDiskIds.reserve(DirectBlockGroupHostCount);
@@ -147,133 +152,6 @@ void TICStorageTransportTestAdapter::FireDisconnect(
             new TEvInterconnect::TEvNodeDisconnected(nodeId)),
         0,
         true);
-}
-
-////////////////////////////////////////////////////////////////////////////////
-
-NThreading::TFuture<TICStorageTransportTestAdapter::TEvConnectResult>
-TICStorageTransportTestAdapter::Connect(
-    const THostConnection& connection,
-    TDisconnectCB disconnectCB)
-{
-    return Inner->Connect(connection, std::move(disconnectCB));
-}
-
-NThreading::TFuture<
-    TICStorageTransportTestAdapter::TEvReadPersistentBufferResult>
-TICStorageTransportTestAdapter::ReadFromPBuffer(
-    const THostConnection& connection,
-    const NKikimr::NDDisk::TBlockSelector& selector,
-    const ui64 lsn,
-    const NKikimr::NDDisk::TReadInstruction instruction,
-    const TGuardedSgList& data,
-    NWilson::TSpan* span)
-{
-    return Inner
-        ->ReadFromPBuffer(connection, selector, lsn, instruction, data, span);
-}
-
-NThreading::TFuture<TICStorageTransportTestAdapter::TEvReadResult>
-TICStorageTransportTestAdapter::ReadFromDDisk(
-    const THostConnection& connection,
-    const NKikimr::NDDisk::TBlockSelector& selector,
-    const NKikimr::NDDisk::TReadInstruction instruction,
-    const TGuardedSgList& data,
-    NWilson::TSpan* span)
-{
-    return Inner->ReadFromDDisk(connection, selector, instruction, data, span);
-}
-
-NThreading::TFuture<
-    TICStorageTransportTestAdapter::TEvWritePersistentBufferResult>
-TICStorageTransportTestAdapter::WriteToPBuffer(
-    const THostConnection& connection,
-    const NKikimr::NDDisk::TBlockSelector& selector,
-    const ui64 lsn,
-    const NKikimr::NDDisk::TWriteInstruction instruction,
-    const TGuardedSgList& data,
-    NWilson::TSpan* span)
-{
-    return Inner
-        ->WriteToPBuffer(connection, selector, lsn, instruction, data, span);
-}
-
-void TICStorageTransportTestAdapter::WriteToManyPBuffers(
-    const THostConnection& connection,
-    const NKikimr::NDDisk::TBlockSelector& selector,
-    const ui64 lsn,
-    const NKikimr::NDDisk::TWriteInstruction instruction,
-    TVector<NKikimrBlobStorage::NDDisk::TDDiskId> persistentBufferIds,
-    TDuration replyTimeout,
-    const TGuardedSgList& data,
-    std::shared_ptr<NWilson::TSpan> span,
-    TWriteToManyPBuffersCallback callback)
-{
-    Inner->WriteToManyPBuffers(
-        connection,
-        selector,
-        lsn,
-        instruction,
-        std::move(persistentBufferIds),
-        replyTimeout,
-        data,
-        std::move(span),
-        std::move(callback));
-}
-
-NThreading::TFuture<TICStorageTransportTestAdapter::TEvWriteResult>
-TICStorageTransportTestAdapter::WriteToDDisk(
-    const THostConnection& connection,
-    const NKikimr::NDDisk::TBlockSelector& selector,
-    const NKikimr::NDDisk::TWriteInstruction instruction,
-    const TGuardedSgList& data,
-    NWilson::TSpan* span)
-{
-    return Inner->WriteToDDisk(connection, selector, instruction, data, span);
-}
-
-NThreading::TFuture<TICStorageTransportTestAdapter::TEvSyncResult>
-TICStorageTransportTestAdapter::SyncWithPBuffer(
-    const THostConnection& pbufferConnection,
-    const THostConnection& ddiskConnection,
-    TVector<NKikimr::NDDisk::TBlockSelector> selectors,
-    TVector<ui64> lsns,
-    NWilson::TSpan* span)
-{
-    return Inner->SyncWithPBuffer(
-        pbufferConnection,
-        ddiskConnection,
-        std::move(selectors),
-        std::move(lsns),
-        span);
-}
-
-NThreading::TFuture<
-    TICStorageTransportTestAdapter::TEvErasePersistentBufferResult>
-TICStorageTransportTestAdapter::BatchEraseFromPBuffer(
-    const THostConnection& connection,
-    TVector<ui64> lsns,
-    NWilson::TSpan* span)
-{
-    return Inner->BatchEraseFromPBuffer(connection, std::move(lsns), span);
-}
-
-NThreading::TFuture<
-    TICStorageTransportTestAdapter::TEvErasePersistentBufferResult>
-TICStorageTransportTestAdapter::BarrierEraseFromPBuffer(
-    const THostConnection& connection,
-    ui64 lsn,
-    NWilson::TSpan* span)
-{
-    return Inner->BarrierEraseFromPBuffer(connection, lsn, span);
-}
-
-NThreading::TFuture<
-    TICStorageTransportTestAdapter::TEvListPersistentBufferResult>
-TICStorageTransportTestAdapter::ListPBufferEntries(
-    const THostConnection& connection)
-{
-    return Inner->ListPBufferEntries(connection);
 }
 
 ////////////////////////////////////////////////////////////////////////////////

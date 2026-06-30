@@ -25,6 +25,5 @@ feature_flags:
 | `enable_database_admin`                                  | The role of a database administrator |
 | `enable_kafka_native_balancing`                          | Client balancing of partitions when reading using the [Kafka protocol](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) |
 | `enable_topic_compactification_by_key`                   | Enabling topic compactification in the [YDB Topics Kafka API](../../reference/kafka-api/index.md) |
-| `enable_topic_deferred_publish`                          | Topic deferred publish API (`BeginPublication` and related RPCs) |
 | `enable_kafka_transactions`                              | Enabling transactions in the [YDB Topics Kafka API](../../reference/kafka-api/index.md) |
 | `enable_grpc_audit`                                      | Enabling [audit](../../security/audit-log.md#grpc-connection) of gRPC connection state changes |

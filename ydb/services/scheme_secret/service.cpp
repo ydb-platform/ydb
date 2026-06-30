@@ -1,4 +1,4 @@
-#include <ydb/services/scheme_secret/service.h>
+#include "service.h"
 #include <ydb/services/scheme_secret/resolver.h>
 
 #include <ydb/core/base/appdata.h>
@@ -42,7 +42,14 @@ class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecrets
 
             auto secretIds = snapshot->GetSecretIds(UserToken, secretId.GetSecretId());
             if (secretIds.size() > 1) {
-                CompleteAndPassAway(NKqp::TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("several secrets with name '" + secretId.GetSecretId() + "' were found") }));
+                const auto err = TStringBuilder() << "several secrets with name '"
+                    << secretId.GetSecretId() << "' were found";
+                CompleteAndPassAway(
+                    NKqp::TEvDescribeSecretsResponse::TDescription(
+                        Ydb::StatusIds::BAD_REQUEST,
+                        { NYql::TIssue(err) }
+                    )
+                );
                 return;
             }
 
@@ -56,9 +63,17 @@ class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecrets
 
             if (!AskSent) {
                 AskSent = true;
-                Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvAskSnapshot(GetSecretsSnapshotParser()));
+                Send(NMetadata::NProvider::MakeServiceId(
+                    SelfId().NodeId()), new NMetadata::NProvider::TEvAskSnapshot(GetSecretsSnapshotParser()
+                ));
             } else {
-                CompleteAndPassAway(NKqp::TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret with name '" + secretId.GetSecretId() + "' not found") }));
+                const auto err = TStringBuilder() << "secret with name '" << secretId.GetSecretId() << "' not found";
+                CompleteAndPassAway(
+                    NKqp::TEvDescribeSecretsResponse::TDescription(
+                        Ydb::StatusIds::BAD_REQUEST,
+                        { NYql::TIssue(err) }
+                    )
+                );
             }
             return;
         }
@@ -69,7 +84,9 @@ class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecrets
     void CompleteAndPassAway(const NKqp::TEvDescribeSecretsResponse::TDescription& response) {
         Promise.SetValue(response);
 
-        Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()));
+        Send(NMetadata::NProvider::MakeServiceId(
+            SelfId().NodeId()), new NMetadata::NProvider::TEvUnsubscribeExternal(GetSecretsSnapshotParser()
+        ));
         PassAway();
     }
 
@@ -78,7 +95,9 @@ class TDescribeSecretsActor: public NActors::TActorBootstrapped<TDescribeSecrets
     }
 
 public:
-    TDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds, NThreading::TPromise<NKqp::TEvDescribeSecretsResponse::TDescription> promise)
+    TDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds,
+        NThreading::TPromise<NKqp::TEvDescribeSecretsResponse::TDescription> promise
+    )
         : UserToken(NACLib::TUserToken{ownerUserId, TVector<NACLib::TSID>{}})
         , SecretIds(CreateSecretIds(ownerUserId, secretIds))
         , Promise(promise)
@@ -87,17 +106,27 @@ public:
 
     void Bootstrap() {
         if (!NMetadata::NProvider::TServiceOperator::IsEnabled()) {
-            Promise.SetValue(NKqp::TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::INTERNAL_ERROR, { NYql::TIssue("metadata service is not active") }));
+            Promise.SetValue(
+                NKqp::TEvDescribeSecretsResponse::TDescription(
+                    Ydb::StatusIds::INTERNAL_ERROR,
+                    { NYql::TIssue("metadata service is not active") }
+                )
+            );
             PassAway();
             return;
         }
 
-        Send(NMetadata::NProvider::MakeServiceId(SelfId().NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(GetSecretsSnapshotParser()));
+        Send(NMetadata::NProvider::MakeServiceId(
+            SelfId().NodeId()),
+            new NMetadata::NProvider::TEvSubscribeExternal(GetSecretsSnapshotParser()
+        ));
         Become(&TDescribeSecretsActor::StateFunc);
     }
 
 private:
-    static std::vector<NMetadata::NSecret::TSecretId> CreateSecretIds(const TString& ownerUserId, const std::vector<TString>& secretIds) {
+    static std::vector<NMetadata::NSecret::TSecretId> CreateSecretIds(const TString& ownerUserId,
+        const std::vector<TString>& secretIds
+    ) {
         std::vector<NMetadata::NSecret::TSecretId> result;
         for (const TString& secretId : secretIds) {
             result.emplace_back(ownerUserId, secretId);
@@ -112,7 +141,9 @@ private:
     bool AskSent = false;
 };
 
-IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds, NThreading::TPromise<NKqp::TEvDescribeSecretsResponse::TDescription> promise) {
+IActor* CreateDescribeSecretsActor(const TString& ownerUserId, const std::vector<TString>& secretIds,
+    NThreading::TPromise<NKqp::TEvDescribeSecretsResponse::TDescription> promise
+) {
     return new TDescribeSecretsActor(ownerUserId, secretIds, promise);
 }
 
@@ -153,13 +184,13 @@ Ydb::StatusIds::StatusCode MapSchemeShardStatus(NKikimrScheme::EStatus status) {
 TString MakeSchemeShardErrorMessage(NKikimrScheme::EStatus status, const TString& secretName) {
     switch (status) {
         case NKikimrScheme::EStatus::StatusNotAvailable:
-            return "Schemeshard is not available for secret `" + secretName + "`";
+            return TStringBuilder() << "Schemeshard is not available for secret `" << secretName << "`";
         case NKikimrScheme::EStatus::StatusPathDoesNotExist:
-            return "Secret `" + secretName + "` not found";
+            return TStringBuilder() << "Secret `" << secretName << "` not found";
         case NKikimrScheme::EStatus::StatusAccessDenied:
-            return "Access denied to secret `" + secretName + "`";
+            return TStringBuilder() << "Access denied to secret `" << secretName << "`";
         default:
-            return "Failed to resolve secret `" + secretName + "`";
+            return TStringBuilder() << "Failed to resolve secret `" << secretName << "`";
     }
 }
 
@@ -168,7 +199,7 @@ TString ListSecrets(const TVector<TString>& paths) {
         return "";
     }
     if (paths.size() == 1) {
-        return "secret `" + paths[0] + "`";
+        return TStringBuilder() << "secret `" << paths[0] << "`";
     }
 
     auto sb = TStringBuilder() << "secrets ";
@@ -188,7 +219,11 @@ void TDescribeSchemaSecretsService::HandleIncomingRequest(TEvResolveSecret::TPtr
 
     if (ev->Get()->SecretNames.empty()) {
         LOG_W(GetLogLabel("TEvResolveSecret", LastRequestId) << "empty secret names list");
-        static const auto emptyRequest = NKqp::TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("empty secret names list") });
+        static const auto emptyRequest =
+            NKqp::TEvDescribeSecretsResponse::TDescription(
+                Ydb::StatusIds::BAD_REQUEST,
+                { NYql::TIssue("empty secret names list") }
+            );
         ev->Get()->Promise.SetValue(emptyRequest);
         return;
     }
@@ -202,7 +237,7 @@ void TDescribeSchemaSecretsService::HandleIncomingSchemeCacheRetryRequest(TEvRes
     LOG_N(GetLogLabel("TEvResolveSecretSchemeCacheRetry", ev->Get()->InitialRequestId));
 
     const auto it = RequestsInFlight.find(ev->Get()->InitialRequestId);
-    Y_ENSURE(it != RequestsInFlight.end(), "Unregistered requestId: " + ToString(ev->Get()->InitialRequestId));
+    Y_ENSURE(it != RequestsInFlight.end(), "Unregistered requestId: " << ToString(ev->Get()->InitialRequestId));
     Y_ENSURE(it->second.Request.Get(), "Initial request was not saved");
     SendSchemeCacheRequests(*it->second.Request.Get(), ev->Get()->InitialRequestId);
 }
@@ -221,7 +256,9 @@ void TDescribeSchemaSecretsService::HandleIncomingSchemeShardRetryRequest(TEvRes
     SendSchemeShardRequest(*it->second.Request.Get(), ev->Get()->InitialRequestId, ev->Get()->SecretPath);
 }
 
-void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
+void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(
+    TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev
+) {
     const auto requestId = ev->Cookie;
     LOG_D(GetLogLabel("TEvNavigateKeySetResult", requestId));
 
@@ -248,7 +285,7 @@ void TDescribeSchemaSecretsService::HandleSchemeCacheResponse(TEvTxProxySchemeCa
             ++respIt->second.FilledSecretsCnt;
         } else {
             const auto requestIt = RequestsInFlight.find(requestId);
-            Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " + ToString(requestId));
+            Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " << ToString(requestId));
             SendSchemeShardRequest(*requestIt->second.Request.Get(), requestId, secretPath);
         }
     }
@@ -270,13 +307,16 @@ void TDescribeSchemaSecretsService::SendSchemeShardRequest(
     Send(MakeTxProxyID(), navigateRequest.Release(), 0, requestId);
 }
 
-void TDescribeSchemaSecretsService::HandleSchemeShardResponse(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev) {
+void TDescribeSchemaSecretsService::HandleSchemeShardResponse(
+    NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult::TPtr& ev
+) {
     const auto requestId = ev->Cookie;
     LOG_D(GetLogLabel("TEvDescribeSchemeResult", requestId));
 
     const auto respIt = ResolveInFlight.find(requestId);
     if (respIt == ResolveInFlight.end()) {
-        LOG_N(GetLogLabel("TEvDescribeSchemeResult", requestId) << "response handling was skipped due to previous errors");
+        LOG_N(GetLogLabel("TEvDescribeSchemeResult", requestId)
+            << "response handling was skipped due to previous errors");
         return;
     }
 
@@ -305,9 +345,11 @@ void TDescribeSchemaSecretsService::HandleSchemeShardResponse(NSchemeShard::TEvS
     FillResponseIfFinished(requestId, respIt->second);
 }
 
-void TDescribeSchemaSecretsService::FillResponse(const ui64& requestId, const NKqp::TEvDescribeSecretsResponse::TDescription& response) {
+void TDescribeSchemaSecretsService::FillResponse(const ui64& requestId,
+    const NKqp::TEvDescribeSecretsResponse::TDescription& response
+) {
     auto respIt = ResolveInFlight.find(requestId);
-    Y_ENSURE(respIt != ResolveInFlight.end(), "Unregistered requestId: " + ToString(requestId));
+    Y_ENSURE(respIt != ResolveInFlight.end(), "Unregistered requestId: " << ToString(requestId));
     respIt->second.Result.SetValue(response);
     ResolveInFlight.erase(respIt);
     RequestsInFlight.erase(requestId);
@@ -349,21 +391,33 @@ void TDescribeSchemaSecretsService::SendSchemeCacheRequests(const TEvResolveSecr
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request), 0, requestId);
 }
 
-bool TDescribeSchemaSecretsService::LocalCacheHasActualVersion(const TVersionedSecret& secret, const ui64& cacheSecretVersion) {
+bool TDescribeSchemaSecretsService::LocalCacheHasActualVersion(const TVersionedSecret& secret,
+    const ui64& cacheSecretVersion
+) {
     // altering secret value does not change secret path id, so have to check secret version
     return secret.SecretVersion == cacheSecretVersion;
 }
 
-bool TDescribeSchemaSecretsService::LocalCacheHasActualObject(const TVersionedSecret& secret, const ui64& cacheSecretPathId) {
+bool TDescribeSchemaSecretsService::LocalCacheHasActualObject(const TVersionedSecret& secret,
+    const ui64& cacheSecretPathId
+) {
     // This helps with the case when the secret was dropped and created again with the same name.
     // Secret version will become zero again, which would not lead to a secret cache update.
     return secret.PathId == cacheSecretPathId;
 }
 
-bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& requestId, NSchemeCache::TSchemeCacheNavigate& result) {
+bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& requestId,
+    NSchemeCache::TSchemeCacheNavigate& result
+) {
     if (result.ResultSet.empty()) {
         LOG_N(GetLogLabel("TEvNavigateKeySetResult", requestId) << "SchemeCache error: empty response");
-        FillResponse(requestId, NKqp::TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secrets were not found") }));
+        FillResponse(
+            requestId,
+            NKqp::TEvDescribeSecretsResponse::TDescription(
+                Ydb::StatusIds::BAD_REQUEST,
+                { NYql::TIssue("secrets were not found") }
+            )
+        );
         return true;
     }
 
@@ -380,7 +434,8 @@ bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& req
                 if (firstUnresolvedPath.empty()) {
                     firstUnresolvedPath = CanonizePath(entry.Path);
                 }
-                // we don't skip the remaining entries, since if there is a not retryable error, we should not retry anything
+                // we don't skip the remaining entries, since if there is a not retryable error,
+                // we should not retry anything
                 break;
             }
             default: {
@@ -405,7 +460,7 @@ bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& req
                     requestId,
                     NKqp::TEvDescribeSecretsResponse::TDescription(
                         Ydb::StatusIds::BAD_REQUEST,
-                        { NYql::TIssue(ListSecrets(unresolvedPaths) + " not found") }));
+                        { NYql::TIssue(TStringBuilder() << ListSecrets(unresolvedPaths) << " not found") }));
 
                 return true;
             }
@@ -418,13 +473,15 @@ bool TDescribeSchemaSecretsService::HandleSchemeCacheErrorsIfAny(const ui64& req
         }
 
         // no more retries
-        LOG_N(GetLogLabel("TEvNavigateKeySetResult", requestId)
-            << "retry limit exceeded for secret `" + firstUnresolvedPath + "`");
+        LOG_N(GetLogLabel("TEvNavigateKeySetResult", requestId) << "retry limit exceeded for secret `"
+            << firstUnresolvedPath << "`");
         FillResponse(
             requestId,
             NKqp::TEvDescribeSecretsResponse::TDescription(
                 Ydb::StatusIds::UNAVAILABLE,
-                { NYql::TIssue("Retry limit exceeded for secret `" + firstUnresolvedPath + "`") }));
+                { NYql::TIssue(TStringBuilder() << "Retry limit exceeded for secret `" << firstUnresolvedPath << "`") }
+            )
+        );
 
         return true;
     }
@@ -446,7 +503,7 @@ bool TDescribeSchemaSecretsService::HandleSchemeShardErrorsIfAny(
     LOG_N(GetLogLabel("TEvDescribeSchemeResult", requestId) << "SchemeShard error: " << EStatus_Name(status));
     if (IsRetryableSchemeShardStatus(status)) {
         const auto requestIt = RequestsInFlight.find(requestId);
-        Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " + ToString(requestId));
+        Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " << ToString(requestId));
         if (requestIt->second.Request->Settings.RetryPolicy) {
             if (ScheduleSchemeShardRetry(requestId, secretName)) {
                 return true;
@@ -458,7 +515,9 @@ bool TDescribeSchemaSecretsService::HandleSchemeShardErrorsIfAny(
                 requestId,
                 NKqp::TEvDescribeSecretsResponse::TDescription(
                     Ydb::StatusIds::UNAVAILABLE,
-                    { NYql::TIssue("Retry limit exceeded for secret `" + secretName + "`") }));
+                    { NYql::TIssue(TStringBuilder() << "Retry limit exceeded for secret `" << secretName << "`") }
+                )
+            );
             return true;
         }
     }
@@ -472,9 +531,11 @@ bool TDescribeSchemaSecretsService::HandleSchemeShardErrorsIfAny(
     return true;
 }
 
-bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& requestId, const TString& unresolvedSecretPath) {
+bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& requestId,
+    const TString& unresolvedSecretPath
+) {
     auto requestIt = RequestsInFlight.find(requestId);
-    Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " + ToString(requestId));
+    Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " << ToString(requestId));
 
     if (!requestIt->second.SchemeCacheRetryState) {
         static const auto defaultSchemeCacheRetryPolicy = MakeShortRetryPolicy();
@@ -496,7 +557,7 @@ bool TDescribeSchemaSecretsService::ScheduleSchemeCacheRetry(const ui64& request
 
 bool TDescribeSchemaSecretsService::ScheduleSchemeShardRetry(const ui64& requestId, const TString& secretPath) {
     const auto requestIt = RequestsInFlight.find(requestId);
-    Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " + ToString(requestId));
+    Y_ENSURE(requestIt != RequestsInFlight.end(), "Unregistered requestId: " << ToString(requestId));
 
     const auto& retryPolicy = requestIt->second.Request->Settings.RetryPolicy;
     if (!retryPolicy) {
@@ -551,8 +612,15 @@ void TDescribeSchemaSecretsService::FillResponseIfFinished(const ui64& requestId
         const auto& secretPath = secret.first;
         auto it = VersionedSecrets.find(secret.first);
         if (it == VersionedSecrets.end()) {
-            LOG_N(GetLogLabel("FillResponseIfFinished", requestId) << "secret `" << secretPath << "` was dropped during request");
-            FillResponse(requestId, NKqp::TEvDescribeSecretsResponse::TDescription(Ydb::StatusIds::BAD_REQUEST, { NYql::TIssue("secret `" + secretPath + "` not found") }));
+            LOG_N(GetLogLabel("FillResponseIfFinished", requestId) << "secret `" << secretPath
+                << "` was dropped during request");
+            FillResponse(
+                requestId,
+                NKqp::TEvDescribeSecretsResponse::TDescription(
+                    Ydb::StatusIds::BAD_REQUEST,
+                    { NYql::TIssue(TStringBuilder() << "secret `" << secretPath << "` not found") }
+                )
+            );
             return;
         }
 
@@ -592,7 +660,9 @@ NThreading::TFuture<NKqp::TEvDescribeSecretsResponse::TDescription> DescribeSecr
     if (UseSchemaSecrets(AppData()->FeatureFlags, secretNames)) {
         actorSystem->Send(
             MakeDescribeSchemaSecretServiceId(actorSystem->NodeId),
-            new TDescribeSchemaSecretsService::TEvResolveSecret(userToken, database, secretNames, promise, std::move(settings))
+            new TDescribeSchemaSecretsService::TEvResolveSecret(
+                userToken, database, secretNames, promise, std::move(settings)
+            )
         );
         return promise.GetFuture();
     }

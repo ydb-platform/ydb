@@ -50,7 +50,7 @@ jobs:
         with:
           revision: "${{ github.sha }}"
           src-root: ${{ vars.SRC_ROOT }}
-          cli-version: "4.59.12"
+          cli-version: "5.47.3"
           use-ya-opensource: ${{ steps.ya.outputs.use }}
 
   upload:

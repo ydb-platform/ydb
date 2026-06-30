@@ -22,6 +22,7 @@ from ydb.tests.tools.nemesis.library.tablet import KillBlocktoreVolume
 from ydb.tests.tools.nemesis.library.tablet import KillBlocktorePartition
 from ydb.tests.tools.nemesis.library.disk import data_storage_nemesis_list
 from ydb.tests.tools.nemesis.library.datacenter import datacenter_nemesis_list
+from ydb.tests.tools.nemesis.library.host import host_nemesis_list
 from ydb.tests.tools.nemesis.library.bridge_pile import bridge_pile_nemesis_list
 
 
@@ -58,7 +59,7 @@ def is_bridge_cluster(cluster):
 
 
 def basic_kikimr_nemesis_list(
-        cluster, ssh_username, num_of_pq_nemesis=10, network_nemesis=False,
+        cluster, ssh_username, num_of_pq_nemesis=10, network_nemesis=False, host_nemesis=False,
         enable_nemesis_list_filter_by_hostname=False):
 
     logger.info("Building nemesis list")
@@ -75,6 +76,12 @@ def basic_kikimr_nemesis_list(
     nodes_nemesis = nodes_nemesis_list(cluster)
     logger.info("Nodes nemesis count: %d", len(nodes_nemesis))
     harmful_nemesis_list.extend(nodes_nemesis)
+
+    if host_nemesis:
+        logger.info("Adding host nemesis")
+        host_nemesis = host_nemesis_list(cluster)
+        logger.info("Host nemesis count: %d", len(host_nemesis))
+        harmful_nemesis_list.extend(host_nemesis)
 
     logger.info("Adding tablet management nemesis")
     harmful_nemesis_list.extend(

@@ -1183,5 +1183,50 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergePrescribedPartitionsTest) {
         ValidatePartitionChildren(partition2, {});
         ValidatePartitionChildren(partition3, {});
 
-    } // Y_UNIT_TEST
+    } // Y_UNIT_TEST(SplitWithExistingPartitionWithPartialOverlapAndCreateRootLevelSibling)
+
+    Y_UNIT_TEST(AlterTopicConfigAfterSplitAlterInterruptedByReboot) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 3);
+
+        const unsigned char b[] = {0x7F};
+        TString boundary((char*)b, sizeof(b));
+
+        ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
+        scheme.SetName("Topic1");
+        scheme.MutablePQTabletConfig()->MutablePartitionConfig();
+        auto* split = scheme.AddSplit();
+        split->SetPartition(1);
+        split->SetSplitBoundary(boundary);
+
+        TStringBuilder sb;
+        sb << scheme;
+        const TString schemeStr = sb.substr(1, sb.size() - 2);
+
+        AsyncAlterPQGroup(runtime, ++txId, "/MyRoot/USER_1", schemeStr);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        env.TestWaitNotification(runtime, txId);
+
+        auto topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPartitions().size(), 5);
+
+        ui32 activePartitions = 0;
+        for (const auto& partition : topic.GetPartitions()) {
+            if (partition.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active) {
+                ++activePartitions;
+            }
+        }
+        UNIT_ASSERT_VALUES_EQUAL(activePartitions, 4);
+
+        ModifyTopic(runtime, env, txId, [&](auto& alter) {
+            alter.MutablePQTabletConfig()->MutablePartitionConfig()->SetLifetimeSeconds(7200);
+        });
+    } // Y_UNIT_TEST(AlterTopicConfigAfterSplitAlterInterruptedByReboot)
 }

@@ -2976,7 +2976,16 @@ struct TSchemeShard::TTxInit : public TTransactionBase<TSchemeShard> {
                 auto it = Self->Topics.find(pathId);
                 Y_ABORT_UNLESS(it != Self->Topics.end());
 
-                alterData->TotalPartitionCount = it->second->GetTotalPartitionCountWithAlter();
+                alterData->TotalPartitionCount = 0;
+                alterData->ActivePartitionCount = 0;
+                for (const auto& [_, partition] : it->second->Partitions) {
+                    if (partition->AlterVersion <= alterData->AlterVersion) {
+                        ++alterData->TotalPartitionCount;
+                        if (partition->Status == NKikimrPQ::ETopicPartitionStatus::Active) {
+                            ++alterData->ActivePartitionCount;
+                        }
+                    }
+                }
                 alterData->BalancerTabletID = it->second->BalancerTabletID;
                 alterData->BalancerShardIdx = it->second->BalancerShardIdx;
                 it->second->AlterData = alterData;

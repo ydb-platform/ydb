@@ -103,7 +103,7 @@ RelOptInfo* MakeRelOptInfo(const IOptimizer::TRel& r, int relno) {
 
     rel->pathlist = list_make1(p);
     rel->cheapest_total_path = p;
-    rel->relids = bms_add_member(nullptr, rel->relid);
+    rel->relids = bms_add_member(/*a=*/nullptr, rel->relid);
     rel->attr_needed = (Relids*)palloc0((1 + maxattno) * sizeof(Relids));
 
     return rel;
@@ -157,7 +157,7 @@ EquivalenceClass* TPgOptimizer::MakeEqClass(int eqId) {
     for (auto [relno, varno] : Input_.EqClasses[eqId].Vars) {
         EquivalenceMember* m = makeNode(EquivalenceMember);
         m->em_expr = (Expr*)MakeVar(TVarId{relno, varno});
-        m->em_relids = bms_add_member(nullptr, relno);
+        m->em_relids = bms_add_member(/*a=*/nullptr, relno);
         m->em_datatype = 20;
         eq->ec_opfamilies = list_make1_oid(1976);
         eq->ec_members = lappend(eq->ec_members, m);
@@ -295,11 +295,11 @@ void TPgOptimizer::MakeLeftOrRightRestrictions(std::vector<RestrictInfo*>& dst, 
             ri->required_relids = bms_add_member(ri->required_relids, relId);
             ri->clause_relids = bms_add_member(ri->clause_relids, relId);
             if (left) {
-                ri->outer_relids = bms_add_member(nullptr, relId);
-                ri->left_relids = bms_add_member(nullptr, relId);
+                ri->outer_relids = bms_add_member(/*a=*/nullptr, relId);
+                ri->left_relids = bms_add_member(/*a=*/nullptr, relId);
                 left = false;
             } else {
-                ri->right_relids = bms_add_member(nullptr, relId);
+                ri->right_relids = bms_add_member(/*a=*/nullptr, relId);
             }
             oe->args = lappend(oe->args, MakeVar(TVarId{relId, varId}));
 
@@ -348,7 +348,7 @@ RelOptInfo* TPgOptimizer::JoinSearchInternal() {
         root.simple_rte_array[i] = makeNode(RangeTblEntry);
         root.simple_rte_array[i]->rtekind = RTE_RELATION;
     }
-    root.all_baserels = bms_add_range(nullptr, 1, rels->length);
+    root.all_baserels = bms_add_range(/*a=*/nullptr, 1, rels->length);
     root.eq_classes = MakeEqClasses();
 
     for (auto* ri : LeftRestriction_) {

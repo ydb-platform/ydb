@@ -216,7 +216,7 @@ private:
         const auto& suffix = msg.GetRule_unary_subexpr_suffix2();
         const bool suffixIsEmpty = suffix.GetBlock1().empty() && !suffix.HasBlock2();
         if (suffixIsEmpty) {
-            if (auto simpleType = LookupSimpleType(func, true, false); simpleType) {
+            if (auto simpleType = LookupSimpleType(func, /*flexibleTypes=*/true, /*isPgType=*/false); simpleType) {
                 Freqs_[std::make_pair("TYPE", func)] += 1;
             }
         }

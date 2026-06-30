@@ -340,7 +340,7 @@ struct TTrimmerTraits {
 };
 
 IBlockTrimmer::TPtr MakeBlockTrimmer(const NUdf::ITypeInfoHelper& typeInfoHelper, const NUdf::TType* type, arrow::MemoryPool* pool) {
-    return DispatchByArrowTraits<TTrimmerTraits>(typeInfoHelper, type, nullptr, pool);
+    return DispatchByArrowTraits<TTrimmerTraits>(typeInfoHelper, type, /*pgBuilder=*/nullptr, pool);
 }
 
 } // namespace NKikimr::NMiniKQL

@@ -3073,7 +3073,7 @@ namespace {
         }
 
         if (type->GetKind() == ETypeAnnotationKind::EmptyList || type->GetKind() == ETypeAnnotationKind::EmptyDict) {
-            output = MakeBool(input->Pos(), false, ctx.Expr);
+            output = MakeBool(input->Pos(), /*value=*/false, ctx.Expr);
             if (isOptional) {
                 output = MakeConstMap(input->Pos(), input->HeadPtr(), output, ctx.Expr);
             }
@@ -8203,7 +8203,7 @@ namespace {
             return IGraphTransformer::TStatus::Ok;
         }
 
-        if (!EnsureSpecificDataType(*lambdaTimeExtractor, EDataSlot::Timestamp, ctx.Expr, true)) {
+        if (!EnsureSpecificDataType(*lambdaTimeExtractor, EDataSlot::Timestamp, ctx.Expr, /*allowOptional=*/true)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -8412,7 +8412,7 @@ namespace {
         if (!lambdaTimeExtractor->GetTypeAnn()) {
             return IGraphTransformer::TStatus::Repeat;
         }
-        if (!EnsureSpecificDataType(*lambdaTimeExtractor, EDataSlot::Timestamp, ctx.Expr, true)) {
+        if (!EnsureSpecificDataType(*lambdaTimeExtractor, EDataSlot::Timestamp, ctx.Expr, /*allowOptional=*/true)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -8420,21 +8420,21 @@ namespace {
             input->SetTypeAnn(hop->GetTypeAnn());
             return IGraphTransformer::TStatus::Ok;
         }
-        if (!EnsureSpecificDataType(*hop, EDataSlot::Interval, ctx.Expr, true)) {
+        if (!EnsureSpecificDataType(*hop, EDataSlot::Interval, ctx.Expr, /*allowOptional=*/true)) {
             return IGraphTransformer::TStatus::Error;
         }
         if (interval->GetTypeAnn() && interval->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
             input->SetTypeAnn(interval->GetTypeAnn());
             return IGraphTransformer::TStatus::Ok;
         }
-        if (!EnsureSpecificDataType(*interval, EDataSlot::Interval, ctx.Expr, true)) {
+        if (!EnsureSpecificDataType(*interval, EDataSlot::Interval, ctx.Expr, /*allowOptional=*/true)) {
             return IGraphTransformer::TStatus::Error;
         }
         if (delay->GetTypeAnn() && delay->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
             input->SetTypeAnn(delay->GetTypeAnn());
             return IGraphTransformer::TStatus::Ok;
         }
-        if (!EnsureSpecificDataType(*delay, EDataSlot::Interval, ctx.Expr, true)) {
+        if (!EnsureSpecificDataType(*delay, EDataSlot::Interval, ctx.Expr, /*allowOptional=*/true)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -8612,7 +8612,7 @@ namespace {
         if (!lambdaTimeExtractor->GetTypeAnn()) {
             return IGraphTransformer::TStatus::Repeat;
         }
-        if (!EnsureSpecificDataType(*lambdaTimeExtractor, EDataSlot::Timestamp, ctx.Expr, true)) {
+        if (!EnsureSpecificDataType(*lambdaTimeExtractor, EDataSlot::Timestamp, ctx.Expr, /*allowOptional=*/true)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -8620,21 +8620,21 @@ namespace {
             input->SetTypeAnn(hop->GetTypeAnn());
             return IGraphTransformer::TStatus::Ok;
         }
-        if (!EnsureSpecificDataType(*hop, EDataSlot::Interval, ctx.Expr, true)) {
+        if (!EnsureSpecificDataType(*hop, EDataSlot::Interval, ctx.Expr, /*allowOptional=*/true)) {
             return IGraphTransformer::TStatus::Error;
         }
         if (interval->GetTypeAnn() && interval->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
             input->SetTypeAnn(interval->GetTypeAnn());
             return IGraphTransformer::TStatus::Ok;
         }
-        if (!EnsureSpecificDataType(*interval, EDataSlot::Interval, ctx.Expr, true)) {
+        if (!EnsureSpecificDataType(*interval, EDataSlot::Interval, ctx.Expr, /*allowOptional=*/true)) {
             return IGraphTransformer::TStatus::Error;
         }
         if (delay->GetTypeAnn() && delay->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
             input->SetTypeAnn(delay->GetTypeAnn());
             return IGraphTransformer::TStatus::Ok;
         }
-        if (!EnsureSpecificDataType(*delay, EDataSlot::Interval, ctx.Expr, true)) {
+        if (!EnsureSpecificDataType(*delay, EDataSlot::Interval, ctx.Expr, /*allowOptional=*/true)) {
             return IGraphTransformer::TStatus::Error;
         }
 
@@ -9774,7 +9774,7 @@ namespace {
 
         const auto leftKeyType = leftInput->Child(3U)->GetTypeAnn();
         const auto rightKeyType = rightInput->Child(3U)->GetTypeAnn();
-        const auto commonKeyType = CommonType<false>(input->Pos(), leftKeyType, rightKeyType, ctx.Expr, true);
+        const auto commonKeyType = CommonType<false>(input->Pos(), leftKeyType, rightKeyType, ctx.Expr, /*warn=*/true);
         if (!commonKeyType) {
             return IGraphTransformer::TStatus::Error;
         }

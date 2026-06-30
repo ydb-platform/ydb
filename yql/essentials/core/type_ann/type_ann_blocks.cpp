@@ -866,7 +866,7 @@ IGraphTransformer::TStatus BlockCombineAllWrapper(const TExprNode::TPtr& input, 
     }
 
     TTypeAnnotationNode::TListType retMultiType;
-    if (!ValidateBlockAggs(input->Pos(), blockItemTypes, *input->Child(2), retMultiType, ctx.Expr, false, false)) {
+    if (!ValidateBlockAggs(input->Pos(), blockItemTypes, *input->Child(2), retMultiType, ctx.Expr, /*overState=*/false, /*many=*/false)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -911,7 +911,7 @@ IGraphTransformer::TStatus BlockCombineHashedWrapper(const TExprNode::TPtr& inpu
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!ValidateBlockAggs(input->Pos(), blockItemTypes, *input->Child(3), retMultiType, ctx.Expr, false, false)) {
+    if (!ValidateBlockAggs(input->Pos(), blockItemTypes, *input->Child(3), retMultiType, ctx.Expr, /*overState=*/false, /*many=*/false)) {
         return IGraphTransformer::TStatus::Error;
     }
 
@@ -943,7 +943,7 @@ IGraphTransformer::TStatus BlockMergeFinalizeHashedWrapper(const TExprNode::TPtr
         return IGraphTransformer::TStatus::Error;
     }
 
-    if (!ValidateBlockAggs(input->Pos(), blockItemTypes, *input->Child(2), retMultiType, ctx.Expr, true, many)) {
+    if (!ValidateBlockAggs(input->Pos(), blockItemTypes, *input->Child(2), retMultiType, ctx.Expr, /*overState=*/true, many)) {
         return IGraphTransformer::TStatus::Error;
     }
 

@@ -10322,69 +10322,69 @@ Y_UNIT_TEST(DropTopic) {
 Y_UNIT_TEST(TopicBadRequests) {
     TestQuery(R"(
             CREATE TOPIC topic1();
-        )", false);
+        )", /*expectOk=*/false);
     TestQuery(R"(
             CREATE TOPIC topic1 SET setting1 = value1;
-        )", false);
+        )", /*expectOk=*/false);
     TestQuery(R"(
             ALTER TOPIC topic1 SET setting1 value1;
-        )", false);
+        )", /*expectOk=*/false);
     TestQuery(R"(
             ALTER TOPIC topic1 RESET setting1;
-        )", false);
+        )", /*expectOk=*/false);
 
     TestQuery(R"(
             ALTER TOPIC topic1 DROP CONSUMER consumer4 WITH (k1 = v1);
-        )", false);
+        )", /*expectOk=*/false);
 
     TestQuery(R"(
             CREATE TOPIC topic1 WITH (retention_period = 123);
-        )", false,
+        )", /*expectOk=*/false,
               {"3:58: Error: Literal of Interval type is expected for retention"});
     TestQuery(R"(
             CREATE TOPIC topic1 WITH (metrics_level = "1");
-        )", false,
+        )", /*expectOk=*/false,
               {"3:55: Error: METRICS_LEVEL value should be an integer"});
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1, CONSUMER cons1 WITH (important = false));
-        )", false,
+        )", /*expectOk=*/false,
               {"3:59: Error: Consumer cons1 defined more than once"});
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1 WITH (bad_option = false));
-        )", false,
+        )", /*expectOk=*/false,
               {"3:68: Error: BAD_OPTION: unknown option for consumer"});
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1 WITH (important = false, important = true));
-        )", false,
+        )", /*expectOk=*/false,
               {"3:86: Error: IMPORTANT specified multiple times in CONSUMER statement for single consumer"});
     TestQuery(R"(
             ALTER TOPIC topic1 SET (metrics_level = "1");
-        )", false,
+        )", /*expectOk=*/false,
               {"3:53: Error: METRICS_LEVEL value should be an integer"});
     TestQuery(R"(
             ALTER TOPIC topic1 ADD CONSUMER cons1, ALTER CONSUMER cons1 RESET (important);
-        )", false,
+        )", /*expectOk=*/false,
               {"3:80: Error: IMPORTANT reset is not supported"});
     TestQuery(R"(
             ALTER TOPIC topic1 ADD CONSUMER consumer1,
                 ALTER CONSUMER consumer3 SET (supported_codecs = "RAW", read_from = 1),
                 ALTER CONSUMER consumer3 RESET (supported_codecs);
-        )", false,
+        )", /*expectOk=*/false,
               {"5:49: Error: SUPPORTED_CODECS specified multiple times in ALTER CONSUMER statement for single consumer"});
     TestQuery(R"(
             ALTER TOPIC topic1 ADD CONSUMER consumer1,
                 ALTER CONSUMER consumer3 SET (supported_codecs = "RAW", read_from = 1),
                 ALTER CONSUMER consumer3 SET (read_from = 2);
-        )", false,
+        )", /*expectOk=*/false,
               {"5:59: Error: READ_FROM specified multiple times in CONSUMER statement for single consumer"});
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1 WITH (availability_period = 3600));
-        )", false,
+        )", /*expectOk=*/false,
               {"3:77: Error: Literal of Interval type is expected for AVAILABILITY_PERIOD setting"});
     TestQuery(R"(
             ALTER TOPIC topic1
                 ALTER CONSUMER consumer3 SET (availability_period = false);
-        )", false,
+        )", /*expectOk=*/false,
               {"4:69: Error: Literal of Interval type is expected for AVAILABILITY_PERIOD setting"});
 }
 

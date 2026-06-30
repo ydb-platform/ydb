@@ -887,7 +887,7 @@ void PackImpl(const TType* type, TBuf& buffer, const NUdf::TUnboxedValuePod& val
                         }
                         dictBuffer.reserve(length);
                         for (NUdf::TUnboxedValue key, payload; iter.NextPair(key, payload);) {
-                            NUdf::TUnboxedValue encodedKey = MakeString(packer.Encode(key, false));
+                            NUdf::TUnboxedValue encodedKey = MakeString(packer.Encode(key, /*desc=*/false));
                             dictBuffer.emplace_back(std::move(encodedKey), std::move(key), std::move(payload));
                         }
 
@@ -1052,7 +1052,7 @@ template <bool Fast>
 TValuePackerGeneric<Fast>::TValuePackerGeneric(bool stable, const TType* type)
     : Stable_(stable)
     , Type_(type)
-    , State_(ScanTypeProperties(Type_, false))
+    , State_(ScanTypeProperties(Type_, /*assumeList=*/false))
 {
     MKQL_ENSURE(!Fast || !Stable_, "Stable mode is not supported");
 }
@@ -1133,8 +1133,8 @@ TValuePackerTransport<Fast>::TValuePackerTransport(bool stable, const TType* typ
                                                    arrow::MemoryPool* pool, TMaybe<ui8> minFillPercentage)
     : Type_(type)
     , BufferPageAllocSize_(bufferPageAllocSize ? *bufferPageAllocSize : TBufferPage::DefaultPageAllocSize)
-    , State_(ScanTypeProperties(Type_, false))
-    , IncrementalState_(ScanTypeProperties(Type_, true))
+    , State_(ScanTypeProperties(Type_, /*assumeList=*/false))
+    , IncrementalState_(ScanTypeProperties(Type_, /*assumeList=*/true))
     , ArrowPool_(pool ? *pool : *NYql::NUdf::GetYqlMemoryPool())
     , ValuePackerVersion_(valuePackerVersion)
 {
@@ -1157,8 +1157,8 @@ TValuePackerTransport<Fast>::TValuePackerTransport(const TType* type,
                                                    arrow::MemoryPool* pool, TMaybe<ui8> minFillPercentage)
     : Type_(type)
     , BufferPageAllocSize_(bufferPageAllocSize ? *bufferPageAllocSize : TBufferPage::DefaultPageAllocSize)
-    , State_(ScanTypeProperties(Type_, false))
-    , IncrementalState_(ScanTypeProperties(Type_, true))
+    , State_(ScanTypeProperties(Type_, /*assumeList=*/false))
+    , IncrementalState_(ScanTypeProperties(Type_, /*assumeList=*/true))
     , ArrowPool_(pool ? *pool : *NYql::NUdf::GetYqlMemoryPool())
     , ValuePackerVersion_(valuePackerVersion)
 {
@@ -1248,7 +1248,7 @@ TChunkedBuffer TValuePackerTransport<Fast>::Pack(const NUdf::TUnboxedValuePod& v
         State_.OptionalUsageMask.Reset();
         result->ReserveHeader(sizeof(ui32) + State_.OptionalMaskReserve);
         PackImpl<Fast, false>(Type_, *result, value, State_);
-        BuildMeta(result, false);
+        BuildMeta(result, /*addItemCount=*/false);
     }
     return TPagedBuffer::AsChunkedBuffer(result);
 }
@@ -1510,7 +1510,7 @@ TChunkedBuffer TValuePackerTransport<Fast>::Finish() {
         Y_DEBUG_ABORT_UNLESS(dst);
         std::memcpy(dst, &ItemCount_, sizeof(ItemCount_));
     } else {
-        BuildMeta(Buffer_, true);
+        BuildMeta(Buffer_, /*addItemCount=*/true);
     }
     TPagedBuffer::TPtr result = std::move(Buffer_);
     Clear();

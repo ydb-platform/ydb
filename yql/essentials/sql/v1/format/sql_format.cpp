@@ -253,7 +253,7 @@ private:
         }
 
         if (Scopes_.back() == EScope::Identifier && !FuncCall_) {
-            if (str != "$" && !NYql::LookupSimpleTypeBySqlAlias(str, true)) {
+            if (str != "$" && !NYql::LookupSimpleTypeBySqlAlias(str, /*flexibleTypesEnabled=*/true)) {
                 Sb_ << "id";
             } else {
                 Sb_ << str;
@@ -494,7 +494,7 @@ private:
 
     void NewLine() {
         if (TokenIndex_ >= ParsedTokens_.size() || ParsedTokens_[TokenIndex_].Line > LastLine_) {
-            WriteComments(true, /*nextTokenIndex=*/TokenIndex_);
+            WriteComments(/*completeLine=*/true, /*nextTokenIndex=*/TokenIndex_);
         }
 
         if (OutColumn_) {
@@ -1882,15 +1882,15 @@ private:
     void PosFromToken(const TToken& token) {
         LastLine_ = token.GetLine();
         LastColumn_ = token.GetColumn();
-        WriteComments(false, /*nextTokenIndex=*/TokenIndex_);
+        WriteComments(/*completeLine=*/false, /*nextTokenIndex=*/TokenIndex_);
     }
 
     void VisitToken(const TToken& token) {
-        VisitTokenImpl(token, false);
+        VisitTokenImpl(token, /*forceKeyword=*/false);
     }
 
     void VisitKeyword(const TToken& token) {
-        VisitTokenImpl(token, true);
+        VisitTokenImpl(token, /*forceKeyword=*/true);
     }
 
     void VisitTokenImpl(const TToken& token, bool forceKeyword) {
@@ -1985,7 +1985,7 @@ private:
         Out(str);
 
         if (TokenIndex_ + 1 >= ParsedTokens_.size() || ParsedTokens_[TokenIndex_ + 1].Line > LastLine_) {
-            WriteComments(true, /*nextTokenIndex=*/TokenIndex_ + 1);
+            WriteComments(/*completeLine=*/true, /*nextTokenIndex=*/TokenIndex_ + 1);
         }
 
         if (str == ";") {
@@ -3052,7 +3052,7 @@ private:
 
     void VisitNeqSubexpr(const TRule_neq_subexpr& msg) {
         bool pushedIndent = false;
-        VisitNeqSubexprImpl(msg, pushedIndent, true);
+        VisitNeqSubexprImpl(msg, pushedIndent, /*top=*/true);
     }
 
     void VisitNeqSubexprImpl(const TRule_neq_subexpr& msg, bool& pushedIndent, bool top) {
@@ -3087,7 +3087,7 @@ private:
                         }
                     }
 
-                    VisitNeqSubexprImpl(alt.GetRule_neq_subexpr2(), pushedIndent, false);
+                    VisitNeqSubexprImpl(alt.GetRule_neq_subexpr2(), pushedIndent, /*top=*/false);
                     if (pushedIndent && top) {
                         PopCurrentIndent();
                         pushedIndent = false;
@@ -3489,7 +3489,7 @@ public:
 
         auto lexer = NSQLTranslationV1::MakeLexer(Lexers_, parsedSettings.AnsiLexer);
         TVector<TString> statements;
-        if (!NSQLTranslationV1::SplitQueryToStatements(query, lexer, statements, issues, parsedSettings.File, false)) {
+        if (!NSQLTranslationV1::SplitQueryToStatements(query, lexer, statements, issues, parsedSettings.File, /*areBlankSkipped=*/false)) {
             return false;
         }
 

@@ -108,7 +108,7 @@ google::protobuf::Message* TCheckState::ParseSql(TIssues& issues) {
         result.Issues,
         NSQLTranslation::SQL_MAX_PARSER_ERRORS,
         settings.AnsiLexer,
-        true,
+        /*antlr4=*/true,
         &Arena_);
 
     ParserCache_ = result;

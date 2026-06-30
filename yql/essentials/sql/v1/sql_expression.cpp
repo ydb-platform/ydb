@@ -315,7 +315,7 @@ bool ChangefeedSettings(const TRule_changefeed_settings& node, TSqlExpression& c
 bool CreateChangefeed(const TRule_changefeed& node, TSqlExpression& ctx, TVector<TChangefeedDescription>& changefeeds) {
     changefeeds.emplace_back(IdEx(node.GetRule_an_id2(), ctx));
 
-    return ChangefeedSettings(node.GetRule_changefeed_settings5(), ctx, changefeeds.back().Settings, false);
+    return ChangefeedSettings(node.GetRule_changefeed_settings5(), ctx, changefeeds.back().Settings, /*alter=*/false);
 }
 
 namespace {
@@ -1128,17 +1128,17 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
         auto columnRefsState = Ctx_.GetColumnReferenceState();
         bool explicitPgType = columnRefsState == EColumnRefState::AsPgType;
         if (explicitPgType && typePossible && suffixIsEmpty) {
-            auto pgType = BuildSimpleType(Ctx_, Ctx_.Pos(), name, false);
+            auto pgType = BuildSimpleType(Ctx_, Ctx_.Pos(), name, /*dataOnly=*/false);
             if (pgType && tail.Count) {
                 Ctx_.Error() << "Optional types are not supported in this context";
                 return std::unexpected(ESQLError::Basic);
             }
             return Wrap(std::move(pgType));
         }
-        if (auto simpleType = LookupSimpleType(name, flexibleTypes, false); simpleType && typePossible && suffixIsEmpty) {
+        if (auto simpleType = LookupSimpleType(name, flexibleTypes, /*isPgType=*/false); simpleType && typePossible && suffixIsEmpty) {
             if (tail.Count > 0 || columnRefsState == EColumnRefState::Deny || !flexibleTypes) {
                 // a type
-                return Wrap(AddOptionals(BuildSimpleType(Ctx_, Ctx_.Pos(), name, false), tail.Count));
+                return Wrap(AddOptionals(BuildSimpleType(Ctx_, Ctx_.Pos(), name, /*dataOnly=*/false), tail.Count));
             }
             // type or column: ambiguity will be resolved on type annotation stage
             columnOrType = columnRefsState == EColumnRefState::Allow;
@@ -1177,13 +1177,13 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
                 }
 
                 if (!lastExpr) {
-                    lastExpr = BuildAccess(pos, ids, false);
+                    lastExpr = BuildAccess(pos, ids, /*isLookup=*/false);
                     ids.clear();
                 }
 
                 ids.push_back(lastExpr);
                 ids.push_back(keyExpr);
-                lastExpr = BuildAccess(pos, ids, true);
+                lastExpr = BuildAccess(pos, ids, /*isLookup=*/true);
                 ids.clear();
                 break;
             }
@@ -1253,7 +1253,7 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
                 }
 
                 if (lastExpr) {
-                    lastExpr = BuildAccess(pos, ids, false);
+                    lastExpr = BuildAccess(pos, ids, /*isLookup=*/false);
                     ids.clear();
                 }
 
@@ -1267,7 +1267,7 @@ TNodeResult TSqlExpression::UnaryCasualExpr(const TUnaryCasualExprRule& node, co
     }
 
     if (!lastExpr) {
-        lastExpr = BuildAccess(pos, ids, false);
+        lastExpr = BuildAccess(pos, ids, /*isLookup=*/false);
         ids.clear();
     }
 
@@ -1397,7 +1397,7 @@ TNodePtr TSqlExpression::BitCastRule(const TRule_bitcast_expr& rule) {
     if (!exprNode) {
         return {};
     }
-    auto type = TypeSimple(rule.GetRule_type_name_simple5(), true);
+    auto type = TypeSimple(rule.GetRule_type_name_simple5(), /*onlyDataAllowed=*/true);
     if (!type) {
         return {};
     }

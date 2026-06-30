@@ -221,7 +221,7 @@ IOutputStream& TContext::Error(NYql::TIssueCode code) {
 IOutputStream& TContext::Error(NYql::TPosition pos, NYql::TIssueCode code) {
     HasPendingErrors = true;
     bool isError;
-    return MakeIssue(TSeverityIds::S_ERROR, code, pos, false, isError);
+    return MakeIssue(TSeverityIds::S_ERROR, code, pos, /*forceError=*/false, isError);
 }
 
 bool TContext::Warning(NYql::TPosition pos, NYql::TIssueCode code, std::function<void(IOutputStream&)> message,
@@ -234,7 +234,7 @@ bool TContext::Warning(NYql::TPosition pos, NYql::TIssueCode code, std::function
 
 IOutputStream& TContext::Info(NYql::TPosition pos) {
     bool isError;
-    return MakeIssue(TSeverityIds::S_INFO, TIssuesIds::INFO, pos, false, isError);
+    return MakeIssue(TSeverityIds::S_INFO, TIssuesIds::INFO, pos, /*forceError=*/false, isError);
 }
 
 void TContext::SetWarningPolicyFor(NYql::TIssueCode code, NYql::EWarningAction action) {

@@ -200,7 +200,7 @@ private:
 
             switch (start->GetState()) {
             case TExprNode::EState::Initial:
-                return TStatus(TStatus::Repeat, true);
+                return TStatus(TStatus::Repeat, /*hasRestart=*/true);
             case TExprNode::EState::TypeInProgress:
                 return IGraphTransformer::TStatus::Async;
             case TExprNode::EState::TypePending:
@@ -216,7 +216,7 @@ private:
                     break;
                 }
 
-                return TStatus(TStatus::Repeat, true);
+                return TStatus(TStatus::Repeat, /*hasRestart=*/true);
             case TExprNode::EState::TypeComplete:
             case TExprNode::EState::ConstrInProgress:
             case TExprNode::EState::ConstrPending:
@@ -838,7 +838,7 @@ TAutoPtr<IGraphTransformer> CreateFullTypeAnnotationTransformer(
             issueCode));
     }
 
-    return CreateCompositeGraphTransformer(transformers, true);
+    return CreateCompositeGraphTransformer(transformers, /*useIssueScopes=*/true);
 }
 
 bool SyncAnnotateTypes(
@@ -869,7 +869,7 @@ TExprNode::TPtr ParseAndAnnotate(
     }
 
     TExprNode::TPtr exprRoot;
-    if (!CompileExpr(*astRes.Root, exprRoot, exprCtx, nullptr, nullptr)) {
+    if (!CompileExpr(*astRes.Root, exprRoot, exprCtx, /*resolver=*/nullptr, /*urlListerManager=*/nullptr)) {
         return nullptr;
     }
 

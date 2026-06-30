@@ -347,7 +347,7 @@ public:
             unordered = (EOrderKind::None == Values_->GetOrderKind());
         }
 
-        TNodePtr node(BuildInputTables(Pos_, tableList, false, Scoped_));
+        TNodePtr node(BuildInputTables(Pos_, tableList, /*inSubquery=*/false, Scoped_));
         if (!node->Init(ctx, underlyingSrc)) {
             return false;
         }

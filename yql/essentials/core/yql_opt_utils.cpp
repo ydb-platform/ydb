@@ -1488,7 +1488,7 @@ TSet<TStringBuf> GetFilteredMembers(const TCoFilterNullMembersBase& node) {
             memberNames.insert(atom.Value());
         }
     } else {
-        const TTypeAnnotationNode* itemType = GetSequenceItemType(node.Input(), false);
+        const TTypeAnnotationNode* itemType = GetSequenceItemType(node.Input(), /*allowMultiIO=*/false);
         YQL_ENSURE(itemType);
         const TStructExprType* structType = itemType->Cast<TStructExprType>();
         for (auto entry : structType->GetItems()) {

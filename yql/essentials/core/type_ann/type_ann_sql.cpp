@@ -454,7 +454,7 @@ bool ScanColumnsForSublinks(
             if (s->Child(2)->IsCallable("Void")) {
                 needRebuildTestExprs = true;
 
-                if (!ScanColumns(testRowLambda.TailPtr(), inputs, possibleAliases, nullptr, hasColumnRef,
+                if (!ScanColumns(testRowLambda.TailPtr(), inputs, possibleAliases, /*hasStar=*/nullptr, hasColumnRef,
                     refs, qualifiedRefs, ctx, scanColumnsOnly)) {
                     return false;
                 }
@@ -850,7 +850,7 @@ void AddColumns(
                 }
 
                 for (const auto& ref : qualifiedRefs->find(x.Alias)->second) {
-                    auto pos = x.Type->FindItemI(ref, nullptr);
+                    auto pos = x.Type->FindItemI(ref, /*isVirtual=*/nullptr);
                     if (pos) {
                         auto item = x.Type->GetItems()[*pos];
                         item = AddAlias(x.Alias, item, ctx);
@@ -1015,7 +1015,7 @@ IGraphTransformer::TStatus RebuildLambdaColumns(
                         }
                     }
 
-                    auto pos = x.Type->FindItemI(node->Tail().Content(), nullptr);
+                    auto pos = x.Type->FindItemI(node->Tail().Content(), /*isVirtual=*/nullptr);
                     if (pos) {
                         return ctx.Expr.Builder(node->Pos())
                             .Callable("Member")
@@ -1165,7 +1165,7 @@ IGraphTransformer::TStatus RebuildSubLinks(
                 auto valueNode = ctx.Expr.NewArgument(node->Pos(), "value");
                 auto arguments = ctx.Expr.NewArguments(node->Pos(), { argNode, valueNode });
                 TExprNode::TPtr newLambdaRoot;
-                auto status = RebuildLambdaColumns(node->Child(3)->TailPtr(), argNode, newLambdaRoot, inputs, nullptr, ctx);
+                auto status = RebuildLambdaColumns(node->Child(3)->TailPtr(), argNode, newLambdaRoot, inputs, /*expandedColumns=*/nullptr, ctx);
                 auto oldValueNode = node->Child(3)->Head().Child(0);
                 newLambdaRoot = ctx.Expr.ReplaceNode(std::move(newLambdaRoot), *oldValueNode, valueNode);
                 if (status == IGraphTransformer::TStatus::Error) {
@@ -1318,8 +1318,8 @@ bool ValidateGroups(
         THashMap<TString, THashSet<TString>> qualifiedRefs;
         if (group->Child(0)->IsCallable("Void")) {
             // no effective type yet, scan lambda body
-            if (!ScanColumns(group->Tail().TailPtr(), inputs, possibleAliases, nullptr, hasColumnRef,
-                refs, &qualifiedRefs, ctx, scanColumnsOnly, false, usedInUsing)) {
+            if (!ScanColumns(group->Tail().TailPtr(), inputs, possibleAliases, /*hasStar=*/nullptr, hasColumnRef,
+                refs, &qualifiedRefs, ctx, scanColumnsOnly, /*hasEmitPgStar=*/false, usedInUsing)) {
                 return false;
             }
 
@@ -1354,7 +1354,7 @@ bool ValidateGroups(
             }
 
             TVector<const TItemExprType*> items;
-            AddColumns(inputs, nullptr, refs, &qualifiedRefs, items, ctx.Expr, usedInUsing);
+            AddColumns(inputs, /*hasStar=*/nullptr, refs, &qualifiedRefs, items, ctx.Expr, usedInUsing);
             auto effectiveType = ctx.Expr.MakeType<TStructExprType>(items);
             if (!effectiveType->Validate(group->Pos(), ctx.Expr)) {
                 return false;
@@ -1369,7 +1369,7 @@ bool ValidateGroups(
             auto argNode = ctx.Expr.NewArgument(group->Pos(), "row");
             auto arguments = ctx.Expr.NewArguments(group->Pos(), { argNode });
             TExprNode::TPtr newRoot;
-            auto status = RebuildLambdaColumns(group->Tail().TailPtr(), argNode, newRoot, inputs, nullptr, ctx, usedInUsing);
+            auto status = RebuildLambdaColumns(group->Tail().TailPtr(), argNode, newRoot, inputs, /*expandedColumns=*/nullptr, ctx, usedInUsing);
             if (status == IGraphTransformer::TStatus::Error) {
                 return false;
             }
@@ -1435,8 +1435,8 @@ bool ValidateSort(
         bool hasColumnRef = false;
         THashSet<TString> refs;
         THashMap<TString, THashSet<TString>> qualifiedRefs;
-        if (!ScanColumns(oneSort->Child(1)->TailPtr(), inputs, possibleAliases, nullptr, hasColumnRef,
-            refs, &qualifiedRefs, ctx, scanColumnsOnly, false, usedInUsing)) {
+        if (!ScanColumns(oneSort->Child(1)->TailPtr(), inputs, possibleAliases, /*hasStar=*/nullptr, hasColumnRef,
+            refs, &qualifiedRefs, ctx, scanColumnsOnly, /*hasEmitPgStar=*/false, usedInUsing)) {
             return false;
         }
 
@@ -1469,7 +1469,7 @@ bool ValidateSort(
         }
 
         TVector<const TItemExprType*> items;
-        AddColumns(needRebuildSubLinks ? subLinkInputs : inputs, nullptr, refs, &qualifiedRefs, items, ctx.Expr);
+        AddColumns(needRebuildSubLinks ? subLinkInputs : inputs, /*hasStar=*/nullptr, refs, &qualifiedRefs, items, ctx.Expr);
 
         auto effectiveType = ctx.Expr.MakeType<TStructExprType>(items);
         if (!effectiveType->Validate(oneSort->Pos(), ctx.Expr)) {
@@ -1497,7 +1497,7 @@ bool ValidateSort(
             auto argNode = ctx.Expr.NewArgument(oneSort->Pos(), "row");
             auto arguments = ctx.Expr.NewArguments(oneSort->Pos(), { argNode });
             TExprNode::TPtr newRoot;
-            auto status = RebuildLambdaColumns(newLambda->TailPtr(), argNode, newRoot, inputs, nullptr, ctx, usedInUsing);
+            auto status = RebuildLambdaColumns(newLambda->TailPtr(), argNode, newRoot, inputs, /*expandedColumns=*/nullptr, ctx, usedInUsing);
             if (status == IGraphTransformer::TStatus::Error) {
                 return false;
             }
@@ -1875,7 +1875,7 @@ bool GatherExtraSortColumns(
                                 continue;
                             }
 
-                            auto pos = x.Type->FindItemI(column, nullptr);
+                            auto pos = x.Type->FindItemI(column, /*isVirtual=*/nullptr);
                             if (pos) {
                                 index = inputIndex;
                                 break;
@@ -3109,7 +3109,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                             for (ui32 i = 0; i < p->Child(2)->ChildrenSize(); ++i) {
                                 const TTypeAnnotationNode* type = nullptr;
                                 if (columnOrder) {
-                                    auto pos = inputStructType->FindItemI(columnOrder->at(i).PhysicalName, nullptr);
+                                    auto pos = inputStructType->FindItemI(columnOrder->at(i).PhysicalName, /*isVirtual=*/nullptr);
                                     YQL_ENSURE(pos);
                                     type = inputStructType->GetItems()[*pos]->GetItemType();
                                     newOrder->AddColumn(TString(p->Child(2)->Child(i)->Content()));
@@ -3165,7 +3165,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                         bool hasColumnRef = false;
                         THashSet<TString> refs;
                         THashMap<TString, THashSet<TString>> qualifiedRefs;
-                        if (!ScanColumns(data.Child(1)->TailPtr(), joinInputs, possibleAliases, nullptr, hasColumnRef,
+                        if (!ScanColumns(data.Child(1)->TailPtr(), joinInputs, possibleAliases, /*hasStar=*/nullptr, hasColumnRef,
                             refs, &qualifiedRefs, ctx, scanColumnsOnly)) {
                             return IGraphTransformer::TStatus::Error;
                         }
@@ -3179,7 +3179,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
 
                         if (!scanColumnsOnly) {
                             TVector<const TItemExprType*> items;
-                            AddColumns(joinInputs, nullptr, refs, &qualifiedRefs, items, ctx.Expr);
+                            AddColumns(joinInputs, /*hasStar=*/nullptr, refs, &qualifiedRefs, items, ctx.Expr);
                             auto effectiveType = ctx.Expr.MakeType<TStructExprType>(items);
                             if (!effectiveType->Validate(data.Pos(), ctx.Expr)) {
                                 return IGraphTransformer::TStatus::Error;
@@ -3207,7 +3207,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                 auto argNode = ctx.Expr.NewArgument(data.Pos(), "row");
                                 auto arguments = ctx.Expr.NewArguments(data.Pos(), { argNode });
                                 TExprNode::TPtr newRoot;
-                                auto status = RebuildLambdaColumns(newLambda->TailPtr(), argNode, newRoot, joinInputs, nullptr, ctx, repeatedColumnsInUsing);
+                                auto status = RebuildLambdaColumns(newLambda->TailPtr(), argNode, newRoot, joinInputs, /*expandedColumns=*/nullptr, ctx, repeatedColumnsInUsing);
                                 if (status == IGraphTransformer::TStatus::Error) {
                                     return IGraphTransformer::TStatus::Error;
                                 }
@@ -3479,7 +3479,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                     bool hasColumnRef = false;
                                     THashSet<TString> refs;
                                     THashMap<TString, THashSet<TString>> qualifiedRefs;
-                                    if (!ScanColumns(quals.Child(1)->TailPtr(), groupInputs, groupPossibleAliases, nullptr, hasColumnRef,
+                                    if (!ScanColumns(quals.Child(1)->TailPtr(), groupInputs, groupPossibleAliases, /*hasStar=*/nullptr, hasColumnRef,
                                         refs, &qualifiedRefs, ctx, scanColumnsOnly)) {
                                         return IGraphTransformer::TStatus::Error;
                                     }
@@ -3510,7 +3510,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
 
                                     if (!scanColumnsOnly) {
                                         TVector<const TItemExprType*> items;
-                                        AddColumns(groupInputs, nullptr, refs, &qualifiedRefs, items, ctx.Expr);
+                                        AddColumns(groupInputs, /*hasStar=*/nullptr, refs, &qualifiedRefs, items, ctx.Expr);
                                         auto effectiveType = ctx.Expr.MakeType<TStructExprType>(items);
                                         if (!effectiveType->Validate(quals.Pos(), ctx.Expr)) {
                                             return IGraphTransformer::TStatus::Error;
@@ -3521,7 +3521,7 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                         auto argNode = ctx.Expr.NewArgument(quals.Pos(), "row");
                                         auto arguments = ctx.Expr.NewArguments(quals.Pos(), { argNode });
                                         TExprNode::TPtr newRoot;
-                                        auto status = RebuildLambdaColumns(quals.Child(1)->TailPtr(), argNode, newRoot, groupInputs, nullptr, ctx);
+                                        auto status = RebuildLambdaColumns(quals.Child(1)->TailPtr(), argNode, newRoot, groupInputs, /*expandedColumns=*/nullptr, ctx);
                                         if (status == IGraphTransformer::TStatus::Error) {
                                             return IGraphTransformer::TStatus::Error;
                                         }

@@ -1,6 +1,6 @@
 # Export to NFS
 
-The `export nfs` command starts a server-side export process to the network file system ( [Network File System](https://en.wikipedia.org/wiki/Network_File_System), NFS) of the {{ ydb-short-name }} cluster hosts, exporting data and schema object information in the format described in the [File structure](./file-structure.md) article:
+The `export nfs` command starts a server-side export process to the network file system ([Network File System](https://en.wikipedia.org/wiki/Network_File_System), NFS) of the {{ ydb-short-name }} cluster hosts, exporting data and schema object information in the format described in the [File structure](./file-structure.md) article:
 
 
 ```bash
@@ -39,7 +39,7 @@ An alternative way to specify the list of objects is supported:
 - `source`, `src`, or `s` — path to the exported directory or table; `.` points to the root directory of the database. When specifying a directory, all non-system objects in it are exported, as well as all non-system subdirectories recursively.
 - `destination`, `dst`, or `d` — path in NFS (relative to `--fs-path`).
 
-`--exclude STRING`: Pattern ( [PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) for excluding paths from the export. This parameter can be specified multiple times for different patterns.
+`--exclude STRING`: Pattern ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) for excluding paths from the export. This parameter can be specified multiple times for different patterns.
 
 {% include [export-alternative-syntax-warning.md](_includes/export-alternative-syntax-warning.md) %}
 

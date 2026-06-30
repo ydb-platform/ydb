@@ -3,6 +3,10 @@
 #include "server.h"
 
 #include <yt/yt/core/rpc/backend_detail.h>
+#include <yt/yt/core/rpc/endpoint_address.h>
+
+#include <yt/yt/core/net/address.h>
+#include <yt/yt/core/net/local_address.h>
 
 namespace NYT::NRpc::NHttp {
 namespace {
@@ -22,6 +26,14 @@ public:
     }
 
 protected:
+    std::string DoBuildLocalEndpointAddress(const TServerConfigPtr& config) final
+    {
+        return FormatEndpointAddress({
+            .Protocol = GetProtocol(),
+            .Address = NNet::BuildServiceAddress(NNet::GetLocalHostName(), config->Port),
+        });
+    }
+
     IChannelFactoryPtr DoCreateChannelFactory(const TClientConfigPtr& config) final
     {
         return CreateHttpChannelFactory(config);

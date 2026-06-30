@@ -25,6 +25,33 @@ TIntrusivePtr<TConfig>* TProtocolMapConfigBase::MutableTypedConfig(TStringBuf pr
     return &std::any_cast<TIntrusivePtr<TConfig>&>(it->second.CurrentConfig);
 }
 
+template <class TConfig>
+void TProtocolMapConfigBase::SetTypedConfig(TStringBuf protocol, TIntrusivePtr<TConfig> config)
+{
+    *MutableTypedConfig<TConfig>(protocol) = std::move(config);
+}
+
+template <class TConfig>
+TIntrusivePtr<TConfig> TProtocolMapConfigBase::FindTypedConfig(TStringBuf protocol)
+{
+    auto config = FindUntypedConfig(protocol);
+    if (!config.has_value()) {
+        return nullptr;
+    }
+    return std::any_cast<TIntrusivePtr<TConfig>>(std::move(config));
+}
+
+template <class TConfig>
+TIntrusivePtr<TConfig> TProtocolMapConfigBase::GetTypedConfigOrThrow(TStringBuf protocol)
+{
+    auto config = FindTypedConfig<TConfig>(protocol);
+    if (!config) {
+        THROW_ERROR_EXCEPTION("RPC protocol %Qv is not configured",
+            protocol);
+    }
+    return config;
+}
+
 ////////////////////////////////////////////////////////////////////////////////
 
 } // namespace NYT::NRpc

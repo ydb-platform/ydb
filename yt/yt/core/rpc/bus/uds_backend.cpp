@@ -2,6 +2,7 @@
 #include "server.h"
 
 #include <yt/yt/core/rpc/backend_detail.h>
+#include <yt/yt/core/rpc/endpoint_address.h>
 
 #include <yt/yt/core/bus/tcp/config.h>
 #include <yt/yt/core/bus/tcp/server.h>
@@ -27,6 +28,18 @@ public:
     }
 
 protected:
+    std::string DoBuildLocalEndpointAddress(const TServerConfigPtr& config) final
+    {
+        if (!config->UnixDomainSocketPath) {
+            THROW_ERROR_EXCEPTION("RPC backend %Qv has no unix domain socket path",
+                GetProtocol());
+        }
+        return FormatEndpointAddress({
+            .Protocol = GetProtocol(),
+            .Address = *config->UnixDomainSocketPath,
+        });
+    }
+
     IChannelFactoryPtr DoCreateChannelFactory(const TClientConfigPtr& config) final
     {
         return CreateUdsBusChannelFactory(config);

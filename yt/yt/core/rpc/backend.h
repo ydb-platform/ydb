@@ -17,6 +17,8 @@ struct IBackend
 
     virtual TStringBuf GetProtocol() = 0;
 
+    virtual std::string BuildLocalEndpointAddress(const std::any& config) = 0;
+
     virtual void RegisterClientConfigField(NYTree::TYsonStructRegistrar<TMultiProtocolClientConfig> registrar) = 0;
     virtual IChannelFactoryPtr CreateChannelFactory(const std::any& config) = 0;
 
@@ -31,6 +33,7 @@ class TBackendRegistry
 public:
     static std::vector<IBackend*> GetBackends();
     static IBackend* FindBackend(TStringBuf protocol);
+    static IBackend* GetBackend(TStringBuf protocol);
     static void RegisterBackend(IBackend* backend);
 };
 

@@ -2,9 +2,13 @@
 #include "server.h"
 
 #include <yt/yt/core/rpc/backend_detail.h>
+#include <yt/yt/core/rpc/endpoint_address.h>
 
 #include <yt/yt/core/bus/tcp/config.h>
 #include <yt/yt/core/bus/tcp/server.h>
+
+#include <yt/yt/core/net/address.h>
+#include <yt/yt/core/net/local_address.h>
 
 namespace NYT::NRpc::NBus {
 namespace {
@@ -27,6 +31,18 @@ public:
     }
 
 protected:
+    std::string DoBuildLocalEndpointAddress(const TServerConfigPtr& config) final
+    {
+        if (!config->Port) {
+            THROW_ERROR_EXCEPTION("RPC backend %Qv is not bound to a port",
+                GetProtocol());
+        }
+        return FormatEndpointAddress({
+            .Protocol = GetProtocol(),
+            .Address = NNet::BuildServiceAddress(NNet::GetLocalHostName(), *config->Port),
+        });
+    }
+
     IChannelFactoryPtr DoCreateChannelFactory(const TClientConfigPtr& config) final
     {
         return CreateTcpBusChannelFactory(config);

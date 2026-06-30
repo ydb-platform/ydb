@@ -1,6 +1,7 @@
 #include "backend.h"
 
 #include <yt/yt/core/misc/collection_helpers.h>
+#include <yt/yt/core/misc/error.h>
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
 
@@ -62,6 +63,15 @@ std::vector<IBackend*> TBackendRegistry::GetBackends()
 IBackend* TBackendRegistry::FindBackend(TStringBuf protocol)
 {
     return TBackendRegistryImpl::Get()->FindBackend(protocol);
+}
+
+IBackend* TBackendRegistry::GetBackend(TStringBuf protocol)
+{
+    auto* backend = FindBackend(protocol);
+    if (!backend) {
+        THROW_ERROR_EXCEPTION("No RPC backend registered for protocol %Qv", protocol);
+    }
+    return backend;
 }
 
 void TBackendRegistry::RegisterBackend(IBackend* backend)

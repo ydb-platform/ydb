@@ -454,6 +454,17 @@ void TOverloadControllerConfig::Register(TRegistrar registrar)
 
 ////////////////////////////////////////////////////////////////////////////////
 
+std::vector<std::string> TProtocolMapConfigBase::GetConfiguredProtocols() const
+{
+    std::vector<std::string> result;
+    for (const auto& [protocol, entry] : ProtocolToEntry_) {
+        if (!entry.IsNull(entry.CurrentConfig)) {
+            result.push_back(protocol);
+        }
+    }
+    return result;
+}
+
 std::any TProtocolMapConfigBase::GetUntypedConfig(TStringBuf protocol)
 {
     return GetOrCrash(ProtocolToEntry_, protocol).CurrentConfig;

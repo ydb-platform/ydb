@@ -24,6 +24,14 @@ public:
     }
 
 protected:
+    std::string DoBuildLocalEndpointAddress(const TServerConfigPtr& /*config*/) final
+    {
+        // gRPC binds a list of (often wildcard) addresses with no single routable
+        // local host, so there is no meaningful local endpoint to advertise.
+        THROW_ERROR_EXCEPTION("RPC backend %Qv does not support local endpoint address resolution",
+            GetProtocol());
+    }
+
     IChannelFactoryPtr DoCreateChannelFactory(const TClientConfigPtr& config) final
     {
         return CreateGrpcChannelFactory(config);

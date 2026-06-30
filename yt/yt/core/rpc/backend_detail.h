@@ -8,6 +8,8 @@
 
 #include <library/cpp/yt/memory/leaky_singleton.h>
 
+#include <library/cpp/yt/assert/assert.h>
+
 #include <any>
 
 namespace NYT::NRpc {
@@ -19,6 +21,8 @@ class TBackendBase
     : public IBackend
 {
 public:
+    std::string BuildLocalEndpointAddress(const std::any& config) final;
+
     void RegisterClientConfigField(NYTree::TYsonStructRegistrar<TMultiProtocolClientConfig> registrar) final;
     IChannelFactoryPtr CreateChannelFactory(const std::any& config) final;
 
@@ -26,6 +30,7 @@ public:
     IServerPtr CreateServer(const std::any& config) final;
 
 protected:
+    virtual std::string DoBuildLocalEndpointAddress(const TIntrusivePtr<TServerConfig>& config) = 0;
     virtual IChannelFactoryPtr DoCreateChannelFactory(const TIntrusivePtr<TClientConfig>& config) = 0;
     virtual IServerPtr DoCreateServer(const TIntrusivePtr<TServerConfig>& config) = 0;
 };

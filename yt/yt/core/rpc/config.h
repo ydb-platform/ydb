@@ -586,13 +586,34 @@ class TProtocolMapConfigBase
     : public NYTree::TYsonStruct
 {
 public:
+    //! Returns the protocols that are actually configured (i.e. present with a
+    //! non-null config), skipping registered-but-unconfigured ones.
+    std::vector<std::string> GetConfiguredProtocols() const;
+
+    //! Returns a pointer to the typed config for #protocol, creating an
+    //! empty (null) entry if needed.
+    template <class TConfig>
+    TIntrusivePtr<TConfig>* MutableTypedConfig(TStringBuf protocol);
+
+    //! Returns the type-erased config for #protocol; crashes if it is absent.
     std::any GetUntypedConfig(TStringBuf protocol);
+
     //! Like #GetUntypedConfig, but returns an empty std::any for an unconfigured protocol
     //! (i.e. one that is absent or whose config is null).
     std::any FindUntypedConfig(TStringBuf protocol);
 
+    //! Sets the typed config for #protocol.
     template <class TConfig>
-    TIntrusivePtr<TConfig>* MutableTypedConfig(TStringBuf protocol);
+    void SetTypedConfig(TStringBuf protocol, TIntrusivePtr<TConfig> config);
+
+    //! Returns the typed config for #protocol, or null if it is unconfigured
+    //! (i.e. absent or holding a null pointer).
+    template <class TConfig>
+    TIntrusivePtr<TConfig> FindTypedConfig(TStringBuf protocol);
+
+    //! Like #FindTypedConfig, but throws if #protocol is unconfigured.
+    template <class TConfig>
+    TIntrusivePtr<TConfig> GetTypedConfigOrThrow(TStringBuf protocol);
 
 private:
     struct TProtocolEntry

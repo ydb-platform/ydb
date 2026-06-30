@@ -9,6 +9,14 @@ namespace NYT::NRpc {
 ////////////////////////////////////////////////////////////////////////////////
 
 template <class TClientConfig, class TServerConfig>
+std::string TBackendBase<TClientConfig, TServerConfig>::BuildLocalEndpointAddress(const std::any& config)
+{
+    auto typedConfig = std::any_cast<TIntrusivePtr<TServerConfig>>(config);
+    YT_VERIFY(typedConfig);
+    return DoBuildLocalEndpointAddress(typedConfig);
+}
+
+template <class TClientConfig, class TServerConfig>
 void TBackendBase<TClientConfig, TServerConfig>::RegisterClientConfigField(NYTree::TYsonStructRegistrar<TMultiProtocolClientConfig> registrar)
 {
     registrar

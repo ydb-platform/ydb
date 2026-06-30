@@ -12,6 +12,7 @@
 #include <ydb/library/yql/dq/opt/dq_opt_join.h>
 #include <ydb/library/yql/dq/opt/dq_opt_log.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
+#include <ydb/library/yql/providers/dq/expr_nodes/dqs_expr_nodes.h>
 
 #include <yql/essentials/core/yql_opt_match_recognize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
@@ -201,9 +202,32 @@ protected:
         return output;
     }
 
+    static TExprNode::TPtr DqLookupSourceFromKqlReadTableRanges(const TExprBase& node, TExprContext& ctx) {
+        auto maybeRanges = node.Maybe<TKqlReadTableRanges>();
+        if (!maybeRanges) {
+            return {};
+        }
+        auto ranges = maybeRanges.Cast();
+        const auto inputSeqType = node.Raw()->GetTypeAnn();
+        return Build<TDqLookupSourceWrap>(ctx, node.Pos())
+            .Input<TKqpReadRangesSourceSettings>()
+                .Table(ranges.Table())
+                .Columns(ranges.Columns())
+                .Settings(ranges.Settings())
+                .RangesExpr<TCoVoid>().Build()
+            .Build()
+            .DataSource<TCoDataSource>()
+                .Category<TCoAtom>().Value(NYql::KikimrProviderName).Build()
+                .Build()
+            .RowType(ExpandType(ranges.Pos(), *GetSeqItemType(inputSeqType), ctx))
+            .Settings<TCoAtomList>().Add(ranges.Table().Path()).Build()
+        .Done().Ptr();
+    }
+
     TMaybeNode<TExprBase> RewriteStreamEquiJoinWithLookup(TExprBase node, TExprContext& ctx) {
         // First step of stream lookup join with DQ external sources (not kqp tables)
-        TExprBase output = DqRewriteStreamEquiJoinWithLookup(node, ctx, TypesCtx);
+        TExprBase output = DqRewriteStreamEquiJoinWithLookup(node, ctx, TypesCtx,
+                Config->FeatureFlags.GetEnableDqSourceStreamLookupJoinLocalLookups() ? DqLookupSourceFromKqlReadTableRanges : nullptr);
         DumpAppliedRule("KqpRewriteStreamEquiJoinWithLookup", node.Ptr(), output.Ptr(), ctx);
         return output;
     }

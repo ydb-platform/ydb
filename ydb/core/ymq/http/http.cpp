@@ -627,6 +627,7 @@ void THttpRequest::SetupChangeMessageVisibilityBatch(TChangeMessageVisibilityBat
 
 void THttpRequest::SetupCreateQueue(TCreateQueueRequest* const req) {
     req->SetQueueName(QueueName_);
+    req->SetSourceAddress(SourceAddress_);
 
     if (QueryParams_.CreateTimestampSeconds) {
         req->SetCreatedTimestamp(QueryParams_.CreateTimestampSeconds.GetRef());
@@ -680,6 +681,7 @@ void THttpRequest::SetupDeleteMessageBatch(TDeleteMessageBatchRequest* const req
 
 void THttpRequest::SetupDeleteQueue(TDeleteQueueRequest* const req) {
     req->SetQueueName(QueueName_);
+    req->SetSourceAddress(SourceAddress_);
 }
 
 void THttpRequest::SetupListPermissions(TListPermissionsRequest* const req) {
@@ -738,6 +740,7 @@ void THttpRequest::SetupPrivateGetQueueAttributesBatch(TGetQueueAttributesBatchR
 }
 
 void THttpRequest::SetupDeleteUser(TDeleteUserRequest* const req) {
+    req->SetSourceAddress(SourceAddress_);
     if (QueryParams_.UserName) {
         req->SetUserName(*QueryParams_.UserName);
     }
@@ -971,6 +974,7 @@ void THttpRequest::SetupListQueueTags(TListQueueTagsRequest* const req) {
 
 void THttpRequest::SetupTagQueue(TTagQueueRequest* const req) {
     req->SetQueueName(QueueName_);
+    req->SetSourceAddress(SourceAddress_);
     for (const auto& tag : QueryParams_.Tags) {
         auto& target = *req->AddTags();
         target.SetKey(tag.second.Key.GetOrElse(""));
@@ -980,6 +984,7 @@ void THttpRequest::SetupTagQueue(TTagQueueRequest* const req) {
 
 void THttpRequest::SetupUntagQueue(TUntagQueueRequest* const req) {
     req->SetQueueName(QueueName_);
+    req->SetSourceAddress(SourceAddress_);
     for (const auto& key : QueryParams_.TagKeys) {
         req->AddTagKeys(key.second);
     }

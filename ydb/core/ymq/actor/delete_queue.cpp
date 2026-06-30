@@ -6,6 +6,8 @@
 #include <util/string/join.h>
 #include <ydb/core/ymq/base/helpers.h>
 
+#include <functional>
+
 namespace NKikimr::NSQS {
 
 class TDeleteQueueActor
@@ -38,6 +40,14 @@ private:
             tagsJson = TagsToJson(*QueueTags_);
         }
 
+        const auto sourceAddress = std::invoke([&]() {
+            if (Request().GetAuth().HasSourceAddress()) {
+                return Request().GetAuth().GetSourceAddress();
+            } else {
+                return Request().GetSourceAddress();
+            }
+        });
+
         SchemaActor_ = Register(
             new TDeleteQueueSchemaActorV2(
                 TQueuePath(Cfg().GetRoot(), UserName_, GetQueueName(), QueueVersion_.GetRef()),
@@ -51,7 +61,7 @@ private:
                 UserSID_,
                 MaskedToken_,
                 AuthType_,
-                Request().GetAuth().GetSourceAddress()
+                sourceAddress
             )
         );
     }

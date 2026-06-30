@@ -36,7 +36,11 @@ public:
             TagKeys_.push_back(key);
         }
 
-        SourceAddress_ = Request().GetAuth().GetSourceAddress();
+        if (Request().GetAuth().HasSourceAddress()) {
+            SourceAddress_ = Request().GetAuth().GetSourceAddress();
+        } else {
+            SourceAddress_ = Request().GetSourceAddress();
+        }
         IsCloudEventsEnabled = Cfg().HasCloudEventsConfig() && Cfg().GetCloudEventsConfig().GetEnableCloudEvents();
     }
 

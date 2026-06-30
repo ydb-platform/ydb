@@ -178,6 +178,8 @@ namespace NKikimr::NYmq::V1 {
         const TString UserSid;
         const TString RequestId;
         const TString SecurityToken;
+
+    protected:
         const TString SourceAddress;
     };
 
@@ -252,6 +254,7 @@ namespace NKikimr::NYmq::V1 {
         NKikimr::NSQS::TCreateQueueRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableCreateQueue();
             result->SetQueueName(GetProtoRequest()->queue_name());
+            result->SetSourceAddress(SourceAddress);
             for (auto &srcAttribute : GetProtoRequest()->attributes()) {
                 auto dstAttribute = result->MutableAttributes()->Add();
                 dstAttribute->SetName(srcAttribute.first);
@@ -671,6 +674,7 @@ namespace NKikimr::NYmq::V1 {
         NKikimr::NSQS::TDeleteQueueRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableDeleteQueue();
             result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
+            result->SetSourceAddress(SourceAddress);
             return result;
         }
     };
@@ -1044,6 +1048,7 @@ namespace NKikimr::NYmq::V1 {
         NKikimr::NSQS::TTagQueueRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableTagQueue();
             result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
+            result->SetSourceAddress(SourceAddress);
             for (const auto& [key, value]: GetProtoRequest()->Gettags()) {
                 auto tag = requestHolder.MutableTagQueue()->MutableTags()->Add();
                 tag->SetKey(key);
@@ -1091,6 +1096,7 @@ namespace NKikimr::NYmq::V1 {
         NKikimr::NSQS::TUntagQueueRequest* GetRequest(TSqsRequest& requestHolder) override {
             auto result = requestHolder.MutableUntagQueue();
             result->SetQueueName(CloudIdAndResourceIdFromQueueUrl(GetProtoRequest()->queue_url()).second);
+            result->SetSourceAddress(SourceAddress);
             for (const auto& key: GetProtoRequest()->Gettag_keys()) {
                 result->AddTagKeys(key);
             }

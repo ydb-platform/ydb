@@ -613,7 +613,12 @@ private:
         UserSID_ = request.GetAuth().GetUserSID();
         MaskedToken_ = request.GetAuth().GetMaskedToken();
         AuthType_ = request.GetAuth().GetAuthType();
-        PeerName_ = request.GetAuth().GetSourceAddress();
+
+        if (request.GetAuth().HasSourceAddress()) {
+            PeerName_ = request.GetAuth().GetSourceAddress();
+        } else {
+            PeerName_ = "";
+        }
 
         if (IsCloud() && !FolderId_) {
             auto items = ParseCloudSecurityToken(SecurityToken_);

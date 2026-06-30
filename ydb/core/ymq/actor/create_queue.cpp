@@ -10,6 +10,8 @@
 #include <util/string/join.h>
 #include <util/string/type.h>
 
+#include <functional>
+
 namespace NKikimr::NSQS {
 
 class TCreateQueueActor
@@ -131,11 +133,18 @@ private:
 
     void StartQueueCreation(const TString& queueName, const TString& accountName, const TString& customQueueName) {
         const auto& cfg = Cfg();
+        const auto sourceAddress = std::invoke([&](){
+            if (Request().GetAuth().HasSourceAddress()) {
+                return Request().GetAuth().GetSourceAddress();
+            } else {
+                return Request().GetSourceAddress();
+            }
+        });
         SchemaActor_ = Register(
             new TCreateQueueSchemaActorV2(accountName, TQueuePath(cfg.GetRoot(), accountName, queueName),
                                           Request(), SelfId(), RequestId_, customQueueName, FolderId_, IsCloud(),
                                           cfg.GetEnableQueueAttributesValidation(), UserCounters_, QuoterResources_,
-                                          TagsJson_, UserSID_, MaskedToken_, AuthType_, Request().GetAuth().GetSourceAddress())
+                                          TagsJson_, UserSID_, MaskedToken_, AuthType_, sourceAddress)
         );
     }
 

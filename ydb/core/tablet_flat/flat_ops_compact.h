@@ -362,16 +362,14 @@ namespace NTabletFlatExecutor {
                     auto resultingPageCollection = MakeIntrusive<NTable::TLoader::TPageCollection>(pageCollection.PageCollection);
                     auto saveCompactedPages = MakeHolder<NSharedCache::TEvSaveCompactedPages>(pageCollection.PageCollection);
                     auto gcList = SharedCachePages->GCList;
-                    auto addPage = [&saveCompactedPages, &pageCollection, &resultingPageCollection, &gcList](NPageCollection::TLoadedPage& loadedPage, bool sticky) {
-                        auto pageId = loadedPage.PageId;
-                        auto pageSize = pageCollection.PageCollection->Page(pageId).Size;
-                        auto sharedPage = MakeIntrusive<TPage>(pageId, pageSize, nullptr);
+                    auto addPage = [&saveCompactedPages, &resultingPageCollection, &gcList](NPageCollection::TLoadedPage& loadedPage, bool sticky) {
+                        auto sharedPage = MakeIntrusive<TPage>(loadedPage.Location.Offset, loadedPage.Location.Size, loadedPage.Location.Type, loadedPage.Location.Crc32, nullptr);
                         sharedPage->ProvideBody(std::move(loadedPage.Data));
                         saveCompactedPages->Pages.push_back(sharedPage);
                         if (sticky) {
-                            resultingPageCollection->AddStickyPage(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList));
+                            resultingPageCollection->AddStickyPage(loadedPage.Location, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList));
                         } else {
-                            resultingPageCollection->AddPage(pageId, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList));
+                            resultingPageCollection->AddPage(loadedPage.Location, TSharedPageRef::MakeUsed(std::move(sharedPage), gcList));
                         }
                     };
                     for (auto &page : pageCollection.StickyPages) {

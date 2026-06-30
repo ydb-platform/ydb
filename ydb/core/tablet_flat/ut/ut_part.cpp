@@ -58,14 +58,15 @@ namespace {
     }
 
     struct TTouchEnv : public NTest::TTestEnv {
-        const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, TPageLocation location, TGroupId groupId) override
         {
+            auto pageId = location.GetPageIndex();
             if (PrechargePhase) {
                 Precharged[groupId].insert(pageId);
-                return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
+                return NTest::TTestEnv::TryGetPage(part, location, groupId);
             } else {
                 Y_ENSURE(Precharged[groupId].count(pageId), "Requested page " << pageId << " should be precharged");
-                return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
+                return NTest::TTestEnv::TryGetPage(part, location, groupId);
             }
         }
 

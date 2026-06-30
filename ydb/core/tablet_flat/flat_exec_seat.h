@@ -71,7 +71,7 @@ namespace NTabletFlatExecutor {
         const TTxType TxType;
         NWilson::TSpan WaitingSpan;
         ui64 Retries = 0;
-        THashMap<TLogoBlobID, THashMap<TPageId, TPrivatePageCache::TPinnedPage>> Pinned;
+        THashMap<TLogoBlobID, THashMap<TPageOffset, TPrivatePageCache::TPinnedPage>> Pinned;
 
         THPTimer LatencyTimer;
         THPTimer CommitTimer;

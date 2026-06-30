@@ -92,7 +92,7 @@ namespace NTable {
                 }
 
                 Y_ENSURE(Index->GetRowId() <= rowId, "SeekIndex invariant failure");
-                if (!LoadPage(Index->GetPageId())) {
+                if (!LoadPage(Index->GetLocation())) {
                     return false;
                 }
                 Y_ENSURE(Page.BaseRow() == Index->GetRowId(), "Index and data are out of sync");
@@ -116,7 +116,7 @@ namespace NTable {
             }
             Y_ENSURE(hasLast != EReady::Gone, "Unexpected failure to find the last index record");
 
-            if (!LoadPage(Index->GetPageId())) {
+            if (!LoadPage(Index->GetLocation())) {
                 return false;
             }
             Y_ENSURE(Page.BaseRow() == Index->GetRowId(), "Index and data are out of sync");
@@ -125,13 +125,13 @@ namespace NTable {
             return true;
         }
 
-        bool LoadPage(TPageId pageId)
+        bool LoadPage(TPageLocation location)
         {
-            Y_ENSURE(pageId != Max<TPageId>(), "Unexpected seek to an invalid page id");
-            if (PageId != pageId) {
-                if (auto* data = Env->TryGetPage(Part, pageId, {})) {
+            Y_ENSURE(location.Offset != TPageOffset::Max(), "Unexpected seek to an invalid page id");
+            if (Offset != location.Offset) {
+                if (auto* data = Env->TryGetPage(Part, location, {})) {
                     Y_ENSURE(Page.Set(data), "Unexpected failure to load data page");
-                    PageId = pageId;
+                    Offset = location.Offset;
                 } else {
                     return false;
                 }
@@ -156,7 +156,7 @@ namespace NTable {
         const TPart* Part;
         IPages* Env;
         TRowId RowId = Max<TRowId>();
-        TPageId PageId = Max<TPageId>();
+        TPageOffset Offset = TPageOffset::Max();
         THolder<IPartGroupIndexIter> Index;
         NPage::TDataPage Page;
         TSmallVec<TCell> Key;

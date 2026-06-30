@@ -76,7 +76,7 @@ public:
                     continue; // don't go deeper
                 }
 
-                auto page = Env->TryGetPage(Part, nodeState.PageId, {});
+                auto page = Env->TryGetPage(Part, Part->GetPageLocation(nodeState.PageId, {}), {});
                 if (!page) {
                     ready = false;
                     continue; // continue requesting other nodes
@@ -141,8 +141,8 @@ public:
         return Meta.GetRowCount();
     }
 
-    TPageId GetPageId() const override {
-        return GetCurrentNode().PageId;
+    TPageLocation GetLocation() const override {
+        return Part->GetPageLocation(GetCurrentNode().PageId, GroupId);
     }
 
     TRowId GetRowId() const override {

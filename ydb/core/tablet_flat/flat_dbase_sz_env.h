@@ -25,27 +25,26 @@ namespace NTable {
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
 
-            AddPageSize(partStore->Locate(lob, ref), ref);
+            auto *info = partStore->Locate(lob, ref);
+            AddPageSize(info->PageCollection.Get(), info->PageCollection->GetLocation(ref));
 
             return { true, nullptr };
         }
 
-        const TSharedData* TryGetPage(const TPart* part, TPageId pageId, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart* part, TPageLocation location, TGroupId groupId) override
         {
             auto *partStore = CheckedCast<const NTable::TPartStore*>(part);
+            auto *collection = partStore->PageCollections.at(groupId.Index).Get();
 
-            auto info = partStore->PageCollections.at(groupId.Index).Get();
-            auto type = info->GetPageType(pageId);
-            
-            switch (type) {
+            switch (location.Type) {
                 case EPage::FlatIndex:
                 case EPage::BTreeIndex:
                     // need index pages to continue counting
                     // do not count index
                     // if these pages are not in memory, data won't be counted in precharge
-                    return Env->TryGetPage(part, pageId, groupId);
+                    return Env->TryGetPage(part, location, groupId);
                 default:
-                    AddPageSize(partStore->PageCollections.at(groupId.Index).Get(), pageId);
+                    AddPageSize(collection->PageCollection.Get(), location);
                     return nullptr;
             }
         }
@@ -55,17 +54,17 @@ namespace NTable {
         }
 
     private:
-        void AddPageSize(TPageCollection *info, TPageId pageId)
+        void AddPageSize(const NPageCollection::IPageCollection *collection, TPageLocation location)
         {
-            if (Touched[info].insert(pageId).second) {
+            if (Touched[collection].insert(location.Offset).second) {
                 Pages++;
-                Bytes += info->GetPageSize(pageId);
+                Bytes += location.Size;
             }
         }
 
     private:
         IPages* Env;
-        THashMap<const void*, THashSet<TPageId>> Touched;
+        THashMap<const NPageCollection::IPageCollection*, THashSet<TPageOffset>> Touched;
         ui64 Pages = 0;
         ui64 Bytes = 0;
     };

@@ -78,6 +78,29 @@ ui64 TMeta::GetPageSize(ui32 pageId) const
     return Index[pageId].Page - begin;
 }
 
+NTable::NPage::TPageLocation TMeta::GetLocation(ui32 pageId) const
+{
+    Y_ENSURE(pageId < Header->Pages);
+
+    const ui64 offset = (pageId == 0) ? 0 : Index[pageId - 1].Page;
+    const ui64 size = Index[pageId].Page - offset;
+
+    return NTable::NPage::TPageLocation::FromByteOffset(offset, size, static_cast<NTable::NPage::EPage>(Extra[pageId].Type), Extra[pageId].Crc32);
+}
+
+TBorder TMeta::Bounds(NTable::NPage::TPageLocation location) const
+{
+    Y_ENSURE(!location.Offset.IsMax());
+    if (!location.Offset.IsByteOffset()) {
+        // Accept page-index offsets (from blob forward cache): resolve byte offset from Index
+        const auto pageId = location.Offset.AsPageIndex();
+        Y_ENSURE(pageId < Header->Pages, "Requested page " << pageId << " out of " << Header->Pages << " total pages");
+        const ui64 offset = pageId ? Index[pageId - 1].Page : 0;
+        return TAlign(Steps).Lookup(offset, location.Size);
+    }
+    return TAlign(Steps).Lookup(location.GetByteOffset(), location.Size);
+}
+
 TStringBuf TMeta::GetPageInplaceData(ui32 pageId) const
 {
     Y_DEBUG_ABORT_UNLESS(pageId < Header->Pages);

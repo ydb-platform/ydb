@@ -10,6 +10,8 @@ namespace NKikimr {
 namespace NPageCollection {
 
     using TPageId = NTable::NPage::TPageId;
+    using TPageOffset = NTable::NPage::TPageOffset;
+    using TPageLocation = NTable::NPage::TPageLocation;
 
     struct TLargeGlobId {
         /* ... is a piece of some data up to 4GiB placed on a continuous

@@ -691,7 +691,7 @@ void TExecutor::TryActivateWaitingTransaction(TIntrusivePtr<NPageCollection::TPa
     if (pageCollection) {
         auto &pinnedCollection = transaction.Seat->Pinned[pageCollection->Id];
         for (auto& loaded : loadedPages) {
-            auto inserted = pinnedCollection.insert(std::make_pair(loaded.PageId, TPrivatePageCache::TPinnedPage(std::move(loaded.Page))));
+            auto inserted = pinnedCollection.insert(std::make_pair(loaded.Location.Offset, TPrivatePageCache::TPinnedPage(std::move(loaded.Page))));
             Y_ENSURE(inserted.second);
         }
     }
@@ -2240,20 +2240,16 @@ void TExecutor::PostponeTransaction(TSeat* seat, TPageCollectionTxEnv &env,
     TransactionWaitPads[waitPad.Get()] = waitPad;
 
     auto toLoad = env.ObtainToLoad();
-    for (auto &[pageCollectionId, pages] : toLoad) {
-        Y_DEBUG_ABORT_UNLESS(pages);
+    for (auto &[pageCollectionId, locations] : toLoad) {
+        Y_DEBUG_ABORT_UNLESS(locations);
 
         if (auto logl = Logger->Log(ELnLev::Dbg03)) {
             logl
                 << NFmt::Do(*this) << " " << NFmt::Do(*seat) << " request page collection " << pageCollectionId
-                << " pages [ ";
-            for (auto pageId : pages) {
-                logl << pageId << " ";
-            }
-            logl << "]";
+                << " pages " << locations;
         }
 
-        auto request = new NSharedCache::TEvRequest(NBlockIO::EPriority::Fast, PrivatePageCache->GetPageCollection(pageCollectionId)->PageCollection, std::move(pages));
+        auto request = new NSharedCache::TEvRequest(NBlockIO::EPriority::Fast, PrivatePageCache->GetPageCollection(pageCollectionId)->PageCollection, std::move(locations));
         request->TraceId = waitPad->GetWaitingTraceId();
         request->WaitPad = waitPad;
         ++waitPad->PendingRequests;
@@ -3068,11 +3064,11 @@ void TExecutor::Handle(NSharedCache::TEvResult::TPtr &ev) {
 
             if (requestType == ERequestTypeCookie::StickyPages) {
                 for (auto& loaded : msg->Pages) {
-                    PrivatePageCache->AddStickyPage(loaded.PageId, std::move(loaded.Page), pageCollection);
+                    PrivatePageCache->AddStickyPage(loaded.Location, std::move(loaded.Page), pageCollection);
                 }
             } else { // requestType == ERequestTypeCookie::Transaction or ERequestTypeCookie::TryKeepInMemPages
                 for (auto& loaded : msg->Pages) {
-                    PrivatePageCache->AddPage(loaded.PageId, loaded.Page, pageCollection);
+                    PrivatePageCache->AddPage(loaded.Location, loaded.Page, pageCollection);
                 }
                 if (requestType == ERequestTypeCookie::Transaction) {
                     TryActivateWaitingTransaction(std::move(msg->WaitPad), std::move(msg->Pages), pageCollection);
@@ -3148,8 +3144,8 @@ void TExecutor::Handle(NSharedCache::TEvUpdated::TPtr &ev) {
 
     for (auto &kv : msg->DroppedPages) {
         if (auto *pageCollection = PrivatePageCache->FindPageCollection(kv.first)) {
-            for (ui32 pageId : kv.second) {
-                PrivatePageCache->DropPage(pageId, pageCollection);
+            for (auto offset : kv.second) {
+                PrivatePageCache->DropPage(offset, pageCollection);
             }
         }
     }

@@ -42,7 +42,7 @@ std::string Deserialize(TSharedRefArray message)
 int ReadActiveConnectionCount(const IBusServerPtr& server)
 {
     auto countsYson = NYTree::SyncYPathGet(server->GetOrchidService(), "/connection_counts");
-    auto counts = NYTree::ConvertTo<THashMap<TString, int>>(countsYson);
+    auto counts = NYTree::ConvertTo<THashMap<std::string, int>>(countsYson);
     int total = 0;
     for (const auto& [_, count] : counts) {
         total += count;

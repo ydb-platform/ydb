@@ -473,12 +473,45 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
     op = CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
         NKikimrSchemeOp::TTableDescription(),
         std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&buildInfo.SpecializedIndexDescription),
-        buildInfo.IndexType, prefixColumns);
+        buildInfo.IndexType, prefixColumns, true);
 
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
 
     LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+
+    return propose;
+}
+
+// Creates the transient "row-id source" table for a compact rowid-mode build: the main table re-keyed
+// by the dense seq, holding the indexed text + data columns. Dropped on apply (IsBuildImplTable).
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextRowIdSrcPropose(
+    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+{
+    Y_ENSURE(buildInfo.IsBuildFulltextCompactRowId());
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    propose->Record.SetFailOnExist(true);
+    NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
+    modifyScheme.SetInternal(true);
+
+    auto path = TPath::Init(buildInfo.TablePathId, ss);
+    const auto& tableInfo = ss->Tables.at(path->PathId);
+
+    modifyScheme.SetWorkingDir(path.Dive(buildInfo.IndexName).PathString());
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
+    auto& op = *modifyScheme.MutableCreateTable();
+
+    THashSet<TString> dataColumns(buildInfo.DataColumns.begin(), buildInfo.DataColumns.end());
+    op = CalcFulltextRowIdSrcImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
+        dataColumns,
+        NKikimrSchemeOp::TTableDescription(),
+        std::get<NKikimrSchemeOp::TFulltextIndexDescription>(buildInfo.SpecializedIndexDescription));
+
+    op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix));
+
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "CreateBuildFulltextRowIdSrcPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
 }
@@ -1271,11 +1304,49 @@ private:
         LOG_N("TTxBuildProgress: TUploadSampleK: " << buildInfo);
     }
 
+    // Compact rowid-mode prepass: copy the (arbitrary-PK) main table into the transient row-id source
+    // table, re-keyed by __ydb_row_id, so the later posting fill visits doc ids in ascending order (the
+    // order the compact delta format requires). This is a plain re-keying row copy, so it reuses the
+    // generic secondary-index build scan (TBuildIndexScan) rather than a bespoke fulltext scan path: it
+    // is a secondary index over [__ydb_row_id] carrying the indexed text + data columns as values.
+    void SendBuildFulltextRowIdSrcRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+        auto ev = MakeHolder<TEvDataShard::TEvBuildIndexCreateRequest>();
+        ev->Record.SetId(ui64(BuildId));
+
+        // Scan the snapshotted main table; FillScanRequestCommon attaches the build snapshot.
+        ev->Record.SetOwnerId(buildInfo.TablePathId.OwnerId);
+        ev->Record.SetPathId(buildInfo.TablePathId.LocalPathId);
+
+        TPath implTable = GetBuildPath(Self, buildInfo,
+            TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix));
+        const auto& implTableInfo = Self->Tables.at(implTable.Base()->PathId);
+        auto columns = NTableIndex::ExtractInfo(implTableInfo);
+        // Key = [__ydb_row_id]; data = the indexed text column + data columns.
+        for (const auto& key : columns.Keys) {
+            ev->Record.AddIndexColumns(key);
+            columns.Columns.erase(key);
+        }
+        for (const auto& column : columns.Columns) {
+            ev->Record.AddDataColumns(column);
+        }
+
+        ev->Record.SetDatabaseName(CanonizePath(Self->RootPathElements));
+        ev->Record.SetTargetName(implTable.PathString());
+
+        auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
+
+        LOG_N("TTxBuildProgress: TEvBuildIndexCreateRequest (fulltext rowid prepass): " << ev->Record.ShortDebugString());
+
+        ToTabletSend.emplace(shardId, std::move(ev));
+    }
+
     void SendBuildFulltextIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         auto ev = MakeHolder<TEvDataShard::TEvBuildFulltextIndexRequest>();
         ev->Record.SetId(ui64(BuildId));
 
-        buildInfo.TablePathId.ToProto(ev->Record.MutablePathId());
+        // The scanned table is the main table, except the compact rowid-mode posting fill, which scans
+        // the row-id source table built by the prepass (see GetShardsPath).
+        GetShardsPath(buildInfo)->PathId.ToProto(ev->Record.MutablePathId());
         ev->Record.SetDatabaseName(CanonizePath(Self->RootPathElements));
 
         if (buildInfo.IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson ||
@@ -1309,11 +1380,16 @@ private:
             TPath implTable = GetBuildPath(Self, buildInfo, TString(NTableIndex::ImplTable) + (compact ? NTableIndex::NKMeans::BuildSuffix0 : ""));
             buildInfo.TargetName = implTable.PathString();
         }
-        if (const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(
-                &buildInfo.SpecializedIndexDescription);
-            fulltextDesc && fulltextDesc->GetUseRowIdAsDocId())
-        {
-            ev->Record.SetUseRowIdAsDocId(true);
+        // UseRowIdAsDocId applies only to non-compact (plain/relevance) builds, which scan the main
+        // table directly with __ydb_row_id as doc id. Compact builds get the row id via the prepass
+        // (the posting fill then scans the row-id source table, whose PK already is the doc id).
+        if (!compact) {
+            if (const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(
+                    &buildInfo.SpecializedIndexDescription);
+                fulltextDesc && fulltextDesc->GetUseRowIdAsDocId())
+            {
+                ev->Record.SetUseRowIdAsDocId(true);
+            }
         }
         ev->Record.SetIndexName(buildInfo.TargetName);
         ev->Record.SetIndexType(ConvertFulltextType(buildInfo.IndexType));
@@ -2210,6 +2286,28 @@ private:
         bool done = false;
 
         switch (buildInfo.SubState) {
+        case TIndexBuildInfo::ESubState::FulltextRowIdSrc:
+            // Compact rowid-mode prepass: copy the main table into the row-id source table (a generic
+            // secondary-index build over __ydb_row_id), then go back through CreateBuild (to build the
+            // 0build posting table) and the posting fill.
+            LOG_D("FillFulltextIndex RowIdSrc");
+            if (NoShardsAdded(buildInfo)) {
+                AddAllShards(buildInfo);
+            }
+            done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildFulltextRowIdSrcRequest(shardIdx, buildInfo); }) &&
+                buildInfo.DoneShards.size() == buildInfo.Shards.size();
+            if (done) {
+                LOG_D("FillFulltextIndex RowIdSrc Done");
+                ClearDoneShards(txc, buildInfo);
+                NIceDb::TNiceDb db{txc.DB};
+                buildInfo.SubState = TIndexBuildInfo::ESubState::None;
+                Self->PersistBuildIndexState(db, buildInfo);
+                Self->PersistBuildIndexShardStatusReset(db, buildInfo);
+                ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
+                Progress(BuildId);
+                done = false;
+            }
+            break;
         case TIndexBuildInfo::ESubState::None:
             // Stage 1 for FulltextRelevance - build "posting" table (token-documents)
             LOG_D("FillFulltextIndex Posting");
@@ -2528,6 +2626,13 @@ public:
             } else if (!buildInfo.InitiateTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.InitiateTxId)));
             } else {
+                if (buildInfo.IsBuildFulltextCompactRowId() &&
+                    buildInfo.SubState == TIndexBuildInfo::ESubState::None) {
+                    // Run the row-id source prepass first: CreateBuild builds the rowid source table.
+                    NIceDb::TNiceDb db(txc.DB);
+                    buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextRowIdSrc;
+                    Self->PersistBuildIndexState(db, buildInfo);
+                }
                 if (buildInfo.IsBuildVectorIndex() && buildInfo.KMeans.NeedsAnotherLevel() ||
                     buildInfo.IsBuildFulltextCompact()) {
                     ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
@@ -2597,7 +2702,11 @@ public:
                 AllocateTxId(BuildId);
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
                 if (buildInfo.IsBuildFulltextCompact()) {
-                    Send(Self->SelfId(), CreateBuildFulltextPropose(Self, buildInfo), 0, ui64(BuildId));
+                    if (buildInfo.SubState == TIndexBuildInfo::ESubState::FulltextRowIdSrc) {
+                        Send(Self->SelfId(), CreateBuildFulltextRowIdSrcPropose(Self, buildInfo), 0, ui64(BuildId));
+                    } else {
+                        Send(Self->SelfId(), CreateBuildFulltextPropose(Self, buildInfo), 0, ui64(BuildId));
+                    }
                 } else {
                     Send(Self->SelfId(), CreateBuildPropose(Self, buildInfo), 0, ui64(BuildId));
                 }
@@ -2642,6 +2751,9 @@ public:
                     buildInfo.SubState == TIndexBuildInfo::ESubState::UniqConsistentValidation ||
                     buildInfo.SubState == TIndexBuildInfo::ESubState::PrepareValidation) {
                     tableName = NTableIndex::ImplTable;
+                } else if (buildInfo.SubState == TIndexBuildInfo::ESubState::None && buildInfo.IsBuildFulltextCompactRowId()) {
+                    // Lock the row-id source table before the posting fill scans it.
+                    tableName = TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix);
                 } else {
                     tableName = buildInfo.KMeans.ReadFrom();
                 }
@@ -2887,6 +2999,11 @@ public:
                         return GetBuildPath(Self, buildInfo, TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
                     }
                     return GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
+                }
+                // Compact rowid-mode: the posting fill (SubState None) scans the row-id source table;
+                // the prepass (FulltextRowIdSrc) and all other builds scan the main table.
+                if (buildInfo.SubState == TIndexBuildInfo::ESubState::None && buildInfo.IsBuildFulltextCompactRowId()) {
+                    return GetBuildPath(Self, buildInfo, TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix));
                 }
                 return TPath::Init(buildInfo.TablePathId, Self);
             case TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex:

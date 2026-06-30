@@ -356,8 +356,8 @@ TMaybe<TString> ChooseIndexForLookupJoin(
             ++prefix;
         }
 
-        // the first index in declaration order wins ties (deterministic).
-        if (prefix > bestPrefix) {
+        // Better prefix wins and ties broken alphabetically by index name.
+        if (prefix > bestPrefix || (prefix == bestPrefix && prefix > 0 && index.Name < best)) {
             bestPrefix = prefix;
             best = index.Name;
         }

@@ -126,12 +126,12 @@ private:
 
     bool GetExecutionIdFromRequest() {
         TString error;
-        TMaybe<TString> executionId = NKqp::ScriptExecutionIdFromOperation(GetProtoRequest()->operation_id(), error);
+        auto executionId = NKqp::ScriptExecutionIdFromOperation(GetProtoRequest()->operation_id(), error);
         if (!executionId) {
             Reply(Ydb::StatusIds::BAD_REQUEST, error);
             return false;
         }
-        ExecutionId = *executionId;
+        ExecutionId = std::move(*executionId);
         return true;
     }
 

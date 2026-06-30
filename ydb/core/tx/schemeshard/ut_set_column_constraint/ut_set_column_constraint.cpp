@@ -1,6 +1,5 @@
 #include <ydb/core/testlib/tablet_helpers.h>
 #include <ydb/core/testlib/actors/block_events.h>
-#include <ydb/core/tx/schemeshard/schemeshard_set_column_constraint.h>
 #include <ydb/core/tx/schemeshard/ut_helpers/helpers.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
 #include <ydb/library/testlib/helpers.h>
@@ -1248,5 +1247,45 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
         ui64 setConstraintTxId = ++txId;
 
         DoGetRequest(setConstraintTxId, runtime, wrongRoot, Ydb::StatusIds::BAD_REQUEST);
+    }
+
+    Y_UNIT_TEST(GetRequestUserSidBeginEndTime) {
+        TTestBasicRuntime runtime;
+
+        TTestEnv env(runtime);
+
+        ui64 txId = 100;
+
+        TString root = "/MyRoot";
+        TString tablePath = root + "/Table";
+
+        TestCreateTable(runtime, ++txId, root, R"(
+              Name: "Table"
+              Columns { Name: "key"   Type: "Uint32" }
+              Columns { Name: "value" Type: "Utf8"   }
+              KeyColumnNames: ["key"]
+        )");
+        env.TestWaitNotification(runtime, txId);
+
+        ui64 setConstraintTxId = ++txId;
+
+        auto createResponse = TestSetColumnConstraint(
+            runtime, setConstraintTxId,
+            TTestTxConfig::SchemeShard,
+            root,
+            tablePath,
+            {"value"});
+        UNIT_ASSERT_VALUES_EQUAL(createResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
+        env.TestWaitNotification(runtime, setConstraintTxId, TTestTxConfig::SchemeShard);
+
+        auto getResponse = DoGetRequest(setConstraintTxId, runtime, root);
+
+        // In tests TAppData::TimeProvider->Now() returns epoch (0), so StartTime/EndTime
+        // are TInstant::Zero() and FillSetColumnConstraint skips them. Just verify the
+        // proto fields are present and EndTime >= StartTime (both 0 in the test environment).
+        UNIT_ASSERT(getResponse.HasUserSID() && getResponse.GetUserSID() == "someuser@builtin");
+        UNIT_ASSERT(getResponse.HasStartTime());
+        UNIT_ASSERT(getResponse.HasEndTime());
+        UNIT_ASSERT(getResponse.GetEndTime().seconds() >= getResponse.GetStartTime().seconds());
     }
 } // Y_UNIT_TEST_SUITE(SetNotNullTest)

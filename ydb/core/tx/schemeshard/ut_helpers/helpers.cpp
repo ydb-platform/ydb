@@ -3471,12 +3471,15 @@ namespace NSchemeShardUT_Private {
         const TString& dbName,
         const TString& tablePath,
         const TVector<TString>& notNullColumns,
-        bool skipSettings)
+        bool skipSettings,
+        const TString& user)
     {
         // We can't do `GetRequest`, because it is not implemented at the time of writing the test
         auto request = MakeHolder<TEvSetColumnConstraint::TEvCreateRequest>();
         request->Record.SetTxId(txId);
         request->Record.SetDatabaseName(dbName);
+
+        request->Record.SetUserSID(user);
 
         if (!skipSettings) {
             NKikimrSetColumnConstraint::TSetColumnConstraintSettings settings;

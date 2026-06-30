@@ -800,7 +800,7 @@ namespace NSchemeShardUT_Private {
 
     void MeteringDataEqual(const TString& leftMsg, const TString& rightMsg);
 
-    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(TTestActorRuntime& runtime, ui64 txId, ui64 schemeShard, const TString& dbName, const TString& tablePath, const TVector<TString>& notNullColumns, bool skipSettings = false);
+    NKikimrSetColumnConstraint::TEvCreateResponse TestSetColumnConstraint(TTestActorRuntime& runtime, ui64 txId, ui64 schemeShard, const TString& dbName, const TString& tablePath, const TVector<TString>& notNullColumns, bool skipSettings = false, const TString& user = "someuser@builtin");
     void AsyncSetColumnConstraint(TTestActorRuntime& runtime, ui64 txId, ui64 schemeShard, const TString& dbName, const TString& tablePath, const TVector<TString>& notNullColumns);
     void TestCheckColumnsNotNull(TTestActorRuntime& runtime, const TString& tablePath, const std::map<TString, bool>& expectedColumnNotNullStates);
 } //NSchemeShardUT_Private

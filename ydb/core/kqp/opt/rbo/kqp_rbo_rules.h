@@ -136,9 +136,9 @@ class TPushAppendIntoMapRule : public ISimplifiedRule {
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
 
-class TPushAppendThroughUnaryRule : public ISimplifiedRule {
+class TPushMapElementsThroughUnaryRule : public ISimplifiedRule {
   public:
-    explicit TPushAppendThroughUnaryRule(bool pushExpressions = false)
+    explicit TPushMapElementsThroughUnaryRule(bool pushExpressions = false)
         : ISimplifiedRule("Push map elements through unary", ERuleProperties::RequireParents)
         , PushExpressions(pushExpressions) {}
 
@@ -156,9 +156,9 @@ class TPushMapElementsThroughAggregateRule : public ISimplifiedRule {
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
 
-class TPushAppendThroughJoinRule : public ISimplifiedRule {
+class TPushMapElementsThroughJoinRule : public ISimplifiedRule {
   public:
-    TPushAppendThroughJoinRule()
+    TPushMapElementsThroughJoinRule()
         : ISimplifiedRule("Push map elements through join", ERuleProperties::RequireParents) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;

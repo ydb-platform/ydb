@@ -24,7 +24,7 @@ SRCS(
     map/projection_pruning.cpp
     map/push_append_into_map.cpp
     map/push_map_elements_through_aggregate.cpp
-    map/push_append_through_join.cpp
+    map/push_map_elements_through_join.cpp
     map/push_map_elements_through_unary.cpp
     map/push_append_wrappers.cpp
     push_filter_into_join.cpp

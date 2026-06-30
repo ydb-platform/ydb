@@ -100,7 +100,7 @@ EPushTarget SelectExpressionJoinPushTarget(
 
 } // anonymous namespace
 
-TIntrusivePtr<IOperator> TPushAppendThroughJoinRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
+TIntrusivePtr<IOperator> TPushMapElementsThroughJoinRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     if (input->Kind != EOperator::Map) {
         return input;
     }

@@ -48,7 +48,7 @@ bool CanPushThroughUnary(const TIntrusivePtr<IOperator>& op) {
 } // anonymous namespace
 
 TIntrusivePtr<IOperator>
-TPushAppendThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
+TPushMapElementsThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
     if (input->Kind != EOperator::Map) {
         return input;
     }

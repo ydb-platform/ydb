@@ -97,7 +97,7 @@ jobs:
         with:
           revision: "pr-${{ github.event.pull_request.number }}-${{ steps.sha.outputs.value }}"
           src-root: "./ydb/docs"
-          cli-version: "5.47.3"
+          cli-version: "4.59.12"
           use-ya-opensource: ${{ steps.ya.outputs.use }}
 
       - name: Fail on documentation build issues

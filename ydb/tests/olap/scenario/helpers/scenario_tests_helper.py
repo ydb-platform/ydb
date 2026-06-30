@@ -668,8 +668,15 @@ class ScenarioTestHelper:
                 'table': tablename,
             },
         ):
-            result_sets = self.execute_query(f'SELECT count(*) FROM `{self.get_full_path(tablename)}`')
-            return result_sets[0].rows[0][0]
+            result = self.execute_query(
+                f'SELECT count(*) FROM `{self.get_full_path(tablename)}`',
+                fail_on_error=False,
+                return_error=True,
+                ignore_error={''},
+            )
+            if isinstance(result, ydb.issues.Error):
+                raise result
+            return result[0].rows[0][0]
 
     @allure.step('Describe table {path}')
     def describe_table(self, path: str, settings: ydb.DescribeTableSettings = None) -> ydb.TableSchemeEntry:

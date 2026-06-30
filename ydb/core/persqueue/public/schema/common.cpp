@@ -1,6 +1,7 @@
 #include "common.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/kafka_proxy/kafka_constants.h>
 #include <ydb/core/persqueue/public/config.h>
@@ -433,12 +434,15 @@ void UpdateConsumerVersion(
     consumer.SetModificationVersion(config.GetTopicConfigVersion());
 }
 
-TConsumerVersionInfoByName CollectConsumerVersionInfo(const NKikimrPQ::TPQTabletConfig& config) {
+TConsumerVersionInfoByName CollectConsumerVersionInfo(
+    const NKikimrPQ::TPQTabletConfig& config,
+    const TString& database
+) {
     TConsumerVersionInfoByName result;
     for (const auto& consumer : config.GetConsumers()) {
         result[consumer.GetName()] = {
             consumer.GetModificationVersion(),
-            GetDLQTopicPath(consumer),
+            NKikimr::CanonizeAndNormalizePath(database, GetDLQTopicPath(consumer)),
         };
     }
     return result;
@@ -446,10 +450,11 @@ TConsumerVersionInfoByName CollectConsumerVersionInfo(const NKikimrPQ::TPQTablet
 
 void ApplyConsumerVersionUpdates(
     NKikimrPQ::TPQTabletConfig& config,
-    const TConsumerVersionInfoByName& oldConsumerInfoByName
+    const TConsumerVersionInfoByName& oldConsumerInfoByName,
+    const TString& database
 ) {
     for (auto& consumer : *config.MutableConsumers()) {
-        const TString newDlqTopicPath = GetDLQTopicPath(consumer);
+        const TString newDlqTopicPath = NKikimr::CanonizeAndNormalizePath(database, GetDLQTopicPath(consumer));
         if (const auto* oldInfo = oldConsumerInfoByName.FindPtr(consumer.GetName())) {
             if (newDlqTopicPath != oldInfo->DlqTopicPath) {
                 UpdateConsumerVersion(consumer, config);

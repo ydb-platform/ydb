@@ -257,7 +257,8 @@ TResult ApplyChangesInt(
 
     const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes();
 
-    const auto oldConsumerInfoByName = CollectConsumerVersionInfo(*pqTabletConfig);
+    const auto [database, _] = GetWorkingDirAndName(request.path());
+    const auto oldConsumerInfoByName = CollectConsumerVersionInfo(*pqTabletConfig, database);
     BumpTopicConfigVersion(*pqTabletConfig);
 
     std::vector<std::pair<bool, Ydb::Topic::Consumer>> consumers;
@@ -334,7 +335,7 @@ TResult ApplyChangesInt(
             return result;
         }
     }
-    ApplyConsumerVersionUpdates(*pqTabletConfig, oldConsumerInfoByName);
+    ApplyConsumerVersionUpdates(*pqTabletConfig, oldConsumerInfoByName, database);
     if (auto errorCode = consumersAdvancedMonitoringSettings.CheckForUnknownConsumers(error); errorCode != Ydb::StatusIds::SUCCESS) {
         return {errorCode, std::move(error)};
     }

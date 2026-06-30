@@ -110,7 +110,7 @@ THashSet<TString> CollectDLQTopicPaths(
             continue;
         }
 
-        result.insert(NKikimr::NormalizePath(NKikimr::CanonizePath(database), NKikimr::CanonizePath(dlq)));
+        result.insert(NKikimr::CanonizeAndNormalizePath(database, dlq));
     }
 
     return result;

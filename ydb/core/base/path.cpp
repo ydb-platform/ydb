@@ -167,6 +167,13 @@ TString NormalizePath(const TString& database, const TString& path) {
     return NKikimr::CanonizePath(database + "/" + path);
 }
 
+TString CanonizeAndNormalizePath(const TString& database, const TString& path) {
+    if (path.empty()) {
+        return {};
+    }
+    return NormalizePath(CanonizePath(database), CanonizePath(path));
+}
+
 ui32 CanonizedPathLen(const TVector<TString>& path) {
     ui32 ret = path.size();
     for (auto &x : path)

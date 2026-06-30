@@ -67,10 +67,14 @@ struct TConsumerVersionInfo {
 
 using TConsumerVersionInfoByName = THashMap<TString, TConsumerVersionInfo>;
 
-TConsumerVersionInfoByName CollectConsumerVersionInfo(const NKikimrPQ::TPQTabletConfig& config);
+TConsumerVersionInfoByName CollectConsumerVersionInfo(
+    const NKikimrPQ::TPQTabletConfig& config,
+    const TString& database
+);
 void ApplyConsumerVersionUpdates(
     NKikimrPQ::TPQTabletConfig& config,
-    const TConsumerVersionInfoByName& oldConsumerInfoByName
+    const TConsumerVersionInfoByName& oldConsumerInfoByName,
+    const TString& database
 );
 
 TResult ValidateConsumersConfig(

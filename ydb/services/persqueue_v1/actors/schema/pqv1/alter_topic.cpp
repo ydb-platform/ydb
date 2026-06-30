@@ -37,7 +37,7 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         const auto& pqConfig = AppData()->PQConfig;
         const auto& sourceTabletConfig = sourceConfig.GetPQTabletConfig();
 
-        const auto oldConsumerInfoByName = NPQ::NSchema::CollectConsumerVersionInfo(sourceTabletConfig);
+        const auto oldConsumerInfoByName = NPQ::NSchema::CollectConsumerVersionInfo(sourceTabletConfig, Database);
 
         for (const auto& readRule : Request.settings().read_rules()) {
             const auto consumerName = NPersQueue::ConvertNewConsumerName(readRule.consumer_name(), pqConfig);
@@ -62,7 +62,7 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         auto& targetTabletConfig = *targetConfig.MutablePQTabletConfig();
         targetTabletConfig.SetTopicConfigVersion(sourceTabletConfig.GetTopicConfigVersion());
         NPQ::NSchema::BumpTopicConfigVersion(targetTabletConfig);
-        NPQ::NSchema::ApplyConsumerVersionUpdates(targetTabletConfig, oldConsumerInfoByName);
+        NPQ::NSchema::ApplyConsumerVersionUpdates(targetTabletConfig, oldConsumerInfoByName, Database);
 
         targetTabletConfig.SetLocalDC(sourceTabletConfig.GetLocalDC());
         targetTabletConfig.SetDC(sourceTabletConfig.GetDC());

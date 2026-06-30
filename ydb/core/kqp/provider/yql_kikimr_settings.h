@@ -64,6 +64,7 @@ struct TKikimrSettings {
 
     /* Disable optimizer rules */
     NCommon::TConfSetting<bool, false> OptDisableTopSort;
+    NCommon::TConfSetting<bool, false> OptDisableAutoIndexSelection;
     NCommon::TConfSetting<bool, false> OptDisableSqlInToJoin;
     NCommon::TConfSetting<bool, false> OptEnableInplaceUpdate;
     NCommon::TConfSetting<bool, false> OptEnablePredicateExtract;
@@ -208,6 +209,7 @@ struct TKikimrConfiguration : public TKikimrSettings, public NCommon::TSettingDi
     void SetDefaultEnabledSpillingNodes(const TString& node);
     ui64 GetEnabledSpillingNodes() const;
     bool GetEnableOlapPushdownAggregate() const;
+    bool IsAutoIndexSelectionDisabled() const;
 };
 
 }

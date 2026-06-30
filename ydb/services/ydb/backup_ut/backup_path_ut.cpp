@@ -921,6 +921,7 @@ void FilterByPathFailsWhenNoSchemaMappingImpl(TBackupTestFixture& f, bool /*isOl
     f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
     if constexpr (std::is_same_v<TExportSettings, NExport::TExportToFsSettings>) {
         f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableExportFiltering(false);
+        f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableEncryptedExport(false);
     }
     {
         auto exportSettings = traits.MakeExportSettingsNoPrefix(f, "/Root/RecursiveFolderProcessing/dir1");
@@ -1097,6 +1098,7 @@ void ExportRecursiveWithoutDestinationPrefixImpl(TBackupTestFixture& f, bool isO
     f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
     if constexpr (std::is_same_v<TExportSettings, NExport::TExportToFsSettings>) {
         f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableExportFiltering(false);
+        f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableEncryptedExport(false);
     }
 
     {

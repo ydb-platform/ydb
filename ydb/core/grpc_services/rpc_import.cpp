@@ -185,9 +185,6 @@ public:
             }
         }
         if (settings.has_encryption_settings()) {
-            if (!exportFilteringEnabled) {
-                return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export filtering must be enabled for encrypted import");
-            }
             if (!encryptedExportEnabled) {
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
             }

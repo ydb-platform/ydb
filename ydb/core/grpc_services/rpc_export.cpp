@@ -569,6 +569,7 @@ public:
         }
 
         const auto& settings = request.settings();
+        const bool exportFilteringEnabled = NBackup::IsExportFilteringEnabled(*AppData());
         InitCommonSourcePath();
 
         try {
@@ -576,7 +577,7 @@ public:
         } catch (const std::exception& ex) {
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Invalid regexp: " << ex.what());
         }
-        if (!NBackup::IsExportFilteringEnabled(*AppData()) && !settings.exclude_regexps().empty()) {
+        if (!exportFilteringEnabled && !settings.exclude_regexps().empty()) {
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export filtering is not supported in current configuration");
         }
 
@@ -606,7 +607,6 @@ public:
                 return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Items are not set");
             }
         } else {
-            const bool exportFilteringEnabled = NBackup::IsExportFilteringEnabled(*AppData());
             const bool commonDestSpecified = TTraits::HasDestination(settings);
             if (!exportFilteringEnabled) {
                 // Check that no new fields are specified
@@ -642,9 +642,6 @@ public:
         }
         if constexpr (TTraits::HasEncryption) {
             if (settings.has_encryption_settings()) { // Validate that it is possible to encrypt with these settings
-                if (!NBackup::IsExportFilteringEnabled(*AppData())) {
-                    return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export filtering must be enabled for encrypted export");
-                }
                 if (!NBackup::IsEncryptedExportEnabled(*AppData())) {
                     return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export encryption is not supported in current configuration");
                 }

@@ -228,8 +228,14 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
         NJson::TJsonValue* explainPlanStage;
         NJson::TJsonValue* explainPlanOp;
 
-        Y_ENSURE(FindStageAndOpByOpId(execPlan, idNode.GetIntegerSafe(), execPlanStage, execPlanOp, execOperatorIdx));
-        Y_ENSURE(FindStageAndOpByOpId(simplifiedPlan, idNode.GetIntegerSafe(), explainPlanStage, explainPlanOp, explainOperatorIdx));
+        if (!FindStageAndOpByOpId(execPlan, idNode.GetIntegerSafe(), execPlanStage, execPlanOp, execOperatorIdx)) {
+            YQL_CLOG(TRACE, CoreDq) << "Did not find operator: " << idNode.GetIntegerSafe() << " in exec plan";
+            continue;
+        }
+        if (!FindStageAndOpByOpId(simplifiedPlan, idNode.GetIntegerSafe(), explainPlanStage, explainPlanOp, explainOperatorIdx)) {
+            YQL_CLOG(TRACE, CoreDq) << "Did not find operator: " << idNode.GetIntegerSafe() << " in simplified plan";
+
+        }
 
         if(!execPlanStage->GetMapSafe().contains("Stats")) {
             continue;

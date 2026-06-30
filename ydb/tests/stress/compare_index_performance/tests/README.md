@@ -63,7 +63,7 @@ sanity check) or two different refs — **without a local build**.
 | `compare_targets` | `1000` | number of query targets |
 | `compare_ref` | `main` | baseline S3 ref (download URL + report label) |
 | `compare_current_ref` | `` | current S3 ref; empty → use the locally built `ydbd` |
-| `compare_build_preset` | `release` | S3 preset for downloads + report label |
+| `compare_build_preset` | `release` | S3 preset for downloads + report label (e.g. `release`, `relwithdebinfo`, `profile`) |
 | `compare_baseline_ydbd` | `` | explicit baseline `ydbd` path (skips S3) |
 | `compare_current_ydbd` | `` | explicit current `ydbd` path (skips build/S3) |
 | `compare_baseline_feature_flags` | `` | comma-separated feature flags for the baseline cluster |

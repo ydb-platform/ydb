@@ -16,6 +16,7 @@ on:
         options:
           - release
           - relwithdebinfo
+          - profile
         default: release
       ref:
         description: 'S3 ref to compare against (e.g. main, stable-26-1-1)'

@@ -1049,9 +1049,15 @@ private:
                 value = &body;
                 while (value->IsCallable({"FlatMap", "OrderedFlatMap"})) {
                     TNodeMap<TMaybe<TFieldsLineage>> visited;
-                    if (auto res = ScanExprLineage(value->Head(), &arg, &innerLineage, visited, TFieldsLineageMap(Allocator_.get()))) {
-                        flattenColumns.emplace(value->Tail().Head().HeadPtr().Get(), res);
+                    auto res = ScanExprLineage(value->Head(), &arg, &innerLineage, visited, TFieldsLineageMap(Allocator_.get()));
+                    if (!res) {
+                        TFieldsLineage all(Allocator_.get());
+                        for (const auto& f : *innerLineage.Fields) {
+                            all.Items.insert(f.second.Items.begin(), f.second.Items.end());
+                        }
+                        res = std::move(all);
                     }
+                    flattenColumns.emplace(value->Tail().Head().HeadPtr().Get(), res);
                     value = &value->Tail().Tail();
                 }
                 if (value->IsCallable("Just")) {
@@ -1221,11 +1227,11 @@ private:
                         res.Items.insert(x);
                     }
 
-                    if (f->StructItems || f->Items.empty()) {
+                    if (f->StructItems) {
                         if (!hasStructItems) {
                             hasStructItems = true;
                         }
-                    } else {
+                    } else if (!f->Items.empty()) {
                         hasStructItems = false;
                     }
                 }
@@ -1402,11 +1408,11 @@ private:
             }
 
             auto& h = hasStructItems[field->GetName()];
-            if (f.StructItems || f.Items.empty()) {
+            if (f.StructItems) {
                 if (!h) {
                     h = true;
                 }
-            } else {
+            } else if (!f.Items.empty()) {
                 h = false;
             }
         }

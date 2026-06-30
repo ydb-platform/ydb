@@ -32,7 +32,7 @@ concurrency:
       github.event_name == 'pull_request_target'
       && format('pr-{0}{1}', github.event.pull_request.number,
           github.event.action == 'labeled' && github.event.label.name != 'rebase-and-check' && github.event.label.name != 'ok-to-test' && format('-ignore-{0}', github.run_id) || '')
-      || format('push-{0}', github.ref)
+      || format('push-{0}-{1}', github.ref, github.run_id)
     }}
   cancel-in-progress: ${{ github.event_name == 'pull_request_target' }}
 env:

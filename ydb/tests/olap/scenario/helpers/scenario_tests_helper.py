@@ -769,10 +769,11 @@ class ScenarioTestHelper:
         query = f'''SELECT * FROM `{path}/.sys/primary_index_stats` WHERE Activity == 1'''
         if (len(name_column)):
             query += f' AND EntityName = \"{name_column}\"'
-        result_set = self.execute_scan_query(query, {ydb.StatusCode.SUCCESS}).result_set
+        result_sets = self.execute_query(query)
         raw_bytes = 0
         bytes = 0
-        for row in result_set.rows:
-            raw_bytes += row["RawBytes"]
-            bytes += row["BlobRangeSize"]
+        for result_set in result_sets:
+            for row in result_set.rows:
+                raw_bytes += row["RawBytes"]
+                bytes += row["BlobRangeSize"]
         return raw_bytes, bytes

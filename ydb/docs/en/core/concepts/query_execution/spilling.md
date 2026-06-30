@@ -75,7 +75,11 @@ The data transfer system continuously monitors its state:
 
 ## Interaction with Memory Controller
 
-When executing queries, {{ ydb-short-name }} tries to stay within the memory limit set by the [memory controller](../../reference/configuration/memory_controller_config.md). To continue fitting within this limit as intermediate computations grow, spilling is used. For more details, see the [Memory Management section](../../reference/configuration/table_service_config.md#memory-management).
+When executing queries, {{ ydb-short-name }} tries to stay within the memory limit set by the [memory controller](../../reference/configuration/memory_controller_config.md). To continue fitting within this limit as intermediate computations grow, spilling is used.
+
+At the Resource Manager level, the threshold for switching to spilling is set by [`resource_manager.spilling_percent`](../../reference/configuration/table_service_config.md#spilling-percent): when the Query Processor memory pool on a node is filled to the specified percentage, compute operations start preferring disk offload over further RAM growth. The pool size is set by [`query_execution_limit_percent` / `query_execution_limit_bytes`](../../reference/configuration/memory_controller_config.md#query-execution-limit).
+
+For spilling settings and related memory limits, see [Memory Management](../../reference/configuration/table_service_config.md#memory-management) and [Query execution memory limits](../../reference/configuration/table_service_config.md#query-execution-memory-limits).
 
 ## See Also
 

@@ -95,7 +95,7 @@ private:
                     .Utf8("CLOUD_EVENT_USER_SID", UserSID_)
                     .Utf8("CLOUD_EVENT_USER_MASKED_TOKEN", MaskedToken_)
                     .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
-                    .Utf8("CLOUD_EVENT_PEERNAME", PeerName_)
+                    .Utf8("CLOUD_EVENT_PEERNAME", SourceAddress_)
                     .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_);
         } else {
             builder

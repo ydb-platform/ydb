@@ -380,7 +380,7 @@ message TTableServiceConfig {
 
     optional bool EnableSnapshotIsolationRW = 76 [default = true, (InvalidateCompileCache) = true];
     optional bool EnableStreamWrite = 77 [default = false, (InvalidateCompileCache) = true];
-    optional bool EnableBatchUpdates = 78 [default = true];
+    optional bool EnableBatchUpdates = 78 [default = true, deprecated = true];
 
     optional bool AllowMultiBroadcasts = 79 [default = true, (InvalidateCompileCache) = true];
 
@@ -525,8 +525,8 @@ message TTableServiceConfig {
         optional uint64 RemoteSessionInflightBytes = 3 [default = 67108864];
         optional uint64 ReconciliationCount = 4 [default = 3];
         optional uint64 CleanupPeriodMs = 5 [default = 30000];
-        optional uint64 IdlePingPeriodMs = 6 [default = 30000];
-        optional uint64 IdleDestroyPeriodMs = 7 [default = 30000];
+        optional uint64 IdlePingPeriodMs = 6 [default = 60000];
+        optional uint64 IdleDestroyPeriodMs = 7 [default = 120000];
     }
 
     optional TDqChannelConfig DqChannelConfig = 133 [(InvalidateCompileCache) = false];
@@ -537,4 +537,6 @@ message TTableServiceConfig {
     // KqpRewriteHybridRankTopSort logical rewrite, so it changes the compiled plan shape and must
     // invalidate the compile cache when toggled.
     optional bool EnableHybridSearch = 135 [default = true, (InvalidateCompileCache) = true];
+
+    optional bool EnableStrictSerializableIsolation = 136 [default = false, (InvalidateCompileCache) = true];
 };

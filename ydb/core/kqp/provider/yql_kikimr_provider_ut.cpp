@@ -1,5 +1,7 @@
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 
+#include <ydb/core/scheme/scheme_tabledefs.h>
+
 #include <yql/essentials/ast/yql_expr.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 #include <yql/essentials/sql/v1/context.h>
@@ -61,6 +63,24 @@ void Find(const TAstNode* node, const std::function<bool(const TAstNode*)>& pred
 } // anonymous namespace
 
 Y_UNIT_TEST_SUITE(KikimrProvider) {
+    Y_UNIT_TEST(SystemColumnsMatchCoreScheme) {
+        const auto& schemeColumns = NKikimr::GetSystemColumns();
+        const auto& kikimrColumns = KikimrSystemColumns();
+
+        UNIT_ASSERT_VALUES_EQUAL(kikimrColumns.size(), schemeColumns.size());
+        for (const auto& [name, schemeColumn] : schemeColumns) {
+            const auto* kikimrType = kikimrColumns.FindPtr(name);
+            UNIT_ASSERT_C(kikimrType, "Missing KQP system column: " << name);
+            UNIT_ASSERT_VALUES_EQUAL(*kikimrType, NKikimr::NUdf::GetDataSlot(schemeColumn.TypeId));
+        }
+
+        const auto* partitionColumn = schemeColumns.FindPtr(NKikimr::YqlPartitionColumnName);
+        UNIT_ASSERT(partitionColumn);
+        UNIT_ASSERT_VALUES_EQUAL(
+            static_cast<ui32>(partitionColumn->ColumnId),
+            static_cast<ui32>(NKikimr::TKeyDesc::EColumnIdDataShard));
+    }
+
     Y_UNIT_TEST(TestFillAuthPropertiesNone) {
         THashMap<TString, TString> properties;
         TExternalSource source;

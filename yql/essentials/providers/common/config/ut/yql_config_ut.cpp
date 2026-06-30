@@ -1014,6 +1014,96 @@ Y_UNIT_TEST(CustomSerializerOverride) {
     UNIT_ASSERT_VALUES_EQUAL("custom_value", collected[0].second);
 }
 
+Y_UNIT_TEST(SerializationOrderIsAlphabeticRegardlessOfRegistrationOrder) {
+    TConfSetting<TString, EConfSettingType::Static> alphaSettingReversed;
+    TConfSetting<TString, EConfSettingType::Static> betaSettingReversed;
+    TConfSetting<TString, EConfSettingType::Static> charlieSettingReversed;
+    TSettingDispatcher dispatcherReversed;
+    dispatcherReversed.AddSetting("Charlie", charlieSettingReversed);
+    dispatcherReversed.AddSetting("Beta", betaSettingReversed);
+    dispatcherReversed.AddSetting("Alpha", alphaSettingReversed);
+    alphaSettingReversed[ALL_CLUSTERS] = "alpha_value";
+    betaSettingReversed[ALL_CLUSTERS] = "beta_value";
+    charlieSettingReversed[ALL_CLUSTERS] = "charlie_value";
+
+    TConfSetting<TString, EConfSettingType::Static> alphaSettingForward;
+    TConfSetting<TString, EConfSettingType::Static> betaSettingForward;
+    TConfSetting<TString, EConfSettingType::Static> charlieSettingForward;
+    TSettingDispatcher dispatcherForward;
+    dispatcherForward.AddSetting("Alpha", alphaSettingForward);
+    dispatcherForward.AddSetting("Beta", betaSettingForward);
+    dispatcherForward.AddSetting("Charlie", charlieSettingForward);
+    alphaSettingForward[ALL_CLUSTERS] = "alpha_value";
+    betaSettingForward[ALL_CLUSTERS] = "beta_value";
+    charlieSettingForward[ALL_CLUSTERS] = "charlie_value";
+
+    TVector<std::pair<TString, TString>> reversedResult;
+    TVector<std::pair<TString, TString>> forwardResult;
+    dispatcherReversed.SerializeStaticSettings([&](const TString& name, const TString& value) {
+        reversedResult.emplace_back(name, value);
+    });
+    dispatcherForward.SerializeStaticSettings([&](const TString& name, const TString& value) {
+        forwardResult.emplace_back(name, value);
+    });
+
+    UNIT_ASSERT_VALUES_EQUAL(3U, reversedResult.size());
+    UNIT_ASSERT_VALUES_EQUAL(3U, forwardResult.size());
+
+    UNIT_ASSERT_VALUES_EQUAL(reversedResult[0].first, forwardResult[0].first);
+    UNIT_ASSERT_VALUES_EQUAL(reversedResult[1].first, forwardResult[1].first);
+    UNIT_ASSERT_VALUES_EQUAL(reversedResult[2].first, forwardResult[2].first);
+
+    UNIT_ASSERT_VALUES_EQUAL("Alpha", reversedResult[0].first);
+    UNIT_ASSERT_VALUES_EQUAL("Beta", reversedResult[1].first);
+    UNIT_ASSERT_VALUES_EQUAL("Charlie", reversedResult[2].first);
+
+    UNIT_ASSERT_VALUES_EQUAL("alpha_value", reversedResult[0].second);
+    UNIT_ASSERT_VALUES_EQUAL("beta_value", reversedResult[1].second);
+    UNIT_ASSERT_VALUES_EQUAL("charlie_value", reversedResult[2].second);
+}
+
+Y_UNIT_TEST(CountSerializableStaticSettingsEmpty) {
+    TSettingDispatcher dispatcher;
+    TConfSetting<TString, EConfSettingType::Static> setting;
+    dispatcher.AddSetting("MySetting", setting);
+
+    UNIT_ASSERT_VALUES_EQUAL(0U, dispatcher.CountSerializableStaticSettings());
+}
+
+Y_UNIT_TEST(CountSerializableStaticSettingsWithValue) {
+    TSettingDispatcher dispatcher;
+    TConfSetting<TString, EConfSettingType::Static> stringSetting;
+    TConfSetting<i64, EConfSettingType::Static> integerSetting;
+    TConfSetting<TString, EConfSettingType::Static> anotherStringSetting;
+    dispatcher.AddSetting("StringSetting", stringSetting);
+    dispatcher.AddSetting("IntegerSetting", integerSetting);
+    dispatcher.AddSetting("AnotherStringSetting", anotherStringSetting);
+
+    stringSetting[ALL_CLUSTERS] = "string_value";
+    integerSetting[ALL_CLUSTERS] = 42LL;
+
+    UNIT_ASSERT_VALUES_EQUAL(2U, dispatcher.CountSerializableStaticSettings());
+
+    anotherStringSetting[ALL_CLUSTERS] = "another_string_value";
+
+    UNIT_ASSERT_VALUES_EQUAL(3U, dispatcher.CountSerializableStaticSettings());
+}
+
+Y_UNIT_TEST(CountSerializableStaticSettingsMatchesSerializeCount) {
+    TSettingDispatcher dispatcher;
+    TConfSetting<TString, EConfSettingType::Static> stringSetting;
+    TConfSetting<i64, EConfSettingType::Static> integerSetting;
+    dispatcher.AddSetting("Alpha", stringSetting);
+    dispatcher.AddSetting("Beta", integerSetting);
+    stringSetting[ALL_CLUSTERS] = "hello";
+    integerSetting[ALL_CLUSTERS] = 7LL;
+
+    ui64 serializedCount = 0;
+    dispatcher.SerializeStaticSettings([&](const TString&, const TString&) { ++serializedCount; });
+
+    UNIT_ASSERT_VALUES_EQUAL(serializedCount, dispatcher.CountSerializableStaticSettings());
+}
+
 } // Y_UNIT_TEST_SUITE(TSettingDispatcherSerializeTest)
 
 } // namespace NYql::NCommon

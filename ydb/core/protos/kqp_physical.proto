@@ -14,6 +14,7 @@ import "ydb/public/api/protos/ydb_table.proto";
 import "ydb/public/api/protos/ydb_value.proto";
 import "ydb/core/protos/index_builder.proto";
 import "ydb/core/protos/forced_compaction.proto";
+import "ydb/core/protos/set_column_constraint.proto";
 import "ydb/core/protos/sys_view_types.proto";
 
 enum EIsolationLevel {
@@ -25,6 +26,7 @@ enum EIsolationLevel {
     ISOLATION_LEVEL_SNAPSHOT_RO = 5;
     ISOLATION_LEVEL_SNAPSHOT_RW = 6;
     ISOLATION_LEVEL_READ_COMMITTED_RW = 7;
+    ISOLATION_LEVEL_STRICT_SERIALIZABLE = 8;
 };
 
 message TKqpPhyExternalBinding {
@@ -102,6 +104,9 @@ message TKqpPhyColumn {
     // operation.
     optional bool IsBuildInProgress = 7;
     optional TKqpPhySequenceId DefaultFromSequencePathId = 8;
+    // flag that indicates that column is currently under the set not null
+    // operation.
+    optional bool SetNotNullInProgress = 9;
 }
 
 enum EKqpPhyTableKind {
@@ -423,6 +428,14 @@ message TKqpFullTextSource {
 
         // Pre-compiled tokens extracted from jsonpath at query compile time (JSON index only)
         repeated TQueryToken Tokens = 3;
+
+        // Equality bindings for the index prefix columns (KeyColumnNames[0..n-2]).
+        // Each value is a literal or $param expression resolved at task build time.
+        message TPrefixColumn {
+            optional NKikimrKqp.TKqpColumnMetadataProto Column = 1;
+            optional TKqpPhyValue Value = 2;
+        }
+        repeated TPrefixColumn PrefixColumns = 4;
     }
 
     message TIndexTable {
@@ -452,6 +465,10 @@ message TKqpFullTextSource {
     TKqpPhyValue Mode = 14;
 
     optional EKqpFullTextIndexType IndexType = 15;
+
+    // When fulltext index uses __ydb_row_id as doc_id, this is the unique secondary index impl table
+    // (keyed by __ydb_row_id, value = main-table PK columns) used to resolve __ydb_row_id -> PK at read time.
+    optional TIndexTable UniqueIndexImplTable = 16;
 }
 
 message TKqpReadRangesSource {
@@ -666,7 +683,7 @@ message TKqpSchemeOperation {
         NKikimrSchemeOp.TModifyScheme AlterTransfer = 52;
         NKikimrSchemeOp.TModifyScheme DropTransfer = 53;
         NKikimrSchemeOp.TModifyScheme AlterDatabase = 54;
-        NKikimrSchemeOp.TModifyScheme SetConstraint = 55;
+        NKikimrSetColumnConstraint.TSetColumnConstraintSettings SetColumnConstraint = 55;
         NKikimrSchemeOp.TModifyScheme CreateStreamingQuery = 56;
         NKikimrSchemeOp.TModifyScheme AlterStreamingQuery = 57;
         NKikimrSchemeOp.TModifyScheme DropStreamingQuery = 58;

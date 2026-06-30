@@ -267,31 +267,8 @@ bool TOpJoin::PropagateNameConstraints(INameConstraintsContext& ctx) {
 }
 
 bool TOpUnionAll::PropagateNameConstraints(INameConstraintsContext& ctx) {
-    const auto incoming = ctx.GetIncomingForbidden(this);
-    const auto schema = MakeInfoUnitSet(GetOutputIUs());
-
-    bool changed = false;
-    for (ui32 childIdx = 0; childIdx < Children.size(); ++childIdx) {
-        const auto& child = Children[childIdx];
-        const auto childOutput = child->GetOutputIUs();
-        const auto childOutputSet = MakeInfoUnitSet(childOutput);
-
-        TInfoUnitSet childForbidden;
-        for (const auto& iu : childOutput) {
-            if (!schema.contains(iu)) {
-                AddInfoUnit(childForbidden, iu);
-            }
-        }
-        for (const auto& iu : incoming) {
-            if (childOutputSet.contains(iu)) {
-                AddInfoUnit(childForbidden, iu);
-            }
-        }
-
-        changed |= ctx.AddForbiddenToChild(this, childIdx, childForbidden);
-    }
-
-    return changed;
+    Y_UNUSED(ctx);
+    return false;
 }
 
 void ComputePlanNameConstraints(TOpRoot& root) {

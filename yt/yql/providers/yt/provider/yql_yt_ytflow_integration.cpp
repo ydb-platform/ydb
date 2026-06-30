@@ -155,9 +155,19 @@ public:
 
                 uniqueKeys = true;
 
+
+                auto ytState = State_.lock();
+                YQL_ENSURE(ytState, "Failed to get yt state");
+
+                const auto& tableDescription = ytState->TablesData->GetTable(
+                    pathInfo.Table->Cluster, pathInfo.Table->Name, pathInfo.Table->Epoch);
+                const auto& expressionColumns = tableDescription.RowSpec->ExpressionColumns;
+
                 TVector<TStringBuf> sortKeys;
                 for (const auto& [key, _] : pathInfo.Table->RowSpec->GetForeignSort()) {
-                    sortKeys.push_back(key);
+                    if (!expressionColumns.contains(key)) {
+                        sortKeys.push_back(key);
+                    }
                 }
 
                 if (keys != sortKeys) {

@@ -40,6 +40,7 @@ SRCS(
     mirror3of4.cpp
     monitoring.cpp
     multiget.cpp
+    node_warden_cache.cpp
     patch.cpp
     recovery.cpp
     retro_tracing.cpp

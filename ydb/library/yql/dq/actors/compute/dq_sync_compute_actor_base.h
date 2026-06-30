@@ -182,7 +182,8 @@ protected: //TDqComputeActorCheckpoints::ICallbacks
                 continue;
             }
 
-            if (!channelInfo.IsPaused()) {
+            // A finished channel may no longer become paused, but its buffer still needs to be drained.
+            if (!channelInfo.IsPaused() && !channelInfo.Channel->IsFinished()) {
                 return false;
             }
 
@@ -281,8 +282,11 @@ protected:
             // This code is called from TaskRunner (either directly or from input transform/helper code), which is owned by sync CA, so `*this` must be alive at that point
             this->ScheduleIdlenessCheck();
         });
+        this->WatermarkGeneratorTracker.SetNotifyHandler([this](TInstant checkTime) {
+            this->ScheduleSourceIdlenessCheck(checkTime);
+        });
 
-        TaskRunner->Prepare(this->Task, limits, execCtx, &this->WatermarksTracker);
+        TaskRunner->Prepare(this->Task, limits, execCtx, &this->WatermarksTracker, &this->WatermarkGeneratorTracker);
 
         for (auto& [channelId, channel] : this->InputChannelsMap) {
             channel.Channel = TaskRunner->GetInputChannel(channelId);

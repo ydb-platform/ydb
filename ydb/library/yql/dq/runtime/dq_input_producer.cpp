@@ -703,11 +703,11 @@ private:
 
         YQL_ENSURE(width == chunk.size() + 1);
         for (ui32 i = 0; i < chunk.size(); ++i) {
-            result[i] = Factory_.CreateArrowBlock(std::move(chunk[i]));
+            result[i] = Factory_.CreateArrowBlock(std::move(chunk[i]), NYql::DefaultDatumValidationMode);
         }
 
         YQL_ENSURE(blockLen > 0);
-        result[chunk.size()] = Factory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)));
+        result[chunk.size()] = Factory_.CreateArrowBlock(arrow::Datum(std::make_shared<arrow::UInt64Scalar>(blockLen)), NYql::DefaultDatumValidationMode);
         if (Stats_) {
             Stats_.Add(result, width);
         }

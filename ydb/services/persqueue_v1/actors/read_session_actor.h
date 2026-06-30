@@ -410,6 +410,7 @@ private:
     THashMap<TString, i64> MaxLagByTopic;
 
     bool ReadOnlyLocal;
+    bool BatchingSupported = false;
     TDuration CommitInterval;
 
     TSet<TPartitionInfo> AvailablePartitions;

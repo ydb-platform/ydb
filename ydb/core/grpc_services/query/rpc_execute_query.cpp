@@ -71,6 +71,9 @@ bool FillTxSettings(const Ydb::Query::TransactionSettings& from, Ydb::Table::Tra
         case Ydb::Query::TransactionSettings::kReadCommittedReadWrite:
             to.mutable_read_committed_read_write();
             break;
+        case Ydb::Query::TransactionSettings::kStrictSerializableReadWrite:
+            to.mutable_strict_serializable_read_write();
+            break;
         default:
             issues.AddIssue(MakeIssue(NKikimrIssues::TIssuesIds::DEFAULT_ERROR,
                 "Invalid tx_settings"));

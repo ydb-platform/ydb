@@ -1,10 +1,10 @@
 #include "table_description.h"
 
+#include <ydb/core/kqp/provider/yql_kikimr_gateway.h>
 #include <ydb/core/testlib/test_client.h>
 
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_local.h>
-
 #include <library/cpp/testing/unittest/registar.h>
 
 namespace NKikimr {
@@ -64,7 +64,8 @@ Y_UNIT_TEST_SUITE(ConvertColumnTableDictionaryEncodingFeatureFlag) {
                     alter->add_encoding()->mutable_dictionary();
                 }
                 NKikimrSchemeOp::TModifyScheme modifyScheme;
-                ok = BuildAlterColumnTableModifyScheme("/Root/ColumnTable", &req, &modifyScheme, status, error);
+                TIntrusivePtr<NYql::TKikimrTableMetadata> meta = MakeIntrusive<NYql::TKikimrTableMetadata>();
+                ok = BuildAlterColumnTableModifyScheme("/Root/ColumnTable", &req, &modifyScheme, meta, status, error);
             }
 
             ctx.Send(ReplyTo, new TEvConvertResult(TResult{ok, status, error}));

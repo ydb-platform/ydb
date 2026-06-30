@@ -186,6 +186,8 @@ public:
     NCommon::TConfSetting<ui32, Static> _SecureTmpWaitForAclMaxAttempts;
     NCommon::TConfSetting<NYT::TNode, Static> _SecureTmpAttributes;
     NCommon::TConfSetting<ETmpSecurityMode, Static> TmpSecurity;
+    NCommon::TConfSetting<bool, Static> _ParseExpressionColumns;
+    NCommon::TConfSetting<TDuration, Static> _SecureTmpTokenUsersAccessPeriod;
 
     // Job runtime
     NCommon::TConfSetting<TString, Dynamic> Pool;

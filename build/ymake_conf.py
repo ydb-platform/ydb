@@ -1316,7 +1316,7 @@ class GnuToolchain(Toolchain):
             self.c_flags_platform.append('-mthumb')
 
         if target.is_arm_aml403:
-            self.c_flags_platform.append('-march=armv8-a -mthumb')
+            self.c_flags_platform.append('-march=armv8-a')
             self.setup_amlogic_rtos_sdk()
 
         if target.is_arm64_aml403:
@@ -1325,6 +1325,7 @@ class GnuToolchain(Toolchain):
 
         if target.is_arm_ats3089p and target.is_zephyr:
             self.c_flags_platform.append('-mcpu=cortex-m33+nodsp -mfpu=fpv5-sp-d16 -mabi=aapcs -mthumb -mfloat-abi=hard')
+            self.setup_actions_zephyr_sdk()
 
         if target.is_rv32imc:
             self.c_flags_platform.append('-march=rv32imc')
@@ -1392,6 +1393,9 @@ class GnuToolchain(Toolchain):
 
     def setup_amlogic64_rtos_sdk(self):
         self.platform_projects.insert(0, 'build/internal/platform/amlogic64_rtos')
+
+    def setup_actions_zephyr_sdk(self):
+        self.platform_projects.insert(0, 'build/internal/platform/actions_zephyr')
 
     def setup_allwinner_rtos_sdk(self):
         self.platform_projects.insert(0, 'build/internal/platform/allwinner_rtos')
@@ -1782,6 +1786,9 @@ class Linker(object):
         if not self.tc.is_from_arcadia or is_positive('EXPORT_CMAKE'):
             # External (e.g. system) toolchain: disable linker selection logic
             return None
+
+        if self.build.target.is_freertos or self.build.target.is_zephyr:
+            return Linker.BFD
 
         if self.build.target.is_android:
             # Android toolchain is NDK, LLD works on all supported platforms

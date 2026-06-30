@@ -4,6 +4,7 @@
 
 #include <ydb/core/actorlib_impl/long_timer.h>
 #include <ydb/core/base/tablet_pipecache.h>
+#include <ydb/core/base/table_index.h>
 #include <ydb/core/engine/minikql/minikql_engine_host.h>
 #include <ydb/core/kqp/common/kqp_resolve.h>
 #include <ydb/core/kqp/gateway/kqp_gateway.h>
@@ -16,6 +17,8 @@
 #include <ydb/core/kqp/runtime/kqp_scan_data.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor_impl.h>
 #include <ydb/core/tx/sequenceproxy/public/events.h>
+
+#include <util/generic/bitops.h>
 
 #include <list>
 
@@ -45,15 +48,17 @@ class TKqpSequencerActor : public NActors::TActorBootstrapped<TKqpSequencerActor
         NUdf::TUnboxedValue UvLiteral;
         Ydb::TypedValue Literal;
         bool InitialiedLiteral = false;
-        TCProto::EDefaultKind DefaultKind = TCProto::DEFAULT_KIND_UNSPECIFIED; 
+        bool BitReverseSequenceValue = false;
+        TCProto::EDefaultKind DefaultKind = TCProto::DEFAULT_KIND_UNSPECIFIED;
 
         explicit TColumnSequenceInfo(const ::NKikimrKqp::TKqpColumnMetadataProto& proto)
             : TypeInfo(BuildTypeInfo(proto))
+            , BitReverseSequenceValue(proto.GetBitReverseSequenceValue())
             , DefaultKind(proto.GetDefaultKind())
         {
             if (DefaultKind == TCProto::DEFAULT_KIND_SEQUENCE) {
                 DefaultFromSequence = proto.GetDefaultFromSequence();
-                DefaultFromSequencePathId = TPathId(proto.GetDefaultFromSequencePathId().GetOwnerId(), 
+                DefaultFromSequencePathId = TPathId(proto.GetDefaultFromSequencePathId().GetOwnerId(),
                     proto.GetDefaultFromSequencePathId().GetTableId());
             }
 
@@ -234,6 +239,12 @@ private:
                     *rowItems++ = defaultV;
                 } else if (columnInfo.IsDefaultFromSequence()) {
                     i64 nextVal = columnInfo.AcquireNextVal();
+                    if (columnInfo.BitReverseSequenceValue) {
+                        // Set only for __ydb_row_id: apply the shared row-id layout (spread high bits,
+                        // dense seq low bits) so online-inserted values match the backfill scan
+                        // (secondary_index.cpp).
+                        nextVal = static_cast<i64>(NKikimr::NTableIndex::NFulltext::RowIdFromSeq(static_cast<ui64>(nextVal)));
+                    }
                     *rowItems++ = NUdf::TUnboxedValuePod(nextVal);
                     rowSize += sizeof(NUdf::TUnboxedValuePod);
                     hasSequences &= columnInfo.HasValues();

@@ -574,13 +574,13 @@ namespace NKikimr::NHttpProxy {
             #undef DECLARE_DATASTREAMS_PROCESSOR
         }
 
-        THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
+        THttpResponseData MakeError(const THttpRequestContext& httpContext, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
             const auto exception = MapToException(Status, "", issueCode);
             return {
                 .HttpCode = static_cast<ui32>(exception.second),
-                .ContentType = contentType,
+                .ContentType = httpContext.ContentType,
                 .Message = exception.first,
-                .Body = NDataStreams::Serialize(contentType, NDataStreams::TErrorResponse{
+                .Body = NDataStreams::Serialize(httpContext.ContentType, NDataStreams::TErrorResponse{
                     .Exception = exception,
                     .ErrorText = TString(message),
                 })

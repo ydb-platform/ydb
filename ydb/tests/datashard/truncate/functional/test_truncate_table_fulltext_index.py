@@ -8,7 +8,7 @@ CLUSTER_CONFIG = dict(
         'TX_DATASHARD': LogLevels.DEBUG,
         'KQP_PROXY': LogLevels.DEBUG,
     },
-    extra_feature_flags=["enable_fulltext_index", "enable_truncate_table"]
+    extra_feature_flags=["enable_fulltext_index", "enable_fulltext_index_prefix", "enable_truncate_table"]
 )
 
 
@@ -189,6 +189,80 @@ def test_truncate_table_with_fulltext_index_with_query_service_many_sessions(ydb
             select_empty_results()
             upsert_some_texts()
             select_empty_results()
+
+        verify_index_works_correctly()
+
+        for _ in range(5):
+            truncate_table()
+            verify_index_works_correctly()
+
+
+def test_truncate_table_with_prefixed_fulltext_index_with_query_service(ydb_cluster, ydb_database, ydb_client):
+    """Test truncate table with prefixed (filtered) fulltext index using query service."""
+    driver = ydb_client(ydb_database)
+    driver.wait(timeout=10)
+
+    with ydb.QuerySessionPool(driver) as session_pool:
+        session_pool.execute_with_retries('''
+            CREATE TABLE `Texts` (
+                Key Uint64,
+                UserId Uint64,
+                Text String,
+                Data String,
+                PRIMARY KEY (Key)
+            );
+        ''')
+
+        session_pool.execute_with_retries('''
+            ALTER TABLE `Texts` ADD INDEX fulltext_idx
+                GLOBAL USING fulltext_plain
+                ON (UserId, Text)
+                WITH (tokenizer=standard, use_filter_lowercase=true)
+        ''')
+
+        def upsert_some_texts():
+            session_pool.execute_with_retries('''
+                UPSERT INTO `Texts` (Key, UserId, Text, Data) VALUES
+                    (100, 1, "Cats love cats.", "cats data"),
+                    (200, 1, "Dogs love foxes.", "dogs data"),
+                    (300, 2, "Cats love milk.", "more cats data")
+            ''')
+
+        def select_empty_results():
+            result = session_pool.execute_with_retries('''
+                SELECT `Key`, `Text`
+                FROM `Texts` VIEW `fulltext_idx`
+                WHERE UserId = 1 AND FulltextMatch(`Text`, "404 not found")
+                ORDER BY `Key`;
+            ''')
+            assert_that(len(result[0].rows), equal_to(0))
+
+        def select_with_results():
+            result = session_pool.execute_with_retries('''
+                SELECT `Key`, `Text`
+                FROM `Texts` VIEW `fulltext_idx`
+                WHERE UserId = 1 AND FulltextMatch(`Text`, "cats")
+                ORDER BY `Key`;
+            ''')
+            assert_that(len(result[0].rows), equal_to(1))
+            assert_that(result[0].rows[0]['Key'], equal_to(100))
+
+        def truncate_table():
+            session_pool.execute_with_retries('''
+                TRUNCATE TABLE `Texts`;
+            ''')
+
+            result = session_pool.execute_with_retries('''
+                SELECT *
+                FROM `Texts`;
+            ''')
+            assert_that(len(result[0].rows), equal_to(0))
+
+        def verify_index_works_correctly():
+            select_empty_results()
+            upsert_some_texts()
+            select_empty_results()
+            select_with_results()
 
         verify_index_works_correctly()
 

@@ -1,8 +1,44 @@
 # Yandex Enterprise Database changelog
 
+## Version 25.4 {#25-4}
+
+### Version 25.4.1.ent.2 {#25-4-1-ent-2}
+
+Release date: June 17, 2026.
+
+This version includes all improvements from {{ ydb-short-name }} 25.4.1.15; see the [changelog](./changelog-server.md#25-4-1-15). It also includes all [additional fixes](#25-2-1-ent-13-extras) listed below for version 25.2.1.ent.13.
+
+## Version 25.3 {#25-3}
+
+### Version 25.3.1.ent.3 {#25-3-1-ent-3}
+
+Release date: June 11, 2026.
+
+This version includes all improvements from {{ ydb-short-name }} 25.3.1.27; see the [changelog](./changelog-server.md#25-3-1-27). It also includes all [additional fixes](#25-2-1-ent-13-extras) listed below for version 25.2.1.ent.13.
+
 ## Version 25.2 {#25-2}
 
-### Version 25.2.1.ent.4 {#24-2-1-ent-4}
+### Version 25.2.1.ent.13 {#25-2-1-ent-13}
+
+Release date: June 11, 2026.
+
+This version includes all improvements from {{ ydb-short-name }} 25.2.1.26; see the [changelog](./changelog-server.md#25-2-1-26). It also includes a number of additional improvements ported from the current 26.1 version.
+
+#### Additional Fixes {#25-2-1-ent-13-extras}
+
+The following changes were ported from version 26.1 into supported stable versions of Yandex Enterprise Database:
+
+* Fixed a bug that violated the sort order specified in the query when accessing system tables.
+* Fixed a bug in internal state integrity check logic that in rare cases could cause a single (not mass) restart of storage nodes.
+* Added an optimization that allows filtering rows by index columns before querying the main table, reducing the number of accesses to the main table when executing certain types of queries.
+* Implemented a set of fixes in index access (StreamIndexLookup) that eliminates the possibility of rare situations where executed queries could hang, and reduces RAM consumption during query execution.
+* Added an optimization that reduces memory consumption when processing queries with the TopSort operation (`SELECT ... ORDER BY x LIMIT n`).
+* Added support for index materialization during backup and restore.
+* TLI (Transaction Locks Invalidated) error messages now always include either an identifier or the path of the affected table.
+* Lock metrics have been added to query statistics provided through the `.sys/query_metrics_*` system tables.
+* Invalid views can now be restored from a backup. This allows restoring backups created from databases containing such views without additional actions from the administrator.
+
+### Version 25.2.1.ent.4 {#25-2-1-ent-4}
 
 Release date: February 12, 2026.
 
@@ -46,7 +82,7 @@ Release date: February 12, 2026.
 
 ## Version 25.1 {#25-1}
 
-### Version 25.1.4.ent.8 {#24-1-4-ent-8}
+### Version 25.1.4.ent.8 {#25-1-4-ent-8}
 
 Release date: February 12, 2026.
 
@@ -55,7 +91,7 @@ Release date: February 12, 2026.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/29940) an [issue](https://github.com/ydb-platform/ydb/issues/29903) where named expression containing another named expression caused incorrect `VIEW` backup
 * [Fixed](https://github.com/ydb-platform/ydb/commit/c3b025603a6ba71d27ef0f1f66b9f643407643b3) descending sorting not working in queries to system views.
 
-### Version 25.1.4.ent.3 {#24-1-4-ent-3}
+### Version 25.1.4.ent.3 {#25-1-4-ent-3}
 
 Release date: November 25, 2025.
 
@@ -174,7 +210,7 @@ Release date: November 25, 2025.
 
 ## Version 24.4 {#24-4}
 
-### Version 24.4.4.15 {#24-4-4-20}
+### Version 24.4.4.20 {#24-4-4-20}
 
 Release date: November 1, 2025.
 

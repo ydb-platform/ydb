@@ -15,8 +15,6 @@ namespace {
 
 TKikimrSettings GetTestSettings() {
     auto appConfig = NKikimrConfig::TAppConfig();
-    appConfig.MutableTableServiceConfig()->SetEnableBatchUpdates(true);
-
     auto logConfig = TTestLogSettings()
         .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_EXECUTER, NLog::EPriority::PRI_TRACE)
         .AddLogPriority(NKikimrServices::EServiceKikimr::KQP_COMPUTE, NLog::EPriority::PRI_INFO);
@@ -130,7 +128,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
 
         const auto executeAndTestError = [&](const std::string& query, const std::vector<std::string>& expectedIssues) {
             const auto result = kikimr.RunCall([&]{
-                return db.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+                return db.ExecuteQuery(query, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
             });
 
             UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
@@ -184,7 +182,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         )", tableName);
 
         const auto result = kikimr.RunCall([&]{
-            return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
+            return db.ExecuteQuery(batchQuery, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
         });
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
@@ -220,7 +218,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         )", tableName);
 
         const auto result = kikimr.RunCall([&]{
-            return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
+            return db.ExecuteQuery(batchQuery, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
         });
 
         // An error is expected because the actor is in the PrepareState and does not know what to do with the unknown event
@@ -285,7 +283,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         )", tableName);
 
         const auto result = kikimr.RunCall([&]{
-            return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
+            return db.ExecuteQuery(batchQuery, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
         });
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
@@ -359,7 +357,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         )", tableName);
 
         const auto result = kikimr.RunCall([&]{
-            return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
+            return db.ExecuteQuery(batchQuery, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
         });
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::ABORTED, result.GetIssues().ToString());
@@ -433,7 +431,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         )", tableName);
 
         const auto result = kikimr.RunCall([&]{
-            return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
+            return db.ExecuteQuery(batchQuery, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
         });
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::TIMEOUT, result.GetIssues().ToString());
@@ -496,7 +494,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         )", tableName);
 
         auto queryFuture = kikimr.RunInThreadPool([&] {
-            return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
+            return db.ExecuteQuery(batchQuery, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
         });
 
         // Wait for all responses to be captured
@@ -592,7 +590,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         )", tableName);
 
         const auto result = kikimr.RunCall([&]{
-            return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
+            return db.ExecuteQuery(batchQuery, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
         });
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::UNAVAILABLE, result.GetIssues().ToString());
@@ -665,7 +663,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         )", tableName);
 
         auto queryFuture = kikimr.RunInThreadPool([&] {
-            return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
+            return db.ExecuteQuery(batchQuery, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
         });
 
         // Wait for all delayed events to be captured
@@ -760,7 +758,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         )", tableName);
 
         const auto result = kikimr.RunCall([&]{
-            return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
+            return db.ExecuteQuery(batchQuery, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
         });
 
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::INTERNAL_ERROR, result.GetIssues().ToString());
@@ -883,7 +881,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
 
         for (size_t i = 0; i < maxQueryId; ++i) {
             const auto result = kikimr.RunCall([&]{
-                return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
+                return db.ExecuteQuery(batchQuery, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
             });
 
             if (i + 1 < maxQueryId) {
@@ -960,7 +958,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         )", tableName);
 
         const auto result = kikimr.RunCall([&]{
-            return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
+            return db.ExecuteQuery(batchQuery, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
         });
 
         // An error is expected because the actor is in the ExecuteState and does not know what to do with the unknown event
@@ -1042,7 +1040,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         )", tableName);
 
         auto queryFuture = kikimr.RunInThreadPool([&] {
-            return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
+            return db.ExecuteQuery(batchQuery, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
         });
 
         // Wait for all abort events to be captured
@@ -1140,7 +1138,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         )", tableName);
 
         auto queryFuture = kikimr.RunInThreadPool([&] {
-            return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
+            return db.ExecuteQuery(batchQuery, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
         });
 
         // Wait for all abort events to be captured
@@ -1239,7 +1237,7 @@ Y_UNIT_TEST_SUITE(KqpBatchPEA) {
         )", tableName);
 
         auto queryFuture = kikimr.RunInThreadPool([&] {
-            return db.ExecuteQuery(batchQuery, TTxControl::NoTx()).GetValueSync();
+            return db.ExecuteQuery(batchQuery, TTxControl::NoTx(), NoRetryExecuteQuerySettings()).GetValueSync();
         });
 
         // Wait for all abort events to be captured

@@ -192,6 +192,7 @@ runs:
           --test-threads "${{ inputs.test_threads }}" --link-threads "${{ inputs.link_threads }}"
           -DUSE_EAT_MY_DATA
           --add-peerdirs-tests all
+          --cleanup-child-processes
         )
 
         TEST_RETRY_COUNT=${{ inputs.test_retry_count }}
@@ -204,9 +205,6 @@ runs:
           relwithdebinfo)
             params+=(--build "relwithdebinfo")
             ;;
-          profile)
-            params+=(--build "profile")
-            ;;
           release)
             params+=(--build "release")
             ;;
@@ -214,7 +212,6 @@ runs:
             params+=(
               --build "release" --sanitize="address"
             )
-            IS_TEST_RESULT_IGNORED=1
             ;;
           release-tsan)
             params+=(

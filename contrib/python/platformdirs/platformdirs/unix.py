@@ -124,6 +124,31 @@ class _UnixDefaults(PlatformDirsABC):  # noqa: PLR0904
         return _get_user_media_dir("XDG_DESKTOP_DIR", "~/Desktop")
 
     @property
+    def user_projects_dir(self) -> str:
+        """:returns: projects directory tied to the user, e.g. ``~/Projects``"""
+        return _get_user_media_dir("XDG_PROJECTS_DIR", "~/Projects")
+
+    @property
+    def user_publicshare_dir(self) -> str:
+        """:returns: public share directory tied to the user, e.g. ``~/Public``"""
+        return _get_user_media_dir("XDG_PUBLICSHARE_DIR", "~/Public")
+
+    @property
+    def user_templates_dir(self) -> str:
+        """:returns: templates directory tied to the user, e.g. ``~/Templates``"""
+        return _get_user_media_dir("XDG_TEMPLATES_DIR", "~/Templates")
+
+    @property
+    def user_fonts_dir(self) -> str:
+        """:returns: fonts directory tied to the user, e.g. ``~/.local/share/fonts``"""
+        return f"{os.path.expanduser('~/.local/share')}/fonts"  # noqa: PTH111  # API returns str, not Path
+
+    @property
+    def user_preference_dir(self) -> str:
+        """:returns: preference directory tied to the user, same as ``user_config_dir``"""
+        return self.user_config_dir
+
+    @property
     def user_bin_dir(self) -> str:
         """:returns: bin directory tied to the user, e.g. ``~/.local/bin``"""
         return os.path.expanduser("~/.local/bin")  # noqa: PTH111

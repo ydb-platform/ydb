@@ -199,8 +199,11 @@ namespace NKikimr::NHttpProxy {
 
             void ReplyWithYdbError(const TActorContext& ctx, NYdb::EStatus status, const TString& errorText, size_t issueCode = ISSUE_CODE_GENERIC) {
                 const auto [errorName, httpCode] = MapToException(status, Method, issueCode);
+                ReplyWithYdbError(ctx, errorName, errorText, httpCode);
+            }
 
-                ctx.Send(MakeMetricsServiceID(),
+            void ReplyWithYdbError(const TActorContext& ctx, const TString& errorName, const TString& errorText, ui32 httpCode) {
+                    ctx.Send(MakeMetricsServiceID(),
                          new TEvServerlessProxy::TEvCounter{
                              1, true, true,
                              AddCommonLabels({
@@ -212,7 +215,7 @@ namespace NKikimr::NHttpProxy {
                     .HttpCode = static_cast<ui32>(httpCode),
                     .ContentType = HttpContext.ContentType,
                     .Message = errorName,
-                    .Body = NSQS::Serialize(HttpContext.ContentType, {
+                    .Body = NSQS::Serialize(HttpContext, {
                         .StatusCode = errorName,
                         .ErrorText = errorText,
                     })
@@ -243,7 +246,7 @@ namespace NKikimr::NHttpProxy {
                     .HttpCode = httpStatusCode,
                     .ContentType = HttpContext.ContentType,
                     .Message = ymqStatusCode,
-                    .Body = NSQS::Serialize(HttpContext.ContentType, {
+                    .Body = NSQS::Serialize(HttpContext, {
                         .StatusCode = ymqStatusCode,
                         .ErrorText = errorText,
                     })
@@ -321,7 +324,7 @@ namespace NKikimr::NHttpProxy {
                         .HttpCode = 200,
                         .ContentType = HttpContext.ContentType,
                         .Message = "",
-                        .Body = NSQS::Serialize(HttpContext.ContentType, *ev->Get()->Message)
+                        .Body = NSQS::Serialize(HttpContext, *ev->Get()->Message)
                     }, ev->Get()->Message->ByteSizeLong());
                 } else {
                     auto retryClass =
@@ -388,13 +391,16 @@ namespace NKikimr::NHttpProxy {
             void Bootstrap(const TActorContext& ctx) {
                 StartTime = ctx.Now();
                 try {
-                    NSQS::Deserialize<TProtoRequest>(HttpContext.ContentType, Request, HttpContext.Request->Body);
+                    NSQS::Deserialize<TProtoRequest>(HttpContext, Request);
                 } catch (const NKikimr::NSQS::TSQSException& e) {
                     NYds::EErrorCodes issueCode = NYds::EErrorCodes::OK;
-                    if (e.ErrorClass.ErrorCode == "MissingParameter")
+                    if (e.ErrorClass.ErrorCode == "MissingParameter") {
                         issueCode = NYds::EErrorCodes::MISSING_PARAMETER;
-                    else if (e.ErrorClass.ErrorCode == "InvalidQueryParameter" || e.ErrorClass.ErrorCode == "MalformedQueryString")
+                    } else if (e.ErrorClass.ErrorCode == "InvalidParameterValue") {
+                        return ReplyWithYdbError(ctx, "InvalidParameterValue", e.what(), static_cast<ui32>(e.ErrorClass.HttpStatusCode));
+                    } else if (e.ErrorClass.ErrorCode == "InvalidQueryParameter" || e.ErrorClass.ErrorCode == "MalformedQueryString") {
                         issueCode = NYds::EErrorCodes::INVALID_ARGUMENT;
+                    }
                     return ReplyWithYdbError(ctx, NYdb::EStatus::BAD_REQUEST, e.what(), static_cast<size_t>(issueCode));
                 } catch (const std::exception& e) {
                     YDB_LOG_WARN_CTX(ctx, "Got new request with incorrect json from database",
@@ -515,13 +521,13 @@ namespace NKikimr::NHttpProxy {
                 #undef DECLARE_SQS_TOPIC_PROCESSOR_QUEUE_KNOWN
             }
 
-            THttpResponseData MakeError(MimeTypes contentType, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
+            THttpResponseData MakeError(const THttpRequestContext& httpContext, NYdb::EStatus Status, const TStringBuf message, size_t issueCode) const override {
                 const auto [errorName, httpCode] = MapToException(Status, "", issueCode);
                 return {
                     .HttpCode = static_cast<ui32>(httpCode),
-                    .ContentType = contentType,
+                    .ContentType = httpContext.ContentType,
                     .Message = errorName,
-                    .Body = NSQS::Serialize(contentType, NSQS::TErrorResponse{
+                    .Body = NSQS::Serialize(httpContext, NSQS::TErrorResponse{
                         .StatusCode = errorName,
                         .ErrorText = TString(message),
                     })

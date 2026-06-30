@@ -206,7 +206,7 @@ void FormatValue(
         replicationCard.ReplicationCardCollocationId);
 }
 
-TString ToString(
+std::string ToString(
     const TReplicationCard& replicationCard,
     std::optional<TReplicationProgressProjection> replicationProgressProjection)
 {

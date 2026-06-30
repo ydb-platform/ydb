@@ -282,6 +282,7 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
         }
         column.Family = col.GetFamily();
         column.NotNull = col.GetNotNull();
+        column.SetNotNullInProgress = col.GetSetNotNullInProgress();
     }
 
     for (const auto& col : descr.GetDropColumns()) {
@@ -327,8 +328,8 @@ void TUserTable::ParseProto(const NKikimrSchemeOp::TTableDescription& descr)
     ReplicationConfig = TReplicationConfig(descr.GetReplicationConfig());
     IncrementalBackupConfig = TIncrementalBackupConfig(descr.GetIncrementalBackupConfig());
     UniqueIndexKeySize = descr.GetUniqueIndexKeySize();
-    if (descr.HasIndexImplType()) {
-        IndexImplType = descr.GetIndexImplType();
+    if (descr.HasTableType()) {
+        TableType = descr.GetTableType();
     }
 
     CheckSpecialColumns();
@@ -471,7 +472,7 @@ void TUserTable::DoApplyCreate(
         const TUserColumn& column = col.second;
 
         auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-        alter.AddColumnWithTypeInfo(tid, column.Name, columnId, columnType.TypeId, columnType.TypeInfo, column.NotNull, false);
+        alter.AddColumnWithTypeInfo(tid, column.Name, columnId, columnType.TypeId, columnType.TypeInfo, column.NotNull, false, {}, column.SetNotNullInProgress);
         alter.AddColumnToFamily(tid, columnId, column.Family);
     }
 
@@ -507,6 +508,10 @@ void TUserTable::DoApplyCreate(
             }
             alter.SetByKeyFilterPrefixes(tid, prefixes);
         }
+    }
+
+    if (TableType != NKikimrSchemeOp::ESpecialTableTypeNone) {
+        alter.SetSpecialTableType(tid, static_cast<ui32>(TableType));
     }
 
     // N.B. some settings only apply to the main table
@@ -593,10 +598,10 @@ void TUserTable::ApplyAlter(
         const TUserColumn& column = col.second;
 
         auto it = oldTable.Columns.find(colId);
-        if (it == oldTable.Columns.end() || it->second.NotNull != column.NotNull) {
+        if (it == oldTable.Columns.end() || it->second.NotNull != column.NotNull || it->second.SetNotNullInProgress != column.SetNotNullInProgress) {
             for (ui32 tid : tids) {
                 auto columnType = NScheme::ProtoColumnTypeFromTypeInfoMod(column.Type, column.TypeMod);
-                alter.AddColumnWithTypeInfo(tid, column.Name, colId, columnType.TypeId, columnType.TypeInfo, column.NotNull, false);
+                alter.AddColumnWithTypeInfo(tid, column.Name, colId, columnType.TypeId, columnType.TypeInfo, column.NotNull, false, {}, column.SetNotNullInProgress);
             }
         }
 

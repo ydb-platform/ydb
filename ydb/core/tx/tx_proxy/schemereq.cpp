@@ -787,6 +787,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         const NKikimrSchemeOp::TModifyScheme& pbModifyScheme,
         const NKikimrPQ::TPQTabletConfig& config
     ) {
+        if (pbModifyScheme.GetInternal()) {
+            return;
+        }
+
         const auto dlqPaths = NPQ::CollectDLQTopicPaths(
             config,
             GetRequestProto().GetDatabaseName(),

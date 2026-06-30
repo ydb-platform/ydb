@@ -1,5 +1,9 @@
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/session_pool.h>
 
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/exceptions/exceptions.h>
+
+#include <util/system/thread.h>
+
 #include <deque>
 #include <memory>
 #include <mutex>
@@ -79,14 +83,14 @@ struct TCoordinationSessionPool::TImpl {
         , Settings_(std::move(settings))
     {
         if (Settings_.PoolSize_ == 0) {
-            throw TYdbLockException("Session pool size must be positive");
+            throw TYdbException("Session pool size must be positive");
         }
 
         for (size_t i = 0; i < Settings_.PoolSize_; ++i) {
-            auto session = StartSession();
+            auto session = StartSessionWithRetry();
             if (!session) {
                 CloseAll();
-                throw TYdbLockException("Failed to start session");
+                throw TYdbException("Failed to start session");
             }
             Sessions_.push_back(std::move(*session));
         }
@@ -96,18 +100,10 @@ struct TCoordinationSessionPool::TImpl {
         CloseAll();
     }
 
-    std::optional<TSession> GetAny(TSessionLostCallback onLost) noexcept {
-        while (auto pooled = PopIdleSession()) {
+    std::optional<TSession> GetAny(TSessionLostCallback onLost) {
+        if (auto pooled = PopIdleSession()) {
             if (pooled->State->IsLost() || !pooled->State->SetOnLost(onLost)) {
-                CloseSession(pooled->Session);
-                pooled = StartSession();
-                if (!pooled) {
-                    return std::nullopt;
-                }
-                if (!pooled->State->SetOnLost(onLost)) {
-                    CloseSession(pooled->Session);
-                    return std::nullopt;
-                }
+                RefreshPooledSession(*pooled, onLost);
             }
 
             auto session = pooled->Session;
@@ -130,7 +126,7 @@ struct TCoordinationSessionPool::TImpl {
         const bool lost = pooled->State->ClearOnLost();
         if (lost) {
             CloseSession(pooled->Session);
-            pooled = StartSession();
+            pooled = StartSessionWithRetry();
             if (!pooled) {
                 return;
             }
@@ -149,7 +145,7 @@ struct TCoordinationSessionPool::TImpl {
         pooled->State->ClearOnLost();
         CloseSession(pooled->Session);
 
-        auto replacement = StartSession();
+        auto replacement = StartSessionWithRetry();
         if (!replacement) {
             return false;
         }
@@ -192,7 +188,20 @@ private:
         return pooled;
     }
 
-    std::optional<TPooledSession> StartSession() noexcept {
+    void RestoreIdleSession(TPooledSession&& pooled) {
+        std::lock_guard guard(Lock_);
+        Sessions_.push_back(std::move(pooled));
+    }
+
+    TDuration GetStartSessionRetryDeadline() const {
+        const auto& settings = Settings_.SessionSettings_;
+        if (settings.Timeout_ == TDuration::Max()) {
+            return TDuration::Max();
+        }
+        return settings.Timeout_ * settings.ReconnectSessionTimeoutMultiplier_;
+    }
+
+    std::optional<TPooledSession> StartSessionOnce() noexcept {
         auto state = std::make_shared<TPooledSessionState>();
         auto settings = Settings_.SessionSettings_;
         auto userOnStateChanged = settings.OnStateChanged_;
@@ -224,6 +233,60 @@ private:
             };
         } catch (...) {
             return std::nullopt;
+        }
+    }
+
+    std::optional<TPooledSession> StartSessionWithRetry() {
+        const auto& settings = Settings_.SessionSettings_;
+        const TDuration retryDeadline = GetStartSessionRetryDeadline();
+        const TInstant deadline = retryDeadline == TDuration::Max()
+            ? TInstant::Max()
+            : TInstant::Now() + retryDeadline;
+        TDuration backoff = settings.ReconnectBackoffDelay_;
+
+        while (true) {
+            if (auto session = StartSessionOnce()) {
+                return session;
+            }
+
+            if (deadline != TInstant::Max() && TInstant::Now() >= deadline) {
+                return std::nullopt;
+            }
+
+            TDuration sleepDuration = backoff;
+            if (deadline != TInstant::Max()) {
+                const TDuration remaining = deadline - TInstant::Now();
+                if (remaining <= TDuration::Zero()) {
+                    return std::nullopt;
+                }
+                sleepDuration = Min(sleepDuration, remaining);
+            }
+            Sleep(sleepDuration);
+
+            if (settings.Timeout_ != TDuration::Max()) {
+                backoff = Min(
+                    backoff * settings.ReconnectBackoffMultiplier_,
+                    settings.Timeout_);
+            } else {
+                backoff = backoff * settings.ReconnectBackoffMultiplier_;
+            }
+        }
+    }
+
+    void RefreshPooledSession(TPooledSession& pooled, TSessionLostCallback& onLost) {
+        CloseSession(pooled.Session);
+
+        auto replacement = StartSessionWithRetry();
+        if (!replacement) {
+            RestoreIdleSession(std::move(pooled));
+            throw TYdbException("Failed to start session");
+        }
+
+        pooled = std::move(*replacement);
+        if (!pooled.State->SetOnLost(onLost)) {
+            CloseSession(pooled.Session);
+            RestoreIdleSession(std::move(pooled));
+            throw TYdbException("Failed to start session");
         }
     }
 
@@ -300,7 +363,7 @@ TCoordinationSessionPool TClient::CreateSessionPool(
 
 TDistributedLock TCoordinationSessionPool::CreateDistributedLock(const TDistributedLockSettings& settings) {
     if (!Impl_) {
-        throw TYdbLockException("Session pool is not initialized");
+        throw TYdbException("Session pool is not initialized");
     }
     return TDistributedLock(*this, settings);
 }

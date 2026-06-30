@@ -11,6 +11,7 @@
 #include <util/system/hostname.h>
 #include <util/system/thread.h>
 
+#include <atomic>
 #include <mutex>
 #include <optional>
 
@@ -376,6 +377,71 @@ Y_UNIT_TEST_SUITE(DistributedLock) {
         lock.lock();
         UNIT_ASSERT(!lock.GetStopToken().stop_requested());
         lock.unlock();
+    }
+
+    Y_UNIT_TEST(SessionPoolGetAnyRetriesFailedRefresh) {
+        TTestEnv env;
+        auto lostPromise = NThreading::NewPromise();
+        auto lostFuture = lostPromise.GetFuture();
+        std::atomic<bool> anySessionLost = false;
+        auto pool = env.Client->CreateSessionPool(
+            COORD_PATH,
+            TCoordinationSessionPoolSettings()
+                .PoolSize(2)
+                .SessionSettings(TSessionSettings()
+                    .Timeout(TEST_TIMEOUT)
+                    .OnStopped([&anySessionLost, lostPromise]() mutable {
+                        if (!anySessionLost.exchange(true)) {
+                            lostPromise.SetValue();
+                        }
+                    })));
+
+        env.CoordinationService.MaxPingResponses.store(2);
+        UNIT_ASSERT(lostFuture.Wait(TDuration::Seconds(5)));
+        env.CoordinationService.MaxPingResponses.store(0);
+
+        const size_t startsBeforeRefresh = env.CoordinationService.StartedSessions.load();
+        env.CoordinationService.FailNextSessionStarts.store(1);
+
+        auto session = pool.GetAny();
+        UNIT_ASSERT(session);
+
+        env.CoordinationService.FailNextSessionStarts.store(0);
+        pool.Return(std::move(*session));
+        UNIT_ASSERT_VALUES_EQUAL(env.CoordinationService.FailNextSessionStarts.load(), 0u);
+        UNIT_ASSERT_VALUES_EQUAL(env.CoordinationService.StartedSessions.load(), startsBeforeRefresh + 1u);
+    }
+
+    Y_UNIT_TEST(SessionPoolGetAnyRefreshFailurePreservesPoolSize) {
+        TTestEnv env;
+        auto lostPromise = NThreading::NewPromise();
+        auto lostFuture = lostPromise.GetFuture();
+        std::atomic<bool> anySessionLost = false;
+        auto pool = env.Client->CreateSessionPool(
+            COORD_PATH,
+            TCoordinationSessionPoolSettings()
+                .PoolSize(2)
+                .SessionSettings(TSessionSettings()
+                    .Timeout(TEST_TIMEOUT)
+                    .OnStopped([&anySessionLost, lostPromise]() mutable {
+                        if (!anySessionLost.exchange(true)) {
+                            lostPromise.SetValue();
+                        }
+                    })));
+
+        env.CoordinationService.MaxPingResponses.store(2);
+        UNIT_ASSERT(lostFuture.Wait(TDuration::Seconds(5)));
+        env.CoordinationService.MaxPingResponses.store(0);
+
+        env.CoordinationService.FailAllSessionStarts.store(true);
+        UNIT_ASSERT_EXCEPTION(pool.GetAny(), TYdbException);
+        env.CoordinationService.FailAllSessionStarts.store(false);
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 2u);
+
+        auto recoveredSession = pool.GetAny();
+        UNIT_ASSERT(recoveredSession);
+        pool.Return(std::move(*recoveredSession));
+        UNIT_ASSERT_VALUES_EQUAL(pool.Size(), 2u);
     }
 
 }

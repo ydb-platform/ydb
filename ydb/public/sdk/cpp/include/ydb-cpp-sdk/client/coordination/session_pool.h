@@ -16,6 +16,9 @@ public:
     TCoordinationSessionPool();
     ~TCoordinationSessionPool();
 
+    // Returns nullopt when no idle session is available.
+    // Throws TYdbException if a popped slot cannot be replaced after retries
+    // (the slot is restored to the idle pool before throwing).
     std::optional<TSession> GetAny(TSessionLostCallback onLost = {});
     void Return(TSession session);
     bool Replace(TSession session);

@@ -13,6 +13,8 @@ namespace NCoordination {
 
 namespace {
 
+constexpr double SERVER_ACQUIRE_TIMEOUT_FRACTION = 0.8;
+
 class TLockLossState {
 public:
     std::stop_token GetStopToken() const {
@@ -73,11 +75,11 @@ struct TDistributedLock::TImpl {
     }
 
     bool try_lock() noexcept {
-        return TryAcquire(Timeout_) == EAcquireResult::Acquired;
+        return TryAcquire() == EAcquireResult::Acquired;
     }
 
     void lock() {
-        switch (TryAcquire(Timeout_)) {
+        switch (TryAcquire()) {
             case EAcquireResult::Acquired:
                 return;
             case EAcquireResult::NoSession:
@@ -134,17 +136,25 @@ private:
             .Timeout(acquireTimeout);
     }
 
+    TDuration ServerAcquireTimeout() const {
+        return Timeout_ * SERVER_ACQUIRE_TIMEOUT_FRACTION;
+    }
+
     bool EnsureSession() noexcept {
         if (Session_) {
             return true;
         }
 
-        auto session = Pool_.GetAny(MakeLockLossCallback());
-        if (!session) {
+        try {
+            auto session = Pool_.GetAny(MakeLockLossCallback());
+            if (!session) {
+                return false;
+            }
+            Session_ = std::move(*session);
+            return true;
+        } catch (const TYdbException&) {
             return false;
         }
-        Session_ = std::move(*session);
-        return true;
     }
 
     void ReturnSession() noexcept {
@@ -161,13 +171,13 @@ private:
         }
     }
 
-    EAcquireResult TryAcquire(TDuration acquireTimeout) noexcept try {
+    EAcquireResult TryAcquire() noexcept try {
         if (!EnsureSession()) {
             return EAcquireResult::NoSession;
         }
 
         LockLossState_->Reset();
-        auto acquireFuture = Session_.AcquireSemaphore(Name_, MakeAcquireSettings(acquireTimeout));
+        auto acquireFuture = Session_.AcquireSemaphore(Name_, MakeAcquireSettings(ServerAcquireTimeout()));
         if (!acquireFuture.Wait(Timeout_)) {
             ReplaceSession();
             return EAcquireResult::Failed;

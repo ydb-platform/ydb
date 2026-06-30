@@ -416,7 +416,8 @@ namespace NKikimr::NHttpProxy {
                         .IAMToken = HttpContext.IamToken,
                         .FolderID = HttpContext.FolderId,
                         .RequestFormat = NKikimr::NSQS::TAuthActorData::Json,
-                        .Requester = ctx.SelfID
+                        .Requester = ctx.SelfID,
+                        .SourceAddress = HttpContext.SourceAddress,
                     };
 
                     AppData(ctx.ActorSystem())->SqsAuthFactory->RegisterAuthActor(
@@ -537,4 +538,3 @@ namespace NKikimr::NHttpProxy {
     }
 
 } // namespace NKikimr::NHttpProxy
-

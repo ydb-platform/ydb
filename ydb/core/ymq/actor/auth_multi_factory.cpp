@@ -497,6 +497,7 @@ void TBaseCloudAuthRequestProxy::ProposeStaticCreds(TProto& req) {
     req.MutableAuth()->SetUserSID(UserSID_);
     req.MutableAuth()->SetAuthType(AuthType_);
     req.MutableAuth()->SetMaskedToken(MaskedToken_);
+    req.MutableAuth()->SetSourceAddress(PeerName_);
 }
 
 void TBaseCloudAuthRequestProxy::Bootstrap() {

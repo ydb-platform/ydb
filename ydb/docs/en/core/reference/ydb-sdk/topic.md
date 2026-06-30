@@ -3638,7 +3638,7 @@ In case of a *hard interruption*, the client receives a notification that it can
 
 {% endlist %}
 
-#### Hard abort of reading {#hard-stop}
+#### Hard read interrupt {#hard-stop}
 
 {% list tabs group=lang %}
 

@@ -15,6 +15,8 @@
 #include <util/system/datetime.h>
 #include <util/system/hp_timer.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_PROXY_PUT
+
 LWTRACE_USING(BLOBSTORAGE_PROVIDER);
 
 namespace NKikimr {
@@ -474,22 +476,23 @@ class TBlobStorageGroupPutRequest : public TBlobStorageGroupRequestActor {
 
         if ((TActivationContext::Monotonic() - RequestStartTime >= LongRequestThreshold) && PopAllowToken(HandleClass)) {
             // NRetroTracing::DemandTrace(Span.GetTraceId());
-            STLOG(PRI_WARN, BS_PROXY_PUT, BPP71, "Long TEvPut request detected",
-                    (LongRequestThreshold, LongRequestThreshold),
-                    (GroupId, Info->GroupID),
-                    (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),
-                    (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),
-                    (RestartCounter, RestartCounter),
-                    (History, PutImpl.PrintHistory()));
+            YDB_LOG_WARN("Long TEvPut request detected",
+                {"marker", "BPP71"},
+                {"longRequestThreshold", LongRequestThreshold},
+                {"groupId", Info->GroupID},
+                {"handleClass", NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)},
+                {"tactic", TEvBlobStorage::TEvPut::TacticName(Tactic)},
+                {"restartCounter", RestartCounter},
+                {"history", PutImpl.PrintHistory()});
         }
 
         if (ResponsesSent == PutImpl.Blobs.size() && IS_LOG_PRIORITY_ENABLED(PutImpl.ResultPriority, LogCtx.LogComponent) && PopAllowToken(HandleClass)) {
-            STLOG(PutImpl.ResultPriority,
-                    BS_PROXY_PUT, BPP72, "Query history",
-                    (GroupId, Info->GroupID),
-                    (HandleClass, NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)),
-                    (Tactic, TEvBlobStorage::TEvPut::TacticName(Tactic)),
-                    (History, PutImpl.PrintHistory()));
+            YDB_LOG_COMP(PutImpl.ResultPriority, BS_PROXY_PUT, "Query history",
+                {"marker", "BPP72"},
+                {"groupId", Info->GroupID},
+                {"handleClass", NKikimrBlobStorage::EPutHandleClass_Name(HandleClass)},
+                {"tactic", TEvBlobStorage::TEvPut::TacticName(Tactic)},
+                {"history", PutImpl.PrintHistory()});
         }
 
         if (ResponsesSent == PutImpl.Blobs.size()) {

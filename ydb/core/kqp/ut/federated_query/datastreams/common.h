@@ -204,10 +204,6 @@ public:
     // Should be called at most once
     static void SetupMockConnectorTableData(std::shared_ptr<NYql::NConnector::NTest::TConnectorClientMock> mockClient, const TMockConnectorReadSplitsSettings& settings);
 
-    // Other helpers
-
-    static std::function<void(const std::string&)> AstChecker(ui64 txCount, ui64 stagesCount);
-
 private:
     void EnsureNotInitialized(const std::string& info);
 

@@ -3541,5 +3541,128 @@ Y_UNIT_TEST_SUITE(TestYmqHttpProxy) {
         UNIT_ASSERT_VALUES_EQUAL(json["Messages"][0]["Body"], "MessageBody-1");
     }
 
+    Y_UNIT_TEST_F(NoBillingRecordsOnJsonApiAuthFailure, THttpProxyTestMockWithMetering) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto meteringLogFilePath = KikimrServer->ServerSettings->AppConfig->GetSqsConfig().GetMeteringLogFilePath();
+
+        auto loadBillingRecords = [](const TString& filepath) -> TVector<NSc::TValue> {
+            TString data = TFileInput(filepath).ReadAll();
+            auto rawRecords = SplitString(data, "\n");
+            TVector<NSc::TValue> records;
+            for (auto& record : rawRecords) {
+                records.push_back(NSc::TValue::FromJson(record));
+            }
+            return records;
+        };
+
+        // First, create a queue with valid auth to generate baseline billing records
+        // Each successful SQS request generates 3 billing records (2 traffic + 1 request)
+        auto json = CreateQueue({{"QueueName", "MeteringTestQueue"}});
+
+        // Wait for metering flush interval to pass (flush interval is 100ms, wait 2 seconds to be safe)
+        Sleep(TDuration::Seconds(2));
+        TVector<NSc::TValue> records = loadBillingRecords(meteringLogFilePath);
+
+        const size_t baselineRecordCount = records.size();
+
+        // Disable authorization so that subsequent requests are sent without an
+        // Authorization header (FormAuthorizationStr returns an empty string).
+        DisableAuthorization();
+
+        // Send a JSON API CreateQueue request without authorization header.
+        // This triggers an IAM auth failure in TYmqHttpRequestActor::HandleYmqCloudAuthorizationResponse,
+        // which sets IamAuthFailed_ = true, causing DoMetering() to skip billing record generation.
+        // Auth failures are reported with HTTP code 400.
+        CreateQueue({{"QueueName", "AuthFailQueue"}}, 400);
+
+        // Wait for metering flush interval to pass (flush interval is 100ms, wait 2 seconds to be safe)
+        Sleep(TDuration::Seconds(2));
+
+        // Verify no additional billing records were generated for the failed auth request
+        records = loadBillingRecords(meteringLogFilePath);
+        UNIT_ASSERT_VALUES_EQUAL_C(records.size(), baselineRecordCount,
+            "Auth failure should not generate billing records, but got "
+            << records.size() << " records instead of " << baselineRecordCount);
+
+        // Re-enable authorization and verify that metering resumes: a successful
+        // request must again produce billing records (3 per request).
+        EnableAuthorization();
+        CreateQueue({{"QueueName", "AuthReenabledQueue"}});
+
+        // Wait for metering flush interval to pass (flush interval is 100ms, wait 2 seconds to be safe)
+        Sleep(TDuration::Seconds(2));
+        const size_t expectedAfterReenable = baselineRecordCount + 3;
+        records = loadBillingRecords(meteringLogFilePath);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(records.size(), expectedAfterReenable,
+            "Metering should resume after authorization is re-enabled, but got "
+            << records.size() << " records instead of " << expectedAfterReenable);
+    }
+
+    Y_UNIT_TEST_F(NoBillingRecordsOnXmlApiAuthFailure, THttpProxyTestMockWithMetering) {
+        PrepareConfigs(KikimrServer.Get());
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationTopicCreation(true);
+        KikimrServer->GetRuntime()->GetAppData().FeatureFlags.SetEnableSQSMigrationCompatibility(true);
+
+        auto meteringLogFilePath = KikimrServer->ServerSettings->AppConfig->GetSqsConfig().GetMeteringLogFilePath();
+
+        auto loadBillingRecords = [](const TString& filepath) -> TVector<NSc::TValue> {
+            TString data = TFileInput(filepath).ReadAll();
+            auto rawRecords = SplitString(data, "\n");
+            TVector<NSc::TValue> records;
+            for (auto& record : rawRecords) {
+                records.push_back(NSc::TValue::FromJson(record));
+            }
+            return records;
+        };
+
+        // First, create a queue with valid auth (via JSON API) to generate baseline billing records
+        auto json = CreateQueue({{"QueueName", "MeteringTestQueue"}});
+
+        // Wait for metering flush interval to pass (flush interval is 100ms, wait 2 seconds to be safe)
+        Sleep(TDuration::Seconds(2));
+        TVector<NSc::TValue> records = loadBillingRecords(meteringLogFilePath);
+
+        const size_t baselineRecordCount = records.size();
+
+        // Disable authorization so that subsequent requests are sent without an
+        // Authorization header (FormAuthorizationStr returns an empty string).
+        DisableAuthorization();
+
+        // Send an XML API CreateQueue request without authorization header.
+        // This triggers the XML API auth path (TCloudAuthRequestProxy) which calls
+        // Callback_->OnIamAuthError(), setting SkipMetering on the response.
+        // Auth failures are reported with HTTP code 400 and an IncompleteSignature error.
+        auto json2 = CreateQueueXml({{"QueueName", "XmlAuthFailQueue"}}, 400);
+        UNIT_ASSERT_STRING_CONTAINS(GetByPath<TString>(json2, "__type"), "IncompleteSignature");
+
+        // Wait for metering flush interval to pass
+        Sleep(TDuration::Seconds(2));
+
+        // Verify no additional billing records were generated for the failed auth request
+        records = loadBillingRecords(meteringLogFilePath);
+        UNIT_ASSERT_VALUES_EQUAL_C(records.size(), baselineRecordCount,
+            "Auth failure on XML API should not generate billing records, but got "
+            << records.size() << " records instead of " << baselineRecordCount);
+
+        // Re-enable authorization and verify that metering resumes: a successful
+        // XML API request must again produce billing records (3 per request).
+        EnableAuthorization();
+        CreateQueueXml({{"QueueName", "XmlAuthReenabledQueue"}});
+
+        const size_t expectedAfterReenable = baselineRecordCount + 3;
+
+        // Wait for metering flush interval to pass (flush interval is 100ms, wait 2 seconds to be safe)
+        Sleep(TDuration::Seconds(2));
+        records = loadBillingRecords(meteringLogFilePath);
+
+        UNIT_ASSERT_VALUES_EQUAL_C(records.size(), expectedAfterReenable,
+            "Metering should resume after authorization is re-enabled, but got "
+            << records.size() << " records instead of " << expectedAfterReenable);
+    }
+
 
 } // Y_UNIT_TEST_SUITE(TestYmqHttpProxy)

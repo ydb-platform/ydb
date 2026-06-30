@@ -16,6 +16,7 @@
     * `vector_kmeans_tree` — векторный индекс. Подробнее описан в разделе [{#T}](../create_table/vector_index.md).
     * `fulltext_plain` — базовый полнотекстовый индекс. Подробнее описан в [{#T}](../create_table/fulltext_index.md).
     * `fulltext_relevance` — полнотекстовый индекс со статистикой [BM25](https://en.wikipedia.org/wiki/Okapi_BM25) для расчёта релевантности. Подробнее описан в [{#T}](../create_table/fulltext_index.md).
+    * `json` — JSON-индекс для ускорения предикатов `JSON_EXISTS` и `JSON_VALUE` по колонке типа `Json` или `JsonDocument`. Подробнее описан в [{#T}](../create_table/json_index.md).
     * `bloom_filter` — локальный Блум-индекс. Доступен только `LOCAL`. См. [ALTER TABLE ADD INDEX](../alter_table/indexes.md#local-bloom).
     * `bloom_ngram_filter` — локальный N-граммный Блум-индекс. Доступен только `LOCAL`. См. [ALTER TABLE ADD INDEX](../alter_table/indexes.md#local-bloom).
 

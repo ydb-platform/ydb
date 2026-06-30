@@ -328,7 +328,6 @@ RECURSE_FOR_TESTS(
     ut_export
     ut_external_blobs
     ut_followers
-    ut_fulltext
     ut_incremental_backup
     ut_incremental_restore_scan
     ut_init

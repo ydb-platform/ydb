@@ -818,28 +818,32 @@ public:
 
         const auto& event = *ev->Get();
         const bool ready = event.Ready;
-        const auto status = event.Status;
-        if (!ready && status != Ydb::StatusIds::SUCCESS && status != Ydb::StatusIds::NOT_FOUND) {
+        const auto operationStatus = event.Status;
+        if (const auto requestStatus = event.RequestStatus; requestStatus != Ydb::StatusIds::SUCCESS) {
             const auto& issues = event.Issues;
             YDB_LOG_ERROR("[StreamingQueries] [SysView] Get script execution info failed",
                 {"logPrefix", LogPrefix()},
                 {"sender", ev->Sender},
-                {"status", status},
-                {"issues", issues.ToOneLineString()});
-            ReplyErrorAndDie(status, NKqp::AddRootIssue(TStringBuilder() << "Failed to get last script execution info for query '" << path << "'", issues));
+                {"requestStatus",  requestStatus},
+                {"issues", issues.ToOneLineString()},
+                {"operationStatus", operationStatus},
+                {"ready", ready});
+            ReplyErrorAndDie(requestStatus, NKqp::AddRootIssue(TStringBuilder() << "Failed to get last script execution info for query '" << path << "'", issues));
             return;
         }
 
         ResolvedQueriesCount = std::max(ResolvedQueriesCount, ev->Cookie + 1);
-        YDB_LOG_DEBUG("[StreamingQueries] [SysView] Get script execution info finished query",
+        const bool entryExists = event.ExecutionEntryExists;
+        YDB_LOG_DEBUG("[StreamingQueries] [SysView] Get script execution info finished operation",
             {"logPrefix", LogPrefix()},
             {"sender", ev->Sender},
-            {"status", status},
+            {"operationStatus", operationStatus},
             {"ready", ready},
-            {"path", path},
+            {"entryExists", entryExists},
+            {"queryPath", path},
             {"remains", InflightScriptExecutionInfoResolve});
 
-        if (ready || status != Ydb::StatusIds::NOT_FOUND) {
+        if (entryExists) {
             const auto it = QueriesBatch.find(path);
             if (it == QueriesBatch.end()) {
                 InternalError(TStringBuilder() << "Resolve script execution info for query '" << path << "' which is not in current batch");
@@ -850,7 +854,7 @@ public:
             info.Issues = NKqp::SerializeIssues(event.Issues);
             info.RetryCount = event.RetryCount;
 
-            if (!ready || status != Ydb::StatusIds::SUCCESS) {
+            if (!ready || operationStatus != Ydb::StatusIds::SUCCESS) {
                 info.LastFailAt = event.LastFailAt;
                 info.SuspendedUntil = event.SuspendedUntil;
             }
@@ -867,9 +871,9 @@ public:
             if (info.SuspendedUntil) {
                 info.Status = "SUSPENDED";
             } else if (ready) {
-                if (status == Ydb::StatusIds::SUCCESS) {
+                if (operationStatus == Ydb::StatusIds::SUCCESS) {
                     info.Status = "COMPLETED";
-                } else if (status == Ydb::StatusIds::CANCELLED) {
+                } else if (!info.Run) {
                     info.Status = "STOPPED";
                 } else {
                     info.Status = "FAILED";
@@ -997,9 +1001,7 @@ private:
                 }
             }
 
-            auto event = std::make_unique<NKqp::TEvGetScriptExecutionOperation>(DatabaseName, NKqp::OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA);
-            event->CheckLeaseState = false;
-            Send(kqpProxyId, std::move(event), 0, i);
+            Send(kqpProxyId, std::make_unique<NKqp::TEvGetScriptExecutionOperation>(DatabaseName, NKqp::OperationIdFromExecutionId(executionId), BUILTIN_ACL_METADATA, /* failOnNotFound */ false), /* flags */ 0, i);
 
             YDB_LOG_DEBUG("[StreamingQueries] [SysView] Resolving script execution info for query execution",
                 {"logPrefix", LogPrefix()},

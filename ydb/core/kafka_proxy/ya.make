@@ -52,11 +52,11 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(actors/actors.h)
 
 PEERDIR(
-    ydb/library/kafka
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/public/sdk/cpp/src/client/params
     ydb/library/actors/core
     ydb/library/actors/protos
-    ydb/library/kafka
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/core/base
     ydb/core/persqueue/public/describer
     ydb/core/persqueue/public/fetcher

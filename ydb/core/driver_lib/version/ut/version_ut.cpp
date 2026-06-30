@@ -12,11 +12,6 @@ Y_UNIT_TEST_SUITE(VersionParser) {
         UNIT_ASSERT_VALUES_EQUAL(GetBranchName("svn://arcadia/arc/trunk/arcadia"), "trunk");
         UNIT_ASSERT_VALUES_EQUAL(GetBranchName("svn://arcadia/arc/branches/kikimr/arcadia"), "branches/kikimr");
     }
-
-    Y_UNIT_TEST(CiSmokeUnifiedPrCheck44879) {
-        // Postcommit smoke on ci-test-*: ydb/ diff required for increment graph.
-        UNIT_ASSERT(true);
-    }
 }
 
 using TComponentId = NKikimrConfig::TCompatibilityRule::EComponentId;

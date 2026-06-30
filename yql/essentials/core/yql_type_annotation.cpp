@@ -554,7 +554,6 @@ bool TModuleResolver::AddFromMemory(const TString& fullName, const TString& modu
         settings.ClusterMapping = ClusterMapping_;
         settings.Flags = SqlFlags_;
         settings.SyntaxVersion = syntaxVersion;
-        settings.V0Behavior = NSQLTranslation::EV0Behavior::Silent;
         settings.FileAliasPrefix = FileAliasPrefix_;
         astRes = SqlToYql(Translators_, query, settings);
     }

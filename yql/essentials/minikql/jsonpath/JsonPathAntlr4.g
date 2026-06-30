@@ -1,9 +1,4 @@
-grammar JsonPath;
-
-options {
-    language = Cpp;
-    memoize = true;
-}
+grammar JsonPathAntlr4;
 
 // Root rule. Input is a mode followed by jsonpath expression
 jsonpath: (STRICT | LAX)? expr EOF;
@@ -174,31 +169,29 @@ UNKNOWN: 'unknown';
 WITH: 'with';
 
 // String literal
-fragment STRING_CORE_SINGLE: ( ~(QUOTE_SINGLE | BACKSLASH) | (BACKSLASH .) )*;
-fragment STRING_CORE_DOUBLE: ( ~(QUOTE_DOUBLE | BACKSLASH) | (BACKSLASH .) )*;
-fragment STRING_SINGLE: (QUOTE_SINGLE STRING_CORE_SINGLE QUOTE_SINGLE);
-fragment STRING_DOUBLE: (QUOTE_DOUBLE STRING_CORE_DOUBLE QUOTE_DOUBLE);
+fragment STRING_CORE_SINGLE: ~[\\']+ ;
+fragment STRING_CORE_DOUBLE: ~[\\"]+ ;
+fragment STRING_SINGLE: QUOTE_SINGLE STRING_CORE_SINGLE QUOTE_SINGLE;
+fragment STRING_DOUBLE: QUOTE_DOUBLE STRING_CORE_DOUBLE QUOTE_DOUBLE;
 
-STRING_VALUE: (STRING_SINGLE | STRING_DOUBLE);
+STRING_VALUE: STRING_SINGLE | STRING_DOUBLE;
 
 // Number literal
-fragment DIGIT: '0'..'9';
+fragment DIGIT: [0-9];
 fragment DIGITS: DIGIT+;
 fragment REAL_PART: DOT DIGITS;
-fragment EXP_PART: ('e' | 'E') (PLUS | MINUS)? DIGITS;
+fragment EXP_PART: ('e' | 'E') ('+' | '-')? DIGITS;
 
 NUMBER: DIGITS REAL_PART? EXP_PART?;
 
 // Javascript identifier
-fragment ID_START: ('a'..'z' | 'A'..'Z' | UNDERSCORE);
-fragment ID_CORE: (ID_START | DIGIT | DOLLAR);
+fragment ID_START: [a-zA-Z_];
+fragment ID_CORE: [a-zA-Z0-9_$];
 
-IDENTIFIER: ID_START (ID_CORE)*;
+IDENTIFIER: ID_START ID_CORE*;
 
 // Jsonpath variable
-VARIABLE: DOLLAR (ID_CORE)*;
+VARIABLE: DOLLAR ID_CORE+;
 
-WS: (' '|'\r'|'\t'|'\n') {$channel=HIDDEN;};
-// FIXME: WS and COMMENT tokens are currently required.
-// FIXME: Since there are no comments in JSONPATH, we split whitespace characters between WS and COMMENT
-COMMENT: ('\u000C') {$channel=HIDDEN;};
+WS: [ \r\t\n]+ -> channel(HIDDEN);
+COMMENT: '\u000C' -> channel(HIDDEN);

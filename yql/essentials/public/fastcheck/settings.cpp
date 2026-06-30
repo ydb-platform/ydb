@@ -56,7 +56,6 @@ bool BuildSqlTranslationSettings(
     settings.Arena = arena;
     settings.File = request.File;
     FillClusters(request, settings);
-    settings.Antlr4Parser = true;
     settings.AnsiLexer = request.IsAnsiLexer;
     settings.SyntaxVersion = request.SyntaxVersion;
     settings.Flags = TranslationFlags();
@@ -126,7 +125,6 @@ bool BuildSqlParsingSettings(
 {
     settings.SyntaxVersion = request.SyntaxVersion;
     settings.AnsiLexer = request.IsAnsiLexer;
-    settings.Antlr4Parser = true;
     settings.File = request.File;
     settings.Arena = arena;
 

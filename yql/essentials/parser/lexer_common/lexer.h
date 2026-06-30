@@ -19,7 +19,7 @@ struct TParsedToken {
     TString Name;
     TString Content;
     // Position of first token byte/symbol
-    // When antlr3 lexer is used, LinePos is a position as in a byte array,
+    // LinePos is a position as in a byte array,
     // but when antlr4 lexer is used, LinePos is a position as in a symbol array,
     ui32 Line = 0;    // starts from 1
     ui32 LinePos = 0; // starts from 0

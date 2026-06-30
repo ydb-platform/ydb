@@ -29,9 +29,8 @@ Y_UNIT_TEST(Runs) {
     };
 
     NSQLTranslation::TTranslators translators(
-        /* V0 = */ nullptr,
-        /* V1 = */ NSQLTranslationV1::MakeTranslator(lexers, parsers),
-        /* PG = */ nullptr);
+        NSQLTranslationV1::MakeTranslator(lexers, parsers),
+        nullptr);
 
     google::protobuf::Arena arena;
     NSQLTranslation::TTranslationSettings settings;

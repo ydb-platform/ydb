@@ -107,7 +107,6 @@ bool RunDqProgram(
 
     NSQLTranslation::TTranslationSettings sqlSettings;
     sqlSettings.SyntaxVersion = 1;
-    sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
     sqlSettings.Flags.insert("DqEngineEnable");
     sqlSettings.Flags.insert("DqEngineForce");
     sqlSettings.ClusterMapping["plato"] = TString(YtProviderName);

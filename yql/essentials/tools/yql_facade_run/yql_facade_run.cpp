@@ -360,7 +360,7 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     opts.AddLongOption("diagnostics", "Output diagnostics").Optional().NoArgument().SetFlag(&PrintDiagnostics);
 
     opts.AddLongOption("sql-flags", "SQL translator pragma flags").SplitHandler(&SqlFlags, ',');
-    opts.AddLongOption("syntax-version", "SQL syntax version").StoreResult(&SyntaxVersion).DefaultValue(1);
+    opts.AddLongOption("syntax-version", "SQL syntax version (only 1 is supported)").StoreResult(&SyntaxVersion).DefaultValue(1);
     opts.AddLongOption("ansi-lexer", "Use ansi lexer").NoArgument().SetFlag(&AnsiLexer);
     opts.AddLongOption("assume-ydb-on-slash", "Assume YDB provider if cluster name starts with '/'").NoArgument().SetFlag(&AssumeYdbOnClusterWithSlash);
 
@@ -427,7 +427,6 @@ void TFacadeRunOptions::Parse(int argc, const char** argv) {
     }
 
     if (CustomTests) {
-        opts.AddLongOption("test-antlr4", "Check antlr4 parser").NoArgument().SetFlag(&TestAntlr4);
         opts.AddLongOption("test-format", "Compare formatted query's AST with the original query's AST (only syntaxVersion=1 is supported)").NoArgument().SetFlag(&TestSqlFormat);
         opts.AddLongOption("test-lexers", "Compare lexers").NoArgument().SetFlag(&TestLexers);
         opts.AddLongOption("test-complete", "Check completion engine").NoArgument().SetFlag(&TestComplete);
@@ -606,9 +605,7 @@ int TFacadeRunner::DoMain(int argc, const char** argv) {
     parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(
         /*isAmbiguityError=*/RunOptions_.TestSyntaxAmbiguities);
 
-    NSQLTranslation::TTranslators translators(
-        nullptr,
-        NSQLTranslationV1::MakeTranslator(lexers, parsers),
+    NSQLTranslation::TTranslators translators(NSQLTranslationV1::MakeTranslator(lexers, parsers),
         NSQLTranslationPG::MakeTranslator());
 
     TExprContext ctx;
@@ -845,8 +842,6 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
         settings.Flags = RunOptions_.SqlFlags;
         settings.SyntaxVersion = RunOptions_.SyntaxVersion;
         settings.AnsiLexer = RunOptions_.AnsiLexer;
-        settings.TestAntlr4 = RunOptions_.TestAntlr4;
-        settings.V0Behavior = NSQLTranslation::EV0Behavior::Report;
         settings.AssumeYdbOnClusterWithSlash = RunOptions_.AssumeYdbOnClusterWithSlash;
         settings.Bindings = RunOptions_.Bindings;
         if (ERunMode::Discover == RunOptions_.Mode) {
@@ -895,9 +890,8 @@ int TFacadeRunner::DoRun(TProgramFactory& factory) {
             };
 
             NSQLTranslation::TTranslators translators(
-                /* v0 = */ nullptr,
                 NSQLTranslationV1::MakeTranslator(lexers, parsers),
-                /* pg = */ nullptr);
+                nullptr);
 
             NYql::TIssues issues;
             google::protobuf::Message* message = NSQLTranslation::SqlAST(

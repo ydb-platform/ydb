@@ -1221,7 +1221,6 @@ int Main(int argc, char** argv)
     settings.Flags = sqlFlags;
     settings.SyntaxVersion = 1;
     settings.AnsiLexer = false;
-    settings.V0Behavior = NSQLTranslation::EV0Behavior::Report;
     settings.AssumeYdbOnClusterWithSlash = false;
     settings.PgParser = true;
 

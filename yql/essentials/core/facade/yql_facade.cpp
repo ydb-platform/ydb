@@ -746,8 +746,6 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
         // clang-format off
         auto dataNode = NYT::TNode()
             ("ClusterMapping", clusterMappingsNode)
-            ("V0Behavior", ui64(settings.V0Behavior))
-            ("V0WarnAsError", settings.V0WarnAsError->Allow())
             ("DqDefaultAuto", settings.DqDefaultAuto->Allow())
             ("BlockDefaultAuto", settings.BlockDefaultAuto->Allow())
             ("SqlFlags", sqlFlagsNode);
@@ -767,8 +765,6 @@ void TProgram::HandleTranslationSettings(NSQLTranslation::TTranslationSettings& 
             settings.ClusterMapping[c.first] = c.second.AsString();
         }
 
-        settings.V0Behavior = (NSQLTranslation::EV0Behavior)dataNode["V0Behavior"].AsUint64();
-        settings.V0WarnAsError = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["V0WarnAsError"].AsBool());
         settings.DqDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["DqDefaultAuto"].AsBool());
         settings.BlockDefaultAuto = NSQLTranslation::ISqlFeaturePolicy::Make(dataNode["BlockDefaultAuto"].AsBool());
         settings.IsReplay = true;
@@ -876,9 +872,7 @@ bool TProgram::ParseSql(const NSQLTranslation::TTranslationSettings& settings)
     parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
     parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
-    NSQLTranslation::TTranslators translators(
-        nullptr,
-        NSQLTranslationV1::MakeTranslator(lexers, parsers),
+    NSQLTranslation::TTranslators translators(NSQLTranslationV1::MakeTranslator(lexers, parsers),
         NSQLTranslationPG::MakeTranslator());
 
     return FillParseResult(SqlToYql(translators, SourceCode_, currentSettings, &warningRules), &warningRules);

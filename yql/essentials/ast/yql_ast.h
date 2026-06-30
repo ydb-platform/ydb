@@ -257,7 +257,6 @@ private:
 };
 
 enum class ESyntaxType {
-    YQLv0,
     YQLv1,
     Pg,
 };

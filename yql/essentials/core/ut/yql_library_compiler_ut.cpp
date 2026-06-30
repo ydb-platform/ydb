@@ -9,9 +9,7 @@ Y_UNIT_TEST_SUITE(TLibraryCompilerTests) {
 const char* alias = "/lib/ut.yqls";
 
 bool CompileAndLink(const THashMap<TString, TString>& libs, TExprContext& ctx) {
-    NSQLTranslation::TTranslators translators(
-        nullptr,
-        nullptr,
+    NSQLTranslation::TTranslators translators(nullptr,
         nullptr);
 
     THashMap<TString, TLibraryCohesion> compiled;
@@ -32,9 +30,7 @@ Y_UNIT_TEST(OnlyExportsTest) {
                    "(export X)\n"
                    ")\n";
 
-    NSQLTranslation::TTranslators translators(
-        nullptr,
-        nullptr,
+    NSQLTranslation::TTranslators translators(nullptr,
         nullptr);
 
     TExprContext ctx;
@@ -55,9 +51,7 @@ Y_UNIT_TEST(ExportAndImportsTest) {
                    "(export ex)\n"
                    ")\n";
 
-    NSQLTranslation::TTranslators translators(
-        nullptr,
-        nullptr,
+    NSQLTranslation::TTranslators translators(nullptr,
         nullptr);
 
     TExprContext ctx;

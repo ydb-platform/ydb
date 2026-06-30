@@ -25,7 +25,6 @@ void FillSettings(NSQLTranslation::TTranslationSettings& settings, const TOption
     settings.LangVer = options.LangVer;
     settings.ClusterMapping = options.ClusterMapping;
     settings.SyntaxVersion = options.SyntaxVersion;
-    settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
     settings.Flags = TranslationFlags();
 }
 
@@ -49,9 +48,7 @@ bool CheckProgram(const TString& program, const TOptions& options, TIssues& erro
     parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
     parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
-    NSQLTranslation::TTranslators translators(
-        nullptr,
-        NSQLTranslationV1::MakeTranslator(lexers, parsers),
+    NSQLTranslation::TTranslators translators(NSQLTranslationV1::MakeTranslator(lexers, parsers),
         NSQLTranslationPG::MakeTranslator());
 
     TAstParseResult astRes;

@@ -322,9 +322,7 @@ int BuildAST(int argc, char** argv) {
         res.Has("test-syntax-ambiguity"),
         res.Has("debug-syntax-ambiguity"));
 
-    NSQLTranslation::TTranslators translators(
-        nullptr,
-        NSQLTranslationV1::MakeTranslator(lexers, parsers),
+    NSQLTranslation::TTranslators translators(NSQLTranslationV1::MakeTranslator(lexers, parsers),
         NSQLTranslationPG::MakeTranslator());
 
     TVector<TString> queries;
@@ -378,10 +376,7 @@ int BuildAST(int argc, char** argv) {
             settings.Flags = flags;
             settings.SyntaxVersion = syntaxVersion;
             settings.AnsiLexer = res.Has("ansi-lexer");
-            settings.WarnOnV0 = false;
-            settings.V0ForceDisable = false;
             settings.AssumeYdbOnClusterWithSlash = res.Has("assume-ydb-on-slash");
-            settings.TestAntlr4 = res.Has("test-antlr4");
 
             if (res.Has("lexer")) {
                 NYql::TIssues issues;
@@ -426,7 +421,6 @@ int BuildAST(int argc, char** argv) {
                         NSQLTranslation::TSQLHints hints;
                         auto lexer = SqlLexer(translators, query, parseRes.Issues, settings);
                         if (lexer && CollectSqlHints(*lexer, query, queryFile, settings.File, hints, parseRes.Issues,
-                                                     settings.MaxErrors, settings.Antlr4Parser)) {
                             parseRes = NSQLTranslation::SqlASTToYql(translators, query, *ast, hints, settings);
                         }
                     }

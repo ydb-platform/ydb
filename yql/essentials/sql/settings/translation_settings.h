@@ -53,13 +53,6 @@ inline bool IsQueryMode(NSQLTranslation::ESqlMode mode) {
 
 using TIncrementMonCounterFunction = std::function<void(const TString&, const TString&)>;
 
-// persisted
-enum class EV0Behavior: ui32 {
-    Silent = 0,
-    Report,
-    Disable
-};
-
 class ISqlFeaturePolicy: public TThrRefBase {
 public:
     ~ISqlFeaturePolicy() override = default;
@@ -110,17 +103,10 @@ struct TTranslationSettings {
     bool EndOfQueryCommit;
     TString File;
     bool EnableGenericUdfs;
-    ui16 SyntaxVersion;
+    ui16 SyntaxVersion = 1;
     bool AnsiLexer;
-    bool Antlr4Parser; // TODO(YQL-19017): remove.
     bool PgParser;
-    bool InferSyntaxVersion;
-    EV0Behavior V0Behavior;
-    bool V0ForceDisable;
     bool PGDisable;
-    bool WarnOnV0;
-    bool TestAntlr4; // TODO(YQL-19017): remove.
-    ISqlFeaturePolicy::TPtr V0WarnAsError;
     ISqlFeaturePolicy::TPtr DqDefaultAuto;
     ISqlFeaturePolicy::TPtr BlockDefaultAuto;
     bool AssumeYdbOnClusterWithSlash;
@@ -149,7 +135,6 @@ struct TTranslationSettings {
 };
 
 struct TParsedSettings {
-    bool HasSyntaxV0 = false;
     bool HasSyntaxV1 = false;
     bool HasAnsiLexer = false;
     bool HasPgParser = false;

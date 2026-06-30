@@ -55,7 +55,7 @@ curl -sL https://apt.kitware.com/kitware-archive.sh | bash
 apt-get -y install --no-install-recommends \
   gcc clang-12 clang-14 clang-16 clang-18 \
   lld-14 llvm-14 llvm-16 lld-16 llvm-18 lld-18 \
-  antlr3 cmake docker.io git jq libaio-dev libaio1 libicu70 libidn11-dev libkrb5-3 \
+  cmake docker.io git jq libaio-dev libaio1 libicu70 libidn11-dev libkrb5-3 \
   liblttng-ust1 m4 make ninja-build parallel postgresql-client postgresql-client \
   python-is-python3 python3-pip s3cmd s3cmd zlib1g linux-tools-common linux-tools-generic \
   ibverbs-providers rdma-core libibverbs1 ibverbs-utils

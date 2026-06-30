@@ -89,7 +89,6 @@ public:
     THashSet<TString> SqlFlags;
     ui16 SyntaxVersion = 1;
     bool AnsiLexer = false;
-    bool TestAntlr4 = false;
     bool AssumeYdbOnClusterWithSlash = false;
     bool TestSqlFormat = false;
     bool TestLexers = false;

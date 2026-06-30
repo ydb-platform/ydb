@@ -6,13 +6,8 @@
 #include <library/cpp/deprecated/split/split_iterator.h>
 
 #include <util/string/split.h>
-#include <util/system/env.h>
 
 namespace {
-bool InTestEnvironment() {
-    return GetEnv("YQL_LOCAL_ENVIRONMENT") || GetEnv("YA_TEST_RUNNER");
-}
-
 using namespace NSQLTranslation;
 class TAlwaysDiallowPolicy: public ISqlFeaturePolicy {
 public:
@@ -51,17 +46,9 @@ TTranslationSettings::TTranslationSettings()
     , MaxErrors(SQL_MAX_PARSER_ERRORS)
     , EndOfQueryCommit(true)
     , EnableGenericUdfs(true)
-    , SyntaxVersion(1)
     , AnsiLexer(false)
-    , Antlr4Parser(true)
     , PgParser(false)
-    , InferSyntaxVersion(false)
-    , V0Behavior(EV0Behavior::Disable)
-    , V0ForceDisable(InTestEnvironment())
     , PGDisable(false)
-    , WarnOnV0(true)
-    , TestAntlr4(false)
-    , V0WarnAsError(ISqlFeaturePolicy::MakeAlwaysDisallow())
     , DqDefaultAuto(ISqlFeaturePolicy::MakeAlwaysDisallow())
     , BlockDefaultAuto(ISqlFeaturePolicy::MakeAlwaysDisallow())
     , AssumeYdbOnClusterWithSlash(false)
@@ -69,21 +56,10 @@ TTranslationSettings::TTranslationSettings()
 }
 
 bool TParsedSettings::ApplyTo(TTranslationSettings& settings, NYql::TIssues& issues) const {
-    if ((HasSyntaxV0 || HasSyntaxV1) && !settings.InferSyntaxVersion) {
-        issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, 0), NYql::TIssuesIds::DEFAULT_ERROR,
-                                       "Explicit syntax version is not allowed"));
-        return false;
-    }
-
-    if (HasSyntaxV0) {
-        if (settings.V0ForceDisable || settings.V0Behavior == EV0Behavior::Disable) {
-            issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, 0), NYql::TIssuesIds::DEFAULT_ERROR,
-                                           "V0 syntax is disabled"));
-            return false;
-        }
-        settings.SyntaxVersion = 0;
-    } else if (HasSyntaxV1) {
-        settings.SyntaxVersion = 1;
+    if (HasSyntaxV1) {
+        // syntax_v1 is the only supported version; kept for backward compatibility with existing queries.
+        (void)settings;
+        (void)issues;
     }
 
     if (HasAnsiLexer) {
@@ -136,7 +112,9 @@ bool ParseTranslationSettingsFromComments(const TString& query, TParsedSettings&
         }
 
         if (value == "syntax_v0") {
-            parsed.HasSyntaxV0 = true;
+            issues.AddIssue(NYql::YqlIssue(NYql::TPosition(0, lineNumber), NYql::TIssuesIds::DEFAULT_ERROR,
+                                           "V0 syntax is not supported"));
+            return false;
         } else if (value == "syntax_v1") {
             parsed.HasSyntaxV1 = true;
         } else if (value == "ansi_lexer") {

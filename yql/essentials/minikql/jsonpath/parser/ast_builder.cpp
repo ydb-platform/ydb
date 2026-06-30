@@ -485,7 +485,7 @@ TAstNodePtr TAstBuilder::BuildJsonPath(const TRule_jsonpath& node) {
     return new TRootNode(pos, expr, mode);
 }
 
-TAstNodePtr TAstBuilder::Build(const TJsonPathParserAST& ast) {
+TAstNodePtr TAstBuilder::Build(const TJsonPathAntlr4ParserAST& ast) {
     return BuildJsonPath(ast.GetRule_jsonpath());
 }
 

@@ -154,8 +154,6 @@ NSQLTranslation::TTranslationSettings GetTranslationSettings(const THashSet<TStr
     NSQLTranslation::TTranslationSettings settings;
     settings.ClusterMapping = clusters;
     settings.SyntaxVersion = 1;
-    settings.InferSyntaxVersion = true;
-    settings.V0Behavior = NSQLTranslation::EV0Behavior::Report;
     settings.Flags = sqlFlags;
     return settings;
 }

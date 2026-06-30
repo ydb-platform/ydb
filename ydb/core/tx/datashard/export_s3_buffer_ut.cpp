@@ -1,6 +1,6 @@
 #include "export_s3_buffer.h"
-#include "ut_export/export_enums.h"
 
+#include <ydb/core/tx/datashard/backup_restore_traits.h>
 #include <ydb/core/tx/datashard/export_scan.h>
 
 #include <library/cpp/testing/unittest/registar.h>
@@ -10,6 +10,8 @@
 #ifndef KIKIMR_DISABLE_S3_OPS
 
 namespace NKikimr::NDataShard {
+
+using NBackupRestoreTraits::EDataFormat;
 
 class TExportS3BufferFixture : public NUnitTest::TBaseFixture {
 public:
@@ -43,7 +45,7 @@ public:
         
         NExportScan::IBuffer* buffer = nullptr;
         switch (dataFormat) {
-        case EDataFormat::YDB_DUMP:
+        case EDataFormat::YdbDump:
             {
                 TYdbDumpExportSettings dataFormatSettings;
                 dataFormatSettings.WithColumns(Columns);
@@ -51,7 +53,7 @@ public:
                 buffer = CreateS3ExportBuffer(std::move(settings), std::move(dataFormat));
                 break;
             }
-        case EDataFormat::PARQUET:
+        case EDataFormat::Parquet:
             {
                 TParquetExportSettings dataFormatSettings;
                 dataFormatSettings.WithColumns(Columns);
@@ -69,22 +71,34 @@ public:
                 buffer = CreateS3ExportBuffer(std::move(settings), std::move(dataFormat));
                 break;
             }
+        case EDataFormat::Invalid:
+            break;
         }
-        
+
+        if (!buffer) {
+            return nullptr;
+        }
+
         buffer->ColumnsOrder(Tags);
 
         return buffer;
     }
 
     NExportScan::IBuffer* Buffer(EDataFormat dataFormat) {
-        THolder<NExportScan::IBuffer>* exportBuffer;
+        THolder<NExportScan::IBuffer>* exportBuffer = nullptr;
         switch (dataFormat) {
-            case EDataFormat::YDB_DUMP:
+            case EDataFormat::YdbDump:
                 exportBuffer = &S3ExportBuffer;
                 break;
-            case EDataFormat::PARQUET:
+            case EDataFormat::Parquet:
                 exportBuffer = &ParquetBuffer;
                 break;
+            case EDataFormat::Invalid:
+                break;
+        }
+
+        if (!exportBuffer) {
+            return nullptr;
         }
 
         if (!*exportBuffer) {
@@ -111,6 +125,10 @@ public:
 
     // Tests impl
     void TestMinBufferSize(EDataFormat dataFormat, ui64 minBufferSize) {
+        if (dataFormat == EDataFormat::Invalid) {
+            return;
+        }
+
         for (ui32 i = 0; i < 10000; ++i) {
             UNIT_ASSERT(CollectKeyValue(dataFormat, i, TString("v") * 16));
             NExportScan::IBuffer::TStats stats;

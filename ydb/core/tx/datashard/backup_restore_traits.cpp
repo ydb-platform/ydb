@@ -23,7 +23,6 @@ EDataFormat DataFormatFromExportData(const NKikimrSchemeOp::TExportDataSettings&
     case NKikimrSchemeOp::TExportDataSettings::kParquet:
         return EDataFormat::Parquet;
     }
-    Y_ENSURE(false, "Unhandled export data format");
     return EDataFormat::Invalid;
 }
 
@@ -90,20 +89,19 @@ ECompressionCodec NextCompressionCodec(ECompressionCodec cur) {
 TParquetExportSettings ParquetExportSettingsFromTask(const NKikimrSchemeOp::TBackupTask& task) {
     NKikimrSchemeOp::TParquetFormat taskParquetSettings;
     switch(task.GetSettingsCase()) {
-    case NKikimrSchemeOp::TBackupTask::kS3Settings:        
-        taskParquetSettings = task.GetS3Settings().GetExportDataSettings().GetParquet();
-        break;
-    case NKikimrSchemeOp::TBackupTask::kFSSettings:
-        taskParquetSettings = task.GetFSSettings().GetExportDataSettings().GetParquet();
-        break;
+    case NKikimrSchemeOp::TBackupTask::kS3Settings: {        
+        auto& taskParquetSettings = task.GetS3Settings().GetExportDataSettings().GetParquet();
+        return TParquetExportSettings().WithRowGroupSize(taskParquetSettings.GetRowGroupSize());
+    }
+    case NKikimrSchemeOp::TBackupTask::kFSSettings: {
+        auto& taskParquetSettings = task.GetFSSettings().GetExportDataSettings().GetParquet();
+        return TParquetExportSettings().WithRowGroupSize(taskParquetSettings.GetRowGroupSize());
+    }
     case NKikimrSchemeOp::TBackupTask::SETTINGS_NOT_SET:
     case NKikimrSchemeOp::TBackupTask::kYTSettings:
         return TParquetExportSettings();
     }
-
-    TParquetExportSettings settings;
-    settings.WithRowGroupSize(taskParquetSettings.GetRowGroupSize());
-    return settings;
+    return TParquetExportSettings();
 }
 
 TString DataFileExtension(EDataFormat format, ECompressionCodec codec) {

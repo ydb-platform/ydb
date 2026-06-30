@@ -60,11 +60,8 @@ static std::shared_ptr<parquet::WriterProperties> CreateWriteProperties(const TP
         switch (settings.CompressionSettings->Algorithm) {
         case TParquetExportSettings::TCompressionSettings::EAlgorithm::Zstd:
             builder->compression(arrow::Compression::ZSTD);
+            builder->compression_level(settings.CompressionSettings->Level);
             break;
-        }
-        if (settings.CompressionSettings->Level != -1) {
-            builder->compression_level(
-                settings.CompressionSettings->Level);
         }
     }
     return builder->build();

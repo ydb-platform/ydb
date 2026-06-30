@@ -4,6 +4,7 @@
 #include <ydb/core/protos/data_format_settings.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/fs_settings.pb.h>
+#include <ydb/core/protos/s3_settings.pb.h>
 
 #include <ydb/core/testlib/basics/appdata.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -22,6 +23,35 @@
 namespace NKikimr::NDataShard {
 
 namespace {
+
+    using TSettingsCase = NKikimrSchemeOp::TBackupTask::SettingsCase;
+
+    bool IsParquetExportSettingsCase(TSettingsCase settings) {
+        return settings == NKikimrSchemeOp::TBackupTask::kS3Settings
+            || settings == NKikimrSchemeOp::TBackupTask::kFSSettings;
+    }
+
+    void ConfigureParquetBackupTask(NKikimrSchemeOp::TBackupTask& task, TSettingsCase settings, ui32 rowGroupSize) {
+        switch (settings) {
+        case NKikimrSchemeOp::TBackupTask::kFSSettings: {
+            auto& fs = *task.MutableFSSettings();
+            fs.SetBasePath("/tmp/exports");
+            fs.SetPath("backup");
+            fs.MutableExportDataSettings()->MutableParquet()->SetRowGroupSize(rowGroupSize);
+            break;
+        }
+        case NKikimrSchemeOp::TBackupTask::kS3Settings: {
+            auto& s3 = *task.MutableS3Settings();
+            s3.SetEndpoint("localhost");
+            s3.SetBucket("test-bucket");
+            s3.SetObjectKeyPattern("backup");
+            s3.MutableExportDataSettings()->MutableParquet()->SetRowGroupSize(rowGroupSize);
+            break;
+        }
+        default:
+            Y_ENSURE(false, "Unexpected settings case");
+        }
+    }
 
     // Parses Parquet file content into a single-chunk arrow::Table.
     std::shared_ptr<arrow::Table> ReadParquet(const TString& data) {
@@ -63,9 +93,9 @@ namespace {
         const NActors::TActorId ReplyTo;
     };
 
-    // Builds an FS-Parquet backup task, runs TS3Export::CreateBuffer(), feeds the rows
+    // Builds a Parquet backup task (FS or S3), runs TS3Export::CreateBuffer(), feeds the rows
     // and returns the produced (single) data file bytes.
-    TString ExportRowsToFsParquet(const TVector<std::pair<ui32, TString>>& rows, ui32 rowGroupSize) {
+    TString ExportRowsToParquet(TSettingsCase settings, const TVector<std::pair<ui32, TString>>& rows, ui32 rowGroupSize) {
         TTestActorRuntime runtime;
         runtime.Initialize(TAppPrepare().Unwrap());
 
@@ -77,10 +107,7 @@ namespace {
             columns[1] = TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::Utf8), "", "value", false);
 
             NKikimrSchemeOp::TBackupTask task;
-            auto& fs = *task.MutableFSSettings();
-            fs.SetBasePath("/tmp/exports");
-            fs.SetPath("backup");
-            fs.MutableExportDataSettings()->MutableParquet()->SetRowGroupSize(rowGroupSize);
+            ConfigureParquetBackupTask(task, settings, rowGroupSize);
 
             TS3Export exportTask(task, columns);
             THolder<NExportScan::IBuffer> buffer(exportTask.CreateBuffer());
@@ -114,17 +141,22 @@ namespace {
 
 } // namespace
 
-Y_UNIT_TEST_SUITE(ExportFsParquetTest) {
-    // The FS-Parquet code path in TS3Export::CreateBuffer() (DataFormatFromTask /
-    // ParquetExportSettingsFromTask reading FSSettings) must produce a valid Parquet file.
-    Y_UNIT_TEST(ShouldProduceValidParquetForFsTask) {
+Y_UNIT_TEST_SUITE(ExportParquetTest) {
+    // The Parquet code path in TS3Export::CreateBuffer() (DataFormatFromTask /
+    // ParquetExportSettingsFromTask reading S3/FS settings) must produce a valid Parquet file.
+    Y_UNIT_TEST(ShouldProduceValidParquet, TSettingsCase) {
+        const auto settings = Arg<0>();
+        if (!IsParquetExportSettingsCase(settings)) {
+            return;
+        }
+
         const TVector<std::pair<ui32, TString>> rows = {
             {1, "valueA"},
             {2, "valueB"},
             {3, "valueC"},
         };
 
-        const TString data = ExportRowsToFsParquet(rows, /* rowGroupSize */ 2);
+        const TString data = ExportRowsToParquet(settings, rows, /* rowGroupSize */ 2);
         UNIT_ASSERT(!data.empty());
 
         const auto table = ReadParquet(data);
@@ -149,13 +181,18 @@ Y_UNIT_TEST_SUITE(ExportFsParquetTest) {
 
     // A small row group size forces multiple Parquet row groups; the file must still
     // round-trip every row correctly.
-    Y_UNIT_TEST(ShouldProduceValidParquetWithSmallRowGroup) {
+    Y_UNIT_TEST(ShouldProduceValidParquetWithSmallRowGroup, TSettingsCase) {
+        const auto settings = Arg<0>();
+        if (!IsParquetExportSettingsCase(settings)) {
+            return;
+        }
+
         TVector<std::pair<ui32, TString>> rows;
         for (ui32 i = 0; i < 50; ++i) {
             rows.emplace_back(i, TStringBuilder() << "value_" << i);
         }
 
-        const TString data = ExportRowsToFsParquet(rows, /* rowGroupSize */ 1);
+        const TString data = ExportRowsToParquet(settings, rows, /* rowGroupSize */ 1);
         UNIT_ASSERT(!data.empty());
 
         const auto table = ReadParquet(data);

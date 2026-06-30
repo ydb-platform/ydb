@@ -77,6 +77,10 @@ protected:
                     Abort(op, ctx, "Parquet export is disabled by feature flag EnableParquetForExport");
                     return false;
                 }
+                if (backup.HasEncryptionSettings()) {
+                    Abort(op, ctx, "Encryption is not supported for parquet files");
+                    return false;
+                }
             }
 
             const TStringBuf exportKind = backup.HasFSSettings() ? "FS"sv : "S3"sv;

@@ -294,6 +294,26 @@ Y_UNIT_TEST_SUITE(IScan) {
         UNIT_ASSERT_VALUES_EQUAL(
             data, "\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n");
     }
+
+    Y_UNIT_TEST(ShouldRejectParquetExportWithEncryption) {
+        TRuntimePtr runtime(new TTestBasicRuntime(1, true));
+        SetupTabletServices(*runtime);
+
+        NDataShard::IExport::TTableColumns columns;
+        columns[0] = NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::String), "", "key", true);
+        columns[1] = NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::String), "", "value", false);
+
+        auto backupTask = MakeBackupTask("test");
+        backupTask.MutableS3Settings()->MutableExportDataSettings()->MutableParquet();
+        backupTask.MutableEncryptionSettings()->SetEncryptionAlgorithm("AES-256-GCM");
+
+        auto exportFactory = std::make_shared<TDataShardExportFactory>();
+        auto result =
+            NColumnShard::NBackup::CreateIScanExportUploader(runtime->AllocateEdgeActor(), backupTask, exportFactory.get(), columns, 0);
+
+        UNIT_ASSERT(!result);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetErrorMessage(), "Encryption is not supported for parquet files");
+    }
 }
 
 }   // namespace NKikimr

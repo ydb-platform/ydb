@@ -4913,4 +4913,43 @@ CREATE EXTERNAL TABLE IF NOT EXISTS `ExternalTable` (
         const TString decrypted(decryptedData.Data(), decryptedData.Size());
         UNIT_ASSERT_VALUES_EQUAL_C(decrypted, expected, "Encrypted buffer corruption detected");
     }
+
+    Y_UNIT_TEST(ShouldRejectParquetExportWithEncryption) {
+        Env();
+        Runtime().GetAppData().FeatureFlags.SetEnableEncryptedExport(true);
+        ui64 txId = 100;
+
+        TestCreateTable(Runtime(), ++txId, "/MyRoot", R"(
+            Name: "Table"
+            Columns { Name: "key" Type: "Uint32" }
+            Columns { Name: "value" Type: "Utf8" }
+            KeyColumnNames: ["key"]
+        )");
+        Env().TestWaitNotification(Runtime(), txId);
+
+        TestExport(Runtime(), ++txId, "/MyRoot", Sprintf(R"(
+            ExportToS3Settings {
+              endpoint: "localhost:%d"
+              scheme: HTTP
+              destination_prefix: "export1"
+              parquet { }
+              encryption_settings {
+                encryption_algorithm: "AES-128-GCM"
+                symmetric_key {
+                    key: "0123456789012345"
+                }
+              }
+              items {
+                source_path: "/MyRoot/Table"
+                destination_prefix: ""
+              }
+            }
+        )", S3Port()));
+        Env().TestWaitNotification(Runtime(), txId);
+
+        const auto response = TestGetExport(Runtime(), txId, "/MyRoot", Ydb::StatusIds::CANCELLED);
+        const auto& entry = response.GetResponse().GetEntry();
+        UNIT_ASSERT_C(entry.IssuesSize() > 0, entry.ShortDebugString());
+        UNIT_ASSERT_STRING_CONTAINS(entry.GetIssues(0).message(), "Encryption is not supported for parquet files");
+    }
 }

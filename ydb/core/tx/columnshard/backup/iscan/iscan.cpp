@@ -140,6 +140,9 @@ TConclusion<std::unique_ptr<NTable::IScan>> CreateIScanExportUploader(const TAct
                 if (!AppData()->FeatureFlags.GetEnableParquetForExport()) {
                     return TConclusionStatus::Fail("Parquet export to S3 is disabled by feature flag EnableParquetForExport");
                 }
+                if (backupTask.HasEncryptionSettings()) {
+                    return TConclusionStatus::Fail("Encryption is not supported for parquet files");
+                }
             }
             if (exportFactory) {
                 exp = std::shared_ptr<NDataShard::IExport>(exportFactory->CreateExportToS3(backupTask, tableColumns));

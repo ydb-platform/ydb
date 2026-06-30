@@ -9,10 +9,11 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     backup_restore_traits_ut.cpp
-    export_fs_parquet_ut.cpp
+    export_parquet_ut.cpp
     export_s3_buffer_ut.cpp
 )
 
-GENERATE_ENUM_SERIALIZATION(export_enums.h)
+GENERATE_ENUM_SERIALIZATION(ydb/core/tx/datashard/backup_restore_traits.h)
+GENERATE_ENUM_SERIALIZATION(ydb/core/protos/flat_scheme_op.pb.h)
 
 END()

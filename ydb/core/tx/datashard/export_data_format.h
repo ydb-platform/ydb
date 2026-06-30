@@ -55,7 +55,7 @@ struct TParquetExportSettings {
         }
 
         EAlgorithm Algorithm = EAlgorithm::Zstd;
-        int Level = -1;
+        int Level = 3;
     };
 
     TParquetExportSettings& WithColumns(IExport::TTableColumns columns) {

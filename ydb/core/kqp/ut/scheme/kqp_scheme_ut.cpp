@@ -5393,6 +5393,113 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         }
     }
 
+    Y_UNIT_TEST(RebuildVectorIndexNonPrefixedToPrefixedSql) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Data String,
+                    Embedding String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Embedding)
+                        WITH (distance=cosine, vector_type=float, vector_dimension=2, levels=2, clusters=2)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable`
+                    REBUILD INDEX vector_idx
+                        ON (Data, Embedding)
+                    WITH (levels = 2, clusters = 3);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/TestTable").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 2);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns()[0], "Data");
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns()[1], "Embedding");
+        }
+        {
+            // Rebuild as prefixed must have created the prefix impl table.
+            auto describePrefix = session.DescribeTable("/Root/TestTable/vector_idx/indexImplPrefixTable").GetValueSync();
+            UNIT_ASSERT_C(describePrefix.IsSuccess(), describePrefix.GetIssues().ToString());
+        }
+    }
+
+    Y_UNIT_TEST(RebuildVectorIndexPrefixedToNonPrefixedSql) {
+        NKikimrConfig::TFeatureFlags featureFlags;
+        auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);
+        TKikimrRunner kikimr(settings);
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                CREATE TABLE `/Root/TestTable` (
+                    Key Uint64,
+                    Data String,
+                    Embedding String,
+                    PRIMARY KEY (Key),
+                    INDEX vector_idx
+                        GLOBAL USING vector_kmeans_tree
+                        ON (Data, Embedding)
+                        WITH (distance=cosine, vector_type=float, vector_dimension=2, levels=2, clusters=2)
+                );
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+        {
+            // Prefixed index must have a prefix impl table before the rebuild.
+            auto describePrefix = session.DescribeTable("/Root/TestTable/vector_idx/indexImplPrefixTable").GetValueSync();
+            UNIT_ASSERT_C(describePrefix.IsSuccess(), describePrefix.GetIssues().ToString());
+        }
+        {
+            auto status = session.ExecuteSchemeQuery(R"(
+                --!syntax_v1
+                ALTER TABLE `/Root/TestTable`
+                    REBUILD INDEX vector_idx
+                        ON (Embedding)
+                    WITH (levels = 2, clusters = 3);
+            )").ExtractValueSync();
+            UNIT_ASSERT_VALUES_EQUAL_C(status.GetStatus(), EStatus::SUCCESS, status.GetIssues().ToString());
+        }
+        {
+            TDescribeTableResult describe = session.DescribeTable("/Root/TestTable").GetValueSync();
+            UNIT_ASSERT_EQUAL(describe.GetStatus(), EStatus::SUCCESS);
+            auto indexDesc = describe.GetTableDescription().GetIndexDescriptions();
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns().size(), 1);
+            UNIT_ASSERT_VALUES_EQUAL(indexDesc.back().GetIndexColumns()[0], "Embedding");
+        }
+        {
+            // After rebuilding down to non-prefixed, the prefix impl table must be gone.
+            auto describePrefix = session.DescribeTable("/Root/TestTable/vector_idx/indexImplPrefixTable").GetValueSync();
+            UNIT_ASSERT_C(!describePrefix.IsSuccess(), "indexImplPrefixTable must be removed after rebuild to non-prefixed");
+        }
+        {
+            // Level and posting tables must still exist.
+            auto describeLevel = session.DescribeTable("/Root/TestTable/vector_idx/indexImplLevelTable").GetValueSync();
+            UNIT_ASSERT_C(describeLevel.IsSuccess(), describeLevel.GetIssues().ToString());
+            auto describePosting = session.DescribeTable("/Root/TestTable/vector_idx/indexImplPostingTable").GetValueSync();
+            UNIT_ASSERT_C(describePosting.IsSuccess(), describePosting.GetIssues().ToString());
+        }
+    }
+
     Y_UNIT_TEST(RenameTableWithVectorIndex) {
         NKikimrConfig::TFeatureFlags featureFlags;
         auto settings = TKikimrSettings().SetFeatureFlags(featureFlags);

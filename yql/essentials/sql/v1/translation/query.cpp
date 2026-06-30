@@ -1985,6 +1985,11 @@ public:
             actions = L(actions, Q(Y(Q("dropChangefeed"), name)));
         }
 
+        for (const auto& index : Params_.RebuildIndexes) {
+            const auto& desc = CreateIndexDesc(index, ETableSettingsParsingMode::Alter, *this);
+            actions = L(actions, Q(Y(Q("rebuildIndex"), Q(desc))));
+        }
+
         if (Params_.Compact) {
             auto settings = Y();
             if (Params_.Compact->Cascade) {

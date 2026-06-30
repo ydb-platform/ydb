@@ -1447,6 +1447,7 @@ struct TAlterTableParameters {
     TVector<TIdentifier> DropChangefeeds;
     ETableType TableType = ETableType::Table;
     TMaybe<TCompactEntry> Compact;
+    TVector<TIndexDescription> RebuildIndexes;
 
     bool IsEmpty() const {
         return AddColumns.empty() &&
@@ -1465,7 +1466,8 @@ struct TAlterTableParameters {
                AddChangefeeds.empty() &&
                AlterChangefeeds.empty() &&
                DropChangefeeds.empty() &&
-               !Compact.Defined();
+               !Compact.Defined() &&
+               RebuildIndexes.empty();
     }
 };
 

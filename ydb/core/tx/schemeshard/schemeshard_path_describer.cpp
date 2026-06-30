@@ -1559,10 +1559,9 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     ui64 dataSize = 0;
     for (const auto& indexImplTablePathId : indexPath.GetChildren()) {
         const auto* tableInfoPtr = Tables.FindPtr(indexImplTablePathId.second);
-        if (!tableInfoPtr && NTableIndex::IsBuildImplTable(indexImplTablePathId.first)) {
-            continue; // it's possible because of dropping build index impl tables without dropping index
+        if (!tableInfoPtr) {
+            continue; // it's possible because of dropping impl tables during index build or rebuild
         }
-        Y_ABORT_UNLESS(tableInfoPtr);
         const auto& tableInfo = *tableInfoPtr->Get();
 
         const auto& tableStats = tableInfo.GetStats().Aggregated;

@@ -2746,6 +2746,16 @@ bool TSqlQuery::AlterTableAction(const TRule_alter_table_action& node, TAlterTab
             if (!AlterTableDropStatistics(dropStatistics, params)) {
                 return false;
             }
+
+            break;
+        }
+        case TRule_alter_table_action::kAltAlterTableAction26: {
+            // REBUILD INDEX
+            const auto& rebuildRule = node.GetAlt_alter_table_action26().GetRule_alter_table_rebuild_index1();
+
+            if (!AlterTableRebuildIndex(rebuildRule, params)) {
+                return false;
+            }
             break;
         }
         case TRule_alter_table_action::ALT_NOT_SET:
@@ -3172,6 +3182,34 @@ bool TSqlQuery::AlterTableAlterIndex(const TRule_alter_table_alter_index& node, 
         }
         case TRule_alter_table_alter_index_action::ALT_NOT_SET:
             YQL_ENSURE(false, "Unreachable");
+    }
+
+    return true;
+}
+
+bool TSqlQuery::AlterTableRebuildIndex(const TRule_alter_table_rebuild_index& node, TAlterTableParameters& params) {
+    // REBUILD INDEX an_id (ON LPAREN columns RPAREN)? with_index_settings?
+    const auto indexName = IdEx(node.GetRule_an_id3(), *this);
+    // Use GlobalVectorKmeansTree as default type - will be validated/resolved in KQP exec layer
+    params.RebuildIndexes.emplace_back(indexName, TIndexDescription::EType::GlobalVectorKmeansTree);
+    auto& index = params.RebuildIndexes.back();
+
+    // Parse optional ON (columns) clause
+    if (node.HasBlock4()) {
+        const auto& onClause = node.GetBlock4();
+        // First column
+        index.IndexColumns.push_back(IdEx(onClause.GetRule_an_id_schema3(), *this));
+        // Remaining columns
+        for (const auto& block : onClause.GetBlock4()) {
+            index.IndexColumns.push_back(IdEx(block.GetRule_an_id_schema2(), *this));
+        }
+    }
+
+    // Parse optional WITH (settings) clause
+    if (node.HasBlock5()) {
+        if (!FillIndexSettings(node.GetBlock5().GetRule_with_index_settings1(), index.IndexSettings)) {
+            return false;
+        }
     }
 
     return true;

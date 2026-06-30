@@ -339,6 +339,10 @@ bool BuildAlterTableAddIndexRequest(const Ydb::Table::AlterTableRequest* req, NK
         settings->set_if_not_exist(true);
     }
 
+    if (flags & NKqpProto::TKqpSchemeOperation::FLAG_REBUILD_INDEX) {
+        settings->set_is_rebuild(true);
+    }
+
     if (desc.parallel()) {
         settings->set_max_shards_in_flight(desc.parallel());
     }

@@ -3170,6 +3170,123 @@ public:
                             return SyncError();
                         }
                     }
+                } else if (name == "rebuildIndex") {
+                    auto listNode = action.Value().Cast<TExprList>();
+                    auto add_index = alterTableRequest.add_add_indexes();
+                    TString rebuildIndexName;
+                    bool hasUserColumns = false;
+
+                    // Parse the same way as addIndex
+                    for (size_t i = 0; i < listNode.Size(); ++i) {
+                        auto item = listNode.Item(i);
+                        auto columnTuple = item.Cast<TExprList>();
+                        auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
+                        auto n = TString(nameNode.Value());
+                        if (n == "indexName") {
+                            rebuildIndexName = TString(columnTuple.Item(1).Cast<TCoAtom>().Value());
+                            add_index->set_name(rebuildIndexName);
+                        } else if (n == "indexType") {
+                            // Will be resolved from existing index below
+                        } else if (n == "indexColumns") {
+                            auto columnList = columnTuple.Item(1).Cast<TCoAtomList>();
+                            for (auto column : columnList) {
+                                add_index->add_index_columns(TString(column.Value()));
+                            }
+                            hasUserColumns = columnList.Size() > 0;
+                        } else if (n == "dataColumns") {
+                            auto columnList = columnTuple.Item(1).Cast<TCoAtomList>();
+                            for (auto column : columnList) {
+                                add_index->add_data_columns(TString(column.Value()));
+                            }
+                        } else if (n == "indexSettings") {
+                            // Defer settings parsing until after we resolve the index type
+                        }
+                    }
+
+                    // Find existing index in table metadata
+                    const NYql::TIndexDescription* existingIndex = nullptr;
+                    for (const auto& idx : table.Metadata->Indexes) {
+                        if (idx.Name == rebuildIndexName) {
+                            existingIndex = &idx;
+                            break;
+                        }
+                    }
+
+                    if (!existingIndex) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                            TStringBuilder() << "Index '" << rebuildIndexName << "' not found"));
+                        return SyncError();
+                    }
+
+                    // Only vector_kmeans_tree is supported for rebuild
+                    if (existingIndex->Type != NYql::TIndexDescription::EType::GlobalSyncVectorKMeansTree) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Pos()),
+                            TStringBuilder() << "REBUILD INDEX is only supported for vector_kmeans_tree indexes"));
+                        return SyncError();
+                    }
+
+                    // Set the index type
+                    add_index->mutable_global_vector_kmeans_tree_index();
+
+                    // If user didn't provide ON columns, inherit from existing index
+                    if (!hasUserColumns) {
+                        for (const auto& col : existingIndex->KeyColumns) {
+                            add_index->add_index_columns(col);
+                        }
+                    }
+                    // Inherit data columns if user didn't provide any
+                    if (add_index->data_columns().empty()) {
+                        for (const auto& col : existingIndex->DataColumns) {
+                            add_index->add_data_columns(col);
+                        }
+                    }
+
+                    // Parse user-provided index settings (don't pre-populate with existing;
+                    // schemeshard will merge with existing settings in Prepare)
+                    auto* vectorSettings = add_index->mutable_global_vector_kmeans_tree_index()->mutable_vector_settings();
+                    for (size_t i = 0; i < listNode.Size(); ++i) {
+                        auto item = listNode.Item(i);
+                        auto columnTuple = item.Cast<TExprList>();
+                        auto nameNode = columnTuple.Item(0).Cast<TCoAtom>();
+                        auto n = TString(nameNode.Value());
+                        if (n == "indexSettings") {
+                            auto indexSettings = columnTuple.Item(1).Cast<TCoAtomList>();
+                            for (const auto& indexSetting : indexSettings.Cast<TCoNameValueTupleList>()) {
+                                YQL_ENSURE(indexSetting.Value().Maybe<TCoAtom>());
+                                const auto& settingName = to_lower(indexSetting.Name().StringValue());
+                                const auto& value = indexSetting.Value().Cast<TCoAtom>();
+
+                                if (settingName == "distance" || settingName == "similarity"
+                                    || settingName == "vector_type" || settingName == "vector_dimension")
+                                {
+                                    ctx.AddError(TIssue(ctx.GetPosition(value.Pos()),
+                                        "Can't override parameters distance, similarity, vector_type or vector_dimension on index rebuild"));
+                                    return SyncError();
+                                }
+
+                                TString error;
+                                NKikimr::NKMeans::FillSetting(
+                                    *vectorSettings,
+                                    settingName, value.StringValue(), error);
+                                if (error) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(value.Pos()), error));
+                                    return SyncError();
+                                }
+                            }
+                        }
+                    }
+
+                    // NB: don't run ValidateSettingsPartial here. On rebuild the nested
+                    // VectorIndexSettings (metric/vector_type/vector_dimension) is inherited
+                    // from the existing index and cannot be provided by the user, so it is
+                    // always empty at this point and the check would spuriously fail with
+                    // "vector index settings should be set". levels/clusters are already
+                    // bounds-checked in FillSetting, and full validation runs on the
+                    // schemeshard side after merging with the existing index settings.
+
+                    // Mark as rebuild via flags
+                    alterTableFlags |= NKqpProto::TKqpSchemeOperation::FLAG_REBUILD_INDEX;
+
                 } else if (name == "compact") {
                     if (table.Metadata->StoreType == EStoreType::Row && !SessionCtx->Config().FeatureFlags.GetEnableForcedCompactions()) {
                         ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),

@@ -302,6 +302,104 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropBuildPropose(
     return propose;
 }
 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> DropRebuildImplPropose(
+    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+{
+    Y_ENSURE(buildInfo.IsBuildVectorIndex());
+    Y_ENSURE(buildInfo.IsRebuild);
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    propose->Record.SetFailOnExist(true);
+
+    auto indexPath = TPath::Init(buildInfo.TablePathId, ss).Dive(buildInfo.IndexName);
+    const TString indexPathStr = indexPath.PathString();
+
+    auto addDropTable = [&](const TString& tableName) {
+        auto path = TPath::Init(buildInfo.TablePathId, ss).Dive(buildInfo.IndexName).Dive(tableName);
+        if (!path.IsResolved() || path.IsDeleted()) {
+            return;
+        }
+        NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
+        modifyScheme.SetInternal(true);
+        modifyScheme.SetWorkingDir(indexPathStr);
+        if (path.IsLocked()) {
+            modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
+        }
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpDropTable);
+        modifyScheme.MutableDrop()->SetName(tableName);
+    };
+
+    using namespace NTableIndex::NKMeans;
+    addDropTable(LevelTable);
+    addDropTable(PostingTable);
+    // Always attempt to drop the prefix table: it must be removed both when the rebuild
+    // target is prefixed (it will be recreated) and when rebuilding a previously prefixed
+    // index down to non-prefixed (it must not be left orphaned). addDropTable is a no-op
+    // when the table doesn't exist, so plain non-prefixed rebuilds are unaffected.
+    addDropTable(PrefixTable);
+
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "DropRebuildImplPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+
+    return propose;
+}
+
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateRebuildImplPropose(
+    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+{
+    Y_ENSURE(buildInfo.IsBuildVectorIndex());
+    Y_ENSURE(buildInfo.IsRebuild);
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    propose->Record.SetFailOnExist(true);
+
+    const auto& tableInfo = ss->Tables.at(buildInfo.TablePathId);
+    const TString indexPathStr = TPath::Init(buildInfo.TablePathId, ss).Dive(buildInfo.IndexName).PathString();
+
+    NKikimrSchemeOp::TModifyScheme indexBuildProto;
+    buildInfo.SerializeToProto(ss, indexBuildProto.MutableInitiateIndexBuild());
+    const auto& indexDesc = indexBuildProto.GetInitiateIndexBuild().GetIndex();
+    const THashSet<TString> indexDataColumns{indexDesc.GetDataColumnNames().begin(), indexDesc.GetDataColumnNames().end()};
+
+    auto addCreateTable = [&](NKikimrSchemeOp::TTableDescription&& implTableDesc) {
+        implTableDesc.MutablePartitionConfig()->SetShadowData(true);
+        implTableDesc.MutablePartitionConfig()->MutableCompactionPolicy()->SetKeepEraseMarkers(true);
+
+        NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
+        modifyScheme.SetInternal(true);
+        modifyScheme.SetWorkingDir(indexPathStr);
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
+        *modifyScheme.MutableCreateTable() = std::move(implTableDesc);
+    };
+
+    using namespace NTableIndex::NKMeans;
+    addCreateTable(CalcVectorKmeansTreeLevelImplTableDesc(tableInfo->PartitionConfig(), {}));
+    addCreateTable(CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, {}));
+    if (buildInfo.IsBuildPrefixedVectorIndex()) {
+        const auto& baseTableColumns = NTableIndex::ExtractInfo(tableInfo);
+        auto indexKeys = NTableIndex::ExtractInfo(indexDesc);
+        auto implTableColumns = CalcTableImplDescription(buildInfo.IndexType, baseTableColumns, indexKeys);
+        const THashSet<TString> prefixColumns{indexDesc.GetKeyColumnNames().begin(), indexDesc.GetKeyColumnNames().end() - 1};
+
+        // Create prefix table first (localSequences extracted from DefaultFromSequence by ConstructParts),
+        // then the sequence under it
+        addCreateTable(CalcVectorKmeansTreePrefixImplTableDesc(
+            prefixColumns, tableInfo, tableInfo->PartitionConfig(), implTableColumns, {}));
+        {
+            NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
+            modifyScheme.SetInternal(true);
+            modifyScheme.SetWorkingDir(indexPathStr + "/" + TString(PrefixTable));
+            modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateSequence);
+            modifyScheme.MutableSequence()->SetName(TString(IdColumnSequence));
+        }
+    }
+
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "CreateRebuildImplPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+
+    return propose;
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
@@ -2651,7 +2749,12 @@ public:
                     buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextRowIdSrc;
                     Self->PersistBuildIndexState(db, buildInfo);
                 }
-                if (buildInfo.IsBuildVectorIndex() && buildInfo.KMeans.NeedsAnotherLevel() ||
+                if (buildInfo.IsRebuild && buildInfo.IsBuildVectorIndex()) {
+                    // For rebuild: drop old impl tables, then create new ones
+                    buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::RebuildDrop;
+                    PersistKMeansState(txc, buildInfo);
+                    ChangeState(BuildId, TIndexBuildInfo::EState::DropBuild);
+                } else if (buildInfo.IsBuildVectorIndex() && buildInfo.KMeans.NeedsAnotherLevel() ||
                     buildInfo.IsBuildFulltextCompact()) {
                     ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
                 } else {
@@ -2693,11 +2796,16 @@ public:
         }
         case TIndexBuildInfo::EState::DropBuild:
             Y_ENSURE(buildInfo.IsBuildVectorIndex());
-            Y_ENSURE(buildInfo.KMeans.Level > 2 || buildInfo.KMeans.OverlapClusters > 1 && buildInfo.KMeans.Levels > 1);
+            Y_ENSURE(buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::RebuildDrop ||
+                buildInfo.KMeans.Level > 2 || buildInfo.KMeans.OverlapClusters > 1 && buildInfo.KMeans.Levels > 1);
             if (buildInfo.ApplyTxId == InvalidTxId) {
                 AllocateTxId(BuildId);
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
-                Send(Self->SelfId(), DropBuildPropose(Self, buildInfo), 0, ui64(BuildId));
+                if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::RebuildDrop) {
+                    Send(Self->SelfId(), DropRebuildImplPropose(Self, buildInfo), 0, ui64(BuildId));
+                } else {
+                    Send(Self->SelfId(), DropBuildPropose(Self, buildInfo), 0, ui64(BuildId));
+                }
             } else if (!buildInfo.ApplyTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.ApplyTxId)));
             } else {
@@ -2709,6 +2817,10 @@ public:
                 Self->PersistBuildIndexApplyTx(db, buildInfo);
 
                 ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
+                if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::RebuildDrop) {
+                    buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::RebuildCreate;
+                    PersistKMeansState(txc, buildInfo);
+                }
                 Progress(BuildId);
             }
             break;
@@ -2723,6 +2835,8 @@ public:
                     } else {
                         Send(Self->SelfId(), CreateBuildFulltextPropose(Self, buildInfo), 0, ui64(BuildId));
                     }
+                } else if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::RebuildCreate) {
+                    Send(Self->SelfId(), CreateRebuildImplPropose(Self, buildInfo), 0, ui64(BuildId));
                 } else {
                     Send(Self->SelfId(), CreateBuildPropose(Self, buildInfo), 0, ui64(BuildId));
                 }
@@ -2739,7 +2853,19 @@ public:
                 NIceDb::TNiceDb db(txc.DB);
                 Self->PersistBuildIndexApplyTx(db, buildInfo);
 
-                ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
+                if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::RebuildCreate) {
+                    // Rebuild impl tables created, now proceed to normal fill flow
+                    buildInfo.KMeans.State = TIndexBuildInfo::TKMeans::Sample;
+                    PersistKMeansState(txc, buildInfo);
+                    if (buildInfo.KMeans.NeedsAnotherLevel()) {
+                        // Multi-level: need to create build tables first
+                        ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
+                    } else {
+                        ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
+                    }
+                } else {
+                    ChangeState(BuildId, TIndexBuildInfo::EState::Filling);
+                }
                 Progress(BuildId);
             }
             break;

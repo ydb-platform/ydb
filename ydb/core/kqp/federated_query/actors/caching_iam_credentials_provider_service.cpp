@@ -36,6 +36,7 @@ class TIamResolverActor : public NActors::TActor<TIamResolverActor> {
         )
         void Handle(NYql::TEvIamAuthCredentialsProviderService::TEvGetAuthInfoRequest::TPtr& event) {
             auto& promise = event->Get()->Promise;
+            // Attention: only Promise field is valid here
             try {
                 if (!NKikimr::AppData()->FeatureFlags.GetEnableExternalDataSourceAuthMethodIam()) {
                     throw yexception() << "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it";
@@ -67,6 +68,7 @@ class TIamResolverServiceActor : public NActors::TActor<TIamResolverServiceActor
         auto [it, inserted] = Actors.emplace(std::pair { std::move(ev->Get()->ServiceAccountId), std::move(ev->Get()->ResourceId) }, NActors::TActorId {});
         if (inserted) {
             try {
+                // Attention: ev->Get()->{ServiceAccountId, ResourceId} already destroyed and must not be used
                 it->second = Register(new TIamResolverActor(it->first.first, it->first.second));
             } catch(...) {
                 ev->Get()->Promise.SetException(std::current_exception());

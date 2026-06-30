@@ -9,6 +9,8 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <ydb/library/actors/util/rope.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_LOAD_TEST
+
 namespace NKikimr {
 
     namespace {
@@ -99,8 +101,8 @@ namespace NKikimr {
             }
 
             void Bootstrap(const TActorContext& ctx) {
-                LOG_INFO(ctx, NKikimrServices::BS_LOAD_TEST, "Load actor starter, erasure# %s",
-                        GType.ToString().data());
+                YDB_LOG_INFO_CTX(ctx, "Load actor starter,",
+                    {"gType", GType});
                 Become(&TVDiskLoadActor::StateFunc);
                 StartTime = TAppData::TimeProvider->Now();
                 ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);

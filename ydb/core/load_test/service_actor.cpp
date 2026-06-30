@@ -32,12 +32,9 @@
 #include <util/string/strip.h>
 #include <util/string/type.h>
 
-namespace NKikimr {
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_LOAD_TEST
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, stream)
+namespace NKikimr {
 
 namespace {
 
@@ -293,13 +290,14 @@ private:
         if (legacyRequest) {
             ui64 tag = ExtractTagFromCommand(origRequest);
             if (tag) {
-                LOG_N("Received legacy request with tag# " << tag);
+                YDB_LOG_NOTICE("Received legacy request with",
+                    {"tag", tag});
                 Y_ENSURE(tag >= NextTag, "External tag# " << tag << " should not be less than NextTag = " << NextTag);
                 Y_ENSURE(TakenTags.count(tag) == 0, "External tag# " << tag << " should not be taken");
                 TakenTags.insert(tag);
                 return tag;
             } else {
-                LOG_N("Received legacy request with tag# 0, assigning it a proper tag in a regular way");
+                YDB_LOG_NOTICE("Received legacy request with 0, assigning it a proper tag in a regular way");
             }
         }
         while (TakenTags.contains(NextTag)) {
@@ -317,14 +315,16 @@ private:
         UuidByTag[tag] = request.GetUuid();
         auto ret = RequestsInProcessing.emplace(request.GetUuid(), std::move(request));
         Y_ENSURE(ret.second);
-        LOG_N("Added request info for tag# " << tag << ", uuid# " << UuidByTag[tag]);
+        YDB_LOG_NOTICE("Added request info",
+            {"tag", tag},
+            {"uuid", UuidByTag[tag]});
         return ret.first->second;
     }
 
     const TEvLoadTestRequest& GetFixedRequest(TEvLoad::TEvLoadTestRequest::TPtr& ev) {
         const auto& origRequest = ev->Get()->Record;
         if (IsLegacyRequest(origRequest)) {
-            LOG_N("Modifying legacy request to satisfy general expectations");
+            YDB_LOG_NOTICE("Modifying legacy request to satisfy general expectations");
             const auto& modifiedRequest = AddRequestInProcessing(origRequest, /* legacyRequest */ true);
             return modifiedRequest;
         } else {
@@ -337,7 +337,8 @@ private:
             return;
         }
         const TString query = MakeRecordInsertionYql(TestResultsToStore);
-        LOG_D("YQL query to insert records: " << query);
+        YDB_LOG_DEBUG("YQL query to insert",
+            {"records", query});
         RecordInsertionActor = TlsActivationContext->Register(
             CreateYqlSingleQueryActor(
                 SelfId(),
@@ -349,7 +350,8 @@ private:
             )
         );
         TestResultsToStore.clear();
-        LOG_N("Created actor for record insertion " << RecordInsertionActor.ToString());
+        YDB_LOG_NOTICE("Created actor for record insertion",
+            {"recordInsertionActor", RecordInsertionActor});
     }
 
     void AggregateNodeResponses(const TString& uuid) {
@@ -407,12 +409,14 @@ private:
                 TString(kTableCreatedResult)
             )
         );
-        LOG_N("Created actor for table creation " << TableCreationActor.ToString());
+        YDB_LOG_NOTICE("Created actor for table creation",
+            {"tableCreationActor", TableCreationActor});
     }
 
     void StartReadingResultsFromTable(ui32 offset, ui32 limit) {
         const TString query = MakeRecordSelectionYql(offset, limit);
-        LOG_D("YQL query to select records: " << query);
+        YDB_LOG_DEBUG("YQL query to select",
+            {"records", query});
         auto recordSelectionActor = TlsActivationContext->Register(
             CreateYqlSingleQueryActor(
                 SelfId(),
@@ -423,7 +427,8 @@ private:
                 TString(kRecordsSelectedResult)
             )
         );
-        LOG_N("Created actor for record selection " << recordSelectionActor.ToString());
+        YDB_LOG_NOTICE("Created actor for record selection",
+            {"recordSelectionActor", recordSelectionActor});
     }
 
     void GenerateArchiveJsonResponse(ui32 requestId) {
@@ -480,9 +485,10 @@ public:
 
     void Handle(TEvLoad::TEvLoadTestRequest::TPtr& ev) {
         const auto& record = GetFixedRequest(ev);
-        LOG_N("Load test request arrived from " << ev->Sender.ToString() <<
-            ": tag# " << record.GetTag() <<
-            ", uuid# " << record.GetUuid());
+        YDB_LOG_NOTICE("Load test request arrived",
+            {"sender", ev->Sender},
+            {"tag", record.GetTag()},
+            {"uuid", record.GetUuid()});
         ui32 status = NMsgBusProxy::MSTATUS_OK;
         TString error;
         try {
@@ -492,7 +498,8 @@ public:
             UuidByTag[record.GetTag()] = record.GetUuid();
             ProcessCmd(record);
         } catch (const TLoadActorException& ex) {
-            LOG_E("Exception while creating load actor, what# " << ex.what());
+            YDB_LOG_ERROR("Exception while creating load actor,",
+                {"what", ex.what()});
             status = NMsgBusProxy::MSTATUS_ERROR;
             error = ex.what();
         }
@@ -510,9 +517,11 @@ public:
 
     void Handle(TEvLoad::TEvLoadTestResponse::TPtr& ev) {
         if (ev->Get()->Record.GetStatus() != NMsgBusProxy::MSTATUS_OK) {
-            LOG_E("Receieved non-OK LoadTestResponse from another node, Record# " << ev->ToString());
+            YDB_LOG_ERROR("Receieved non-OK LoadTestResponse from another node,",
+                {"record", ev->ToString()});
         } else {
-            LOG_N("Receieved OK LoadTestResponse from another node# " << ev->ToString());
+            YDB_LOG_NOTICE("Receieved OK LoadTestResponse from another",
+                {"node", ev->ToString()});
         }
     }
 
@@ -528,7 +537,8 @@ public:
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
-                LOG_D("Create new load actor with tag# " << tag);
+                YDB_LOG_DEBUG("Create new load actor with",
+                    {"tag", tag});
                 LoadActors.emplace(tag, TlsActivationContext->Register(CreateWriterLoadTest(cmd, SelfId(),
                                 GetServiceCounters(Counters, "load_actor"), tag)));
                 break;
@@ -537,7 +547,7 @@ public:
             case NKikimr::TEvLoadTestRequest::CommandCase::kStop: {
                 const auto& cmd = record.GetStop();
                 if (cmd.HasRemoveAllTags() && cmd.GetRemoveAllTags()) {
-                    LOG_D("Delete all running load actors");
+                    YDB_LOG_DEBUG("Delete all running load actors");
                     for (auto& actorPair : LoadActors) {
                         Send(actorPair.second, new TEvents::TEvPoisonPill);
                     }
@@ -549,8 +559,8 @@ public:
                         ythrow TLoadActorException()
                             << Sprintf("load actor with Tag# %" PRIu64 " not found", tag);
                     }
-                    LOG_D("Delete running load actor with tag# "
-                            << tag);
+                    YDB_LOG_DEBUG("Delete running load actor with",
+                        {"tag", tag});
                     Send(iter->second, new TEvents::TEvPoisonPill);
                 }
                 break;
@@ -561,7 +571,8 @@ public:
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
-                LOG_D("Create new load actor with tag# " << tag);
+                YDB_LOG_DEBUG("Create new load actor with",
+                    {"tag", tag});
                 LoadActors.emplace(tag, TlsActivationContext->Register(CreatePDiskWriterLoadTest(
                                 cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
@@ -572,7 +583,8 @@ public:
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
-                LOG_D("Create new load actor with tag# " << tag);
+                YDB_LOG_DEBUG("Create new load actor with",
+                    {"tag", tag});
                 LoadActors.emplace(tag, TlsActivationContext->Register(CreateDDiskLoadTest(
                                 cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
@@ -583,7 +595,8 @@ public:
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
-                LOG_D("Create new load actor with tag# " << tag);
+                YDB_LOG_DEBUG("Create new load actor with",
+                    {"tag", tag});
                 LoadActors.emplace(tag, TlsActivationContext->Register(CreatePersistentBufferWriterLoadTest(
                                 cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
@@ -594,7 +607,8 @@ public:
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
-                LOG_D("Create new load actor with tag# " << tag);
+                YDB_LOG_DEBUG("Create new load actor with",
+                    {"tag", tag});
                 LoadActors.emplace(tag, TlsActivationContext->Register(CreatePDiskReaderLoadTest(
                                 cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
@@ -605,7 +619,8 @@ public:
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
-                LOG_D("Create new load actor with tag# " << tag);
+                YDB_LOG_DEBUG("Create new load actor with",
+                    {"tag", tag});
                 LoadActors.emplace(tag, TlsActivationContext->Register(CreatePDiskLogWriterLoadTest(
                                 cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
@@ -616,7 +631,8 @@ public:
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
-                LOG_D("Create new load actor with tag# " << tag);
+                YDB_LOG_DEBUG("Create new load actor with",
+                    {"tag", tag});
                 LoadActors.emplace(tag, TlsActivationContext->Register(CreateVDiskWriterLoadTest(cmd, SelfId(), tag)));
                 break;
             }
@@ -627,7 +643,8 @@ public:
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
 
-                LOG_D("Create new load actor with tag# " << tag);
+                YDB_LOG_DEBUG("Create new load actor with",
+                    {"tag", tag});
                 LoadActors.emplace(tag, TlsActivationContext->Register(CreateKeyValueWriterLoadTest(
                                 cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
@@ -639,7 +656,8 @@ public:
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
 
-                LOG_D("Create new Kqp load actor with tag# " << tag);
+                YDB_LOG_DEBUG("Create new Kqp load actor with",
+                    {"tag", tag});
                 LoadActors.emplace(tag, TlsActivationContext->Register(CreateKqpLoadActor(
                             cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
@@ -651,7 +669,8 @@ public:
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
 
-                LOG_D("Create new memory load actor with tag# " << tag);
+                YDB_LOG_DEBUG("Create new memory load actor with",
+                    {"tag", tag});
                 LoadActors.emplace(tag, TlsActivationContext->Register(CreateMemoryLoadTest(
                             cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
@@ -663,7 +682,8 @@ public:
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
 
-                LOG_D("Create new YCSB load actor with tag# " << tag);
+                YDB_LOG_DEBUG("Create new YCSB load actor with",
+                    {"tag", tag});
                 LoadActors.emplace(tag, TlsActivationContext->Register(NDataShardLoad::CreateTestLoadActor(
                             cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), tag)));
                 break;
@@ -674,7 +694,8 @@ public:
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
-                LOG_D("Create new interconnect load actor with tag# " << tag);
+                YDB_LOG_DEBUG("Create new interconnect load actor with",
+                    {"tag", tag});
                 LoadActors.emplace(tag, TlsActivationContext->Register(CreateInterconnectLoadTest(cmd, SelfId(),
                                 GetServiceCounters(Counters, "load_actor"), tag)));
                 break;
@@ -685,7 +706,8 @@ public:
                 if (LoadActors.count(tag) != 0) {
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
-                LOG_D("Create new NBS-DBG-Like load actor with tag# " << tag);
+                YDB_LOG_DEBUG("Create new NBS-DBG-Like load actor with",
+                    {"tag", tag});
                 LoadActors.emplace(tag, TlsActivationContext->Register(
                     NNbsDbgLike::CreateNbsDbgLikeLoadActor(
                         cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), tag)));
@@ -699,7 +721,8 @@ public:
                     ythrow TLoadActorException() << Sprintf("duplicate load actor with Tag# %" PRIu64, tag);
                 }
 
-                LOG_D("Create new NBS2 load actor with tag# " << tag);
+                YDB_LOG_DEBUG("Create new NBS2 load actor with",
+                    {"tag", tag});
                 LoadActors.emplace(tag, TlsActivationContext->Register(CreateNBS2LoadActor(
                             cmd, SelfId(), GetServiceCounters(Counters, "load_actor"), 0, tag)));
                 break;
@@ -722,7 +745,8 @@ public:
         const ui32 id = ev->Get()->HttpRequestId;
         auto it = InfoRequests.find(id);
         if (it == InfoRequests.end()) {
-            LOG_E("NbsTabletListPageReady for unknown HttpRequestId# " << id);
+            YDB_LOG_ERROR("NbsTabletListPageReady for unknown",
+                {"httpRequestId", id});
             return;
         }
         THttpInfoRequest& info = it->second;
@@ -743,7 +767,8 @@ public:
         const auto& msg = ev->Get();
         auto iter = LoadActors.find(msg->Tag);
         Y_ABORT_UNLESS(iter != LoadActors.end());
-        LOG_D("Load actor with tag# " << msg->Tag << " finished");
+        YDB_LOG_DEBUG("Load actor with finished",
+            {"tag", msg->Tag});
         LoadActors.erase(iter);
         const TInstant finishTime = TAppData::TimeProvider->Now();
 
@@ -806,7 +831,8 @@ public:
                 record.SetJsonResult(str.Str());
             }
             auto requestSender = RequestSender[msg->Tag];
-            LOG_N("Sending TEvNodeFinishResponse back to sender# " << requestSender.ToString());
+            YDB_LOG_NOTICE("Sending TEvNodeFinishResponse back",
+                {"toSender", requestSender});
             Send(requestSender, nodeFinishResponse.Release());
             RequestSender.erase(msg->Tag);
         }
@@ -837,14 +863,17 @@ public:
 
         auto requestIt = RequestStatus.find(uuid);
         if (requestIt == RequestStatus.end()) {
-            LOG_E("Node finish response has arrived for unknown request uuid# " << uuid);
+            YDB_LOG_ERROR("Node finish response has arrived for unknown request",
+                {"uuid", uuid});
             return;
         }
 
         TRequestStatus& status = requestIt->second;
         auto nodeIt = status.NodeResponses.find(nodeId);
         if (nodeIt != status.NodeResponses.end()) {
-            LOG_E("Node finish response has arrived for already finished node# " << nodeId << ", uuid# " << uuid);
+            YDB_LOG_ERROR("Node finish response has arrived for already finished",
+                {"node", nodeId},
+                {"uuid", uuid});
             return;
         }
         status.NodeResponses.emplace(nodeId, record);
@@ -853,8 +882,10 @@ public:
         } else {
             ++status.FailedCount;
         }
-        LOG_N("Received responses from " << status.FinishedCount << " finished and " <<
-            status.FailedCount << " failed nodes out of " << status.StartedCount);
+        YDB_LOG_NOTICE("Received responses from finished and failed nodes out of",
+            {"finishedCount", status.FinishedCount},
+            {"failedCount", status.FailedCount},
+            {"startedCount", status.StartedCount});
         if (status.FinishedCount + status.FailedCount >= status.StartedCount) {
             AggregateNodeResponses(uuid);
         }
@@ -873,7 +904,7 @@ public:
 
     void Handle(TEvStateStorage::TEvBoardInfo::TPtr& ev) {
         if (ev->Get()->Status != TEvStateStorage::TEvBoardInfo::EStatus::Ok) {
-            LOG_E("Error status for TEvStateStorage::TEvBoardInfo");
+            YDB_LOG_ERROR("Error status for TEvStateStorage::TEvBoardInfo");
             // TODO Reply error to user
             return;
         }
@@ -899,7 +930,8 @@ public:
             .FailedCount = 0,
         });
         for (const auto& id : dynNodesIds) {
-            LOG_D("sending load request to: " << id);
+            YDB_LOG_DEBUG("Sending load request",
+                {"to", id});
             auto msg = MakeHolder<TEvLoad::TEvLoadTestRequest>();
             msg->Record = request;
             msg->Record.SetCookie(id);
@@ -929,7 +961,9 @@ public:
         const auto& params = request.GetParams();
         TString mode = params.Has("mode") ? params.Get("mode") : "start";
         info.Mode = mode;
-        LOG_N("handle http GET request, mode: " << mode << " LoadActors.size(): " << LoadActors.size());
+        YDB_LOG_NOTICE("Handle http GET request,",
+            {"mode", mode},
+            {"loadActorsCount", LoadActors.size()});
 
         if (mode == "results") {
             info.ResultsUuid = params.Has("uuid") ? params.Get("uuid") : "";
@@ -997,7 +1031,8 @@ public:
             auto status = google::protobuf::util::JsonStringToMessage(content, &*record);
             success = status.ok();
         } else {
-            LOG_D("Unable to parse request, content: " << content.Quote());
+            YDB_LOG_DEBUG("Unable to parse request,",
+                {"content", content});
         }
         if (!success) {
             record.reset();
@@ -1011,21 +1046,24 @@ public:
 
         TString mode = params.Has("mode") ? params.Get("mode") : "start";
 
-        LOG_N("handle http POST request, mode: " << mode);
+        YDB_LOG_NOTICE("Handle http POST request,",
+            {"mode", mode});
         if (mode == "start") {
             TString errorMsg = "ok";
             auto record = ParseMessage<NKikimr::TEvLoadTestRequest>(request, params.Get("config"));
-            LOG_I( "received config: " << params.Get("config").Quote() << "; proto parse success: " << std::to_string(bool{record}));
+            YDB_LOG_INFO("Received proto parse",
+                {"config", params.Get("config")},
+                {"success", bool{record}});
 
             ui64 tag = 0;
             TString uuid;
             if (record) {
                 if (params.Has("all_nodes") && params.Get("all_nodes") == "true") {
-                    LOG_N("running on all nodes");
+                    YDB_LOG_NOTICE("Running on all nodes");
                     RunRecordOnAllNodes(*record, tag, uuid, errorMsg);
                 } else {
                     try {
-                        LOG_N("running on single node");
+                        YDB_LOG_NOTICE("Running on single node");
                         const auto& modifiedRequest = AddRequestInProcessing(record.value(), /* legacyRequest */ false);
                         tag = modifiedRequest.GetTag();
                         uuid = modifiedRequest.GetUuid();
@@ -1037,7 +1075,7 @@ public:
                 }
             } else {
                 errorMsg = "bad protobuf";
-                LOG_E(errorMsg);
+                YDB_LOG_ERROR(errorMsg);
             }
 
             GenerateJsonTagInfoRes(id, tag, uuid, errorMsg);
@@ -1051,20 +1089,23 @@ public:
             *loadReq.MutableStop() = *record;
 
             if (params.Has("all_nodes") && params.Get("all_nodes") == "true") {
-                LOG_D("stop load on all nodes");
+                YDB_LOG_DEBUG("Stop load on all nodes");
                 ui64 dummyTag;
                 TString dummyUuid;
                 TString dummyMsg;
                 RunRecordOnAllNodes(loadReq, dummyTag, dummyUuid, dummyMsg);
             } else {
-                LOG_D("stop load on node: " << SelfId().NodeId());
+                YDB_LOG_DEBUG("Stop load",
+                    {"onNode", SelfId().NodeId()});
                 ProcessCmd(loadReq);
             }
             GenerateJsonTagInfoRes(id, 0, "", "OK");
         } else if (mode == "tablet_create" || mode == "tablet_delete") {
             const auto it = InfoRequests.find(id);
             if (it == InfoRequests.end()) {
-                LOG_E("tablet_* mode " << mode << " has no InfoRequests entry id=" << id);
+                YDB_LOG_ERROR("Tablet_* mode has no InfoRequests entry",
+                    {"mode", mode},
+                    {"id", id});
                 return;
             }
             const TActorId origin = it->second.Origin;
@@ -1084,10 +1125,11 @@ public:
 
             const TActorId helperId = Register(NNbsDbgLike::CreateNbsDbgLikeLoadTabletHttpRequest(
                 op, ownerIdx, cfg, origin, subRequestId, pools));
-            LOG_I("Dispatch tablet helper mode# " << mode
-                << " ownerIdx# " << ownerIdx
-                << " helper# " << helperId
-                << " origin# " << origin);
+            YDB_LOG_INFO("Dispatch tablet helper",
+                {"mode", mode},
+                {"ownerIdx", ownerIdx},
+                {"helper", helperId},
+                {"origin", origin});
         } else if (mode == "tablet_run") {
             const ui64 tabletId    = FromStringWithDefault<ui64>(params.Get("tablet_id"), 0);
             // Multi-tablet: CSV of "tabletId:nodeId" pairs. When present the run
@@ -1172,16 +1214,19 @@ public:
             } catch (const TLoadActorException& ex) {
                 errorMsg = ex.what();
             }
-            LOG_I("tablet_run tabletId# " << tabletId
-                << " maxInFlight# " << maxInFlight
-                << " outTag# " << outTag
-                << " status# " << errorMsg);
+            YDB_LOG_INFO("Tablet_run",
+                {"tabletId", tabletId},
+                {"maxInFlight", maxInFlight},
+                {"outTag", outTag},
+                {"status", errorMsg});
             GenerateJsonTagInfoRes(id, outTag, uuid, errorMsg);
         } else {
             // Unknown POST mode: reply so the HTTP client does not hang.
             const auto it = InfoRequests.find(id);
             if (it == InfoRequests.end()) {
-                LOG_E("POST mode " << mode.Quote() << " has no InfoRequests entry id=" << id);
+                YDB_LOG_ERROR("POST mode has no InfoRequests entry",
+                    {"modeQuote", mode},
+                    {"id", id});
                 return;
             }
             const TActorId origin = it->second.Origin;
@@ -1228,33 +1273,38 @@ public:
         const auto* response = ev->Get();
         if (response->Result == kTableCreatedResult) {
             if (response->ErrorMessage.Defined()) {
-                LOG_E("Failed to create test results table: " << response->ErrorMessage.GetRef());
+                YDB_LOG_ERROR("Failed to create test results",
+                    {"table", response->ErrorMessage.GetRef()});
             } else {
-                LOG_N("Created test results table");
+                YDB_LOG_NOTICE("Created test results table");
                 StoreResults();
             }
         } else if (response->Result == kRecordsInsertedResult) {
             if (response->ErrorMessage.Defined()) {
-                LOG_E("Failed to save test results into table: " << response->ErrorMessage.GetRef());
+                YDB_LOG_ERROR("Failed to save test results into",
+                    {"table", response->ErrorMessage.GetRef()});
             } else {
-                LOG_N("Inserted records with test results");
+                YDB_LOG_NOTICE("Inserted records with test results");
             }
         } else if (response->Result == kRecordsSelectedResult) {
             if (response->ErrorMessage.Defined()) {
-                LOG_E("Failed to select test results from table: " << response->ErrorMessage.GetRef());
+                YDB_LOG_ERROR("Failed to select test results",
+                    {"fromTable", response->ErrorMessage.GetRef()});
             } else {
-                LOG_N("Selected records from table");
+                YDB_LOG_NOTICE("Selected records from table");
                 Y_ENSURE(response->Response.Defined());
                 if (!LoadResultFromResponseProto(response->Response.GetRef(), ArchivedResults)) {
-                    LOG_E("Failed to parse results from table");
+                    YDB_LOG_ERROR("Failed to parse results from table");
                     ArchivedResults.clear();
                 } else {
-                    LOG_N("Got results from table: " << ArchivedResults.size());
+                    YDB_LOG_NOTICE("Got results",
+                        {"fromTable", ArchivedResults.size()});
                 }
             }
             RespondToArchiveRequests();
         } else {
-            LOG_E("Unsupported result from YQL query: " << response->Result);
+            YDB_LOG_ERROR("Unsupported result from YQL",
+                {"query", response->Result});
         }
     }
 
@@ -1265,7 +1315,8 @@ public:
         auto it = InfoRequests.find(id);
         Y_ABORT_UNLESS(it != InfoRequests.end());
         THttpInfoRequest& info = it->second;
-        LOG_I("Handle TEvHttpInfoRes, pending: " << info.HttpInfoResPending);
+        YDB_LOG_INFO("Handle TEvHttpInfoRes,",
+            {"pending", info.HttpInfoResPending});
 
         auto actorIt = info.ActorMap.find(ev->Sender);
         Y_ABORT_UNLESS(actorIt != info.ActorMap.end());

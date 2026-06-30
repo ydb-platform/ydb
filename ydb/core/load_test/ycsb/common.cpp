@@ -9,6 +9,8 @@
 
 #include <google/protobuf/text_format.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DS_LOAD_TEST
+
 namespace NKikimr::NDataShardLoad {
 
 namespace {
@@ -48,8 +50,9 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << Id
-            << " Bootstrap called, sample# " << SampleKeyCount);
+        YDB_LOG_INFO_CTX(ctx, "Bootstrap called,",
+            {"readIteratorScan", Id},
+            {"sample", SampleKeyCount});
 
         Become(&TReadIteratorScan::StateFunc);
         Connect(ctx);
@@ -57,8 +60,9 @@ public:
 
 private:
     void Connect(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << Id
-            << " Connect to# " << TabletId << " called");
+        YDB_LOG_DEBUG_CTX(ctx, "Connect called",
+            {"readIteratorScan", Id},
+            {"to", TabletId});
         --ReconnectLimit;
         if (ReconnectLimit == 0) {
             TStringStream ss;
@@ -71,8 +75,9 @@ private:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev, const TActorContext& ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << Id
-            << " Handle TEvClientConnected called, Status# " << msg->Status);
+        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvClientConnected called,",
+            {"readIteratorScan", Id},
+            {"status", msg->Status});
 
         if (msg->Status != NKikimrProto::OK) {
             return Connect(ctx);
@@ -84,8 +89,8 @@ private:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr, const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << Id
-            << " Handle TEvClientDestroyed called");
+        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvClientDestroyed called",
+            {"readIteratorScan", Id});
 
         // sanity check
         if (!WasConnected) {
@@ -130,11 +135,12 @@ private:
             }
 
             if (record.GetFinished() || SampledKeys.size() >= SampleKeyCount) {
-                LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << Id
-                    << " finished in " << delta
-                    << ", sampled# " << SampledKeys.size()
-                    << ", iter finished# " << record.GetFinished()
-                    << ", oks# " << Oks);
+                YDB_LOG_NOTICE_CTX(ctx, "Finished in iter",
+                    {"readIteratorScan", Id},
+                    {"delta", delta},
+                    {"sampled", SampledKeys.size()},
+                    {"finished", record.GetFinished()},
+                    {"oks", Oks});
 
                 ctx.Send(Parent, new TEvPrivate::TEvKeys(std::move(SampledKeys)));
                 return Die(ctx);
@@ -142,9 +148,10 @@ private:
 
             return;
         } else if (record.GetFinished()) {
-            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << Id
-                << " finished in " << delta
-                << ", read# " << Oks);
+            YDB_LOG_NOTICE_CTX(ctx, "Finished",
+                {"readIteratorScan", Id},
+                {"delta", delta},
+                {"read", Oks});
 
             auto response = std::make_unique<TEvDataShardLoad::TEvTestLoadFinished>(0);
             auto& report = *response->Record.MutableReport();
@@ -158,8 +165,9 @@ private:
     }
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
-        LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << Id
-            << ", stopped with error: " << reason);
+        YDB_LOG_WARN_CTX(ctx, "Stopped with",
+            {"readIteratorScan", Id},
+            {"error", reason});
 
         ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(0, reason));
         NTabletPipe::CloseClient(SelfId(), Pipe);
@@ -167,8 +175,8 @@ private:
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorScan# " << Id
-            << " tablet received PoisonPill, going to die");
+        YDB_LOG_DEBUG_CTX(ctx, "Tablet received PoisonPill, going to die",
+            {"readIteratorScan", Id});
 
         // TODO: cancel iterator
         return Die(ctx);

@@ -19,6 +19,8 @@
 #include <cstring>
 #include <memory>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_LOAD_TEST
+
 namespace NKikimr {
 
 namespace {
@@ -374,7 +376,8 @@ public:
         if (msg.GetStatus() != NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
             TStringStream str;
             str << "ddisk connect failed, Status# " << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus());
-            LOG_INFO(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
+            YDB_LOG_INFO_CTX(ctx, "Ddisk connect failed",
+                {"status", NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())});
             FinishAndDie(ctx, str.Str());
             return;
         }
@@ -693,7 +696,9 @@ public:
             str << "TEvWriteResult error, Status# "
                 << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
                 << " ErrorReason# " << msg.GetErrorReason();
-            LOG_ERROR(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
+            YDB_LOG_ERROR_CTX(ctx, "TEvWriteResult error",
+                {"status", NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())},
+                {"errorReason", msg.GetErrorReason()});
             FinishAndDie(ctx, str.Str());
             return;
         }
@@ -710,7 +715,9 @@ public:
             str << "TEvReadResult error, Status# "
                 << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())
                 << " ErrorReason# " << msg.GetErrorReason();
-            LOG_ERROR(ctx, NKikimrServices::BS_LOAD_TEST, "%s", str.Str().c_str());
+            YDB_LOG_ERROR_CTX(ctx, "TEvReadResult error",
+                {"status", NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(msg.GetStatus())},
+                {"errorReason", msg.GetErrorReason()});
             FinishAndDie(ctx, str.Str());
             return;
         }

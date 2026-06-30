@@ -28,11 +28,7 @@
 #include <util/string/cast.h>
 #include <util/string/printf.h>
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsDbgLikeLoad] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsDbgLikeLoad] " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsDbgLikeLoad] " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsDbgLikeLoad] " << stream)
-#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsDbgLikeLoad] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_LOAD_TEST
 
 namespace NKikimr::NNbsDbgLike {
 
@@ -131,24 +127,25 @@ TEvLoad::TEvLoadTestFinished* BuildNbsDbgLikeFinishEvent(
     const ui64 readP95Us  = stats.ReadPbUs.GetValueAtPercentile(95.0);
     const ui64 readP99Us  = stats.ReadPbUs.GetValueAtPercentile(99.0);
 
-    LOG_I("Run finished Tag# " << tag
-        << " Status# " << (errorReason.empty() ? "OK" : errorReason)
-        << " DurationMs# " << durationMs
-        << " MeasuredMs# " << measuredMs
-        << " WritesIssued# " << stats.WritesIssued
-        << " WritesOk# " << stats.WritesOkTotal
-        << " MeasuredWritesOk# " << stats.WritesOk
-        << " WriteBytes# " << stats.WriteBytesTotal
-        << " MeasuredWriteBytes# " << stats.WriteBytes
-        << " WriteLatencyP50Us# " << writeP50Us
-        << " WriteLatencyP99Us# " << writeP99Us
-        << " ReadsIssued# " << stats.ReadsIssuedTotal
-        << " ReadsOk# " << stats.ReadsOkTotal
-        << " MeasuredReadsOk# " << stats.ReadsPbOk
-        << " ReadBytes# " << stats.ReadBytesTotal
-        << " MeasuredReadBytes# " << stats.ReadsPbBytes
-        << " ReadLatencyP50Us# " << readP50Us
-        << " ReadLatencyP99Us# " << readP99Us);
+    YDB_LOG_INFO("[NbsDbgLikeLoad] Run finished",
+        {"tag", tag},
+        {"status", (errorReason.empty() ? "OK" : errorReason)},
+        {"durationMs", durationMs},
+        {"measuredMs", measuredMs},
+        {"writesIssued", stats.WritesIssued},
+        {"writesOk", stats.WritesOkTotal},
+        {"measuredWritesOk", stats.WritesOk},
+        {"writeBytes", stats.WriteBytesTotal},
+        {"measuredWriteBytes", stats.WriteBytes},
+        {"writeLatencyP50Us", writeP50Us},
+        {"writeLatencyP99Us", writeP99Us},
+        {"readsIssued", stats.ReadsIssuedTotal},
+        {"readsOk", stats.ReadsOkTotal},
+        {"measuredReadsOk", stats.ReadsPbOk},
+        {"readBytes", stats.ReadBytesTotal},
+        {"measuredReadBytes", stats.ReadsPbBytes},
+        {"readLatencyP50Us", readP50Us},
+        {"readLatencyP99Us", readP99Us});
 
     auto report = MakeIntrusive<TEvLoad::TLoadReport>();
     report->Duration = TDuration::MilliSeconds(durationMs);
@@ -240,20 +237,24 @@ public:
     }
 
     void Bootstrap() {
-        LOG_I("Bootstrap Tag# " << Tag
-            << " TabletId# " << TabletId
-            << " DurationSeconds# " << Config.GetDurationSeconds()
-            << " MaxInFlight# " << Config.GetMaxInFlight()
-            << " ReadRatio# " << Config.GetReadRatio()
-            << " Sequential# " << Config.GetSequential()
-            << " Worker# " << WorkerIndex << "/" << NumWorkers);
+        YDB_LOG_INFO("[NbsDbgLikeLoad] Bootstrap /",
+            {"tag", Tag},
+            {"tabletId", TabletId},
+            {"durationSeconds", Config.GetDurationSeconds()},
+            {"maxInFlight", Config.GetMaxInFlight()},
+            {"readRatio", Config.GetReadRatio()},
+            {"sequential", Config.GetSequential()},
+            {"worker", WorkerIndex},
+            {"numWorkers", NumWorkers});
 
         // Compute this worker's slice of the flat io-unit address space.
         // The summary fields (EffectiveDbgCount, VChunkSizeBytes, etc.) were
         // already validated by the proxy.
         ComputeWorkerSlice();
         if (!ErrorReason.empty()) {
-            LOG_N("ComputeWorkerSlice error Tag# " << Tag << " " << ErrorReason);
+            YDB_LOG_NOTICE("[NbsDbgLikeLoad] ComputeWorkerSlice error",
+                {"tag", Tag},
+                {"errorReason", ErrorReason});
             FinishRun();
             return;
         }
@@ -279,19 +280,23 @@ private:
         if (ev->Get()->Status != NKikimrProto::OK) {
             ErrorReason = TStringBuilder()
                 << "pipe connect failed: status=" << static_cast<int>(ev->Get()->Status);
-            LOG_N("Pipe connect error Tag# " << Tag << " " << ErrorReason);
+            YDB_LOG_NOTICE("[NbsDbgLikeLoad] Pipe connect error",
+                {"tag", Tag},
+                {"errorReason", ErrorReason});
             FinishRun();
             return;
         }
 
-        LOG_N("Worker ready Tag# " << Tag
-            << " EffectiveDbgCount# " << EffectiveDbgCount
-            << " VChunkSizeBytes# " << VChunkSizeBytes
-            << " TargetNumVChunks# " << TargetNumVChunks
-            << " IoSizeBytes# " << IoSizeBytes
-            << " Worker# " << WorkerIndex << "/" << NumWorkers
-            << " UnitRange# [" << UnitRangeStart << "," << UnitRangeStart + UnitRangeCount << ")"
-            << " — starting load");
+        YDB_LOG_NOTICE("[NbsDbgLikeLoad] Worker ready / — starting load",
+            {"tag", Tag},
+            {"effectiveDbgCount", EffectiveDbgCount},
+            {"VChunkSizeBytes", VChunkSizeBytes},
+            {"targetNumVChunks", TargetNumVChunks},
+            {"ioSizeBytes", IoSizeBytes},
+            {"worker", WorkerIndex},
+            {"numWorkers", NumWorkers},
+            {"unitRangeStart", UnitRangeStart},
+            {"unitRangeEnd", UnitRangeStart + UnitRangeCount});
 
         InitCounters();
         WritePayload = BuildWritePayload(IoSizeBytes, Rng);
@@ -324,9 +329,10 @@ private:
 
     void HandleInitWakeup(TEvents::TEvWakeup::TPtr& ev) {
         if (ev->Get()->Tag == kWakeupInitTimeoutTag) {
-            LOG_N("Pipe connect timeout after " << kInitTimeout
-                << " Tag# " << Tag
-                << " TabletId# " << TabletId);
+            YDB_LOG_NOTICE("[NbsDbgLikeLoad] Pipe connect timeout after",
+                {"kInitTimeout", kInitTimeout},
+                {"tag", Tag},
+                {"tabletId", TabletId});
             ErrorReason = TStringBuilder()
                 << "pipe connect timed out after " << kInitTimeout
                 << " (TabletId " << TabletId << ")";
@@ -457,7 +463,9 @@ private:
         NHPTimer::GetTime(&sentAt);
         auto res = Inflight.Emplace(addr, size, sentAt, /*IsRead=*/false);
         if (!res) {
-            LOG_D("IssueWrite queue full Tag# " << Tag << " " << res.error());
+            YDB_LOG_DEBUG("[NbsDbgLikeLoad] IssueWrite queue full",
+                {"tag", Tag},
+                {"error", res.error()});
             return false;
         }
         const ui64 cookie = res.value();
@@ -465,7 +473,11 @@ private:
         ev->Payload = TRope(WritePayload);
         NTabletPipe::SendData(SelfId(), PipeClient, ev.release(), cookie);
         ++WriteInFlight;
-        LOG_T("IssueWrite Cookie# " << cookie << " Addr# " << addr << " Size# " << size << " WriteInFlight# " << WriteInFlight);
+        YDB_LOG_TRACE("[NbsDbgLikeLoad] IssueWrite",
+            {"cookie", cookie},
+            {"addr", addr},
+            {"size", size},
+            {"writeInFlight", WriteInFlight});
         ++WritesIssued;
         if (Writes.Requests) {
             Writes.Requests->Inc();
@@ -484,14 +496,20 @@ private:
         NHPTimer::GetTime(&sentAt);
         auto res = Inflight.Emplace(addr, size, sentAt, /*IsRead=*/true);
         if (!res) {
-            LOG_D("IssueRead queue full Tag# " << Tag << " " << res.error());
+            YDB_LOG_DEBUG("[NbsDbgLikeLoad] IssueRead queue full",
+                {"tag", Tag},
+                {"error", res.error()});
             return false;
         }
         const ui64 cookie = res.value();
         auto ev = std::make_unique<TEvLoad::TEvNbsRead>(addr, size);
         NTabletPipe::SendData(SelfId(), PipeClient, ev.release(), cookie);
         ++ReadInFlight;
-        LOG_T("IssueRead Cookie# " << cookie << " Addr# " << addr << " Size# " << size << " ReadInFlight# " << ReadInFlight);
+        YDB_LOG_TRACE("[NbsDbgLikeLoad] IssueRead",
+            {"cookie", cookie},
+            {"addr", addr},
+            {"size", size},
+            {"readInFlight", ReadInFlight});
         ++ReadsIssued;
         if (Reads.Requests) {
             Reads.Requests->Inc();
@@ -512,8 +530,9 @@ private:
         // monotonic cookies; if it ever fires, erase the entry and release
         // its inflight budget so the queue front can't be pinned forever.
         if (entry->IsRead) {
-            LOG_E("HandleWriteResult cookie type mismatch Tag# " << Tag
-                << " Cookie# " << cookie << " expected write but IsRead=true");
+            YDB_LOG_ERROR("[NbsDbgLikeLoad] HandleWriteResult cookie type mismatch expected write but IsRead=true",
+                {"tag", Tag},
+                {"cookie", cookie});
             Y_DEBUG_ABORT_UNLESS(false, "cookie type mismatch in HandleWriteResult");
             const ui32 sizeBytes = entry->SizeBytes;
             Inflight.Erase(cookie);
@@ -534,9 +553,11 @@ private:
         const ui64 latencyUs = LatencyUsFromHPTimer(now - e.SentAt);
         const bool ok = ev->Get()->Record.GetStatus() == NBSIO_OK;
         const bool measure = InMeasurementWindow();
-        LOG_T("HandleWriteResult Cookie# " << cookie << " Status# "
-            << ENbsIoResultStatus_Name(ev->Get()->Record.GetStatus()) << " LatencyUs# "
-            << latencyUs << " WriteInFlight# " << WriteInFlight);
+        YDB_LOG_TRACE("[NbsDbgLikeLoad] HandleWriteResult",
+            {"cookie", cookie},
+            {"status", ENbsIoResultStatus_Name(ev->Get()->Record.GetStatus())},
+            {"latencyUs", latencyUs},
+            {"writeInFlight", WriteInFlight});
 
         if (WriteInFlight > 0) {
             --WriteInFlight;
@@ -560,17 +581,20 @@ private:
             }
             const ui32 stopCount = Config.GetStopOnWritesDoneCount();
             if (stopCount > 0 && WritesOk >= stopCount && !Draining) {
-                LOG_N("StopOnWritesDoneCount reached Tag# " << Tag << " WritesOk# " << WritesOk);
+                YDB_LOG_NOTICE("[NbsDbgLikeLoad] StopOnWritesDoneCount reached",
+                    {"tag", Tag},
+                    {"writesOk", WritesOk});
                 BeginDraining();
                 Schedule(kDrainTimeout, new TEvents::TEvWakeup(kWakeupDrainTimeoutTag));
             }
         } else {
             const auto& record = ev->Get()->Record;
-            LOG_D("HandleWriteResult error Tag# " << Tag
-                << " Cookie# " << cookie
-                << " LatencyUs# " << latencyUs
-                << " Status# " << ENbsIoResultStatus_Name(record.GetStatus())
-                << " Reason# " << record.GetReason());
+            YDB_LOG_DEBUG("[NbsDbgLikeLoad] HandleWriteResult error",
+                {"tag", Tag},
+                {"cookie", cookie},
+                {"latencyUs", latencyUs},
+                {"status", ENbsIoResultStatus_Name(record.GetStatus())},
+                {"reason", record.GetReason()});
             if (Writes.ReplyErr) {
                 Writes.ReplyErr->Inc();
             }
@@ -601,8 +625,9 @@ private:
         // monotonic cookies; if it ever fires, erase the entry and release
         // its inflight budget so the queue front can't be pinned forever.
         if (!entry->IsRead) {
-            LOG_E("HandleReadResult cookie type mismatch Tag# " << Tag
-                << " Cookie# " << cookie << " expected read but IsRead=false");
+            YDB_LOG_ERROR("[NbsDbgLikeLoad] HandleReadResult cookie type mismatch expected read but IsRead=false",
+                {"tag", Tag},
+                {"cookie", cookie});
             Y_DEBUG_ABORT_UNLESS(false, "cookie type mismatch in HandleReadResult");
             const ui32 sizeBytes = entry->SizeBytes;
             Inflight.Erase(cookie);
@@ -623,9 +648,11 @@ private:
         const ui64 latencyUs = LatencyUsFromHPTimer(now - e.SentAt);
         const bool ok = ev->Get()->Record.GetStatus() == NBSIO_OK;
         const bool measure = InMeasurementWindow();
-        LOG_T("HandleReadResult Cookie# " << cookie << " Status# "
-            << ENbsIoResultStatus_Name(ev->Get()->Record.GetStatus()) << " LatencyUs# " << latencyUs
-            << " ReadInFlight# " << ReadInFlight);
+        YDB_LOG_TRACE("[NbsDbgLikeLoad] HandleReadResult",
+            {"cookie", cookie},
+            {"status", ENbsIoResultStatus_Name(ev->Get()->Record.GetStatus())},
+            {"latencyUs", latencyUs},
+            {"readInFlight", ReadInFlight});
 
         if (ReadInFlight > 0) {
             --ReadInFlight;
@@ -649,12 +676,13 @@ private:
             }
         } else {
             const auto& record = ev->Get()->Record;
-            LOG_D("HandleReadResult error Tag# " << Tag
-                << " Cookie# " << cookie
-                << " LatencyUs# " << latencyUs
-                << " PayloadCount# " << ev->Get()->GetPayloadCount()
-                << " Status# " << ENbsIoResultStatus_Name(record.GetStatus())
-                << " Reason# " << record.GetReason());
+            YDB_LOG_DEBUG("[NbsDbgLikeLoad] HandleReadResult error",
+                {"tag", Tag},
+                {"cookie", cookie},
+                {"latencyUs", latencyUs},
+                {"payloadCount", ev->Get()->GetPayloadCount()},
+                {"status", ENbsIoResultStatus_Name(record.GetStatus())},
+                {"reason", record.GetReason()});
             if (Reads.ReplyErr) {
                 Reads.ReplyErr->Inc();
             }
@@ -676,9 +704,10 @@ private:
     }
 
     void HandlePoison(TEvents::TEvPoisonPill::TPtr&) {
-        LOG_N("Drain start Tag# " << Tag
-            << " WriteInFlight# " << WriteInFlight
-            << " ReadInFlight# " << ReadInFlight);
+        YDB_LOG_NOTICE("[NbsDbgLikeLoad] Drain start",
+            {"tag", Tag},
+            {"writeInFlight", WriteInFlight},
+            {"readInFlight", ReadInFlight});
         BeginDraining();
         Schedule(kDrainTimeout, new TEvents::TEvWakeup(kWakeupDrainTimeoutTag));
         CheckDrainComplete();
@@ -691,10 +720,10 @@ private:
             return;
         }
         if (ev->Get()->Tag == kWakeupDrainTimeoutTag) {
-            LOG_E("Drain timeout Tag# " << Tag
-                << " WriteInFlight# " << WriteInFlight
-                << " ReadInFlight# " << ReadInFlight
-                << " — forcing finish");
+            YDB_LOG_ERROR("[NbsDbgLikeLoad] Drain timeout — forcing finish",
+                {"tag", Tag},
+                {"writeInFlight", WriteInFlight},
+                {"readInFlight", ReadInFlight});
             if (ErrorReason.empty()) {
                 ErrorReason = "drain timeout";
             }
@@ -707,9 +736,11 @@ private:
             return;
         }
         PipeClient = TActorId();
-        LOG_E("Pipe to tablet " << TabletId << " destroyed during run Tag# " << Tag
-            << " WriteInFlight# " << WriteInFlight
-            << " ReadInFlight# " << ReadInFlight);
+        YDB_LOG_ERROR("[NbsDbgLikeLoad] Pipe to tablet destroyed during run",
+            {"tabletId", TabletId},
+            {"tag", Tag},
+            {"writeInFlight", WriteInFlight},
+            {"readInFlight", ReadInFlight});
         if (ErrorReason.empty()) {
             ErrorReason = "tablet pipe lost during run";
         }
@@ -925,9 +956,10 @@ public:
         const auto& config = Cmd.GetWorkloadConfig();
         TotalMaxInFlight = config.GetMaxInFlight();
 
-        LOG_I("Proxy bootstrap Tag# " << Tag
-            << " TabletId# " << TabletId
-            << " TotalMaxInFlight# " << TotalMaxInFlight);
+        YDB_LOG_INFO("[NbsDbgLikeLoad] Proxy bootstrap",
+            {"tag", Tag},
+            {"tabletId", TabletId},
+            {"totalMaxInFlight", TotalMaxInFlight});
 
         NTabletPipe::TClientConfig pipeConfig{
             .RetryPolicy = {.RetryLimitCount = kPipeRetryLimit}
@@ -1053,16 +1085,17 @@ private:
             * static_cast<ui64>(targetNumVChunks) * (vChunkSizeBytes / ioBytes);
         numWorkers = static_cast<ui32>(Min<ui64>(numWorkers, addressSpaceIoUnits));
 
-        LOG_N("Proxy GetSummary OK Tag# " << Tag
-            << " TotalDbgCount# " << totalDbgs
-            << " ReadyDbgCount# " << readyDbgs
-            << " EffectiveDbgCount# " << effectiveDbgCount
-            << " VChunkSizeBytes# " << vChunkSizeBytes
-            << " TargetNumVChunks# " << targetNumVChunks
-            << " IoSizeBytes# " << ioSizeBytes
-            << " NumWorkers# " << numWorkers
-            << " TotalMaxInFlight# " << TotalMaxInFlight
-            << " TotalStopOnWritesDoneCount# " << totalStopCount);
+        YDB_LOG_NOTICE("[NbsDbgLikeLoad] Proxy GetSummary OK",
+            {"tag", Tag},
+            {"totalDbgCount", totalDbgs},
+            {"readyDbgCount", readyDbgs},
+            {"effectiveDbgCount", effectiveDbgCount},
+            {"VChunkSizeBytes", vChunkSizeBytes},
+            {"targetNumVChunks", targetNumVChunks},
+            {"ioSizeBytes", ioSizeBytes},
+            {"numWorkers", numWorkers},
+            {"totalMaxInFlight", TotalMaxInFlight},
+            {"totalStopOnWritesDoneCount", totalStopCount});
 
         // Send a single ConfigureTablet. The proxy's pipe stays open until
         // PassAway() to ensure delivery.
@@ -1125,9 +1158,10 @@ private:
 
     void HandleInitWakeup(TEvents::TEvWakeup::TPtr& ev) {
         if (ev->Get()->Tag == kWakeupInitTimeoutTag) {
-            LOG_N("Proxy GetSummary timeout after " << kInitTimeout
-                << " Tag# " << Tag
-                << " TabletId# " << TabletId);
+            YDB_LOG_NOTICE("[NbsDbgLikeLoad] Proxy GetSummary timeout after",
+                {"kInitTimeout", kInitTimeout},
+                {"tag", Tag},
+                {"tabletId", TabletId});
             EmitError(TStringBuilder()
                 << "GetSummary timed out after " << kInitTimeout
                 << " (TabletId " << TabletId << ")");
@@ -1155,8 +1189,9 @@ private:
             }
         }
 
-        LOG_I("Proxy worker finished Tag# " << Tag
-            << " RemainingWorkers# " << Workers.size());
+        YDB_LOG_INFO("[NbsDbgLikeLoad] Proxy worker finished",
+            {"tag", Tag},
+            {"remainingWorkers", Workers.size()});
 
         if (Workers.empty()) {
             EmitCombined();
@@ -1170,7 +1205,9 @@ private:
         ProxyPipeClient = TActorId();
         // The proxy pipe dying during the run is benign: ConfigureTablet was
         // already delivered. Workers have their own pipes and self-manage.
-        LOG_D("Proxy pipe to tablet " << TabletId << " destroyed during run Tag# " << Tag);
+        YDB_LOG_DEBUG("[NbsDbgLikeLoad] Proxy pipe to tablet destroyed during run",
+            {"tabletId", TabletId},
+            {"tag", Tag});
     }
 
     void HandleWorkPipeConnected(TEvTabletPipe::TEvClientConnected::TPtr&) {
@@ -1181,14 +1218,16 @@ private:
         // The init-timeout wakeup scheduled in Bootstrap() is not cancelled
         // on the success path and fires here; ignore it.
         if (ev->Get()->Tag != kWakeupInitTimeoutTag) {
-            LOG_D("Proxy unexpected wakeup Tag# " << Tag
-                << " WakeupTag# " << ev->Get()->Tag);
+            YDB_LOG_DEBUG("[NbsDbgLikeLoad] Proxy unexpected wakeup",
+                {"tag", Tag},
+                {"wakeupTag", ev->Get()->Tag});
         }
     }
 
     void HandlePoison(TEvents::TEvPoisonPill::TPtr&) {
-        LOG_I("Proxy poison Tag# " << Tag
-            << " forwarding to " << Workers.size() << " worker(s)");
+        YDB_LOG_INFO("[NbsDbgLikeLoad] Proxy poison forwarding to worker(s)",
+            {"tag", Tag},
+            {"workersCount", Workers.size()});
         for (const TActorId& worker : Workers) {
             Send(worker, new TEvents::TEvPoisonPill);
         }
@@ -1240,7 +1279,9 @@ private:
     }
 
     void EmitError(TString reason) {
-        LOG_N("Proxy error Tag# " << Tag << " " << reason);
+        YDB_LOG_NOTICE("[NbsDbgLikeLoad] Proxy error",
+            {"tag", Tag},
+            {"reason", reason});
         if (ProxyPipeClient) {
             NTabletPipe::CloseClient(SelfId(), ProxyPipeClient);
             ProxyPipeClient = TActorId();

@@ -35,12 +35,9 @@
 #include <util/string/strip.h>
 #include <util/generic/algorithm.h>
 
-namespace NKikimr::NNbsDbgLike {
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_LOAD_TEST
 
-#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsLoadTabletHttp] " << stream)
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsLoadTabletHttp] " << stream)
-#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsLoadTabletHttp] " << stream)
-#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsLoadTabletHttp] " << stream)
+namespace NKikimr::NNbsDbgLike {
 
 namespace {
 
@@ -452,10 +449,11 @@ public:
 
         const TDuration timeout = kHelperBaseTimeout;
         Schedule(timeout, new TEvents::TEvWakeup);
-        LOG_I("Bootstrap Op# " << OpName(Op)
-            << " OwnerIdx# " << OwnerIdx
-            << " Timeout# " << timeout
-            << " Origin# " << Origin);
+        YDB_LOG_INFO("[NbsLoadTabletHttp] Bootstrap",
+            {"op", OpName(Op)},
+            {"ownerIdx", OwnerIdx},
+            {"timeout", timeout},
+            {"origin", Origin});
         ResolveTenantDomainAndProceed();
     }
 
@@ -488,10 +486,12 @@ private:
             for (const auto& [poolName, _] : domainsInfo->Domain->StoragePoolTypes) {
                 TenantStoragePools.push_back(poolName);
             }
-            LOG_D("Resolved root domain for Op# " << OpName(Op)
-                << " Tenant# " << (TenantName.empty() ? "<root>" : TenantName)
-                << " HiveTabletId# " << HiveTabletId
-                << " Domain# " << DomainSchemeShard << ":" << DomainPathId);
+            YDB_LOG_DEBUG("[NbsLoadTabletHttp] Resolved root domain",
+                {"op", OpName(Op)},
+                {"tenant", (TenantName.empty() ? "<root>" : TenantName)},
+                {"hiveTabletId", HiveTabletId},
+                {"domain", DomainSchemeShard},
+                {"domainPathId", DomainPathId});
             OpenHivePipeAndSendRequest();
             return;
         }
@@ -502,8 +502,9 @@ private:
         entry.Operation = NSchemeCache::TSchemeCacheNavigate::OpPath;
         entry.Path = SplitPath(TenantName);
 
-        LOG_D("Resolving tenant domain Op# " << OpName(Op)
-            << " Tenant# " << TenantName);
+        YDB_LOG_DEBUG("[NbsLoadTabletHttp] Resolving tenant domain",
+            {"op", OpName(Op)},
+            {"tenant", TenantName});
         Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
     }
 
@@ -544,10 +545,12 @@ private:
                 TenantStoragePools.push_back(pool.GetName());
             }
         }
-        LOG_D("Resolved tenant domain for Op# " << OpName(Op)
-            << " Tenant# " << TenantName
-            << " HiveTabletId# " << HiveTabletId
-            << " Domain# " << DomainSchemeShard << ":" << DomainPathId);
+        YDB_LOG_DEBUG("[NbsLoadTabletHttp] Resolved tenant domain",
+            {"op", OpName(Op)},
+            {"tenant", TenantName},
+            {"hiveTabletId", HiveTabletId},
+            {"domain", DomainSchemeShard},
+            {"domainPathId", DomainPathId});
         OpenHivePipeAndSendRequest();
     }
 
@@ -555,10 +558,11 @@ private:
         NTabletPipe::TClientConfig pipeConfig{
             .RetryPolicy = {.RetryLimitCount = kPipeRetryLimit}};
         HivePipe = Register(NTabletPipe::CreateClient(SelfId(), HiveTabletId, pipeConfig));
-        LOG_D("Opened Hive pipe Op# " << OpName(Op)
-            << " Tenant# " << (TenantName.empty() ? "<root>" : TenantName)
-            << " HiveTabletId# " << HiveTabletId
-            << " HivePipe# " << HivePipe);
+        YDB_LOG_DEBUG("[NbsLoadTabletHttp] Opened Hive pipe",
+            {"op", OpName(Op)},
+            {"tenant", (TenantName.empty() ? "<root>" : TenantName)},
+            {"hiveTabletId", HiveTabletId},
+            {"hivePipe", HivePipe});
 
         switch (Op) {
             case EOp::Create:
@@ -571,9 +575,11 @@ private:
     }
 
     void SendCreate() {
-        LOG_D("Send create to Hive OwnerIdx# " << OwnerIdx
-            << " Tenant# " << (TenantName.empty() ? "<root>" : TenantName)
-            << " Domain# " << DomainSchemeShard << ":" << DomainPathId);
+        YDB_LOG_DEBUG("[NbsLoadTabletHttp] Send create to Hive",
+            {"ownerIdx", OwnerIdx},
+            {"tenant", (TenantName.empty() ? "<root>" : TenantName)},
+            {"domain", DomainSchemeShard},
+            {"domainPathId", DomainPathId});
         auto req = std::make_unique<TEvHive::TEvCreateTablet>();
         auto& rec = req->Record;
         rec.SetOwner(kLoadOwner);
@@ -588,8 +594,9 @@ private:
             for (ui32 i = 0; i < kDefaultChannelCount; ++i) {
                 effectivePoolNames.push_back(TenantStoragePools[i % TenantStoragePools.size()]);
             }
-            LOG_D("Using tenant storage pools for create OwnerIdx# " << OwnerIdx
-                << " Pools# " << JoinSeq(",", effectivePoolNames));
+            YDB_LOG_DEBUG("[NbsLoadTabletHttp] Using tenant storage pools for create",
+                {"ownerIdx", OwnerIdx},
+                {"pools", JoinSeq(",", effectivePoolNames)});
         }
         if (effectivePoolNames.empty()) {
             // Last-resort fallback: let Hive pick default bindings.
@@ -604,10 +611,12 @@ private:
     }
 
     void SendLookup() {
-        LOG_D("Send lookup to Hive Op# " << OpName(Op)
-            << " OwnerIdx# " << OwnerIdx
-            << " Tenant# " << (TenantName.empty() ? "<root>" : TenantName)
-            << " Domain# " << DomainSchemeShard << ":" << DomainPathId);
+        YDB_LOG_DEBUG("[NbsLoadTabletHttp] Send lookup to Hive",
+            {"op", OpName(Op)},
+            {"ownerIdx", OwnerIdx},
+            {"tenant", (TenantName.empty() ? "<root>" : TenantName)},
+            {"domain", DomainSchemeShard},
+            {"domainPathId", DomainPathId});
         auto req = std::make_unique<TEvHive::TEvLookupTablet>();
         auto& rec = req->Record;
         rec.SetOwner(kLoadOwner);
@@ -618,9 +627,10 @@ private:
     void Handle(TEvHive::TEvCreateTabletReply::TPtr& ev) {
         const auto& rec = ev->Get()->Record;
         const auto status = rec.GetStatus();
-        LOG_D("Hive reply Op# " << OpName(Op)
-            << " Status# " << NKikimrProto::EReplyStatus_Name(status)
-            << " TabletId# " << rec.GetTabletID());
+        YDB_LOG_DEBUG("[NbsLoadTabletHttp] Hive reply",
+            {"op", OpName(Op)},
+            {"status", NKikimrProto::EReplyStatus_Name(status)},
+            {"tabletId", rec.GetTabletID()});
 
         // For Lookup (Run/Delete), Hive replies NODATA when the OwnerIdx is
         // unknown (hive_impl.cpp:2236-2245).
@@ -640,8 +650,9 @@ private:
                 // (Hive only sends that on first boot) and try the idempotent
                 // tablet handler directly. Phase 1.2 spec §23.10 case 1.
                 WaitingForTabletCreation = false;
-                LOG_N("Tablet already exists OwnerIdx# " << OwnerIdx
-                    << " TabletId# " << TabletId);
+                YDB_LOG_NOTICE("[NbsLoadTabletHttp] Tablet already exists",
+                    {"ownerIdx", OwnerIdx},
+                    {"tabletId", TabletId});
                 OpenTabletPipe();
                 return;
             }
@@ -649,7 +660,8 @@ private:
             // back to this helper actor (e.g. routing nuances), so proceed
             // immediately with the idempotent tablet Create request.
             WaitingForTabletCreation = false;
-            LOG_D("Hive create OK, opening tablet pipe immediately TabletId# " << TabletId);
+            YDB_LOG_DEBUG("[NbsLoadTabletHttp] Hive create OK, opening tablet pipe immediately",
+                {"tabletId", TabletId});
             OpenTabletPipe();
             return;
         }
@@ -660,8 +672,9 @@ private:
 
     void Handle(TEvHive::TEvTabletCreationResult::TPtr& ev) {
         if (Op != EOp::Create || !WaitingForTabletCreation) {
-            LOG_D("Ignoring late tablet creation result Op# " << OpName(Op)
-                << " WaitingForTabletCreation# " << (WaitingForTabletCreation ? "true" : "false"));
+            YDB_LOG_DEBUG("[NbsLoadTabletHttp] Ignoring late tablet creation result",
+                {"op", OpName(Op)},
+                {"waitingForTabletCreation", (WaitingForTabletCreation ? "true" : "false")});
             return;
         }
         const auto& rec = ev->Get()->Record;
@@ -670,8 +683,9 @@ private:
                 << NKikimrProto::EReplyStatus_Name(rec.GetStatus()));
         }
         WaitingForTabletCreation = false;
-        LOG_N("Tablet created successfully OwnerIdx# " << OwnerIdx
-            << " TabletId# " << TabletId);
+        YDB_LOG_NOTICE("[NbsLoadTabletHttp] Tablet created successfully",
+            {"ownerIdx", OwnerIdx},
+            {"tabletId", TabletId});
         OpenTabletPipe();
     }
 
@@ -679,9 +693,10 @@ private:
         NTabletPipe::TClientConfig pipeConfig{
             .RetryPolicy = {.RetryLimitCount = kPipeRetryLimit}};
         TabletPipe = Register(NTabletPipe::CreateClient(SelfId(), TabletId, pipeConfig));
-        LOG_D("Opened tablet pipe Op# " << OpName(Op)
-            << " TabletId# " << TabletId
-            << " TabletPipe# " << TabletPipe);
+        YDB_LOG_DEBUG("[NbsLoadTabletHttp] Opened tablet pipe",
+            {"op", OpName(Op)},
+            {"tabletId", TabletId},
+            {"tabletPipe", TabletPipe});
         switch (Op) {
             case EOp::Create: {
                 auto ev = std::make_unique<TEvLoad::TEvNbsLoadTabletAllocateGroups>();
@@ -690,13 +705,15 @@ private:
                     return ReplyError(400, "failed to parse AllocConfig text-proto");
                 }
                 *ev->Record.MutableAllocConfig() = std::move(cfg);
-                LOG_D("Dispatch tablet create request TabletId# " << TabletId);
+                YDB_LOG_DEBUG("[NbsLoadTabletHttp] Dispatch tablet create request",
+                    {"tabletId", TabletId});
                 NTabletPipe::SendData(SelfId(), TabletPipe, ev.release());
                 break;
             }
             case EOp::Delete: {
                 auto ev = std::make_unique<TEvLoad::TEvNbsLoadTabletDelete>();
-                LOG_D("Dispatch tablet delete request TabletId# " << TabletId);
+                YDB_LOG_DEBUG("[NbsLoadTabletHttp] Dispatch tablet delete request",
+                    {"tabletId", TabletId});
                 NTabletPipe::SendData(SelfId(), TabletPipe, ev.release());
                 break;
             }
@@ -706,11 +723,13 @@ private:
     void Handle(TEvLoad::TEvNbsLoadTabletAllocateGroupsResult::TPtr& ev) {
         const auto& rec = ev->Get()->Record;
         if (rec.GetStatus() == NBSLT_OK) {
-            LOG_N("Tablet create completed TabletId# " << TabletId);
+            YDB_LOG_NOTICE("[NbsLoadTabletHttp] Tablet create completed",
+                {"tabletId", TabletId});
             return ReplyOk("Tablet created");
         }
         if (rec.GetStatus() == NBSLT_ALREADY_INITIALIZED) {
-            LOG_N("Tablet already initialized TabletId# " << TabletId);
+            YDB_LOG_NOTICE("[NbsLoadTabletHttp] Tablet already initialized",
+                {"tabletId", TabletId});
             return ReplyAlready("Tablet was already initialized");
         }
         ReplyError(409, TStringBuilder()
@@ -726,7 +745,8 @@ private:
                 << " " << rec.GetErrorReason());
         }
         // Now ask Hive to delete the tablet.
-        LOG_D("Tablet delete acknowledged, requesting Hive delete TabletId# " << TabletId);
+        YDB_LOG_DEBUG("[NbsLoadTabletHttp] Tablet delete acknowledged, requesting Hive delete",
+            {"tabletId", TabletId});
         auto del = std::make_unique<TEvHive::TEvDeleteTablet>();
         auto& rec2 = del->Record;
         rec2.SetShardOwnerId(kLoadOwner);
@@ -740,8 +760,9 @@ private:
             return ReplyError(500, TStringBuilder() << "Hive delete failed: "
                 << NKikimrProto::EReplyStatus_Name(rec.GetStatus()));
         }
-        LOG_N("Hive delete completed OwnerIdx# " << OwnerIdx
-            << " TabletId# " << TabletId);
+        YDB_LOG_NOTICE("[NbsLoadTabletHttp] Hive delete completed",
+            {"ownerIdx", OwnerIdx},
+            {"tabletId", TabletId});
         ReplyOk("Tablet deleted");
     }
 
@@ -756,9 +777,10 @@ private:
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr&) {}
 
     void HandleTimeout(TEvents::TEvWakeup::TPtr&) {
-        LOG_E("Operation timeout Op# " << OpName(Op)
-            << " OwnerIdx# " << OwnerIdx
-            << " TabletId# " << TabletId);
+        YDB_LOG_ERROR("[NbsLoadTabletHttp] Operation timeout",
+            {"op", OpName(Op)},
+            {"ownerIdx", OwnerIdx},
+            {"tabletId", TabletId});
         ReplyError(504, "operation timeout");
     }
 
@@ -816,9 +838,10 @@ private:
     }
 
     void ReplyError(ui32 httpStatus, const TString& msg) {
-        LOG_E("Reply error Op# " << OpName(Op)
-            << " HttpStatus# " << httpStatus
-            << " Reason# " << msg);
+        YDB_LOG_ERROR("[NbsLoadTabletHttp] Reply error",
+            {"op", OpName(Op)},
+            {"httpStatus", httpStatus},
+            {"reason", msg});
         TStringStream html;
         html << "<div class='alert alert-danger'>"
              << "<strong>Error " << httpStatus << "</strong> &nbsp; "
@@ -844,10 +867,11 @@ private:
     }
 
     void Cleanup() {
-        LOG_D("Cleanup Op# " << OpName(Op)
-            << " TabletId# " << TabletId
-            << " HivePipe# " << HivePipe
-            << " TabletPipe# " << TabletPipe);
+        YDB_LOG_DEBUG("[NbsLoadTabletHttp] Cleanup",
+            {"op", OpName(Op)},
+            {"tabletId", TabletId},
+            {"hivePipe", HivePipe},
+            {"tabletPipe", TabletPipe});
         if (HivePipe) {
             NTabletPipe::CloseClient(SelfId(), HivePipe);
             HivePipe = TActorId();

@@ -19,6 +19,7 @@
 #include <util/random/fast.h>
 #include <util/random/shuffle.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_LOAD_TEST
 
 namespace NKikimr {
 
@@ -110,7 +111,9 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " TKqpLoadWorker Bootstrap called");
+        YDB_LOG_INFO_CTX(ctx, "Worker TKqpLoadWorker Bootstrap called",
+            {"tag", ParentTag},
+            {"workerTag", WorkerTag});
 
         ctx.Schedule(EndTimestamp, new TEvents::TEvPoisonPill);
 
@@ -122,7 +125,9 @@ private:
     // death
 
     void HandlePoisonPill(const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " HandlePoisonPill");
+        YDB_LOG_INFO_CTX(ctx, "Worker HandlePoisonPill",
+            {"tag", ParentTag},
+            {"workerTag", WorkerTag});
 
         Send(Parent, new TEvKqpWorkerResponse(LatencyHist, Errors, WorkerTag));
 
@@ -131,7 +136,9 @@ private:
     }
 
     void CloseSession(const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " creating event for session close");
+        YDB_LOG_INFO_CTX(ctx, "Worker creating event for session close",
+            {"tag", ParentTag},
+            {"workerTag", WorkerTag});
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
         ev->Record.MutableRequest()->SetSessionId(WorkerSession);
@@ -144,7 +151,9 @@ private:
     // working
 
     void CreateWorkingSession(const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " creating event for session creation");
+        YDB_LOG_INFO_CTX(ctx, "Worker creating event for session creation",
+            {"tag", ParentTag},
+            {"workerTag", WorkerTag});
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
 
         ev->Record.MutableRequest()->SetDatabase(WorkingDir);
@@ -159,11 +168,16 @@ private:
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             WorkerSession = response.GetResponse().GetSessionId();
-            LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " Session is created: " + WorkerSession);
+            YDB_LOG_INFO_CTX(ctx, "Worker",
+                {"tag", ParentTag},
+                {"workerTag", WorkerTag},
+                {"sessionDetail", " Session is created: " + WorkerSession});
             CreateDataQuery(ctx);
         } else {
-            LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag
-                << " Session creation failed: " + ev->Get()->ToString());
+            YDB_LOG_ERROR_CTX(ctx, "Worker session creation failed",
+                {"tag", ParentTag},
+                {"workerTag", WorkerTag},
+                {"ev", ev->Get()->ToString()});
         }
     }
 
@@ -176,12 +190,18 @@ private:
         auto q = std::move(Queries.front());
         Queries.pop_front();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag
-            << " query type: " << WorkloadType << ", params size: " << q.Params.GetValues().size());
+        YDB_LOG_DEBUG_CTX(ctx, "Worker query params",
+            {"tag", ParentTag},
+            {"workerTag", WorkerTag},
+            {"type", WorkloadType},
+            {"size", q.Params.GetValues().size()});
 
         Transactions->Inc();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " using session: " << WorkerSession);
+        YDB_LOG_DEBUG_CTX(ctx, "Worker using",
+            {"tag", ParentTag},
+            {"workerTag", WorkerTag},
+            {"session", WorkerSession});
 
         SendQueryRequest(ctx, q, QueryType, WorkerSession, WorkingDir);
     }
@@ -190,12 +210,16 @@ private:
         auto& response = ev->Get()->Record;
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag << " data request status: Success");
+            YDB_LOG_DEBUG_CTX(ctx, "Worker data request status: Success",
+                {"tag", ParentTag},
+                {"workerTag", WorkerTag});
             TransactionsBytesWritten->Add(response.GetResponse().GetQueryStats().ByteSize());
             LatencyHist.RecordValue(response.GetResponse().GetQueryStats().GetDurationUs());
         } else {
-            LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Worker Tag# " << ParentTag << "." << WorkerTag
-                << " data request status: Fail, Issue: " + ev->Get()->ToString());
+            YDB_LOG_INFO_CTX(ctx, "Worker",
+                {"tag", ParentTag},
+                {"workerTag", WorkerTag},
+                {"dataRequestError", " data request status: Fail, Issue: " + ev->Get()->ToString()});
             ++Errors;
         }
 
@@ -300,34 +324,38 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " TKqpLoadActor Bootstrap called");
+        YDB_LOG_DEBUG_CTX(ctx, "TKqpLoadActor Bootstrap called",
+            {"tag", Tag});
 
         Become(&TKqpLoadActor::StateStart);
 
         if (WorkloadClass == "stock") {
             NYdbWorkload::TStockWorkloadParams* params = static_cast<NYdbWorkload::TStockWorkloadParams*>(WorkloadQueryGenParams.get());
-            LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Starting load actor with workload STOCK, Params: {"
-                << "PartitionsByLoad: " << params->PartitionsByLoad << " "
-                << "OrderCount: " << params->OrderCount << " "
-                << "ProductCount: " << params->ProductCount << " "
-                << "Quantity: " << params->Quantity << " "
-                << "Limit: " << params->Limit << " "
-                << "DbPath: " << params->DbPath << " "
-                << "MinPartitions: " << params->MinPartitions);
+            YDB_LOG_INFO_CTX(ctx, "Starting load actor with workload STOCK, Params",
+                {"tag", Tag},
+                {"partitionsByLoad", params->PartitionsByLoad},
+                {"orderCount", params->OrderCount},
+                {"productCount", params->ProductCount},
+                {"quantity", params->Quantity},
+                {"limit", params->Limit},
+                {"dbPath", params->DbPath},
+                {"minPartitions", params->MinPartitions});
         } else if (WorkloadClass == "kv") {
             NYdbWorkload::TKvWorkloadParams* params = static_cast<NYdbWorkload::TKvWorkloadParams*>(WorkloadQueryGenParams.get());
-            LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Starting load actor with workload KV, Params: {"
-                << "InitRowCount: " << params->InitRowCount << " "
-                << "PartitionsByLoad: " << params->PartitionsByLoad << " "
-                << "MaxFirstKey: " << params->MaxFirstKey << " "
-                << "MinPartitions: " << params->MinPartitions << " "
-                << "StringLen: " << params->StringLen << " "
-                << "ColumnsCnt: " << params->ColumnsCnt << " "
-                << "RowsCnt: " << params->RowsCnt << " "
-                << "DbPath: " << params->DbPath);
+            YDB_LOG_INFO_CTX(ctx, "Starting load actor with workload KV, Params",
+                {"tag", Tag},
+                {"initRowCount", params->InitRowCount},
+                {"partitionsByLoad", params->PartitionsByLoad},
+                {"maxFirstKey", params->MaxFirstKey},
+                {"minPartitions", params->MinPartitions},
+                {"stringLen", params->StringLen},
+                {"columnsCnt", params->ColumnsCnt},
+                {"rowsCnt", params->RowsCnt},
+                {"dbPath", params->DbPath});
         }
 
-        LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Schedule PoisonPill");
+        YDB_LOG_INFO_CTX(ctx, "Schedule PoisonPill",
+            {"tag", Tag});
         EarlyStop = false;
         ctx.Schedule(TDuration::Seconds(DurationSeconds + 10), new TEvents::TEvPoisonPill);
 
@@ -377,14 +405,15 @@ private:
 
     void HandlePoisonPill(const TActorContext& ctx) {
         EarlyStop = (TAppData::TimeProvider->Now() - TestStartTime).Seconds() < DurationSeconds;
-        LOG_CRIT_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " HandlePoisonPill, "
-            << "but it is supposed to pass away by receiving TEvKqpWorkerResponse from all of the workers");
+        YDB_LOG_CRIT_CTX(ctx, "HandlePoisonPill, but it is supposed to pass away by receiving TEvKqpWorkerResponse from all of the workers",
+            {"tag", Tag});
         StartDeathProcess(ctx);
     }
 
     void StartDeathProcess(const TActorContext& ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " TKqpLoadActor StartDeathProcess called,"
-            << " DeleteTableOnFinish: " << DeleteTableOnFinish);
+        YDB_LOG_NOTICE_CTX(ctx, "TKqpLoadActor StartDeathProcess called,",
+            {"tag", Tag},
+            {"deleteTableOnFinish", DeleteTableOnFinish});
 
         Become(&TKqpLoadActor::StateEndOfWork);
 
@@ -412,9 +441,12 @@ private:
         auto& response = ev->Get()->Record;
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
-            LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " drop tables status: SUCCESS");
+            YDB_LOG_NOTICE_CTX(ctx, "Drop tables status: SUCCESS",
+                {"tag", Tag});
         } else {
-            LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " drop tables status: FAIL, reason: " + ev->Get()->ToString());
+            YDB_LOG_ERROR_CTX(ctx, "Drop tables status: FAIL",
+                {"tag", Tag},
+                {"reason", ev->Get()->ToString()});
             Error = TStringBuilder() << "Failed to drop tables " << ev->Get()->ToString();
         }
 
@@ -440,7 +472,8 @@ private:
         finishEv->LastHtmlPage = RenderHTML();
         finishEv->JsonResult = GetJsonResult();
         ctx.Send(Parent, finishEv);
-        LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " DeathReport");
+        YDB_LOG_NOTICE_CTX(ctx, "DeathReport",
+            {"tag", Tag});
         PassAway();
     }
 
@@ -467,8 +500,9 @@ private:
     void HandleResult(TEvKqpWorkerResponse::TPtr& ev, const TActorContext& ctx) {
         const auto& response = ev->Get();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " got monitoring response from worker Tag# "
-            << response->WorkerTag);
+        YDB_LOG_DEBUG_CTX(ctx, "Got monitoring response from worker",
+            {"tag", Tag},
+            {"workerTag", response->WorkerTag});
 
         Total->Add(response->Data);
         ++ResultsReceived;
@@ -480,7 +514,8 @@ private:
     // tables creation
 
     void CreateSessionForTablesDDL(const TActorContext& ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " creating event for session creation");
+        YDB_LOG_NOTICE_CTX(ctx, "Creating event for session creation",
+            {"tag", Tag});
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
 
         ev->Record.MutableRequest()->SetDatabase(WorkingDir);
@@ -495,16 +530,21 @@ private:
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             TableSession = response.GetResponse().GetSessionId();
-            LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Session is created: " + TableSession);
+            YDB_LOG_INFO_CTX(ctx, "Session is created",
+                {"tag", Tag},
+                {"sessionDetail", TableSession});
             CreateTables(ctx);
         } else {
-            LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " Session creation failed: " + ev->Get()->ToString());
+            YDB_LOG_ERROR_CTX(ctx, "Session creation failed",
+                {"tag", Tag},
+                {"sessionError", ev->Get()->ToString()});
             Error = TStringBuilder() << "Failed to create session " << ev->Get()->ToString();
         }
     }
 
     void CreateTables(const TActorContext& ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " creating event for tables creation");
+        YDB_LOG_NOTICE_CTX(ctx, "Creating event for tables creation",
+            {"tag", Tag});
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         ev->Record.MutableRequest()->SetDatabase(WorkingDir);
@@ -523,11 +563,14 @@ private:
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             Become(&TKqpLoadActor::StateMain);
-            LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " tables are created");
+            YDB_LOG_NOTICE_CTX(ctx, "Tables are created",
+                {"tag", Tag});
             InitData = WorkloadQueryGen->GetInitialData();
             InsertInitData(ctx);
         } else {
-            LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " tables creation failed: " + ev->Get()->ToString());
+            YDB_LOG_ERROR_CTX(ctx, "Tables creation failed",
+                {"tag", Tag},
+                {"tablesCreationError", ev->Get()->ToString()});
             Error = TStringBuilder() << "Failed to create tables " << ev->Get()->ToString();
             CreateTables(ctx);
         }
@@ -540,8 +583,10 @@ private:
         auto q = std::move(InitData.front());
         InitData.pop_front();
 
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag
-            << " Creating request for init query, need to exec: " << InitData.size() + 1 << " session: " << TableSession);
+        YDB_LOG_DEBUG_CTX(ctx, "Creating request for init query, need",
+            {"tag", Tag},
+            {"toExec", InitData.size() + 1},
+            {"session", TableSession});
 
         SendQueryRequest(ctx, q, QueryType, TableSession, WorkingDir);
     }
@@ -550,14 +595,18 @@ private:
         auto& response = ev->Get()->Record;
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
-            LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " init query status: SUCCESS");
+            YDB_LOG_DEBUG_CTX(ctx, "Init query status: SUCCESS",
+                {"tag", Tag});
         } else {
-            LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " init query status: FAIL, reason: " + ev->Get()->ToString());
+            YDB_LOG_ERROR_CTX(ctx, "Init query status: FAIL",
+                {"tag", Tag},
+                {"initQueryError", ev->Get()->ToString()});
             Error = TStringBuilder() << "Failed to initialize " << ev->Get()->ToString();
         }
 
         if (InitData.empty()) {
-            LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " initial query is executed, going to create workers");
+            YDB_LOG_NOTICE_CTX(ctx, "Initial query is executed, going to create workers",
+                {"tag", Tag});
             TestStartTime = TAppData::TimeProvider->Now();
             if (IncreaseSessions) {
                 ctx.Schedule(TDuration::Seconds(1), new TEvents::TEvWakeup);
@@ -656,7 +705,8 @@ private:
     }
 
     void CloseSession(const TActorContext& ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Tag# " << Tag << " creating event for session close");
+        YDB_LOG_DEBUG_CTX(ctx, "Creating event for session close",
+            {"tag", Tag});
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
         ev->Record.MutableRequest()->SetSessionId(TableSession);

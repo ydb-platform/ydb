@@ -325,5 +325,5 @@ message TFeatureFlags {
     optional bool EnableAccessServiceV2Interface = 283 [default = true, (RequireRestart) = true];
     optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
     optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
-    optional bool EnableParquetForExport = 286 [default = true];
+    optional bool EnableParquetForExport = 286 [default = false];
 }

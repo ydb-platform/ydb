@@ -955,6 +955,59 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
 
     } // Y_UNIT_TEST(SplitByMinPartitionCountWithTwoIter)
 
+    Y_UNIT_TEST(SplitByMinPartitionCountToSixteen) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        auto countActivePartitions = [](const auto& topic) {
+            ui32 activePartitions = 0;
+            for (const auto& partition : topic.GetPartitions()) {
+                if (partition.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active) {
+                    ++activePartitions;
+                }
+            }
+            return activePartitions;
+        };
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 1);
+
+        ::NKikimrSchemeOp::TPersQueueGroupDescription scheme;
+        scheme.SetName("Topic1");
+        scheme.MutablePQTabletConfig()->MutablePartitionConfig();
+        scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMaxPartitionCount(100);
+        scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMinPartitionCount(16);
+        scheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetPartitionStrategyType(
+            ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+
+        TStringBuilder sb;
+        sb << scheme;
+        const TString schemeStr = sb.substr(1, sb.size() - 2);
+
+        AsyncAlterPQGroup(runtime, ++txId, "/MyRoot/USER_1", schemeStr);
+
+        RebootTablet(runtime, TTestTxConfig::SchemeShard, runtime.AllocateEdgeActor());
+
+        env.TestWaitNotification(runtime, txId);
+
+        auto topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPartitions().size(), 31);
+        UNIT_ASSERT_VALUES_EQUAL(countActivePartitions(topic), 16);
+
+        ModifyTopic(runtime, env, txId, [&](auto& alterScheme) {
+            alterScheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMaxPartitionCount(100);
+            alterScheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetMinPartitionCount(32);
+            alterScheme.MutablePQTabletConfig()->MutablePartitionStrategy()->SetPartitionStrategyType(
+                ::NKikimrPQ::TPQTabletConfig_TPartitionStrategyType::TPQTabletConfig_TPartitionStrategyType_CAN_SPLIT_AND_MERGE);
+        });
+
+        topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPartitions().size(), 63);
+        UNIT_ASSERT_VALUES_EQUAL(countActivePartitions(topic), 32);
+    } // Y_UNIT_TEST(SplitByMinPartitionCountToSixteen)
+
 } // Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest)
 
 Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergePrescribedPartitionsTest) {

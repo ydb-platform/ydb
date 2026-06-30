@@ -35,7 +35,7 @@ The result of the `SELECT` query is computed as follows:
 
 {% endif %}
 
-* Either [FLATTEN COLUMNS](flatten.md#flatten-columns) or [](flatten.md) is executed. Aliases specified in `FLATTEN BY` become visible after this point.
+* Either [FLATTEN COLUMNS](flatten.md#flatten-columns) or [FLATTEN BY](flatten.md) is executed. Aliases specified in `FLATTEN BY` become visible after this point.
 
 {% if feature_join %}
 
@@ -81,7 +81,7 @@ When `PRAGMA OrderedColumns;` is enabled, the column order is preserved in the q
 
 {% endif %}
 
-* The order of depends on the execution mode of [`UNION ALL`](union.md#union-all)
+* The order of `UNION ALL` depends on the execution mode of [UNION ALL](union.md#union-all).
 * the order of columns for [AS_TABLE](from_as_table.md) is not defined.
 
 ## Combination of queries {#combining-queries}
@@ -131,7 +131,7 @@ The following functions are defined for these purposes:
 
 * prefix — directory for searching tables, specified without a trailing slash. The only required argument; if only it is specified, all tables in that directory are used.
 * min, max — the next two arguments specify the range of names for including tables. The range is inclusive on both ends. If the range is not specified, all tables in the prefix directory are used. Names of tables or directories located in the directory specified in prefix are compared with the `[min, max]` range lexicographically, not concatenated, so it is important to specify the range without leading slashes.
-* suffix — table name. Expected without a leading slash. If suffix is not specified, the `[min, max]` arguments specify the range of table names. If suffix is specified, the `[min, max]` arguments specify the range of folders in which a table with the name specified in the suffix argument exists.
+* suffix — table name. Expected without a leading slash. If suffix is not specified, the `[min, max]` arguments specify the range of table names. If suffix is specified, the `[min, max]` arguments specify the range of directories in which a table with the name specified in the suffix argument exists.
 
 ``` LIKE(`prefix`, `pattern`, `suffix`, `view`)` и `REGEXP(`prefix`, `pattern`, `suffix`, `view`) ``` — the pattern argument is specified in a format similar to the binary operators of the same name: [LIKE](../expressions.md#like) and [REGEXP](../expressions.md#regexp).
 

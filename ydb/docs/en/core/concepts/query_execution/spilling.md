@@ -10,7 +10,6 @@ In data processing systems, including {{ ydb-short-name }}, spilling is essentia
 - executing complex analytical operations (aggregations, table joins) over large datasets
 - optimizing query performance through intermediate materialization of part of the data in external memory, which in certain scenarios can accelerate overall execution time
 
-
 Spilling operates based on the memory hierarchy principle:
 
 1. **Random Access Memory (RAM)** — fast but limited.
@@ -24,10 +23,9 @@ When memory usage approaches the limit, the system:
 - continues processing the query using data remaining in memory
 - loads data back into memory, when necessary, to continue computations
 
-
 ## Spilling in {{ ydb-short-name }}
 
-{{ ydb-short-name }} implements the spilling mechanism through the **Spilling Service**, an [actor service](../glossary.md#actor-service) that provides temporary storage for data blobs. Spilling is only performed on [database nodes](../glossary.md#database-node). Detailed technical information about it is available in [{#T}](../../contributor/spilling-service.md).
+{{ ydb-short-name }} implements the spilling mechanism through the **Spilling Service**, an [actor service](../glossary.md#actor-service) that provides temporary storage for data blobs. Spilling is only performed on [database nodes](../glossary.md#database-node). Detailed technical information about it is available in [Spilling Service](../../contributor/spilling-service.md).
 
 ### Types of Spilling in {{ ydb-short-name }}
 
@@ -58,7 +56,6 @@ Compute nodes contain specialized objects for monitoring memory usage. When the 
 5. The system continues processing the data remaining in memory, which frees additional space.
 6. When necessary, data is loaded back and processed.
 
-
 #### Transport Spilling {#transport-spilling}
 
 This type of spilling operates at the level of data transfer between different query execution stages. The system automatically buffers and offloads data when transfer buffers overflow. This helps avoid blocking the execution of data-generating operations, even when receiving operations are not ready to accept data.
@@ -67,11 +64,11 @@ This type of spilling operates at the level of data transfer between different q
 
 The data transfer system continuously monitors its state:
 
-1. **Buffering**: Incoming data accumulates in the transfer system's internal buffers  
-2. **Fill control**: The system tracks buffer fill levels  
-3. **Automatic spilling**: When limits are reached, data is automatically serialized and transferred to the Spilling Service  
-4. **Continued operation**: The transfer system continues accepting new data after freeing memory space  
-5. **Recovery**: When the next stage is ready, data is read from external storage and passed further  
+1. **Buffering**: Incoming data accumulates in the transfer system's internal buffers
+2. **Fill control**: The system tracks buffer fill levels
+3. **Automatic spilling**: When limits are reached, data is automatically serialized and transferred to the Spilling Service
+4. **Continued operation**: The transfer system continues accepting new data after freeing memory space
+5. **Recovery**: When the next stage is ready, data is read from external storage and passed further
 
 ## Interaction with Memory Controller
 

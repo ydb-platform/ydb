@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Map GitHub workflow + build preset to analytics job_name / github_workflow."""
 
+# Exact legacy workflow names (mute rules, BI queries).
 POSTCOMMIT_LEGACY_NAMES = {
     "relwithdebinfo": "Postcommit_relwithdebinfo",
     "release-asan": "Postcommit_asan",
@@ -9,7 +10,10 @@ POSTCOMMIT_LEGACY_NAMES = {
 
 def resolve_ci_job_name(workflow_name: str, build_preset: str) -> str:
     if workflow_name == "Postcommit":
-        return POSTCOMMIT_LEGACY_NAMES.get(build_preset, workflow_name)
+        if build_preset in POSTCOMMIT_LEGACY_NAMES:
+            return POSTCOMMIT_LEGACY_NAMES[build_preset]
+        # New presets: Postcommit_<preset>, same pattern as legacy yaml names.
+        return f"Postcommit_{build_preset}"
     return workflow_name
 
 

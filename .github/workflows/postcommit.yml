@@ -30,6 +30,7 @@ jobs:
       with:
         fetch-depth: 2
     - name: Build and test
+      # Per-preset CHECKS_SWITCH at step level: matrix is fixed (relwithdebinfo + asan).
       if: >-
         (matrix.build_preset == 'relwithdebinfo' && fromJSON(vars.CHECKS_SWITCH).postcommit_relwithdebinfo == true)
         || (matrix.build_preset == 'release-asan' && fromJSON(vars.CHECKS_SWITCH).postcommit_asan == true)
@@ -37,6 +38,7 @@ jobs:
       with:
         build_preset: ${{ matrix.build_preset }}
         increment: true
+        additional_ya_make_args: -DDEBUGINFO_LINES_ONLY  # we don't need full symbols in CI checks
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
         ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
         secs: ${{ env.CI_SECS }}

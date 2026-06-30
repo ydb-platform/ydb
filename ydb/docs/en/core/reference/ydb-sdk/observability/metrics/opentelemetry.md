@@ -16,9 +16,9 @@
 | Name | Type | Unit | Description |
 | --- | --- | --- | --- |
 | `ydb.query.session.create_time` | Histogram | `s` | Duration of creating a new session. |
-| `ydb.query.session.pending_requests` | Counter | `{request}` | Monotonic counter of queries for session acquisition that entered the wait queue since the pool was created. |
+| `ydb.query.session.pending_requests` | Counter | `{request}` | Monotonic counter of requests for session acquisition that entered the wait queue since the pool was created. |
 | `ydb.query.session.timeouts` | Counter | `{timeout}` | Monotonic counter of timeouts when waiting for a free session, since the pool was created. |
-| `ydb.query.session.count` | Gauge | `{session}` | Current number of sessions in the pool, divided by states. |
+| `ydb.query.session.count` | Gauge | `{session}` | Current number of sessions in the pool, broken down by state. |
 | `ydb.query.session.min` | Gauge | `{session}` | Configured minimum session pool size. |
 | `ydb.query.session.max` | Gauge | `{session}` | Configured maximum size of the session pool. |
 

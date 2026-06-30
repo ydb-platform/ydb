@@ -88,11 +88,18 @@ void SetSessionBrokenError(T& record)
 }
 
 template <typename TEvent, typename TMap>
-void RejectRequestsForNode(TMap& map, ui32 nodeId)
+void RejectRequestsForNode(TMap& map, ui32 nodeId, const TActorContext& ctx)
 {
     for (auto it = map.begin(); it != map.end();) {
         auto& request = it->second;
         if (request->ServiceId.NodeId() == nodeId) {
+            LOG_ERROR(
+                ctx,
+                NKikimrServices::NBS_PARTITION,
+                "maks_ololo RejectRequestsForNode requrst disconnected for "
+                "node #%lu",
+                nodeId);
+
             TEvent event;
             SetSessionBrokenError(event.Record);
             request->Promise.SetValue(std::move(event.Record));
@@ -146,23 +153,31 @@ void TICStorageTransportActor::HandleConnect(
     const TEvTransportPrivate::TEvConnect::TPtr& ev,
     const TActorContext& ctx)
 {
-    const auto* msg = ev->Get();
-
     const ui64 requestId = ++RequestIdGenerator;
     auto [it, inserted] =
         ConnectRequests.emplace(requestId, ev->Release().Release());
     Y_ABORT_UNLESS(inserted);
 
-    LOG_ERROR(
+    const auto& request = *it->second;
+
+    // Subscribe for node disconnect already at the moment of the connect
+    // request (not only after a successful connect). Otherwise a host that is
+    // stuck in a pending connect would never be notified about a disconnect.
+    // The callback is copied here because it is still needed in
+    // ConnectRequests until the connect completes.
+    ICSubscribedNodes[request.ServiceId.NodeId()].push_back(
+        request.DisconnectCB);
+
+    LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
-        "maks_ololo Sent TEvConnect with requestId# %lu",
+        "Sent TEvConnect with requestId# %lu",
         requestId);
 
     SendWithUndeliveryTracking(
         ctx,
-        msg->ServiceId,
-        std::make_unique<NDDisk::TEvConnect>(msg->Credentials),
+        request.ServiceId,
+        std::make_unique<NDDisk::TEvConnect>(request.Credentials),
         requestId,
         NWilson::TTraceId());
 }
@@ -209,8 +224,8 @@ void TICStorageTransportActor::HandleConnectResult(
 
     if (auto* r = ConnectRequests.FindPtr(requestId)) {
         auto& request = **r;
-        ICSubscribedNodes[request.ServiceId.NodeId()].push_back(
-            std::move(request.DisconnectCB));
+        // The disconnect subscription is registered already in HandleConnect,
+        // so here we only resolve the promise and drop the request.
         request.Promise.SetValue(std::move(ev->Get()->Record));
 
         ConnectRequests.erase(requestId);
@@ -1121,13 +1136,22 @@ void TICStorageTransportActor::PassAway()
     NActors::IActor::PassAway();
 }
 
-void TICStorageTransportActor::RejectAllSessionRequestsForNode(ui32 nodeId)
+void TICStorageTransportActor::RejectAllSessionRequestsForNode(
+    ui32 nodeId,
+    const NActors::TActorContext& ctx)
 {
-    RejectRequestsForNode<NDDisk::TEvReadResult>(ReadFromDDiskRequests, nodeId);
-    RejectRequestsForNode<NDDisk::TEvWriteResult>(WriteToDDiskRequests, nodeId);
+    RejectRequestsForNode<NDDisk::TEvReadResult>(
+        ReadFromDDiskRequests,
+        nodeId,
+        ctx);
+    RejectRequestsForNode<NDDisk::TEvWriteResult>(
+        WriteToDDiskRequests,
+        nodeId,
+        ctx);
     RejectRequestsForNode<NDDisk::TEvSyncResult>(
         FlushFromPBufferRequests,
-        nodeId);
+        nodeId,
+        ctx);
 }
 
 void TICStorageTransportActor::HandleICNodeDisconnected(
@@ -1137,7 +1161,7 @@ void TICStorageTransportActor::HandleICNodeDisconnected(
     Y_UNUSED(ctx);
     const ui32 nodeId = ev->Get()->NodeId;
 
-    LOG_CRIT(
+    LOG_ERROR(
         ctx,
         NKikimrServices::NBS_PARTITION,
         "maks_ololo Node #%lu disconnected",
@@ -1153,7 +1177,7 @@ void TICStorageTransportActor::HandleICNodeDisconnected(
         ICSubscribedNodes.erase(it);
     }
 
-    RejectAllSessionRequestsForNode(nodeId);
+    RejectAllSessionRequestsForNode(nodeId, ctx);
 }
 
 void TICStorageTransportActor::HandleICNodeConnected(
@@ -1161,15 +1185,6 @@ void TICStorageTransportActor::HandleICNodeConnected(
     const TActorContext& ctx)
 {
     Y_UNUSED(ev, ctx);
-    /*
-    const ui32 node = ev->Get()->NodeId;
-
-    LOG_CRIT(
-        ctx,
-        NKikimrServices::NBS_PARTITION,
-        "maks_ololo Node #%lu connected",
-        node);
-    */
 }
 
 ///////////////////////////////////////////////////////////////////////////////

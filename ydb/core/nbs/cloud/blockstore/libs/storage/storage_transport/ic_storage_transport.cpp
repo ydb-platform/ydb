@@ -14,6 +14,13 @@ TICStorageTransport::TICStorageTransport(NActors::TActorSystem* actorSystem)
     , ICStorageTransportActorId(CreateTransportActor())
 {}
 
+TICStorageTransport::TICStorageTransport(
+    NActors::TActorSystem* actorSystem,
+    NActors::TActorId icStorageTransportActorId)
+    : ActorSystem(actorSystem)
+    , ICStorageTransportActorId(icStorageTransportActorId)
+{}
+
 TFuture<NKikimrBlobStorage::NDDisk::TEvConnectResult>
 TICStorageTransport::Connect(
     const THostConnection& connection,

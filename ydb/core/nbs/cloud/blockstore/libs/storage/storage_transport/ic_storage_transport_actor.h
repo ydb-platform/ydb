@@ -162,7 +162,9 @@ private:
         const NActors::TActorContext& ctx);
 
     void PassAway() override;
-    void RejectAllSessionRequestsForNode(ui32 nodeId);
+    void RejectAllSessionRequestsForNode(
+        ui32 nodeId,
+        const NActors::TActorContext& ctx);
 
     void HandleICNodeDisconnected(
         const NActors::TEvInterconnect::TEvNodeDisconnected::TPtr& ev,

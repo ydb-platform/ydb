@@ -1267,7 +1267,7 @@ void TDirectBlockGroup::OnNodeDisconnected(THostIndex hostIndex, ui32 nodeId)
     LOG_WARN(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,
-        "maks_ololo TDBG::OnNodeDisconnected %s, host %s, nodeId: %d",
+        "TDBG::OnNodeDisconnected %s, host %s, nodeId: %d",
         LogTitle.GetWithTime().c_str(),
         PrintHostIndex(hostIndex).c_str(),
         nodeId);

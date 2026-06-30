@@ -148,10 +148,10 @@ class TPushAppendThroughUnaryRule : public ISimplifiedRule {
     bool PushExpressions;
 };
 
-class TPushAppendThroughAggregateRule : public ISimplifiedRule {
+class TPushMapElementsThroughAggregateRule : public ISimplifiedRule {
   public:
-    TPushAppendThroughAggregateRule()
-        : ISimplifiedRule("Push append through aggregate", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
+    TPushMapElementsThroughAggregateRule()
+        : ISimplifiedRule("Push map elements through aggregate", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -201,14 +201,6 @@ class TPushRenameThroughPassThroughMapRule : public IRule {
   public:
     TPushRenameThroughPassThroughMapRule()
         : IRule("Push semantic rename through map", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
-
-    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
-};
-
-class TPushRenameThroughAggregateKeyRule : public IRule {
-  public:
-    TPushRenameThroughAggregateKeyRule()
-        : IRule("Push semantic rename through aggregate key", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
 
     virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };

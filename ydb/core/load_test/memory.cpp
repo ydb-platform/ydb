@@ -5,8 +5,6 @@
 #include <library/cpp/monlib/service/pages/templates.h>
 #include <library/cpp/time_provider/time_provider.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_LOAD_TEST
-
 
 namespace NKikimr {
 
@@ -58,13 +56,13 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "TMemoryLoadTestActor Bootstrap called",
-            {"tag", Tag});
+        LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
+            << " TMemoryLoadTestActor Bootstrap called");
 
         Become(&TMemoryLoadTestActor::StateFunc);
 
-        YDB_LOG_INFO_CTX(ctx, "Schedule PoisonPill",
-            {"tag", Tag});
+        LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
+            << " Schedule PoisonPill");
 
         ctx.Schedule(Duration, new TEvents::TEvPoisonPill);
         ctx.Schedule(Interval, new TEvAllocateBlock);
@@ -74,8 +72,8 @@ public:
 
     void HandlePoisonPill(const TActorContext& ctx) {
         EarlyStop = (TAppData::TimeProvider->Now() - TestStartTime).Seconds() < DurationSeconds;
-        YDB_LOG_INFO_CTX(ctx, "Handle PoisonPill",
-            {"tag", Tag});
+        LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
+            << " Handle PoisonPill");
 
         TIntrusivePtr<TEvLoad::TLoadReport> report = nullptr;
         if (!EarlyStop) {
@@ -99,8 +97,8 @@ public:
         }
         AllocatedSize += size;
 
-        YDB_LOG_DEBUG_CTX(ctx, "Handle AllocateBlock",
-            {"tag", Tag});
+        LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
+            << " Handle AllocateBlock");
 
         ctx.Schedule(Interval, new TEvAllocateBlock);
     }

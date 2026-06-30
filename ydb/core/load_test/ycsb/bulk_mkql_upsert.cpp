@@ -12,8 +12,6 @@
 
 #include <google/protobuf/text_format.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DS_LOAD_TEST
-
 // * Scheme is hardcoded and it is like default YCSB setup:
 // 1 Text "id" column, 10 Bytes "field0" - "field9" columns
 // * row is ~ 1 KB, keys are like user1000385178204227360
@@ -154,11 +152,9 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        YDB_LOG_NOTICE_CTX(ctx, "TUpsertActor Bootstrap with",
-            {"id", Id},
-            {"called", ConfingString},
-            {"type", int(RequestType)},
-            {"target", Target.DebugString()});
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
+            << " TUpsertActor Bootstrap called: " << ConfingString << " with type# " << int(RequestType)
+            << ", target# " << Target.DebugString());
 
         Become(&TUpsertActor::StateFunc);
         Connect(ctx);
@@ -167,14 +163,12 @@ public:
 private:
     void Connect(const TActorContext &ctx) {
         if (ReconnectLimit != RECONNECT_LIMIT) {
-            YDB_LOG_DEBUG_CTX(ctx, "Will reconnect retries",
-                {"TUpsertActor", Id},
-                {"toTablet", Target.GetTabletId()},
-                {"left", (ReconnectLimit - 1)});
+            LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TUpsertActor# " << Id
+                << " will reconnect to tablet# " << Target.GetTabletId()
+                << " retries left# " << (ReconnectLimit - 1));
         } else {
-            YDB_LOG_TRACE_CTX(ctx, "Will connect",
-                {"TUpsertActor", Id},
-                {"toTablet", Target.GetTabletId()});
+            LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TUpsertActor# " << Id
+                << " will connect to tablet# " << Target.GetTabletId());
         }
 
         --ReconnectLimit;
@@ -189,9 +183,8 @@ private:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev, const TActorContext& ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
 
-        YDB_LOG_TRACE_CTX(ctx, "TUpsertActor Handle TEvClientConnected called,",
-            {"id", Id},
-            {"status", msg->Status});
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
+            << " TUpsertActor Handle TEvClientConnected called, Status# " << msg->Status);
 
         if (msg->Status != NKikimrProto::OK) {
             Pipe = {};
@@ -204,8 +197,8 @@ private:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr, const TActorContext& ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "TUpsertActor Handle TEvClientDestroyed called",
-            {"id", Id});
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
+            << " TUpsertActor Handle TEvClientDestroyed called");
 
         // sanity check
         if (!WasConnected) {
@@ -227,11 +220,9 @@ private:
                 RequestType,
                 Target.GetTableName());
 
-            YDB_LOG_TRACE_CTX(ctx, "Sends with",
-                {"TUpsertActor", Id},
-                {"request", CurrentRow},
-                {"batchSize", batchSize},
-                {"requestString", request->ToString()});
+            LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TUpsertActor# " << Id
+                << " sends request# " << CurrentRow << " with batchSize# " << batchSize
+                <<  ": " << request->ToString());
 
             NTabletPipe::SendData(ctx, Pipe, request.release());
 
@@ -260,45 +251,37 @@ private:
 
             ctx.Send(Parent, response.release());
 
-            YDB_LOG_NOTICE_CTX(ctx, "TUpsertActor finished",
-                {"id", Id},
-                {"delta", delta},
-                {"errors", Errors});
+            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
+                << " TUpsertActor finished in " << delta << ", errors=" << Errors);
             Die(ctx);
         }
     }
 
     void Handle(TEvDataShard::TEvUploadRowsResponse::TPtr ev, const TActorContext& ctx) {
-        YDB_LOG_TRACE_CTX(ctx, "TUpsertActor received",
-            {"id", Id},
-            {"sender", ev->Sender},
-            {"record", ev->Get()->Record});
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
+            << " TUpsertActor received from " << ev->Sender << ": " << ev->Get()->Record);
         --Inflight;
 
         TEvDataShard::TEvUploadRowsResponse *msg = ev->Get();
         if (msg->Record.GetStatus() != 0) {
             ++Errors;
-            YDB_LOG_WARN_CTX(ctx, "TUpsertActor",
-                {"id", Id},
-                {"TEvUploadRowsResponse", msg->ToString()});
+            LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
+                << " TUpsertActor TEvUploadRowsResponse: " << msg->ToString());
         }
 
         OnRequestDone(ctx);
     }
 
     void Handle(TEvTablet::TEvLocalMKQLResponse::TPtr ev, const TActorContext& ctx) {
-        YDB_LOG_TRACE_CTX(ctx, "TUpsertActor received",
-            {"id", Id},
-            {"sender", ev->Sender},
-            {"record", ev->Get()->Record});
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
+            << " TUpsertActor received from " << ev->Sender << ": " << ev->Get()->Record);
         --Inflight;
 
         TEvTablet::TEvLocalMKQLResponse *msg = ev->Get();
         if (msg->Record.GetStatus() != 0) {
             ++Errors;
-            YDB_LOG_WARN_CTX(ctx, "TUpsertActor",
-                {"id", Id},
-                {"TEvLocalMKQLResponse", msg->ToString()});
+            LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "Id# " << Id
+                << " TUpsertActor TEvLocalMKQLResponse: " << msg->ToString());
         }
 
         OnRequestDone(ctx);
@@ -324,14 +307,13 @@ private:
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        YDB_LOG_INFO_CTX(ctx, "Load tablet received PoisonPill, going to die");
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "Load tablet received PoisonPill, going to die");
         NTabletPipe::CloseClient(SelfId(), Pipe);
         Die(ctx);
     }
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
-        YDB_LOG_ERROR_CTX(ctx, "Load tablet stopped with",
-            {"error", reason});
+        LOG_ERROR_S(ctx, NKikimrServices::DS_LOAD_TEST, "Load tablet stopped with error: " << reason);
         ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(Id.SubTag, reason));
         NTabletPipe::CloseClient(SelfId(), Pipe);
         Die(ctx);

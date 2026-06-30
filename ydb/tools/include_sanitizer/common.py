@@ -20,24 +20,56 @@ PKG_PARENT = PKG_ROOT.parent
 PKG_NAME = PKG_ROOT.name
 
 
-def _find_repo_root(start: Path) -> Path:
-    """Locate the repository root by marker, independent of tool depth.
+def _find_marker_root(start: Path) -> Optional[Path]:
+    """Walk up from ``start`` to the arcadia root, identified by the
+    ``.arcadia.root`` marker. Returns None if no marker is found.
 
-    Walks up from ``start`` looking for ``.arcadia.root`` (the ydb/arcadia
-    root marker) or a ``build/scripts/clang_wrapper.py``. Falls back to two
-    levels up (the historical ``<repo>/tools/include_sanitizer`` layout).
+    We deliberately key ONLY on ``.arcadia.root`` (which lives at the true
+    repo root and is NOT copied into ya's ephemeral build_root). An earlier
+    version also accepted ``build/scripts/clang_wrapper.py`` as a marker,
+    but ya stages that file inside the per-TU build_root — so when inline
+    analysis runs there (CWD = build_root) it would mis-detect the
+    build_root as the repo root and emit absolute, unstable cache keys.
     """
-    cur = start
-    for _ in range(40):
-        if (cur / ".arcadia.root").exists() or (cur / "build" / "scripts" / "clang_wrapper.py").exists():
+    try:
+        cur = start.resolve()
+    except OSError:
+        cur = start
+    for _ in range(60):
+        if (cur / ".arcadia.root").exists():
             return cur
         if cur.parent == cur:
-            break
+            return None
         cur = cur.parent
-    return start.parent.parent
+    return None
 
 
-REPO_ROOT = _find_repo_root(PKG_ROOT)
+def _detect_repo_root() -> Path:
+    """Resolve the repository root robustly across execution contexts.
+
+    Priority:
+      1. ``YDB_REPO_ROOT`` env override. The ``compdb``/``timetrace``
+         drivers set this for the build steps they spawn, where CWD is the
+         ephemeral build_root and a bundled binary's ``__file__`` may be
+         relative (so package-based detection is unreliable).
+      2. Marker search up from the package directory (correct from source).
+      3. Marker search up from the current working directory (covers the
+         bundled binary launched from within the checkout).
+      4. Two levels up from the package as a last resort.
+    """
+    env = os.environ.get("YDB_REPO_ROOT")
+    if env:
+        return Path(env).resolve()
+    r = _find_marker_root(PKG_ROOT)
+    if r is not None:
+        return r
+    r = _find_marker_root(Path.cwd())
+    if r is not None:
+        return r
+    return PKG_ROOT.parent.parent
+
+
+REPO_ROOT = _detect_repo_root()
 
 # Where cache/reports are written. Defaults next to the source package
 # (the established from-source layout). When the tool runs as a ya-built

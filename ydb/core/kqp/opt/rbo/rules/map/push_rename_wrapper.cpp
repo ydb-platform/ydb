@@ -21,7 +21,9 @@ bool TPushRenameRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext
     if (TPushRenameThroughPassThroughMapRule().MatchAndApply(input, ctx, props)) {
         return true;
     }
-    if (TPushRenameThroughAggregateKeyRule().MatchAndApply(input, ctx, props)) {
+    output = TPushMapElementsThroughAggregateRule().SimpleMatchAndApply(input, ctx, props);
+    if (output != input) {
+        input = output;
         return true;
     }
     output = TPushAppendThroughJoinRule().SimpleMatchAndApply(input, ctx, props);

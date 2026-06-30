@@ -14,7 +14,7 @@ TIntrusivePtr<IOperator> TPushAppendRule::SimpleMatchAndApply(const TIntrusivePt
         return result;
     }
 
-    result = TPushAppendThroughAggregateRule().SimpleMatchAndApply(input, ctx, props);
+    result = TPushMapElementsThroughAggregateRule().SimpleMatchAndApply(input, ctx, props);
     if (result != input) {
         return result;
     }

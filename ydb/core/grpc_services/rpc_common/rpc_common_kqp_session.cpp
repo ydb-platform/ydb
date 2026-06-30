@@ -29,8 +29,11 @@ using TEvCreateSessionTableRequest = TGrpcRequestOperationCall<Ydb::Table::Creat
 using TEvDeleteSessionTableRequest = TGrpcRequestOperationCall<Ydb::Table::DeleteSessionRequest,
     Ydb::Table::DeleteSessionResponse>;
 
-using TEvDeleteSessionQueryRequest = TGrpcRequestOperationCall<Ydb::Query::DeleteSessionRequest,
+using TEvDeleteSessionQueryRequest = TGrpcRequestNoOperationCall<Ydb::Query::DeleteSessionRequest,
     Ydb::Query::DeleteSessionResponse>;
+
+using TEvCreateSessionQueryRequest = TGrpcRequestNoOperationCall<Ydb::Query::CreateSessionRequest,
+    Ydb::Query::CreateSessionResponse>;
 
 class TCreateSessionRPC : public TActorBootstrapped<TCreateSessionRPC> {
 public:
@@ -288,6 +291,11 @@ IActor* TEvCreateSessionTableRequest::CreateRpcActor(NKikimr::NGRpcService::IReq
     return TCreateSessionTableService::New(msg);
 }
 
+template<>
+IActor* TEvCreateSessionQueryRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestNoOpCtx* msg) {
+    return TCreateSessionQueryService::New(msg);
+}
+
 void DoDeleteSessionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& provider) {
     provider.RegisterActor(TDeleteSessionTableService::New(p.release()));
 }
@@ -295,6 +303,11 @@ void DoDeleteSessionRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityPro
 template<>
 IActor* TEvDeleteSessionTableRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestOpCtx* msg) {
     return TDeleteSessionTableService::New(msg);
+}
+
+template<>
+IActor* TEvDeleteSessionQueryRequest::CreateRpcActor(NKikimr::NGRpcService::IRequestNoOpCtx* msg) {
+    return TDeleteSessionQueryService::New(msg);
 }
 
 namespace NQuery {

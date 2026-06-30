@@ -396,7 +396,7 @@ private:
     }
 
     void StartLevelRound() {
-        LevelChildren.clear();
+        LevelCandidates.clear();
         Phase = EPhase::Level;
 
         // Read all parents of this round in a single inner read: it fans the
@@ -413,7 +413,13 @@ private:
                 if (cached && !cached->BatchRows.empty()) {
                     for (TConstArrayRef<TCell> row : cached->BatchRows) {
                         // Cached row layout: [id (Uint64), centroid (String)].
-                        LevelChildren[row[0].AsValue<ui64>()] = TString(row[1].AsBuf());
+                        auto centroid = row[1].AsBuf();
+                        if (!RankClusters->IsExpectedFormat(centroid)) {
+                            RuntimeError("Invalid centroids in level table", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+                            return;
+                        }
+                        LevelCandidates.emplace_back(row[0].AsValue<ui64>(),
+                            RankClusters->CalcDistance(centroid, TargetVector));
                     }
                     continue;
                 }
@@ -432,34 +438,20 @@ private:
     }
 
     void OnLevelRoundDone() {
-        // Rank all collected children of this level and keep the LevelTop nearest.
+        // Children were ranked incrementally as rows arrived (distance to target
+        // already in LevelCandidates). Keep only the LevelTop nearest via a partial
+        // sort -- equivalent to FindClusters with skipRatio 0.0 (no early exit).
         CurrentParents.clear();
-        if (!LevelChildren.empty()) {
-            TString error;
-            auto clusters = NKikimr::NKMeans::CreateClusters(Settings.GetIndexSettings(), 0, error);
-            if (!clusters) {
-                RuntimeError(error, NYql::NDqProto::StatusIds::INTERNAL_ERROR);
-                return;
-            }
-            TVector<TClusterId> ids;
-            TVector<TString> centroids;
-            ids.reserve(LevelChildren.size());
-            centroids.reserve(LevelChildren.size());
-            for (auto& [id, centroid] : LevelChildren) {
-                ids.push_back(id);
-                centroids.push_back(std::move(centroid));
-            }
-            if (!clusters->SetClusters(std::move(centroids))) {
-                RuntimeError("Invalid centroids in level table", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
-                return;
-            }
-            std::vector<std::pair<ui32, double>> nearest;
-            clusters->FindClusters(TargetVector, nearest, LevelTop, /* skipRatio */ 0.0);
-            for (auto& [pos, _] : nearest) {
-                CurrentParents.push_back(ids[pos]);
+        if (!LevelCandidates.empty()) {
+            size_t k = std::min<size_t>(LevelTop, LevelCandidates.size());
+            std::partial_sort(LevelCandidates.begin(), LevelCandidates.begin() + k, LevelCandidates.end(),
+                [](const auto& a, const auto& b) { return a.second < b.second; });
+            CurrentParents.reserve(k);
+            for (size_t i = 0; i < k; ++i) {
+                CurrentParents.push_back(LevelCandidates[i].first);
             }
         }
-        LevelChildren.clear();
+        LevelCandidates.clear();
 
         {
             TStringBuilder sb;
@@ -1027,7 +1019,13 @@ private:
                 TClusterId child = value.GetElement(1).Get<ui64>();
                 auto centroid = value.GetElement(2);
                 auto centroidRef = centroid.AsStringRef();
-                LevelChildren[child] = TString(centroidRef);
+                if (!RankClusters->IsExpectedFormat(centroidRef)) {
+                    RuntimeError("Invalid centroids in level table", NYql::NDqProto::StatusIds::INTERNAL_ERROR);
+                    return;
+                }
+                // Compute the centroid<->target distance now, overlapping the shard
+                // reads still in flight; ranking is deferred to the round barrier.
+                LevelCandidates.emplace_back(child, RankClusters->CalcDistance(centroidRef, TargetVector));
                 if (auto it = CachingLevelBatches.find(parent); it != CachingLevelBatches.end()) {
                     // Store [id (Uint64), centroid (String)]; Append copies the cells.
                     TCell cells[2] = {
@@ -1248,7 +1246,12 @@ private:
     // Parents of the current round being read (level phase); a read row's parent
     // must be one of these.
     THashSet<TClusterId> ReadingParents;
-    THashMap<TClusterId, TString> LevelChildren;
+    // Children of the current level round as (id, distance-to-target) pairs. The
+    // distance is computed incrementally as rows arrive (overlapping the shard
+    // reads); the round barrier only partial-sorts to keep the LevelTop nearest.
+    // Ranking reuses RankClusters' metric (CalcDistance is SetClusters-independent),
+    // so no centroid bytes are copied into this accumulator.
+    TVector<std::pair<TClusterId, double>> LevelCandidates;
 
     // Shared, process-wide cache of immutable level-table rows.
     TIntrusivePtr<TVectorIndexLevelsCache> LevelsCache;

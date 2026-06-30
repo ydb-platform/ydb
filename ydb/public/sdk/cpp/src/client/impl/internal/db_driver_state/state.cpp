@@ -217,6 +217,11 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                 }
                 delete p;
             };
+
+            auto [it, inserted] = States_.try_emplace(key); // creates empty weak_ptr
+            lock.unlock(); // release lock
+
+            Y_ABORT_UNLESS(inserted);
             strongState = std::shared_ptr<TDbDriverState>(
                 new TDbDriverState(
                     quotedDatabase,
@@ -234,7 +239,10 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
             if (discoveryMode != EDiscoveryMode::Off) {
                 DiscoveryClient_->AddPeriodicTask(CreatePeriodicDiscoveryTask(strongState), DISCOVERY_RECHECK_PERIOD);
             }
-            Y_ABORT_UNLESS(States_.emplace(key, strongState).second);
+
+            lock.lock();
+            Y_ENSURE(it->second.expired());
+            it->second = strongState; // iterator remains valid (as long as key was not erase'd)
             break;
         }
     }

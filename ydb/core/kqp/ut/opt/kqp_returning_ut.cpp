@@ -1653,6 +1653,7 @@ Y_UNIT_TEST_TWIN(MultipleSelectsAndReturnings, EnableIndexStreamWrite) {
             --!syntax_v1
             CREATE TABLE t1 (key Int32, val String, PRIMARY KEY(key));
             CREATE TABLE t2 (key Int32, val String, PRIMARY KEY(key));
+            CREATE TABLE t3 (key Int32, val String, PRIMARY KEY(key));
         )")).GetValueSync();
         UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
     }
@@ -1661,20 +1662,20 @@ Y_UNIT_TEST_TWIN(MultipleSelectsAndReturnings, EnableIndexStreamWrite) {
         auto db = kikimr.GetQueryClient();
         auto session = db.GetSession().GetValueSync().GetSession();
         auto result = session.ExecuteQuery(R"(
-            SELECT 1;
+            SELECT * FROM t3;
             UPSERT INTO t1 (key, val) VALUES (10, "x") RETURNING key, val;
-            SELECT 2;
+            SELECT * FROM t3;
             UPSERT INTO t2 (key, val) VALUES (20, "y") RETURNING key, val;
-            SELECT 3;
+            SELECT * FROM t3;
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
 
         UNIT_ASSERT_VALUES_EQUAL(result.GetResultSets().size(), 5u);
-        CompareYson(R"([[1]])", FormatResultSetYson(result.GetResultSet(0)));
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
         CompareYson(R"([[[10];["x"]]])", FormatResultSetYson(result.GetResultSet(1)));
-        CompareYson(R"([[2]])", FormatResultSetYson(result.GetResultSet(2)));
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(2)));
         CompareYson(R"([[[20];["y"]]])", FormatResultSetYson(result.GetResultSet(3)));
-        CompareYson(R"([[3]])", FormatResultSetYson(result.GetResultSet(4)));
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(4)));
     }
 }
 
@@ -1688,8 +1689,15 @@ Y_UNIT_TEST_TWIN(MultipleSelectsAndReturningsStream, EnableIndexStreamWrite) {
             --!syntax_v1
             CREATE TABLE t1 (key Int32, val String, PRIMARY KEY(key));
             CREATE TABLE t2 (key Int32, val String, PRIMARY KEY(key));
+            CREATE TABLE t3 (key Int32, val String, PRIMARY KEY(key));
         )")).GetValueSync();
         UNIT_ASSERT_C(resultCreate.IsSuccess(), resultCreate.GetIssues().ToString());
+
+        auto resultInsert = session.ExecuteDataQuery(Q_(R"(
+            --!syntax_v1
+            INSERT INTO t3 (key, val) VALUES (1, "a");
+        )"), TTxControl::BeginTx().CommitTx()).GetValueSync();
+        UNIT_ASSERT_C(resultInsert.IsSuccess(), resultInsert.GetIssues().ToString());
     }
 
     {
@@ -1698,20 +1706,20 @@ Y_UNIT_TEST_TWIN(MultipleSelectsAndReturningsStream, EnableIndexStreamWrite) {
             .Syntax(NYdb::NQuery::ESyntax::YqlV1)
             .ConcurrentResultSets(false);
         auto it = db.StreamExecuteQuery(R"(
-            SELECT 1;
+            SELECT * FROM t3;
             UPSERT INTO t1 (key, val) VALUES (10, "x") RETURNING key, val;
-            SELECT 2;
+            SELECT * FROM t3;
             UPSERT INTO t2 (key, val) VALUES (20, "y") RETURNING key, val;
-            SELECT 3;
+            SELECT * FROM t3;
         )", NYdb::NQuery::TTxControl::BeginTx().CommitTx(), settings).ExtractValueSync();
         UNIT_ASSERT_VALUES_EQUAL_C(it.GetStatus(), EStatus::SUCCESS, it.GetIssues().ToString());
 
         CompareYson(R"([
-            [1];
+            [[1];["a"]];
             [[10];["x"]];
-            [2];
+            [[1];["a"]];
             [[20];["y"]];
-            [3]
+            [[1];["a"]]
         ])", StreamResultToYson(it));
     }
 }

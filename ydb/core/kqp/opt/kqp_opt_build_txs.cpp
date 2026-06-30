@@ -647,48 +647,32 @@ public:
         };
 
         if (KqpCtx->Config->GetEnableIndexStreamWrite()) {
-            auto collectedEffects = CollectEffects(query.Effects(), ctx, *KqpCtx);
-            if (!collectedEffects) {
+            auto collected = CollectEffects(query.Effects(), query.Results(), ctx, *KqpCtx);
+            if (!collected) {
                 return TStatus::Error;
             }
 
-            // Build a map from sink-effect stage -> result indices in query.Results() that are RETURNING outputs.
-            // RETURNING results are TDqCnUnionAll whose Output().Stage() matches a TKqpSinkEffect's stage.
-            THashMap<const TExprNode*, TVector<ui32>> stageToReturningResults;
-            for (ui32 i = 0; i < query.Results().Size(); ++i) {
-                const auto& result = query.Results().Item(i);
-                if (auto maybeUnionAll = result.Value().Maybe<TDqCnUnionAll>()) {
-                    const auto stage = maybeUnionAll.Cast().Output().Stage();
-                    stageToReturningResults[stage.Raw()].push_back(i);
-                }
-            }
+            const auto& updatedResults = collected->UpdatedResults;
 
-            // Determine which result indices are RETURNING (belong to an effects tx) vs reads.
+            // Determine which result indices are RETURNING (belong to an effects tx).
             THashSet<ui32> returningResultIndices;
-            for (const auto& effects : *collectedEffects) {
-                for (const auto& effect : effects) {
-                    if (auto sinkEffect = effect.Maybe<TKqpSinkEffect>()) {
-                        const auto stage = sinkEffect.Cast().Stage();
-                        auto it = stageToReturningResults.find(stage.Raw());
-                        if (it != stageToReturningResults.end()) {
-                            for (ui32 idx : it->second) {
-                                returningResultIndices.insert(idx);
-                            }
-                        }
-                    }
+            for (const auto& group : collected->ReturningResultGroups) {
+                for (ui32 idx : group) {
+                    returningResultIndices.insert(idx);
                 }
             }
 
-            // Map each original result index to (txIndex, localResultIndex) for deferred binding emission.
-            TVector<std::pair<ui32, ui32>> resultTxMapping(query.Results().Size(), {0, 0});
+            // Map each result index to (txIndex, localResultIndex) for deferred binding emission.
+            TVector<std::pair<ui32, ui32>> resultTxMapping(updatedResults.size(),
+                {Max<ui32>(), Max<ui32>()});
 
             // Build reads tx with non-RETURNING results only.
             {
                 TVector<TKqlQueryResult> readResults;
-                for (ui32 i = 0; i < query.Results().Size(); ++i) {
+                for (ui32 i = 0; i < updatedResults.size(); ++i) {
                     if (!returningResultIndices.contains(i)) {
                         resultTxMapping[i] = {BuildCtx->PhysicalTxs.size(), readResults.size()};
-                        readResults.emplace_back(query.Results().Item(i));
+                        readResults.emplace_back(updatedResults[i]);
                     }
                 }
 
@@ -711,19 +695,12 @@ public:
             }
 
             // Build effects txs, each carrying its RETURNING results.
-            for (auto& effects : *collectedEffects) {
+            for (size_t group = 0; group < collected->EffectsGroups.size(); ++group) {
+                auto& effects = collected->EffectsGroups[group];
                 TVector<TKqlQueryResult> effectsResults;
-                for (const auto& effect : effects) {
-                    if (auto sinkEffect = effect.Maybe<TKqpSinkEffect>()) {
-                        const auto stage = sinkEffect.Cast().Stage();
-                        auto it = stageToReturningResults.find(stage.Raw());
-                        if (it != stageToReturningResults.end()) {
-                            for (ui32 idx : it->second) {
-                                resultTxMapping[idx] = {BuildCtx->PhysicalTxs.size(), effectsResults.size()};
-                                effectsResults.emplace_back(query.Results().Item(idx));
-                            }
-                        }
-                    }
+                for (const ui32 idx : collected->ReturningResultGroups[group]) {
+                    resultTxMapping[idx] = {BuildCtx->PhysicalTxs.size(), effectsResults.size()};
+                    effectsResults.emplace_back(updatedResults[idx]);
                 }
 
                 auto effectsQuery = Build<TKqlQuery>(ctx, query.Pos())
@@ -741,10 +718,11 @@ public:
                 BuildCtx->PhysicalTxs.emplace_back(tx.Cast());
             }
 
-            // Emit bindings in query.Results() order to preserve client-visible result ordering.
-            for (ui32 i = 0; i < query.Results().Size(); ++i) {
+            // Emit bindings in results order to preserve client-visible result ordering.
+            for (ui32 i = 0; i < updatedResults.size(); ++i) {
                 const auto& [txIndex, localResultIndex] = resultTxMapping[i];
-                const auto& result = query.Results().Item(i);
+                YQL_ENSURE(txIndex != Max<ui32>(), "Result " << i << " was not mapped to any physical tx");
+                const auto& result = updatedResults[i];
                 auto binding = Build<TKqpTxResultBinding>(ctx, query.Pos())
                     .Type(ExpandType(query.Pos(), *result.Value().Ref().GetTypeAnn(), ctx))
                     .TxIndex()
@@ -771,12 +749,13 @@ public:
         }
 
         if (!query.Effects().Empty()) {
-            auto collectedEffects = CollectEffects(query.Effects(), ctx, *KqpCtx);
-            if (!collectedEffects) {
+            auto emptyResults = Build<TKqlQueryResultList>(ctx, query.Pos()).Done();
+            auto collected = CollectEffects(query.Effects(), emptyResults, ctx, *KqpCtx);
+            if (!collected) {
                 return TStatus::Error;
             }
 
-            for (auto& effects : *collectedEffects) {
+            for (auto& effects : collected->EffectsGroups) {
                 auto tx = BuildTx(effects.Ptr(), ctx, /* isPrecompute */ false);
                 if (!tx) {
                     return TStatus::Error;
@@ -832,7 +811,16 @@ private:
         return {};
     }
 
-    std::optional<TVector<TExprList>> CollectEffects(const TExprList& list, TExprContext& ctx, TKqpOptimizeContext& kqpCtx) {
+    struct TCollectEffectsResult {
+        TVector<TExprList> EffectsGroups;
+        TVector<TVector<ui32>> ReturningResultGroups; // for each effects group, indices into UpdatedResults
+        TVector<TKqlQueryResult> UpdatedResults;
+    };
+
+    std::optional<TCollectEffectsResult> CollectEffects(
+        const TExprList& list, const TKqlQueryResultList& results,
+        TExprContext& ctx, TKqpOptimizeContext& kqpCtx)
+    {
         TVector<TEffectsInfo> effectsInfos;
         TVector<TKqpSinkEffect> externalEffects;
 
@@ -919,7 +907,8 @@ private:
             it->AddExpr(sinkEffect.Ptr());
         }
 
-        TVector<TExprList> results;
+        TCollectEffectsResult collected;
+        TNodeOnNodeOwnedMap allReplaces;
 
         for (const auto& effects : effectsInfos) {
             auto builder = Build<TExprList>(ctx, list.Pos());
@@ -977,8 +966,14 @@ private:
                 YQL_ENSURE(replaces.emplace(stage.Raw(), stageBuilder.Done().Ptr()).second);
             }
 
+            // Merge replaces into allReplaces for later applying to results.
+            for (auto& [key, value] : replaces) {
+                YQL_ENSURE(allReplaces.emplace(key, value).second,
+                    "Stage replaced in multiple effect groups");
+            }
+
             if (replaces.empty()) {
-                results.emplace_back(effect);
+                collected.EffectsGroups.emplace_back(effect);
             } else {
                 TExprNode::TPtr output;
                 TOptimizeExprSettings settings(nullptr);
@@ -986,11 +981,58 @@ private:
                 if (RemapExpr(effect.Ptr(), output, replaces, ctx, settings).Level == TStatus::Error) {
                     return std::nullopt;
                 }
-                results.emplace_back(output);
+                collected.EffectsGroups.emplace_back(output);
             }
         }
 
-        return std::move(results);
+        // Apply all stage replaces to results so that TDqCnUnionAll references match rebuilt stages.
+        if (allReplaces.empty()) {
+            for (ui32 i = 0; i < results.Size(); ++i) {
+                collected.UpdatedResults.emplace_back(results.Item(i));
+            }
+        } else {
+            TExprNode::TPtr updatedResultsNode;
+            TOptimizeExprSettings settings(nullptr);
+            settings.VisitLambdas = false;
+            if (RemapExpr(results.Ptr(), updatedResultsNode, allReplaces, ctx, settings).Level == TStatus::Error) {
+                return std::nullopt;
+            }
+            TKqlQueryResultList updatedResults(updatedResultsNode);
+            for (const auto& result : updatedResults) {
+                collected.UpdatedResults.emplace_back(result);
+            }
+        }
+
+        // For each effects group, find which RETURNING results belong to it.
+        // After replaces, stages in EffectsGroups and UpdatedResults are consistent.
+        THashMap<const TExprNode*, TVector<ui32>> rebuiltStageToResults;
+        for (ui32 i = 0; i < collected.UpdatedResults.size(); ++i) {
+            if (auto maybeUnionAll = collected.UpdatedResults[i].Value().Maybe<TDqCnUnionAll>()) {
+                const auto stage = maybeUnionAll.Cast().Output().Stage();
+                rebuiltStageToResults[stage.Raw()].push_back(i);
+            }
+        }
+
+        for (const auto& effectsGroup : collected.EffectsGroups) {
+            TVector<ui32> returningIndices;
+            VisitExpr(effectsGroup.Ptr(), [](const TExprNode::TPtr& node) {
+                return !node->IsLambda();
+            }, [&](const TExprNode::TPtr& node) {
+                if (auto sinkEffect = TMaybeNode<TKqpSinkEffect>(node)) {
+                    const auto stage = sinkEffect.Cast().Stage();
+                    auto it = rebuiltStageToResults.find(stage.Raw());
+                    if (it != rebuiltStageToResults.end()) {
+                        for (ui32 idx : it->second) {
+                            returningIndices.push_back(idx);
+                        }
+                    }
+                }
+                return true;
+            });
+            collected.ReturningResultGroups.emplace_back(std::move(returningIndices));
+        }
+
+        return collected;
     }
 
     bool HasTableEffects(const TExprList& effectsList) const {

@@ -1202,7 +1202,7 @@ private:
                         AllocatedHolder->CheckForNotConsumedLinear();
                     }
                     if (dataConsumed) {
-                        AllocatedHolder->Output->Flush();
+                        // AllocatedHolder->Output->Flush();
                     }
                     return status;
                 }
@@ -1210,7 +1210,7 @@ private:
         }
 
         if (dataConsumed) {
-            AllocatedHolder->Output->Flush();
+            // AllocatedHolder->Output->Flush();
         }
         return ERunStatus::PendingOutput;
     }

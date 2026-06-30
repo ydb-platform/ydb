@@ -2460,7 +2460,7 @@ void TFastDqOutputChannel::Bind(NActors::TActorId outputActorId, NActors::TActor
     Y_ENSURE(service, "Channel has been binded or service is not available");
 
     if (IsLocalChannel) {
-        Serializer = ConvertToLocalSerializer(std::move(Serializer));
+        Serializer = ConvertToLocalSerializer(std::move(Serializer), MaxChunkBytes);
     }
     Serializer->Buffer->Info.OutputActorId = outputActorId;
     Serializer->Buffer->Info.InputActorId = inputActorId;

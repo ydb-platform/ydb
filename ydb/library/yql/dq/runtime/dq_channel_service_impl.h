@@ -120,7 +120,7 @@ public:
 };
 
 std::unique_ptr<TOutputSerializer> CreateSerializer(const TDqChannelSettings& settings, std::shared_ptr<IChannelBuffer> buffer, bool local);
-std::unique_ptr<TOutputSerializer> ConvertToLocalSerializer(std::unique_ptr<TOutputSerializer>&& serializer);
+std::unique_ptr<TOutputSerializer> ConvertToLocalSerializer(std::unique_ptr<TOutputSerializer>&& serializer, ui64 maxChunkBytes);
 std::unique_ptr<TInputDeserializer> CreateDeserializer(NKikimr::NMiniKQL::TType* rowType, NDqProto::EDataTransportVersion transportVersion, NKikimr::NMiniKQL::EValuePackerVersion packerVersion, TMaybe<size_t> bufferPageAllocSize, const NKikimr::NMiniKQL::THolderFactory& holderFactory);
 
 class TChannelStub : public IChannelBuffer {
@@ -776,6 +776,7 @@ public:
         PopStats.ChannelId = settings.ChannelId;
         PopStats.DstStageId = settings.DstStageId;
         PopStats.Level = settings.Level;
+        MaxChunkBytes = std::min(settings.MaxStoredBytes, settings.MaxChunkBytes);
     }
 
     mutable TDqOutputStats PushStats;
@@ -907,6 +908,7 @@ public:
     IDqChannelStorage::TPtr Storage;
     bool IsLocalChannel = false;
     IMemoryQuotaManager::TPtr ChannelQuotaManager;
+    ui64 MaxChunkBytes = 0; // maybe needed for ConvertToLocalSerializer
 };
 
 class TFastDqInputChannel : public IDqInputChannel {

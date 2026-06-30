@@ -4,7 +4,7 @@ namespace NKikimr {
 namespace NKqp {
 
 TIntrusivePtr<IOperator> TPushAppendRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    auto result = TPushAppendIntoMapRule().SimpleMatchAndApply(input, ctx, props);
+    auto result = TPushMapElementsIntoMapRule().SimpleMatchAndApply(input, ctx, props);
     if (result != input) {
         return result;
     }
@@ -23,7 +23,7 @@ TIntrusivePtr<IOperator> TPushAppendRule::SimpleMatchAndApply(const TIntrusivePt
 }
 
 TIntrusivePtr<IOperator> TPushAppendExpressionRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) {
-    auto result = TPushAppendIntoMapRule().SimpleMatchAndApply(input, ctx, props);
+    auto result = TPushMapElementsIntoMapRule().SimpleMatchAndApply(input, ctx, props);
     if (result != input) {
         return result;
     }

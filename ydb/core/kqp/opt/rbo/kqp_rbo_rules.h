@@ -125,13 +125,13 @@ class TFuseFiltersRule : public ISimplifiedRule {
 };
 
 /**
- * Push append map elements closer to sources one topology at a time.
+ * Push map elements closer to sources one topology at a time.
  * If only part of a map can move safely, leave the rest above.
  */
-class TPushAppendIntoMapRule : public ISimplifiedRule {
+class TPushMapElementsIntoMapRule : public ISimplifiedRule {
   public:
-    TPushAppendIntoMapRule()
-        : ISimplifiedRule("Push append into map", ERuleProperties::RequireParents | ERuleProperties::RequireNameConstraints) {}
+    TPushMapElementsIntoMapRule()
+        : ISimplifiedRule("Push map elements into map", ERuleProperties::RequireParents) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -193,14 +193,6 @@ class TRenameToAppendRule : public IRule {
   public:
     TRenameToAppendRule()
         : IRule("Convert safe renames to appends", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
-
-    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
-};
-
-class TPushRenameThroughPassThroughMapRule : public IRule {
-  public:
-    TPushRenameThroughPassThroughMapRule()
-        : IRule("Push semantic rename through map", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
 
     virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };

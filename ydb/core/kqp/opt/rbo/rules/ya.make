@@ -22,7 +22,7 @@ SRCS(
     peephole_predicate.cpp
     map/map_output_utils.cpp
     map/projection_pruning.cpp
-    map/push_append_into_map.cpp
+    map/push_map_elements_into_map.cpp
     map/push_map_elements_through_aggregate.cpp
     map/push_map_elements_through_join.cpp
     map/push_map_elements_through_unary.cpp
@@ -40,7 +40,6 @@ SRCS(
     map/push_rename_into_aggregate_result.cpp
     map/push_rename_into_map_producer.cpp
     map/push_rename_into_read.cpp
-    map/push_rename_through_map.cpp
     map/push_rename_wrapper.cpp
     map/rewrite_to_preferred_alias.cpp
     propagate_aggregate_through_stage.cpp

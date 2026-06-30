@@ -61,7 +61,8 @@ public:
         Become(&TPGConnection::StateAccepting);
         Schedule(InactivityTimeout, InactivityEvent = new TEvPollerReady(nullptr, false, false));
         YDB_LOG_DEBUG("Incoming connection opened",
-            {"logPrefix", LogPrefix()});
+            {"socket", GetRawSocket()},
+            {"address", Address} );
         OnAccept();
     }
 
@@ -937,6 +938,8 @@ protected:
     }
 
     STATEFN(StateAccepting) {
+        YDB_LOG_CREATE_CONTEXT({"socket", GetRawSocket()},
+            {"address", Address} );
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPollerReady, HandleAccepting);
             hFunc(TEvPollerRegisterResult, HandleAccepting);
@@ -944,6 +947,8 @@ protected:
     }
 
     STATEFN(StateConnected) {
+        YDB_LOG_CREATE_CONTEXT({"socket", GetRawSocket()},
+            {"address", Address} );
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvPollerReady, HandleConnected);
             hFunc(TEvPollerRegisterResult, HandleConnected);

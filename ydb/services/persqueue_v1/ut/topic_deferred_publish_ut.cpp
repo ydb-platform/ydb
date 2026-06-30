@@ -106,6 +106,13 @@ TBeginPublicationOutcome CallBeginPublicationWithEmptyDatabaseHeader(
     return CallBeginPublication(stub, "", extPublicationId);
 }
 
+TBeginPublicationOutcome CallBeginPublicationWithoutDatabaseHeader(
+    Ydb::Topic::DeferredPublish::V1::TopicDeferredPublishService::Stub& stub,
+    const TString& extPublicationId = "pub-no-db")
+{
+    return CallBeginPublication(stub, "", extPublicationId, false);
+}
+
 } // namespace
 
 Y_UNIT_TEST_SUITE(TopicDeferredPublishService) {
@@ -188,6 +195,26 @@ Y_UNIT_TEST(BeginPublicationRejectsEmptyDatabaseInHandler) {
     server.AnnoyingClient->GrantConnect("root@builtin");
 
     const auto outcome = CallBeginPublicationWithEmptyDatabaseHeader(*MakeStub(server));
+    UNIT_ASSERT(outcome.RpcStatus.ok());
+    UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::BAD_REQUEST);
+    UNIT_ASSERT_GT(outcome.Operation.issues_size(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.issues(0).message(), "Database name is not set");
+}
+
+Y_UNIT_TEST(BeginPublicationRejectsMissingDatabaseAtGrpcProxy) {
+    auto server = MakeServerWithDeferredPublishEnabled(true);
+    server.AnnoyingClient->GrantConnect("root@builtin");
+
+    const auto outcome = CallBeginPublicationWithoutDatabaseHeader(*MakeStub(server));
+    UNIT_ASSERT(!outcome.RpcStatus.ok());
+    UNIT_ASSERT_VALUES_EQUAL(outcome.RpcStatus.error_code(), grpc::StatusCode::UNAUTHENTICATED);
+}
+
+Y_UNIT_TEST(BeginPublicationRejectsMissingDatabaseInHandler) {
+    auto server = MakeServerWithDeferredPublishEnabled(false);
+    server.AnnoyingClient->GrantConnect("root@builtin");
+
+    const auto outcome = CallBeginPublicationWithoutDatabaseHeader(*MakeStub(server));
     UNIT_ASSERT(outcome.RpcStatus.ok());
     UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::BAD_REQUEST);
     UNIT_ASSERT_GT(outcome.Operation.issues_size(), 0);

@@ -1,3 +1,4 @@
+#include <ydb/core/protos/data_format_settings.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/testlib/basics/runtime.h>

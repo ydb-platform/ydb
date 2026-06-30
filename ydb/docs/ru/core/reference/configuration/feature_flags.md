@@ -27,6 +27,7 @@ feature_flags:
 | `enable_database_admin`                                  | Добавление роли администратора базы данных |
 | `enable_kafka_native_balancing`                          | Клиентская балансировка партиций при чтении по [протоколу Kafka](https://kafka.apache.org/documentation/#consumerconfigs_partition.assignment.strategy) |
 | `enable_topic_compactification_by_key`                   | Включение компактификации топиков в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|
+| `enable_topic_deferred_publish`                          | API отложенной публикации в Topic (`BeginPublication` и связанные RPC) |
 | `enable_kafka_transactions`                              | Включение транзакций в [YDB Topics Kafka API](../../reference/kafka-api/index.md)|
 | `enable_external_data_sources`                           | Включение [внешних источников данных](../../concepts/datamodel/external_data_source.md)|
 | `enable_grpc_audit`                                      | Включение [аудита](../../security/audit-log.md#grpc-connection) изменений состояния gRPC-соединения |

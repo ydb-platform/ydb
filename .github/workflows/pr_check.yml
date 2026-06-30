@@ -19,6 +19,7 @@ on:
       - 'main'
       - 'stable-*'
       - 'stream-nb-*'
+      - 'ci-test-*'
     paths-ignore:
       - 'ydb/docs/**'
 # Only 'rebase-and-check' and 'ok-to-test' labels should re-trigger checks.

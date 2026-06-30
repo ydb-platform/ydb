@@ -593,6 +593,7 @@ bool TCompatibilityInfo::CompleteFromTag(NKikimrConfig::TCurrentCompatibilityInf
 ////////////////////////////////////////////
 
 void CheckVersionTag() {
+    Y_UNUSED(GetBranchString());
     if (VERSION) {
         TString branch = GetBranchString();
         const char* arcadia_url = GetArcadiaSourceUrl();

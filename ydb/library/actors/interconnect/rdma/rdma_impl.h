@@ -78,7 +78,7 @@ class TSrq {
     struct TRecieveSlot {
         TRcBuf Buffer;
     };
-    
+
 public:
     static constexpr ui64 SRQ_WR_MASK = 1ull << 63;
     static constexpr int CqTerminalError = -1;

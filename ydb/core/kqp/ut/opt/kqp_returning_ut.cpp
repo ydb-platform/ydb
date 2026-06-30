@@ -1362,6 +1362,100 @@ Y_UNIT_TEST_TWIN(ReturningAfterUpsert, EnableStreamIndex) {
     );
 }
 
+Y_UNIT_TEST_TWIN(ReturningUpdateNewVsOldValues, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, false);
+    }
+
+    auto db = kikimr.GetQueryClient();
+    {
+        auto result = db.ExecuteQuery(
+            R"(
+                UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES (1, 10, "Old");
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto result = db.ExecuteQuery(
+            R"(
+                UPDATE `/Root/SecondaryKeys` SET Value = "New" WHERE Key = 1
+                RETURNING Key, Fk, Value;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[1];[10];["New"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    {
+        auto result = db.ExecuteQuery(
+            R"(
+                UPDATE `/Root/SecondaryKeys` SET Fk = 20 WHERE Key = 1
+                RETURNING Key, Fk, Value;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[1];[20];["New"]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    CompareYson(
+        R"([[[20];[1]]])",
+        ExecuteReturningQuery(kikimr, true,
+            "SELECT Fk, Key FROM `/Root/SecondaryKeys/Index/indexImplTable` ORDER BY Key;")
+    );
+}
+
+Y_UNIT_TEST_TWIN(ReturningDeletePkOnlyWithIndex, EnableIndexStreamWrite) {
+    auto kikimr = DefaultKikimrRunner({}, GetAppConfig(EnableIndexStreamWrite));
+    {
+        auto db = kikimr.GetTableClient();
+        auto session = db.CreateSession().GetValueSync().GetSession();
+        CreateSampleTablesWithIndex(session, false);
+    }
+
+    auto db = kikimr.GetQueryClient();
+    {
+        auto result = db.ExecuteQuery(
+            R"(
+                UPSERT INTO `/Root/SecondaryKeys` (Key, Fk, Value) VALUES
+                    (1, 10, "a"),
+                    (2, 20, "b");
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+    }
+
+    {
+        auto result = db.ExecuteQuery(
+            R"(
+                DELETE FROM `/Root/SecondaryKeys` WHERE Key = 1 RETURNING Key;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([[[1]]])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+
+    CompareYson(
+        R"([[[20];[2]]])",
+        ExecuteReturningQuery(kikimr, true,
+            "SELECT Fk, Key FROM `/Root/SecondaryKeys/Index/indexImplTable` ORDER BY Key;")
+    );
+
+    {
+        auto result = db.ExecuteQuery(
+            R"(
+                DELETE FROM `/Root/SecondaryKeys` WHERE Key = 1 RETURNING Key;
+            )",
+            NYdb::NQuery::TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        CompareYson(R"([])", FormatResultSetYson(result.GetResultSet(0)));
+    }
+}
+
 }
 
 } // namespace NKikimr::NKqp

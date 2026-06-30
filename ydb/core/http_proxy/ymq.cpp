@@ -415,9 +415,9 @@ namespace NKikimr::NHttpProxy {
                         .AWSSignature = std::move(HttpContext.GetSignature()),
                         .IAMToken = HttpContext.IamToken,
                         .FolderID = HttpContext.FolderId,
-                        .RequestFormat = NKikimr::NSQS::TAuthActorData::Json,
-                        .Requester = ctx.SelfID,
                         .SourceAddress = HttpContext.SourceAddress,
+                        .RequestFormat = NKikimr::NSQS::TAuthActorData::Json,
+                        .Requester = ctx.SelfID
                     };
 
                     AppData(ctx.ActorSystem())->SqsAuthFactory->RegisterAuthActor(

@@ -1,6 +1,6 @@
 #pragma once
 
-#include <ydb/core/base/appdata_fwd.h>
+#include <ydb/core/base/appdata.h>
 
 namespace NKikimr::NBackup {
 

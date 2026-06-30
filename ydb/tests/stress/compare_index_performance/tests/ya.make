@@ -14,7 +14,7 @@ TAG(ya:external)
 
 SIZE(LARGE)
 TAG(ya:fat)
-TIMEOUT(86400)
+TIMEOUT(3600)
 
 DEPENDS(
     ydb/tests/stress/vector_workload

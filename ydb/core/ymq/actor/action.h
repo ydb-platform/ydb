@@ -615,11 +615,11 @@ private:
         AuthType_ = request.GetAuth().GetAuthType();
 
         if (request.GetAuth().HasSourceAddress()) {
-            PeerName_ = request.GetAuth().GetSourceAddress();
-        } else if constexpr (requires { request.GetSourceAddress(); }) {
-            PeerName_ = request.GetSourceAddress();
+            SourceAddress_ = request.GetAuth().GetSourceAddress();
+        } else if (request.HasSourceAddress()) {
+            SourceAddress_ = request.GetSourceAddress();
         } else {
-            PeerName_.clear();
+            SourceAddress_.clear();
         }
 
         if (IsCloud() && !FolderId_) {
@@ -656,7 +656,7 @@ private:
     void RequestTicketParser() {
         this->Send(MakeTicketParserID(), new TEvTicketParser::TEvAuthorizeTicket({
             .Ticket = SecurityToken_,
-            .PeerName = PeerName_,
+            .PeerName = SourceAddress_,
         }));
     }
 
@@ -670,7 +670,7 @@ private:
     }
 
     void HandleConfiguration(TSqsEvents::TEvConfiguration::TPtr& ev) {
-        const TDuration confDuration = TActivationContext::Now() - StartTs_;
+        const TDuration confDuraion = TActivationContext::Now() - StartTs_;
         RLOG_SQS_DEBUG("Get configuration duration: " << confDuration.MilliSeconds() << "ms");
 
         RootUrl_  = std::move(ev->Get()->RootUrl);
@@ -941,7 +941,7 @@ protected:
     TString  RootUrl_;
     TString  UserName_;
     TString  SecurityToken_;
-    TString  PeerName_;
+    TString  SourceAddress_;
     TString  FolderId_;
     size_t SecurityCheckRequestsToWaitFor_ = 2;
     TIntrusivePtr<TSecurityObject> SecurityObject_;

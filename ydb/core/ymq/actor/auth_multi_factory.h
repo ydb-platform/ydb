@@ -76,7 +76,7 @@ public:
         , FolderId_(std::move(data.FolderID))
         , CloudId_(std::move(data.CloudID))
         , ResourceId_(std::move(data.ResourceID))
-        , PeerName_(std::move(data.SourceAddress))
+        , SourceAddress_(std::move(data.SourceAddress))
         , Counters_(*data.Counters)
         , UserSidCallback_(std::move(data.UserSidCallback))
         , EnableAccessServiceV2Interface_(enableAccessServiceV2Interface)
@@ -153,7 +153,7 @@ protected:
     TString UserSID_;
     TString AuthType_;
     TString ResourceId_;
-    TString PeerName_;
+    TString SourceAddress_;
     ui32 RequestsToWait_ = 0;
     EActionClass ActionClass_ = EActionClass::QueueSpecified;
     bool AuthenticateIamToken_ = false;

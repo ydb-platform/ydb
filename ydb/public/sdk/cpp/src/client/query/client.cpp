@@ -520,15 +520,32 @@ public:
             }
 
             void ReplyNewSession() override {
-                Client->CreateAttachedSession(RpcSettings).Subscribe(
-                    [promise{std::move(Promise)}, obs = Observation](TAsyncCreateSessionResult future) mutable
+                TRpcRequestSettings deferredRpcSettings = RpcSettings;
+                deferredRpcSettings.Deadline = TDeadline::Max();
+                Client->CreateAttachedSession(
+                    this->Client->Settings_.SessionPoolSettings_.UseDeferredSessionCreation_ ? 
+                    deferredRpcSettings :
+                    RpcSettings).Subscribe(
+                    [promise = Promise, obs = Observation](TAsyncCreateSessionResult future) mutable
                 {
                     auto val = future.ExtractValue();
                     if (obs) {
                         obs->End(val.GetStatus(), val.GetEndpoint());
                     }
-                    promise.SetValue(std::move(val));
+                    promise.TrySetValue(std::move(val));
                 });
+                if (Client->Settings_.SessionPoolSettings_.UseDeferredSessionCreation_) {
+                    Client->Connections_->ScheduleDelayedTask(
+                        [promise = Promise, obs = Observation, client = Client]() mutable {
+                            TSession session;
+                            promise.TrySetValue(TCreateSessionResult(TStatus(TPlainStatus(EStatus::CLIENT_DEADLINE_EXCEEDED, "GetSession deadline exceeded")), std::move(session)));
+                            if (obs) {
+                                obs->End(EStatus::CLIENT_DEADLINE_EXCEEDED, "GetSession deadline exceeded");
+                            }
+                        },
+                        GetDeadline()
+                    );
+                }
             }
 
             void ScheduleOnDeadlineWaiterCleanup() override {

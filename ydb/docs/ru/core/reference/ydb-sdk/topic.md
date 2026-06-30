@@ -14,7 +14,7 @@
 
 - Go
 
-  [Примеры на GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/master/examples/topic)
+  [Примеры на GitHub](https://github.com/ydb-platform/ydb-go-sdk/tree/master/examples/topic) 
 
 - Java
 

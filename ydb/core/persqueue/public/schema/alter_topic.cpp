@@ -9,8 +9,6 @@
 #include <ydb/core/ydb_convert/topic_description.h>
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
-
 namespace NKikimr::NPQ::NSchema {
 
 namespace {
@@ -259,13 +257,7 @@ TResult ApplyChangesInt(
 
     const auto& supportedClientServiceTypes = GetSupportedClientServiceTypes();
 
-    absl::flat_hash_map<TString, std::pair<ui64, TString>> oldConsumerInfoByName;
-    for (const auto& c : pqTabletConfig->GetConsumers()) {
-        oldConsumerInfoByName[c.GetName()] = {
-            c.GetModificationVersion(),
-            GetDLQTopicPath(c),
-        };
-    }
+    const auto oldConsumerInfoByName = CollectConsumerVersionInfo(*pqTabletConfig);
     BumpTopicConfigVersion(*pqTabletConfig);
 
     std::vector<std::pair<bool, Ydb::Topic::Consumer>> consumers;
@@ -342,18 +334,7 @@ TResult ApplyChangesInt(
             return result;
         }
     }
-    for (auto& consumer : *pqTabletConfig->MutableConsumers()) {
-        const TString newDlqTopicPath = GetDLQTopicPath(consumer);
-        if (const auto it = oldConsumerInfoByName.find(consumer.GetName()); it != oldConsumerInfoByName.end()) {
-            if (newDlqTopicPath != it->second.second) {
-                UpdateConsumerVersion(consumer, *pqTabletConfig);
-            } else {
-                consumer.SetModificationVersion(it->second.first);
-            }
-        } else {
-            UpdateConsumerVersion(consumer, *pqTabletConfig);
-        }
-    }
+    ApplyConsumerVersionUpdates(*pqTabletConfig, oldConsumerInfoByName);
     if (auto errorCode = consumersAdvancedMonitoringSettings.CheckForUnknownConsumers(error); errorCode != Ydb::StatusIds::SUCCESS) {
         return {errorCode, std::move(error)};
     }

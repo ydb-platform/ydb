@@ -8,8 +8,6 @@
 #include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/services/persqueue_v1/actors/schema/common/grpc_proxy_actor.h>
 
-#include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
-
 namespace NKikimr::NGRpcProxy::V1::NPQv1 {
 
 namespace {
@@ -39,13 +37,7 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         const auto& pqConfig = AppData()->PQConfig;
         const auto& sourceTabletConfig = sourceConfig.GetPQTabletConfig();
 
-        absl::flat_hash_map<TString, std::pair<ui64, TString>> oldConsumerInfoByName;
-        for (const auto& c : sourceTabletConfig.GetConsumers()) {
-            oldConsumerInfoByName[c.GetName()] = {
-                c.GetModificationVersion(),
-                NPQ::GetDLQTopicPath(c),
-            };
-        }
+        const auto oldConsumerInfoByName = NPQ::NSchema::CollectConsumerVersionInfo(sourceTabletConfig);
 
         for (const auto& readRule : Request.settings().read_rules()) {
             const auto consumerName = NPersQueue::ConvertNewConsumerName(readRule.consumer_name(), pqConfig);
@@ -68,19 +60,9 @@ struct TAlterTopicStrategy: public NPQ::NSchema::IAlterTopicStrategy {
         }
 
         auto& targetTabletConfig = *targetConfig.MutablePQTabletConfig();
-        targetTabletConfig.SetTopicConfigVersion(sourceTabletConfig.GetTopicConfigVersion() + 1);
-        for (auto& consumer : *targetTabletConfig.MutableConsumers()) {
-            const TString newDlqTopicPath = NPQ::GetDLQTopicPath(consumer);
-            if (const auto it = oldConsumerInfoByName.find(consumer.GetName()); it != oldConsumerInfoByName.end()) {
-                if (newDlqTopicPath != it->second.second) {
-                    NPQ::NSchema::UpdateConsumerVersion(consumer, targetTabletConfig);
-                } else {
-                    consumer.SetModificationVersion(it->second.first);
-                }
-            } else {
-                NPQ::NSchema::UpdateConsumerVersion(consumer, targetTabletConfig);
-            }
-        }
+        targetTabletConfig.SetTopicConfigVersion(sourceTabletConfig.GetTopicConfigVersion());
+        NPQ::NSchema::BumpTopicConfigVersion(targetTabletConfig);
+        NPQ::NSchema::ApplyConsumerVersionUpdates(targetTabletConfig, oldConsumerInfoByName);
 
         targetTabletConfig.SetLocalDC(sourceTabletConfig.GetLocalDC());
         targetTabletConfig.SetDC(sourceTabletConfig.GetDC());

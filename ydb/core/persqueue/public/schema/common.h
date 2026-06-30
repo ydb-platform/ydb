@@ -14,6 +14,8 @@
 #include <optional>
 #include <string_view>
 
+#include <util/generic/hash.h>
+
 namespace NKikimr::NPQ::NSchema {
 
 enum class EOperation {
@@ -56,6 +58,19 @@ void BumpTopicConfigVersion(NKikimrPQ::TPQTabletConfig& config);
 void UpdateConsumerVersion(
     NKikimrPQ::TPQTabletConfig_TConsumer& consumer,
     const NKikimrPQ::TPQTabletConfig& config
+);
+
+struct TConsumerVersionInfo {
+    ui64 ModificationVersion = 0;
+    TString DlqTopicPath;
+};
+
+using TConsumerVersionInfoByName = THashMap<TString, TConsumerVersionInfo>;
+
+TConsumerVersionInfoByName CollectConsumerVersionInfo(const NKikimrPQ::TPQTabletConfig& config);
+void ApplyConsumerVersionUpdates(
+    NKikimrPQ::TPQTabletConfig& config,
+    const TConsumerVersionInfoByName& oldConsumerInfoByName
 );
 
 TResult ValidateConsumersConfig(

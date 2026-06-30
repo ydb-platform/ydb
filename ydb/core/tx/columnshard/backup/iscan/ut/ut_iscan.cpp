@@ -298,6 +298,7 @@ Y_UNIT_TEST_SUITE(IScan) {
     Y_UNIT_TEST(ShouldRejectParquetExportWithEncryption) {
         TRuntimePtr runtime(new TTestBasicRuntime(1, true));
         SetupTabletServices(*runtime);
+        runtime->GetAppData().FeatureFlags.SetEnableParquetForExport(true);
 
         NDataShard::IExport::TTableColumns columns;
         columns[0] = NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::String), "", "key", true);

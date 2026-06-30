@@ -111,6 +111,9 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             if constexpr (IsFs) {
                 runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
             }
+            if (Request.Contains("parquet")) {
+                runtime.GetAppData().FeatureFlags.SetEnableParquetForExport(true);
+            }
         }
 
         bool HasFile(const TString& path) const {
@@ -139,13 +142,23 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     {
         t.GetTestEnvOptions() = opts;
 
+        TRuntimeSetup runtimeSetup;
+        if (extraSettings.Contains("parquet")) {
+            runtimeSetup = [](TTestActorRuntime& runtime) {
+                runtime.GetAppData().FeatureFlags.SetEnableParquetForExport(true);
+            };
+        }
+
         if (isFs) {
             TTempDir tempDir;
             TString request = Sprintf(
                 MakeFsRequestTemplate(items, extraSettings).c_str(),
                 tempDir.Path().c_str());
-            func(schemeObjects, request, t, [](TTestActorRuntime& runtime) {
+            func(schemeObjects, request, t, [runtimeSetup](TTestActorRuntime& runtime) {
                 runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+                if (runtimeSetup) {
+                    runtimeSetup(runtime);
+                }
             });
         } else {
             TPortManager portManager;
@@ -154,7 +167,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             UNIT_ASSERT(s3Mock.Start());
             TString request = Sprintf(
                 MakeS3RequestTemplate(items, extraSettings).c_str(), port);
-            func(schemeObjects, request, t, {});
+            func(schemeObjects, request, t, runtimeSetup);
         }
     }
 

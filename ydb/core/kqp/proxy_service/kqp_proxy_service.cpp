@@ -234,6 +234,7 @@ public:
             VectorIndexLevelsCache, GetKqpResourceManager(), TableServiceConfig.GetResourceManager()));
         FeatureFlags = AppData()->FeatureFlags;
         WorkloadManagerConfig = AppData()->WorkloadManagerConfig;
+        WarmupGateOpen = !(TableServiceConfig.GetEnableCompileCacheWarmup() && !AppData()->TenantName.empty());
         // NOTE: some important actors are constructed within next call
         FederatedQuerySetup = FederatedQuerySetupFactory->Make(ctx.ActorSystem());
         AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory, VectorIndexLevelsCache);
@@ -720,6 +721,16 @@ public:
         const auto queryAction = ev->Get()->GetAction();
         TKqpRequestInfo requestInfo(traceId);
         ui64 requestId = PendingRequests.RegisterRequest(ev->Sender, ev->Cookie, traceId, TKqpEvents::EvQueryRequest);
+        // Hold external client queries until warmup finishes; warmup's own traffic (PREPARE compilations, internal calls, the Metadata-system-user sysview fetch) must pass or it self-deadlocks.
+        if (!WarmupGateOpen && !ev->Get()->GetIsWarmupCompilation() && !ev->Get()->IsInternalCall()) {
+            const auto& userToken = ev->Get()->GetUserToken();
+            if (!userToken || !userToken->IsSystemUser()) {
+                ReplyProcessError(Ydb::StatusIds::UNAVAILABLE,
+                    "Node is warming up the compile cache, retry shortly", requestId);
+                return;
+            }
+        }
+
         bool explicitSession = true;
         if (ev->Get()->GetSessionId().empty()) {
             TProcessResult<TKqpSessionInfo*> result;
@@ -1026,8 +1037,7 @@ public:
     void Handle(TEvPrivate::TEvCollectPeerProxyData::TPtr&) {
         if (!ShutdownRequested) {
             TDuration d;
-            // Board convergence alone mustn't stop fast-poll: the warmup actor blocks
-            // on TEvStartWarmup, which we only send once peer resources are gathered.
+            // Keep fast-polling until we've actually sent TEvStartWarmup (after peer resources gather), not just until the board converges.
             bool fastPoll = false;
             if (!WarmupStarted
                 && TableServiceConfig.GetEnableCompileCacheWarmup()
@@ -1111,9 +1121,9 @@ public:
             Send(MakeKqpWarmupActorId(SelfId().NodeId()), new TEvStartWarmup(PeerProxyNodeResources.size(), std::move(nodeIds)));
         }
     }
-
-    // Warmup done (often a skip) — stop fast-polling and don't send to a dead actor.
+    // Warmup done (compiled/skipped/gave up): clear pending state so fast-poll winds down and we don't send TEvStartWarmup to a dead actor.
     void Handle(NKqp::TEvKqpWarmupComplete::TPtr&) {
+        WarmupGateOpen = true;
         WarmupStarted = true;
     }
 
@@ -2054,6 +2064,7 @@ private:
 
     bool ServerWorkerBalancerComplete = false;
     bool WarmupStarted = false;
+    bool WarmupGateOpen = true;
     std::optional<TString> SelfDataCenterId;
     TIntrusivePtr<IRandomProvider> RandomProvider;
     std::vector<ui64> LocalDatacenterProxies;

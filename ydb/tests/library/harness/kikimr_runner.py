@@ -668,6 +668,8 @@ class KiKiMR(kikimr_cluster_interface.KiKiMRClusterInterface):
         if bs_needed:
             self.client.add_config_item(read_binary(__name__, "resources/default_profile.txt"), token=root_token)
 
+        self._wait_tenant_usable("/" + self.domain_name, token=root_token)
+
     def __run_node(self, node_id):
         """
         :returns started KiKiMRNode instance

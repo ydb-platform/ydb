@@ -4248,10 +4248,53 @@ TNodeResult BuildBuiltinFunc(
             auto fulltextBuiltinName = normalizedName == "fulltextmatch" ? "FulltextMatch" : "FulltextScore";
             return TNonNull(TNodePtr(new TCallNodeImpl(pos, fulltextBuiltinName, args)));
         } else if (normalizedName == "hybridrank") {
+            TVector<TNodePtr> hybridArgs = args;
             if (mustUseNamed && *mustUseNamed) {
+                // The named arguments are packed into a struct (hybridArgs[1]). A custom fusion lambda --
+                // RankLambda (fuses the per-branch ranks) or ScoreLambda (fuses the raw per-branch scores) --
+                // cannot live there: a lambda is not a struct-field-typed value. Pull it out of the struct
+                // and pass it as two trailing positional children of HybridRank: a "rank"/"score" marker
+                // followed by the lambda. The marker comes first because it governs how the lambda is
+                // interpreted (it picks the argument's dict value type -- Int64 ranks vs Double scores) for
+                // both the type checker and the KQP rewrite. The two lambdas are mutually exclusive.
+                if (hybridArgs.size() == 2) {
+                    if (auto* named = hybridArgs[1]->GetStructNode()) {
+                        // Match by label only: a SQL `($x) -> ...` lambda is a BuildSqlLambda node, not a
+                        // TLambdaNode, so GetLambdaNode() would not recognize it here. Whether the value is
+                        // actually a lambda is validated during type annotation (HybridRankBuiltinWrapper).
+                        TVector<TNodePtr> kept;
+                        TNodePtr lambda;
+                        TString kind;
+                        bool duplicate = false;
+                        for (const auto& member : named->GetExprs()) {
+                            const auto& label = member->GetLabel();
+                            if (label == "RankLambda" || label == "ScoreLambda") {
+                                if (lambda) {
+                                    duplicate = true;
+                                } else {
+                                    lambda = member;
+                                    kind = label == "ScoreLambda" ? "score" : "rank";
+                                }
+                            } else {
+                                kept.push_back(member);
+                            }
+                        }
+                        if (duplicate) {
+                            *mustUseNamed = false; // we have consumed the named args; report our own error
+                            return TNonNull(TNodePtr(new TInvalidBuiltin(pos,
+                                                                         "HybridRank accepts at most one of RankLambda or ScoreLambda")));
+                        }
+                        if (lambda) {
+                            lambda->SetLabel(""); // make it a positional child, not a named one
+                            hybridArgs[1] = BuildStructure(pos, kept);
+                            hybridArgs.push_back(BuildQuotedAtom(pos, kind)); // marker first (a bare atom)
+                            hybridArgs.push_back(lambda);
+                        }
+                    }
+                }
                 *mustUseNamed = false;
             }
-            return TNonNull(TNodePtr(new TCallNodeImpl(pos, "HybridRank", args)));
+            return TNonNull(TNodePtr(new TCallNodeImpl(pos, "HybridRank", hybridArgs)));
         } else if (normalizedName == "asstruct" || normalizedName == "structtype") {
             if (args.empty()) {
                 return TNonNull(TNodePtr(new TCallNodeImpl(pos, normalizedName == "asstruct" ? "AsStruct" : "StructType", 0, 0, args)));

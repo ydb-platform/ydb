@@ -98,6 +98,11 @@ public:
     NCommon::TConfSetting<bool, Static> OptCreateStageForAggregation;
     NCommon::TConfSetting<bool, Static> OptValidateStreamingConstraints;
 
+    // True Cardinalities
+    NCommon::TConfSetting<bool, Static> OptTrueCardinalities;
+    NCommon::TConfSetting<ui32, Static> TrueCardsTimeoutSec;
+    NCommon::TConfSetting<ui64, Static> TrueCardinalitiesConcurrency;
+
     // Use CostBasedOptimizationLevel for internal usage. This is a dummy flag that is mapped to the optimization level during parsing.
     NCommon::TConfSetting<TString, Static> CostBasedOptimization;
 

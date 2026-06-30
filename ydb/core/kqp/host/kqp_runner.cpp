@@ -8,6 +8,7 @@
 #include <ydb/core/kqp/opt/kqp_opt_hash_func_propagate_transformer.h>
 #include <ydb/core/kqp/opt/kqp_query_plan.h>
 #include <ydb/core/kqp/opt/kqp_statistics_transformer.h>
+#include <ydb/core/kqp/opt/logical/kqp_true_cardinalities.h>
 #include <ydb/core/kqp/opt/logical/kqp_opt_cbo.h>
 #include <ydb/core/kqp/opt/logical/kqp_opt_log.h>
 #include <ydb/core/kqp/opt/peephole/kqp_opt_peephole.h>
@@ -345,6 +346,7 @@ private:
             .Add(CreateKqpConstantFoldingTransformer(OptimizeCtx, *typesCtx, Config), "ConstantFolding")
             .Add(CreateKqpColumnStatisticsRequester(Config, *typesCtx, SessionCtx->Tables(), Cluster, sessionCtx->GetDatabase(), ActorSystem), "ColumnStatisticsRequester")
             .Add(CreateKqpStatisticsTransformer(OptimizeCtx, *typesCtx, Config, Pctx), "Statistics")
+            .Add(CreateKqpTrueCardinalities(OptimizeCtx, *typesCtx, Config, Cluster, sessionCtx->GetDatabase(), ActorSystem), "TrueCardinalities")
             .Add(CreateKqpLogOptTransformer(OptimizeCtx, *typesCtx, Config), "LogicalOptimize")
             .Add(CreateLogicalDataProposalsInspector(*typesCtx), "ProvidersLogicalOptimize")
             .Add(CreateKqpPhyOptTransformer(OptimizeCtx, *typesCtx), "KqpPhysicalOptimize");
@@ -422,7 +424,7 @@ private:
 
         // Create a NewRBO composite transformer only if the special flag is enabled.
         if (Config->GetEnableNewRBO()) {
-            
+
             auto newRBOPreparedExplainTransformer = CreateKqpRBOExplainPreparedTransformer(
                 Gateway, Cluster, TransformCtx, &funcRegistry, *typesCtx, OptimizeCtx);
 

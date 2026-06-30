@@ -5,7 +5,9 @@
 namespace NKikimr::NBackup {
 
 inline bool IsExportFilteringEnabled(const TAppData& appData) {
-    return appData.FeatureFlags.GetEnableExportFiltering();
+    // Backward compatibility: clusters with only EnableEncryptedExport keep filtering API enabled.
+    return appData.FeatureFlags.GetEnableExportFiltering()
+        || appData.FeatureFlags.GetEnableEncryptedExport();
 }
 
 inline bool IsEncryptedExportEnabled(const TAppData& appData) {

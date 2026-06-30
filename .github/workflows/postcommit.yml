@@ -5,8 +5,6 @@ on:
       - 'main'
       - 'stable-*'
       - 'stream-nb-*'
-      # Temporary: smoke-test Postcommit push before merge; remove with #45005.
-      - 'ci-test-*'
     paths-ignore:
       - 'ydb/docs/**'
 env:

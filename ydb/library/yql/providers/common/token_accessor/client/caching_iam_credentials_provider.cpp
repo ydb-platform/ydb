@@ -20,7 +20,8 @@ public:
         auto promise = NThreading::NewPromise<std::string>();
         ActorSystem->Send(MakeCachingIamServiceCredentialsProviderServiceId(), new TEvIamAuthCredentialsProviderService::TEvGetAuthInfoRequest(ServiceAccountId, ResourceId, promise));
 
-        return promise.GetFuture().GetValueSync();
+        // TODO make asynchronous interface for GetAuthInfo
+        return promise.GetFuture().ExtractValue(TDuration::Seconds(30));
     }
 
     bool IsValid() const override {

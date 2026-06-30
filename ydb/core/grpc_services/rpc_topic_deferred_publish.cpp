@@ -26,6 +26,29 @@ TString GetUserSID(const IRequestOpCtx* request) {
 }
 
 template <typename TEvRequest, typename TResult>
+class TTopicDeferredPublishDisabledRPC
+    : public NActors::TActorBootstrapped<TTopicDeferredPublishDisabledRPC<TEvRequest, TResult>> {
+public:
+    static constexpr NKikimrServices::TActivity::EType ActorActivityType() {
+        return NKikimrServices::TActivity::GRPC_REQ;
+    }
+
+    explicit TTopicDeferredPublishDisabledRPC(IRequestOpCtx* request)
+        : Request(request)
+    {}
+
+    void Bootstrap() {
+        Request->RaiseIssue(NYql::TIssue(TString(DisabledMessage)));
+        TResult result;
+        Request->SendResult(result, Ydb::StatusIds::UNSUPPORTED);
+        this->PassAway();
+    }
+
+private:
+    std::unique_ptr<IRequestOpCtx> Request;
+};
+
+template <typename TEvRequest, typename TResult>
 class TTopicDeferredPublishNotImplementedRPC
     : public NActors::TActorBootstrapped<TTopicDeferredPublishNotImplementedRPC<TEvRequest, TResult>> {
 public:
@@ -49,7 +72,11 @@ private:
 };
 
 template <typename TEvRequest, typename TResult>
-void RegisterNotImplementedRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+void RegisterDeferredPublishRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
+    if (!AppData()->FeatureFlags.GetEnableTopicDeferredPublish()) {
+        f.RegisterActor(new TTopicDeferredPublishDisabledRPC<TEvRequest, TResult>(p.release()));
+        return;
+    }
     f.RegisterActor(new TTopicDeferredPublishNotImplementedRPC<TEvRequest, TResult>(p.release()));
 }
 
@@ -143,19 +170,19 @@ void DoBeginPublicationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacility
 }
 
 void DoPublishRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    RegisterNotImplementedRequest<TEvPublishRequest, Ydb::Topic::DeferredPublish::PublishResult>(std::move(p), f);
+    RegisterDeferredPublishRequest<TEvPublishRequest, Ydb::Topic::DeferredPublish::PublishResult>(std::move(p), f);
 }
 
 void DoCancelPublicationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    RegisterNotImplementedRequest<TEvCancelPublicationRequest, Ydb::Topic::DeferredPublish::CancelPublicationResult>(std::move(p), f);
+    RegisterDeferredPublishRequest<TEvCancelPublicationRequest, Ydb::Topic::DeferredPublish::CancelPublicationResult>(std::move(p), f);
 }
 
 void DoListPublicationsRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    RegisterNotImplementedRequest<TEvListPublicationsRequest, Ydb::Topic::DeferredPublish::ListPublicationsResult>(std::move(p), f);
+    RegisterDeferredPublishRequest<TEvListPublicationsRequest, Ydb::Topic::DeferredPublish::ListPublicationsResult>(std::move(p), f);
 }
 
 void DoDescribePublicationRequest(std::unique_ptr<IRequestOpCtx> p, const IFacilityProvider& f) {
-    RegisterNotImplementedRequest<TEvDescribePublicationRequest, Ydb::Topic::DeferredPublish::DescribePublicationResult>(std::move(p), f);
+    RegisterDeferredPublishRequest<TEvDescribePublicationRequest, Ydb::Topic::DeferredPublish::DescribePublicationResult>(std::move(p), f);
 }
 
 }

@@ -254,9 +254,10 @@ namespace NTable {
                     auto currentFirstRowId = current->GetRowId();
                     auto currentLastRowId = currentExt ? (currentExt->GetRowId() - 1) : Max<TRowId>();
 
-                    auto page = Env->TryGetPage(Part, current->GetPageId(), {});
+                    auto location = Part->GetPageLocation(current->GetPageId(), {});
+                    auto page = Env->TryGetPage(Part, location, {});
                     if (bytesLimit) {
-                        bytes += Part->GetPageSize(current->GetPageId(), {});
+                        bytes += location.Size;
                     }
                     ready &= bool(page);
 
@@ -356,9 +357,10 @@ namespace NTable {
                     auto currentFirstRowId = currentExt ? (currentExt->GetRowId() - 1) : Max<TRowId>();
                     auto currentLastRowId = current->GetRowId();
 
-                    auto page = Env->TryGetPage(Part, current->GetPageId(), {});
+                    auto location = Part->GetPageLocation(current->GetPageId(), {});
+                    auto page = Env->TryGetPage(Part, location, {});
                     if (bytesLimit) {
-                        bytes += Part->GetPageSize(current->GetPageId(), {});
+                        bytes += location.Size;
                     }
                     ready &= bool(page);
 
@@ -482,7 +484,7 @@ namespace NTable {
             TRowId prechargedFirstRowId, prechargedLastRowId;
 
             for (auto current = first; current && current <= last; current++) {
-                auto page = Env->TryGetPage(Part, current->GetPageId(), NPage::TGroupId(0, true));
+                auto page = Env->TryGetPage(Part, Part->GetPageLocation(current->GetPageId(), NPage::TGroupId(0, true)), NPage::TGroupId(0, true));
                 ready &= bool(page);
 
                 if (!HistoryGroups) {
@@ -578,9 +580,10 @@ namespace NTable {
                 }
                 group.LastRowId = groupIndex->GetLastRowId(group.Index);
                 auto pageId = group.Index->GetPageId();
-                ready &= bool(Env->TryGetPage(Part, pageId, group.GroupId));
+                auto loc = Part->GetPageLocation(pageId, group.GroupId);
+                ready &= bool(Env->TryGetPage(Part, loc, group.GroupId));
                 if (bytesLimit) {
-                    bytes += Part->GetPageSize(pageId, group.GroupId);
+                    bytes += loc.Size;
                 }
             }
 
@@ -592,9 +595,10 @@ namespace NTable {
                 }
                 group.LastRowId = groupIndex->GetLastRowId(group.Index);
                 auto pageId = group.Index->GetPageId();
-                ready &= bool(Env->TryGetPage(Part, pageId, group.GroupId));
+                auto loc = Part->GetPageLocation(pageId, group.GroupId);
+                ready &= bool(Env->TryGetPage(Part, loc, group.GroupId));
                 if (bytesLimit) {
-                    bytes += Part->GetPageSize(pageId, group.GroupId);
+                    bytes += loc.Size;
                 }
             }
 
@@ -625,9 +629,10 @@ namespace NTable {
                 }
                 group.LastRowId = groupIndex->GetLastRowId(group.Index);
                 auto pageId = group.Index->GetPageId();
-                ready &= bool(Env->TryGetPage(Part, pageId, group.GroupId));
+                auto loc = Part->GetPageLocation(pageId, group.GroupId);
+                ready &= bool(Env->TryGetPage(Part, loc, group.GroupId));
                 if (bytesLimit) {
-                    bytes += Part->GetPageSize(pageId, group.GroupId);
+                    bytes += loc.Size;
                 }
             }
 
@@ -639,9 +644,10 @@ namespace NTable {
                 group.LastRowId = group.Index->GetRowId() - 1;
                 --group.Index;
                 auto pageId = group.Index->GetPageId();
-                ready &= bool(Env->TryGetPage(Part, pageId, group.GroupId));
+                auto loc = Part->GetPageLocation(pageId, group.GroupId);
+                ready &= bool(Env->TryGetPage(Part, loc, group.GroupId));
                 if (bytesLimit) {
-                    bytes += Part->GetPageSize(pageId, group.GroupId);
+                    bytes += loc.Size;
                 }
             }
 

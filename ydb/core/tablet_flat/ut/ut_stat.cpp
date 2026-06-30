@@ -16,9 +16,10 @@ namespace {
     using namespace NTest;
 
     struct TTouchEnv : public NTest::TTestEnv {
-        const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, TPageLocation location, TGroupId groupId) override
         {
-            auto page = NTest::TTestEnv::TryGetPage(part, pageId, groupId);
+            auto pageId = location.GetPageIndex();
+            auto page = NTest::TTestEnv::TryGetPage(part, location, groupId);
 
             bool newTouch = Touched[{part, groupId}].insert(pageId).second;
 

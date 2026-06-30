@@ -11,7 +11,7 @@ namespace NKikimr {
 namespace NTabletFlatExecutor {
 namespace NBlockIO {
 
-    using TPageId = NPageCollection::TPageId;
+    using TPageLocation = NTable::NPage::TPageLocation;
 
     enum class EEv : ui32 {
         Base_ = EventSpaceBegin(TKikimrEvents::ES_FLAT_EXECUTOR) + 1088,
@@ -22,7 +22,7 @@ namespace NBlockIO {
     };
 
     struct TEvFetch : public TEventLocal<TEvFetch, ui32(EEv::Fetch)> {
-        TEvFetch(EPriority priority, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, TVector<TPageId> pages, ui64 cookie)
+        TEvFetch(EPriority priority, TIntrusiveConstPtr<NPageCollection::IPageCollection> pageCollection, TVector<TPageLocation> pages, ui64 cookie)
             : Priority(priority)
             , PageCollection(std::move(pageCollection))
             , Pages(std::move(pages))
@@ -33,7 +33,7 @@ namespace NBlockIO {
 
         const EPriority Priority;
         TIntrusiveConstPtr<NPageCollection::IPageCollection> PageCollection;
-        TVector<TPageId> Pages;
+        TVector<TPageLocation> Pages;
         NWilson::TTraceId TraceId;
         const ui64 Cookie;
     };

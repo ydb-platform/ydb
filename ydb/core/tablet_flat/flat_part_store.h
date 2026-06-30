@@ -92,6 +92,12 @@ public:
         return PageCollections[groupId.Index]->GetPageType(pageId);
     }
 
+    NPage::TPageLocation GetPageLocation(NPage::TPageId pageId, NPage::TGroupId groupId) const override
+    {
+        Y_ENSURE(groupId.Index < PageCollections.size());
+        return PageCollections[groupId.Index]->PageCollection->GetLocation(pageId);
+    }
+
     ui8 GetGroupChannel(NPage::TGroupId groupId) const override
     {
         Y_ENSURE(groupId.Index < PageCollections.size());
@@ -134,29 +140,34 @@ public:
         return (lob == ELargeObj::Extern ? Pseudo : PageCollections.at(GroupsCount)).Get();
     }
 
-    TVector<TPageId> GetPages(ui32 room) const
+    TVector<TPageLocation> GetPages(ui32 room) const
     {
         Y_ENSURE(room < PageCollections.size());
 
-        auto total = PageCollections[room]->PageCollection->Total();
+        auto& pageCollection = *PageCollections[room]->PageCollection;
+        auto total = pageCollection.Total();
 
-        TVector<TPageId> pages(total);
-        for (size_t i : xrange(total)) {
-            pages[i] = i;
+        TVector<TPageLocation> pages(Reserve(total));
+        for (ui32 i = 0; i < total; ++i) {
+            pages.push_back(pageCollection.GetLocation(i));
         }
 
         return pages;
     }
 
-    static TVector<TIntrusivePtr<TPageCollection>> Construct(TVector<TPageCollectionComponents> components)
+    /// TOuterPageCollection for the outer blob slot
+    static void Construct(TVector<TIntrusivePtr<TPageCollection>>& pageCollections, TVector<TPageCollectionComponents> components, ui32 outerIdx = Max<ui32>())
     {
-        TVector<TIntrusivePtr<TPageCollection>> pageCollections;
-
-        for (auto &one: components) {
-            pageCollections.emplace_back(new TPageCollection(std::move(one.PageCollection)));
+        for (ui32 i = 0; i < components.size(); i++) {
+            if (i == outerIdx) {
+                auto outerColl = MakeIntrusiveConst<NPageCollection::TOuterPageCollection>(
+                    components[i].PageCollection->LargeGlobId,
+                    TSharedData(components[i].PageCollection->Meta.Raw));
+                pageCollections.emplace_back(new TPageCollection(std::move(outerColl)));
+            } else {
+                pageCollections.emplace_back(new TPageCollection(std::move(components[i].PageCollection)));
+            }
         }
-
-        return pageCollections;
     }
 
     static TArrayRef<const TIntrusivePtr<TPageCollection>> Storages(const TPartView &partView)

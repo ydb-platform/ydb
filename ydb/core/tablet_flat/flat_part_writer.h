@@ -583,41 +583,40 @@ namespace NTable {
                     if (Current.HistoryWritten > 0) {
                         Current.FlatHistoricIndexes.reserve(Histories.size());
                         for (auto& g : Histories) {
-                            Current.FlatHistoricIndexes.push_back(WritePage(g.FlatIndex.Flush(), EPage::FlatIndex));
+                            Current.FlatHistoricIndexes.push_back(WriteGetId(g.FlatIndex.Flush(), EPage::FlatIndex));
                         }
                     }
 
                     if (Groups.size() > 1) {
                         Current.FlatGroupIndexes.reserve(Groups.size() - 1);
                         for (ui32 group : xrange(ui32(1), ui32(Groups.size()))) {
-                            Current.FlatGroupIndexes.push_back(WritePage(Groups[group].FlatIndex.Flush(), EPage::FlatIndex));
+                            Current.FlatGroupIndexes.push_back(WriteGetId(Groups[group].FlatIndex.Flush(), EPage::FlatIndex));
                         }
                     }
 
-                    Current.FlatIndex = WritePage(Groups[0].FlatIndex.Flush(), EPage::FlatIndex);
+                    Current.FlatIndex = WriteGetId(Groups[0].FlatIndex.Flush(), EPage::FlatIndex);
                 }
 
-                Current.Large = WriteIf(FrameL.Make(), EPage::Frames);
-                Current.Small = WriteIf(FrameS.Make(), EPage::Frames);
-                Current.Globs = WriteIf(Globs.Make(), EPage::Globs);
+                Current.Large = WriteIfGetId(FrameL.Make(), EPage::Frames);
+                Current.Small = WriteIfGetId(FrameS.Make(), EPage::Frames);
+                Current.Globs = WriteIfGetId(Globs.Make(), EPage::Globs);
                 Current.ByKeyPrefixPages.clear();
                 for (auto& [prefixLen, writer] : ByKeyPrefixes) {
-                    TPageId pageId = WriteIf(writer->Make(), EPage::Bloom);
-                    if (pageId != Max<TPageId>()) {
+                    if (TPageId pageId = WriteIfGetId(writer->Make(), EPage::Bloom); pageId != Max<TPageId>()) {
                         Current.ByKeyPrefixPages.emplace_back(prefixLen, pageId);
                     }
                 }
 
                 if (Current.GarbageStatsBuilder) {
                     Current.GarbageStatsBuilder.ShrinkTo(GarbageStatsMaxSize);
-                    Current.GarbageStats = WriteIf(Current.GarbageStatsBuilder.Finish(), EPage::GarbageStats);
+                    Current.GarbageStats = WriteIfGetId(Current.GarbageStatsBuilder.Finish(), EPage::GarbageStats);
                 }
 
                 if (Current.TxIdStatsBuilder) {
-                    Current.TxIdStats = WriteIf(Current.TxIdStatsBuilder.Finish(), EPage::TxIdStats);
+                    Current.TxIdStats = WriteIfGetId(Current.TxIdStatsBuilder.Finish(), EPage::TxIdStats);
                 }
 
-                Current.Scheme = WritePage(SchemeData, EPage::Schem2);
+                Current.Scheme = WriteGetId(SchemeData, EPage::Schem2);
                 WriteInplace(Current.Scheme, MakeMetaBlob(last));
 
                 Y_ENSURE(Slices && *Slices, "Flushing bundle without a run");
@@ -786,7 +785,7 @@ namespace NTable {
             return blob;
         }
 
-        TPageId WritePage(TSharedData page, EPage type, ui32 group = 0)
+        TPageOffset WritePage(TSharedData page, EPage type, ui32 group = 0)
         {
             NSan::CheckMemIsInitialized(page.data(), page.size());
 
@@ -804,9 +803,15 @@ namespace NTable {
             Pager.WriteInplace(page, std::move(body));
         }
 
-        TPageId WriteIf(TSharedData page, EPage type)
+        TPageId WriteIfGetId(TSharedData page, EPage type, ui32 group = 0)
         {
-            return page ? WritePage(std::move(page), type) : Max<TPageId>();
+            return page ? WriteGetId(std::move(page), type, group) : Max<TPageId>();
+        }
+
+        TPageId WriteGetId(TSharedData page, EPage type, ui32 group = 0)
+        {
+            WritePage(std::move(page), type, group);
+            return Pager.GetWrittenPageId(group);
         }
 
         void Save(TSharedData raw, NPage::TGroupId groupId) override
@@ -861,7 +866,7 @@ namespace NTable {
 
                 Current.Coded += raw.size(); /* after encoding */
 
-                auto page = WritePage(raw, EPage::DataPage, groupId.Index);
+                auto page = WriteGetId(raw, EPage::DataPage, groupId.Index);
 
                 if (WriteFlatIndex) {
                     // N.B. non-main groups have no key

@@ -41,6 +41,7 @@
 #include <util/generic/guid.h>
 #include <util/stream/buffer.h>
 #include <util/stream/file.h>
+#include <util/system/fs.h>
 #include <util/generic/ptr.h>
 #include <util/string/split.h>
 #include <util/system/condvar.h>
@@ -2918,8 +2919,10 @@ private:
                             // Convert text YSON (file gateway format) to binary YSON
                             // (the format WrapYtTableContent/TYtCodecIo expects).
                             // Apply column projection from the rich path if set.
+                            // In local FMR mode the table may be in splitted layout (.part.N);
+                            // parse all parts in order without mutating the source files.
                             {
-                                TFileInput src(*localFilePath);
+                                const TString& srcPath = *localFilePath;
                                 TFileOutput dst(uniqueId + "_" + ToString(i));
                                 TBinaryYsonWriter writer(&dst, ::NYson::EYsonType::ListFragment);
                                 NYT::NYson::IYsonConsumer* consumer = &writer;
@@ -2932,8 +2935,25 @@ private:
                                     filter.Reset(new TColumnFilteringConsumer(consumer, columns, Nothing()));
                                     consumer = filter.Get();
                                 }
-                                NYson::TYsonParser parser(consumer, &src, ::NYson::EYsonType::ListFragment);
-                                parser.Parse();
+                                i64 numParts = 0;
+                                const TString attrPath = srcPath + ".attr";
+                                if (NFs::Exists(attrPath)) {
+                                    const NYT::TNode attrs = NYT::NodeFromYsonString(TFileInput(attrPath).ReadAll());
+                                    if (attrs.HasKey("splitted")) {
+                                        numParts = attrs["splitted"].AsInt64();
+                                    }
+                                }
+                                if (numParts > 0) {
+                                    for (i64 p = 0; p < numParts; ++p) {
+                                        TFileInput part(srcPath + ".part." + ToString(p));
+                                        NYson::TYsonParser parser(consumer, &part, ::NYson::EYsonType::ListFragment);
+                                        parser.Parse();
+                                    }
+                                } else {
+                                    TFileInput src(srcPath);
+                                    NYson::TYsonParser parser(consumer, &src, ::NYson::EYsonType::ListFragment);
+                                    parser.Parse();
+                                }
                             }
 
                             TString refName = TStringBuilder() << "$table" << i;

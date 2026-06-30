@@ -21,6 +21,7 @@
 #include <util/string/cast.h>
 #include <util/system/file.h>
 #include <util/system/fs.h>
+#include <util/system/mutex.h>
 
 namespace NYql::NFmr {
 
@@ -88,9 +89,20 @@ private:
     TBufferStream Input_;
 };
 
+// Shared state for all concurrent writers targeting the same output path.
+// The mutex covers only the brief .attr update; data writes to .part.N run in parallel.
+struct TFileOutputState: public TThrRefBase {
+    TMutex AttrMutex;
+    TString AttrPath;
+    std::atomic<ui64> NextPartIndex{0};
+};
+
 class TFileYtTableWriter: public NYT::TRawTableWriter {
 public:
-    TFileYtTableWriter(const TString& filePath): FilePath_(filePath) {}
+    TFileYtTableWriter(const TString& partPath, TIntrusivePtr<TFileOutputState> state)
+        : PartPath_(partPath)
+        , State_(std::move(state))
+    {}
 
     void NotifyRowEnd() override {
         ++RowCount_;
@@ -102,19 +114,45 @@ private:
     }
 
     void DoFlush() override {
-        TMemoryInput input(Buffer_.data(), Buffer_.size());
-        TFile outputFile(FilePath_, OpenAlways | WrOnly | ForAppend);
-        TFileOutput outputFileStream(outputFile);
-        TDoubleHighPrecisionYsonWriter writer(&outputFileStream, ::NYson::EYsonType::ListFragment);
-        NYson::TYsonParser parser(&writer, &input, ::NYson::EYsonType::ListFragment);
-        parser.Parse();
-        Buffer_.Clear();
-        NFile::SaveRowCountToAttr(FilePath_, RowCount_);
+        // Write data to the exclusive part file — no locking needed.
+        {
+            TMemoryInput input(Buffer_.data(), Buffer_.size());
+            TFile outputFile(PartPath_, OpenAlways | WrOnly | ForAppend);
+            TFileOutput outputFileStream(outputFile);
+            TDoubleHighPrecisionYsonWriter writer(&outputFileStream, ::NYson::EYsonType::ListFragment);
+            NYson::TYsonParser parser(&writer, &input, ::NYson::EYsonType::ListFragment);
+            parser.Parse();
+            Buffer_.Clear();
+        }
+
+        // Briefly lock only to accumulate row_count and splitted in the shared .attr.
+        const ui64 flushRows = RowCount_;
+        RowCount_ = 0;
+        const bool firstFlush = !HasContributedPart_;
+        HasContributedPart_ = true;
+
+        TGuard<TMutex> guard(State_->AttrMutex);
+        NYT::TNode attrs;
+        if (NFs::Exists(State_->AttrPath)) {
+            attrs = NYT::NodeFromYsonString(TFileInput(State_->AttrPath).ReadAll());
+        } else {
+            attrs = NYT::TNode::CreateMap();
+        }
+        const i64 prevRows = attrs.HasKey("row_count") ? attrs["row_count"].AsInt64() : 0;
+        attrs["row_count"] = prevRows + static_cast<i64>(flushRows);
+        if (firstFlush) {
+            const i64 prevSplitted = attrs.HasKey("splitted") ? attrs["splitted"].AsInt64() : 0;
+            attrs["splitted"] = prevSplitted + 1;
+        }
+        TFileOutput ofAttr(State_->AttrPath);
+        ofAttr << NYT::NodeToYsonString(attrs, NYT::NYson::EYsonFormat::Pretty);
     }
 
-    TString FilePath_;
+    TString PartPath_;
+    TIntrusivePtr<TFileOutputState> State_;
     TBuffer Buffer_;
     ui64 RowCount_ = 0;
+    bool HasContributedPart_ = false;
 };
 
 
@@ -272,7 +310,24 @@ public:
         const TYtWriterSettings& /*writerSettings*/
     ) override {
         YQL_ENSURE(ytTable.FilePath.Defined());
-        return MakeIntrusive<TFileYtTableWriter>(*ytTable.FilePath);
+        const TString& basePath = *ytTable.FilePath;
+
+        TIntrusivePtr<TFileOutputState> state;
+        ui64 partIndex;
+        {
+            TGuard<TMutex> guard(OutputsMutex_);
+            auto it = Outputs_.find(basePath);
+            if (it == Outputs_.end()) {
+                auto s = MakeIntrusive<TFileOutputState>();
+                s->AttrPath = basePath + ".attr";
+                it = Outputs_.emplace(basePath, s).first;
+            }
+            state = it->second;
+            partIndex = state->NextPartIndex.fetch_add(1);
+        }
+        return MakeIntrusive<TFileYtTableWriter>(
+            basePath + ".part." + ToString(partIndex),
+            std::move(state));
     }
 
     IWriteDistributedSession::TPtr StartDistributedWriteSession(
@@ -322,6 +377,9 @@ public:
         // TODO - delete created files in DropTables() / CloseSession()
     }
 
+private:
+    TMutex OutputsMutex_;
+    THashMap<TString, TIntrusivePtr<TFileOutputState>> Outputs_;
 };
 
 } // namespace

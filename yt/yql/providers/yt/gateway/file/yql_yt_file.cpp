@@ -905,19 +905,20 @@ public:
             const i64 numParts = NFile::ReadSplittedPartsCount(srcFilePath);
 
             if (numParts > 0) {
-                // Source is a multi-job upload: reformat each source part via
-                // TDoubleHighPrecisionYsonWriter into the corresponding destination part file.
+                // Part files are already formatted — hardlink or copy them directly.
                 for (i64 p = 0; p < numParts; ++p) {
-                    TIFStream srcPart(srcFilePath + ".part." + ToString(p));
-                    TOFStream dstPart(destFilePath + ".part." + ToString(p));
-                    TDoubleHighPrecisionYsonWriter writer(&dstPart, ::NYson::EYsonType::ListFragment);
-                    if (Services_->GetWriteOutputRowCount()) {
-                        auto counting = NFile::MakeRowCountingYsonConsumer(&writer, publishedRowCount);
-                        NYson::TYsonParser parser(counting.get(), &srcPart, ::NYson::EYsonType::ListFragment);
-                        parser.Parse();
-                    } else {
-                        NYson::TYsonParser parser(&writer, &srcPart, ::NYson::EYsonType::ListFragment);
-                        parser.Parse();
+                    NFs::HardLinkOrCopy(
+                        srcFilePath + ".part." + ToString(p),
+                        destFilePath + ".part." + ToString(p));
+                }
+                if (Services_->GetWriteOutputRowCount()) {
+                    const TString srcAttrPath = srcFilePath + ".attr";
+                    if (NFs::Exists(srcAttrPath)) {
+                        TIFStream input(srcAttrPath);
+                        const auto srcAttrs = NYT::NodeFromYsonStream(&input);
+                        if (srcAttrs.HasKey("row_count")) {
+                            publishedRowCount = static_cast<ui64>(srcAttrs["row_count"].AsInt64());
+                        }
                     }
                 }
             } else {

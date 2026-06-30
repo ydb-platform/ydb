@@ -253,14 +253,14 @@ jobs:
             build_target: "ydb/"
             test_size: small,medium
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
-    name: Build and test ${{ matrix.build_preset }}
+    name: PR-check · Build and test ${{ matrix.build_preset }}
     steps:
     - name: Checkout
       uses: actions/checkout@v5
       with:
         ref: ${{ needs.check-running-allowed.outputs.commit_sha }}
         fetch-depth: 2
-    - name: Build and test
+    - name: Build and test (PR-check)
       if: |
           (matrix.build_preset == 'release-asan') || 
           (matrix.build_preset == 'relwithdebinfo') || 
@@ -300,14 +300,14 @@ jobs:
             analytics_job_name: Postcommit_relwithdebinfo
           - build_preset: release-asan
             analytics_job_name: Postcommit_asan
-    name: Build and test ${{ matrix.build_preset }}
+    name: Postcommit · Build and test ${{ matrix.build_preset }}
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}", postcommit ]
     steps:
     - name: Checkout
       uses: actions/checkout@v5
       with:
         fetch-depth: 2
-    - name: Build and test
+    - name: Build and test (Postcommit)
       if: >-
         (matrix.build_preset == 'relwithdebinfo' && fromJSON(vars.CHECKS_SWITCH).postcommit_relwithdebinfo == true)
         || (matrix.build_preset == 'release-asan' && fromJSON(vars.CHECKS_SWITCH).postcommit_asan == true)

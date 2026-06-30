@@ -1008,6 +1008,80 @@ Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest) {
         UNIT_ASSERT_VALUES_EQUAL(countActivePartitions(topic), 32);
     } // Y_UNIT_TEST(SplitByMinPartitionCountToSixteen)
 
+    Y_UNIT_TEST(CreateRootLevelSiblingPartitions) {
+        TTestBasicRuntime runtime;
+        TTestEnv env = CreateTestEnv(runtime);
+
+        ui64 txId = 100;
+
+        auto countActivePartitions = [](const auto& topic) {
+            ui32 activePartitions = 0;
+            for (const auto& partition : topic.GetPartitions()) {
+                if (partition.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active) {
+                    ++activePartitions;
+                }
+            }
+            return activePartitions;
+        };
+
+        TString bound0((char*)bound_1_3, sizeof(bound_1_3));
+        TString bound1((char*)bound_2_3, sizeof(bound_2_3));
+        const unsigned char partitionBoundaryBytes[] = {0xBF};
+        const unsigned char splitBoundaryBytes[] = {0xB5};
+        TString partitionBoundary((char*)partitionBoundaryBytes, sizeof(partitionBoundaryBytes));
+        TString splitBoundary((char*)splitBoundaryBytes, sizeof(splitBoundaryBytes));
+
+        CreateSubDomain(runtime, env, ++txId);
+        CreateTopic(runtime, env, ++txId, 1);
+
+        ModifyTopic(runtime, env, txId, [&](auto& scheme) {
+            auto* boundary0 = scheme.AddRootPartitionBoundaries();
+            boundary0->SetPartition(0);
+            boundary0->MutableKeyRange()->SetToBound(bound0);
+            auto* boundary1 = scheme.AddRootPartitionBoundaries();
+            boundary1->SetPartition(1);
+            boundary1->SetCreatePartition(true);
+            boundary1->MutableKeyRange()->SetFromBound(bound0);
+            boundary1->MutableKeyRange()->SetToBound(bound1);
+            auto* boundary2 = scheme.AddRootPartitionBoundaries();
+            boundary2->SetPartition(2);
+            boundary2->SetCreatePartition(true);
+            boundary2->MutableKeyRange()->SetFromBound(bound1);
+        });
+
+        auto topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPartitions().size(), 3);
+        UNIT_ASSERT_VALUES_EQUAL(countActivePartitions(topic), 3);
+
+        ModifyTopic(runtime, env, txId, [&](auto& scheme) {
+            auto* boundary0 = scheme.AddRootPartitionBoundaries();
+            boundary0->SetPartition(0);
+            boundary0->MutableKeyRange()->SetToBound(bound0);
+            auto* boundary1 = scheme.AddRootPartitionBoundaries();
+            boundary1->SetPartition(1);
+            boundary1->MutableKeyRange()->SetFromBound(bound0);
+            boundary1->MutableKeyRange()->SetToBound(bound1);
+            auto* boundary2 = scheme.AddRootPartitionBoundaries();
+            boundary2->SetPartition(2);
+            boundary2->MutableKeyRange()->SetFromBound(bound1);
+            boundary2->MutableKeyRange()->SetToBound(partitionBoundary);
+            auto* boundary3 = scheme.AddRootPartitionBoundaries();
+            boundary3->SetPartition(3);
+            boundary3->SetCreatePartition(true);
+            boundary3->MutableKeyRange()->SetFromBound(partitionBoundary);
+        });
+
+        topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPartitions().size(), 4);
+        UNIT_ASSERT_VALUES_EQUAL(countActivePartitions(topic), 4);
+
+        SplitPartitionTo(runtime, env, txId, 2, splitBoundary, {3, 4}, true);
+
+        topic = DescribeTopic(runtime);
+        UNIT_ASSERT_VALUES_EQUAL(topic.GetPartitions().size(), 5);
+        UNIT_ASSERT_VALUES_EQUAL(countActivePartitions(topic), 5);
+    } // Y_UNIT_TEST(CreateRootLevelSiblingPartitions)
+
 } // Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergeTest)
 
 Y_UNIT_TEST_SUITE(TSchemeShardTopicSplitMergePrescribedPartitionsTest) {

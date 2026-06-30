@@ -79,6 +79,13 @@ The fusion method and its parameters are passed as named arguments to `HybridRan
 * `K` — the RRF constant (default `60.0`);
 * `Indexes` / `Limits` — explicit per-branch index names and candidate-pool sizes.
 
+For the built-in modes, the per-branch contribution is fixed by the formula. For full control over the fusion, pass a custom lambda instead of `Mode`:
+
+* `RankLambda` — a lambda that receives each document's per-branch ranks (1-based position within each branch) and returns the fused score;
+* `ScoreLambda` — a lambda that receives each document's per-branch raw scores (the fulltext relevance or vector distance/similarity) and returns the fused score.
+
+A custom lambda replaces the built-in fusion, so it cannot be combined with `Mode`, `Weights`, `K`, or `Normalize` — fold any weights and constants into the lambda body. For a detailed description and examples, see [Hybrid search query syntax (HybridRank)](../yql/reference/syntax/select/hybrid_search.md#custom-fusion).
+
 For example, to weight the vector branch twice as much as the text branch under RRF:
 
 ```yql
@@ -103,3 +110,5 @@ For the full list of parameters and their semantics, see [{#T}](../yql/reference
 * If more than one fulltext (or vector) index matches a branch's column, the branch is ambiguous and must be disambiguated with an explicit `AS Indexes` override.
 * `LIMIT` must be a literal, because it sizes the per-branch candidate pools. To use a parameterized `LIMIT`, pass explicit `AS Limits`.
 * `HybridRank(...)` must be the entire `ORDER BY` key — it cannot be negated, wrapped, or combined with other sort keys.
+* A custom fusion lambda (`RankLambda` or `ScoreLambda`) replaces the built-in fusion and cannot be combined with `Mode`, `Weights`, `K`, or `Normalize`. At most one of `RankLambda` or `ScoreLambda` may be specified.
+* A custom fusion lambda (`RankLambda` or `ScoreLambda`) replaces the built-in fusion and cannot be combined with `Mode`, `Weights`, `K`, or `Normalize`. At most one of `RankLambda` or `ScoreLambda` may be specified.

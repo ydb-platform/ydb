@@ -36,9 +36,17 @@ To perform backup to an S3-compatible storage (for example, [AWS S3](https://doc
 
 To restore from a backup created in an S3-compatible storage, use the `{{ ydb-cli }} import s3` command. Follow [the link](../../reference/ydb-cli/export-import/import-s3.md) to the {{ ydb-short-name }} CLI reference for information about this command.
 
+### NFS {#nfs}
+
+To perform backup to [NFS](https://en.wikipedia.org/wiki/Network_File_System) on hosts where {{ ydb-short-name }} is running, use the `{{ ydb-cli }} export nfs` command. Follow [the link](../../reference/ydb-cli/export-import/export-nfs.md) to the {{ ydb-short-name }} CLI reference for information about this command.
+
+To restore from a backup created in [NFS](https://en.wikipedia.org/wiki/Network_File_System) on hosts where {{ ydb-short-name }} is running, use the `{{ ydb-cli }} import nfs` command. Follow [the link](../../reference/ydb-cli/export-import/import-nfs.md) to the {{ ydb-short-name }} CLI reference for information about this command.
+
+For more details on configuring NFS for backup and recovery, see the recipe [Backup and recovery via NFS](../../recipes/nfs-backup/nfs-backup.md).
+
 {% note info %}
 
-The speed of backup and recovery operations to/from an S3-compatible storage is tuned to minimize the impact on user workload. To control the operation speed, configure limits for the corresponding queue of the [resource broker](../../reference/configuration/resource_broker_config.md#resource-broker-config).
+The speed of backup and recovery operations to/from an S3-compatible storage or NFS is tuned to minimize the impact on user workload. To control the operation speed, configure limits for the corresponding queue of the [resource broker](../../reference/configuration/resource_broker_config.md#resource-broker-config).
 
 {% endnote %}
 

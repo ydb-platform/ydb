@@ -1,0 +1,1 @@
+Data export runs in the background. You can get information about the status and progress of the export by calling the `operation get` command, passing the **quoted** operation ID as its parameter, for example:

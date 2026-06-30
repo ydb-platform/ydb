@@ -57,6 +57,79 @@ If no `VIEW` section is specified, making a query like this results in a full sc
 
 In transactional applications, such information queries are executed with paginated data output. This eliminates an increase in the cost and time of query execution if the number of entries that meet the filtering conditions grows. The described approach to writing [paginated queries](../dev/paging.md) using the primary key can also be applied to columns that are part of a secondary index.
 
+An experimental capability to automatically select a secondary index for use in a query is also available. The selection algorithm is currently rule-based and uses only the query text to automatically select a secondary index.
+
+### Automatic use of indexes when selecting data
+
+Explicitly specifying the `VIEW` section takes priority over the optimizer's decision to use secondary indexes. That is, the query
+
+```yql
+SELECT * FROM `Table` VIEW Index
+```
+
+is guaranteed to perform selection using the `Index` index.
+
+To explicitly specify reading using the primary key, use the following construct:
+
+```yql
+SELECT * FROM `Table` VIEW PRIMARY KEY
+```
+
+#### Criteria for selecting a secondary index
+
+The index used for reading is selected during query optimization when determining the row ranges that need to be read (predicate pushdown). Indexes, like the main table, are a set of rows ordered by a set of key columns.
+
+Selection between reading using an index and reading using the primary key is based on the following metrics:
+
+1. Need for additional reads from the main table. If the index contains all columns required for the query, no additional reads are needed.
+2. Length of the point prefix of the predicate for the corresponding table's key. That is, the predicate constrains a set of columns that are the first components of the key with point conditions: `=`, `IN`, `IS NULL`. Priority is given to indexes for which all indexed columns are fixed, or to the main table if the entire primary key is point-fixed.
+3. Number of columns used in the read range bounds. In the following query to the `Table` table with primary key (Key1, Key2, Key3)
+
+```yql
+SELECT * FROM `Table` WHERE (Key1, Key2, Key3) < ($param1, $param2, $param3) AND (Key1, Key2) > ($param4, $param5)
+```
+
+reading will be performed in the range `(($param4, $param5), ($param1, $param2, $param3))`, and thus the number of used columns will be 3. Similarly, preference is given to indexes for which all indexed columns are used.
+
+Read methods are ranked against each other according to criterion 2, with ties broken by criterion 3, and criterion 1 is additionally taken into account.
+
+#### Examples of automatic index selection
+
+```yql
+CREATE TABLE `Table` (
+     Key Int32,
+     SubKey1 Int32,
+     SubKey2 String,
+     Value1 String,
+     Value2 String,
+     PRIMARY KEY (Key, SubKey1, SubKey2),
+     INDEX Index12 GLOBAL ON (SubKey1, SubKey2),
+     INDEX Index21 GLOBAL ON (SubKey2, Value1),
+     INDEX Index212 GLOBAL ON (SubKey2) COVER (Value2)
+);
+
+```
+
+`SELECT * FROM Table WHERE SubKey1 = $p1 and SubKey2 > $p2` — `Index12` will be used. The range expression is `(($p1; $p2), ($p1)]`. The point prefix length for `Index12` is 1; for other indexes, it is 0.
+
+`SELECT * FROM Table WHERE Key = $p1 and SubKey1 = $p2 And SubKey2 = $p2` — no index will be used. When selecting a scan of the main table, all 3 columns are used: `[Key, Fk1, Fk2]`, and the point prefix length is 3.
+
+`SELECT * FROM Table WHERE Key = $p1 and SubKey2 = $p2` — secondary indexes will not be used. When selecting any secondary index, 1 column is used, and the point prefix is also at most 1 for any index choice.
+
+`SELECT * FROM Table WHERE Key >= $p1 and SubKey1 = $p2 And SubKey2 = $p3` — `Index12` should be selected, because when it is selected, the resulting range `[[Fk1; Fk2; Key], [Fk1; Fk2])` yields a point prefix length of 2, and 3 columns are used.
+
+`SELECT * FROM Table WHERE Key = 2 and SubKey2 = 3` — secondary indexes should not be used. When reading by `PK` or using any of the secondary indexes, the point prefix consists of at most one column. Also, at most one column is used.
+
+`SELECT * FROM Table WHERE SubKey1 > 2` — `Index12` should be selected. Only when using `Index12` will the read range be non-trivial.
+
+`SELECT * FROM Table WHERE SubKey2 = 2` — either `Index21` or `Index212` may be selected. When using the indexes mentioned above, the point prefix length will be 1. The number of used columns is also maximized when selecting `Index21` and `Index212`.
+
+`SELECT Value2 FROM Table WHERE SubKey2 = 2` — `Index212` should be selected. When using `Index21` and `Index212`, the point prefix length will be 1, but when using `Index212`, no read from the main table is required.
+
+`SELECT * FROM Table WHERE SubKey2 > 2` — `Index21` or `Index212` will be used, because the read range is non-trivial only when using them.
+
+`SELECT * FROM Table WHERE SubKey1 = 2` — `Index12` will be used, because when using it, the point prefix length will be 1, whereas in other cases it is 0.
+
 ## Checking the cost of queries {#cost}
 
 Any query made in a transactional application should be checked in terms of the number of I/O operations it performed in the database and how much CPU was used to run it. You should also make sure these indicators don't continuously grow as the database volume grows. {{ ydb-short-name }} returns statistics required for the analysis after running each query.

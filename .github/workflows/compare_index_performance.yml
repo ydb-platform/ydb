@@ -14,9 +14,9 @@ on:
         required: false
         type: choice
         options:
-          - relwithdebinfo
           - release
-        default: relwithdebinfo
+          - relwithdebinfo
+        default: release
       ref:
         description: 'S3 ref to compare against (e.g. main, stable-26-1-1)'
         required: false
@@ -70,7 +70,7 @@ on:
 jobs:
   compare:
     name: Compare performance (${{ inputs.ref || 'main' }} vs current)
-    runs-on: [ self-hosted, auto-provisioned, "build-preset-${{ inputs.build_preset || 'relwithdebinfo' }}" ]
+    runs-on: [ self-hosted, auto-provisioned, "build-preset-${{ inputs.build_preset || 'release' }}" ]
     timeout-minutes: 1200
     steps:
       - name: Checkout
@@ -79,7 +79,7 @@ jobs:
       - name: Run performance comparison
         env:
           INPUT_DURATION: ${{ inputs.duration || '600' }}
-          INPUT_BUILD_PRESET: ${{ inputs.build_preset || 'relwithdebinfo' }}
+          INPUT_BUILD_PRESET: ${{ inputs.build_preset || 'release' }}
           INPUT_REF: ${{ inputs.ref || 'main' }}
           INPUT_WORKLOAD: ${{ inputs.workload || 'all' }}
           INPUT_ROWS: ${{ inputs.rows || '10000' }}

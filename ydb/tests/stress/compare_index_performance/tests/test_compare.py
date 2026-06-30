@@ -176,7 +176,7 @@ class TestCompareIndexPerformance:
         self.current_ydbd_param = yatest.common.get_param('compare_current_ydbd', default='')
         self.ref = yatest.common.get_param('compare_ref', default='main')
         self.current_ref = yatest.common.get_param('compare_current_ref', default='')
-        self.build_preset = yatest.common.get_param('compare_build_preset', default='relwithdebinfo')
+        self.build_preset = yatest.common.get_param('compare_build_preset', default='release')
 
         # Workload knobs (kept as strings: the workload CLIs accept them as-is)
         self.iterations = int(yatest.common.get_param('compare_iterations', default='3'))

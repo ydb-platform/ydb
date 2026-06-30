@@ -46,7 +46,7 @@ message TPBufferConfig
     // default true
     optional bool EnableWritesBatching = 11;
 
-    // reserve free sectors for priority barrier moving and fast erase operations again of write
-    // default 256 equal to default disk operations max inflight size
+    // Reserve free sectors for higher-priority barrier movement and fast erase operations.
+    // default 256, equal to the default disk operations max inflight size
     optional uint32 MinFreeSectorsReserve = 12;
 }

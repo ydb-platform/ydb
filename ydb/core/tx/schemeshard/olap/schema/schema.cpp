@@ -62,6 +62,9 @@ bool TOlapSchema::ParseFromProto(const NKikimrSchemeOp::TColumnTableSchema& tabl
         return false;
     }
     ParseIndexesFromFullSchema(tableSchema);
+    if (!Indexes.ValidateNoDuplicateColumnIndexes(*this, errors)) {
+        return false;
+    }
     return true;
 }
 

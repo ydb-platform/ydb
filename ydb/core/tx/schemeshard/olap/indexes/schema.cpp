@@ -1,7 +1,7 @@
 #include "schema.h"
 #include <ydb/library/accessor/validator.h>
 #include <ydb/core/tx/columnshard/blobs_action/common/const.h>
-
+#include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 namespace NKikimr::NSchemeShard {
 
 void TOlapIndexSchema::SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& indexSchema) const {
@@ -84,6 +84,24 @@ bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, cons
             if (!meta) {
                 return false;
             }
+            // Forbid two indexes of the same type (class) on the same column.
+            if (const auto newColumnId = meta->GetSingleColumnId()) {
+                for (const auto& indexPair : Indexes) {
+                    const auto& existingIndex = indexPair.second;
+                    const auto& existingMeta = existingIndex.GetIndexMeta();
+                    if (existingMeta->GetClassName() == meta->GetClassName() && existingMeta->GetSingleColumnId() == newColumnId) {
+                        TString columnName = ToString(*newColumnId);
+                        if (const auto* column = currentSchema.GetColumns().GetById(*newColumnId)) {
+                            columnName = column->GetName();
+                        }
+                        errors.AddError(NKikimrScheme::StatusAlreadyExists,
+                            TStringBuilder() << "cannot create " << meta->GetClassName() << " index '" << index.GetName() << "' on column '"
+                                             << columnName << "': it already has a " << meta->GetClassName() << " index '"
+                                             << existingIndex.GetName() << "'");
+                        return false;
+                    }
+                }
+            }
             TOlapIndexSchema newIndex(id, index.GetName(), meta);
             Y_ABORT_UNLESS(IndexesByName.emplace(index.GetName(), id).second);
             Y_ABORT_UNLESS(Indexes.emplace(id, std::move(newIndex)).second);
@@ -110,6 +128,34 @@ void TOlapIndexesDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& t
         Y_ABORT_UNLESS(IndexesByName.emplace(indexProto.GetName(), indexProto.GetId()).second);
         Y_ABORT_UNLESS(Indexes.emplace(indexProto.GetId(), std::move(index)).second);
     }
+}
+
+bool TOlapIndexesDescription::ValidateNoDuplicateColumnIndexes(const TOlapSchema& currentSchema, IErrorCollector& errors) const {
+    // Forbid two indexes of the same type (class) on the same column.
+    THashMap<std::pair<ui32, TString>, TString> indexNameByColumnAndClass;   // (columnId, className) -> indexName
+    for (const auto& indexPair : Indexes) {
+        const auto& index = indexPair.second;
+        const auto& meta = index.GetIndexMeta();
+        const auto columnId = meta->GetSingleColumnId();
+        if (!columnId) {
+            continue;
+        }
+        const auto inserted = indexNameByColumnAndClass.emplace(std::make_pair(*columnId, meta->GetClassName()), index.GetName());
+        if (!inserted.second) {
+            TString columnName = ToString(*columnId);
+            if (const auto* column = currentSchema.GetColumns().GetById(*columnId)) {
+                columnName = column->GetName();
+            }
+            // Not StatusAlreadyExists: on the CREATE TABLE path that status is treated as idempotent
+            // success, which would let the duplicate slip through. Use a hard scheme error instead.
+            errors.AddError(NKikimrScheme::StatusSchemeError,
+                TStringBuilder() << "cannot create " << meta->GetClassName() << " index '" << index.GetName() << "' on column '"
+                                 << columnName << "': it already has a " << meta->GetClassName() << " index '"
+                                 << inserted.first->second << "'");
+            return false;
+        }
+    }
+    return true;
 }
 
 void TOlapIndexesDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const {

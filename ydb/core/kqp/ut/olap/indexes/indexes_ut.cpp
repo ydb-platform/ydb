@@ -241,13 +241,14 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMaxWithBSStorage)).Execute(settings);
     }
 
-    Y_UNIT_TEST(ManyIndexesOnSingleColumnIsAllowed, EUseQueryService, ELocalIndexAsSchemeObject) {
+    Y_UNIT_TEST(CannotHaveTwoIndexesOfSameTypeOnOneColumn, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
             .SetWithSampleTables(false);
         settings.FeatureFlags.SetEnableLocalMinMaxIndex(true);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
+        settings.FeatureFlags.SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
+        settings.AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
         TKikimrRunner kikimr(settings);
 
         auto helper = TLocalHelper(kikimr);
@@ -275,6 +276,11 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
         };
 
+        auto assertDDLQueryNotOk = [&](TString query) {
+            auto result = runDDLQuery(query);
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        };
+
 
         assertDDLQueryOk(R"(
             CREATE TABLE `/Root/test_cannot_have_two_indexes_on_one_column` (
@@ -286,22 +292,51 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
             WITH (
                 STORE = COLUMN
             );
-            ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_mm` LOCAL USING min_max ON(`value`);            
+            ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_mm` LOCAL USING min_max ON(`value`);
         )");
-        {
-            NYdb::TStatus status = runDDLQuery(R"(
-                ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `vvalue_mm` LOCAL USING min_max ON(`value`);            
+        assertDDLQueryNotOk(R"(
+                ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_mm2` LOCAL USING min_max ON(`value`);
             )");
-            
-            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-        }
-        {
-            NYdb::TStatus status = runDDLQuery(R"(
-                ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `vvvalue_bloom_filter` LOCAL USING bloom_filter ON(`value`);            
+        
+        assertDDLQueryOk(R"(
+                ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_bloom` LOCAL USING bloom_filter ON(`value`);
             )");
-            
-            UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
-        }
+        assertDDLQueryNotOk(R"(
+                ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_bloom2` LOCAL USING bloom_filter ON(`value`);
+            )");
+        
+        assertDDLQueryNotOk(R"(
+                CREATE TABLE `/Root/two_minmax_in_create` (
+                    `key` Int32 NOT NULL,
+                    `value` String NOT NULL,
+                    INDEX `mm1` LOCAL USING min_max ON(`value`),
+                    INDEX `mm2` LOCAL USING min_max ON(`value`),
+                    PRIMARY KEY (`key`)
+                )
+                PARTITION BY HASH (`key`)
+                WITH (
+                    STORE = COLUMN
+                );
+            )");
+
+        assertDDLQueryOk(R"(
+            CREATE TABLE `/Root/two_minmax_via_alter_object` (
+                `key` Int32 NOT NULL,
+                `value` String NOT NULL,
+                PRIMARY KEY (`key`)
+            )
+            PARTITION BY HASH (`key`)
+            WITH (
+                STORE = COLUMN
+            );
+        )");
+        assertDDLQueryOk(R"(
+            ALTER OBJECT `/Root/two_minmax_via_alter_object` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=mm_a, TYPE=MIN_MAX, FEATURES=`{"column_name": "value"}`);
+        )");
+        assertDDLQueryNotOk(R"(
+            ALTER OBJECT `/Root/two_minmax_via_alter_object` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=mm_b, TYPE=MIN_MAX, FEATURES=`{"column_name": "value"}`);
+        )");
+
     }
     
     Y_UNIT_TEST(AlterIndexOnNotExistingTableResultsInError, EUseQueryService, ELocalIndexAsSchemeObject) {

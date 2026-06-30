@@ -806,20 +806,22 @@ Y_UNIT_TEST_SUITE(KqpOlapTiering) {
         }
 
         {
-            auto addGoodIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+            auto addFirstIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
                 ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_ts, TYPE=MIN_MAX,
                         FEATURES=`{"storage_id": "__LOCAL_METADATA", "inherit_portion_storage": false, "column_name": "ts"}`);
             )").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(addGoodIndex.GetStatus(), NYdb::EStatus::SUCCESS, addGoodIndex.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_EQUAL_C(addFirstIndex.GetStatus(), NYdb::EStatus::SUCCESS, addFirstIndex.GetIssues().ToString());
             auto addTTL = testHelper.GetSession().ExecuteSchemeQuery(
                 TStringBuilder() << "ALTER TABLE `/Root/ColumnWithTTLAndMinMaxIndex` SET TTL Interval(\"P10D\") TO EXTERNAL DATA SOURCE `" << DEFAULT_TIER_PATH << "` ON `ts`;"
             ).GetValueSync();
             UNIT_ASSERT_VALUES_EQUAL_C(addTTL.GetStatus(), NYdb::EStatus::SUCCESS, addTTL.GetIssues().ToString()); 
-            auto addBadIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
+            // A second min_max index on column `ts`, which already has `index_minmax_ts`, must be
+            // rejected: a column cannot have two indexes of the same type.
+            auto addDuplicateIndex = testHelper.GetSession().ExecuteSchemeQuery(R"(
                 ALTER OBJECT `/Root/ColumnWithTTLAndMinMaxIndex` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=index_minmax_ts2, TYPE=MIN_MAX,
                         FEATURES=`{"storage_id": "__LOCAL_METADATA", "inherit_portion_storage": true, "column_name": "ts"}`);
             )").GetValueSync();
-            UNIT_ASSERT_VALUES_EQUAL_C(addBadIndex.GetStatus(), NYdb::EStatus::SUCCESS, addBadIndex.GetIssues().ToString());
+            UNIT_ASSERT_VALUES_UNEQUAL_C(addDuplicateIndex.GetStatus(), NYdb::EStatus::SUCCESS, addDuplicateIndex.GetIssues().ToString());
 
         }
         

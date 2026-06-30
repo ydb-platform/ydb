@@ -490,10 +490,10 @@ struct Schema: NIceDb::Schema {
 
         struct LockId: Column<2, NScheme::NTypeIds::Uint64> {};
 
-        struct Broken: Column<3, NScheme::NTypeIds::Bool> {};
+        // do not use tag 3 until 28-1, it was removed in 26-3
 
         using TKey = TableKey<TxId, LockId>;
-        using TColumns = TableColumns<TxId, LockId, Broken>;
+        using TColumns = TableColumns<TxId, LockId>;
     };
 
     struct TierBlobsDraft: NIceDb::Schema::Table<(ui32)ETierTables::TierBlobsDraft> {

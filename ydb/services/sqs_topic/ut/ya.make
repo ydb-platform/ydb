@@ -11,4 +11,6 @@ PEERDIR(
     ydb/services/sqs_topic
 )
 
+# test
+
 END()

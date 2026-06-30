@@ -391,8 +391,8 @@ public:
             TFile file(key, RdOnly | Seq);
             const i64 fileSize = file.GetLength();
 
-            YDB_LOG_INFO("HeadObject file",
-                {"size", fileSize},
+            YDB_LOG_INFO("HeadObject",
+                {"file size", fileSize},
                 {"for", key});
 
             Aws::S3::Model::HeadObjectResult awsResult;
@@ -539,8 +539,8 @@ public:
 
     void Handle(TEvDeleteObjectsRequest::TPtr& ev) {
         const auto& request = ev->Get()->GetRequest();
-        YDB_LOG_WARN("DeleteObjects: not implemented, objects",
-            {"count", request.GetDelete().GetObjects().size()});
+        YDB_LOG_WARN("DeleteObjects: not implemented",
+            {"objects count", request.GetDelete().GetObjects().size()});
         ReplyError<TEvDeleteObjectsResponse>(ev->Sender, {.ErrorMessage = "Not implemented"});
     }
 
@@ -559,7 +559,7 @@ public:
 
             ActiveUploads.emplace(uploadId, TMultipartUploadSession(key));
 
-            YDB_LOG_INFO("CreateMultipartUpload file opened with exclusive lock",
+            YDB_LOG_INFO("CreateMultipartUpload: file opened with exclusive lock",
                 {"key", key},
                 {"uploadId", uploadId});
 
@@ -606,7 +606,7 @@ public:
                     const TString errorMsg = TStringBuilder()
                         << "Cannot create new upload session for part " << partNumber
                         << " (uploadId: " << uploadId << "). Session must start with part 1.";
-                    YDB_LOG_ERROR("Cannot create new upload session for part. Session must start with part 1",
+                    YDB_LOG_ERROR(errorMsg,
                         {"part", partNumber},
                         {"uploadId", uploadId});
                     ReplyError<TEvUploadPartResponse>(ev->Sender,
@@ -623,10 +623,10 @@ public:
             session.File.Flush();
             session.TotalSize += body.size();
 
-            YDB_LOG_INFO("UploadPart: written under lock total",
+            YDB_LOG_INFO("UploadPart: written under lock",
                 {"uploadId", uploadId},
                 {"part", partNumber},
-                {"size", session.TotalSize});
+                {"total size", session.TotalSize});
 
             const TString etag = TStringBuilder() << "\"part" << partNumber << "\"";
 
@@ -681,7 +681,7 @@ public:
                 const TString errorMsg = TStringBuilder()
                     << "Failed to rename " << incompleteKey << " to " << key
                     << ": " << LastSystemErrorText();
-                YDB_LOG_ERROR("Failed to rename",
+                YDB_LOG_ERROR(errorMsg,
                     {"incompleteKey", incompleteKey},
                     {"key", key});
 
@@ -702,9 +702,9 @@ public:
             FsyncParentDir(key);
             session.File.Close();
 
-            YDB_LOG_INFO("CompleteMultipartUpload total file mv",
+            YDB_LOG_INFO("CompleteMultipartUpload: file mv",
                 {"uploadId", uploadId},
-                {"size", session.TotalSize},
+                {"total size", session.TotalSize},
                 {"from", incompleteKey},
                 {"to", key});
 
@@ -744,7 +744,7 @@ public:
         try {
             auto it = ActiveUploads.find(uploadId);
             if (it == ActiveUploads.end()) {
-                YDB_LOG_WARN("AbortMultipartUpload session not found",
+                YDB_LOG_WARN("AbortMultipartUpload: session not found",
                     {"uploadId", uploadId});
             } else {
                 auto& session = it->second;
@@ -758,7 +758,7 @@ public:
                 }
                 ActiveUploads.erase(it);
 
-                YDB_LOG_INFO("AbortMultipartUpload file deleted, lock released",
+                YDB_LOG_INFO("AbortMultipartUpload: file deleted, lock released",
                     {"uploadId", uploadId});
             }
 

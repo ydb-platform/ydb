@@ -14,8 +14,6 @@
 
 #include <google/protobuf/text_format.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DS_LOAD_TEST
-
 // * Scheme is hardcoded and it is like default YCSB setup:
 // 1 Text "id" column, 10 Bytes "field0" - "field9" columns
 // * row is ~ 1 KB, keys are like user1000385178204227360
@@ -114,9 +112,8 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        YDB_LOG_NOTICE_CTX(ctx, "Bootstrap",
-            {"TKqpUpsertActor", Id},
-            {"called", ConfingString});
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
+            << " Bootstrap called: " << ConfingString);
 
         Become(&TKqpUpsertActor::StateFunc);
         CreateSession(ctx);
@@ -125,9 +122,8 @@ public:
 private:
     void CreateSession(const TActorContext& ctx) {
         auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        YDB_LOG_TRACE_CTX(ctx, "Sends event for session creation",
-            {"TKqpUpsertActor", Id},
-            {"toProxy", kqpProxy});
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
+            << " sends event for session creation to proxy: " << kqpProxy.ToString());
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
         ev->Record.MutableRequest()->SetDatabase(Database);
@@ -139,9 +135,8 @@ private:
             return;
 
         auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-        YDB_LOG_TRACE_CTX(ctx, "Sends session close query",
-            {"TKqpUpsertActor", Id},
-            {"toProxy", kqpProxy});
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
+            << " sends session close query to proxy: " << kqpProxy);
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();
         ev->Record.MutableRequest()->SetSessionId(Session);
@@ -154,11 +149,9 @@ private:
             request->Record.MutableRequest()->SetSessionId(Session);
 
             auto kqpProxy = NKqp::MakeKqpProxyID(ctx.SelfID.NodeId());
-            YDB_LOG_TRACE_CTX(ctx, "Send",
-                {"TKqpUpsertActor", Id},
-                {"request", CurrentRequest},
-                {"toProxy", kqpProxy},
-                {"requestString", request->ToString()});
+            LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
+                << " send request# " << CurrentRequest
+                << " to proxy# " << kqpProxy << ": " << request->ToString());
 
             if (!Config.GetInfinite()) {
                 ctx.Send(kqpProxy, Requests[CurrentRequest].release());
@@ -193,17 +186,15 @@ private:
 
             ctx.Send(Parent, response.release());
 
-            YDB_LOG_NOTICE_CTX(ctx, "Finished",
-                {"TKqpUpsertActor", Id},
-                {"delta", delta},
-                {"errors", Errors});
+            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
+                << " finished in " << delta << ", errors=" << Errors);
             Die(ctx);
         }
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "Tablet received PoisonPill, going to die",
-            {"TKqpUpsertActor", Id});
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
+            << " tablet received PoisonPill, going to die");
         CloseSession(ctx);
         Die(ctx);
     }
@@ -213,9 +204,7 @@ private:
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             Session = response.GetResponse().GetSessionId();
-            YDB_LOG_DEBUG_CTX(ctx, "Dump TKqpUpsertActor, session",
-                {"TKqpUpsertActor", Id},
-                {"session", Session});
+            LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id << " session: " << Session);
             SendRows(ctx);
         } else {
             StopWithError(ctx, "failed to create session: " + ev->Get()->ToString());
@@ -223,10 +212,8 @@ private:
     }
 
     void Handle(NKqp::TEvKqp::TEvQueryResponse::TPtr& ev, const TActorContext& ctx) {
-        YDB_LOG_TRACE_CTX(ctx, "Received",
-            {"TKqpUpsertActor", Id},
-            {"sender", ev->Sender},
-            {"recordDebugString", ev->Get()->Record.DebugString()});
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActor# " << Id
+            << " received from " << ev->Sender << ": " << ev->Get()->Record.DebugString());
 
         --Inflight;
 
@@ -239,8 +226,7 @@ private:
     }
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
-        YDB_LOG_WARN_CTX(ctx, "Load tablet stopped with",
-            {"error", reason});
+        LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "Load tablet stopped with error: " << reason);
         ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(Id.SubTag, reason));
         Die(ctx);
     }
@@ -308,9 +294,8 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        YDB_LOG_NOTICE_CTX(ctx, "Bootstrap",
-            {"TKqpUpsertActorMultiSession", Id},
-            {"called", ConfingString});
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Id
+            << " Bootstrap called: " << ConfingString);
 
         Become(&TKqpUpsertActorMultiSession::StateFunc);
         StartActors(ctx);
@@ -372,10 +357,8 @@ private:
             Actors.emplace_back(ctx.Register(kqpActor));
         }
 
-        YDB_LOG_NOTICE_CTX(ctx, "Actors each with",
-            {"TKqpUpsertActorMultiSession", Id},
-            {"started", actorsCount},
-            {"inflight", requestsPerActor});
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Id
+            << " started# " << actorsCount << " actors each with inflight# " << requestsPerActor);
     }
 
     void Handle(const TEvDataShardLoad::TEvTestLoadFinished::TPtr& ev, const TActorContext& ctx) {
@@ -390,9 +373,7 @@ private:
             return;
         }
 
-        YDB_LOG_INFO_CTX(ctx, "Finished",
-            {"kqp", Id},
-            {"ev", ev->Get()->ToString()});
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "kqp# " << Id << " finished: " << ev->Get()->ToString());
 
         Errors += record.GetReport().GetOperationsError();
         Oks += record.GetReport().GetOperationsOK();
@@ -410,11 +391,8 @@ private:
             report.SetOperationsError(Errors);
             ctx.Send(Parent, response.release());
 
-            YDB_LOG_NOTICE_CTX(ctx, "Finished",
-                {"TKqpUpsertActorMultiSession", Id},
-                {"delta", delta},
-                {"oks", Oks},
-                {"errors", Errors});
+            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Id
+                << " finished in " << delta << ", oks# " << Oks << ", errors# " << Errors);
 
             Stop(ctx);
         }
@@ -429,15 +407,14 @@ private:
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        YDB_LOG_INFO_CTX(ctx, "Tablet received PoisonPill, going to die",
-            {"TKqpUpsertActorMultiSession", Id});
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Id
+            << " tablet received PoisonPill, going to die");
         Stop(ctx);
     }
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
-        YDB_LOG_ERROR_CTX(ctx, "Stopped with",
-            {"TKqpUpsertActorMultiSession", Id},
-            {"error", reason});
+        LOG_ERROR_S(ctx, NKikimrServices::DS_LOAD_TEST, "TKqpUpsertActorMultiSession# " << Id
+            << " stopped with error: " << reason);
 
         ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(Id.SubTag, reason));
         Stop(ctx);

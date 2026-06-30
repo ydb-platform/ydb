@@ -17,8 +17,6 @@
 
 #include <random>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::DS_LOAD_TEST
-
 // * Scheme is hardcoded and it is like default YCSB setup:
 // 1 utf8 "key" column, 10 utf8 "field0" - "field9" columns
 // * row is ~ 1 KB, keys are like user1000385178204227360
@@ -77,9 +75,8 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        YDB_LOG_NOTICE_CTX(ctx, "Bootstrap called, will read",
-            {"id", Id},
-            {"keys", Points.size()});
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+            << " Bootstrap called, will read keys# " << Points.size());
 
         Become(&TReadIteratorPoints::StateFunc);
 
@@ -91,14 +88,12 @@ public:
 private:
     void Connect(const TActorContext &ctx) {
         if (ReconnectLimit != RECONNECT_LIMIT) {
-            YDB_LOG_DEBUG_CTX(ctx, "Will reconnect retries",
-                {"TReadIteratorPoints", Id},
-                {"toTablet", TabletId},
-                {"left", (ReconnectLimit - 1)});
+            LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+                << " will reconnect to tablet# " << TabletId
+                << " retries left# " << (ReconnectLimit - 1));
         } else {
-            YDB_LOG_TRACE_CTX(ctx, "Will connect",
-                {"TReadIteratorPoints", Id},
-                {"toTablet", TabletId});
+            LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+                << " will connect to tablet# " << TabletId);
         }
 
         --ReconnectLimit;
@@ -113,9 +108,8 @@ private:
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr ev, const TActorContext& ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
 
-        YDB_LOG_TRACE_CTX(ctx, "Handle TEvClientConnected called,",
-            {"TReadIteratorPoints", Id},
-            {"status", msg->Status});
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+            << " Handle TEvClientConnected called, Status# " << msg->Status);
 
         if (msg->Status != NKikimrProto::OK) {
             Pipe = {};
@@ -128,8 +122,8 @@ private:
     }
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr, const TActorContext& ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "Handle TEvClientDestroyed called",
-            {"TReadIteratorPoints", Id});
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+            << " Handle TEvClientDestroyed called");
 
         // sanity check
         if (!WasConnected) {
@@ -158,10 +152,8 @@ private:
         request->Record = BaseRequest->Record;
         AddKeyQuery(*request, currentKeyCells);
 
-        YDB_LOG_TRACE_CTX(ctx, "Sends",
-            {"TReadIteratorPoints", Id},
-            {"request", PointsRead},
-            {"requestString", request->ToString()});
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+            << " sends request# " << PointsRead << ": " << request->ToString());
 
         RequestTimer.Reset();
         NTabletPipe::SendData(ctx, Pipe, request.release());
@@ -173,10 +165,8 @@ private:
         const auto* msg = ev->Get();
         const auto& record = msg->Record;
 
-        YDB_LOG_TRACE_CTX(ctx, "Received",
-            {"TReadIteratorPoints", Id},
-            {"sender", ev->Sender},
-            {"messageString", msg->ToString()});
+        LOG_TRACE_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+            << " received from " << ev->Sender << ": " << msg->ToString());
 
         if (record.HasStatus() && record.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
             TStringStream ss;
@@ -218,9 +208,8 @@ private:
     }
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
-        YDB_LOG_ERROR_CTX(ctx, "Stopped with",
-            {"TReadIteratorPoints", Id},
-            {"error", reason});
+        LOG_ERROR_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+            << ", stopped with error: " << reason);
 
         ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(0, reason));
         NTabletPipe::CloseClient(SelfId(), Pipe);
@@ -228,8 +217,8 @@ private:
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        YDB_LOG_INFO_CTX(ctx, "Tablet received PoisonPill, going to die",
-            {"TReadIteratorPoints", Id});
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "TReadIteratorPoints# " << Id
+            << " tablet received PoisonPill, going to die");
 
         // TODO: cancel iterator
         return Die(ctx);
@@ -341,10 +330,8 @@ public:
     }
 
     void Bootstrap(const TActorContext& ctx) {
-        YDB_LOG_NOTICE_CTX(ctx, "With Bootstrap",
-            {"readIteratorLoadScenario", SelfId()},
-            {"id", Id},
-            {"called", ConfingString});
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << SelfId()
+            << " with id# " << Id << " Bootstrap called: " << ConfingString);
 
         Become(&TReadIteratorLoadScenario::StateFunc);
         StartTs = TInstant::Now();
@@ -403,15 +390,11 @@ private:
             AllColumnIds.push_back(column.GetId());
         }
 
-        YDB_LOG_INFO_CTX(ctx, "Resolved target table for scenario",
-            {"readIteratorLoadScenario", Id},
-            {"tablet", TabletId},
-            {"ownerId", OwnerId},
-            {"tableId", TableId},
-            {"path", Target.GetWorkingDir()},
-            {"tableName", Target.GetTableName()},
-            {"columnsCount", AllColumnIds.size()},
-            {"keyColumnCount", KeyColumnIds.size()});
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Id
+            << " will work with tablet# " << TabletId << " with ownerId# " << OwnerId
+            << " with tableId# " << TableId << " resolved for path# "
+            << Target.GetWorkingDir() << "/" << Target.GetTableName()
+            << " with columnsCount# " << AllColumnIds.size() << ", keyColumnCount# " << KeyColumnIds.size());
 
         if (!ChunkSizes.empty()) {
             State = EState::FullScan;
@@ -452,8 +435,7 @@ private:
         auto* actor = CreateReadIteratorScan(request.release(), TabletId, SelfId(), subId, sampleKeys);
         StartedActors.emplace_back(ctx.Register(actor));
 
-        YDB_LOG_INFO_CTX(ctx, "Started fullscan",
-            {"actor", StartedActors.back()});
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "started fullscan actor# " << StartedActors.back());
     }
 
     void Handle(const TEvDataShardLoad::TEvTestLoadFinished::TPtr& ev, const TActorContext& ctx) {
@@ -470,10 +452,9 @@ private:
 
         switch (State) {
         case EState::FullScan: {
-            YDB_LOG_NOTICE_CTX(ctx, "Fullscan with",
-                {"actor", ev->Sender},
-                {"chunkSize", ChunkSizes[ChunkIndex]},
-                {"finished", ev->Get()->ToString()});
+            LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "fullscan actor# " << ev->Sender
+                << " with chunkSize# " << ChunkSizes[ChunkIndex]
+                << " finished: " << ev->Get()->ToString());
             Errors += record.GetReport().GetOperationsError();
             Oks += record.GetReport().GetOperationsOK();
             Results.emplace_back(record.GetReport());
@@ -498,9 +479,8 @@ private:
             return StopWithError(ctx, TStringBuilder() << "TEvTestLoadFinished while in " << State);
         case EState::ReadHeadPoints: {
             Y_ABORT_UNLESS(Inflight == 0);
-            YDB_LOG_INFO_CTX(ctx, "Headread with",
-                {"inflight", Inflights[InflightIndex]},
-                {"finished", ev->Get()->ToString()});
+            LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "headread with inflight# " << Inflights[InflightIndex]
+                << " finished: " << ev->Get()->ToString());
             Errors += record.GetReport().GetOperationsError();
             Oks += record.GetReport().GetOperationsOK();
             Results.emplace_back(record.GetReport());
@@ -523,9 +503,8 @@ private:
     void Handle(TEvPrivate::TEvKeys::TPtr& ev, const TActorContext& ctx) {
         Keys = std::move(ev->Get()->Keys);
 
-        YDB_LOG_INFO_CTX(ctx, "Received",
-            {"readIteratorLoadScenario", Id},
-            {"keyCount", Keys.size()});
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Id
+            << " received keyCount# " << Keys.size());
 
         State = EState::ReadHeadPoints;
         Run(ctx);
@@ -569,19 +548,16 @@ private:
 
         StartedActors.emplace_back(ctx.Register(readActor));
 
-        YDB_LOG_DEBUG_CTX(ctx, "Started read actor with",
-            {"readIteratorLoadScenario", Id},
-            {"id", StartedActors.back()});
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Id
+            << " started read actor with id# " << StartedActors.back());
     }
 
     void Handle(TEvPrivate::TEvPointTimes::TPtr& ev, const TActorContext& ctx) {
         --Inflight;
 
         const auto& requestTimes = ev->Get()->RequestTimes;
-        YDB_LOG_DEBUG_CTX(ctx, "Received point Inflight",
-            {"readIteratorLoadScenario", Id},
-            {"times", requestTimes.size()},
-            {"left", Inflight});
+        LOG_DEBUG_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Id
+            << " received point times# " << requestTimes.size() << ", Inflight left# " << Inflight);
 
         for (auto t: requestTimes) {
             auto ms = t.MilliSeconds();
@@ -637,10 +613,8 @@ private:
         report.SetInfo(ss.Str());
         report.SetSubtestCount(Results.size());
 
-        YDB_LOG_NOTICE_CTX(ctx, "Finished in with report:\n",
-            {"readIteratorLoadScenario", Id},
-            {"delta", delta},
-            {"reportInfo", report.GetInfo()});
+        LOG_NOTICE_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Id
+            << " finished in " << delta << " with report:\n" << report.GetInfo());
 
         ctx.Send(Parent, response.release());
 
@@ -656,15 +630,14 @@ private:
     }
 
     void HandlePoison(const TActorContext& ctx) {
-        YDB_LOG_INFO_CTX(ctx, "Tablet received PoisonPill, going to die",
-            {"readIteratorLoadScenario", Id});
+        LOG_INFO_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Id
+            << " tablet received PoisonPill, going to die");
         Stop(ctx);
     }
 
     void StopWithError(const TActorContext& ctx, const TString& reason) {
-        YDB_LOG_WARN_CTX(ctx, "Stopped with",
-            {"readIteratorLoadScenario", Id},
-            {"error", reason});
+        LOG_WARN_S(ctx, NKikimrServices::DS_LOAD_TEST, "ReadIteratorLoadScenario# " << Id
+            << " stopped with error: " << reason);
 
         ctx.Send(Parent, new TEvDataShardLoad::TEvTestLoadFinished(Id.SubTag, reason));
         Stop(ctx);

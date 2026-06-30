@@ -19,8 +19,6 @@
 #include <util/random/fast.h>
 #include <util/random/shuffle.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_LOAD_TEST
-
 namespace NKikimr {
 
 namespace {
@@ -264,7 +262,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             ui32 blobSize = SizeGenerator.Generate();
             const TLogoBlobID id(tabletId, gen, step, channel, blobSize, BlobCookie++);
             const TRcBuf buffer = GenerateBuffer(id, contentType, nullptr, false, ctx);
-
+            
             auto ev = std::make_unique<TEvBlobStorage::TEvPut>(TEvBlobStorage::TEvPut::TParameters{
                 .BlobId = id,
                 .Buffer = TRope(buffer),
@@ -311,7 +309,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             return ConfirmedBlobs[idx];
         }
 
-        TString ToString() const {
+        TString ToString() {
             return TStringBuilder() << "TInitialAllocation# {"
                 << " PutHandleClass# " << NKikimrBlobStorage::EPutHandleClass_Name(PutHandleClass)
                 << " SizeToWrite# " << SizeToWrite
@@ -329,7 +327,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         ui32 BlobsToWrite = 0;
         ui64 ConfirmedDataSize = 0;
         TVector<TLogoBlobID> ConfirmedBlobs;
-        ui32 CollectedBlobsPerMille = 0;
+        ui32 CollectedBlobsPerMille = 0; 
 
         TInFlightTracker InFlightTracker;
 
@@ -645,9 +643,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             if (goodStatuses.empty() || Count(goodStatuses, ev->Status)) {
                 return true;
             } else {
-                YDB_LOG_ERROR_CTX(ctx, "Received not OK,",
-                    {"printMe", PrintMe()},
-                    {"msg", ev->ToString()});
+                LOG_ERROR_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " received not OK, msg# "
+                        << ev->ToString());
                 IsWorkingNow = false;
                 ctx.Send(ctx.SelfID, new TEvStopTest());
                 return false;
@@ -659,18 +656,15 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             NextWriteTimestamp = TActivationContext::Monotonic();
             NextGarbageCollectionTimestamp = TActivationContext::Monotonic();
             auto ev = std::make_unique<TEvBlobStorage::TEvDiscover>(TabletId, Generation, false, true, TInstant::Max(), 0, true);
-            YDB_LOG_DEBUG_CTX(ctx, "Is bootstrapped, going to send",
-                {"printMe", PrintMe()},
-                {"eventString", ev->ToString()});
+            LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " is bootstrapped, going to send "
+                    << ev->ToString());
             auto callback = [this] (IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvDiscoverResult *>(event);
                 Y_ABORT_UNLESS(res);
                 if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK, NKikimrProto::EReplyStatus::NODATA})) {
                     return;
                 }
-                YDB_LOG_INFO_CTX(ctx, "Received",
-                    {"printMe", PrintMe()},
-                    {"resultString", res->ToString()});
+                LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " received " << res->ToString());
                 Generation = res->BlockedGeneration + 1;
                 IssueTEvBlock(ctx);
             };
@@ -680,25 +674,19 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         void IssueTEvBlock(const TActorContext& ctx) {
             auto ev = std::make_unique<TEvBlobStorage::TEvBlock>(TabletId, Generation, TInstant::Max(),
                     TWriteSource::GroupWriteLoadActor);
-            YDB_LOG_DEBUG_CTX(ctx, "Going to send",
-                {"printMe", PrintMe()},
-                {"ev", ev->ToString()});
+            LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " going to send " << ev->ToString());
             auto callback = [this] (IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvBlockResult *>(event);
                 Y_ABORT_UNLESS(res);
                 if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK, NKikimrProto::EReplyStatus::ALREADY})) {
                     return;
                 } else if (res->Status == NKikimrProto::EReplyStatus::ALREADY && GroupBlockRetries-- > 0) {
-                    YDB_LOG_INFO_CTX(ctx, "Received",
-                        {"printMe", PrintMe()},
-                        {"resultString", res->ToString()});
+                    LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " received " << res->ToString());
                     IssueTEvBlock(ctx);
                     return;
                 }
 
-                YDB_LOG_INFO_CTX(ctx, "Received",
-                    {"printMe", PrintMe()},
-                    {"resultString", res->ToString()});
+                LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " received " << res->ToString());
                 // For work use next generation after blocked
                 ++Generation;
                 IssueLastBlob(ctx);
@@ -735,9 +723,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         void IssueTEvCollectGarbageOnce(const TActorContext& ctx) {
             auto ev = TEvBlobStorage::TEvCollectGarbage::CreateHardBarrier(TabletId, Generation, GarbageCollectStep,
                     Channel, Generation, 0, TInstant::Max(), TWriteSource::GroupWriteLoadActor);
-            YDB_LOG_DEBUG_CTX(ctx, "Going to send",
-                {"printMe", PrintMe()},
-                {"ev", ev->ToString()});
+            LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " going to send " << ev->ToString());
             ++GarbageCollectStep;
             auto callback = [this] (IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult *>(event);
@@ -746,9 +732,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK})) {
                     return;
                 }
-                YDB_LOG_INFO_CTX(ctx, "Received",
-                    {"printMe", PrintMe()},
-                    {"resultString", res->ToString()});
+                LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " received " << res->ToString());
                 MakeInitialAllocation(ctx);
             };
 
@@ -777,9 +761,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 Self.InitialAllocationCompleted(ctx);
                 return;
             }
-            YDB_LOG_DEBUG_CTX(ctx, "Going to make initial allocation,",
-                {"printMe", PrintMe()},
-                {"initialAllocation", InitialAllocation});
+            LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " going to make initial allocation,"
+                    << InitialAllocation.ToString());
             while (InitialAllocation.CanSendRequest()) {
                 IssueInitialPut(ctx);
             }
@@ -807,9 +790,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
         void SetKeepFlagsOnInitialAllocation(const TActorContext& ctx) {
             auto ev = InitialAllocation.ManageKeepFlags(TabletId, Generation, GarbageCollectStep, Channel, true);
 
-            YDB_LOG_DEBUG_CTX(ctx, "Going to set keep flags on initially allocated blobs,",
-                {"printMe", PrintMe()},
-                {"ev", ev->Print(false)});
+            LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " going to set keep flags on initally allocated blobs, ev#"
+                    << ev->Print(false));
             auto callback = [this](IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult*>(event);
                 Y_ABORT_UNLESS(res);
@@ -826,9 +808,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
             auto ev = TEvBlobStorage::TEvCollectGarbage::CreateHardBarrier(TabletId, Generation, GarbageCollectStep,
                     Channel, Generation, Max<ui32>(), TInstant::Max(),
                     TWriteSource::GroupWriteLoadActor);
-            YDB_LOG_DEBUG_CTX(ctx, "End working, going to send",
-                {"printMe", PrintMe()},
-                {"ev", ev->ToString()});
+            LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " end working, going to send " << ev->ToString());
             ++GarbageCollectStep;
             auto callback = [this](IEventBase *event, const TActorContext& ctx) {
                 auto *res = dynamic_cast<TEvBlobStorage::TEvCollectGarbageResult *>(event);
@@ -838,9 +818,7 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                 if (!CheckStatus(ctx, res, {NKikimrProto::EReplyStatus::OK})) {
                     return;
                 }
-                YDB_LOG_INFO_CTX(ctx, "Received",
-                    {"printMe", PrintMe()},
-                    {"resultString", res->ToString()});
+                LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, PrintMe() << " received " << res->ToString());
 
                 if (IsWorkingNow) {
                     ctx.Send(ctx.SelfID, new TEvStopTest());
@@ -1318,8 +1296,8 @@ class TLogWriterLoadTestActor : public TActorBootstrapped<TLogWriterLoadTestActo
                         TEvBlobStorage::TEvGetResult::TResponse response = res->Responses[i];
                         TString buffer = response.Buffer.ConvertToString();
                         if (!ValidateBuffer(response.Id, buffer.data(), ContentType)) {
-                            YDB_LOG_ERROR_CTX(ctx, "Data corruption detected,",
-                                {"blobId", response.Id});
+                            LOG_ERROR_S(ctx, NKikimrServices::BS_LOAD_TEST,
+                                    "Data corruption detected, BlobId# " << response.Id.ToString());
                         }
                     }
                 }
@@ -1610,7 +1588,7 @@ public:
         if (TestDuration.Defined()) {
             EarlyStop = TActivationContext::Monotonic() - TestStartTime < TestDuration;
         }
-        YDB_LOG_DEBUG_CTX(ctx, "Load tablet received PoisonPill, going to die");
+        LOG_DEBUG_S(ctx, NKikimrServices::BS_LOAD_TEST, "Load tablet received PoisonPill, going to die");
         for (auto& writer : TabletWriters) {
             writer->StopWorking(ctx); // Sends TEvStopTest then all garbage is collected
         }

@@ -9,7 +9,6 @@
 #include <util/random/fast.h>
 #include <util/generic/queue.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_LOAD_TEST
 
 namespace NKikimr {
 class TPDiskLogWriterLoadTestActor;
@@ -356,13 +355,10 @@ public:
 
     void Bootstrap(const TActorContext& ctx) {
         Become(&TPDiskLogWriterLoadTestActor::StateFunc);
-        YDB_LOG_INFO_CTX(ctx, "Schedule PoisonPill",
-            {"tag", Tag});
+        LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " Schedule PoisonPill");
         ctx.Schedule(TDuration::MilliSeconds(MonitoringUpdateCycleMs), new TEvUpdateMonitoring);
 
-        YDB_LOG_INFO_CTX(ctx, "Bootstrap,",
-            {"tag", Tag},
-            {"workersCount", Workers.size()});
+        LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " Bootstrap, Workers.size# " << Workers.size());
         if (IsWardenlessTest) {
             for (auto& worker : Workers) {
                 AppData(ctx)->Dcb->RegisterLocalControl(worker->MaxInFlight,
@@ -370,8 +366,7 @@ public:
                 SendRequest(ctx, worker->GetYardInit(PDiskGuid));
             }
         } else {
-            YDB_LOG_INFO_CTX(ctx, "Send TEvRegisterPDiskLoadActor",
-                {"tag", Tag});
+            LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " Send TEvRegisterPDiskLoadActor");
             Send(MakeBlobStorageNodeWardenID(ctx.SelfID.NodeId()), new TEvRegisterPDiskLoadActor());
         }
         OwnerInitInProgress = Workers.size();
@@ -380,9 +375,8 @@ public:
     void Handle(TEvRegisterPDiskLoadActorResult::TPtr& ev, const TActorContext& ctx) {
         auto msg = ev->Get();
 
-        YDB_LOG_INFO_CTX(ctx, "TEvRegisterPDiskLoadActorResult received,",
-            {"tag", Tag},
-            {"ownerRound", (ui32)msg->OwnerRound});
+        LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
+                << " TEvRegisterPDiskLoadActorResult received, ownerRound# " << (ui32)msg->OwnerRound);
         for (auto& worker : Workers) {
             worker->OwnerRound = msg->OwnerRound + 1;
             SendRequest(ctx, worker->GetYardInit(PDiskGuid));
@@ -394,17 +388,15 @@ public:
         if (msg->Status != NKikimrProto::OK) {
             TStringStream str;
             str << "TEvYardInitResult is not OK, msg.ToString()# " << msg->ToString();
-            YDB_LOG_ERROR_CTX(ctx, "TEvYardInitResult is not OK",
-                {"msg", msg->ToString()});
+            LOG_ERROR_S(ctx, NKikimrServices::BS_LOAD_TEST, str.Str());
             ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, nullptr, str.Str()));
             Die(ctx);
             return;
         }
 
-        YDB_LOG_INFO_CTX(ctx, "TEvYardInitResult,",
-            {"tag", Tag},
-            {"owner", (ui32)msg->PDiskParams->Owner},
-            {"ownerRound", msg->PDiskParams->OwnerRound});
+        LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " TEvYardInitResult, "
+                << " Owner# " << (ui32)msg->PDiskParams->Owner
+                << " OwnerRound# " << msg->PDiskParams->OwnerRound);
 
         for (auto& worker : Workers) {
             if (!worker->PDiskParams) {
@@ -412,10 +404,8 @@ public:
                 worker->OwnerRound = Max(worker->OwnerRound, worker->PDiskParams->OwnerRound);
                 auto logRead = worker->GetLogRead();
                 Y_ABORT_UNLESS(logRead);
-                YDB_LOG_INFO_CTX(ctx, "Going to send",
-                    {"tag", Tag},
-                    {"owner", (ui32)worker->PDiskParams->Owner},
-                    {"firstTEvLogRead", logRead->ToString()});
+                LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " owner# "
+                        << (ui32)worker->PDiskParams->Owner << " going to send first TEvLogRead# " << logRead->ToString());
                 SendRequest(ctx, std::move(logRead));
                 break;
             }
@@ -430,10 +420,8 @@ public:
             if (worker->PDiskParams && worker->PDiskParams->Owner == msg->Owner) {
                 if (worker->FindLastWrittenLsn(msg)) {
                     // Lsn is found
-                    YDB_LOG_INFO_CTX(ctx, "Found first Lsn",
-                        {"tag", Tag},
-                        {"owner", (ui32)msg->Owner},
-                        {"toWrite", worker->Lsn});
+                    LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " owner# " << (ui32)msg->Owner
+                            << " found first Lsn to write# " << worker->Lsn);
 
                     --OwnerInitInProgress;
                 } else {
@@ -450,12 +438,12 @@ public:
             ctx.Schedule(TDuration::Seconds(DurationSeconds), new TEvents::TEvPoisonPill);
             TestStartTime = TAppData::TimeProvider->Now();
             if (IsDying) {
-                YDB_LOG_INFO_CTX(ctx, "Last TEvReadLogResult, all workers is initialized, but true, so starting death process",
-                    {"tag", Tag});
+                LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " last TEvReadLogResult, "
+                        << " all workers is initialized, but IsDying# true, so starting death process");
                 StartDeathProcess(ctx);
             } else {
-                YDB_LOG_INFO_CTX(ctx, "Last TEvReadLogResult, all workers is initialized, start test",
-                    {"tag", Tag});
+                LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " last TEvReadLogResult, "
+                        << " all workers is initialized, start test");
                 SendWriteRequests(ctx);
             }
         }
@@ -468,11 +456,11 @@ public:
     void HandlePoisonPill(const TActorContext& ctx) {
         IsDying = true;
         if (OwnerInitInProgress) {
-            YDB_LOG_INFO_CTX(ctx, "HandlePoisonPill, not all workers is initialized, so wait them to end initialization",
-                {"tag", Tag});
+            LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " HandlePoisonPill, "
+                    << "not all workers is initialized, so wait them to end initialization");
         } else {
-            YDB_LOG_INFO_CTX(ctx, "HandlePoisonPill, all workers is initialized, so starting death process",
-                {"tag", Tag});
+            LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " HandlePoisonPill, "
+                    << "all workers is initialized, so starting death process");
             StartDeathProcess(ctx);
         }
     }
@@ -493,9 +481,8 @@ public:
     void HandleEnd(TEvRegisterPDiskLoadActorResult::TPtr& ev, const TActorContext& ctx) {
         auto msg = ev->Get();
 
-        YDB_LOG_INFO_CTX(ctx, "TEvRegisterPDiskLoadActorResult received,",
-            {"tag", Tag},
-            {"ownerRound", msg->OwnerRound});
+        LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag
+                << " TEvRegisterPDiskLoadActorResult received, ownerRound# " << msg->OwnerRound);
         for (auto& worker : Workers) {
             worker->OwnerRound = msg->OwnerRound + 1;
             worker->PoisonPill();
@@ -522,17 +509,15 @@ public:
         if (msg->Status != NKikimrProto::OK) {
             TStringStream str;
             str << "TEvYardInitResult is not OK, msg.ToString()# " << msg->ToString();
-            YDB_LOG_ERROR_CTX(ctx, "TEvYardInitResult is not OK",
-                {"msg", msg->ToString()});
+            LOG_ERROR_S(ctx, NKikimrServices::BS_LOAD_TEST, str.Str());
             ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, nullptr, str.Str()));
             Die(ctx);
             return;
         }
 
-        YDB_LOG_INFO_CTX(ctx, "End of work, TEvYardInitResult,",
-            {"tag", Tag},
-            {"owner", (ui32)msg->PDiskParams->Owner},
-            {"ownerRound", msg->PDiskParams->OwnerRound});
+        LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " end of work, TEvYardInitResult, "
+                << " Owner# " << (ui32)msg->PDiskParams->Owner
+                << " OwnerRound# " << msg->PDiskParams->OwnerRound);
 
         for (auto& worker : Workers) {
             if (worker->PDiskParams->Owner == msg->PDiskParams->Owner) {
@@ -568,8 +553,7 @@ public:
         if (msg->Status != NKikimrProto::OK) {
             TStringStream str;
             str << "TEvHarakiriResult is not OK, msg.ToString()# " << msg->ToString();
-            YDB_LOG_ERROR_CTX(ctx, "TEvHarakiriResult is not OK",
-                {"msg", msg->ToString()});
+            LOG_ERROR_S(ctx, NKikimrServices::BS_LOAD_TEST, str.Str());
             ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, nullptr, str.Str()));
             Die(ctx);
             return;
@@ -579,18 +563,16 @@ public:
 
         if (!--HarakiriInFlight) {
             for (auto& worker : Workers) {
-                YDB_LOG_INFO_CTX(ctx, "End of work,",
-                    {"tag", Tag},
-                    {"owner", (ui32)worker->PDiskParams->Owner},
-                    {"reallyWrittenBytes", worker->GetReallyWrittenBytes()},
-                    {"globalWrittenBytes", worker->GetGlobalWrittenBytes()});
+                LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " End of work,"
+                        << " owner# " << (ui32)worker->PDiskParams->Owner
+                        << " GetReallyWrittenBytes()# " << worker->GetReallyWrittenBytes()
+                        << " GetGlobalWrittenBytes()# " << worker->GetGlobalWrittenBytes());
             }
             TIntrusivePtr<TEvLoad::TLoadReport> report = new TEvLoad::TLoadReport();
             report->LoadType = TEvLoad::TLoadReport::LOAD_LOG_WRITE;
             report->Duration = TAppData::TimeProvider->Now() - TestStartTime;
             ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, report, "OK"));
-            YDB_LOG_INFO_CTX(ctx, "End of work, TEvLoadTestFinished is sent",
-                {"tag", Tag});
+            LOG_INFO_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " End of work, TEvLoadTestFinished is sent");
             Die(ctx);
         }
 
@@ -611,8 +593,7 @@ public:
     ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
     void SendWriteRequests(const TActorContext& ctx) {
-        YDB_LOG_TRACE_CTX(ctx, "SendWriteRequests",
-            {"tag", Tag});
+        LOG_TRACE_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " SendWriteRequests");
         for (auto& worker : Workers) {
             auto now = TAppData::TimeProvider->Now();
             while (std::unique_ptr<NPDisk::TEvLog> ev = worker->TrySend(WrittenBytes)) {
@@ -632,8 +613,7 @@ public:
         if (msg->Status != NKikimrProto::OK) {
             TStringStream str;
             str << " TEvLogResult is not OK, msg.ToString()# " << msg->ToString();
-            YDB_LOG_ERROR_CTX(ctx, "TEvLogResult is not OK",
-                {"msg", msg->ToString()});
+            LOG_ERROR_S(ctx, NKikimrServices::BS_LOAD_TEST, str.Str());
             ctx.Send(Parent, new TEvLoad::TEvLoadTestFinished(Tag, nullptr, str.Str()));
             Die(ctx);
             return;
@@ -649,9 +629,8 @@ public:
 
             worker->OnLogResult(res, stats.Size);
             WrittenBytes = Max(WrittenBytes, worker->GetGlobalWrittenBytes());
-            YDB_LOG_TRACE_CTX(ctx, "TEvLogResult,",
-                {"tag", Tag},
-                {"writtenBytes", WrittenBytes});
+            LOG_TRACE_S(ctx, NKikimrServices::BS_LOAD_TEST, "Tag# " << Tag << " TEvLogResult, "
+                    << " WrittenBytes# " << WrittenBytes);
             InFlightLogWrites.erase(it);
         }
 

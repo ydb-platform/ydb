@@ -56,7 +56,11 @@
 #include <tuple>
 #include <utility>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_LOAD_TEST
+#define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsLoadTablet] " << stream)
+#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsLoadTablet] " << stream)
+#define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsLoadTablet] " << stream)
+#define LOG_D(stream) LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsLoadTablet] " << stream)
+#define LOG_T(stream) LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BS_LOAD_TEST, "[NbsLoadTablet] " << stream)
 
 namespace NKikimr::NNbsDbgLike {
 
@@ -648,11 +652,10 @@ public:
     }
 
     bool HandleHook(STFUNC_SIG) override {
-        YDB_LOG_DEBUG("[NbsLoadTablet] HandleHook ev",
-            {"type", ev->GetTypeRewrite()},
-            {"name", ev->GetTypeName()},
-            {"sender", ev->Sender},
-            {"cookie", ev->Cookie});
+        LOG_D("HandleHook ev type# " << ev->GetTypeRewrite()
+            << " name# " << ev->GetTypeName()
+            << " Sender# " << ev->Sender
+            << " Cookie# " << ev->Cookie);
         switch (ev->GetTypeRewrite()) {
             HFunc(TEvLoad::TEvNbsLoadTabletAllocateGroups, Handle);
             HFunc(TEvLoad::TEvNbsLoadTabletDelete, Handle);
@@ -754,26 +757,23 @@ public:
     }
 
     void OnDetach(const TActorContext& ctx) override {
-        YDB_LOG_NOTICE("[NbsLoadTablet] OnDetach",
-            {"tabletId", TabletID()},
-            {"generation", Generation()});
+        LOG_N("OnDetach TabletId# " << TabletID()
+            << " Generation# " << Generation());
         Cleanup();
         NKeyValue::TKeyValueFlat::OnDetach(ctx);
     }
 
     void OnTabletDead(TEvTablet::TEvTabletDead::TPtr& ev, const TActorContext& ctx) override {
-        YDB_LOG_NOTICE("[NbsLoadTablet] OnTabletDead",
-            {"tabletId", TabletID()},
-            {"generation", Generation()},
-            {"reason", ev->Get()->Reason});
+        LOG_N("OnTabletDead TabletId# " << TabletID()
+            << " Generation# " << Generation()
+            << " Reason# " << ev->Get()->Reason);
         Cleanup();
         NKeyValue::TKeyValueFlat::OnTabletDead(ev, ctx);
     }
 
     void PassAway() override {
-        YDB_LOG_NOTICE("[NbsLoadTablet] PassAway",
-            {"tabletId", TabletID()},
-            {"generation", Generation()});
+        LOG_N("PassAway TabletId# " << TabletID()
+            << " Generation# " << Generation());
         Cleanup();
         NKeyValue::TKeyValueFlat::PassAway();
     }
@@ -804,10 +804,9 @@ private:
     // TEvConnect from KickOffPeerConnect) gets its reply routed to the
     // executor, which has no handler for it and silently drops it.
     void OnLoadComplete(const TActorContext& ctx) {
-        YDB_LOG_INFO("[NbsLoadTablet] Load complete",
-            {"tabletId", TabletID()},
-            {"phase", Phase},
-            {"dbgs", Dbgs.size()});
+        LOG_I("Load complete TabletId# " << TabletID()
+            << " Phase# " << Phase
+            << " Dbgs# " << Dbgs.size());
         SignalTabletActive(SelfId());
         EmitPhaseGauge();
         if (Phase == ETabletPhase::Ready) {
@@ -1006,16 +1005,17 @@ public:
 
     void Complete(const TActorContext& ctx) override {
         if (!DroppedDbgIndices.empty()) {
-            YDB_LOG_ERROR("[NbsLoadTablet] Dropped malformed Dbgs row(s) at boot — first index tablet rolls back to UNINITIALIZED so the user can re-Create",
-                {"droppedDbgIndicesCount", DroppedDbgIndices.size()},
-                {"droppedDbgIndex", DroppedDbgIndices.front()});
+            LOG_E("Dropped " << DroppedDbgIndices.size()
+                << " malformed Dbgs row(s) at boot — first index "
+                << DroppedDbgIndices.front()
+                << "; tablet rolls back to UNINITIALIZED so the user can re-Create.");
         }
         Self->AllocConfigSerialized = std::move(AllocConfigSerialized);
 
         bool malformedConfig = false;
         if (!Self->AllocConfigSerialized.empty()) {
             if (!Self->AllocConfig.ParseFromString(Self->AllocConfigSerialized)) {
-                YDB_LOG_ERROR("[NbsLoadTablet] Malformed AllocConfig blob in tablet schema; rolling back to UNINITIALIZED");
+                LOG_E("Malformed AllocConfig blob in tablet schema; rolling back to UNINITIALIZED");
                 malformedConfig = true;
             }
         }
@@ -1028,9 +1028,9 @@ public:
         bool hasGap = false;
         for (ui32 i = 0; i < Dbgs.size(); ++i) {
             if (Dbgs[i].DbgIndex != i) {
-                YDB_LOG_ERROR("[NbsLoadTablet] Gap in loaded Dbgs at position rolling back to UNINITIALIZED so the user can re-Create",
-                    {"i", i},
-                    {"dbgIndex", Dbgs[i].DbgIndex});
+                LOG_E("Gap in loaded Dbgs at position " << i
+                    << " (DbgIndex=" << Dbgs[i].DbgIndex
+                    << "); rolling back to UNINITIALIZED so the user can re-Create.");
                 hasGap = true;
                 break;
             }
@@ -1223,10 +1223,9 @@ void TNbsDbgLikeLoadTablet::Handle(TEvLoad::TEvNbsLoadTabletAllocateGroups::TPtr
     const TActorContext& ctx)
 {
     EnsureCounters(ctx);
-    YDB_LOG_NOTICE("[NbsLoadTablet] Create request",
-        {"tabletId", TabletID()},
-        {"sender", ev->Sender},
-        {"phase", Phase});
+    LOG_N("Create request TabletId# " << TabletID()
+        << " Sender# " << ev->Sender
+        << " Phase# " << Phase);
 
     auto reply = [&](NKikimr::ENbsLoadTabletStatus s, const TString& err = {}) {
         auto r = std::make_unique<TEvLoad::TEvNbsLoadTabletAllocateGroupsResult>();
@@ -1290,16 +1289,14 @@ void TNbsDbgLikeLoadTablet::SendBscAllocate(const TActorContext& ctx, bool deall
     if (!BscPipeClient) {
         BscPipeClient = ctx.Register(NTabletPipe::CreateClient(
             ctx.SelfID, MakeBSControllerID()));
-        YDB_LOG_DEBUG("[NbsLoadTablet] Created BSC pipe client",
-            {"tabletId", TabletID()},
-            {"bscPipeClient", BscPipeClient});
+        LOG_D("Created BSC pipe client TabletId# " << TabletID()
+            << " BscPipeClient# " << BscPipeClient);
     }
 
-    YDB_LOG_DEBUG("[NbsLoadTablet] Send BSC request",
-        {"dealloc", (dealloc ? "deallocate" : "allocate")},
-        {"tabletId", TabletID()},
-        {"numDirectBlockGroups", AllocConfig.GetNumDirectBlockGroups()},
-        {"attempt", (BscRetryAttempts + 1)});
+    LOG_D("Send BSC " << (dealloc ? "deallocate" : "allocate")
+        << " request TabletId# " << TabletID()
+        << " NumDirectBlockGroups# " << AllocConfig.GetNumDirectBlockGroups()
+        << " Attempt# " << (BscRetryAttempts + 1));
     auto request = std::make_unique<TEvBlobStorage::TEvControllerAllocateDDiskBlockGroup>();
     BuildAllocateRequest(request->Record, AllocConfig, dealloc);
     BscRequestSentAt = ctx.Now();
@@ -1332,19 +1329,16 @@ void TNbsDbgLikeLoadTablet::ScheduleBscRetry(const TActorContext& ctx) {
     if (backoff > kBscRetryMaxBackoff) {
         backoff = kBscRetryMaxBackoff;
     }
-    YDB_LOG_NOTICE("[NbsLoadTablet] BSC retry",
-        {"bscRetryAttempts", BscRetryAttempts},
-        {"backoff", backoff});
+    LOG_N("BSC retry " << BscRetryAttempts << " in " << backoff);
     BscRetryScheduled = true;
     ctx.Schedule(backoff, new TEvents::TEvWakeup(kWakeupBscRetry));
 }
 
 void TNbsDbgLikeLoadTablet::RetryBscOperation(const TActorContext& ctx) {
     BscRetryScheduled = false;
-    YDB_LOG_DEBUG("[NbsLoadTablet] Retry BSC operation",
-        {"tabletId", TabletID()},
-        {"phase", Phase},
-        {"attempt", BscRetryAttempts});
+    LOG_D("Retry BSC operation TabletId# " << TabletID()
+        << " Phase# " << Phase
+        << " Attempt# " << BscRetryAttempts);
     if (Phase == ETabletPhase::Allocating) {
         SendBscAllocate(ctx, /*dealloc=*/false);
     } else if (Phase == ETabletPhase::Deleting) {
@@ -1396,9 +1390,8 @@ void TNbsDbgLikeLoadTablet::Handle(
     if (Phase == ETabletPhase::Deleting) {
         const auto status = rec.GetStatus();
         const bool ok = (status == NKikimrProto::OK || status == NKikimrProto::ALREADY);
-        YDB_LOG_DEBUG("[NbsLoadTablet] BSC dealloc reply",
-            {"tabletId", TabletID()},
-            {"status", NKikimrProto::EReplyStatus_Name(status)});
+        LOG_D("BSC dealloc reply TabletId# " << TabletID()
+            << " Status# " << NKikimrProto::EReplyStatus_Name(status));
         if (ok) {
             if (BscDeallocOk) {
                 BscDeallocOk->Inc();
@@ -1409,9 +1402,8 @@ void TNbsDbgLikeLoadTablet::Handle(
             }
             // Continue and clear local state anyway — the user can re-run if BSC
             // still has a phantom DBG (BSC tolerates re-dealloc).
-            YDB_LOG_ERROR("[NbsLoadTablet] BSC dealloc returned clearing local state regardless",
-                {"replyStatus", NKikimrProto::EReplyStatus_Name(status)},
-                {"errorReason", rec.GetErrorReason()});
+            LOG_E("BSC dealloc returned " << NKikimrProto::EReplyStatus_Name(status)
+                << " " << rec.GetErrorReason() << "; clearing local state regardless.");
         }
         Execute(CreateTxClearAll(), ctx);
         return;
@@ -1427,9 +1419,8 @@ void TNbsDbgLikeLoadTablet::Handle(
         return;
     }
 
-    YDB_LOG_DEBUG("[NbsLoadTablet] BSC alloc parsed",
-        {"tabletId", TabletID()},
-        {"dbgs", parsed->size()});
+    LOG_D("BSC alloc parsed TabletId# " << TabletID()
+        << " Dbgs# " << parsed->size());
     Execute(CreateTxStoreDbgs(std::move(*parsed)), ctx);
 }
 
@@ -1439,10 +1430,9 @@ void TNbsDbgLikeLoadTablet::Handle(TEvLoad::TEvNbsLoadTabletDelete::TPtr& ev,
     const TActorContext& ctx)
 {
     EnsureCounters(ctx);
-    YDB_LOG_NOTICE("[NbsLoadTablet] Delete request",
-        {"tabletId", TabletID()},
-        {"sender", ev->Sender},
-        {"phase", Phase});
+    LOG_N("Delete request TabletId# " << TabletID()
+        << " Sender# " << ev->Sender
+        << " Phase# " << Phase);
     auto reply = [&](NKikimr::ENbsLoadTabletStatus s, const TString& err = {}) {
         auto r = std::make_unique<TEvLoad::TEvNbsLoadTabletDeleteResult>();
         r->Record.SetStatus(s);
@@ -1531,10 +1521,9 @@ void TNbsDbgLikeLoadTablet::SpawnDbgActors(const TActorContext& ctx) {
     PoisonDbgActors();
     DbgActors.resize(Dbgs.size());
     DbgPbConnected.assign(Dbgs.size(), 0);
-    YDB_LOG_DEBUG("[NbsLoadTablet] Spawn per-DBG worker actors",
-        {"tabletId", TabletID()},
-        {"generation", Generation()},
-        {"dbgs", Dbgs.size()});
+    LOG_D("Spawn per-DBG worker actors TabletId# " << TabletID()
+        << " Generation# " << Generation()
+        << " Dbgs# " << Dbgs.size());
     for (ui32 i = 0; i < Dbgs.size(); ++i) {
         // Routing maps address -> position in DbgActors[], while workers identify
         // themselves by logical DbgIndex and GetSummary indexes DbgPbConnected by it.
@@ -1586,10 +1575,8 @@ void TNbsDbgLikeLoadTablet::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev,
     const auto& msg = ev->Get()->Record;
     const TActorId origin = ev->Sender;
     const ui64 cookie = ev->Cookie;
-    YDB_LOG_TRACE("[NbsLoadTablet] Route NbsWrite",
-        {"cookie", cookie},
-        {"addr", msg.GetAddress()},
-        {"size", msg.GetSizeBytes()});
+    LOG_T("Route NbsWrite Cookie# " << cookie << " Addr# " << msg.GetAddress()
+        << " Size# " << msg.GetSizeBytes());
     if (Phase != ETabletPhase::Ready || IoSizeBytes == 0 || BytesPerDbg == 0) {
         Send(origin, new TEvLoad::TEvNbsWriteResult(NBSIO_TABLET_NOT_READY,
             "Phase not Ready or IoSizeBytes/BytesPerDbg not set"), 0, cookie);
@@ -1615,10 +1602,8 @@ void TNbsDbgLikeLoadTablet::HandleNbsRead(TEvLoad::TEvNbsRead::TPtr& ev,
     const auto& msg = ev->Get()->Record;
     const TActorId origin = ev->Sender;
     const ui64 cookie = ev->Cookie;
-    YDB_LOG_TRACE("[NbsLoadTablet] Route NbsRead",
-        {"cookie", cookie},
-        {"addr", msg.GetAddress()},
-        {"size", msg.GetSizeBytes()});
+    LOG_T("Route NbsRead Cookie# " << cookie << " Addr# " << msg.GetAddress()
+        << " Size# " << msg.GetSizeBytes());
     if (Phase != ETabletPhase::Ready || IoSizeBytes == 0 || BytesPerDbg == 0) {
         Send(origin, new TEvLoad::TEvNbsReadResult(NBSIO_TABLET_NOT_READY,
             "Phase not Ready or IoSizeBytes/BytesPerDbg not set"), 0, cookie);
@@ -1640,11 +1625,10 @@ void TNbsDbgLikeLoadTablet::HandleConfigureTablet(
     TEvLoad::TEvConfigureTablet::TPtr& ev, const TActorContext& ctx)
 {
     const auto& cfg = ev->Get()->Record;
-    YDB_LOG_INFO("[NbsLoadTablet] Proxy HandleConfigureTablet",
-        {"tabletId", TabletID()},
-        {"numDirectBlockGroupsToUse", cfg.GetNumDirectBlockGroupsToUse()},
-        {"ioSizeBytes", cfg.GetIoSizeBytes()},
-        {"dbgs", Dbgs.size()});
+    LOG_I("Proxy HandleConfigureTablet TabletId# " << TabletID()
+        << " NumDirectBlockGroupsToUse# " << cfg.GetNumDirectBlockGroupsToUse()
+        << " IoSizeBytes# " << cfg.GetIoSizeBytes()
+        << " Dbgs# " << Dbgs.size());
 
     EnsureCounters(ctx);
     RecomputeRouting(cfg);
@@ -1745,16 +1729,14 @@ void TNbsDbgLikeLoadTablet::RenderHtml(IOutputStream& out) const {
 
 void TNbsDbgLikeActor::Bootstrap() {
     Become(&TNbsDbgLikeActor::StateWork);
-    YDB_LOG_DEBUG("[NbsLoadTablet] Worker Bootstrap",
-        {"DBG", MyDbgIndex},
-        {"generation", Generation()},
-        {"hostsPerDbg", HostsPerDbg()});
+    LOG_D("Worker Bootstrap DBG# " << MyDbgIndex
+        << " Generation# " << Generation()
+        << " HostsPerDbg# " << HostsPerDbg());
     KickOffPeerConnect();
 }
 
 void TNbsDbgLikeActor::HandlePoison() {
-    YDB_LOG_NOTICE("[NbsLoadTablet] Worker poison",
-        {"DBG", MyDbgIndex});
+    LOG_N("Worker poison DBG# " << MyDbgIndex);
     DisconnectAllPeers();
     // Reconcile the shared root up/down gauges: subtract whatever this worker
     // still has in flight so a poisoned worker cannot leak Pending/BytesInFlight
@@ -1790,10 +1772,9 @@ void TNbsDbgLikeActor::ReportReadiness() {
 
 void TNbsDbgLikeActor::KickOffPeerConnect() {
     const ui32 hostsPerDbg = HostsPerDbg();
-    YDB_LOG_DEBUG("[NbsLoadTablet] Worker peer pre-connect",
-        {"DBG", MyDbgIndex},
-        {"generation", Generation()},
-        {"peers", (2 * hostsPerDbg)});
+    LOG_D("Worker peer pre-connect DBG# " << MyDbgIndex
+        << " Generation# " << Generation()
+        << " Peers# " << (2 * hostsPerDbg));
     for (ui32 k = 0; k < hostsPerDbg; ++k) {
         ConnectPeer(k, /*isPb=*/true);
         ConnectPeer(k, /*isPb=*/false);
@@ -1830,11 +1811,9 @@ void TNbsDbgLikeActor::HandlePeerConnect(NDDisk::TEvConnectResult::TPtr& ev) {
     auto& st = isPb ? PB[k] : DD[k];
     st.ConnectInFlight = false;
     const auto& rec = ev->Get()->Record;
-    YDB_LOG_DEBUG("[NbsLoadTablet] Worker HandlePeerConnect",
-        {"DBG", MyDbgIndex},
-        {"storageType", (isPb ? "PB" : "DD")},
-        {"k", k},
-        {"status", NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(rec.GetStatus())});
+    LOG_D("Worker HandlePeerConnect DBG# " << MyDbgIndex
+        << " " << (isPb ? "PB" : "DD") << k
+        << " Status# " << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(rec.GetStatus()));
     if (rec.GetStatus() == NKikimrBlobStorage::NDDisk::TReplyStatus::OK) {
         st.Connected = true;
         st.Guid = rec.GetDDiskInstanceGuid();
@@ -1849,8 +1828,7 @@ void TNbsDbgLikeActor::HandlePeerConnect(NDDisk::TEvConnectResult::TPtr& ev) {
             }
         }
         if (allConnected) {
-            YDB_LOG_DEBUG("[NbsLoadTablet] Worker AllConnected — populating DbgState",
-                {"DBG", MyDbgIndex});
+            LOG_D("Worker AllConnected DBG# " << MyDbgIndex << " — populating DbgState");
             PopulateDbgState();
         }
         ReportReadiness();
@@ -1866,12 +1844,10 @@ void TNbsDbgLikeActor::HandlePeerConnect(NDDisk::TEvConnectResult::TPtr& ev) {
             Dbg.DDConnected.reset(k);
         }
         ReportReadiness();
-        YDB_LOG_DEBUG("[NbsLoadTablet] Worker pre-connect failed DBG",
-            {"directBlockGroupId", DbgInfo.DirectBlockGroupId},
-            {"storageType", (isPb ? "PB" : "DD")},
-            {"k", k},
-            {"replyStatus", NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(rec.GetStatus())},
-            {"errorReason", rec.GetErrorReason()});
+        LOG_D("Worker pre-connect failed DBG " << DbgInfo.DirectBlockGroupId
+            << " " << (isPb ? "PB" : "DD") << k << ": "
+            << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(rec.GetStatus())
+            << " " << rec.GetErrorReason());
     }
 }
 
@@ -1943,10 +1919,9 @@ void TNbsDbgLikeActor::PopulateDbgState() {
         dst.Lsns.reserve(perDbg);
         dst.ReadyToErase.reserve(perDbg);
     }
-    YDB_LOG_DEBUG("[NbsLoadTablet] Worker PopulateDbgState",
-        {"DBG", MyDbgIndex},
-        {"PBConnectedBefore", dst.PBConnected.count()},
-        {"DDConnectedBefore", dst.DDConnected.count()});
+    LOG_D("Worker PopulateDbgState DBG# " << MyDbgIndex
+        << " PBConnected_before# " << dst.PBConnected.count()
+        << " DDConnected_before# " << dst.DDConnected.count());
     const auto& src = DbgInfo;
     const ui32 hostsPerDbg = HostsPerDbg();
     dst.DbgIndex = src.DbgIndex;
@@ -2170,10 +2145,7 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
     const auto& msg = ev->Get()->Record;
     const TActorId origin = ev->Sender;
     const ui64 cookie = ev->Cookie;
-    YDB_LOG_TRACE("[NbsLoadTablet] HandleNbsWrite",
-        {"cookie", cookie},
-        {"addr", msg.GetAddress()},
-        {"size", msg.GetSizeBytes()});
+    LOG_T("HandleNbsWrite Cookie# " << cookie << " Addr# " << msg.GetAddress() << " Size# " << msg.GetSizeBytes());
 
     if (IoSizeBytes == 0) {
         ReplyWriteErr(origin, cookie, NBSIO_NOT_CONFIGURED, "IoSizeBytes not set");
@@ -2187,11 +2159,10 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
 
     const auto decoded = DecodeAddress(msg.GetAddress(), msg.GetSizeBytes());
     if (!decoded || decoded->DbgIndex != MyDbgIndex) {
-        YDB_LOG_DEBUG("[NbsLoadTablet] HandleNbsWrite invalid",
-            {"address", msg.GetAddress()},
-            {"sizeBytes", msg.GetSizeBytes()},
-            {"ioSizeBytes", IoSizeBytes},
-            {"activeDbgs", ActiveDbgs});
+        LOG_D("HandleNbsWrite invalid Address# " << msg.GetAddress()
+            << " SizeBytes# " << msg.GetSizeBytes()
+            << " IoSizeBytes# " << IoSizeBytes
+            << " ActiveDbgs# " << ActiveDbgs);
         ReplyWriteErr(origin, cookie, NBSIO_INVALID_ADDRESS,
             TStringBuilder() << "decode failed Addr# " << msg.GetAddress()
                 << " SizeBytes# " << msg.GetSizeBytes()
@@ -2204,11 +2175,11 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
 
     const ui32 pbConnectedCount = static_cast<ui32>(Dbg.PBConnected.count());
     if (pbConnectedCount < kPrimaryHostsPerDbg) {
-        YDB_LOG_DEBUG("[NbsLoadTablet] HandleNbsWrite peers not ready replying TABLET_NOT_READY",
-            {"DBG", dbgIndex},
-            {"cookie", cookie},
-            {"PBConnected", pbConnectedCount},
-            {"need", kPrimaryHostsPerDbg});
+        LOG_D("HandleNbsWrite peers not ready DBG# " << dbgIndex
+            << " Cookie# " << cookie
+            << " PBConnected# " << pbConnectedCount
+            << " need# " << kPrimaryHostsPerDbg
+            << "; replying TABLET_NOT_READY");
         ReplyWriteErr(origin, cookie, NBSIO_TABLET_NOT_READY,
             TStringBuilder() << "PB peers not ready: " << pbConnectedCount
                 << "/" << kPrimaryHostsPerDbg);
@@ -2391,10 +2362,7 @@ void TNbsDbgLikeActor::HandleNbsRead(TEvLoad::TEvNbsRead::TPtr& ev,
     const auto& msg = ev->Get()->Record;
     const TActorId origin = ev->Sender;
     const ui64 cookie = ev->Cookie;
-    YDB_LOG_TRACE("[NbsLoadTablet] HandleNbsRead",
-        {"cookie", cookie},
-        {"addr", msg.GetAddress()},
-        {"size", msg.GetSizeBytes()});
+    LOG_T("HandleNbsRead Cookie# " << cookie << " Addr# " << msg.GetAddress() << " Size# " << msg.GetSizeBytes());
 
     if (IoSizeBytes == 0) {
         ReplyReadErr(origin, cookie, NBSIO_NOT_CONFIGURED, "IoSizeBytes not set");
@@ -2408,9 +2376,8 @@ void TNbsDbgLikeActor::HandleNbsRead(TEvLoad::TEvNbsRead::TPtr& ev,
 
     const auto decoded = DecodeAddress(msg.GetAddress(), msg.GetSizeBytes());
     if (!decoded || decoded->DbgIndex != MyDbgIndex) {
-        YDB_LOG_DEBUG("[NbsLoadTablet] HandleNbsRead invalid",
-            {"address", msg.GetAddress()},
-            {"sizeBytes", msg.GetSizeBytes()});
+        LOG_D("HandleNbsRead invalid Address# " << msg.GetAddress()
+            << " SizeBytes# " << msg.GetSizeBytes());
         ReplyReadErr(origin, cookie, NBSIO_INVALID_ADDRESS,
             TStringBuilder() << "decode failed Addr# " << msg.GetAddress()
                 << " SizeBytes# " << msg.GetSizeBytes());
@@ -2422,11 +2389,11 @@ void TNbsDbgLikeActor::HandleNbsRead(TEvLoad::TEvNbsRead::TPtr& ev,
 
     const ui32 ddConnectedCount = static_cast<ui32>(Dbg.DDConnected.count());
     if (ddConnectedCount < kPrimaryHostsPerDbg) {
-        YDB_LOG_DEBUG("[NbsLoadTablet] HandleNbsRead peers not ready replying TABLET_NOT_READY",
-            {"DBG", dbgIndex},
-            {"cookie", cookie},
-            {"DDConnected", ddConnectedCount},
-            {"need", kPrimaryHostsPerDbg});
+        LOG_D("HandleNbsRead peers not ready DBG# " << dbgIndex
+            << " Cookie# " << cookie
+            << " DDConnected# " << ddConnectedCount
+            << " need# " << kPrimaryHostsPerDbg
+            << "; replying TABLET_NOT_READY");
         ReplyReadErr(origin, cookie, NBSIO_TABLET_NOT_READY,
             TStringBuilder() << "DDisk peers not ready: " << ddConnectedCount
                 << "/" << kPrimaryHostsPerDbg);
@@ -2521,15 +2488,15 @@ void TNbsDbgLikeActor::HandleWritePbsResult(
         }
         if (!ok) {
             overallOk = false;
-            YDB_LOG_DEBUG("[NbsLoadTablet] HandleWritePbsResult PB error",
-                {"DBG", MyDbgIndex},
-                {"LSN", lsn},
-                {"peerK", k},
-                {"nodeId", pbId.GetNodeId()},
-                {"PDiskId", pbId.GetPDiskId()},
-                {"DDiskSlotId", pbId.GetDDiskSlotId()},
-                {"status", NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(                     sub.GetResult().GetStatus())},
-                {"errorReason", sub.GetResult().GetErrorReason()});
+            LOG_D("HandleWritePbsResult PB error DBG# " << MyDbgIndex
+                << " LSN# " << lsn
+                << " PeerK# " << k
+                << " NodeId# " << pbId.GetNodeId()
+                << " PDiskId# " << pbId.GetPDiskId()
+                << " DDiskSlotId# " << pbId.GetDDiskSlotId()
+                << " Status# " << NKikimrBlobStorage::NDDisk::TReplyStatus::E_Name(
+                    sub.GetResult().GetStatus())
+                << " ErrorReason# " << sub.GetResult().GetErrorReason());
         }
     }
 
@@ -3334,14 +3301,13 @@ void TNbsDbgLikeActor::HandleConfigureTablet(
     TEvLoad::TEvConfigureTablet::TPtr& ev, const TActorContext& /*ctx*/)
 {
     const auto& cfg = ev->Get()->Record;
-    YDB_LOG_INFO("[NbsLoadTablet] Worker HandleConfigureTablet",
-        {"DBG", MyDbgIndex},
-        {"maxInflightLsns", cfg.GetMaxInflightLsns()},
-        {"flushBatchSize", cfg.GetFlushBatchSize()},
-        {"eraseBatchSize", cfg.GetEraseBatchSize()},
-        {"syncRequestsBatchSize", cfg.GetSyncRequestsBatchSize()},
-        {"numDirectBlockGroupsToUse", cfg.GetNumDirectBlockGroupsToUse()},
-        {"ioSizeBytes", cfg.GetIoSizeBytes()});
+    LOG_I("Worker HandleConfigureTablet DBG# " << MyDbgIndex
+        << " MaxInflightLsns# " << cfg.GetMaxInflightLsns()
+        << " FlushBatchSize# " << cfg.GetFlushBatchSize()
+        << " EraseBatchSize# " << cfg.GetEraseBatchSize()
+        << " SyncRequestsBatchSize# " << cfg.GetSyncRequestsBatchSize()
+        << " NumDirectBlockGroupsToUse# " << cfg.GetNumDirectBlockGroupsToUse()
+        << " IoSizeBytes# " << cfg.GetIoSizeBytes());
 
     InitWorkerCounters();
 
@@ -3361,15 +3327,13 @@ void TNbsDbgLikeActor::HandleConfigureTablet(
     const ui64 vChunkSizeBytes = AllocConfig.GetVChunkSizeBytes();
     if (!params.IoValid && wantIo != 0) {
         if (wantIo > vChunkSizeBytes) {
-            YDB_LOG_ERROR("[NbsLoadTablet] Worker HandleConfigureTablet > keeping previous",
-                {"ioSizeBytes", wantIo},
-                {"VChunkSizeBytes", vChunkSizeBytes},
-                {"ioSizeBytes", IoSizeBytes});
+            LOG_E("Worker HandleConfigureTablet IoSizeBytes=" << wantIo
+                << " > VChunkSizeBytes=" << vChunkSizeBytes
+                << "; keeping previous IoSizeBytes=" << IoSizeBytes);
         } else {
-            YDB_LOG_ERROR("[NbsLoadTablet] Worker HandleConfigureTablet does not divide keeping previous",
-                {"ioSizeBytes", wantIo},
-                {"VChunkSizeBytes", vChunkSizeBytes},
-                {"ioSizeBytes", IoSizeBytes});
+            LOG_E("Worker HandleConfigureTablet IoSizeBytes=" << wantIo
+                << " does not divide VChunkSizeBytes=" << vChunkSizeBytes
+                << "; keeping previous IoSizeBytes=" << IoSizeBytes);
         }
     } else if (params.IoValid && params.IoSizeBytes != IoSizeBytes) {
         IoSizeBytes = params.IoSizeBytes;

@@ -14,7 +14,7 @@ Y_UNIT_TEST_SUITE(VersionParser) {
     }
 
     Y_UNIT_TEST(CiSmokeSplitPostcommit45005) {
-        UNIT_ASSERT(true);
+        UNIT_ASSERT(true);  // retrigger increment smoke
     }
 }
 

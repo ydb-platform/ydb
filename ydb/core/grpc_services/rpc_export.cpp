@@ -572,13 +572,14 @@ public:
         const bool exportFilteringEnabled = NBackup::IsExportFilteringEnabled(*AppData());
         InitCommonSourcePath();
 
+        if (!exportFilteringEnabled && !settings.exclude_regexps().empty()) {
+            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export filtering is not supported in current configuration");
+        }
+
         try {
             ExcludeRegexps = NBackup::CombineRegexps(settings.exclude_regexps());
         } catch (const std::exception& ex) {
             return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, TStringBuilder() << "Invalid regexp: " << ex.what());
-        }
-        if (!exportFilteringEnabled && !settings.exclude_regexps().empty()) {
-            return this->Reply(StatusIds::BAD_REQUEST, TIssuesIds::DEFAULT_ERROR, "Export filtering is not supported in current configuration");
         }
 
         if constexpr (IsFsExport) {

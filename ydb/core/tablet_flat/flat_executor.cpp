@@ -2338,7 +2338,8 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             || env.LoanBundle
             || env.LoanTxStatus
             || env.LoanConfirmation
-            || env.BorrowUpdates;
+            || env.BorrowUpdates
+            || env.AttachedParts;
 
         auto commitResult = LogicRedo->CommitRWTransaction(std::move(seat), *change, force);
 
@@ -2752,6 +2753,84 @@ void TExecutor::CommitTransactionLog(std::unique_ptr<TSeat> seat, TPageCollectio
             }
 
             PrepareExternalTxStatus(partSwitch, loaned->DataId, loaned->Epoch, loaned->Data);
+        }
+
+        for (auto &attached : env.AttachedParts) {
+            const ui32 attachTableId = attached.TableId;
+            auto &result = attached.Result;
+
+            // Place the part at the table's current head epoch and advance the
+            // head above it, so it merges below the (new) mutable memtable. For
+            // the empty restore target this is the table's only layer; the general
+            // "bottom of a non-empty table" case (epoch renumbering) is deferred.
+            const NTable::TEpoch head = Database->Head(attachTableId).Epoch;
+            Y_ENSURE(head > NTable::TEpoch::Zero(),
+                "Cannot attach a part to table " << attachTableId << " with head epoch " << head);
+            const NTable::TEpoch partEpoch = head;
+            const NTable::TEpoch snapEpoch = head + 1;
+            const auto stamp = MakeGenStepPair(Generation(), commit->Step);
+
+            NKikimrExecutorFlat::TTablePartSwitch proto;
+            proto.SetTableId(attachTableId);
+
+            {
+                TGCBlobDelta dummy; /* this isn't a real cut log operation */
+                LogicRedo->CutLog(attachTableId, { stamp, snapEpoch }, dummy);
+                Y_ENSURE(!dummy.Deleted && !dummy.Created);
+
+                auto *sx = proto.MutableTableSnapshoted();
+                sx->SetTable(attachTableId);
+                sx->SetGeneration(Generation());
+                sx->SetStep(commit->Step);
+                sx->SetHead(snapEpoch.ToProto());
+            }
+
+            const auto &cacheModes = GetCacheModes(attachTableId);
+            auto *snap = proto.MutableIntroducedParts();
+            auto *bySwitchAux = aux.AddBySwitchAux();
+
+            for (size_t i = 0; i < result->Parts.size(); ++i) {
+                auto partView = result->Parts[i].CloneWithEpoch(partEpoch);
+
+                AddPartStorePageCollections(partView, cacheModes);
+
+                auto *partStore = partView.As<NTable::TPartStore>();
+                Y_ENSURE(partStore, "Direct write produced an unexpected part type");
+
+                { /*_ register all new blobs (including external) with gc logic */
+                    partStore->SaveAllBlobIdsTo(commit->GcDelta.Created);
+                    for (auto &hole : result->Growth[i])
+                        for (auto seq : xrange(hole.Begin, hole.End))
+                            commit->GcDelta.Created.push_back(partStore->Blobs->Glob(seq).Logo);
+                }
+
+                Database->Merge(attachTableId, partView);
+                if (CompactionLogic) {
+                    CompactionLogic->BorrowedPart(attachTableId, partView);
+                }
+
+                TPageCollectionProtoHelper::Snap(snap, partView, attachTableId, CompactionLogic->BorrowedPartLevel());
+                TPageCollectionProtoHelper(true).Do(bySwitchAux->AddHotBundles(), partView);
+            }
+            Database->MergeDone(attachTableId);
+
+            {
+                auto body = proto.SerializeAsString();
+                auto glob = CommitManager->Turns.One(commit->Refs, std::move(body), true);
+                LogoBlobIDFromLogoBlobID(glob.Logo, bySwitchAux->MutablePartSwitchRef());
+            }
+
+            // Move the held GC barrier into the per-step collection released once
+            // this redo commit (carrying the keep-flags) is durable. The blobs are
+            // protected until then; a restart before that re-runs the whole write.
+            if (auto bIt = DirectWriteBarriers.find(result->Step); bIt != DirectWriteBarriers.end()) {
+                InFlySnapCollectionBarriers[commit->Step].push_back(std::move(bIt->second));
+                DirectWriteBarriers.erase(bIt);
+            }
+
+            if (result->YellowMoveChannels || result->YellowStopChannels) {
+                CheckYellow(std::move(result->YellowMoveChannels), std::move(result->YellowStopChannels));
+            }
         }
 
         if (!hadPendingPartSwitches) {
@@ -4898,6 +4977,115 @@ bool TExecutor::HasSchemaChanges(const NTable::TPartView& partView, const NTable
     }
 
     return false;
+}
+
+THolder<TDirectPartWriter> TExecutor::BeginWritePart(ui32 tableId)
+{
+    using NTable::NPage::ECache;
+
+    auto rowScheme = RowScheme(tableId);
+    auto *tableInfo = Scheme().GetTableInfo(tableId);
+    Y_ENSURE(tableInfo, "Cannot write a part for an unknown table " << tableId);
+    auto *policy = tableInfo->CompactionPolicy.Get();
+
+    // Reserve a step and hold a GC barrier so the blobs we are about to write are
+    // not collected before they are committed (and not re-used by the executor).
+    // The blobs carry no keep-flags until commit, so a restart before commit
+    // leaves them to be garbage collected (the write must then restart).
+    LogicRedo->FlushBatchedLog();
+    auto commit = CommitManager->Begin(true, ECommit::Misc, {});
+    const ui32 step = commit->Step;
+    TIntrusivePtr<TBarrier> barrier = new TBarrier(step);
+    AttachLeaseCommit(commit.Get());
+    CommitManager->Commit(commit);
+
+    GcLogic->HoldBarrier(barrier->Step);
+    Y_ENSURE(DirectWriteBarriers.emplace(step, barrier).second, "Duplicate direct write step");
+
+    CompactionLogic->UpdateLogUsage(LogicRedo->GrabLogUsage());
+
+    TDirectWriteCfg cfg;
+    // Bottom-layer parts get a low baked epoch; the final epoch is rebased at
+    // commit time to sit below the table's mutable memtable (see AttachPart).
+    cfg.Epoch = NTable::TEpoch::Zero() + 1;
+    cfg.Layout.Final = false;
+    cfg.Layout.WriteBTreeIndex = AppData()->FeatureFlags.GetEnableLocalDBBtreeIndex();
+    cfg.Layout.WriteFlatIndex = AppData()->FeatureFlags.GetEnableLocalDBFlatIndex();
+    cfg.Writer.StickyFlatIndex = !cfg.Layout.WriteBTreeIndex;
+    for (const auto& p : tableInfo->ByKeyFilterPrefixes) {
+        cfg.Layout.ByKeyFilterPrefixes.push_back({p.PrefixLength, p.FalsePositiveProbability});
+    }
+    cfg.Layout.Groups.resize(rowScheme->Families.size());
+    cfg.Writer.Groups.resize(rowScheme->Families.size());
+
+    auto addChannel = [&](ui8 channel) {
+        auto group = Owner->Info()->GroupFor(channel, Generation());
+        cfg.Writer.Slots.emplace_back(channel, group);
+    };
+    auto addChannels = [&](const std::vector<ui8>& channels) {
+        for (auto channel : channels) {
+            addChannel(channel);
+        }
+    };
+
+    for (size_t group : xrange(rowScheme->Families.size())) {
+        auto familyId = rowScheme->Families[group];
+        static const NTable::TScheme::TFamily defaultFamilySettings;
+        const auto& family = tableInfo->Families.ValueRef(familyId, defaultFamilySettings); // Workaround for KIKIMR-17222
+
+        auto* room = tableInfo->Rooms.FindPtr(family.Room);
+        Y_ENSURE(room, "Cannot find room " << family.Room << " in table " << tableId);
+
+        auto& pageGroup = cfg.Layout.Groups.at(group);
+        auto& writeGroup = cfg.Writer.Groups.at(group);
+
+        pageGroup.Codec = family.Codec;
+        pageGroup.PageSize = policy->MinDataPageSize;
+        pageGroup.BTreeIndexNodeTargetSize = policy->MinBTreeIndexNodeSize;
+        pageGroup.BTreeIndexNodeKeysMin = policy->MinBTreeIndexNodeKeys;
+
+        writeGroup.Cache = Max(family.Cache, ECache::None);
+        writeGroup.CacheMode = family.CacheMode;
+        writeGroup.MaxBlobSize = NBlockIO::BlockSize;
+        writeGroup.Channel = room->Main;
+        addChannel(room->Main);
+
+        if (group == 0) {
+            cfg.Layout.SmallEdge = family.Small;
+            cfg.Layout.LargeEdge = family.Large;
+
+            cfg.Writer.BlobsChannels = room->Blobs;
+            cfg.Writer.OuterChannel = room->Outer;
+            addChannels(room->Blobs);
+            addChannel(room->Outer);
+
+            cfg.Writer.ChannelsShares = NUtil::TChannelsShares(Database->Counters().NormalizedFreeSpaceShareByChannel);
+        }
+    }
+
+    TLogoBlobID mask(Owner->TabletID(), Generation(), step, Max<ui8>(), 0, 0);
+
+    if (auto logl = Logger->Log(ELnLev::Info)) {
+        logl << NFmt::Do(*this) << " begin direct part write for table " << tableId << " at step " << step;
+    }
+
+    return MakeHolder<TDirectPartWriter>(mask, std::move(cfg), std::move(rowScheme));
+}
+
+void TExecutor::ReleaseWritePart(ui32 step)
+{
+    auto it = DirectWriteBarriers.find(step);
+    if (it == DirectWriteBarriers.end()) {
+        return;
+    }
+
+    if (auto logl = Logger->Log(ELnLev::Info)) {
+        logl << NFmt::Do(*this) << " release direct part write barrier at step " << step;
+    }
+
+    TIntrusivePtr<TBarrier> barrier = std::move(it->second);
+    DirectWriteBarriers.erase(it);
+    CheckCollectionBarrier(barrier);
 }
 
 ui64 TExecutor::BeginCompaction(THolder<NTable::TCompactionParams> params)

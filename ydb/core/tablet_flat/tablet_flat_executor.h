@@ -30,6 +30,8 @@ class TExecutor;
 struct TPageCollectionTxEnv;
 struct TSeat;
 class TExecutorCounters;
+class TDirectPartWriter;
+struct TDirectPartResult;
 
 class TTableSnapshotContext : public TThrRefBase, TNonCopyable {
     friend class TExecutor;
@@ -104,6 +106,9 @@ struct IExecuting {
     virtual void MoveSnapshot(const TTableSnapshotContext&, ui32 src, ui32 dst) = 0;
     virtual void ClearSnapshot(const TTableSnapshotContext&) = 0;
     virtual void LoanTable(ui32 tableId, const TString &partsInfo) = 0; // attach table parts to table (called on part destination)
+    // Attach a part built via IExecutor::BeginWritePart as a bottom layer of the
+    // table, atomically within this transaction. Takes ownership of the result.
+    virtual void AttachPart(ui32 tableId, THolder<TDirectPartResult> result) = 0;
     virtual void CleanupLoan(const TLogoBlobID &bundleId, ui64 from) = 0; // mark loan completion (called on part source)
     virtual void ConfirmLoan(const TLogoBlobID &bundleId, const TLogoBlobID &borrowId) = 0; // confirm loan update delivery (called on part destination)
     virtual void EnableReadMissingReferences() = 0;
@@ -620,6 +625,17 @@ namespace NFlatExecutorSetup {
         virtual ui64 CompactMemTable(ui32 tableId) = 0;
         virtual ui64 CompactTable(ui32 tableId) = 0;
         virtual bool CompactTables() = 0;
+
+        // Begin writing a sorted part (SST) directly into the table, bypassing
+        // the memtable and compaction. Reserves a step and holds a GC barrier;
+        // the returned writer is handed to an actor that feeds rows in ascending
+        // key order and writes blobs in the background. The built part is later
+        // committed as a bottom layer via IExecuting::AttachPart. The barrier is
+        // released either by that commit or by ReleaseWritePart (on abort).
+        virtual THolder<TDirectPartWriter> BeginWritePart(ui32 tableId) = 0;
+        // Release the GC barrier of a direct part write identified by its reserved
+        // step, for a writer that will not be committed (e.g. aborted).
+        virtual void ReleaseWritePart(ui32 step) = 0;
 
         // Signal executor that it's ok to compact borrowed data in the given
         // table even if there's no local modifications. Useful after finishing

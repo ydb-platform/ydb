@@ -41,7 +41,7 @@ While this documentation section focuses on complete reference documentation for
 
 - As part of the initial {{ ydb-short-name }} cluster deployment:
 
-    - [Ansible](../../devops/deployment-options/ansible/initial-deployment.md)
+    - [Ansible](../../devops/deployment-options/ansible/initial-deployment/index.md)
     - [Kubernetes](../../devops/deployment-options/kubernetes/initial-deployment.md)
     - [Manual](../../devops/deployment-options/manual/initial-deployment/index.md)
 

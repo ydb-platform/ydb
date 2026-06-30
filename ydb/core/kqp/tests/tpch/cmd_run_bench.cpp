@@ -18,7 +18,7 @@ namespace NYdb::NTpch {
 
 namespace {
 
-TMaybe<ui64> ConsumeStream(NQuery::TExecuteQueryIterator& it, ui64& maxMemory, ui64& sumMemory, ui64& extraMemory) {
+TMaybe<ui64> ConsumeStream(NTable::TScanQueryPartIterator& it, ui64& maxMemory, ui64& sumMemory, ui64& extraMemory) {
     ui64 resultHash = 0;
 
     for (;;) {
@@ -185,6 +185,8 @@ void TCommandRunBenchmark::Config(TConfig& config) {
     config.Opts->AddLongOption('n', "iterations", "Iterations count (without cold-start run) [default: 5]")
         .DefaultValue(5)
         .StoreResult(&IterationsCount);
+    config.Opts->AddLongOption('x', "mixed-snapshots", "run with volatile and persistent snapshots [default: false]")
+        .StoreTrue(&MixedMode);
     config.Opts->AddLongOption('o', "output", "Output file with benchmark's report [default: report.txt]")
         .DefaultValue("report.txt")
         .StoreResult(&ReportFileName);
@@ -286,9 +288,13 @@ int TCommandRunBenchmark::Run(TConfig& config) {
         TMaybe<ui64> queryResultHash;
         bool sameResult = true;
         for (ui32 i = 0; i <= IterationsCount; ++i) {
-            Cout << "  + Iteration #" << i << Endl;
+            bool usePersistentSnapshot = true;
+            if (MixedMode) {
+                usePersistentSnapshot = (i % 2 == 0);
+            }
+            Cout << "  + Iteration #" << i << ", snapshot: " << (usePersistentSnapshot ? "persistent" : "volatile") << Endl;
             TInstant before = TInstant::Now();
-            auto it = tpch.RunQuery(queryN, MemoryProfile);
+            auto it = tpch.RunQuery(queryN, MemoryProfile, usePersistentSnapshot);
             ui64 maxMem = 0, sumMem = 0, extraMem = 0;
             auto resultHash = ConsumeStream(it, maxMem, sumMem, extraMem);
             if (resultHash) {

@@ -8,7 +8,6 @@ SRCS(
 PEERDIR(
     library/cpp/resource
     ydb/core/protos
-    ydb/public/sdk/cpp/src/client/query
     ydb/public/sdk/cpp/src/client/scheme
     ydb/public/sdk/cpp/src/client/table
 )

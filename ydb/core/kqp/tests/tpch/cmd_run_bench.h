@@ -27,6 +27,7 @@ private:
     TString JsonOutputFileName;
     ui32 IterationsCount = 0;
     TSet<ui32> TestCases;
+    bool MixedMode = false;
     bool MemoryProfile = false;
 };
 

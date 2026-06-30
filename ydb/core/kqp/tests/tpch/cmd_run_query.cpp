@@ -48,10 +48,11 @@ int TCommandRunQuery::Run(TConfig& config){
             }
         }
 
-        if (streamPart.GetStats() && !Profile.empty()) {
+        if (streamPart.HasQueryStats() && Profile) {
+            const auto& profile = streamPart.HasQueryStats();
             // TODO: support multiple profile files
             TFileOutput out{Profile};
-            out.Write(streamPart.GetStats()->ToString(/* withPlan */ true));
+            out.Write(profile);
             out.Flush();
         }
     }

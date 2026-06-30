@@ -1,8 +1,13 @@
 #include <util/thread/pool.h>
+#include <util/generic/hash_set.h>
 #include <util/system/thread.h>
+#include <util/system/yield.h>
 
+#include <algorithm>
+#include <array>
 #include <atomic>
 #include <string.h>
+#include <vector>
 
 #include <contrib/libs/ibdrv/include/infiniband/verbs.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
@@ -76,6 +81,38 @@ struct TEvSendReceiveProbeResult : public TEventLocal<TEvSendReceiveProbeResult,
     {}
 };
 
+struct TEvTriggerCqTerminalError : public TEventLocal<TEvTriggerCqTerminalError, EventSpaceBegin(TEvents::ES_PRIVATE) + 2> {
+    std::shared_ptr<std::atomic<bool>> Ready;
+    std::shared_ptr<std::atomic<bool>> Start;
+
+    TEvTriggerCqTerminalError() = default;
+
+    TEvTriggerCqTerminalError(std::shared_ptr<std::atomic<bool>> ready, std::shared_ptr<std::atomic<bool>> start)
+        : Ready(std::move(ready))
+        , Start(std::move(start))
+    {}
+};
+
+struct TEvCqTerminalErrorTriggered : public TEventLocal<TEvCqTerminalErrorTriggered, EventSpaceBegin(TEvents::ES_PRIVATE) + 3> {
+    bool Success = false;
+    TDuration NotifyErrDuration;
+
+    TEvCqTerminalErrorTriggered(bool success, TDuration notifyErrDuration)
+        : Success(success)
+        , NotifyErrDuration(notifyErrDuration)
+    {}
+};
+
+struct TEvReceiveTerminalProbeResult : public TEventLocal<TEvReceiveTerminalProbeResult, EventSpaceBegin(TEvents::ES_PRIVATE) + 4> {
+    ui32 QpNum = 0;
+    TString ErrSource;
+
+    TEvReceiveTerminalProbeResult(ui32 qpNum, TString errSource)
+        : QpNum(qpNum)
+        , ErrSource(std::move(errSource))
+    {}
+};
+
 class TReceiveDoneProbeActor : public TActorBootstrapped<TReceiveDoneProbeActor> {
 public:
     TReceiveDoneProbeActor(TActorId edge, std::shared_ptr<std::atomic<ui64>> sendTsUs)
@@ -107,6 +144,65 @@ public:
 private:
     TActorId Edge;
     std::shared_ptr<std::atomic<ui64>> SendTsUs;
+};
+
+class TReceiveTerminalProbeActor : public TActorBootstrapped<TReceiveTerminalProbeActor> {
+public:
+    TReceiveTerminalProbeActor(TActorId edge, ui32 qpNum)
+        : Edge(edge)
+        , QpNum(qpNum)
+    {}
+
+    void Bootstrap() {
+        Become(&TReceiveTerminalProbeActor::StateFunc);
+    }
+
+    void Handle(TEvRdmaIoReceiveDone::TPtr& ev) {
+        Send(Edge, new TEvReceiveTerminalProbeResult(QpNum, TString(ev->Get()->GetErrSource())));
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvRdmaIoReceiveDone, Handle);
+    )
+
+private:
+    TActorId Edge;
+    ui32 QpNum;
+};
+
+class TNotifyCqTerminalErrorActor : public TActorBootstrapped<TNotifyCqTerminalErrorActor> {
+public:
+    TNotifyCqTerminalErrorActor(ICq::TPtr cq, TActorId edge)
+        : Cq(std::move(cq))
+        , Edge(edge)
+    {}
+
+    void Bootstrap() {
+        Become(&TNotifyCqTerminalErrorActor::StateFunc);
+    }
+
+    void Handle(TEvTriggerCqTerminalError::TPtr& ev) {
+        if (ev->Get()->Ready && ev->Get()->Start) {
+            ev->Get()->Ready->store(true, std::memory_order_release);
+            while (!ev->Get()->Start->load(std::memory_order_acquire)) {
+                ThreadYield();
+            }
+        }
+        auto* cqImpl = dynamic_cast<TSimpleCqBase*>(Cq.get());
+        const TInstant start = TInstant::Now();
+        if (cqImpl) {
+            cqImpl->NotifyErr();
+        }
+        Send(Edge, new TEvCqTerminalErrorTriggered(cqImpl != nullptr, TInstant::Now() - start));
+    }
+
+    STRICT_STFUNC(StateFunc,
+        hFunc(TEvTriggerCqTerminalError, Handle);
+    )
+
+private:
+    ICq::TPtr Cq;
+    TActorId Edge;
 };
 
 static TRegistrationTestCq CreateRegistrationTestCq(TString bindTo, ECqMode mode, TRdmaRuntimeParams params) {
@@ -370,6 +466,113 @@ TEST_P(TCqMode, RegisteredQpGetsTerminalReceiveError) {
     ASSERT_TRUE(ev);
     EXPECT_TRUE(ev->Get()->IsCqError());
     EXPECT_FALSE(rdma.Cq->RegisterQpAsync(43, edge));
+}
+
+TEST_P(TCqMode, NotifyErrFromActorNotifiesAllRegisteredQpActors) {
+    auto rdma = CreateRegistrationTestCq("127.0.0.1", GetParam(), TRdmaRuntimeParams{
+        .MaxCqe = 16,
+        .MaxWr = 4,
+        .MaxSrqWr = 8,
+        .RecieveBufSz = 1024,
+    });
+    ASSERT_TRUE(rdma.Cq);
+
+    const TActorId edge = rdma.ActorSystem->AllocateEdgeActor(0);
+    const std::array<ui32, 4> qpNums = {42, 43, 44, 45};
+    for (ui32 qpNum : qpNums) {
+        const TActorId actor = rdma.ActorSystem->Register(new TReceiveTerminalProbeActor(edge, qpNum));
+        ASSERT_TRUE(rdma.Cq->RegisterQpAsync(qpNum, actor));
+    }
+
+    const TActorId notifier = rdma.ActorSystem->Register(new TNotifyCqTerminalErrorActor(rdma.Cq, edge));
+    rdma.ActorSystem->Send(new IEventHandle(notifier, edge, new TEvTriggerCqTerminalError()), 0);
+
+    auto triggerResult = rdma.ActorSystem->GrabEdgeEvent<TEvCqTerminalErrorTriggered>(edge, TDuration::Seconds(5));
+    ASSERT_TRUE(triggerResult);
+    ASSERT_TRUE(triggerResult->Get()->Success);
+
+    THashSet<ui32> notifiedQps;
+    for (size_t i = 0; i < qpNums.size(); ++i) {
+        auto ev = rdma.ActorSystem->GrabEdgeEvent<TEvReceiveTerminalProbeResult>(edge, TDuration::Seconds(5));
+        ASSERT_TRUE(ev);
+        EXPECT_EQ(ev->Get()->ErrSource, "TCqErr");
+        notifiedQps.insert(ev->Get()->QpNum);
+    }
+
+    EXPECT_EQ(notifiedQps.size(), qpNums.size());
+    for (ui32 qpNum : qpNums) {
+        EXPECT_TRUE(notifiedQps.contains(qpNum)) << "Missing terminal notification for qp " << qpNum;
+    }
+    EXPECT_FALSE(rdma.Cq->RegisterQpAsync(46, edge));
+}
+
+TEST_P(TCqMode, ConcurrentRegisterAndNotifyErrEitherRejectsOrNotifies) {
+    static constexpr ui32 Iterations = 1000;
+    ui32 notificationCount = 0;
+    ui32 registerRejectedCount = 0;
+    std::vector<TDuration> notifyErrDurations;
+    notifyErrDurations.reserve(Iterations);
+
+    for (ui32 i = 0; i < Iterations; ++i) {
+        auto rdma = CreateRegistrationTestCq("127.0.0.1", GetParam(), TRdmaRuntimeParams{
+            .MaxCqe = 16,
+            .MaxWr = 4,
+            .MaxSrqWr = 8,
+            .RecieveBufSz = 1024,
+        });
+        ASSERT_TRUE(rdma.Cq);
+
+        const TActorId edge = rdma.ActorSystem->AllocateEdgeActor(0);
+        const ui32 qpNum = 10000 + i;
+        const TActorId receiver = rdma.ActorSystem->Register(new TReceiveTerminalProbeActor(edge, qpNum));
+        const TActorId notifier = rdma.ActorSystem->Register(new TNotifyCqTerminalErrorActor(rdma.Cq, edge));
+
+        auto ready = std::make_shared<std::atomic<bool>>(false);
+        auto start = std::make_shared<std::atomic<bool>>(false);
+        auto registered = std::make_shared<std::atomic<bool>>(false);
+
+        TThread registerThread([cq = rdma.Cq, receiver, qpNum, ready, start, registered]() {
+            while (!ready->load(std::memory_order_acquire)) {
+                ThreadYield();
+            }
+            start->store(true, std::memory_order_release);
+            registered->store(cq->RegisterQpAsync(qpNum, receiver), std::memory_order_release);
+        });
+        registerThread.Start();
+
+        rdma.ActorSystem->Send(new IEventHandle(notifier, edge, new TEvTriggerCqTerminalError(ready, start)), 0);
+
+        auto triggerResult = rdma.ActorSystem->GrabEdgeEvent<TEvCqTerminalErrorTriggered>(edge, TDuration::Seconds(5));
+        registerThread.Join();
+        ASSERT_TRUE(triggerResult) << "iteration " << i;
+        ASSERT_TRUE(triggerResult->Get()->Success) << "iteration " << i;
+        notifyErrDurations.push_back(triggerResult->Get()->NotifyErrDuration);
+
+        if (registered->load(std::memory_order_acquire)) {
+            auto ev = rdma.ActorSystem->GrabEdgeEvent<TEvReceiveTerminalProbeResult>(edge, TDuration::Seconds(5));
+            ASSERT_TRUE(ev) << "iteration " << i;
+            EXPECT_EQ(ev->Get()->QpNum, qpNum) << "iteration " << i;
+            EXPECT_EQ(ev->Get()->ErrSource, "TCqErr") << "iteration " << i;
+            ++notificationCount;
+        } else {
+            ++registerRejectedCount;
+        }
+    }
+
+    ASSERT_EQ(notifyErrDurations.size(), Iterations);
+    std::sort(notifyErrDurations.begin(), notifyErrDurations.end());
+    const size_t p99Index = (notifyErrDurations.size() * 99 + 99) / 100 - 1;
+    const TDuration notifyErrP99 = notifyErrDurations[p99Index];
+
+    Cerr << "Concurrent Register/NotifyErr stats: notifications=" << notificationCount
+         << ", registerRejected=" << registerRejectedCount
+         << ", notifyErrP99Us=" << notifyErrP99.MicroSeconds()
+         << Endl;
+    ::testing::Test::RecordProperty("NotificationCount", notificationCount);
+    ::testing::Test::RecordProperty("RegisterRejectedCount", registerRejectedCount);
+    ::testing::Test::RecordProperty("NotifyErrP99Us", notifyErrP99.MicroSeconds());
+
+    EXPECT_EQ(notificationCount + registerRejectedCount, Iterations);
 }
 
 TEST_P(TCqMode, DeregisteredQpDoesNotGetTerminalReceiveError) {

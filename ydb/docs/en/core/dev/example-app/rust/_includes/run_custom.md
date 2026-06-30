@@ -1,6 +1,7 @@
-To run the example against any available {{ ydb-short-name }} database, provide the [endpoint](../../../../concepts/connect.md#endpoint) and the [database path](../../../../concepts/connect.md#database).
+To run the example on any available {{ ydb-short-name }} database, specify the [endpoint](../../../../concepts/connect.md#endpoint) and [database path](../../../../concepts/connect.md#database).
 
-If authentication is enabled, choose an [authentication mode](../../../../security/authentication.md) and set the corresponding environment variables.
+If authentication is enabled, select the [authentication mode](../../../../security/authentication.md) and set the environment variables.
+
 
 ```bash
 export <auth_mode_var>="<auth_mode_value>"
@@ -9,14 +10,16 @@ cd ydb-rs-sdk/ydb
 cargo run --example basic
 ```
 
+
 where
 
-- `<endpoint>`: The [endpoint](../../../../concepts/connect.md#endpoint).
-- `<database>`: The [database path](../../../../concepts/connect.md#database).
-- `<auth_mode_var>`: The [environment variable](../../../../reference/ydb-sdk/auth.md#env) for the authentication mode.
-- `<auth_mode_value>`: The credential value for the selected mode.
+- `<endpoint>` — [endpoint](../../../../concepts/connect.md#endpoint).
+- `<database>` — [database path](../../../../concepts/connect.md#database).
+- `<auth_mode_var>` — [environment variable](../../../../reference/ydb-sdk/auth.md#env) for the authentication mode.
+- `<auth_mode_value>` — credential value.
 
 For example:
+
 
 ```bash
 export YDB_ACCESS_TOKEN_CREDENTIALS="t1.9euelZqOnJuJlc..."

@@ -1,21 +1,21 @@
 # Exporting logs to OpenTelemetry
 
-Each {{ ydb-short-name }} SDK writes its own internal logs (driver initialization, session pool, query execution, retries, etc.) through the standard logging facility of its language. Instead of outputting logs only to the console (see [Enable logging](logging.md)), they can be redirected to the [OpenTelemetry](https://opentelemetry.io/) Logs SDK and exported via the standard OTLP protocol to a collector. The collector then forwards the records to the chosen backend for storing and viewing logs.
+Each {{ ydb-short-name }} SDK writes its own internal logs (driver initialization, session pool, query execution, retries, etc.) through the standard logging facility of its language. Instead of outputting logs only to the console (see [Enable logging](logging.md)), they can be redirected to the [OpenTelemetry](https://opentelemetry.io/) Logs SDK and exported via the standard OTLP protocol to a collector. The collector then forwards the records to the chosen backend for log storage and viewing.
 
-The principle is the same across all SDKs:
+The principle is the same in all SDKs:
 
-1. Create an OpenTelemetry `LoggerProvider` with an OTLP log exporter and a resource attribute `service.name`.
-2. Redirect the SDK logger to this provider via an adapter (log appender / bridge) that converts each SDK log record into an OTel log record. For the list of adapters and the status of log support in different languages, see the [OpenTelemetry logging documentation](https://opentelemetry.io/docs/concepts/signals/logs/).
+1. Create an OpenTelemetry `LoggerProvider` with an OTLP log exporter and resource attribute `service.name`.
+2. Redirect the SDK logger to this provider via an adapter (log appender / bridge) that converts each SDK log record into an OTel log record. See the [OpenTelemetry logging documentation](https://opentelemetry.io/docs/concepts/signals/logs/) for the list of adapters and log support status in different languages.
 3. Run the workload — all internal SDK logs are now sent to the collector as OTLP log records.
 
 {% note info %}
 
 ## Principles {#principles}
 
-The method of collecting logs depends on the language and infrastructure — there is no single format:
+The method of log collection depends on the language and infrastructure — there is no single format:
 
-* **Programmatic bridges (log appender / bridge).** The application itself sends logs to the collector via OTLP directly from the process (the «direct-to-Collector» workflow). This is the approach shown in the examples below.
-* **Agent collectors.** The application writes logs to a file or `stdout`, and a separate agent (for example, the [filelog receiver](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/filelogreceiver) in [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/)) reads, parses, and forwards them to a backend — without changing the application code.
+* **Programmatic bridges (log appender / bridge).** The application itself sends logs to the collector via OTLP directly from the process (direct-to-Collector workflow). This is the approach shown in the examples below.
+* **Collector agents.** The application writes logs to a file or `stdout`, and a separate agent (e.g., [filelog receiver](https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/receiver/filelogreceiver) in [OpenTelemetry Collector](https://opentelemetry.io/docs/collector/)) reads, parses, and forwards them to the backend — without changing the application code.
 
 {% endnote %}
 
@@ -23,9 +23,90 @@ The method of collecting logs depends on the language and infrastructure — the
 
 {% list tabs %}
 
+- C++
+
+  {{ ydb-short-name }} The {{ ydb-short-name }} C++ SDK writes logs via `TLogBackend` from `util`. Implement a backend that converts each record into an OTel log record, and pass it to the driver via `TDriverConfig::SetLog`. See the [Getting Started](https://opentelemetry.io/docs/languages/cpp/getting-started/) guide for building the OpenTelemetry C++ SDK.
+
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/driver/driver.h>
+  #include <opentelemetry/exporters/otlp/otlp_grpc_log_record_exporter_factory.h>
+  #include <opentelemetry/exporters/otlp/otlp_grpc_log_record_exporter_options.h>
+  #include <opentelemetry/logs/provider.h>
+  #include <opentelemetry/sdk/logs/batch_log_record_processor_factory.h>
+  #include <opentelemetry/sdk/logs/logger_provider_factory.h>
+  #include <opentelemetry/sdk/resource/resource.h>
+  #include <library/cpp/logger/backend.h>
+  #include <library/cpp/logger/record.h>
+  #include <memory>
+
+  namespace otlp     = opentelemetry::exporter::otlp;
+  namespace logs_sdk = opentelemetry::sdk::logs;
+  namespace logs_api = opentelemetry::logs;
+  namespace resource = opentelemetry::sdk::resource;
+
+  namespace {
+
+  class TOtelLogBackend final : public TLogBackend {
+  public:
+    explicit TOtelLogBackend(opentelemetry::nostd::shared_ptr<logs_api::Logger> logger)
+        : Logger_(std::move(logger)) {}
+
+    void WriteData(const TLogRecord& rec) override {
+        Logger_->EmitLogRecord(MapSeverity(rec.Priority),
+                               opentelemetry::nostd::string_view(rec.Data, rec.Len));
+    }
+
+    void ReopenLog() override {}
+
+  private:
+    static logs_api::Severity MapSeverity(ELogPriority p) {
+        switch (p) {
+            case TLOG_EMERG:
+            case TLOG_ALERT:
+            case TLOG_CRIT:    return logs_api::Severity::kFatal;
+            case TLOG_ERR:     return logs_api::Severity::kError;
+            case TLOG_WARNING: return logs_api::Severity::kWarn;
+            case TLOG_NOTICE:
+            case TLOG_INFO:    return logs_api::Severity::kInfo;
+            case TLOG_DEBUG:   return logs_api::Severity::kDebug;
+            default:           return logs_api::Severity::kTrace;
+        }
+    }
+
+    opentelemetry::nostd::shared_ptr<logs_api::Logger> Logger_;
+  };
+  } // namespace
+
+  int main() {
+    // 1. Configure the OTel log provider with an OTLP exporter
+    otlp::OtlpGrpcLogRecordExporterOptions exporterOpts;
+    exporterOpts.endpoint = "localhost:4317";
+    auto exporter  = otlp::OtlpGrpcLogRecordExporterFactory::Create(exporterOpts);
+    auto processor = logs_sdk::BatchLogRecordProcessorFactory::Create(std::move(exporter));
+    auto res       = resource::Resource::Create({{"service.name", "ydb-cpp-sdk-otel-logs-sample"}});
+
+    std::shared_ptr<logs_api::LoggerProvider> provider(
+        logs_sdk::LoggerProviderFactory::Create(std::move(processor), res));
+    logs_api::Provider::SetLoggerProvider(provider);
+
+    auto logger = provider->GetLogger("ydb-cpp-sdk");
+
+    // 2. Pass the bridge to the YDB driver
+    auto config = NYdb::TDriverConfig()
+        .SetEndpoint("localhost:2136")
+        .SetDatabase("/local")
+        .SetLog(std::make_unique<TOtelLogBackend>(logger));
+
+    NYdb::TDriver driver(config);
+    // ... use driver ...
+    driver.Stop(true);
+  }
+  ```
+
 - Go
 
-  For the {{ ydb-short-name }} Go SDK, there is a ready-made adapter [ydb-go-sdk-otel](https://github.com/ydb-platform/ydb-go-sdk-otel) that converts SDK events into OpenTelemetry signals: traces (`WithTracer`), metrics (`WithMetrics`), and logs (`WithLogger`). The adapter does not configure exporters itself — you create a `LoggerProvider` with an OTLP log exporter, get a logger from it, and pass it to the `ydbOtel.WithLogger` option when calling `ydb.Open`. Each internal SDK log record (driver initialization, session pool, query execution, retries, etc.) is then sent to the collector as an OTLP log record.
+  For the {{ ydb-short-name }} Go SDK, there is a ready-made adapter [ydb-go-sdk-otel](https://github.com/ydb-platform/ydb-go-sdk-otel) that converts SDK events into OpenTelemetry signals: traces (`WithTracer`), metrics (`WithMetrics`), and logs (`WithLogger`). The adapter does not configure exporters itself — you create a `LoggerProvider` with an OTLP log exporter, obtain a logger from it, and pass it to the `ydbOtel.WithLogger` option when calling `ydb.Open`. Each internal SDK log record (driver initialization, session pool, query execution, retries, etc.) is then sent to the collector as an OTLP log record.
 
 
   ```bash
@@ -56,7 +137,7 @@ The method of collecting logs depends on the language and infrastructure — the
   func main() {
       ctx := context.Background()
 
-      // 1. Setting up the OTel log provider with an OTLP exporter.
+      // 1. Configure the OTel log provider with an OTLP exporter.
       exporter, err := otlploggrpc.New(ctx,
           otlploggrpc.WithEndpoint("localhost:4317"),
           otlploggrpc.WithInsecure(),
@@ -73,7 +154,7 @@ The method of collecting logs depends on the language and infrastructure — the
       )
       defer lp.Shutdown(ctx)
 
-      // 2. Opening the YDB driver with the ydb-go-sdk-otel adapter.
+      // 2. Open the YDB driver with the ydb-go-sdk-otel adapter.
       // WithLogger forwards SDK log events to OTel log records.
       logger := lp.Logger("ydb-go-sdk")
       db, err := ydb.Open(ctx,
@@ -88,91 +169,9 @@ The method of collecting logs depends on the language and infrastructure — the
   }
   ```
 
-- Python
-
-  {{ ydb-short-name }} Python SDK writes logs through the standard `logging` module (loggers named `ydb.*`). Use the built-in OpenTelemetry `LoggingHandler` to redirect these records to `LoggerProvider` and export via OTLP:
-
-
-  ```bash
-  pip install opentelemetry-sdk opentelemetry-exporter-otlp-proto-grpc
-  ```
-
-
-  ```python
-  import logging
-
-  import ydb
-  from opentelemetry._logs import set_logger_provider
-  from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
-  from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
-  from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
-  from opentelemetry.sdk.resources import Resource
-
-  resource = Resource(attributes={"service.name": "ydb-otel-logs-example"})
-  logger_provider = LoggerProvider(resource=resource)
-  logger_provider.add_log_record_processor(
-      BatchLogRecordProcessor(OTLPLogExporter(endpoint="http://localhost:4317"))
-  )
-  set_logger_provider(logger_provider)
-
-  # Bridge stdlib logging -> OpenTelemetry. Binding a handler to the root logger
-  # intercepts everything the SDK writes via logging.getLogger("ydb...").
-  otel_handler = LoggingHandler(level=logging.NOTSET, logger_provider=logger_provider)
-  logging.basicConfig(level=logging.INFO, handlers=[otel_handler])
-  logging.getLogger("ydb").setLevel(logging.INFO)
-
-  with ydb.Driver(endpoint="grpc://localhost:2136", database="/local") as driver:
-      driver.wait(timeout=5)
-      with ydb.QuerySessionPool(driver) as pool:
-          pool.execute_with_retries("SELECT 1")
-
-  logger_provider.shutdown()
-  ```
-
-- C#
-
-  {{ ydb-short-name }} C# SDK writes logs through the `ILoggerFactory` passed to it. Create a factory based on the OpenTelemetry logging provider with an OTLP exporter and pass it to the data source:
-
-
-  ```bash
-  dotnet add package OpenTelemetry
-  dotnet add package OpenTelemetry.Exporter.OpenTelemetryProtocol
-  ```
-
-
-  ```csharp
-  using Microsoft.Extensions.Logging;
-  using OpenTelemetry.Logs;
-  using OpenTelemetry.Resources;
-  using Ydb.Sdk.Ado;
-
-  var resourceBuilder = ResourceBuilder.CreateDefault()
-      .AddService("ydb-sdk-otel-logs-sample");
-
-  using var loggerFactory = LoggerFactory.Create(builder =>
-  {
-      builder.AddOpenTelemetry(options =>
-      {
-          options.SetResourceBuilder(resourceBuilder);
-          options.AddOtlpExporter(o => o.Endpoint = new Uri("http://localhost:4317"));
-      });
-  });
-
-  // Pass the factory to the SDK: each internal log (driver initialization, session pool,
-  // query execution, retries, ...) is exported to the collector as an OTLP log record.
-  await using var dataSource = new YdbDataSource(
-      new YdbConnectionStringBuilder("Host=localhost;Port=2136;Database=/local")
-      {
-          LoggerFactory = loggerFactory
-      });
-
-  await using var connection = await dataSource.OpenConnectionAsync();
-  await new YdbCommand("SELECT 1", connection).ExecuteNonQueryAsync();
-  ```
-
 - Java
 
-  {{ ydb-short-name }} Java SDK writes logs through `slf4j`. If logback is used as the `slf4j` implementation, connect the ready-made `opentelemetry-logback-appender-1.0` appender, which forwards each event to the OpenTelemetry Logs SDK:
+  {{ ydb-short-name }} Java SDK writes logs via `slf4j`. If logback is used as the `slf4j` implementation, connect the ready-made `opentelemetry-logback-appender-1.0` appender, which forwards each event to the OpenTelemetry Logs SDK:
 
 
   ```xml
@@ -258,88 +257,99 @@ The method of collecting logs depends on the language and infrastructure — the
   }
   ```
 
-- C++
+- Python
 
-  {{ ydb-short-name }} C++ SDK writes logs through `TLogBackend` from `util`. Implement a backend that turns each record into an OTel log record, and pass it to the driver via `TDriverConfig::SetLog`. See [Getting Started](https://opentelemetry.io/docs/languages/cpp/getting-started/) for building the OpenTelemetry C++ SDK.
+  {{ ydb-short-name }} Python SDK writes logs via the standard `logging` module (loggers named `ydb.*`). Use the OpenTelemetry built-in `LoggingHandler` to redirect these records to `LoggerProvider` and export via OTLP:
 
 
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
-  #include <opentelemetry/exporters/otlp/otlp_grpc_log_record_exporter_factory.h>
-  #include <opentelemetry/exporters/otlp/otlp_grpc_log_record_exporter_options.h>
-  #include <opentelemetry/logs/provider.h>
-  #include <opentelemetry/sdk/logs/batch_log_record_processor_factory.h>
-  #include <opentelemetry/sdk/logs/logger_provider_factory.h>
-  #include <opentelemetry/sdk/resource/resource.h>
-  #include <library/cpp/logger/backend.h>
-  #include <library/cpp/logger/record.h>
-  #include <memory>
+  ```bash
+  pip install opentelemetry-sdk opentelemetry-exporter-otlp-proto-grpc
+  ```
 
-  namespace otlp     = opentelemetry::exporter::otlp;
-  namespace logs_sdk = opentelemetry::sdk::logs;
-  namespace logs_api = opentelemetry::logs;
-  namespace resource = opentelemetry::sdk::resource;
 
-  namespace {
+  ```python
+  import logging
 
-  class TOtelLogBackend final : public TLogBackend {
-  public:
-    explicit TOtelLogBackend(opentelemetry::nostd::shared_ptr<logs_api::Logger> logger)
-        : Logger_(std::move(logger)) {}
+  import ydb
+  from opentelemetry._logs import set_logger_provider
+  from opentelemetry.exporter.otlp.proto.grpc._log_exporter import OTLPLogExporter
+  from opentelemetry.sdk._logs import LoggerProvider, LoggingHandler
+  from opentelemetry.sdk._logs.export import BatchLogRecordProcessor
+  from opentelemetry.sdk.resources import Resource
 
-    void WriteData(const TLogRecord& rec) override {
-        Logger_->EmitLogRecord(MapSeverity(rec.Priority),
-                               opentelemetry::nostd::string_view(rec.Data, rec.Len));
-    }
+  resource = Resource(attributes={"service.name": "ydb-otel-logs-example"})
+  logger_provider = LoggerProvider(resource=resource)
+  logger_provider.add_log_record_processor(
+      BatchLogRecordProcessor(OTLPLogExporter(endpoint="http://localhost:4317"))
+  )
+  set_logger_provider(logger_provider)
 
-    void ReopenLog() override {}
+  # Bridge stdlib logging -> OpenTelemetry. Binding a handler to the root logger
+  # intercepts everything the SDK writes via logging.getLogger("ydb...").
+  otel_handler = LoggingHandler(level=logging.NOTSET, logger_provider=logger_provider)
+  logging.basicConfig(level=logging.INFO, handlers=[otel_handler])
+  logging.getLogger("ydb").setLevel(logging.INFO)
 
-  private:
-    static logs_api::Severity MapSeverity(ELogPriority p) {
-        switch (p) {
-            case TLOG_EMERG:
-            case TLOG_ALERT:
-            case TLOG_CRIT:    return logs_api::Severity::kFatal;
-            case TLOG_ERR:     return logs_api::Severity::kError;
-            case TLOG_WARNING: return logs_api::Severity::kWarn;
-            case TLOG_NOTICE:
-            case TLOG_INFO:    return logs_api::Severity::kInfo;
-            case TLOG_DEBUG:   return logs_api::Severity::kDebug;
-            default:           return logs_api::Severity::kTrace;
-        }
-    }
+  with ydb.Driver(endpoint="grpc://localhost:2136", database="/local") as driver:
+      driver.wait(timeout=5)
+      with ydb.QuerySessionPool(driver) as pool:
+          pool.execute_with_retries("SELECT 1")
 
-    opentelemetry::nostd::shared_ptr<logs_api::Logger> Logger_;
-  };
-  } // namespace
+  logger_provider.shutdown()
+  ```
 
-  int main() {
-    // 1. Setting up the OTel log provider with an OTLP exporter
-    otlp::OtlpGrpcLogRecordExporterOptions exporterOpts;
-    exporterOpts.endpoint = "localhost:4317";
-    auto exporter  = otlp::OtlpGrpcLogRecordExporterFactory::Create(exporterOpts);
-    auto processor = logs_sdk::BatchLogRecordProcessorFactory::Create(std::move(exporter));
-    auto res       = resource::Resource::Create({{"service.name", "ydb-cpp-sdk-otel-logs-sample"}});
+- C#
 
-    std::shared_ptr<logs_api::LoggerProvider> provider(
-        logs_sdk::LoggerProviderFactory::Create(std::move(processor), res));
-    logs_api::Provider::SetLoggerProvider(provider);
+  {{ ydb-short-name }} C# SDK writes logs via the `ILoggerFactory` passed to it. Create a factory based on the OpenTelemetry logging provider with an OTLP exporter and pass it to the data source:
 
-    auto logger = provider->GetLogger("ydb-cpp-sdk");
 
-    // 2. Pass the bridge to the YDB driver
-    auto config = NYdb::TDriverConfig()
-        .SetEndpoint("localhost:2136")
-        .SetDatabase("/local")
-        .SetLog(std::make_unique<TOtelLogBackend>(logger));
+  ```bash
+  dotnet add package OpenTelemetry
+  dotnet add package OpenTelemetry.Exporter.OpenTelemetryProtocol
+  ```
 
-    NYdb::TDriver driver(config);
-    // ... use driver ...
-    driver.Stop(true);
-  }
+
+  ```csharp
+  using Microsoft.Extensions.Logging;
+  using OpenTelemetry.Logs;
+  using OpenTelemetry.Resources;
+  using Ydb.Sdk.Ado;
+
+  var resourceBuilder = ResourceBuilder.CreateDefault()
+      .AddService("ydb-sdk-otel-logs-sample");
+
+  using var loggerFactory = LoggerFactory.Create(builder =>
+  {
+      builder.AddOpenTelemetry(options =>
+      {
+          options.SetResourceBuilder(resourceBuilder);
+          options.AddOtlpExporter(o => o.Endpoint = new Uri("http://localhost:4317"));
+      });
+  });
+
+  // Pass the factory to the SDK: each internal log (driver initialization, session pool,
+  // query execution, retries, ...) is exported to the collector as an OTLP log record.
+  await using var dataSource = new YdbDataSource(
+      new YdbConnectionStringBuilder("Host=localhost;Port=2136;Database=/local")
+      {
+          LoggerFactory = loggerFactory
+      });
+
+  await using var connection = await dataSource.OpenConnectionAsync();
+  await new YdbCommand("SELECT 1", connection).ExecuteNonQueryAsync();
   ```
 
 - JavaScript
+
+  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
+
+- Rust
+
+  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
+
+  Track progress or vote for support in the Rust SDK: [ydb-rs-sdk#268](https://github.com/ydb-platform/ydb-rs-sdk/issues/268)
+
+- PHP
 
   {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
 

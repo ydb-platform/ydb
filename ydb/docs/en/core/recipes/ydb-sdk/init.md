@@ -1,10 +1,83 @@
-# Initialize the driver
+# Driver initialization
 
-To connect to {{ ydb-short-name }}, you must specify the required parameters (see [Connecting to a {{ ydb-short-name }} server](../../concepts/connect.md)) and optional parameters that control driver behavior.
+To connect to {{ ydb-short-name }}, you must specify required parameters (read more in the [Connecting to the {{ ydb-short-name }} server](../../concepts/connect.md) section) and optional ones that determine the driver's behavior during operation.
 
-Below are examples of connecting to {{ ydb-short-name }} (creating a driver) in different {{ ydb-short-name }} SDKs.
+Below are code examples for connecting to {{ ydb-short-name }} (creating a driver) in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+
+    int main() {
+      auto driverConfig = NYdb::TDriverConfig("grpc://localhost:2136/local");
+
+      NYdb::TDriver driver(driverConfig);
+
+      // ...
+
+      driver.Stop();
+
+      return 0;
+    }
+    ```
+
+  - userver
+
+    {% cut "static config" %}
+
+    ```yaml
+    ydb:
+        databases:
+            db:
+                endpoint: grpc://localhost:2136
+                database: /local
+    ```
+
+    {% endcut %}
+
+
+    ```cpp
+    #include <userver/components/component_base.hpp>
+    #include <userver/components/minimal_server_component_list.hpp>
+    #include <userver/storages/secdist/component.hpp>
+    #include <userver/storages/secdist/provider_component.hpp>
+    #include <userver/utils/daemon_run.hpp>
+    #include <userver/ydb/component.hpp>
+    #include <userver/ydb/table.hpp>
+
+    class MyYdbWorker final : public components::ComponentBase {
+    public:
+        static constexpr std::string_view kName = "my-ydb-worker";
+
+        MyYdbWorker(const components::ComponentConfig& config, const components::ComponentContext& context)
+            : components::ComponentBase(config, context),
+              table_client_(context.FindComponent<ydb::YdbComponent>().GetTableClient("db"))
+        {
+            // ...
+        }
+
+    private:
+        std::shared_ptr<ydb::TableClient> table_client_;
+    };
+
+    int main(int argc, char* argv[]) {
+        auto component_list = components::MinimalServerComponentList()
+            .Append<components::DefaultSecdistProvider>()
+            .Append<components::Secdist>()
+            .Append<ydb::YdbComponent>()
+            .Append<MyYdbWorker>();
+        return utils::DaemonMain(argc, argv, component_list);
+    }
+    ```
+
+  {% endlist %}
 
 - Go
 
@@ -37,7 +110,7 @@ Below are examples of connecting to {{ ydb-short-name }} (creating a driver) in 
 
   - database/sql
 
-    {% cut "Using a connector (recommended)" %}
+    {% cut "Using a connector (recommended method)" %}
 
     ```golang
     package main
@@ -79,7 +152,8 @@ Below are examples of connecting to {{ ydb-short-name }} (creating a driver) in 
 
     {% cut "Using a connection string" %}
 
-    The `database/sql` driver is registered when you import the driver package with a blank import:
+    The `database/sql` driver is registered when importing the specific driver package using an underscore:
+
 
     ```golang
     package main
@@ -115,7 +189,7 @@ Below are examples of connecting to {{ ydb-short-name }} (creating a driver) in 
     public void work() {
         try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
                 .build()) {
-            // Work with transport
+            // Working with transport
             doWork(transport);
         }
     }
@@ -125,17 +199,18 @@ Below are examples of connecting to {{ ydb-short-name }} (creating a driver) in 
 
     ```java
     public void work() throws SQLException {
-        // tech.ydb.jdbc.YdbDriver must be on the classpath for DriverManager auto-loading
+        // Driver tech.ydb.jdbc.YdbDriver must be in the classpath for auto-loading via DriverManager
         try (Connection connection = DriverManager.getConnection("jdbc:ydb:grpc://localhost:2136/local")) {
-            // Work with connection
+            // Working with connection
             doWork(connection);
         }
     }
     ```
 
-    For Spring Boot, set the URL and driver class in `application.properties` or `application.yml` (`spring.datasource.url`, `spring.datasource.driver-class-name`).
 
-    Spring Boot, ORMs, and other JDBC stacks (Hibernate, JOOQ, MyBatis, and so on) talk to {{ ydb-short-name }} like any JDBC source: add the {{ ydb-short-name }} JDBC dependency and configure the URL — you do not need to configure native `GrpcTransport` separately.
+    For Spring Boot, specify the URL and driver class in `application.properties` or `application.yml` (`spring.datasource.url`, `spring.datasource.driver-class-name`).
+
+    Spring Boot, as well as ORM and other tools around JDBC (Hibernate, JOOQ, MyBatis, etc.), initialize the transport to {{ ydb-short-name }} in the same way as regular JDBC: just add a dependency with the {{ ydb-short-name }} JDBC driver and set the connection URL — no separate configuration of the native `GrpcTransport` is required.
 
   {% endlist %}
 
@@ -169,17 +244,14 @@ Below are examples of connecting to {{ ydb-short-name }} (creating a driver) in 
 
   {% endlist %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
+  using Ydb.Sdk.Ado;
 
-  var config = new DriverConfig(
-      endpoint: "grpc://localhost:2136",
-      database: "/local"
-  );
-
-  await using var driver = await Driver.CreateInitialized(config);
+  await using var dataSource = new YdbDataSource("Host=localhost;Port=2136;Database=/local");
+  await using var connection = await dataSource.OpenConnectionAsync();
+  // ...
   ```
 
 - JavaScript
@@ -189,6 +261,21 @@ Below are examples of connecting to {{ ydb-short-name }} (creating a driver) in 
 
   const driver = new Driver('grpc://localhost:2136/local')
   await driver.ready()
+  ```
+
+- Rust
+
+  ```rust
+  use ydb::{AccessTokenCredentials, ClientBuilder, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136/local")?
+          .with_credentials(AccessTokenCredentials::from("..."))
+          .client()?;
+      client.wait().await?;
+      Ok(())
+  }
   ```
 
 - PHP
@@ -217,21 +304,6 @@ Below are examples of connecting to {{ ydb-short-name }} (creating a driver) in 
   ];
 
   $ydb = new Ydb($config);
-  ```
-
-- Rust
-
-  ```rust
-  use ydb::{AccessTokenCredentials, ClientBuilder, YdbResult};
-
-  #[tokio::main]
-  async fn main() -> YdbResult<()> {
-      let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136/local")?
-          .with_credentials(AccessTokenCredentials::from("..."))
-          .client()?;
-      client.wait().await?;
-      Ok(())
-  }
   ```
 
 {% endlist %}

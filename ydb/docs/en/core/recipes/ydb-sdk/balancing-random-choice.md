@@ -1,10 +1,51 @@
-# Random choice
+# Uniform random choice
 
-The {{ ydb-short-name }} SDK uses the `random_choice` (uniform random) balancing algorithm by default, except the C++ SDK, which defaults to ["prefer the nearest data center"](./balancing-prefer-local.md).
+{{ ydb-short-name }}SDK uses the `random_choice` algorithm (uniform random balancing) by default, except for the C++ SDK, which uses the ["prefer nearest datacenter"](./balancing-prefer-local.md) algorithm by default.
 
-Below are examples of explicitly setting the "random choice" balancing algorithm in different {{ ydb-short-name }} SDKs.
+Below are code examples for forcibly setting the "uniform random choice" balancing algorithm in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+
+    int main() {
+      auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+      auto driverConfig = NYdb::TDriverConfig(connectionString)
+        .SetBalancingPolicy(NYdb::TBalancingPolicy::UseAllNodes());
+
+      NYdb::TDriver driver(driverConfig);
+      // ...
+      driver.Stop(true);
+      return 0;
+    }
+    ```
+
+  - userver
+
+    {% cut "static config" %}
+
+    ```yaml
+    ydb:
+        databases:
+            db:
+                endpoint: grpc://localhost:2136
+                database: /local
+                prefer_local_dc: false
+    ```
+
+    {% endcut %}
+
+    The code for initializing `ydb::YdbComponent`, obtaining `ydb::TableClient`, and starting `components::MinimalServerComponentList` is as in the example from [init.md](./init.md).
+
+  {% endlist %}
 
 - Go
 
@@ -42,9 +83,10 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
 
   - database/sql
 
-    Client-side balancing in the {{ ydb-short-name }} `database/sql` driver happens only when opening a new connection (in `database/sql` terms), which maps to a {{ ydb-short-name }} session on a specific node. After the session is created, all queries on that session go to that node. Queries on the same {{ ydb-short-name }} session are not balanced across nodes.
+    Client-side balancing in the `database/sql` driver for {{ ydb-short-name }} is performed only when a new connection is established (in `database/sql` terms), which is a {{ ydb-short-name }} session on a specific node. After the session is created, all queries on that session are directed to the node where the session was created. Query balancing on the same {{ ydb-short-name }} session between different {{ ydb-short-name }} nodes does not occur.
 
-    Example for "random choice" balancing:
+    Example code for setting the "uniform random choice" balancing algorithm:
+
 
     ```go
     package main
@@ -85,24 +127,6 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
 
   {% endlist %}
 
-- C++
-
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
-
-  int main() {
-    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
-
-    auto driverConfig = NYdb::TDriverConfig(connectionString)
-      .SetBalancingPolicy(NYdb::TBalancingPolicy::UseAllNodes());
-
-    NYdb::TDriver driver(driverConfig);
-    // ...
-    driver.Stop(true);
-    return 0;
-  }
-  ```
-
 - Python
 
   {% list tabs %}
@@ -117,7 +141,7 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
         endpoint=os.environ["YDB_ENDPOINT"],
         database=os.environ["YDB_DATABASE"],
         credentials=ydb.credentials_from_env_variables(),
-        use_all_nodes=True,  # uniform random choice
+        use_all_nodes=True,  # равномерный случайный выбор
     )
 
     with ydb.Driver(driver_config) as driver:
@@ -137,7 +161,7 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
             endpoint=os.environ["YDB_ENDPOINT"],
             database=os.environ["YDB_DATABASE"],
             credentials=ydb.credentials_from_env_variables(),
-            use_all_nodes=True,  # uniform random choice
+            use_all_nodes=True,  # равномерный случайный выбор
         )
         async with ydb.aio.Driver(driver_config) as driver:
             await driver.wait()
@@ -156,7 +180,7 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
         os.environ["YDB_SQLALCHEMY_URL"],
         connect_args={
             "driver_config_kwargs": {
-                "use_all_nodes": True,  # uniform random choice
+                "use_all_nodes": True,  # равномерный случайный выбор
             }
         },
     )
@@ -164,9 +188,13 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
 
   {% endlist %}
 
+- C#
+
+  This algorithm is used by default.
+
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Java
 
@@ -174,7 +202,8 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
 
   - Native SDK
 
-    "Random choice" in the Java SDK corresponds to the `USE_ALL_NODES` policy in `BalancingSettings` (this is also the default if you do not override settings).
+    The "uniform random choice" algorithm in the Java SDK is set by the `USE_ALL_NODES` policy in `BalancingSettings` (this is the default behavior if settings are not overridden).
+
 
     ```java
     import tech.ydb.core.grpc.BalancingSettings;
@@ -189,14 +218,18 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
 
   - JDBC
 
-    Balancing when selecting a new session is handled by the native transport inside the driver; if needed, use the same parameters as in the native SDK via [JDBC connection settings](../../reference/languages-and-apis/jdbc-driver/properties.md).
+    Balancing when selecting a new session is set on the native transport side inside the driver; if necessary, use the same parameters as in the native SDK via [JDBC connection settings](../../reference/languages-and-apis/jdbc-driver/properties.md).
 
-    In Spring Boot, ORMs, and other JDBC wrappers, use the same JDBC URL and balancing parameters as with the driver directly (for example `spring.datasource.url` with query parameters or `DataSource` properties).
+    In Spring Boot, ORM, and other third-party frameworks around JDBC, specify the same JDBC connection string and balancing parameters as when using the driver directly (for example, `spring.datasource.url` with the required query parameters or `DataSource` properties).
 
   {% endlist %}
 
 - Rust
 
-  The RandomChoice policy (random endpoint selection among discovery nodes) is enabled **by default** — no extra configuration is required.
+  The RandomChoice policy (random selection of an endpoint among discovery nodes) is used **by default** — no additional configuration is required.
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

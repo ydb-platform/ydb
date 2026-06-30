@@ -1,18 +1,62 @@
-# Setting the session pool size
+# Set the session pool size
 
-{{ ydb-short-name }} creates an [actor](../../concepts/glossary.md#actor) for each session. Consequently, the session pool size on the client affects resource consumption (memory, CPU) on the {{ ydb-short-name }} server.
+{{ ydb-short-name }} creates an [actor](../../concepts/glossary.md#actor) for each session. As a result, the size of the session pool on the client affects resource consumption (memory, CPU) on the server side {{ ydb-short-name }}.
 
-For example, if 1000 clients of the same database open 1000 sessions each, one million actors are created on the server, consuming a large amount of memory and CPU. Without a client-side session limit, this can slow the cluster down and put it in a degraded state.
+For example, if 1000 clients of one database each open 1000 sessions, then 1,000,000 actors are created on the server side. Such a number of actors consumes significant amounts of memory and CPU resources. Without a limit on the number of sessions on the client, this can lead to slow cluster operation and its semi-emergency state.
 
-By default, native {{ ydb-short-name }} SDK drivers use a limit of 50 sessions. When using third-party libraries such as Go `database/sql`, no limit is set.
+By default, in {{ ydb-short-name }} SDK when using native drivers, a limit of 50 sessions is set. When using third-party libraries, for example, Go `database/sql`, no limit is set.
 
-Set the client session limit to the minimum needed for normal application operation. Remember that a session is single-threaded on both server and client. If the application must run 1000 concurrent in-flight requests to {{ ydb-short-name }}, set the limit to about 1000 sessions.
+It is recommended to set the limit on the number of sessions on the client to the minimum necessary for normal operation of the client application. Note that a session is single-threaded both on the server and client side. Accordingly, if the application needs to execute 1000 concurrent requests (inflight) to {{ ydb-short-name }} for the estimated load, then the limit should be set at 1000 sessions.
 
-Distinguish estimated RPS (requests per second) from in-flight requests. RPS is the total number of requests completed in one second. For example, with RPS = 10000 and average latency 100&nbsp;ms, a limit of 1000 sessions is enough: each session can run about 10 sequential requests per second on average.
+It is important to distinguish between the estimated RPS (requests per second) and inflight. The first case refers to the total number of requests executed to {{ ydb-short-name }} per second. For example, with RPS = 10000 and an average request execution latency of 100 ms, it is sufficient to set a limit of 1000 sessions. This means that each session will execute an average of 10 sequential requests per estimated second.
 
-Below are examples of setting the session pool limit in different {{ ydb-short-name }} SDKs.
+Below are code examples for setting the session pool limit in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    - `MaxActiveSessions` — maximum pool size (default 50).
+    - `MinPoolSize` — minimum number of sessions (default 10). The SDK will stop closing sessions by timeout when the limit is reached, so the number is not guaranteed.
+
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    NYdb::NQuery::TQueryClient CreateQueryClient(const NYdb::TDriver& driver) {
+        NYdb::NQuery::TClientSettings settings;
+        settings.SessionPoolSettings(
+            NYdb::NQuery::TSessionPoolSettings()
+                .MaxActiveSessions(500)
+                .MinPoolSize(10));
+        return NYdb::NQuery::TQueryClient(driver, settings);
+    }
+    ```
+
+  - userver
+
+    {% cut "static config" %}
+
+    ```yaml
+    ydb:
+        databases:
+            db:
+                endpoint: grpc://localhost:2136
+                database: /local
+                max_pool_size: 500
+                min_pool_size: 10
+    ```
+
+    {% endcut %}
+
+    The code for initializing `ydb::YdbComponent`, obtaining `ydb::TableClient`, and starting `components::MinimalServerComponentList` is as in the example from [init.md](./init.md).
+
+  {% endlist %}
 
 - Go
 
@@ -44,9 +88,10 @@ Below are examples of setting the session pool limit in different {{ ydb-short-n
 
   - database/sql
 
-    The `database/sql` library has its own connection pool. Each `database/sql` connection maps to one {{ ydb-short-name }} session. Tune the pool with `sql.DB.SetMaxOpenConns` and `sql.DB.SetMaxIdleConns`. See the [`database/sql` documentation](https://pkg.go.dev/database/sql#DB.SetMaxOpenConns).
+    The `database/sql` library has its own connection pool. Each connection in `database/sql` corresponds to a specific {{ ydb-short-name }} session. The connection pool in `database/sql` is managed using the `sql.DB.SetMaxOpenConns` and `sql.DB.SetMaxIdleConns` functions. For more details, see the [documentation](https://pkg.go.dev/database/sql#DB.SetMaxOpenConns) `database/sql`.
 
-    Example using a `database/sql` connection pool:
+    Example code using the connection pool size `database/sql`:
+
 
     ```golang
     package main
@@ -81,8 +126,8 @@ Below are examples of setting the session pool limit in different {{ ydb-short-n
 
     ```java
     this.queryClient = QueryClient.newClient(transport)
-            // 10 — minimum active sessions kept in the pool during cleanup
-            // 500 — maximum pool size
+            // 10 — minimum number of active sessions held in the pool during cleanup
+            // 500 — maximum size of the session pool
             .sessionPoolMinSize(10)
             .sessionPoolMaxSize(500)
             .build();
@@ -90,14 +135,15 @@ Below are examples of setting the session pool limit in different {{ ydb-short-n
 
   - JDBC
 
-    JDBC applications typically use external connection pools such as [HikariCP](https://github.com/brettwooldridge/HikariCP) or [C3p0](https://github.com/swaldman/c3p0). By default, the {{ ydb-short-name }} JDBC driver observes how many connections the external pool opens and adjusts the session pool accordingly. Configure session limits by configuring HikariCP or C3p0 correctly.
+    When working with JDBC, external connection pools such as [HikariCP](https://github.com/brettwooldridge/HikariCP) or [C3p0](https://github.com/swaldman/c3p0) are typically used. In the default operation mode, the {{ ydb-short-name }} JDBC driver determines the number of connections opened by the external pool and adjusts the session pool size accordingly. Therefore, it is sufficient to configure `HikariCP` or `C3p0` correctly to set up the session pool.
 
-    Example HikariCP settings in Spring:
+    Example of configuring HikariCP pool in Spring configuration:
+
 
     ```properties
     spring.datasource.url=jdbc:ydb:grpc://localhost:2136/local
     spring.datasource.driver-class-name=tech.ydb.jdbc.YdbDriver
-    spring.datasource.hikari.maximum-pool-size=100 # max JDBC connections
+    spring.datasource.hikari.maximum-pool-size=100 # максимум JDBC-соединений
     ```
 
   {% endlist %}
@@ -142,17 +188,37 @@ Below are examples of setting the session pool limit in different {{ ydb-short-n
 
   - SQLAlchemy
 
-    Setting the pool size is not currently supported.
+    Setting the pool size is currently not supported.
 
   {% endlist %}
 
+- C#
+
+  In the {{ ydb-short-name }} C# SDK, session pool parameters are set via the connection string:
+
+
+  ```C#
+  using Ydb.Sdk.Ado;
+
+  await using var dataSource = new YdbDataSource(
+      "Host=localhost;Port=2136;Database=/local;MaxPoolSize=500;MinPoolSize=10;SessionIdleTimeout=60");
+  ```
+
+
+  * `MaxPoolSize`: maximum size of the session pool (default 100)
+  * `MinPoolSize` — minimum number of sessions held in the pool (default 0)
+  * `SessionIdleTimeout` — session idle time in seconds before it is closed (default 300)
+
+  For Entity Framework and linq2db, use the same connectionString.
+
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Rust
 
-  For `QueryClient`, set the session pool size via [`QuerySessionPoolSettings::with_limit`](https://docs.rs/ydb/latest/ydb/struct.QuerySessionPoolSettings.html#method.with_limit) and [`with_implicit_session_pool`](https://docs.rs/ydb/latest/ydb/struct.QueryClient.html#method.with_implicit_session_pool) (or [`with_session_pool`](https://docs.rs/ydb/latest/ydb/struct.QueryClient.html#method.with_session_pool) for explicit sessions):
+  For `QueryClient`, the pool size is set via [`QuerySessionPoolSettings::with_limit`](https://docs.rs/ydb/latest/ydb/struct.QuerySessionPoolSettings.html#method.with_limit) and [`with_implicit_session_pool`](https://docs.rs/ydb/latest/ydb/struct.QueryClient.html#method.with_implicit_session_pool) (or [`with_session_pool`](https://docs.rs/ydb/latest/ydb/struct.QueryClient.html#method.with_session_pool) for explicit sessions):
+
 
   ```rust
   use ydb::{ClientBuilder, QuerySessionPoolSettings, YdbResult};
@@ -175,5 +241,9 @@ Below are examples of setting the session pool limit in different {{ ydb-short-n
       Ok(())
   }
   ```
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

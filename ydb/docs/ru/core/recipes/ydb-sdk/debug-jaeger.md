@@ -1,12 +1,12 @@
-# Enabling tracing in Jaeger
+# Включение трассировки в Jaeger
 
-Below are code examples for enabling tracing in Jaeger in different {{ ydb-short-name }} SDKs.
+Ниже приведены примеры кода для включения трассировки в Jaeger в различных {{ ydb-short-name }} SDK.
 
 {% list tabs %}
 
 - C++
 
-  This functionality is not currently supported.
+  Данная функциональность в настоящее время не поддерживается.
 
 - Go
 
@@ -145,28 +145,28 @@ Below are code examples for enabling tracing in Jaeger in different {{ ydb-short
 
 - Java
 
-  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Python
 
-  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - C#
 
-  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
-  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Rust
 
-  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-  For distributed tracing, use [`tracing`](https://docs.rs/tracing) and export via OpenTelemetry ([#268](https://github.com/ydb-platform/ydb-rs-sdk/issues/268)).
+  Используйте экосистему [`tracing`](https://docs.rs/tracing) и экспорт OpenTelemetry ([#268](https://github.com/ydb-platform/ydb-rs-sdk/issues/268)).
 
 - PHP
 
-  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

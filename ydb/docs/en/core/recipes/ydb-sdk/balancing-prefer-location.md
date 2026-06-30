@@ -1,8 +1,39 @@
 # Prefer a specific availability zone
 
-Below are examples of setting the "prefer availability zone" balancing algorithm in different {{ ydb-short-name }} SDKs.
+Below are code examples for setting the balancing algorithm option "prefer availability zone" in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    In the C++ SDK, you can select only one availability zone as the preferred one.
+
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+
+    int main() {
+      auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+      auto driverConfig = NYdb::TDriverConfig(connectionString)
+        .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferableLocation("datacenter1"));
+
+      NYdb::TDriver driver(driverConfig);
+      // ...
+      driver.Stop(true);
+      return 0;
+    }
+    ```
+
+  - userver
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  {% endlist %}
 
 - Go
 
@@ -44,9 +75,10 @@ Below are examples of setting the "prefer availability zone" balancing algorithm
 
   - database/sql
 
-    Client-side balancing in the {{ ydb-short-name }} `database/sql` driver happens only when opening a new connection (in `database/sql` terms), which maps to a {{ ydb-short-name }} session on a specific node. After the session is created, all queries on that session go to that node. Queries on the same {{ ydb-short-name }} session are not balanced across nodes.
+    Client-side balancing in the `database/sql` driver for {{ ydb-short-name }} is performed only when a new connection is established (in `database/sql` terms), which is a {{ ydb-short-name }} session on a specific node. After the session is created, all queries on that session are directed to the node where the session was created. Query balancing on the same {{ ydb-short-name }} session between different {{ ydb-short-name }} nodes does not occur.
 
-    Example for "prefer availability zone" balancing:
+    Example code for setting the balancing algorithm "prefer availability zone":
+
 
     ```go
     package main
@@ -91,37 +123,21 @@ Below are examples of setting the "prefer availability zone" balancing algorithm
 
   {% endlist %}
 
-- C++
-
-  The C++ SDK lets you pick only one availability zone as preferred.
-
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
-
-  int main() {
-    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
-
-    auto driverConfig = NYdb::TDriverConfig(connectionString)
-      .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferableLocation("datacenter1"));
-
-    NYdb::TDriver driver(driverConfig);
-    // ...
-    driver.Stop(true);
-    return 0;
-  }
-  ```
-
 - Python
 
-  This functionality is not currently supported.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Java
 
-  In the **Java SDK**, availability zone preference is set on the gRPC transport.
+  In **Java SDK**, the availability zone preference is set in the gRPC transport settings.
 
   {% list tabs %}
 
@@ -132,7 +148,7 @@ Below are examples of setting the "prefer availability zone" balancing algorithm
     import tech.ydb.core.grpc.GrpcTransport;
 
     try (GrpcTransport transport = GrpcTransport.forConnectionString("grpc://localhost:2136/local")
-            .withBalancingSettings(BalancingSettings.fromLocation("a")) // preferred availability zone
+            .withBalancingSettings(BalancingSettings.fromLocation("a")) // предпочитаемая зона доступности
             .build()) {
         // ...
     }
@@ -140,9 +156,9 @@ Below are examples of setting the "prefer availability zone" balancing algorithm
 
   - JDBC
 
-    See supported availability-zone parameters in [JDBC driver properties](../../reference/languages-and-apis/jdbc-driver/properties.md), or configure balancing through the native API when embedding the driver.
+    Check the supported availability zone parameters in the [JDBC driver properties](../../reference/languages-and-apis/jdbc-driver/properties.md) or set the balancing via the native API when embedding the driver.
 
-    In Spring Boot, ORMs, and other JDBC wrappers, pass the same JDBC URL and zone parameters as for a direct connection (for example in `spring.datasource.url` or pool properties).
+    In Spring Boot, ORM, and other third-party frameworks around JDBC, pass the same JDBC URL and availability zone parameters as in direct connection (for example, in `spring.datasource.url` or pool properties).
 
   {% endlist %}
 
@@ -150,6 +166,10 @@ Below are examples of setting the "prefer availability zone" balancing algorithm
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-  Track progress or vote for Rust SDK support: [ydb-rs-sdk#238](https://github.com/ydb-platform/ydb-rs-sdk/issues/238)
+  Track progress or vote for support in the Rust SDK: [ydb-rs-sdk#238](https://github.com/ydb-platform/ydb-rs-sdk/issues/238)
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

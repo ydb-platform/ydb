@@ -1,26 +1,29 @@
-# Example app in Rust
+# Example application in Rust
 
 <!-- markdownlint-disable blanks-around-fences -->
 
-This page provides a detailed description of the code for a [test app](https://github.com/ydb-platform/ydb-rs-sdk/tree/master/ydb/examples/basic) that uses the YDB [Rust SDK](https://github.com/ydb-platform/ydb-rs-sdk).
+This page provides a detailed breakdown of the code of the [test application](https://github.com/ydb-platform/ydb-rs-sdk/tree/master/ydb/examples/basic) that uses the YDB [Rust SDK](https://github.com/ydb-platform/ydb-rs-sdk).
 
-## Downloading and starting {#download}
+## Getting and running {#download}
 
-[Git](https://git-scm.com/downloads) and [Rust](https://www.rust-lang.org/tools/install) 1.85+ are required. For SDK installation, see [{#T}](../../../reference/ydb-sdk/install.md).
+You need [Git](https://git-scm.com/downloads) and [Rust](https://www.rust-lang.org/tools/install) 1.85+. For SDK installation, see [{#T}](../../../reference/ydb-sdk/install.md).
 
 Clone the repository:
+
 
 ```bash
 git clone https://github.com/ydb-platform/ydb-rs-sdk.git
 ```
 
-Start the example:
+
+Running the example:
 
 {% include [run_options.md](_includes/run_options.md) %}
 
 {% include [init.md](../_includes/steps/01_init.md) %}
 
-Import the crate and open a client:
+Importing and initializing the client:
+
 
 ```rust
 use ydb::{ClientBuilder, YdbResult};
@@ -39,23 +42,25 @@ async fn main() -> YdbResult<()> {
 }
 ```
 
-`ClientBuilder::new_from_connection_string` accepts a {{ ydb-short-name }} connection string (`grpc://host:port/database`). `client.wait()` waits until the driver discovers cluster endpoints. `query_client()` is the entry point for the Query Service API.
 
-By default, anonymous authentication is used for local Docker. For token auth, use [`ClientBuilder::with_credentials`](https://docs.rs/ydb/latest/ydb/struct.ClientBuilder.html) — see [authentication recipes](../../../recipes/ydb-sdk/auth.md).
+`ClientBuilder::new_from_connection_string` accepts a connection string (`grpc://host:port/database`). `client.wait()` waits for endpoint discovery. `query_client()` is the entry point to the Query Service API.
+
+For a local Docker instance, anonymous authentication is used by default. For a token, use [`ClientBuilder::with_credentials`](https://docs.rs/ydb/latest/ydb/struct.ClientBuilder.html); see [authentication recipes](../../../recipes/ydb-sdk/auth.md).
 
 ## Query Service client {#query-client}
 
-To run a single transactional SQL statement, use awaitable builders on [`QueryClient`](https://docs.rs/ydb/latest/ydb/struct.QueryClient.html):
+One-shot queries — awaitable builders on [`QueryClient`](https://docs.rs/ydb/latest/ydb/struct.QueryClient.html):
 
-- `qc.exec(yql)` — statement with no result set (DDL, DML).
-- `qc.query_row(yql)` — exactly one row.
-- `qc.query(yql).await?` — streaming [`QueryStream`](https://docs.rs/ydb/latest/ydb/struct.QueryStream.html) for large results.
+- `qc.exec(yql)` — without a result set (DDL, DML).
+- `qc.query_row(yql)` — a single row.
+- `qc.query(yql).await?` — streaming [`QueryStream`](https://docs.rs/ydb/latest/ydb/struct.QueryStream.html).
 
-Automatic retries are enabled via `clone_with_idempotent_operations(true)` for idempotent reads and DDL.
+Retries on errors: `clone_with_idempotent_operations(true)` for idempotent reads and DDL.
 
 {% include [steps/02_create_table.md](../_includes/steps/02_create_table.md) %}
 
-Table creation (no explicit transaction control — implicit session, server-side DDL):
+Creating a table (implicit session, DDL without explicit tx_control):
+
 
 ```rust
 qc.exec(format!(
@@ -72,9 +77,11 @@ qc.exec(format!(
 .await?;
 ```
 
+
 {% include [steps/03_write_queries.md](../_includes/steps/03_write_queries.md) %}
 
-Bulk load with `AS_TABLE` and typed parameters:
+Batch upload via `AS_TABLE`:
+
 
 ```rust
 use ydb::{Value, ydb_struct};
@@ -86,9 +93,11 @@ qc.exec("UPSERT INTO ... FROM AS_TABLE($seriesData);")
     .await?;
 ```
 
+
 {% include [steps/04_query_processing.md](../_includes/steps/04_query_processing.md) %}
 
-Read materialized result with snapshot read-only isolation:
+Reading a materialized result in snapshot read-only isolation mode:
+
 
 ```rust
 use ydb::QueryTxMode;
@@ -101,15 +110,17 @@ let mut result = qc
 
 while let Some(result_set) = result.next_result_set().await? {
     for mut row in result_set {
-        // extract columns from row
+        // extracting columns from row
     }
 }
 result.close().await?;
 ```
 
+
 {% include [steps/06_param_queries.md](../_includes/steps/06_param_queries.md) %}
 
-Per-call parameters use `.param(name, value)` or the `ydb_params!` macro:
+Parameters are set using the `.param(name, value)` function or the `ydb_params!` macro:
+
 
 ```rust
 use ydb::ydb_params;
@@ -120,7 +131,7 @@ qc.exec("UPSERT INTO `native/query/series` (series_id, title) VALUES ($id, $titl
     .param("$title", "Example title")
     .await?;
 
-// several parameters via macro
+// multiple parameters via macro
 qc.exec("UPSERT INTO `native/query/series` (series_id, title) VALUES ($id, $title)")
     .params(ydb_params!(
         "$id" => b"series-2".to_vec(),
@@ -129,11 +140,13 @@ qc.exec("UPSERT INTO `native/query/series` (series_id, title) VALUES ($id, $titl
     .await?;
 ```
 
+
 {% include [steps/10_transaction_control.md](../_includes/steps/10_transaction_control.md) %}
 
-The Rust SDK does not expose explicit `Begin` / `Commit` to application code. Use `retry_transaction` with [`QueryTransactionOptions`](https://docs.rs/ydb/latest/ydb/struct.QueryTransactionOptions.html) for interactive transactions. For a single SQL statement, set isolation with `.with_tx_mode(...)`.
+In the Rust SDK, explicit transaction management (via `Begin` and `Commit`) is not available for client code. Instead, use `retry_transaction` with [`QueryTransactionOptions`](https://docs.rs/ydb/latest/ydb/struct.QueryTransactionOptions.html) for interactive transactions. For a single SQL query, the isolation mode is set via `.with_tx_mode(...)`.
 
-Single statement in snapshot read-only mode:
+A single query in snapshot read-only mode:
+
 
 ```rust
 use ydb::QueryTxMode;
@@ -146,7 +159,9 @@ let mut row = qc
     .await?;
 ```
 
-Interactive transaction with multiple operations:
+
+An interactive transaction with multiple operations:
+
 
 ```rust
 use ydb::{QueryTransactionOptions, QueryTxMode};
@@ -166,4 +181,5 @@ let title: String = qc
     .await?;
 ```
 
-By default, such calls use implicit transaction control — the server infers isolation from the SQL statement.
+
+By default, queries on the query client use the ImplicitTx mode; the actual isolation mode is determined by the server side {{ ydb-short-name }}.

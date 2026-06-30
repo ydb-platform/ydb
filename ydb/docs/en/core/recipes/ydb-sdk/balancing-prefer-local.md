@@ -1,8 +1,52 @@
 # Prefer the nearest data center
 
-Below are examples of setting the "prefer the nearest data center" balancing algorithm in different {{ ydb-short-name }} SDKs.
+Below are code examples for setting the balancing algorithm option "prefer the nearest data center" in different {{ ydb-short-name }} SDKs.
 
 {% list tabs %}
+
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    The {{ ydb-short-name }} C++ SDK uses the `prefer_local_dc` algorithm (prefer the nearest data center) by default.
+
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+
+    int main() {
+      auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+      auto driverConfig = NYdb::TDriverConfig(connectionString)
+        .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferableLocation());
+
+      NYdb::TDriver driver(driverConfig);
+      // ...
+      driver.Stop(true);
+      return 0;
+    }
+    ```
+
+  - userver
+
+    {% cut "static config" %}
+
+    ```yaml
+    ydb:
+        databases:
+            db:
+                endpoint: grpc://localhost:2136
+                database: /local
+                prefer_local_dc: true
+    ```
+
+    {% endcut %}
+
+    The code for initializing `ydb::YdbComponent`, obtaining `ydb::TableClient`, and starting `components::MinimalServerComponentList` is as in the example from [init.md](./init.md).
+
+  {% endlist %}
 
 - Go
 
@@ -42,9 +86,10 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
 
   - database/sql
 
-    Client-side balancing in the {{ ydb-short-name }} `database/sql` driver happens only when opening a new connection (in `database/sql` terms), which corresponds to a {{ ydb-short-name }} session on a specific node. After the session is created, all queries on that session go to that node. Queries on the same {{ ydb-short-name }} session are not balanced across nodes.
+    Client-side balancing in the `database/sql` driver for {{ ydb-short-name }} is performed only when a new connection is established (in `database/sql` terms), which is a {{ ydb-short-name }} session on a specific node. After the session is created, all queries on that session are directed to the node where the session was created. Query balancing on the same {{ ydb-short-name }} session between different {{ ydb-short-name }} nodes does not occur.
 
-    Example for "prefer the nearest data center" balancing:
+    Example code for setting the balancing algorithm "prefer the nearest data center":
+
 
     ```go
     package main
@@ -87,26 +132,6 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
 
   {% endlist %}
 
-- C++
-
-  The {{ ydb-short-name }} C++ SDK uses the `prefer_local_dc` (prefer nearest data center) algorithm by default.
-
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
-
-  int main() {
-    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
-
-    auto driverConfig = NYdb::TDriverConfig(connectionString)
-      .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferableLocation());
-
-    NYdb::TDriver driver(driverConfig);
-    // ...
-    driver.Stop(true);
-    return 0;
-  }
-  ```
-
 - Python
 
   {% list tabs %}
@@ -121,7 +146,7 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
         endpoint=os.environ["YDB_ENDPOINT"],
         database=os.environ["YDB_DATABASE"],
         credentials=ydb.credentials_from_env_variables(),
-        use_all_nodes=False,  # prefer the nearest data center
+        use_all_nodes=False,  # предпочитать ближайший дата-центр
     )
 
     with ydb.Driver(driver_config) as driver:
@@ -141,7 +166,7 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
             endpoint=os.environ["YDB_ENDPOINT"],
             database=os.environ["YDB_DATABASE"],
             credentials=ydb.credentials_from_env_variables(),
-            use_all_nodes=False,  # prefer the nearest data center
+            use_all_nodes=False,  # предпочитать ближайший дата-центр
         )
         async with ydb.aio.Driver(driver_config) as driver:
             await driver.wait()
@@ -160,7 +185,7 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
         os.environ["YDB_SQLALCHEMY_URL"],
         connect_args={
             "driver_config_kwargs": {
-                "use_all_nodes": False,  # prefer the nearest data center
+                "use_all_nodes": False,  # предпочитать ближайший дата-центр
             }
         },
     )
@@ -168,9 +193,13 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
-  {% include notitle [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Java
 
@@ -191,16 +220,20 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
 
   - JDBC
 
-    See [JDBC driver properties](../../reference/languages-and-apis/jdbc-driver/properties.md); configure balancing via the native transport if needed.
+    See [JDBC driver properties](../../reference/languages-and-apis/jdbc-driver/properties.md); if necessary, set the balancing policy via the native transport.
 
-    In Spring Boot, ORMs, and other JDBC wrappers, use the same JDBC URL and balancing settings as with the driver directly (for example `spring.datasource.url` or `DataSource` properties).
+    In Spring Boot, ORM, and other third-party frameworks around JDBC, specify the same JDBC connection string and balancing parameters as when using the driver directly (for example, `spring.datasource.url` or `DataSource` properties).
 
   {% endlist %}
 
 - Rust
 
-  {% include notitle [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-  Track progress or vote for Rust SDK support: [ydb-rs-sdk#239](https://github.com/ydb-platform/ydb-rs-sdk/issues/239)
+  Track progress or vote for support in the Rust SDK: [ydb-rs-sdk#239](https://github.com/ydb-platform/ydb-rs-sdk/issues/239)
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

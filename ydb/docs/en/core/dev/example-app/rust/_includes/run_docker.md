@@ -1,4 +1,5 @@
-To connect to a locally deployed {{ ydb-short-name }} database according to the [Docker](../../../../quickstart.md) use case, run the following command in the default configuration:
+To connect to a local {{ ydb-short-name }} database in the [Docker](../../../../quickstart.md) scenario, run:
+
 
 ```bash
 export YDB_CONNECTION_STRING=grpc://localhost:2136/local

@@ -39,9 +39,14 @@ inputs:
   put_build_results_to_cache:
     type: boolean
     default: true
+  default_ya_make_args:
+    type: string
+    default: "-DDEBUGINFO_LINES_ONLY"
+    description: "Default ya make flags for CI checks; prepended to additional_ya_make_args. Pass empty to disable."
   additional_ya_make_args:
     type: string
     default: ""
+    description: "Extra ya make flags appended after default_ya_make_args"
   test_retry_count:
     default: ""
     description: "how many times to retry failed tests"
@@ -67,12 +72,34 @@ inputs:
     type: string
     required: false
     description: "Pull request number (for workflow_call events)"
+  analytics_job_name:
+    type: string
+    required: false
+    default: ""
+    description: "Override job_name in test_results and github_workflow in binary_size; default github.workflow"
+  ci_ydb_service_account_key_file_credentials:
+    type: string
+    required: false
+    default: ""
+    description: "YDB SA JSON for upload_tests_results / binary_size; runs setup when set"
+  ydb_qa_config:
+    type: string
+    required: false
+    default: ""
+    description: "YDB QA table paths JSON (vars.YDB_QA_CONFIG); runs setup when set"
 defaults:
   run:
     shell: bash
 runs:
   using: "composite"
   steps:
+    - name: Setup ydb access
+      if: inputs.ci_ydb_service_account_key_file_credentials != '' || inputs.ydb_qa_config != ''
+      uses: ./.github/actions/setup_ci_ydb_service_account_key_file_credentials
+      with:
+        ci_ydb_service_account_key_file_credentials: ${{ inputs.ci_ydb_service_account_key_file_credentials }}
+        ydb_qa_config: ${{ inputs.ydb_qa_config }}
+
     - name: Prepare folder prefix
       id: prepare_prefix
       shell: bash
@@ -93,6 +120,24 @@ runs:
         fi
         # Output the folder_prefix for use in subsequent steps
         echo "folder_prefix=${FOLDER_PREFIX}" >> $GITHUB_ENV
+
+    - name: Prepare ya make args
+      shell: bash
+      run: |
+        default="${{ inputs.default_ya_make_args }}"
+        additional="${{ inputs.additional_ya_make_args }}"
+        combined=""
+        if [ -n "$default" ]; then
+          combined="$default"
+        fi
+        if [ -n "$additional" ]; then
+          if [ -n "$combined" ]; then
+            combined="$combined $additional"
+          else
+            combined="$additional"
+          fi
+        fi
+        echo "combined_ya_make_args=$combined" >> "$GITHUB_ENV"
 
     - name: Prepare s3cmd
       uses: ./.github/actions/s3cmd
@@ -115,7 +160,7 @@ runs:
         run_tests: ${{ inputs.run_tests }}
         increment: ${{ inputs.increment }}
         link_threads: ${{ inputs.link_threads }}
-        additional_ya_make_args: ${{ inputs.additional_ya_make_args }}
+        additional_ya_make_args: ${{ env.combined_ya_make_args }}
         test_threads: ${{ inputs.test_threads }}
         bazel_remote_uri: ${{  fromJSON( inputs.vars ).REMOTE_CACHE_URL || '' }}
         bazel_remote_username: ${{ fromJSON( inputs.secs ).REMOTE_CACHE_USERNAME || '' }}
@@ -129,3 +174,4 @@ runs:
         telegram_alert_chat: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_CHAT || '' }}
         collect_coredumps: ${{ inputs.collect_coredumps }}
         pull_number: ${{ inputs.pull_number }}
+        analytics_job_name: ${{ inputs.analytics_job_name }}

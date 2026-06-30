@@ -79,6 +79,11 @@ inputs:
     type: string
     required: false
     description: "Pull request number (for workflow_call events)"
+  analytics_job_name:
+    type: string
+    required: false
+    default: ""
+    description: "Override job_name in test_results and github_workflow in binary_size; default github.workflow"
 
 outputs:
   success:
@@ -574,7 +579,11 @@ runs:
               ;;
           esac
           run_name="${run_name}_attempt_${RETRY}"
-          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${{ github.workflow }}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
+          ANALYTICS_JOB_NAME="${{ inputs.analytics_job_name }}"
+          if [ -z "${ANALYTICS_JOB_NAME}" ]; then
+            ANALYTICS_JOB_NAME="${{ github.workflow }}"
+          fi
+          result=`.github/scripts/analytics/upload_tests_results.py --test-results-file ${CURRENT_REPORT} --run-timestamp $(date +%s) --commit $ORIGINAL_HEAD --build-type ${BUILD_PRESET} --pull ${run_name} --job-name "${ANALYTICS_JOB_NAME}" --job-id "${{ github.run_id }}" --branch "${BRANCH_NAME}"`
 
           if [ $IS_LAST_RETRY = 1 ]; then
             break
@@ -672,6 +681,9 @@ runs:
         set -x
         export build_preset="${{ inputs.build_preset }}"
         export commit_git_sha="$ORIGINAL_HEAD"
+        if [ -n "${{ inputs.analytics_job_name }}" ]; then
+          export GITHUB_WORKFLOW="${{ inputs.analytics_job_name }}"
+        fi
 
         python3 .github/scripts/send_build_stats.py
 

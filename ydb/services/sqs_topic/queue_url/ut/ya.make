@@ -1,4 +1,6 @@
-GTEST()
+UNITTEST()
+
+SIZE(SMALL)
 
 SRCS(
     utils_ut.cpp

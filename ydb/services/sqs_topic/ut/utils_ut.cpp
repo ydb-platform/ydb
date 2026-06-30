@@ -2,15 +2,25 @@
 
 #include <ydb/core/base/appdata.h>
 #include <ydb/core/protos/pqconfig.pb.h>
-#include <ydb/core/util/actorsys_test/testactorsys.h>
+#include <ydb/core/testlib/actors/test_runtime.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_local.h>
 
-#include <library/cpp/testing/gtest/gtest.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr::NSqsTopic;
 
 namespace {
+
+    void InitRuntime(NKikimr::TTestActorRuntime& runtime) {
+        runtime.Initialize({
+            new NKikimr::TAppData(0, 0, 0, 0, {}, nullptr, nullptr, nullptr, nullptr),
+            nullptr,
+            nullptr,
+            {},
+            {}
+        });
+    }
 
     TString GetLabelValue(
         const TVector<std::pair<TString, TString>>& labels,
@@ -59,66 +69,62 @@ namespace {
     };
 
     TVector<std::pair<TString, TString>> CollectRequestMessageCountMetricsLabels(
-        NKikimr::TTestActorSystem& actorSystem,
+        NKikimr::TTestActorRuntime& runtime,
         const TString& consumer,
         bool firstClassCitizen
     ) {
-        const auto edge = actorSystem.AllocateEdgeActor(1);
-        actorSystem.Register(
+        const auto edge = runtime.AllocateEdgeActor();
+        runtime.Register(
             new TMetricsLabelsTestActor(edge, consumer, firstClassCitizen),
-            1,
-            NKikimr::TTestActorSystem::SYSTEM_POOL_ID
+            0,
+            runtime.GetAppData().SystemPoolId
         );
-        auto ev = actorSystem.WaitForEdgeActorEvent<TEvMetricsLabelsResult>(edge);
+        auto ev = runtime.GrabEdgeEvent<TEvMetricsLabelsResult>(edge);
         return ev->Get()->Labels;
     }
 
 } // namespace
 
-TEST(SqsTopicMetricsLabels, ConvertOldConsumerNameForFirstClassCitizen) {
-    NKikimr::TTestActorSystem actorSystem(1);
-    actorSystem.Start();
+Y_UNIT_TEST_SUITE(SqsTopicMetricsLabels) {
+    Y_UNIT_TEST(ConvertOldConsumerNameForFirstClassCitizen) {
+        NKikimr::TTestActorRuntime runtime(1, false);
+        InitRuntime(runtime);
 
-    const auto labels = CollectRequestMessageCountMetricsLabels(
-        actorSystem,
-        "ydb_sqs_consumer",
-        true
-    );
+        const auto labels = CollectRequestMessageCountMetricsLabels(
+            runtime,
+            "ydb_sqs_consumer",
+            true
+        );
 
-    EXPECT_EQ(GetLabelValue(labels, "consumer"), "ydb_sqs_consumer");
-    EXPECT_EQ(GetLabelValue(labels, "name"), "api.sqs.request.message_count");
-    EXPECT_EQ(GetLabelValue(labels, "method"), "SendMessage");
-    EXPECT_EQ(GetLabelValue(labels, "topic"), "topic");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "consumer"), "ydb_sqs_consumer");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "name"), "api.sqs.request.message_count");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "method"), "SendMessage");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "topic"), "topic");
+    }
 
-    actorSystem.Stop();
-}
+    Y_UNIT_TEST(ConvertOldConsumerNameForSharedConsumerInFederation) {
+        NKikimr::TTestActorRuntime runtime(1, false);
+        InitRuntime(runtime);
 
-TEST(SqsTopicMetricsLabels, ConvertOldConsumerNameForSharedConsumerInFederation) {
-    NKikimr::TTestActorSystem actorSystem(1);
-    actorSystem.Start();
+        const auto labels = CollectRequestMessageCountMetricsLabels(
+            runtime,
+            "ydb_sqs_consumer",
+            false
+        );
 
-    const auto labels = CollectRequestMessageCountMetricsLabels(
-        actorSystem,
-        "ydb_sqs_consumer",
-        false
-    );
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "consumer"), "shared/ydb_sqs_consumer");
+    }
 
-    EXPECT_EQ(GetLabelValue(labels, "consumer"), "shared/ydb_sqs_consumer");
+    Y_UNIT_TEST(ConvertOldConsumerNameForNonSharedConsumerInFederation) {
+        NKikimr::TTestActorRuntime runtime(1, false);
+        InitRuntime(runtime);
 
-    actorSystem.Stop();
-}
+        const auto labels = CollectRequestMessageCountMetricsLabels(
+            runtime,
+            "account@dir--topic",
+            false
+        );
 
-TEST(SqsTopicMetricsLabels, ConvertOldConsumerNameForNonSharedConsumerInFederation) {
-    NKikimr::TTestActorSystem actorSystem(1);
-    actorSystem.Start();
-
-    const auto labels = CollectRequestMessageCountMetricsLabels(
-        actorSystem,
-        "account@dir--topic",
-        false
-    );
-
-    EXPECT_EQ(GetLabelValue(labels, "consumer"), "account/dir--topic");
-
-    actorSystem.Stop();
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "consumer"), "account/dir--topic");
+    }
 }

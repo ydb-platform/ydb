@@ -1,4 +1,4 @@
-GTEST()
+UNITTEST()
 
 SRCS(
     utils_ut.cpp
@@ -7,8 +7,7 @@ SRCS(
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
-    yql/essentials/sql/pg_dummy
-    ydb/core/util/actorsys_test
+    ydb/core/testlib/default
     ydb/services/sqs_topic
 )
 

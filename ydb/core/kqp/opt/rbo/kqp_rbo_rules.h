@@ -159,7 +159,7 @@ class TPushAppendThroughAggregateRule : public ISimplifiedRule {
 class TPushAppendThroughJoinRule : public ISimplifiedRule {
   public:
     TPushAppendThroughJoinRule()
-        : ISimplifiedRule("Push append through join", ERuleProperties::RequireParents | ERuleProperties::RequireNameConstraints) {}
+        : ISimplifiedRule("Push map elements through join", ERuleProperties::RequireParents) {}
 
     virtual TIntrusivePtr<IOperator> SimpleMatchAndApply(const TIntrusivePtr<IOperator> &input, TRBOContext &ctx, TPlanProps &props) override;
 };
@@ -209,14 +209,6 @@ class TPushRenameThroughAggregateKeyRule : public IRule {
   public:
     TPushRenameThroughAggregateKeyRule()
         : IRule("Push semantic rename through aggregate key", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
-
-    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
-};
-
-class TPushRenameThroughJoinSideRule : public IRule {
-  public:
-    TPushRenameThroughJoinSideRule()
-        : IRule("Push semantic rename through join side", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
 
     virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };

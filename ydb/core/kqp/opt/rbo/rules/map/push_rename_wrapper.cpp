@@ -24,7 +24,12 @@ bool TPushRenameRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext
     if (TPushRenameThroughAggregateKeyRule().MatchAndApply(input, ctx, props)) {
         return true;
     }
-    return TPushRenameThroughJoinSideRule().MatchAndApply(input, ctx, props);
+    output = TPushAppendThroughJoinRule().SimpleMatchAndApply(input, ctx, props);
+    if (output != input) {
+        input = output;
+        return true;
+    }
+    return false;
 }
 
 } // namespace NKqp

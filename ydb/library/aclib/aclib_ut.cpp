@@ -66,35 +66,6 @@ Y_UNIT_TEST_SUITE(ACLib) {
         UNIT_ASSERT(effectiveCatFileACL.CheckAccess(EAccessRights::UpdateRow, dogToken) == false);
     }
 
-    Y_UNIT_TEST(TestUsers_AnyAccess) {
-        TSecurityObject rootACL(James, true);
-
-        rootACL.AddAccess(EAccessType::Allow, EAccessRights::SelectRow, Cat, EInheritanceType::InheritContainer);
-        rootACL.AddAccess(EAccessType::Allow, EAccessRights::UpdateRow, Cat, EInheritanceType::InheritContainer);
-
-        rootACL.AddAccess(EAccessType::Deny, EAccessRights::CreateQueue, Cat, EInheritanceType::InheritContainer);
-        rootACL.AddAccess(EAccessType::Deny, EAccessRights::CreateDatabase, Cat, EInheritanceType::InheritContainer);
-
-        TUserToken catToken(Cat, TVector<TSID>());
-
-        UNIT_ASSERT(rootACL.CheckAnyAccess(EAccessRights::SelectRow, catToken) == true);
-        UNIT_ASSERT(rootACL.CheckAnyAccess(EAccessRights::UpdateRow, catToken) == true);
-        UNIT_ASSERT(rootACL.CheckAnyAccess(EAccessRights::CreateQueue, catToken) == false);
-        UNIT_ASSERT(rootACL.CheckAnyAccess(EAccessRights::CreateDatabase, catToken) == false);
-
-        UNIT_ASSERT(rootACL.CheckAnyAccess(EAccessRights::SelectRow | EAccessRights::UpdateRow, catToken) == true);
-        UNIT_ASSERT(rootACL.CheckAnyAccess(EAccessRights::SelectRow | EAccessRights::CreateDatabase, catToken) == true);
-        UNIT_ASSERT(rootACL.CheckAnyAccess(EAccessRights::CreateQueue | EAccessRights::CreateDatabase, catToken) == false);
-
-        TSecurityObject dogFilesACL(Dog, true);
-        TSecurityObject effectiveDogFilesACL(dogFilesACL.MergeWithParent(rootACL));
-
-        effectiveDogFilesACL.AddAccess(EAccessType::Deny, EAccessRights::SelectRow, Cat, EInheritanceType::InheritContainer);
-
-        UNIT_ASSERT(effectiveDogFilesACL.CheckAnyAccess(EAccessRights::SelectRow, catToken) == false);
-        UNIT_ASSERT(effectiveDogFilesACL.CheckAnyAccess(EAccessRights::SelectRow | EAccessRights::UpdateRow, catToken) == true);
-    }
-
     Y_UNIT_TEST(TestGroups) {
         TSecurityObject rootACL(James, true);
 

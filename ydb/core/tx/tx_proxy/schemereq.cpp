@@ -35,6 +35,19 @@ const TVector<NLoginProto::EHashType::HashType> HASHES_TO_COMPUTE = {
     NLoginProto::EHashType::ScramSha256,
 };
 
+bool CheckAnyOfAccess(
+    const NACLib::TSecurityObject& securityObject,
+    const TVector<ui32>& accesses,
+    const NACLib::TUserToken& user
+) {
+    for (ui32 access : accesses) {
+        if (securityObject.CheckAccess(access, user)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 } // namespace
 
 namespace NKikimr {
@@ -64,7 +77,7 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
     struct TPathToResolve {
         const NKikimrSchemeOp::TModifyScheme& ModifyScheme;
         ui32 RequireAccess = NACLib::EAccessRights::NoAccess;
-        bool RequireAnyAccess = false; // Allows you to check whether a user has at least one right to an object
+        TVector<ui32> RequireAnyOfAccess;
 
         // Params for NSchemeCache::TSchemeCacheNavigate::TEntry
         TVector<TString> Path;
@@ -799,8 +812,10 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
         for (const auto& dlqPath : dlqPaths) {
             auto toResolve = TPathToResolve(pbModifyScheme);
             toResolve.Path = SplitPath(dlqPath);
-            toResolve.RequireAccess = NACLib::EAccessRights::AlterSchema | NACLib::EAccessRights::UpdateRow;
-            toResolve.RequireAnyAccess = true;
+            toResolve.RequireAnyOfAccess = {
+                NACLib::EAccessRights::AlterSchema,
+                NACLib::EAccessRights::UpdateRow,
+            };
             ResolveForACL.push_back(std::move(toResolve));
         }
     }
@@ -1543,7 +1558,6 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
             }
 
             ui32 access = requestIt->RequireAccess;
-            const bool anyAccess = requestIt->RequireAnyAccess;
 
             // request more rights if dst path is DB
             if (modifyScheme.GetOperationType() == NKikimrSchemeOp::ESchemeOpAlterUserAttributes) {
@@ -1552,18 +1566,33 @@ struct TBaseSchemeReq: public TActorBootstrapped<TDerived> {
                 }
             }
 
-            if (allowACLBypass || access == NACLib::EAccessRights::NoAccess || !entry.SecurityObject) {
+            const bool skipAccessCheck = requestIt->RequireAnyOfAccess.empty()
+                && access == NACLib::EAccessRights::NoAccess;
+
+            if (allowACLBypass || skipAccessCheck || !entry.SecurityObject) {
                 ++resolveIt;
                 ++requestIt;
                 continue;
             }
 
-            bool hasAccess = anyAccess ? entry.SecurityObject->CheckAnyAccess(access, *UserToken)
-                : entry.SecurityObject->CheckAccess(access, *UserToken);
+            bool hasAccess = requestIt->RequireAnyOfAccess.empty()
+                ? entry.SecurityObject->CheckAccess(access, *UserToken)
+                : CheckAnyOfAccess(*entry.SecurityObject, requestIt->RequireAnyOfAccess, *UserToken);
 
             if (!hasAccess) {
+                TStringBuilder accessDescription;
+                if (requestIt->RequireAnyOfAccess.empty()) {
+                    accessDescription << NACLib::AccessRightsToString(access);
+                } else {
+                    for (size_t i = 0; i < requestIt->RequireAnyOfAccess.size(); ++i) {
+                        if (i) {
+                            accessDescription << " or ";
+                        }
+                        accessDescription << NACLib::AccessRightsToString(requestIt->RequireAnyOfAccess[i]);
+                    }
+                }
                 const auto errString = MakeAccessDeniedError(ctx, entry.Path, TStringBuilder()
-                    << "with access " << NACLib::AccessRightsToString(access)
+                    << "with access " << accessDescription
                 );
                 auto issue = MakeIssue(NKikimrIssues::TIssuesIds::ACCESS_DENIED, errString);
                 ReportStatus(TEvTxUserProxy::TEvProposeTransactionStatus::EStatus::AccessDenied, nullptr, &issue, ctx);

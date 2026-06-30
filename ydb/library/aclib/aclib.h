@@ -167,7 +167,6 @@ public:
     TSecurityObject(const TSID& owner, bool isContainer); // creating new object
     TSecurityObject(); // creating new object for ACL manipulation only
     bool CheckAccess(ui32 access, const TUserToken& user) const; // check for access requested
-    bool CheckAnyAccess(ui32 access, const TUserToken& user) const; // check for at least one access requested
     bool CheckGrantAccess(const NACLibProto::TDiffACL& diffACL, const TUserToken& user) const; // check for valid diffACL
     ui32 GetEffectiveAccessRights(const TUserToken& user) const;
     TSecurityObject MergeWithParent(const NACLibProto::TSecurityObject& parent) const; // returns effective ACL as result of merging parent with this

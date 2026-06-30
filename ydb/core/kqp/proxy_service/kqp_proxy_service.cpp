@@ -575,6 +575,7 @@ public:
         InitSharedReading();
         InitCheckpointStorage();
         InitDescribeResourceIdService();
+        InitCachingIamServiceProvider();
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {

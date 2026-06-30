@@ -80,3 +80,4 @@ flowchart LR
 ## Основные материалы {#materials}
 
 - [{#T}](initial-deployment.md)
+- [{#T}](s3-backups.md)

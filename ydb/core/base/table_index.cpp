@@ -345,7 +345,9 @@ bool IsImplTable(std::string_view tableName) {
 bool IsBuildImplTable(std::string_view tableName) {
     // all impl tables that ends with "build" should be used only for index creation and dropped when index build is finished
     return tableName.ends_with(NKMeans::BuildSuffix0)
-        || tableName.ends_with(NKMeans::BuildSuffix1);
+        || tableName.ends_with(NKMeans::BuildSuffix1)
+        // transient compact-fulltext rowid-mode source table - dropped on apply like the *build tables
+        || tableName.ends_with(NFulltext::RowIdSrcBuildSuffix);
 }
 
 namespace NFulltext {

@@ -443,7 +443,7 @@ void TTableConsumer::ThrowEntityExpected() const
     THROW_ERROR AttachLocationAttributes(TError("Invalid control attributes syntax, entity expected"));
 }
 
-void TTableConsumer::ThrowInvalidControlAttribute(const TString& whatsWrong) const
+void TTableConsumer::ThrowInvalidControlAttribute(const std::string& whatsWrong) const
 {
     THROW_ERROR AttachLocationAttributes(TError("Control attribute %Qlv cannot %v",
         ControlAttribute_,

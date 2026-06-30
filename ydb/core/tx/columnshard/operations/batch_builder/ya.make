@@ -10,6 +10,7 @@ PEERDIR(
     ydb/core/tx/conveyor/usage
     ydb/core/tx/columnshard/common
     ydb/core/tx/data_events
+    ydb/core/formats/arrow/filter
     ydb/core/formats/arrow/reader
     ydb/library/conclusion
     ydb/core/tx/columnshard/engines/scheme/versions

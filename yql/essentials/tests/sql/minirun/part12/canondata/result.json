@@ -1150,6 +1150,20 @@
             "uri": "https://{canondata_backend}/1899731/db557cf50e84fba5e07ed252ed220f77f5fa9cc9/resource.tar.gz#test.test_select_yql-select_op_precedence_union_intersect-default.txt-Results_/results.txt"
         }
     ],
+    "test.test[select_yql-select_op_union_disjoint_columns-default.txt-Debug]": [
+        {
+            "checksum": "8ff45fdd9ded5684f8b7115c80186beb",
+            "size": 3972,
+            "uri": "https://{canondata_backend}/1775319/b9a32adc18f608d55f8b878efd9732c63e30f56e/resource.tar.gz#test.test_select_yql-select_op_union_disjoint_columns-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-select_op_union_disjoint_columns-default.txt-Results]": [
+        {
+            "checksum": "432dc3f06dfcf84fc9a9217cd6bd414a",
+            "size": 12347,
+            "uri": "https://{canondata_backend}/1775319/b9a32adc18f608d55f8b878efd9732c63e30f56e/resource.tar.gz#test.test_select_yql-select_op_union_disjoint_columns-default.txt-Results_/results.txt"
+        }
+    ],
     "test.test[select_yql-select_op_union_named_node_from-default.txt-Debug]": [
         {
             "checksum": "780e5cf6189782608c4983ab4fc846f2",
@@ -1246,6 +1260,20 @@
             "checksum": "67f271fd825506adf0034230a12ea26b",
             "size": 1975,
             "uri": "https://{canondata_backend}/1899731/db557cf50e84fba5e07ed252ed220f77f5fa9cc9/resource.tar.gz#test.test_select_yql-window_pg_tutorial_3-default.txt-Results_/results.txt"
+        }
+    ],
+    "test.test[select_yql-with_cte_counter-default.txt-Debug]": [
+        {
+            "checksum": "2abb0b7af2d095152408162d08659db2",
+            "size": 978,
+            "uri": "https://{canondata_backend}/1899731/c140e6d65fa403f511e1a1c6d072e72b6876bd7a/resource.tar.gz#test.test_select_yql-with_cte_counter-default.txt-Debug_/opt.yql"
+        }
+    ],
+    "test.test[select_yql-with_cte_counter-default.txt-Results]": [
+        {
+            "checksum": "35335b7760a77765728f050765131846",
+            "size": 981,
+            "uri": "https://{canondata_backend}/1923547/d596560d5d30da1929cacebea4ad376808b86f38/resource.tar.gz#test.test_select_yql-with_cte_counter-default.txt-Results_/results.txt"
         }
     ],
     "test.test[side_effects-logical_bools_skipped-default.txt-Debug]": [

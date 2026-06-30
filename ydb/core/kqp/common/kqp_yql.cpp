@@ -235,6 +235,12 @@ TKqpReadTableFullTextIndexSettings TKqpReadTableFullTextIndexSettings::Parse(con
         } else if (name == TKqpReadTableFullTextIndexSettings::TokensSettingName) {
             YQL_ENSURE(tuple.Value().IsValid());
             settings.Tokens = tuple.Value().Cast().Ptr();
+        } else if (name == TKqpReadTableFullTextIndexSettings::PrefixColumnSettingName) {
+            // Value is a 2-element list: [Atom(columnName), valueExpr].
+            YQL_ENSURE(tuple.Value().IsValid());
+            auto list = tuple.Value().Cast<TExprList>();
+            YQL_ENSURE(list.Size() == 2);
+            settings.AddPrefixColumn(TString(list.Item(0).Cast<TCoAtom>().Value()), list.Item(1).Ptr());
         } else {
             YQL_ENSURE(false, "Unknown KqpReadTableFullTextIndex setting name '" << name << "'");
         }
@@ -300,6 +306,16 @@ NNodes::TCoNameValueTupleList TKqpReadTableFullTextIndexSettings::BuildNode(TExp
         settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
             .Name().Build(TokensSettingName)
             .Value(Tokens)
+            .Done());
+    }
+
+    for (const auto& [name, value] : PrefixColumns) {
+        settings.emplace_back(Build<TCoNameValueTuple>(ctx, pos)
+            .Name().Build(PrefixColumnSettingName)
+            .Value<TExprList>()
+                .Add<TCoAtom>().Build(name)
+                .Add(value)
+            .Build()
             .Done());
     }
 

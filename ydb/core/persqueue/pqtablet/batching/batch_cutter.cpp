@@ -1,9 +1,11 @@
 #include "batch_cutter.h"
 
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/core/persqueue/public/codecs/kafka.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
+#include <ydb/public/api/protos/ydb_topic.pb.h>
 
 #include <library/cpp/streams/zstd/zstd.h>
 
@@ -55,17 +57,17 @@ TString CompressPayload(TStringBuf data, NPersQueueCommon::ECodec codec) {
 
 } // namespace
 
-TVector<TReadResult> TKafkaBatchCutter::Cut(const TReadResult& readResult, const ui64 readStartOffset) const {
-    const NKikimrPQClient::TDataChunk dataChunk = NKikimr::GetDeserializedData(readResult.GetData());
+TVector<TReadResult> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const ui64 readStartOffset) const {
+    const auto& dataChunk = data.DataChunk;
     if (dataChunk.GetChunkType() != NKikimrPQClient::TDataChunk::REGULAR) {
-        return {readResult};
+        return {data.ReadResult};
     }
 
-    Y_ENSURE(!dataChunk.HasCodec() || dataChunk.GetCodec() == NPersQueueCommon::RAW);
+    Y_ENSURE(dataChunk.HasCodec() && dataChunk.GetCodec() == KafkaBatchCodec());
 
     const auto batch = NKafka::ReadKafkaRecordBatch(dataChunk.GetData());
     if (batch.Records.empty()) {
-        return {readResult};
+        return {data.ReadResult};
     }
 
     const auto codec = ToDataChunkCodec(batch.CompressionType());
@@ -73,7 +75,7 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TReadResult& readResult, const
     TVector<TReadResult> result;
     result.reserve(batch.Records.size());
 
-    const ui64 baseOffset = readResult.GetOffset();
+    const ui64 baseOffset = data.ReadResult.GetOffset();
     for (size_t i = 0; i < batch.Records.size(); ++i) {
         const auto offset = baseOffset + batch.Records[i].OffsetDelta;
         if (offset < readStartOffset) {
@@ -82,11 +84,11 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TReadResult& readResult, const
 
         const auto& record = batch.Records[i];
         const ui64 seqNo = NKafka::GetRecordSeqNo(batch, i, record);
-        TReadResult item = readResult;
+        TReadResult item = data.ReadResult;
         item.SetOffset(offset);
         item.SetSeqNo(seqNo);
-        item.SetMessageCount(1);
-        item.SetMessageFormat(NKikimrClient::STANDARD);
+        item.SetLogicalMessageCount(1);
+        item.SetIsBatch(false);
         item.ClearUncompressedSize();
 
         NKikimrPQClient::TDataChunk itemChunk = dataChunk;

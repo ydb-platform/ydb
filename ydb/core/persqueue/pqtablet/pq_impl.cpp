@@ -2,7 +2,6 @@
 #include "pq_impl.h"
 #include "pq_impl_types.h"
 #include "fix_transaction_states.h"
-#include <ydb/core/persqueue/pqtablet/blob/message_format.h>
 
 #include <ydb/core/persqueue/common/actor.h>
 #include <ydb/core/persqueue/pqtablet/common/logging.h>
@@ -1126,6 +1125,22 @@ void TPersQueue::Handle(TEvPQ::TEvPartitionCounters::TPtr& ev, const TActorConte
     SetTxCounters();
 }
 
+void TPersQueue::Handle(TEvPQ::TEvConsumerBatchProcessorMetrics::TPtr& ev, const TActorContext&)
+{
+    const auto partitionId = ev->Get()->PartitionId;
+
+    auto it = Partitions.find(TPartitionId{partitionId});
+    if (it == Partitions.end()) {
+        return;
+    }
+
+    auto& partitionInfo = it->second;
+    if (!partitionInfo.InitDone) {
+        return;
+    }
+    Forward(ev, partitionInfo.Actor);
+}
+
 
 void TPersQueue::AggregateAndSendLabeledCountersFor(const TString& group, const TActorContext& ctx)
 {
@@ -1874,8 +1889,8 @@ void TPersQueue::FillBatchInfo(
     if (cmd.HasMaxSeqNo()) {
         msg.MaxSeqNo = static_cast<ui64>(cmd.GetMaxSeqNo());
     }
-    msg.MessageCount = static_cast<ui32>(cmd.GetMessageCount());
-    msg.MessageFormat = FromProtoMessageFormat(cmd.GetMessageFormat());
+    msg.LogicalMessageCount = static_cast<ui32>(cmd.GetLogicalMessageCount());
+    msg.IsBatch = cmd.GetIsBatch();
     if (cmd.GetPartNo() > 0) {
         return;
     }
@@ -1970,10 +1985,8 @@ void TPersQueue::HandleWriteRequest(const ui64 responseCookie, NWilson::TTraceId
             errorStr = "SeqNo must be >= 0";
         } else if (cmd.HasMaxSeqNo() && cmd.GetMaxSeqNo() < 0) {
             errorStr = "MaxSeqNo must be >= 0";
-        } else if (cmd.GetMessageCount() < 1 || cmd.GetMessageCount() > MAX_MESSAGE_COUNT) {
-            errorStr = TStringBuilder() << "MessageCount must be >= 1 and <= " << MAX_MESSAGE_COUNT;
-        } else if (cmd.GetMessageFormat() < 0 || cmd.GetMessageFormat() >= (1 << MESSAGE_FORMAT_BITS)) {
-            errorStr = TStringBuilder() << "MessageFormat must be >= 0 and < " << (1 << MESSAGE_FORMAT_BITS);
+        } else if (cmd.GetLogicalMessageCount() < 1 || cmd.GetLogicalMessageCount() > MAX_LOGICAL_MESSAGE_COUNT) {
+            errorStr = TStringBuilder() << "LogicalMessageCount must be >= 1 and <= " << MAX_LOGICAL_MESSAGE_COUNT;
         } else if (cmd.HasPartNo() && (cmd.GetPartNo() < 0 || cmd.GetPartNo() >= Max<ui16>())) {
             errorStr = "PartNo must be >= 0 and < 65535";
         } else if (cmd.HasPartNo() != cmd.HasTotalParts()) {
@@ -5617,6 +5630,7 @@ bool TPersQueue::HandleHook(STFUNC_SIG)
         HFuncTraced(TEvKeyValue::TEvResponse, Handle);
         HFuncTraced(TEvPQ::TEvInitComplete, Handle);
         HFuncTraced(TEvPQ::TEvPartitionCounters, Handle);
+        HFuncTraced(TEvPQ::TEvConsumerBatchProcessorMetrics, Handle);
         HFuncTraced(TEvPQ::TEvMetering, Handle);
         HFuncTraced(TEvPQ::TEvPartitionLabeledCounters, Handle);
         HFuncTraced(TEvPQ::TEvPartitionLabeledCountersDrop, Handle);

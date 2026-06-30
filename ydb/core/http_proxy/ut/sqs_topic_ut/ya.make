@@ -13,18 +13,22 @@ PEERDIR(
     ydb/core/base
     ydb/core/http_proxy
     ydb/core/http_proxy/ut/datastreams_fixture
+    ydb/core/persqueue/ut/common
     ydb/core/testlib/default
+    ydb/public/sdk/cpp/src/library/kafka
     ydb/library/aclib
     ydb/library/persqueue/tests
     ydb/public/sdk/cpp/src/client/discovery
     ydb/public/sdk/cpp/src/client/topic
     ydb/public/sdk/cpp/src/client/types
+    ydb/services/sqs_topic
     ydb/services/ydb
 )
 
 SRCS(
     ../sqs_topic_ut.cpp
     ../sqs_topic_cdc_ut.cpp
+    ../sqs_topic_xml_ut.cpp
     inside_ydb_ut.cpp
 )
 

@@ -3,6 +3,7 @@
 #include <ydb/core/base/row_version.h>
 #include <ydb/core/scheme/scheme_tabledefs.h>
 #include <util/system/types.h>
+#include <util/datetime/base.h>
 #include <util/generic/hash.h>
 #include <util/generic/set.h>
 #include <util/generic/vector.h>
@@ -18,6 +19,9 @@ public:
     virtual bool HasSnapshot(const NKikimr::TTableId& tableId, const TRowVersion& version) const = 0;
     virtual TSet<TRowVersion> GetActiveSnapshots(const NKikimr::TTableId& tableId) const = 0;
     virtual TRowVersion GetBorder() const = 0;
+
+    // Freshness bound for cleanup: oldest collection time across all nodes (local node = now).
+    virtual TInstant GetOldestCollectionTime() const = 0;
 };
 
 class IImmutableSnapshotRegistryHolder : public TThrRefBase {
@@ -38,6 +42,8 @@ public:
     virtual ~IImmutableSnapshotRegistryBuilder() = default;
 
     virtual void SetSnapshotBorder(const TRowVersion& version) = 0;
+
+    virtual void SetOldestCollectionTime(TInstant oldestCollectionTime) = 0;
 
     virtual void AddSnapshot(const TVector<NKikimr::TTableId>& tableIds, const TRowVersion& version) = 0;
 

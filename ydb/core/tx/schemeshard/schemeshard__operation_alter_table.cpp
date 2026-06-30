@@ -58,7 +58,8 @@ bool CheckDefaultColumnFamilies(const NKikimrSchemeOp::TPartitionConfig& partiti
 
 TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table, const NKikimrSchemeOp::TTableDescription& alter,
                                       const bool shadowDataAllowed, const THashSet<TString>& localSequences,
-                                      TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context) {
+                                      TString& errStr, NKikimrScheme::EStatus& status, TOperationContext& context,
+                                      bool isInternal = false) {
     const TAppData* appData = AppData(context.Ctx);
 
     if (!path.IsCommonSensePath()) {
@@ -211,6 +212,37 @@ TTableInfo::TAlterDataPtr ParseParams(const TPath& path, TTableInfo::TPtr table,
         status = NKikimrScheme::StatusInvalidParameter;
         return nullptr;
     }
+
+    // Changing the SetNotNullInProgress or NotNull to true without the Internal flag set is not
+    // possible through normal API channels. However, there is a known hack that
+    // allows sending an arbitrary ModifyScheme directly to SchemeShard:
+    //
+    //   ./ydbd --server ... db schema exec modify_scheme.txt
+    //
+    // Note that checking the Internal flag is NOT a protection against a
+    // deliberate action by a potential attacker. Rather, it is an extra
+    // guard to prevent accidental ModifyScheme sends that could corrupt
+    // the schema object state.
+    //
+    // In addition, such verification protects against a potential bug on the client side.
+    if (!isInternal) {
+        for (auto& col : *copyAlter.MutableColumns()) {
+            if (col.HasNotNull() && col.GetNotNull()) {
+                status = NKikimrScheme::StatusInvalidParameter;
+                errStr = Sprintf("Cannot set NotNull to true on column '%s' in a ModifyScheme request — Internal flag is not set. "
+                                    "To override, set Internal = true. This is dangerous: only do this if you know what you are doing", col.GetName().c_str());
+                return nullptr;
+            }
+
+            if (col.HasSetNotNullInProgress()) {
+                status = NKikimrScheme::StatusInvalidParameter;
+                errStr = Sprintf("Cannot set NotNullInProgress on column '%s' in a ModifyScheme request — Internal flag is not set. "
+                                    "To override, set Internal = true. This is dangerous: only do this if you know what you are doing", col.GetName().c_str());
+                return nullptr;
+            }
+        }
+    }
+
     copyAlter.MutablePartitionConfig()->CopyFrom(compilationPartitionConfig);
 
     const TSubDomainInfo& subDomain = *path.DomainInfo();
@@ -623,7 +655,10 @@ public:
             if (column.HasDefaultFromSequence()) {
                 TString defaultFromSequence = column.GetDefaultFromSequence();
 
-                const auto sequencePath = TPath::Resolve(defaultFromSequence, context.SS);
+                // A table-local sequence is referenced by its leaf name (the create-table convention)
+                const auto sequencePath = defaultFromSequence.StartsWith('/')
+                    ? TPath::Resolve(defaultFromSequence, context.SS)
+                    : path.Child(defaultFromSequence);
                 {
                     const auto checks = sequencePath.Check();
                     checks
@@ -642,7 +677,9 @@ public:
                     }
                 }
 
-                localSequences.insert(sequencePath.PathString());
+                // CreateAlterData compares the column's raw DefaultFromSequence against this set
+                // and stores it verbatim, so insert the same (possibly relative) form.
+                localSequences.insert(defaultFromSequence);
             }
         }
 
@@ -696,7 +733,8 @@ public:
 
         NKikimrScheme::EStatus status;
         TTableInfo::TAlterDataPtr alterData = ParseParams(
-            path, table, alter, IsShadowDataAllowed(), localSequences, errStr, status, context);
+            path, table, alter, IsShadowDataAllowed(), localSequences, errStr, status, context,
+            Transaction.GetInternal());
         if (!alterData) {
             result->SetError(status, errStr);
             return result;
@@ -836,6 +874,122 @@ static void AppendOwnedSequenceDrops(TVector<ISubOperation::TPtr>& result, TOper
     }
 }
 
+// Collects the names of the table's live local prefix bloom filter index children.
+static TVector<TString> CollectLocalBloomIndexNames(const TPath& path, TOperationContext& context) {
+    TVector<TString> names;
+    for (const auto& [childName, childPathId] : path.Base()->GetChildren()) {
+        const auto& child = context.SS->PathsById.at(childPathId);
+        if (child->Dropped() || !child->IsTableIndex()) {
+            continue;
+        }
+        auto it = context.SS->Indexes.find(childPathId);
+        if (it != context.SS->Indexes.end()
+            && it->second->Type == NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
+            names.push_back(childName);
+        }
+    }
+    return names;
+}
+
+// Disabling KEY_BLOOM_FILTER clears all ByKeyFilterPrefixes. Drop the corresponding
+// scheme objects together with the alter to keep the catalog consistent.
+static std::optional<TVector<ISubOperation::TPtr>> DropLocalBloomIndexesOnFilterDisable(
+    TOperationId id, const TTxTransaction& tx, const TPath& path, TOperationContext& context)
+{
+    const auto& alter = tx.GetAlterTable();
+    if (!alter.HasPartitionConfig()
+        || !alter.GetPartitionConfig().HasEnableFilterByKey()
+        || alter.GetPartitionConfig().GetEnableFilterByKey())
+    {
+        return std::nullopt;
+    }
+
+    const TVector<TString> bloomIndexNames = CollectLocalBloomIndexNames(path, context);
+    if (bloomIndexNames.empty()) {
+        return std::nullopt;
+    }
+
+    TVector<ISubOperation::TPtr> result;
+    result.push_back(CreateAlterTable(NextPartId(id, result), tx));
+    for (const auto& indexName : bloomIndexNames) {
+        AddDropIndex(result, id, path.Child(indexName));
+    }
+    return result;
+}
+
+// Builds a TIndexCreationConfig for the generic create-index sub-op from a TIndexDescription
+// carried in the alter (the same field Describe uses for indexes).
+static NKikimrSchemeOp::TIndexCreationConfig ToIndexCreationConfig(const NKikimrSchemeOp::TIndexDescription& desc) {
+    NKikimrSchemeOp::TIndexCreationConfig config;
+    config.SetName(desc.GetName());
+    config.SetType(desc.GetType());
+    config.SetState(desc.GetState());
+    for (const auto& col : desc.GetKeyColumnNames()) {
+        config.AddKeyColumnNames(col);
+    }
+    if (desc.HasBloomFilterDescription()) {
+        *config.MutableBloomFilterDescription() = desc.GetBloomFilterDescription();
+    }
+    return config;
+}
+
+// Decompose ADD INDEX for row-table prefix bloom filters into a table alter (if there are
+// table-level changes) plus one CreateNewTableIndex sub-op per index.
+static std::optional<TVector<ISubOperation::TPtr>> AddLocalBloomIndexes(
+    TOperationId id, const TTxTransaction& tx, const TPath& path, const TString& name, TOperationContext& context)
+{
+    const auto& alter = tx.GetAlterTable();
+    if (alter.TableIndexesSize() == 0) {
+        return std::nullopt;
+    }
+
+    for (const auto& indexDesc : alter.GetTableIndexes()) {
+        // Only row-table prefix bloom filters travel through this path.
+        if (indexDesc.GetType() != NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
+            return TVector<ISubOperation::TPtr>{CreateReject(id, NKikimrScheme::EStatus::StatusInvalidParameter,
+                TStringBuilder() << "Only local bloom filter indexes can be added via alter on table " << name)};
+        }
+
+        // Duplicate-column-set prevention: reject if a bloom filter index over the same columns
+        // already exists on the table (other local index types over the same columns are allowed).
+        const TVector<TString> newKeys(indexDesc.GetKeyColumnNames().begin(), indexDesc.GetKeyColumnNames().end());
+        for (const auto& [childName, childPathId] : path.Base()->GetChildren()) {
+            const auto& child = context.SS->PathsById.at(childPathId);
+            if (child->Dropped() || !child->IsTableIndex()) {
+                continue;
+            }
+            auto it = context.SS->Indexes.find(childPathId);
+            if (it != context.SS->Indexes.end()
+                && it->second->Type == NKikimrSchemeOp::EIndexTypeLocalBloomFilter
+                && it->second->IndexKeys == newKeys) {
+                return TVector<ISubOperation::TPtr>{CreateReject(id, NKikimrScheme::EStatus::StatusSchemeError,
+                    TStringBuilder() << "Local bloom filter index over the same columns already exists on table " << name)};
+            }
+        }
+    }
+
+    TVector<ISubOperation::TPtr> result;
+    // Forward the base alter only when it carries a real table-level change besides the index list,
+    // with the transient index list cleared so the base sub-op never observes it.
+    TTxTransaction baseTx = tx;
+    baseTx.MutableAlterTable()->ClearTableIndexes();
+    if (!CheckAllowedFields(baseTx.GetAlterTable(), {"Name", "PathId"})) {
+        result.push_back(CreateAlterTable(NextPartId(id, result), baseTx));
+    }
+
+    for (const auto& indexDesc : alter.GetTableIndexes()) {
+        auto scheme = TransactionTemplate(path.PathString(),
+            NKikimrSchemeOp::EOperationType::ESchemeOpCreateTableIndex);
+        scheme.SetFailOnExist(tx.GetFailOnExist());
+        // Internal so the generic create-index op accepts a steady/under-alter parent table.
+        scheme.SetInternal(true);
+        *scheme.MutableCreateTableIndex() = ToIndexCreationConfig(indexDesc);
+        result.push_back(CreateNewTableIndex(NextPartId(id, result), scheme));
+    }
+
+    return result;
+}
+
 TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const TTxTransaction& tx, TOperationContext& context) {
     Y_ABORT_UNLESS(tx.GetOperationType() == NKikimrSchemeOp::EOperationType::ESchemeOpAlterTable);
 
@@ -863,6 +1017,14 @@ TVector<ISubOperation::TPtr> CreateConsistentAlterTable(TOperationId id, const T
             return {CreateAlterColumnTable(id, tx)};
         }
         return {CreateAlterTable(id, tx)};
+    }
+
+    if (auto result = DropLocalBloomIndexesOnFilterDisable(id, tx, path, context)) {
+        return std::move(*result);
+    }
+
+    if (auto result = AddLocalBloomIndexes(id, tx, path, name, context)) {
+        return std::move(*result);
     }
 
     if (path.IsCommonSensePath()) {

@@ -27,9 +27,7 @@ class KiKiMRClusterInterface(object):
         self.__kv_client = None
         self.__scheme_client = None
         self.__config_client = None
-        self.__clients = None
         self.__monitors = None
-        self.__ready_timeout_seconds = 60
 
     @property
     def monitors(self):
@@ -120,6 +118,16 @@ class KiKiMRClusterInterface(object):
         if self.__config_client is None:
             self.__config_client = self._create_config_client()
         return self.__config_client
+
+    def reset_clients(self):
+        for client in (self.__client, self.__kv_client, self.__scheme_client, self.__config_client):
+            if client is not None:
+                client.close()
+
+        self.__client = None
+        self.__kv_client = None
+        self.__scheme_client = None
+        self.__config_client = None
 
     @abc.abstractmethod
     def _create_config_client(self):

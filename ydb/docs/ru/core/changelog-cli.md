@@ -1,5 +1,33 @@
 # Список изменений {{ ydb-short-name }} CLI
 
+## Версия 2.33.0 {#2-33-0}
+
+Дата выхода 23 июня 2026. Для обновления до версии **2.33.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* AI-ассистент в [интерактивном режиме](./reference/ydb-cli/interactive-cli.md) `{{ ydb-cli }}` теперь умеет искать информацию в документации {{ ydb-short-name }}, что делает ответы более точными.
+
+## Версия 2.32.0 {#2-32-0}
+
+Дата выхода 22 июня 2026. Для обновления до версии **2.32.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).
+
+### Функциональность
+
+* Добавлен AI-режим в [интерактивный режим](./reference/ydb-cli/interactive-cli.md) `{{ ydb-cli }}`. Для переключения нажмите `Ctrl+T`.
+* Добавлена команда [`{{ ydb-cli }} workload fulltext`](./reference/ydb-cli/workload-fulltext.md) для нагрузочного тестирования и оценки качества полнотекстовых индексов.
+* Добавлена команда `SET resource_pool` в [интерактивный режим](./reference/ydb-cli/interactive-cli.md) `{{ ydb-cli }}`.
+* Добавлена опция `--resource-pool` в [команду](./reference/ydb-cli/sql.md) `{{ ydb-cli }} sql`.
+* Добавлена опция `--no-consumer` в [команду](./reference/ydb-cli/topic-read.md) `{{ ydb-cli }} topic read` для чтения из топика без читателя.
+* Добавлены опции `--partition-write-speed-mps` и `--partition-write-burst-messages` в [команду](./reference/ydb-cli/topic-create.md) `{{ ydb-cli }} topic create` и [команду](./reference/ydb-cli/topic-alter.md) `{{ ydb-cli }} topic alter`.
+* Добавлена опция `--partition-max-inflight-bytes` в [команду](./reference/ydb-cli/workload-topic.md) `{{ ydb-cli }} workload topic`.
+* Добавлены опции `--codec kafka-batch`, `--batch-inner-codec`, `--batch-flush-interval`, `--batch-flush-size` и `--batch-flush-message-count` в [команды](./reference/ydb-cli/workload-topic.md) `{{ ydb-cli }} workload topic run write|full`.
+* Добавлена статистика процессорного времени (CPU time) в [команды](./reference/ydb-cli/commands/workload/index.md) `{{ ydb-cli }} workload * run`.
+
+### Улучшения
+
+* [Команда](./reference/ydb-cli/commands/scheme-describe.md) `{{ ydb-cli }} scheme describe` теперь выводит понятное человеку описание внешних источников данных (тип источника, расположение, способ аутентификации, база данных, свойства и время создания) вместо пустого вывода.
+
 ## Версия 2.31.0 {#2-31-0}
 
 Дата выхода 20 апреля 2026. Для обновления до версии **2.31.0** перейдите в раздел [Загрузки](downloads/ydb-cli.md).

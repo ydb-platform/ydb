@@ -624,7 +624,7 @@ private:
         return size;
     }
     const TVector<std::unique_ptr<IBlockReader>> Children_;
-    mutable TBlockItem InnerItem_;
+    TBlockItem InnerItem_;
 };
 
 class TExternalOptionalBlockReader final: public TBlockReaderBase {

@@ -1,0 +1,7 @@
+{"key"="foo";"ts"=10;"value"=1};
+{"key"="foo";"ts"=17;"value"=10};
+{"key"="bar";"ts"=15;"value"=1};
+{"key"="bar";"ts"=17;"value"=10};
+{"key"="baz";"ts"=21;"value"=1};
+{"key"="baz";"ts"=22;"value"=10};
+{"key"="baz";"ts"=24;"value"=100};

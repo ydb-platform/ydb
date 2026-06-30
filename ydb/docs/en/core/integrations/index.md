@@ -1,53 +1,56 @@
 # Integrations {{ ydb-short-name }}
 
-This section provides the main information about {{ ydb-name }} integrations with third-party systems.
+This section provides basic information about integrations {{ ydb-name }} with third-party systems.
 
 {% note info %}
 
-In addition to its own native protocol, {{ ydb-name }} has a compatibility layer that allows external systems to connect to databases via network protocols [PostgreSQL](../postgresql/intro.md) or [Apache Kafka](../reference/kafka-api/index.md). Due to the compatibility layer, many tools designed to work with these systems can also interact with {{ ydb-name }}. The compatibility level of each specific application needs to be clarified separately.
+In addition to its own native protocol, {{ ydb-name }} has a compatibility layer that allows external systems to connect to databases via the [PostgreSQL](../postgresql/intro.md) or [Apache Kafka](../reference/kafka-api/index.md) network protocols. Thanks to the compatibility layer, many tools designed to work with these systems can also interact with {{ ydb-name }}. The compatibility level for each specific application must be verified separately.
 
 {% endnote %}
 
-
 ## Graphical user interfaces {#gui}
 
-{% include notitle [Table of contents](gui/_includes/toc-table.md) %}
+{% include notitle [Contents](gui/_includes/toc-table.md) %}
 
-## Data visualization (Business intelligence, BI) {#bi}
+## Data visualization (Business Intelligence, BI) {#bi}
 
-{% include notitle [Table of contents](visualization/_includes/toc-table.md) %}
+{% include notitle [Contents](visualization/_includes/toc-table.md) %}
 
 ## Orchestration {#orchestration}
 
-{% include notitle [Table of contents](orchestration/_includes/toc-table.md) %}
+{% include notitle [Contents](orchestration/_includes/toc-table.md) %}
 
-## Data ingestion {#ingestion}
+## Data provisioning {#ingestion}
 
-{% include notitle [Table of contents](ingestion/_includes/toc-table.md) %}
+{% include notitle [Contents](ingestion/_includes/toc-table.md) %}
 
-### Streaming data ingestion {#streaming-ingestion}
+### Streaming data provisioning
 
-{% include notitle [Table of contents](ingestion/_includes/toc-table-streaming.md) %}
+{% include notitle [Contents](ingestion/_includes/toc-table-streaming.md) %}
 
 ## Data migrations {#data_migration}
 
-{% include notitle [Table of contents](data-migration/_includes/toc-table.md) %}
+{% include notitle [Contents](data-migration/_includes/toc-table.md) %}
 
 ## Schema migrations {#schema_migration}
 
-{% include notitle [Table of contents](migration/_includes/toc-table.md) %}
+{% include notitle [Contents](migration/_includes/toc-table.md) %}
 
-## Query engines {#query_engines}
+## Query execution engines {#query_engines}
 
-{% include notitle [Table of contents](query-engines/_includes/toc-table.md) %}
+{% include notitle [Contents](query-engines/_includes/toc-table.md) %}
 
-## Object–relational mapping (ORM) {#orm}
+## Object-relational mapping (ORM) {#orm}
 
-{% include notitle [Table of contents](orm/_includes/toc-table.md) %}
+{% include notitle [Contents](orm/_includes/toc-table.md) %}
 
 ## Vector search {#vectorsearch}
 
-{% include notitle [Table of contents](vectorsearch/_includes/toc-table.md) %}
+{% include notitle [Contents](vectorsearch/_includes/toc-table.md) %}
+
+## SQL dialect conversion {#sql-translation}
+
+{% include notitle [Contents](sql-translation/_includes/toc-table.md) %}
 
 ## See also
 

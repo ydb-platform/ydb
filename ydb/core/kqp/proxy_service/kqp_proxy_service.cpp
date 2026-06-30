@@ -518,6 +518,9 @@ public:
         if (DescribeResourceIdService) {
             Send(DescribeResourceIdService, new TEvents::TEvPoison());
         }
+        if (CachingIamCredentialsService) {
+            Send(CachingIamCredentialsService, new TEvents::TEvPoison());
+        }
 
         LocalSessions->ForEachNode([this](TNodeId node) {
             Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
@@ -2016,7 +2019,7 @@ private:
         if (!FederatedQuerySetup || CachingIamCredentialsService) {
             return;
         }
-        auto actor = NYql::NewCachingIamServiceCredentialsProviderService();
+        auto actor = NewCachingIamServiceCredentialsProviderService();
         CachingIamCredentialsService = TActivationContext::Register(actor.release());
         TActivationContext::ActorSystem()->RegisterLocalService(
             NYql::MakeCachingIamServiceCredentialsProviderServiceId(), CachingIamCredentialsService);

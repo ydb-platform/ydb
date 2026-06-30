@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     kqp_federated_query_actors.cpp
+    caching_iam_credentials_provider_service.cpp
 )
 
 PEERDIR(

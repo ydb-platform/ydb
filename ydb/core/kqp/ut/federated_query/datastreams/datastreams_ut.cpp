@@ -1575,7 +1575,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
                 "pq_source"_a = sourceName,
                 "topic_name"_a = topicName
             ),
-            EStatus::INTERNAL_ERROR, "AUTH_METHOD=IAM is disabled");
+            EStatus::GENERIC_ERROR, "AUTH_METHOD=IAM is disabled");
 
         // b) Attempt to create new EDS fails
         constexpr char pqBadSourceName[] = "sourceNameCloudBad";

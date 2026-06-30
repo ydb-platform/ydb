@@ -32,6 +32,7 @@ class TIamResolverActor : public NActors::TActor<TIamResolverActor> {
     private:
         STRICT_STFUNC(StateFunc,
             hFunc(NYql::TEvIamAuthCredentialsProviderService::TEvGetAuthInfoRequest, Handle);
+            sFunc(NActors::TEvents::TEvPoison, PassAway);
         )
         void Handle(NYql::TEvIamAuthCredentialsProviderService::TEvGetAuthInfoRequest::TPtr& event) {
             auto& promise = event->Get()->Promise;
@@ -54,11 +55,14 @@ class TIamResolverServiceActor : public NActors::TActor<TIamResolverServiceActor
             : TBase(&TIamResolverServiceActor::StateFunc)
         {
         }
+
     private:
     STRICT_STFUNC(
             StateFunc,
             hFunc(NYql::TEvIamAuthCredentialsProviderService::TEvGetAuthInfoRequest, Handle);
+            sFunc(NActors::TEvents::TEvPoison, PassAway);
             );
+
     void Handle(NYql::TEvIamAuthCredentialsProviderService::TEvGetAuthInfoRequest::TPtr& ev) {
         auto [it, inserted] = Actors.emplace(std::pair { std::move(ev->Get()->ServiceAccountId), std::move(ev->Get()->ResourceId) }, NActors::TActorId {});
         if (inserted) {
@@ -66,6 +70,15 @@ class TIamResolverServiceActor : public NActors::TActor<TIamResolverServiceActor
         }
         Send(ev->Forward(it->second));
     }
+
+    void PassAway() override {
+        for (auto& [_, actorId]: Actors) {
+            Send(actorId, new NActors::TEvents::TEvPoison());
+        }
+        TBase::PassAway();
+    }
+
+    private:
     THashMap<std::pair<TString, TString>, NActors::TActorId> Actors; // TODO replace with LRU
 };
 } // namespace {

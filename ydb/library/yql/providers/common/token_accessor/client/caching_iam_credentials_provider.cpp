@@ -56,7 +56,7 @@ private:
     NActors::TActorSystem* const ActorSystem;
 };
 
-} // namespace {
+} // namespace anonymous
 
 std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCachingIamServiceCredentialsProviderFactory(const TString& serviceAccountId, const TString& resourceId) {
     auto actorSystem = NActors::TlsActivationContext ? NActors::TlsActivationContext->ActorSystem() : nullptr;

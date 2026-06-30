@@ -2,6 +2,7 @@ LIBRARY()
 
 SRCS(
     bearer_credentials_provider.cpp
+    caching_iam_credentials_provider.cpp
     factory.cpp
     token_accessor_client.cpp
     token_accessor_client_factory.cpp

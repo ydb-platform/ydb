@@ -122,6 +122,7 @@ private:
             }
         } catch (...) {
             std::lock_guard lock(Lock_);
+            NextTicketUpdate_ = TInstant::Now() + std::min(RefreshPeriod_, TDuration::Seconds(10));
             LastErrorMessage_ = CurrentExceptionMessage();
         }
     }

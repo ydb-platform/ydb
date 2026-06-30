@@ -505,7 +505,7 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
             std::move(request), "/Root", "", runtime.GetActorSystem(0));
         auto response = runtime.WaitFuture(std::move(future));
 
-        UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::NOT_FOUND,
+        UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::UNSUPPORTED,
             response.ShortDebugString());
         UNIT_ASSERT_VALUES_EQUAL(response.issues_size(), 1);
         UNIT_ASSERT_VALUES_EQUAL(response.Getissues(0).severity(),

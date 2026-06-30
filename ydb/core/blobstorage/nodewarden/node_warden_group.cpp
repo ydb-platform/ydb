@@ -129,6 +129,9 @@ namespace NKikimr::NStorage {
         bool groupChanged = false; // did the 'Group' field change somehow?
         if (newGroup) {
             auto& currentGroup = group.Group;
+            const bool hadCurrentGroup = currentGroup.has_value();
+            const ui32 prevCurrentGroupGeneration = hadCurrentGroup ? currentGroup->GetGroupGeneration() : 0;
+            const ui32 prevCurrentGroupEncryptionMode = hadCurrentGroup ? currentGroup->GetEncryptionMode() : 0;
 
             // generate serialized string to compare it to the one after changes
             TString before;
@@ -144,13 +147,47 @@ namespace NKikimr::NStorage {
 
             // apply encryption parameters from new protobuf
             auto& ep = group.EncryptionParams;
-            Y_VERIFY_S(!ep.HasEncryptionMode() || ep.GetEncryptionMode() == newGroup->GetEncryptionMode(),
+            const ui32 incomingEncryptionMode = newGroup->GetEncryptionMode();
+            const bool incomingEncryptionModeIsKnown = incomingEncryptionMode <= static_cast<ui32>(TBlobStorageGroupInfo::EEM_ENC_V1);
+            const bool firstInvalidEncryptionMode = !ep.HasEncryptionMode() && !incomingEncryptionModeIsKnown;
+            const bool encryptionModeChanged = ep.HasEncryptionMode() && ep.GetEncryptionMode() != incomingEncryptionMode;
+            if (firstInvalidEncryptionMode || encryptionModeChanged) {
+                STLOG(PRI_ERROR, BS_NODE, NW113, "ApplyGroupInfo EncryptionMode diagnostics",
+                    (GroupId, groupId),
+                    (GroupGeneration, generation),
+                    (FromController, fromController),
+                    (FromResolver, fromResolver),
+                    (StoredHasEncryptionMode, ep.HasEncryptionMode()),
+                    (StoredEncryptionModeRaw, ep.GetEncryptionMode()),
+                    (IncomingHasEncryptionMode, newGroup->HasEncryptionMode()),
+                    (IncomingEncryptionModeRaw, incomingEncryptionMode),
+                    (StoredLifeCyclePhase, ep.GetLifeCyclePhase()),
+                    (IncomingLifeCyclePhase, newGroup->GetLifeCyclePhase()),
+                    (HadCurrentGroup, hadCurrentGroup),
+                    (PrevCurrentGroupGeneration, prevCurrentGroupGeneration),
+                    (PrevCurrentGroupEncryptionModeRaw, prevCurrentGroupEncryptionMode),
+                    (MaxKnownGeneration, group.MaxKnownGeneration),
+                    (StoredEncryptionParams, ep),
+                    (IncomingGroup, *newGroup));
+            }
+
+            Y_VERIFY_S(!encryptionModeChanged,
                 "sudden EncryptionMode change from# " << static_cast<TBlobStorageGroupInfo::EEncryptionMode>(ep.GetEncryptionMode())
-                << " to# " << static_cast<TBlobStorageGroupInfo::EEncryptionMode>(newGroup->GetEncryptionMode()) << " GroupId# " << groupId);
+                << " to# " << static_cast<TBlobStorageGroupInfo::EEncryptionMode>(incomingEncryptionMode)
+                << " fromRaw# " << ep.GetEncryptionMode()
+                << " toRaw# " << incomingEncryptionMode
+                << " GroupId# " << groupId
+                << " GroupGeneration# " << generation
+                << " FromController# " << fromController
+                << " FromResolver# " << fromResolver
+                << " HadCurrentGroup# " << hadCurrentGroup
+                << " PrevCurrentGroupGeneration# " << prevCurrentGroupGeneration
+                << " PrevCurrentGroupEncryptionModeRaw# " << prevCurrentGroupEncryptionMode
+                << " MaxKnownGeneration# " << group.MaxKnownGeneration);
 
             if (!ep.HasEncryptionMode() || group.EncryptionParams.GetLifeCyclePhase() != TBlobStorageGroupInfo::ELCP_IN_USE) {
                 // copy encryption mode and then copy other parameters if encryption is enabled
-                ep.SetEncryptionMode(newGroup->GetEncryptionMode());
+                ep.SetEncryptionMode(incomingEncryptionMode);
                 if (ep.GetEncryptionMode() != TBlobStorageGroupInfo::EEM_NONE) {
                     ep.SetLifeCyclePhase(newGroup->GetLifeCyclePhase());
                     ep.SetMainKeyId(newGroup->GetMainKeyId());

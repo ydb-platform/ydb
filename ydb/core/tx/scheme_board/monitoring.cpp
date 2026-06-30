@@ -32,6 +32,8 @@
 #include <util/string/join.h>
 #include <util/string/split.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SCHEME_BOARD_BACKUP
+
 // additional html elements
 namespace NMonitoring {
     const char NavTag[] = "nav";
@@ -1757,10 +1759,12 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 BackupProgress = TBackupProgress();
                 BackupProgress.Status = TBackupProgress::EStatus::Starting;
 
-                SBB_LOG_I("Starting backup to file: " << filePath
-                    << ", in-flight limit: " << inFlightLimit
-                    << ", require majority: " << requireMajority
-                );
+                YDB_LOG_INFO("Starting backup in-flight require",
+                    {"logPrefix", LogPrefix()},
+                    {"selfId", this->SelfId()},
+                    {"toFile", filePath},
+                    {"limit", inFlightLimit},
+                    {"majority", requireMajority});
 
                 Register(CreateSchemeBoardBackuper(filePath, inFlightLimit, requireMajority, SelfId()));
 
@@ -1811,10 +1815,12 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
                 RestoreProgress = TRestoreProgress();
                 RestoreProgress.Status = TRestoreProgress::EStatus::Starting;
 
-                SBB_LOG_I("Starting restore from " << filePath
-                    << " for SchemeShard ID: " << schemeShardId
-                    << " of generation: " << generation
-                );
+                YDB_LOG_INFO("Starting restore from for SchemeShard of",
+                    {"logPrefix", LogPrefix()},
+                    {"selfId", this->SelfId()},
+                    {"filePath", filePath},
+                    {"ID", schemeShardId},
+                    {"generation", generation});
 
                 Register(CreateSchemeBoardRestorer(filePath, schemeShardId, generation, SelfId()));
 
@@ -1840,7 +1846,10 @@ class TMonitoring: public TActorBootstrapped<TMonitoring> {
     template <typename TProgress, typename TEventPtr>
     void Handle(TProgress& progress, TEventPtr& ev) {
         const auto& msg = *ev->Get();
-        SBB_LOG_D("Handle " << msg.ToString());
+        YDB_LOG_DEBUG("Handle",
+            {"logPrefix", LogPrefix()},
+            {"selfId", this->SelfId()},
+            {"ev", msg});
         progress = TProgress(msg);
     }
 

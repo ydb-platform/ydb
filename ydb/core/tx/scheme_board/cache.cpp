@@ -42,13 +42,10 @@
 
 #include <google/protobuf/util/json_util.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TX_PROXY_SCHEME_CACHE
+
 namespace NKikimr {
 namespace NSchemeBoard {
-
-#define SBC_LOG_T(stream) SB_LOG_T(TX_PROXY_SCHEME_CACHE, stream)
-#define SBC_LOG_D(stream) SB_LOG_D(TX_PROXY_SCHEME_CACHE, stream)
-#define SBC_LOG_N(stream) SB_LOG_N(TX_PROXY_SCHEME_CACHE, stream)
-#define SBC_LOG_W(stream) SB_LOG_W(TX_PROXY_SCHEME_CACHE, stream)
 
 using TEvNavigate = TEvTxProxySchemeCache::TEvNavigateKeySet;
 using TEvNavigateResult = TEvTxProxySchemeCache::TEvNavigateKeySetResult;
@@ -262,10 +259,10 @@ namespace {
         }
 
         void SendResult() {
-            SBC_LOG_D("Send result"
-                << ": self# " << this->SelfId()
-                << ", recipient# " << Context->Sender
-                << ", result# " << Context->Request->ToString(*AppData()->TypeRegistry));
+            YDB_LOG_DEBUG("Send result",
+                {"self", this->SelfId()},
+                {"recipient", Context->Sender},
+                {"result", Context->Request->ToString(*AppData()->TypeRegistry)});
 
             this->Send(Context->Sender, new TEvResult(Context->Request.Release()), 0, Context->Cookie);
             this->PassAway();
@@ -301,10 +298,10 @@ namespace {
                 ) {
 
                     if (Context->ResolvedDomainInfo->DomainKey != entry.DomainInfo->DomainKey) {
-                        SBC_LOG_W("Path does not belong to the specified domain"
-                            << ": self# " << this->SelfId()
-                            << ", domain# " << Context->ResolvedDomainInfo->DomainKey
-                            << ", path's domain# " << entry.DomainInfo->DomainKey);
+                        YDB_LOG_WARN("Path does not belong to the specified domain path's",
+                            {"self", this->SelfId()},
+                            {"contextDomain", Context->ResolvedDomainInfo->DomainKey},
+                            {"entryDomain", entry.DomainInfo->DomainKey});
 
                         SetErrorAndClear(Context.Get(), entry, false);
                     }
@@ -318,10 +315,10 @@ namespace {
 
                     const ui32 access = GetAccess(entry);
                     if (!securityObject->CheckAccess(access, *token)) {
-                        SBC_LOG_W("Access denied"
-                            << ": self# " << this->SelfId()
-                            << ", for# " << token->GetUserSID()
-                            << ", access# " << NACLib::AccessRightsToString(access));
+                        YDB_LOG_WARN("Access denied",
+                            {"self", this->SelfId()},
+                            {"for", token->GetUserSID()},
+                            {"access", NACLib::AccessRightsToString(access)});
 
                         const auto hasDescribeAccess = securityObject->CheckAccess(NACLib::DescribeSchema, *token);
                         SetErrorAndClear(Context.Get(), entry, hasDescribeAccess);
@@ -556,11 +553,11 @@ namespace {
     private:
         template <typename TPath>
         TActorId CreateSubscriber(const TPath& path, const ui64 tabletId, const ui64 domainOwnerId) const {
-            SBC_LOG_T("Create subscriber"
-                << ": self# " << SelfId()
-                << ", path# " << path
-                << ", tabletId# " << tabletId
-                << ", domainOwnerId# " << domainOwnerId);
+            YDB_LOG_TRACE("Create subscriber",
+                {"self", SelfId()},
+                {"path", path},
+                {"tabletId", tabletId},
+                {"domainOwnerId", domainOwnerId});
 
             return Register(CreateSchemeBoardSubscriber(SelfId(), path, domainOwnerId));
         }
@@ -1895,11 +1892,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         void FillEntry(TNavigateContext* context, TNavigate::TEntry& entry, const TResponseProps& props = {}) const {
-            SBC_LOG_D("FillEntry for TNavigate"
-                << ": self# " << Owner->SelfId()
-                << ", cacheItem# " << ToString()
-                << ", entry# " << entry.ToString()
-                << ", props# " << props.ToString());
+            YDB_LOG_DEBUG("FillEntry for TNavigate",
+                {"self", Owner->SelfId()},
+                {"cacheItem", ToString()},
+                {"entry", entry},
+                {"props", props});
 
             if (props.IsSync && props.Partial) {
                 return SetError(context, entry, TNavigate::EStatus::LookupError);
@@ -2123,11 +2120,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         void FillEntry(TResolveContext* context, TResolve::TEntry& entry, const TResponseProps& props = {}) const {
-            SBC_LOG_D("FillEntry for TResolve"
-                << ": self# " << Owner->SelfId()
-                << ", cacheItem# " << ToString()
-                << ", entry# " << entry.ToString()
-                << ", props# " << props.ToString());
+            YDB_LOG_DEBUG("FillEntry for TResolve",
+                {"self", Owner->SelfId()},
+                {"cacheItem", ToString()},
+                {"entry", entry},
+                {"props", props});
 
             TKeyDesc& keyDesc = *entry.KeyDescription;
 
@@ -2390,10 +2387,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
     template <typename TPath>
     TSubscriber CreateSubscriber(const TPath& path, const ui64 domainOwnerId) const {
-        SBC_LOG_T("Create subscriber"
-            << ": self# " << SelfId()
-            << ", path# " << path
-            << ", domainOwnerId# " << domainOwnerId);
+        YDB_LOG_TRACE("Create subscriber",
+            {"self", SelfId()},
+            {"path", path},
+            {"domainOwnerId", domainOwnerId});
 
         return TSubscriber(
             Register(CreateSchemeBoardSubscriber(SelfId(), path, domainOwnerId)), domainOwnerId, path
@@ -2531,11 +2528,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         TCacheItem* byPath = Cache.FindPtr(notify.Path);
         TCacheItem* byPathId = Cache.FindPtr(notify.PathId);
 
-        SBC_LOG_D("ResolveCacheItem"
-            << ": self# " << SelfId()
-            << ", notify# " << notify.ToString()
-            << ", by path# " << (byPath ? byPath->ToString() : "nullptr")
-            << ", by pathId# " << (byPathId ? byPathId->ToString() : "nullptr"));
+        YDB_LOG_DEBUG("ResolveCacheItem by by",
+            {"self", SelfId()},
+            {"notify", notify},
+            {"path", (byPath ? byPath->ToString() : "nullptr")},
+            {"pathId", (byPathId ? byPathId->ToString() : "nullptr")});
 
         TCacheItem* commonResolve = ResolveCacheItemCommon(notify.PathId, notify.Path);
         if (commonResolve) {
@@ -2553,20 +2550,20 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
             return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
         }
 
-        SBC_LOG_D("ResolveCacheItemForNotify: subdomain case"
-                  << ": self# " << SelfId()
-                  << ", path# " << notify.Path
-                  << ", pathId# " << notify.PathId
-                  << ", byPath# " << (byPath ? byPath->ToString() : "nullptr")
-                  << ", byPathId# " << (byPathId ? byPathId->ToString() : "nullptr"));
+        YDB_LOG_DEBUG("ResolveCacheItemForNotify: subdomain case",
+            {"self", SelfId()},
+            {"path", notify.Path},
+            {"pathId", notify.PathId},
+            {"byPath", (byPath ? byPath->ToString() : "nullptr")},
+            {"byPathId", (byPathId ? byPathId->ToString() : "nullptr")});
 
         if (byPath->GetDomainId() != notifyDomainId && notifyDomainId) {
-            SBC_LOG_D("ResolveCacheItemForNotify: recreation domain case"
-                << ": self# " << SelfId()
-                << ", path# " << notify.Path
-                << ", pathId# " << notify.PathId
-                << ", byPath# " << (byPath ? byPath->ToString() : "nullptr")
-                << ", byPathId# " << (byPathId ? byPathId->ToString() : "nullptr"));
+            YDB_LOG_DEBUG("ResolveCacheItemForNotify: recreation domain case",
+                {"self", SelfId()},
+                {"path", notify.Path},
+                {"pathId", notify.PathId},
+                {"byPath", (byPath ? byPath->ToString() : "nullptr")},
+                {"byPathId", (byPathId ? byPathId->ToString() : "nullptr")});
 
             if (PathIdLessThan(byPath->GetPathId(), notify.PathId)) {
                 return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
@@ -2577,51 +2574,51 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
 
         if (byPath->GetPathId() == notifyDomainId) { //Update from TSS, GSS->TSS
             if (byPath->GetAbandonedSchemeShardIds().contains(notify.PathId.OwnerId)) {
-                SBC_LOG_D("ResolveCacheItemForNotify: this is update from TSS, the update is ignored, present GSS reverted implicitly that TSS"
-                    << ": self# " << SelfId()
-                    << ", path# " << notify.Path
-                    << ", pathId# " << notify.PathId);
+                YDB_LOG_DEBUG("ResolveCacheItemForNotify: this is update from TSS, the update is ignored, present GSS reverted implicitly that TSS",
+                    {"self", SelfId()},
+                    {"path", notify.Path},
+                    {"pathId", notify.PathId});
                 return byPathId;
             }
 
-            SBC_LOG_D("ResolveCacheItemForNotify: this is update from TSS, the update overrides GSS by path"
-                << ": self# " << SelfId()
-                << ", path# " << notify.Path
-                << ", pathId# " << notify.PathId);
+            YDB_LOG_DEBUG("ResolveCacheItemForNotify: this is update from TSS, the update overrides GSS by path",
+                {"self", SelfId()},
+                {"path", notify.Path},
+                {"pathId", notify.PathId});
             return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
         }
 
         if (byPath->GetDomainId() == notify.PathId) { //Update from GSS, TSS->GSS
             if (abandonedSchemeShardIds.contains(byPath->GetPathId().OwnerId)) { //GSS reverts TSS
-                SBC_LOG_D("ResolveCacheItemForNotify: this is update from GSS, the update overrides TSS by path, GSS implicitly reverts that TSS"
-                    << ": self# " << SelfId()
-                    << ", path# " << notify.Path
-                    << ", pathId# " << notify.PathId);
+                YDB_LOG_DEBUG("ResolveCacheItemForNotify: this is update from GSS, the update overrides TSS by path, GSS implicitly reverts that TSS",
+                    {"self", SelfId()},
+                    {"path", notify.Path},
+                    {"pathId", notify.PathId});
                 return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
             }
 
             if (!notifyDomainId) {
-                SBC_LOG_D("ResolveCacheItemForNotify: this is update from GSS that removes TSS"
-                    << ": self# " << SelfId()
-                    << ", path# " << notify.Path
-                    << ", pathId# " << notify.PathId);
+                YDB_LOG_DEBUG("ResolveCacheItemForNotify: this is update from GSS that removes TSS",
+                    {"self", SelfId()},
+                    {"path", notify.Path},
+                    {"pathId", notify.PathId});
                 return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
             }
 
-            SBC_LOG_D("ResolveCacheItemForNotify: this is update from GSS, the update is ignored, TSS is preferred"
-                << ": self# " << SelfId()
-                << ", path# " << notify.Path
-                << ", pathId# " << notify.PathId);
+            YDB_LOG_DEBUG("ResolveCacheItemForNotify: this is update from GSS, the update is ignored, TSS is preferred",
+                {"self", SelfId()},
+                {"path", notify.Path},
+                {"pathId", notify.PathId});
             return byPathId;
         }
 
         if (byPath->GetDomainId() == notifyDomainId && notifyDomainId) {
-            SBC_LOG_D("ResolveCacheItemForNotify: recreation migrated path case"
-                      << ": self# " << SelfId()
-                      << ", path# " << notify.Path
-                      << ", pathId# " << notify.PathId
-                      << ", byPath# " << (byPath ? byPath->ToString() : "nullptr")
-                      << ", byPathId# " << (byPathId ? byPathId->ToString() : "nullptr"));
+            YDB_LOG_DEBUG("ResolveCacheItemForNotify: recreation migrated path case",
+                {"self", SelfId()},
+                {"path", notify.Path},
+                {"pathId", notify.PathId},
+                {"byPath", (byPath ? byPath->ToString() : "nullptr")},
+                {"byPathId", (byPathId ? byPathId->ToString() : "nullptr")});
 
             if (PathIdLessThan(byPath->GetPathId(), notify.PathId)) {
                 return SwapSubscriberAndUpsert(byPath, notify.PathId, notify.Path);
@@ -2631,10 +2628,10 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         }
 
         if (!notifyDomainId) {
-            SBC_LOG_D("ResolveCacheItemForNotify: path has gone, update only by pathId"
-                << ": self# " << SelfId()
-                << ", path# " << notify.Path
-                << ", pathId# " << notify.PathId);
+            YDB_LOG_DEBUG("ResolveCacheItemForNotify: path has gone, update only by pathId",
+                {"self", SelfId()},
+                {"path", notify.Path},
+                {"pathId", notify.PathId});
             return byPathId;
         }
 
@@ -2658,9 +2655,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         const TResponseProps response = TResponseProps::FromEvent(ev);
         auto& notify = *ev->Get();
 
-        SBC_LOG_D("HandleNotify"
-            << ": self# " << SelfId()
-            << ", notify# " << notify.ToString());
+        YDB_LOG_DEBUG("HandleNotify",
+            {"self", SelfId()},
+            {"notify", notify});
 
         if (notify.Path && notify.PathId) {
             Y_ABORT_UNLESS(!response.IsSync);
@@ -2669,11 +2666,11 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
         TCacheItem* cacheItem = ResolveCacheItemForNotify(notify);
 
         if (!cacheItem) {
-            SBC_LOG_W("HandleNotify doesn't find any cacheItem for Fill"
-                << ": self# " << SelfId()
-                << ", path# " << notify.Path
-                << ", pathId# " << notify.PathId
-                << ", isSync# " << response.IsSync);
+            YDB_LOG_WARN("HandleNotify doesn't find any cacheItem for Fill",
+                {"self", SelfId()},
+                {"path", notify.Path},
+                {"pathId", notify.PathId},
+                {"isSync", response.IsSync});
             return;
         }
 
@@ -2817,9 +2814,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
     // otherwise use original entry and remove fallback entry
     // - This approach allows to avoid adding new handlers to SchemeCache actor and changing ProcessInFlight behavior
     void Handle(TEvTxProxySchemeCache::TEvNavigateKeySet::TPtr& ev) {
-        SBC_LOG_D("Handle TEvTxProxySchemeCache::TEvNavigateKeySet"
-            << ": self# " << SelfId()
-            << ", request# " << ev->Get()->Request->ToString(*AppData()->TypeRegistry));
+        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvNavigateKeySet",
+            {"self", SelfId()},
+            {"request", ev->Get()->Request->ToString(*AppData()->TypeRegistry)});
 
         if (MaybeRunDbResolver(ev)) {
             return;
@@ -2892,9 +2889,9 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
     }
 
     void Handle(TEvTxProxySchemeCache::TEvResolveKeySet::TPtr& ev) {
-        SBC_LOG_D("Handle TEvTxProxySchemeCache::TEvResolveKeySet"
-            << ": self# " << SelfId()
-            << ", request# " << ev->Get()->Request->ToString(*AppData()->TypeRegistry));
+        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvResolveKeySet",
+            {"self", SelfId()},
+            {"request", ev->Get()->Request->ToString(*AppData()->TypeRegistry)});
 
         if (MaybeRunDbResolver(ev)) {
             return;
@@ -2921,8 +2918,8 @@ class TSchemeCache: public TMonitorableActor<TSchemeCache> {
     }
 
     void Handle(TEvTxProxySchemeCache::TEvInvalidateTable::TPtr& ev) {
-        SBC_LOG_D("Handle TEvTxProxySchemeCache::TEvInvalidateTable"
-            << ": self# " << SelfId());
+        YDB_LOG_DEBUG("Handle TEvTxProxySchemeCache::TEvInvalidateTable",
+            {"self", SelfId()});
         Send(ev->Sender, new TEvTxProxySchemeCache::TEvInvalidateTableResult(ev->Get()->Sender), 0, ev->Cookie);
     }
 

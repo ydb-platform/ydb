@@ -649,26 +649,83 @@ public:
         if (KqpCtx->Config->GetEnableIndexStreamWrite()) {
             auto collectedEffects = CollectEffects(query.Effects(), ctx, *KqpCtx);
 
-            if (!query.Results().Empty()) {
-                auto resultsQuery = Build<TKqlQuery>(ctx, query.Pos())
-                    .Results(query.Results())
-                    .Effects()
-                        .Build()
-                    .Done();
-
-                auto tx = BuildTx(resultsQuery.Ptr(), ctx, false);
-                if (!tx) {
-                    return TStatus::Error;
+            // Build a map from sink-effect stage -> result indices in query.Results() that are RETURNING outputs.
+            // RETURNING results are TDqCnUnionAll whose Output().Stage() matches a TKqpSinkEffect's stage.
+            THashMap<const TExprNode*, TVector<ui32>> stageToReturningResults;
+            for (ui32 i = 0; i < query.Results().Size(); ++i) {
+                const auto& result = query.Results().Item(i);
+                if (auto maybeUnionAll = result.Value().Maybe<TDqCnUnionAll>()) {
+                    const auto stage = maybeUnionAll.Cast().Output().Stage();
+                    stageToReturningResults[stage.Raw()].push_back(i);
                 }
-
-                BuildCtx->PhysicalTxs.emplace_back(tx.Cast());
-
-                updateResultBinding(resultsQuery);
             }
 
+            // Determine which result indices are RETURNING (belong to an effects tx) vs reads.
+            THashSet<ui32> returningResultIndices;
+            for (const auto& effects : *collectedEffects) {
+                for (const auto& effect : effects) {
+                    if (auto sinkEffect = effect.Maybe<TKqpSinkEffect>()) {
+                        const auto stage = sinkEffect.Cast().Stage();
+                        auto it = stageToReturningResults.find(stage.Raw());
+                        if (it != stageToReturningResults.end()) {
+                            for (ui32 idx : it->second) {
+                                returningResultIndices.insert(idx);
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Map each original result index to (txIndex, localResultIndex) for deferred binding emission.
+            TVector<std::pair<ui32, ui32>> resultTxMapping(query.Results().Size(), {0, 0});
+
+            // Build reads tx with non-RETURNING results only.
+            {
+                TVector<TKqlQueryResult> readResults;
+                for (ui32 i = 0; i < query.Results().Size(); ++i) {
+                    if (!returningResultIndices.contains(i)) {
+                        resultTxMapping[i] = {BuildCtx->PhysicalTxs.size(), readResults.size()};
+                        readResults.emplace_back(query.Results().Item(i));
+                    }
+                }
+
+                if (!readResults.empty()) {
+                    auto resultsQuery = Build<TKqlQuery>(ctx, query.Pos())
+                        .Results()
+                            .Add(readResults)
+                            .Build()
+                        .Effects()
+                            .Build()
+                        .Done();
+
+                    auto tx = BuildTx(resultsQuery.Ptr(), ctx, false);
+                    if (!tx) {
+                        return TStatus::Error;
+                    }
+
+                    BuildCtx->PhysicalTxs.emplace_back(tx.Cast());
+                }
+            }
+
+            // Build effects txs, each carrying its RETURNING results.
             for (auto& effects : *collectedEffects) {
+                TVector<TKqlQueryResult> effectsResults;
+                for (const auto& effect : effects) {
+                    if (auto sinkEffect = effect.Maybe<TKqpSinkEffect>()) {
+                        const auto stage = sinkEffect.Cast().Stage();
+                        auto it = stageToReturningResults.find(stage.Raw());
+                        if (it != stageToReturningResults.end()) {
+                            for (ui32 idx : it->second) {
+                                resultTxMapping[idx] = {BuildCtx->PhysicalTxs.size(), effectsResults.size()};
+                                effectsResults.emplace_back(query.Results().Item(idx));
+                            }
+                        }
+                    }
+                }
+
                 auto effectsQuery = Build<TKqlQuery>(ctx, query.Pos())
                     .Results()
+                        .Add(effectsResults)
                         .Build()
                     .Effects(effects)
                     .Done();
@@ -679,10 +736,23 @@ public:
                 }
 
                 BuildCtx->PhysicalTxs.emplace_back(tx.Cast());
-
-                updateResultBinding(effectsQuery);
             }
-            
+
+            // Emit bindings in query.Results() order to preserve client-visible result ordering.
+            for (ui32 i = 0; i < query.Results().Size(); ++i) {
+                const auto& [txIndex, localResultIndex] = resultTxMapping[i];
+                const auto& result = query.Results().Item(i);
+                auto binding = Build<TKqpTxResultBinding>(ctx, query.Pos())
+                    .Type(ExpandType(query.Pos(), *result.Value().Ref().GetTypeAnn(), ctx))
+                    .TxIndex()
+                        .Build(ToString(txIndex))
+                    .ResultIndex()
+                        .Build(ToString(localResultIndex))
+                    .Done();
+
+                BuildCtx->QueryResults.emplace_back(std::move(binding));
+            }
+
             return TStatus::Ok;
         }
 
@@ -725,8 +795,8 @@ public:
     }
 
 private:
-    static TMaybeNode<TDqSink> GetStageSink(const TKqpSinkEffect& effect) {
-        // (KqpSinkEffect (DqStage (... ((DqSink '0 (DataSink '"kikimr") ...)))) '0)
+    static TMaybeNode<TDqOutputAnnotationBase> GetStageOutput(const TKqpSinkEffect& effect) {
+        // (KqpSinkEffect (DqStage (... ((DqSink|DqTransform '0 (DataSink '"kikimr") ...)))) '0)
         const auto maybeStage = effect.Stage().Maybe<TDqStageBase>();
         YQL_ENSURE(maybeStage);
         const auto stage = maybeStage.Cast();
@@ -734,8 +804,29 @@ private:
         const auto outputs = stage.Outputs().Cast();
         const size_t sinkIndex = FromString(effect.SinkIndex().Value());
         YQL_ENSURE(sinkIndex < outputs.Size());
-        const auto maybeSink = outputs.Item(sinkIndex).Maybe<TDqSink>();
-        return maybeSink;
+        return TMaybeNode<TDqOutputAnnotationBase>(outputs.Item(sinkIndex).Ptr());
+    }
+
+    static TMaybeNode<TDqSink> GetStageSink(const TKqpSinkEffect& effect) {
+        const auto output = GetStageOutput(effect);
+        if (!output) {
+            return {};
+        }
+        return output.Cast().Maybe<TDqSink>();
+    }
+
+    static TMaybeNode<TKqpTableSinkSettings> GetStageSinkSettings(const TKqpSinkEffect& effect) {
+        const auto output = GetStageOutput(effect);
+        if (!output) {
+            return {};
+        }
+        if (const auto maybeSink = output.Cast().Maybe<TDqSink>()) {
+            return maybeSink.Cast().Settings().Maybe<TKqpTableSinkSettings>();
+        }
+        if (const auto maybeTransform = output.Cast().Maybe<TDqTransform>()) {
+            return maybeTransform.Cast().Settings().Maybe<TKqpTableSinkSettings>();
+        }
+        return {};
     }
 
     std::optional<TVector<TExprList>> CollectEffects(const TExprList& list, TExprContext& ctx, TKqpOptimizeContext& kqpCtx) {
@@ -744,16 +835,11 @@ private:
 
         for (const auto& expr : list) {
             if (auto sinkEffect = expr.Maybe<TKqpSinkEffect>()) {
-                const auto dqSink = GetStageSink(sinkEffect.Cast());
-                if (!dqSink) {
-                    // TODO: process output transfroms
-                    continue;
-                }
-                
-                const auto sinkSettings = dqSink.Cast().Settings().Maybe<TKqpTableSinkSettings>();
+                const auto sinkSettings = GetStageSinkSettings(sinkEffect.Cast());
                 if (!sinkSettings) {
+                    const auto dqSink = GetStageSink(sinkEffect.Cast());
+                    AFL_ENSURE(dqSink);
                     AFL_ENSURE(!kqpCtx.UsePessimisticLocks);
-                    /// ???
                     externalEffects.emplace_back(sinkEffect.Cast());
                 } else {
                     // Two table sinks can't be executed in one physical transaction if they write into same table and have same priority.

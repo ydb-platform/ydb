@@ -18,8 +18,7 @@
 namespace NKikimr::NSecret {
 
 inline NActors::TActorId MakeDescribeSchemaSecretServiceId(ui32 nodeId) {
-    // It was initially registered in KQP, so the original name is left as is for compatibility.
-    const char name[12] = "kqp_dsc_sec";
+    const char name[12] = "desc_secret";
     return NActors::TActorId(nodeId, TStringBuf(name, 12));
 }
 

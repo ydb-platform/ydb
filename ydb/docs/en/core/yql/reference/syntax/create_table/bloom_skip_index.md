@@ -18,7 +18,7 @@ Where:
 
 * `<index_name>`: Index name.
 * `LOCAL`: Required keyword for Bloom skip indexes.
-* `<index_columns>`: List of columns used to build the index; the number of columns depends on the table type and index type.
+* `<index_columns>`: List of columns used to build the index; the number of columns depends on the table type and index type. On [row-oriented tables](../../../../concepts/glossary.md#row-oriented-table), the indexed columns of a `bloom_filter` must be a left prefix of the [primary key](../../../../concepts/glossary.md#primary-key).
 * `COVER (...)` and data columns are not supported for Bloom skip indexes.
 
 `WITH (...)` parameters:

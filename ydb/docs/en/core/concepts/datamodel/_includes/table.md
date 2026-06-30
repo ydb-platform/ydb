@@ -164,13 +164,21 @@ The speed of renaming is determined by the type of data transactions currently r
 * [Renaming a table in YQL](../../../yql/reference/syntax/alter_table/rename.md)
 * [Renaming a table via the CLI](../../../reference/ydb-cli/commands/tools/rename.md)
 
-### Bloom Filter {#bloom-filter}
+### Local Bloom skip indexes {#bloom-filter}
 
 Using a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) allows more efficiently determining the absence of keys in a table during multiple point lookups by primary key, reducing the number of required disk I/O operations at the cost of increased memory consumption.
+
+The recommended way to manage bloom filters on row-oriented tables is via [local Bloom skip indexes](../../glossary.md#local-bloom-skip-index) (`LOCAL USING bloom_filter`), created with [ALTER TABLE ... ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-bloom) and removed with [ALTER TABLE ... DROP INDEX](../../../yql/reference/syntax/alter_table/indexes.md#drop-index). For details, see [Bloom skip indexes](../../../dev/bloom-skip-indexes.md#row-vs-column).
+
+{% note warning %}
 
 | Parameter name | Type | Acceptable values | Update<br/>capability | Reset<br/>capability |
 | ------------- | --- | ------------------- | --------------------- | ------------------ |
 | `KEY_BLOOM_FILTER` | Enum | `ENABLED`, `DISABLED` | Yes | No |
+
+The `KEY_BLOOM_FILTER` setting is deprecated. It enables a bloom filter over the full primary key and, when set to `DISABLED`, clears all bloom filters on the table.
+
+{% endnote %}
 
 ### Column Groups {#column-groups}
 

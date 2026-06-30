@@ -164,13 +164,21 @@ CREATE TABLE article (
 * [Переименование таблицы в YQL](../../../yql/reference/syntax/alter_table/rename.md)
 * [Переименование таблицы через CLI](../../../reference/ydb-cli/commands/tools/rename.md)
 
-### Фильтр Блума {#bloom-filter}
+### Локальные блум-индексы {#bloom-filter}
 
 Использование [фильтра Блума](https://en.wikipedia.org/wiki/Bloom_filter) позволяет эффективнее определять отсутствие ключей в таблице при множественных точечных запросах по первичному ключу, снижая количество необходимых операций ввода-вывода с диска, ценой увеличения объема потребляемой памяти.
+
+Рекомендуемый способ управления фильтрами Блума в строковых таблицах — через [локальные Блум-индексы](../../glossary.md#local-bloom-skip-index) (`LOCAL USING bloom_filter`), создаваемые с помощью [ALTER TABLE ... ADD INDEX](../../../yql/reference/syntax/alter_table/indexes.md#local-bloom) и удаляемые с помощью [ALTER TABLE ... DROP INDEX](../../../yql/reference/syntax/alter_table/indexes.md#drop-index). Подробнее см. [Блум-индексы](../../../dev/bloom-skip-indexes.md#row-vs-column).
+
+{% note warning %}
 
 | Имя параметра | Тип | Допустимые значения | Возможность<br/>изменения | Возможность<br/>сброса |
 | ------------- | --- | ------------------- | --------------------- | ------------------ |
 | `KEY_BLOOM_FILTER` | Enum | `ENABLED`, `DISABLED` | Да | Нет |
+
+Настройка `KEY_BLOOM_FILTER` устарела (deprecated). Она включает фильтр Блума по всему первичному ключу, а при установке `DISABLED` очищает все фильтры Блума на таблице.
+
+{% endnote %}
 
 ### Группы колонок {#column-groups}
 

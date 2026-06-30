@@ -1,8 +1,8 @@
 # Bloom skip index quickstart
 
-## Creating a table with a bloom_filter index
+## Column-oriented (OLAP) table: bloom_filter
 
-Below is a minimal example: a column-oriented table with a primary key and a local `bloom_filter` index on a column that is frequently used in filters.
+Below is a minimal example: a [column-oriented table](../../concepts/glossary.md#column-oriented-table) with a primary key and a local `bloom_filter` index on a column that is frequently used in filters.
 
 ```yql
 CREATE TABLE events (
@@ -39,7 +39,7 @@ ALTER TABLE events
 
 After you load data, selective queries that filter on indexed columns may read less data: while scanning storage, the Bloom skip index skips fragments that cannot contain the requested value (compared to reading the full column without this filter).
 
-Sample data and queries for the table above:
+Sample data and queries for the column-oriented table above:
 
 ```yql
 INSERT INTO events (id, resource_id, payload, message) VALUES
@@ -62,6 +62,38 @@ Substring search on the column with `bloom_ngram_filter` — the n-gram index he
 SELECT id, message
 FROM events
 WHERE message LIKE '%timeout%';
+```
+
+## Row-oriented (OLTP) table: prefix bloom filter
+
+On a [row-oriented table](../../concepts/glossary.md#row-oriented-table), a `bloom_filter` index is built over a left prefix of the primary key. The indexed columns must be a contiguous leading subset of the primary key columns:
+
+```yql
+CREATE TABLE orders (
+    customer_id Utf8 NOT NULL,
+    order_id Utf8 NOT NULL,
+    amount Decimal(10,2),
+    PRIMARY KEY (customer_id, order_id),
+    -- Prefix bloom filter on the first key column
+    INDEX idx_customer LOCAL USING bloom_filter
+        ON (customer_id)
+        WITH (false_positive_probability = 0.001),
+    -- Prefix bloom filter on the full primary key
+    INDEX idx_full_key LOCAL USING bloom_filter
+        ON (customer_id, order_id)
+);
+```
+
+Point lookups and range scans that constrain the leading key columns can skip irrelevant data fragments. A query that filters on `customer_id` only uses the prefix bloom filter `idx_customer`:
+
+```yql
+SELECT amount FROM orders WHERE customer_id = "cust-42";
+```
+
+A query that filters on the full primary key uses `idx_full_key`:
+
+```yql
+SELECT amount FROM orders WHERE customer_id = "cust-42" AND order_id = "ord-1001";
 ```
 
 ## How to verify index effectiveness

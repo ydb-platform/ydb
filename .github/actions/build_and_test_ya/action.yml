@@ -31,7 +31,7 @@ inputs:
     description: "run only specific test types (or all by default)"
   increment:
     type: boolean
-    default: true
+    required: true
     description: If true, compares build graphs between the current and previous commits to find a list of test suites to run. Otherwise, runs all tests.
   folder_prefix:
     type: string

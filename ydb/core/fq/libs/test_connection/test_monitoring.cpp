@@ -82,7 +82,7 @@ public:
         const TString authorizationHeader = "Authorization";
         const auto structedToken = NYql::ComposeStructuredTokenJsonForServiceAccount(ClusterConfig.GetServiceAccountId(), ClusterConfig.GetServiceAccountIdSignature(), ClusterConfig.GetToken());
         const auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, structedToken);
-        const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
+        const auto authToken = credentialsProviderFactory->CreateProvider()->GetAuthInfo(false);
 
         switch (static_cast<NYql::NSo::NProto::ESolomonClusterType>(ClusterConfig.GetClusterType())) {
             case NYql::NSo::NProto::ESolomonClusterType::CT_SOLOMON:

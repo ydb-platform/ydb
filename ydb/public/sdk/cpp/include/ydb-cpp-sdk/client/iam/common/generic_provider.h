@@ -95,22 +95,12 @@ private:
             );
         }
 
-        std::string GetTicket() {
+        std::string GetTicket(bool throwOnError) {
             std::lock_guard guard(Lock_);
-            if (Ticket_.empty()) {
+            if (Ticket_.empty() && throwOnError) {
                 ythrow yexception() << "IAM-token not ready yet. " << LastRequestError_;
             }
             return Ticket_;
-        }
-
-        void WaitForToken() {
-            std::unique_lock guard(Lock_);
-            TokenReady_.wait_for(guard,
-                std::chrono::microseconds(2 * IamEndpoint_.RequestTimeout.MicroSeconds()),
-                [this]() {
-                    return NeedStop_ || !Ticket_.empty(); 
-                }
-            );
         }
 
         void Stop() {
@@ -207,7 +197,7 @@ private:
             if (AuthTokenProvider_) {
                 guard.unlock();
                 try {
-                    authToken = AuthTokenProvider_->GetAuthInfo();
+                    authToken = AuthTokenProvider_->GetAuthInfo(true);
                 } catch (...) {
                     guard.lock();
                     throw;
@@ -291,7 +281,6 @@ private:
                 const SysTimePoint expiresAt = SysClock::from_time_t(result.expires_at().seconds());
                 RescheduleOnSuccess(expiresAt);
 
-                TokenReady_.notify_all();
             }
 
             ResetContextImpl();
@@ -346,15 +335,14 @@ public:
         : Impl_(std::make_shared<TImpl>(endpoint, requestFiller, rpc, std::move(responseFacility), authTokenProvider))
     {
         Impl_->StartPeriodicTask();
-        Impl_->WaitForToken();
     }
 
     ~TGrpcIamCredentialsProvider() {
         Impl_->Stop();
     }
 
-    std::string GetAuthInfo() const override {
-        return Impl_->GetTicket();
+    std::string GetAuthInfo(bool throwOnError) const override {
+        return Impl_->GetTicket(throwOnError);
     }
 
     bool IsValid() const override {
@@ -376,8 +364,8 @@ public:
         , Inner_(std::move(inner))
     {}
 
-    std::string GetAuthInfo() const override {
-        return Inner_->GetAuthInfo();
+    std::string GetAuthInfo(bool throwOnError) const override {
+        return Inner_->GetAuthInfo(throwOnError);
     }
 
     bool IsValid() const override {

@@ -161,7 +161,7 @@ public:
         Impl->Stop();
     }
 
-    std::string GetAuthInfo() const override {
+    std::string GetAuthInfo(bool /*throwOnError*/) const override {
         return Impl->GetTicket();
     }
 

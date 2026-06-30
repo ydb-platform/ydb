@@ -62,7 +62,7 @@ public:
 
     void StartDownload(std::shared_ptr<TEvRequestS3Range>&& request, NActors::TActorSystem* actorSystem) {
         auto length = request->End - request->Start;
-        const auto& authInfo = Credentials_.GetAuthInfo();
+        const auto& authInfo = Credentials_.GetAuthInfo(false);
         auto headers = NYql::IHTTPGateway::MakeYcHeaders(
             request->RequestId.AsGuidString(),
             authInfo.GetToken(),

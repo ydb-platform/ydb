@@ -276,7 +276,7 @@ namespace NKikimr::NHttpProxy {
         void SendIamTokenRequest(const TActorContext& ctx) {
             auto request = MakeHolder<NCloud::TEvIamTokenService::TEvCreateForServiceAccountRequest>();
             request->RequestId = RequestId;
-            request->Token = ServiceAccountCredentialsProvider->GetAuthInfo();
+            request->Token = ServiceAccountCredentialsProvider->GetAuthInfo(false);
             request->Request.set_service_account_id(ServiceAccountId);
 
             ctx.Send(MakeIamTokenServiceID(), std::move(request));

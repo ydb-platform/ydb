@@ -22,7 +22,7 @@ struct TS3Credentials {
     TS3Credentials() = default;
     TS3Credentials(ISecuredServiceAccountCredentialsFactory::TPtr factory, const TString& structuredTokenJson, bool addBearerToToken = false);
 
-    TAuthInfo GetAuthInfo() const;
+    TAuthInfo GetAuthInfo(bool throwOnError) const;
 
     bool operator<(const TS3Credentials& other) const;
     friend IOutputStream& operator<<(IOutputStream& stream, const TS3Credentials& credentials);

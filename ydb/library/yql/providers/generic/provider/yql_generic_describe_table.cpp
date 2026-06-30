@@ -121,7 +121,7 @@ void TGenericDescribeTableTransformer::FillCredentials(NConnector::NApi::TDescri
                 .first;
     }
 
-    iamToken = providersIt->second->GetAuthInfo();
+    iamToken = providersIt->second->GetAuthInfo(false);
     Y_ENSURE(iamToken, "empty IAM token");
     *dsi->mutable_credentials()->mutable_token()->mutable_value() = iamToken;
     *dsi->mutable_credentials()->mutable_token()->mutable_type() = "IAM";

@@ -33,7 +33,7 @@ TStringBuilder TReadSession::GetLogPrefix() const {
 TReadSession::TReadSession(const TReadSessionSettings& settings,
              std::shared_ptr<TPersQueueClient::TImpl> client,
              std::shared_ptr<TGRpcConnectionsImpl> connections,
-             TDbDriverStatePtr dbDriverState)
+             TDbDriverStatePtr dbDriverState, bool /*throwOnError*/)
     : Settings(settings)
     , SessionId(CreateGuidAsString())
     , Log(settings.Log_.value_or(dbDriverState->Log))

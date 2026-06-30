@@ -23,7 +23,7 @@ protected:
             .OperationSettings = settings,
             .RequestCreator = std::move(requestCreator),
             .Database = Database,
-            .Token = CredentialsProvider ? TMaybe<TString>(CredentialsProvider->GetAuthInfo()) : Nothing(),
+            .Token = CredentialsProvider ? TMaybe<TString>(CredentialsProvider->GetAuthInfo(false)) : Nothing(),
             .Promise = promise,
             .OperationName = "local_topic_rpc_operation",
         });

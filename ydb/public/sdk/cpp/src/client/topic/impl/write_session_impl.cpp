@@ -102,7 +102,7 @@ TWriteSessionImpl::TWriteSessionImpl(
     , Client(std::move(client))
     , Connections(std::move(connections))
     , DbDriverState(std::move(dbDriverState))
-    , PrevToken(DbDriverState->CredentialsProvider ? DbDriverState->CredentialsProvider->GetAuthInfo() : "")
+    , PrevToken(DbDriverState->CredentialsProvider ? DbDriverState->CredentialsProvider->GetAuthInfo(false) : "")
     , MaxBlockMessageCount(Settings.BatchFlushMessageCount_)
     , InitSeqNoPromise(NThreading::NewPromise<uint64_t>())
     , WakeupInterval(
@@ -1576,7 +1576,7 @@ void TWriteSessionImpl::UpdateTokenIfNeededImpl() {
         return;
     }
 
-    auto token = DbDriverState->CredentialsProvider->GetAuthInfo();
+    auto token = DbDriverState->CredentialsProvider->GetAuthInfo(false);
     if (token == PrevToken) {
         return;
     }

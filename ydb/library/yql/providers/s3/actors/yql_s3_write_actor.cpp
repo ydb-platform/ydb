@@ -167,7 +167,7 @@ public:
         ParentId = parentId;
         LOG_D("TS3FileWriteActor", "Bootstrap by " << ParentId << " for Key: [" << Key << "], Url: [" << Url << "], request id: [" << RequestId << "]");
         try {
-            BeginPartsUpload(Credentials.GetAuthInfo());
+            BeginPartsUpload(Credentials.GetAuthInfo(false));
         } catch (...) {
             FailOnException();
         }
@@ -395,7 +395,7 @@ private:
             InFlight += size;
             SentSize += size;
             SentCount++;
-            auto authInfo = Credentials.GetAuthInfo();
+            auto authInfo = Credentials.GetAuthInfo(false);
             Gateway->Upload(Url + "?partNumber=" + std::to_string(index + 1) + "&uploadId=" + UploadId,
                 IHTTPGateway::MakeYcHeaders(RequestId, authInfo.GetToken(), {}, authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
                 std::move(part),
@@ -423,7 +423,7 @@ private:
         for (const auto& tag : Tags)
             xml << "<Part><PartNumber>" << ++i << "</PartNumber><ETag>" << tag << "</ETag></Part>" << Endl;
         xml << "</CompleteMultipartUpload>" << Endl;
-        auto authInfo = Credentials.GetAuthInfo();
+        auto authInfo = Credentials.GetAuthInfo(false);
         Gateway->Upload(Url + "?uploadId=" + UploadId,
             IHTTPGateway::MakeYcHeaders(RequestId, authInfo.GetToken(), "application/xml", authInfo.GetAwsUserPwd(), authInfo.GetAwsSigV4()),
             xml,
@@ -434,7 +434,7 @@ private:
 
     void SafeAbortMultipartUpload() {
         try {
-            AbortMultipartUpload(Credentials.GetAuthInfo());
+            AbortMultipartUpload(Credentials.GetAuthInfo(true));
         } catch (...) {
             LOG_W("TS3FileWriteActor", "Failed to abort multipart upload, error: " << CurrentExceptionMessage());
         }

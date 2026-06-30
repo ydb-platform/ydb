@@ -133,7 +133,7 @@ protected:
 
     template <typename TRpcEvent, typename TSettings>
     std::unique_ptr<TRpcEvent> CreateRpcBiStreamingEvent(const NYdb::TRequestSettings<TSettings>& settings, const TString& methodName, NJaegerTracing::ERequestType requestType) const {
-        const auto& token = CredentialsProvider ? std::optional<TString>(CredentialsProvider->GetAuthInfo()) : std::nullopt;
+        const auto& token = CredentialsProvider ? std::optional<TString>(CredentialsProvider->GetAuthInfo(false)) : std::nullopt;
         auto ctx = MakeIntrusive<TLocalRpcCtx>(TBase::ActorContext().ActorSystem(), TBase::SelfId(), typename TLocalRpcCtx::TSettings{
             .Database = Database,
             .Token = token,

@@ -10,8 +10,8 @@ public:
         : Delegatee(delegatee) {
     }
 
-    std::string GetAuthInfo() const override {
-        TString result = Delegatee->GetAuthInfo();
+    std::string GetAuthInfo(bool throwOnError) const override {
+        TString result = Delegatee->GetAuthInfo(throwOnError);
         if (!result || result.StartsWith("Bearer ")) {
             return result;
         }

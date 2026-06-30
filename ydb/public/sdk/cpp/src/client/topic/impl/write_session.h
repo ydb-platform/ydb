@@ -26,7 +26,7 @@ public:
     TWriteSession(const TWriteSessionSettings& settings,
             std::shared_ptr<TTopicClient::TImpl> client,
             std::shared_ptr<TGRpcConnectionsImpl> connections,
-            TDbDriverStatePtr dbDriverState);
+            TDbDriverStatePtr dbDriverState    );
 
     std::optional<TWriteSessionEvent::TEvent> GetEvent(bool block = false) override;
     std::vector<TWriteSessionEvent::TEvent> GetEvents(bool block = false,

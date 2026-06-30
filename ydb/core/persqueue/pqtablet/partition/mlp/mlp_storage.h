@@ -334,6 +334,10 @@ private:
     template <class Fn>
     void IterateAllMessagesInOrder(Fn&& fn);
 
+    template <class Fn>
+    void IterateAllMessagesInOrder(Fn&& fn) const;
+
+
     TReadMessage ConvertoToReadMessage(ui64 offset, const TMessage& message) const;
     bool IsMessageGroupLocked(const TMessage& message, const absl::flat_hash_set<ui32>& skipMessageGroups) const;
 
@@ -351,6 +355,8 @@ private:
 
     TTryGetMessageResult TryGetMessage(ui64 offset, const std::optional<ui32> retentionDeadlineDelta, const absl::flat_hash_set<ui32>& skipMessageGroups, const char* caseDescription);
     TNextMessageResult SearchForEligibleMessage(const std::optional<ui32> retentionDeadlineDelta, const absl::flat_hash_set<ui32>& skipMessageGroups);
+
+    void ValidateNextOffsets() const;
 
 private:
     const TIntrusivePtr<ITimeProvider> TimeProvider;
@@ -406,6 +412,9 @@ private:
         size_t UnlockedMessageGroupsIdSize() const;
         bool UnlockedMessageGroupsIdErase(const ui32 messageGroupIdHash);
         void UpdateLockedMaps(const TLockedGroup& locked, ui32 messageGroupIdHash);
+        const auto& UnlockedMessageGroupsIdIterate() const {
+            return UnlockedMessageGroupsId;
+        }
         const TIntrusiveList<TOrderedMessageGroupIdHash>& GetUnlockedMessageGroupsIdViewOrder() const;
         TIntrusiveList<TOrderedMessageGroupIdHash>& GetUnlockedMessageGroupsIdViewOrder();
         void Clear();
@@ -456,4 +465,14 @@ inline void TStorage::IterateAllMessagesInOrder(Fn&& fn) {
     }
 }
 
+
+template <class Fn>
+inline void TStorage::IterateAllMessagesInOrder(Fn&& fn) const {
+    for (auto& [offset, m] : SlowMessages) {
+        fn(offset, m);
+    }
+    for (size_t i = 0; i < Messages.size(); ++i) {
+        fn(FirstOffset + i, Messages[i]);
+    }
+}
 }

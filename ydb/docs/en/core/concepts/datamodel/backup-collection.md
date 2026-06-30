@@ -22,9 +22,9 @@ For comparison with other backup methods (export/import, dump/restore), see [Bac
 
 These terms are essential for understanding backup collections. For detailed definitions, see the [glossary](../glossary.md#backup-collection).
 
-- ** [Full backup](../glossary.md#backup)**: A complete snapshot of all data in the collection at a specific point in time. Serves as the basis for subsequent incremental backups.
-- ** [Incremental backup](../glossary.md#backup)**: Captures only changes (inserts, updates, deletes) since the previous backup. Requires the entire backup chain for restore.
-- ** [Backup chain](../glossary.md#backup-chain)**: An ordered sequence starting with a full backup, followed by zero or more incremental backups.
+- **[Full backup](../glossary.md#backup)**: A complete snapshot of all data in the collection at a specific point in time. Serves as the basis for subsequent incremental backups.
+- **[Incremental backup](../glossary.md#backup)**: Captures only changes (inserts, updates, deletes) since the previous backup. Requires the entire backup chain for restore.
+- **[Backup chain](../glossary.md#backup-chain)**: An ordered sequence starting with a full backup, followed by zero or more incremental backups.
 
 ## Limitations {#limitations}
 

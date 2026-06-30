@@ -11,6 +11,7 @@
 * `global options` — [глобальные параметры](commands/global-options.md).
 * `options` — [параметры подкоманды](#options).
 * `kind` — тип операции. Возможные значения:
+  * `analyze` — операции сбора статистики [ANALYZE](../../yql/reference/syntax/analyze.md);
   * `buildindex` — операции построения индекса;
   * `compaction` — операции компакшна таблиц;
   * `export/s3` — операции экспорта в S3;

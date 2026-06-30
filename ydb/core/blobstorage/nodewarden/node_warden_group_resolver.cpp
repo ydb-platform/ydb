@@ -1,6 +1,7 @@
 #include "node_warden_impl.h"
 #include <ydb/core/base/nameservice.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_NODE
 
 namespace NKikimr::NStorage {
 
@@ -71,14 +72,18 @@ namespace NKikimr::NStorage {
         {}
 
         void Bootstrap() {
-            STLOG(PRI_INFO, BS_NODE, NW79, "TGroupResolverActor::Bootstrap", (GroupId, GroupId));
+            YDB_LOG_INFO("TGroupResolverActor::Bootstrap",
+                {"marker", "NW79"},
+                {"groupId", GroupId});
             Become(&TThis::StateWaitStart, GroupResolverStartTimeout, new TEvents::TEvWakeup);
         }
 
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         void StartResolving() {
-            STLOG(PRI_INFO, BS_NODE, NW85, "TGroupResolverActor::StartResolving", (GroupId, GroupId));
+            YDB_LOG_INFO("TGroupResolverActor::StartResolving",
+                {"marker", "NW85"},
+                {"groupId", GroupId});
             Become(&TThis::StateFunc);
 
             if (!Ctx.NodeIds.empty()) { // we already have list of static nodes, so we can process immediately
@@ -122,7 +127,10 @@ namespace NKikimr::NStorage {
 
         bool IssueQuery() {
             auto issueQueryToNode = [this](ui32 nodeId) {
-                STLOG(PRI_DEBUG, BS_NODE, NW80, "TGroupResolverActor::IssueQuery", (GroupId, GroupId), (NodeId, nodeId));
+                YDB_LOG_DEBUG("TGroupResolverActor::IssueQuery",
+                    {"marker", "NW80"},
+                    {"groupId", GroupId},
+                    {"nodeId", nodeId});
 
                 // issue message to target node
                 Send(MakeBlobStorageNodeWardenID(nodeId), new TEvNodeWardenQueryGroupInfo(GroupId),
@@ -184,8 +192,11 @@ namespace NKikimr::NStorage {
         void Handle(TEvNodeWardenGroupInfo::TPtr ev) {
             const ui32 nodeId = ev->Cookie;
             const auto& record = ev->Get()->Record;
-            STLOG(PRI_DEBUG, BS_NODE, NW84, "TGroupResolverActor::TEvNodeWardenGroupInfo", (GroupId, GroupId),
-                (NodeId, nodeId), (Msg, ev->Get()->ToString()));
+            YDB_LOG_DEBUG("TGroupResolverActor::TEvNodeWardenGroupInfo",
+                {"marker", "NW84"},
+                {"groupId", GroupId},
+                {"nodeId", nodeId},
+                {"msg", ev->Get()->ToString()});
 
             // remove group<->node mapping for selected node and clear started groups vector
             auto& nodeInfo = Ctx.NodeInfo[nodeId];
@@ -256,8 +267,10 @@ namespace NKikimr::NStorage {
 
         void ProcessResultAndFinish() {
             if (auto *result = GetResultingGroupInfo()) {
-                STLOG(PRI_INFO, BS_NODE, NW86, "TGroupResolverActor::ProcessResultAndFinish", (GroupId, GroupId),
-                    (Result, *result));
+                YDB_LOG_INFO("TGroupResolverActor::ProcessResultAndFinish",
+                    {"marker", "NW86"},
+                    {"groupId", GroupId},
+                    {"result", *result});
                 Send(MakeBlobStorageNodeWardenID(SelfId().NodeId()), new TEvBlobStorage::TEvUpdateGroupInfo(TGroupId::FromValue(GroupId),
                     result->GetGroupGeneration(), *result));
                 PassAway();
@@ -267,7 +280,9 @@ namespace NKikimr::NStorage {
         }
 
         void PassAway() {
-            STLOG(PRI_INFO, BS_NODE, NW81, "TGroupResolverActor::PassAway", (GroupId, GroupId));
+            YDB_LOG_INFO("TGroupResolverActor::PassAway",
+                {"marker", "NW81"},
+                {"groupId", GroupId});
             for (ui32 nodeId : SubscribedNodes) {
                 Send(TActivationContext::InterconnectProxy(nodeId), new TEvents::TEvUnsubscribe);
             }
@@ -277,14 +292,18 @@ namespace NKikimr::NStorage {
         ////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
         void Handle(TEvInterconnect::TEvNodeConnected::TPtr ev) {
-            STLOG(PRI_DEBUG, BS_NODE, NW82, "TGroupResolverActor::TEvNodeConnected", (GroupId, GroupId),
-                (NodeId, ev->Get()->NodeId));
+            YDB_LOG_DEBUG("TGroupResolverActor::TEvNodeConnected",
+                {"marker", "NW82"},
+                {"groupId", GroupId},
+                {"nodeId", ev->Get()->NodeId});
         }
 
         void Handle(TEvInterconnect::TEvNodeDisconnected::TPtr ev) {
             const ui32 nodeId = ev->Get()->NodeId;
-            STLOG(PRI_DEBUG, BS_NODE, NW83, "TGroupResolverActor::TEvNodeDisconnected", (GroupId, GroupId),
-                (NodeId, ev->Get()->NodeId));
+            YDB_LOG_DEBUG("TGroupResolverActor::TEvNodeDisconnected",
+                {"marker", "NW83"},
+                {"groupId", GroupId},
+                {"nodeId", ev->Get()->NodeId});
             QueriesInFlight.erase(nodeId);
             NodeTimeoutQ.push_back(TNodeTimeout{TActivationContext::Now() + NodeTimeout, nodeId});
             if (NodeTimeoutQ.size() == 1) {

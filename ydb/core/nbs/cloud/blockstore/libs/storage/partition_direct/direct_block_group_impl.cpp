@@ -26,7 +26,7 @@ namespace {
 ////////////////////////////////////////////////////////////////////////////////
 
 constexpr auto DefaultOracleThinkInterval = TDuration::Seconds(1);
-constexpr ui64 InitialDDiskSessionSeqNo = 1;
+constexpr ui64 InitialDDiskSessionSeqNo = 0;
 
 constexpr size_t MinLockedDDiskSessionsToStart =
     QuorumDirectBlockGroupHostCount;
@@ -78,6 +78,7 @@ TDirectBlockGroup::TDirectBlockGroup(
     , StorageConfig(std::move(storageConfig))
     , Executor(std::move(executor))
     , TabletId(tabletId)
+    , TabletGeneration(generation)
     , DirectBlockGroupIndex(directBlockGroupIndex)
     , StorageTransport(std::move(storageTransport))
     , LogTitle(
@@ -85,7 +86,7 @@ TDirectBlockGroup::TDirectBlockGroup(
           TLogTitle::TDirectBlockGroup{
               .DiskId = diskId,
               .TabletId = TabletId,
-              .Generation = generation,
+              .Generation = TabletGeneration,
               .DirectBlockGroupIndex = DirectBlockGroupIndex,
           })
     , Oracle(StorageConfig, this)
@@ -769,9 +770,8 @@ TDBGFlushResponse TDirectBlockGroup::HandleSyncWithPBufferResponse(
 }
 
 NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::BatchEraseFromPBuffer(
-    ui32 vChunkIndex,
     THostIndex hostIndex,
-    const TVector<TPBufferSegment>& segments,
+    const TEraseSegments& segments,
     const NWilson::TTraceId& traceId)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -781,14 +781,6 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::BatchEraseFromPBuffer(
 
     const auto startAt = TMonotonic::Now();
 
-    TVector<NKikimr::NDDisk::TBlockSelector> selectors;
-    for (const auto& segment: segments) {
-        selectors.push_back(NKikimr::NDDisk::TBlockSelector(
-            vChunkIndex,
-            segment.Range.Start * DefaultBlockSize,
-            segment.Range.Size() * DefaultBlockSize));
-    }
-
     auto childSpan =
         CreateChildSpan(traceId, "NbsPartition.BatchEraseFromPBuffer");
 
@@ -796,8 +788,7 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::BatchEraseFromPBuffer(
 
     auto future = StorageTransport->BatchEraseFromPBuffer(
         PBufferConnections[hostIndex].HostConnection,
-        std::move(selectors),
-        TPBufferSegment::MakeLsnVector(segments),
+        MakeLsnVector(segments),
         childSpan.get());
 
     auto promise = NewPromise<TDBGEraseResponse>();
@@ -1091,16 +1082,23 @@ ui64 TDirectBlockGroup::GetHostPBufferUsedSize(THostIndex hostIndex) const
     return result;
 }
 
+ui64 TDirectBlockGroup::GetDDiskSessionSeqNo(size_t index) const
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+    Y_ABORT_UNLESS(index < DDiskConnections.size());
+    return DDiskConnections[index].ConfirmedSessionSeqNo;
+}
+
 void TDirectBlockGroup::DoEstablishConnections()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
     for (size_t i = 0; i < DDiskConnections.size(); ++i) {
-        DoEstablishConnection(i, DDiskConnections[i]);
+        DoEstablishConnection(i, EConnectionType::DDisk);
     }
 
     for (size_t i = 0; i < PBufferConnections.size(); ++i) {
-        DoEstablishConnection(i, PBufferConnections[i]);
+        DoEstablishConnection(i, EConnectionType::PBuffer);
     }
 
     DoListPBuffers();
@@ -1108,9 +1106,25 @@ void TDirectBlockGroup::DoEstablishConnections()
 
 void TDirectBlockGroup::DoEstablishConnection(
     size_t index,
-    const TDDiskConnection& connection)
+    EConnectionType connectionType)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    auto& connection = connectionType == EConnectionType::DDisk
+                           ? DDiskConnections[index]
+                           : PBufferConnections[index];
+    ui64& actualSeqNo = connection.HostConnection.Credentials.DDiskSessionSeqNo;
+    if (connectionType == EConnectionType::DDisk) {
+        actualSeqNo++;
+
+        LOG_INFO(
+            *ActorSystem,
+            NKikimrServices::NBS_PARTITION,
+            "%s host[%zu] starting session: new seq_no: %lu ",
+            LogTitle.GetWithTime().c_str(),
+            index,
+            actualSeqNo);
+    }
 
     using TEvConnectResult = NKikimrBlobStorage::NDDisk::TEvConnectResult;
 
@@ -1120,17 +1134,23 @@ void TDirectBlockGroup::DoEstablishConnection(
         [weakSelf = weak_from_this(),
          executor = Executor,
          connectionType = connection.HostConnection.ConnectionType,
-         index]   //
+         index,
+         actualSeqNo]   //
         (const TFuture<TEvConnectResult>& f) mutable
         {
             executor->ExecuteSimple(
-                [weakSelf = std::move(weakSelf), connectionType, index, f]   //
+                [weakSelf = std::move(weakSelf),
+                 connectionType,
+                 index,
+                 f,
+                 actualSeqNo]   //
                 () mutable
                 {
                     if (auto self = weakSelf.lock()) {
                         self->OnConnectionEstablished(
                             connectionType,
                             index,
+                            actualSeqNo,
                             f.GetValue());
                     }
                 });
@@ -1140,6 +1160,7 @@ void TDirectBlockGroup::DoEstablishConnection(
 void TDirectBlockGroup::OnConnectionEstablished(
     EConnectionType connectionType,
     size_t index,
+    ui64 seqNo,
     const NKikimrBlobStorage::NDDisk::TEvConnectResult& result)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -1153,7 +1174,20 @@ void TDirectBlockGroup::OnConnectionEstablished(
         connection.HostConnection.Credentials.DDiskInstanceGuid =
             result.GetDDiskInstanceGuid();
         if (connectionType == EConnectionType::DDisk) {
+            if (seqNo <= connection.ConfirmedSessionSeqNo) {
+                LOG_WARN(
+                    *ActorSystem,
+                    NKikimrServices::NBS_PARTITION,
+                    "%s host[%zu] attempt to establish a session with an old "
+                    "seq_no: %lu while actual seq_no: %lu ",
+                    LogTitle.GetWithTime().c_str(),
+                    index,
+                    seqNo,
+                    connection.ConfirmedSessionSeqNo);
+                return;
+            }
             connection.SessionState = EDDiskSessionState::Locked;
+            connection.ConfirmedSessionSeqNo = seqNo;
         }
         // INVARIANT: PBuffer does NOT require a session/lock
     } else {

@@ -87,7 +87,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/proxy_service/kqp_proxy_service.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
-#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/services/scheme_secret/service.h>
 #include <ydb/core/kqp/compile_service/kqp_warmup_compile_actor.h>
 #include <ydb/core/kqp/runtime/scheduler/kqp_compute_scheduler_service.h>
 
@@ -259,6 +259,7 @@
 #include <ydb/library/actors/interconnect/load.h>
 #include <ydb/library/actors/interconnect/poller/poller_actor.h>
 #include <ydb/library/actors/interconnect/poller/poller_tcp.h>
+#include <ydb/library/actors/interconnect/poller/uring_poller_actor.h>
 #include <ydb/library/actors/interconnect/rdma/cq_actor/cq_actor.h>
 #include <ydb/library/actors/interconnect/rdma/mem_pool.h>
 #include <ydb/core/retro_tracing_impl/distributed_collector/distributed_retro_collector.h>
@@ -586,6 +587,14 @@ static TInterconnectSettings GetInterconnectSettings(const NKikimrConfig::TInter
         result.CollectSubscriptionStackTrace = config.GetCollectSubscriptionStackTrace();
     }
 
+    if (config.HasUseUring()) {
+        result.UseUring = config.GetUseUring();
+    }
+
+    if (config.HasEnableUringSQPOLL()) {
+        result.EnableUringSQPOLL = config.GetEnableUringSQPOLL();
+    }
+
     return result;
 }
 
@@ -701,6 +710,11 @@ void TBasicServicesInitializer::InitializeServices(NActors::TActorSystemSetup* s
             // create poller actor (whether platform supports it)
             setup->LocalServices.emplace_back(MakePollerActorId(), TActorSetupCmd(
                 CreatePollerActor(schedulerConfig.MonCounters), TMailboxType::ReadAsFilled, systemPoolId));
+
+            if (settings.UseUring && TUringContext::IsSupported()) {
+                setup->LocalServices.emplace_back(MakeUringPollerActorId(), TActorSetupCmd(
+                    CreateUringPollerActor(settings.EnableUringSQPOLL), TMailboxType::ReadAsFilled, systemPoolId));
+            }
 
             auto destructorQueueSize = std::make_shared<std::atomic<TAtomicBase>>(0);
 
@@ -2418,9 +2432,9 @@ void TKqpServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setu
             NKqp::MakeKqpProxyID(NodeId),
             TActorSetupCmd(proxy, TMailboxType::HTSwap, appData->UserPoolId)));
 
-        auto describeSchemaSecretsService = NKqp::TDescribeSchemaSecretsServiceFactory().CreateService();
+        auto describeSchemaSecretsService = NSecret::TDescribeSchemaSecretsServiceFactory().CreateService();
         setup->LocalServices.push_back(std::make_pair(
-            NKqp::MakeKqpDescribeSchemaSecretServiceId(NodeId),
+            NSecret::MakeDescribeSchemaSecretServiceId(NodeId),
             TActorSetupCmd(describeSchemaSecretsService, TMailboxType::HTSwap, appData->UserPoolId)));
 
         if (Config.GetTableServiceConfig().GetEnableCompileCacheWarmup() && !appData->TenantName.empty()) {
@@ -3182,6 +3196,10 @@ TLocalPgWireServiceInitializer::TLocalPgWireServiceInitializer(const TKikimrRunC
 }
 
 void TLocalPgWireServiceInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    if (!Config.GetLocalPgWireConfig().GetEnableLocalPgWire()) {
+        return;
+    }
+
     setup->LocalServices.emplace_back(
         NLocalPgWire::CreateLocalPgWireProxyId(),
         TActorSetupCmd(NLocalPgWire::CreateLocalPgWireProxy(), TMailboxType::HTSwap, appData->UserPoolId)

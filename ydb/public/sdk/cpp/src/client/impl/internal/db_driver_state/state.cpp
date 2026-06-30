@@ -221,6 +221,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
             auto [it, inserted] = States_.try_emplace(key); // creates empty weak_ptr
             lock.unlock(); // release lock
 
+            try { // TODO reindent
             Y_ABORT_UNLESS(inserted);
             strongState = std::shared_ptr<TDbDriverState>(
                 new TDbDriverState(
@@ -238,6 +239,12 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
 
             if (discoveryMode != EDiscoveryMode::Off) {
                 DiscoveryClient_->AddPeriodicTask(CreatePeriodicDiscoveryTask(strongState), DISCOVERY_RECHECK_PERIOD);
+            }
+            } catch (...) {
+                lock.lock();
+                Y_ENSURE(it->second.expired());
+                States_.erase(it);
+                throw;
             }
 
             lock.lock();

@@ -23,9 +23,19 @@ SELECT 2 + 2;
 The `SELECT` query result is calculated as follows:
 
 * Determine the set of input tables by evaluating the [FROM](from.md) clauses.
+<<<<<<< HEAD
 * Apply [SAMPLE](sample.md)/[TABLESAMPLE](sample.md) to input tables.
 * Execute [FLATTEN COLUMNS](../flatten.md#flatten-columns) or [FLATTEN BY](../flatten.md); aliases set in `FLATTEN BY` become visible after this point.
 
+=======
+{% if feature_match_recogznize==true %}
+* Apply [MATCH_RECOGNIZE](match_recognize.md) to input tables.
+{% endif %}
+{% if feature_tablesample==true %}
+* Evaluate [SAMPLE](sample.md)/[TABLESAMPLE](sample.md).
+{% endif %}
+* Execute [FLATTEN COLUMNS](flatten.md#flatten-columns) or [FLATTEN BY](flatten.md); aliases set in `FLATTEN BY` become visible after this point.
+>>>>>>> 0d4a38f56a4 (Remove tablesample references (#44191))
 {% if feature_join %}
 
 * Execute every [JOIN](../join.md).
@@ -127,8 +137,24 @@ If the underlying queries have one of the `ORDER BY/LIMIT/DISCARD/INTO RESULT` o
 * [ORDER BY](order_by.md)
 * [ASSUME ORDER BY](assume_order_by.md)
 * [LIMIT OFFSET](limit_offset.md)
+{% if feature_tablesample==true %}
 * [SAMPLE](sample.md)
 * [TABLESAMPLE](sample.md)
+<<<<<<< HEAD
+=======
+{% endif %}
+{% if feature_match_recogznize==true %}
+* [MATCH_RECOGNIZE](match_recognize.md)
+{% endif %}
+{% if feature_join %}
+* [JOIN](join.md)
+{% endif %}
+* [GROUP BY](group-by.md)
+* [FLATTEN](flatten.md)
+{% if feature_window_functions %}
+* [WINDOW](window.md)
+{% endif %}
+>>>>>>> 0d4a38f56a4 (Remove tablesample references (#44191))
 
 {% if yt %}
 

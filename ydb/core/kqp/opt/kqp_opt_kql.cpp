@@ -130,12 +130,22 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithAbsentNullColumns(const TKi
 }
 
 // Converts a DEFAULT_KIND_LITERAL proto value to a YQL AST literal node.
+// Inverse of FillLiteralProto(); the per-type field selection
+// (int/text/bytes/low_128) must stay in sync with it.
 TExprBase BuildYqlLiteralFromTypedValue(
     const Ydb::TypedValue& proto, TPositionHandle pos, TExprContext& ctx)
 {
     const auto& v = proto.value();
 
+    // Guards that the proto actually carries a value in the field we are about to read
+    // (catches NULL/unset defaults and producer/consumer field mismatches).
+    auto ensureValueCase = [&](Ydb::Value::ValueCase expected) {
+        YQL_ENSURE(v.value_case() == expected, "BuildYqlLiteralFromTypedValue: unexpected value case "
+            << static_cast<int>(v.value_case()) << ", expected " << static_cast<int>(expected));
+    };
+
     if (proto.type().has_decimal_type()) {
+        ensureValueCase(Ydb::Value::kLow128);
         ui8 precision = proto.type().decimal_type().precision();
         ui8 scale = proto.type().decimal_type().scale();
 
@@ -164,12 +174,14 @@ TExprBase BuildYqlLiteralFromTypedValue(
     TString atomValue;
     switch (*slot) {
         case NKikimr::NUdf::EDataSlot::Bool:
+            ensureValueCase(Ydb::Value::kBoolValue);
             atomValue = v.bool_value() ? "1" : "0";
             break;
         case NKikimr::NUdf::EDataSlot::Int8:
         case NKikimr::NUdf::EDataSlot::Int16:
         case NKikimr::NUdf::EDataSlot::Int32:
         case NKikimr::NUdf::EDataSlot::Date32:
+            ensureValueCase(Ydb::Value::kInt32Value);
             atomValue = ToString(v.int32_value());
             break;
         case NKikimr::NUdf::EDataSlot::Uint8:
@@ -177,6 +189,7 @@ TExprBase BuildYqlLiteralFromTypedValue(
         case NKikimr::NUdf::EDataSlot::Uint32:
         case NKikimr::NUdf::EDataSlot::Date:
         case NKikimr::NUdf::EDataSlot::Datetime:
+            ensureValueCase(Ydb::Value::kUint32Value);
             atomValue = ToString(v.uint32_value());
             break;
         case NKikimr::NUdf::EDataSlot::Int64:
@@ -184,29 +197,36 @@ TExprBase BuildYqlLiteralFromTypedValue(
         case NKikimr::NUdf::EDataSlot::Datetime64:
         case NKikimr::NUdf::EDataSlot::Timestamp64:
         case NKikimr::NUdf::EDataSlot::Interval64:
+            ensureValueCase(Ydb::Value::kInt64Value);
             atomValue = ToString(v.int64_value());
             break;
         case NKikimr::NUdf::EDataSlot::Uint64:
         case NKikimr::NUdf::EDataSlot::Timestamp:
+            ensureValueCase(Ydb::Value::kUint64Value);
             atomValue = ToString(v.uint64_value());
             break;
         case NKikimr::NUdf::EDataSlot::Float:
-            atomValue = ToString(v.float_value());
+            ensureValueCase(Ydb::Value::kFloatValue);
+            atomValue = FloatToString(v.float_value());
             break;
         case NKikimr::NUdf::EDataSlot::Double:
-            atomValue = ToString(v.double_value());
+            ensureValueCase(Ydb::Value::kDoubleValue);
+            atomValue = FloatToString(v.double_value());
             break;
         case NKikimr::NUdf::EDataSlot::String:
         case NKikimr::NUdf::EDataSlot::Yson:
+            ensureValueCase(Ydb::Value::kBytesValue);
             atomValue = v.bytes_value();
             break;
         case NKikimr::NUdf::EDataSlot::Utf8:
         case NKikimr::NUdf::EDataSlot::Json:
         case NKikimr::NUdf::EDataSlot::DyNumber:
         case NKikimr::NUdf::EDataSlot::JsonDocument:
+            ensureValueCase(Ydb::Value::kTextValue);
             atomValue = v.text_value();
             break;
         case NKikimr::NUdf::EDataSlot::Uuid: {
+            ensureValueCase(Ydb::Value::kLow128);
             char buf[16];
             *reinterpret_cast<ui64*>(buf) = v.low_128();
             *reinterpret_cast<ui64*>(buf + 8) = v.high_128();

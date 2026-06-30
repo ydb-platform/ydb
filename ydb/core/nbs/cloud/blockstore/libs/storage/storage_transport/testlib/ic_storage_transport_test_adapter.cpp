@@ -21,8 +21,7 @@ TICStorageTransportTestAdapter::TICStorageTransportTestAdapter(
           // Register the real transport actor inside the runtime and address
           // it directly from the TICStorageTransport base.
           runtime->Register(new TICStorageTransportActor(), 0))
-{
-}
+{}
 
 TICStorageTransportTestAdapter::TICStorageTransportTestAdapter(
     TTestActorRuntime* runtime,

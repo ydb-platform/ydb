@@ -112,39 +112,26 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
         }
         Executors.clear();
 
-        // Deliver every event still queued in the runtime before it is
-        // destroyed. Disconnect callbacks may have posted reconnect
-        // TEvConnect events into the mailbox after the last pump; if those
-        // stay undelivered, ~TEventMailBox drops them with their promises
-        // unresolved and TConnect::~TConnect() aborts on Promise.IsReady().
-        // Delivering them moves the promises into the transport actor, whose
-        // destructor then rejects them cleanly.
         if (Runtime) {
             DrainRuntime();
         }
     }
 
     // Dispatches one batch of events queued in the runtime.
-    // Returns true if events were dispatched, false if the queue was already
-    // empty (TEmptyEventQueueException). The short per-call dispatch timeout
-    // set in SetUp guarantees the exception is thrown promptly on an idle real
-    // runtime.
-    bool DispatchRuntimeOnce(NActors::TDispatchOptions options = {})
+    bool DispatchRuntimeOnce(NActors::TDispatchOptions options = {}) const
     {
         // Quirk: a non-empty FinalEvents list enables full simulation.
         options.FinalEvents.emplace_back([](NActors::IEventHandle&)
                                          { return false; });
         try {
-            Runtime->DispatchEvents(options, DispatchStep);
-            return true;
+            return Runtime->DispatchEvents(options, DispatchStep);
         } catch (const NActors::TEmptyEventQueueException&) {
             return false;
         }
     }
 
-    // Dispatches everything currently queued in the runtime until the event
-    // queue drains or a small iteration bound is reached.
-    void DrainRuntime()
+    // Dispatches everything currently queued in the runtime.
+    void DrainRuntime() const
     {
         for (int i = 0; i < MaxDrainIterations && DispatchRuntimeOnce(); ++i) {
         }
@@ -158,10 +145,11 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
         return executor;
     }
 
-    std::shared_ptr<TDirectBlockGroup> MakeDirectBlockGroup(
+    [[nodiscard]] std::shared_ptr<TDirectBlockGroup> MakeDirectBlockGroup(
         const TExecutorPtr& executor,
-        std::unique_ptr<TStorageTransportMock> transport,
-        ui32 baseNodeId = 100)
+        std::unique_ptr<NStorage::NTransport::IStorageTransport> transport,
+        const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
+        const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds) const
     {
         return std::make_shared<TDirectBlockGroup>(
             Runtime->GetActorSystem(0),
@@ -171,42 +159,44 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
             1,
             1,
             0,
-            MakeDDiskIds(baseNodeId),
-            MakeDDiskIds(baseNodeId + DirectBlockGroupHostCount),
+            ddisksIds,
+            pbufferIds,
             std::move(transport));
     }
 
-    // Overload for the real-transport adapter: the ddisk/pbuffer ids come from
-    // the adapter (all on the runtime node), so the DirectBlockGroup talks to
-    // the stub actors registered by the adapter.
-    std::shared_ptr<TDirectBlockGroup> MakeDirectBlockGroup(
+    [[nodiscard]] std::shared_ptr<TDirectBlockGroup> MakeDirectBlockGroup(
         const TExecutorPtr& executor,
-        std::unique_ptr<TICStorageTransportTestAdapter> transport)
+        std::unique_ptr<TStorageTransportMock> transport,
+        ui32 baseNodeId) const
+    {
+        return MakeDirectBlockGroup(
+            executor,
+            std::move(transport),
+            MakeDDiskIds(baseNodeId),
+            MakeDDiskIds(baseNodeId + DirectBlockGroupHostCount));
+    }
+
+    [[nodiscard]] std::shared_ptr<TDirectBlockGroup> MakeDirectBlockGroup(
+        const TExecutorPtr& executor,
+        std::unique_ptr<TICStorageTransportTestAdapter> transport) const
     {
         auto ddisks = transport->GetDDiskIds();
         auto pbuffers = transport->GetPBufferIds();
-        return std::make_shared<TDirectBlockGroup>(
-            Runtime->GetActorSystem(0),
-            MakeStorageConfig(),
+
+        return MakeDirectBlockGroup(
             executor,
-            "disk-1",
-            1,
-            1,
-            0,
+            std::move(transport),
             ddisks,
-            pbuffers,
-            std::move(transport));
+            pbuffers);
     }
 
     // Interleaves the simulated runtime and the coroutine executor: dispatches
-    // everything queued in the runtime (stub/transport actors resolve transport
-    // futures) and lets the executor run the resumed coroutines. Repeats until
-    // `predicate` holds or the timeout elapses. Returns the final predicate
-    // value.
-    bool PumpUntil(
+    // everything queued in the runtime and lets the executor run the resumed
+    // coroutines.
+    bool DoExecutorAndRuntimeWorkWithPredicate(
         const TExecutorPtr& executor,
         std::function<bool()> predicate,
-        TDuration timeout = WaitTimeout)
+        TDuration timeout) const
     {
         const auto deadline = TInstant::Now() + timeout;
         for (;;) {
@@ -236,13 +226,14 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
 
     // Pumps runtime + executor for a bounded time so in-flight async work (sent
     // requests, callbacks) settles, without waiting for a specific condition.
-    // The predicate is intentionally never satisfied, so the full duration is
-    // always consumed.
-    void Settle(
+    void DoAllExecutorAndRuntimeWork(
         const TExecutorPtr& executor,
-        TDuration duration = SettleDuration)
+        TDuration duration) const
     {
-        PumpUntil(executor, []() { return false; }, duration);
+        DoExecutorAndRuntimeWorkWithPredicate(
+            executor,
+            []() { return false; },
+            duration);
     }
 
     // Pumps runtime + executor until `future` is resolved, then returns its
@@ -251,9 +242,9 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
     T WaitFuture(
         const TExecutorPtr& executor,
         NThreading::TFuture<T> future,
-        TDuration timeout = WaitTimeout)
+        TDuration timeout)
     {
-        PumpUntil(
+        DoExecutorAndRuntimeWorkWithPredicate(
             executor,
             [&]() { return future.HasValue() || future.HasException(); },
             timeout);
@@ -300,7 +291,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                 pbuffers[i]));
         }
 
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -346,7 +337,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[4]);
         Y_UNUSED(pendingHost4);
 
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -482,7 +473,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto* transportPtr = transport.get();
 
         const auto ddisks = MakeDDiskIds(100);
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -508,7 +499,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto* transportPtr = transport.get();
 
         const auto pbuffers = MakeDDiskIds(100 + DirectBlockGroupHostCount);
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -550,7 +541,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
                 ddiskId));
         }
 
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -587,7 +578,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
         auto* transportPtr = transport.get();
 
         const auto ddisks = MakeDDiskIds(100);
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -659,7 +650,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
         auto firstConnect =
             transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[0]);
 
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -702,7 +693,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
         auto* transportPtr = transport.get();
 
         const auto ddisks = MakeDDiskIds(100);
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -760,7 +751,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
 
-        WaitFuture(executor, initialReady);
+        WaitFuture(executor, initialReady, WaitTimeout);
         UNIT_ASSERT(initialReady.HasValue());
 
         const auto range = TBlockRange64::WithLength(0, 1);
@@ -778,7 +769,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
                     MakeSgList(buffer),
                     NWilson::TTraceId());
             });
-        Settle(executor);
+        DoAllExecutorAndRuntimeWork(executor, SettleDuration);
         UNIT_ASSERT(!pendingRead.HasValue());
 
         // The disconnect resets the session: ResetSession wakes the waiter with
@@ -788,8 +779,8 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
             ddisks[0],
             transportPtr->GetNodeId());
 
-        auto innerRead = WaitFuture(executor, pendingRead);
-        auto response = WaitFuture(executor, innerRead);
+        auto innerRead = WaitFuture(executor, pendingRead, WaitTimeout);
+        auto response = WaitFuture(executor, innerRead, WaitTimeout);
         UNIT_ASSERT_VALUES_UNEQUAL(S_OK, response.Error.GetCode());
     }
 
@@ -809,7 +800,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
 
-        WaitFuture(executor, initialReady);
+        WaitFuture(executor, initialReady, WaitTimeout);
         UNIT_ASSERT(initialReady.HasValue());
 
         // DDisk[0] no longer answers reads: the read future stays pending.
@@ -835,8 +826,8 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
         // The session is already established, so the read does not suspend in
         // WaitForSessionLock: the outer future resolves immediately, carrying
         // the still-pending in-flight read future.
-        auto inFlightRead = WaitFuture(executor, pendingRead);
-        Settle(executor);
+        auto inFlightRead = WaitFuture(executor, pendingRead, WaitTimeout);
+        DoAllExecutorAndRuntimeWork(executor, SettleDuration);
         UNIT_ASSERT(!inFlightRead.HasValue());
 
         // The disconnect rejects the in-flight read with a "Session broken"
@@ -847,7 +838,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
             ddisks[0],
             transportPtr->GetNodeId());
 
-        auto response = WaitFuture(executor, inFlightRead);
+        auto response = WaitFuture(executor, inFlightRead, WaitTimeout);
         UNIT_ASSERT_VALUES_UNEQUAL(S_OK, response.Error.GetCode());
     }
 }

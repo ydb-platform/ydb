@@ -2583,6 +2583,106 @@ TStatus AnnotateVectorResolveConnection(const TExprNode::TPtr& node, TExprContex
     return TStatus::Ok;
 }
 
+// Logical node TKqlReadTableVectorIndex: reads the top-K rows of the main table
+// nearest to the target vector. Output type is a list of the requested main-table columns.
+TStatus AnnotateReadTableVectorIndex(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
+    const TKikimrTablesData& tablesData, bool withSystemColumns)
+{
+    // PrefixRows (the per-prefix-group root cluster rows) is an optional last child.
+    if (!EnsureMinMaxArgsCount(*node, 6, 7, ctx)) {
+        return TStatus::Error;
+    }
+
+    auto table = ResolveTable(node->Child(TKqlReadTableVectorIndex::idx_Table), ctx, cluster, tablesData);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureAtom(*node->Child(TKqlReadTableVectorIndex::idx_Index), ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureTupleOfAtoms(*node->Child(TKqlReadTableVectorIndex::idx_Columns), ctx)) {
+        return TStatus::Error;
+    }
+    TCoAtomList columns{node->ChildPtr(TKqlReadTableVectorIndex::idx_Columns)};
+
+    if (node->ChildrenSize() > TKqlReadTableVectorIndex::idx_PrefixRows) {
+        // Prefixed index: the prefix-table rows carry the root __ydb_parent id per group.
+        const TTypeAnnotationNode* prefixType = node->Child(TKqlReadTableVectorIndex::idx_PrefixRows)->GetTypeAnn();
+        const TTypeAnnotationNode* prefixItemType = nullptr;
+        if (!EnsureNewSeqType<false>(node->Child(TKqlReadTableVectorIndex::idx_PrefixRows)->Pos(), *prefixType, ctx, &prefixItemType)) {
+            return TStatus::Error;
+        }
+        if (!EnsureStructType(node->Child(TKqlReadTableVectorIndex::idx_PrefixRows)->Pos(), *prefixItemType, ctx)) {
+            return TStatus::Error;
+        }
+        const auto* prefixStruct = prefixItemType->Cast<TStructExprType>();
+        if (!prefixStruct->FindItem(NTableIndex::NKMeans::ParentColumn)) {
+            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
+                << "TKqlReadTableVectorIndex: PrefixRows must contain the "
+                << NTableIndex::NKMeans::ParentColumn << " column"));
+            return TStatus::Error;
+        }
+    }
+
+    auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, columns, withSystemColumns);
+    if (!rowType) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TListExprType>(rowType));
+
+    return TStatus::Ok;
+}
+
+// Physical input-transform connection TKqpCnVectorSearch: same output as the
+// logical node but as a stream (it feeds a compute stage).
+TStatus AnnotateVectorSearchConnection(const TExprNode::TPtr& node, TExprContext& ctx, const TString& cluster,
+    const TKikimrTablesData& tablesData, bool withSystemColumns)
+{
+    // HasPrefix is an optional last child (prefixed index).
+    if (!EnsureMinMaxArgsCount(*node, 7, 8, ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureCallable(*node->Child(TKqpCnVectorSearch::idx_Output), ctx)) {
+        return TStatus::Error;
+    }
+    if (!TDqOutput::Match(node->Child(TKqpCnVectorSearch::idx_Output))) {
+        ctx.AddError(TIssue(ctx.GetPosition(node->Child(TKqpCnVectorSearch::idx_Output)->Pos()),
+            TStringBuilder() << "Expected " << TDqOutput::CallableName()));
+        return TStatus::Error;
+    }
+
+    auto table = ResolveTable(node->Child(TKqpCnVectorSearch::idx_Table), ctx, cluster, tablesData);
+    if (!table.second) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureType(*node->Child(TKqpCnVectorSearch::idx_InputType), ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureAtom(*node->Child(TKqpCnVectorSearch::idx_Index), ctx)) {
+        return TStatus::Error;
+    }
+
+    if (!EnsureTupleOfAtoms(*node->Child(TKqpCnVectorSearch::idx_Columns), ctx)) {
+        return TStatus::Error;
+    }
+    TCoAtomList columns{node->ChildPtr(TKqpCnVectorSearch::idx_Columns)};
+
+    auto rowType = GetReadTableRowType(ctx, tablesData, cluster, table.first, columns, withSystemColumns);
+    if (!rowType) {
+        return TStatus::Error;
+    }
+
+    node->SetTypeAnn(ctx.MakeType<TStreamExprType>(rowType));
+
+    return TStatus::Ok;
+}
+
 TStatus AnnotateIndexLookupJoin(const TExprNode::TPtr& node, TExprContext& ctx) {
 
     if (!EnsureArgsCount(*node, 4, ctx)) {
@@ -3231,6 +3331,8 @@ public:
             TKqpReadTableFullTextIndex::CallableName(),
             TKqlReadTableFullTextIndex::CallableName(),
         }, HndlInt(&AnnotateReadTableFullTextIndex));
+        AddHandler({TKqlReadTableVectorIndex::CallableName()}, HndlInt(&AnnotateReadTableVectorIndex));
+        AddHandler({TKqpCnVectorSearch::CallableName()}, HndlInt(&AnnotateVectorSearchConnection));
         AddHandler({
             TKqpLookupTable::CallableName(),
             TKqlStreamLookupTable::CallableName(),

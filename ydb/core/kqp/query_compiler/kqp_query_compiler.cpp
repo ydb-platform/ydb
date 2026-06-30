@@ -2907,6 +2907,112 @@ private:
             return;
         }
 
+        if (auto maybeVectorSearch = connection.Maybe<TKqpCnVectorSearch>()) {
+            TProgramBuilder pgmBuilder(TypeEnv, FuncRegistry);
+            auto& proto = *connectionProto.MutableVectorSearch();
+            auto vectorSearch = maybeVectorSearch.Cast();
+
+            auto tableMeta = TablesData->ExistingTable(Cluster, vectorSearch.Table().Path()).Metadata;
+            YQL_ENSURE(tableMeta);
+
+            const auto* indexDesc = tableMeta->GetIndex(vectorSearch.Index().Value()).second;
+            YQL_ENSURE(indexDesc);
+
+            // Index settings
+            const auto& kmeansDesc = std::get<NKikimrKqp::TVectorIndexKmeansTreeDescription>(indexDesc->SpecializedIndexDescription);
+            *proto.MutableIndexSettings() = kmeansDesc.GetSettings().Getsettings();
+            proto.SetOverlapClusters(kmeansDesc.GetSettings().overlap_clusters());
+            proto.SetOverlapRatio(kmeansDesc.GetSettings().overlap_ratio());
+            proto.SetLevels(std::max<ui32>(1, kmeansDesc.GetSettings().levels()));
+
+            const bool withOverlap = kmeansDesc.GetSettings().overlap_clusters() > 1;
+            proto.SetLevelTop(Config->KMeansTreeSearchTopSize.Get().GetOrElse(withOverlap ? 4 : 10));
+
+            // Main table
+            FillTablesMap(vectorSearch.Table(), tablesMap);
+            FillTableId(vectorSearch.Table(), *proto.MutableTable());
+
+            auto fillImplTable = [&](const char* implName, NKqpProto::TKqpPhyTableId& tableIdProto) {
+                TString path = TStringBuilder()
+                    << vectorSearch.Table().Path().Value()
+                    << "/" << vectorSearch.Index().Value()
+                    << "/" << implName;
+                auto implMeta = TablesData->ExistingTable(Cluster, path).Metadata;
+                YQL_ENSURE(implMeta);
+                tablesMap.emplace(path, THashSet<TStringBuf>{});
+                tableIdProto.SetPath(path);
+                tableIdProto.SetOwnerId(implMeta->PathId.OwnerId());
+                tableIdProto.SetTableId(implMeta->PathId.TableId());
+                tableIdProto.SetVersion(implMeta->SchemaVersion);
+                return implMeta;
+            };
+
+            // Index level table
+            fillImplTable(NTableIndex::NKMeans::LevelTable, *proto.MutableLevelTable());
+            const TString levelTablePath = proto.GetLevelTable().GetPath();
+            tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::ParentColumn);
+            tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::IdColumn);
+            tablesMap[levelTablePath].emplace(NTableIndex::NKMeans::CentroidColumn);
+
+            // Index posting table
+            auto postingTableMeta = fillImplTable(NTableIndex::NKMeans::PostingTable, *proto.MutablePostingTable());
+            const TString postingTablePath = proto.GetPostingTable().GetPath();
+            for (const auto& keyColumn : postingTableMeta->KeyColumnNames) {
+                tablesMap[postingTablePath].emplace(keyColumn);
+            }
+
+            // Input and output types
+            const auto inputType = vectorSearch.InputType().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType();
+            YQL_ENSURE(inputType, "Empty vector search input type");
+            YQL_ENSURE(inputType->GetKind() == ETypeAnnotationKind::List, "Unexpected vector search input type");
+            const auto inputItemType = inputType->Cast<TListExprType>()->GetItemType();
+            proto.SetInputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *inputItemType), TypeEnv));
+
+            const auto outputType = vectorSearch.Ref().GetTypeAnn();
+            YQL_ENSURE(outputType, "Empty vector search output type");
+            YQL_ENSURE(outputType->GetKind() == ETypeAnnotationKind::Stream, "Unexpected vector search output type");
+            const auto outputItemType = outputType->Cast<TStreamExprType>()->GetItemType();
+            YQL_ENSURE(outputItemType->GetKind() == ETypeAnnotationKind::Struct);
+            proto.SetOutputType(NMiniKQL::SerializeNode(CompileType(pgmBuilder, *outputItemType), TypeEnv));
+
+            // Output columns, in the same order as the (canonical) output struct type so that
+            // the actor emits rows matching OutputType. The embedding column must be present
+            // (the logical optimizer includes it) so the actor can rank rows by distance.
+            const auto& embeddingColumn = indexDesc->KeyColumns.back();
+            ui32 vectorColumnIndex = 0;
+            bool hasEmbedding = false;
+            ui32 columnIndex = 0;
+            for (const auto& item : outputItemType->Cast<TStructExprType>()->GetItems()) {
+                const auto name = TString(item->GetName());
+                proto.AddColumns(name);
+                tablesMap[vectorSearch.Table().Path()].emplace(name);
+                // Covered index: the actor reads output columns straight from the
+                // posting table, so register them there too (not just main table).
+                if (postingTableMeta->Columns.contains(name)) {
+                    tablesMap[postingTablePath].emplace(name);
+                }
+                if (name == embeddingColumn) {
+                    vectorColumnIndex = columnIndex;
+                    hasEmbedding = true;
+                }
+                ++columnIndex;
+            }
+            YQL_ENSURE(hasEmbedding, "Vector search output columns must contain the embedding column: " << embeddingColumn);
+            proto.SetVectorColumnIndex(vectorColumnIndex);
+
+            // Search parameters. TopK (LIMIT) may be a literal or a query parameter;
+            // resolve it to an actual value at execution time (see BuildVectorSearchChannels).
+            SetVectorTopKLimit(proto.MutableTopK(), vectorSearch.TopK().Ptr());
+            proto.SetIsDesc(vectorSearch.IsDesc().Value() == "true");
+
+            // Prefixed index: the transform input carries the per-group root __ydb_parent.
+            if (vectorSearch.HasPrefix().IsValid()) {
+                proto.SetHasPrefix(vectorSearch.HasPrefix().Cast().Value() == "true");
+            }
+
+            return;
+        }
+
         if (auto maybeDqSourceStreamLookup = connection.Maybe<TDqCnStreamLookup>()) {
             const auto streamLookup = maybeDqSourceStreamLookup.Cast();
             const auto lookupSourceWrap = streamLookup.RightInput().Cast<TDqLookupSourceWrap>();

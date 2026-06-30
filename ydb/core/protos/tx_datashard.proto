@@ -366,6 +366,75 @@ message TKqpVectorResolveSettings {
     optional string PoolId = 21;
 }
 
+// Specialized input-transform actor for reading from a vector KMeans tree index.
+// Takes a single target vector value as input and returns the top-K rows from the
+// main table (or posting table for covered queries) sorted by distance/similarity.
+// Replaces the StreamLookup chain produced by the logical optimizer.
+message TKqpVectorSearchSettings {
+    // Index settings (metric, overlap, etc.)
+    optional Ydb.Table.VectorIndexSettings IndexSettings = 1;
+    optional uint32 IndexLevels = 2;
+
+    // Level table and its column IDs
+    optional TKqpTransaction.TTableMeta LevelTable = 3;
+    optional uint32 LevelTableParentColumnId = 4;
+    optional uint32 LevelTableClusterColumnId = 5;
+    optional uint32 LevelTableCentroidColumnId = 6;
+
+    // Posting table and the IDs of its key columns (__ydb_parent + main table PK columns)
+    optional TKqpTransaction.TTableMeta PostingTable = 7;
+    repeated uint32 PostingTableKeyColumnIds = 8;
+
+    // Main table, the IDs of its key (PK) columns and the output columns to fetch.
+    optional TKqpTransaction.TTableMeta MainTable = 9;
+    repeated TKqpTransaction.TColumnMeta MainTableKeyColumns = 10;
+    repeated TKqpTransaction.TColumnMeta OutputColumns = 11;
+    // Index of the embedding (vector) column in OutputColumns, used to rank rows by distance.
+    optional uint32 VectorColumnIndex = 12;
+
+    // Search parameters
+    optional uint32 TopK = 13;
+    optional bool IsDesc = 14;
+    optional uint32 LevelTop = 15;       // KMeansTreeSearchTopSize
+    optional uint32 OverlapClusters = 16;
+    optional double OverlapRatio = 17;
+
+    // Prefixed index support (reserved): the prefix table is read in the plan; the actor
+    // receives the per-prefix-group root cluster id in the input row's __ydb_parent member.
+    optional TKqpTransaction.TTableMeta PrefixTable = 18;
+    repeated uint32 PrefixTableKeyColumnIds = 19;
+
+    // Transaction context
+    optional NKikimrProto.TRowVersion Snapshot = 20;
+    optional uint64 LockTxId = 21;
+    optional uint32 LockNodeId = 22;
+    optional NKikimrDataEvents.ELockMode LockMode = 23;
+    optional string Database = 24;
+    optional string PoolId = 25;
+    optional uint64 QuerySpanId = 26;
+
+    // Serialized MiniKQL types: InputType is the single target vector value item,
+    // OutputType is the output row struct.
+    optional bytes InputType = 27;
+    optional bytes OutputType = 28;
+
+    // When set, the immutable index impl tables (level, posting) are read from
+    // followers (stale-RO). The main table is always read from the leader.
+    optional bool UseFollowers = 29;
+
+    // Covered index: the posting table already holds every output column
+    // (including the embedding used for ranking), so the main table read can be
+    // skipped. PostingOutputColumnIds gives, for each OutputColumns entry (same
+    // order), the column id of that column in the posting table.
+    optional bool PostingCovers = 30;
+    repeated uint32 PostingOutputColumnIds = 31;
+
+    // Prefixed index: the transform input rows carry the root cluster id in the
+    // __ydb_parent member (input struct element 1; the target vector is element 0).
+    // The actor uses these as the level-traversal roots instead of cluster 0.
+    optional bool HasPrefix = 32;
+}
+
 message TKqpTaskInfo {
     optional uint64 TaskId = 1;
     optional NActorsProto.TActorId ComputeActor = 2;

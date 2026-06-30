@@ -283,6 +283,115 @@ TExprBase KqpBuildReadTableFullTextIndexStage(TExprBase node, TExprContext& ctx,
         .Done();
 }
 
+TExprBase KqpBuildReadTableVectorIndexStage(TExprBase node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx) {
+    if (!node.Maybe<TKqlReadTableVectorIndex>()) {
+        return node;
+    }
+
+    const auto read = node.Cast<TKqlReadTableVectorIndex>();
+    const auto pos = read.Pos();
+
+    const auto& tableDesc = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, read.Table().Path());
+    auto [implTable, indexDesc] = tableDesc.Metadata->GetIndex(read.Index().Value());
+    Y_UNUSED(implTable);
+    const auto& embeddingColumn = indexDesc->KeyColumns.back();
+
+    const bool hasPrefix = read.PrefixRows().IsValid();
+
+    TMaybeNode<TDqStage> inputStageMaybe;
+    const TTypeAnnotationNode* inputType = nullptr;
+    if (hasPrefix) {
+        // Prefixed index: the prefix-table read (producing {__target, __ydb_parent}
+        // rows) is fed as a direct connection into the input stage, which streams it
+        // to the transform. Keeping it as a connection (not a precompute) keeps the
+        // whole search in one execution phase sharing the query MVCC snapshot.
+        auto prefixRows = read.PrefixRows().Cast();
+        if (!prefixRows.Maybe<TDqCnUnionAll>()) {
+            // The prefix read has not been built into a connection yet; wait for a
+            // later optimizer iteration.
+            return node;
+        }
+        inputStageMaybe = Build<TDqStage>(ctx, pos)
+            .Inputs()
+                .Add(prefixRows)
+                .Build()
+            .Program()
+                .Args({"prefix"})
+                .Body<TCoToStream>()
+                    .Input("prefix")
+                    .Build()
+                .Build()
+            .Settings().Build()
+            .Done();
+        // Input type for the transform: List<Struct<__target, __ydb_parent>>.
+        inputType = prefixRows.Ref().GetTypeAnn();
+    } else {
+        // Build a single-row input stage producing the target vector as struct {embedding: vector}.
+        auto targetStruct = Build<TCoAsStruct>(ctx, pos)
+            .Add<TCoNameValueTuple>()
+                .Name().Build(embeddingColumn)
+                .Value(read.TargetVector())
+                .Build()
+            .Done();
+
+        inputStageMaybe = Build<TDqStage>(ctx, pos)
+            .Inputs()
+                .Build()
+            .Program()
+                .Args({})
+                .Body<TCoToStream>()
+                    .Input<TCoJust>()
+                        .Input(targetStruct)
+                        .Build()
+                    .Build()
+                .Build()
+            .Settings().Build()
+            .Done();
+
+        // Input type for the transform: List<Struct<embedding: <target vector type>>>.
+        const TTypeAnnotationNode* targetType = read.TargetVector().Ref().GetTypeAnn();
+        const auto* rowType = ctx.MakeType<TStructExprType>(
+            TVector<const TItemExprType*>{ctx.MakeType<TItemExprType>(embeddingColumn, targetType)});
+        inputType = ctx.MakeType<TListExprType>(rowType);
+    }
+
+    auto inputStage = inputStageMaybe.Cast();
+
+    auto connection = Build<TKqpCnVectorSearch>(ctx, pos)
+        .Output<TDqOutput>()
+            .Stage(inputStage)
+            .Index().Build("0")
+            .Build()
+        .Table(read.Table())
+        .InputType(ExpandType(pos, *inputType, ctx))
+        .Index(read.Index())
+        .Columns(read.Columns())
+        .TopK(read.TopK())
+        .IsDesc(read.IsDesc())
+        .HasPrefix(ctx.NewAtom(pos, hasPrefix ? "true" : "false"))
+        .Done();
+
+    auto readStage = Build<TDqStage>(ctx, pos)
+        .Inputs()
+            .Add(connection)
+            .Build()
+        .Program()
+            .Args({"rows"})
+            .Body<TCoToStream>()
+                .Input("rows")
+                .Build()
+            .Build()
+        .Settings().Build()
+        .Done();
+
+    return Build<TDqCnUnionAll>(ctx, pos)
+        .Output()
+            .Stage(readStage)
+            .Index().Build("0")
+            .Build()
+        .Done();
+}
+
 TExprBase KqpBuildReadTableRangesStage(TExprBase node, TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, const TParentsMap& parents)
 {

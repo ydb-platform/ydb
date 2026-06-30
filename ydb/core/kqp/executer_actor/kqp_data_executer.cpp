@@ -161,7 +161,8 @@ public:
                 for (ui32 inputIndex = 0; inputIndex < stage.InputsSize(); ++inputIndex) {
                     const auto& input = stage.GetInputs(inputIndex);
                     if (input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kStreamLookup ||
-                        input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorResolve)
+                        input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorResolve ||
+                        input.GetTypeCase() == NKqpProto::TKqpPhyConnection::kVectorSearch)
                     {
                         unknownAffectedShardCount = true;
                     }

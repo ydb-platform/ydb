@@ -154,6 +154,39 @@ void InferStatisticsForReadTable(const TExprNode::TPtr& input, TTypeAnnotationCo
     kqpStats->SetStats(input.Get(), stats);
 }
 
+// Vector index search returns at most TopK rows of the main table.
+void InferStatisticsForReadTableVectorIndex(const TExprNode::TPtr& input, TTypeAnnotationContext* /*typeCtx*/,
+    const NOpt::TKqpOptimizeContext& /*kqpCtx*/, TKqpStatsStore* kqpStats) {
+
+    auto read = TExprBase(input).Cast<TKqlReadTableVectorIndex>();
+    auto inputStats = kqpStats->GetStats(read.Table().Raw());
+    if (!inputStats) {
+        return;
+    }
+
+    double nRows = 1;
+    if (auto literal = read.TopK().Maybe<TCoUint64>()) {
+        nRows = FromString<double>(literal.Cast().Literal().Value());
+    }
+    int nAttrs = read.Columns().Size();
+    double sizePerRow = inputStats->ByteSize / (inputStats->Nrows == 0 ? 1 : inputStats->Nrows);
+    double byteSize = nRows * sizePerRow * (nAttrs / (double)(inputStats->Ncols == 0 ? 1 : inputStats->Ncols));
+
+    auto stats = std::make_shared<TOptimizerStatistics>(
+        EStatisticsType::BaseTable,
+        nRows,
+        nAttrs,
+        byteSize,
+        0.0,
+        inputStats->KeyColumns,
+        inputStats->ColumnStatistics,
+        inputStats->StorageType
+    );
+    stats->SourceTableName = inputStats->SourceTableName;
+
+    kqpStats->SetStats(input.Get(), std::move(stats));
+}
+
 std::vector<TOrdering::TItem::EDirection> GetAscDirections(std::size_t n) {
     return std::vector<TOrdering::TItem::EDirection>(n, TOrdering::TItem::EDirection::EAscending);
 }
@@ -1468,6 +1501,9 @@ bool TKqpStatisticsTransformer::BeforeLambdasSpecific(const TExprNode::TPtr& inp
     }
     else if(TKqlReadTableBase::Match(input.Get()) || TKqlReadTableRangesBase::Match(input.Get())){
         InferStatisticsForReadTable(input, TypeCtx, KqpCtx, KqpStats);
+    }
+    else if(TKqlReadTableVectorIndex::Match(input.Get())){
+        InferStatisticsForReadTableVectorIndex(input, TypeCtx, KqpCtx, KqpStats);
     }
     else if(TKqlStreamLookupIndex::Match(input.Get())){
         InferStatisticsForIndexLookup(input, TypeCtx, KqpStats);

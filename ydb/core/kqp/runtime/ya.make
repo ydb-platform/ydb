@@ -31,6 +31,7 @@ SRCS(
     kqp_vector_index_levels_cache.cpp
     kqp_vector_index_levels_cache.h
     kqp_vector_actor.cpp
+    kqp_vector_search_actor.cpp
     kqp_write_actor_settings.cpp
     kqp_write_actor.cpp
     kqp_write_table.cpp

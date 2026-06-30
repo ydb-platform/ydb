@@ -302,6 +302,7 @@ struct TTaskInputMeta {
     NKikimrKqp::TKqpStreamLookupSettings* StreamLookupSettings = nullptr;
     NKikimrKqp::TKqpSequencerSettings* SequencerSettings = nullptr;
     NKikimrTxDataShard::TKqpVectorResolveSettings* VectorResolveSettings = nullptr;
+    NKikimrTxDataShard::TKqpVectorSearchSettings* VectorSearchSettings = nullptr;
     // Fully-qualified table path for TLI filtering (vector resolve only;
     // stream lookup reads path from its proto settings directly).
     TString TablePath;
@@ -455,6 +456,9 @@ private:
     void BuildVectorResolveChannels(const TStageInfo& stageInfo, ui32 inputIndex,
         const TStageInfo& inputStageInfo, ui32 outputIndex,
         const NKqpProto::TKqpPhyCnVectorResolve& vectorResolve, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc);
+    void BuildVectorSearchChannels(const TStageInfo& stageInfo, ui32 inputIndex,
+        const TStageInfo& inputStageInfo, ui32 outputIndex,
+        const NKqpProto::TKqpPhyCnVectorSearch& vectorSearch, bool enableSpilling, const NYql::NDq::TChannelLogFunc& logFunc);
     void BuildDqSourceStreamLookupChannels(const TStageInfo& stageInfo, ui32 inputIndex, const TStageInfo& inputStageInfo,
         ui32 outputIndex, const NKqpProto::TKqpPhyCnDqSourceStreamLookup& dqSourceStreamLookup, const NYql::NDq::TChannelLogFunc& logFunc);
     void BuildResultChannels(const TKqpPhyTxHolder::TConstPtr& tx, ui64 txIdx);

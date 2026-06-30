@@ -22,9 +22,21 @@
 # binary; compare_build_preset only selects which prebuilt baseline is fetched
 # from S3 (and labels the report). Both binaries should use the same preset for
 # a fair comparison.
+#
+# Optional CPU flamegraphs: pass compare_flamegraph=1 to profile each ydbd with
+# `perf` during its workload run and emit one SVG per side per iteration into
+# testing_out_stuff (via contrib/tools/flame-graph). For each iteration a
+# differential flamegraph between the baseline and current runs is also produced
+# (<workload>_diff_<i>.svg, colored red=hotter / blue=colder; plus a
+# <workload>_diff_before_<i>.svg variant with baseline frame widths).
+# `perf record --pid` needs perf_event_paranoid<=1 or sudo (compare_perf_sudo=1);
+# if perf cannot profile, the test fails. perf adds overhead, so measured
+# Txs/Sec are perturbed when on.
 
 import os
+import signal
 import statistics
+import subprocess
 import urllib.request
 
 import pytest
@@ -38,6 +50,10 @@ S3_BASE_URL = "https://storage.yandexcloud.net/ydb-builds"
 
 
 # --- Parameter parsing helpers ---
+def _truthy(raw):
+    return str(raw).lower() in ('1', 'true', 'yes', 'on')
+
+
 def _parse_feature_flags(raw):
     return [f for f in raw.split(',') if f]
 
@@ -182,6 +198,17 @@ class TestCompareIndexPerformance:
 
         self.workload = yatest.common.get_param('compare_workload', default='all')
 
+        # Flamegraph collection (off by default). When on, each workload run is
+        # profiled with `perf` and a CPU flamegraph SVG is produced per side per
+        # iteration. perf record --pid of another process needs
+        # perf_event_paranoid <= 1 or sudo; on failure the test fails loudly.
+        # NOTE: perf adds overhead, so measured Txs/Sec are perturbed when on.
+        self.flamegraph = _truthy(yatest.common.get_param('compare_flamegraph', default=''))
+        self.perf_sudo = _truthy(yatest.common.get_param('compare_perf_sudo', default=''))
+        self.perf_freq = yatest.common.get_param('compare_perf_freq', default='50')
+        self.flame_tool = (
+            yatest.common.source_path("contrib/tools/flame-graph") if self.flamegraph else None)
+
     # --- binary resolution ---
     def _download_ydbd(self, ref):
         # Download (and cache) a prebuilt ydbd for the given S3 ref + preset.
@@ -213,7 +240,7 @@ class TestCompareIndexPerformance:
         return f"current({self.current_ref})" if self.current_ref else "current"
 
     # --- cluster lifecycle + single workload run ---
-    def _run_one(self, label, ydbd_path, flags, tsc, run_workload, log_name):
+    def _run_one(self, label, ydbd_path, flags, tsc, run_workload, log_name, svg_name):
         config = KikimrConfigGenerator(
             binary_paths=[ydbd_path],
             erasure=Erasure.from_string(yatest.common.get_param('stress_default_erasure', default='NONE')),
@@ -230,10 +257,148 @@ class TestCompareIndexPerformance:
             # stdout and stderr go to separate files: the Txs/Sec line is parsed
             # from stdout, so stderr noise must not interleave into it.
             with open(log_file, "w") as out, open(err_file, "w") as err:
-                run_workload(endpoint, out, err)
+                perf = self._perf_start(cluster.nodes[1].pid, svg_name) if self.flamegraph else None
+                workload_ok = False
+                try:
+                    run_workload(endpoint, out, err)
+                    workload_ok = True
+                finally:
+                    if perf is not None:
+                        # Convert/validate the profile only if the workload
+                        # itself succeeded; otherwise just stop perf so its error
+                        # does not mask the original workload failure.
+                        self._perf_finish(perf, svg_name, validate=workload_ok)
             return extract_total_txs_sec(log_file)
         finally:
             cluster.stop()
+
+    # --- flamegraph collection (perf record -> stackcollapse -> flamegraph) ---
+    def _perf_start(self, pid, svg_name):
+        # Profile the live ydbd process for the whole workload run (until SIGINT).
+        # Run perf in its own session/process group so we can interrupt it
+        # reliably, including when wrapped in `sudo` (which would otherwise not
+        # forward our SIGINT to the perf child).
+        perf_data = yatest.common.output_path(svg_name + ".perf.data")
+        perf_log = yatest.common.output_path(svg_name + ".perf.log")
+        cmd = (["sudo"] if self.perf_sudo else []) + [
+            "perf", "record", "-F", str(self.perf_freq), "--call-graph", "dwarf",
+            "-g", "--proc-map-timeout=10000", "--pid", str(pid), "-o", perf_data,
+        ]
+        log = open(perf_log, "w")
+        try:
+            proc = subprocess.Popen(cmd, stdout=log, stderr=subprocess.STDOUT,
+                                    start_new_session=True)
+        except OSError as exc:
+            log.close()
+            pytest.fail(f"failed to start perf for flamegraph {svg_name}: {exc}; "
+                        f"perf log: {perf_log}")
+        return {"proc": proc, "log": log, "data": perf_data, "perf_log": perf_log}
+
+    def _perf_stop(self, perf):
+        # Send SIGINT to perf's process group (perf flushes perf.data on SIGINT).
+        # With sudo, perf is not our direct child, so signal the whole group via
+        # `sudo kill` to reach the privileged perf process.
+        proc = perf["proc"]
+        try:
+            if self.perf_sudo:
+                subprocess.call(["sudo", "kill", "-INT", f"-{proc.pid}"])
+            else:
+                os.killpg(proc.pid, signal.SIGINT)
+        except OSError:
+            proc.send_signal(signal.SIGINT)
+        try:
+            proc.wait(timeout=120)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.wait()
+        perf["log"].close()
+
+    def _flame_script(self, name):
+        # perl scripts shipped via DATA(arcadia/contrib/tools/flame-graph); run
+        # them through `perl` so they work regardless of file mode in the sandbox.
+        return ["perl", os.path.join(self.flame_tool, name)]
+
+    def _run_pipeline(self, cmds, out_file, log_file, what):
+        # Run cmds[0] | cmds[1] | ... with the final stdout written to out_file
+        # and every stage's stderr appended to log_file. Fails loudly on error.
+        procs = []
+        try:
+            with open(out_file, "w") as out, open(log_file, "a") as plog:
+                prev_stdout = None
+                for idx, cmd in enumerate(cmds):
+                    last = idx == len(cmds) - 1
+                    proc = subprocess.Popen(
+                        cmd, stdin=prev_stdout,
+                        stdout=(out if last else subprocess.PIPE), stderr=plog)
+                    if prev_stdout is not None:
+                        prev_stdout.close()  # let the upstream stage get SIGPIPE
+                    procs.append(proc)
+                    prev_stdout = proc.stdout
+                procs[-1].communicate()
+            rcs = tuple(p.wait() for p in procs)
+        except OSError as exc:
+            self._reap(procs)
+            pytest.fail(f"{what} failed: {exc}; log: {log_file}")
+        if any(rc != 0 for rc in rcs):
+            pytest.fail(f"{what} failed (rc={rcs}); log: {log_file}")
+
+    def _perf_finish(self, perf, svg_name, validate):
+        # Stop perf, then (when validate) convert perf.data to a folded stack file
+        # (kept for diffing) and a per-run SVG, via contrib/tools/flame-graph:
+        #   perf script | stackcollapse-perf.pl > <name>.folded
+        #   flamegraph.pl < <name>.folded > <name>.svg
+        self._perf_stop(perf)
+        if not validate:
+            # The workload failed; don't mask its error with a perf failure.
+            return
+
+        if not os.path.isfile(perf["data"]) or os.path.getsize(perf["data"]) == 0:
+            pytest.fail(f"perf produced no data for {svg_name}; perf log: {perf['perf_log']}")
+
+        folded_file = yatest.common.output_path(svg_name + ".folded")
+        svg_file = yatest.common.output_path(svg_name)
+        script_cmd = (["sudo"] if self.perf_sudo else []) + ["perf", "script", "-i", perf["data"]]
+        self._run_pipeline(
+            [script_cmd, self._flame_script("stackcollapse-perf.pl")],
+            folded_file, perf["perf_log"], f"perf collapse for {svg_name}")
+        self._run_pipeline(
+            [["cat", folded_file], self._flame_script("flamegraph.pl")],
+            svg_file, perf["perf_log"], f"flamegraph render for {svg_name}")
+        print(f"Flamegraph: {svg_file}")
+
+    def _flamegraph_diff(self, slug, i):
+        # Build before/after differential flamegraphs from the folded stacks of
+        # this iteration's baseline and current runs (consequent runs of the two
+        # branches). Colored by delta: red = hotter, blue = colder.
+        base_folded = yatest.common.output_path(f"{slug}_main_{i}.svg.folded")
+        cur_folded = yatest.common.output_path(f"{slug}_current_{i}.svg.folded")
+        if not (os.path.isfile(base_folded) and os.path.isfile(cur_folded)):
+            return
+        log_file = yatest.common.output_path(f"{slug}_diff_{i}.log")
+        # diff2: widths = current (after) profile, colored by what DID change.
+        self._run_pipeline(
+            [self._flame_script("difffolded.pl") + [base_folded, cur_folded],
+             self._flame_script("flamegraph.pl")],
+            yatest.common.output_path(f"{slug}_diff_{i}.svg"), log_file,
+            f"flamegraph diff for {slug} iteration {i}")
+        # diff1: widths = baseline (before) profile, colored by what WILL change.
+        self._run_pipeline(
+            [self._flame_script("difffolded.pl") + [cur_folded, base_folded],
+             self._flame_script("flamegraph.pl") + ["--negate"]],
+            yatest.common.output_path(f"{slug}_diff_before_{i}.svg"), log_file,
+            f"flamegraph diff (before) for {slug} iteration {i}")
+        print(f"Flamegraph diff: {slug}_diff_{i}.svg, {slug}_diff_before_{i}.svg")
+
+    @staticmethod
+    def _reap(procs):
+        # Terminate and wait for any still-running pipeline processes so a
+        # partially-built chain does not leak subprocesses / fds.
+        for p in procs:
+            if p.stdout is not None and not p.stdout.closed:
+                p.stdout.close()
+            if p.poll() is None:
+                p.kill()
+            p.wait()
 
     def _exec_workload(self, binary_env, endpoint, out, err, extra):
         cmd = [
@@ -294,6 +459,14 @@ class TestCompareIndexPerformance:
             f.write("|---|---|---|---|---|\n")
             f.write(f"| {workload_name} | {res['main_detail']} | {res['current_detail']} "
                     f"| {res['diff']} | {res['significance']} |\n")
+            if self.flamegraph:
+                svgs = [f"{slug}_{side}_{i}.svg"
+                        for i in range(1, self.iterations + 1)
+                        for side in ("main", "current")]
+                diffs = [f"{slug}_diff_{i}.svg" for i in range(1, self.iterations + 1)]
+                f.write("\nFlamegraphs: " + ", ".join(f"`{s}`" for s in svgs) + "\n")
+                f.write("\nFlamegraph diffs (baseline vs current, red=hotter/blue=colder): "
+                        + ", ".join(f"`{s}`" for s in diffs) + "\n")
         print(f"Markdown report: {report_file}")
 
     # --- tests ---
@@ -331,10 +504,12 @@ class TestCompareIndexPerformance:
 
             collect_value(main_values, self._run_one(
                 self.ref, baseline_ydbd, self.baseline_flags, self.baseline_tsc,
-                baseline_workload, f"vector_main_{i}.log"))
+                baseline_workload, f"vector_main_{i}.log", f"vector_main_{i}.svg"))
             collect_value(current_values, self._run_one(
                 "current", current_ydbd, self.current_flags, self.current_tsc,
-                current_workload, f"vector_current_{i}.log"))
+                current_workload, f"vector_current_{i}.log", f"vector_current_{i}.svg"))
+            if self.flamegraph:
+                self._flamegraph_diff("vector", i)
 
         self._report("vector", "vector select", self._summarize(main_values, current_values))
 
@@ -362,9 +537,11 @@ class TestCompareIndexPerformance:
 
             collect_value(main_values, self._run_one(
                 self.ref, baseline_ydbd, baseline_flags, self.baseline_tsc,
-                fulltext_workload, f"fulltext_main_{i}.log"))
+                fulltext_workload, f"fulltext_main_{i}.log", f"fulltext_main_{i}.svg"))
             collect_value(current_values, self._run_one(
                 "current", current_ydbd, current_flags, self.current_tsc,
-                fulltext_workload, f"fulltext_current_{i}.log"))
+                fulltext_workload, f"fulltext_current_{i}.log", f"fulltext_current_{i}.svg"))
+            if self.flamegraph:
+                self._flamegraph_diff("fulltext", i)
 
         self._report("fulltext", "fulltext select", self._summarize(main_values, current_values))

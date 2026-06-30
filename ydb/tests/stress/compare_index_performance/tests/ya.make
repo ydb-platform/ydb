@@ -23,6 +23,12 @@ DEPENDS(
     ydb/apps/ydb
 )
 
+# Flame-graph scripts (stackcollapse-perf.pl, flamegraph.pl) used by the
+# optional compare_flamegraph=1 mode; resolved via yatest.common.source_path.
+DATA(
+    arcadia/contrib/tools/flame-graph
+)
+
 PEERDIR(
     ydb/tests/library
     ydb/tests/library/stress

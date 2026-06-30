@@ -5,6 +5,8 @@ SET(antlr_templates ${antlr_output}/org/antlr/v4/tool/templates/codegen)
 SET(jsonpath_grammar ${ARCADIA_ROOT}/yql/essentials/minikql/jsonpath/JsonPathAntlr4.g)
 
 SET(ANTLR_PACKAGE_NAME NJsonPathGenerated)
+SET(PARSER_AST_NAME JsonPathAntlr4Parser)
+SET(PARSER_PROTO_NAME JsonPathAntlr4Parser)
 
 CONFIGURE_FILE(${ARCADIA_ROOT}/yql/essentials/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Java/Java.stg.in ${antlr_templates}/Java/Java.stg)
 

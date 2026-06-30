@@ -407,7 +407,7 @@ void <parser.grammarName; format = "lower">ParserInitialize() {
   try {
     RuleReturnType root(<parser.name>::<first(parser.funcs).name>());
     if (!error && root) {
-      auto ast = google::protobuf::Arena::CreateMessage\<@ANTLR_PACKAGE_NAME@::TSQLv1ParserAST>(Arena);
+      auto ast = google::protobuf::Arena::CreateMessage\<@ANTLR_PACKAGE_NAME@::T@PARSER_AST_NAME@AST>(Arena);
       Y_ASSERT(dynamic_cast\<@ANTLR_PACKAGE_NAME@::TRule_<first(parser.funcs).name>* >(root));
       ast->unsafe_arena_set_allocated_rule_<first(parser.funcs).name>(static_cast\<@ANTLR_PACKAGE_NAME@::TRule_<first(parser.funcs).name>* >(root));
       return ast;

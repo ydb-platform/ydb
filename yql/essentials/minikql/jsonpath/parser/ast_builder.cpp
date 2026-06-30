@@ -207,7 +207,7 @@ TAstNodePtr TAstBuilder::BuildPrimary(const TRule_primary& node) {
             return new TLastArrayIndexNode(GetPos(token));
         }
         case TRule_primary::kAltPrimary4: {
-            const auto& primary = node.GetAlt_primary4().GetBlock1();
+            const auto& primary = node.GetAlt_primary4();
             const auto input = BuildExpr(primary.GetRule_expr2());
             if (primary.HasBlock4()) {
                 const auto& token = primary.GetBlock4().GetToken1();
@@ -304,7 +304,7 @@ TAstNodePtr TAstBuilder::BuildLikeRegexExpr(const TRule_like_regex_expr& node, T
 TAstNodePtr TAstBuilder::BuildPredicateExpr(const TRule_predicate_expr& node) {
     switch (node.GetAltCase()) {
         case TRule_predicate_expr::kAltPredicateExpr1: {
-            const auto& predicate = node.GetAlt_predicate_expr1().GetBlock1();
+            const auto& predicate = node.GetAlt_predicate_expr1();
             const auto input = BuildPlainExpr(predicate.GetRule_plain_expr1());
             if (!predicate.HasBlock2()) {
                 return input;
@@ -312,21 +312,21 @@ TAstNodePtr TAstBuilder::BuildPredicateExpr(const TRule_predicate_expr& node) {
 
             const auto& block = predicate.GetBlock2();
             switch (block.GetAltCase()) {
-                case TRule_predicate_expr_TAlt1_TBlock1_TBlock2::kAlt1: {
+                case TRule_predicate_expr_TAlt1_TBlock2::kAlt1: {
                     const auto& innerBlock = block.GetAlt1().GetRule_starts_with_expr1();
                     const auto& prefix = BuildPlainExpr(innerBlock.GetRule_plain_expr3());
                     return new TStartsWithPredicateNode(GetPos(innerBlock.GetToken1()), input, prefix);
                 }
-                case TRule_predicate_expr_TAlt1_TBlock1_TBlock2::kAlt2: {
+                case TRule_predicate_expr_TAlt1_TBlock2::kAlt2: {
                     return BuildLikeRegexExpr(block.GetAlt2().GetRule_like_regex_expr1(), input);
                 }
-                case TRule_predicate_expr_TAlt1_TBlock1_TBlock2::ALT_NOT_SET:
+                case TRule_predicate_expr_TAlt1_TBlock2::ALT_NOT_SET:
                     Y_ABORT("Alternative for inner block of 'predicate_expr' rule is not set");
             }
             MKQL_ENSURE(false, "Unreachable");
         }
         case TRule_predicate_expr::kAltPredicateExpr2: {
-            const auto& predicate = node.GetAlt_predicate_expr2().GetBlock1();
+            const auto& predicate = node.GetAlt_predicate_expr2();
             const auto input = BuildExpr(predicate.GetRule_expr3());
             return new TExistsPredicateNode(GetPos(predicate.GetToken1()), input);
         }

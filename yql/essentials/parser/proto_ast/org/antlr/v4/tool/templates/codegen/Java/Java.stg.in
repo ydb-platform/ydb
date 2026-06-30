@@ -61,7 +61,7 @@ message TToken {
 
 <parser>
 
-message TSQLv1ParserAST {
+message T@PARSER_AST_NAME@AST {
     <first(parser.funcs):{r | TRule_<r.currentRule.name> Rule_<r.currentRule.name> = 1;}; separator="">
 }
 >>

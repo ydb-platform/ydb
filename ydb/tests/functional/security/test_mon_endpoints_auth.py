@@ -8,7 +8,6 @@ import yatest.common
 
 from security_test_helpers import _test_endpoints
 
-
 requests.packages.urllib3.disable_warnings()
 
 TOKENS = [
@@ -227,10 +226,7 @@ def _full_path(base_path, query):
 
 def _requests_for_spec(cluster, spec):
     base_path = _base_path(cluster, spec)
-    return [
-        (base_path, _query_string(query), _full_path(base_path, query))
-        for query in _queries_for_spec(spec)
-    ]
+    return [(base_path, _query_string(query), _full_path(base_path, query)) for query in _queries_for_spec(spec)]
 
 
 def _request_status(method, base_url, path, token):
@@ -368,4 +364,3 @@ def test_with_require_healthcheck_authentication(ydb_cluster_with_require_health
         },  # checks this just in case
     }
     _test_endpoints(ydb_cluster_with_require_healthcheck_auth, EXPECTED_RESULTS_WITH_REQUIRE_HEALTHCHECK_AUTH)
-

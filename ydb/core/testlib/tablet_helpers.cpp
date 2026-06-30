@@ -1297,18 +1297,17 @@ namespace NKikimr {
             const auto type = ev->Get()->Record.GetTabletType();
             const auto bootMode = ev->Get()->Record.GetTabletBootMode();
 
-            auto logPrefix = TStringBuilder() << "[" << TabletID() << "] TEvCreateTablet"
-                << ", Owner " << ev->Get()->Record.GetOwner() << ", OwnerIdx " << ev->Get()->Record.GetOwnerIdx()
-                << ", type " << type
-                << ", ";
+            YDB_LOG_CREATE_CONTEXT({"tabletId", TabletID()},
+                {"owner", ev->Get()->Record.GetOwner()},
+                {"ownerIdx", ev->Get()->Record.GetOwnerIdx()},
+                {"type", type});
 
             auto it = State->Tablets.find(key);
             TActorId bootstrapperActorId;
             if (it == State->Tablets.end()) {
                 if (bootMode == NKikimrHive::TABLET_BOOT_MODE_EXTERNAL) {
                     // don't boot anything
-                    YDB_LOG_INFO_CTX(ctx, "External boot mode requested",
-                        {"logPrefix", logPrefix});
+                    YDB_LOG_INFO_CTX(ctx, "TEvCreateTablet. External boot mode requested");
                 } else if (auto x = GetTabletCreationFunc(type)) {
                     bootstrapperActorId = Boot(ctx, type, x, DataGroupErasure);
                 } else if (type == TTabletTypes::DataShard) {
@@ -1355,9 +1354,8 @@ namespace NKikimr {
                     it = State->Tablets.insert(std::make_pair(key, TTabletInfo(type, tabletId, bootstrapperActorId))).first;
                     State->TabletIdToOwner[tabletId] = key;
 
-                    YDB_LOG_INFO_CTX(ctx, "Boot OK",
-                        {"logPrefix", logPrefix},
-                        {"tabletId", tabletId});
+                    YDB_LOG_INFO_CTX(ctx, "TEvCreateTablet. Boot OK",
+                       {"tabletId", tabletId});
 
                     // After a successful creation of a data shard, need to create
                     // the given number of followers (if requested)
@@ -1370,8 +1368,7 @@ namespace NKikimr {
                         const ui32 followerCount = ev->Get()->Record.GetFollowerCount();
 
                         if (followerCount) {
-                            YDB_LOG_INFO_CTX(ctx, "DataShard created successfully creating followers",
-                                {"logPrefix", logPrefix},
+                            YDB_LOG_INFO_CTX(ctx, "TEvCreateTablet. DataShard created successfully, creating followers",
                                 {"tabletId", tabletId},
                                 {"followerCount", followerCount});
 
@@ -1385,8 +1382,7 @@ namespace NKikimr {
                         }
                     }
                 } else {
-                    YDB_LOG_ERROR_CTX(ctx, "Boot failed",
-                        {"logPrefix", logPrefix},
+                    YDB_LOG_ERROR_CTX(ctx, "TEvCreateTablet. Boot failed",
                         {"status", status});
                 }
             } else {

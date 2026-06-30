@@ -61,7 +61,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto transport = std::make_unique<TStorageTransportMock>();
         auto* transportPtr = transport.get();
 
-        const auto ddisks = MakeDDiskIds(100);
+        const auto ddisks = transportPtr->GetDDiskIds();
 
         // All DDisk connects are deferred -> the sessions stay NotLocked until
         // the test resolves them.
@@ -72,7 +72,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                 ddiskId));
         }
 
-        const auto pbuffers = MakeDDiskIds(100 + DirectBlockGroupHostCount);
+        const auto pbuffers = transportPtr->GetPBufferIds();
         TVector<TStorageTransportMock::TConnectPromise> connectPBufferPromises;
         for (size_t i = 2; i < pbuffers.size(); ++i) {
             connectPBufferPromises.push_back(transportPtr->SetPendingConnect(
@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                 pbuffers[i]));
         }
 
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), ddisks, pbuffers);
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -116,7 +116,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto transport = std::make_unique<TStorageTransportMock>();
         auto* transportPtr = transport.get();
 
-        const auto ddisks = MakeDDiskIds(100);
+        const auto ddisks = transportPtr->GetDDiskIds();
 
         // Hosts 0..2 connect immediately (default) and form the quorum; hosts
         // 3 and 4 stay pending.
@@ -126,8 +126,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[4]);
         Y_UNUSED(pendingHost4);
 
-        const auto pbuffers = MakeDDiskIds(100 + DirectBlockGroupHostCount);
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), ddisks, pbuffers);
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -205,22 +204,20 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto executorA = MakeExecutor();
         auto dbgA = MakeDirectBlockGroup(
             executorA,
-            std::make_unique<TStorageTransportMock>(),
-            100);
+            std::make_unique<TStorageTransportMock>());
 
         // DBG B: every DDisk session is deferred -> not ready yet.
         auto executorB = MakeExecutor();
-        auto transportB = std::make_unique<TStorageTransportMock>();
+        auto transportB = std::make_unique<TStorageTransportMock>(200);
         auto* transportBPtr = transportB.get();
-        const auto ddisksB = MakeDDiskIds(200);
+        const auto ddisksB = transportBPtr->GetDDiskIds();
         TVector<TStorageTransportMock::TConnectPromise> connectPromisesB;
         for (const auto& ddiskId: ddisksB) {
             connectPromisesB.push_back(transportBPtr->SetPendingConnect(
                 EConnectionType::DDisk,
                 ddiskId));
         }
-        const auto pbuffersB = MakeDDiskIds(200 + DirectBlockGroupHostCount);
-        auto dbgB = MakeDirectBlockGroup(executorB, std::move(transportB), ddisksB, pbuffersB);
+        auto dbgB = MakeDirectBlockGroup(executorB, std::move(transportB));
 
         // Mirror fast_path_service.cpp: WaitAll over per-DBG initial-ready
         // futures returned by Run().
@@ -263,9 +260,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto transport = std::make_unique<TStorageTransportMock>();
         auto* transportPtr = transport.get();
 
-        const auto ddisks = MakeDDiskIds(100);
-        const auto pbuffers = MakeDDiskIds(100 + DirectBlockGroupHostCount);
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), ddisks, pbuffers);
+        const auto ddisks = transportPtr->GetDDiskIds();
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -290,9 +286,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto transport = std::make_unique<TStorageTransportMock>();
         auto* transportPtr = transport.get();
 
-        const auto ddisks = MakeDDiskIds(100);
-        const auto pbuffers = MakeDDiskIds(100 + DirectBlockGroupHostCount);
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), ddisks, pbuffers);
+        const auto pbuffers = transportPtr->GetPBufferIds();
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -324,7 +319,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
         auto transport = std::make_unique<TStorageTransportMock>();
         auto* transportPtr = transport.get();
 
-        const auto ddisks = MakeDDiskIds(100);
+        const auto ddisks = transportPtr->GetDDiskIds();
 
         // Defer every DDisk connect so no session gets confirmed.
         TVector<TStorageTransportMock::TConnectPromise> connectPromises;
@@ -334,7 +329,7 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
                 ddiskId));
         }
 
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -370,8 +365,8 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
         auto transport = std::make_unique<TStorageTransportMock>();
         auto* transportPtr = transport.get();
 
-        const auto ddisks = MakeDDiskIds(100);
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
+        const auto ddisks = transportPtr->GetDDiskIds();
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -437,13 +432,13 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
         auto transport = std::make_unique<TStorageTransportMock>();
         auto* transportPtr = transport.get();
 
-        const auto ddisks = MakeDDiskIds(100);
+        const auto ddisks = transportPtr->GetDDiskIds();
 
         // First Connect (seq_no=1) on DDisk[0] is in flight.
         auto firstConnect =
             transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[0]);
 
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -485,8 +480,8 @@ Y_UNIT_TEST_SUITE(TDDiskSessionSeqNoTest)
         auto transport = std::make_unique<TStorageTransportMock>();
         auto* transportPtr = transport.get();
 
-        const auto ddisks = MakeDDiskIds(100);
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
+        const auto ddisks = transportPtr->GetDDiskIds();
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);

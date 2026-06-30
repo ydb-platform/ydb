@@ -40,8 +40,7 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
 
     [[nodiscard]] std::shared_ptr<TDirectBlockGroup> MakeDirectBlockGroup(
         const TExecutorPtr& executor,
-        std::unique_ptr<NTransport::TStorageTransportMock> transport,
-        ui32 baseNodeId) const;
+        std::unique_ptr<NTransport::TStorageTransportMock> transport) const;
 
     [[nodiscard]] std::shared_ptr<TDirectBlockGroup> MakeDirectBlockGroup(
         const TExecutorPtr& executor,

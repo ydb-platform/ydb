@@ -116,14 +116,16 @@ TDBGFixture::MakeDirectBlockGroup(
 [[nodiscard]] std::shared_ptr<TDirectBlockGroup>
 TDBGFixture::MakeDirectBlockGroup(
     const TExecutorPtr& executor,
-    std::unique_ptr<NTransport::TStorageTransportMock> transport,
-    ui32 baseNodeId) const
+    std::unique_ptr<NTransport::TStorageTransportMock> transport) const
 {
+    auto ddisks = transport->GetDDiskIds();
+    auto pbuffers = transport->GetPBufferIds();
+
     return MakeDirectBlockGroup(
         executor,
         std::move(transport),
-        MakeDDiskIds(baseNodeId),
-        MakeDDiskIds(baseNodeId + DirectBlockGroupHostCount));
+        ddisks,
+        pbuffers);
 }
 
 [[nodiscard]] std::shared_ptr<TDirectBlockGroup>

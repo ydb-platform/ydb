@@ -2,11 +2,14 @@
 
 #include "storage_transport.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
+
 #include <ydb/core/protos/blobstorage_ddisk.pb.h>
 
 #include <library/cpp/threading/future/future.h>
 
 #include <util/generic/map.h>
+#include <util/generic/vector.h>
 #include <util/generic/yexception.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NTransport {
@@ -46,8 +49,23 @@ public:
     // DDiskInstanceGuid reported in an immediate successful connect.
     ui64 DefaultDDiskInstanceGuid = 1;
 
-    TStorageTransportMock() = default;
+    // Generates the DDisk / PersistentBuffer ids for this group from baseNodeId
+    // using the same layout as the test adapter, so the mock owns the ids and
+    // exposes them via GetDDiskIds()/GetPBufferIds() in the same style.
+    explicit TStorageTransportMock(ui32 baseNodeId = 100);
     ~TStorageTransportMock() override = default;
+
+    // DDisk / PersistentBuffer ids generated for this group. Pass them to the
+    // DirectBlockGroup under test.
+    [[nodiscard]] const TVector<TDDiskId>& GetDDiskIds() const
+    {
+        return DDiskIds;
+    }
+
+    [[nodiscard]] const TVector<TDDiskId>& GetPBufferIds() const
+    {
+        return PBufferIds;
+    }
 
     // Builds a successful connect result with the given instance guid.
     [[nodiscard]] static TEvConnectResult MakeConnectResult(
@@ -168,6 +186,11 @@ private:
         const TDDiskId& ddiskId);
 
     [[nodiscard]] static TKey MakeKey(const THostConnection& connection);
+
+    // Single group: ids generated from baseNodeId, distinguished by node/slot,
+    // matching what the test passes to the DirectBlockGroup under test.
+    TVector<TDDiskId> DDiskIds;
+    TVector<TDDiskId> PBufferIds;
 
     TMap<TKey, TConnectPromise> PendingConnects;
     // ConnectCredentials stores the credentials of every Connect() call

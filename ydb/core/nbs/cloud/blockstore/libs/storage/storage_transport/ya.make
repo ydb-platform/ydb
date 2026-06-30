@@ -12,6 +12,7 @@ SRCS(
 PEERDIR(
     ydb/core/mind/bscontroller
 
+    ydb/core/nbs/cloud/blockstore/libs/common
     ydb/core/nbs/cloud/blockstore/libs/kikimr
 )
 

@@ -305,8 +305,8 @@ public:
         if (it->second->Unregister()) {
             AllocationScopes.erase(it);
             RefreshMemoryUsage();
+            WaitingScopes.erase(externalScopeId);
         }
-        WaitingScopes.erase(externalScopeId);
     }
 
     void RegisterScope(const ui64 externalScopeId) {

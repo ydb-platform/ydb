@@ -537,4 +537,6 @@ message TTableServiceConfig {
     // KqpRewriteHybridRankTopSort logical rewrite, so it changes the compiled plan shape and must
     // invalidate the compile cache when toggled.
     optional bool EnableHybridSearch = 135 [default = true, (InvalidateCompileCache) = true];
+
+    optional bool EnableStrictSerializableIsolation = 136 [default = false, (InvalidateCompileCache) = true];
 };

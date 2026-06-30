@@ -4141,7 +4141,7 @@ public:
                 NYql::NDqProto::StatusIds::ABORTED,
                 std::move(issues));
             return;
-        } else if (TxManager->IsSingleShard() && !TxManager->HasOlapTable() && (!WriteInfos.empty() || TxManager->HasTopics()) && TxManager->GetTopicOperations().GetSize() <= 1) {
+        } else if ((!WriteInfos.empty() || TxManager->HasTopics()) && TxManager->CanUseImmediateCommit()) {
             TxManager->StartExecute();
             ImmediateCommit(std::move(traceId));
         } else {

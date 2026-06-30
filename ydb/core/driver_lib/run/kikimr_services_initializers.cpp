@@ -2307,10 +2307,6 @@ TTopicDeferredPublishRegistryInitializer::TTopicDeferredPublishRegistryInitializ
 {}
 
 void TTopicDeferredPublishRegistryInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
-    if (!appData->FeatureFlags.GetEnableTopicDeferredPublish()) {
-        return;
-    }
-
     IActor* actor = NPQ::NDeferredPublish::CreateDeferredPublishRegistryActor();
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
         NPQ::NDeferredPublish::MakeDeferredPublishRegistryActorId(),

@@ -61,7 +61,7 @@ The build process using the source code is described in the source code reposito
   {% note info %}
 
   - Supported platform: Ubuntu 24.04 (Noble), amd64.
-  - Packages are bundled without apt dependencies; install `yandex-googleapis-api-common-protos` alongside the core SDK package.
+  - The `.deb` packages do not declare apt dependencies on each other; install `yandex-googleapis-api-common-protos` together with the core SDK package.
   - For other platforms, use the build-from-source instructions below.
 
   {% endnote %}

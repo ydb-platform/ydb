@@ -1,7 +1,5 @@
 #include "direct_block_group_test_fixture.h"
 
-// #include <ydb/core/nbs/cloud/blockstore/config/config.h>
-// #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
 

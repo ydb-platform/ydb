@@ -80,7 +80,7 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                 pbuffers[i]));
         }
 
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), ddisks, pbuffers);
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -126,7 +126,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
             transportPtr->SetPendingConnect(EConnectionType::DDisk, ddisks[4]);
         Y_UNUSED(pendingHost4);
 
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
+        const auto pbuffers = MakeDDiskIds(100 + DirectBlockGroupHostCount);
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), ddisks, pbuffers);
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -218,7 +219,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
                 EConnectionType::DDisk,
                 ddiskId));
         }
-        auto dbgB = MakeDirectBlockGroup(executorB, std::move(transportB), 200);
+        const auto pbuffersB = MakeDDiskIds(200 + DirectBlockGroupHostCount);
+        auto dbgB = MakeDirectBlockGroup(executorB, std::move(transportB), ddisksB, pbuffersB);
 
         // Mirror fast_path_service.cpp: WaitAll over per-DBG initial-ready
         // futures returned by Run().
@@ -262,7 +264,8 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto* transportPtr = transport.get();
 
         const auto ddisks = MakeDDiskIds(100);
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
+        const auto pbuffers = MakeDDiskIds(100 + DirectBlockGroupHostCount);
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), ddisks, pbuffers);
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);
@@ -287,8 +290,9 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         auto transport = std::make_unique<TStorageTransportMock>();
         auto* transportPtr = transport.get();
 
+        const auto ddisks = MakeDDiskIds(100);
         const auto pbuffers = MakeDDiskIds(100 + DirectBlockGroupHostCount);
-        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), 100);
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport), ddisks, pbuffers);
 
         TPartitionDirectServiceMock service(true);
         auto initialReady = dbg->Run(&service);

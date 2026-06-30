@@ -616,8 +616,10 @@ private:
 
         if (request.GetAuth().HasSourceAddress()) {
             PeerName_ = request.GetAuth().GetSourceAddress();
+        } else if constexpr (requires { request.GetSourceAddress(); }) {
+            PeerName_ = request.GetSourceAddress();
         } else {
-            PeerName_ = "";
+            PeerName_.clear();
         }
 
         if (IsCloud() && !FolderId_) {

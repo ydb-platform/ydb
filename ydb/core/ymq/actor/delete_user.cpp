@@ -9,8 +9,6 @@
 
 #include <util/generic/set.h>
 
-#include <functional>
-
 using NKikimr::NClient::TValue;
 
 namespace NKikimr::NSQS {
@@ -99,14 +97,6 @@ private:
                     tagsJson = TagsToJson(*QueueTags_);
                 }
 
-                const auto sourceAddress = std::invoke([&]() {
-                    if (Request().GetAuth().HasSourceAddress()) {
-                        return Request().GetAuth().GetSourceAddress();
-                    } else {
-                        return Request().GetSourceAddress();
-                    }
-                });
-
                 Register(
                     new TDeleteQueueSchemaActorV2(
                         TQueuePath(Cfg().GetRoot(), Request().GetUserName(), name, version),
@@ -120,7 +110,7 @@ private:
                         UserSID_,
                         MaskedToken_,
                         AuthType_,
-                        sourceAddress
+                        PeerName_
                     )
                 );
             }

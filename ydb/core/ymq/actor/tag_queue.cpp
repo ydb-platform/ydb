@@ -37,11 +37,6 @@ public:
             map.emplace(t.GetKey(), t.GetValue());
         }
 
-        if (Request().GetAuth().HasSourceAddress()) {
-            SourceAddress_ = Request().GetAuth().GetSourceAddress();
-        } else {
-            SourceAddress_ = Request().GetSourceAddress();
-        }
         IsCloudEventsEnabled_ = Cfg().HasCloudEventsConfig() && Cfg().GetCloudEventsConfig().GetEnableCloudEvents();
     }
 
@@ -100,7 +95,7 @@ private:
                     .Utf8("CLOUD_EVENT_USER_SID", UserSID_)
                     .Utf8("CLOUD_EVENT_USER_MASKED_TOKEN", MaskedToken_)
                     .Utf8("CLOUD_EVENT_AUTHTYPE", AuthType_)
-                    .Utf8("CLOUD_EVENT_PEERNAME", SourceAddress_)
+                    .Utf8("CLOUD_EVENT_PEERNAME", PeerName_)
                     .Utf8("CLOUD_EVENT_REQUEST_ID", RequestId_);
         } else {
             builder
@@ -172,7 +167,6 @@ private:
     TString TagsJson_;
     bool IsCloudEventsEnabled_;
     TString CustomQueueName_ = "";
-    TString SourceAddress_ = "";
 };
 
 IActor* CreateTagQueueActor(const NKikimrClient::TSqsRequest& sourceSqsRequest, THolder<IReplyCallback> cb) {

@@ -773,6 +773,31 @@ private:
         LaunchPhaseReads(src, arena, MainPartitioning, EReadKind::Main);
     }
 
+    // Dispatch buffered candidate PKs into main reads (steps #2/#4): batched to
+    // MainBatchKeys and capped at MaxInFlightMainReads concurrent reads, decoupled from
+    // posting-shard boundaries. Once posting is done, flush the remainder even if below
+    // the batch size. Recall-neutral. The re-entrancy guard stops the nested HandleRead
+    // (kicked by LaunchPhaseReads) from re-dispatching mid-loop.
+    void MaybeDispatchMainReads(bool postingDone) {
+        if (PostingCovers || DispatchingMain) {
+            return;
+        }
+        DispatchingMain = true;
+        while (CountActiveReads(EReadKind::Main) < MaxInFlightMainReads && !PendingMainKeys.empty()
+            && (PendingMainKeys.size() >= MainBatchKeys || postingDone))
+        {
+            const size_t take = std::min(PendingMainKeys.size(), MainBatchKeys);
+            TVector<TString> batch;
+            batch.reserve(take);
+            for (size_t i = PendingMainKeys.size() - take; i < PendingMainKeys.size(); ++i) {
+                batch.push_back(std::move(PendingMainKeys[i]));
+            }
+            PendingMainKeys.resize(PendingMainKeys.size() - take);
+            LaunchMainReadFor(std::move(batch));
+        }
+        DispatchingMain = false;
+    }
+
     // Launch the reads for one phase. With a pre-resolved partitioning, each read is
     // pinned to a single shard via ShardIdHint, so the inner read actor skips its own
     // scheme-cache resolve (one less serial round-trip per phase). Without it (resolve
@@ -922,6 +947,12 @@ private:
         {
             auto guard = BindAllocator();
             for (auto& ar : ActiveReads) {
+                // Backpressure (#2): stop pulling posting once the candidate buffer is
+                // full; resume when main reads drain it below the quota. Not polling the
+                // inner read propagates backpressure down to the posting shards.
+                if (ar.Kind == EReadKind::Posting && PendingMainKeys.size() >= MaxPendingKeys) {
+                    continue;
+                }
                 TMaybe<TInstant> watermark;
                 ui64 freeSpace = 32 * 1024 * 1024;
                 bool finished = false;
@@ -959,19 +990,11 @@ private:
         if (Failed) {
             return;
         }
-        // Pipeline posting -> main: a posting shard just finished, so dispatch the PKs
-        // gathered so far (across all posting reads) to a main read that overlaps the
-        // remaining posting reads. Covered searches build candidates straight from the
-        // posting rows and never read the main table.
-        bool postingFinished = false;
-        for (const auto& ar : finishedReads) {
-            postingFinished |= (ar.Kind == EReadKind::Posting);
-        }
-        if (postingFinished && !PostingCovers && !PendingMainKeys.empty()) {
-            TVector<TString> batch;
-            batch.swap(PendingMainKeys);
-            LaunchMainReadFor(std::move(batch));
-        }
+        // Pipeline posting -> main (#2/#4): dispatch buffered candidate PKs into
+        // bounded, in-flight-capped main reads as the buffer fills, flushing the
+        // remainder once posting is done -- decoupled from posting-shard boundaries.
+        // Covered searches build candidates from posting rows and never read main.
+        MaybeDispatchMainReads(/* postingDone */ CountActiveReads(EReadKind::Posting) == 0);
 
         if (finishedReads.empty() || Phase == EPhase::Done) {
             return;
@@ -986,7 +1009,8 @@ private:
         // Posting phase (and the main reads it pipelines into): done once neither
         // remains. Covered -> candidates are already built; non-covered -> candidates
         // came from the main reads (or there were none -> empty result).
-        if (CountActiveReads(EReadKind::Posting) == 0 && CountActiveReads(EReadKind::Main) == 0) {
+        if (CountActiveReads(EReadKind::Posting) == 0 && CountActiveReads(EReadKind::Main) == 0
+            && PendingMainKeys.empty()) {
             CA_LOG_D("Posting/main done: candidateRows=" << Candidates.size() << " topK=" << TopK);
             FinalizeResults();
         }
@@ -1240,6 +1264,16 @@ private:
     // clusters, across all posting shards of the query.
     TVector<TString> PendingMainKeys;
     THashSet<TString> SeenKeys;
+
+    // Posting->main dispatch policy (steps #2/#4): batch candidate PKs into bounded,
+    // in-flight-capped main reads instead of one read per finished posting shard, and
+    // backpressure posting when the buffer is full. Recall-neutral -- only changes when
+    // and in what sizes main lookups are issued. Tune via the VectorSearch summary
+    // (mainReads count, peak buffer, postingMainMs).
+    static constexpr size_t MainBatchKeys = 2048;      // dispatch a main read at this many buffered keys
+    static constexpr ui32 MaxInFlightMainReads = 4;    // cap concurrent main reads
+    static constexpr size_t MaxPendingKeys = 16384;    // backpressure posting above this many buffered
+    bool DispatchingMain = false;                      // re-entrancy guard for MaybeDispatchMainReads
 
     TVector<TCandidate> Candidates;
     NKikimr::NMiniKQL::TUnboxedValueDeque ResultRows;

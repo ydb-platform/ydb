@@ -2480,7 +2480,7 @@ void TTenantsManager::FillTenantStatus(TTenant::TPtr tenant, Ydb::Cms::GetDataba
     }
 
     for (const auto &attr : tenant->Attributes.GetUserAttributes()) {
-        // Filter out emty-value attributes kept forever as tombstones
+        // Filter out empty-value attributes kept forever as tombstones
         // (see TTenantsManager::TTxAlterTenant::Execute())
         if (attr.HasValue()) {
             (*status.mutable_attributes())[attr.GetKey()] = attr.GetValue();

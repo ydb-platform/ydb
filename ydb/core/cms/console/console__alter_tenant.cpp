@@ -375,7 +375,7 @@ public:
             Self->DbUpdateTenantAlterIdempotencyKey(Tenant, Tenant->AlterIdempotencyKey, txc, ctx);
         }
 
-        // Attributes with empy values are kept forever as tombstones
+        // Attributes with empty values are kept forever as tombstones
         // to self-heal divergence with subdomain if subdomain AlterUserAttributes
         // request didn't reach SchemeShard (due to Console restart
         // right after persisting updated Tenant->Attributes in local db

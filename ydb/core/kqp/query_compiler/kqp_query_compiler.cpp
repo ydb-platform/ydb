@@ -2207,8 +2207,10 @@ private:
                         }
 
                         FillTablesMap(implTable->Name, tablesMap);
-                        for (const auto& columnName: {NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::MaxIdColumn,
-                            NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::AddedColumn,
+                        for (const auto& columnName: {NTableIndex::NFulltext::TokenColumn,
+                            NTableIndex::NFulltext::GenColumn,
+                            NTableIndex::NFulltext::MaxIdColumn,
+                            NTableIndex::NFulltext::AddedColumn,
                             NTableIndex::NFulltext::SegmentColumn}) {
                             const auto& columnMeta = implTable->Columns.at(columnName);
                             auto keyColumnProto = indexSettings->AddImplColumns();

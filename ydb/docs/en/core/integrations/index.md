@@ -29,9 +29,17 @@ In addition to its own native protocol, {{ ydb-name }} has a compatibility layer
 
 {% include notitle [Table of contents](ingestion/_includes/toc-table-streaming.md) %}
 
-## Data migrations {#schema_migration}
+## Data migrations {#data_migration}
+
+{% include notitle [Table of contents](data-migration/_includes/toc-table.md) %}
+
+## Schema migrations {#schema_migration}
 
 {% include notitle [Table of contents](migration/_includes/toc-table.md) %}
+
+## Query engines {#query_engines}
+
+{% include notitle [Table of contents](query-engines/_includes/toc-table.md) %}
 
 ## Object–relational mapping (ORM) {#orm}
 

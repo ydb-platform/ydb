@@ -11,7 +11,7 @@
 #include <type_traits>
 
 #include "kafka_records.h"
-#include "kafka_log_impl.h"
+#include "kafka_log.h"
 
 namespace NKafka {
 namespace NPrivate {

@@ -399,13 +399,15 @@ namespace NKikimr::NHttpProxy {
                     const TActorContext& ctx,
                     ui32 httpStatusCode,
                     const TString& ymqStatusCode,
-                    const TString& errorText) {
+                    const TString& errorText,
+                    bool skipMetering = false) {
                 HttpContext.ResponseData.IsYmq = true;
                 HttpContext.ResponseData.UseYmqStatusCode = true;
                 HttpContext.ResponseData.Status = NYdb::EStatus::STATUS_UNDEFINED;
                 HttpContext.ResponseData.YmqHttpCode = httpStatusCode;
                 HttpContext.ResponseData.YmqStatusCode = ymqStatusCode;
                 HttpContext.ResponseData.ErrorText = errorText;
+                HttpContext.ResponseData.SkipMetering = skipMetering;
 
                 ReplyToHttpContext(ctx);
 
@@ -523,7 +525,8 @@ namespace NKikimr::NHttpProxy {
                         ctx,
                         ev->Get()->Error->HttpStatusCode,
                         ev->Get()->Error->ErrorCode,
-                        ev->Get()->Error->Message
+                        ev->Get()->Error->Message,
+                        true /*skip metering on auth failure*/
                     );
                 }
             }
@@ -1752,7 +1755,7 @@ namespace NKikimr::NHttpProxy {
             ResponseData.DumpBody(ContentType)
         );
 
-        if (ResponseData.IsYmq && ServiceConfig.GetHttpConfig().GetYandexCloudMode()) {
+        if (ResponseData.IsYmq && ServiceConfig.GetHttpConfig().GetYandexCloudMode() && !ResponseData.SkipMetering) {
             // Send request attributes to the metering actor
             auto reportRequestAttributes = MakeHolder<NSQS::TSqsEvents::TEvReportProcessedRequestAttributes>();
 

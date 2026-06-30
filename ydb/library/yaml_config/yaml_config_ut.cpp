@@ -1,10 +1,10 @@
 #include "yaml_config.h"
 
-#include <contrib/ydb/library/yaml_config/yaml_config_parser.h>
-#include <contrib/ydb/library/yaml_config/public/yaml_config_impl.h>
+#include <ydb/library/yaml_config/yaml_config_parser.h>
+#include <ydb/library/yaml_config/public/yaml_config_impl.h>
 #include <library/cpp/testing/unittest/registar.h>
 
-#include <contrib/ydb/core/protos/key.pb.h>
+#include <ydb/core/protos/key.pb.h>
 
 #include <util/string/strip.h>
 

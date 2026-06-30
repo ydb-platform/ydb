@@ -58,17 +58,29 @@ def _parse_feature_flags(raw):
     return [f for f in raw.split(',') if f]
 
 
+def _coerce_config_value(v):
+    # Coerce a string to bool/int/float so numeric table_service_config values
+    # (e.g. channel_buffer_size=1048576) serialize as numbers, not strings.
+    if v.lower() == 'true':
+        return True
+    if v.lower() == 'false':
+        return False
+    try:
+        return int(v)
+    except ValueError:
+        pass
+    try:
+        return float(v)
+    except ValueError:
+        return v
+
+
 def _parse_table_service_config(raw):
     tsc = {}
     for item in raw.split(','):
         if '=' in item:
             k, v = item.split('=', 1)
-            if v.lower() == 'true':
-                tsc[k] = True
-            elif v.lower() == 'false':
-                tsc[k] = False
-            else:
-                tsc[k] = v
+            tsc[k] = _coerce_config_value(v)
     return tsc
 
 

@@ -220,17 +220,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - build_preset: relwithdebinfo
-            threads_count: 52
-            timeout: 240
-            build_target: "ydb/"
-            test_size: small,medium
-          - build_preset: release-asan
-            threads_count: 52
-            timeout: 240
-            build_target: "ydb/"
-            test_size: small,medium
+        build_preset: [relwithdebinfo, release-asan]
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}" ]
     name: Build and test ${{ matrix.build_preset }}
     steps:
@@ -254,12 +244,7 @@ jobs:
       uses: ./.github/actions/build_and_test_ya
       with:
         build_preset: ${{ matrix.build_preset }}
-        build_target: ${{ matrix.build_target }}
-        increment: true
         run_tests: ${{ contains(fromJSON('["relwithdebinfo", "release-asan", "release-tsan", "release-msan"]'), matrix.build_preset) }}
-        test_size: ${{ matrix.test_size }}
-        test_threads: ${{ matrix.threads_count }}
-        put_build_results_to_cache: true
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
         ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
         secs: ${{ env.CI_SECS }}

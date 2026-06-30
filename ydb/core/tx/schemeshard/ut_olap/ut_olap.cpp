@@ -1607,7 +1607,7 @@ Y_UNIT_TEST_SUITE(TOlapNaming) {
 
     Y_UNIT_TEST(AlterOwnerAfterReadOnlyCopy) {
         TTestBasicRuntime runtime;
-        TTestEnv env(runtime);
+        TTestEnv env(runtime, TTestEnvOptions().EnableColumnTablesBackup(true));
         ui64 txId = 100;
 
         TestMkDir(runtime, ++txId, "/MyRoot", "MyDir");

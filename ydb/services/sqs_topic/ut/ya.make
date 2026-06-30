@@ -1,4 +1,4 @@
-GTEST()
+UNITTEST()
 
 SRCS(
     utils_ut.cpp

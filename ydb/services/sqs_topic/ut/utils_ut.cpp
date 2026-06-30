@@ -6,7 +6,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/event_local.h>
 
-#include <library/cpp/testing/gtest/gtest.h>
+#include <library/cpp/testing/unittest/registar.h>
 
 using namespace NKikimr::NSqsTopic;
 
@@ -85,44 +85,46 @@ namespace {
 
 } // namespace
 
-TEST(SqsTopicMetricsLabels, ConvertOldConsumerNameForFirstClassCitizen) {
-    NKikimr::TTestActorRuntime runtime(1, false);
-    InitRuntime(runtime);
+Y_UNIT_TEST_SUITE(SqsTopicMetricsLabels) {
+    Y_UNIT_TEST(ConvertOldConsumerNameForFirstClassCitizen) {
+        NKikimr::TTestActorRuntime runtime(1, false);
+        InitRuntime(runtime);
 
-    const auto labels = CollectRequestMessageCountMetricsLabels(
-        runtime,
-        "ydb_sqs_consumer",
-        true
-    );
+        const auto labels = CollectRequestMessageCountMetricsLabels(
+            runtime,
+            "ydb_sqs_consumer",
+            true
+        );
 
-    EXPECT_EQ(GetLabelValue(labels, "consumer"), "ydb_sqs_consumer");
-    EXPECT_EQ(GetLabelValue(labels, "name"), "api.sqs.request.message_count");
-    EXPECT_EQ(GetLabelValue(labels, "method"), "SendMessage");
-    EXPECT_EQ(GetLabelValue(labels, "topic"), "topic");
-}
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "consumer"), "ydb_sqs_consumer");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "name"), "api.sqs.request.message_count");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "method"), "SendMessage");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "topic"), "topic");
+    }
 
-TEST(SqsTopicMetricsLabels, ConvertOldConsumerNameForSharedConsumerInFederation) {
-    NKikimr::TTestActorRuntime runtime(1, false);
-    InitRuntime(runtime);
+    Y_UNIT_TEST(ConvertOldConsumerNameForSharedConsumerInFederation) {
+        NKikimr::TTestActorRuntime runtime(1, false);
+        InitRuntime(runtime);
 
-    const auto labels = CollectRequestMessageCountMetricsLabels(
-        runtime,
-        "ydb_sqs_consumer",
-        false
-    );
+        const auto labels = CollectRequestMessageCountMetricsLabels(
+            runtime,
+            "ydb_sqs_consumer",
+            false
+        );
 
-    EXPECT_EQ(GetLabelValue(labels, "consumer"), "shared/ydb_sqs_consumer");
-}
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "consumer"), "shared/ydb_sqs_consumer");
+    }
 
-TEST(SqsTopicMetricsLabels, ConvertOldConsumerNameForNonSharedConsumerInFederation) {
-    NKikimr::TTestActorRuntime runtime(1, false);
-    InitRuntime(runtime);
+    Y_UNIT_TEST(ConvertOldConsumerNameForNonSharedConsumerInFederation) {
+        NKikimr::TTestActorRuntime runtime(1, false);
+        InitRuntime(runtime);
 
-    const auto labels = CollectRequestMessageCountMetricsLabels(
-        runtime,
-        "account@dir--topic",
-        false
-    );
+        const auto labels = CollectRequestMessageCountMetricsLabels(
+            runtime,
+            "account@dir--topic",
+            false
+        );
 
-    EXPECT_EQ(GetLabelValue(labels, "consumer"), "account/dir--topic");
+        UNIT_ASSERT_VALUES_EQUAL(GetLabelValue(labels, "consumer"), "account/dir--topic");
+    }
 }

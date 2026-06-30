@@ -224,9 +224,20 @@ private:
         switch (async_event.event_type) {
             case IBV_EVENT_CQ_ERR:
             case IBV_EVENT_SRQ_ERR:
+            /*  Docs say:
+                All async events that ibv_get_async_event() returns must be
+                acknowledged using ibv_ack_async_event().  To avoid races,
+                destroying an object (CQ, SRQ or QP) will wait for all affiliated
+                events for the object to be acknowledged; this avoids an
+                application retrieving an affiliated event after the corresponding
+                object has already been destroyed.
+
+                So, to avoid deadlock we need ack event before decrementing refcount
+            */
                 ProcessCqErr(it);
+                ibv_ack_async_event(&async_event);
                 CqMap.erase(it);
-            break;
+                return true;
             default:
                 std::get<0>(it->second).AsyncEventToken->Request(true, false);
             break;

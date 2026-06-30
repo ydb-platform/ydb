@@ -1,7 +1,5 @@
 #include "kqp_query_classifier.h"
-#include "kqp_proxy_service_impl.h"
-
-#include <ydb/core/kqp/workload_service/kqp_workload_service.h>
+#include "kqp_workload_service.h"
 
 namespace NKikimr::NKqp {
 
@@ -171,7 +169,7 @@ private:
             return nullptr;
         }
 
-        auto it = ResourcePoolMap->find(TResourcePoolsCache::GetPoolKey(DatabaseId, poolId));
+        auto it = ResourcePoolMap->find(GetPoolKey(DatabaseId, poolId));
         return it != ResourcePoolMap->end() ? &it->second : nullptr;
     }
 

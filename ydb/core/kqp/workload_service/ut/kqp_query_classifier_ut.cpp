@@ -3,7 +3,7 @@
 #include <library/cpp/testing/unittest/registar.h>
 #include <ydb/core/kqp/common/events/workload_service.h>
 #include <ydb/core/kqp/common/simple/services.h>
-#include <ydb/core/kqp/proxy_service/kqp_query_classifier.h>
+#include <ydb/core/kqp/workload_service/kqp_query_classifier.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/core/kqp/common/events/events.h>
 

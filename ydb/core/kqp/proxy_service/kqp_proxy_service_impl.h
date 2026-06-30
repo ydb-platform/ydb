@@ -5,7 +5,7 @@
 #include <ydb/core/kqp/common/kqp.h>
 #include <ydb/core/kqp/common/events/workload_service.h>
 #include <ydb/core/kqp/counters/kqp_counters.h>
-#include <ydb/core/kqp/proxy_service/kqp_query_classifier.h>
+#include <ydb/core/kqp/workload_service/kqp_query_classifier.h>
 #include <ydb/core/kqp/proxy_service/kqp_session_state.h>
 #include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/fetcher.h>
 #include <ydb/core/kqp/rm_service/kqp_rm_service.h>
@@ -630,10 +630,6 @@ private:
     }
 
 public:
-    static TString GetPoolKey(const TString& databaseId, const TString& poolId) {
-        return TStringBuilder() << databaseId << "/" << poolId;
-    }
-
     std::shared_ptr<const TResourcePoolClassifierSnapshot> LastClassifierSnapshot;
     std::shared_ptr<const TResourcePoolMap> LastResourcePoolMapSnapshot;
 

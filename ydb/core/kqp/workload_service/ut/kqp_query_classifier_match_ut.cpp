@@ -1,6 +1,6 @@
 #include <ydb/core/base/path.h>
 #include <ydb/core/kqp/gateway/behaviour/resource_pool_classifier/snapshot.h>
-#include <ydb/core/kqp/proxy_service/kqp_query_classifier.h>
+#include <ydb/core/kqp/workload_service/kqp_query_classifier.h>
 #include <ydb/core/kqp/query_data/kqp_prepared_query.h>
 #include <ydb/library/aclib/aclib.h>
 

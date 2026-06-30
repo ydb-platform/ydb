@@ -7,6 +7,8 @@
 #include <ydb/core/resource_pools/resource_pool_classifier_settings.h>
 #include <ydb/library/aclib/aclib.h>
 
+#include <util/string/builder.h>
+
 namespace NKikimr::NKqp {
 
 struct TClassifyContext {
@@ -22,6 +24,10 @@ struct TResourcePoolEntry {
 
 using TResourcePoolMap = std::unordered_map<TString, TResourcePoolEntry>;
 using TResourcePoolMapPtr = std::shared_ptr<const TResourcePoolMap>;
+
+inline TString GetPoolKey(const TString& databaseId, const TString& poolId) {
+    return TStringBuilder() << databaseId << "/" << poolId;
+}
 
 namespace NWorkload {
 

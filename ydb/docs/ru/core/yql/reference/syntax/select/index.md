@@ -20,8 +20,18 @@ SELECT 2 + 2;
 Результат запроса `SELECT` вычисляется следующим образом:
 
 * определяется набор входных таблиц – вычисляются выражения после [FROM](../select/from.md);
+<<<<<<< HEAD
 * к входным таблицам применяется [SAMPLE](sample.md) / [TABLESAMPLE](sample.md)
 * выполняется [FLATTEN COLUMNS](../flatten.md#flatten-columns) или [FLATTEN BY](../flatten.md); алиасы, заданные во `FLATTEN BY`, становятся видны после этой точки;
+=======
+{% if feature_match_recogznize==true %}
+* к входным таблицам применяется [MATCH_RECOGNIZE](match_recognize.md)
+{% endif %}
+{% if feature_tablesample==true %}
+* вычисляется [SAMPLE](sample.md) / [TABLESAMPLE](sample.md)
+{% endif %}
+* выполняется [FLATTEN COLUMNS](flatten.md#flatten-columns) или [FLATTEN BY](flatten.md); алиасы, заданные во `FLATTEN BY`, становятся видны после этой точки;
+>>>>>>> 0d4a38f56a4 (Remove tablesample references (#44191))
 {% if feature_join %}
 * выполняются все [JOIN](../join.md);
 {% endif %}
@@ -220,8 +230,24 @@ SELECT * FROM FILTER(
 * [ORDER BY](order_by.md)
 * [ASSUME ORDER BY](assume_order_by.md)
 * [LIMIT OFFSET](limit_offset.md)
+{% if feature_tablesample==true %}
 * [SAMPLE](sample.md)
 * [TABLESAMPLE](sample.md)
+<<<<<<< HEAD
+=======
+{% endif %}
+{% if feature_match_recogznize==true %}
+* [MATCH_RECOGNIZE](match_recognize.md)
+{% endif %}
+{% if feature_join %}
+* [JOIN](join.md)
+{% endif %}
+* [GROUP BY](group-by.md)
+* [FLATTEN](flatten.md)
+{% if feature_window_functions %}
+* [WINDOW](window.md)
+{% endif %}
+>>>>>>> 0d4a38f56a4 (Remove tablesample references (#44191))
 
 {% if yt %}
 

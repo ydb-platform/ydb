@@ -217,6 +217,7 @@ void AddStatsToSimplifiedPlan(NJson::TJsonValue& txPlan) {
 
     // Extract all operator ids from SimplifiedPlan and look up stages and operators
     // in the execution plan
+    // FIXME: This tries to look up by connections, let's not find the connections as operators in the first place
     std::vector<NJson::TJsonValue> opIds;
     FindPlanNodes(simplifiedPlan, "OperatorId", opIds);
 

@@ -416,7 +416,7 @@ The only required parameter for creating a topic is its path; all other paramete
 
   The full list of settings can be found [in the header file](https://github.com/ydb-platform/ydb/blob/d2d07d368cd8ffd9458cc2e33798ee4ac86c733c/ydb/public/sdk/cpp/client/ydb_topic/topic.h#L458).
 
-  Example of adding an [important reader](../../concepts/datamodel/topic#important-consumer) to a topic and setting the [message retention time](../../concepts/datamodel/topic#retention-time) for the topic to two days:
+  Example of adding an [important consumer](../../concepts/datamodel/topic#important-consumer) to a topic and setting the [message retention time](../../concepts/datamodel/topic#retention-time) for the topic to two days:
 
 
   ```cpp

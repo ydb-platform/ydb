@@ -167,7 +167,7 @@ message IssueLog {
 ```
 
 
-### Description of fields in the response {#fields-Description}
+### Description of fields in the response {#fields-Description} {#fields-Description}
 
 | Field | Description |
 | :--- | :--- |
@@ -313,17 +313,17 @@ Status (severity) of the current problem:
 #### PDisk state is
 
 **Description:** Reports the physical disk state.
-**Actions on trigger:** In the [Embedded UI](../embedded-ui/ydb-monitoring.md), go to the database page, select the `Storage` tab, set filters `Nodes` and `Degraded`. Using the known `id` node and pDisk, check the availability of nodes and disks on the nodes.
+**Actions on trigger:** In the [Embedded UI](../embedded-ui/ydb-monitoring.md), go to the database page, select the `Storage` tab, set filters `Nodes` and `Degraded`. Using the known `id` of the node and pDisk, check the availability of nodes and disks on the nodes.
 
 #### Available size is less than 12%, Available size is less than 9%, Available size is less than 6%
 
 **Description:** Free space on the physical disk is running out.
-**Actions on trigger:** In the [Embedded UI](../embedded-ui/ydb-monitoring.md), go to the database page, select the `Storage` tab, set filters `Nodes` and `Out of Space`, using the known `id` node and PDisk, view the available space.
+**Actions on trigger:** In the [Embedded UI](../embedded-ui/ydb-monitoring.md), go to the database page, select the `Storage` tab, set filters `Nodes` and `Out of Space`, using the known `id` of the node and PDisk, view the available space.
 
 #### PDisk is not available
 
 **Description:** Physical disk is missing.
-**Actions on trigger:** In the [Embedded UI](../embedded-ui/ydb-monitoring.md), go to the database page, select the `Storage` tab, set filters `Nodes` and `Degraded`, using the known `id` node and PDisk, check the availability of nodes and disks on the nodes.
+**Actions on trigger:** In the [Embedded UI](../embedded-ui/ydb-monitoring.md), go to the database page, select the `Storage` tab, set filters `Nodes` and `Degraded`, using the known `id` of the node and PDisk, check the availability of nodes and disks on the nodes.
 
 ### STORAGE_NODE
 
@@ -369,14 +369,14 @@ Status (severity) of the current problem:
 #### System tablet is unresponsive, System tablet response time over 1000ms, System tablet response time over 5000ms
 
 **Description:** System tablet is unresponsive or responds with a delay.
-**Actions on trigger:** In the [Embedded UI](../embedded-ui/ydb-monitoring.md), on the `Storage` tab, set filter `Nodes`. Check `Uptime` nodes and their status. If `Uptime` is small, check the logs for reasons of node restarts.
+**Actions on trigger:** In the [Embedded UI](../embedded-ui/ydb-monitoring.md), on the `Storage` tab, set filter `Nodes`. Check the `Uptime` of nodes and their status. If `Uptime` is small, check the logs for reasons of node restarts.
 
 ### TABLET
 
 #### Tablets are restarting too often
 
 **Description:** Tablets are restarting too often.
-**Actions on trigger:** In the [Embedded UI](../embedded-ui/ydb-monitoring.md), go to the `Nodes` tab. Check `Uptime` nodes and their status. If `Uptime` is small, check the logs to determine the reasons for frequent node restarts.
+**Actions on trigger:** In the [Embedded UI](../embedded-ui/ydb-monitoring.md), go to the `Nodes` tab. Check the `Uptime` of nodes and their status. If `Uptime` is small, check the logs to determine the reasons for frequent node restarts.
 
 #### Tablets are dead, Followers are dead
 

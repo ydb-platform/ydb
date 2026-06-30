@@ -6,11 +6,12 @@ The `table_service_config` section contains configuration parameters for the tab
 
 The `resource_manager` subsection contains resource management parameters for the table service.
 
-### Vector index level cache
+### Vector index level table cache
 
 The level table (`indexImplLevelTable`) of a [`vector_kmeans_tree`](../../dev/vector-indexes-kmeans-tree-type.md#index-structure) vector index stores the centroids that {{ ydb-short-name }} reads on every step down the cluster tree during a vector search. To avoid re-reading these centroids from distributed storage on each query, {{ ydb-short-name }} can cache them in memory on each database node.
 
 The cache is per-node, uses LRU eviction, and grows incrementally up to the configured cap.
+
 
 ```yaml
 table_service_config:
@@ -18,6 +19,7 @@ table_service_config:
     kqp_level_cache_max_size_bytes: 0
     kqp_level_cache_increase_batch_size_bytes: 33554432
 ```
+
 
 #### resource_manager.kqp_level_cache_max_size_bytes
 
@@ -35,11 +37,13 @@ table_service_config:
 
 The `resource_manager` subsection defines the spilling threshold relative to the query memory pool on a [node](../../concepts/glossary.md#node). The pool size is controlled by [`query_execution_limit_percent` / `query_execution_limit_bytes`](memory_controller_config.md#query-execution-limit) in `memory_controller_config`.
 
+
 ```yaml
 table_service_config:
   resource_manager:
     spilling_percent: 80
 ```
+
 
 #### resource_manager.spilling_percent {#spilling-percent}
 
@@ -82,7 +86,7 @@ The threshold applies to:
 
 [Spilling](../../concepts/query_execution/spilling.md) is a memory management mechanism in {{ ydb-short-name }} that temporarily saves data to disk when the system runs out of RAM.
 
-### Enable {#enable}
+### Enabling {#enable}
 
 Spilling is enabled by default. The following parameter controls enabling and disabling the spilling service.
 
@@ -97,6 +101,7 @@ Spilling is enabled by default. The following parameter controls enabling and di
 
 - `Spilling Service not started` / `Service not started` — attempt to use spilling when Spilling Service is disabled. See [{#T}](../../troubleshooting/spilling/service-not-started.md)
 
+
 ```yaml
 table_service_config:
   spilling_service_config:
@@ -104,7 +109,9 @@ table_service_config:
       enable: true
 ```
 
+
 ### Primary Configuration Parameters
+
 
 ```yaml
 table_service_config:
@@ -113,6 +120,7 @@ table_service_config:
       root: ""
       max_total_size: 21474836480
 ```
+
 
 ### Directory Configuration
 
@@ -135,9 +143,11 @@ Spilling files are stored inside each such directory.
 
 Example of a complete spilling directory path:
 
+
 ```bash
 /tmp/spilling-tmp-<username>/node_1_32860791-037c-42b4-b201-82a0a337ac80
 ```
+
 
 Where:
 
@@ -214,6 +224,7 @@ For information about configuring file descriptor limits during initial deployme
 
 For maximum performance in high-load systems, it is recommended to increase the spilling size:
 
+
 ```yaml
 table_service_config:
   spilling_service_config:
@@ -222,9 +233,11 @@ table_service_config:
       max_total_size: 107374182400   # 100 GiB
 ```
 
+
 #### Limited Resources
 
 For systems with limited resources, it is recommended to use conservative settings:
+
 
 ```yaml
 table_service_config:
@@ -234,7 +247,9 @@ table_service_config:
       max_total_size: 5368709120     # 5 GiB
 ```
 
+
 ### Complete Example
+
 
 ```yaml
 table_service_config:
@@ -244,6 +259,7 @@ table_service_config:
       root: "/var/spilling"
       max_total_size: 53687091200    # 50 GiB
 ```
+
 
 ## See Also
 

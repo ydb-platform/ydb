@@ -12,8 +12,4 @@ inline bool IsEncryptedExportEnabled(const TAppData& appData) {
     return appData.FeatureFlags.GetEnableEncryptedExport();
 }
 
-inline bool IsEncryptedExportAllowed(const TAppData& appData) {
-    return IsEncryptedExportEnabled(appData) && IsExportFilteringEnabled(appData);
-}
-
 } // namespace NKikimr::NBackup

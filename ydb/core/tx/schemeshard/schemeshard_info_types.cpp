@@ -171,7 +171,7 @@ TSmallBlobsQuotas TSubDomainInfo::GetSmallBlobsQuotas() const {
     constexpr ui64 TenTiB = 10ull << 40;
     const double storageUnits = static_cast<double>(diskHardQuotaBytes) / TenTiB;
 
-    const auto& config = AppData()->ColumnShardConfig.GetSmallBlobsQuota();
+    const auto& config = AppData()->SmallBlobsQuotaConfig;
 
     const double softRatio = std::clamp(config.GetSoftRatio(), 0.0, 0.999);
 

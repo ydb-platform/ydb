@@ -52,7 +52,7 @@ const NSplitter::TSplitSettings& IBlobsStorageOperator::GetBlobSplitSettings() c
 }
 
 ui64 IBlobsStorageOperator::GetSmallBlobThresholdBytes() const {
-    const ui64 base = HasAppData() ? AppData()->ColumnShardConfig.GetSmallBlobsQuota().GetSmallBlobSizeThresholdBytes() : (ui64)64_KB;
+    const ui64 base = HasAppData() ? AppData()->SmallBlobsQuotaConfig.GetSmallBlobSizeThresholdBytes() : (ui64)64_KB;
     const auto layout = GetBlobStorageLayout();
     return base * (layout ? std::max<ui32>(1, layout->DataParts()) : 1);
 }

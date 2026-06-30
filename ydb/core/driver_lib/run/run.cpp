@@ -1563,6 +1563,10 @@ void TKikimrRunner::InitializeAppData(const TKikimrRunConfig& runConfig)
         AppData->ColumnShardConfig = runConfig.AppConfig.GetColumnShardConfig();
     }
 
+    if (runConfig.AppConfig.HasSmallBlobsQuotaConfig()) {
+        AppData->SmallBlobsQuotaConfig = runConfig.AppConfig.GetSmallBlobsQuotaConfig();
+    }
+
     if (runConfig.AppConfig.HasSchemeShardConfig()) {
         AppData->SchemeShardConfig = runConfig.AppConfig.GetSchemeShardConfig();
     }

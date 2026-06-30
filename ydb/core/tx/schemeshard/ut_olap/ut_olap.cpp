@@ -237,7 +237,7 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
     const ui64 hardPortions = 20;
     const double softRatio = 0.5;
 
-    auto* smallBlobsQuota = appData.ColumnShardConfig.MutableSmallBlobsQuota();
+    auto* smallBlobsQuota = &appData.SmallBlobsQuotaConfig;
     smallBlobsQuota->SetSoftRatio(softRatio);
     // Treat every blob as "small" (1 GB threshold) so all written data counts toward the small-blobs quotas.
     smallBlobsQuota->SetSmallBlobSizeThresholdBytes(1'000'000'000);

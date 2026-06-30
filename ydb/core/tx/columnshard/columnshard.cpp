@@ -441,7 +441,7 @@ ui64 TColumnShard::NormalizeSmallBlobsCount(const ui64 rawCount) {
     if (!layout) {
         return rawCount;
     }
-    const auto& quota = AppDataVerified().ColumnShardConfig.GetSmallBlobsQuota();
+    const auto& quota = AppDataVerified().SmallBlobsQuotaConfig;
     ui32 coef = 1;
     switch (layout->GetErasure()) {
         case NKikimr::TErasureType::ErasureMirror3dc:

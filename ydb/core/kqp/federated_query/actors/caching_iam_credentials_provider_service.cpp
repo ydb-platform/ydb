@@ -66,7 +66,13 @@ class TIamResolverServiceActor : public NActors::TActor<TIamResolverServiceActor
     void Handle(NYql::TEvIamAuthCredentialsProviderService::TEvGetAuthInfoRequest::TPtr& ev) {
         auto [it, inserted] = Actors.emplace(std::pair { std::move(ev->Get()->ServiceAccountId), std::move(ev->Get()->ResourceId) }, NActors::TActorId {});
         if (inserted) {
-            it->second = Register(new TIamResolverActor(it->first.first, it->first.second));
+            try {
+                it->second = Register(new TIamResolverActor(it->first.first, it->first.second));
+            } catch(...) {
+                ev->Get()->Promise.SetException(std::current_exception());
+                Actors.erase(it);
+                return;
+            }
         }
         Send(ev->Forward(it->second));
     }

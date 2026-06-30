@@ -112,7 +112,7 @@ class TestHttpApi(TestBase):
                 YQHttpClientException,
                 match=re.escape(
                     """Error occurred. http code=400, status=400010, msg=BAD_REQUEST, details=[{'message': """
-                    """"text's length is not in [1; 102400]", 'issue_code': 200800, 'severity': 'ERROR', 'issues': []}]"""
+                    """"text's length is not in [1; 1024000]", 'issue_code': 200800, 'severity': 'ERROR', 'issues': []}]"""
                 ),
             ):  # noqa
                 client.create_query()

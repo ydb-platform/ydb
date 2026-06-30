@@ -318,9 +318,35 @@ public:
                     srcDesc.AddNodeIds(nodeId);
                 }
 
+<<<<<<< HEAD
                 protoSettings.PackFrom(srcDesc);
                 if (sharedReading && !predicateSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
+=======
+                TString watermarkExprSql;
+                if (const auto maybeWatermarkSerialized = topicSource.WatermarkSerialized()) {
+                    const auto serializedWatermarkExpr = maybeWatermarkSerialized.Cast().Ref().Content();
+                    if (!serializedWatermarkExpr.empty()) {
+                        NYql::NConnector::NApi::TExpression watermarkExprProto;
+                        YQL_ENSURE(watermarkExprProto.ParseFromString(serializedWatermarkExpr));
+                        watermarkExprSql = NYql::FormatExpression(watermarkExprProto);
+                        srcDesc.SetWatermarkExpr(watermarkExprSql);
+                    }
+                }
+
+                if (commonSettings) {
+                    commonSettings->MutableSettings()->PackFrom(srcDesc);
+                    protoSettings.PackFrom(*commonSettings);
+                } else {
+                    protoSettings.PackFrom(srcDesc);
+                }
+
+                if (sharedReading && !filterPredicateSql.empty()) {
+                    if (filterPredicateSql.size() > 4000) {
+                        filterPredicateSql = filterPredicateSql.substr(0, 4000) + "...";
+                    }
+                    ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + filterPredicateSql));
+>>>>>>> cba72777bcd (YDB-3355 Set 1M max query text size in yandex query (#42596))
                 }
                 if (sharedReading && !watermarkExprSql.empty()) {
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use watermark expr: " + watermarkExprSql));

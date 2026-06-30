@@ -163,8 +163,8 @@ Or using an alternative method:
 Export the entire database with encryption:
 
 - Using the `AES-128-GCM` encryption algorithm
-- Generate a random key using the `openssl` utility into the `~/my_secret_key` file
-- Read the generated key from the `~/my_secret_key` file
+- Generating the random key using the `openssl` utility to the file `~/my_secret_key`
+- Reading the generated key from the file `~/my_secret_key`
 - To the `/mnt/nfs/backups/export1` directory on the file system
 
 
@@ -179,8 +179,8 @@ openssl rand -out ~/my_secret_key 16
 Exporting the `dir1` directory of the database with encryption:
 
 - Using the `AES-256-GCM` encryption algorithm
-- By generating a random key with the `openssl` utility into the `YDB_ENCRYPTION_KEY` environment variable
-- By reading the generated key from the `YDB_ENCRYPTION_KEY` environment variable
+- Generating the random key using the `openssl` utility to the environment variable `YDB_ENCRYPTION_KEY`
+- Reading the key from the environment variable `YDB_ENCRYPTION_KEY`
 - To the `/mnt/nfs/backups/export1` directory on the file system
 
 

@@ -1,7 +1,7 @@
 #include "kafka_produce_actor.h"
 #include <library/cpp/string_utils/base64/base64.h>
 #include <ydb/core/kafka_proxy/kafka_metrics.h>
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
 #include <contrib/libs/protobuf/src/google/protobuf/util/time_util.h>
 
@@ -477,7 +477,7 @@ std::pair<EKafkaErrors, THolder<TEvPartitionWriter::TEvWriteRequest>> Convert(
 
         w->SetSeqNo(seqNo);
         w->SetMaxSeqNo(maxSeqNo);
-        w->SetMessageCount(batchHeader->RecordsCount);
+        w->SetLogicalMessageCount(batchHeader->RecordsCount);
         w->SetIsBatch(true);
         w->SetData(str);
         w->SetCreateTimeMS(batchHeader->BaseTimestamp > 0 ? batchHeader->BaseTimestamp : TInstant::Now().MilliSeconds());

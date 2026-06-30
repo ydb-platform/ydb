@@ -120,6 +120,16 @@ memory_controller_config:
   query_execution_limit_percent: 25
 ```
 
+#### Query Processor memory limit {#query-execution-limit}
+
+The parameters `query_execution_limit_percent` (20% of the [hard memory limit](#hard-memory-limit) by default) and `query_execution_limit_bytes` set the size of the RAM pool that Resource Manager allocates to queries on a node:
+
+If both parameters are set, the effective limit is `min(query_execution_limit_percent × hard_limit_bytes / 100, query_execution_limit_bytes)`. If only one parameter is set, that value is used directly.
+
+The computed limit is delivered to Resource Manager through Resource Broker.
+
+The [`spilling_percent`](table_service_config.md#spilling-percent) threshold in `table_service_config` is calculated relative to this pool.
+
 ## Configuration Parameters
 
 Each configuration parameter applies within the context of a single database node.

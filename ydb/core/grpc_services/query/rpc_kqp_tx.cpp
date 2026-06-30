@@ -23,6 +23,8 @@ using TEvRollbackTransactionRequest = TGrpcRequestOperationCall<Ydb::Query::Roll
 
 TString GetTransactionModeName(const Ydb::Query::TransactionSettings& settings) {
     switch (settings.tx_mode_case()) {
+        case Ydb::Query::TransactionSettings::kStrictSerializableReadWrite:
+            return "StrictSerializableReadWrite";
         case Ydb::Query::TransactionSettings::kSerializableReadWrite:
             return "SerializableReadWrite";
         case Ydb::Query::TransactionSettings::kOnlineReadOnly:
@@ -109,6 +111,9 @@ private:
                 break;
             case Ydb::Query::TransactionSettings::kReadCommittedReadWrite:
                 ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_read_committed_read_write();
+                break;
+            case Ydb::Query::TransactionSettings::kStrictSerializableReadWrite:
+                ev->Record.MutableRequest()->MutableTxControl()->mutable_begin_tx()->mutable_strict_serializable_read_write();
                 break;
         }
 

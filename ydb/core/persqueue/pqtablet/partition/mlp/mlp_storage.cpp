@@ -733,7 +733,7 @@ void TStorage::RemoveMessageFromSlowZone(ui64 offset) {
     RemoveMessageFromSlowZone(it);
 }
 
-bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay) {
+bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupIdHash, TInstant writeTimestamp, TDuration delay, ui64 logicalMessageCount) {
     AFL_ENSURE(offset >= GetLastOffset())("l", offset)("r", GetLastOffset());
 
     while (!Messages.empty() && offset > GetLastOffset()) {
@@ -784,8 +784,10 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
         auto removedByRetention = writeTimestampDelta <= retentionDeadlineDelta.value();
         // The message will be deleted by retention policy. Skip it.
         if (removedByRetention && Messages.empty()) {
-            ++Metrics.TotalDeletedByRetentionMessageCount;
-            Batch.AddNewMessage(offset);
+            Metrics.TotalDeletedByRetentionMessageCount += logicalMessageCount;
+            for (ui64 i = 0; i < logicalMessageCount; ++i) {
+                Batch.AddNewMessage(offset + i);
+            }
             return true;
         }
     }
@@ -811,6 +813,24 @@ bool TStorage::AddMessage(ui64 offset, bool hasMessagegroup, ui32 messageGroupId
         Batch.AddChange(offset);
     } else {
         ++Metrics.UnprocessedMessageCount;
+    }
+
+    for (ui64 i = 1; i < logicalMessageCount; ++i) {
+        const ui64 tailOffset = offset + i;
+        Messages.emplace_back(TMessageData{
+            .Status = static_cast<ui32>(EMessageStatus::Committed),
+            .ProcessingCount = 0,
+            .DeadlineDelta = 0,
+            .HasMessageGroupId = false,
+            .MessageGroupIdHash = 0,
+            .WriteTimestampDelta = ui32(writeTimestampDelta),
+            .LockingTimestampMilliSecondsDelta = 0,
+            .LockingTimestampSign = 0,
+        });
+        Batch.AddNewMessage(tailOffset);
+        Batch.AddChange(tailOffset);
+        ++Metrics.InflightMessageCount;
+        ++Metrics.CommittedMessageCount;
     }
 
     return true;

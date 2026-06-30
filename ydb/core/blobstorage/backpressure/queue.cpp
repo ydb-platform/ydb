@@ -232,9 +232,12 @@ void TBlobStorageQueue::SendToVDisk(const TActorContext& ctx, const TActorId& re
         ++*QueueItemsSent;
 
         // send item
-        item.Span && item.Span.Event("SendToVDisk", {
-            {"VDiskOrderNumber", vdiskOrderNumber}
-        });
+
+        if (NWilson::TSpan* wilsonSpan = item.Span.GetWilsonSpanPtr()) {
+            wilsonSpan->Event("SendToVDisk", {
+                {"VDiskOrderNumber", vdiskOrderNumber}
+            });
+        }
         item.Event.SendToVDisk(ctx, remoteVDisk, item.QueueCookie, item.MsgId, item.SequenceId, sendMeCostSettings,
             item.Span.GetTraceId(), ClientId, item.ProcessingTimer);
 
@@ -255,10 +258,12 @@ void TBlobStorageQueue::ReplyWithError(TItem& item, NKikimrProto::EReplyStatus s
         {"processingTime", processingTime},
         {"marker", "BSQ03"});
 
-    if (item.Span) {
-        item.Span.EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(status) << ": " << errorReason);
-        item.Span.Reset();
+    if (NWilson::TSpan* wilsonSpan = item.Span.GetWilsonSpanPtr()) {
+        wilsonSpan->EndError(TStringBuilder() << NKikimrProto::EReplyStatus_Name(status) << ": " << errorReason);
+    } else if (TNamedSpan* retroSpan = item.Span.GetRetroSpanPtr()) {
+        retroSpan->EndError();
     }
+    item.Span.Reset();
 
     ctx.Send(item.Event.GetSender(), item.Event.MakeErrorReply(status, errorReason, QueueDeserializedItems,
             QueueDeserializedBytes), 0, item.Event.GetCookie());
@@ -371,7 +376,11 @@ void TBlobStorageQueue::OnConnect() {
 
 TBlobStorageQueue::TItemList::iterator TBlobStorageQueue::EraseItem(TItemList& queue, TItemList::iterator it) {
     SetItemQueue(*it, EItemQueue::NotSet);
-    it->Span.EndError("EraseItem called");
+    if (NWilson::TSpan* wilsonSpan = it->Span.GetWilsonSpanPtr()) {
+        wilsonSpan->EndError("Erase item called");
+    } else if (TNamedSpan* retroSpan = it->Span.GetRetroSpanPtr()) {
+        retroSpan->EndError();
+    }
     TItemList::iterator nextIter = std::next(it);
     if (Queues.Unused.size() < MaxUnusedItems) {
         Queues.Unused.splice(Queues.Unused.end(), queue, it);

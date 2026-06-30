@@ -1,11 +1,10 @@
 #include "direct_block_group_impl.h"
 
-#include "storage_transport_mock.h"
-
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport_mock.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_ut.h>
@@ -330,6 +329,58 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         // Now every DBG is ready -> the aggregate gate resolves.
         allReady.Wait(WaitTimeout);
         UNIT_ASSERT(allReady.HasValue());
+    }
+
+    Y_UNIT_TEST_F(ShouldSeqNo1OnInitialConnectToDDisk, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+
+        auto transport = std::make_unique<TStorageTransportMock>();
+        auto* transportPtr = transport.get();
+
+        const auto ddisks = MakeDDiskIds(100);
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+
+        TPartitionDirectServiceMock service(true);
+        auto initialReady = dbg->Run(&service);
+
+        initialReady.Wait(WaitTimeout);
+        UNIT_ASSERT(initialReady.HasValue());
+        DrainExecutor(executor);
+
+        for (const auto& ddiskId: ddisks) {
+            const auto credentials = transportPtr->GetConnectCredentials(
+                EConnectionType::DDisk,
+                ddiskId);
+            UNIT_ASSERT_VALUES_EQUAL(1, credentials.size());
+            UNIT_ASSERT_VALUES_EQUAL(1, credentials[0].DDiskSessionSeqNo);
+        }
+    }
+
+    Y_UNIT_TEST_F(ShouldSeqNo0OnInitialConnectToPBuffer, TDBGFixture)
+    {
+        auto executor = MakeExecutor();
+
+        auto transport = std::make_unique<TStorageTransportMock>();
+        auto* transportPtr = transport.get();
+
+        const auto pbuffers = MakeDDiskIds(100 + DirectBlockGroupHostCount);
+        auto dbg = MakeDirectBlockGroup(executor, std::move(transport));
+
+        TPartitionDirectServiceMock service(true);
+        auto initialReady = dbg->Run(&service);
+
+        initialReady.Wait(WaitTimeout);
+        UNIT_ASSERT(initialReady.HasValue());
+        DrainExecutor(executor);
+
+        for (const auto& pbufferId: pbuffers) {
+            const auto credentials = transportPtr->GetConnectCredentials(
+                EConnectionType::PBuffer,
+                pbufferId);
+            UNIT_ASSERT_VALUES_EQUAL(1, credentials.size());
+            UNIT_ASSERT_VALUES_EQUAL(0, credentials[0].DDiskSessionSeqNo);
+        }
     }
 }
 

@@ -5,6 +5,7 @@ import yatest.common
 import ydb
 import pytest
 
+from typing import Optional
 from ydb.tests.library.harness.kikimr_config import KikimrConfigGenerator
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 from ydb.tests.tools.datastreams_helpers.control_plane import Endpoint
@@ -30,8 +31,8 @@ def set_test_env(request):
 
 def get_ydb_config(request):
     param = getattr(request, "param", {})
-    enable_watermarks = param.get("enable_watermarks", False)
-    enable_watermarks_advanced = param.get("enable_watermarks_advanced", False)
+    enable_watermarks = param.get("enable_watermarks", True)
+    enable_watermarks_advanced = param.get("enable_watermarks_advanced", True)
     enable_shared_reading_in_streaming_queries = param.get("enable_shared_reading_in_streaming_queries", True)
     enable_streaming_queries = param.get("enable_streaming_queries", True)
     enable_streaming_partition_balancing = param.get("use_partition_balancing", True)
@@ -78,9 +79,16 @@ def get_ydb_config(request):
 
 
 class YdbClient:
-    def __init__(self, endpoint: str, database: str, token: str = "root@builtin"):
-        driver_config = ydb.DriverConfig(endpoint, database, auth_token=token)
-        self.driver = ydb.Driver(driver_config)
+    def __init__(self, endpoint: str, database: str, token: str = "root@builtin", enable_discovery: bool = True):
+        self.driver_config = ydb.DriverConfig(
+            endpoint, database, auth_token=token, disable_discovery=not enable_discovery
+        )
+        self.driver = None
+        self.session_pool = None
+        self.start()
+
+    def start(self):
+        self.driver = ydb.Driver(self.driver_config)
         self.session_pool = ydb.QuerySessionPool(self.driver)
 
     def stop(self):
@@ -93,21 +101,28 @@ class YdbClient:
     def query(self, statement: str):
         return self.session_pool.execute_with_retries(statement)
 
-    def query_async(self, statement: str):
-        return self.session_pool.execute_with_retries_async(statement)
+    def query_async(self, statement: str, timeout: Optional[float] = None):
+        settings = None
+        if timeout is not None:
+            settings = ydb.BaseRequestSettings().with_timeout(timeout)
+        return self.session_pool.execute_with_retries_async(statement, settings=settings)
 
 
 class Kikimr:
-    def __init__(self, config: KikimrConfigGenerator, timeout_seconds: int = 240):
+    def __init__(self, config: KikimrConfigGenerator, timeout_seconds: int = 240, enable_discovery: bool = True):
         ydb_path = yatest.common.build_path(os.environ.get("YDB_DRIVER_BINARY"))
         logger.info(yatest.common.execute([ydb_path, "-V"], wait=True).stdout.decode("utf-8"))
 
         self.cluster = KiKiMR(config)
         self.cluster.start(timeout_seconds=timeout_seconds)
 
-        first_node = list(self.cluster.nodes.values())[0]
-        self.endpoint = Endpoint(f"{first_node.host}:{first_node.port}", f"/{config.domain_name}")
-        self.ydb_client = YdbClient(database=self.endpoint.database, endpoint=f"grpc://{self.endpoint.endpoint}")
+        self.first_node = list(self.cluster.nodes.values())[0]
+        self.endpoint = Endpoint(f"{self.first_node.host}:{self.first_node.port}", f"/{config.domain_name}")
+        self.ydb_client = YdbClient(
+            database=self.endpoint.database,
+            endpoint=f"grpc://{self.endpoint.endpoint}",
+            enable_discovery=enable_discovery,
+        )
         self.ydb_client.wait_connection()
 
     def stop(self):

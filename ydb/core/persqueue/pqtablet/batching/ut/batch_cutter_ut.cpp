@@ -1,8 +1,8 @@
 #include <ydb/core/persqueue/pqtablet/batching/batch_cutter.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
-#include <ydb/library/kafka/kafka_messages_int.h>
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_messages_int.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
 #include <ydb/public/api/protos/ydb_topic.pb.h>
 
@@ -79,7 +79,7 @@ TReadResult MakeKafkaBatchReadResult(
     TReadResult readResult;
     readResult.SetOffset(10);
     readResult.SetSeqNo(seqNo);
-    readResult.SetMessageCount(2);
+    readResult.SetLogicalMessageCount(2);
     readResult.SetIsBatch(true);
     readResult.SetData(SerializeDataChunk(std::move(chunk)));
     readResult.SetWriteTimestampMS(777);
@@ -119,8 +119,8 @@ void AssertKafkaBatchCut(
     UNIT_ASSERT_VALUES_EQUAL(cut[1].GetOffset(), 11u);
     UNIT_ASSERT_VALUES_EQUAL(cut[0].GetSeqNo(), 10u);
     UNIT_ASSERT_VALUES_EQUAL(cut[1].GetSeqNo(), 11u);
-    UNIT_ASSERT_VALUES_EQUAL(cut[0].GetMessageCount(), 1u);
-    UNIT_ASSERT_VALUES_EQUAL(cut[1].GetMessageCount(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(cut[0].GetLogicalMessageCount(), 1u);
+    UNIT_ASSERT_VALUES_EQUAL(cut[1].GetLogicalMessageCount(), 1u);
     UNIT_ASSERT(!cut[0].HasUncompressedSize());
     UNIT_ASSERT(!cut[1].HasUncompressedSize());
 

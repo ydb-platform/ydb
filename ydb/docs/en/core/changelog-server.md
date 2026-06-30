@@ -21,15 +21,14 @@ Release date: TBD.
 * [Streaming queries](./dev/streaming-query/index.md?version=v26.1) support [writing results to local tables](./dev/streaming-query/table-writing.md?version=v26.1).
 * [Changefeeds (CDC)](./concepts/cdc.md?version=v26.1) can export user security identifiers (`USER_SIDS`) — see [`ALTER TABLE` `CHANGEFEED`](./yql/reference/syntax/alter_table/changefeed.md?version=v26.1).
 * [External data sources](./concepts/datamodel/external_data_source.md?version=v26.1) support `AUTH_METHOD=IAM`.
-* Federated queries handle S3 `SlowDown` throttling for GET, PUT, and DELETE operations.
 * CLI supports token file authentication (`--token-file`).
 
 #### Bug Fixes
 
 * [Fixed](https://github.com/ydb-platform/ydb/pull/33620) Fix fluentbit docs (CredentialsYcServiceAccountKey).
-* [Fixed](https://github.com/ydb-platform/ydb/pull/34024) YQ-5083: WM: add SQL text tracking and debug logging to workload serv….
+* [Fixed](https://github.com/ydb-platform/ydb/pull/34024) WM: add SQL text tracking and debug logging to workload serv….
 * [Fixed](https://github.com/ydb-platform/ydb/pull/34620) Fixed commit of offset in federation installation.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/34667) YQ-5091 rename PQ partitions balancer and fix registration.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/34667) rename PQ partitions balancer and fix registration.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/34780) Fix v2 with BSC/Console Protocol enabled by default and other V2 fixes.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/34816) Change dstool human-readable size to GB instead of GiB.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/34856) fix the sequencer issue on multiple origin tasks.
@@ -37,9 +36,9 @@ Release date: TBD.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/34915) Fixes for SET/DROP DEFAULT.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/34947) Add test shard error statistics in mon page.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/34958) Fix auth tokens expire time in ticket parser.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/34961) YQ-5142 fixed s3 files flush in block output.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/34961) fixed s3 files flush in block output.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/34978) fix invalid groups on hive timeout.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/35003) YQ-5089: WM: Fixed query execution after tenant recreation.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/35003) WM: Fixed query execution after tenant recreation.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35040) Fix race in FormatHandler tests.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35047) generic lookup ut: fix racing.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35091) Fixed TSAN error in tests.
@@ -54,21 +53,21 @@ Release date: TBD.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35437) metaservice: fix path mutation.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35465) Fix data shred stopping after some iterations.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35469) pq_composite: fix potential verify failure.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/35548) YQ-5157 fixed failing after unsuccessful lease update.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/35548) fixed failing after unsuccessful lease update.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35553) Fix check status of ticket parsing.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/35636) YQ-5161 fixed race with PQ / Solomon gateway.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/35636) fixed race with PQ / Solomon gateway.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35638) removed addresses crash has been fixed.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35639) Fix and unmute dstool canonized test.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35652) Fix confusing dstool error message.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35660) explicit cast operator and fix operator==.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35663) Fix incremental restore to survive SchemeShard reboots and handle shard failures.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/35702) github-34117 Shared reading / local kesus: fix PendingDescribe flags.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/35702) Shared reading / local kesus: fix PendingDescribe flags.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35735) enhance error handling for invalid acl change.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35739) Move proto to protos subdir to fix  sync to arcadia.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35745) Fixed ydb/services/ydb/backup_ut/BackupRestore.BackupRestoreTransfer_….
-* [Fixed](https://github.com/ydb-platform/ydb/pull/35787) YQ-5164 fix streaming query info not found after create.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/35787) fix streaming query info not found after create.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35793) async ca/checkpointing: fix stall on full input and empty checkpoint.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/35831) YQ-5143  Row dispatcher counters fix.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/35831) Row dispatcher counters fix.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35834) Fixed http error handling in s3 read actor.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35934) Fix BadDir error.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/35944) Fix and unmute dstool te....
@@ -79,7 +78,7 @@ Release date: TBD.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/36114) Fixed topic partition quota wait time.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/36156) Fix default log level setting doc.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/36217) Fix cross-database quota interference in Kesus quoter proxy.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/36220) YQ-5187 fixed hanging in PQ read session.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/36220) fixed hanging in PQ read session.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/36265) fix disk space coding.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/36292) Fix scan executer hang on empty table queries with LIMIT.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/36360) rd: properly handle duplicated json keys.
@@ -95,9 +94,9 @@ Release date: TBD.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/36907) Fix datashard's statistic after TRUNCATE TABLE.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/36935) [Optimizer] Fix constant folding.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/37021) fix storage balancer.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/37051) YDBREQUESTS-7455 Fix incompatibility.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/37051) Fix incompatibility.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/37106) fq checkpoint storage: fix u-a-f.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/37130) YQ-5016 fixed streaming query timeout overflow.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/37130) fixed streaming query timeout overflow.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/37145) Fix thread-safety and token expiry parsing in IAM credentials provider.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/37189) Fixed sending AlterLogin requests to SchemeShard after getting error from PasswordHasher.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/37285) Fixed a bug in http_gateway.
@@ -106,15 +105,14 @@ Release date: TBD.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/37435) Revert "Fixed topic partition quota wait time.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/37442) Fix compatibility test (after disable deduplication).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/37556) Fix AddBlobsFromBody key index for FindPos with multiple blobs.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/37570) YQ-5215 abort query if partition count changed.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/37570) abort query if partition count changed.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/37618) Fix Coverity 106585: avoid use-after-move in PreProcessImmediateTx.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/37668) Fixed size_t overflow with null password.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/37776) LOGBROKER-10362 Fix memory usage.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/37776) Fix memory usage.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/37798) [C++ SDK] Fixed coverity issues.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/37811) fix handling of hive pipe resets.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/37873) Revert commit 685cab5 in discovery.cpp.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/37947) Fix state storage web ui.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/37948) YQ-5223 fixed group by hop over DQ replicate.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/37948) fixed group by hop over DQ replicate.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/38014) Fix typo in Kubernetes deployment documentation.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/38033) Disable change data collection (CDC) for IsBuildInProgress columns.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/38490) Fix segfault during update.
@@ -125,9 +123,9 @@ Release date: TBD.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/38760) fix unitialized fields.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/38790) schemeshard: fix altered migrated table indexes.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/38801) Fix TRangesBuilder AddRange.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/38806) fix use after move warning in the TMonitoringProxy CLOUD-247389.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/38807) fix potential mem leak on shutdown CLOUD-243603.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/38810) Fix shutdown flag not setted LOGBROKER-10370.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/38806) fix use after move warning in the TMonitoringProxy.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/38807) fix potential mem leak on shutdown.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/38810) Fix shutdown flag not setted.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/39188) Fix dry run scenario when overlay item is being deleted from config.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/39337) fix duplicated results in scan query on delivery problem.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/39459) Fix static self-heal by cleaning vdisks properly and support node deletion.
@@ -137,12 +135,12 @@ Release date: TBD.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/39579) Fixed parsing incorrect ACL strings.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/39687) Restrict viewer HTTP endpoints access from database to viewer/admin SIDs and enforce database scope for database-only tokens.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/39798) Fix trash OOM on blob depot load.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/39842) YQ-5295 Reconnect fix in shared reading.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/39842) Reconnect fix in shared reading.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/40172) pq rd read actor: fix duplicated offset dump.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/40464) Fix issue 34933.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/40559) Fix storage groups hive request ordering.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/40584) fix(viewer_groups): group Limit and Usage calculation.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/40603) LOGBROKER-10370 Fix stopping grpc server.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/40603) Fix stopping grpc server.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/40724) fix(viewer_database_stats): group StorageTotal calculation.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/40761) generic provider: improve error handling.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/40774) Fix SpaceColor to EFlag mapping in viewer.
@@ -153,24 +151,24 @@ Release date: TBD.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/41034) fix self thread join and preserved backwards compatibiliy.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/41069) SchemeShard: add drop table test for forced compaction and fix ProcessForcedCompactionQueues.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/41424) configs_dispatcher: skip notifying yaml subscribers when yaml is unchanged.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/41673) YQ-5231 Fix skip data on new queries(force refresh).
+* [Fixed](https://github.com/ydb-platform/ydb/pull/41673) Fix skip data on new queries(force refresh).
 * [Fixed](https://github.com/ydb-platform/ydb/pull/41680) Fix the invariant that there are not empty chunks in TRope.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/41681) fix TQueryBase crash after stream query cancel.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/41695) Fix release node name.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/41721) YQ-5352 fixed empty compile error in group by hop.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/41721) fixed empty compile error in group by hop.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/41760) fix u-a-f TryEnqueueOneShard.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/41824) Fix indexes ids.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/41895) generic provider: fix iam cloud auth.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/41930) Fix path to GlobalPoolTotalBytes and others.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/42005) fix use of moved ev->TraceId.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/42146) YQ-5356 Fix retry limit error.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/42146) Fix retry limit error.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/42268) Fix dstool cluster balance to address VDisk and PDisk size in units.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/42716) YQ-5302 enabled switch optimization for extract members.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/43068) YQ-5376 fixed local CDC reading form YQL.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/43082) YQ-5380 disabled local topics deduplication.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/42716) enabled switch optimization for extract members.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/43068) fixed local CDC reading form YQL.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/43082) disabled local topics deduplication.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/43446) [HIVE] don't change state to Stopped for locked tablets on load.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/43570) YQ-5394 fixed internal error in solomon writer.
-* [Fixed](https://github.com/ydb-platform/ydb/pull/43791) YQ-5399 fixed invalid executor id value on KQP node page.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/43570) fixed internal error in solomon writer.
+* [Fixed](https://github.com/ydb-platform/ydb/pull/43791) fixed invalid executor id value on KQP node page.
 * [Fixed](https://github.com/ydb-platform/ydb/pull/44340) fixes for quick remote cancel in the query service.
 
 ## Version 25.4 {#25-4}

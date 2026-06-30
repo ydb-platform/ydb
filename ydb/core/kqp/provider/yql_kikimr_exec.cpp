@@ -1945,7 +1945,6 @@ public:
             NKikimrIndexBuilder::TIndexBuildSettings indexBuildSettings;
             indexBuildSettings.set_source_path(table.Metadata->Name);
 
-            TVector<TSetColumnConstraintSettings> constraintSetObjects;
             auto applyLocalBloomNgramFilterIndex = [](Ydb::Table::LocalBloomNgramFilterIndex* proto,
                                                            const TIndexDescription::TLocalBloomNgramFilterDescription& desc) -> decltype(auto) {
                 if (desc.NgramSize) {
@@ -2037,6 +2036,30 @@ public:
                             }
                         }
 
+                        // Auto-bind ALTER ADD COLUMN __ydb_row_id Uint64 NOT NULL to a server-side
+                        // sequence: __ydb_row_id is a reserved name for the fulltext UseRowIdAsDocId
+                        // opt-in (NFulltext::RowIdColumn). The schemeshard creates the sequence,
+                        // backfills existing rows via the column-build scan, and bit-reverses
+                        // each value to spread inserts across posting-table shards.
+                        if (hasNotNull && !hasDefaultValue
+                            && TString(columnName.Value()) == NKikimr::NTableIndex::NFulltext::RowIdColumn
+                            && actualType->GetKind() == ETypeAnnotationKind::Data
+                            && actualType->Cast<TDataExprType>()->GetName() == "Uint64")
+                        {
+                            if (columnBuild == nullptr) {
+                                columnBuild = indexBuildSettings.mutable_column_build_operation()->add_column();
+                            }
+                            // The not_null branch above creates columnBuild without a name; set it
+                            // unconditionally here so the schemeshard build pipeline can identify the column.
+                            columnBuild->SetColumnName(TString(columnName));
+                            columnBuild->SetNotNull(true);
+                            columnBuild->set_default_from_sequence(
+                                NKikimr::NTableIndex::NFulltext::RowIdSequenceName);
+                            columnBuild->set_bit_reverse_sequence_value(true);
+                            columnBuild->mutable_default_from_literal()->mutable_type()->set_type_id(Ydb::Type::UINT64);
+                            hasDefaultValue = true;
+                        }
+
                         if (hasNotNull && !hasDefaultValue) {
                             ctx.AddError(
                                 YqlIssue(ctx.GetPosition(columnTuple.Pos()),
@@ -2061,6 +2084,11 @@ public:
                                 }
                             } else {
                                 auto families = columnItem.Cast<TCoAtomList>();
+                                if (table.Metadata->IsOlap() && families.Size() > 0) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
+                                        "Column FAMILY is not supported for column tables"));
+                                    return SyncError();
+                                }
                                 if (families.Size() > 1) {
                                     ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
                                         "Unsupported number of families"));
@@ -2085,6 +2113,7 @@ public:
                         alterTableRequest.add_drop_columns(TString(dropColumn.Value()));
                     }
                 } else if (name == "alterColumns") {
+                    std::vector<TString> notNullColumns;
                     auto listNode = action.Value().Cast<TExprList>();
                     for (size_t i = 0; i < listNode.Size(); ++i) {
                         auto item = listNode.Item(i);
@@ -2118,6 +2147,11 @@ public:
                                 fromSequence->set_name(arg);
                             }
                         } else if (alterColumnAction == "setFamily") {
+                            if (table.Metadata->IsOlap()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
+                                    "Column FAMILY is not supported for column tables"));
+                                return SyncError();
+                            }
                             auto families = alterColumnList.Item(1).Cast<TCoAtomList>();
                             if (families.Size() > 1) {
                                 ctx.AddError(TIssue(ctx.GetPosition(families.Pos()),
@@ -2155,12 +2189,7 @@ public:
                                     return SyncError();
                                 } else {
                                     alterTableRequest.mutable_alter_columns()->RemoveLast();
-
-                                    TSetColumnConstraintSettings value;
-                                    value.SetColumnName(TString(columnName));
-                                    value.SetConstraint(TSetColumnConstraintSettings::NOT_NULL);
-
-                                    constraintSetObjects.push_back(std::move(value));
+                                    notNullColumns.push_back(TString(columnName));
                                 }
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
@@ -2212,7 +2241,27 @@ public:
                             return SyncError();
                         }
                     }
+
+                    if (notNullColumns.size() > 0) {
+                        if (alterTableRequest.alter_columns_size() != 0) {
+                            ctx.AddError(TIssue(
+                                ctx.GetPosition(listNode.Pos()),
+                                "Multiple ALTER COLUMN operations of different kinds are not allowed in a single statement."
+                            ));
+                            return SyncError();
+                        }
+
+                        for (const auto& columnName : notNullColumns) {
+                            auto* req = alterTableRequest.add_set_not_null();
+                            req->set_column_name(TString(columnName));
+                        }
+                    }
                 } else if (name == "addColumnFamilies" || name == "alterColumnFamilies") {
+                    if (table.Metadata->IsOlap()) {
+                        ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                            "Column FAMILY is not supported for column tables"));
+                        return SyncError();
+                    }
                     auto listNode = action.Value().Cast<TExprList>();
                     for (size_t i = 0; i < listNode.Size(); ++i) {
                         auto item = listNode.Item(i);
@@ -2676,6 +2725,37 @@ public:
                         : 0;
 
                     if (table.Metadata->StoreType == EStoreType::Column) {
+                        const auto indexIter = std::find_if(table.Metadata->Indexes.begin(), table.Metadata->Indexes.end(), [&alterIndexName] (const auto& index) {
+                            return index.Name == alterIndexName;
+                        });
+                        if (indexIter == table.Metadata->Indexes.end()) {
+                            if (table.Metadata->Indexes.empty()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                    TStringBuilder() << table.Metadata->Name << " has no indexes, so index " << alterIndexName << " does not exist in " << table.Metadata->Name << "."));
+                                return SyncError();
+                            }
+
+                            TStringBuilder allIndexes;
+                            allIndexes << "[";
+                            bool firstIndex = true;
+                            for (auto& index: table.Metadata->Indexes) {
+                                if (!firstIndex) allIndexes << ", ";
+                                allIndexes << index.Name;
+                                firstIndex = false;
+                            }
+                            allIndexes << "]";
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                TStringBuilder() << "Index " << alterIndexName << " does not exist in table " << table.Metadata->Name << ". Only these " << table.Metadata->Indexes.size() << " do exist: " << allIndexes));
+                            return SyncError();
+                        }
+
+                        if (indexIter->Type != NYql::TIndexDescription::EType::LocalBloomFilter && indexIter->Type != NYql::TIndexDescription::EType::LocalBloomNgramFilter ) {
+                            YQL_ENSURE(indexIter->Type ==  NYql::TIndexDescription::EType::LocalMinMax);
+                            ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                TStringBuilder() << "Index " << alterIndexName << " is MIN_MAX index. "
+                                "Only BLOOM_FILTER and BLOOM_NGRAMM_FILTER indexes can be used in ALTER INDEX statement in Column Shards"));
+                            return SyncError();
+                        }
                         if (tableSettingsCount > 0) {
                             ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
                                 "ALTER INDEX option 'tableSettings' is not supported for column tables; use 'indexSettings'"));
@@ -2688,43 +2768,12 @@ public:
                             return SyncError();
                         }
 
-                        TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDesc;
-                        TIndexDescription::TLocalBloomFilterDescription localBloomFilterDesc;
-                        bool useBloomFilter = false;
-
-                        const auto alterIndexSettings = alterIndexIndexSettingsExpr.Cast<TCoNameValueTupleList>();
-                        for (auto&& is : alterIndexSettings) {
-                            YQL_ENSURE(is.Value().Maybe<TCoAtom>());
-                            const auto& nameAtom = is.Name();
-                            const auto& valueAtom = is.Value().Cast<TCoAtom>();
-                            TString ngramErr;
-                            FillLocalBloomNgramFilterSetting(localBloomNgramFilterDesc, nameAtom.StringValue(), valueAtom.StringValue(), ngramErr);
-                            if (ngramErr) {
-                                TString bloomErr;
-                                FillLocalBloomFilterSetting(localBloomFilterDesc, nameAtom.StringValue(), valueAtom.StringValue(), bloomErr);
-                                if (bloomErr) {
-                                    ctx.AddError(TIssue(ctx.GetPosition(valueAtom.Pos()), ngramErr));
-                                    return SyncError();
-                                }
-
-                                useBloomFilter = true;
-                            }
-                        }
-
                         auto add_index = alterTableRequest.add_add_indexes();
                         add_index->set_name(alterIndexName);
+                        add_index->add_index_columns(indexIter->KeyColumns[0]);
+                        const auto alterIndexSettings = alterIndexIndexSettingsExpr.Cast<TCoNameValueTupleList>();
 
-                        if (!useBloomFilter) {
-                            if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
-                                !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
-                                ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
-                                    "Local bloom ngram filter index support is disabled"));
-                                return SyncError();
-                            }
-
-                            auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
-                            applyLocalBloomNgramFilterIndex(proto, localBloomNgramFilterDesc);
-                        } else {
+                        if (indexIter->Type == NYql::TIndexDescription::EType::LocalBloomFilter) {
                             if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
                                 !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomFilterIndex()) {
                                 ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
@@ -2732,10 +2781,47 @@ public:
                                 return SyncError();
                             }
 
+                            
+                            TIndexDescription::TLocalBloomFilterDescription localBloomFilterDesc;
+                            for (auto&& is : alterIndexSettings) {
+                                YQL_ENSURE(is.Value().Maybe<TCoAtom>());
+                                const auto& nameAtom = is.Name();
+                                const auto& valueAtom = is.Value().Cast<TCoAtom>();
+
+                                TString bloomErr;
+                                FillLocalBloomFilterSetting(localBloomFilterDesc, nameAtom.StringValue(), valueAtom.StringValue(), bloomErr);
+                                if (bloomErr) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(valueAtom.Pos()), bloomErr));
+                                    return SyncError();
+                                }
+                            }
                             auto* proto = add_index->mutable_local_bloom_filter_index();
                             if (localBloomFilterDesc.FalsePositiveProbability) {
                                 proto->set_false_positive_probability(*localBloomFilterDesc.FalsePositiveProbability);
                             }
+
+                        } else {
+                            if (table.Metadata->Kind != EKikimrTableKind::Datashard &&
+                                !SessionCtx->Config().FeatureFlags.GetEnableLocalBloomNgramFilterIndex()) {
+                                ctx.AddError(TIssue(ctx.GetPosition(action.Name().Pos()),
+                                    "Local bloom ngram filter index support is disabled"));
+                                return SyncError();
+                            }
+                            TIndexDescription::TLocalBloomNgramFilterDescription localBloomNgramFilterDesc;
+                            for (auto&& is : alterIndexSettings) {
+                                YQL_ENSURE(is.Value().Maybe<TCoAtom>());
+                                const auto& nameAtom = is.Name();
+                                const auto& valueAtom = is.Value().Cast<TCoAtom>();
+
+                                TString ngramErr;
+                                FillLocalBloomNgramFilterSetting(localBloomNgramFilterDesc, nameAtom.StringValue(), valueAtom.StringValue(), ngramErr);
+                                if (ngramErr) {
+                                    ctx.AddError(TIssue(ctx.GetPosition(valueAtom.Pos()), ngramErr));
+                                    return SyncError();
+                                }
+                            }
+                            auto* proto = add_index->mutable_local_bloom_ngram_filter_index();
+                            applyLocalBloomNgramFilterIndex(proto, localBloomNgramFilterDesc);
                         }
                     } else {
                         const auto indexIter = std::find_if(table.Metadata->Indexes.begin(), table.Metadata->Indexes.end(), [&alterIndexName] (const auto& index) {
@@ -3033,11 +3119,8 @@ public:
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
             bool isTableStore = (table.Metadata->TableType == ETableType::TableStore);  // Doesn't set, so always false
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
-            bool isSetConstraint = (!constraintSetObjects.empty());
 
-            if (isSetConstraint) {
-                future = Gateway->SetConstraint(table.Metadata->Name, std::move(constraintSetObjects));
-            } else if (isTableStore) {
+            if (isTableStore) {
                 AFL_VERIFY(false);
                 if (!isColumn) {
                     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),

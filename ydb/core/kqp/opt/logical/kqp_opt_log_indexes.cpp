@@ -1601,6 +1601,8 @@ struct TFullTextApplyParseResult {
 
     TNodeOnNodeOwnedMap Replaces;
     std::vector<TFulltextQuery> Queries;
+    // Equality bindings for the index prefix columns: (column name, value expr).
+    TVector<std::pair<TString, TExprNode::TPtr>> PrefixColumns;
 
     ui64 FulltextMatch = 0;
     ui64 FulltextScore = 0;
@@ -1614,16 +1616,29 @@ struct TFullTextApplyParseResult {
     TVector<TCoNameValueTuple> Settings(TExprContext& ctx, TPositionHandle pos) {
         TVector<TCoNameValueTuple> settings;
         auto& query = Queries[0];
-        if (!query.NamedOptions) return settings;
-        for(auto& arg : query.NamedOptions->Children()) {
-            auto nameValueTuple = TExprBase(arg).Cast<TCoNameValueTuple>();
-            TExprBase value = TExprBase(nameValueTuple.Value().Cast().Ptr());
-            TString name = nameValueTuple.Name().StringValue();
+        if (query.NamedOptions) {
+            for(auto& arg : query.NamedOptions->Children()) {
+                auto nameValueTuple = TExprBase(arg).Cast<TCoNameValueTuple>();
+                TExprBase value = TExprBase(nameValueTuple.Value().Cast().Ptr());
+                TString name = nameValueTuple.Name().StringValue();
+                settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
+                    .Name<TCoAtom>()
+                        .Value(nameValueTuple.Name().StringValue())
+                        .Build()
+                    .Value(value)
+                    .Done());
+            }
+        }
+
+        for (const auto& [colName, value] : PrefixColumns) {
             settings.push_back(Build<TCoNameValueTuple>(ctx, pos)
                 .Name<TCoAtom>()
-                    .Value(nameValueTuple.Name().StringValue())
+                    .Value(TKqpReadTableFullTextIndexSettings::PrefixColumnSettingName)
                     .Build()
-                .Value(value)
+                .Value<TExprList>()
+                    .Add<TCoAtom>().Value(colName).Build()
+                    .Add(TExprBase(value))
+                .Build()
                 .Done());
         }
 
@@ -1699,9 +1714,12 @@ void VisitExprSkipOptionalIfValue(const TExprNode::TPtr& node, const TExprVisitP
 }
 
 TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext& ctx, std::string_view indexName, bool isNgram,
-    const THashSet<TString>& indexedColumns = {})
+    const THashSet<TString>& indexedColumns = {}, const TVector<TString>& prefixColumns = {},
+    const TVector<std::pair<TString, TExprNode::TPtr>>& seedPrefixColumns = {})
 {
     TFullTextApplyParseResult result;
+    result.PrefixColumns = seedPrefixColumns;
+    const THashSet<TString> prefixColumnsSet{prefixColumns.begin(), prefixColumns.end()};
     static const THashSet<TString> AllowedFulltextExprs = {
         "And",
         "Member",
@@ -1710,9 +1728,42 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
         "AsStruct",
         ">",
         "<",
+        "==",
         "Apply",
         "AssumeStrict",
         "Coalesce",
+    };
+
+    // Extract an equality binding for a prefix column from an `==` node: one side must be
+    // Member(row, prefixCol), the other a parameter or literal. Returns true if captured.
+    auto tryExtractPrefixEq = [&] (const TExprNode::TPtr& expr) {
+        if (prefixColumnsSet.empty()) {
+            return;
+        }
+        auto eq = TExprBase(expr).Maybe<TCoCmpEqual>();
+        if (!eq) {
+            return;
+        }
+        auto trySide = [&] (TExprBase member, TExprBase value) {
+            auto m = member.Maybe<TCoMember>();
+            if (!m) {
+                return false;
+            }
+            TString col = m.Cast().Name().StringValue();
+            if (!prefixColumnsSet.contains(col)) {
+                return false;
+            }
+            auto inner = value.Maybe<TCoJust>() ? value.Cast<TCoJust>().Input() : value;
+            if (!inner.Maybe<TCoParameter>() && !inner.Maybe<TCoDataCtor>()) {
+                return false;
+            }
+            if (AnyOf(result.PrefixColumns, [&](const auto& p) { return p.first == col; })) {
+                return true; // already captured
+            }
+            result.PrefixColumns.emplace_back(col, value.Ptr());
+            return true;
+        };
+        trySide(eq.Cast().Left(), eq.Cast().Right()) || trySide(eq.Cast().Right(), eq.Cast().Left());
     };
 
     TNodeSet visitedNodes;
@@ -1724,6 +1775,8 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
         } else {
             isGreenNode = false;
         }
+
+        tryExtractPrefixEq(expr);
 
         if (auto match = TFulltextQuery::Match(expr, ctx, indexedColumns) ; match.IsValid()) {
             if (match.IsScoreQuery()) {
@@ -1798,6 +1851,9 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
     } else if (result.FulltextScore > 0 && !scoreRestrictionFound) {
         result.HasErrors = true;
         explain = " Score restriction is not found in the predicate. It's required to put FulltextScore() > 0 constraint in the where clause.";
+    } else if (result.PrefixColumns.size() < prefixColumnsSet.size()) {
+        result.HasErrors = true;
+        explain = " Prefixed fulltext index requires an equality predicate (column = <value>) on every prefix column.";
     }
 
     if (result.HasErrors) {
@@ -1809,6 +1865,22 @@ TFullTextApplyParseResult FindMatchingApply(const TExprBase& node, TExprContext&
         SetIssueCode(EYqlIssueCode::TIssuesIds_EIssueCode_KIKIMR_WRONG_INDEX_USAGE, subIssue);
         baseIssue.AddSubIssue(MakeIntrusive<TIssue>(std::move(subIssue)));
         ctx.AddError(baseIssue);
+    }
+
+    // Prefix bindings are collected in predicate traversal order, but downstream they are serialized
+    // and consumed positionally as the leading key cells in index key order ([prefix..., __ydb_token, doc_id...]).
+    // Reorder them to match the index prefix column order so the posting-table read keys are correct.
+    if (!result.HasErrors && !prefixColumnsSet.empty()) {
+        THashMap<TString, TExprNode::TPtr> byName;
+        for (auto& [name, value] : result.PrefixColumns) {
+            byName[name] = value;
+        }
+        TVector<std::pair<TString, TExprNode::TPtr>> ordered;
+        ordered.reserve(prefixColumns.size());
+        for (const auto& col : prefixColumns) {
+            ordered.emplace_back(col, byName.at(col));
+        }
+        result.PrefixColumns = std::move(ordered);
     }
 
     return result;
@@ -1905,7 +1977,32 @@ TMaybeNode<TExprBase> KqpRewriteFlatMapOverFullTextMatch(const NYql::NNodes::TEx
         indexedColumns.insert(analyzer.column());
     }
 
-    auto result = FindMatchingApply(flatMap.Lambda().Body(), ctx, read.Index().Value(), isNgram, indexedColumns);
+    // Fulltext index key columns are [prefix..., text]; the text column is the last one.
+    TVector<TString> prefixColumns;
+    if (indexDesc->KeyColumns.size() > 1) {
+        prefixColumns.assign(indexDesc->KeyColumns.begin(), indexDesc->KeyColumns.end() - 1);
+    }
+
+    // An equality predicate on a prefix (leading key) column is usually pushed into the index read
+    // as a point key range (KqlReadTableIndex with PointPrefixLen). Extract those values here; any
+    // prefix equality that stayed in the lambda is picked up by FindMatchingApply below.
+    TVector<std::pair<TString, TExprNode::TPtr>> seedPrefixColumns;
+    if (!prefixColumns.empty() && read.Read.IsValid()) {
+        auto range = read.Read.Cast().Range();
+        auto from = range.From();
+        auto to = range.To();
+        if (from.Maybe<TKqlKeyInc>() && from.Raw() == to.Raw() && from.ArgCount() >= prefixColumns.size()) {
+            for (size_t i = 0; i < prefixColumns.size(); ++i) {
+                auto value = from.Arg(i);
+                auto inner = value.Maybe<TCoJust>() ? value.Cast<TCoJust>().Input() : value;
+                if (inner.Maybe<TCoParameter>() || inner.Maybe<TCoDataCtor>()) {
+                    seedPrefixColumns.emplace_back(prefixColumns[i], value.Ptr());
+                }
+            }
+        }
+    }
+
+    auto result = FindMatchingApply(flatMap.Lambda().Body(), ctx, read.Index().Value(), isNgram, indexedColumns, prefixColumns, seedPrefixColumns);
     if (result.HasErrors) {
         return {};
     }
@@ -2146,6 +2243,11 @@ struct THybridRankSettings {
     TMaybe<TString> IndexOverride(size_t i) const {
         return i < IndexOverrides_.size() ? IndexOverrides_[i] : Nothing();
     }
+    // The custom fusion lambda (... AS RankLambda / ScoreLambda), or null when fusion uses the built-in
+    // Mode (rrf/linear). IsScoreLambda() is true for ScoreLambda (fuses raw Double scores) and false for
+    // RankLambda (fuses Int64 ranks).
+    const TExprNode::TPtr& CustomLambda() const { return CustomLambda_; }
+    bool IsScoreLambda() const { return IsScoreLambda_; }
 
     TMaybe<TString> Error;
 
@@ -2178,6 +2280,8 @@ private:
     TVector<double> Weights_;           // parallel to ScoringArgs_, or empty => all 1.0
     TVector<TMaybe<ui64>> Limits_;      // parallel to ScoringArgs_, or empty => factor * LIMIT
     TVector<TMaybe<TString>> IndexOverrides_;  // parallel to ScoringArgs_, or empty => auto-detect
+    TExprNode::TPtr CustomLambda_;      // custom fusion lambda (RankLambda/ScoreLambda), null => built-in Mode
+    bool IsScoreLambda_ = false;        // CustomLambda_ fuses raw Double scores (ScoreLambda) vs Int64 ranks
 };
 
 THybridRankSettings THybridRankSettings::Parse(const TExprNode::TPtr& hybridRank, TExprContext& ctx) {
@@ -2199,6 +2303,21 @@ THybridRankSettings THybridRankSettings::Parse(const TExprNode::TPtr& hybridRank
     const auto& positional = hybridRank->Head();
     s.ScoringArgs_.assign(positional.Children().begin(), positional.Children().end());
     const auto n = s.ScoringArgs_.size();
+
+    // Two trailing children carry a custom fusion lambda: a "rank"/"score" marker (child 2) followed by the
+    // lambda (child 3); see the SQL frontend, which lifts them out of the named-args struct (a lambda is not
+    // a struct-field value). The marker comes first because it selects the lambda's value type. The lambda
+    // replaces the built-in fusion.
+    if (hybridRank->ChildrenSize() >= 4) {
+        const auto& kind = hybridRank->Child(2);
+        s.IsScoreLambda_ = kind->IsAtom() && kind->Content() == "score";
+        s.CustomLambda_ = hybridRank->ChildPtr(3);
+    }
+    auto fuseConflict = [&](const TStringBuf opt) {
+        return fail(TStringBuilder() << "'" << opt << "' cannot be combined with a custom "
+            << (s.IsScoreLambda_ ? "ScoreLambda" : "RankLambda") << "; "
+            "fold the weights and the fusion constant into the lambda body");
+    };
 
     // Validate one (Weights/Limits/Indexes) tuple: its arity must equal the scoring-arg count, and each
     // element must parse via `parseElem`. Returns the parsed vector or records a precise error.
@@ -2244,6 +2363,9 @@ THybridRankSettings THybridRankSettings::Parse(const TExprNode::TPtr& hybridRank
                 return s;
             }
         } else if (name == "Weights") {
+            if (s.CustomLambda_) {
+                return fuseConflict("Weights");
+            }
             s.Weights_.clear();
             if (!parseTuple("Weights", value, [&](const TExprNode::TPtr& e) {
                     auto v = GetDoubleElem(e);
@@ -2253,12 +2375,18 @@ THybridRankSettings THybridRankSettings::Parse(const TExprNode::TPtr& hybridRank
                 return s;
             }
         } else if (name == "K" || name == "k") {
+            if (s.CustomLambda_) {
+                return fuseConflict("K");
+            }
             double kv = 0;
             if (value->ChildrenSize() < 1 || !value->Head().IsAtom() || !TryFromString<double>(value->Head().Content(), kv)) {
                 return fail("K must be a numeric literal (the RRF constant), e.g. 60.0 AS K");
             }
             s.K_ = kv;
         } else if (name == "Mode") {
+            if (s.CustomLambda_) {
+                return fuseConflict("Mode");
+            }
             if (!value->IsCallable("String") || value->ChildrenSize() < 1 || !value->Head().IsAtom()) {
                 return fail("Mode must be a string literal: \"rrf\" or \"linear\"");
             }
@@ -2269,12 +2397,16 @@ THybridRankSettings THybridRankSettings::Parse(const TExprNode::TPtr& hybridRank
                 return fail(TStringBuilder() << "unknown Mode '" << value->Head().Content() << "'; expected \"rrf\" or \"linear\"");
             }
         } else if (name == "Normalize") {
+            if (s.CustomLambda_) {
+                return fuseConflict("Normalize");
+            }
             if (!value->IsCallable("Bool") || value->ChildrenSize() < 1 || !value->Head().IsAtom()) {
                 return fail("Normalize must be a boolean literal: true or false");
             }
             s.Normalize_ = (value->Head().Content() == "true");
         } else {
-            return fail(TStringBuilder() << "unknown named argument '" << name << "'; expected Indexes, Limits, K, Mode, Weights or Normalize");
+            // RankLambda/ScoreLambda never reach here: the SQL frontend lifts them to positional children.
+            return fail(TStringBuilder() << "unknown named argument '" << name << "'; expected Indexes, Limits, K, Mode, Weights or Normalize (or a RankLambda/ScoreLambda fusion lambda)");
         }
     }
     return s;
@@ -2740,7 +2872,156 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
         }
     }
 
-    // ---- Fuse: each branch emits a per-row weighted contribution; we then SUM the contributions
+    // ---- Cross-branch fusion: reduce the per-branch candidate lists to one { pk, __ydb_hybrid_rrf } score
+    //      per distinct document (re-ranked below). A custom RankLambda/ScoreLambda assembles each document's
+    //      per-branch value vector and applies the lambda to it; otherwise the built-in Mode (rrf/linear)
+    //      sums an additive per-branch contribution grouped by primary key.
+    TExprNode::TPtr fusedScored;
+    if (const auto& customLambda = settings.CustomLambda()) {
+        // Per branch, project a row carrying this branch's value in its own slot and NULL in every other slot,
+        // so all branches share one schema and can be Extend-ed and grouped by pk. A null-ignoring min per
+        // slot then collapses each document to { pk, slot_0? .. slot_{n-1}? } (a pk occurs at most once per
+        // branch, so min just picks that branch's value). Finally we turn the present values into a
+        // Dict<Int64,V> (branch index -> value; an absent branch has no entry, so $x[i] is NULL in the lambda)
+        // and apply the lambda to get the score.
+        //   RankLambda:  V = Int64;  value = the 1-based rank from KqpStreamEnumerate over the ordered branch
+        //                stream (pushed into the branch's single-partition stage -- no TDqPrecompute needed).
+        //   ScoreLambda: V = Double; value = the raw branch score (fulltext relevance or vector distance/
+        //                similarity) read straight off the branch's score column.
+        const bool isScore = settings.IsScoreLambda();
+        const TStringBuf valType = isScore ? "Double" : "Int64";
+        TVector<TString> slotCols(branches.size());
+        for (size_t i = 0; i < branches.size(); ++i) {
+            slotCols[i] = TStringBuilder() << (isScore ? "__ydb_hybrid_score_" : "__ydb_hybrid_rank_") << i;
+        }
+        // The slot type is Optional<V> in every branch: the active slot carries the value, the others NULL.
+        // SafeCast to an *optional* target so the active slot is Optional<V> even when the source already is
+        // exactly V (e.g. a fulltext relevance is Double, so a SafeCast to Double would be a non-optional
+        // no-op and Extend would then reject the mismatched per-branch schemas).
+        const auto optValType = ctx.Builder(pos)
+            .Callable("OptionalType").Callable(0, "DataType").Atom(0, valType, TNodeFlags::Default).Seal().Seal()
+            .Build();
+        const auto nothingVal = ctx.Builder(pos).Callable("Nothing").Add(0, optValType).Seal().Build();
+
+        TVector<TExprNode::TPtr> slotRows;
+        slotRows.reserve(branches.size());
+        for (const auto& b : branches) {
+            const auto pArg = ctx.NewArgument(pos, "p");
+            // RankLambda maps over KqpStreamEnumerate, whose element is a (rank, row) tuple; ScoreLambda maps
+            // over the branch list directly, whose element is the row. branchRow is the row either way.
+            const auto branchRow = isScore
+                ? pArg
+                : ctx.Builder(pos).Callable("Nth").Add(0, pArg).Atom(1, 1U).Seal().Build();
+            const auto slotSource = isScore
+                ? ctx.Builder(pos).Callable("Member").Add(0, branchRow).Atom(1, b.ScoreCol).Seal().Build()
+                : ctx.Builder(pos).Callable("Nth").Add(0, pArg).Atom(1, 0U).Seal().Build();
+            const auto slotVal = ctx.Builder(pos)
+                .Callable("SafeCast").Add(0, slotSource).Add(1, optValType).Seal()
+                .Build();
+            TExprNode::TListType members;
+            members.push_back(ctx.Builder(pos).List()
+                .Atom(0, pkCol)
+                .Callable(1, "Member").Add(0, branchRow).Atom(1, pkCol).Seal()
+                .Seal().Build());
+            for (size_t j = 0; j < slotCols.size(); ++j) {
+                members.push_back(ctx.Builder(pos).List()
+                    .Atom(0, slotCols[j])
+                    .Add(1, j == b.Index ? slotVal : nothingVal)
+                    .Seal().Build());
+            }
+            const auto body = ctx.NewCallable(pos, "AsStruct", std::move(members));
+            const auto source = isScore
+                ? b.List
+                : ctx.Builder(pos).Callable("KqpStreamEnumerate").Add(0, b.List).Seal().Build();
+            slotRows.push_back(ctx.Builder(pos)
+                .Callable("Map")
+                    .Add(0, source)
+                    .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {pArg}), TExprNode::TPtr(body)))
+                .Seal().Build());
+        }
+
+        const auto rankInput = slotRows.size() == 1
+            ? slotRows[0]
+            : ctx.NewCallable(pos, "Extend", TExprNode::TListType(slotRows.begin(), slotRows.end()));
+
+        // Group by pk, taking the (null-ignoring) min of each per-branch slot to assemble the value vector.
+        TExprNode::TListType handlers;
+        handlers.reserve(slotCols.size());
+        for (const auto& rc : slotCols) {
+            handlers.push_back(ctx.Builder(pos)
+                .List()
+                    .Atom(0, rc)
+                    .Callable(1, "AggApply")
+                        .Atom(0, "min")
+                        .Callable(1, "ListItemType").Callable(0, "TypeOf").Add(0, rankInput).Seal().Seal()
+                        .Lambda(2).Param("row").Callable("Member").Arg(0, "row").Atom(1, rc).Seal().Seal()
+                    .Seal()
+                .Seal().Build());
+        }
+        const auto aggregated = ctx.Builder(pos)
+            .Callable("Aggregate")
+                .Add(0, rankInput)
+                .List(1).Atom(0, pkCol).Seal()
+                .Add(2, ctx.NewList(pos, std::move(handlers)))
+                .List(3).Seal()
+            .Seal().Build();
+
+        // Build { pk, __ydb_hybrid_rrf } where the score = lambda(Dict<Int64,V>(branch index -> value)).
+        const auto rArg = ctx.NewArgument(pos, "r");
+        TExprNode::TListType optEntries;
+        optEntries.reserve(slotCols.size());
+        for (size_t j = 0; j < slotCols.size(); ++j) {
+            const auto vArg = ctx.NewArgument(pos, "v");
+            const auto pair = ctx.Builder(pos).List()
+                .Callable(0, "Int64").Atom(0, ToString(j), TNodeFlags::Default).Seal()
+                .Add(1, vArg)
+                .Seal().Build();
+            // Map over the Optional<V> slot: present -> Just((j, value)); absent -> Nothing (dropped below).
+            optEntries.push_back(ctx.Builder(pos)
+                .Callable("Map")
+                    .Callable(0, "Member").Add(0, rArg).Atom(1, slotCols[j]).Seal()
+                    .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {vArg}), TExprNode::TPtr(pair)))
+                .Seal().Build());
+        }
+        const auto ranksDict = ctx.Builder(pos)
+            .Callable("ToDict")
+                .Callable(0, "ListNotNull")
+                    .Add(0, ctx.NewCallable(pos, "AsList", std::move(optEntries)))
+                .Seal()
+                .Lambda(1).Param("e").Callable("Nth").Arg(0, "e").Atom(1, 0U).Seal().Seal()
+                .Lambda(2).Param("e").Callable("Nth").Arg(0, "e").Atom(1, 1U).Seal().Seal()
+                .List(3)
+                    .Atom(0, "Hashed", TNodeFlags::Default)
+                    .Atom(1, "One", TNodeFlags::Default)
+                .Seal()
+            .Seal().Build();
+        // Inline the user's fusion lambda over the value dict (substituting its argument -> ranksDict) rather
+        // than wrapping it in an Apply callable: a fully type-annotated lambda node carries its body's type
+        // (Double here), so Apply would reject it as "not a callable". The inlined body is then coalesced
+        // to a plain Double (a NULL/failed cast sorts last).
+        const auto applied = ctx.Builder(pos)
+            .Apply(customLambda)
+                .With(0, ranksDict)
+            .Seal().Build();
+        const auto score = ctx.Builder(pos)
+            .Callable("Coalesce")
+                .Callable(0, "SafeCast")
+                    .Add(0, applied)
+                    .Callable(1, "DataType").Atom(0, "Double", TNodeFlags::Default).Seal()
+                .Seal()
+                .Callable(1, "Double").Atom(0, "0", TNodeFlags::Default).Seal()
+            .Seal().Build();
+        const auto scoredBody = ctx.Builder(pos)
+            .Callable("AsStruct")
+                .List(0).Atom(0, pkCol).Callable(1, "Member").Add(0, rArg).Atom(1, pkCol).Seal().Seal()
+                .List(1).Atom(0, rrfCol).Add(1, score).Seal()
+            .Seal().Build();
+        fusedScored = ctx.Builder(pos)
+            .Callable("Map").Add(0, aggregated)
+                .Add(1, ctx.NewLambda(pos, ctx.NewArguments(pos, {rArg}), TExprNode::TPtr(scoredBody)))
+            .Seal().Build();
+    } else {
+    // ---- Built-in Mode: each branch emits a per-row weighted contribution; we then SUM the contributions
     //      grouped by primary key. A document absent from a branch simply has no contribution row
     //      there (so it contributes 0 -- no penalty-rank sentinel needed), and the cross-branch fusion
     //      is a single additive group-by-pk Aggregate rather than a per-candidate dict join. Each
@@ -2922,7 +3203,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             .List(3).Seal()                                      // settings
         .Seal()
         .Build();
-    const auto fusedScored = ctx.Builder(pos)
+    fusedScored = ctx.Builder(pos)
         .Callable("Map").Add(0, aggregated)
             .Lambda(1).Param("r")
                 .Callable("AsStruct")
@@ -2937,6 +3218,7 @@ TMaybeNode<TExprBase> KqpRewriteHybridRankTopSort(const TExprBase& node, TExprCo
             .Seal()
         .Seal()
         .Build();
+    }
     // ---- Look up the main table by the fused candidate keys, carrying the RRF score through ----
     // A LookupJoinRows stream lookup joins the {pk, rrf} stream against the main table by pk and emits a
     // tuple (leftRow, Optional<mainRow>, _) per candidate. This carries the synthetic rrf score (a left

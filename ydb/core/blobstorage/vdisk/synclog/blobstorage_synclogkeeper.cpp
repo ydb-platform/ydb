@@ -72,6 +72,8 @@ namespace NKikimr {
             // PERFORM ACTIONS
             ////////////////////////////////////////////////////////////////////////
             void PerformActions(const TActorContext &ctx) {
+                KeepState.UpdateAtomics(TActivationContext::Now());
+
                 if (auto v = KeepState.GetChunksToForget(); !v.empty()) {
                     Send(SlCtx->PDiskCtx->PDiskId, new NPDisk::TEvChunkForget(SlCtx->PDiskCtx->Dsk->Owner,
                         SlCtx->PDiskCtx->Dsk->OwnerRound, std::move(v)));
@@ -286,7 +288,13 @@ namespace NKikimr {
             void Handle(const TEvPhantomFlagStorageGetSnapshotResult::TPtr& ev) {
                 // This actor only requests PhantomFlagStorage snapshot on restart
                 // to rebuild ThresholdsStructure
-                KeepState.RecoverPhantomFlagStorage(std::move(ev->Get()->Snapshot));
+                auto* msg = ev->Get();
+                KeepState.RecoverPhantomFlagStorage(std::move(msg->Thresholds), msg->Eof);
+                if (!msg->Eof) {
+                    auto next = std::make_unique<TEvPhantomFlagStorageGetSnapshot>();
+                    next->ProcessedChunks = std::move(msg->ProcessedChunks);
+                    KeepState.ContinuePhantomFlagStorageSnapshot(std::move(next));
+                }
             }
 
             void Handle(const TEvLocalSyncData::TPtr& ev) {

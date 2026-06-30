@@ -1,5 +1,6 @@
 RECURSE(
     apps
+    docs
     core
     library
     mvp
@@ -11,13 +12,5 @@ RECURSE(
 IF(NOT EXPORT_CMAKE)
   RECURSE(
     tests
-  )
-ENDIF()
-
-IF(NOT OPENSOURCE)
-  # YFM tool is not supported 
-  # for OSS ya make yet
-  RECURSE(
-    docs
   )
 ENDIF()

@@ -195,6 +195,56 @@ private:
     }
 };
 
+// Fulltext rowid auto-provisioning: build a child TIndexBuildInfo that the parent fulltext build runs,
+// sequentially and before acquiring its own lock, to provision the rowid infrastructure. Each child is
+// a fully normal build (it takes and releases its own lock + snapshot via the standard pipeline) and
+// reports completion back to ParentBuildId. `buildColumn` selects between a BuildColumns child (adds +
+// backfills __ydb_row_id from a sequence) and a BuildSecondaryUniqueIndex child (the unique index over
+// [__ydb_row_id]). The caller has already allocated childId and persisted it on the parent; here we
+// construct, persist, and register the child, then return it for the caller to Progress.
+std::shared_ptr<TIndexBuildInfo> CreateRowIdProvisioningChild(
+    TSchemeShard* ss, NIceDb::TNiceDb& db, const TIndexBuildInfo& parent, bool buildColumn, TIndexBuildId childId)
+{
+    auto child = std::make_shared<TIndexBuildInfo>();
+    child->Id = childId;
+    child->DomainPathId = parent.DomainPathId;
+    child->TablePathId = parent.TablePathId;
+    child->ScanSettings = parent.ScanSettings;
+    child->MaxInProgressShards = parent.MaxInProgressShards;
+    child->StartTime = TAppData::TimeProvider->Now();
+    child->ParentBuildId = parent.Id;
+
+    if (buildColumn) {
+        child->BuildKind = TIndexBuildInfo::EBuildKind::BuildColumns;
+        child->TargetName = TPath::Init(parent.TablePathId, ss).PathString();
+        Ydb::Type uint64Type;
+        uint64Type.set_type_id(Ydb::Type::UINT64);
+        child->BuildColumns.push_back(TIndexBuildInfo::TColumnBuildInfo(
+            TIndexBuildInfo::TColumnBuildInfo::FromSequenceTag{},
+            NTableIndex::NFulltext::RowIdColumn,
+            uint64Type,
+            NTableIndex::NFulltext::RowIdSequenceName,
+            /*bitReverse=*/ true,
+            /*notNull=*/ true,
+            /*familyName=*/ ""));
+    } else {
+        child->BuildKind = TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex;
+        child->IndexType = NKikimrSchemeOp::EIndexTypeGlobalUnique;
+        child->IndexName = parent.AutoUniqueIndexName;
+        child->IndexColumns = { NTableIndex::NFulltext::RowIdColumn };
+        // Empty ImplTableDescriptions -> the create-build-index composer uses defaults.
+    }
+
+    // Run the full standard pipeline starting from Locking (own lock + snapshot, cleanly released).
+    child->State = TIndexBuildInfo::EState::Locking;
+
+    ss->PersistCreateBuildIndex(db, *child);
+    ss->PersistBuildIndexFulltextProvisioning(db, *child);
+    ss->PersistBuildIndexState(db, *child);
+    ss->AddIndexBuild(child);
+    return child;
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateIndexPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
@@ -367,6 +417,36 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
     return propose;
 }
 
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildSequencePropose(
+    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+{
+    Y_ENSURE(buildInfo.IsBuildColumns(), "Unknown operation kind while building CreateBuildSequencePropose");
+    Y_ENSURE(buildInfo.HasFromSequenceBuildColumn());
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.CreateBuildSequenceTxId), ss->TabletID());
+
+    auto tablePath = TPath::Init(buildInfo.TablePathId, ss);
+
+    for (const auto& colInfo : buildInfo.BuildColumns) {
+        if (!colInfo.IsFromSequence()) {
+            continue;
+        }
+        // DefaultFromSequence holds only the sequence leaf name; the sequence lives under the table.
+        auto& modifyScheme = *propose->Record.AddTransaction();
+        modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpCreateSequence);
+        modifyScheme.SetInternal(true);
+        modifyScheme.MutableLockGuard()->SetOwnerTxId(ui64(buildInfo.LockTxId));
+        modifyScheme.SetWorkingDir(tablePath.PathString());
+        auto seq = modifyScheme.MutableSequence();
+        seq->SetName(colInfo.DefaultFromSequence);
+    }
+
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "CreateBuildSequencePropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+
+    return propose;
+}
+
 THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
     TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
 {
@@ -384,15 +464,54 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextPropose(
     modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
     auto& op = *modifyScheme.MutableCreateTable();
 
+    // Fulltext index columns are [prefix..., text]; all but the last are prefix key columns.
+    TVector<TString> prefixColumns;
+    if (buildInfo.IndexColumns.size() > 1) {
+        prefixColumns.assign(buildInfo.IndexColumns.begin(), buildInfo.IndexColumns.end() - 1);
+    }
+
     op = CalcFulltextCompactImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
         NKikimrSchemeOp::TTableDescription(),
         std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(&buildInfo.SpecializedIndexDescription),
-        buildInfo.IndexType);
+        buildInfo.IndexType, prefixColumns, true);
 
     op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
 
     LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
         "CreateBuildPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
+
+    return propose;
+}
+
+// Creates the transient "row-id source" table for a compact rowid-mode build: the main table re-keyed
+// by the dense seq, holding the indexed text + data columns. Dropped on apply (IsBuildImplTable).
+THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildFulltextRowIdSrcPropose(
+    TSchemeShard* ss, const TIndexBuildInfo& buildInfo)
+{
+    Y_ENSURE(buildInfo.IsBuildFulltextCompactRowId());
+
+    auto propose = MakeHolder<TEvSchemeShard::TEvModifySchemeTransaction>(ui64(buildInfo.ApplyTxId), ss->TabletID());
+    propose->Record.SetFailOnExist(true);
+    NKikimrSchemeOp::TModifyScheme& modifyScheme = *propose->Record.AddTransaction();
+    modifyScheme.SetInternal(true);
+
+    auto path = TPath::Init(buildInfo.TablePathId, ss);
+    const auto& tableInfo = ss->Tables.at(path->PathId);
+
+    modifyScheme.SetWorkingDir(path.Dive(buildInfo.IndexName).PathString());
+    modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpInitiateBuildIndexImplTable);
+    auto& op = *modifyScheme.MutableCreateTable();
+
+    THashSet<TString> dataColumns(buildInfo.DataColumns.begin(), buildInfo.DataColumns.end());
+    op = CalcFulltextRowIdSrcImplTableDesc(tableInfo, tableInfo->PartitionConfig(),
+        dataColumns,
+        NKikimrSchemeOp::TTableDescription(),
+        std::get<NKikimrSchemeOp::TFulltextIndexDescription>(buildInfo.SpecializedIndexDescription));
+
+    op.SetName(TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix));
+
+    LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+        "CreateBuildFulltextRowIdSrcPropose " << buildInfo.Id << " " << buildInfo.State << " " << propose->Record.ShortDebugString());
 
     return propose;
 }
@@ -420,7 +539,14 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> AlterMainTablePropose(
 
         col->SetType(NScheme::TypeName(typeInfo, typeMod));
         col->SetName(colInfo.ColumnName);
-        col->MutableDefaultFromLiteral()->CopyFrom(colInfo.DefaultFromLiteral);
+        if (colInfo.IsFromSequence()) {
+            // Store the sequence as a table-local leaf name (not an absolute path), matching
+            // the create-table convention and how the path describer / KQP key local
+            // sequences by leaf.
+            *col->MutableDefaultFromSequence() = colInfo.DefaultFromSequence;
+        } else {
+            col->MutableDefaultFromLiteral()->CopyFrom(colInfo.DefaultFromLiteral);
+        }
         col->SetIsBuildInProgress(true);
 
         if (!colInfo.FamilyName.empty()) {
@@ -1178,11 +1304,49 @@ private:
         LOG_N("TTxBuildProgress: TUploadSampleK: " << buildInfo);
     }
 
+    // Compact rowid-mode prepass: copy the (arbitrary-PK) main table into the transient row-id source
+    // table, re-keyed by __ydb_row_id, so the later posting fill visits doc ids in ascending order (the
+    // order the compact delta format requires). This is a plain re-keying row copy, so it reuses the
+    // generic secondary-index build scan (TBuildIndexScan) rather than a bespoke fulltext scan path: it
+    // is a secondary index over [__ydb_row_id] carrying the indexed text + data columns as values.
+    void SendBuildFulltextRowIdSrcRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
+        auto ev = MakeHolder<TEvDataShard::TEvBuildIndexCreateRequest>();
+        ev->Record.SetId(ui64(BuildId));
+
+        // Scan the snapshotted main table; FillScanRequestCommon attaches the build snapshot.
+        ev->Record.SetOwnerId(buildInfo.TablePathId.OwnerId);
+        ev->Record.SetPathId(buildInfo.TablePathId.LocalPathId);
+
+        TPath implTable = GetBuildPath(Self, buildInfo,
+            TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix));
+        const auto& implTableInfo = Self->Tables.at(implTable.Base()->PathId);
+        auto columns = NTableIndex::ExtractInfo(implTableInfo);
+        // Key = [__ydb_row_id]; data = the indexed text column + data columns.
+        for (const auto& key : columns.Keys) {
+            ev->Record.AddIndexColumns(key);
+            columns.Columns.erase(key);
+        }
+        for (const auto& column : columns.Columns) {
+            ev->Record.AddDataColumns(column);
+        }
+
+        ev->Record.SetDatabaseName(CanonizePath(Self->RootPathElements));
+        ev->Record.SetTargetName(implTable.PathString());
+
+        auto shardId = FillScanRequestCommon(ev->Record, shardIdx, buildInfo);
+
+        LOG_N("TTxBuildProgress: TEvBuildIndexCreateRequest (fulltext rowid prepass): " << ev->Record.ShortDebugString());
+
+        ToTabletSend.emplace(shardId, std::move(ev));
+    }
+
     void SendBuildFulltextIndexRequest(TShardIdx shardIdx, TIndexBuildInfo& buildInfo) {
         auto ev = MakeHolder<TEvDataShard::TEvBuildFulltextIndexRequest>();
         ev->Record.SetId(ui64(BuildId));
 
-        buildInfo.TablePathId.ToProto(ev->Record.MutablePathId());
+        // The scanned table is the main table, except the compact rowid-mode posting fill, which scans
+        // the row-id source table built by the prepass (see GetShardsPath).
+        GetShardsPath(buildInfo)->PathId.ToProto(ev->Record.MutablePathId());
         ev->Record.SetDatabaseName(CanonizePath(Self->RootPathElements));
 
         if (buildInfo.IndexType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJson ||
@@ -1204,10 +1368,28 @@ private:
             buildInfo.DataColumns.begin(), buildInfo.DataColumns.end()
         };
 
+        // Fulltext index columns are [prefix..., text]; all but the last are prefix key columns.
+        if (buildInfo.IndexColumns.size() > 1) {
+            for (size_t i = 0; i + 1 < buildInfo.IndexColumns.size(); ++i) {
+                ev->Record.AddPrefixColumns(buildInfo.IndexColumns[i]);
+            }
+        }
+
         bool compact = buildInfo.IsBuildFulltextCompact();
         if (buildInfo.TargetName.empty()) {
             TPath implTable = GetBuildPath(Self, buildInfo, TString(NTableIndex::ImplTable) + (compact ? NTableIndex::NKMeans::BuildSuffix0 : ""));
             buildInfo.TargetName = implTable.PathString();
+        }
+        // UseRowIdAsDocId applies only to non-compact (plain/relevance) builds, which scan the main
+        // table directly with __ydb_row_id as doc id. Compact builds get the row id via the prepass
+        // (the posting fill then scans the row-id source table, whose PK already is the doc id).
+        if (!compact) {
+            if (const auto* fulltextDesc = std::get_if<NKikimrSchemeOp::TFulltextIndexDescription>(
+                    &buildInfo.SpecializedIndexDescription);
+                fulltextDesc && fulltextDesc->GetUseRowIdAsDocId())
+            {
+                ev->Record.SetUseRowIdAsDocId(true);
+            }
         }
         ev->Record.SetIndexName(buildInfo.TargetName);
         ev->Record.SetIndexType(ConvertFulltextType(buildInfo.IndexType));
@@ -1268,6 +1450,14 @@ private:
         if (buildInfo.IsBuildFulltextRelevance()) {
             path.Rise().Dive(NTableIndex::NFulltext::DictTable);
             ev->Record.SetDictTableName(path.PathString());
+        }
+
+        // Fulltext index columns are [prefix..., text]; all but the last are prefix key columns.
+        // The dict scan needs them to skip prefix cells and compact segments per (prefix, token).
+        if (buildInfo.IndexColumns.size() > 1) {
+            for (size_t i = 0; i + 1 < buildInfo.IndexColumns.size(); ++i) {
+                ev->Record.AddPrefixColumns(buildInfo.IndexColumns[i]);
+            }
         }
 
         const auto& shardStatus = buildInfo.Shards.at(shardIdx);
@@ -1339,8 +1529,9 @@ private:
         TColumnTypes baseColumnTypes;
         TString error;
         Y_ENSURE(ExtractTypes(mainTableInfo, baseColumnTypes, error), error);
-        Y_ENSURE(buildInfo.IndexColumns.size() == 1);
-        auto textColumnInfo = baseColumnTypes.at(buildInfo.IndexColumns[0]);
+        // Fulltext index columns are [prefix..., text]; the text column is always last.
+        Y_ENSURE(!buildInfo.IndexColumns.empty());
+        auto textColumnInfo = baseColumnTypes.at(buildInfo.IndexColumns.back());
 
         auto types = std::make_shared<NTxProxy::TUploadTypes>(2);
         Ydb::Type type;
@@ -2095,6 +2286,28 @@ private:
         bool done = false;
 
         switch (buildInfo.SubState) {
+        case TIndexBuildInfo::ESubState::FulltextRowIdSrc:
+            // Compact rowid-mode prepass: copy the main table into the row-id source table (a generic
+            // secondary-index build over __ydb_row_id), then go back through CreateBuild (to build the
+            // 0build posting table) and the posting fill.
+            LOG_D("FillFulltextIndex RowIdSrc");
+            if (NoShardsAdded(buildInfo)) {
+                AddAllShards(buildInfo);
+            }
+            done = SendToShards(buildInfo, [&](TShardIdx shardIdx) { SendBuildFulltextRowIdSrcRequest(shardIdx, buildInfo); }) &&
+                buildInfo.DoneShards.size() == buildInfo.Shards.size();
+            if (done) {
+                LOG_D("FillFulltextIndex RowIdSrc Done");
+                ClearDoneShards(txc, buildInfo);
+                NIceDb::TNiceDb db{txc.DB};
+                buildInfo.SubState = TIndexBuildInfo::ESubState::None;
+                Self->PersistBuildIndexState(db, buildInfo);
+                Self->PersistBuildIndexShardStatusReset(db, buildInfo);
+                ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
+                Progress(BuildId);
+                done = false;
+            }
+            break;
         case TIndexBuildInfo::ESubState::None:
             // Stage 1 for FulltextRelevance - build "posting" table (token-documents)
             LOG_D("FillFulltextIndex Posting");
@@ -2275,7 +2488,18 @@ private:
     }
 
     bool CanProgressBuilding(const TIndexBuildInfo& buildInfo) const {
-        return !buildInfo.IsBuildColumns() || Self->EnableAddColumsWithDefaults;
+        if (!buildInfo.IsBuildColumns()) {
+            return true;
+        }
+        if (Self->EnableAddColumsWithDefaults) {
+            return true;
+        }
+        for (const auto& col : buildInfo.BuildColumns) {
+            if (!col.IsFromSequence()) {
+                return false;
+            }
+        }
+        return true;
     }
 
 public:
@@ -2308,10 +2532,28 @@ public:
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.LockTxId)));
             } else {
                 if (buildInfo.IsBuildColumns()) {
-                    ChangeState(BuildId, TIndexBuildInfo::EState::AlterMainTable);
+                    if (buildInfo.HasFromSequenceBuildColumn()) {
+                        ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuildSequence);
+                    } else {
+                        ChangeState(BuildId, TIndexBuildInfo::EState::AlterMainTable);
+                    }
                 } else {
                     ChangeState(BuildId, TIndexBuildInfo::EState::Initiating);
                 }
+                Progress(BuildId);
+            }
+            break;
+        case TIndexBuildInfo::EState::CreateBuildSequence:
+            Y_ENSURE(buildInfo.IsBuildColumns());
+            Y_ENSURE(buildInfo.HasFromSequenceBuildColumn());
+            if (buildInfo.CreateBuildSequenceTxId == InvalidTxId) {
+                AllocateTxId(BuildId);
+            } else if (buildInfo.CreateBuildSequenceTxStatus == NKikimrScheme::StatusSuccess) {
+                Send(Self->SelfId(), CreateBuildSequencePropose(Self, buildInfo), 0, ui64(BuildId));
+            } else if (!buildInfo.CreateBuildSequenceTxDone) {
+                Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.CreateBuildSequenceTxId)));
+            } else {
+                ChangeState(BuildId, TIndexBuildInfo::EState::AlterMainTable);
                 Progress(BuildId);
             }
             break;
@@ -2328,6 +2570,50 @@ public:
                 Progress(BuildId);
             }
             break;
+        case TIndexBuildInfo::EState::ProvisioningRowIdColumn: {
+            if (!buildInfo.RowIdColumnBuildId) {
+                // Mint the child build id (assigned + child created in the AllocateResult handler).
+                AllocateTxId(BuildId);
+                break;
+            }
+            auto* child = Self->IndexBuilds.FindPtr(buildInfo.RowIdColumnBuildId);
+            if (child && (*child)->IsDone()) {
+                ChangeState(BuildId, buildInfo.FulltextNeedsUniqueIndex
+                    ? TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex
+                    : TIndexBuildInfo::EState::Locking);
+                Progress(BuildId);
+            } else if (child && (*child)->IsCancelled()) {
+                // The child rolled back its own column on failure; the parent never locked, so it just
+                // transitions to Rejected (nothing of its own to unlock or drop).
+                NIceDb::TNiceDb db(txc.DB);
+                Self->PersistBuildIndexAddIssue(db, buildInfo,
+                    TStringBuilder() << "Auto-provisioning of '" << NTableIndex::NFulltext::RowIdColumn
+                        << "' column failed (child build " << buildInfo.RowIdColumnBuildId << ")");
+                ChangeState(BuildId, TIndexBuildInfo::EState::Rejected);
+                Progress(BuildId);
+            }
+            // else: child still in progress - it calls Progress(parent) when it finishes.
+            break;
+        }
+        case TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex: {
+            if (!buildInfo.RowIdUniqueBuildId) {
+                AllocateTxId(BuildId);
+                break;
+            }
+            auto* child = Self->IndexBuilds.FindPtr(buildInfo.RowIdUniqueBuildId);
+            if (child && (*child)->IsDone()) {
+                ChangeState(BuildId, TIndexBuildInfo::EState::Locking);
+                Progress(BuildId);
+            } else if (child && (*child)->IsCancelled()) {
+                NIceDb::TNiceDb db(txc.DB);
+                Self->PersistBuildIndexAddIssue(db, buildInfo,
+                    TStringBuilder() << "Auto-provisioning of the '" << buildInfo.AutoUniqueIndexName
+                        << "' unique index failed (child build " << buildInfo.RowIdUniqueBuildId << ")");
+                ChangeState(BuildId, TIndexBuildInfo::EState::Rejected);
+                Progress(BuildId);
+            }
+            break;
+        }
         case TIndexBuildInfo::EState::GatheringStatistics:
             ChangeState(BuildId, TIndexBuildInfo::EState::Initiating);
             Progress(BuildId);
@@ -2340,6 +2626,13 @@ public:
             } else if (!buildInfo.InitiateTxDone) {
                 Send(Self->SelfId(), MakeHolder<TEvSchemeShard::TEvNotifyTxCompletion>(ui64(buildInfo.InitiateTxId)));
             } else {
+                if (buildInfo.IsBuildFulltextCompactRowId() &&
+                    buildInfo.SubState == TIndexBuildInfo::ESubState::None) {
+                    // Run the row-id source prepass first: CreateBuild builds the rowid source table.
+                    NIceDb::TNiceDb db(txc.DB);
+                    buildInfo.SubState = TIndexBuildInfo::ESubState::FulltextRowIdSrc;
+                    Self->PersistBuildIndexState(db, buildInfo);
+                }
                 if (buildInfo.IsBuildVectorIndex() && buildInfo.KMeans.NeedsAnotherLevel() ||
                     buildInfo.IsBuildFulltextCompact()) {
                     ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
@@ -2351,13 +2644,19 @@ public:
 
             break;
         case TIndexBuildInfo::EState::Filling: {
-            if (!CanProgressBuilding(buildInfo) || buildInfo.IsCancellationRequested() || FillIndex(txc, buildInfo)) {
+            bool canProgress = CanProgressBuilding(buildInfo);
+            bool cancel = buildInfo.IsCancellationRequested();
+            bool fillRes = false;
+            if (canProgress && !cancel) {
+                fillRes = FillIndex(txc, buildInfo);
+            }
+            if (!canProgress || cancel || fillRes) {
                 auto nextState = TIndexBuildInfo::EState::Applying;
-                if (!CanProgressBuilding(buildInfo)) {
+                if (!canProgress) {
                     Y_ENSURE(buildInfo.IsBuildColumns());
                     buildInfo.AddIssue(TStringBuilder() << "Adding columns with defaults is disabled");
                     nextState = TIndexBuildInfo::EState::Rejection_DroppingColumns;
-                } else if (buildInfo.IsCancellationRequested()) {
+                } else if (cancel) {
                     nextState = buildInfo.IsBuildColumns()
                         ? TIndexBuildInfo::EState::Cancellation_DroppingColumns
                         : TIndexBuildInfo::EState::Cancellation_Applying;
@@ -2403,7 +2702,11 @@ public:
                 AllocateTxId(BuildId);
             } else if (buildInfo.ApplyTxStatus == NKikimrScheme::StatusSuccess) {
                 if (buildInfo.IsBuildFulltextCompact()) {
-                    Send(Self->SelfId(), CreateBuildFulltextPropose(Self, buildInfo), 0, ui64(BuildId));
+                    if (buildInfo.SubState == TIndexBuildInfo::ESubState::FulltextRowIdSrc) {
+                        Send(Self->SelfId(), CreateBuildFulltextRowIdSrcPropose(Self, buildInfo), 0, ui64(BuildId));
+                    } else {
+                        Send(Self->SelfId(), CreateBuildFulltextPropose(Self, buildInfo), 0, ui64(BuildId));
+                    }
                 } else {
                     Send(Self->SelfId(), CreateBuildPropose(Self, buildInfo), 0, ui64(BuildId));
                 }
@@ -2448,6 +2751,9 @@ public:
                     buildInfo.SubState == TIndexBuildInfo::ESubState::UniqConsistentValidation ||
                     buildInfo.SubState == TIndexBuildInfo::ESubState::PrepareValidation) {
                     tableName = NTableIndex::ImplTable;
+                } else if (buildInfo.SubState == TIndexBuildInfo::ESubState::None && buildInfo.IsBuildFulltextCompactRowId()) {
+                    // Lock the row-id source table before the posting fill scans it.
+                    tableName = TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix);
                 } else {
                     tableName = buildInfo.KMeans.ReadFrom();
                 }
@@ -2539,6 +2845,10 @@ public:
             break;
         case TIndexBuildInfo::EState::Done:
             SendNotificationsIfFinished(buildInfo);
+            // A provisioning child wakes its parent fulltext build to advance the prefix.
+            if (buildInfo.ParentBuildId) {
+                Progress(buildInfo.ParentBuildId);
+            }
             // stay calm keep status/issues
             break;
         case TIndexBuildInfo::EState::Cancellation_DroppingColumns:
@@ -2580,6 +2890,9 @@ public:
             break;
         case TIndexBuildInfo::EState::Cancelled:
             SendNotificationsIfFinished(buildInfo);
+            if (buildInfo.ParentBuildId) {
+                Progress(buildInfo.ParentBuildId);
+            }
             // stay calm keep status/issues
             break;
         case TIndexBuildInfo::EState::Rejection_DroppingColumns:
@@ -2626,6 +2939,9 @@ public:
             break;
         case TIndexBuildInfo::EState::Rejected:
             SendNotificationsIfFinished(buildInfo);
+            if (buildInfo.ParentBuildId) {
+                Progress(buildInfo.ParentBuildId);
+            }
             // stay calm keep status/issues
             break;
         }
@@ -2683,6 +2999,11 @@ public:
                         return GetBuildPath(Self, buildInfo, TString::Join(NTableIndex::ImplTable, NTableIndex::NKMeans::BuildSuffix0));
                     }
                     return GetBuildPath(Self, buildInfo, NTableIndex::ImplTable);
+                }
+                // Compact rowid-mode: the posting fill (SubState None) scans the row-id source table;
+                // the prepass (FulltextRowIdSrc) and all other builds scan the main table.
+                if (buildInfo.SubState == TIndexBuildInfo::ESubState::None && buildInfo.IsBuildFulltextCompactRowId()) {
+                    return GetBuildPath(Self, buildInfo, TString::Join(NTableIndex::ImplTable, NTableIndex::NFulltext::RowIdSrcBuildSuffix));
                 }
                 return TPath::Init(buildInfo.TablePathId, Self);
             case TIndexBuildInfo::EBuildKind::BuildSecondaryUniqueIndex:
@@ -3466,6 +3787,14 @@ public:
             Self->PersistBuildIndexAlterMainTableTxDone(db, buildInfo);
             break;
         }
+        case TIndexBuildInfo::EState::CreateBuildSequence:
+        {
+            Y_ENSURE(txId == buildInfo.CreateBuildSequenceTxId);
+
+            buildInfo.CreateBuildSequenceTxDone = true;
+            Self->PersistBuildIndexCreateBuildSequenceTxDone(db, buildInfo);
+            break;
+        }
         case TIndexBuildInfo::EState::Initiating:
         {
             Y_ENSURE(txId == buildInfo.InitiateTxId);
@@ -3509,6 +3838,10 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::Invalid:
+        // The provisioning prefix issues no scheme tx of its own (it delegates to child builds), so it
+        // never receives a tx-completion here.
+        case TIndexBuildInfo::EState::ProvisioningRowIdColumn:
+        case TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex:
         case TIndexBuildInfo::EState::GatheringStatistics:
         case TIndexBuildInfo::EState::Filling:
         case TIndexBuildInfo::EState::Done:
@@ -3638,6 +3971,16 @@ public:
 
             buildInfo.AlterMainTableTxStatus = record.GetStatus();
             Self->PersistBuildIndexAlterMainTableTxStatus(db, buildInfo);
+
+            ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
+            break;
+        }
+        case TIndexBuildInfo::EState::CreateBuildSequence:
+        {
+            Y_ENSURE(txId == buildInfo.CreateBuildSequenceTxId);
+
+            buildInfo.CreateBuildSequenceTxStatus = record.GetStatus();
+            Self->PersistBuildIndexCreateBuildSequenceTxStatus(db, buildInfo);
 
             ifErrorMoveTo(TIndexBuildInfo::EState::Rejection_Unlocking);
             break;
@@ -3772,6 +4115,9 @@ public:
             break;
         }
         case TIndexBuildInfo::EState::Invalid:
+        // The provisioning prefix issues no scheme tx of its own (it delegates to child builds).
+        case TIndexBuildInfo::EState::ProvisioningRowIdColumn:
+        case TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex:
         case TIndexBuildInfo::EState::GatheringStatistics:
         case TIndexBuildInfo::EState::Filling:
         case TIndexBuildInfo::EState::Done:
@@ -3824,6 +4170,12 @@ public:
                 Self->PersistBuildIndexAlterMainTableTxId(db, buildInfo);
             }
             break;
+        case TIndexBuildInfo::EState::CreateBuildSequence:
+            if (!buildInfo.CreateBuildSequenceTxId) {
+                buildInfo.CreateBuildSequenceTxId = txId;
+                Self->PersistBuildIndexCreateBuildSequenceTxId(db, buildInfo);
+            }
+            break;
         case TIndexBuildInfo::EState::Locking:
             if (!buildInfo.LockTxId) {
                 buildInfo.LockTxId = txId;
@@ -3834,6 +4186,25 @@ public:
             if (!buildInfo.InitiateTxId) {
                 buildInfo.InitiateTxId = txId;
                 Self->PersistBuildIndexInitiateTxId(db, buildInfo);
+            }
+            break;
+        case TIndexBuildInfo::EState::ProvisioningRowIdColumn:
+            if (!buildInfo.RowIdColumnBuildId) {
+                // Use the freshly allocated tx-id as the child build id and spawn the column build.
+                buildInfo.RowIdColumnBuildId = TIndexBuildId(ui64(txId));
+                Self->PersistBuildIndexFulltextProvisioning(db, buildInfo);
+                auto child = CreateRowIdProvisioningChild(Self, db, buildInfo, /*buildColumn=*/ true,
+                    buildInfo.RowIdColumnBuildId);
+                Progress(child->Id);
+            }
+            break;
+        case TIndexBuildInfo::EState::ProvisioningRowIdUniqueIndex:
+            if (!buildInfo.RowIdUniqueBuildId) {
+                buildInfo.RowIdUniqueBuildId = TIndexBuildId(ui64(txId));
+                Self->PersistBuildIndexFulltextProvisioning(db, buildInfo);
+                auto child = CreateRowIdProvisioningChild(Self, db, buildInfo, /*buildColumn=*/ false,
+                    buildInfo.RowIdUniqueBuildId);
+                Progress(child->Id);
             }
             break;
         case TIndexBuildInfo::EState::DropBuild:

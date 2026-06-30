@@ -232,6 +232,7 @@ TExprNode::TPtr GetPgNotNullColumns(
     auto pgNotNullColumns = Build<TCoAtomList>(ctx, pos);
 
     for (const auto& [column, meta] : table.Metadata->Columns) {
+        // TODO(flown4qqqq) check correctness with SetNotNullInProgress
         if (meta.NotNull && table.GetColumnType(column)->GetKind() == ETypeAnnotationKind::Pg) {
             pgNotNullColumns.Add<TCoAtom>()
                 .Value(column).Build();
@@ -1259,7 +1260,7 @@ bool CheckDisabledWriteToUniqIndex(const TExprBase& write, const NYql::TKikimrTa
 
 bool ValidateBatchOperation(const NYql::TKikimrTableDescription& tableData, const TExprBase& expr, TExprContext& ctx, TKqpOptimizeContext& kqpCtx)
 {
-    const bool allowBatchUpdates = kqpCtx.Config->GetEnableBatchUpdates() && kqpCtx.Config->GetEnableOltpSink();
+    const bool allowBatchUpdates = kqpCtx.Config->GetEnableOltpSink();
     const bool enabledIndexStreamWrite = kqpCtx.Config->GetEnableIndexStreamWrite();
 
     if (!allowBatchUpdates) {

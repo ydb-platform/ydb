@@ -8,6 +8,8 @@
 #include <util/generic/queue.h>
 #include <util/generic/bitmap.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_INCRHUGE
+
 using namespace NActors;
 
 namespace NKikimr {
@@ -66,10 +68,13 @@ namespace NKikimr {
                 }
             }
 
-            LOG_DEBUG(ctx, NKikimrServices::BS_INCRHUGE, "BlockSize# %" PRIu32 " BlocksInChunk# %" PRIu32
-                    " BlocksInMinBlob# %" PRIu32 " MaxBlobsPerChunk# %" PRIu32 " BlocksInDataSection# %" PRIu32
-                    " BlocksInIndexSection# %" PRIu32, State.BlockSize, State.BlocksInChunk, State.BlocksInMinBlob,
-                    State.MaxBlobsPerChunk, State.BlocksInDataSection, State.BlocksInIndexSection);
+            YDB_LOG_DEBUG_CTX(ctx, "Dump blockSize, blocksInChunk, blocksInMinBlob, maxBlobsPerChunk, blocksInDataSection, blocksInIndexSection",
+                {"blockSize", State.BlockSize},
+                {"blocksInChunk", State.BlocksInChunk},
+                {"blocksInMinBlob", State.BlocksInMinBlob},
+                {"maxBlobsPerChunk", State.MaxBlobsPerChunk},
+                {"blocksInDataSection", State.BlocksInDataSection},
+                {"blocksInIndexSection", State.BlocksInIndexSection});
 
             auto chunksIt = msg->StartingPoints.find(TLogSignature::SignatureIncrHugeChunks);
             auto deletesIt = msg->StartingPoints.find(TLogSignature::SignatureIncrHugeDeletes);

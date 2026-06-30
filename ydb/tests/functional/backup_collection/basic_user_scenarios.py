@@ -745,8 +745,6 @@ class BaseTestBackupInFiles(object):
                 kids = "<could not list children>"
             raise AssertionError(f"Imported snapshots did not appear in collection {target_collection} within 60s. Expected: {sorted(chosen)}. Present: {kids}")
 
-        time.sleep(5)
-
     def _add_more_tables(self, prefix: str, count: int = 1):
         created = []
         for i in range(1, count + 1):
@@ -918,6 +916,137 @@ class BaseTestBackupInFiles(object):
         res = self._execute_yql(f"DROP BACKUP COLLECTION `{collection_name}`;")
         assert res.exit_code == 0, f"Failed to drop backup collection '{collection_name}': {res.std_err}"
 
+    @staticmethod
+    def _extract_operation_id_from_sql_output(stdout):
+        """Pull the `operation_id` column value out of `ydb sql --format json-unicode` output."""
+        candidates = []
+        s = stdout.strip()
+        if s:
+            try:
+                parsed = json.loads(s)
+                if isinstance(parsed, list):
+                    candidates.extend(parsed)
+                elif isinstance(parsed, dict):
+                    candidates.append(parsed)
+            except json.JSONDecodeError:
+                for line in s.splitlines():
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        candidates.append(json.loads(line))
+                    except json.JSONDecodeError:
+                        continue
+        for obj in candidates:
+            if isinstance(obj, dict) and obj.get("operation_id"):
+                return str(obj["operation_id"])
+        return None
+
+    @staticmethod
+    def _wrap_operation_id(kind, raw_id):
+        """Wrap a bare numeric operation id into canonical ydb:// form."""
+        rid = str(raw_id)
+        if rid.startswith("ydb://"):
+            return rid
+        kind_num = {"fullbackup": 14, "incbackup": 11, "restore": 12}[kind]
+        return f"ydb://{kind}/{kind_num}?id={rid}"
+
+    def _run_ydb_sql_statement(self, sql, kind, max_retries=10):
+        """Run a backup/restore SQL statement via `ydb sql` (query service / ExecuteQuery),
+        which surfaces the operation_id result column. Retries transient errors and
+        returns the kind-wrapped operation id on success, or raises AssertionError."""
+        endpoint = f"grpc://localhost:{self.cluster.nodes[1].grpc_port}"
+        retry_delay = 2.0
+        last_out = last_err = ""
+        for attempt in range(max_retries + 1):
+            cmd = [
+                backup_bin(),
+                "-e", endpoint,
+                "-d", self.root_dir,
+                "sql",
+                "--script", sql,
+                "--format", "json-unicode",
+            ]
+            res = yatest.common.execute(cmd, check_exit_code=False)
+            out = (res.std_out or b"").decode("utf-8", "ignore")
+            err = (res.std_err or b"").decode("utf-8", "ignore")
+            last_out, last_err = out, err
+            if res.exit_code == 0:
+                raw = self._extract_operation_id_from_sql_output(out)
+                assert raw, (
+                    f"No operation_id column returned by `{sql}`:\nSTDOUT:{out}\nSTDERR:{err}"
+                )
+                wrapped = self._wrap_operation_id(kind, raw)
+                logger.info(f"[op] `{sql}` -> {wrapped}")
+                return wrapped
+            retryable = (
+                "OVERLOADED" in err
+                or "under operation" in err
+                or "path exist" in err
+            )
+            if retryable and attempt < max_retries:
+                logger.info(
+                    f"`{sql}` retryable error (attempt {attempt + 1}): {err.strip()}; "
+                    f"retry in {retry_delay}s"
+                )
+                time.sleep(retry_delay)
+                retry_delay = min(retry_delay * 1.5, 15.0)
+                continue
+            raise AssertionError(
+                f"`{sql}` failed: code={res.exit_code}\nSTDOUT:{out}\nSTDERR:{err}"
+            )
+        raise AssertionError(
+            f"`{sql}` exhausted retries\nSTDOUT:{last_out}\nSTDERR:{last_err}"
+        )
+
+    def poll_operation_until_terminal(self, op_id, timeout_s=240, poll_interval=2.0):
+        """Poll `ydb operation get <op_id>` until ready==true; return the parsed dict.
+
+        Raises AssertionError ONLY on a genuine timeout (the operation never
+        became ready) or on a CLI error. It does NOT assert on the terminal
+        status, so callers can distinguish a hang from a non-SUCCESS result.
+        """
+        endpoint = f"grpc://localhost:{self.cluster.nodes[1].grpc_port}"
+        deadline = time.time() + timeout_s
+        last = {}
+        while time.time() < deadline:
+            cmd = [
+                backup_bin(),
+                "-e", endpoint,
+                "-d", self.root_dir,
+                "operation", "get", op_id,
+                "--format", "proto-json-base64",
+            ]
+            res = yatest.common.execute(cmd, check_exit_code=False)
+            out = (res.std_out or b"").decode("utf-8", "ignore")
+            err = (res.std_err or b"").decode("utf-8", "ignore")
+            assert res.exit_code == 0, (
+                f"`operation get {op_id}` failed: code={res.exit_code}\n"
+                f"STDOUT:{out}\nSTDERR:{err}"
+            )
+            try:
+                last = json.loads(out)
+            except (json.JSONDecodeError, TypeError):
+                last = {"raw": out}
+            ready = last.get("ready", False)
+            status = last.get("status", "UNKNOWN")
+            logger.info(f"[poll] {op_id} ready={ready} status={status}")
+            if ready:
+                return last
+            time.sleep(poll_interval)
+        raise AssertionError(
+            f"operation {op_id} not ready within {timeout_s}s; last={last}"
+        )
+
+    def poll_operation_to_success(self, op_id, timeout_s=240, poll_interval=2.0):
+        """Poll until terminal, then assert the operation status is SUCCESS."""
+        last = self.poll_operation_until_terminal(op_id, timeout_s, poll_interval)
+        status = last.get("status", "UNKNOWN")
+        assert status == "SUCCESS", (
+            f"operation {op_id} terminal but status={status}: {last}"
+        )
+        return last
+
     def wait_for_changefeed_state(self, table_name: str, expected_enabled: int = 1,
                                   timeout: float = 5.0, poll_interval: float = 0.3) -> Tuple[bool, int, int]:
         start_time = time.time()
@@ -993,38 +1122,18 @@ class BackupBuilder:
 
         if self._backup_type == BackupType.INCREMENTAL:
             sql = f"BACKUP `{self.collection}` INCREMENTAL;"
+            kind = "incbackup"
         else:
             sql = f"BACKUP `{self.collection}`;"
+            kind = "fullbackup"
 
-        # Retry loop: incremental backups may hit OVERLOADED if a previous
-        # CDC stream alter hasn't finished yet (table still in EPathStateAlter).
-        max_retries = 10
-        retry_delay = 2.0
-        for attempt in range(max_retries + 1):
-            res = self.test._execute_yql(sql)
-            if res.exit_code == 0:
-                break
+        try:
+            op_id = self.test._run_ydb_sql_statement(sql, kind)
+            self.test.poll_operation_to_success(op_id, timeout_s=max(180, self._timeout * 6))
+        except AssertionError as e:
+            return BackupResult(success=False, snapshot_name=None, error_message=str(e))
 
-            out = (res.std_out or b"").decode('utf-8', 'ignore')
-            err = (res.std_err or b"").decode('utf-8', 'ignore')
-
-            is_retryable = "OVERLOADED" in err or "under operation" in err
-            if is_retryable and attempt < max_retries:
-                logger.info(
-                    f"Backup attempt {attempt + 1}/{max_retries + 1} got retryable error, "
-                    f"retrying in {retry_delay}s: {err.strip()}"
-                )
-                time.sleep(retry_delay)
-                retry_delay = min(retry_delay * 1.5, 15.0)
-                continue
-
-            error_msg = f"BACKUP failed: code={res.exit_code} STDOUT: {out} STDERR: {err}"
-            return BackupResult(
-                success=False,
-                snapshot_name=None,
-                error_message=error_msg
-            )
-
+        # Operation confirmed complete; retrieve the snapshot directory name.
         self.test.wait_for_collection_has_snapshot(self.collection, timeout_s=self._timeout)
         kids = sorted(self.test.get_collection_children(self.collection))
         snap_name = kids[-1] if kids else None
@@ -1084,76 +1193,46 @@ class RestoreBuilder:
         if self._remove_tables:
             self.test._try_remove_tables(self._remove_tables)
 
-        # Execute restore with retries for transient errors (e.g. table
-        # still being dropped or under CDC operation from a prior backup).
-        max_retries = 10 if not self._should_fail else 0
-        retry_delay = 2.0
-        baseline_ids = None
-        for attempt in range(max_retries + 1):
-            baseline_ids = self.test._list_restore_operation_ids()
-            res = self.test._execute_yql(f"RESTORE `{self._collection}`;")
-
-            if res.exit_code == 0:
-                break
-
-            err = (res.std_err or b"").decode('utf-8', 'ignore') if isinstance(res.std_err, bytes) else str(res.std_err or "")
-            is_retryable = (
-                "path exist" in err
-                or "under operation" in err
-                or "OVERLOADED" in err
-            )
-            if is_retryable and attempt < max_retries:
-                logger.info(
-                    f"Restore attempt {attempt + 1}/{max_retries + 1} got retryable error, "
-                    f"retrying in {retry_delay}s: {err.strip()}"
-                )
-                time.sleep(retry_delay)
-                retry_delay = min(retry_delay * 1.5, 15.0)
-                continue
-            break
+        sql = f"RESTORE `{self._collection}`;"
 
         if self._should_fail:
-            if res.exit_code != 0:
+            # For expected-failure cases we still try via _run_ydb_sql_statement,
+            # but catch rejection at statement level too. Don't retry an
+            # expected-failure statement (max_retries=0).
+            try:
+                op_id = self.test._run_ydb_sql_statement(sql, "restore", max_retries=0)
+            except AssertionError:
+                # Statement itself was rejected (exit_code != 0) — expected.
                 return RestoreResult(
                     success=True,
                     expected_failure=True,
-                    error_message="Restore failed as expected"
+                    error_message="Restore rejected as expected"
                 )
-            else:
+            # Statement accepted; poll to terminal state. A genuine timeout
+            # (operation hangs) raises here and fails the test — it is NOT an
+            # expected failure.
+            last = self.test.poll_operation_until_terminal(op_id, timeout_s=self._timeout)
+            status = last.get("status", "UNKNOWN")
+            if status != "SUCCESS":
+                # Operation finished but not SUCCESS — expected failure.
                 return RestoreResult(
-                    success=False,
+                    success=True,
                     expected_failure=True,
-                    error_message="Expected RESTORE to fail but it succeeded"
+                    error_message=f"Restore failed as expected: {status}"
                 )
-
-        if res.exit_code != 0:
+            # Operation succeeded — that's unexpected.
             return RestoreResult(
                 success=False,
-                error_message=f"RESTORE failed: {res.std_err}"
+                expected_failure=True,
+                error_message="Expected RESTORE to fail but it succeeded"
             )
 
-        if self._use_polling:
-            # Find the specific operation ID created by this RESTORE
-            new_op_id = self.test._find_new_restore_operation(baseline_ids)
-
-            if new_op_id:
-                ok, info = self.test.poll_restore_by_id(
-                    new_op_id,
-                    timeout_s=self._timeout,
-                    poll_interval=2.0,
-                    verbose=True
-                )
-            else:
-                logger.warning("Could not find restore operation ID, waiting for data directly")
-                ok = True
-                info = {"fallback": "no_operation_id"}
-
-            if not ok:
-                return RestoreResult(
-                    success=False,
-                    error_message="Timeout waiting restore",
-                    diagnostics=info
-                )
+        # Normal (non-expected-failure) path.
+        try:
+            op_id = self.test._run_ydb_sql_statement(sql, "restore")
+            self.test.poll_operation_to_success(op_id, timeout_s=self._timeout)
+        except AssertionError as e:
+            return RestoreResult(success=False, error_message=str(e))
 
         # Create result with success
         result = RestoreResult(success=True)
@@ -1320,11 +1399,6 @@ class BackupTestOrchestrator:
         # Only auto-remove tables if requested
         if auto_remove_tables:
             builder.remove_tables(self.tables)
-
-        if stage.backup_type == BackupType.INCREMENTAL:
-            pass
-        else:
-            builder.without_polling()
 
         return builder
 
@@ -1677,19 +1751,30 @@ class TestFullCycleLocalBackupRestoreWIncr(BaseTestBackupInFiles):
             )
             assert r.exit_code == 0, f"Failed to import incremental snapshot {snapshot_name}"
 
-        # Wait for snapshots to be registered
-        time.sleep(5)
+        # Wait for snapshots to be registered in the collection scheme.
+        self.wait_for_collection_has_snapshot(inc_only_collection, timeout_s=60)
 
-        # Now try to RESTORE - this should FAIL because there's no base full backup
-        rest_inc_only = self._execute_yql(f"RESTORE `{inc_only_collection}`;")
-        assert rest_inc_only.exit_code != 0, (
+        # Now try to RESTORE - this should FAIL because there's no base full backup.
+        # A statement rejection (exit_code != 0) or a terminal non-SUCCESS status
+        # both mean the restore failed as expected. A poll timeout (operation
+        # hangs) is a REAL test error, not an expected failure, so it must
+        # propagate.
+        restore_failed_as_expected = False
+        try:
+            op_id = self._run_ydb_sql_statement(
+                f"RESTORE `{inc_only_collection}`;", "restore", max_retries=0
+            )
+        except AssertionError:
+            restore_failed_as_expected = True  # statement rejected = expected
+        else:
+            last = self.poll_operation_until_terminal(op_id, timeout_s=60)  # timeout raises = real test error
+            if last.get("status", "UNKNOWN") != "SUCCESS":
+                restore_failed_as_expected = True
+
+        assert restore_failed_as_expected, (
             "CRITICAL: Restore from incremental-only collection succeeded but should have failed! "
             "This indicates a serious issue with incremental backup validation."
         )
-
-        # Wait for the failed operation to be fully finalized before
-        # proceeding to the next restore test.
-        time.sleep(5)
 
 
 class TestFullCycleLocalBackupRestoreWSchemaChange(BaseTestBackupInFiles):
@@ -2500,98 +2585,6 @@ class TestFullCycleOperationIdPolling(BaseTestBackupInFiles):
         err = (res.std_err or b"").decode("utf-8", "ignore")
         return out, err
 
-    @staticmethod
-    def _extract_operation_id(stdout):
-        """Pull the `operation_id` column value out of
-        `ydb yql --format json-unicode` output. Handles both a single JSON
-        value/array and newline-delimited JSON objects."""
-        candidates = []
-        s = stdout.strip()
-        if s:
-            try:
-                parsed = json.loads(s)
-                if isinstance(parsed, list):
-                    candidates.extend(parsed)
-                elif isinstance(parsed, dict):
-                    candidates.append(parsed)
-            except json.JSONDecodeError:
-                for line in s.splitlines():
-                    line = line.strip()
-                    if not line:
-                        continue
-                    try:
-                        candidates.append(json.loads(line))
-                    except json.JSONDecodeError:
-                        continue
-        for obj in candidates:
-            if isinstance(obj, dict) and obj.get("operation_id"):
-                return str(obj["operation_id"])
-        return None
-
-    @staticmethod
-    def _wrap_op_id(kind, raw_id):
-        """Wrap a bare numeric operation id into a canonical ydb:// id. The CLI
-        parser reads the numeric EKind from the URI path, so the form must be
-        ydb://<kind>/<num>?id=<n> (see operation_id.cpp). If the statement
-        already returned a wrapped id, keep it as-is."""
-        rid = str(raw_id)
-        if rid.startswith("ydb://"):
-            return rid
-        kind_num = {"fullbackup": 14, "incbackup": 11, "restore": 12}[kind]
-        return f"ydb://{kind}/{kind_num}?id={rid}"
-
-    def _run_statement_capture_op_id(self, sql, kind, max_retries=10):
-        """Run a backup/restore statement that returns an operation_id result
-        column, retrying transient errors, and return the kind-wrapped id.
-
-        Uses `ydb sql` (query service / ExecuteQuery), NOT `ydb yql`
-        (scripting / StreamExecuteYqlScript): the operation_id comes back as a
-        query result set, which the scripting path drops but the query service
-        surfaces (see kqp_scheme_ut BackupReturnsOperationId)."""
-        retry_delay = 2.0
-        last_out = last_err = ""
-        for attempt in range(max_retries + 1):
-            res = self._cli("sql", "--script", sql, "--format", "json-unicode")
-            out, err = self._decode(res)
-            last_out, last_err = out, err
-            if res.exit_code == 0:
-                raw = self._extract_operation_id(out)
-                assert raw, f"No operation_id column returned by `{sql}`:\nSTDOUT:{out}\nSTDERR:{err}"
-                wrapped = self._wrap_op_id(kind, raw)
-                logger.info(f"[op] `{sql}` -> {wrapped}")
-                return wrapped
-            retryable = ("OVERLOADED" in err or "under operation" in err or "path exist" in err)
-            if retryable and attempt < max_retries:
-                logger.info(f"`{sql}` retryable error (attempt {attempt + 1}): {err.strip()}; retry in {retry_delay}s")
-                time.sleep(retry_delay)
-                retry_delay = min(retry_delay * 1.5, 15.0)
-                continue
-            raise AssertionError(f"`{sql}` failed: code={res.exit_code}\nSTDOUT:{out}\nSTDERR:{err}")
-        raise AssertionError(f"`{sql}` exhausted retries\nSTDOUT:{last_out}\nSTDERR:{last_err}")
-
-    def poll_operation(self, op_id, timeout_s=240, poll_interval=2.0):
-        """Poll `ydb operation get <op_id>` until ready==true; assert SUCCESS.
-        This is the minimal external control loop: one GetOperation per
-        interval until the long op reaches its terminal state."""
-        deadline = time.time() + timeout_s
-        last = {}
-        while time.time() < deadline:
-            res = self._cli("operation", "get", op_id, "--format", "proto-json-base64")
-            out, err = self._decode(res)
-            assert res.exit_code == 0, f"`operation get {op_id}` failed: code={res.exit_code}\nSTDOUT:{out}\nSTDERR:{err}"
-            try:
-                last = json.loads(out)
-            except (json.JSONDecodeError, TypeError):
-                last = {"raw": out}
-            ready = last.get("ready", False)
-            status = last.get("status", "UNKNOWN")
-            logger.info(f"[poll] {op_id} ready={ready} status={status}")
-            if ready:
-                assert status == "SUCCESS", f"operation {op_id} terminal but status={status}: {last}"
-                return last
-            time.sleep(poll_interval)
-        raise AssertionError(f"operation {op_id} not ready within {timeout_s}s; last={last}")
-
     def operation_list_ids(self, kind):
         """Return the set of operation ids from `ydb operation list <kind>`."""
         res = self._cli("operation", "list", kind, "--format", "proto-json-base64")
@@ -2636,9 +2629,9 @@ class TestFullCycleOperationIdPolling(BaseTestBackupInFiles):
 
         # ---- 1) FULL backup: capture id -> ydb://fullbackup -> poll ------
         time.sleep(1.1)
-        full_id = self._run_statement_capture_op_id(f"BACKUP `{collection}`;", "fullbackup")
+        full_id = self._run_ydb_sql_statement(f"BACKUP `{collection}`;", "fullbackup")
         assert full_id.startswith("ydb://fullbackup/14?id="), full_id
-        self.poll_operation(full_id)
+        self.poll_operation_to_success(full_id)
         assert full_id in self.operation_list_ids("fullbackup"), \
             f"{full_id} not found in `operation list fullbackup`"
 
@@ -2650,18 +2643,18 @@ class TestFullCycleOperationIdPolling(BaseTestBackupInFiles):
         expected_products = self._capture_snapshot(t_products)
 
         time.sleep(1.1)
-        incr_id = self._run_statement_capture_op_id(f"BACKUP `{collection}` INCREMENTAL;", "incbackup")
+        incr_id = self._run_ydb_sql_statement(f"BACKUP `{collection}` INCREMENTAL;", "incbackup")
         assert incr_id.startswith("ydb://incbackup/11?id="), incr_id
-        self.poll_operation(incr_id)
+        self.poll_operation_to_success(incr_id)
         assert incr_id in self.operation_list_ids("incbackup"), \
             f"{incr_id} not found in `operation list incbackup`"
 
         # ---- 3) drop source tables, RESTORE: capture -> poll -------------
         self._try_remove_tables(tables)
 
-        restore_id = self._run_statement_capture_op_id(f"RESTORE `{collection}`;", "restore")
+        restore_id = self._run_ydb_sql_statement(f"RESTORE `{collection}`;", "restore")
         assert restore_id.startswith("ydb://restore/12?id="), restore_id
-        self.poll_operation(restore_id)
+        self.poll_operation_to_success(restore_id)
         assert restore_id in self.operation_list_ids("restore"), \
             f"{restore_id} not found in `operation list restore`"
 

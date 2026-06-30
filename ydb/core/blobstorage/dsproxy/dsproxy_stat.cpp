@@ -1,5 +1,7 @@
 #include "dsproxy_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::BS_PROXY
+
 namespace NKikimr {
 
     void TBlobStorageGroupProxy::HandleUpdateResponsiveness() {
@@ -20,7 +22,9 @@ namespace NKikimr {
             str << "}";
             return str.Str();
         };
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::BS_PROXY, "Group# " << GroupId << " Responsiveness# " << formatResponsiveness());
+        YDB_LOG_TRACE("HandleUpdateResponsiveness",
+            {"group", GroupId},
+            {"responsiveness", formatResponsiveness()});
 
         if (!ResponsivenessTracker.IsEmpty()) {
             ScheduleUpdateResponsiveness();

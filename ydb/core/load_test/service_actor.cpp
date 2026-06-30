@@ -29,6 +29,7 @@
 
 #include <util/generic/algorithm.h>
 #include <util/generic/guid.h>
+#include <util/string/strip.h>
 #include <util/string/type.h>
 
 namespace NKikimr {
@@ -772,6 +773,22 @@ public:
                 jr["read_p95"]      = static_cast<double>(s->ReadPbUs.GetValueAtPercentile(95.0));
                 jr["read_p99"]      = static_cast<double>(s->ReadPbUs.GetValueAtPercentile(99.0));
                 jr["max_in_flight"] = static_cast<ui64>(s->MaxInFlight);
+
+                // Attach typed stats (counters + serialized latency histograms)
+                // so a multi-tablet coordinator on another node can merge them
+                // into an exact combined result.
+                auto* ns = record.MutableNbsDbgLikeStats();
+                ns->SetNodeId(SelfId().NodeId());
+                ns->SetWritesOk(s->WritesOk);
+                ns->SetWriteBytes(s->WriteBytes);
+                ns->SetWritesErr(s->WritesErr);
+                ns->SetReadsOk(s->ReadsPbOk + s->ReadsDDiskOk);
+                ns->SetReadBytes(s->ReadsPbBytes + s->ReadsDDiskBytes);
+                ns->SetReadsErr(s->ReadsErr);
+                ns->SetMeasuredMs(s->MeasuredMs);
+                ns->SetMaxInFlight(s->MaxInFlight);
+                SerializeNbsDbgLikeHistogram(s->WriteE2eUs, *ns->MutableWriteLatencyUs());
+                SerializeNbsDbgLikeHistogram(s->ReadPbUs, *ns->MutableReadLatencyUs());
             }
 
             const NJson::TJsonValue& jsonResult = msg->JsonResult;
@@ -1073,6 +1090,10 @@ public:
                 << " origin# " << origin);
         } else if (mode == "tablet_run") {
             const ui64 tabletId    = FromStringWithDefault<ui64>(params.Get("tablet_id"), 0);
+            // Multi-tablet: CSV of "tabletId:nodeId" pairs. When present the run
+            // is dispatched to a coordinator that fans out one child run per
+            // tablet, placed on that tablet's node.
+            const TString targetsStr = params.Has("targets") ? params.Get("targets") : TString();
             const ui64 tag         = FromStringWithDefault<ui64>(params.Get("tag"), 0);
             const ui32 duration    = FromStringWithDefault<ui32>(params.Get("duration_seconds"), 0);
             const ui32 delayBefore = FromStringWithDefault<ui32>(params.Get("delay_before_seconds"), 15);
@@ -1084,8 +1105,24 @@ public:
             const ui32 maxInflightLsns    = FromStringWithDefault<ui32>(params.Get("max_inflight_lsns"), 4096);
             const bool disableReplication = params.Get("disable_replication") == "1";
 
-            if (!tabletId) {
-                GenerateJsonTagInfoRes(id, 0, "", "tablet_id is required");
+            std::vector<std::pair<ui64, ui32>> targets;
+            for (TStringBuf rest(targetsStr); rest;) {
+                TStringBuf token = rest.NextTok(',');
+                token = StripString(token);
+                if (!token) {
+                    continue;
+                }
+                TStringBuf tidBuf, nidBuf;
+                token.Split(':', tidBuf, nidBuf);
+                const ui64 tid = FromStringWithDefault<ui64>(StripString(tidBuf), 0);
+                const ui32 nid = FromStringWithDefault<ui32>(StripString(nidBuf), 0);
+                if (tid) {
+                    targets.emplace_back(tid, nid);
+                }
+            }
+
+            if (targets.empty() && !tabletId) {
+                GenerateJsonTagInfoRes(id, 0, "", "tablet_id or targets is required");
                 return;
             }
             if (disableReplication && readRatio > 0) {
@@ -1095,7 +1132,15 @@ public:
 
             NKikimr::TEvLoadTestRequest loadReq;
             auto* cmd = loadReq.MutableNbsDbgLikeLoad();
-            cmd->SetNbsDbgLikeTabletId(tabletId);
+            if (targets.empty()) {
+                cmd->SetNbsDbgLikeTabletId(tabletId);
+            } else {
+                for (const auto& [tid, nid] : targets) {
+                    auto* t = cmd->AddTargets();
+                    t->SetTabletId(tid);
+                    t->SetNodeId(nid);
+                }
+            }
             if (tag) {
                 cmd->SetTag(tag);
             }

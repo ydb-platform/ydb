@@ -98,7 +98,7 @@ def basic_kikimr_nemesis_list(
         try:
             bridge_nemesis = bridge_pile_nemesis_list(cluster)
             logger.info("Bridge pile nemesis count: %d", len(bridge_nemesis))
-            harmful_nemesis_list.extend(bridge_nemesis)
+            harmful_nemesis_list = bridge_nemesis
         except Exception as e:
             logger.error("Failed to add bridge pile nemesis: %s", e)
     else:

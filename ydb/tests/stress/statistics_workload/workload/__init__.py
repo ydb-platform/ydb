@@ -8,6 +8,7 @@ import random
 import string
 from ydb.tests.library.clients.kikimr_client import kikimr_client_factory
 from ydb.tests.library.common.protobuf_ss import SchemeDescribeRequest
+from ydb.tests.stress.common.instrumented_pools import InstrumentedQuerySessionPool, InstrumentedSessionPool
 
 ydb.interceptor.monkey_patch_event_handler()
 
@@ -43,7 +44,7 @@ class Workload(object):
         self.database = database
         self.driver = ydb.Driver(ydb.DriverConfig(f"{host}:{port}", database))
         self.kikimr_client = kikimr_client_factory(host, port)
-        self.pool = ydb.SessionPool(self.driver, size=200)
+        self.pool = InstrumentedSessionPool(self.driver, size=200)
         self.duration = duration
         self.batch_size = batch_size
         self.batch_count = batch_count
@@ -129,7 +130,7 @@ class Workload(object):
         self.run_query_ignore_errors(callee)
 
     def get_planner_row_count_estimate(self, table_name):
-        with ydb.QuerySessionPool(self.driver) as session_pool:
+        with InstrumentedQuerySessionPool(self.driver) as session_pool:
             res = session_pool.explain_with_retries(f"SELECT count(*) FROM {table_name}")
             logger.debug(f"SELECT count explain: {res}")
             explain = json.loads(res)

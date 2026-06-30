@@ -7,10 +7,9 @@ SRCS(
 PEERDIR(
     library/cpp/getopt
     library/cpp/svnversion
-    ydb/core/testlib/default
+    yql/essentials/sql/pg_dummy
+    ydb/core/util/actorsys_test
     ydb/services/sqs_topic
 )
-
-# test
 
 END()

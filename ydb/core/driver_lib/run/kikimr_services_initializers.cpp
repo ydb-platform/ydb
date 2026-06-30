@@ -203,8 +203,6 @@
 
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
 
-#include <ydb/library/yql/providers/common/token_accessor/client/caching_iam_credentials_provider_service.h>
-
 #include <yql/essentials/minikql/comp_nodes/mkql_factories.h>
 #include <yql/essentials/parser/pg_wrapper/interface/comp_factory.h>
 #include <ydb/library/yql/utils/actor_log/log.h>

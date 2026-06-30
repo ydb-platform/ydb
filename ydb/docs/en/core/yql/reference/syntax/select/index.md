@@ -24,7 +24,13 @@ The `SELECT` query result is calculated as follows:
 
 * Determine the set of input tables by evaluating the [FROM](from.md) clauses.
 * Apply [MATCH_RECOGNIZE](match_recognize.md) to input tables.
+<<<<<<< HEAD
+=======
+{% endif %}
+{% if feature_tablesample==true %}
+>>>>>>> 0d4a38f56a4 (Remove tablesample references (#44191))
 * Evaluate [SAMPLE](sample.md)/[TABLESAMPLE](sample.md).
+{% endif %}
 * Execute [FLATTEN COLUMNS](flatten.md#flatten-columns) or [FLATTEN BY](flatten.md); aliases set in `FLATTEN BY` become visible after this point.
 
 {% if feature_join %}
@@ -132,8 +138,14 @@ If the underlying queries have one of the `ORDER BY/LIMIT/DISCARD/INTO RESULT` o
 * [ORDER BY](order_by.md)
 * [ASSUME ORDER BY](assume_order_by.md)
 * [LIMIT OFFSET](limit_offset.md)
+{% if feature_tablesample==true %}
 * [SAMPLE](sample.md)
 * [TABLESAMPLE](sample.md)
+<<<<<<< HEAD
+=======
+{% endif %}
+{% if feature_match_recogznize==true %}
+>>>>>>> 0d4a38f56a4 (Remove tablesample references (#44191))
 * [MATCH_RECOGNIZE](match_recognize.md)
 
 {% if yt %}

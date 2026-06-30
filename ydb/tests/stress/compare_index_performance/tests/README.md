@@ -170,6 +170,12 @@ params. It posts the report files to the job summary and uploads the whole
 `testing_out_stuff` tree (reports, logs, flamegraphs) as the `benchmark-results`
 artifact.
 
+Set the **`flamegraph`** dispatch input to `true` to collect flamegraphs in CI
+(it passes `compare_flamegraph=1` and `compare_perf_sudo=1`). GitHub job
+summaries cannot render workspace SVGs inline, so the summary lists the
+flamegraph / diff filenames and you view them by downloading the
+`benchmark-results` artifact and opening the SVGs in a browser.
+
 ## Layout
 
 - `test_compare.py` — the test (orchestration, stats, report, flamegraphs).

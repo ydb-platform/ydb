@@ -43,7 +43,7 @@ public:
             GetTicket();
             {
                 std::lock_guard lock(Lock_);
-                if (now > ExpiresAt_ || LastErrorMessage_.has_value()) {
+                if (LastErrorMessage_.has_value() && now > ExpiresAt_) {
                     Ticket_.clear();
                 }
                 ticket = Ticket_;

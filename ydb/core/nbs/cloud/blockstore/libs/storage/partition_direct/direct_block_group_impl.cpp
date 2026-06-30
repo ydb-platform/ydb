@@ -266,7 +266,7 @@ TDirectBlockGroup::ReadBlocksFromDDisk(
                             hostIndex,
                             TMonotonic::Now() - startAt,
                             EOperation::ReadFromDDisk,
-                            false,
+                            true,
                             error);
                     }
 
@@ -341,7 +341,7 @@ TDirectBlockGroup::ReadBlocksFromPBuffer(
                             hostIndex,
                             TMonotonic::Now() - startAt,
                             EOperation::ReadFromPBuffer,
-                            false,
+                            true,
                             error);
                     }
 
@@ -419,7 +419,7 @@ TDirectBlockGroup::WriteBlocksToDDisk(
                             hostIndex,
                             TMonotonic::Now() - startAt,
                             EOperation::WriteToDDisk,
-                            false,
+                            true,
                             error);
                     }
 
@@ -494,7 +494,7 @@ TDirectBlockGroup::WriteBlocksToPBuffer(
                             hostIndex,
                             TMonotonic::Now() - startAt,
                             EOperation::WriteToPBuffer,
-                            false,
+                            true,
                             error);
                     }
 
@@ -637,7 +637,7 @@ void TDirectBlockGroup::OnWriteBlocksToManyPBuffersResponse(
             executionTime,
             isCoordinator ? EOperation::WriteToManyPBuffers
                           : EOperation::WriteToPBuffer,
-            !isCoordinator,
+            isCoordinator,
             error);
 
         dbgResponse.Responses.push_back(
@@ -848,7 +848,7 @@ NThreading::TFuture<TDBGEraseResponse> TDirectBlockGroup::BatchEraseFromPBuffer(
                             hostIndex,
                             TMonotonic::Now() - startAt,
                             EOperation::Erase,
-                            false,
+                            true,
                             error);
                     }
 
@@ -938,7 +938,7 @@ void TDirectBlockGroup::DoBarrierEraseFromPBuffer(
                         hostIndex,
                         TMonotonic::Now() - startAt,
                         EOperation::BarrierErase,
-                        false,
+                        true,
                         TranslateError(result));
                 });
         });
@@ -1323,12 +1323,12 @@ void TDirectBlockGroup::OnResponse(
     THostIndex hostIndex,
     TDuration executionTime,
     EOperation operation,
-    bool optional,
+    bool needDecreaseInflightCounters,
     const NProto::TError& error)
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
-    if (optional) {
+    if (!needDecreaseInflightCounters) {
         Oracle.OnRequestStarted(hostIndex, operation, TInstant::Now());
     }
 

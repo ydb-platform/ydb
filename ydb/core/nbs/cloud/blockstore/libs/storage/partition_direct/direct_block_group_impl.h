@@ -208,7 +208,7 @@ private:
         THostIndex hostIndex,
         TDuration executionTime,
         EOperation operation,
-        bool optional,   // does not require reducing the inflight counter
+        bool needDecreaseInflightCounters,
         const NProto::TError& error);
     void OnMultiFlushResponse(
         THostIndex pbufferHostIndex,

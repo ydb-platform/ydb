@@ -1680,7 +1680,7 @@ void TBootstrapperInitializer::InitializeServices(
     if (appData->FeatureFlags.GetEnableConfiguredBootstrapper()) {
         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             TActorId(),
-            TActorSetupCmd(CreateConfiguredTabletBootstrapper(Config.GetBootstrapConfig()), TMailboxType::HTSwap, appData->SystemPoolId)));
+            TActorSetupCmd(CreateConfiguredTabletBootstrapper(Config.GetBootstrapConfig(), /* manageAllTablets */ true), TMailboxType::HTSwap, appData->SystemPoolId)));
         return;
     }
 
@@ -1701,7 +1701,7 @@ void TBootstrapperInitializer::InitializeServices(
     if (dynamicConfig.TabletSize()) {
         setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
             TActorId(),
-            TActorSetupCmd(CreateConfiguredTabletBootstrapper(dynamicConfig), TMailboxType::HTSwap, appData->SystemPoolId)));
+            TActorSetupCmd(CreateConfiguredTabletBootstrapper(dynamicConfig, /* manageAllTablets */ false), TMailboxType::HTSwap, appData->SystemPoolId)));
     }
 }
 

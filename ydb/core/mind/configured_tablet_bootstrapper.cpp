@@ -55,6 +55,16 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
     bool WasLocalBootstrappersDisabled = false;
     NKikimrConfig::TBootstrap LastBootstrapConfig;
 
+    bool ManageAllTablets = true;
+    THashSet<ui64> OwnedTabletIds;
+
+    bool IsTabletInScope(const NKikimrConfig::TBootstrap::TTablet& tablet) const {
+        if (ManageAllTablets) {
+            return true;
+        }
+        return tablet.HasInfo() && tablet.GetInfo().HasTabletID() && OwnedTabletIds.contains(tablet.GetInfo().GetTabletID());
+    }
+
     void RegisterTabletBootstrapperControl(ui64 tabletId) {
         auto &state = TabletStates[tabletId];
         if (!state.HasDcbControl) {
@@ -122,6 +132,10 @@ class TConfiguredTabletBootstrapper : public TActorBootstrapped<TConfiguredTable
         for (const auto &tablet : bootstrapConfig.GetTablet()) {
             auto normalizedTablet = tablet;
             RestoreTabletInfoFromStartupConfig(normalizedTablet);
+
+            if (!IsTabletInScope(normalizedTablet)) {
+                continue;
+            }
 
             if (!HasCompleteTabletChannels(normalizedTablet)) {
                 if (normalizedTablet.HasInfo() && normalizedTablet.GetInfo().HasTabletID()) {
@@ -560,9 +574,17 @@ public:
 
     NKikimrConfig::TBootstrap InitialBootstrapConfig;
 
-    TConfiguredTabletBootstrapper(const NKikimrConfig::TBootstrap &bootstrapConfig)
-        : InitialBootstrapConfig(bootstrapConfig)
+    TConfiguredTabletBootstrapper(const NKikimrConfig::TBootstrap &bootstrapConfig, bool manageAllTablets)
+        : ManageAllTablets(manageAllTablets)
+        , InitialBootstrapConfig(bootstrapConfig)
     {
+        if (!ManageAllTablets) {
+            for (const auto &tablet : InitialBootstrapConfig.GetTablet()) {
+                if (tablet.HasInfo() && tablet.GetInfo().HasTabletID()) {
+                    OwnedTabletIds.insert(tablet.GetInfo().GetTabletID());
+                }
+            }
+        }
     }
 
     void Bootstrap() {
@@ -801,8 +823,8 @@ IActor* CreateTabletBootstrapper(const NKikimrConfig::TBootstrap::TTablet& table
     return CreateBootstrapper(storageInfo.Get(), bootstrapperInfo.Get(), tablet.GetStandBy());
 }
 
-IActor* CreateConfiguredTabletBootstrapper(const NKikimrConfig::TBootstrap &bootstrapConfig) {
-    return new TConfiguredTabletBootstrapper(bootstrapConfig);
+IActor* CreateConfiguredTabletBootstrapper(const NKikimrConfig::TBootstrap &bootstrapConfig, bool manageAllTablets) {
+    return new TConfiguredTabletBootstrapper(bootstrapConfig, manageAllTablets);
 }
 
 }

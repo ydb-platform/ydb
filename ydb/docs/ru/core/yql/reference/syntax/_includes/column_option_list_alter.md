@@ -17,13 +17,12 @@
 
 ### NOT NULL
 
-{% note warning %}
+Существуют две операции:
 
-На текущий момент поддерживается только операция `DROP NOT NULL`.
+* `SET NOT NULL` — устанавливает ограничение `NOT NULL` для колонки.
+* `DROP NOT NULL` — снимает ограничение `NOT NULL` с колонки, снова разрешая значения `NULL`.
 
-{% endnote %}
-
-Снимает ограничение `NOT NULL` с колонки, снова разрешая значения `NULL`.
+Подробнее можно прочитать [здесь](../alter_table/not_null.md).
 
 ### COMPRESSION([algorithm=<algorithm_name>[, level=<value>]])
 

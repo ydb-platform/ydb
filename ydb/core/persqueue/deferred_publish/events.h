@@ -10,13 +10,13 @@ namespace NKikimr::NPQ::NDeferredPublish {
 
 struct TEvDeferredPublish {
     enum EEv : ui32 {
-        EvBegin = EventSpaceBegin(TKikimrEvents::ES_PQ_DEFERRED_PUBLISH),
+        EvBeginPublicationRequest = EventSpaceBegin(TKikimrEvents::ES_PQ_DEFERRED_PUBLISH),
         EvBeginPublicationResponse,
         EvTablesCreationFinished,
         EvInsertPublicationFinished,
     };
 
-    struct TEvBeginPublicationRequest : public NActors::TEventLocal<TEvBeginPublicationRequest, EvBegin> {
+    struct TEvBeginPublicationRequest : public NActors::TEventLocal<TEvBeginPublicationRequest, EvBeginPublicationRequest> {
         TString Database;
         TString ExtPublicationId;
         TMaybe<TString> WriterIdentity;

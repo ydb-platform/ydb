@@ -332,4 +332,5 @@ message TFeatureFlags {
     // whose primary key is not a single integer. When OFF, no __ydb_row_id column or its unique index
     // is used or auto-provisioned, and such indexes fall back to requiring a single integer primary key.
     optional bool EnableFulltextIndexRowId = 289 [default = true];
+    optional bool EnableForcedColumnCompactions = 290 [default = false];
 }

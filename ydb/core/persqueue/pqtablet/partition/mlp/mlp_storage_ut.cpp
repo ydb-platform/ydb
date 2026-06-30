@@ -2798,6 +2798,76 @@ Y_UNIT_TEST(NextFromLockedStorage) {
     }
 }
 
+void NextFromLockedWithSequenceOfUnlocksImpl(bool initiatialBlockAll) {
+    TStorage storage(CreateDefaultTimeProvider(), {.KeepMessageOrder = true, .ParentPartitionId = {0}});
+
+    auto sendUpdate = [&, step = 10](NKikimrPQ::EReadWithKeepOrder mode, TConstArrayRef<ui32> blacklist) mutable {
+        NKikimrPQ::TExternalLockedMessageGroupsId unlock;
+        unlock.SetParentPartitionId(0);
+        unlock.SetGeneration(1);
+        unlock.SetConsumerGeneration(1);
+        unlock.SetStep(step);
+        unlock.SetMode(mode);
+        for (ui32 h : blacklist) {
+            unlock.MutableFullBlacklist()->AddParentLockedMessageGroupsIdHash(h);
+        }
+        storage.UpdateExternalLockedMessageGroupsId(unlock);
+        ++step;
+    };
+
+    constexpr ui32 A = 0xAAAA;
+    constexpr ui32 B = 0xBBBB;
+
+    storage.AddMessage(0, true, A, TInstant::Now());
+    storage.AddMessage(1, true, B, TInstant::Now());
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetFirstOffset(), 0);
+    UNIT_ASSERT_VALUES_EQUAL(storage.GetLastOffset(), 2);
+    {   // all locked
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now(), position);
+        UNIT_ASSERT(!result.has_value());
+    }
+
+    if (initiatialBlockAll)  {
+        sendUpdate(NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_BLOCK_ALL, {});
+    } else {
+        sendUpdate(NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_BLACKLIST, {A, B});
+    }
+    {   // still all locked
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now(), position);
+        UNIT_ASSERT(!result.has_value());
+    }
+
+    sendUpdate(NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_BLACKLIST, {A});
+    sendUpdate(NKikimrPQ::EReadWithKeepOrder::READ_WITH_KEEP_ORDER_ALLOW_ALL, {});
+
+    {   // all unlocked
+        TSet<ui32> offsets;
+        TStorage::TPosition position;
+
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+        UNIT_ASSERT(result.has_value());
+        offsets.insert(result->Offset);
+
+        result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+        UNIT_ASSERT(result.has_value());
+        offsets.insert(result->Offset);
+
+        result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+
+        UNIT_ASSERT_EQUAL_C(offsets, TSet<ui32>({0, 1}), '[' + JoinSeq(",", offsets) + ']');
+    }
+}
+
+Y_UNIT_TEST(NextFromLockedWithSequenceOfUnlocksBlockStart) {
+    NextFromLockedWithSequenceOfUnlocksImpl(true);
+}
+
+Y_UNIT_TEST(NextFromLockedWithSequenceOfUnlocksBlacklistStart) {
+    NextFromLockedWithSequenceOfUnlocksImpl(false);
+}
+
 Y_UNIT_TEST(LockedStorageGeneration) {
     TStorage storage(CreateDefaultTimeProvider(), {.KeepMessageOrder = true, .ParentPartitionId = {4}});
 

@@ -219,6 +219,7 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
             };
 
             auto [it, inserted] = States_.try_emplace(key); // creates empty weak_ptr
+            auto& weakState = it->second;
             lock.unlock(); // temporarily release lock
 
             try {
@@ -242,14 +243,14 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                 }
             } catch (...) {
                 lock.lock();
-                Y_ENSURE(it->second.expired());
-                States_.erase(it);
+                Y_ABORT_UNLESS(weakState.expired());
+                Y_ABORT_UNLESS(States_.erase(key));
                 throw;
             }
 
             lock.lock(); // re-acquire lock
-            Y_ENSURE(it->second.expired());
-            it->second = strongState; // iterator remains valid
+            Y_ABORT_UNLESS(weakState.expired());
+            weakState = strongState; // references remains valid
             break;
         }
     }

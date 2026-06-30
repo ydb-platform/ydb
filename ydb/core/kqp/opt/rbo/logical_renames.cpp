@@ -97,6 +97,11 @@ void IOperator::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashF
     Y_UNUSED(stopList);
 }
 
+void IOperator::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
+    Y_UNUSED(renameMap);
+    Y_UNUSED(ctx);
+}
+
 void TOpRead::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                         const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
     Y_UNUSED(ctx);
@@ -138,11 +143,26 @@ void TOpMap::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunc
     MapElements = std::move(newMapElements);
 }
 
+void TOpMap::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+
+    for (auto& el : MapElements) {
+        if (!el.IsRename()) {
+            el.SetExpression(el.GetExpression().ApplyRenames(renameMap));
+        }
+    }
+}
+
 void TOpAddDependencies::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                                    const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
     Y_UNUSED(ctx);
     Y_UNUSED(stopList);
     RenameInfoUnits(Dependencies, renameMap);
+}
+
+void TOpAddDependencies::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
+    Y_UNUSED(renameMap);
+    Y_UNUSED(ctx);
 }
 
 void TOpFilter::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
@@ -152,10 +172,32 @@ void TOpFilter::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashF
     FilterExpr = FilterExpr.ApplyRenames(renameMap);
 }
 
+void TOpFilter::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    FilterExpr = FilterExpr.ApplyRenames(renameMap);
+}
+
 void TOpJoin::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                         const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
     Y_UNUSED(ctx);
     Y_UNUSED(stopList);
+
+    for (auto& k : JoinKeys) {
+        if (renameMap.contains(k.first)) {
+            k.first = renameMap.at(k.first);
+        }
+        if (renameMap.contains(k.second)) {
+            k.second = renameMap.at(k.second);
+        }
+    }
+
+    for (auto& filter : JoinFilters) {
+        filter = filter.ApplyRenames(renameMap);
+    }
+}
+
+void TOpJoin::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
+    Y_UNUSED(ctx);
 
     for (auto& k : JoinKeys) {
         if (renameMap.contains(k.first)) {
@@ -194,6 +236,14 @@ void TOpLimit::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFu
     }
 }
 
+void TOpLimit::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    LimitCond = LimitCond.ApplyRenames(renameMap);
+    if (OffsetCond) {
+        OffsetCond = OffsetCond->ApplyRenames(renameMap);
+    }
+}
+
 void TOpSort::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                         const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
     Y_UNUSED(ctx);
@@ -218,6 +268,21 @@ void TOpSort::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFun
     SortElements = std::move(newSortElements);
 }
 
+void TOpSort::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+
+    for (auto& element : SortElements) {
+        const auto it = renameMap.find(element.SortColumn);
+        if (it != renameMap.end()) {
+            element.SortColumn = it->second;
+        }
+    }
+
+    if (LimitCond.has_value()) {
+        LimitCond = LimitCond->ApplyRenames(renameMap);
+    }
+}
+
 void TOpAggregate::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx,
                              const THashSet<TInfoUnit, TInfoUnit::THashFunction>& stopList) {
     Y_UNUSED(ctx);
@@ -235,6 +300,20 @@ void TOpAggregate::RenameIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THa
         }
         if (renameMap.contains(trait.ResultColName)) {
             trait.ResultColName = renameMap.at(trait.ResultColName);
+        }
+    }
+}
+
+void TOpAggregate::RenameUsedIUs(const THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>& renameMap, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+
+    if (DistinctAll) {
+        return;
+    }
+
+    for (auto& trait : AggregationTraitsList) {
+        if (renameMap.contains(trait.OriginalColName)) {
+            trait.OriginalColName = renameMap.at(trait.OriginalColName);
         }
     }
 }

@@ -238,7 +238,7 @@ class TPushRenameRule : public IRule {
 class TRewriteExpressionsToPreferredAliasesRule : public IRule {
   public:
     TRewriteExpressionsToPreferredAliasesRule()
-        : IRule("Rewrite expressions to preferred aliases", ERuleProperties::RequireLiveness | ERuleProperties::RequireAliases | ERuleProperties::RequireNameConstraints) {}
+        : IRule("Rewrite expressions to preferred aliases", ERuleProperties::RequireLiveness | ERuleProperties::RequireAliases) {}
 
     virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
 };

@@ -67,11 +67,6 @@ inputs:
     type: string
     required: false
     description: "Pull request number (for workflow_call events)"
-  analytics_job_name:
-    type: string
-    required: false
-    default: ""
-    description: "Override job_name in test_results and github_workflow in binary_size; default github.workflow"
   ci_ydb_service_account_key_file_credentials:
     type: string
     required: false
@@ -151,4 +146,3 @@ runs:
         telegram_alert_chat: ${{ fromJSON( inputs.vars ).GH_ALERTS_TG_CHAT || '' }}
         collect_coredumps: ${{ inputs.collect_coredumps }}
         pull_number: ${{ inputs.pull_number }}
-        analytics_job_name: ${{ inputs.analytics_job_name }}

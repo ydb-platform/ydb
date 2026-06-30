@@ -273,7 +273,6 @@ jobs:
         secs: ${{ env.CI_SECS }}
         vars: ${{ env.CI_VARS }}
   postcommit_build_and_test:
-    # Push to mainline: same build path as PR-check; legacy analytics names for mute/BI.
     if: >-
       github.event_name == 'push'
       && vars.CHECKS_SWITCH != ''
@@ -282,11 +281,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - build_preset: relwithdebinfo
-            analytics_job_name: Postcommit_relwithdebinfo
-          - build_preset: release-asan
-            analytics_job_name: Postcommit_asan
+        build_preset: [relwithdebinfo, release-asan]
     name: Postcommit · Build and test ${{ matrix.build_preset }}
     runs-on: [ self-hosted, auto-provisioned, "${{ format('build-preset-{0}', matrix.build_preset) }}", postcommit ]
     steps:
@@ -303,7 +298,6 @@ jobs:
         build_preset: ${{ matrix.build_preset }}
         increment: true
         additional_ya_make_args: -DDEBUGINFO_LINES_ONLY  # we don't need full symbols in CI checks
-        analytics_job_name: ${{ matrix.analytics_job_name }}
         ci_ydb_service_account_key_file_credentials: ${{ secrets.CI_YDB_SERVICE_ACCOUNT_KEY_FILE_CREDENTIALS }}
         ydb_qa_config: ${{ vars.YDB_QA_CONFIG }}
         secs: ${{ env.CI_SECS }}

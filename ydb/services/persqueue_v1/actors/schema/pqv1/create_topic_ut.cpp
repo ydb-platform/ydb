@@ -10,6 +10,8 @@ namespace NKikimr::NGRpcProxy::V1::NPQv1 {
 using namespace NYdb::NTopic::NTests;
 using namespace NKikimr::Tests::NGrpc;
 
+namespace {
+
 std::shared_ptr<TTopicSdkTestSetup> CreateSetup() {
     auto setup = std::make_shared<TTopicSdkTestSetup>("PQv1");
     setup->GetServer().EnableLogs({
@@ -92,10 +94,7 @@ void CreateDlqTopic(
     UNIT_ASSERT_VALUES_EQUAL_C(*result->ResultStatus, Ydb::StatusIds::SUCCESS, result->Issues.ToString());
 }
 
-    
-
-using namespace NYdb;
-using namespace NYdb::NQuery;
+} // namespace
 
 Y_UNIT_TEST_SUITE(CreateTopic_PQv1API) {
 
@@ -235,6 +234,6 @@ Y_UNIT_TEST(CreateTopicWithNameEqDB) {
     UNIT_ASSERT_VALUES_EQUAL_C(*status, Ydb::StatusIds::SCHEME_ERROR, result->Issues.ToString());
 }
 
-};
+} // Y_UNIT_TEST_SUITE(CreateTopic_PQv1API)
 
 } // namespace NKikimr::NGRpcProxy::V1::NPQv1

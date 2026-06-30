@@ -15,7 +15,7 @@
 
 namespace NKikimr::NPQ::NSchema {
 
-std::pair <TString, TString> GetWorkingDirAndName(const TString& fullName) {
+std::pair<TString, TString> GetWorkingDirAndName(const TString& fullName) {
     try {
         return NKikimr::NGRpcService::SplitPath(fullName);
     } catch (const std::exception &ex) {

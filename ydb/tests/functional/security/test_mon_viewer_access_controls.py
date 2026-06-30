@@ -49,22 +49,71 @@ def test_viewer_v2_aliases_access_controls(ydb_cluster_with_external_access_cont
     base_url = f'https://{node.host}:{node.mon_port}'
     db_qs = f'?database={DATABASE.replace("/", "%2F")}'
 
+    grant_query = (
+        f"GRANT 'ydb.granular.describe_schema' ON `{DATABASE}` "
+        f"TO `database@builtin`, `viewer@builtin`, `monitoring@builtin`;"
+    )
+    grant_response = requests.post(
+        base_url + '/viewer/query',
+        headers={'Authorization': 'root@builtin'},
+        params={'database': DATABASE, 'query': grant_query, 'schema': 'multi'},
+        verify=False,
+        timeout=30,
+    )
+    assert grant_response.status_code == 200, grant_response.text
+
     for ep in ['/viewer/v2/json/config', '/viewer/v2/json/config' + db_qs]:
+        # no access
         _assert_status(base_url, ep, 'database@builtin', 403)
         _assert_status(base_url, ep, 'viewer@builtin', 403)
-        _assert_not_status(base_url, ep, 'monitoring@builtin', 403)
-        _assert_not_status(base_url, ep, 'root@builtin', 403)
+        # with access
+        _assert_status(base_url, ep, 'monitoring@builtin', 200)
+        _assert_status(base_url, ep, 'root@builtin', 200)
 
-    for ep in ['/viewer/sysinfo', '/viewer/json/sysinfo', '/viewer/v2/json/sysinfo']:
+    SYSINFO_V2_ENDPOINT = '/viewer/v2/json/sysinfo'
+    # no database CGI-param for database_allowed_sids level
+    _assert_status(base_url, SYSINFO_V2_ENDPOINT, 'database@builtin', 400)
+    # with database CGI-param for database_allowed_sids level
+    _assert_status(base_url, SYSINFO_V2_ENDPOINT + db_qs, 'database@builtin', 200)
+    # check with and without database CGI-params for different access levels
+    _assert_status(base_url, SYSINFO_V2_ENDPOINT, 'viewer@builtin', 200)
+    _assert_status(base_url, SYSINFO_V2_ENDPOINT + db_qs, 'viewer@builtin', 200)
+    _assert_status(base_url, SYSINFO_V2_ENDPOINT, 'monitoring@builtin', 200)
+    _assert_status(base_url, SYSINFO_V2_ENDPOINT + db_qs, 'monitoring@builtin', 200)
+    _assert_status(base_url, SYSINFO_V2_ENDPOINT + db_qs, 'root@builtin', 200)
+    _assert_status(base_url, SYSINFO_V2_ENDPOINT, 'root@builtin', 200)
+
+
+def test_viewer_sysinfo_access_controls(ydb_cluster_with_external_access_controls):
+    node = ydb_cluster_with_external_access_controls.nodes[1]
+    base_url = f'https://{node.host}:{node.mon_port}'
+    db_qs = f'?database={DATABASE.replace("/", "%2F")}'
+
+    grant_query = (
+        f"GRANT 'ydb.granular.describe_schema' ON `{DATABASE}` "
+        f"TO `database@builtin`, `viewer@builtin`, `monitoring@builtin`;"
+    )
+    grant_response = requests.post(
+        base_url + '/viewer/query',
+        headers={'Authorization': 'root@builtin'},
+        params={'database': DATABASE, 'query': grant_query, 'schema': 'multi'},
+        verify=False,
+        timeout=30,
+    )
+    assert grant_response.status_code == 200, grant_response.text
+
+    for ep in ['/viewer/sysinfo', '/viewer/json/sysinfo']:
         # no database CGI-param for database_allowed_sids level
         _assert_status(base_url, ep, 'database@builtin', 400)
         # with database CGI-param for database_allowed_sids level
-        _assert_not_status(base_url, ep + db_qs, 'database@builtin', 403)
-
-        _assert_not_status(base_url, ep, 'viewer@builtin', 403)
-        _assert_not_status(base_url, ep + db_qs, 'viewer@builtin', 403)
-        _assert_not_status(base_url, ep, 'monitoring@builtin', 403)
-        _assert_not_status(base_url, ep, 'root@builtin', 403)
+        _assert_status(base_url, ep + db_qs, 'database@builtin', 200)
+        # check with and without database CGI-params for different access levels
+        _assert_status(base_url, ep, 'viewer@builtin', 200)
+        _assert_status(base_url, ep + db_qs, 'viewer@builtin', 200)
+        _assert_status(base_url, ep, 'monitoring@builtin', 200)
+        _assert_status(base_url, ep + db_qs, 'monitoring@builtin', 200)
+        _assert_status(base_url, ep + db_qs, 'root@builtin', 200)
+        _assert_status(base_url, ep, 'root@builtin', 200)
 
 
 # database@builtin is a strict database-only token and must be rejected when path is out of database scope.

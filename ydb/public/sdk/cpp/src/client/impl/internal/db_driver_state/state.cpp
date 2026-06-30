@@ -219,27 +219,27 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
             };
 
             auto [it, inserted] = States_.try_emplace(key); // creates empty weak_ptr
-            lock.unlock(); // release lock
+            lock.unlock(); // temporarily release lock
 
-            try { // TODO reindent
-            Y_ABORT_UNLESS(inserted);
-            strongState = std::shared_ptr<TDbDriverState>(
-                new TDbDriverState(
-                    quotedDatabase,
-                    discoveryEndpoint,
-                    discoveryMode,
-                    sslCredentials,
-                    DiscoveryClient_),
-                deleter);
+            try {
+                Y_ABORT_UNLESS(inserted);
+                strongState = std::shared_ptr<TDbDriverState>(
+                    new TDbDriverState(
+                        quotedDatabase,
+                        discoveryEndpoint,
+                        discoveryMode,
+                        sslCredentials,
+                        DiscoveryClient_),
+                    deleter);
 
-            strongState->SetCredentialsProvider(
-                credentialsProviderFactory
-                    ? credentialsProviderFactory->CreateProvider(strongState)
-                    : CreateInsecureCredentialsProviderFactory()->CreateProvider(strongState));
+                strongState->SetCredentialsProvider(
+                    credentialsProviderFactory
+                        ? credentialsProviderFactory->CreateProvider(strongState)
+                        : CreateInsecureCredentialsProviderFactory()->CreateProvider(strongState));
 
-            if (discoveryMode != EDiscoveryMode::Off) {
-                DiscoveryClient_->AddPeriodicTask(CreatePeriodicDiscoveryTask(strongState), DISCOVERY_RECHECK_PERIOD);
-            }
+                if (discoveryMode != EDiscoveryMode::Off) {
+                    DiscoveryClient_->AddPeriodicTask(CreatePeriodicDiscoveryTask(strongState), DISCOVERY_RECHECK_PERIOD);
+                }
             } catch (...) {
                 lock.lock();
                 Y_ENSURE(it->second.expired());
@@ -247,9 +247,9 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                 throw;
             }
 
-            lock.lock();
+            lock.lock(); // re-acquire lock
             Y_ENSURE(it->second.expired());
-            it->second = strongState; // iterator remains valid (as long as key was not erase'd)
+            it->second = strongState; // iterator remains valid
             break;
         }
     }

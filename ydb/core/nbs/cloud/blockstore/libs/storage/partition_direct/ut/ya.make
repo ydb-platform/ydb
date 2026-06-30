@@ -5,6 +5,7 @@ SRCS(
     ddisk_data_copier_ut.cpp
     direct_block_group_impl_ut.cpp
     direct_block_group_mock.cpp
+    direct_block_group_test_fixture.cpp
     erase_request_ut.cpp
     flush_request_ut.cpp
     read_request_ut.cpp

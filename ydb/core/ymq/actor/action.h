@@ -616,7 +616,7 @@ private:
 
         if (request.GetAuth().HasSourceAddress()) {
             SourceAddress_ = request.GetAuth().GetSourceAddress();
-        } else if (request.HasSourceAddress()) {
+        } else if constexpr (requires { request.GetSourceAddress(); }) {
             SourceAddress_ = request.GetSourceAddress();
         } else {
             SourceAddress_.clear();
@@ -670,7 +670,7 @@ private:
     }
 
     void HandleConfiguration(TSqsEvents::TEvConfiguration::TPtr& ev) {
-        const TDuration confDuraion = TActivationContext::Now() - StartTs_;
+        const TDuration confDuration = TActivationContext::Now() - StartTs_;
         RLOG_SQS_DEBUG("Get configuration duration: " << confDuration.MilliSeconds() << "ms");
 
         RootUrl_  = std::move(ev->Get()->RootUrl);

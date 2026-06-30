@@ -2013,7 +2013,7 @@ private:
     }
 
     void InitCachingIamServiceProvider() {
-        if (!FederatedQuerySetup || !FeatureFlags.GetEnableExternalDataSourceAuthMethodIam() || CachingIamCredentialsService) {
+        if (!FederatedQuerySetup || CachingIamCredentialsService) {
             return;
         }
         auto actor = NYql::NewCachingIamServiceCredentialsProviderService();

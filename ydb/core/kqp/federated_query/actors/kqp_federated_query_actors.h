@@ -248,4 +248,6 @@ NThreading::TFuture<TEvDescribeResourceIdResponse::TDescription> DescribeExterna
 
 IActor* CreateDescribeResourceIdServiceActor(const std::shared_ptr<NYdb::TDriver>& driver);
 
+std::unique_ptr<NActors::IActor> NewCachingIamServiceCredentialsProviderService();
+
 }  // namespace NKikimr::NKqp

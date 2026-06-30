@@ -151,7 +151,6 @@ PEERDIR(
     ydb/library/security
     ydb/library/yql/providers/pq/cm_client
     ydb/library/slide_limiter/service
-    ydb/library/yql/providers/common/token_accessor/client
     ydb/library/yql/providers/s3/actors
     ydb/public/lib/base
     ydb/public/lib/deprecated/client

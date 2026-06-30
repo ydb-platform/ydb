@@ -1,12 +1,7 @@
 #include "factory.h"
 #include "bearer_credentials_provider.h"
 #include "token_accessor_client_factory.h"
-#include <ydb/core/base/appdata.h>
 #include "caching_iam_credentials_provider.h"
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/driver/driver.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/types/credentials/credentials.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam/iam.h>
-#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/iam_private/iam.h>
 #include <yql/essentials/providers/common/structured_token/yql_structured_token.h>
 #include <yql/essentials/providers/common/structured_token/yql_token_builder.h>
 #include <util/string/cast.h>
@@ -92,9 +87,6 @@ std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFact
     }
 
     if (parser.HasIamAuth()) {
-        if (!NKikimr::AppData()->FeatureFlags.GetEnableExternalDataSourceAuthMethodIam()) {
-            throw yexception() << "AUTH_METHOD=IAM is disabled. Please contact your system administrator to enable it";
-        }
         TString serviceAccountId;
         TString resourceId;
         parser.GetIamAuth(serviceAccountId, resourceId);

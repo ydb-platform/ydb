@@ -4187,7 +4187,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT(pushedMap->MapElements[1].GetRename() == TInfoUnit("a"));
     }
 
-    Y_UNIT_TEST(PushRenameTreatsDeadAppendAliasAsRenameThroughJoin) {
+    Y_UNIT_TEST(PushRenamePushesSemanticRenameThroughJoin) {
         TMapRuleTestContext testContext;
         TPlanProps expressionProps;
         const auto pos = NYql::TPositionHandle();
@@ -4201,10 +4201,10 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
             "Inner",
             TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
         );
-        auto aliasMap = MakeIntrusive<TOpMap>(join, pos, TVector<TMapElement>{
-            MakeTestAppend("l_a", "a", pos, testContext.ExprCtx, expressionProps),
+        auto renameMap = MakeIntrusive<TOpMap>(join, pos, TVector<TMapElement>{
+            MakeTestRename("l_a", "a", pos, testContext.ExprCtx, expressionProps),
         });
-        TOpRoot root(aliasMap, pos, {"l_a", "right_payload"});
+        TOpRoot root(renameMap, pos, {"l_a", "right_payload"});
 
         TVector<std::unique_ptr<IRule>> rules;
         rules.emplace_back(std::make_unique<TPushRenameRule>());
@@ -4781,6 +4781,49 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         auto leftMap = CastOperator<TOpMap>(rewrittenJoin->GetLeftInput());
         UNIT_ASSERT_VALUES_EQUAL(leftMap->MapElements.size(), 1);
         UNIT_ASSERT(leftMap->MapElements.front().GetElementName() == TInfoUnit("one"));
+    }
+
+    Y_UNIT_TEST(PushMapElementsPushesRenameShadowingMovedJoinExpressionOutput) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto leftRead = MakeTestRead({TInfoUnit("a")}, pos);
+        auto rightRead = MakeTestRead({TInfoUnit("b")}, pos);
+        auto join = MakeIntrusive<TOpJoin>(
+            leftRead,
+            rightRead,
+            pos,
+            "Left",
+            TVector<std::pair<TInfoUnit, TInfoUnit>>{{TInfoUnit("a"), TInfoUnit("b")}}
+        );
+        auto map = MakeIntrusive<TOpMap>(join, pos, TVector<TMapElement>{
+            MakeTestConstantAppend("a", pos, testContext.ExprCtx),
+            MakeTestRename("x", "a", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(map, pos, {"a", "x"});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TPushAppendThroughJoinRule>());
+        TRuleBasedStage pushMapElements("Focused push map elements through join", std::move(rules));
+        ComputeLogicalTestProps(root);
+        pushMapElements.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Join, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenJoin = CastOperator<TOpJoin>(root.GetInput());
+        UNIT_ASSERT_C(rewrittenJoin->GetLeftInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(rewrittenJoin->GetRightInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
+
+        auto leftMap = CastOperator<TOpMap>(rewrittenJoin->GetLeftInput());
+        UNIT_ASSERT_VALUES_EQUAL(leftMap->MapElements.size(), 2);
+        UNIT_ASSERT(leftMap->MapElements[0].GetElementName() == TInfoUnit("a"));
+        UNIT_ASSERT(leftMap->MapElements[1].IsRename());
+        UNIT_ASSERT(leftMap->MapElements[1].GetElementName() == TInfoUnit("x"));
+        UNIT_ASSERT(leftMap->MapElements[1].GetRename() == TInfoUnit("a"));
+
+        UNIT_ASSERT_VALUES_EQUAL(rewrittenJoin->JoinKeys.size(), 1);
+        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().first == TInfoUnit("x"));
+        UNIT_ASSERT(rewrittenJoin->JoinKeys.front().second == TInfoUnit("b"));
     }
 
     Y_UNIT_TEST(PushAppendExpressionConstantStaysAboveFullJoin) {

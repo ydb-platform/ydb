@@ -41,7 +41,6 @@ SRCS(
     map/push_rename_into_map_producer.cpp
     map/push_rename_into_read.cpp
     map/push_rename_through_aggregate_key.cpp
-    map/push_rename_through_join_side.cpp
     map/push_rename_through_map.cpp
     map/push_rename_wrapper.cpp
     map/rewrite_to_preferred_alias.cpp

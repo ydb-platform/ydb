@@ -43,7 +43,7 @@ namespace NYql::NDq {
 
         std::string iamToken;
         try {
-            iamToken = CredentialsProvider_->GetAuthInfo();
+            iamToken = CredentialsProvider_->GetAuthInfo(true);
         } catch (const std::exception& e) {
             YQL_CLOG(ERROR, ProviderGeneric) << "FillCredentials: " << e.what();
             return TString(e.what());

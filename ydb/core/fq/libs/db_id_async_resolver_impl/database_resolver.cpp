@@ -639,7 +639,7 @@ private:
                 NHttp::THttpOutgoingRequestPtr httpRequest = NHttp::THttpOutgoingRequest::CreateRequestGet(url);
 
                 auto credentialsProviderFactory = CreateCredentialsProviderFactoryForStructuredToken(CredentialsFactory, databaseAuth.StructuredToken, databaseAuth.AddBearerToToken);
-                auto token = credentialsProviderFactory->CreateProvider()->GetAuthInfo();
+                auto token = credentialsProviderFactory->CreateProvider()->GetAuthInfo(false);
                 if (!token.empty()) {
                     httpRequest->Set("Authorization", token);
                 }

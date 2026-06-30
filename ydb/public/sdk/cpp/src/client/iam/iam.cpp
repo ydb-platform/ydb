@@ -25,7 +25,7 @@ public:
         GetTicket();
     }
 
-    std::string GetAuthInfo() const override {
+    std::string GetAuthInfo(bool /*throwOnError*/) const override {
         std::string ticket;
         TInstant nextTicketUpdate;
         {

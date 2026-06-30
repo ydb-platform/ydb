@@ -1522,7 +1522,7 @@ public:
         LOG_D("TS3StreamReadActor", "RegisterCoro with path " << object.GetPath() << " with pathIndex " << pathIndex);
 
         TActorId actorId;
-        const auto& authInfo = Credentials.GetAuthInfo();
+        const auto& authInfo = Credentials.GetAuthInfo(false);
         auto stuff = std::make_shared<TRetryStuff>(
             Gateway,
             Url + object.GetPath(),

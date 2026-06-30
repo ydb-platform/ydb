@@ -652,7 +652,7 @@ void TMultiAuthFactory::RegisterAuthActor(NActors::TActorSystem& system, TAuthAc
     const ui32 poolID = data.ExecutorPoolID;
 
     // token needed only for ResourceManager
-    const TString token = UseResourceManagerFolderService_ ? CredentialsProvider_->GetAuthInfo() : "";
+    const TString token = UseResourceManagerFolderService_ ? CredentialsProvider_->GetAuthInfo(false) : "";
 
     if (data.RequestFormat == NSQS::TAuthActorData::Json) {
         auto requester = data.Requester;

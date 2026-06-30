@@ -26,22 +26,18 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
         )
 
     def write_data(self):
-        driver = self.create_driver()
-        try:
-            with ydb.QuerySessionPool(driver) as session_pool:
-                for _ in range(10):
-                    random_key = random.randint(1, 1000)
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            for _ in range(10):
+                random_key = random.randint(1, 1000)
 
-                    def operation(session, key=random_key):
-                        session.transaction().execute(
-                            f"""
-                            UPSERT INTO {TABLE_NAME} (key, value) VALUES ({key}, 'Hello, YDB {key}!')
-                            """,
-                            commit_tx=True
-                        )
-                    session_pool.retry_operation_sync(operation)
-        finally:
-            driver.stop()
+                def operation(session, key=random_key):
+                    session.transaction().execute(
+                        f"""
+                        UPSERT INTO {TABLE_NAME} (key, value) VALUES ({key}, 'Hello, YDB {key}!')
+                        """,
+                        commit_tx=True
+                    )
+                session_pool.retry_operation_sync(operation)
 
     def read_data(self):
         queries = [
@@ -60,16 +56,12 @@ class TestStatisticsTLI(RestartToAnotherVersionFixture):
             f"SELECT value FROM {TABLE_NAME} WHERE key > 800 AND key <= 1000;",
         ]
 
-        driver = self.create_driver()
-        try:
-            with ydb.QuerySessionPool(driver) as session_pool:
-                for _ in range(10):
-                    for query in queries:
-                        def operation(session, q=query):
-                            session.transaction().execute(q, commit_tx=True)
-                        session_pool.retry_operation_sync(operation)
-        finally:
-            driver.stop()
+        with ydb.QuerySessionPool(self.driver) as session_pool:
+            for _ in range(10):
+                for query in queries:
+                    def operation(session, q=query):
+                        session.transaction().execute(q, commit_tx=True)
+                    session_pool.retry_operation_sync(operation)
 
     def generate_tli(self):
         errors = []

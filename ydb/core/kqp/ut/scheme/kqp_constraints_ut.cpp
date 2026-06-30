@@ -4039,21 +4039,21 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(CompileTimeDefaults_Ast_Upsert, FlagEnabled) {
-        TestCompileTimeDefaultsPlan("UPSERT", FlagEnabled);
+    Y_UNIT_TEST_TWIN(CompileTimeDefaults_Ast_Upsert, EnableCompileTimeDefaults) {
+        TestCompileTimeDefaultsPlan("UPSERT", EnableCompileTimeDefaults);
     }
 
-    Y_UNIT_TEST_TWIN(CompileTimeDefaults_Ast_Replace, FlagEnabled) {
-        TestCompileTimeDefaultsPlan("REPLACE", FlagEnabled);
+    Y_UNIT_TEST_TWIN(CompileTimeDefaults_Ast_Replace, EnableCompileTimeDefaults) {
+        TestCompileTimeDefaultsPlan("REPLACE", EnableCompileTimeDefaults);
     }
 
-    Y_UNIT_TEST_TWIN(CompileTimeDefaults_Ast_Insert, FlagEnabled) {
-        TestCompileTimeDefaultsPlan("INSERT", FlagEnabled);
+    Y_UNIT_TEST_TWIN(CompileTimeDefaults_Ast_Insert, EnableCompileTimeDefaults) {
+        TestCompileTimeDefaultsPlan("INSERT", EnableCompileTimeDefaults);
     }
 
-    Y_UNIT_TEST_TWIN(CompileTimeDefaults_Write_Upsert, FlagEnabled) {
+    Y_UNIT_TEST_TWIN(CompileTimeDefaults_Write_Upsert, EnableCompileTimeDefaults) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(FlagEnabled);
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
 
@@ -4279,9 +4279,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(CompileTimeDefaults_Write_Replace, FlagEnabled) {
+    Y_UNIT_TEST_TWIN(CompileTimeDefaults_Write_Replace, EnableCompileTimeDefaults) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(FlagEnabled);
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
 
@@ -4493,9 +4493,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(CompileTimeDefaults_Write_Insert, FlagEnabled) {
+    Y_UNIT_TEST_TWIN(CompileTimeDefaults_Write_Insert, EnableCompileTimeDefaults) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(FlagEnabled);
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
 
@@ -4676,6 +4676,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             const std::string query = R"(
                 CREATE TABLE AllTypesDefaultTest (
                     Key Int32,
+                    BoolCol Bool DEFAULT True,
                     Int8Col Int8 DEFAULT -100,
                     Int16Col Int16 DEFAULT -200,
                     Int32Col Int32 DEFAULT -300,
@@ -4713,7 +4714,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             const std::string query = R"(
                 UPSERT INTO AllTypesDefaultTest (Key) VALUES (1)
                 RETURNING
-                    Key,
+                    Key, BoolCol,
                     Int8Col, Int16Col, Int32Col, Int64Col,
                     Uint8Col, Uint16Col, Uint32Col, Uint64Col,
                     FloatCol, DoubleCol,
@@ -4727,7 +4728,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
             CompareYson(R"([
-                [[1];
+                [[1];[%true];
                 [-100];[-200];[-300];[-400];
                 [10u];[20u];[30u];[40u];
                 [1.5];[2.5];
@@ -4744,7 +4745,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         {
             const std::string query = R"(
                 SELECT
-                    Key,
+                    Key, BoolCol,
                     Int8Col, Int16Col, Int32Col, Int64Col,
                     Uint8Col, Uint16Col, Uint32Col, Uint64Col,
                     FloatCol, DoubleCol,
@@ -4759,7 +4760,7 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
             CompareYson(R"([
-                [[1];
+                [[1];[%true];
                 [-100];[-200];[-300];[-400];
                 [10u];[20u];[30u];[40u];
                 [1.5];[2.5];
@@ -4774,9 +4775,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(CompileTimeDefaults_NotNullDefault, FlagEnabled) {
+    Y_UNIT_TEST_TWIN(CompileTimeDefaults_NotNullDefault, EnableCompileTimeDefaults) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(FlagEnabled);
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
 
@@ -4975,9 +4976,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST_TWIN(CompileTimeDefaults_NullableDefault, FlagEnabled) {
+    Y_UNIT_TEST_TWIN(CompileTimeDefaults_NullableDefault, EnableCompileTimeDefaults) {
         NKikimrConfig::TAppConfig appConfig;
-        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(FlagEnabled);
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
 
@@ -5221,9 +5222,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(CompileTimeDefaults_WithGlobalSyncIndex) {
+    Y_UNIT_TEST_TWIN(CompileTimeDefaults_WithGlobalSyncIndex, EnableIndexStreamWrite) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(true);
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
 
@@ -5345,9 +5347,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(CompileTimeDefaults_WithGlobalAsyncIndex) {
+    Y_UNIT_TEST_TWIN(CompileTimeDefaults_WithGlobalAsyncIndex, EnableIndexStreamWrite) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(true);
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
 
@@ -5469,9 +5472,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(CompileTimeDefaults_WithGlobalSyncUniqueIndex) {
+    Y_UNIT_TEST_TWIN(CompileTimeDefaults_WithGlobalSyncUniqueIndex, EnableIndexStreamWrite) {
         NKikimrConfig::TAppConfig appConfig;
         appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(true);
+        appConfig.MutableTableServiceConfig()->SetEnableIndexStreamWrite(EnableIndexStreamWrite);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
 

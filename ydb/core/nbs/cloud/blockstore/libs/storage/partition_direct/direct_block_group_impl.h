@@ -128,6 +128,17 @@ public:
 
     ui64 GetDDiskSessionSeqNo(size_t index) const;
 
+    void AddHost(
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
+
+    void RequestAddHost();
+
+    void OnAddHostFailed(const TString& reason) override;
+
+    size_t GetHostCount() const override;
+
     // IHostStateController implementation
     void SetHostState(
         THostIndex hostIndex,
@@ -168,6 +179,8 @@ private:
 
     void DoEstablishConnections();
     void DoEstablishConnection(size_t index, EConnectionType connectionType);
+
+    void NotifyVChunksAboutNewHost(size_t newHostCount);
     void OnConnectionEstablished(
         EConnectionType connectionType,
         size_t index,
@@ -238,6 +251,8 @@ private:
     TDDiskIdToHostIndex PBufferIdToHostIndex;
     TVector<TVChunkWeakPtr> VChunks;
     TOracle Oracle;
+
+    bool Initialized = false;
 
     // One-shot signal of the FIRST time the locked quorum was reached. Used
     // ONLY to gate the synchronous tablet start (wait for readiness before

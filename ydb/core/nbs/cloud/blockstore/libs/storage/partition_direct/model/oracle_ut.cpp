@@ -2,6 +2,7 @@
 
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -53,7 +54,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         const auto hosts = THostMask::MakeAll(5);
 
-        TOracle oracle(storageConfig, nullptr);
+        TOracle oracle(storageConfig, nullptr, DirectBlockGroupHostCount);
 
         // Host 2 has the lowest inflight count (zero), all others are higher.
         const auto now = TInstant::Now();
@@ -82,7 +83,7 @@ Y_UNIT_TEST_SUITE(TOracle)
 
         const auto hosts = THostMask::MakeOne(3);
 
-        TOracle oracle(storageConfig, nullptr);
+        TOracle oracle(storageConfig, nullptr, DirectBlockGroupHostCount);
 
         // Host 2 has the lowest inflight count (zero), all others are higher.
         const auto now = TInstant::Now();
@@ -115,7 +116,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         hosts.Set(0);
         hosts.Set(3);
 
-        TOracle oracle(storageConfig, nullptr);
+        TOracle oracle(storageConfig, nullptr, DirectBlockGroupHostCount);
 
         const auto now = TInstant::Now();
         for (THostIndex hostIndex: {0, 0, 3}) {
@@ -150,7 +151,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         hosts.Set(2);
         hosts.Set(4);
 
-        TOracle oracle(storageConfig, nullptr);
+        TOracle oracle(storageConfig, nullptr, DirectBlockGroupHostCount);
 
         std::map<THostIndex, size_t> counts;
         const size_t iterations = 3000;
@@ -186,7 +187,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         // picked - only ties at the global minimum are randomized.
         const auto hosts = THostMask::MakeAll(5);
 
-        TOracle oracle(storageConfig, nullptr);
+        TOracle oracle(storageConfig, nullptr, DirectBlockGroupHostCount);
 
         // Host 2 has the lowest inflight count (zero), all others are higher.
         const auto now = TInstant::Now();
@@ -215,7 +216,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         const std::vector<THostIndex> hostIndexes = {0, 1, 2, 3, 4};
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DirectBlockGroupHostCount);
         auto now = TInstant::Now();
 
         oracle.Think(now);
@@ -283,7 +284,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         const std::vector<THostIndex> hostIndexes = {0, 1, 2, 3, 4};
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DirectBlockGroupHostCount);
         auto now = TInstant::Now();
 
         oracle.Think(now);
@@ -326,7 +327,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         const std::vector<THostIndex> hostIndexes = {0, 1, 2, 3, 4};
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DirectBlockGroupHostCount);
         auto now = TInstant::Now();
 
         oracle.Think(now);
@@ -373,7 +374,7 @@ Y_UNIT_TEST_SUITE(TOracle)
         const std::vector<THostIndex> hostIndexes = {0, 1, 2, 3, 4};
 
         THostStateControllerMock hostStateController;
-        TOracle oracle(config, &hostStateController);
+        TOracle oracle(config, &hostStateController, DirectBlockGroupHostCount);
         auto now = TInstant::Now();
 
         oracle.Think(now);

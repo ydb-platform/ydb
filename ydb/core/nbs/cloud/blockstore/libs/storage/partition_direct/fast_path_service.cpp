@@ -371,6 +371,13 @@ void TFastPathService::UpdateVChunkConfig(const TVChunkConfig& cfg)
     ActorSystem->Send(PartitionActorId, event.release());
 }
 
+void TFastPathService::RequestAddHost(size_t directBlockGroupId)
+{
+    auto event = std::make_unique<TEvPartitionDirectPrivate::TEvAddHostToDBG>(
+        directBlockGroupId);
+    ActorSystem->Send(PartitionActorId, event.release());
+}
+
 ui64 TFastPathService::GenerateLsn()
 {
     const ui64 lsn = ++SequenceGenerator;

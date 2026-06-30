@@ -94,7 +94,8 @@ private:
 
 TOracle::TOracle(
     TStorageConfigPtr storageConfig,
-    IHostStateController* hostStateController)
+    IHostStateController* hostStateController,
+    size_t hostCount)
     : StorageConfig(std::move(storageConfig))
     , HostStateController(hostStateController)
     , DefaultReadHedgingDelay(StorageConfig->GetReadHedgingDelay())
@@ -106,8 +107,8 @@ TOracle::TOracle(
     , DefaultFlushRequestTimeout(StorageConfig->GetFlushRequestTimeout())
     , DefaultEraseRequestTimeout(StorageConfig->GetEraseRequestTimeout())
     , DefaultWriteMode(GetWriteModeFromProto(StorageConfig->GetWriteMode()))
-    , HostStatistics(DirectBlockGroupHostCount)
-    , HostStates(DirectBlockGroupHostCount)
+    , HostStatistics(hostCount)
+    , HostStates(hostCount)
 {
     HostsHealths.resize(HostStates.size());
     for (auto& healths: HostsHealths) {
@@ -167,6 +168,13 @@ void TOracle::Think(TInstant now)
             }
         }
     }
+}
+
+void TOracle::OnHostAdded()
+{
+    HostStatistics.emplace_back();
+    HostStates.emplace_back();
+    HostsHealths.push_back(EHostHealth::Online);
 }
 
 void TOracle::OnRequestStarted(

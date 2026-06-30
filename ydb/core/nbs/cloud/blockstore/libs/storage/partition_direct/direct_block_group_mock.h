@@ -2,6 +2,7 @@
 
 #include "direct_block_group.h"
 
+#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -213,6 +214,24 @@ public:
         THostIndex hostIndex) override;
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
+
+    using TAddHostHandler = std::function<void(
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId)>;
+    TAddHostHandler AddHostHandler;
+
+    void AddHost(
+        THostIndex newHostIndex,
+        NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
+        NKikimrBlobStorage::NDDisk::TDDiskId pbufferId) override;
+
+    using TOnAddHostFailedHandler = std::function<void(const TString& reason)>;
+    TOnAddHostFailedHandler OnAddHostFailedHandler;
+    void OnAddHostFailed(const TString& reason) override;
+
+    size_t HostCount = DirectBlockGroupHostCount;
+    size_t GetHostCount() const override;
 };
 
 using TDirectBlockGroupMockPtr = std::shared_ptr<TDirectBlockGroupMock>;

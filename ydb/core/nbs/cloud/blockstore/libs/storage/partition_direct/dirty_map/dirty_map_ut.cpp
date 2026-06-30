@@ -90,6 +90,27 @@ Y_UNIT_TEST_SUITE(TDirtyMapTest)
             readHint.DebugPrint());
     }
 
+    Y_UNIT_TEST(ShouldResizeHosts)
+    {
+        auto vchunkConfig = MakeTestVChunkConfig();
+        TBlocksDirtyMap dirtyMap(
+            vchunkConfig,
+            DefaultBlockSize,
+            DefaultVChunkSize / DefaultBlockSize);
+
+        vchunkConfig.AppendHost();
+        const auto newIdx = static_cast<THostIndex>(5);
+        dirtyMap.ResizeHosts(vchunkConfig.GetHostCount());
+        dirtyMap.UpdateConfig(vchunkConfig);
+
+        UNIT_ASSERT_VALUES_EQUAL(
+            0u,
+            dirtyMap.GetPBufferCounters(newIdx).CurrentBytesCount);
+        UNIT_ASSERT_STRING_CONTAINS(
+            dirtyMap.DebugPrintDDiskState(),
+            "H5-{Disabled,0,0}");
+    }
+
     Y_UNIT_TEST(ShouldRespectWatermarksWhenConstruct)
     {
         auto vchunkConfig = MakeTestVChunkConfig();

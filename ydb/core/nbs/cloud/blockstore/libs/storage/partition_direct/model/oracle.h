@@ -66,7 +66,8 @@ class TOracle: public IOracle
 public:
     TOracle(
         TStorageConfigPtr storageConfig,
-        IHostStateController* hostStateController);
+        IHostStateController* hostStateController,
+        size_t hostCount);
 
     void Think(TInstant now);
 
@@ -83,6 +84,8 @@ public:
         THostIndex hostIndex,
         EOperation operation,
         TInstant now) override;
+
+    void OnHostAdded();
 
     [[nodiscard]] THostIndex SelectBestPBufferHost(
         THostMask hosts,

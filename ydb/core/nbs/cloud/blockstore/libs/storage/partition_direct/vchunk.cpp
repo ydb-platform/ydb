@@ -221,6 +221,31 @@ void TVChunk::SetHostState(THostIndex hostIndex, EHostState state)
     UpdateConfig(std::move(prepare), std::move(apply));
 }
 
+void TVChunk::OnHostAppended(size_t newHostCount)
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    BlocksDirtyMap.ResizeHosts(newHostCount);
+
+    auto prepare = [weakSelf = weak_from_this()]() -> TVChunkConfig
+    {
+        if (auto self = weakSelf.lock()) {
+            TVChunkConfig cfg = self->VChunkConfig;
+            cfg.AppendHost();
+            return cfg;
+        }
+        return TVChunkConfig{};
+    };
+    auto apply = [weakSelf = weak_from_this()]()
+    {
+        if (auto self = weakSelf.lock()) {
+            self->ApplyConfig();
+        }
+    };
+
+    UpdateConfig(std::move(prepare), std::move(apply));
+}
+
 const TVChunkConfig& TVChunk::GetConfig() const
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
@@ -344,6 +369,16 @@ void TVChunk::DoStart()
 
     LogTitle.SetDiskId(PartitionDirectService->GetVolumeConfig()->DiskId);
     DirectBlockGroup->Register(weak_from_this());
+
+    // On recovery our persisted config can lag the DBG's connection count
+    // (connections persist first). Catch up before restoring the dirty map.
+    const size_t dbgHostCount = DirectBlockGroup->GetHostCount();
+    for (size_t hostCount = VChunkConfig.GetHostCount() + 1;
+         hostCount <= dbgHostCount;
+         ++hostCount)
+    {
+        OnHostAppended(hostCount);
+    }
 
     LOG_DEBUG(
         *ActorSystem,

@@ -49,6 +49,8 @@ TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
     , Lsn(other.Lsn)
     , ByteCount(other.ByteCount)
     , StartAt(other.StartAt)
+    , PBuffersLockCount(other.PBuffersLockCount)
+    , QuorumReadyPromise(std::move(other.QuorumReadyPromise))
     , WriteRequested(other.WriteRequested)
     , WriteConfirmed(other.WriteConfirmed)
     , FlushRequested(other.FlushRequested)
@@ -57,6 +59,7 @@ TInflightInfo::TInflightInfo(TInflightInfo&& other) noexcept
     , EraseConfirmed(other.EraseConfirmed)
 {
     other.ReadyQueue = nullptr;
+    other.PBuffersLockCount = 0;
 }
 
 TInflightInfo::~TInflightInfo()
@@ -223,7 +226,9 @@ bool TInflightInfo::RequestErase(THostIndex host)
 {
     Y_ABORT_UNLESS(
         State == EState::PBufferFlushed || State == EState::PBufferErasing);
-    Y_ABORT_UNLESS(FlushConfirmed.Count() >= QuorumDirectBlockGroupHostCount);
+    // When the DDisk is not fully filled, the flush is made into the filled
+    // area. Thus, the number of completed flushes may be less than the quorum.
+    Y_ABORT_UNLESS(!FlushConfirmed.Empty());
 
     if (WriteRequested.Get(host) && !EraseRequested.Get(host)) {
         State = EState::PBufferErasing;
@@ -300,8 +305,14 @@ TString TInflightInfo::DebugPrint(TInstant now) const
     TStringBuilder result;
     result << " " << FormatDuration(now - StartAt) << ", " << ToString(State)
            << ", size:" << ByteCount << ", locks:" << PBuffersLockCount
-           << ", requested:" << WriteRequested.Print()
-           << ", confirmed:" << WriteConfirmed.Print();
+           << ", wr:" << WriteRequested.Print()
+           << ", wc:" << WriteConfirmed.Print()
+           << ", fd:" << FlushDesired.Print()
+           << ", fr:" << FlushRequested.Print()
+           << ", fc:" << FlushConfirmed.Print()
+           << ", er:" << EraseRequested.Print()
+           << ", ec:" << EraseConfirmed.Print();
+
     return result;
 }
 

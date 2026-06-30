@@ -60,7 +60,7 @@ public:
         }
     }
 
-    Y_FORCE_INLINE void ParseField(ui16 columnId, const TString& name, NSkiff::EWireType wireType, bool required = false)
+    Y_FORCE_INLINE void ParseField(ui16 columnId, const std::string& name, NSkiff::EWireType wireType, bool required = false)
     {
         if (!required) {
             ui8 tag = Parser_->ParseVariant8Tag();
@@ -149,12 +149,12 @@ public:
 private:
     struct TField
     {
-        TString Name;
+        std::string Name;
         NSkiff::EWireType WireType;
         ui16 ColumnId = 0;
         bool Required = false;
 
-        TField(TString name, NSkiff::EWireType wireType, ui16 columnId, bool required)
+        TField(std::string name, NSkiff::EWireType wireType, ui16 columnId, bool required)
             : Name(std::move(name))
             , WireType(wireType)
             , ColumnId(columnId)

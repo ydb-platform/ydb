@@ -185,7 +185,7 @@ public:
             permission.Deadline = TInstant::MicroSeconds(deadline);
             permission.Priority = priority;
 
-            YDB_LOG_DEBUG_CTX(ctx, "Loaded permission owned by valid until",
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded permission",
                 {"id", id.data()},
                 {"owner", owner.data()},
                 {"until", TInstant::MicroSeconds(deadline).ToStringLocalUpToSeconds().data()},
@@ -225,7 +225,7 @@ public:
             notification.Owner = owner;
             ParseFromStringSafe(notificationStr, &notification.Notification);
 
-            YDB_LOG_DEBUG_CTX(ctx, "Loaded notification owned by",
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded notification",
                 {"id", id.data()},
                 {"owner", owner.data()},
                 {"notification", notificationStr.data()});

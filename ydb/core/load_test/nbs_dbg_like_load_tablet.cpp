@@ -320,7 +320,7 @@ struct TRootCounters {
 };
 
 // Per-batch flush/erase tracking. One entry per outgoing
-// TEvSyncWithPersistentBuffer / TEvBatchErasePersistentBuffer keyed by a
+// TEvSync / TEvBatchErasePersistentBuffer keyed by a
 // fresh u64 cookie so retries from one batch never disturb another.
 struct TFlushBatch {
     ui32 DbgIndex = 0;
@@ -477,7 +477,7 @@ public:
             HFunc(TEvLoad::TEvNbsRead, HandleNbsRead);
             HFunc(TEvLoad::TEvConfigureTablet, HandleConfigureTablet);
             HFunc(NDDisk::TEvWritePersistentBuffersResult, HandleWritePbsResult);
-            HFunc(NDDisk::TEvSyncWithPersistentBufferResult, HandleSyncResult);
+            HFunc(NDDisk::TEvSyncResult, HandleSyncResult);
             HFunc(NDDisk::TEvErasePersistentBufferResult, HandleEraseResult);
             HFunc(NDDisk::TEvReadPersistentBufferResult, HandlePbReadResult);
             HFunc(NDDisk::TEvReadResult, HandleDDiskReadResult);
@@ -531,7 +531,7 @@ private:
     void HandleConfigureTablet(TEvLoad::TEvConfigureTablet::TPtr& ev, const TActorContext& ctx);
     void HandleWritePbsResult(NDDisk::TEvWritePersistentBuffersResult::TPtr& ev,
         const TActorContext& ctx);
-    void HandleSyncResult(NDDisk::TEvSyncWithPersistentBufferResult::TPtr& ev,
+    void HandleSyncResult(NDDisk::TEvSyncResult::TPtr& ev,
         const TActorContext& ctx);
     void HandleEraseResult(NDDisk::TEvErasePersistentBufferResult::TPtr& ev,
         const TActorContext& ctx);
@@ -1250,6 +1250,13 @@ void TNbsDbgLikeLoadTablet::Handle(TEvLoad::TEvNbsLoadTabletAllocateGroups::TPtr
 
     AllocConfig = ev->Get()->Record.GetAllocConfig();
 
+    // Storage namespace owner must be unique per load tablet; the PB dedup key
+    // is {TabletId, Generation, Lsn}. A shared/user-supplied id makes two load
+    // tablets collide ("duplicate record with incorrect data"). Always use our
+    // own (Hive-assigned) TabletID() as the BSC allocation owner and PB/DD
+    // credential TabletId.
+    AllocConfig.SetTabletId(TabletID());
+
     // Input validation (spec §23.10 / Phase 2.6).
     if (AllocConfig.GetNumDirectBlockGroups() == 0) {
         return reply(NBSLT_INTERNAL_ERROR, "NumDirectBlockGroups must be > 0");
@@ -1673,7 +1680,7 @@ void TNbsDbgLikeLoadTablet::RenderHtml(IOutputStream& out) const {
                 TABLER() { TABLED() { out << "Phase"; } TABLED() {
                     out << Phase;
                 } }
-                TABLER() { TABLED() { out << "AllocTabletId"; } TABLED() { out << AllocConfig.GetTabletId(); } }
+                TABLER() { TABLED() { out << "Storage owner (TabletId)"; } TABLED() { out << AllocConfig.GetTabletId(); } }
                 TABLER() { TABLED() { out << "NumDirectBlockGroups"; } TABLED() { out << Dbgs.size(); } }
                 TABLER() { TABLED() { out << "VChunkSizeBytes"; } TABLED() { out << AllocConfig.GetVChunkSizeBytes(); } }
                 TABLER() { TABLED() { out << "BscRetryAttempts"; } TABLED() { out << BscRetryAttempts; } }
@@ -2192,7 +2199,17 @@ void TNbsDbgLikeActor::HandleNbsWrite(TEvLoad::TEvNbsWrite::TPtr& ev, const TAct
     }
 
     auto& dbg = Dbg;
-    const ui64 lsn = ++SequenceGenerator;
+    // LSNs must be unique per {TabletId, Generation}: when PB slots are scarce
+    // the BSC packs several DBGs of this tablet onto the SAME persistent-buffer
+    // slot instance (AllocatePersistentBuffer refcounts and reuses slots; there
+    // is no cross-DBG exclusion). A PB record is deduped by {TabletId,
+    // Generation, Lsn} only -- the per-DBG DDiskInstanceGuid identifies the slot
+    // instance (identical for two DBGs on one slot) and is not part of the key.
+    // Stride the per-worker sequence by DbgIndex so two DBG workers never emit
+    // the same Lsn against a shared PB slot. Single-DBG layout is unchanged
+    // (stride 1, index 0 -> 1, 2, 3, ...).
+    const ui64 lsnStride = Max<ui64>(1, NumDbgsTotal);
+    const ui64 lsn = (SequenceGenerator++) * lsnStride + MyDbgIndex + 1;
     const ui32 coord = ChooseCoordinator(dbg);
 
     TWriteInfo info;
@@ -2534,7 +2551,7 @@ void TNbsDbgLikeActor::HandleWritePbsResult(
         EnterState(dbg, EPBufferState::PBufferIncompleteWrite, /*delta=*/-1);
         if (TabletConfig.GetDisableReplication()) {
             // Skip flush: jump directly to PBufferFlushed so DoErase can
-            // reclaim PB space without sending TEvSyncWithPersistentBuffer.
+            // reclaim PB space without sending TEvSync.
             info.State = EPBufferState::PBufferFlushed;
             EnterState(dbg, EPBufferState::PBufferFlushed, /*delta=*/+1);
             if (dbg.ReadyToErase.insert(lsn).second) {
@@ -2667,15 +2684,14 @@ void TNbsDbgLikeActor::DoFlush(TPerDbgState& dbg) {
             dbg.PBIdsPb[k].GetNodeId(),
             dbg.PBIdsPb[k].GetPDiskId(),
             dbg.PBIdsPb[k].GetDDiskSlotId()};
-        auto ev = std::make_unique<NDDisk::TEvSyncWithPersistentBuffer>(
-            creds, srcId, dbg.PBGuid[k]);
+        auto ev = std::make_unique<NDDisk::TEvSync>(creds);
         TFlushBatch batchInfo;
         batchInfo.DbgIndex = dbg.DbgIndex;
         batchInfo.Sink = static_cast<ui8>(k);
         batchInfo.Lsns.reserve(pending[k].size());
         batchInfo.SentAt = MonotonicNow();
         for (auto& [lsn, sel] : pending[k]) {
-            ev->AddSegment(sel, lsn, generation);
+            ev->AddSegmentFromPB(srcId, dbg.PBGuid[k], sel, lsn, generation);
             batchInfo.Lsns.push_back(lsn);
         }
         const ui64 cookie = NextBatchCookie++;
@@ -2705,7 +2721,7 @@ void TNbsDbgLikeActor::DoFlush(TPerDbgState& dbg) {
 }
 
 void TNbsDbgLikeActor::HandleSyncResult(
-    NDDisk::TEvSyncWithPersistentBufferResult::TPtr& ev,
+    NDDisk::TEvSyncResult::TPtr& ev,
     const TActorContext& ctx)
 {
     const ui64 cookie = ev->Cookie;

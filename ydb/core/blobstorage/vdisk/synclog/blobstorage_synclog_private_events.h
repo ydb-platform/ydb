@@ -5,8 +5,11 @@
 #include <ydb/core/blobstorage/groupinfo/blobstorage_groupinfo.h>
 #include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_data.h>
 #include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_storage_snapshot.h>
+#include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flag_thresholds.h>
 #include <ydb/core/blobstorage/vdisk/synclog/phantom_flag_storage/phantom_flags.h>
 #include <ydb/core/base/blobstorage.h>
+
+#include <unordered_set>
 
 namespace NKikimr {
     namespace NSyncLog {
@@ -91,17 +94,29 @@ namespace NKikimr {
                 : public TEventLocal<TEvPhantomFlagStorageGetSnapshot,
                                      TEvBlobStorage::EvPhantomFlagStorageGetSnapshot>
         {
-            // Persistent PhantomFlagStorage  also includes flags from the main synclog
+            // Persistent PhantomFlagStorage also includes flags from the main synclog
+            // (delivered during the builder phase as the final batch).
             TSyncLogSnapshotPtr SyncLogSnapshot;
+            // Chunks the requester has already received and consumed.  Empty on the
+            // very first request of a stream.
+            std::unordered_set<ui32> ProcessedChunks;
         };
 
         struct TEvPhantomFlagStorageGetSnapshotResult
                 : public TEventLocal<TEvPhantomFlagStorageGetSnapshotResult,
                                      TEvBlobStorage::EvPhantomFlagStorageGetSnapshotResult>
         {
-            TEvPhantomFlagStorageGetSnapshotResult(TPhantomFlagStorageSnapshot&& snapshot);
+            TEvPhantomFlagStorageGetSnapshotResult(TPhantomFlags&& flags,
+                    TPhantomFlagThresholds&& thresholds,
+                    std::unordered_set<ui32>&& processedChunks,
+                    bool eof);
 
-            TPhantomFlagStorageSnapshot Snapshot;
+            TPhantomFlags Flags;
+            TPhantomFlagThresholds Thresholds;
+            // Updated set of chunks the requester has now received, to be echoed back
+            // on the next request.  Empty for the volatile in-memory path.
+            std::unordered_set<ui32> ProcessedChunks;
+            bool Eof;
         };
 
         struct TEvSyncLogUpdateNeighbourSyncedLsn

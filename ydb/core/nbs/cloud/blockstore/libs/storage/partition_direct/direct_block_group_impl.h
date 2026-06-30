@@ -34,11 +34,13 @@ public:
         NActors::TActorSystem* actorSystem,
         TStorageConfigPtr storageConfig,
         TExecutorPtr executor,
+        const TString& diskId,
         ui64 tabletId,
         ui32 generation,
         size_t directBlockGroupIndex,
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
-        const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds);
+        const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds,
+        std::unique_ptr<NTransport::IStorageTransport> storageTransport);
 
     ~TDirectBlockGroup() override = default;
 
@@ -56,7 +58,7 @@ public:
         const NWilson::TTraceId& traceId,
         TStringBuf name) override;
 
-    void Run(IPartitionDirectService* service) override;
+    NThreading::TFuture<void> Run(IPartitionDirectService* service) override;
 
     NThreading::TFuture<TDBGReadBlocksResponse> ReadBlocksFromDDisk(
         ui32 vChunkIndex,
@@ -107,9 +109,8 @@ public:
         const NWilson::TTraceId& traceId) override;
 
     NThreading::TFuture<TDBGEraseResponse> BatchEraseFromPBuffer(
-        ui32 vChunkIndex,
         THostIndex hostIndex,
-        const TVector<TPBufferSegment>& segments,
+        const TEraseSegments& segments,
         const NWilson::TTraceId& traceId) override;
 
     void BarrierEraseFromPBuffer(ui64 lsn) override;
@@ -125,6 +126,8 @@ public:
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
+    ui64 GetDDiskSessionSeqNo(size_t index) const;
+
     // IHostStateController implementation
     void SetHostState(
         THostIndex hostIndex,
@@ -133,11 +136,19 @@ public:
     ui64 GetHostPBufferUsedSize(THostIndex hostIndex) const override;
 
 private:
-    using TEvSyncWithPersistentBufferResult =
-        NKikimrBlobStorage::NDDisk::TEvSyncWithPersistentBufferResult;
+    using TEvSyncResult = NKikimrBlobStorage::NDDisk::TEvSyncResult;
     using EConnectionType = NTransport::THostConnection::EConnectionType;
     using TDDiskIdToHostIndex =
         TMap<NKikimrBlobStorage::NDDisk::TDDiskId, THostIndex, TDDiskIdLess>;
+
+    // State of a logical session (lock) with a DDisk.
+    // Sessions are used only for DDisk connections.
+    enum class EDDiskSessionState
+    {
+        NotLocked,
+        Locked,
+        Broken,
+    };
 
     struct TDDiskConnection
     {
@@ -148,17 +159,23 @@ private:
         TPromise ConnectPromise = NThreading::NewPromise<NProto::TError>();
         TFuture ConnectFuture{ConnectPromise.GetFuture()};
 
+        EDDiskSessionState SessionState = EDDiskSessionState::NotLocked;
+
+        ui64 ConfirmedSessionSeqNo = 0;
+
         [[nodiscard]] const TFuture& GetFuture() const;
     };
 
     void DoEstablishConnections();
-    void DoEstablishConnection(
-        size_t index,
-        const TDDiskConnection& connection);
+    void DoEstablishConnection(size_t index, EConnectionType connectionType);
     void OnConnectionEstablished(
         EConnectionType connectionType,
         size_t index,
+        ui64 seqNo,
         const NKikimrBlobStorage::NDDisk::TEvConnectResult& result);
+
+    [[nodiscard]] bool HasPBufferQuorum() const;
+    [[nodiscard]] bool HasLockedQuorum() const;
 
     void DoListPBuffers();
     void OnPBuffersListed(const TAggregatedListPBufferResponse& response);
@@ -171,7 +188,7 @@ private:
         TDuration executionTime);
 
     TDBGFlushResponse HandleSyncWithPBufferResponse(
-        const TEvSyncWithPersistentBufferResult& response,
+        const TEvSyncResult& response,
         size_t segmentCount);
 
     void DoBarrierEraseFromPBuffer(
@@ -200,6 +217,9 @@ private:
 
     void Thinking();
     void ScheduleOracleThinking();
+
+    [[nodiscard]] bool WaitForSessionLock(THostIndex hostIndex);
+
     TDBGDumpResponse DoDebugPrintDirtyMap();
 
     NActors::TActorSystem* const ActorSystem = nullptr;
@@ -207,6 +227,7 @@ private:
     const TExecutorPtr Executor;
     const TThreadChecker ExecutorThreadChecker{Executor};
     const ui64 TabletId;
+    const ui32 TabletGeneration;
     const size_t DirectBlockGroupIndex;
     const std::unique_ptr<NTransport::IStorageTransport> StorageTransport;
 
@@ -218,9 +239,10 @@ private:
     TVector<TVChunkWeakPtr> VChunks;
     TOracle Oracle;
 
-    bool Initialized = false;
-    NThreading::TPromise<void> ConnectionEstablishedPromise =
-        NThreading::NewPromise();
+    // One-shot signal of the FIRST time the locked quorum was reached. Used
+    // ONLY to gate the synchronous tablet start (wait for readiness before
+    // opening the endpoint). It does NOT reflect the current runtime readiness.
+    NThreading::TPromise<void> InitialReadyPromise = NThreading::NewPromise();
 
     THashMap<ui32, TDBGRestoreResponse> RestoredPBuffers;
     NThreading::TPromise<void> RestoredPBuffersPromise =

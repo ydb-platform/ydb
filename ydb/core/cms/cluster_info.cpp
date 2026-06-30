@@ -968,7 +968,7 @@ void TClusterInfo::ApplyStateStorageInfo(TIntrusiveConstPtr<TStateStorageInfo> i
                     YDB_LOG_ERROR("Node referenced by state storage ring in ring group does not exist in cluster. State storage is probably not reconfigured yet. Treating the replica as down",
                         {"nodeId", nodeId},
                         {"ringId", ringId},
-                        {"RGroupId", rGroupId});
+                        {"ringGroupId", rGroupId});
                     TNodeInfoPtr stub = MakeIntrusive<TNodeInfo>();
                     stub->NodeId = nodeId;
                     ringInfo->AddNode(stub);
@@ -1000,7 +1000,7 @@ void TClusterInfo::GenerateSysTabletsNodesCheckers() {
     for (auto tablet : BootstrapConfig.GetTablet()) {
         for (auto nodeId : tablet.GetNode()) {
             if (!HasNode(nodeId)) {
-                YDB_LOG_ERROR("Got node",
+                YDB_LOG_ERROR("Got node with system tablet, which exists in configuration, but does not exist in cluster",
                     {"nodeId", nodeId});
                 continue;
             }

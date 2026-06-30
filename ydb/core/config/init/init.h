@@ -14,6 +14,9 @@
 #include <util/generic/string.h>
 #include <util/datetime/base.h>
 
+#include <functional>
+#include <memory>
+
 namespace NKikimr::NConfig {
 
 struct TConfigItemInfo {
@@ -258,6 +261,19 @@ struct TDebugInfo {
     THashMap<ui32, TConfigItemInfo> InitInfo;
 };
 
+// Opaque dynamic YAML config parser.
+// Parses YAML config section marked with NMarkers.OpaqueConfig in TAppConfig
+// into a message whose schema the configs dispatcher itself does not have.
+// Provided by the end node, so the configs dispatcher stays schema-agnostic.
+// The parsed message is attached to the node-local config notification
+// (see TEvConfigNotificationRequest).
+//
+// Thrown exceptions are catched and processed by configs dispatcher.
+//
+// @param opaqueYamlConfig - string content of opaque config section in YAML config
+// @return the parsed message, or nullptr to attach nothing.
+using TOpaqueConfigParser = std::function<std::shared_ptr<const ::google::protobuf::Message>(const TString& opaqueYamlConfig)>;
+
 struct TConfigsDispatcherInitInfo {
     NKikimrConfig::TAppConfig InitialConfig;
     TString StartupConfigYaml;
@@ -267,6 +283,10 @@ struct TConfigsDispatcherInitInfo {
     std::optional<TDebugInfo> DebugInfo;
     std::shared_ptr<NConfig::TRecordedInitialConfiguratorDeps> RecordedInitialConfiguratorDeps = nullptr;
     std::vector<TString> Args;
+    // Per-kind parsers for opaque config sections (kind == TAppConfig field
+    // number). Node-local; empty by default. When set, the dispatcher parses the
+    // section and attaches the result to the notification for that kind.
+    THashMap<ui32, TOpaqueConfigParser> OpaqueConfigParsers;
 };
 
 class IInitialConfigurator {

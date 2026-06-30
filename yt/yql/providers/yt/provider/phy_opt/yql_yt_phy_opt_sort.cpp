@@ -780,4 +780,4 @@ TMaybeNode<TExprBase> TYtPhysicalOptProposalTransformer::AssumeConstraints(TExpr
         .Done();
 }
 
-}  // namespace NYql
+} // namespace NYql

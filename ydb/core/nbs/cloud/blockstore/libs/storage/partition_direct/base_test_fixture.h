@@ -58,6 +58,7 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     TDirectBlockGroupMockPtr DirectBlockGroup;
     TBlocksDirtyMap DirtyMap{VChunkConfig, BlockSize, VChunkBlockCount};
 
+    THostIndex ExpectedHost = 0;
     TBlockRange64 ExpectedRange;
     TString RangeData;
 
@@ -95,6 +96,24 @@ struct TBaseFixture: public NUnitTest::TBaseFixture
     static auto& AccessConfig(TVChunk& vchunk)
     {
         return vchunk.VChunkConfig;
+    }
+
+    static bool IsDirtyMapReady(TVChunk& vchunk)
+    {
+        return vchunk.DirtyMapReady.HasValue();
+    }
+
+    static auto& AccessDirtyMapReadyPromise(TVChunk& vchunk)
+    {
+        return vchunk.DirtyMapReady;
+    }
+
+    // Must be invoked on the vchunk's executor thread.
+    static void InvokeUpdateDirtyMap(
+        TVChunk& vchunk,
+        const TDBGRestoreResponse& response)
+    {
+        vchunk.UpdateDirtyMap(response);
     }
 
 private:

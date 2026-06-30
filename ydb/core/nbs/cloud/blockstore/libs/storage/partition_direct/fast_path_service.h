@@ -10,6 +10,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/service/storage.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/public.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/vchunk_config.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/public.h>
 
@@ -70,7 +71,10 @@ public:
 
     ~TFastPathService() override;
 
-    void Run();
+    // Starts all DBGs and regions; returns a future that becomes ready the
+    // first time the Locked-session quorum is reached in every DBG.
+    NThreading::TFuture<void> Run();
+    NThreading::TFuture<void> Stop();
 
     // IStorage implementation
     NThreading::TFuture<TReadBlocksLocalResponse> ReadBlocksLocal(
@@ -99,6 +103,9 @@ public:
     void UpdateVChunkConfig(const TVChunkConfig& cfg) override;
 
     ui64 GenerateLsn() override;
+
+    // Read-only info for the monitoring UI.
+    [[nodiscard]] TFastPathServiceInfo GetMonInfo() const;
 
 private:
     void ScheduleDirtyMapDebugPrint();

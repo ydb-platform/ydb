@@ -22,9 +22,10 @@
 #include <ydb/library/actors/core/event.h>
 #include <ydb/library/actors/core/event_local.h>
 #include <ydb/library/actors/core/actorid.h>
-#include <ydb/core/grpc_services/rpc_calls.h>
+#include <ydb/library/actors/wilson/wilson_span.h>
 #include <ydb/public/api/protos/draft/persqueue_error_codes.pb.h>
 #include <ydb/public/api/protos/persqueue_error_codes_v1.pb.h>
+#include <ydb/public/api/protos/ydb_status_codes.pb.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/control_plane.h>
 
 #include <ydb/core/persqueue/events/internal/protos/events.pb.h>
@@ -239,6 +240,9 @@ struct TEvPQ {
         EvMLPGetRuntimeAttributesRequest,
         EvMLPGetRuntimeAttributesResponse,
         EvRewindCommitResult,
+        EvConsumerBatchProcessorMetrics,
+        EvProcessBatchRead,
+        EvProcessBatchReadResult,
         EvEnd,
     };
 
@@ -301,8 +305,8 @@ struct TEvPQ {
 
             std::optional<TString> MessageDeduplicationId;
             TMessageExternalDeduplicationInfo ExternalDeduplicationInfo;
-            ui32 MessageCount = 1;
-            NPQ::EMessageFormat MessageFormat = NPQ::EMessageFormat::STANDARD;
+            ui32 LogicalMessageCount = 1;
+            bool IsBatch = false;
             std::vector<std::pair<TString, ui64>> PartitionKeys;
         };
 
@@ -774,6 +778,23 @@ struct TEvPQ {
 
         TString ClientId;
         TDuration InFlightLimitReachedDuration;
+    };
+
+    struct TEvConsumerBatchProcessorMetrics : TEventLocal<TEvConsumerBatchProcessorMetrics, EvConsumerBatchProcessorMetrics> {
+        TEvConsumerBatchProcessorMetrics(ui32 partitionId, const TString& user, ui64 cpuUsage)
+            : PartitionId(partitionId)
+            , User(user)
+            , CPUUsage(cpuUsage)
+        {
+        }
+
+        ui32 GetPartitionId() const {
+            return PartitionId;
+        }
+
+        ui32 PartitionId;
+        TString User;
+        ui64 CPUUsage;
     };
 
     struct TEvUpdateAvailableSize : TEventLocal<TEvUpdateAvailableSize, EvUpdateAvailableSize> {
@@ -1844,12 +1865,14 @@ struct TEvPQ {
     };
 
     struct TEvRewindCommitResult: public TEventLocal<TEvRewindCommitResult, EvRewindCommitResult> {
-        explicit TEvRewindCommitResult(NYdb::TStatus status)
+        explicit TEvRewindCommitResult(NYdb::TStatus status, ui64 endOffset)
             : Status(std::move(status))
+            , EndOffset(endOffset)
         {
         }
 
         NYdb::TStatus Status;
+        ui64 EndOffset;
     };
 };
 

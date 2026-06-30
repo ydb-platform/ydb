@@ -117,6 +117,9 @@ message TColumnDescription {
     // operation.
     optional bool IsBuildInProgress = 11 [default = false];
     optional TColumnCompression Compression = 13;
+    // flag that indicates that SET NOT NULL operation is currently in progress
+    // for this column (full scan is running to verify no nulls exist).
+    optional bool SetNotNullInProgress = 14 [default = false];
 }
 
 message TStorageSettings {
@@ -211,6 +214,7 @@ message TPartitionConfig {
     optional uint64 KeepSnapshotTimeout = 25; // milliseconds
     reserved 26; // deprecated -> ByKeyFilterPrefixes
     repeated TByKeyFilterPrefix ByKeyFilterPrefixes = 27; // Bloom filters on PK prefixes
+    repeated uint32 DropByKeyFilterPrefixLengths = 28; // Bloom filter prefix lengths to drop
 }
 
 message TByKeyFilterPrefix {
@@ -372,6 +376,12 @@ message TTableIncrementalBackupConfig {
     optional EConsistency Consistency = 2;
 }
 
+enum ESpecialTableType {
+    ESpecialTableTypeNone = 0;
+    ESpecialTableTypeFulltextCompact = 1;
+    ESpecialTableTypeFulltextCompactRelevance = 2;
+}
+
 message TTableDescription {
     optional string Name = 1;
     optional uint64 Id_Deprecated = 2; // LocalPathId, deprecated
@@ -460,7 +470,7 @@ message TTableDescription {
     optional TTableDetailedMetricsSettings DetailedMetricsSettings = 51;
 
     // For fulltext indexes - to determine if the table is an impl table of an index
-    optional EIndexType IndexImplType = 52;
+    optional ESpecialTableType TableType = 52;
 }
 
 message TCompressionOptions {

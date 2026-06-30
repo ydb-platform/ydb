@@ -67,6 +67,38 @@ std::optional<TInternalPathId> TTablesManager::ResolveInternalPathIdOptional(
     }
 }
 
+std::optional<NOlap::TSnapshot> TTablesManager::GetCopyVersionOptional(const TSchemeShardLocalPathId schemeShardLocalPathId) const {
+    if (const auto internalPathId = ResolveInternalPathId(schemeShardLocalPathId, false)) {
+        if (const auto* table = Tables.FindPtr(*internalPathId)) {
+            return table->GetCopyVersionOptional(schemeShardLocalPathId);
+        }
+    }
+    return std::nullopt;
+}
+
+std::vector<NOlap::TSnapshot> TTablesManager::GetReadOnlyTablesSnapshots() const {
+    return std::vector<NOlap::TSnapshot>(ReadOnlyTablesSnapshots.begin(), ReadOnlyTablesSnapshots.end());
+}
+
+NOlap::TSnapshot TTablesManager::ResolveReadSnapshot(
+    const TSchemeShardLocalPathId schemeShardLocalPathId, const NOlap::TSnapshot& requestSnapshot) const {
+    if (const auto copyVersion = GetCopyVersionOptional(schemeShardLocalPathId)) {
+        return *copyVersion;
+    }
+    return requestSnapshot;
+}
+
+void TTablesManager::RegisterReadOnlyTableSnapshot(const NOlap::TSnapshot& version) {
+    ReadOnlyTablesSnapshots.insert(version);
+}
+
+void TTablesManager::RebuildReadOnlyTablesSnapshots() {
+    ReadOnlyTablesSnapshots.clear();
+    for (const auto& [_, table] : Tables) {
+        table.CollectReadOnlyTablesSnapshots(ReadOnlyTablesSnapshots);
+    }
+}
+
 bool TTablesManager::FillMonitoringReport(NTabletFlatExecutor::TTransactionContext& txc, NJson::TJsonValue& json) {
     NIceDb::TNiceDb db(txc.DB);
     {
@@ -225,6 +257,7 @@ bool TTablesManager::InitFromDB(NIceDb::TNiceDb& db, const TTabletStorageInfo* i
         if (table.IsDropped()) {
             AFL_VERIFY(PathsToDrop[table.GetDropVersionVerified()].emplace(internalPathId).second);
         }
+        table.CollectReadOnlyTablesSnapshots(ReadOnlyTablesSnapshots);
     }
 
     std::optional<TSchemaPreset> preset;
@@ -406,14 +439,28 @@ void TTablesManager::DropTable(
     const TSchemeShardLocalPathId schemeShardLocalPathId, const TInternalPathId pathId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
     auto* table = Tables.FindPtr(pathId);
     AFL_VERIFY(table);
+    const bool isReadOnly = table->IsReadOnly(schemeShardLocalPathId);
+    const bool isPartialDrop = table->GetPathIds().size() > 1;
     table->SetDropVersion(schemeShardLocalPathId, version);
     if (table->IsDropped()) {
-        AFL_VERIFY(PathsToDrop[version].emplace(pathId).second);
+        AFL_VERIFY(PathsToDrop[table->GetDropVersionVerified()].emplace(pathId).second);
     }
-    if (!table->IsReadOnly(schemeShardLocalPathId)) {   // v0 can't be read-only
+    if (isReadOnly) {
+        RebuildReadOnlyTablesSnapshots();
+    } else if (!isPartialDrop) {
         Schema::SaveTableDropVersion(db, pathId, version.GetPlanStep(), version.GetTxId());
     }
-    Schema::SaveTableDropVersionV1(db, schemeShardLocalPathId, pathId, version.GetPlanStep(), version.GetTxId());
+    if (isPartialDrop) {
+        if (!isReadOnly) {
+            Schema::EraseTableInfo(db, pathId);
+        }
+        Schema::EraseTableInfoV1(db, pathId, schemeShardLocalPathId);
+        table->Remove(schemeShardLocalPathId);
+        AFL_VERIFY(SchemeShardLocalToInternal.erase(schemeShardLocalPathId));
+        NYDBTest::TControllers::GetColumnShardController()->OnDeletePathId(TabletId, TUnifiedPathId::BuildValid(pathId, schemeShardLocalPathId));
+    } else {
+        Schema::SaveTableDropVersionV1(db, schemeShardLocalPathId, pathId, version.GetPlanStep(), version.GetTxId());
+    }
 }
 
 void TTablesManager::DropPreset(const ui32 presetId, const NOlap::TSnapshot& version, NIceDb::TNiceDb& db) {
@@ -585,6 +632,7 @@ bool TTablesManager::TryFinalizeDropPathOnComplete(const TInternalPathId pathId)
         AFL_VERIFY(SchemeShardLocalToInternal.erase(unifiedPathId.GetSchemeShardLocalPathId()));
     }
     Tables.erase(itTable);
+    RebuildReadOnlyTablesSnapshots();
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("method", "TryFinalizeDropPathOnComplete")("path_id", pathId)("size", Tables.size());
     return true;
 }
@@ -604,6 +652,26 @@ void TTablesManager::CopyTablePropose(const TSchemeShardLocalPathId srcSchemeSha
     const auto& internalPathId = ResolveInternalPathId(srcSchemeShardLocalPathId, false);
     AFL_VERIFY(internalPathId);
     AFL_VERIFY(CopyingLocalToInternal.emplace(srcSchemeShardLocalPathId, *internalPathId).second)("src_internal_path_id", internalPathId);
+}
+
+void TTablesManager::CopyTablePlanStep(NIceDb::TNiceDb& db, const NOlap::TSnapshot& version,
+    const TSchemeShardLocalPathId srcSchemeShardLocalPathId, const TSchemeShardLocalPathId dstSchemeShardLocalPathId) {
+    NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("event", "copy_table_plan")(
+        "src_path_id", srcSchemeShardLocalPathId)("dst_path_id", dstSchemeShardLocalPathId)("snapshot", version);
+    const auto* pInternalPathId = CopyingLocalToInternal.FindPtr(srcSchemeShardLocalPathId);
+    AFL_VERIFY(pInternalPathId);
+    const auto internalPathId = *pInternalPathId;
+    AFL_VERIFY(HasTable(internalPathId));
+    auto* table = Tables.FindPtr(internalPathId);
+    AFL_VERIFY(table);
+    if (!table->GetCopyVersionOptional(dstSchemeShardLocalPathId)) {
+        table->SetCopyVersion(dstSchemeShardLocalPathId, version);
+        table->SetReadOnly(dstSchemeShardLocalPathId, true);
+        Schema::SaveTableCopyVersionV1(db, internalPathId, dstSchemeShardLocalPathId, version);
+    } else {
+        AFL_VERIFY(*table->GetCopyVersionOptional(dstSchemeShardLocalPathId) == version);
+    }
+    RegisterReadOnlyTableSnapshot(version);
 }
 
 void TTablesManager::MoveTableProgress(
@@ -634,7 +702,6 @@ void TTablesManager::CopyTableProgress(NIceDb::TNiceDb& db, const NOlap::TSnapsh
     const TSchemeShardLocalPathId srcSchemeShardLocalPathId, const TSchemeShardLocalPathId dstSchemeShardLocalPathId) {
     NActors::TLogContextGuard gLogging = NActors::TLogContextBuilder::Build(NKikimrServices::TX_COLUMNSHARD)("event", "copy_table_progress")(
         "src_path_id", srcSchemeShardLocalPathId)("dst_path_id", dstSchemeShardLocalPathId);
-    AFL_VERIFY(!ResolveInternalPathId(dstSchemeShardLocalPathId, false));
     const auto* pInternalPathId = CopyingLocalToInternal.FindPtr(srcSchemeShardLocalPathId);
     AFL_VERIFY(pInternalPathId);
     const auto internalPathId = *pInternalPathId;
@@ -642,10 +709,15 @@ void TTablesManager::CopyTableProgress(NIceDb::TNiceDb& db, const NOlap::TSnapsh
     auto* table = Tables.FindPtr(internalPathId);
     AFL_VERIFY(table);
     table->CopySchemeShardLocalPathId(db, srcSchemeShardLocalPathId, dstSchemeShardLocalPathId, version);
+    RegisterReadOnlyTableSnapshot(version);
     AFL_VERIFY(CopyingLocalToInternal.erase(srcSchemeShardLocalPathId));
-    AFL_VERIFY(SchemeShardLocalToInternal.emplace(dstSchemeShardLocalPathId, internalPathId).second);
-    NYDBTest::TControllers::GetColumnShardController()->OnAddPathId(
-        TabletId, TUnifiedPathId::BuildValid(internalPathId, dstSchemeShardLocalPathId));
+    if (const auto existingInternalPathId = ResolveInternalPathId(dstSchemeShardLocalPathId, false)) {
+        AFL_VERIFY(*existingInternalPathId == internalPathId);
+    } else {
+        AFL_VERIFY(SchemeShardLocalToInternal.emplace(dstSchemeShardLocalPathId, internalPathId).second);
+        NYDBTest::TControllers::GetColumnShardController()->OnAddPathId(
+            TabletId, TUnifiedPathId::BuildValid(internalPathId, dstSchemeShardLocalPathId));
+    }
 }
 
 std::vector<TTablesManager::TSchemasChain> TTablesManager::ExtractSchemasToClean() const {

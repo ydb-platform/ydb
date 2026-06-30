@@ -34,6 +34,8 @@
 #include <util/string/join.h>
 #include <util/system/hostname.h>
 
+#include <algorithm>
+
 #define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
 
 namespace NKikimr::NCms {
@@ -367,7 +369,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         }
     }
 
-    YDB_LOG_INFO_CTX(ctx, "Check",
+    YDB_LOG_INFO_CTX(ctx, "Check request",
         {"request", request});
 
     switch (request.GetAvailabilityMode()) {
@@ -810,7 +812,7 @@ bool TCms::TryToLockStateStorageReplica(const TAction& action,
     TDuration duration = TDuration::MicroSeconds(action.GetDuration()) + opts.PermissionDuration;
     for (auto ringInfo : ClusterInfo->StateStorageRings[ringGroupId]) {
         auto state = ringInfo->CountState(now, State->Config.DefaultRetryTime, duration, opts.RequestId);
-        YDB_LOG_DEBUG("Dump ring, state",
+        YDB_LOG_DEBUG("Dump ring",
             {"ring", ringInfo->RingId},
             {"state", TStateStorageRingInfo::RingStateToString(state)});
 
@@ -935,7 +937,12 @@ bool TCms::CheckSysTabletsNode(const TActionOptions &opts,
         return true;
     }
 
-    for (auto &tabletType : ClusterInfo->NodeToTabletTypes[node.NodeId]) {
+    auto it = ClusterInfo->NodeToTabletTypes.find(node.NodeId);
+    if (it == ClusterInfo->NodeToTabletTypes.end()) {
+        return true;
+    }
+
+    for (const auto &tabletType : it->second) {
         TNodeLockContext lockCtx(opts.Priority, opts.RequestId, opts.AvailabilityMode);
         if (!ClusterInfo->SysNodesCheckers[node.PileId.GetOrElse(0)][tabletType]->TryToLockNode(node.NodeId, lockCtx, error.Reason)) {
             error.Code = TStatus::DISALLOW_TEMP;
@@ -945,6 +952,16 @@ bool TCms::CheckSysTabletsNode(const TActionOptions &opts,
     }
 
     return true;
+}
+
+void TCms::SortActionsBySysTabletPriority(
+    TPermissionRequest &request) const
+{
+    auto *actions = request.MutableActions();
+    std::partition(actions->begin(), actions->end(),
+        [this](const TAction &action) {
+            return !ClusterInfo->HostHasSysTablet(action.GetHost());
+        });
 }
 
 bool TCms::TryToLockNode(const TAction& action,
@@ -1464,7 +1481,7 @@ void TCms::RemovePermission(TEvCms::TEvManagePermissionRequest::TPtr &ev, bool d
 
     YDB_LOG_INFO_CTX(ctx, "User permissions",
         {"user", user.data()},
-        {"done", done ? "is done with" : "rejected"},
+        {"done", done ? "done" : "rejected"},
         {"permissions", ToString(rec.GetPermissions()).data()});
 
     TVector<TString> ids;
@@ -2191,6 +2208,8 @@ void TCms::Handle(TEvCms::TEvPermissionRequest::TPtr &ev,
             rec.MutableActions()->Add()->CopyFrom(action);
         }
     }
+
+    SortActionsBySysTabletPriority(rec);
 
     if (rec.GetEvictVDisks()) {
         for (const auto &action : rec.GetActions()) {

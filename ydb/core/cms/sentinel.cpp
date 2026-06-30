@@ -1186,13 +1186,13 @@ class TSentinel: public TActorBootstrapped<TSentinel> {
             info->ApplyChanges(reason);
             const EPDiskStatus requiredStatus = info->GetStatus();
 
-            YDB_LOG_NOTICE("[Sentinel] PDisk status changed, required, dry",
+            YDB_LOG_NOTICE("[Sentinel] PDisk status changed, required",
                 {"name", Name()},
                 {"pdiskId", id},
                 {"status", status},
                 {"requiredStatus", requiredStatus},
                 {"reason", reason},
-                {"run", Config.DryRun});
+                {"dryRun", Config.DryRun});
             LogStatusChange(id, status, requiredStatus, reason);
 
             if (!Config.DryRun) {

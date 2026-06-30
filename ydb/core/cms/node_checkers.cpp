@@ -205,7 +205,7 @@ bool TSysTabletsNodesCounter::TryToLockNode(ui32 nodeId, const TNodeLockContext&
 
     YDB_LOG_DEBUG("[Nodes Counter] Checking limits for sys tablet",
         {"tablet", NKikimrConfig::TBootstrap_ETabletType_Name(TabletType)},
-        {"onNode", nodeId},
+        {"node", nodeId},
         {"state", nodeState},
         {"lockedNodes", LockedNodesCount},
         {"downNodes", DownNodesCount});

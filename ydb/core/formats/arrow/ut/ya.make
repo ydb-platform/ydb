@@ -6,7 +6,11 @@ PEERDIR(
     contrib/libs/apache/arrow
     ydb/library/arrow_kernels
     ydb/library/formats/arrow/simple_builder
+    ydb/core/formats/arrow/filter
+    ydb/core/formats/arrow/hash
+    ydb/core/formats/arrow/printer
     ydb/core/formats/arrow/program
+    ydb/core/formats/arrow/reader
     ydb/core/base
     ydb/library/formats/arrow
 

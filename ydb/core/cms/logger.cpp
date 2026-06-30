@@ -33,7 +33,7 @@ bool TLogger::DbCleanupLog(TTransactionContext &txc, const TActorContext &ctx) {
     ui64 from = Max<ui64>() - fromDate.GetValue();
 
     YDB_LOG_DEBUG_CTX(ctx, "Cleanup log records until",
-        {"fromDate", fromDate});
+        {"date", fromDate});
 
     auto rowset = db.Table<Schema::LogRecords>().GreaterOrEqual(from)
         .Select<Schema::LogRecords::Timestamp>();

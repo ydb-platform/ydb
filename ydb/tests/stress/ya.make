@@ -4,10 +4,12 @@ RECURSE(
     common
     ctas
     federated_queries
+    fulltext_workload
     kafka
     kafka_serverless
     kv
     kv_volume
+    kv_volume_tool
     log
     min_max_workload
     mixedpy
@@ -29,6 +31,7 @@ RECURSE(
     topic_kafka
     topic_sqs
     transfer
+    vector_workload
     viewer
     streaming
 )

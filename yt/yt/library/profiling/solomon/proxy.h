@@ -23,15 +23,15 @@ struct IEndpointProvider
     struct TEndpoint
     {
         //! Logical name of the endpoint.
-        TString Name;
+        std::string Name;
         //! Actual address to pull sensors from.
-        TString Address;
+        std::string Address;
         //! A set of labels which can be filtered upon.
-        THashMap<TString, TString> Labels;
+        THashMap<std::string, std::string> Labels;
     };
 
     //! Human-readable component name.
-    virtual TString GetComponentName() const = 0;
+    virtual std::string GetComponentName() const = 0;
     //! This method is allowed to return a cached response.
     virtual std::vector<TEndpoint> GetEndpoints() const = 0;
 };
@@ -47,7 +47,7 @@ struct TSolomonProxyConfig
     //! Endpoints from other components are not pulled from.
     //! Currently, this filter is applied for all requests.
     //! TODO(achulkov2): Add some form of access control to allow bypassing this check.
-    std::optional<THashSet<TString>> PublicComponentNames;
+    std::optional<THashSet<std::string>> PublicComponentNames;
 
     //! Forbids pulling sensors from too many endpoints within a single request.
     //! Instead of increasing this limit, one should make requests with a larger shard count.
@@ -71,12 +71,12 @@ public:
     void RegisterEndpointProvider(const IEndpointProviderPtr& endpointProvider);
     void UnregisterEndpointProvider(const IEndpointProviderPtr& endpointProvider);
 
-    void Register(const TString& prefix, const NHttp::IServerPtr& server);
+    void Register(const std::string& prefix, const NHttp::IServerPtr& server);
 
 private:
     const TSolomonProxyConfigPtr Config_;
     const NHttp::IClientPtr HttpClient_;
-    THashMap<TString, IEndpointProviderPtr> ComponentNameToEndpointProvider_;
+    THashMap<std::string, IEndpointProviderPtr> ComponentNameToEndpointProvider_;
 
     void HandleSensors(const NHttp::IRequestPtr& req, const NHttp::IResponseWriterPtr& rsp);
     void GuardedHandleSensors(const NHttp::IRequestPtr& req, const NHttp::IResponseWriterPtr& rsp);
@@ -85,7 +85,7 @@ private:
 
     struct TComponentMatcher
     {
-        std::optional<THashSet<TString>> Components;
+        std::optional<THashSet<std::string>> Components;
     };
 
     static TComponentMatcher GetComponentMatcher(const TCgiParameters& parameters);
@@ -93,8 +93,8 @@ private:
 
     struct TInstanceFilter
     {
-        std::optional<THashSet<TString>> Instances;
-        THashMap<TString, THashSet<TString>> LabelFilter;
+        std::optional<THashSet<std::string>> Instances;
+        THashMap<std::string, THashSet<std::string>> LabelFilter;
     };
 
     static TInstanceFilter GetInstanceFilter(const TCgiParameters& parameters);
@@ -102,7 +102,7 @@ private:
         const TInstanceFilter& instanceFilter,
         const std::vector<IEndpointProvider::TEndpoint>& endpoints);
 
-    std::vector<TString> CollectEndpoints(const TCgiParameters& parameters, int shardIndex, int shardCount) const;
+    std::vector<std::string> CollectEndpoints(const TCgiParameters& parameters, int shardIndex, int shardCount) const;
 
     //! For safety we only proxy whitelisted headers.
     static NHttp::THeadersPtr PreparePullHeaders(const NHttp::THeadersPtr& reqHeaders, const TOutputEncodingContext& outputContext);

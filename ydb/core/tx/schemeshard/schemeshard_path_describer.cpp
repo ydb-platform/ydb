@@ -1567,8 +1567,17 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
     ui64 dataSize = 0;
     for (const auto& indexImplTablePathId : indexPath.GetChildren()) {
         const auto* tableInfoPtr = Tables.FindPtr(indexImplTablePathId.second);
-        if (!tableInfoPtr && NTableIndex::IsBuildImplTable(indexImplTablePathId.first)) {
-            continue; // it's possible because of dropping build index impl tables without dropping index
+        if (!tableInfoPtr) {
+            // The impl table info may be legitimately absent while the table itself is being dropped:
+            //  - build impl tables are dropped without dropping the index during index build;
+            //  - regular impl tables (level/posting/prefix) are temporarily dropped during index rebuild.
+            // In both cases the child path element is marked as (planned to be) dropped. Any other
+            // missing impl table indicates an inconsistency and must still trip the assertion below.
+            const auto* childPathPtr = PathsById.FindPtr(indexImplTablePathId.second);
+            if (NTableIndex::IsBuildImplTable(indexImplTablePathId.first)
+                || (childPathPtr && ((*childPathPtr)->PlannedToDrop() || (*childPathPtr)->Dropped()))) {
+                continue;
+            }
         }
         Y_ABORT_UNLESS(tableInfoPtr);
         const auto& tableInfo = *tableInfoPtr->Get();

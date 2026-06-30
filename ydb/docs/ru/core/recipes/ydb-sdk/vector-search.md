@@ -1120,6 +1120,137 @@
     }
     ```
 
+- Python
+
+    {% cut "asyncio" %}
+
+    ```python
+    import ydb
+
+    async def add_vector_index(
+        pool: ydb.aio.QuerySessionPool,
+        driver: ydb.aio.Driver,
+        table_name: str,
+        index_name: str,
+        strategy: str
+    ):
+        temp_index_name = f"{index_name}__temp"
+        query = f"""
+        ALTER TABLE `{table_name}`
+        ADD INDEX {temp_index_name}
+        GLOBAL USING vector_kmeans_tree
+        ON (embedding)
+        WITH (
+            {strategy}
+        );
+        """
+
+        await pool.execute_with_retries(query)
+        await driver.table_client.alter_table(
+            f"{driver._driver_config.database}/{table_name}",
+            rename_indexes=[
+                ydb.RenameIndexItem(
+                    source_name=temp_index_name,
+                    destination_name=f"{index_name}",
+                    replace_destination=True,
+                ),
+            ],
+        )
+
+    ```
+
+    {% endcut %}
+
+    ```python
+    def add_vector_index(
+        pool: ydb.QuerySessionPool,
+        driver: ydb.Driver,
+        table_name: str,
+        index_name: str,
+        strategy: str,
+    ):
+        temp_index_name = f"{index_name}__temp"
+        query = f"""
+        ALTER TABLE `{table_name}`
+        ADD INDEX {temp_index_name}
+        GLOBAL USING vector_kmeans_tree
+        ON (embedding)
+        WITH (
+            {strategy}
+        );
+        """
+
+        pool.execute_with_retries(query)
+        driver.table_client.alter_table(
+            f"{driver._driver_config.database}/{table_name}",
+            rename_indexes=[
+                ydb.RenameIndexItem(
+                    source_name=temp_index_name,
+                    destination_name=f"{index_name}",
+                    replace_destination=True,
+                ),
+            ],
+        )
+        pool.execute_with_retries(query)
+        driver.table_client.alter_table(
+            f"{driver._driver_config.database}/{table_name}",
+            rename_indexes=[
+                ydb.RenameIndexItem(
+                    source_name=temp_index_name,
+                    destination_name=f"{index_name}",
+                    replace_destination=True,
+                ),
+            ],
+        )
+        print(f"Table index {index_name} created.")
+    ```
+
+    - Native SDK (Asyncio)
+
+      ```python
+      import ydb
+
+      async def add_vector_index(
+          pool: ydb.aio.QuerySessionPool,
+          driver: ydb.aio.Driver,
+          table_name: str,
+          index_name: str,
+          strategy: str
+      ):
+          temp_index_name = f"{index_name}__temp"
+          query = f"""
+          ALTER TABLE `{table_name}`
+          ADD INDEX {temp_index_name}
+          GLOBAL USING vector_kmeans_tree
+          ON (embedding)
+          WITH (
+              {strategy}
+          );
+          """
+
+          await pool.execute_with_retries(query)
+          await driver.table_client.alter_table(
+              f"{driver._driver_config.database}/{table_name}",
+              rename_indexes=[
+                  ydb.RenameIndexItem(
+                      source_name=temp_index_name,
+                      destination_name=f"{index_name}",
+                      replace_destination=True,
+                  ),
+              ],
+          )
+
+          print(f"Table index {index_name} created.")
+      ```
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- JavaScript
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - Java
 
     ```java

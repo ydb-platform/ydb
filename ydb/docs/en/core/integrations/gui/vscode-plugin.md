@@ -15,7 +15,7 @@
 - Active session monitoring via [`.sys/query_sessions`](../../dev/system-views.md#query-sessions).
 - Cluster dashboard based on [{{ ydb-short-name }} Embedded UI](../../reference/embedded-ui/index.md): CPU load, memory usage, network traffic (updates every 10 seconds).
 - Management of [access rights (ACL)](../../security/authorization.md#right): viewing permissions on database objects.
-- Generation of DDL scripts ( [`CREATE`](../../yql/reference/syntax/create_table/index.md)) for any database object.
+- Generation of DDL scripts ([`CREATE`](../../yql/reference/syntax/create_table/index.md)) for any database object.
 - Management of [streaming queries](../../concepts/glossary.md#streaming-query): viewing, starting, stopping.
 - [SQL query converter](../sql-translation/sql-dialect-converter.md) from other dialects (PostgreSQL, MySQL, ClickHouse, and others) to YQL.
 - Built-in [MCP server](#mcp) — direct access to databases from AI assistants (Claude Code and others).
@@ -32,7 +32,7 @@ The plugin can be installed from the VS Code Marketplace or from a `.vsix` file 
 ### Installation from VS Code Marketplace {#install-marketplace}
 
 1. Open the Extensions panel in VS Code (`Ctrl+Shift+X` / `Cmd+Shift+X`).
-2. In the search bar, enter `YDB for VS Code` and select the extension from publisher `ydb-tech` ( [direct link](https://marketplace.visualstudio.com/items?itemName=ydb-tech.ydb-vscode-plugin)).
+2. In the search bar, enter `YDB for VS Code` and select the extension from publisher `ydb-tech` ([direct link](https://marketplace.visualstudio.com/items?itemName=ydb-tech.ydb-vscode-plugin)).
 3. Click **Install**.
 
 Alternatively, you can install the plugin from the Marketplace with a single terminal command:
@@ -102,7 +102,7 @@ Authentication by login and password. Enter the username in the **Username** fie
 
 {% note info %}
 
-In managed {{ ydb-name }} installations, login and password authentication is disabled: managed services use the cloud platform's centralized access control system ( [IAM](https://yandex.cloud/en/docs/iam/)).
+In managed {{ ydb-name }} installations, login and password authentication is disabled: managed services use the cloud platform's centralized access control system ([IAM](https://yandex.cloud/en/docs/iam/)).
 
 {% endnote %}
 

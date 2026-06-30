@@ -411,13 +411,17 @@ public:
 private:
     void FillStages();
 
-    void CountScanTasksFromSource(const TStageInfo& stageInfo, bool limitTasksPerNode);
-    void CountFullTextScanTasksFromSource(const TStageInfo& stageInfo);
-    void CountSysViewTasksFromSource(const TStageInfo& stageInfo);
-    void CountReadTasksFromSource(const TStageInfo& stageInfo, size_t resourceSnapshotSize, ui32 scheduledTaskCount);
-    void CountSysViewScanTasks(const TStageInfo& stageInfo);
-    void CountComputeTasks(const TStageInfo& stageInfo, ui32 nodesCount);
-    void CountScanTasksFromShards(const TStageInfo& stageInfo, bool enableShuffleElimination);
+    // Groups the stage's already-placed tasks (stageInfo.Tasks) by their Meta.ExpectedNodeId. Used by Build* methods
+    // that fill tasks per node. Every task must already have ExpectedNodeId set (done by the placement pipeline).
+    THashMap<ui64, TVector<ui64>> GroupStageTasksByNode(const TStageInfo& stageInfo) const;
+
+    void CountScanTasksFromSource(TStageInfo& stageInfo, bool limitTasksPerNode);
+    void CountFullTextScanTasksFromSource(TStageInfo& stageInfo);
+    void CountSysViewTasksFromSource(TStageInfo& stageInfo);
+    void CountReadTasksFromSource(TStageInfo& stageInfo, size_t resourceSnapshotSize, ui32 scheduledTaskCount);
+    void CountSysViewScanTasks(TStageInfo& stageInfo);
+    void CountComputeTasks(TStageInfo& stageInfo, ui32 nodesCount);
+    void CountScanTasksFromShards(TStageInfo& stageInfo, bool enableShuffleElimination);
 
     TMaybe<size_t> BuildScanTasksFromSource(TStageInfo& stageInfo, TQueryExecutionStats* stats);
     void BuildFullTextScanTasksFromSource(TStageInfo& stageInfo, TQueryExecutionStats* stats);

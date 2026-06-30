@@ -4573,10 +4573,18 @@ IGraphTransformer::TStatus SqlSelectWrapper(const TExprNode::TPtr& input, TExprN
         }
 
         auto nonRecursivePart = setItems->ChildPtr(0);
+        if (nonRecursivePart->GetTypeAnn() && nonRecursivePart->GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
+            input->SetTypeAnn(nonRecursivePart->GetTypeAnn());
+            return IGraphTransformer::TStatus::Ok;
+        }
+
         auto recursivePart = setItems->ChildPtr(1);
         auto tableArg = ctx.Expr.NewArgument(input->Pos(), "table");
-        auto order = *ctx.Types.LookupColumnOrder(*nonRecursivePart);
-        auto withColumnOrder = KeepColumnOrder(order, tableArg, ctx.Expr);
+
+        auto order = ctx.Types.LookupColumnOrder(*nonRecursivePart);
+        YQL_ENSURE(order, "Expected column order at non-recursive part");
+        auto withColumnOrder = KeepColumnOrder(*order, tableArg, ctx.Expr);
+
         auto status = OptimizeExpr(recursivePart, recursivePart, [&](const TExprNode::TPtr& node, TExprContext& ctx) -> TExprNode::TPtr {
             Y_UNUSED(ctx);
             if (node->IsCallable({"PgSelf", "YqlSelf"})) {

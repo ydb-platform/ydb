@@ -8,8 +8,6 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
-#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::KQP_LOAD_TEST
-
 namespace NKikimr {
 
 using namespace NActors;
@@ -42,15 +40,15 @@ public:
 
 private:
     void HandlePoisonPill(const TActorContext& ctx) {
-        YDB_LOG_CRIT_CTX(ctx, "HandlePoisonPill");
+        LOG_CRIT_S(ctx, NKikimrServices::KQP_LOAD_TEST, "HandlePoisonPill");
         ReportError(ctx, "Query timed out");
     }
 
     void ReportResult(const TActorContext& ctx, NKikimrKqp::TQueryResponse response, TMaybe<TString> errorMessage) {
         CloseSession(ctx);
 
-        YDB_LOG_DEBUG_CTX(ctx, "Creating event for query response",
-            {"resultStatus", (errorMessage.Defined() ? "with error" : "with success")});
+        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST,
+            "Creating event for query response " << (errorMessage.Defined() ? "with error" : "with success"));
         auto* finishEv = new TEvLoad::TEvYqlSingleQueryResponse(
             Result,
             std::move(errorMessage),
@@ -64,7 +62,7 @@ private:
     void ReportError(const TActorContext& ctx, TString errorMessage) {
         CloseSession(ctx);
 
-        YDB_LOG_DEBUG_CTX(ctx, "Creating event for table creation finish");
+        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Creating event for table creation finish");
         auto* finishEv = new TEvLoad::TEvYqlSingleQueryResponse(
             "",
             std::move(errorMessage),
@@ -76,7 +74,7 @@ private:
     }
 
     void CreateSession(const TActorContext& ctx) {
-        YDB_LOG_NOTICE_CTX(ctx, "Creating event for session creation");
+        LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Creating event for session creation");
         auto ev = MakeHolder<NKqp::TEvKqp::TEvCreateSessionRequest>();
 
         ev->Record.MutableRequest()->SetDatabase(WorkingDir);
@@ -91,17 +89,15 @@ private:
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
             Session = response.GetResponse().GetSessionId();
-            YDB_LOG_INFO_CTX(ctx, "Session is created",
-                {"sessionId", Session});
+            LOG_INFO_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Session is created: " + Session);
             ExecuteQuery(ctx);
         } else {
-            YDB_LOG_ERROR_CTX(ctx, "Session creation failed",
-                {"ev", ev->Get()->ToString()});
+            LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Session creation failed: " + ev->Get()->ToString());
         }
     }
 
     void ExecuteQuery(const TActorContext& ctx) {
-        YDB_LOG_NOTICE_CTX(ctx, "Creating event for query execution");
+        LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Creating event for query execution");
 
         auto ev = MakeHolder<NKqp::TEvKqp::TEvQueryRequest>();
         auto* request = ev->Record.MutableRequest();
@@ -131,21 +127,19 @@ private:
         auto& response = ev->Get()->Record;
 
         if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SUCCESS) {
-            YDB_LOG_NOTICE_CTX(ctx, "Query is executed successfully");
+            LOG_NOTICE_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Query is executed successfully");
             ReportResult(ctx, response.GetResponse(), Nothing());
         } else if (response.GetYdbStatus() == Ydb::StatusIds_StatusCode_SCHEME_ERROR) {
-            YDB_LOG_ERROR_CTX(ctx, "Abort after query execution failed with scheme error",
-                {"ev", ev->Get()->ToString()});
+            LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Abort after query execution failed with scheme error: " + ev->Get()->ToString());
             ReportResult(ctx, response.GetResponse(), ev->Get()->ToString());
         } else {
-            YDB_LOG_ERROR_CTX(ctx, "Query execution failed",
-                {"ev", ev->Get()->ToString()});
+            LOG_ERROR_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Query execution failed: " + ev->Get()->ToString());
             ExecuteQuery(ctx);
         }
     }
 
     void CloseSession(const TActorContext& ctx) {
-        YDB_LOG_DEBUG_CTX(ctx, "Creating event for session closing");
+        LOG_DEBUG_S(ctx, NKikimrServices::KQP_LOAD_TEST, "Creating event for session closing");
 
         if (!Session.empty()) {
             auto ev = MakeHolder<NKqp::TEvKqp::TEvCloseSessionRequest>();

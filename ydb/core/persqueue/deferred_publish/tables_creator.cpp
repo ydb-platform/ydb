@@ -67,7 +67,11 @@ private:
         return CreateTableCreator(
             DestinationsTablePathComponents(),
             {
-                Col("int_publication_id", NScheme::NTypeIds::Uint64),
+                [] {
+                    auto column = Col("int_publication_id", NScheme::NTypeIds::Uint64);
+                    column.SetNotNull(true);
+                    return column;
+                }(),
                 StringColumn("path", true),
                 [] {
                     auto column = Col("destination_blob", NScheme::NTypeIds::String);

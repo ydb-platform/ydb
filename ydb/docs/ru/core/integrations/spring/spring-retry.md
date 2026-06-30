@@ -118,7 +118,7 @@ public class UserService {
 - С `idempotent = true` дополнительно повторяются недетерминированные коды статуса (например, когда результат коммита неизвестен). Включайте этот режим только для операций, повторное выполнение которых безопасно.
 
 ```java
-@YdbTransactional(idempotent = true, readOnly = true)
+@YdbTransactional(idempotent = true)
 public String findPayload(String guid, int id) {
     return jdbcTemplate.queryForObject(
             "SELECT payload FROM slo_test_table WHERE guid = ? AND id = ?",

@@ -433,62 +433,61 @@ void TTpchRunner::PrepareDataForPostgresql(const TString& dir, const TString& ou
     out << Endl << "commit;" << Endl;
 }
 
-NTable::TScanQueryPartIterator TTpchRunner::RunQuery(ui32 number, bool profile, bool usePersistentSnapshot) {
-    if (number == 1)  { return RunQuery01(TInstant::ParseIso8601("1998-12-01"), TDuration::Days(3), profile, usePersistentSnapshot); }
-    if (number == 2)  { return RunQuery02(profile, usePersistentSnapshot); }
-    if (number == 3)  { return RunQuery03(profile, usePersistentSnapshot); }
-    if (number == 4)  { return RunQuery04(profile, usePersistentSnapshot); }
-    if (number == 5)  { return RunQuery05(profile, usePersistentSnapshot); }
-    if (number == 6)  { return RunQuery06(profile, usePersistentSnapshot); }
-    if (number == 7)  { return RunQuery07(profile, usePersistentSnapshot); }
-    if (number == 8)  { return RunQuery08(profile, usePersistentSnapshot); }
-    if (number == 9)  { return RunQuery09(profile, usePersistentSnapshot); }
-    if (number == 10) { return RunQuery10(profile, usePersistentSnapshot); }
-    if (number == 11) { return RunQuery11(profile, usePersistentSnapshot); }
-    if (number == 12) { return RunQuery12(profile, usePersistentSnapshot); }
-    if (number == 13) { return RunQuery13(profile, usePersistentSnapshot); }
-    if (number == 14) { return RunQuery14(profile, usePersistentSnapshot); }
-    if (number == 15) { return RunQuery15(profile, usePersistentSnapshot); }
-    if (number == 16) { return RunQuery16(profile, usePersistentSnapshot); }
-    if (number == 17) { return RunQuery17(profile, usePersistentSnapshot); }
-    if (number == 18) { return RunQuery18(profile, usePersistentSnapshot); }
-    if (number == 19) { return RunQuery19(profile, usePersistentSnapshot); }
-    if (number == 20) { return RunQuery20(profile, usePersistentSnapshot); }
-    if (number == 21) { return RunQuery21(profile, usePersistentSnapshot); }
-    if (number == 22) { return RunQuery22(profile, usePersistentSnapshot); }
+NQuery::TExecuteQueryIterator TTpchRunner::RunQuery(ui32 number, bool profile) {
+    if (number == 1)  { return RunQuery01(TInstant::ParseIso8601("1998-12-01"), TDuration::Days(3), profile); }
+    if (number == 2)  { return RunQuery02(profile); }
+    if (number == 3)  { return RunQuery03(profile); }
+    if (number == 4)  { return RunQuery04(profile); }
+    if (number == 5)  { return RunQuery05(profile); }
+    if (number == 6)  { return RunQuery06(profile); }
+    if (number == 7)  { return RunQuery07(profile); }
+    if (number == 8)  { return RunQuery08(profile); }
+    if (number == 9)  { return RunQuery09(profile); }
+    if (number == 10) { return RunQuery10(profile); }
+    if (number == 11) { return RunQuery11(profile); }
+    if (number == 12) { return RunQuery12(profile); }
+    if (number == 13) { return RunQuery13(profile); }
+    if (number == 14) { return RunQuery14(profile); }
+    if (number == 15) { return RunQuery15(profile); }
+    if (number == 16) { return RunQuery16(profile); }
+    if (number == 17) { return RunQuery17(profile); }
+    if (number == 18) { return RunQuery18(profile); }
+    if (number == 19) { return RunQuery19(profile); }
+    if (number == 20) { return RunQuery20(profile); }
+    if (number == 21) { return RunQuery21(profile); }
+    if (number == 22) { return RunQuery22(profile); }
 
     Y_ABORT("Unknown query %02d", number);
 }
 
-NTable::TScanQueryPartIterator TTpchRunner::RunQuery01(TInstant startDate, TDuration startDateShift, bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator TTpchRunner::RunQuery01(TInstant startDate, TDuration startDateShift, bool profile) {
     Cout << "Run query #01: Pricing Summary Report Query" << Endl;
 
     TString query = NResource::Find("01.sql");
     SubstGlobal(query, "$DBROOT$", TablesPath);
-
-    if (usePersistentSnapshot) {
-        SubstGlobal(query, "$PRAGMAS$", "");
-    } else {
-        SubstGlobal(query, "$PRAGMAS$", "PRAGMA kikimr.DisablePersistentSnapshot = 'true';");
-    }
+    SubstGlobal(query, "$PRAGMAS$", "");
 
 //    Cout << query << Endl;
 //    Cout << "$start_date: " << startDate << Endl;
 //    Cout << "$start_date_shift: " << startDateShift << Endl;
 
-    TTableClient client{Driver};
+    NQuery::TQueryClient client{Driver};
 
-    auto params = client.GetParamsBuilder()
+    auto params = TParamsBuilder()
             .AddParam("$start_date").Date(startDate).Build()
             .AddParam("$start_date_shift").Interval(startDateShift.MicroSeconds()).Build()
             .Build();
 
-    auto settings = TStreamExecScanQuerySettings();
+    NQuery::TExecuteQuerySettings settings;
     if (profile) {
-        settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+        settings.StatsMode(NQuery::EStatsMode::Full);
     }
 
-    auto it = client.StreamExecuteScanQuery(query, params, settings).GetValueSync();
+    auto it = client.StreamExecuteQuery(
+        query,
+        NQuery::TTxControl::BeginTx(NQuery::TTxSettings::SnapshotRO()).CommitTx(),
+        params,
+        settings).GetValueSync();
 
     if (it.IsSuccess()) {
         return it;
@@ -497,131 +496,129 @@ NTable::TScanQueryPartIterator TTpchRunner::RunQuery01(TInstant startDate, TDura
     ythrow yexception() << "Query execution failed: " << it.GetStatus() << ", " << it.GetIssues().ToString();
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery02(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery02(bool profile) {
     Cout << "Run query #02: Minimum Cost Supplier Query" << Endl;
-    return RunQueryGeneric(2, profile, usePersistentSnapshot);
+    return RunQueryGeneric(2, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery03(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery03(bool profile) {
     Cout << "Run query #03: Shipping Priority Query" << Endl;
-    return RunQueryGeneric(3, profile, usePersistentSnapshot);
+    return RunQueryGeneric(3, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery04(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery04(bool profile) {
     Cout << "Run query #04: Order Priority Checking Query" << Endl;
-    return RunQueryGeneric(4, profile, usePersistentSnapshot);
+    return RunQueryGeneric(4, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery05(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery05(bool profile) {
     Cout << "Run query #05: Local Supplier Volume Query" << Endl;
-    return RunQueryGeneric(5, profile, usePersistentSnapshot);
+    return RunQueryGeneric(5, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery06(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery06(bool profile) {
     Cout << "Run query #06: Forecasting Revenue Change Query" << Endl;
-    return RunQueryGeneric(6, profile, usePersistentSnapshot);
+    return RunQueryGeneric(6, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery07(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery07(bool profile) {
     Cout << "Run query #07: Volume Shipping Query" << Endl;
-    return RunQueryGeneric(7, profile, usePersistentSnapshot);
+    return RunQueryGeneric(7, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery08(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery08(bool profile) {
     Cout << "Run query #08: National Market Share Query" << Endl;
-    return RunQueryGeneric(8, profile, usePersistentSnapshot);
+    return RunQueryGeneric(8, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery09(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery09(bool profile) {
     Cout << "Run query #09: Product Type Profit Measure Query" << Endl;
-    return RunQueryGeneric(9, profile, usePersistentSnapshot);
+    return RunQueryGeneric(9, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery10(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery10(bool profile) {
     Cout << "Run query #10: Returned Item Reporting Query" << Endl;
-    return RunQueryGeneric(10, profile, usePersistentSnapshot);
+    return RunQueryGeneric(10, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery11(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery11(bool profile) {
     Cout << "Run query #11: Important Stock Identification Query" << Endl;
-    return RunQueryGeneric(11, profile, usePersistentSnapshot);
+    return RunQueryGeneric(11, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery12(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery12(bool profile) {
     Cout << "Run query #12: Shipping Modes and Order Priority Query" << Endl;
-    return RunQueryGeneric(12, profile, usePersistentSnapshot);
+    return RunQueryGeneric(12, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery13(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery13(bool profile) {
     Cout << "Run query #13: Customer Distribution Query" << Endl;
-    return RunQueryGeneric(13, profile, usePersistentSnapshot);
+    return RunQueryGeneric(13, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery14(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery14(bool profile) {
     Cout << "Run query #14: Promotion Effect Query" << Endl;
-    return RunQueryGeneric(14, profile, usePersistentSnapshot);
+    return RunQueryGeneric(14, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery15(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery15(bool profile) {
     Cout << "Run query #15: Top Supplier Query" << Endl;
-    return RunQueryGeneric(15, profile, usePersistentSnapshot);
+    return RunQueryGeneric(15, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery16(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery16(bool profile) {
     Cout << "Run query #16: Parts Supplier Relationship Query" << Endl;
-    return RunQueryGeneric(16, profile, usePersistentSnapshot);
+    return RunQueryGeneric(16, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery17(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery17(bool profile) {
     Cout << "Run query #17: Small Quantity Order Revenue Query" << Endl;
-    return RunQueryGeneric(17, profile, usePersistentSnapshot);
+    return RunQueryGeneric(17, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery18(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery18(bool profile) {
     Cout << "Run query #18: Large Volume Customer Query" << Endl;
-    return RunQueryGeneric(18, profile, usePersistentSnapshot);
+    return RunQueryGeneric(18, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery19(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery19(bool profile) {
     Cout << "Run query #19: Discounted Revenue Query" << Endl;
-    return RunQueryGeneric(19, profile, usePersistentSnapshot);
+    return RunQueryGeneric(19, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery20(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery20(bool profile) {
     Cout << "Run query #20: Potential Part Promotion Query" << Endl;
-    return RunQueryGeneric(20, profile, usePersistentSnapshot);
+    return RunQueryGeneric(20, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery21(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery21(bool profile) {
     Cout << "Run query #21: Suppliers Who Kept Orders Waiting Query" << Endl;
-    return RunQueryGeneric(21, profile, usePersistentSnapshot);
+    return RunQueryGeneric(21, profile);
 }
 
-NTable::TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQuery22(bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQuery22(bool profile) {
     Cout << "Run query #22: Global Sales Opportunity Query" << Endl;
-    return RunQueryGeneric(22, profile, usePersistentSnapshot);
+    return RunQueryGeneric(22, profile);
 }
 
-TScanQueryPartIterator NYdb::NTpch::TTpchRunner::RunQueryGeneric(ui32 number, bool profile, bool usePersistentSnapshot) {
+NQuery::TExecuteQueryIterator NYdb::NTpch::TTpchRunner::RunQueryGeneric(ui32 number, bool profile) {
     TString query = NResource::Find(Sprintf("%02d.sql", number));
     SubstGlobal(query, "$DBROOT$", TablesPath);
-
-    if (usePersistentSnapshot) {
-        SubstGlobal(query, "$PRAGMAS$", "");
-    } else {
-        SubstGlobal(query, "$PRAGMAS$", "PRAGMA kikimr.DisablePersistentSnapshot = 'true';");
-    }
+    SubstGlobal(query, "$PRAGMAS$", "");
 
     // Cout << query << Endl;
 
-    TTableClient client{Driver};
+    NQuery::TQueryClient client{Driver};
 
-    TStreamExecScanQuerySettings settings;
+    NQuery::TExecuteQuerySettings settings;
     if (profile) {
-        settings.CollectQueryStats(ECollectQueryStatsMode::Full);
+        settings.StatsMode(NQuery::EStatsMode::Full);
     }
 
-    auto it = client.StreamExecuteScanQuery(query, settings).GetValueSync();
+    auto it = client.StreamExecuteQuery(
+        query,
+        NQuery::TTxControl::BeginTx(NQuery::TTxSettings::SnapshotRO()).CommitTx(),
+        settings).GetValueSync();
 
     if (it.IsSuccess()) {
         return it;

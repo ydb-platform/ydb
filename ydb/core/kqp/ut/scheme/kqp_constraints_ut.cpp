@@ -12,6 +12,64 @@ using namespace NYdb;
 using namespace NYdb::NQuery;
 using namespace NYdb::NTopic;
 
+namespace {
+
+void TestCompileTimeDefaultsPlan(const std::string& operation, bool enabled) {
+    NKikimrConfig::TAppConfig appConfig;
+    appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(enabled);
+
+    TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+    auto db = kikimr.GetQueryClient();
+    auto session = db.GetSession().GetValueSync().GetSession();
+    auto settings = TExecuteQuerySettings().ExecMode(EExecMode::Explain);
+
+    {
+        const std::string query = R"(
+            CREATE TABLE TestTable (
+                Key Int32,
+                Value String DEFAULT "first_default",
+                PRIMARY KEY (Key)
+            );
+        )";
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+    }
+
+    {
+        // Implicit default value
+        const std::string query = std::format(R"(
+            {} INTO TestTable (Key) VALUES (1);
+        )", operation);
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx(), settings).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const auto ast = result.GetStats()->GetAst();
+        if (enabled) {
+            // DEFAULT value is inlined into the plan
+            UNIT_ASSERT_C(!ast->contains("KqpCnSequencer"), ast);
+        } else {
+            // Runtime substitution of DEFAULT value
+            UNIT_ASSERT_C(ast->contains("KqpCnSequencer"), ast);
+        }
+    }
+
+    {
+        // Explicit default value -> without sequencer
+        const std::string query = std::format(R"(
+            {} INTO TestTable (Key, Value) VALUES (2, "value2");
+        )", operation);
+        auto result = session.ExecuteQuery(query, TTxControl::NoTx(), settings).GetValueSync();
+        UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+        const auto ast = result.GetStats()->GetAst();
+        // DEFAULT value is inlined into the plan
+        UNIT_ASSERT_C(!ast->contains("KqpCnSequencer"), ast);
+    }
+}
+
+} // namespace
+
 Y_UNIT_TEST_SUITE(KqpConstraints) {
     Y_UNIT_TEST(SerialTypeNegative1) {
         TKikimrRunner kikimr(TKikimrSettings()
@@ -3977,6 +4035,630 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
                 [[1];["first_default"]];
                 [[2];["second_default"]];
                 [[3];["third_default"]]
+            ])");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CompileTimeDefaults_Ast_Upsert, FlagEnabled) {
+        TestCompileTimeDefaultsPlan("UPSERT", FlagEnabled);
+    }
+
+    Y_UNIT_TEST_TWIN(CompileTimeDefaults_Ast_Replace, FlagEnabled) {
+        TestCompileTimeDefaultsPlan("REPLACE", FlagEnabled);
+    }
+
+    Y_UNIT_TEST_TWIN(CompileTimeDefaults_Ast_Insert, FlagEnabled) {
+        TestCompileTimeDefaultsPlan("INSERT", FlagEnabled);
+    }
+
+    Y_UNIT_TEST_TWIN(CompileTimeDefaults_Write_Upsert, FlagEnabled) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(FlagEnabled);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            const std::string query = R"(
+                CREATE TABLE TestTable (
+                    Key Int32,
+                    Value String DEFAULT "default_value",
+                    Value2 String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const auto validateTable = [&](const TString& expected) {
+            const std::string query = R"(
+                SELECT Key, Value, Value2 FROM TestTable ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        };
+
+        // Upsert new row, without default, without nullable
+        {
+            const std::string query = R"(
+                UPSERT INTO TestTable (Key) VALUES (1) RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1];["default_value"];#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#]
+            ])");
+        }
+
+        // Upsert new row, with default, without nullable
+        {
+            const std::string query = R"(
+                UPSERT INTO TestTable (Key, Value) VALUES (2, "explicit") RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[2];["explicit"];#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#]
+            ])");
+        }
+
+        // Upsert new row, without default, with nullable
+        {
+            const std::string query = R"(
+                UPSERT INTO TestTable (Key, Value2) VALUES (3, "explicit") RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[3];["default_value"];["explicit"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#];
+                [[3];["default_value"];["explicit"]]
+            ])");
+        }
+
+        // Upsert new row, with default, with nullable
+        {
+            const std::string query = R"(
+                UPSERT INTO TestTable (Key, Value, Value2) VALUES (4, "explicit", "explicit") RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[4];["explicit"];["explicit"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#];
+                [[3];["default_value"];["explicit"]];
+                [[4];["explicit"];["explicit"]]
+            ])");
+        }
+
+        // Upsert old row, without default, without nullable
+        {
+            const std::string query = R"(
+                UPSERT INTO TestTable (Key) VALUES (4) RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            // todo: https://github.com/ydb-platform/ydb/issues/44939
+            if (false) {
+                CompareYson(R"([
+                    [[4];["explicit"];["explicit"]]
+                ])", FormatResultSetYson(result.GetResultSet(0)));
+            } else {
+                CompareYson(R"([
+                    [[4];["default_value"];["explicit"]]
+                ])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#];
+                [[3];["default_value"];["explicit"]];
+                [[4];["explicit"];["explicit"]]
+            ])");
+        }
+
+        // Upsert old row, with default, without nullable
+        {
+            const std::string query = R"(
+                UPSERT INTO TestTable (Key, Value) VALUES (4, "updated") RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[4];["updated"];["explicit"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#];
+                [[3];["default_value"];["explicit"]];
+                [[4];["updated"];["explicit"]]
+            ])");
+        }
+
+        // Upsert old row, without default, with nullable
+        {
+            const std::string query = R"(
+                UPSERT INTO TestTable (Key, Value2) VALUES (4, "updated") RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            // todo: https://github.com/ydb-platform/ydb/issues/44939
+            if (false) {
+                CompareYson(R"([
+                    [[4];["updated"];["updated"]]
+                ])", FormatResultSetYson(result.GetResultSet(0)));
+            } else {
+                CompareYson(R"([
+                    [[4];["default_value"];["updated"]]
+                ])", FormatResultSetYson(result.GetResultSet(0)));
+            }
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#];
+                [[3];["default_value"];["explicit"]];
+                [[4];["updated"];["updated"]]
+            ])");
+        }
+
+        // Upsert old row, with default, with nullable
+        {
+            const std::string query = R"(
+                UPSERT INTO TestTable (Key, Value, Value2) VALUES (3, "updated", "updated") RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[3];["updated"];["updated"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#];
+                [[3];["updated"];["updated"]];
+                [[4];["updated"];["updated"]]
+            ])");
+        }
+
+        // Upsert batch, without default, without nullable
+        {
+            const std::string query = R"(
+                UPSERT INTO TestTable (Key) VALUES (5), (6), (7), (8)
+                RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[5];["default_value"];#];
+                [[6];["default_value"];#];
+                [[7];["default_value"];#];
+                [[8];["default_value"];#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#];
+                [[3];["updated"];["updated"]];
+                [[4];["updated"];["updated"]];
+                [[5];["default_value"];#];
+                [[6];["default_value"];#];
+                [[7];["default_value"];#];
+                [[8];["default_value"];#]
+            ])");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CompileTimeDefaults_Write_Replace, FlagEnabled) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(FlagEnabled);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            const std::string query = R"(
+                CREATE TABLE TestTable (
+                    Key Int32,
+                    Value String DEFAULT "default_value",
+                    Value2 String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const auto validateTable = [&](const TString& expected) {
+            const std::string query = R"(
+                SELECT Key, Value, Value2 FROM TestTable ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        };
+
+        // Replace new row, without default, without nullable
+        {
+            const std::string query = R"(
+                REPLACE INTO TestTable (Key) VALUES (1) RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1];["default_value"];#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#]
+            ])");
+        }
+
+        // Replace new row, with default, without nullable
+        {
+            const std::string query = R"(
+                REPLACE INTO TestTable (Key, Value) VALUES (2, "explicit") RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[2];["explicit"];#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#]
+            ])");
+        }
+
+        // Replace new row, without default, with nullable
+        {
+            const std::string query = R"(
+                REPLACE INTO TestTable (Key, Value2) VALUES (3, "explicit") RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[3];["default_value"];["explicit"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#];
+                [[3];["default_value"];["explicit"]]
+            ])");
+        }
+
+        // Replace new row, with default, with nullable
+        {
+            const std::string query = R"(
+                REPLACE INTO TestTable (Key, Value, Value2) VALUES (4, "explicit", "explicit") RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[4];["explicit"];["explicit"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#];
+                [[3];["default_value"];["explicit"]];
+                [[4];["explicit"];["explicit"]]
+            ])");
+        }
+
+        // Replace old row, without default, without nullable
+        {
+            const std::string query = R"(
+                REPLACE INTO TestTable (Key) VALUES (4) RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[4];["default_value"];#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#];
+                [[3];["default_value"];["explicit"]];
+                [[4];["default_value"];#]
+            ])");
+        }
+
+        // Replace old row, with default, without nullable
+        {
+            const std::string query = R"(
+                REPLACE INTO TestTable (Key, Value) VALUES (4, "updated") RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[4];["updated"];#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#];
+                [[3];["default_value"];["explicit"]];
+                [[4];["updated"];#]
+            ])");
+        }
+
+        // Replace old row, without default, with nullable
+        {
+            const std::string query = R"(
+                REPLACE INTO TestTable (Key, Value2) VALUES (4, "updated") RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[4];["default_value"];["updated"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#];
+                [[3];["default_value"];["explicit"]];
+                [[4];["default_value"];["updated"]]
+            ])");
+        }
+
+        // Replace old row, with default, with nullable
+        {
+            const std::string query = R"(
+                REPLACE INTO TestTable (Key, Value, Value2) VALUES (3, "updated", "updated") RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[3];["updated"];["updated"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#];
+                [[3];["updated"];["updated"]];
+                [[4];["default_value"];["updated"]]
+            ])");
+        }
+
+        // Replace batch, without default, without nullable
+        {
+            const std::string query = R"(
+                REPLACE INTO TestTable (Key) VALUES (5), (6), (7), (8)
+                RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[5];["default_value"];#];
+                [[6];["default_value"];#];
+                [[7];["default_value"];#];
+                [[8];["default_value"];#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#];
+                [[3];["updated"];["updated"]];
+                [[4];["default_value"];["updated"]];
+                [[5];["default_value"];#];
+                [[6];["default_value"];#];
+                [[7];["default_value"];#];
+                [[8];["default_value"];#]
+            ])");
+        }
+    }
+
+    Y_UNIT_TEST_TWIN(CompileTimeDefaults_Write_Insert, FlagEnabled) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(FlagEnabled);
+
+        TKikimrRunner kikimr(TKikimrSettings(appConfig).SetWithSampleTables(false));
+
+        auto db = kikimr.GetQueryClient();
+        auto session = db.GetSession().GetValueSync().GetSession();
+
+        {
+            const std::string query = R"(
+                CREATE TABLE TestTable (
+                    Key Int32,
+                    Value String DEFAULT "default_value",
+                    Value2 String,
+                    PRIMARY KEY (Key)
+                );
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        const auto validateTable = [&](const TString& expected) {
+            const std::string query = R"(
+                SELECT Key, Value, Value2 FROM TestTable ORDER BY Key;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+            CompareYson(expected, FormatResultSetYson(result.GetResultSet(0)));
+        };
+
+        // Insert new row, without default, without nullable
+        {
+            const std::string query = R"(
+                INSERT INTO TestTable (Key) VALUES (1) RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[1];["default_value"];#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#]
+            ])");
+        }
+
+        // Insert new row, with default, without nullable
+        {
+            const std::string query = R"(
+                INSERT INTO TestTable (Key, Value) VALUES (2, "explicit") RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[2];["explicit"];#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#]
+            ])");
+        }
+
+        // Insert new row, without default, with nullable
+        {
+            const std::string query = R"(
+                INSERT INTO TestTable (Key, Value2) VALUES (3, "explicit") RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[3];["default_value"];["explicit"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#];
+                [[3];["default_value"];["explicit"]]
+            ])");
+        }
+
+        // Insert new row, with default, with nullable
+        {
+            const std::string query = R"(
+                INSERT INTO TestTable (Key, Value, Value2) VALUES (4, "explicit", "explicit") RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[4];["explicit"];["explicit"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#];
+                [[3];["default_value"];["explicit"]];
+                [[4];["explicit"];["explicit"]]
+            ])");
+        }
+
+        // Insert old row, without default, without nullable
+        {
+            const std::string query = R"(
+                INSERT INTO TestTable (Key) VALUES (4) RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Insert old row, with default, without nullable
+        {
+            const std::string query = R"(
+                INSERT INTO TestTable (Key, Value) VALUES (4, "updated") RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Insert old row, without default, with nullable
+        {
+            const std::string query = R"(
+                INSERT INTO TestTable (Key, Value2) VALUES (4, "updated") RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Insert old row, with default, with nullable
+        {
+            const std::string query = R"(
+                INSERT INTO TestTable (Key, Value, Value2) VALUES (3, "updated", "updated") RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        }
+
+        // Insert batch, without default, without nullable
+        {
+            const std::string query = R"(
+                INSERT INTO TestTable (Key) VALUES (5), (6), (7), (8)
+                RETURNING Key, Value, Value2;
+            )";
+            auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+
+            CompareYson(R"([
+                [[5];["default_value"];#];
+                [[6];["default_value"];#];
+                [[7];["default_value"];#];
+                [[8];["default_value"];#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
+
+            validateTable(R"([
+                [[1];["default_value"];#];
+                [[2];["explicit"];#];
+                [[3];["default_value"];["explicit"]];
+                [[4];["explicit"];["explicit"]];
+                [[5];["default_value"];#];
+                [[6];["default_value"];#];
+                [[7];["default_value"];#];
+                [[8];["default_value"];#]
             ])");
         }
     }

@@ -12,6 +12,8 @@
 
 #include <util/generic/vector.h>
 
+#include <array>
+
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -22,6 +24,18 @@ enum class EHostHealth
     Sufferer,
     TemporaryOffline,
     Offline,
+};
+
+// Per-host snapshot for the monitoring UI: raw model-level values. The mon-page
+// view maps EHostHealth to its own enum (see TOracle::BuildHostStats).
+struct TOracleHostStat
+{
+    THostIndex Index = InvalidHostIndex;
+    EHostState State = EHostState::Online;
+    EHostHealth Health = EHostHealth::Online;
+    std::array<size_t, OperationCount> InflightByOp{};
+    THostStat::TErrorsInfo Errors;
+    ui64 PBufferUsedSize = 0;
 };
 
 class IOracle
@@ -98,6 +112,9 @@ public:
     [[nodiscard]] EWriteMode GetWriteMode() const override;
 
     [[nodiscard]] TString Dump() const override;
+
+    // Per-host snapshot for the monitoring UI.
+    [[nodiscard]] TVector<TOracleHostStat> BuildHostStats(TInstant now) const;
 
 private:
     const TStorageConfigPtr StorageConfig;

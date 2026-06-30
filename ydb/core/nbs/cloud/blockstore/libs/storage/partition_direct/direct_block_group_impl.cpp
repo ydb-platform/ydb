@@ -1,5 +1,6 @@
 #include "direct_block_group_impl.h"
 
+#include "partition_direct_events_private.h"
 #include "restore_request.h"
 #include "vchunk.h"
 
@@ -49,6 +50,21 @@ TListPBufferResponse MakeListPBufferResponse(
             {.VChunkIndex = vChunkIndex, .Lsn = lsn, .Range = range});
     }
     return result;
+}
+
+EHostHealthView MapHealth(EHostHealth health)
+{
+    switch (health) {
+        case EHostHealth::Online:
+            return EHostHealthView::Online;
+        case EHostHealth::Sufferer:
+            return EHostHealthView::Sufferer;
+        case EHostHealth::TemporaryOffline:
+            return EHostHealthView::TemporaryOffline;
+        case EHostHealth::Offline:
+            return EHostHealthView::Offline;
+    }
+    return EHostHealthView::Offline;
 }
 
 }   // namespace
@@ -1048,6 +1064,32 @@ NThreading::TFuture<TDBGDumpResponse> TDirectBlockGroup::Dump()
     return future;
 }
 
+void TDirectBlockGroup::RequestMonSnapshot(
+    NActors::TActorId replyTo,
+    ui64 cookie)
+{
+    Executor->ExecuteSimple(
+        [weakSelf = weak_from_this(),
+         actorSystem = ActorSystem,
+         index = DirectBlockGroupIndex,
+         replyTo,
+         cookie]   //
+        () mutable
+        {
+            TDbgSnapshot snapshot;
+            if (auto self = weakSelf.lock()) {
+                snapshot = self->DoBuildMonSnapshot();
+            } else {
+                snapshot.Index = index;
+            }
+            actorSystem->Send(
+                replyTo,
+                new TEvPartitionDirectPrivate::TEvMonDbgSnapshotReady(
+                    cookie,
+                    std::move(snapshot)));
+        });
+}
+
 void TDirectBlockGroup::SetHostState(
     THostIndex hostIndex,
     EHostState oldState,
@@ -1398,6 +1440,29 @@ TDBGDumpResponse TDirectBlockGroup::DoDebugPrintDirtyMap()
         }
     }
     return result;
+}
+
+TDbgSnapshot TDirectBlockGroup::DoBuildMonSnapshot()
+{
+    Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
+
+    TDbgSnapshot snapshot;
+    snapshot.Index = DirectBlockGroupIndex;
+    snapshot.VChunkCount = VChunks.size();
+
+    const auto hostStats = Oracle.BuildHostStats(TInstant::Now());
+    snapshot.Hosts.reserve(hostStats.size());
+    for (const auto& stat: hostStats) {
+        THostSnapshot host;
+        host.Index = stat.Index;
+        host.State = stat.State;
+        host.Health = MapHealth(stat.Health);
+        host.InflightByOp = stat.InflightByOp;
+        host.Errors = stat.Errors;
+        host.PBufferUsedSize = stat.PBufferUsedSize;
+        snapshot.Hosts.push_back(host);
+    }
+    return snapshot;
 }
 
 ////////////////////////////////////////////////////////////////////////////////

@@ -107,6 +107,16 @@ public:
     // Read-only info for the monitoring UI.
     [[nodiscard]] TFastPathServiceInfo GetMonInfo() const;
 
+    // Kicks the asynchronous gather of per-DBG monitoring snapshots. When
+    // dbgIndex is set, only that DBG is asked (detail view); otherwise every
+    // DBG is asked (list view). Each asked DBG replies with
+    // TEvMonDbgSnapshotReady(cookie) to `replyTo`. Returns how many snapshots
+    // to expect.
+    [[nodiscard]] size_t RequestMonSnapshots(
+        NActors::TActorId replyTo,
+        ui64 cookie,
+        std::optional<size_t> dbgIndex) const;
+
 private:
     void ScheduleDirtyMapDebugPrint();
     void QueryDirtyMapDebugDump();

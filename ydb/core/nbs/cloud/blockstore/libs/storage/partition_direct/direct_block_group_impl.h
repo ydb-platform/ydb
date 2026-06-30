@@ -11,6 +11,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_stat.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/host_state.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/ddisk_helpers.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport.h>
 
@@ -126,6 +127,8 @@ public:
 
     NThreading::TFuture<TDBGDumpResponse> Dump() override;
 
+    void RequestMonSnapshot(NActors::TActorId replyTo, ui64 cookie) override;
+
     ui64 GetDDiskSessionSeqNo(size_t index) const;
 
     // IHostStateController implementation
@@ -221,6 +224,10 @@ private:
     [[nodiscard]] bool WaitForSessionLock(THostIndex hostIndex);
 
     TDBGDumpResponse DoDebugPrintDirtyMap();
+
+    // Builds this DBG's monitoring snapshot (per-host health / inflight /
+    // errors). Runs on the executor thread.
+    TDbgSnapshot DoBuildMonSnapshot();
 
     NActors::TActorSystem* const ActorSystem = nullptr;
     const TStorageConfigPtr StorageConfig;

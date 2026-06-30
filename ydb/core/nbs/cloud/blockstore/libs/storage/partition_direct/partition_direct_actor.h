@@ -8,6 +8,7 @@
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/api/service.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/core/tablet.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/model/log_title.h>
+#include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/mon_page/mon_model.h>
 
 #include <ydb/core/nbs/cloud/storage/core/libs/common/error.h>
 #include <ydb/core/nbs/cloud/storage/core/libs/coroutine/executor_pool.h>
@@ -21,6 +22,8 @@
 
 #include <ydb/library/actors/core/mon.h>
 #include <ydb/library/services/services.pb.h>
+
+#include <util/generic/hash.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
 
@@ -51,6 +54,21 @@ private:
     NActors::TActorId LoadActorAdapter;
     bool DdiskBlockGroupAllocated = false;
     std::shared_ptr<TFastPathService> FastPathService;
+
+    // One in-flight DBG monitoring page request. The page is assembled
+    // asynchronously: each DBG replies with its host snapshot and the page is
+    // rendered once all snapshots arrive (or the render deadline fires).
+    struct TMonRequest
+    {
+        EMonPage Page = EMonPage::Overview;
+        NActors::TActorId Requester;
+        std::optional<ui32> SelectedDbg;
+        TVector<TDbgSnapshot> Dbgs;
+        size_t PendingDbgs = 0;
+    };
+
+    ui64 MonCookieCounter = 0;
+    THashMap<ui64, TMonRequest> MonRequests;
 
 public:
     TPartitionActor(
@@ -125,6 +143,21 @@ private:
     void HandleFastPathServiceStopped(
         const TEvPartitionDirectPrivate::TEvFastPathServiceStopped::TPtr& ev,
         const NActors::TActorContext& ctx);
+
+    void HandleMonDbgSnapshotReady(
+        const TEvPartitionDirectPrivate::TEvMonDbgSnapshotReady::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    void HandleMonRenderTimeout(
+        const TEvPartitionDirectPrivate::TEvMonRenderTimeout::TPtr& ev,
+        const NActors::TActorContext& ctx);
+
+    // Snapshot of the tablet-level fields shown in the monitoring header.
+    TTabletInfo MakeMonTabletInfo();
+
+    // Renders and replies to the pending monitoring request `cookie` once all
+    // its DBG snapshots have arrived (or its deadline fired), then drops it.
+    void MaybeReplyMonRequest(ui64 cookie, const NActors::TActorContext& ctx);
 
     void Start(
         const NActors::TActorContext& ctx,

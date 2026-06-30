@@ -581,6 +581,14 @@ STFUNC(TPartitionActor::StateWork)
 
         HFunc(NMon::TEvRemoteHttpInfo, HandleHttpInfo);
 
+        HFunc(
+            TEvPartitionDirectPrivate::TEvMonDbgSnapshotReady,
+            HandleMonDbgSnapshotReady);
+
+        HFunc(
+            TEvPartitionDirectPrivate::TEvMonRenderTimeout,
+            HandleMonRenderTimeout);
+
         default:
             if (!HandleDefaultEvents(ev, SelfId())) {
                 LOG_DEBUG_S(

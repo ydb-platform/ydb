@@ -109,7 +109,7 @@ namespace NKikimr {
                 ctx.Send(RecipientID, new TSelected(action, std::move(CompactionTask)));
 
                 TInstant finishTime(TAppData::TimeProvider->Now());
-                YDB_LOG_CTX_COMP(action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO, ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "%s: Selector actor: action# %s timeSpent# %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), ActionToStr(action), (finishTime - startTime).ToString().data()));
+                YDB_LOG_CTX_COMP(ctx, action == ActNothing ? NLog::PRI_DEBUG : NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, VDISKP(HullCtx->VCtx->VDiskLogPrefix, "%s: Selector actor: action# %s timeSpent# %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), ActionToStr(action), (finishTime - startTime).ToString().data()));
                 TThis::Die(ctx);
             }
 

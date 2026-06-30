@@ -50,7 +50,7 @@ See also [{#T}](yandex-enterprise-database.md).
 || v.25.2.1.26  | 12.05.26  | `cr.yandex/crptqonuodf51kdj7a7d/ydb:25.2.1.26` | [See list](../changelog-server.md#25-2-1-26) ||
 || v.25.2.1.10  | 21.09.25  | `cr.yandex/crptqonuodf51kdj7a7d/ydb:25.2.1.10-rc` | [See list](../changelog-server.md#25-2-1-10-rc) ||
 || **v25.1** | > | > | > ||
-|| v.25.1.4.18  | 12.05.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:25.1.4.7` | [See list](../changelog-server.md#25-1-4-18) ||
+|| v.25.1.4.18  | 12.05.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:25.1.4.18` | [See list](../changelog-server.md#25-1-4-18) ||
 || v.25.1.2.7-rc  | 14.07.25  | `cr.yandex/crptqonuodf51kdj7a7d/ydb:25.1.2.7-rc` | [See list](../changelog-server.md#25-1-2-7-rc) ||
 || **v24.4** | > | > | > ||
 || v.24.4.4.12 | 03.06.25 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:24.4.4.12` | [See list](../changelog-server.md#24-4-4-12) ||

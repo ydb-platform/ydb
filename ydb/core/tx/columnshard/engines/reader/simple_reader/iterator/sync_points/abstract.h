@@ -40,6 +40,7 @@ protected:
     }
 
     void OnSourceFinished();
+    void ReleaseInFlightForPreparedEmptySources();
 
     virtual TString DoDebugString() const {
         return "";

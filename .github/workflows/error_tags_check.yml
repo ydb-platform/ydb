@@ -1,0 +1,144 @@
+name: Check YDBE-XXXXX tags
+
+on:
+  pull_request_target:
+    branches:
+      - main
+      - stable-*
+    paths:
+      - 'ydb/**'
+      - '.github/workflows/error_tags_check.yml'
+  workflow_dispatch: {}
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check-running-allowed:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (vars.CHECKS_SWITCH != '' && fromJSON(vars.CHECKS_SWITCH).error_tags_check == true)
+    runs-on: [self-hosted, tiny-worker]
+    outputs:
+      result: ${{ steps.check-ownership-membership.outputs.result }}
+      commit_sha: ${{ steps.commit-sha.outputs.commit_sha }}
+    steps:
+      - name: Check if running is allowed
+        id: check-ownership-membership
+        if: github.event_name == 'pull_request_target'
+        uses: actions/github-script@v8
+        with:
+          github-token: ${{ secrets.GH_PERSONAL_ACCESS_TOKEN }}
+          script: |
+            const labels = context.payload.pull_request.labels;
+            const okToTestLabel = labels.find(
+              label => label.name == 'ok-to-test'
+            );
+
+            console.log("okToTestLabel=%o", okToTestLabel !== undefined);
+
+            if (okToTestLabel !== undefined) {
+              return true;
+            }
+
+            // This is used primarily in forks. Repository owner
+            // should be allowed to run anything.
+            const userLogin = context.payload.pull_request.user.login;
+
+            // How to interpret membership status code:
+            // https://docs.github.com/rest/collaborators/collaborators#check-if-a-user-is-a-repository-collaborator
+            const isRepoCollaborator = async function () {
+              try {
+                const response = await github.rest.repos.checkCollaborator({
+                  owner: context.payload.repository.owner.login,
+                  repo: context.payload.repository.name,
+                  username: userLogin,
+                });
+                return response.status == 204;
+              } catch (error) {
+                if (error.status && error.status == 404) {
+                  return false;
+                }
+                throw error;
+              }
+            }
+
+            if (context.payload.repository.owner.login == userLogin) {
+              console.log("You are the repository owner!");
+              return true;
+            }
+
+            if (await isRepoCollaborator()) {
+              console.log("You are a collaborator!");
+              return true;
+            }
+
+            return false;
+
+      - name: Comment if waiting on ok-to-test
+        if: steps.check-ownership-membership.outputs.result == 'false' && github.event.action == 'opened'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: 'Hi! The error-tags check will run after a maintainer adds an `ok-to-test` label to this PR. Thank you for your patience!'
+            });
+
+      - name: Resolve commit sha
+        id: commit-sha
+        if: steps.check-ownership-membership.outputs.result == 'true'
+        run: echo "commit_sha=${{ github.event.pull_request.head.sha }}" >> "$GITHUB_OUTPUT"
+
+  validate-error-tags:
+    needs: check-running-allowed
+    if: github.event_name == 'workflow_dispatch' || needs.check-running-allowed.outputs.result == 'true'
+    runs-on: [self-hosted, tiny-worker]
+    steps:
+      - name: Check out the repository
+        uses: actions/checkout@v5
+        with:
+          ref: ${{ needs.check-running-allowed.outputs.commit_sha || github.ref }}
+          fetch-depth: 0
+
+      - name: Determine changed files
+        id: changed
+        if: github.event_name == 'pull_request_target'
+        env:
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          set -euo pipefail
+          git fetch --no-tags origin "$BASE_REF"
+          git diff --name-only --diff-filter=ACMRT "origin/$BASE_REF...HEAD" > changed_files.txt
+          echo "Changed files:"
+          cat changed_files.txt
+
+      - name: Validate YDBE-XXXXX error tags
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "pull_request_target" ]; then
+            # Diff mode: only inspect the files touched by this PR.
+            python3 ydb/library/error_tags/validate_error_tags.py \
+              --changed-files-from changed_files.txt | tee validate_output.txt
+          else
+            # Manual run: full-tree audit.
+            python3 ydb/library/error_tags/validate_error_tags.py | tee validate_output.txt
+          fi
+          exit "${PIPESTATUS[0]}"
+
+      - name: Publish result to job summary
+        if: always()
+        run: |
+          {
+            echo "## Error-tags check"
+            echo
+            echo '```'
+            cat validate_output.txt 2>/dev/null || echo "(no output produced)"
+            echo '```'
+            echo
+            echo "Every \`YDBE-XXXXX\` tag used in code must be listed in \`ydb/library/error_tags/registry.txt\`."
+            echo "See \`ydb/library/error_tags/README.md\` for how to pick a code."
+          } >> "$GITHUB_STEP_SUMMARY"

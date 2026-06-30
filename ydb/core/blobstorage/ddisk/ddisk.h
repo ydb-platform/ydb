@@ -265,7 +265,7 @@ struct TPersistentBufferFormat {
     // and fast erases (which write to a new sector before freeing the old one)
     // always have space available. New plain writes are rejected with OVERFILL
     // when the free sector count drops below this threshold. Defaults to 256
-    // which matches the maximum disk-level inflight (TDDiskActor::MaxInFlight).
+    // (= default disk operations max inflight size).
     ui32 MinFreeSectorsReserve = 256;
 };
 

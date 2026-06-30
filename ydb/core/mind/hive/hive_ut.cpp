@@ -5150,6 +5150,87 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         check_distribution();
     }
 
+    Y_UNIT_TEST(TestHiveBalancerManyRestarts) {
+        static constexpr int NUM_NODES = 3;
+        static constexpr int NUM_TABLETS = NUM_NODES * (NUM_NODES - 1);
+
+        TTestBasicRuntime runtime(NUM_NODES, false);
+        Setup(runtime, true, 1);
+        const int nodeBase = runtime.GetNodeId(0);
+        TActorId senderA = runtime.AllocateEdgeActor();
+        const ui64 hiveTablet = MakeDefaultHiveID();
+        const ui64 testerTablet = MakeTabletID(false, 1);
+
+        auto check_distribution = [hiveTablet, nodeBase, senderA, &runtime](size_t numNodes) {
+            std::vector<unsigned> nodeTablets(numNodes, 0);
+            {
+                runtime.SendToPipe(hiveTablet, senderA, new TEvHive::TEvRequestHiveInfo());
+                TAutoPtr<IEventHandle> handle;
+                TEvHive::TEvResponseHiveInfo* response = runtime.GrabEdgeEventRethrow<TEvHive::TEvResponseHiveInfo>(handle);
+                for (const NKikimrHive::TTabletInfo& tablet : response->Record.GetTablets()) {
+                    UNIT_ASSERT_C(((int)tablet.GetNodeID() - nodeBase >= 0) && (tablet.GetNodeID() - nodeBase < numNodes),
+                            "nodeId# " << tablet.GetNodeID() << " nodeBase# " << nodeBase);
+                    nodeTablets[tablet.GetNodeID() - nodeBase]++;
+                }
+            }
+            Ctest << "Tablets distribution: ";
+            for (const auto& i : nodeTablets) {
+                Ctest << i << " ";
+            }
+            Ctest << Endl;
+            auto mmElements = std::minmax_element(nodeTablets.begin(), nodeTablets.end());
+            UNIT_ASSERT_VALUES_EQUAL(*mmElements.first, *mmElements.second);
+        };
+
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(hiveTablet, TTabletTypes::Hive), &CreateDefaultHive);
+
+        // wait for creation of nodes
+        {
+            TDispatchOptions options;
+            options.FinalEvents.emplace_back(TEvLocal::EvStatus, NUM_NODES);
+            runtime.DispatchEvents(options);
+        }
+
+        // create NUM_TABLETS tablets
+        TTabletTypes::EType tabletType = TTabletTypes::Dummy;
+        TVector<ui64> tablets;
+        for (int i = 0; i < NUM_TABLETS; ++i) {
+            THolder<TEvHive::TEvCreateTablet> ev(new TEvHive::TEvCreateTablet(testerTablet, 100500 + i, tabletType, BINDED_CHANNELS));
+            ev->Record.SetObjectId(i);
+            ui64 tabletId = SendCreateTestTablet(runtime, hiveTablet, testerTablet, std::move(ev), 0, true);
+            tablets.emplace_back(tabletId);
+            MakeSureTabletIsUp(runtime, tabletId, 0);
+        }
+
+        // check that the initial distribution is correct
+        check_distribution(NUM_NODES);
+
+        // Do a lot of node restarts of all nodes except last, unevenly spread between remaining nodes
+        for (int i = 0; i < 3; ++i) {
+            for (int j = 0; j < NUM_NODES; ++j) {
+                for (int k = 0; k < j; ++k) {
+                    TDispatchOptions options;
+                    options.FinalEvents.emplace_back(TEvLocal::EvStatus);
+                    SendKillLocal(runtime, k);
+                    runtime.DispatchEvents(options);
+                    CreateLocal(runtime, k);
+                    runtime.DispatchEvents(options);
+                }
+            }
+        }
+
+        // kill the last node
+        SendKillLocal(runtime, NUM_NODES - 1);
+
+        // wait for tablets
+        for (const auto& tablet : tablets) {
+            WaitForTabletIsUp(runtime, tablet, 0);
+        }
+
+        // check distribution
+        check_distribution(NUM_NODES - 1);
+    }
+
     Y_UNIT_TEST(TestSpreadNeighboursWithUpdateTabletsObject) {
         TTestBasicRuntime runtime(2, false);
         Setup(runtime, true, 1, [](TAppPrepare& app) {
@@ -9363,13 +9444,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
         }
 
         ui64 version = 1;
-        auto makeRequest = [&](ui64 newSize, NKikimrProto::EReplyStatus expectedStatus) {
+        auto makeRequest = [&](ui64 newSize, NKikimrProto::EReplyStatus expectedStatus, ui64 version) {
             auto request = std::make_unique<TEvHive::TEvShrinkStoragePool>();
             request->Record.MutableSubDomain()->SetSchemeShard(TTestTxConfig::SchemeShard);
             request->Record.MutableSubDomain()->SetPathId(1);
             request->Record.SetStoragePool("def1");
             request->Record.SetNewSize(newSize);
-            request->Record.SetVersion(++version);
+            request->Record.SetVersion(version);
             runtime.SendToPipe(hiveTablet, senderA, request.release(), 0, GetPipeConfigWithRetries());
             TAutoPtr<IEventHandle> handle;
             auto response = runtime.GrabEdgeEventRethrow<TEvHive::TEvShrinkStoragePoolReply>(handle);
@@ -9378,11 +9459,13 @@ Y_UNIT_TEST_SUITE(THiveTest) {
             return response->Record.GetGroupsToRemove();
         };
 
-        auto groupsToRemove = makeRequest(3, NKikimrProto::OK);
+        auto groupsToRemove = makeRequest(3, NKikimrProto::OK, version);
         UNIT_ASSERT(std::ranges::none_of(groupsToRemove, [&](auto groupId) { return usedGroups.contains(groupId); }));
-        makeRequest(10, NKikimrProto::ERROR);
-        makeRequest(0, NKikimrProto::ERROR);
-        makeRequest(5, NKikimrProto::OK);
+        auto groupsToRemove1 = makeRequest(3, NKikimrProto::OK, version); // idempotency
+        UNIT_ASSERT(std::ranges::equal(groupsToRemove, groupsToRemove1));
+        makeRequest(10, NKikimrProto::ERROR, ++version);
+        makeRequest(0, NKikimrProto::ERROR, ++version);
+        makeRequest(5, NKikimrProto::OK, ++version);
     }
 
     void TestShrinkStoragePool(TTestBasicRuntime& runtime, bool& activeZone) {

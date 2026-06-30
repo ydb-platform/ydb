@@ -30,6 +30,7 @@
 #include <ydb/core/sys_view/partition_stats/partition_stats.h>
 #include <ydb/core/tablet/tablet_counters_aggregator.h>
 #include <ydb/core/tablet/tablet_counters_protobuf.h>
+#include <ydb/core/tablet_flat/bloom_filter_defaults.h>
 #include <ydb/core/tablet_flat/tablet_flat_executed.h>
 #include <ydb/core/tx/columnshard/bg_tasks/events/events.h>
 #include <ydb/core/tx/scheme_board/events_schemeshard.h>
@@ -240,6 +241,97 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
             items.emplace_back(TLocalIndexMigrationItem{
                 .WorkingDir = workingDir,
                 .IndexConfig = std::move(indexConfig),
+            });
+        }
+    }
+
+    // Row tables: legacy prefix bloom filters live as nameless ByKeyFilterPrefixes in the
+    // partition config. Synthesize a named TTableIndex scheme object per prefix.
+    for (const auto& [tablePathId, tableInfo] : Tables) {
+        const auto& partitionConfig = tableInfo->PartitionConfig();
+        if (partitionConfig.ByKeyFilterPrefixesSize() == 0) {
+            continue;
+        }
+
+        const TPathElement::TPtr tablePath = PathsById.at(tablePathId);
+        if (tablePath->Dropped() || !tablePath->IsTable()) {
+            continue;
+        }
+        const TPath path = TPath::Init(tablePathId, this);
+        if (!path.IsCommonSensePath()) {
+            // Skip index impl tables and other non-user tables.
+            continue;
+        }
+
+        // Ordered primary-key column names.
+        TVector<TString> pkColumns;
+        pkColumns.reserve(tableInfo->KeyColumnIds.size());
+        for (ui32 colId : tableInfo->KeyColumnIds) {
+            auto colIt = tableInfo->Columns.find(colId);
+            if (colIt == tableInfo->Columns.end()) {
+                break;
+            }
+            pkColumns.push_back(colIt->second.Name);
+        }
+
+        const TString workingDir = path.PathString();
+
+        for (const auto& prefix : partitionConfig.GetByKeyFilterPrefixes()) {
+            const ui32 prefixLen = prefix.GetPrefixLength();
+            if (prefixLen == 0 || prefixLen > pkColumns.size()) {
+                continue;
+            }
+
+            // Idempotency: skip if a local bloom index over this prefix already exists.
+            bool alreadyExists = false;
+            for (const auto& [childName, childPathId] : tablePath->GetChildren()) {
+                const auto& child = PathsById.at(childPathId);
+                if (child->Dropped() || !child->IsTableIndex()) {
+                    continue;
+                }
+                auto indexIt = Indexes.find(childPathId);
+                if (indexIt == Indexes.end()
+                    || indexIt->second->Type != NKikimrSchemeOp::EIndexTypeLocalBloomFilter) {
+                    continue;
+                }
+                const auto& indexKeys = indexIt->second->IndexKeys;
+                if (indexKeys.size() == prefixLen
+                    && std::equal(indexKeys.begin(), indexKeys.end(), pkColumns.begin())) {
+                    alreadyExists = true;
+                    break;
+                }
+            }
+            if (alreadyExists) {
+                continue;
+            }
+
+            NKikimrSchemeOp::TIndexCreationConfig indexConfig;
+            for (ui32 i = 0; i < prefixLen; ++i) {
+                indexConfig.AddKeyColumnNames(pkColumns[i]);
+            }
+            // Legacy prefixes have no name. Use a deterministic convention
+            // "idx_bloom_<prefixLen>" to keep the name stable.
+            const TString name = TStringBuilder() << "idx_bloom_" << prefixLen;
+            if (tablePath->FindChild(name)) {
+                LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                    "CollectLocalIndexMigrations: skipping row bloom prefix " << prefixLen
+                    << " for table " << workingDir << " (name '" << name << "' already taken)");
+                continue;
+            }
+            indexConfig.SetName(name);
+            indexConfig.SetType(NKikimrSchemeOp::EIndexTypeLocalBloomFilter);
+            indexConfig.SetState(NKikimrSchemeOp::EIndexStateReady);
+            indexConfig.MutableBloomFilterDescription()->SetFalsePositiveProbability(
+                prefix.HasFalsePositiveProbability()
+                    ? prefix.GetFalsePositiveProbability()
+                    : NTable::DefaultBloomFilterFpp);
+
+            LOG_INFO_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
+                "CollectLocalIndexMigrations: adding row bloom index " << name << " from table " << workingDir);
+            items.emplace_back(TLocalIndexMigrationItem{
+                .WorkingDir = workingDir,
+                .IndexConfig = std::move(indexConfig),
+                .IsColumnTable = false,
             });
         }
     }
@@ -5839,6 +5931,7 @@ void TSchemeShard::StateWork(STFUNC_SIG) {
 
         //namespace NIndexBuilder {
         HFuncTraced(TEvSetColumnConstraint::TEvCreateRequest, Handle);
+        HFuncTraced(TEvSetColumnConstraint::TEvGetRequest, Handle);
         HFuncTraced(TEvDataShard::TEvValidateRowConditionResponse, Handle);
         HFuncTraced(TEvIndexBuilder::TEvCreateRequest, Handle);
         HFuncTraced(TEvIndexBuilder::TEvGetRequest, Handle);

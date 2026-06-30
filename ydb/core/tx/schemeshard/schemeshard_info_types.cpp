@@ -819,8 +819,8 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         alterData->TableDescriptionFull->SetUniqueIndexKeySize(op.GetUniqueIndexKeySize());
     }
 
-    if (op.HasIndexImplType()) {
-        alterData->TableDescriptionFull->SetIndexImplType(op.GetIndexImplType());
+    if (op.HasTableType()) {
+        alterData->TableDescriptionFull->SetTableType(op.GetTableType());
     }
 
     if (source) {
@@ -1168,6 +1168,19 @@ bool TPartitionConfigMerger::ApplyChanges(
             entry->SetPrefixLength(len);
             entry->SetFalsePositiveProbability(fpp);
         }
+    }
+
+    if (changes.DropByKeyFilterPrefixLengthsSize() > 0) {
+        // Remove specific bloom filter prefixes (used when dropping a row-table prefix bloom index).
+        TSet<ui32> toRemove(changes.GetDropByKeyFilterPrefixLengths().begin(),
+                            changes.GetDropByKeyFilterPrefixLengths().end());
+        google::protobuf::RepeatedPtrField<NKikimrSchemeOp::TByKeyFilterPrefix> kept;
+        for (auto& p : *result.MutableByKeyFilterPrefixes()) {
+            if (!toRemove.contains(p.GetPrefixLength())) {
+                kept.Add()->Swap(&p);
+            }
+        }
+        result.MutableByKeyFilterPrefixes()->Swap(&kept);
     }
 
     if (changes.HasExecutorFastLogPolicy()) {

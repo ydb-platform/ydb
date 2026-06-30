@@ -1945,7 +1945,6 @@ public:
             NKikimrIndexBuilder::TIndexBuildSettings indexBuildSettings;
             indexBuildSettings.set_source_path(table.Metadata->Name);
 
-            TVector<TSetColumnConstraintSettings> constraintSetObjects;
             auto applyLocalBloomNgramFilterIndex = [](Ydb::Table::LocalBloomNgramFilterIndex* proto,
                                                            const TIndexDescription::TLocalBloomNgramFilterDescription& desc) -> decltype(auto) {
                 if (desc.NgramSize) {
@@ -2114,6 +2113,7 @@ public:
                         alterTableRequest.add_drop_columns(TString(dropColumn.Value()));
                     }
                 } else if (name == "alterColumns") {
+                    std::vector<TString> notNullColumns;
                     auto listNode = action.Value().Cast<TExprList>();
                     for (size_t i = 0; i < listNode.Size(); ++i) {
                         auto item = listNode.Item(i);
@@ -2189,12 +2189,7 @@ public:
                                     return SyncError();
                                 } else {
                                     alterTableRequest.mutable_alter_columns()->RemoveLast();
-
-                                    TSetColumnConstraintSettings value;
-                                    value.SetColumnName(TString(columnName));
-                                    value.SetConstraint(TSetColumnConstraintSettings::NOT_NULL);
-
-                                    constraintSetObjects.push_back(std::move(value));
+                                    notNullColumns.push_back(TString(columnName));
                                 }
                             } else {
                                 ctx.AddError(TIssue(ctx.GetPosition(constraintsList.Pos()), TStringBuilder()
@@ -2244,6 +2239,21 @@ public:
                             ctx.AddError(TIssue(ctx.GetPosition(alterColumnList.Pos()),
                                     TStringBuilder() << "Unsupported action to alter column: " << alterColumnAction));
                             return SyncError();
+                        }
+                    }
+
+                    if (notNullColumns.size() > 0) {
+                        if (alterTableRequest.alter_columns_size() != 0) {
+                            ctx.AddError(TIssue(
+                                ctx.GetPosition(listNode.Pos()),
+                                "Multiple ALTER COLUMN operations of different kinds are not allowed in a single statement."
+                            ));
+                            return SyncError();
+                        }
+
+                        for (const auto& columnName : notNullColumns) {
+                            auto* req = alterTableRequest.add_set_not_null();
+                            req->set_column_name(TString(columnName));
                         }
                     }
                 } else if (name == "addColumnFamilies" || name == "alterColumnFamilies") {
@@ -2760,6 +2770,7 @@ public:
 
                         auto add_index = alterTableRequest.add_add_indexes();
                         add_index->set_name(alterIndexName);
+                        add_index->add_index_columns(indexIter->KeyColumns[0]);
                         const auto alterIndexSettings = alterIndexIndexSettingsExpr.Cast<TCoNameValueTupleList>();
 
                         if (indexIter->Type == NYql::TIndexDescription::EType::LocalBloomFilter) {
@@ -3108,11 +3119,8 @@ public:
             NThreading::TFuture<IKikimrGateway::TGenericResult> future;
             bool isTableStore = (table.Metadata->TableType == ETableType::TableStore);  // Doesn't set, so always false
             bool isColumn = (table.Metadata->StoreType == EStoreType::Column);
-            bool isSetConstraint = (!constraintSetObjects.empty());
 
-            if (isSetConstraint) {
-                future = Gateway->SetConstraint(table.Metadata->Name, std::move(constraintSetObjects));
-            } else if (isTableStore) {
+            if (isTableStore) {
                 AFL_VERIFY(false);
                 if (!isColumn) {
                     ctx.AddError(TIssue(ctx.GetPosition(input->Pos()),

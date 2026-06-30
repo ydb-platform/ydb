@@ -53,7 +53,9 @@ public:
     [[nodiscard]] virtual TDuration GetReadRequestTimeout() const = 0;
     [[nodiscard]] virtual TDuration GetWriteHedgingDelay() const = 0;
     [[nodiscard]] virtual TDuration GetWriteRequestTimeout() const = 0;
-    [[nodiscard]] virtual TDuration GetPBufferReplyTimeout() const = 0;
+    [[nodiscard]] virtual TDuration GetIndirectWriteReplyTimeout() const = 0;
+    [[nodiscard]] virtual TDuration GetFlushRequestTimeout() const = 0;
+    [[nodiscard]] virtual TDuration GetEraseRequestTimeout() const = 0;
     [[nodiscard]] virtual EWriteMode GetWriteMode() const = 0;
 
     [[nodiscard]] virtual TString Dump() const = 0;
@@ -90,7 +92,9 @@ public:
     [[nodiscard]] TDuration GetReadRequestTimeout() const override;
     [[nodiscard]] TDuration GetWriteHedgingDelay() const override;
     [[nodiscard]] TDuration GetWriteRequestTimeout() const override;
-    [[nodiscard]] TDuration GetPBufferReplyTimeout() const override;
+    [[nodiscard]] TDuration GetIndirectWriteReplyTimeout() const override;
+    [[nodiscard]] TDuration GetFlushRequestTimeout() const override;
+    [[nodiscard]] TDuration GetEraseRequestTimeout() const override;
     [[nodiscard]] EWriteMode GetWriteMode() const override;
 
     [[nodiscard]] TString Dump() const override;
@@ -103,7 +107,9 @@ private:
     const TDuration DefaultReadRequestTimeout;
     const TDuration DefaultWriteHedgingDelay;
     const TDuration DefaultWriteRequestTimeout;
-    const TDuration DefaultPBufferReplyTimeout;
+    const TDuration DefaultIndirectWriteReplyTimeout;
+    const TDuration DefaultFlushRequestTimeout;
+    const TDuration DefaultEraseRequestTimeout;
     const EWriteMode DefaultWriteMode;
 
     TVector<THostStat> HostStatistics;

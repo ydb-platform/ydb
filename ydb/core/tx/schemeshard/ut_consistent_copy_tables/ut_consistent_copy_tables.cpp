@@ -648,4 +648,54 @@ Y_UNIT_TEST_SUITE(TSchemeShardConsistentCopyTablesTest) {
         // 3. Verify the copied table and both bloom indexes are ready scheme objects
         NLocalIndexes::CheckOlapTableWithBloomAndNgramIndexesReady(runtime, "/MyRoot/ColumnTableWithLocalIndexesCopy");
     }
+
+    Y_UNIT_TEST(ConsistentCopyRowTableWithMultipleBloomPrefixes) {
+        TTestWithReboots t;
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            runtime.GetAppData().FeatureFlags.SetEnableLocalIndexAsSchemeObject(true);
+
+            {
+                TInactiveZone inactive(activeZone);
+                // Create source table with multiple bloom filter prefixes
+                TestCreateTable(runtime, ++t.TxId, "/MyRoot", R"(
+                    Name: "src"
+                    Columns { Name: "Key1" Type: "Uint64"}
+                    Columns { Name: "Key2" Type: "Uint64"}
+                    Columns { Name: "Value" Type: "Utf8"}
+                    KeyColumnNames: ["Key1", "Key2"]
+                    PartitionConfig {
+                        ByKeyFilterPrefixes { PrefixLength: 1 }
+                        ByKeyFilterPrefixes { PrefixLength: 2 }
+                    }
+                )");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                // Restart SchemeShard to trigger migration to scheme objects
+                TActorId sender = runtime.AllocateEdgeActor();
+                GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
+                runtime.SimulateSleep(TDuration::Seconds(5));
+
+                // Verify source has bloom filters after migration
+                NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/src",
+                    {1, 2},
+                    {{"idx_bloom_1", {"Key1"}}, {"idx_bloom_2", {"Key1", "Key2"}}});
+            }
+
+            // Perform consistent copy operation with reboots
+            {
+                TInactiveZone inactive(activeZone);
+                TestConsistentCopyTables(runtime, ++t.TxId, "/", R"(
+                    CopyTableDescriptions {
+                      SrcPath: "/MyRoot/src"
+                      DstPath: "/MyRoot/dst"
+                    })");
+                t.TestEnv->TestWaitNotification(runtime, t.TxId);
+
+                // Verify copy has all bloom filters
+                NLocalIndexes::CheckRowTableBloomSchemeObjects(runtime, "/MyRoot/dst",
+                    {1, 2},
+                    {{"idx_bloom_1", {"Key1"}}, {"idx_bloom_2", {"Key1", "Key2"}}});
+            }
+        });
+    }
 }

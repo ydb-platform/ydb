@@ -1,5 +1,6 @@
 #include "common.h"
 
+#include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
 #include <ydb/library/yql/providers/s3/actors/yql_s3_actors_factory_impl.h>
@@ -12,6 +13,7 @@ using namespace fmt::literals;
 using namespace NTestUtils;
 using namespace NYdb;
 using namespace NYdb::NQuery;
+using namespace NFederatedQueryTest;
 
 Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     Y_UNIT_TEST_F(CreateExternalDataSource, TStreamingTestFixture) {
@@ -1437,6 +1439,7 @@ Y_UNIT_TEST_SUITE(KqpFederatedQueryDatastreams) {
     }
 
     Y_UNIT_TEST_F(CreateExternalDataSourceAuthMethodIam, TStreamingWithSchemaSecretsTestFixture) {
+        InternalInitFederatedQuerySetupFactory = true;
         ++DynamicNodeCount;
         auto storagePoolType = StoragePoolTypes.emplace_back("hdd");
         auto& appConfig = SetupAppConfig();

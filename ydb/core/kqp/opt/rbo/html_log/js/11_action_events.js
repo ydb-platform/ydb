@@ -500,11 +500,20 @@ var TraceActionEvents = (function() {
         var ri = intAttr(el, 'data-ri');
 
         switch (action) {
+        case 'toggle-trace-picker-menu':
+            TraceActions.trace.toggleTracePickerMenu(ev);
+            break;
+        case 'set-active-trace-only':
+            TraceActions.trace.setActiveTraceOnly(intAttr(el, 'data-trace-index'), ev);
+            break;
+        case 'toggle-trace-selection':
+            TraceActions.trace.toggleTraceSelection(intAttr(el, 'data-trace-index'), ev);
+            break;
         case 'cycle-global-state':
             TraceActions.layout.cycleGlobalState();
             break;
         case 'toggle-stage':
-            TraceActions.layout.toggleStage(si);
+            TraceActions.layout.toggleStage(si, ev);
             break;
         case 'toggle-stage-rules':
             TraceActions.layout.toggleStageRules(si, ev);
@@ -646,41 +655,47 @@ var TraceActionEvents = (function() {
         case 'toggle-settings-popover':
             TraceActions.topBar.toggleSettingsPopover(ev);
             break;
-        case 'toggle-node-columns-menu':
-            TraceActions.topBar.toggleNodeColumnsMenu(ev);
+        case 'toggle-pinned-fields-menu':
+            TraceActions.topBar.togglePinnedFieldsMenu(ev);
             break;
         case 'toggle-diff-fields-menu':
             TraceActions.topBar.toggleDiffFieldsMenu(ev);
             break;
-        case 'reset-node-columns':
-            TraceActions.detail.resetNodeColumns(ev);
+        case 'reset-pinned-fields':
+            TraceActions.detail.resetPinnedFields(ev);
             break;
         case 'reset-diff-fields':
             TraceActions.detail.resetDiffFields(ev);
             break;
-        case 'solo-node-column':
-            TraceActions.detail.soloNodeColumn(el.getAttribute('data-node-column-key') || '', ev);
+        case 'solo-pinned-field':
+            TraceActions.detail.soloPinnedField(el.getAttribute('data-pinned-field-key') || '', ev);
             break;
         case 'solo-diff-field':
             TraceActions.detail.soloDiffField(el.getAttribute('data-diff-field-key') || '', ev);
             break;
-        case 'set-all-node-columns':
-            TraceActions.detail.setAllNodeColumns(el.getAttribute('data-visible') === 'true', ev);
+        case 'set-all-pinned-fields':
+            TraceActions.detail.setAllPinnedFields(el.getAttribute('data-visible') === 'true', ev);
             break;
         case 'set-all-diff-fields':
             TraceActions.detail.setAllDiffFields(el.getAttribute('data-visible') === 'true', ev);
             break;
-        case 'apply-node-column-preset':
-            TraceActions.detail.applyNodeColumnPreset(
-                el.getAttribute('data-node-column-preset-index') || '',
+        case 'apply-pinned-field-preset':
+            TraceActions.detail.applyPinnedFieldPreset(
+                el.getAttribute('data-pinned-field-preset-index') || '',
                 ev
             );
             break;
-        case 'pin-node-column':
-            TraceActions.detail.setNodeColumnVisible(el.getAttribute('data-node-column-key') || '', true, ev);
+        case 'apply-diff-field-preset':
+            TraceActions.detail.applyDiffFieldPreset(
+                el.getAttribute('data-diff-field-preset-index') || '',
+                ev
+            );
             break;
-        case 'unpin-node-column':
-            TraceActions.detail.setNodeColumnVisible(el.getAttribute('data-node-column-key') || '', false, ev);
+        case 'pin-field':
+            TraceActions.detail.setPinnedFieldVisible(el.getAttribute('data-pinned-field-key') || '', true, ev);
+            break;
+        case 'unpin-field':
+            TraceActions.detail.setPinnedFieldVisible(el.getAttribute('data-pinned-field-key') || '', false, ev);
             break;
         case 'set-theme-dark-mode':
             TraceActions.theme.setThemeDarkMode(el.getAttribute('data-dark-mode') === 'true', ev);
@@ -723,15 +738,12 @@ var TraceActionEvents = (function() {
         if (!el) return;
 
         switch (el.getAttribute('data-trace-action')) {
-        case 'set-active-trace':
-            TraceActions.trace.setActiveTrace(el.value);
-            break;
         case 'theme-select':
             TraceActions.theme.setTheme(el.value, ev);
             break;
-        case 'toggle-node-column':
-            TraceActions.detail.setNodeColumnVisible(
-                el.getAttribute('data-node-column-key') || '',
+        case 'toggle-pinned-field':
+            TraceActions.detail.setPinnedFieldVisible(
+                el.getAttribute('data-pinned-field-key') || '',
                 !!el.checked,
                 ev
             );
@@ -753,8 +765,8 @@ var TraceActionEvents = (function() {
         if (!el) return;
         if (el.getAttribute('data-trace-action') === 'search-box') {
             TraceActions.search.scheduleSearch(ev);
-        } else if (el.getAttribute('data-trace-action') === 'node-columns-filter') {
-            applyNodeColumnsFilter();
+        } else if (el.getAttribute('data-trace-action') === 'pinned-fields-filter') {
+            applyPinnedFieldsFilter();
         } else if (el.getAttribute('data-trace-action') === 'diff-fields-filter') {
             applyDiffFieldsFilter();
         }
@@ -801,39 +813,39 @@ var TraceActionEvents = (function() {
     }
 
     var infoPanelDrag = null;
-    var nodeColumnResizeDrag = null;
-    var nodeColumnReorderDrag = null;
-    var NODE_COLUMN_REORDER_DRAG_THRESHOLD_PX = 4;
+    var pinnedFieldResizeDrag = null;
+    var pinnedFieldReorderDrag = null;
+    var PINNED_FIELD_REORDER_DRAG_THRESHOLD_PX = 4;
     var INFO_PANEL_RESIZE_MIN_HEIGHT = 60;
 
-    function nodeColumnResizeHandle(ev) {
+    function pinnedFieldResizeHandle(ev) {
         return ev.target && ev.target.closest && ev.target.closest('.pinned-header-resize');
     }
 
-    function nodeColumnReorderCell(ev) {
+    function pinnedFieldReorderCell(ev) {
         if (!ev || !ev.target || !ev.target.closest) return null;
-        if (nodeColumnResizeHandle(ev)) return null;
+        if (pinnedFieldResizeHandle(ev)) return null;
         if (ev.target.closest('.pinned-header-unpin')) return null;
-        return ev.target.closest('.pinned-header-cell[data-node-column-key]');
+        return ev.target.closest('.pinned-header-cell[data-pinned-field-key]');
     }
 
-    function clearNodeColumnReorderClasses(drag) {
+    function clearPinnedFieldReorderClasses(drag) {
         var header = drag && drag.header;
         if (!header || !header.querySelectorAll) return;
         var cells = header.querySelectorAll('.pinned-header-cell');
         for (var i = 0; i < cells.length; i++) {
             if (!cells[i].classList) continue;
             cells[i].classList.remove(
-                'node-column-drag-source',
-                'node-column-drop-before',
-                'node-column-drop-after'
+                'pinned-field-drag-source',
+                'pinned-field-drop-before',
+                'pinned-field-drop-after'
             );
         }
     }
 
-    function nodeColumnDropIndexFromPointer(drag, clientX) {
+    function pinnedFieldDropIndexFromPointer(drag, clientX) {
         var cells = drag && drag.header && drag.header.querySelectorAll
-            ? drag.header.querySelectorAll('.pinned-header-cell[data-node-column-index]')
+            ? drag.header.querySelectorAll('.pinned-header-cell[data-pinned-field-index]')
             : [];
         if (!cells || !cells.length) return -1;
         for (var i = 0; i < cells.length; i++) {
@@ -844,71 +856,71 @@ var TraceActionEvents = (function() {
         return cells.length;
     }
 
-    function nodeColumnDropIndexWouldMove(drag, dropIndex) {
+    function pinnedFieldDropIndexWouldMove(drag, dropIndex) {
         if (!drag || !Number.isFinite(dropIndex)) return false;
         if (dropIndex < 0) return false;
         return dropIndex !== drag.startIndex && dropIndex !== drag.startIndex + 1;
     }
 
-    function updateNodeColumnReorderPreview(drag, dropIndex) {
-        clearNodeColumnReorderClasses(drag);
+    function updatePinnedFieldReorderPreview(drag, dropIndex) {
+        clearPinnedFieldReorderClasses(drag);
         if (!drag || !drag.header || !drag.header.querySelectorAll) return;
-        if (drag.cell && drag.cell.classList) drag.cell.classList.add('node-column-drag-source');
-        if (!nodeColumnDropIndexWouldMove(drag, dropIndex)) return;
+        if (drag.cell && drag.cell.classList) drag.cell.classList.add('pinned-field-drag-source');
+        if (!pinnedFieldDropIndexWouldMove(drag, dropIndex)) return;
 
-        var cells = drag.header.querySelectorAll('.pinned-header-cell[data-node-column-index]');
+        var cells = drag.header.querySelectorAll('.pinned-header-cell[data-pinned-field-index]');
         if (!cells || !cells.length) return;
         if (dropIndex <= 0 && cells[0].classList) {
-            cells[0].classList.add('node-column-drop-before');
+            cells[0].classList.add('pinned-field-drop-before');
             return;
         }
         if (dropIndex >= cells.length && cells[cells.length - 1].classList) {
-            cells[cells.length - 1].classList.add('node-column-drop-after');
+            cells[cells.length - 1].classList.add('pinned-field-drop-after');
             return;
         }
         if (cells[dropIndex] && cells[dropIndex].classList) {
-            cells[dropIndex].classList.add('node-column-drop-before');
+            cells[dropIndex].classList.add('pinned-field-drop-before');
         }
     }
 
-    function endNodeColumnReorderDrag(ev, commit) {
-        var drag = nodeColumnReorderDrag || resizeRuntime().nodeColumnReorderDrag;
+    function endPinnedFieldReorderDrag(ev, commit) {
+        var drag = pinnedFieldReorderDrag || resizeRuntime().pinnedFieldReorderDrag;
         if (!drag) return;
         if (ev && ev.pointerId !== undefined &&
             drag.pointerId !== undefined &&
             ev.pointerId !== drag.pointerId) {
             return;
         }
-        clearNodeColumnReorderClasses(drag);
-        if (document.body && document.body.classList) document.body.classList.remove('node-column-reordering');
-        nodeColumnReorderDrag = null;
-        resizeRuntime().nodeColumnReorderDrag = null;
+        clearPinnedFieldReorderClasses(drag);
+        if (document.body && document.body.classList) document.body.classList.remove('pinned-field-reordering');
+        pinnedFieldReorderDrag = null;
+        resizeRuntime().pinnedFieldReorderDrag = null;
         if (drag.cell && drag.cell.releasePointerCapture && drag.pointerId !== undefined) {
             try { drag.cell.releasePointerCapture(drag.pointerId); } catch (err) {}
         }
-        if (commit && drag.active && nodeColumnDropIndexWouldMove(drag, drag.dropIndex)) {
-            TraceActions.detail.reorderNodeColumn(drag.key, drag.dropIndex, ev);
+        if (commit && drag.active && pinnedFieldDropIndexWouldMove(drag, drag.dropIndex)) {
+            TraceActions.detail.reorderPinnedField(drag.key, drag.dropIndex, ev);
         }
     }
 
-    function applyNodeColumnResizePreview(index, width) {
+    function applyPinnedFieldResizePreview(index, width) {
         if (!hasDOM() || !document.querySelectorAll) return;
-        var px = clampNodeColumnWidth(width) + 'px';
-        var cells = document.querySelectorAll('[data-node-column-index="' + String(index) + '"]');
+        var px = clampPinnedFieldWidth(width) + 'px';
+        var cells = document.querySelectorAll('[data-pinned-field-index="' + String(index) + '"]');
         for (var i = 0; i < cells.length; i++) {
             if (cells[i].style && cells[i].style.setProperty) {
-                cells[i].style.setProperty('--pinned-column-width', px);
+                cells[i].style.setProperty('--pinned-field-width', px);
             }
         }
     }
 
-    function handleNodeColumnResizePointerDown(ev) {
+    function handlePinnedFieldResizePointerDown(ev) {
         if (ev.button !== 0) return;
-        var handle = nodeColumnResizeHandle(ev);
+        var handle = pinnedFieldResizeHandle(ev);
         if (!handle) return;
         var cell = handle.closest ? handle.closest('.pinned-header-cell') : null;
-        var key = handle.getAttribute('data-node-column-key') || '';
-        var index = Number(handle.getAttribute('data-node-column-index'));
+        var key = handle.getAttribute('data-pinned-field-key') || '';
+        var index = Number(handle.getAttribute('data-pinned-field-index'));
         if (!key || !Number.isFinite(index)) return;
 
         ev.preventDefault();
@@ -916,8 +928,8 @@ var TraceActionEvents = (function() {
         var rect = cell && cell.getBoundingClientRect ? cell.getBoundingClientRect() : null;
         var startWidth = rect && Number.isFinite(rect.width)
             ? rect.width
-            : nodeColumnWidthForKey(key);
-        nodeColumnResizeDrag = {
+            : pinnedFieldWidthForKey(key);
+        pinnedFieldResizeDrag = {
             handle: handle,
             key: key,
             index: index,
@@ -926,16 +938,16 @@ var TraceActionEvents = (function() {
             startWidth: startWidth,
             currentWidth: startWidth
         };
-        resizeRuntime().nodeColumnResizeDrag = nodeColumnResizeDrag;
+        resizeRuntime().pinnedFieldResizeDrag = pinnedFieldResizeDrag;
         handle.classList.add('resizing');
-        if (document.body && document.body.classList) document.body.classList.add('node-column-resizing');
+        if (document.body && document.body.classList) document.body.classList.add('pinned-field-resizing');
         if (handle.setPointerCapture && ev.pointerId !== undefined) {
             try { handle.setPointerCapture(ev.pointerId); } catch (err) {}
         }
     }
 
-    function handleNodeColumnResizePointerMove(ev) {
-        var drag = nodeColumnResizeDrag || resizeRuntime().nodeColumnResizeDrag;
+    function handlePinnedFieldResizePointerMove(ev) {
+        var drag = pinnedFieldResizeDrag || resizeRuntime().pinnedFieldResizeDrag;
         if (!drag) return;
         if (ev.pointerId !== undefined &&
             drag.pointerId !== undefined &&
@@ -943,12 +955,12 @@ var TraceActionEvents = (function() {
             return;
         }
         ev.preventDefault();
-        drag.currentWidth = clampNodeColumnWidth(drag.startWidth + ev.clientX - drag.startX);
-        applyNodeColumnResizePreview(drag.index, drag.currentWidth);
+        drag.currentWidth = clampPinnedFieldWidth(drag.startWidth + ev.clientX - drag.startX);
+        applyPinnedFieldResizePreview(drag.index, drag.currentWidth);
     }
 
-    function handleNodeColumnResizePointerUp(ev) {
-        var drag = nodeColumnResizeDrag || resizeRuntime().nodeColumnResizeDrag;
+    function handlePinnedFieldResizePointerUp(ev) {
+        var drag = pinnedFieldResizeDrag || resizeRuntime().pinnedFieldResizeDrag;
         if (!drag) return;
         if (ev && ev.pointerId !== undefined &&
             drag.pointerId !== undefined &&
@@ -956,22 +968,22 @@ var TraceActionEvents = (function() {
             return;
         }
         if (drag.handle && drag.handle.classList) drag.handle.classList.remove('resizing');
-        if (document.body && document.body.classList) document.body.classList.remove('node-column-resizing');
-        nodeColumnResizeDrag = null;
-        resizeRuntime().nodeColumnResizeDrag = null;
-        TraceActions.detail.setNodeColumnWidth(drag.key, drag.currentWidth, ev);
+        if (document.body && document.body.classList) document.body.classList.remove('pinned-field-resizing');
+        pinnedFieldResizeDrag = null;
+        resizeRuntime().pinnedFieldResizeDrag = null;
+        TraceActions.detail.setPinnedFieldWidth(drag.key, drag.currentWidth, ev);
     }
 
-    function handleNodeColumnReorderPointerDown(ev) {
+    function handlePinnedFieldReorderPointerDown(ev) {
         if (ev.button !== 0) return;
-        var cell = nodeColumnReorderCell(ev);
+        var cell = pinnedFieldReorderCell(ev);
         if (!cell) return;
         var header = cell.closest ? cell.closest('.tree-pinned-header') : null;
-        var key = cell.getAttribute('data-node-column-key') || '';
-        var index = Number(cell.getAttribute('data-node-column-index'));
+        var key = cell.getAttribute('data-pinned-field-key') || '';
+        var index = Number(cell.getAttribute('data-pinned-field-index'));
         if (!header || !key || !Number.isFinite(index)) return;
 
-        nodeColumnReorderDrag = {
+        pinnedFieldReorderDrag = {
             cell: cell,
             header: header,
             key: key,
@@ -982,14 +994,14 @@ var TraceActionEvents = (function() {
             dropIndex: index,
             active: false
         };
-        resizeRuntime().nodeColumnReorderDrag = nodeColumnReorderDrag;
+        resizeRuntime().pinnedFieldReorderDrag = pinnedFieldReorderDrag;
         if (cell.setPointerCapture && ev.pointerId !== undefined) {
             try { cell.setPointerCapture(ev.pointerId); } catch (err) {}
         }
     }
 
-    function handleNodeColumnReorderPointerMove(ev) {
-        var drag = nodeColumnReorderDrag || resizeRuntime().nodeColumnReorderDrag;
+    function handlePinnedFieldReorderPointerMove(ev) {
+        var drag = pinnedFieldReorderDrag || resizeRuntime().pinnedFieldReorderDrag;
         if (!drag) return;
         if (ev.pointerId !== undefined &&
             drag.pointerId !== undefined &&
@@ -1000,18 +1012,18 @@ var TraceActionEvents = (function() {
         var dx = ev.clientX - drag.startX;
         var dy = ev.clientY - drag.startY;
         if (!drag.active) {
-            if (Math.sqrt(dx * dx + dy * dy) < NODE_COLUMN_REORDER_DRAG_THRESHOLD_PX) return;
+            if (Math.sqrt(dx * dx + dy * dy) < PINNED_FIELD_REORDER_DRAG_THRESHOLD_PX) return;
             drag.active = true;
-            if (document.body && document.body.classList) document.body.classList.add('node-column-reordering');
+            if (document.body && document.body.classList) document.body.classList.add('pinned-field-reordering');
         }
 
         ev.preventDefault();
-        drag.dropIndex = nodeColumnDropIndexFromPointer(drag, ev.clientX);
-        updateNodeColumnReorderPreview(drag, drag.dropIndex);
+        drag.dropIndex = pinnedFieldDropIndexFromPointer(drag, ev.clientX);
+        updatePinnedFieldReorderPreview(drag, drag.dropIndex);
     }
 
-    function handleNodeColumnReorderPointerUp(ev) {
-        endNodeColumnReorderDrag(ev, true);
+    function handlePinnedFieldReorderPointerUp(ev) {
+        endPinnedFieldReorderDrag(ev, true);
     }
 
     function handleInfoResizerPointerDown(ev) {
@@ -1070,6 +1082,7 @@ var TraceActionEvents = (function() {
         );
         infoPanelDrag.currentH = newH;
         infoPanelDrag.panel.style.height = newH + 'px';
+        if (typeof scheduleDiffMoveArrows === 'function') scheduleDiffMoveArrows();
     }
 
     function handleInfoResizerPointerUp() {
@@ -1079,6 +1092,7 @@ var TraceActionEvents = (function() {
             resizeRuntime().infoPanelHeights[infoPanelDrag.key] =
                 infoPanelDrag.panel.getBoundingClientRect().height;
         }
+        if (typeof scheduleDiffMoveArrows === 'function') scheduleDiffMoveArrows();
         infoPanelDrag = null;
     }
 
@@ -1103,14 +1117,14 @@ var TraceActionEvents = (function() {
             state.boundTarget.removeEventListener('pointermove', handleInfoResizerPointerMove);
             state.boundTarget.removeEventListener('pointerup', handleInfoResizerPointerUp);
             state.boundTarget.removeEventListener('pointercancel', handleInfoResizerPointerUp);
-            state.boundTarget.removeEventListener('pointerdown', handleNodeColumnResizePointerDown);
-            state.boundTarget.removeEventListener('pointermove', handleNodeColumnResizePointerMove);
-            state.boundTarget.removeEventListener('pointerup', handleNodeColumnResizePointerUp);
-            state.boundTarget.removeEventListener('pointercancel', handleNodeColumnResizePointerUp);
-            state.boundTarget.removeEventListener('pointerdown', handleNodeColumnReorderPointerDown);
-            state.boundTarget.removeEventListener('pointermove', handleNodeColumnReorderPointerMove);
-            state.boundTarget.removeEventListener('pointerup', handleNodeColumnReorderPointerUp);
-            state.boundTarget.removeEventListener('pointercancel', endNodeColumnReorderDrag);
+            state.boundTarget.removeEventListener('pointerdown', handlePinnedFieldResizePointerDown);
+            state.boundTarget.removeEventListener('pointermove', handlePinnedFieldResizePointerMove);
+            state.boundTarget.removeEventListener('pointerup', handlePinnedFieldResizePointerUp);
+            state.boundTarget.removeEventListener('pointercancel', handlePinnedFieldResizePointerUp);
+            state.boundTarget.removeEventListener('pointerdown', handlePinnedFieldReorderPointerDown);
+            state.boundTarget.removeEventListener('pointermove', handlePinnedFieldReorderPointerMove);
+            state.boundTarget.removeEventListener('pointerup', handlePinnedFieldReorderPointerUp);
+            state.boundTarget.removeEventListener('pointercancel', endPinnedFieldReorderDrag);
         }
         document.addEventListener('change', handleChange);
         document.addEventListener('click', handleClick);
@@ -1128,14 +1142,14 @@ var TraceActionEvents = (function() {
         document.addEventListener('pointermove', handleInfoResizerPointerMove);
         document.addEventListener('pointerup', handleInfoResizerPointerUp);
         document.addEventListener('pointercancel', handleInfoResizerPointerUp);
-        document.addEventListener('pointerdown', handleNodeColumnResizePointerDown);
-        document.addEventListener('pointermove', handleNodeColumnResizePointerMove);
-        document.addEventListener('pointerup', handleNodeColumnResizePointerUp);
-        document.addEventListener('pointercancel', handleNodeColumnResizePointerUp);
-        document.addEventListener('pointerdown', handleNodeColumnReorderPointerDown);
-        document.addEventListener('pointermove', handleNodeColumnReorderPointerMove);
-        document.addEventListener('pointerup', handleNodeColumnReorderPointerUp);
-        document.addEventListener('pointercancel', endNodeColumnReorderDrag);
+        document.addEventListener('pointerdown', handlePinnedFieldResizePointerDown);
+        document.addEventListener('pointermove', handlePinnedFieldResizePointerMove);
+        document.addEventListener('pointerup', handlePinnedFieldResizePointerUp);
+        document.addEventListener('pointercancel', handlePinnedFieldResizePointerUp);
+        document.addEventListener('pointerdown', handlePinnedFieldReorderPointerDown);
+        document.addEventListener('pointermove', handlePinnedFieldReorderPointerMove);
+        document.addEventListener('pointerup', handlePinnedFieldReorderPointerUp);
+        document.addEventListener('pointercancel', endPinnedFieldReorderDrag);
         state.boundTarget = document;
     }
 

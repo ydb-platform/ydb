@@ -6,6 +6,11 @@
 #include <ydb/core/statistics/events.h>
 #include <ydb/core/statistics/service/service.h>
 
+#include <ydb/core/grpc_services/base/base.h>
+#include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+
+#include <ydb/public/api/grpc/ydb_operation_v1.grpc.pb.h>
+
 template<>
 void Out<Ydb::Table::AnalyzeState_State>(IOutputStream& o, Ydb::Table::AnalyzeState_State s) {
     o << static_cast<int>(s);
@@ -480,6 +485,39 @@ Y_UNIT_TEST_SUITE(AnalyzeOpList) {
         }
         UNIT_ASSERT_C(foundCancelled,
             "cancelled active op did not transition to STATE_CANCELLED");
+    }
+
+    Y_UNIT_TEST(ListAnalyzeNoStatisticsAggregator) {
+        // The root domain "/Root" has no StatisticsAggregator assigned.
+        // The gRPC ListOperations(analyze) path must report an error.
+        TTestEnv env(1, 1);
+        auto& runtime = *env.GetServer().GetRuntime();
+        CreateDatabase(env, "Database");
+
+        using TEvListOperationsRequest = NKikimr::NGRpcService::TGrpcRequestNoOperationCall<
+            Ydb::Operations::ListOperationsRequest,
+            Ydb::Operations::ListOperationsResponse>;
+
+        Ydb::Operations::ListOperationsRequest request;
+        request.set_kind("analyze");
+
+        auto future = NRpcService::DoLocalRpc<TEvListOperationsRequest>(
+            std::move(request), "/Root", "", runtime.GetActorSystem(0));
+        auto response = runtime.WaitFuture(std::move(future));
+
+        UNIT_ASSERT_VALUES_EQUAL_C(response.status(), Ydb::StatusIds::NOT_FOUND,
+            response.ShortDebugString());
+        UNIT_ASSERT_VALUES_EQUAL(response.issues_size(), 1);
+        UNIT_ASSERT_VALUES_EQUAL(response.Getissues(0).severity(),
+            static_cast<ui32>(NYql::TSeverityIds::S_ERROR));
+        UNIT_ASSERT_C(
+            response.Getissues(0).message().find("statistics aggregator") != TString::npos,
+            "Expected a descriptive message about the missing statistics aggregator, got: "
+                << response.Getissues(0).message());
+        UNIT_ASSERT_C(
+            response.Getissues(0).message().find("/Root") != TString::npos,
+            "Expected the database name in the error message, got: "
+                << response.Getissues(0).message());
     }
 
 } // Y_UNIT_TEST_SUITE(AnalyzeOpList)

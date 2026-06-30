@@ -226,7 +226,9 @@ class TListOperationsRPC
             if (entry.DomainInfo->Params.HasStatisticsAggregator()) {
                 SendAnalyzeListToSa(entry.DomainInfo->Params.GetStatisticsAggregator());
             } else {
-                Reply(StatusIds::INTERNAL_ERROR, TIssuesIds::GENERIC_RESOLVE_ERROR);
+                Reply(StatusIds::NOT_FOUND, TIssuesIds::GENERIC_RESOLVE_ERROR,
+                    TStringBuilder() << "No statistics aggregator found for the database "
+                        << GetDatabaseName() << "; ANALYZE long-running operations are not available");
             }
             return;
         }

@@ -189,31 +189,28 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
         }
     }
     TDbDriverStatePtr strongState;
-    for (;;) {
+    {
         std::unique_lock lock(Lock_);
-        {
+        Notify_.wait(lock, [&]() {
             auto state = States_.find(key);
-            if (state != States_.end()) {
-                auto strong = state->second.lock();
-                if (strong) {
-                    return strong;
-                } else {
-                    // We could find state record, but couldn't promote weak to shared
-                    // this means weak ptr already expired but dtor hasn't been
-                    // called yet. Likely other thread now is waiting on mutex to
-                    // remove expired record from hashmap. So give him chance
-                    // to do it after that we will be able to create new state
-                    lock.unlock();
-                    std::this_thread::yield();
-                    continue;
-                }
+            if (state == States_.end()) {
+                return true;
             }
+            strongState = state->second.lock();
+            if (strongState) {
+                return true;
+            }
+            return false;
+        });
+        if (strongState) {
+            return strongState;
         }
         {
             auto deleter = [this, key](TDbDriverState* p) {
                 {
                     std::unique_lock lock(Lock_);
                     States_.erase(key);
+                    Notify_.notify_all();
                 }
                 delete p;
             };
@@ -245,13 +242,14 @@ TDbDriverStatePtr TDbDriverStateTracker::GetDriverState(
                 lock.lock();
                 Y_ABORT_UNLESS(weakState.expired());
                 Y_ABORT_UNLESS(States_.erase(key));
+                Notify_.notify_all();
                 throw;
             }
 
             lock.lock(); // re-acquire lock
             Y_ABORT_UNLESS(weakState.expired());
-            weakState = strongState; // references remains valid
-            break;
+            weakState = strongState; // reference remains valid
+            Notify_.notify_all();
         }
     }
 

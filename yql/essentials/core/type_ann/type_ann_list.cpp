@@ -80,14 +80,13 @@ namespace {
 
         auto traitsFactory = node.ChildPtr(2);
         auto traitsFactoryBody = traitsFactory->ChildPtr(1);
-        // If the module resolver is not available, we cannot resolve (Apply (bind...)) to get the actual trait.
-        if (traitsFactoryBody->IsCallable("Apply")) {
+        if (IsUniversalLiteral(traitsFactoryBody)) {
             isUniversal = true;
             return nullptr;
         }
 
         if (traitsFactoryBody->IsCallable("ToWindowTraits")) {
-            if (traitsFactoryBody->Head().IsCallable("Apply")) {
+            if (IsUniversalLiteral(traitsFactoryBody->HeadPtr())) {
                 isUniversal = true;
                 return nullptr;
             }
@@ -6467,8 +6466,7 @@ namespace {
         }
 
         auto root = lambda2->TailPtr();
-        // If the module resolver is not available, we cannot resolve (Apply (bind...)) to get the actual trait.
-        if (root->IsCallable("Apply")) {
+        if (IsUniversalLiteral(root)) {
             input->SetTypeAnn(ctx.Expr.MakeType<TUniversalExprType>());
             return IGraphTransformer::TStatus::Ok;
         }

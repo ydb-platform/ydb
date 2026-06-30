@@ -6157,6 +6157,13 @@ bool IsBoolLike(const TExprNode& node) {
     return node.GetTypeAnn() && IsBoolLike(*node.GetTypeAnn());
 }
 
+bool IsUniversalLiteral(const TExprNode::TPtr& node) {
+    return node->IsCallable("InstanceOf") &&
+           node->ChildrenSize() == 1 &&
+           node->Head().IsCallable("UniversalType") &&
+           node->Head().ChildrenSize() == 0;
+}
+
 namespace {
 
 using TIndentPrinter = std::function<void(TStringBuilder& res, size_t)>;

@@ -50,6 +50,33 @@ void TNodeWarden::ApplyServiceSet(const NKikimrBlobStorage::TNodeWardenServiceSe
     STLOG(PRI_DEBUG, BS_NODE, NW18, "ApplyServiceSet", (IsStatic, isStatic), (Comprehensive, comprehensive),
         (Origin, origin), (ServiceSet, serviceSet));
 
+    for (const auto& incomingGroup : serviceSet.GetGroups()) {
+        const ui32 groupId = incomingGroup.GetGroupID();
+        if (incomingGroup.GetEntityStatus() != NKikimrBlobStorage::DESTROY) {
+            const auto it = Groups.find(groupId);
+            const auto *ep = it != Groups.end() ? &it->second.EncryptionParams : nullptr;
+            const bool storedHasEncryptionMode = ep && ep->HasEncryptionMode();
+            const ui32 storedEncryptionMode = storedHasEncryptionMode ? ep->GetEncryptionMode() : 0;
+            const ui32 storedLifeCyclePhase = storedHasEncryptionMode ? ep->GetLifeCyclePhase() : 0;
+            const ui32 incomingEncryptionMode = incomingGroup.GetEncryptionMode();
+            const bool incomingEncryptionModeIsKnown = incomingEncryptionMode <= static_cast<ui32>(TBlobStorageGroupInfo::EEM_ENC_V1);
+            const bool firstInvalidEncryptionMode = !storedHasEncryptionMode && !incomingEncryptionModeIsKnown;
+            const bool encryptionModeChanged = storedHasEncryptionMode && storedEncryptionMode != incomingEncryptionMode;
+            if (firstInvalidEncryptionMode || encryptionModeChanged) {
+                STLOG(PRI_ERROR, BS_NODE, NW114, "ApplyServiceSet group EncryptionMode diagnostics",
+                    (Origin, origin),
+                    (GroupId, groupId),
+                    (IncomingGeneration, incomingGroup.GetGroupGeneration()),
+                    (StoredHasEncryptionMode, storedHasEncryptionMode),
+                    (StoredEncryptionModeRaw, storedEncryptionMode),
+                    (IncomingEncryptionModeRaw, incomingEncryptionMode),
+                    (StoredLifeCyclePhase, storedLifeCyclePhase),
+                    (IncomingLifeCyclePhase, incomingGroup.GetLifeCyclePhase()));
+                break;
+            }
+        }
+    }
+
     // apply proxy information before we try to start VDisks/PDisks
     ApplyGroupInfoFromServiceSet(serviceSet);
 

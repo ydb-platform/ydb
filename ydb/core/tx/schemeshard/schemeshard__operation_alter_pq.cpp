@@ -942,11 +942,11 @@ public:
             }
 
             if (alter.HasPQTabletConfig() && alter.GetPQTabletConfig().HasPartitionStrategy()) {
-                alterData->ActivePartitionCount = CountActivePartitions(topic->Partitions);
+                size_t activePartitionCount = CountActivePartitions(topic->Partitions);
                 auto requestedMinPartitionCount = alter.GetPQTabletConfig().GetPartitionStrategy().GetMinPartitionCount();
-                if (requestedMinPartitionCount > alterData->ActivePartitionCount) {
+                if (requestedMinPartitionCount > activePartitionCount) {
                     // select exisisting active partitions for split
-                    auto numPartitionsToSplit = requestedMinPartitionCount - alterData->ActivePartitionCount;
+                    auto numPartitionsToSplit = requestedMinPartitionCount - activePartitionCount;
                     struct TPartitionsComparer {
                         bool operator()(const TTopicTabletInfo::TTopicPartitionInfo* lhs, const TTopicTabletInfo::TTopicPartitionInfo* rhs) const {
                             return lhs->ParentPartitionIds.size() < rhs->ParentPartitionIds.size(); // for now simply sort by number of parents
@@ -990,7 +990,7 @@ public:
                             container.emplace_back(childPartitionId.value(), childPartitionId.value() + 1, range, parents);
                         }
                         alterData->TotalGroupCount += 2;
-                        ++alterData->ActivePartitionCount;
+                        ++activePartitionCount;
 
                         return {};
                     };
@@ -1024,7 +1024,7 @@ public:
 
                     // repeat splitting
                     size_t startIdx = 0;
-                    while (requestedMinPartitionCount > alterData->ActivePartitionCount) {
+                    while (requestedMinPartitionCount > activePartitionCount) {
                         TVector<NKikimr::NSchemeShard::TTopicInfo::TPartitionToAdd> partitionsToAdd;
                         auto endIdx = alterData->PartitionsToAdd.size();
                         for (size_t i = startIdx; i < endIdx; ++i) {
@@ -1041,7 +1041,7 @@ public:
                                 result->SetError(NKikimrScheme::StatusInvalidParameter, errStr);
                                 return result;
                             }
-                            if (requestedMinPartitionCount <= alterData->ActivePartitionCount) {
+                            if (requestedMinPartitionCount <= activePartitionCount) {
                                 break;
                             }
                         }

@@ -393,6 +393,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
                 ctx,
                 NKikimrServices::FLAT_TX_SCHEMESHARD,
                 "Do not want to split tablet " << datashardId
+                    << " (table: " << TPath::Init(pathId, Self).PathString() << ")"
                     << " by the CPU load from the follower ID " << followerId
                     << ", reason: " << splitReason
             );
@@ -404,6 +405,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
             ctx,
             NKikimrServices::FLAT_TX_SCHEMESHARD,
             "Want to split tablet " << datashardId
+                << " (table: " << TPath::Init(pathId, Self).PathString() << ")"
                 << " by the CPU load from the follower ID " << followerId
                 << ", reason: " << splitReason
         );
@@ -595,20 +597,28 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     if (table->ShouldSplitBySize(dataSize, forceShardSplitSettings, reason)) {
         // We would like to split by size and do this no matter how many partitions there are
         LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Want to split tablet " << datashardId << " by size: " << reason);
+            "Want to split tablet " << datashardId
+            << " (table: " << TPath::Init(pathId, Self).PathString() << ")"
+            << " by size: " << reason);
     } else if (table->GetPartitions().size() >= table->GetMaxPartitionsCount()) {
         // We cannot split as there are max partitions already
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Do not want to split tablet " << datashardId << " by load,"
+            "Do not want to split tablet " << datashardId
+            << " (table: " << TPath::Init(pathId, Self).PathString() << ")"
+            << " by load,"
             << " its table already has "<< table->GetPartitions().size() << " out of " << table->GetMaxPartitionsCount() << " partitions");
         return true;
     } else if (table->CheckSplitByLoad(Self->SplitSettings, shardIdx, newStats.GetCurrentRawCpuUsage(), mainTableForIndex, reason)) {
         LOG_NOTICE_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Want to split tablet " << datashardId << " by load: " << reason);
+            "Want to split tablet " << datashardId
+            << " (table: " << TPath::Init(pathId, Self).PathString() << ")"
+            << " by load: " << reason);
         collectKeySample = true;
     } else {
         LOG_DEBUG_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD,
-            "Do not want to split tablet " << datashardId << ": " << reason);
+            "Do not want to split tablet " << datashardId
+            << " (table: " << TPath::Init(pathId, Self).PathString() << ")"
+            << ": " << reason);
         return true;
     }
 

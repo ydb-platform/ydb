@@ -14,7 +14,7 @@
 
 // Must be included AFTER YDB headers because linux/uapi headers pulled by
 // liburing may define macros that clash with project headers.
-#include "liburing_compat.h"
+#include <ydb/library/uring/liburing_linux.h>
 
 #include <cerrno>
 #include <cstring>

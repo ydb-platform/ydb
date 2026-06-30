@@ -308,20 +308,7 @@ public:
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_INSERT: {
                     FillOps(scheme, userTable, tableInfo, validatedOperation, rowIdx, ops);
-                    if (userTable.IndexImplType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact ||
-                        userTable.IndexImplType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance ||
-                        userTable.IndexImplType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalJsonCompact) {
-                        try {
-                            userDb.InsertFulltext(fullTableId, key, ops, userCtx,
-                                userTable.IndexImplType == NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance);
-                        } catch (const TNotReadyTabletException&) {
-                            // Simple alternative to complex precharge process: continue processing
-                            // other rows to resolve more page faults in one pass
-                            notReady = true;
-                        }
-                    } else {
-                        userDb.InsertRow(fullTableId, key, ops, userCtx);
-                    }
+                    userDb.InsertRow(fullTableId, key, ops, userCtx);
                     break;
                 }
                 case NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE: {

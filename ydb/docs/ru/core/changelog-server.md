@@ -56,7 +56,6 @@
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/35553) Fix check status of ticket parsing.
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/35636) fixed race with PQ / Solomon gateway.
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/35638) removed addresses crash has been fixed.
-* [Исправлено](https://github.com/ydb-platform/ydb/pull/35639) Fix and unmute dstool canonized test.
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/35652) Fix confusing dstool error message.
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/35660) explicit cast operator and fix operator==.
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/35663) Fix incremental restore to survive SchemeShard reboots and handle shard failures.
@@ -69,7 +68,6 @@
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/35831) Row dispatcher counters fix.
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/35834) Fixed http error handling in s3 read actor.
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/35934) Fix BadDir error.
-* [Исправлено](https://github.com/ydb-platform/ydb/pull/35944) Fix and unmute dstool te....
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/35975) Fix bad atomic access in VDiskIOTest::HugeBlobIOCount UT.
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/36001) Fix cluster name as uint.
 * [Исправлено](https://github.com/ydb-platform/ydb/pull/36048) Fix error on mixed disk types in config.storage_pool_types.

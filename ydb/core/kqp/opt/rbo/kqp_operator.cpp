@@ -349,8 +349,11 @@ TVector<TInfoUnit> TOpMap::GetUsedIUs(TPlanProps& props) {
 
     TVector<TInfoUnit> result;
 
-    for (auto expr : GetExpressions()) {
-        auto usedIUs = expr.get().GetInputIUs(false, true);
+    for (const auto& mapElement : MapElements) {
+        if (mapElement.IsRename()) {
+            continue;
+        }
+        auto usedIUs = mapElement.GetExpression().GetInputIUs(false, true);
         AddUnique<TInfoUnit>(usedIUs, result);
     }
 
@@ -845,6 +848,16 @@ TVector<TInfoUnit> TOpLimit::GetOutputIUs() {
     return GetInput()->GetOutputIUs();
 }
 
+TVector<TInfoUnit> TOpLimit::GetUsedIUs(TPlanProps& props) {
+    Y_UNUSED(props);
+    TVector<TInfoUnit> result = LimitCond.GetInputIUs(false, true);
+    if (OffsetCond) {
+        const auto offsetIUs = OffsetCond->GetInputIUs(false, true);
+        result.insert(result.end(), offsetIUs.begin(), offsetIUs.end());
+    }
+    return result;
+}
+
 TString TOpLimit::ToString(TExprContext& ctx) {
     Y_UNUSED(ctx);
     TStringBuilder builder;
@@ -899,6 +912,10 @@ TVector<TInfoUnit> TOpSort::GetUsedIUs(TPlanProps& props) {
     TVector<TInfoUnit> result;
     for (const auto& element : SortElements) {
         result.push_back(element.SortColumn);
+    }
+    if (LimitCond) {
+        const auto limitIUs = LimitCond->GetInputIUs(false, true);
+        result.insert(result.end(), limitIUs.begin(), limitIUs.end());
     }
     return result;
 }
@@ -982,7 +999,10 @@ TVector<TInfoUnit> TOpAggregate::GetOutputIUs() {
 
 TVector<TInfoUnit> TOpAggregate::GetUsedIUs(TPlanProps& props) {
     Y_UNUSED(props);
-    TVector<TInfoUnit> usedIUs = KeyColumns;
+    TVector<TInfoUnit> usedIUs;
+    if (DistinctAll) {
+        return usedIUs;
+    }
     for (const auto& aggTraits : AggregationTraitsList) {
         usedIUs.push_back(aggTraits.OriginalColName);
     }

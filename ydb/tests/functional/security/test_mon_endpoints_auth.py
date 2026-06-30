@@ -6,6 +6,8 @@ from urllib.parse import urlencode
 import requests
 import yatest.common
 
+from security_test_helpers import _test_endpoints
+
 
 requests.packages.urllib3.disable_warnings()
 
@@ -290,3 +292,80 @@ def test_mon_endpoints_auth(ydb_cluster_for_mon_endpoints_auth):
         f'mon_endpoints_auth-{case_name}',
         _collect_endpoints(cluster),
     )
+
+
+def test_with_require_counters_authentication(ydb_cluster_with_require_counters_auth):
+    EXPECTED_RESULTS_WITH_REQUIRE_COUNTERS_AUTH = {
+        '/counters': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/counters/hosts': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/ping': {
+            None: 200,
+            'user@builtin': 200,
+            'database@builtin': 200,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },  # checks this just in case
+    }
+    _test_endpoints(ydb_cluster_with_require_counters_auth, EXPECTED_RESULTS_WITH_REQUIRE_COUNTERS_AUTH)
+
+
+def test_with_require_healthcheck_authentication(ydb_cluster_with_require_healthcheck_auth):
+    EXPECTED_RESULTS_WITH_REQUIRE_HEALTHCHECK_AUTH = {
+        '/healthcheck?format=prometheus': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/healthcheck': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 403,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/healthcheck?database=%2FRoot': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 403,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/healthcheck?database=%2FRoot&format=prometheus': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/ping': {
+            None: 200,
+            'user@builtin': 200,
+            'database@builtin': 200,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },  # checks this just in case
+    }
+    _test_endpoints(ydb_cluster_with_require_healthcheck_auth, EXPECTED_RESULTS_WITH_REQUIRE_HEALTHCHECK_AUTH)
+

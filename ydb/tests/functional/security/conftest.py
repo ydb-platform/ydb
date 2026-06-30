@@ -43,22 +43,6 @@ _MON_ENDPOINTS_AUTH_CLUSTER_PARAMS = (
         },
         id='enforce_user_token_disabled',
     ),
-    pytest.param(
-        {
-            'case_name': 'require_counters_authentication',
-            'enforce_user_token_requirement': True,
-            'require_counters_authentication': True,
-        },
-        id='require_counters_authentication',
-    ),
-    pytest.param(
-        {
-            'case_name': 'require_healthcheck_authentication',
-            'enforce_user_token_requirement': True,
-            'require_healthcheck_authentication': True,
-        },
-        id='require_healthcheck_authentication',
-    ),
 )
 
 
@@ -73,6 +57,32 @@ def ydb_cluster_for_mon_endpoints_auth(request, certificates):
     cluster = KiKiMR(configurator)
     cluster.start()
     yield case_name, cluster
+    cluster.stop()
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_require_counters_auth(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+        require_counters_authentication=True,
+    )
+    cluster = KiKiMR(configurator)
+    cluster.start()
+    yield cluster
+    cluster.stop()
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_with_require_healthcheck_auth(certificates):
+    configurator = create_ydb_configurator(
+        certificates,
+        enforce_user_token_requirement=True,
+        require_healthcheck_authentication=True,
+    )
+    cluster = KiKiMR(configurator)
+    cluster.start()
+    yield cluster
     cluster.stop()
 
 

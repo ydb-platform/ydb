@@ -127,7 +127,7 @@ namespace NKikimr::NSqsTopic::V1 {
                 Register(NPQ::NMLP::CreateDescriber(SelfId(), {
                     .DatabasePath = Database,
                     .TopicName = FullTopicPath_,
-                    .Consumer = QueueUrl_->Consumer,
+                    .Consumer = ResolveConsumerNameFromQueueUrl(QueueUrl_->Consumer, ctx),
                 }));
             }
 

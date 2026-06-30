@@ -360,7 +360,7 @@ public:
 
     void LogCurrentState(const TString& message) {
         using TEnumToString = TString(const ETaskCompletionStatus&);
-        YDB_LOG_INFO("TSchemaQueryYDBActor Logging current state. Message: Actor. CompletionStatuses:",
+        YDB_LOG_INFO("TSchemaQueryYDBActor Logging current state. Message: Actor. CompletionStatuses",
             {"message", message},
             {"id", TBase::SelfId()},
             {"completionStatuses", JoinMapRange(", ",                                   CompletionStatuses.cbegin(),                                   CompletionStatuses.cend(),                                   (TEnumToString*)ToString<ETaskCompletionStatus>)},

@@ -445,7 +445,7 @@ TAsyncStatus TDbRequester::Validate(
             return MakeFuture(TStatus{EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{status.GetIssues()}});
         }
         if (!status.IsSuccess()) {
-            YDB_LOG_WARN_CTX(*actorSystem, "DB Error,",
+            YDB_LOG_WARN_CTX(*actorSystem, "DB Error",
                 {"status", status.GetStatus()},
                 {"issues", status.GetIssues().ToOneLineString()},
                 {"query", query});
@@ -481,7 +481,7 @@ TAsyncStatus TDbRequester::Write(
                 return TStatus{EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{status.GetIssues()}};
             }
             if (!status.IsSuccess()) {
-                YDB_LOG_WARN_CTX(*actorSystem, "DB Error,",
+                YDB_LOG_WARN_CTX(*actorSystem, "DB Error",
                     {"status", status.GetStatus()},
                     {"issues", status.GetIssues().ToOneLineString()},
                     {"query", query});
@@ -579,7 +579,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                 return TStatus{EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{status.GetIssues()}};
             }
             if (!status.IsSuccess()) {
-                YDB_LOG_WARN_CTX(*actorSystem, "DB Error,",
+                YDB_LOG_WARN_CTX(*actorSystem, "DB Error",
                     {"status", status.GetStatus()},
                     {"issues", status.GetIssues().ToOneLineString()},
                     {"query", readQuery});
@@ -606,7 +606,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                             return TStatus{EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{status.GetIssues()}};
                         }
                         if (!status.IsSuccess()) {
-                            YDB_LOG_WARN_CTX(*actorSystem, "DB Error,, COMMIT",
+                            YDB_LOG_WARN_CTX(*actorSystem, "DB Error, COMMIT",
                                 {"status", status.GetStatus()},
                                 {"issues", status.GetIssues().ToOneLineString()});
                         }
@@ -622,7 +622,7 @@ TAsyncStatus TDbRequester::ReadModifyWrite(
                         return TStatus{EStatus::UNAVAILABLE, NYdb::NIssue::TIssues{status.GetIssues()}};
                     }
                     if (!status.IsSuccess()) {
-                        YDB_LOG_WARN_CTX(*actorSystem, "DB Error,",
+                        YDB_LOG_WARN_CTX(*actorSystem, "DB Error",
                             {"status", status.GetStatus()},
                             {"issues", status.GetIssues().ToOneLineString()},
                             {"query", writeQuery});

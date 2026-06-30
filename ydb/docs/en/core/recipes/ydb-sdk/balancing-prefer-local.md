@@ -4,6 +4,49 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
 
 {% list tabs %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    The {{ ydb-short-name }} C++ SDK uses the `prefer_local_dc` (prefer nearest data center) algorithm by default.
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+
+    int main() {
+      auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+      auto driverConfig = NYdb::TDriverConfig(connectionString)
+        .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferableLocation());
+
+      NYdb::TDriver driver(driverConfig);
+      // ...
+      driver.Stop(true);
+      return 0;
+    }
+    ```
+
+  - userver
+
+    {% cut "static config" %}
+
+    ```yaml
+    ydb:
+        databases:
+            db:
+                endpoint: grpc://localhost:2136
+                database: /local
+                prefer_local_dc: true
+    ```
+
+    {% endcut %}
+
+    Initialization of `ydb::YdbComponent`, obtaining `ydb::TableClient`, and starting `components::MinimalServerComponentList` — as in the example from [init.md](./init.md).
+
+  {% endlist %}
+
 - Go
 
   {% list tabs %}
@@ -87,26 +130,6 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
 
   {% endlist %}
 
-- C++
-
-  The {{ ydb-short-name }} C++ SDK uses the `prefer_local_dc` (prefer nearest data center) algorithm by default.
-
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
-
-  int main() {
-    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
-
-    auto driverConfig = NYdb::TDriverConfig(connectionString)
-      .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferableLocation());
-
-    NYdb::TDriver driver(driverConfig);
-    // ...
-    driver.Stop(true);
-    return 0;
-  }
-  ```
-
 - Python
 
   {% list tabs %}
@@ -168,9 +191,13 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
 
   {% endlist %}
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
-  {% include notitle [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Java
 
@@ -199,8 +226,12 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
 
 - Rust
 
-  {% include notitle [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#239](https://github.com/ydb-platform/ydb-rs-sdk/issues/239)
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

@@ -222,9 +222,16 @@ Below are examples of connecting to {{ ydb-short-name }} (creating a driver) in 
 - Rust
 
   ```rust
-  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
-        .with_credentials(AccessTokenCredentials::from("..."))
-        .client()?
+  use ydb::{AccessTokenCredentials, ClientBuilder, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136/local")?
+          .with_credentials(AccessTokenCredentials::from("..."))
+          .client()?;
+      client.wait().await?;
+      Ok(())
+  }
   ```
 
 {% endlist %}

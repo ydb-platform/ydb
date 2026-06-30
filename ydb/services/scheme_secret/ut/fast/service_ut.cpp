@@ -1,14 +1,16 @@
 #include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/core/kqp/common/simple/services.h>
-#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
-#include <ydb/core/kqp/federated_query/actors/ut_service/common/helpers.h>
+#include <ydb/services/scheme_secret/service.h>
+
+#include <ydb/services/scheme_secret/ut/common/helpers.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
-namespace NKikimr::NKqp {
+namespace NKikimr::NSecret {
 
-using TDescriptionPromise = NThreading::TPromise<TEvDescribeSecretsResponse::TDescription>;
+using NKqp::TKikimrRunner;
+using NKqp::TKikimrSettings;
+using TDescriptionPromise = NThreading::TPromise<NKqp::TEvDescribeSecretsResponse::TDescription>;
 
 Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
     Y_UNIT_TEST(GetNewValue) {
@@ -561,4 +563,4 @@ Y_UNIT_TEST_SUITE(DescribeSchemaSecretsService) {
 
 }
 
-} // NKikimr::NKqp
+} // NKikimr::NSecret

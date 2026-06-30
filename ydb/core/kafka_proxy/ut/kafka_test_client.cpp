@@ -4,7 +4,7 @@
 #include <library/cpp/string_utils/base64/base64.h>
 
 #include <ydb/core/kafka_proxy/kafka_constants.h>
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/library/login/sasl/scram.h>
 
 #include <util/random/random.h>

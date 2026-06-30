@@ -2,6 +2,7 @@
 
 #include <ydb/core/kqp/common/events/events.h>
 #include <ydb/core/kqp/common/simple/services.h>
+#include <ydb/core/kqp/ut/federated_query/common/common.h>
 #include <ydb/core/sys_view/common/registry.h>
 #include <ydb/library/testlib/s3_recipe_helper/s3_recipe_helper.h>
 #include <ydb/library/testlib/solomon_helpers/solomon_emulator_helpers.h>
@@ -17,6 +18,7 @@ using namespace NYdb::NQuery;
 using namespace fmt::literals;
 using namespace NYql::NConnector::NTest;
 using namespace NTestUtils;
+using namespace NFederatedQueryTest;
 
 Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
     Y_UNIT_TEST_F(CreateAndAlterStreamingQuery, TStreamingWithSchemaSecretsTestFixture) {
@@ -2771,6 +2773,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
         ReadTopicMessage(outputTopic1, "test-A");
         ReadTopicMessage(outputTopic2, "test-B");
 
+        Sleep(TDuration::Seconds(1));
         const auto& results = ExecQuery(fmt::format(R"(
             SELECT * FROM `{row_table}`;
             SELECT * FROM `{column_table}`;)",
@@ -2871,7 +2874,7 @@ Y_UNIT_TEST_SUITE(KqpStreamingQueriesDdl) {
             const auto& result = ExecQuery("SELECT Status FROM `.sys/streaming_queries`");
             UNIT_ASSERT_VALUES_EQUAL(result.size(), 1);
             CheckScriptResult(result[0], 1, 1, [&](TResultSetParser& resultSet) {
-                UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Status").GetOptionalUtf8(), "FAILED");
+                UNIT_ASSERT_VALUES_EQUAL(*resultSet.ColumnParser("Status").GetOptionalUtf8(), "STOPPED");
             });
         }
 

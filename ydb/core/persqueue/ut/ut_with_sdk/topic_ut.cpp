@@ -3,8 +3,8 @@
 #include <ydb/core/persqueue/events/global.h>
 #include <ydb/core/persqueue/ut/common/pq_ut_common.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
-#include <ydb/library/kafka/kafka_messages_int.h>
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_messages_int.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 
 #include <ydb/public/sdk/cpp/src/client/topic/ut/ut_utils/topic_sdk_test_setup.h>
 

@@ -1,7 +1,8 @@
 #pragma once
 
 #include <ydb/core/kqp/common/events/script_executions.h>
-#include <ydb/core/kqp/federated_query/actors/kqp_federated_query_actors.h>
+#include <ydb/services/scheme_secret/service.h>
+#include <ydb/services/scheme_secret/resolver.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/table/table.h>
@@ -10,8 +11,8 @@
 #include <util/generic/string.h>
 #include <util/generic/ptr.h>
 
-namespace NKikimr::NKqp {
-    using TDescriptionPromise = NThreading::TPromise<TEvDescribeSecretsResponse::TDescription>;
+namespace NKikimr::NSecret {
+    using TDescriptionPromise = NThreading::TPromise<NKqp::TEvDescribeSecretsResponse::TDescription>;
 
     void CreateSchemaSecret(const TString& secretName, const TString& secretValue, NYdb::NTable::TSession& session);
     void AlterSchemaSecret(const TString& secretName, const TString& secretValue, NYdb::NTable::TSession& session);
@@ -20,14 +21,14 @@ namespace NKikimr::NKqp {
     TDescriptionPromise
     ResolveSecrets(
         const TVector<TString>& secretNames,
-        TKikimrRunner& kikimr,
+        NKqp::TKikimrRunner& kikimr,
         const TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr,
         TDescribeSecretSettings settings = {}
     );
     TDescriptionPromise
     ResolveSecret(
         const TString& secretName,
-        TKikimrRunner& kikimr,
+        NKqp::TKikimrRunner& kikimr,
         const TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr,
         TDescribeSecretSettings settings = {}
     );
@@ -89,4 +90,4 @@ namespace NKikimr::NKqp {
         mutable ui32 StatusOverwriteRemainingCount = 0;
     };
 
-} // NKikimr::NKqp
+} // NKikimr::NSecret

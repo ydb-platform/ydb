@@ -4,6 +4,8 @@
 #include <ydb/core/blobstorage/vdisk/common/vdisk_events.h>
 #include <ydb/core/util/stlog.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT BS_PROXY
+
 namespace NKikimr {
 
     namespace {
@@ -14,59 +16,81 @@ namespace NKikimr {
             TIntrusivePtr<NFake::TProxyDS> Model;
 
             void Handle(TEvBlobStorage::TEvPut::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM01, "TEvPut", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvPut",
+                    {"marker", "BSPM01"},
+                    {"msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvGet::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM02, "TEvGet", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvGet",
+                    {"marker", "BSPM02"},
+                    {"msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvBlock::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM03, "TEvBlock", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvBlock",
+                    {"marker", "BSPM03"},
+                    {"msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvDiscover::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM04, "TEvDiscover", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvDiscover",
+                    {"marker", "BSPM04"},
+                    {"msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvRange::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM05, "TEvRange", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvRange",
+                    {"marker", "BSPM05"},
+                    {"msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvCollectGarbage::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM06, "TEvCollectGarbage", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvCollectGarbage",
+                    {"marker", "BSPM06"},
+                    {"msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvStatus::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM07, "TEvStatus", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvStatus",
+                    {"marker", "BSPM07"},
+                    {"msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), new TEvBlobStorage::TEvStatusResult(NKikimrProto::OK,
                     Model->GetStorageStatusFlags())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvAssimilate::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM09, "TEvAssimilate", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvAssimilate",
+                    {"marker", "BSPM09"},
+                    {"msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), new TEvBlobStorage::TEvAssimilateResult(NKikimrProto::ERROR,
                     "not implemented")), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvPatch::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM10, "TEvPatch", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvPatch",
+                    {"marker", "BSPM10"},
+                    {"msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvGetBlock::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM11, "TEvGetBlock", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvGetBlock",
+                    {"marker", "BSPM11"},
+                    {"msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
             void Handle(TEvBlobStorage::TEvCheckIntegrity::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM12, "TEvCheckIntegrity", (Msg, ev->Get()->ToString()));
+                YDB_LOG_DEBUG("TEvCheckIntegrity",
+                    {"marker", "BSPM12"},
+                    {"msg", ev->Get()->ToString()});
                 Send(ev->Sender, CopyExecutionRelay(ev->Get(), Model->Handle(ev->Get())), 0, ev->Cookie);
             }
 
@@ -77,7 +101,8 @@ namespace NKikimr {
             }
 
             void HandlePoison(TEvents::TEvPoisonPill::TPtr& ev) {
-                STLOG(PRI_DEBUG, BS_PROXY, BSPM08, "TEvPoisonPill");
+                YDB_LOG_DEBUG("TEvPoisonPill",
+                    {"marker", "BSPM08"});
                 Send(ev->Sender, new TEvents::TEvPoisonTaken);
                 PassAway();
             }

@@ -145,7 +145,7 @@ runs:
     - name: Resolve analytics job name
       shell: bash
       run: |
-        echo "ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "${{ github.workflow }}" "${{ inputs.build_preset }}")" >> "$GITHUB_ENV"
+        echo "ANALYTICS_JOB_NAME=$(python3 .github/scripts/analytics/resolve_ci_job_name.py "${{ github.workflow }}" "${{ inputs.build_preset }}" "${{ github.job }}")" >> "$GITHUB_ENV"
 
     - name: Setup cache
       shell: bash

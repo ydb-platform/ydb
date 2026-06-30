@@ -7,12 +7,20 @@ POSTCOMMIT_LEGACY_NAMES = {
     "release-asan": "Postcommit_asan",
 }
 
+# Unified PR-check (#44879): postcommit runs in job postcommit_build_and_test, workflow stays PR-check.
+POSTCOMMIT_JOB_NAME = "postcommit_build_and_test"
 
-def resolve_ci_job_name(workflow_name: str, build_preset: str) -> str:
-    if workflow_name == "Postcommit":
+
+def resolve_ci_job_name(
+    workflow_name: str, build_preset: str, github_job: str = ""
+) -> str:
+    is_postcommit = (
+        workflow_name == "Postcommit"
+        or github_job == POSTCOMMIT_JOB_NAME
+    )
+    if is_postcommit:
         if build_preset in POSTCOMMIT_LEGACY_NAMES:
             return POSTCOMMIT_LEGACY_NAMES[build_preset]
-        # New presets: Postcommit_<preset>, same pattern as legacy yaml names.
         return f"Postcommit_{build_preset}"
     return workflow_name
 
@@ -20,7 +28,11 @@ def resolve_ci_job_name(workflow_name: str, build_preset: str) -> str:
 if __name__ == "__main__":
     import sys
 
-    if len(sys.argv) != 3:
-        print("usage: resolve_ci_job_name.py <workflow_name> <build_preset>", file=sys.stderr)
+    if len(sys.argv) not in (3, 4):
+        print(
+            "usage: resolve_ci_job_name.py <workflow_name> <build_preset> [github_job]",
+            file=sys.stderr,
+        )
         sys.exit(2)
-    print(resolve_ci_job_name(sys.argv[1], sys.argv[2]))
+    github_job = sys.argv[3] if len(sys.argv) == 4 else ""
+    print(resolve_ci_job_name(sys.argv[1], sys.argv[2], github_job))

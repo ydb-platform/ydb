@@ -388,6 +388,8 @@ private:
         size_t UnlockedMessageGroupsIdSize() const;
         bool UnlockedMessageGroupsIdErase(const ui32 messageGroupIdHash);
         void UpdateLockedMaps(const TLockedGroup& locked, ui32 messageGroupIdHash);
+        const TIntrusiveList<TOrderedMessageGroupIdHash>& GetUnlockedMessageGroupsIdViewOrder() const;
+        TIntrusiveList<TOrderedMessageGroupIdHash>& GetUnlockedMessageGroupsIdViewOrder();
         void Clear();
         ~TMessageGroups();
 

@@ -175,6 +175,72 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
         return message.HasMessageGroupId && (!CanReadMessageGroupIdHash(message.MessageGroupIdHash) || skipMessageGroups.contains(message.MessageGroupIdHash));
     };
 
+    if (KeepMessageOrder) {
+        auto isMessageGroupSkipped = [&](const TMessage& message) {
+            return message.HasMessageGroupId && skipMessageGroups.contains(message.MessageGroupIdHash);
+        };
+
+        auto tryGetMessage = [&](ui64 offset, const char* desc) -> TMessage* {
+            // checks if message is eligible for return: it is not expired or skipped
+            const auto& [message, _] = GetMessageInt(offset);
+            AFL_ENSURE(message != nullptr)("offset", offset)("case", desc);
+            AFL_ENSURE(message->GetStatus() == EMessageStatus::Unprocessed)("status", message->GetStatus())("offset", offset)("case", desc);
+            if (retentionExpired(*message)) {
+                return nullptr;
+            }
+            if (isMessageGroupSkipped(*message)) {
+                return nullptr;
+            }
+            return message;
+        };
+
+        auto tryReturn = [&](ui64 offset, const char* desc) -> std::optional<TReadMessage> {
+            auto* message = tryGetMessage(offset, desc);
+            if (!message) {
+                return std::nullopt;
+            }
+            DoLock(offset, *message, deadline);
+            return asResult(offset, *message);
+        };
+
+        auto& unlockedList = MessageGroups.GetUnlockedMessageGroupsIdViewOrder();
+        auto searchForEligibleMessage = [&]() -> std::tuple<TMessage*, ui64, TIntrusiveList<TOrderedMessageGroupIdHash>::iterator> {
+            for (auto firstIt = unlockedList.begin(); firstIt != unlockedList.end(); ++firstIt) {
+                const ui32 groupId{*firstIt};
+                auto* group = MapFindPtr(MessageGroups.Groups, groupId);
+                AFL_ENSURE(group != nullptr)("groupId", groupId);
+                ui64 offset = group->FirstOffset;
+                TMessage* message = tryGetMessage(offset, "unlocked");
+                if (message) {
+                    return std::make_tuple(message, offset, firstIt);
+                }
+            }
+            return std::make_tuple(nullptr, -1, unlockedList.end());
+        };
+
+        auto [message, offset, firstIt] = searchForEligibleMessage();
+        if (message) {
+            if (unlockedList.begin() != firstIt) [[unlikely]] {
+                if constexpr (0) {
+                    // rotate
+                    // move skipped messaged to the end of queue, so they won't be rechecked on the next iteration
+                    TIntrusiveList<TOrderedMessageGroupIdHash> cut;
+                    unlockedList.Cut(unlockedList.begin(), firstIt, cut.end());
+                    unlockedList.Append(std::move(cut));
+                }
+            }
+            DoLock(offset, *message, deadline);
+            return asResult(offset, *message);
+        }
+
+        for (ui64 offset : MessageGroups.UnorderedOffsets) [[unlikely]] {
+            if (auto result = tryReturn(offset, "unordered")) {
+                return result;
+            }
+        }
+        return std::nullopt;
+    }
+
     for(; position.SlowPosition != SlowMessages.end(); ++position.SlowPosition.value()) {
         auto offset = position.SlowPosition.value()->first;
         auto& message = position.SlowPosition.value()->second;
@@ -1641,6 +1707,14 @@ bool TStorage::TMessageGroups::UnlockedMessageGroupsIdErase(const ui32 messageGr
     size_t viewOrderSz1 = Y_IS_DEBUG_BUILD ? UnlockedMessageGroupsIdViewOrder.Size() : 0;
     Y_ASSERT(Y_IS_DEBUG_BUILD && (viewOrderSz0 == viewOrderSz1 + n));
     return n > 0;
+}
+
+const TIntrusiveList<TOrderedMessageGroupIdHash>& TStorage::TMessageGroups::GetUnlockedMessageGroupsIdViewOrder() const {
+    return UnlockedMessageGroupsIdViewOrder;
+}
+
+TIntrusiveList<TOrderedMessageGroupIdHash>& TStorage::TMessageGroups::GetUnlockedMessageGroupsIdViewOrder() {
+    return UnlockedMessageGroupsIdViewOrder;
 }
 
 TStorage::TMessageGroups::~TMessageGroups() = default;

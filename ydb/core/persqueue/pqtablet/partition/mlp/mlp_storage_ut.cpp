@@ -2929,6 +2929,218 @@ Y_UNIT_TEST(TOrderedMessageGroupIdHash) {
     UNIT_ASSERT_UNEQUAL(a, c);
     UNIT_ASSERT_UNEQUAL(b, c);
 }
+
+struct TFairnessModel {
+    TStorage Storage = TStorage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = true});
+    ui64 Offset = 0;
+    TSet<ui64> Infly;
+    TSet<ui64> Committed;
+    TMap<ui64, ui32> Hashes;
+    TMap<ui32, ui32> LastReadTime;
+    ui32 ReadTime = 1;
+
+    TSet<ui64> GetAvailalableOffsets() const {
+        TSet<ui32> visited;
+        for (ui32 o : Infly) {
+            auto [_, ins] = visited.insert(Hashes.at(o));
+            Y_ASSERT(ins);
+        }
+
+        TSet<ui64> res;
+        ui32 OldestRecordTime = -1;
+        for (auto [o, h] : Hashes) {
+            if (Committed.contains(o)) {
+                continue;
+            }
+            if (Infly.contains(o)) {
+                continue;
+            }
+            if (visited.contains(h)) {
+                continue;
+            }
+            if (auto lrt = LastReadTime.Value(h, 0); lrt > OldestRecordTime) {
+                continue;
+            } else if (lrt < OldestRecordTime) {
+                OldestRecordTime = lrt;
+                res.clear();
+            }
+            visited.insert(h);
+            res.insert(o);
+        }
+        return res;
+
+    }
+
+    void AddMessage(ui32 group) {
+        Cerr << "Add message " << LabeledOutput(Offset, group) << "\n";
+        Storage.AddMessage(Offset, true, group, TInstant::Now());
+        Hashes[Offset] = group;
+        ++Offset;
+    }
+
+    struct TMessage {
+        ui64 Offset;
+        ui32 Group;
+    };
+
+    std::vector<TMessage> Next(size_t count) {
+        std::vector<TMessage> res;
+        TStorage::TPosition position;
+        for (size_t i = 0; i < count; ++i) {
+            auto result = Storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+            const auto available = GetAvailalableOffsets();
+
+            Cerr << "Next message " << (i + 1) << '/' << count << ": ";
+
+
+
+            UNIT_ASSERT_VALUES_EQUAL_C(result.has_value(), !available.empty(), i);
+
+            if (result.has_value()) {
+                ui64 offset = result->Offset;
+                ui32 hash = Hashes.at(result->Offset);
+                TString availableStr = "{" + JoinSeq(", ", available) + "}";
+                Cerr << LabeledOutput(offset, hash, availableStr) << "\n";
+                UNIT_ASSERT_C(available.contains(result->Offset), i);
+                Infly.insert(offset);
+                res.push_back(TMessage{.Offset =offset, .Group = hash});
+                LastReadTime[hash] = ReadTime;
+            } else {
+                Cerr << "none\n";
+            }
+        }
+        ++ReadTime;
+        return res;
+    }
+
+    void Commit(ui64 offset) {
+        Y_ASSERT(Infly.contains(offset));
+        Y_ASSERT(!Committed.contains(offset));
+        Infly.erase(offset);
+        Committed.insert(offset);
+
+        const auto available = GetAvailalableOffsets();
+        TString availableStr = "{" + JoinSeq(", ", available) + "}";
+        Cerr << "Commit message " << LabeledOutput(offset, Hashes.at(offset), availableStr) << "\n";
+
+        Storage.Commit(offset);
+    }
+
+};
+
+Y_UNIT_TEST(NextWithFairness3) {
+    TFairnessModel model;
+    const int n = 25;
+    for (int i = 0; i < n; ++i) {
+        ui32 hash = (i % 2 == 0) ? 0 : i;
+        model.AddMessage(hash);
+    }
+
+    for (int i = 0; i < n; ++i) {
+        auto v = model.Next(1);
+        for (auto& m : v) {
+            model.Commit(m.Offset);
+        }
+    }
+}
+
+
+Y_UNIT_TEST(NextWithFairness4) {
+    TFairnessModel model;
+    const int n = 25;
+    for (int i = 0; i < n; ++i) {
+        ui32 hash = (i % 2 == 0) ? 0 : i;
+        model.AddMessage(hash);
+    }
+
+    for (int i = 0; i < n; ++i) {
+        auto v = model.Next(3);
+        for (auto& m : v) {
+            model.Commit(m.Offset);
+        }
+    }
+}
+
+
+Y_UNIT_TEST(NextWithFairness5) {
+    TFairnessModel model;
+    const int n = 25;
+    const int groupsSize = 6;
+    for (int i = 0; i < n; ++i) {
+        ui32 hash = i / groupsSize;
+        model.AddMessage(hash);
+    }
+
+    for (int i = 0; i < n; ++i) {
+        auto v = model.Next(1);
+        for (auto& m : v) {
+            model.Commit(m.Offset);
+        }
+    }
+}
+
+
+Y_UNIT_TEST(NextWithFairness6) {
+    TFairnessModel model;
+    const int n = 25;
+    const int groupsSize = 6;
+    for (int i = 0; i < n; ++i) {
+        ui32 hash = i / groupsSize;
+        model.AddMessage(hash);
+    }
+
+    for (int i = 0; i < n; ++i) {
+        auto v = model.Next(3);
+        for (auto& m : v) {
+            model.Commit(m.Offset);
+        }
+    }
+}
+
+
+Y_UNIT_TEST(NextWithFairness1) {
+    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = true});
+
+    TMap<ui64, ui32> groupIds;
+    const int n = 25;
+    for (int i = 0; i < n; ++i) {
+        ui32 hash = (i % 2 == 0) ? 0 : IntHash(i);
+        storage.AddMessage(i, true, hash, TInstant::Now());
+        groupIds[i] = hash;
+    }
+
+    for (int i = 0; i < n; ++i) {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+        UNIT_ASSERT_C(result.has_value(), LabeledOutput(i));
+        Cerr << LabeledOutput(i, result->Offset, groupIds.at(result->Offset)) << "\n";
+        bool commit = storage.Commit(result->Offset);
+        UNIT_ASSERT_C(commit, LabeledOutput(i));
+    }
+}
+
+Y_UNIT_TEST(NextWithFairness2) {
+    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = true});
+
+    TMap<ui64, ui32> groupIds;
+    const int n = 25;
+    const int groupsSize = 6;
+    for (int i = 0; i < n; ++i) {
+        ui32 hash = i / groupsSize;
+        storage.AddMessage(i, true, hash, TInstant::Now());
+        groupIds[i] = hash;
+    }
+
+    for (int i = 0; i < n; ++i) {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+        UNIT_ASSERT_C(result.has_value(), LabeledOutput(i));
+        Cerr << LabeledOutput(i, result->Offset, groupIds.at(result->Offset)) << "\n";
+        bool commit = storage.Commit(result->Offset);
+        UNIT_ASSERT_C(commit, LabeledOutput(i));
+    }
+}
+
 }
 
 } // namespace NKikimr::NPQ::NMLP

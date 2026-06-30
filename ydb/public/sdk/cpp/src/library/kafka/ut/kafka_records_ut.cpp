@@ -1,5 +1,6 @@
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_messages_int.h>
 #include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/ut/kafka_ut_compare.h>
 
 #include <library/cpp/testing/unittest/registar.h>
 
@@ -100,8 +101,8 @@ void AssertRecordBatchRoundTrip(ECompressionType compressionType) {
     for (size_t i = 0; i < batch.Records.size(); ++i) {
         UNIT_ASSERT_VALUES_EQUAL(parsed.Records[i].TimestampDelta, batch.Records[i].TimestampDelta);
         UNIT_ASSERT_VALUES_EQUAL(parsed.Records[i].OffsetDelta, batch.Records[i].OffsetDelta);
-        UNIT_ASSERT_VALUES_EQUAL(*parsed.Records[i].Key, *batch.Records[i].Key);
-        UNIT_ASSERT_VALUES_EQUAL(*parsed.Records[i].Value, *batch.Records[i].Value);
+        UNIT_ASSERT(KafkaBytesEqual(parsed.Records[i].Key, batch.Records[i].Key));
+        UNIT_ASSERT(KafkaBytesEqual(parsed.Records[i].Value, batch.Records[i].Value));
     }
 }
 
@@ -269,13 +270,13 @@ void AssertKafkaRecord(
     UNIT_ASSERT_VALUES_EQUAL(record.OffsetDelta, offsetDelta);
     UNIT_ASSERT(record.Key);
     UNIT_ASSERT(record.Value);
-    UNIT_ASSERT_VALUES_EQUAL(*record.Key, key);
-    UNIT_ASSERT_VALUES_EQUAL(*record.Value, value);
+    UNIT_ASSERT(KafkaBytesEqual(record.Key, key));
+    UNIT_ASSERT(KafkaBytesEqual(record.Value, value));
     UNIT_ASSERT_VALUES_EQUAL(record.Headers.size(), 1);
     UNIT_ASSERT(record.Headers[0].Key);
     UNIT_ASSERT(record.Headers[0].Value);
-    UNIT_ASSERT_VALUES_EQUAL(*record.Headers[0].Key, headerKey);
-    UNIT_ASSERT_VALUES_EQUAL(*record.Headers[0].Value, headerValue);
+    UNIT_ASSERT(KafkaBytesEqual(record.Headers[0].Key, headerKey));
+    UNIT_ASSERT(KafkaBytesEqual(record.Headers[0].Value, headerValue));
 }
 
 void AssertKafkaLegacyRecord(
@@ -289,8 +290,8 @@ void AssertKafkaLegacyRecord(
     UNIT_ASSERT_VALUES_EQUAL(record.OffsetDelta, offsetDelta);
     UNIT_ASSERT(record.Key);
     UNIT_ASSERT(record.Value);
-    UNIT_ASSERT_VALUES_EQUAL(*record.Key, key);
-    UNIT_ASSERT_VALUES_EQUAL(*record.Value, value);
+    UNIT_ASSERT(KafkaBytesEqual(record.Key, key));
+    UNIT_ASSERT(KafkaBytesEqual(record.Value, value));
     UNIT_ASSERT(record.Headers.empty());
 }
 

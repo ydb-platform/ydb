@@ -3460,7 +3460,7 @@
       "": {
         "__none__": 401,
         "user@builtin": 403,
-        "database@builtin": 403,
+        "database@builtin": 400,
         "viewer@builtin": 200,
         "monitoring@builtin": 200,
         "root@builtin": 200
@@ -3468,7 +3468,7 @@
       "?database=/Root": {
         "__none__": 401,
         "user@builtin": 403,
-        "database@builtin": 403,
+        "database@builtin": 400,
         "viewer@builtin": 400,
         "monitoring@builtin": 400,
         "root@builtin": 200
@@ -3798,7 +3798,7 @@
       "": {
         "__none__": 401,
         "user@builtin": 403,
-        "database@builtin": 403,
+        "database@builtin": 400,
         "viewer@builtin": 200,
         "monitoring@builtin": 200,
         "root@builtin": 200
@@ -3806,7 +3806,7 @@
       "?database=/Root": {
         "__none__": 401,
         "user@builtin": 403,
-        "database@builtin": 403,
+        "database@builtin": 400,
         "viewer@builtin": 400,
         "monitoring@builtin": 400,
         "root@builtin": 200
@@ -7386,7 +7386,7 @@
       "": {
         "__none__": 401,
         "user@builtin": 403,
-        "database@builtin": 403,
+        "database@builtin": 400,
         "viewer@builtin": 200,
         "monitoring@builtin": 200,
         "root@builtin": 200
@@ -7394,7 +7394,7 @@
       "?database=/Root": {
         "__none__": 401,
         "user@builtin": 403,
-        "database@builtin": 403,
+        "database@builtin": 400,
         "viewer@builtin": 400,
         "monitoring@builtin": 400,
         "root@builtin": 200
@@ -7724,7 +7724,7 @@
       "": {
         "__none__": 401,
         "user@builtin": 403,
-        "database@builtin": 403,
+        "database@builtin": 400,
         "viewer@builtin": 200,
         "monitoring@builtin": 200,
         "root@builtin": 200
@@ -7732,7 +7732,7 @@
       "?database=/Root": {
         "__none__": 401,
         "user@builtin": 403,
-        "database@builtin": 403,
+        "database@builtin": 400,
         "viewer@builtin": 400,
         "monitoring@builtin": 400,
         "root@builtin": 200

@@ -4,7 +4,7 @@
 #include <optional>
 #include <ostream>
 
-#include <yql/essentials/public/decimal/yql_wide_int.h>
+#include <ydb/public/sdk/cpp/src/library/decimal/yql_wide_int.h>
 
 #include "kafka_write_buffer.h"
 
@@ -59,7 +59,7 @@ using TKafkaUint16 = ui16;
 using TKafkaInt32 = i32;
 using TKafkaUint32 = ui32;
 using TKafkaInt64 = i64;
-using TKafkaUuid = NYql::TWide<ui64>;
+using TKafkaUuid = NYdb::NDecimal::TWide<ui64>;
 using TKafkaFloat64 = double;
 using TKafkaRawString = TString;
 using TKafkaString = std::optional<TKafkaRawString>;

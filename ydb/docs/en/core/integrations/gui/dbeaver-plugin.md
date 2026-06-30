@@ -160,7 +160,7 @@ Authentication by login and password. Enter the username in the **User** field a
 
 {% note info %}
 
-In managed {{ ydb-name }} installations, login and password authentication is disabled: managed services use the cloud platform's centralized access control system ( [IAM](https://yandex.cloud/en/docs/iam/)).
+In managed {{ ydb-name }} installations, login and password authentication is disabled: managed services use the cloud platform's centralized access control system ([IAM](https://yandex.cloud/en/docs/iam/)).
 
 {% endnote %}
 

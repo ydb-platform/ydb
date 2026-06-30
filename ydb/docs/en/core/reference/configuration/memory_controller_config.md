@@ -2,7 +2,8 @@
 
 There are many components inside {{ ydb-short-name }} [database nodes](../../concepts/glossary.md#database-node) that utilize memory. Most of them need a fixed amount, but some are flexible and can use varying amounts of memory, typically to improve performance.
 
-## General Overview of Memory Consumption by Components within a YDB process
+## General Overview of Memory Consumption by Components within a YDB node
+
 
 ```mermaid
 ---
@@ -23,6 +24,7 @@ YDB process memory,Activity Components, 30
 YDB process memory,Allocator caches, 10
 YDB process memory,Other,10
 ```
+
 
 If {{ ydb-short-name }} components allocate more memory than is physically available, the operating system is likely to [terminate](https://en.wikipedia.org/wiki/Out_of_memory#Recovery) the entire {{ ydb-short-name }} process, which is undesirable. The memory controller's goal is to allow {{ ydb-short-name }} to avoid out-of-memory situations while still efficiently using the available memory.
 
@@ -50,10 +52,12 @@ Most of other memory limits can be configured either in absolute bytes or as a p
 
 Example of the `memory_controller_config` section with a specified hard memory limit:
 
+
 ```yaml
 memory_controller_config:
   hard_limit_bytes: 16106127360
 ```
+
 
 ## Soft Memory Limit {#soft-memory-limit}
 
@@ -94,11 +98,13 @@ If needed, both the minimum and maximum thresholds should be overridden; otherwi
 
 Example of the `memory_controller_config` section with specified shared cache limits:
 
+
 ```yaml
 memory_controller_config:
   shared_cache_min_percent: 10
   shared_cache_max_percent: 30
 ```
+
 
 ### Activity Components Memory Limits
 
@@ -115,10 +121,12 @@ There are some other activity components that currently do not have individual m
 
 Example of the `memory_controller_config` section with a specified QP limit:
 
+
 ```yaml
 memory_controller_config:
   query_execution_limit_percent: 25
 ```
+
 
 #### Query Processor memory limit {#query-execution-limit}
 
@@ -138,21 +146,21 @@ As mentioned above, the sum of the minimum memory limits for the cache component
 
 This restriction can be expressed in a simplified form:
 
-$shared\_cache\_min\_percent + mem\_table\_min\_percent + activities\_limit\_percent < soft\_limit\_percent$
+$shared_cache_min_percent + mem_table_min_percent + activities_limit_percent < soft_limit_percent$
 
 Or in a detailed form:
 
-$Max(shared\_cache\_min\_percent * hard\_limit\_bytes / 100, shared\_cache\_min\_bytes) + Max(mem\_table\_min\_percent * hard\_limit\_bytes / 100, mem\_table\_min\_bytes) + Min(activities\_limit\_percent * hard\_limit\_bytes / 100, activities\_limit\_bytes) < Min(soft\_limit\_percent * hard\_limit\_bytes / 100, soft\_limit\_bytes)$
+$Max(shared_cache_min_percent * hard_limit_bytes / 100, shared_cache_min_bytes) + Max(mem_table_min_percent * hard_limit_bytes / 100, mem_table_min_bytes) + Min(activities_limit_percent * hard_limit_bytes / 100, activities_limit_bytes) < Min(soft_limit_percent * hard_limit_bytes / 100, soft_limit_bytes)$
 
-| Parameter | Default | Description |
+| Parameters | Default | Description |
 | --- | --- | --- |
-| `hard_limit_bytes` | CGroup&nbsp;memory&nbsp;limit&nbsp;/<br/>Host memory | Hard memory usage limit. |
-| `soft_limit_percent`&nbsp;/<br/>`soft_limit_bytes` | 75% | Soft memory usage limit. |
-| `target_utilization_percent`&nbsp;/<br/>`target_utilization_bytes` | 50% | Target memory utilization. |
-| `activities_limit_percent`&nbsp;/<br/>`activities_limit_bytes` | 30% | Activities memory limit. |
-| `shared_cache_min_percent`&nbsp;/<br/>`shared_cache_min_bytes` | 20% | Minimum threshold for the shared cache memory limit. |
-| `shared_cache_max_percent`&nbsp;/<br/>`shared_cache_max_bytes` | 50% | Maximum threshold for the shared cache memory limit. |
-| `mem_table_min_percent`&nbsp;/<br/>`mem_table_min_bytes` | 1% | Minimum threshold for the MemTable memory limit. |
-| `mem_table_max_percent`&nbsp;/<br/>`mem_table_max_bytes` | 3% | Maximum threshold for the MemTable memory limit. |
-| `query_execution_limit_percent`&nbsp;/<br/>`query_execution_limit_bytes` | 20% | QP memory limit. |
-| `compaction_limit_percent`&nbsp;/<br/>`compaction_limit_bytes` | 10% | Compaction memory limit. |
+| `hard_limit_bytes` | CGroup memory limit /<br/>Host memory | Hard memory usage limit. |
+| `soft_limit_percent` /<br/>`soft_limit_bytes` | 75% | Soft memory usage limit. |
+| `target_utilization_percent` /<br/>`target_utilization_bytes` | 50% | Target memory utilization. |
+| `activities_limit_percent` /<br/>`activities_limit_bytes` | 30% | Activities memory limit. |
+| `shared_cache_min_percent` /<br/>`shared_cache_min_bytes` | 20% | Minimum threshold for the shared cache memory limit. |
+| `shared_cache_max_percent` /<br/>`shared_cache_max_bytes` | 50% | Maximum threshold for the shared cache memory limit. |
+| `mem_table_min_percent` /<br/>`mem_table_min_bytes` | 1% | Minimum threshold for the MemTable memory limit. |
+| `mem_table_max_percent` /<br/>`mem_table_max_bytes` | 3% | Maximum threshold for the MemTable memory limit. |
+| `query_execution_limit_percent` /<br/>`query_execution_limit_bytes` | 20% | QP memory limit. |
+| `compaction_limit_percent` /<br/>`compaction_limit_bytes` | 10% | Compaction memory limit. |

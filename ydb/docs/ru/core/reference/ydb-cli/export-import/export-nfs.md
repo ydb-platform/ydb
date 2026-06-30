@@ -1,0 +1,194 @@
+# Выгрузка в NFS
+
+Команда `export nfs` запускает на стороне сервера процесс выгрузки в сетевую файловую систему ([Network File System](https://ru.wikipedia.org/wiki/Network_File_System), NFS) хостов кластера {{ ydb-short-name }} данных и информации об объектах схемы, в описанном в статье [Файловая структура](./file-structure.md) формате:
+
+```bash
+{{ ydb-cli }} [connection options] export nfs [options]
+```
+
+{% include [conn_options_ref.md](../commands/_includes/conn_options_ref.md) %}
+
+{% note warning %}
+
+{% include [export-supported-object-types.md](_includes/export-supported-object-types.md) %}
+
+{% endnote %}
+
+## Параметры командной строки {#pars}
+
+`[options]` - параметры команды:
+
+### Параметры NFS {#nfs-params}
+
+Команда выгрузки в NFS требует указания монтированной директории (или поддиректории) общей для всех объектов, участвующих в выгрузке. Так как выгрузка производится в асинхронном режиме на всех хостах {{ ydb-short-name }}, указанная директория должна быть на каждом хосте {{ ydb-short-name }} и смонтирована в NFS.
+
+`--fs-path PATH`: путь до монтированной директории (или поддиректории).
+
+### Перечень выгружаемых объектов {#items}
+
+{% include [export-root-include-exclude-params.md](_includes/export-root-include-exclude-params.md) %}
+
+{% cut "Альтернативный способ" %}
+
+Поддерживается альтернативный способ указания перечня объектов:
+
+`--item STRING`: Описание объекта выгрузки. Параметр `--item` может быть указан несколько раз, если необходимо выполнить выгрузку нескольких объектов. `STRING` задается в формате `<свойство>=<значение>,...`, со следующими обязательными свойствами:
+
+- `source`, `src`, или `s` — путь до выгружаемой директории или таблицы, `.` указывает на корневую директорию базы данных. При указании директории выгружаются все несистемные объекты в ней, а также рекурсивно все несистемные поддиректории.
+- `destination`, `dst`, или `d` —  путь в NFS (относительно `--fs-path`).
+
+`--exclude STRING`: Шаблон ([PCRE](https://www.pcre.org/original/doc/html/pcrepattern.html)) для исключения путей из выгрузки. Данный параметр может быть указан несколько раз для разных шаблонов.
+
+{% include [export-alternative-syntax-warning.md](_includes/export-alternative-syntax-warning.md) %}
+
+{% endcut %}
+
+### Дополнительные параметры {#aux}
+
+| Параметр | Описание |
+| --- | --- |
+| `--description STRING` | Текстовое описание операции, сохраняемое в истории операций. |
+| `--retries NUM` | Количество повторных попыток выгрузки, которые будет предпринимать сервер.<br/>Значение по умолчанию: `10`. |
+| `--compression STRING` | Сжимать выгружаемые данные.<br/>При уровне сжатия по умолчанию для алгоритма [Zstandard](https://ru.wikipedia.org/wiki/Zstandard) данные могут быть сжаты в 5-10 раз. Сжатие данных использует ресурс CPU и может повлиять на скорость выполнения других операций с БД.<br/>Допустимые значения:<br/><ul><li>`zstd` — сжатие алгоритмом Zstandard c уровнем сжатия по умолчанию (`3`);</li><li>`zstd-N` — сжатие алгоритмом Zstandard, `N` — уровень сжатия (`1` — `22`).</li></ul> |
+| `--encryption-algorithm ALGORITHM` | Шифровать выгружаемые данные используя указанный алгоритм. Поддерживаемые значения: `AES-128-GCM`, `AES-256-GCM`, `ChaCha20-Poly1305`. |
+| `--encryption-key-file PATH` | Путь к файлу, содержащему ключ шифрования (только для зашифрованных выгрузок). Данный файл является бинарным и должен содержать точное количество байт, соответствующее длине ключа в выбранном алгоритме шифрования (16 байт для `AES-128-GCM`, 32 байта для `AES-256-GCM` и `ChaCha20-Poly1305`). Ключ также может быть передан через переменную окружения `YDB_ENCRYPTION_KEY`, в шестнадцатеричном строковом представлении. |
+| `--format STRING` | Формат вывода результата.<br/>Допустимые значения:<br/><ul><li>`pretty` — человекочитаемый формат (по умолчанию);</li><li>`proto-json-base64` — [Protocol Buffers](https://ru.wikipedia.org/wiki/Protocol_Buffers) в формате [JSON](https://ru.wikipedia.org/wiki/JSON), бинарные строки закодированы в [Base64](https://ru.wikipedia.org/wiki/Base64).</li></ul> |
+
+## Выполнение выгрузки {#exec}
+
+{% include [server-export-workflow.md](_includes/server-export-workflow.md) %}
+
+### Результат запуска {#result}
+
+При успешном исполнении команда `export nfs` выводит сводную информацию о поставленной в очередь операции выгрузки в NFS, в заданном опцией `--format` формате. Фактическая выгрузка производится сервером асинхронно. В сводной информации выводится ID операции, который может быть использован в дальнейшем для проверки статуса и действий с операцией:
+
+{% include [export-operation-result-pretty-intro.md](_includes/export-operation-result-pretty-intro.md) %}
+
+  ```text
+  ┌───────────────────────────────────────────┬───────┬─────...
+  | id                                        | ready | stat...
+  ├───────────────────────────────────────────┼───────┼─────...
+  | ydb://export/6?id=281474976788395&kind=fs | true  | SUCC...
+  ├╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴╴┴╴╴╴╴╴╴╴┴╴╴╴╴╴...
+  | Include index data: false
+  | Items:
+  ...
+  ```
+
+{% include [export-operation-result-json-intro.md](_includes/export-operation-result-json-intro.md) %}
+
+  ```json
+  {"id":"ydb://export/6?id=281474976788395&kind=fs","ready":true, ... }
+  ```
+
+### Статус выгрузки {#status}
+
+{% include [export-operation-status-intro.md](_includes/export-operation-status-intro.md) %}
+
+```bash
+{{ ydb-cli }} -p quickstart operation get "ydb://export/6?id=281474976788395&kind=fs"
+```
+
+{% include [export-operation-status-after-get.md](_includes/export-operation-status-after-get.md) %}
+
+### Завершение операции выгрузки {#forget}
+
+{% include [export-operation-forget-intro.md](_includes/export-operation-forget-intro.md) %}
+
+```bash
+{{ ydb-cli }} -p quickstart operation forget "ydb://export/6?id=281474976788395&kind=fs"
+```
+
+### Список операций выгрузки {#list}
+
+Для получения списка операций выгрузки воспользуйтесь командой `operation list export/nfs`:
+
+```bash
+{{ ydb-cli }} -p quickstart operation list export/nfs
+```
+
+{% include [export-operation-list-tail.md](_includes/export-operation-list-tail.md) %}
+
+## Примеры {#examples}
+
+{% include [ydb-cli-profile.md](../../../_includes/ydb-cli-profile.md) %}
+
+### Выгрузка базы данных {#example-full-db}
+
+Выгрузка всех несистемных объектов базы данных в директорию `/mnt/nfs/backups/export1` на файловой системе:
+
+```bash
+{{ ydb-cli }} -p quickstart export nfs \
+  --fs-path /mnt/nfs/backups/export1
+```
+
+### Выгрузка нескольких директорий {#example-specific-dirs}
+
+Выгрузка объектов из директорий `dir1` и `dir2` базы данных в директорию `/mnt/nfs/backups/export1` на файловой системе:
+
+```bash
+{{ ydb-cli }} -p quickstart export nfs \
+  --fs-path /mnt/nfs/backups/export1 \
+  --include dir1 --include dir2
+```
+
+Либо с использованием альтернативного способа:
+
+```bash
+{{ ydb-cli }} -p quickstart export nfs \
+  --fs-path /mnt/nfs/backups \
+  --item src=dir1,dst=export1/dir1 --item src=dir2,dst=export1/dir2
+```
+
+### Выгрузка с шифрованием {#example-encryption}
+
+Выгрузка всей базы данных с шифрованием:
+
+- С использованием алгоритма шифрования `AES-128-GCM`
+- С генерацией случайного ключа утилитой `openssl` в файл `~/my_secret_key`
+- С чтением сгенерированного ключа из файла `~/my_secret_key`
+- В директорию `/mnt/nfs/backups/export1` на файловой системе
+
+```bash
+openssl rand -out ~/my_secret_key 16
+{{ ydb-cli }} -p quickstart export nfs \
+  --fs-path /mnt/nfs/backups/export1 \
+  --encryption-algorithm AES-128-GCM --encryption-key-file ~/my_secret_key
+```
+
+Выгрузка директории `dir1` базы данных с шифрованием:
+
+- С использованием алгоритма шифрования `AES-256-GCM`
+- С генерацией случайного ключа утилитой `openssl` в переменную окружения `YDB_ENCRYPTION_KEY`
+- С чтением сгенерированного ключа из переменной окружения `YDB_ENCRYPTION_KEY`
+- В директорию `/mnt/nfs/backups/export1` на файловой системе
+
+```bash
+export YDB_ENCRYPTION_KEY=$(openssl rand -hex 32)
+{{ ydb-cli }} -p quickstart export nfs \
+  --root-path dir1 \
+  --fs-path /mnt/nfs/backups/export1 \
+  --encryption-algorithm AES-256-GCM
+```
+
+### Получение идентификаторов операций {#example-list-oneline}
+
+Для получения перечня идентификаторов операций выгрузки в удобном для обработки в скриптах bash формате вы можете применить утилиту [jq](https://stedolan.github.io/jq/download/):
+
+```bash
+{{ ydb-cli }} -p quickstart operation list export/nfs --format proto-json-base64 | jq -r ".operations[].id"
+```
+
+Вы получите вывод, где в каждой новой строке находится идентификатор операции, например:
+
+```text
+ydb://export/6?id=281474976789577&kind=fs
+ydb://export/6?id=281474976789526&kind=fs
+ydb://export/6?id=281474976788779&kind=fs
+```
+
+По этим идентификаторам может быть, например, запущен цикл для завершения всех текущих операций:
+
+```bash
+{{ ydb-cli }} -p quickstart operation list export/nfs --format proto-json-base64 | jq -r ".operations[].id" | while read line; do {{ ydb-cli }} -p quickstart operation forget $line;done
+```

@@ -670,7 +670,7 @@ void TMultiDeltaReader::Reset(bool withFreq, bool sign) {
 
 void TMultiDeltaReader::Add(bool added, TDeltaReader* rdr) {
     Y_ENSURE(!Started);
-    Readers.push_back({ rdr, added });
+    Readers.push_back({ rdr, added, false });
 }
 
 void TMultiDeltaReader::Add(bool added, TConstArrayRef<ui8> buf) {
@@ -679,11 +679,34 @@ void TMultiDeltaReader::Add(bool added, TConstArrayRef<ui8> buf) {
         return;
     }
     auto rdr = std::make_unique<TDeltaReader>(buf, WithFreq, Sign);
-    Readers.push_back({ rdr.get(), added });
+    Readers.push_back({ rdr.get(), added, true });
     OwnedReaders.push_back(std::move(rdr));
 }
 
+void TMultiDeltaReader::Pop() {
+    if (!Readers.size()) {
+        return;
+    }
+    auto& last = Readers.back();
+    for (auto& item: Items) {
+        Y_ENSURE(item.RdrId != Readers.size());
+    }
+    if (last.Owned) {
+        Y_ENSURE(OwnedReaders.size() > 0 && OwnedReaders.back().get() == last.Reader);
+        OwnedReaders.pop_back();
+    }
+    Readers.pop_back();
+}
+
+void TMultiDeltaReader::SetMaxId(ui64 maxId) {
+    Y_ENSURE(!Items.size());
+    for (auto& rdr: Readers) {
+        rdr.Reader->SetMaxId(maxId);
+    }
+}
+
 void TMultiDeltaReader::Start() {
+    Y_ENSURE(!Started);
     Started = true;
     if (Readers.size() == 1) {
         OneLeft = true;
@@ -695,6 +718,12 @@ void TMultiDeltaReader::Start() {
             SelectNext();
         }
     }
+}
+
+void TMultiDeltaReader::Stop() {
+    Y_ENSURE(!Items.size()); // restart is allowed, for example after changing MaxId
+    OneLeft = false;
+    Started = false;
 }
 
 void TMultiDeltaReader::SelectNext() {

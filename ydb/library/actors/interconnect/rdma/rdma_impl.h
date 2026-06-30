@@ -18,6 +18,7 @@
 #include <util/system/guard.h>
 #include <util/system/spinlock.h>
 #include <util/system/thread.h>
+#include <util/system/yield.h>
 #include <util/system/sanitizers.h>
 #include <util/system/compiler.h>
 
@@ -598,8 +599,16 @@ public:
         Queue.Enqueue(static_cast<TWr*>(wr));
     }
 
-    void NotifyErr() noexcept override {
+protected:
+    // Internal terminal transition. It may be called from the CQ poller thread,
+    // so it must not try to wake or wait for the poller.
+    void DoNotifyErr() noexcept {
         SetTerminalError(TSrq::CqTerminalError);
+    }
+
+public:
+    void NotifyErr() noexcept override {
+        DoNotifyErr();
     }
 
     void SetTerminalError(int error) noexcept {
@@ -653,8 +662,8 @@ public:
         return Srq.EnqueueCmd(cmd);
     }
 
-    // Build RDMA verbs and post it
-    // Returns false if it safe to sleep to wait for cq event
+    // Builds and posts pending RDMA send WRs.
+    // Returns false when there is no pending send work and the CQ thread may idle.
     bool ProcessWr(std::unique_ptr<TWaiterCtx>& ctx, std::vector<TWr*>& preparedWr, bool tryBuildAtOnce) noexcept {
         while (true) {
             if (ctx) {
@@ -728,7 +737,7 @@ public:
                 int rv = Do(wcs);
                 if (rv < 0) {
                     //TODO: Is it correct err handling?
-                    SetTerminalError(TSrq::CqTerminalError);
+                    DoNotifyErr();
                 } else if (rv == 0) {
                     bool idleAllowed = false;
                     MaybeIdle.store(true);
@@ -821,6 +830,26 @@ public:
     }
 
 protected:
+    bool IsCqThread() const noexcept {
+        return CqThreadId && pthread_equal(pthread_self(), CqThreadId);
+    }
+
+    // External terminal notifications may arrive through async_fd while the poller
+    // sleeps in ibv_get_cq_event() on a different completion channel. Since a
+    // signal can be delivered just before the blocking syscall, repeat wakeups
+    // until the poller observes TerminalError and exits the loop.
+    void WakeUntilFinished() noexcept {
+        if (!Thread.Running() || IsCqThread()) {
+            return;
+        }
+        while (!Finished.load(std::memory_order_relaxed)) {
+            Awake();
+            if (Finished.load(std::memory_order_relaxed)) {
+                break;
+            }
+            ThreadYield();
+        }
+    }
     TThread Thread;
     std::atomic<bool> Finished;
     std::atomic<bool> Cont;

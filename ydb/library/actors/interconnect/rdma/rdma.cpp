@@ -98,8 +98,8 @@ public:
     }
 
     void NotifyErr() noexcept override {
-        TSimpleCqBase::NotifyErr();
-        Awake();
+        DoNotifyErr();
+        WakeUntilFinished();
     }
 
     void Idle() noexcept override final {
@@ -109,7 +109,7 @@ public:
         int err = ibv_get_cq_event(CompChannel, &evCq, &evCtx);
         if (err) {
             if (errno != EINTR) {
-                NotifyErr();
+                DoNotifyErr();
                 return;
             }
         }
@@ -122,7 +122,7 @@ public:
         err = ibv_req_notify_cq(evCq, 0);
         if (err) {
             Cerr << "Couldn't request CQ notification\n" << Endl;
-            NotifyErr();
+            DoNotifyErr();
             Y_DEBUG_ABORT_UNLESS(false);
         }
     }
@@ -141,14 +141,7 @@ public:
         // NOTE: There is a tiny chanse the signal was send before thread blocked on the read syscall
         // so in this case repeat send signal until cq thread finished
         if (Thread.Running()) {
-            while (!Finished.load(std::memory_order_relaxed)) {
-                Awake();
-                if (Finished.load(std::memory_order_relaxed)) {
-                    break;
-                }
-                ThreadYield();
-            }
-
+            WakeUntilFinished();
             // 4. As usual, join and destroy CQ
             Thread.Join();
         }

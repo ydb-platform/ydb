@@ -1723,7 +1723,7 @@ Y_UNIT_TEST_SUITE(TCdcStreamTests) {
         UNIT_ASSERT_VALUES_EQUAL(getIndexSchemaVersion("/MyRoot/Tenant/Table/Index"), indexSchemaVersion);
     }
 
-    Y_UNIT_TEST(CreateCdcStreamForbiddenWhenTopicsAreFirstClassCitizen) {
+    Y_UNIT_TEST(CreateCdcStreamForbiddenWhenTopicsAreNotFirstClassCitizen) {
         TTestBasicRuntime runtime;
         TTestEnv env(runtime, TTestEnvOptions().EnableProtoSourceIdInfo(true));
         ui64 txId = 100;

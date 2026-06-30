@@ -947,6 +947,7 @@ TVector<ISubOperation::TPtr> CreateNewCdcStream(TOperationId opId, const TTxTran
         return {CreateReject(opId, NKikimrScheme::EStatus::StatusPreconditionFailed, TStringBuilder()
             << "CDC stream creation is not allowed when topic is not FirstClassCitizen")};
     }
+
     const auto acceptExisted = !tx.GetFailOnExist();
     const auto& op = tx.GetCreateCdcStream();
     const auto& tableName = op.GetTableName();

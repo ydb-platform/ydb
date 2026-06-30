@@ -13,6 +13,7 @@
 #include <ydb/library/yql/providers/pq/common/pq_events_processor.h>
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/client.h>
+#include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/topic/errors.h>
 
 #include <util/generic/queue.h>
 
@@ -526,12 +527,33 @@ NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings(const T
         << ", StartingMessageTimestamp " << minTime
         << ", BufferSize " << BufferSize << ", GetConsumerMode " << Config.GetConsumerMode());
 
+    // Custom retry policy: treat CLIENT_UNAUTHENTICATED as LongRetry so that
+    // a transient "IAM-token not ready yet" error (grpc::UNAUTHENTICATED) does
+    // not abort the session immediately.  All other statuses are classified by
+    // the standard GetRetryErrorClass().
+    auto retryPolicy = NYdb::NTopic::IRetryPolicy::GetExponentialBackoffPolicy(
+        /* minDelay           */ TDuration::MilliSeconds(500),
+        /* minLongRetryDelay  */ TDuration::Seconds(30),
+        /* maxDelay           */ TDuration::Seconds(30),
+        /* maxRetries         */ std::numeric_limits<size_t>::max(),
+        /* maxTime            */ TDuration::Seconds(30),
+        /* scaleFactor        */ 2.0,
+        /* customRetryClass   */ [](NYdb::EStatus status) {
+            if (status == NYdb::EStatus::CLIENT_UNAUTHENTICATED) {
+                // IAM token may not be ready on the first connection attempt;
+                // retry with the "long" (slower) back-off instead of aborting.
+                return ERetryErrorClass::LongRetry;
+            }
+            return NYdb::NTopic::GetRetryErrorClass(status);
+        });
+
     auto settings = NYdb::NTopic::TReadSessionSettings()
         .TraceId(LogPrefix)
         .AppendTopics(topicReadSettings)
         .MaxMemoryUsageBytes(BufferSize)
         .ReadFromTimestamp(minTime)
-        .AutoPartitioningSupport(true);
+        .AutoPartitioningSupport(true)
+        .RetryPolicy(retryPolicy);
 
     if (Config.GetConsumerMode() == TRowDispatcherSettings::EConsumerMode::Without
      || (Config.GetConsumerMode() == TRowDispatcherSettings::EConsumerMode::Auto && !consumerName)) {
@@ -961,8 +983,11 @@ void TTopicSession::StopReadSession() {
         LOG_ROW_DISPATCHER_DEBUG("Close read session");
         ReadSession->Close(TDuration::Zero());
         ReadSession.reset();
+        // TopicClient is intentionally NOT reset here so that
+        // TGrpcIamCredentialsProvider (and its cached IAM Ticket_) survive
+        // across reconnects.  The TopicClient member will be destroyed
+        // automatically when the TTopicSession actor is torn down.
     }
-    TopicClient.Reset();
 }
 
 void TTopicSession::SendDataArrived(TClientsInfo& info) {

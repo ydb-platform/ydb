@@ -461,6 +461,10 @@ message SetColumnConstraintState {
     }
 }
 
+message SetNotNullItem {
+    optional string column_name = 1;
+}
+
 // Description of index building operation
 message IndexBuildDescription {
     string path = 1;
@@ -1187,6 +1191,9 @@ message AlterTableRequest {
         MetricsSettings set_metrics_settings = 25;
         google.protobuf.Empty drop_metrics_settings = 26;
     }
+
+    // Start set not null for table
+    repeated SetNotNullItem set_not_null = 27;
 }
 
 message AlterTableResponse {

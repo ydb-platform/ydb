@@ -178,19 +178,22 @@ TStorage::TTryGetMessageResult TStorage::TryGetMessage(ui64 offset, const std::o
     AFL_ENSURE(message->GetStatus() == EMessageStatus::Unprocessed)("status", message->GetStatus())("offset", offset)("case", caseDescription);
     if (RetentionExpired(*message, retentionDeadlineDelta)) {
         return TTryGetMessageResult{
-            .Message = nullptr,
+            .Message = message,
             .TryNextInGroup = true,
+            .Usable = false,
         };
     }
     if (isMessageGroupSkipped(*message)) {
         return TTryGetMessageResult{
             .Message = nullptr,
             .TryNextInGroup = false,
+            .Usable = false,
         };
     }
     return TTryGetMessageResult{
         .Message = message,
         .TryNextInGroup = false,
+        .Usable = true,
     };
 }
 TStorage::TNextMessageResult TStorage::SearchForEligibleMessage(const std::optional<ui32> retentionDeadlineDelta, const absl::flat_hash_set<ui32>& skipMessageGroups) {
@@ -203,7 +206,7 @@ TStorage::TNextMessageResult TStorage::SearchForEligibleMessage(const std::optio
 
         while (true) {
             TTryGetMessageResult result = TryGetMessage(offset, retentionDeadlineDelta, skipMessageGroups, "unlocked");
-            if (result.Message) {
+            if (result.Usable) {
                 return TNextMessageResult{
                     .Message = result.Message,
                     .Offset = offset,
@@ -211,10 +214,14 @@ TStorage::TNextMessageResult TStorage::SearchForEligibleMessage(const std::optio
                 };
             }
             if (!result.TryNextInGroup) {
-                // TODO: hop inside group
                 break;
             }
-            break;
+            // The head of the group contains expired messages. Try to look in the tail of the same group.
+            auto nextOffset = result.Message->NextMessageGroupIdOffset();
+            if (nextOffset.Empty()) {
+                break;
+            }
+            offset = *nextOffset;
         }
     }
     return TNextMessageResult{
@@ -250,7 +257,7 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
 
         auto tryReturn = [&](ui64 offset, const char* desc) -> std::optional<TReadMessage> {
             TTryGetMessageResult result = TryGetMessage(offset, retentionDeadlineDelta, skipMessageGroups, desc);
-            if (!result.Message) {
+            if (!result.Usable) {
                 return std::nullopt;
             }
             DoLock(offset, *result.Message, deadline);

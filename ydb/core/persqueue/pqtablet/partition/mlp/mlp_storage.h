@@ -344,8 +344,9 @@ private:
     };
 
     struct TTryGetMessageResult {
-        TMessage* Message; // nullable
+        TMessage* Message; // not null
         bool TryNextInGroup;
+        bool Usable;
     };
 
     TTryGetMessageResult TryGetMessage(ui64 offset, const std::optional<ui32> retentionDeadlineDelta, const absl::flat_hash_set<ui32>& skipMessageGroups, const char* caseDescription);

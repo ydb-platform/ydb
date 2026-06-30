@@ -16,6 +16,8 @@
 
 #include <algorithm>
 
+#define YDB_LOG_THIS_FILE_COMPONENT HttpLog
+
 namespace NHttp {
 
 static i64 InstantToMicros(TInstant instant) {
@@ -274,14 +276,18 @@ public:
         THttpIncomingResponsePtr response(event->Get()->Response);
         auto itRequests = OutgoingRequests.find(request.Get());
         if (itRequests == OutgoingRequests.end()) {
-            ALOG_ERROR(HttpLog, "Cache received response to unknown request " << request->Host << request->URL);
+            YDB_LOG_ERROR("Cache received response to unknown request",
+                {"host", request->Host},
+                {"url", request->URL});
             return;
         }
         auto key = itRequests->second;
         OutgoingRequests.erase(itRequests);
         auto it = Cache.find(key);
         if (it == Cache.end()) {
-            ALOG_ERROR(HttpLog, "Cache received response to unknown cache key " << request->Host << request->URL);
+            YDB_LOG_ERROR("Cache received response to unknown cache key",
+                {"host", request->Host},
+                {"url", request->URL});
             return;
         }
         TCacheRecord& cacheRecord = it->second;
@@ -328,12 +334,18 @@ public:
             error = event->Get()->Error;
         }
         if (!error.empty()) {
-            ALOG_WARN(HttpLog, "Error from " << cacheRecord.GetName() << ": " << error);
+            YDB_LOG_WARN("Error",
+                {"cacheRecordName", cacheRecord.GetName()},
+                {"error", error});
         }
-        ALOG_DEBUG(HttpLog, "OutgoingUpdate " << cacheRecord.GetName());
+        YDB_LOG_DEBUG("OutgoingUpdate",
+            {"cacheRecordName", cacheRecord.GetName()});
         cacheRecord.UpdateResponse(response, event->Get()->Error, now);
         RefreshQueue.push({it->first, it->second.RefreshTime});
-        ALOG_DEBUG(HttpLog, "OutgoingSchedule " << cacheRecord.GetName() << " at " << cacheRecord.RefreshTime << " until " << cacheRecord.DeathTime);
+        YDB_LOG_DEBUG("OutgoingSchedule at until",
+            {"cacheRecordName", cacheRecord.GetName()},
+            {"cacheRecordRefreshTime", cacheRecord.RefreshTime},
+            {"cacheRecordDeathTime", cacheRecord.DeathTime});
     }
 
     NWilson::TSpan SetupTracing(TEvHttpProxy::TEvHttpOutgoingRequest::TPtr& event, TStringBuf spanName) {
@@ -371,11 +383,9 @@ public:
         if (it != Cache.end()) {
             if (it->second.IsValid()) {
                 RecordCacheHit(key);
-                ALOG_DEBUG(HttpLog, "OutgoingRespond "
-                            << it->second.GetName()
-                            << " ("
-                            << ((it->second.Response != nullptr) ? ToString(it->second.Response->Size()) : TString("error"))
-                            << ")");
+                YDB_LOG_DEBUG("OutgoingRespond",
+                    {"cacheRecordName", it->second.GetName()},
+                    {"responseSize", ((it->second.Response != nullptr) ? ToString(it->second.Response->Size()) : TString("error"))});
                 THttpIncomingResponsePtr response = it->second.Response;
                 if (response != nullptr) {
                     THeadersBuilder extraHeaders;
@@ -414,7 +424,8 @@ public:
             extraHeaders.Set("Accept-Encoding", {}); // disable compression for caching
             it->second.OutgoingRequest = it->second.Request->Duplicate(extraHeaders);
             OutgoingRequests[it->second.OutgoingRequest.Get()] = key;
-            ALOG_DEBUG(HttpLog, "OutgoingInitiate " << it->second.GetName());
+            YDB_LOG_DEBUG("OutgoingInitiate",
+                {"cacheRecordName", it->second.GetName()});
             it->second.FetchStartedAt = NActors::TActivationContext::Now();
             Send(HttpProxyId, new TEvHttpProxy::TEvHttpOutgoingRequest(it->second.OutgoingRequest, it->second.Timeout));
         }
@@ -484,7 +495,8 @@ public:
             auto it = Cache.find(rrec.Key);
             if (it != Cache.end()) {
                 if (it->second.DeathTime > NActors::TActivationContext::Now()) {
-                    ALOG_DEBUG(HttpLog, "OutgoingRefresh " << it->second.GetName());
+                    YDB_LOG_DEBUG("OutgoingRefresh",
+                        {"cacheRecordName", it->second.GetName()});
                     THeadersBuilder extraHeaders;
                     extraHeaders.Set("traceparent", {});
                     extraHeaders.Set("Accept-Encoding", {}); // disable compression for caching
@@ -493,7 +505,8 @@ public:
                     it->second.FetchStartedAt = NActors::TActivationContext::Now();
                     Send(HttpProxyId, new TEvHttpProxy::TEvHttpOutgoingRequest(it->second.OutgoingRequest, it->second.Timeout));
                 } else {
-                    ALOG_DEBUG(HttpLog, "OutgoingForget " << it->second.GetName());
+                    YDB_LOG_DEBUG("OutgoingForget",
+                        {"cacheRecordName", it->second.GetName()});
                     if (it->second.OutgoingRequest) {
                         OutgoingRequests.erase(it->second.OutgoingRequest.Get());
                     }
@@ -755,7 +768,8 @@ public:
             IncomingRequests[cacheRecord.Request.Get()] = cacheKey;
             Send(handler, new TEvHttpProxy::TEvHttpIncomingRequest(cacheRecord.Request));
         } else {
-            ALOG_ERROR(HttpLog, "Can't find cache handler for " << cacheRecord.GetName());
+            YDB_LOG_ERROR("Can't find cache handler",
+                {"cacheRecordName", cacheRecord.GetName()});
         }
     }
 
@@ -797,14 +811,18 @@ public:
         THttpOutgoingResponsePtr response(event->Get()->Response);
         auto itRequests = IncomingRequests.find(request.Get());
         if (itRequests == IncomingRequests.end()) {
-            ALOG_ERROR(HttpLog, "Cache received response to unknown request " << request->Host << request->URL);
+            YDB_LOG_ERROR("Cache received response to unknown request",
+                {"host", request->Host},
+                {"url", request->URL});
             return;
         }
 
         TCacheKey key = itRequests->second;
         auto it = Cache.find(key);
         if (it == Cache.end()) {
-            ALOG_ERROR(HttpLog, "Cache received response to unknown cache key " << request->Host << request->URL);
+            YDB_LOG_ERROR("Cache received response to unknown cache key",
+                {"host", request->Host},
+                {"url", request->URL});
             return;
         }
 
@@ -825,7 +843,10 @@ public:
             if (itStatusToRetry != cacheRecord.CachePolicy.StatusesToRetry.end()) {
                 if (cacheRecord.Retries < cacheRecord.CachePolicy.RetriesCount) {
                     ++cacheRecord.Retries;
-                    ALOG_WARN(HttpLog, "IncomingRetry " << cacheRecord.GetName() << ": " << status << " " << error);
+                    YDB_LOG_WARN("IncomingRetry",
+                        {"cacheRecordName", cacheRecord.GetName()},
+                        {"status", status},
+                        {"error", error});
                     SendCacheRequest(key, cacheRecord);
                     return;
                 }
@@ -855,23 +876,31 @@ public:
         }
         cacheRecord.FetchStartedAt = TInstant();
         if (!error.empty()) {
-            ALOG_WARN(HttpLog, "Error from " << cacheRecord.GetName() << ": " << error);
+            YDB_LOG_WARN("Error",
+                {"cacheRecordName", cacheRecord.GetName()},
+                {"error", error});
             if (!cacheRecord.Response) {
-                ALOG_DEBUG(HttpLog, "IncomingDiscard " << cacheRecord.GetName());
+                YDB_LOG_DEBUG("IncomingDiscard",
+                    {"cacheRecordName", cacheRecord.GetName()});
                 DropCacheRecord(it);
                 return;
             }
         }
         if (cacheRecord.CachePolicy.TimeToRefresh) {
-            ALOG_DEBUG(HttpLog, "IncomingUpdate " << cacheRecord.GetName());
+            YDB_LOG_DEBUG("IncomingUpdate",
+                {"cacheRecordName", cacheRecord.GetName()});
             cacheRecord.UpdateResponse(response, error, now);
             if (!cacheRecord.Enqueued) {
                 RefreshQueue.push({it->first, it->second.RefreshTime});
                 cacheRecord.Enqueued = true;
             }
-            ALOG_DEBUG(HttpLog, "IncomingSchedule " << cacheRecord.GetName() << " at " << cacheRecord.RefreshTime << " until " << cacheRecord.DeathTime);
+            YDB_LOG_DEBUG("IncomingSchedule at until",
+                {"cacheRecordName", cacheRecord.GetName()},
+                {"cacheRecordRefreshTime", cacheRecord.RefreshTime},
+                {"cacheRecordDeathTime", cacheRecord.DeathTime});
         } else {
-            ALOG_DEBUG(HttpLog, "IncomingDrop " << cacheRecord.GetName());
+            YDB_LOG_DEBUG("IncomingDrop",
+                {"cacheRecordName", cacheRecord.GetName()});
             DropCacheRecord(it);
         }
     }
@@ -933,11 +962,9 @@ public:
             it->second.UpdateExpireTime();
             if (it->second.IsValid()) {
                 RecordCacheHit(key);
-                ALOG_DEBUG(HttpLog, "IncomingRespond "
-                            << it->second.GetName()
-                            << " ("
-                            << ((it->second.Response != nullptr) ? ToString(it->second.Response->Size()) : TString("error"))
-                            << ")");
+                YDB_LOG_DEBUG("IncomingRespond",
+                    {"cacheRecordName", it->second.GetName()},
+                    {"responseSize", ((it->second.Response != nullptr) ? ToString(it->second.Response->Size()) : TString("error"))});
                 THttpOutgoingResponsePtr response = it->second.Response;
                 if (response != nullptr) {
                     THeadersBuilder extraHeaders;
@@ -968,10 +995,12 @@ public:
             it->second.CacheId = key.GetId(); // for debugging
             it->second.InitRequest(event->Get()->Request);
             if (policy.DiscardCache) {
-                ALOG_DEBUG(HttpLog, "IncomingDiscardCache " << it->second.GetName());
+                YDB_LOG_DEBUG("IncomingDiscardCache",
+                    {"cacheRecordName", it->second.GetName()});
             }
             it->second.Waiters.emplace_back(std::move(event), std::move(span));
-            ALOG_DEBUG(HttpLog, "IncomingInitiate " << it->second.GetName());
+            YDB_LOG_DEBUG("IncomingInitiate",
+                {"cacheRecordName", it->second.GetName()});
             SendCacheRequest(key, it->second);
         }
     }
@@ -1055,10 +1084,12 @@ public:
             if (it != Cache.end()) {
                 it->second.Enqueued = false;
                 if (it->second.DeathTime > NActors::TActivationContext::Now()) {
-                    ALOG_DEBUG(HttpLog, "IncomingRefresh " << it->second.GetName());
+                    YDB_LOG_DEBUG("IncomingRefresh",
+                        {"cacheRecordName", it->second.GetName()});
                     SendCacheRequest(it->first, it->second);
                 } else {
-                    ALOG_DEBUG(HttpLog, "IncomingForget " << it->second.GetName());
+                    YDB_LOG_DEBUG("IncomingForget",
+                        {"cacheRecordName", it->second.GetName()});
                     DropCacheRecord(it);
                 }
             }

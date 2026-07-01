@@ -85,5 +85,8 @@ class TestYdbWorkload(StressFixture):
         for t in threads:
             t.join(timeout=120)
 
+        stuck = [t.name for t in threads if t.is_alive()]
+        assert not stuck, "workload thread(s) did not finish (hang?): {}".format(stuck)
+
         self._assert_cluster_alive(mode)
         assert not errors, "workload thread(s) failed:\n" + "\n\n".join(errors)

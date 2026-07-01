@@ -57,18 +57,74 @@ size_t CountActivePartitions(const THashMap<ui32, TTopicTabletInfo::TTopicPartit
     return count;
 }
 
+size_t CountTopicTotalPartitions(
+        const TTopicInfo::TPtr& topic,
+        const NKikimrSchemeOp::TPersQueueGroupDescription& alter)
+{
+    if (!topic->Partitions.empty()) {
+        return topic->Partitions.size();
+    }
+
+    size_t count = 0;
+    for (const auto& [_, shard] : topic->Shards) {
+        count += shard->Partitions.size();
+    }
+    if (count > 0) {
+        return count;
+    }
+
+    if (alter.PartitionsSize() > 0) {
+        return alter.PartitionsSize();
+    }
+
+    return topic->TotalPartitionCount;
+}
+
+size_t CountTopicActivePartitions(
+        const TTopicInfo::TPtr& topic,
+        const NKikimrSchemeOp::TPersQueueGroupDescription& alter)
+{
+    size_t count = CountActivePartitions(topic->Partitions);
+    if (!topic->Partitions.empty()) {
+        return count;
+    }
+
+    for (const auto& [_, shard] : topic->Shards) {
+        for (const auto& partition : shard->Partitions) {
+            if (partition->Status == NKikimrPQ::ETopicPartitionStatus::Active) {
+                ++count;
+            }
+        }
+    }
+    if (count > 0) {
+        return count;
+    }
+
+    for (const auto& partition : alter.GetPartitions()) {
+        if (!partition.HasStatus() || partition.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active) {
+            ++count;
+        }
+    }
+    if (count > 0) {
+        return count;
+    }
+
+    return topic->ActivePartitionCount;
+}
+
 size_t ComputeAlterActivePartitionCount(
-        const THashMap<ui32, TTopicTabletInfo::TTopicPartitionInfo*>& partitions,
+        const TTopicInfo::TPtr& topic,
+        const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
         const TTopicInfo::TPtr& alterData)
 {
-    size_t count = CountActivePartitions(partitions);
+    size_t count = CountTopicActivePartitions(topic, alter);
     THashSet<ui32> deactivatedParents;
     for (const auto& partition : alterData->PartitionsToAdd) {
         ++count;
         for (const ui32 parentId : partition.ParentPartitionIds) {
             if (deactivatedParents.emplace(parentId).second) {
-                const auto parentIt = partitions.find(parentId);
-                if (parentIt != partitions.end()
+                const auto parentIt = topic->Partitions.find(parentId);
+                if (parentIt != topic->Partitions.end()
                     && parentIt->second->Status == NKikimrPQ::ETopicPartitionStatus::Active) {
                     --count;
                 }
@@ -76,6 +132,15 @@ size_t ComputeAlterActivePartitionCount(
         }
     }
     return count;
+}
+
+void ComputeAlterPartitionCounts(
+        const TTopicInfo::TPtr& topic,
+        const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
+        TTopicInfo::TPtr alterData)
+{
+    alterData->TotalPartitionCount = CountTopicTotalPartitions(topic, alter) + alterData->PartitionsToAdd.size();
+    alterData->ActivePartitionCount = ComputeAlterActivePartitionCount(topic, alter, alterData);
 }
 
 class TAlterPQ: public TSubOperation {
@@ -536,7 +601,9 @@ public:
                     << ", first new shardIdx " << startShardIdx
                     << " hasBalancer " << hasBalancer);
 
-        ReassignIds(pqGroup);
+        if (!pqGroup->AlterData->PartitionsToAdd.empty()) {
+            ReassignIds(pqGroup);
+        }
         return shardsToCreate > 0;
     }
 
@@ -942,7 +1009,7 @@ public:
             }
 
             if (alter.HasPQTabletConfig() && alter.GetPQTabletConfig().HasPartitionStrategy()) {
-                size_t activePartitionCount = CountActivePartitions(topic->Partitions);
+                size_t activePartitionCount = CountTopicActivePartitions(topic, alter);
                 auto requestedMinPartitionCount = alter.GetPQTabletConfig().GetPartitionStrategy().GetMinPartitionCount();
                 if (requestedMinPartitionCount > activePartitionCount) {
                     // select exisisting active partitions for split
@@ -1075,12 +1142,7 @@ public:
             }
         }
 
-        alterData->TotalPartitionCount = topic->TotalPartitionCount + alterData->PartitionsToAdd.size();
-        if (!splitMergeEnabled) {
-            alterData->ActivePartitionCount = alterData->TotalPartitionCount;
-        } else {
-            alterData->ActivePartitionCount = ComputeAlterActivePartitionCount(topic->Partitions, alterData);
-        }
+        ComputeAlterPartitionCounts(topic, alter, alterData);
 
         if (!(0 < alterData->ActivePartitionCount && alterData->ActivePartitionCount <= alterData->TotalPartitionCount)) {
             errStr = TStringBuilder()
@@ -1127,7 +1189,7 @@ public:
         }
 
         const auto& stats = topic->Stats;
-        const auto topicActivePartitionCount = CountActivePartitions(topic->Partitions);
+        const auto topicActivePartitionCount = CountTopicActivePartitions(topic, alter);
         const PQGroupReserve reserve(newTabletConfig, alterData->ActivePartitionCount);
         const PQGroupReserve reserveForCheckLimit(newTabletConfig, alterData->ActivePartitionCount + involvedPartitions.size());
         const PQGroupReserve oldReserve(tabletConfig, topicActivePartitionCount);

@@ -263,6 +263,15 @@ public:
                 }
                 const TCoNameValueTupleList watermarkSettings = watermarkSettingsBuilder.Done();
 
+                // The partition id metadata column is exposed at the expr level under the user-facing
+                // __ydb_ name when system columns are forbidden, and under the legacy _yql_sys_ name otherwise.
+                const TString partitionIdColumn = State_->ForbidYqlSysColumnsAndSystemMetadata
+                    ? "__ydb_partition_id"
+                    : "_yql_sys_partition_id";
+                const TString clusterColumn = State_->ForbidYqlSysColumnsAndSystemMetadata
+                    ? "__ydb_cluster"
+                    : "_yql_sys_cluster";
+
                 result = Build<TDqPhyWatermarkGenerator>(ctx, pos)
                     .Input(result)
                     .WatermarkExtractor(watermark)
@@ -273,14 +282,14 @@ public:
                                 .Name<TCoAtom>().Build("cluster")
                                 .Value<TCoMember>()
                                     .Struct("arg")
-                                    .Name().Build("_yql_sys_cluster")
+                                    .Name().Build(clusterColumn)
                                     .Build()
                                 .Build()
                             .Add<TCoNameValueTuple>()
                                 .Name<TCoAtom>().Build("partition_id")
                                 .Value<TCoMember>()
                                     .Struct("arg")
-                                    .Name().Build("_yql_sys_partition_id")
+                                    .Name().Build(partitionIdColumn)
                                     .Build()
                                 .Build()
                             .Build()
@@ -479,7 +488,27 @@ public:
                 }
 
                 for (const auto metadata : topic.Metadata()) {
-                    srcDesc.AddMetadataFields(metadata.Value().Maybe<TCoAtom>().Cast().StringValue());
+                    const auto sysColumnName = metadata.Value().Maybe<TCoAtom>().Cast().StringValue();
+                    if (State_->ForbidYqlSysColumnsAndSystemMetadata && SkipPqSystemPrefix(sysColumnName)) {
+                        continue;
+                    }
+                    // For __ydb_-prefixed columns, map to the corresponding _yql_sys_ name
+                    // so the read actor can find the right extractor
+                    if (auto oldName = YdbSysColumnToOldSysColumn(sysColumnName, State_->AddTransparentPrefixToTransparentSystemColumns)) {
+                        // Only add the _yql_sys_ version if it's not already present
+                        bool alreadyPresent = false;
+                        for (size_t i = 0; i < static_cast<size_t>(srcDesc.MetadataFieldsSize()); ++i) {
+                            if (srcDesc.GetMetadataFields(i) == *oldName) {
+                                alreadyPresent = true;
+                                break;
+                            }
+                        }
+                        if (!alreadyPresent) {
+                            srcDesc.AddMetadataFields(*oldName);
+                        }
+                    } else {
+                        srcDesc.AddMetadataFields(sysColumnName);
+                    }
                 }
 
                 const auto rowSchema = topic.RowSpec().Ref().GetTypeAnn()->Cast<TTypeExprType>()->GetType()->Cast<TStructExprType>();
@@ -663,7 +692,7 @@ private:
                     return Nothing();
                 }
             }
-            if (!IsIn({"_yql_sys_tsp_write_time", "_yql_sys_write_time"}, member.Name())) {
+            if (!IsIn({"_yql_sys_tsp_write_time", "_yql_sys_write_time", "__ydb_write_time"}, member.Name())) {
                 ctx.AddError(TIssue(pos, defaultMessage));
                 return Nothing();
             }
@@ -922,11 +951,18 @@ public:
             .Done());
 
         TExprNode::TListType metadataFieldsList;
-        for (const auto& sysColumn : GetAllowedPqMetaSysColumns(
-                 State_->AddTransparentPrefixToTransparentSystemColumns,
-                 State_->EnableUserAttributesInTopicQuery))
-        {
-            metadataFieldsList.push_back(ctx.NewAtom(pos, sysColumn));
+        if (!State_->ForbidYqlSysColumnsAndSystemMetadata) {
+            for (const auto& sysColumn : GetAllowedPqMetaSysColumns(
+                     State_->AddTransparentPrefixToTransparentSystemColumns,
+                     State_->EnableUserAttributesInTopicQuery))
+            {
+                metadataFieldsList.push_back(ctx.NewAtom(pos, sysColumn));
+            }
+        }
+
+        // Also add __ydb_-prefixed system columns
+        for (const auto& ydbColumn : GetAllowedYdbSysColumns(State_->EnableUserAttributesInTopicQuery)) {
+            metadataFieldsList.push_back(ctx.NewAtom(pos, ydbColumn));
         }
 
         settings.push_back(Build<TCoNameValueTuple>(ctx, pos)

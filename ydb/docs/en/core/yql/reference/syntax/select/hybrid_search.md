@@ -62,7 +62,7 @@ In both modes a document that is absent from a branch's candidate pool simply do
 
 ### Custom fusion lambda {#custom-fusion}
 
-Instead of the built-in `Mode` (`rrf`/`linear`), you can supply a custom fusion lambda that computes the fused score from the per-branch values yourself. Two lambda kinds are available, mutually exclusive:
+Instead of the built-in `Mode` (`rrf`/`linear`), you can supply a custom fusion lambda that computes the fused score from the per-branch values yourself. Two mutually exclusive lambda kinds are available:
 
 * `RankLambda` — the lambda receives the document's per-branch ranks as a `Dict<Int64, Int64>` (branch index → 1-based rank within that branch). A branch the document is absent from has no entry, so `$ranks[i]` is `NULL`.
 * `ScoreLambda` — the lambda receives the document's per-branch raw scores as a `Dict<Int64, Double>` (branch index → the branch's score value: the fulltext relevance, or the vector distance/similarity). A branch the document is absent from has no entry, so `$scores[i]` is `NULL`.

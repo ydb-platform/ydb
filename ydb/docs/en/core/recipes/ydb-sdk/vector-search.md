@@ -27,7 +27,21 @@ The recipe assumes that `embedding` is already available.
 This section describes the minimum steps required to run queries in {{ ydb-short-name }}.
 For more information on connecting to {{ ydb-short-name }}, see [{#T}](./init.md).
 
-{% list tabs %}
+{% list tabs group=tool %}
+
+- C++
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/query/client.h>
+
+    int main() {
+        auto driverConfig = NYdb::CreateFromEnvironment(endpoint + "/?database=" + database);
+        NYdb::TDriver driver(driverConfig);
+        NYdb::NQuery::TQueryClient client(driver);
+
+        // ...
+    }
+    ```
 
 - Go
 
@@ -35,25 +49,26 @@ For more information on connecting to {{ ydb-short-name }}, see [{#T}](./init.md
     package main
 
     import (
-      "context"
-      "os"
+        "context"
+        "os"
 
-      "github.com/ydb-platform/ydb-go-sdk/v3"
+        "github.com/ydb-platform/ydb-go-sdk/v3"
     )
 
     func main() {
-      ctx, cancel := context.WithCancel(context.Background())
-      defer cancel()
-      db, err := ydb.Open(ctx,
-        os.Getenv("YDB_CONNECTION_STRING"),
-      )
-      if err != nil {
-        panic(err)
-      }
-      defer db.Close(ctx)
+        ctx, cancel := context.WithCancel(context.Background())
+        defer cancel()
+        db, err := ydb.Open(ctx,
+            os.Getenv("YDB_CONNECTION_STRING"),
+        )
+        if err != nil {
+            panic(err)
+        }
+        defer db.Close(ctx)
     }
     ```
 
+<<<<<<< HEAD
 - Python
 
     {% list tabs %}
@@ -114,6 +129,8 @@ For more information on connecting to {{ ydb-short-name }}, see [{#T}](./init.md
   const sql = query(driver)
   ```
 
+=======
+>>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 - Java
 
     For queries, use `QueryClient` and `SessionRetryContext` (see [driver initialization](./init.md)). Below is minimal setup and a client for the YQL Query Service:
@@ -126,15 +143,96 @@ For more information on connecting to {{ ydb-short-name }}, see [{#T}](./init.md
     String connectionString = System.getenv().getOrDefault("YDB_CONNECTION_STRING", "grpc://localhost:2136/local");
 
     try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
-       QueryClient queryClient = QueryClient.newClient(transport).build()) {
+        QueryClient queryClient = QueryClient.newClient(transport).build()) {
 
-      SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
-      // retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery(...)))
+        SessionRetryContext retryCtx = SessionRetryContext.create(queryClient).build();
+        // retryCtx.supplyResult(session -> QueryReader.readFrom(session.createQuery(...)))
     }
     ```
 
-{% endlist %}
+- Python
 
+    {% list tabs %}
+
+    - Native SDK
+
+        To run queries, create a `ydb.QuerySessionPool`.
+
+
+        ```python
+        import ydb
+
+        driver = ydb.Driver(
+            endpoint=ydb_endpoint,
+            database=ydb_database,
+            credentials=ydb_credentials,
+        )
+        driver.wait(5, fail_fast=True)
+        pool = ydb.QuerySessionPool(driver)
+        ```
+
+    - Native SDK (Asyncio)
+
+        To run queries, create a `ydb.aio.QuerySessionPool`:
+
+
+        ```python
+        import asyncio
+        import ydb
+
+        async def main():
+            async with ydb.aio.Driver(
+                endpoint=ydb_endpoint,
+                database=ydb_database,
+                credentials=ydb_credentials,
+            ) as driver:
+                await driver.wait(5, fail_fast=True)
+                pool = ydb.aio.QuerySessionPool(driver)
+                # ... use pool ...
+
+        asyncio.run(main())
+        ```
+
+    {% endlist %}
+
+- C#
+
+    Vector search examples for the .NET SDK are not available yet.
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+    Track progress or vote for support: [ydb-dotnet-sdk#657](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/657)
+
+- JavaScript
+
+    ```javascript
+    import { Driver } from '@ydbjs/core'
+    import { query, unsafe, identifier } from '@ydbjs/query'
+
+    const driver = new Driver('grpc://localhost:2136/local')
+    await driver.ready()
+    const sql = query(driver)
+    ```
+
+- Rust
+
+    ```rust
+    use ydb::{ClientBuilder, YdbResult};
+
+    let client = ClientBuilder::new_from_connection_string(connection_string)?.client()?;
+    client.wait().await?;
+    let mut qc = client.query_client().clone_with_idempotent_operations(true);
+    ```
+
+- PHP
+
+    Vector search examples for the PHP SDK are not available yet.
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+    Track progress or vote for support: [ydb-php-sdk#268](https://github.com/ydb-platform/ydb-php-sdk/issues/268)
+
+{% endlist %}
 
 ## Creating a table {#create-table}
 
@@ -150,11 +248,12 @@ Table structure:
 
 {% note warning %}
 
-The `String` type is used to store vectors. For details, see the [exact vector search](../../yql/reference/udf/list/knn.md#data-types) documentation.
+The `String` type is used to store vectors. For details, see the [exact vector search](../../yql/reference/udf/list/knn.md#data-types).
 
 {% endnote %}
 
 
+<<<<<<< HEAD
 {% list tabs %}
 
 - Go
@@ -214,6 +313,9 @@ The `String` type is used to store vectors. For details, see the [exact vector s
       ```
 
     {% endlist %}
+=======
+{% list tabs group=tool %}
+>>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 
 - C++
 
@@ -236,8 +338,133 @@ The `String` type is used to store vectors. For details, see the [exact vector s
     }
     ```
 
-{% endlist %}
+- Go
 
+    ```go
+    func createVectorTable(ctx context.Context, db *ydb.Driver, tableName string) error {
+        query := fmt.Sprintf(`
+            CREATE TABLE IF NOT EXISTS %s (
+                id Utf8,
+                document Utf8,
+                embedding String,
+                PRIMARY KEY (id)
+            );`, "`"+tableName+"`")
+
+        return db.Query().Exec(ctx, query)
+    }
+    ```
+
+- Java
+
+    ```java
+    import tech.ydb.common.transaction.TxMode;
+    import tech.ydb.query.tools.QueryReader;
+    import tech.ydb.query.tools.SessionRetryContext;
+    import tech.ydb.table.query.Params;
+
+    void createVectorTable(SessionRetryContext retryCtx, String tableName) {
+        String query = String.format("""
+                CREATE TABLE IF NOT EXISTS `%s` (
+                    id Utf8,
+                    document Utf8,
+                    embedding String,
+                    PRIMARY KEY (id)
+                );""", tableName);
+
+        retryCtx.supplyResult(session -> QueryReader.readFrom(
+                session.createQuery(query, TxMode.NONE, Params.empty())
+        )).join().getValue();
+
+        System.out.println("Vector table created: " + tableName);
+    }
+    ```
+
+- Python
+
+    {% list tabs %}
+
+    - Native SDK
+
+        ```python
+        import ydb
+
+        def create_vector_table(pool: ydb.QuerySessionPool, table_name: str) -> None:
+            query = f"""
+            CREATE TABLE IF NOT EXISTS `{table_name}` (
+                id Utf8,
+                document Utf8,
+                embedding String,
+                PRIMARY KEY (id)
+            );"""
+
+            pool.execute_with_retries(query)
+
+            print(f"Vector table {table_name} created")
+        ```
+
+    - Native SDK (Asyncio)
+
+        ```python
+        import ydb
+
+        async def create_vector_table(pool: ydb.aio.QuerySessionPool, table_name: str) -> None:
+            query = f"""
+            CREATE TABLE IF NOT EXISTS `{table_name}` (
+                id Utf8,
+                document Utf8,
+                embedding String,
+                PRIMARY KEY (id)
+            );"""
+
+            await pool.execute_with_retries(query)
+
+            print(f"Vector table {table_name} created")
+        ```
+
+    {% endlist %}
+
+- C#
+
+    Vector search examples for the .NET SDK are not available yet.
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+    Track progress or vote for support: [ydb-dotnet-sdk#657](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/657)
+
+- JavaScript
+
+    ```javascript
+    await sql`CREATE TABLE IF NOT EXISTS `table_name` (
+        id Utf8,
+        document Utf8,
+        embedding String,
+        PRIMARY KEY (id)
+    );`
+    ```
+
+- Rust
+
+    ```rust
+    qc.exec(format!(
+        "CREATE TABLE IF NOT EXISTS `{table_name}` (
+            id Utf8,
+            document Utf8,
+            embedding String,
+            PRIMARY KEY (id)
+        );", tableName,
+    ))
+    .await?;
+    ```
+
+- PHP
+
+    Vector search examples for the PHP SDK are not available yet.
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+    Track progress or vote for support: [ydb-php-sdk#268](https://github.com/ydb-platform/ydb-php-sdk/issues/268)
+
+{% endlist %}
 
 ## Inserting vectors {#insert-vectors}
 
@@ -247,6 +474,7 @@ The query uses the container type `List<Struct<...>>` (a list of structs), so yo
 
 In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences. **Prefer performing this conversion on the client.** Alternatively, delegate conversion to the server using [Knn UDF](../../yql/reference/udf/list/knn.md#functions-convert). Examples for both approaches follow.
 
+<<<<<<< HEAD
 {% list tabs %}
 
 - Go
@@ -461,138 +689,39 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
       ```
 
     {% endlist %}
+=======
+{% list tabs group=tool %}
+>>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 
 - C++
 
-    ```cpp
-    std::string ConvertVectorToBytes(const std::vector<float>& vector)
-    {
-        std::string result;
-        for (const auto& value : vector) {
-            const char* bytes = reinterpret_cast<const char*>(&value);
-            result += std::string(bytes, sizeof(float));
+    {% list tabs %}
+
+    - Recommended approach
+
+        ```cpp
+        std::string ConvertVectorToBytes(const std::vector<float>& vector)
+        {
+            std::string result;
+            for (const auto& value : vector) {
+                const char* bytes = reinterpret_cast<const char*>(&value);
+                result += std::string(bytes, sizeof(float));
+            }
+            return result + "\x01";
         }
-        return result + "\x01";
-    }
 
-    void InsertItemsAsBytes(
-        NYdb::NQuery::TQueryClient& client,
-        const std::string& tableName,
-        const std::vector<TItem>& items)
-    {
-        std::string query = std::format(R"(
-            DECLARE $items AS List<Struct<
-                id: Utf8,
-                document: Utf8,
-                embedding: String
-            >>;
-            UPSERT INTO `{0}`
-            (
-                id,
-                document,
-                embedding
-            )
-            SELECT
-                id,
-                document,
-                embedding,
-            FROM AS_TABLE($items);
-        )", tableName);
-
-        NYdb::TParamsBuilder paramsBuilder;
-        auto& valueBuilder = paramsBuilder.AddParam("$items");
-        valueBuilder.BeginList();
-        for (const auto& item : items) {
-            valueBuilder.AddListItem();
-            valueBuilder.BeginStruct();
-            valueBuilder.AddMember("id").Utf8(item.Id);
-            valueBuilder.AddMember("document").Utf8(item.Document);
-            valueBuilder.AddMember("embedding").String(ConvertVectorToBytes(item.Embedding));
-            valueBuilder.EndStruct();
-        }
-        valueBuilder.EndList();
-        valueBuilder.Build();
-
-        NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params = paramsBuilder.Build(), &query](NYdb::NQuery::TSession session) {
-            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
-        }));
-
-        std::cout << items.size() << " items inserted" << std::endl;
-    }
-    ```
-
-    {% note info %}
-
-    The `ConvertVectorToBytes` function assumes a [little-endian](https://en.wikipedia.org/wiki/Endianness) byte order on the client (e.g. x86_64). If a different byte order is used, adapt the `ConvertVectorToBytes` function accordingly.
-
-    {% endnote %}
-
-- JavaScript
-
-  ```javascript
-  function convertVectorToBytes(vector) {
-    const bytes = new Uint8Array(vector.length * 4 + 1);
-    const view = new DataView(bytes.buffer);
-
-    for (let i = 0; i < vector.length; i++) {
-        view.setFloat32(i * 4, vector[i], true);
-    }
-
-    bytes[bytes.length - 1] = 0x01;
-    return bytes;
-  }
-
-  const items = [
-    {
-      id: "first_doc",
-      document: "My Document",
-      embedding: convertVectorToBytes(new Float32Array([1.5, 2.5, 3.5]))
-    }
-  ]
-
-  await sql`
-    UPSERT INTO `table_name` (id, document, embedding)
-    SELECT id, document, embedding,
-    FROM AS_TABLE($items);`
-  ```
-
-- Java
-
-    ```java
-    import java.nio.ByteBuffer;
-    import java.nio.ByteOrder;
-    import java.util.ArrayList;
-    import java.util.List;
-
-    import tech.ydb.common.transaction.TxMode;
-    import tech.ydb.query.tools.QueryReader;
-    import tech.ydb.query.tools.SessionRetryContext;
-    import tech.ydb.table.query.Params;
-    import tech.ydb.table.values.ListType;
-    import tech.ydb.table.values.ListValue;
-    import tech.ydb.table.values.PrimitiveType;
-    import tech.ydb.table.values.PrimitiveValue;
-    import tech.ydb.table.values.StructType;
-    import tech.ydb.table.values.Value;
-
-    byte[] convertVectorToBytes(float[] vector) {
-        ByteBuffer bb = ByteBuffer.allocate(vector.length * Float.BYTES + 1).order(ByteOrder.LITTLE_ENDIAN);
-        for (float v : vector) {
-            bb.putFloat(v);
-        }
-        bb.put((byte) 0x01);
-        return bb.array();
-    }
-
-    void insertItemsAsBytes(SessionRetryContext retryCtx, String tableName, List<Item> items) {
-        String query = String.format("""
+        void InsertItemsAsBytes(
+            NYdb::NQuery::TQueryClient& client,
+            const std::string& tableName,
+            const std::vector<TItem>& items)
+        {
+            std::string query = std::format(R"(
                 DECLARE $items AS List<Struct<
                     id: Utf8,
                     document: Utf8,
                     embedding: String
                 >>;
-
-                UPSERT INTO `%s`
+                UPSERT INTO `{0}`
                 (
                     id,
                     document,
@@ -602,68 +731,59 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
                     id,
                     document,
                     embedding,
-                FROM AS_TABLE($items);""", tableName);
+                FROM AS_TABLE($items);
+            )", tableName);
 
-        StructType rowType = StructType.of(
-                "id", PrimitiveType.Text,
-                "document", PrimitiveType.Text,
-                "embedding", PrimitiveType.Bytes
-        );
+            NYdb::TParamsBuilder paramsBuilder;
+            auto& valueBuilder = paramsBuilder.AddParam("$items");
+            valueBuilder.BeginList();
+            for (const auto& item : items) {
+                valueBuilder.AddListItem();
+                valueBuilder.BeginStruct();
+                valueBuilder.AddMember("id").Utf8(item.Id);
+                valueBuilder.AddMember("document").Utf8(item.Document);
+                valueBuilder.AddMember("embedding").String(ConvertVectorToBytes(item.Embedding));
+                valueBuilder.EndStruct();
+            }
+            valueBuilder.EndList();
+            valueBuilder.Build();
 
-        List<Value<?>> rows = new ArrayList<>(items.size());
-        for (Item item : items) {
-            rows.add(rowType.newValue(
-                    "id", PrimitiveValue.newText(item.id()),
-                    "document", PrimitiveValue.newText(item.document()),
-                    "embedding", PrimitiveValue.newBytes(convertVectorToBytes(item.embedding()))
-            ));
+            NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params = paramsBuilder.Build(), &query](NYdb::NQuery::TSession session) {
+                return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+            }));
+
+            std::cout << items.size() << " items inserted" << std::endl;
         }
+        ```
 
-        ListValue itemsParam = ListType.of(rowType).newValue(rows);
-        Params params = Params.of("$items", itemsParam);
+        {% note info %}
 
-        retryCtx.supplyResult(session -> QueryReader.readFrom(
-                session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
-        )).join().getValue();
+        The `ConvertVectorToBytes` function assumes a [little-endian](https://en.wikipedia.org/wiki/Endianness) byte order on the client (e.g. x86_64). If a different byte order is used, adapt the `ConvertVectorToBytes` function accordingly.
 
-        System.out.println(items.size() + " items inserted");
-    }
+        {% endnote %}
 
-    // record Item(String id, String document, float[] embedding) {}
-    ```
+    - Alternative approach
 
-    {% note info %}
+        {% note warning %}
 
-    `convertVectorToBytes` assumes a [little-endian](https://en.wikipedia.org/wiki/Endianness) CPU (for example x86_64). On other byte orders, adapt the conversion accordingly.
+        Passing vectors as `List<Float>` and converting on the YQL side with `Knn::ToBinaryStringFloat` has lower performance than client-side byte array encoding.
 
-    {% endnote %}
+        {% endnote %}
 
-    You can also pass vector components as `List<Float>` and convert on the YQL side with `Knn::ToBinaryStringFloat`, same idea as the alternative Python and C++ examples below:
-
-    ```java
-    import java.util.ArrayList;
-    import java.util.List;
-
-    import tech.ydb.common.transaction.TxMode;
-    import tech.ydb.query.tools.QueryReader;
-    import tech.ydb.query.tools.SessionRetryContext;
-    import tech.ydb.table.query.Params;
-    import tech.ydb.table.values.ListType;
-    import tech.ydb.table.values.ListValue;
-    import tech.ydb.table.values.PrimitiveType;
-    import tech.ydb.table.values.PrimitiveValue;
-    import tech.ydb.table.values.StructType;
-    import tech.ydb.table.values.Value;
-
-    void insertItemsAsFloatList(SessionRetryContext retryCtx, String tableName, List<Item> items) {
-        String query = String.format("""
+        ```cpp
+        void InsertItemsAsFloatList(
+            NYdb::NQuery::TQueryClient& client,
+            const std::string& tableName,
+            const std::vector<TItem>& items)
+        {
+            std::string query = std::format(R"(
                 DECLARE $items AS List<Struct<
                     id: Utf8,
                     document: Utf8,
                     embedding: List<Float>
                 >>;
 
-                UPSERT INTO `%s`
+                UPSERT INTO `{}`
                 (
                     id,
                     document,
@@ -673,27 +793,34 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
                     id,
                     document,
                     Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
-                FROM AS_TABLE($items);""", tableName);
+                FROM AS_TABLE($items);
+            )", tableName);
 
-        StructType rowType = StructType.of(
-                "id", PrimitiveType.Text,
-                "document", PrimitiveType.Text,
-                "embedding", ListType.of(PrimitiveType.Float)
-        );
-
-        List<Value<?>> rows = new ArrayList<>(items.size());
-        for (Item item : items) {
-            Value<?>[] emb = new Value<?>[item.embedding().length];
-            for (int i = 0; i < item.embedding().length; i++) {
-                emb[i] = PrimitiveValue.newFloat(item.embedding()[i]);
+            NYdb::TParamsBuilder paramsBuilder;
+            auto& valueBuilder = paramsBuilder.AddParam("$items");
+            valueBuilder.BeginList();
+            for (const auto& item : items) {
+                valueBuilder.AddListItem();
+                valueBuilder.BeginStruct();
+                valueBuilder.AddMember("id").Utf8(item.Id);
+                valueBuilder.AddMember("document").Utf8(item.Document);
+                valueBuilder.AddMember("embedding").BeginList();
+                for (const auto& value : item.Embedding) {
+                    valueBuilder.AddListItem().Float(value);
+                }
+                valueBuilder.EndList();
+                valueBuilder.EndStruct();
             }
-            ListValue embList = ListType.of(PrimitiveType.Float).newValueOwn(emb);
-            rows.add(rowType.newValue(
-                    "id", PrimitiveValue.newText(item.id()),
-                    "document", PrimitiveValue.newText(item.document()),
-                    "embedding", embList
-            ));
+            valueBuilder.EndList();
+            valueBuilder.Build();
+
+            NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params = paramsBuilder.Build(), &query](NYdb::NQuery::TSession session) {
+                return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+            }));
+
+            std::cout << items.size() << " items inserted" << std::endl;
         }
+<<<<<<< HEAD
 
         ListValue itemsParam = ListType.of(rowType).newValue(rows);
         Params params = Params.of("$items", itemsParam);
@@ -843,86 +970,556 @@ In {{ ydb-short-name }} tables, vectors are stored as serialized byte sequences.
 
           print(f"{len(items)} items inserted")
       ```
+=======
+        ```
+>>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 
     {% endlist %}
 
-- C++ (alternative)
+- Go
 
-    ```cpp
-    void InsertItemsAsFloatList(
-        NYdb::NQuery::TQueryClient& client,
-        const std::string& tableName,
-        const std::vector<TItem>& items)
-    {
-        std::string query = std::format(R"(
-            DECLARE $items AS List<Struct<
-                id: Utf8,
-                document: Utf8,
-                embedding: List<Float>
-            >>;
+    The function converts a float32 vector to the binary layout and runs a parameterized query:
 
-            UPSERT INTO `{}`
-            (
-                id,
-                document,
-                embedding
-            )
-            SELECT
-                id,
-                document,
-                Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
-            FROM AS_TABLE($items);
-        )", tableName);
+    ```go
+    import (
+        "encoding/binary"
+        "math"
+    )
 
-        NYdb::TParamsBuilder paramsBuilder;
-        auto& valueBuilder = paramsBuilder.AddParam("$items");
-        valueBuilder.BeginList();
-        for (const auto& item : items) {
-            valueBuilder.AddListItem();
-            valueBuilder.BeginStruct();
-            valueBuilder.AddMember("id").Utf8(item.Id);
-            valueBuilder.AddMember("document").Utf8(item.Document);
-            valueBuilder.AddMember("embedding").BeginList();
-            for (const auto& value : item.Embedding) {
-                valueBuilder.AddListItem().Float(value);
-            }
-            valueBuilder.EndList();
-            valueBuilder.EndStruct();
+    func convertVectorToBytes(vector []float32) []byte {
+        buf := make([]byte, len(vector)*4+1)
+        for i, v := range vector {
+        binary.LittleEndian.PutUint32(buf[i*4:], math.Float32bits(v))
         }
-        valueBuilder.EndList();
-        valueBuilder.Build();
+        buf[len(buf)-1] = 0x01
+        return buf
+    }
 
-        NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params = paramsBuilder.Build(), &query](NYdb::NQuery::TSession session) {
-            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
-        }));
+    func insertItems(ctx context.Context, db *ydb.Driver, tableName string, items []Item) error {
+        query := fmt.Sprintf(`
+        DECLARE $items AS List<Struct<
+            id: Utf8,
+            document: Utf8,
+            embedding: String
+        >>;
 
-        std::cout << items.size() << " items inserted" << std::endl;
+        UPSERT INTO %s
+        (id, document, embedding)
+        SELECT id, document, embedding
+        FROM AS_TABLE($items);
+        `, "`"+tableName+"`")
+
+        rows := make([]types.Value, 0, len(items))
+        for _, item := range items {
+        rows = append(rows, types.StructValue(
+            types.StructFieldValue("id", types.UTF8Value(item.ID)),
+            types.StructFieldValue("document", types.UTF8Value(item.Document)),
+            types.StructFieldValue("embedding", types.BytesValue(convertVectorToBytes(item.Embedding))),
+        ))
+        }
+
+        return db.Query().Exec(ctx, query,
+        query.WithParameters(
+            ydb.ParamsBuilder().Param("$items").BeginList().AddItems(rows...).EndList().Build(),
+        ),
+        )
     }
     ```
 
-- JavaScript (alternative)
+- Java
 
-  ```javascript
-  const items = [
-    {
-      id: "first_doc",
-      document: "My Document",
-      embedding: new Float32Array([1.5, 2.5, 3.5])
+    {% list tabs %}
+
+    - Recommended approach
+
+        ```java
+        import java.nio.ByteBuffer;
+        import java.nio.ByteOrder;
+        import java.util.ArrayList;
+        import java.util.List;
+
+        import tech.ydb.common.transaction.TxMode;
+        import tech.ydb.query.tools.QueryReader;
+        import tech.ydb.query.tools.SessionRetryContext;
+        import tech.ydb.table.query.Params;
+        import tech.ydb.table.values.ListType;
+        import tech.ydb.table.values.ListValue;
+        import tech.ydb.table.values.PrimitiveType;
+        import tech.ydb.table.values.PrimitiveValue;
+        import tech.ydb.table.values.StructType;
+        import tech.ydb.table.values.Value;
+
+        byte[] convertVectorToBytes(float[] vector) {
+            ByteBuffer bb = ByteBuffer.allocate(vector.length * Float.BYTES + 1).order(ByteOrder.LITTLE_ENDIAN);
+            for (float v : vector) {
+                bb.putFloat(v);
+            }
+            bb.put((byte) 0x01);
+            return bb.array();
+        }
+
+        void insertItemsAsBytes(SessionRetryContext retryCtx, String tableName, List<Item> items) {
+            String query = String.format("""
+                    DECLARE $items AS List<Struct<
+                        id: Utf8,
+                        document: Utf8,
+                        embedding: String
+                    >>;
+
+                    UPSERT INTO `%s`
+                    (
+                        id,
+                        document,
+                        embedding
+                    )
+                    SELECT
+                        id,
+                        document,
+                        embedding,
+                    FROM AS_TABLE($items);""", tableName);
+
+            StructType rowType = StructType.of(
+                    "id", PrimitiveType.Text,
+                    "document", PrimitiveType.Text,
+                    "embedding", PrimitiveType.Bytes
+            );
+
+            List<Value<?>> rows = new ArrayList<>(items.size());
+            for (Item item : items) {
+                rows.add(rowType.newValue(
+                        "id", PrimitiveValue.newText(item.id()),
+                        "document", PrimitiveValue.newText(item.document()),
+                        "embedding", PrimitiveValue.newBytes(convertVectorToBytes(item.embedding()))
+                ));
+            }
+
+            ListValue itemsParam = ListType.of(rowType).newValue(rows);
+            Params params = Params.of("$items", itemsParam);
+
+            retryCtx.supplyResult(session -> QueryReader.readFrom(
+                    session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
+            )).join().getValue();
+
+            System.out.println(items.size() + " items inserted");
+        }
+
+        // record Item(String id, String document, float[] embedding) {}
+        ```
+
+        {% note info %}
+
+        The `ConvertVectorToBytes` function assumes a [little-endian](https://en.wikipedia.org/wiki/Endianness) byte order on the client (e.g. x86_64). If a different byte order is used, adapt the `ConvertVectorToBytes` function accordingly.
+
+        {% endnote %}
+
+    - Alternative approach
+
+        {% note warning %}
+
+        Passing vectors as `List<Float>` and converting on the YQL side with `Knn::ToBinaryStringFloat` has lower performance than client-side byte array encoding.
+
+        {% endnote %}
+
+        A variant that passes vector components as `List<Float>` and converts on the YQL side with `Knn::ToBinaryStringFloat` — same pattern as the alternative Python and C++ examples below:
+
+        ```java
+        import java.util.ArrayList;
+        import java.util.List;
+
+        import tech.ydb.common.transaction.TxMode;
+        import tech.ydb.query.tools.QueryReader;
+        import tech.ydb.query.tools.SessionRetryContext;
+        import tech.ydb.table.query.Params;
+        import tech.ydb.table.values.ListType;
+        import tech.ydb.table.values.ListValue;
+        import tech.ydb.table.values.PrimitiveType;
+        import tech.ydb.table.values.PrimitiveValue;
+        import tech.ydb.table.values.StructType;
+        import tech.ydb.table.values.Value;
+
+        void insertItemsAsFloatList(SessionRetryContext retryCtx, String tableName, List<Item> items) {
+            String query = String.format("""
+                    DECLARE $items AS List<Struct<
+                        id: Utf8,
+                        document: Utf8,
+                        embedding: List<Float>
+                    >>;
+
+                    UPSERT INTO `%s`
+                    (
+                        id,
+                        document,
+                        embedding
+                    )
+                    SELECT
+                        id,
+                        document,
+                        Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
+                    FROM AS_TABLE($items);""", tableName);
+
+            StructType rowType = StructType.of(
+                    "id", PrimitiveType.Text,
+                    "document", PrimitiveType.Text,
+                    "embedding", ListType.of(PrimitiveType.Float)
+            );
+
+            List<Value<?>> rows = new ArrayList<>(items.size());
+            for (Item item : items) {
+                Value<?>[] emb = new Value<?>[item.embedding().length];
+                for (int i = 0; i < item.embedding().length; i++) {
+                    emb[i] = PrimitiveValue.newFloat(item.embedding()[i]);
+                }
+                ListValue embList = ListType.of(PrimitiveType.Float).newValueOwn(emb);
+                rows.add(rowType.newValue(
+                        "id", PrimitiveValue.newText(item.id()),
+                        "document", PrimitiveValue.newText(item.document()),
+                        "embedding", embList
+                ));
+            }
+
+            ListValue itemsParam = ListType.of(rowType).newValue(rows);
+            Params params = Params.of("$items", itemsParam);
+
+            retryCtx.supplyResult(session -> QueryReader.readFrom(
+                    session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
+            )).join().getValue();
+
+            System.out.println(items.size() + " items inserted");
+        }
+
+        // record Item(String id, String document, float[] embedding) {}
+        ```
+
+    {% endlist %}
+
+- Python
+
+    {% list tabs %}
+
+    - Recommended approach
+
+        The method accepts an array of dictionaries `items`, where each dictionary contains `id` (identifier), `document` (text), and `embedding` (vector representation of the text, pre-serialized to a byte sequence).
+
+        The example below creates `items_struct_type = ydb.StructType()` with field types. To pass a list of such structs, wrap it in `ydb.ListType`: `ydb.ListType(items_struct_type)`.
+
+        {% list tabs %}
+
+        - Native SDK
+
+            ```python
+            import struct
+            import ydb
+
+
+            def convert_vector_to_bytes(vector: list[float]) -> bytes:
+                b = struct.pack("f" * len(vector), *vector)
+                return b + b"\x01"
+
+            def insert_items_vector_as_bytes(
+                pool: ydb.QuerySessionPool,
+                table_name: str,
+                items: list[dict],
+            ) -> None:
+                query = f"""
+                DECLARE $items AS List<Struct<
+                    id: Utf8,
+                    document: Utf8,
+                    embedding: String
+                >>;
+
+                UPSERT INTO `{table_name}`
+                (
+                    id,
+                    document,
+                    embedding
+                )
+                SELECT
+                    id,
+                    document,
+                    embedding,
+                FROM AS_TABLE($items);
+                """
+
+                items_struct_type = ydb.StructType()
+                items_struct_type.add_member("id", ydb.PrimitiveType.Utf8)
+                items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
+                items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
+
+                for item in items:
+                    item["embedding"] = convert_vector_to_bytes(item["embedding"])
+
+                pool.execute_with_retries(
+                    query, {"$items": (items, ydb.ListType(items_struct_type))}
+                )
+
+                print(f"{len(items)} items inserted")
+            ```
+
+        - Native SDK (Asyncio)
+
+            ```python
+            import struct
+            import ydb
+
+            def convert_vector_to_bytes(vector: list[float]) -> bytes:
+                b = struct.pack("f" * len(vector), *vector)
+                return b + b"\x01"
+
+            async def insert_items_vector_as_bytes(
+                pool: ydb.aio.QuerySessionPool,
+                table_name: str,
+                items: list[dict],
+            ) -> None:
+                query = f"""
+                DECLARE $items AS List<Struct<
+                    id: Utf8,
+                    document: Utf8,
+                    embedding: String
+                >>;
+
+                UPSERT INTO `{table_name}`
+                (
+                    id,
+                    document,
+                    embedding
+                )
+                SELECT
+                    id,
+                    document,
+                    embedding,
+                FROM AS_TABLE($items);
+                """
+
+                items_struct_type = ydb.StructType()
+                items_struct_type.add_member("id", ydb.PrimitiveType.Utf8)
+                items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
+                items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
+
+                for item in items:
+                    item["embedding"] = convert_vector_to_bytes(item["embedding"])
+
+                await pool.execute_with_retries(
+                    query, {"$items": (items, ydb.ListType(items_struct_type))}
+                )
+
+                print(f"{len(items)} items inserted")
+            ```
+
+        {% endlist %}
+
+    - Alternative approach
+
+        {% note warning %}
+
+        Passing vectors as `List<Float>` and converting on the YQL side with `Knn::ToBinaryStringFloat` has lower performance than client-side byte array encoding.
+
+        {% endnote %}
+
+        The method accepts an array of dictionaries `items`, where each dictionary contains `id` (identifier), `document` (text), and `embedding` (vector representation of the text).
+
+        The example below creates `items_struct_type = ydb.StructType()` with field types. To pass a list of such structs, wrap it in `ydb.ListType`: `ydb.ListType(items_struct_type)`.
+
+        {% list tabs %}
+
+        - Native SDK
+
+            ```python
+            import ydb
+
+            def insert_items_vector_as_float_list(
+                pool: ydb.QuerySessionPool,
+                table_name: str,
+                items: list[dict],
+            ) -> None:
+                query = f"""
+                DECLARE $items AS List<Struct<
+                    id: Utf8,
+                    document: Utf8,
+                    embedding: List<Float>
+                >>;
+
+                UPSERT INTO `{table_name}`
+                (
+                    id,
+                    document,
+                    embedding
+                )
+                SELECT
+                    id,
+                    document,
+                    Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
+                FROM AS_TABLE($items);
+                """
+
+                items_struct_type = ydb.StructType()
+                items_struct_type.add_member("id", ydb.PrimitiveType.Utf8)
+                items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
+                items_struct_type.add_member("embedding", ydb.ListType(ydb.PrimitiveType.Float))
+
+                pool.execute_with_retries(
+                    query, {"$items": (items, ydb.ListType(items_struct_type))}
+                )
+
+                print(f"{len(items)} items inserted")
+            ```
+
+        - Native SDK (Asyncio)
+
+            ```python
+            import ydb
+
+            async def insert_items_vector_as_float_list(
+                pool: ydb.aio.QuerySessionPool,
+                table_name: str,
+                items: list[dict],
+            ) -> None:
+                query = f"""
+                DECLARE $items AS List<Struct<
+                    id: Utf8,
+                    document: Utf8,
+                    embedding: List<Float>
+                >>;
+
+                UPSERT INTO `{table_name}`
+                (
+                    id,
+                    document,
+                    embedding
+                )
+                SELECT
+                    id,
+                    document,
+                    Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
+                FROM AS_TABLE($items);
+                """
+
+                items_struct_type = ydb.StructType()
+                items_struct_type.add_member("id", ydb.PrimitiveType.Utf8)
+                items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
+                items_struct_type.add_member("embedding", ydb.ListType(ydb.PrimitiveType.Float))
+
+                await pool.execute_with_retries(
+                    query, {"$items": (items, ydb.ListType(items_struct_type))}
+                )
+
+                print(f"{len(items)} items inserted")
+            ```
+
+        {% endlist %}
+
+    {% endlist %}
+
+- C#
+
+    Vector search examples for the .NET SDK are not available yet.
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+    Track progress or vote for support: [ydb-dotnet-sdk#657](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/657)
+
+- JavaScript
+
+    {% list tabs %}
+
+    - Recommended approach
+
+        ```javascript
+        function convertVectorToBytes(vector) {
+            const bytes = new Uint8Array(vector.length * 4 + 1);
+            const view = new DataView(bytes.buffer);
+
+            for (let i = 0; i < vector.length; i++) {
+                view.setFloat32(i * 4, vector[i], true);
+            }
+
+            bytes[bytes.length - 1] = 0x01;
+            return bytes;
+        }
+
+        const items = [
+            {
+            id: "first_doc",
+            document: "My Document",
+            embedding: convertVectorToBytes(new Float32Array([1.5, 2.5, 3.5]))
+            }
+        ]
+
+        await sql`
+            UPSERT INTO `table_name` (id, document, embedding)
+            SELECT id, document, embedding,
+            FROM AS_TABLE($items);`
+        ```
+
+    - Alternative approach
+
+        {% note warning %}
+
+        Passing vectors as `List<Float>` and converting on the YQL side with `Knn::ToBinaryStringFloat` has lower performance than client-side byte array encoding.
+
+        {% endnote %}
+
+        ```javascript
+        const items = [
+            {
+            id: "first_doc",
+            document: "My Document",
+            embedding: new Float32Array([1.5, 2.5, 3.5])
+            }
+        ]
+
+        await sql`
+            UPSERT INTO `table_name` (id, document, embedding)
+            SELECT id, document, Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
+            FROM AS_TABLE($items);`
+        ```
+
+    {% endlist %}
+
+- Rust
+
+    ```rust
+    use ydb::{Bytes, Value, ydb_struct};
+
+    fn convert_vector_to_bytes(vector: &[f32]) -> Bytes {
+        let mut buf = Vec::with_capacity(vector.len() * 4 + 1);
+        for v in vector {
+            buf.extend_from_slice(&v.to_le_bytes());
+        }
+        buf.push(0x01);
+        Bytes::from(buf)
     }
-  ]
 
-  await sql`
-    UPSERT INTO `table_name` (id, document, embedding)
-    SELECT id, document, Untag(Knn::ToBinaryStringFloat(embedding), "FloatVector"),
-    FROM AS_TABLE($items);`
-  ```
+    let example = ydb_struct!(
+        "id" => "",
+        "document" => "",
+        "embedding" => Bytes::default(),
+    );
+    let rows: Vec<Value> = items
+        .iter()
+        .map(|item| ydb_struct!(
+            "id" => item.id,
+            "document" => item.document,
+            "embedding" => convert_vector_to_bytes(&item.embedding),
+        ))
+        .collect();
+    let list = Value::list_from(example, rows)?;
+
+    qc.exec(insert_query).param("$items", list).await?;
+    ```
+
+- PHP
+
+    Vector search examples for the PHP SDK are not available yet.
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+    Track progress or vote for support: [ydb-php-sdk#268](https://github.com/ydb-platform/ydb-php-sdk/issues/268)
 
 {% endlist %}
 
-
 ## Adding an index {#add-vector-index}
 
-A vector index supports efficient approximate nearest-neighbor search. See [vector indexes](../../dev/vector-indexes.md) for trade-offs and usage.
+A vector index supports efficient approximate nearest-neighbor search. See [vector indexes](../../dev/vector-indexes.md).
 
 Adding an index takes two steps:
 
@@ -939,11 +1536,12 @@ Available strategies:
 * `distance=euclidean`;
 * `distance=manhattan`.
 
-Each strategy defines the function used for subsequent search. For details on these functions, see [distance and similarity functions](../../yql/reference/udf/list/knn.md#functions-distance).
+Each strategy defines the function used for subsequent search. For details on these functions, see [distance and similarity functions](../../yql/reference/udf/list/knn.md#fuctions-distance).
 
-Parameters for the `vector_kmeans_tree` index type are described in the [vector index](../../dev/vector-indexes.md#kmeans-tree-type) documentation.
+Parameters for the `vector_kmeans_tree` index type are described in the [vector index](../../dev/vector-indexes.md#kmeans-tree-type).
 
 
+<<<<<<< HEAD
 {% list tabs %}
 
 - Go
@@ -1146,6 +1744,9 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
       ```
 
     {% endlist %}
+=======
+{% list tabs group=tool %}
+>>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 
 - C++
 
@@ -1195,9 +1796,36 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
     }
     ```
 
-- JavaScript
+- Go
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+    ```go
+    func addVectorIndex(
+        ctx context.Context,
+        db *ydb.Driver,
+        tableName, indexName, strategy string
+    ) error {
+        tempIndexName := indexName + "__temp"
+        query := fmt.Sprintf(`
+            ALTER TABLE %s
+            ADD INDEX %s
+            GLOBAL USING vector_kmeans_tree
+            ON (embedding)
+            WITH (
+            %s
+            );
+        `, "`"+tableName+"`", tempIndexName, strategy)
+
+        if err := db.Query().Exec(ctx, query); err != nil {
+            return err
+        }
+
+        return db.Table().Do(ctx, func(ctx context.Context, s table.Session) error {
+            return s.AlterTable(ctx, path.Join(db.Name(), tableName),
+            options.WithRenameIndex(tempIndexName, indexName, true),
+            )
+        })
+    }
+    ```
 
 - Java
 
@@ -1253,9 +1881,133 @@ Parameters for the `vector_kmeans_tree` index type are described in the [vector 
     // SessionRetryContext tableRetry = SessionRetryContext.create(TableClient.newClient(transport).build()).build();
     ```
 
+- Python
+
+    {% list tabs %}
+
+    - Native SDK
+
+        ```python
+        import ydb
+
+        def add_vector_index(
+            pool: ydb.QuerySessionPool,
+            driver: ydb.Driver,
+            table_name: str,
+            index_name: str,
+            strategy: str,
+        ):
+            temp_index_name = f"{index_name}__temp"
+            query = f"""
+            ALTER TABLE `{table_name}`
+            ADD INDEX {temp_index_name}
+            GLOBAL USING vector_kmeans_tree
+            ON (embedding)
+            WITH (
+                {strategy}
+            );
+            """
+
+            pool.execute_with_retries(query)
+            driver.table_client.alter_table(
+                f"{driver._driver_config.database}/{table_name}",
+                rename_indexes=[
+                    ydb.RenameIndexItem(
+                        source_name=temp_index_name,
+                        destination_name=f"{index_name}",
+                        replace_destination=True,
+                    ),
+                ],
+            )
+            print(f"Table index {index_name} created.")
+        ```
+
+    - Native SDK (Asyncio)
+
+        ```python
+        import ydb
+
+        async def add_vector_index(
+            pool: ydb.aio.QuerySessionPool,
+            driver: ydb.aio.Driver,
+            table_name: str,
+            index_name: str,
+            strategy: str
+        ):
+            temp_index_name = f"{index_name}__temp"
+            query = f"""
+            ALTER TABLE `{table_name}`
+            ADD INDEX {temp_index_name}
+            GLOBAL USING vector_kmeans_tree
+            ON (embedding)
+            WITH (
+                {strategy}
+            );
+            """
+
+            await pool.execute_with_retries(query)
+            await driver.table_client.alter_table(
+                f"{driver._driver_config.database}/{table_name}",
+                rename_indexes=[
+                    ydb.RenameIndexItem(
+                        source_name=temp_index_name,
+                        destination_name=f"{index_name}",
+                        replace_destination=True,
+                    ),
+                ],
+            )
+
+            print(f"Table index {index_name} created.")
+        ```
+
+    {% endlist %}
+
+- C#
+
+    Vector search examples for the .NET SDK are not available yet.
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+    Track progress or vote for support: [ydb-dotnet-sdk#657](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/657)
+
+- JavaScript
+
+    Vector index creation and a full end-to-end program for the JavaScript SDK are not available yet.
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+    Track progress or vote for support: [ydb-js-sdk#627](https://github.com/ydb-platform/ydb-js-sdk/issues/627)
+
+- Rust
+
+    ```rust
+    let temp_index_name = format!("{index_name}__temp");
+    qc.exec(format!(
+        "ALTER TABLE `{table_name}`
+        ADD INDEX {temp_index_name}
+        GLOBAL USING vector_kmeans_tree
+        ON (embedding)
+        WITH ({strategy}, vector_type=\"Float\", vector_dimension={dimension},
+                levels={levels}, clusters={clusters});"
+    ))
+    .await?;
+    qc.exec(format!(
+        "ALTER TABLE `{table_name}` RENAME INDEX `{temp_index_name}` TO `{index_name}`;"
+    ))
+    .await?;
+    ```
+
+- PHP
+
+    Vector search examples for the PHP SDK are not available yet.
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+    Track progress or vote for support: [ydb-php-sdk#268](https://github.com/ydb-platform/ydb-php-sdk/issues/268)
+
 {% endlist %}
 
-## Vector search {#search-by-vector}
+## Search by vector {#search-by-vector}
 
 Vector search uses a special YQL query where you define a similarity or distance function.
 Supported values:
@@ -1266,359 +2018,504 @@ Supported values:
 * `ManhattanDistance`;
 * `EuclideanDistance`.
 
-For details, see [distance and similarity functions](../../yql/reference/udf/list/knn.md#functions-distance).
+For details, see [distance and similarity functions](../../yql/reference/udf/list/knn.md#fuctions-distance).
 
 You can specify the index name. If set, the query will include the `VIEW index_name` expression so that the vector index is used for search.
 
 The method returns a list of dictionaries with the fields `id`, `document`, and `score` (a number indicating similarity or distance to the query vector).
 
-{% list tabs %}
+{% list tabs group=tool %}
+
+- C++
+
+    {% list tabs %}
+
+    - Recommended approach
+
+        ```cpp
+        std::vector<TResultItem> SearchItemsAsBytes(
+            NYdb::NQuery::TQueryClient& client,
+            const std::string& tableName,
+            const std::vector<float>& embedding,
+            const std::string& strategy,
+            std::uint64_t limit,
+            std::uint64_t topClusters = 10,
+            const std::optional<std::string>& indexName = std::nullopt)
+        {
+            std::string viewIndex = indexName ? "VIEW " + *indexName : "";
+            std::string sortOrder = strategy.ends_with("Similarity") ? "DESC" : "ASC";
+
+            std::string query = std::format(R"(
+                PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
+                DECLARE $embedding as String;
+                SELECT
+                    id,
+                    document,
+                    Knn::{2}(embedding, $embedding) as score
+                FROM {0} {1}
+                ORDER BY score {3}
+                LIMIT {4};
+            )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
+
+            auto params = NYdb::TParamsBuilder()
+                .AddParam("$embedding")
+                    .String(ConvertVectorToBytes(embedding))
+                    .Build()
+                .Build();
+
+            std::vector<TResultItem> result;
+
+            NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params, &query, &result](NYdb::NQuery::TSession session) {
+                auto execResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+                if (execResult.IsSuccess()) {
+                    auto parser = execResult.GetResultSetParser(0);
+                    while (parser.TryNextRow()) {
+                        result.push_back({
+                            .Id = *parser.ColumnParser(0).GetOptionalUtf8(),
+                            .Document = *parser.ColumnParser(1).GetOptionalUtf8(),
+                            .Score = *parser.ColumnParser(2).GetOptionalFloat()
+                        });
+                    }
+                }
+                return execResult;
+            }));
+
+            return result;
+        }
+        ```
+
+    - Alternative approach
+
+        {% note warning %}
+
+        Passing vectors as `List<Float>` and converting on the YQL side with `Knn::ToBinaryStringFloat` has lower performance than client-side byte array encoding.
+
+        {% endnote %}
+
+        ```cpp
+        std::vector<TResultItem> SearchItemsAsFloatList(
+            NYdb::NQuery::TQueryClient& client,
+            const std::string& tableName,
+            const std::vector<float>& embedding,
+            const std::string& strategy,
+            std::uint64_t limit,
+            std::uint64_t topClusters = 10,
+            const std::optional<std::string>& indexName = std::nullopt)
+        {
+            std::string viewIndex = indexName ? "VIEW " + *indexName : "";
+            std::string sortOrder = strategy.ends_with("Similarity") ? "DESC" : "ASC";
+
+            std::string query = std::format(R"(
+                PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
+                DECLARE $embedding as List<Float>;
+
+                $TargetEmbedding = Knn::ToBinaryStringFloat($embedding);
+
+                SELECT
+                    id,
+                    document,
+                    Knn::{2}(embedding, $TargetEmbedding) as score
+                FROM {0} {1}
+                ORDER BY score
+                {3}
+                LIMIT {4};
+            )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
+
+            NYdb::TParamsBuilder paramsBuilder;
+            auto& valueBuilder = paramsBuilder.AddParam("$embedding");
+            valueBuilder.BeginList();
+            for (auto value : embedding) {
+                valueBuilder.AddListItem().Float(value);
+            }
+            valueBuilder.EndList().Build();
+
+            std::vector<TResultItem> result;
+
+            NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params = paramsBuilder.Build(), &query, &result](NYdb::NQuery::TSession session) {
+                auto execResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
+                if (execResult.IsSuccess()) {
+                    auto parser = execResult.GetResultSetParser(0);
+                    while (parser.TryNextRow()) {
+                        result.push_back({
+                            .Id = *parser.ColumnParser(0).GetOptionalUtf8(),
+                            .Document = *parser.ColumnParser(1).GetOptionalUtf8(),
+                            .Score = *parser.ColumnParser(2).GetOptionalFloat()
+                        });
+                    }
+                }
+                return execResult;
+            }));
+
+            return result;
+        }
+        ```
+
+  {% endlist %}
 
 - Go
 
     ```go
     type ResultItem struct {
-      ID       string
-      Document string
-      Score    float32
+        ID       string
+        Document string
+        Score    float32
     }
 
     func searchItems(
-      ctx context.Context,
-      db *ydb.Driver,
-      tableName string,
-      embedding []float32,
-      strategy string,
-      limit int,
-      indexName string,
+        ctx context.Context,
+        db *ydb.Driver,
+        tableName string,
+        embedding []float32,
+        strategy string,
+        limit int,
+        indexName string,
     ) ([]ResultItem, error) {
-      viewIndex := ""
-      if indexName != "" {
-        viewIndex = "VIEW " + indexName
-      }
-      sortOrder := "DESC"
-      if !strings.HasSuffix(strategy, "Similarity") {
-        sortOrder = "ASC"
-      }
-      q := fmt.Sprintf(`
-        DECLARE $embedding AS String;
-        SELECT id, document, Knn::%s(embedding, $embedding) AS score
-        FROM %s %s
-        ORDER BY score %s
-        LIMIT %d;
-      `, strategy, tableName, viewIndex, sortOrder, limit)
-
-      row, err := db.Query().Query(ctx, q,
-        query.WithParameters(
-          ydb.ParamsBuilder().Param("$embedding").Bytes(convertVectorToBytes(embedding)).Build(),
-        ),
-      )
-      if err != nil {
-        return nil, err
-      }
-      defer row.Close(ctx)
-
-      var items []ResultItem
-      for rs, err := row.NextResultSet(ctx); err == nil; rs, err = row.NextResultSet(ctx) {
-        for r, err := rs.NextRow(ctx); err == nil; r, err = rs.NextRow(ctx) {
-          var item ResultItem
-          if err := r.ScanNamed(
-            query.Named("id", &item.ID),
-            query.Named("document", &item.Document),
-            query.Named("score", &item.Score),
-          ); err != nil {
-            return nil, err
-          }
-          items = append(items, item)
+        viewIndex := ""
+        if indexName != "" {
+            viewIndex = "VIEW " + indexName
         }
-      }
-      return items, nil
+        sortOrder := "DESC"
+        if !strings.HasSuffix(strategy, "Similarity") {
+            sortOrder = "ASC"
+        }
+        q := fmt.Sprintf(`
+            DECLARE $embedding AS String;
+            SELECT id, document, Knn::%s(embedding, $embedding) AS score
+            FROM %s %s
+            ORDER BY score %s
+            LIMIT %d;
+            `, strategy, tableName, viewIndex, sortOrder, limit)
+
+        row, err := db.Query().Query(ctx, q,
+        query.WithParameters(
+            ydb.ParamsBuilder().Param("$embedding").Bytes(convertVectorToBytes(embedding)).Build(),
+        ),
+        )
+        if err != nil {
+            return nil, err
+        }
+        defer row.Close(ctx)
+
+        var items []ResultItem
+        for rs, err := row.NextResultSet(ctx); err == nil; rs, err = row.NextResultSet(ctx) {
+            for r, err := rs.NextRow(ctx); err == nil; r, err = rs.NextRow(ctx) {
+                var item ResultItem
+                if err := r.ScanNamed(
+                    query.Named("id", &item.ID),
+                    query.Named("document", &item.Document),
+                    query.Named("score", &item.Score),
+                ); err != nil {
+                    return nil, err
+                }
+                items = append(items, item)
+            }
+        }
+        return items, nil
     }
     ```
+
+- Java
+
+    {% list tabs %}
+
+    - Recommended approach
+
+        ```java
+        import java.nio.ByteBuffer;
+        import java.nio.ByteOrder;
+        import java.util.ArrayList;
+        import java.util.List;
+        import java.util.Optional;
+
+        import tech.ydb.common.transaction.TxMode;
+        import tech.ydb.query.tools.QueryReader;
+        import tech.ydb.query.tools.SessionRetryContext;
+        import tech.ydb.table.query.Params;
+        import tech.ydb.table.result.ResultSetReader;
+        import tech.ydb.table.values.PrimitiveValue;
+
+        byte[] convertVectorToBytes(float[] vector) {
+            ByteBuffer bb = ByteBuffer.allocate(vector.length * Float.BYTES + 1).order(ByteOrder.LITTLE_ENDIAN);
+            for (float v : vector) {
+                bb.putFloat(v);
+            }
+            bb.put((byte) 0x01);
+            return bb.array();
+        }
+
+        List<ResultItem> searchItemsAsBytes(
+                SessionRetryContext retryCtx,
+                String tableName,
+                float[] embedding,
+                String strategy,
+                long limit,
+                Optional<String> indexName) {
+
+            String viewIndex = indexName.map(n -> "VIEW " + n).orElse("");
+            String sortOrder = strategy.endsWith("Similarity") ? "DESC" : "ASC";
+
+            String query = String.format("""
+                    DECLARE $embedding as String;
+                    SELECT
+                        id,
+                        document,
+                        Knn::%s(embedding, $embedding) as score
+                    FROM %s %s
+                    ORDER BY score %s
+                    LIMIT %d;
+                    """, strategy, tableName, viewIndex, sortOrder, limit);
+
+            Params params = Params.of("$embedding", PrimitiveValue.newBytes(convertVectorToBytes(embedding)));
+
+            QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                    session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
+            )).join().getValue();
+
+            List<ResultItem> result = new ArrayList<>();
+            ResultSetReader rs = reader.getResultSet(0);
+            while (rs.next()) {
+                result.add(new ResultItem(
+                        rs.getColumn("id").getText(),
+                        rs.getColumn("document").getText(),
+                        rs.getColumn("score").getFloat()
+                ));
+            }
+            return result;
+        }
+
+        // record ResultItem(String id, String document, float score) {}
+        ```
+
+    - Alternative approach
+
+        {% note warning %}
+
+        Passing vectors as `List<Float>` and converting on the YQL side with `Knn::ToBinaryStringFloat` has lower performance than client-side byte array encoding.
+
+        {% endnote %}
+
+        The same search with the query vector passed as `List<Float>`:
+
+        ```java
+        import java.util.ArrayList;
+        import java.util.List;
+        import java.util.Optional;
+
+        import tech.ydb.common.transaction.TxMode;
+        import tech.ydb.query.tools.QueryReader;
+        import tech.ydb.query.tools.SessionRetryContext;
+        import tech.ydb.table.query.Params;
+        import tech.ydb.table.result.ResultSetReader;
+        import tech.ydb.table.values.ListType;
+        import tech.ydb.table.values.ListValue;
+        import tech.ydb.table.values.PrimitiveType;
+        import tech.ydb.table.values.PrimitiveValue;
+        import tech.ydb.table.values.Value;
+
+        List<ResultItem> searchItemsAsFloatList(
+                SessionRetryContext retryCtx,
+                String tableName,
+                float[] embedding,
+                String strategy,
+                long limit,
+                Optional<String> indexName) {
+
+            String viewIndex = indexName.map(n -> "VIEW " + n).orElse("");
+            String sortOrder = strategy.endsWith("Similarity") ? "DESC" : "ASC";
+
+            String query = String.format("""
+                    DECLARE $embedding as List<Float>;
+
+                    $target_embedding = Knn::ToBinaryStringFloat($embedding);
+
+                    SELECT
+                        id,
+                        document,
+                        Knn::%s(embedding, $target_embedding) as score
+                    FROM %s %s
+                    ORDER BY score
+                    %s
+                    LIMIT %d;
+                    """, strategy, tableName, viewIndex, sortOrder, limit);
+
+            Value<?>[] floats = new Value<?>[embedding.length];
+            for (int i = 0; i < embedding.length; i++) {
+                floats[i] = PrimitiveValue.newFloat(embedding[i]);
+            }
+            ListValue emb = ListType.of(PrimitiveType.Float).newValueOwn(floats);
+            Params params = Params.of("$embedding", emb);
+
+            QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
+                    session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
+            )).join().getValue();
+
+            List<ResultItem> result = new ArrayList<>();
+            ResultSetReader rs = reader.getResultSet(0);
+            while (rs.next()) {
+                result.add(new ResultItem(
+                        rs.getColumn("id").getText(),
+                        rs.getColumn("document").getText(),
+                        rs.getColumn("score").getFloat()
+                ));
+            }
+            return result;
+        }
+
+        // record ResultItem(String id, String document, float score) {}
+        ```
+
+  {% endlist %}
 
 - Python
 
     {% list tabs %}
 
-    - Native SDK
+    - Recommended approach
 
-      ```python
-      import ydb
+        {% list tabs %}
 
-      def search_items_vector_as_bytes(
-          pool: ydb.QuerySessionPool,
-          table_name: str,
-          embedding: list[float],
-          strategy: str = "CosineSimilarity",
-          limit: int = 1,
-          index_name: str | None = None,
-          top_clusters: int = 10,
-      ) -> list[dict]:
-          view_index = f"VIEW {index_name}" if index_name else ""
+        - Native SDK
 
-          sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
+            ```python
+            import ydb
 
-          query = f"""
-          PRAGMA ydb.KMeansTreeSearchTopSize = "{top_clusters}";
-          DECLARE $embedding as String;
+            def search_items_vector_as_bytes(
+                pool: ydb.QuerySessionPool,
+                table_name: str,
+                embedding: list[float],
+                strategy: str = "CosineSimilarity",
+                limit: int = 1,
+                index_name: str | None = None,
+                top_clusters: int = 10,
+            ) -> list[dict]:
+                view_index = f"VIEW {index_name}" if index_name else ""
 
-          SELECT
-              id,
-              document,
-              Knn::{strategy}(embedding, $embedding) as score
-          FROM {table_name} {view_index}
-          ORDER BY score {sort_order}
-          LIMIT {limit};
-          """
+                sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
 
-          result = pool.execute_with_retries(
-              query,
-              {
-                  "$embedding": (
-                      convert_vector_to_bytes(embedding),
-                      ydb.PrimitiveType.String,
-                  ),
-              },
-          )
-
-          items = []
-
-          for result_set in result:
-              for row in result_set.rows:
-                  items.append(
-                      {
-                          "id": row["id"],
-                          "document": row["document"],
-                          "score": row["score"],
-                      }
-                  )
-
-          return items
-      ```
-
-    - Native SDK (Asyncio)
-
-      ```python
-      import ydb
-
-      async def search_items_vector_as_bytes(
-          pool: ydb.aio.QuerySessionPool,
-          table_name: str,
-          embedding: list[float],
-          strategy: str = "CosineSimilarity",
-          limit: int = 1,
-          index_name: str | None = None,
-      ) -> list[dict]:
-          view_index = f"VIEW {index_name}" if index_name else ""
-
-          sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
-
-          query = f"""
-          DECLARE $embedding as String;
-
-          SELECT
-              id,
-              document,
-              Knn::{strategy}(embedding, $embedding) as score
-          FROM {table_name} {view_index}
-          ORDER BY score {sort_order}
-          LIMIT {limit};
-          """
-
-          result = await pool.execute_with_retries(
-              query,
-              {
-                  "$embedding": (
-                      convert_vector_to_bytes(embedding),
-                      ydb.PrimitiveType.String,
-                  ),
-              },
-          )
-
-          items = []
-
-          for result_set in result:
-              for row in result_set.rows:
-                  items.append(
-                      {
-                          "id": row["id"],
-                          "document": row["document"],
-                          "score": row["score"],
-                      }
-                  )
-
-          return items
-      ```
-
-    {% endlist %}
-
-- C++
-
-    ```cpp
-    std::vector<TResultItem> SearchItemsAsBytes(
-        NYdb::NQuery::TQueryClient& client,
-        const std::string& tableName,
-        const std::vector<float>& embedding,
-        const std::string& strategy,
-        std::uint64_t limit,
-        std::uint64_t topClusters = 10,
-        const std::optional<std::string>& indexName = std::nullopt)
-    {
-        std::string viewIndex = indexName ? "VIEW " + *indexName : "";
-        std::string sortOrder = strategy.ends_with("Similarity") ? "DESC" : "ASC";
-
-        std::string query = std::format(R"(
-            PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
-            DECLARE $embedding as String;
-            SELECT
-                id,
-                document,
-                Knn::{2}(embedding, $embedding) as score
-            FROM {0} {1}
-            ORDER BY score {3}
-            LIMIT {4};
-        )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
-
-        auto params = NYdb::TParamsBuilder()
-            .AddParam("$embedding")
-                .String(ConvertVectorToBytes(embedding))
-                .Build()
-            .Build();
-
-        std::vector<TResultItem> result;
-
-        NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params, &query, &result](NYdb::NQuery::TSession session) {
-            auto execResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
-            if (execResult.IsSuccess()) {
-                auto parser = execResult.GetResultSetParser(0);
-                while (parser.TryNextRow()) {
-                    result.push_back({
-                        .Id = *parser.ColumnParser(0).GetOptionalUtf8(),
-                        .Document = *parser.ColumnParser(1).GetOptionalUtf8(),
-                        .Score = *parser.ColumnParser(2).GetOptionalFloat()
-                    });
-                }
-            }
-            return execResult;
-        }));
-
-        return result;
-    }
-    ```
-
-- JavaScript
-
-  ```javascript
-  const limit;
-  const embedding = convertVectorToBytes(new Float32Array([1.5, 2.5, 3.5]))
-
-  await sql`SELECT
-        id,
-        document,
-        Knn::CosineSimilarity(embedding, ${embedding}) as score
-    FROM `table_name`
-    ORDER BY score DESC
-    LIMIT ${unsafe(limit)};
-  ```
-
-- Java
-
-    ```java
-    import java.nio.ByteBuffer;
-    import java.nio.ByteOrder;
-    import java.util.ArrayList;
-    import java.util.List;
-    import java.util.Optional;
-
-    import tech.ydb.common.transaction.TxMode;
-    import tech.ydb.query.tools.QueryReader;
-    import tech.ydb.query.tools.SessionRetryContext;
-    import tech.ydb.table.query.Params;
-    import tech.ydb.table.result.ResultSetReader;
-    import tech.ydb.table.values.PrimitiveValue;
-
-    byte[] convertVectorToBytes(float[] vector) {
-        ByteBuffer bb = ByteBuffer.allocate(vector.length * Float.BYTES + 1).order(ByteOrder.LITTLE_ENDIAN);
-        for (float v : vector) {
-            bb.putFloat(v);
-        }
-        bb.put((byte) 0x01);
-        return bb.array();
-    }
-
-    List<ResultItem> searchItemsAsBytes(
-            SessionRetryContext retryCtx,
-            String tableName,
-            float[] embedding,
-            String strategy,
-            long limit,
-            Optional<String> indexName) {
-
-        String viewIndex = indexName.map(n -> "VIEW " + n).orElse("");
-        String sortOrder = strategy.endsWith("Similarity") ? "DESC" : "ASC";
-
-        String query = String.format("""
+                query = f"""
+                PRAGMA ydb.KMeansTreeSearchTopSize = "{top_clusters}";
                 DECLARE $embedding as String;
+
                 SELECT
                     id,
                     document,
-                    Knn::%s(embedding, $embedding) as score
-                FROM %s %s
-                ORDER BY score %s
-                LIMIT %d;
-                """, strategy, tableName, viewIndex, sortOrder, limit);
+                    Knn::{strategy}(embedding, $embedding) as score
+                FROM {table_name} {view_index}
+                ORDER BY score {sort_order}
+                LIMIT {limit};
+                """
 
-        Params params = Params.of("$embedding", PrimitiveValue.newBytes(convertVectorToBytes(embedding)));
+                result = pool.execute_with_retries(
+                    query,
+                    {
+                        "$embedding": (
+                            convert_vector_to_bytes(embedding),
+                            ydb.PrimitiveType.String,
+                        ),
+                    },
+                )
 
-        QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
-                session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
-        )).join().getValue();
+                items = []
 
-        List<ResultItem> result = new ArrayList<>();
-        ResultSetReader rs = reader.getResultSet(0);
-        while (rs.next()) {
-            result.add(new ResultItem(
-                    rs.getColumn("id").getText(),
-                    rs.getColumn("document").getText(),
-                    rs.getColumn("score").getFloat()
-            ));
-        }
-        return result;
-    }
+                for result_set in result:
+                    for row in result_set.rows:
+                        items.append(
+                            {
+                                "id": row["id"],
+                                "document": row["document"],
+                                "score": row["score"],
+                            }
+                        )
 
-    // record ResultItem(String id, String document, float score) {}
-    ```
+                return items
+            ```
 
-    The same search with the query vector passed as `List<Float>`:
+        - Native SDK (Asyncio)
 
-    ```java
-    import java.util.ArrayList;
-    import java.util.List;
-    import java.util.Optional;
+            ```python
+            import ydb
 
-    import tech.ydb.common.transaction.TxMode;
-    import tech.ydb.query.tools.QueryReader;
-    import tech.ydb.query.tools.SessionRetryContext;
-    import tech.ydb.table.query.Params;
-    import tech.ydb.table.result.ResultSetReader;
-    import tech.ydb.table.values.ListType;
-    import tech.ydb.table.values.ListValue;
-    import tech.ydb.table.values.PrimitiveType;
-    import tech.ydb.table.values.PrimitiveValue;
-    import tech.ydb.table.values.Value;
+            async def search_items_vector_as_bytes(
+                pool: ydb.aio.QuerySessionPool,
+                table_name: str,
+                embedding: list[float],
+                strategy: str = "CosineSimilarity",
+                limit: int = 1,
+                index_name: str | None = None,
+            ) -> list[dict]:
+                view_index = f"VIEW {index_name}" if index_name else ""
 
-    List<ResultItem> searchItemsAsFloatList(
-            SessionRetryContext retryCtx,
-            String tableName,
-            float[] embedding,
-            String strategy,
-            long limit,
-            Optional<String> indexName) {
+                sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
 
-        String viewIndex = indexName.map(n -> "VIEW " + n).orElse("");
-        String sortOrder = strategy.endsWith("Similarity") ? "DESC" : "ASC";
+                query = f"""
+                DECLARE $embedding as String;
 
-        String query = String.format("""
+                SELECT
+                    id,
+                    document,
+                    Knn::{strategy}(embedding, $embedding) as score
+                FROM {table_name} {view_index}
+                ORDER BY score {sort_order}
+                LIMIT {limit};
+                """
+
+                result = await pool.execute_with_retries(
+                    query,
+                    {
+                        "$embedding": (
+                            convert_vector_to_bytes(embedding),
+                            ydb.PrimitiveType.String,
+                        ),
+                    },
+                )
+
+                items = []
+
+                for result_set in result:
+                    for row in result_set.rows:
+                        items.append(
+                            {
+                                "id": row["id"],
+                                "document": row["document"],
+                                "score": row["score"],
+                            }
+                        )
+
+                return items
+            ```
+
+        {% endlist %}
+
+    - Alternative approach
+
+        {% note warning %}
+
+        Passing vectors as `List<Float>` and converting on the YQL side with `Knn::ToBinaryStringFloat` has lower performance than client-side byte array encoding.
+
+        {% endnote %}
+
+        {% list tabs %}
+
+        - Native SDK
+
+            ```python
+            import ydb
+
+            def search_items_vector_as_float_list(
+                pool: ydb.QuerySessionPool,
+                table_name: str,
+                embedding: list[float],
+                strategy: str = "CosineSimilarity",
+                limit: int = 1,
+                index_name: str | None = None,
+                top_clusters: int = 10,
+            ) -> list[dict]:
+                view_index = f"VIEW {index_name}" if index_name else ""
+
+                sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
+
+                query = f"""
+                PRAGMA ydb.KMeansTreeSearchTopSize = "{top_clusters}";
                 DECLARE $embedding as List<Float>;
 
                 $target_embedding = Knn::ToBinaryStringFloat($embedding);
@@ -1626,229 +2523,168 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
                 SELECT
                     id,
                     document,
-                    Knn::%s(embedding, $target_embedding) as score
-                FROM %s %s
+                    Knn::{strategy}(embedding, $target_embedding) as score
+                FROM {table_name} {view_index}
                 ORDER BY score
-                %s
-                LIMIT %d;
-                """, strategy, tableName, viewIndex, sortOrder, limit);
+                {sort_order}
+                LIMIT {limit};
+                """
 
-        Value<?>[] floats = new Value<?>[embedding.length];
-        for (int i = 0; i < embedding.length; i++) {
-            floats[i] = PrimitiveValue.newFloat(embedding[i]);
-        }
-        ListValue emb = ListType.of(PrimitiveType.Float).newValueOwn(floats);
-        Params params = Params.of("$embedding", emb);
+                result = pool.execute_with_retries(
+                    query,
+                    {
+                        "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
+                    },
+                )
 
-        QueryReader reader = retryCtx.supplyResult(session -> QueryReader.readFrom(
-                session.createQuery(query, TxMode.SERIALIZABLE_RW, params)
-        )).join().getValue();
+                items = []
 
-        List<ResultItem> result = new ArrayList<>();
-        ResultSetReader rs = reader.getResultSet(0);
-        while (rs.next()) {
-            result.add(new ResultItem(
-                    rs.getColumn("id").getText(),
-                    rs.getColumn("document").getText(),
-                    rs.getColumn("score").getFloat()
-            ));
-        }
-        return result;
-    }
+                for result_set in result:
+                    for row in result_set.rows:
+                        items.append(
+                            {
+                                "id": row["id"],
+                                "document": row["document"],
+                                "score": row["score"],
+                            }
+                        )
 
-    // record ResultItem(String id, String document, float score) {}
-    ```
+                return items
+            ```
 
-- Python (alternative)
+        - Native SDK (Asyncio)
+
+            ```python
+            import ydb
+
+            async def search_items_vector_as_float_list(
+                pool: ydb.aio.QuerySessionPool,
+                table_name: str,
+                embedding: list[float],
+                strategy: str = "CosineSimilarity",
+                limit: int = 1,
+                index_name: str | None = None,
+            ) -> list[dict]:
+                view_index = f"VIEW {index_name}" if index_name else ""
+
+                sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
+
+                query = f"""
+                DECLARE $embedding as List<Float>;
+
+                $target_embedding = Knn::ToBinaryStringFloat($embedding);
+
+                SELECT
+                    id,
+                    document,
+                    Knn::{strategy}(embedding, $target_embedding) as score
+                FROM {table_name} {view_index}
+                ORDER BY score
+                {sort_order}
+                LIMIT {limit};
+                """
+
+                result = await pool.execute_with_retries(
+                    query,
+                    {
+                        "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
+                    },
+                )
+
+                items = []
+
+                for result_set in result:
+                    for row in result_set.rows:
+                        items.append(
+                            {
+                                "id": row["id"],
+                                "document": row["document"],
+                                "score": row["score"],
+                            }
+                        )
+
+                return items
+            ```
+
+        {% endlist %}
+
+  {% endlist %}
+
+- C#
+
+    Vector search examples for the .NET SDK are not available yet.
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+    Track progress or vote for support: [ydb-dotnet-sdk#657](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/657)
+
+- JavaScript
 
     {% list tabs %}
 
-    - Native SDK
+    - Recommended approach
 
-      ```python
-      import ydb
+        ```javascript
+        const limit;
+        const embedding = convertVectorToBytes(new Float32Array([1.5, 2.5, 3.5]))
 
-      def search_items_vector_as_float_list(
-          pool: ydb.QuerySessionPool,
-          table_name: str,
-          embedding: list[float],
-          strategy: str = "CosineSimilarity",
-          limit: int = 1,
-          index_name: str | None = None,
-          top_clusters: int = 10,
-      ) -> list[dict]:
-          view_index = f"VIEW {index_name}" if index_name else ""
+        await sql`SELECT
+            id,
+            document,
+            Knn::CosineSimilarity(embedding, ${embedding}) as score
+        FROM `table_name`
+        ORDER BY score DESC
+        LIMIT ${unsafe(limit)};
+        ```
 
-          sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
+    - Alternative approach
 
-          query = f"""
-          PRAGMA ydb.KMeansTreeSearchTopSize = "{top_clusters}";
-          DECLARE $embedding as List<Float>;
+        {% note warning %}
 
-          $target_embedding = Knn::ToBinaryStringFloat($embedding);
+        Passing vectors as `List<Float>` and converting on the YQL side with `Knn::ToBinaryStringFloat` has lower performance than client-side byte array encoding.
 
-          SELECT
-              id,
-              document,
-              Knn::{strategy}(embedding, $target_embedding) as score
-          FROM {table_name} {view_index}
-          ORDER BY score
-          {sort_order}
-          LIMIT {limit};
-          """
+        {% endnote %}
 
-          result = pool.execute_with_retries(
-              query,
-              {
-                  "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
-              },
-          )
+        ```javascript
+        const limit;
+        const embedding = new Float32Array([1.5, 2.5, 3.5])
 
-          items = []
-
-          for result_set in result:
-              for row in result_set.rows:
-                  items.append(
-                      {
-                          "id": row["id"],
-                          "document": row["document"],
-                          "score": row["score"],
-                      }
-                  )
-
-          return items
-      ```
-
-    - Native SDK (Asyncio)
-
-      ```python
-      import ydb
-
-      async def search_items_vector_as_float_list(
-          pool: ydb.aio.QuerySessionPool,
-          table_name: str,
-          embedding: list[float],
-          strategy: str = "CosineSimilarity",
-          limit: int = 1,
-          index_name: str | None = None,
-      ) -> list[dict]:
-          view_index = f"VIEW {index_name}" if index_name else ""
-
-          sort_order = "DESC" if strategy.endswith("Similarity") else "ASC"
-
-          query = f"""
-          DECLARE $embedding as List<Float>;
-
-          $target_embedding = Knn::ToBinaryStringFloat($embedding);
-
-          SELECT
-              id,
-              document,
-              Knn::{strategy}(embedding, $target_embedding) as score
-          FROM {table_name} {view_index}
-          ORDER BY score
-          {sort_order}
-          LIMIT {limit};
-          """
-
-          result = await pool.execute_with_retries(
-              query,
-              {
-                  "$embedding": (embedding, ydb.ListType(ydb.PrimitiveType.Float)),
-              },
-          )
-
-          items = []
-
-          for result_set in result:
-              for row in result_set.rows:
-                  items.append(
-                      {
-                          "id": row["id"],
-                          "document": row["document"],
-                          "score": row["score"],
-                      }
-                  )
-
-          return items
-      ```
-
-    {% endlist %}
-
-- C++ (alternative)
-
-    ```cpp
-    std::vector<TResultItem> SearchItemsAsFloatList(
-        NYdb::NQuery::TQueryClient& client,
-        const std::string& tableName,
-        const std::vector<float>& embedding,
-        const std::string& strategy,
-        std::uint64_t limit,
-        std::uint64_t topClusters = 10,
-        const std::optional<std::string>& indexName = std::nullopt)
-    {
-        std::string viewIndex = indexName ? "VIEW " + *indexName : "";
-        std::string sortOrder = strategy.ends_with("Similarity") ? "DESC" : "ASC";
-
-        std::string query = std::format(R"(
-            PRAGMA ydb.KMeansTreeSearchTopSize = "{5}";
-            DECLARE $embedding as List<Float>;
-
-            $TargetEmbedding = Knn::ToBinaryStringFloat($embedding);
-
-            SELECT
+        await sql`SELECT
                 id,
                 document,
-                Knn::{2}(embedding, $TargetEmbedding) as score
-            FROM {0} {1}
-            ORDER BY score
-            {3}
-            LIMIT {4};
-        )", tableName, viewIndex, strategy, sortOrder, limit, topClusters);
+                Knn::CosineSimilarity(embedding, Knn::ToBinaryStringFloat(${embedding})) as score
+            FROM `table_name`
+            ORDER BY score DESC
+            LIMIT ${unsafe(limit)};
+        ```
 
-        NYdb::TParamsBuilder paramsBuilder;
-        auto& valueBuilder = paramsBuilder.AddParam("$embedding");
-        valueBuilder.BeginList();
-        for (auto value : embedding) {
-            valueBuilder.AddListItem().Float(value);
+  {% endlist %}
+
+- Rust
+
+    ```rust
+    let view_index = index_name.map(|n| format!("VIEW {n}")).unwrap_or_default();
+    let sort_order = if strategy.ends_with("Similarity") { "DESC" } else { "ASC" };
+
+    let mut stream = qc
+        .query(search_query)
+        .param("$embedding", convert_vector_to_bytes(&embedding))
+        .await?;
+    while let Some(result_set) = stream.next_result_set().await? {
+        for mut row in result_set {
+            // id, document, score
         }
-        valueBuilder.EndList().Build();
-
-        std::vector<TResultItem> result;
-
-        NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([params = paramsBuilder.Build(), &query, &result](NYdb::NQuery::TSession session) {
-            auto execResult = session.ExecuteQuery(query, NYdb::NQuery::TTxControl::BeginTx(NYdb::NQuery::TTxSettings::SerializableRW()).CommitTx(), params).ExtractValueSync();
-            if (execResult.IsSuccess()) {
-                auto parser = execResult.GetResultSetParser(0);
-                while (parser.TryNextRow()) {
-                    result.push_back({
-                        .Id = *parser.ColumnParser(0).GetOptionalUtf8(),
-                        .Document = *parser.ColumnParser(1).GetOptionalUtf8(),
-                        .Score = *parser.ColumnParser(2).GetOptionalFloat()
-                    });
-                }
-            }
-            return execResult;
-        }));
-
-        return result;
     }
+    stream.close().await?;
     ```
 
-- JavaScript (alternative)
+- PHP
 
-  ```javascript
-  const limit;
-  const embedding = new Float32Array([1.5, 2.5, 3.5])
+    Vector search examples for the PHP SDK are not available yet.
 
-  await sql`SELECT
-        id,
-        document,
-        Knn::CosineSimilarity(embedding, Knn::ToBinaryStringFloat(${embedding})) as score
-    FROM `table_name`
-    ORDER BY score DESC
-    LIMIT ${unsafe(limit)};
-  ```
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+    Track progress or vote for support: [ydb-php-sdk#268](https://github.com/ydb-platform/ydb-php-sdk/issues/268)
 
 {% endlist %}
 
@@ -1856,238 +2692,14 @@ The method returns a list of dictionaries with the fields `id`, `document`, and 
 
 The following example combines all the steps above:
 
-1. Dropping the existing table.
-2. Creating a new table.
-3. Inserting items.
-4. Searching for nearest vectors without an index.
-5. Adding a vector index.
-6. Searching for nearest vectors with the index.
+1. Dropping the existing table
+2. Creating a new table
+3. Inserting items
+4. Searching for nearest vectors without an index
+5. Adding a vector index
+6. Searching for nearest vectors with the index
 
-{% list tabs %}
-
-- Go
-
-    Vector search is fully supported in the Go SDK. A complete program that combines the steps above (create table, insert data, create index, search) can be built from the snippets on this page. See the [ydb-go-sdk](https://github.com/ydb-platform/ydb-go-sdk/tree/master/examples) repository for runnable examples.
-
-- Python
-
-    Usage example
-
-    {% list tabs %}
-
-    - Native SDK
-
-      ```python
-      import os
-      import ydb
-
-      def print_results(items):
-          if len(items) == 0:
-              print("No items found")
-              return
-
-          for item in items:
-              print(f"[score={item['score']}] {item['id']}: {item['document']}")
-
-      def drop_vector_table_if_exists(pool: ydb.QuerySessionPool, table_name: str) -> None:
-          pool.execute_with_retries(f"DROP TABLE IF EXISTS `{table_name}`")
-
-          print("Vector table dropped")
-
-      def main(
-          ydb_endpoint: str,
-          ydb_database: str,
-          ydb_credentials: ydb.AbstractCredentials,
-          table_name: str,
-          index_name: str,
-      ):
-          driver = ydb.Driver(
-              endpoint=ydb_endpoint,
-              database=ydb_database,
-              credentials=ydb_credentials,
-          )
-          driver.wait(5, fail_fast=True)
-          pool = ydb.QuerySessionPool(driver)
-
-          drop_vector_table_if_exists(pool, table_name)
-
-          create_vector_table(pool, table_name)
-
-          items = [
-              {"id": "1", "document": "vector 1", "embedding": [0.98, 0.1, 0.01]},
-              {"id": "2", "document": "vector 2", "embedding": [1.0, 0.05, 0.05]},
-              {"id": "3", "document": "vector 3", "embedding": [0.9, 0.1, 0.1]},
-              {"id": "4", "document": "vector 4", "embedding": [0.03, 0.0, 0.99]},
-              {"id": "5", "document": "vector 5", "embedding": [0.0, 0.0, 0.99]},
-              {"id": "6", "document": "vector 6", "embedding": [0.0, 0.02, 1.0]},
-              {"id": "7", "document": "vector 7", "embedding": [0.0, 1.05, 0.05]},
-              {"id": "8", "document": "vector 8", "embedding": [0.02, 0.98, 0.1]},
-              {"id": "9", "document": "vector 9", "embedding": [0.0, 1.0, 0.05]},
-          ]
-
-          insert_items_vector_as_bytes(pool, table_name, items)
-
-          items = search_items_vector_as_bytes(
-              pool,
-              table_name,
-              embedding=[1, 0, 0],
-              strategy="CosineSimilarity",
-              limit=3,
-              top_clusters=10,
-          )
-          print_results(items)
-
-          add_vector_index(
-              pool,
-              driver,
-              table_name,
-              index_name=index_name,
-              strategy="similarity=cosine",
-              dimension=3,
-              levels=1,
-              clusters=3,
-          )
-
-          items = search_items_vector_as_bytes(
-              pool,
-              table_name,
-              embedding=[1, 0, 0],
-              index_name=index_name,
-              strategy="CosineSimilarity",
-              limit=3,
-              top_clusters=10,
-          )
-          print_results(items)
-
-          pool.stop()
-          driver.stop()
-
-
-      if __name__ == "__main__":
-          main(
-              ydb_endpoint=os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136"),
-              ydb_database=os.environ.get("YDB_DATABASE", "/local"),
-              ydb_credentials=ydb.credentials_from_env_variables(),
-              table_name="ydb_vector_search",
-              index_name="ydb_vector_index",
-          )
-      ```
-
-    - Native SDK (Asyncio)
-
-      ```python
-      import os
-      import ydb
-      import asyncio
-
-      def print_results(items):
-          if len(items) == 0:
-              print("No items found")
-              return
-
-          for item in items:
-              print(f"[score={item['score']}] {item['id']}: {item['document']}")
-
-      async def drop_vector_table_if_exists(pool: ydb.aio.QuerySessionPool, table_name: str) -> None:
-          await pool.execute_with_retries(f"DROP TABLE IF EXISTS `{table_name}`")
-
-          print("Vector table dropped")
-
-      async def main(
-          ydb_endpoint: str,
-          ydb_database: str,
-          ydb_credentials: ydb.AbstractCredentials,
-          table_name: str,
-          index_name: str,
-      ):
-          async with ydb.aio.Driver(
-              endpoint=ydb_endpoint,
-              database=ydb_database,
-              credentials=ydb_credentials,
-          ) as driver:
-              await driver.wait(5, fail_fast=True)
-              pool = ydb.aio.QuerySessionPool(driver)
-
-              await drop_vector_table_if_exists(pool, table_name)
-
-              await create_vector_table(pool, table_name)
-
-              items = [
-                  {"id": "1", "document": "vector 1", "embedding": [0.98, 0.1, 0.01]},
-                  {"id": "2", "document": "vector 2", "embedding": [1.0, 0.05, 0.05]},
-                  {"id": "3", "document": "vector 3", "embedding": [0.9, 0.1, 0.1]},
-                  {"id": "4", "document": "vector 4", "embedding": [0.03, 0.0, 0.99]},
-                  {"id": "5", "document": "vector 5", "embedding": [0.0, 0.0, 0.99]},
-                  {"id": "6", "document": "vector 6", "embedding": [0.0, 0.02, 1.0]},
-                  {"id": "7", "document": "vector 7", "embedding": [0.0, 1.05, 0.05]},
-                  {"id": "8", "document": "vector 8", "embedding": [0.02, 0.98, 0.1]},
-                  {"id": "9", "document": "vector 9", "embedding": [0.0, 1.0, 0.05]},
-              ]
-
-              await insert_items_vector_as_bytes(pool, table_name, items)
-
-              items = await search_items_vector_as_bytes(
-                  pool,
-                  table_name,
-                  embedding=[1, 0, 0],
-                  strategy="CosineSimilarity",
-                  limit=3,
-              )
-              print_results(items)
-
-              await add_vector_index(
-                  pool,
-                  driver,
-                  table_name,
-                  index_name=index_name,
-                  strategy="similarity=cosine",
-                  dimension=3,
-                  levels=1,
-                  clusters=3,
-              )
-
-              items = await search_items_vector_as_bytes(
-                  pool,
-                  table_name,
-                  embedding=[1, 0, 0],
-                  index_name=index_name,
-                  strategy="CosineSimilarity",
-                  limit=3,
-              )
-              print_results(items)
-
-              await pool.stop()
-
-      if __name__ == "__main__":
-          asyncio.run(main(
-              ydb_endpoint=os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136"),
-              ydb_database=os.environ.get("YDB_DATABASE", "/local"),
-              ydb_credentials=ydb.credentials_from_env_variables(),
-              table_name="ydb_vector_search",
-              index_name="ydb_vector_index",
-          ))
-      ```
-
-    {% endlist %}
-
-    Program output:
-
-    ```bash
-    Vector table dropped
-    Vector table created
-    9 items inserted
-    [score=0.997509241104126] 2: vector 2
-    [score=0.9947828650474548] 1: vector 1
-    [score=0.9878783822059631] 3: vector 3
-    Table index ydb_vector_index created.
-    [score=0.997509241104126] 2: vector 2
-    [score=0.9947828650474548] 1: vector 1
-    [score=0.9878783822059631] 3: vector 3
-    ```
-
-    The table was created, 9 documents were added, and vector similarity search ran successfully both before and after adding the vector index.
-
-    Full source code is available at this [link](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/python/examples/vector_search/vector_search.py).
+{% list tabs group=tool %}
 
 - C++
 
@@ -2129,7 +2741,7 @@ The following example combines all the steps above:
                 {.Id = "9", .Document = "document 9", .Embedding = {0.0, 1.0, 0.05}},
             };
             InsertItemsAsBytes(client, tableName, items);
-            PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3, 10));
+            PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3));
             AddIndex(driver, client, database, tableName, indexName, "similarity=cosine", 3, 1, 3);
             PrintResults(SearchItemsAsBytes(client, tableName, {1.0, 0.0, 0.0}, "CosineSimilarity", 3, 10, indexName));
         } catch (const std::exception& e) {
@@ -2142,13 +2754,13 @@ The following example combines all the steps above:
 
     Full source code is available at this [link](https://github.com/ydb-platform/ydb/tree/main/ydb/public/sdk/cpp/examples/vector_index_builtin).
 
-- JavaScript
+- Go
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+    Vector search is fully supported in the Go SDK. A complete example combining all operations above (table creation, data insert, index creation, search) is built from the code fragments on this page. See a working example in the [ydb-go-sdk](https://github.com/ydb-platform/ydb-go-sdk/tree/master/examples).
 
 - Java
 
-    The example below combines the steps from the sections above: `QueryClient` and `SessionRetryContext` for YQL, and `TableClient` with `SessionRetryContext` for `ALTER TABLE` with index rename. Use the same `createVectorTable`, `insertItemsAsBytes`, `searchItemsAsBytes`, `addVectorIndex` methods and `Item` / `ResultItem` types as in the snippets on this page.
+    The example combines steps from the sections above: `QueryClient` + `SessionRetryContext` for YQL and `TableClient` + `SessionRetryContext` for `ALTER TABLE` with index rename. Methods `createVectorTable`, `insertItemsAsBytes`, `searchItemsAsBytes`, `addVectorIndex`, and types `Item` / `ResultItem` are as in the corresponding fragments on this page.
 
     ```java
     import java.util.List;
@@ -2173,8 +2785,8 @@ The following example combines all the steps above:
             String indexName = "ydb_vector_index";
 
             try (GrpcTransport transport = GrpcTransport.forConnectionString(connectionString).build();
-                 QueryClient queryClient = QueryClient.newClient(transport).build();
-                 TableClient tableClient = TableClient.newClient(transport).build()) {
+                QueryClient queryClient = QueryClient.newClient(transport).build();
+                TableClient tableClient = TableClient.newClient(transport).build()) {
 
                 SessionRetryContext queryRetry = SessionRetryContext.create(queryClient).build();
                 SessionRetryContext tableRetry = SessionRetryContext.create(tableClient).build();
@@ -2227,5 +2839,264 @@ The following example combines all the steps above:
     ```
 
     The output matches the Python example above.
+
+- Python
+
+    Usage example
+
+    {% list tabs %}
+
+    - Native SDK
+
+        ```python
+        import os
+        import ydb
+
+        def print_results(items):
+            if len(items) == 0:
+                print("No items found")
+                return
+
+            for item in items:
+                print(f"[score={item['score']}] {item['id']}: {item['document']}")
+
+        def drop_vector_table_if_exists(pool: ydb.QuerySessionPool, table_name: str) -> None:
+            pool.execute_with_retries(f"DROP TABLE IF EXISTS `{table_name}`")
+
+            print("Vector table dropped")
+
+        def main(
+            ydb_endpoint: str,
+            ydb_database: str,
+            ydb_credentials: ydb.AbstractCredentials,
+            table_name: str,
+            index_name: str,
+        ):
+            driver = ydb.Driver(
+                endpoint=ydb_endpoint,
+                database=ydb_database,
+                credentials=ydb_credentials,
+            )
+            driver.wait(5, fail_fast=True)
+            pool = ydb.QuerySessionPool(driver)
+
+            drop_vector_table_if_exists(pool, table_name)
+
+            create_vector_table(pool, table_name)
+
+            items = [
+                {"id": "1", "document": "vector 1", "embedding": [0.98, 0.1, 0.01]},
+                {"id": "2", "document": "vector 2", "embedding": [1.0, 0.05, 0.05]},
+                {"id": "3", "document": "vector 3", "embedding": [0.9, 0.1, 0.1]},
+                {"id": "4", "document": "vector 4", "embedding": [0.03, 0.0, 0.99]},
+                {"id": "5", "document": "vector 5", "embedding": [0.0, 0.0, 0.99]},
+                {"id": "6", "document": "vector 6", "embedding": [0.0, 0.02, 1.0]},
+                {"id": "7", "document": "vector 7", "embedding": [0.0, 1.05, 0.05]},
+                {"id": "8", "document": "vector 8", "embedding": [0.02, 0.98, 0.1]},
+                {"id": "9", "document": "vector 9", "embedding": [0.0, 1.0, 0.05]},
+            ]
+
+            insert_items_vector_as_bytes(pool, table_name, items)
+
+            items = search_items_vector_as_bytes(
+                pool,
+                table_name,
+                embedding=[1, 0, 0],
+                strategy="CosineSimilarity",
+                limit=3,
+                top_clusters=10,
+            )
+            print_results(items)
+
+            add_vector_index(
+                pool,
+                driver,
+                table_name,
+                index_name=index_name,
+                strategy="similarity=cosine",
+                dimension=3,
+                levels=1,
+                clusters=3,
+            )
+
+            items = search_items_vector_as_bytes(
+                pool,
+                table_name,
+                embedding=[1, 0, 0],
+                index_name=index_name,
+                strategy="CosineSimilarity",
+                limit=3,
+                top_clusters=10,
+            )
+            print_results(items)
+
+            pool.stop()
+            driver.stop()
+
+        if __name__ == "__main__":
+            main(
+                ydb_endpoint=os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136"),
+                ydb_database=os.environ.get("YDB_DATABASE", "/local"),
+                ydb_credentials=ydb.credentials_from_env_variables(),
+                table_name="ydb_vector_search",
+                index_name="ydb_vector_index",
+            )
+        ```
+
+    - Native SDK (Asyncio)
+
+        ```python
+        import os
+        import ydb
+        import asyncio
+
+        def print_results(items):
+            if len(items) == 0:
+                print("No items found")
+                return
+
+            for item in items:
+                print(f"[score={item['score']}] {item['id']}: {item['document']}")
+
+        async def drop_vector_table_if_exists(pool: ydb.aio.QuerySessionPool, table_name: str) -> None:
+            await pool.execute_with_retries(f"DROP TABLE IF EXISTS `{table_name}`")
+
+            print("Vector table dropped")
+
+        async def main(
+            ydb_endpoint: str,
+            ydb_database: str,
+            ydb_credentials: ydb.AbstractCredentials,
+            table_name: str,
+            index_name: str,
+        ):
+            async with ydb.aio.Driver(
+                endpoint=ydb_endpoint,
+                database=ydb_database,
+                credentials=ydb_credentials,
+            ) as driver:
+                await driver.wait(5, fail_fast=True)
+                pool = ydb.aio.QuerySessionPool(driver)
+
+                await drop_vector_table_if_exists(pool, table_name)
+
+                await create_vector_table(pool, table_name)
+
+                items = [
+                    {"id": "1", "document": "vector 1", "embedding": [0.98, 0.1, 0.01]},
+                    {"id": "2", "document": "vector 2", "embedding": [1.0, 0.05, 0.05]},
+                    {"id": "3", "document": "vector 3", "embedding": [0.9, 0.1, 0.1]},
+                    {"id": "4", "document": "vector 4", "embedding": [0.03, 0.0, 0.99]},
+                    {"id": "5", "document": "vector 5", "embedding": [0.0, 0.0, 0.99]},
+                    {"id": "6", "document": "vector 6", "embedding": [0.0, 0.02, 1.0]},
+                    {"id": "7", "document": "vector 7", "embedding": [0.0, 1.05, 0.05]},
+                    {"id": "8", "document": "vector 8", "embedding": [0.02, 0.98, 0.1]},
+                    {"id": "9", "document": "vector 9", "embedding": [0.0, 1.0, 0.05]},
+                ]
+
+                await insert_items_vector_as_bytes(pool, table_name, items)
+
+                items = await search_items_vector_as_bytes(
+                    pool,
+                    table_name,
+                    embedding=[1, 0, 0],
+                    strategy="CosineSimilarity",
+                    limit=3,
+                )
+                print_results(items)
+
+                await add_vector_index(
+                    pool,
+                    driver,
+                    table_name,
+                    index_name=index_name,
+                    strategy="similarity=cosine",
+                    dimension=3,
+                    levels=1,
+                    clusters=3,
+                )
+
+                items = await search_items_vector_as_bytes(
+                    pool,
+                    table_name,
+                    embedding=[1, 0, 0],
+                    index_name=index_name,
+                    strategy="CosineSimilarity",
+                    limit=3,
+                )
+                print_results(items)
+
+                await pool.stop()
+
+        if __name__ == "__main__":
+            asyncio.run(main(
+                ydb_endpoint=os.environ.get("YDB_ENDPOINT", "grpc://localhost:2136"),
+                ydb_database=os.environ.get("YDB_DATABASE", "/local"),
+                ydb_credentials=ydb.credentials_from_env_variables(),
+                table_name="ydb_vector_search",
+                index_name="ydb_vector_index",
+            ))
+        ```
+
+    {% endlist %}
+
+    Program output:
+
+    ```bash
+    Vector table dropped
+    Vector table created
+    9 items inserted
+    [score=0.997509241104126] 2: vector 2
+    [score=0.9947828650474548] 1: vector 1
+    [score=0.9878783822059631] 3: vector 3
+    Table index ydb_vector_index created.
+    [score=0.997509241104126] 2: vector 2
+    [score=0.9947828650474548] 1: vector 1
+    [score=0.9878783822059631] 3: vector 3
+    ```
+
+    The table was created, 9 documents were added, and vector similarity search ran successfully both before and after adding the vector index.
+
+    Full source code is available at this [link](https://github.com/ydb-platform/ydb/blob/main/ydb/public/sdk/python/examples/vector_search/vector_search.py).
+
+- C#
+
+    Vector search examples for the .NET SDK are not available yet.
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+    Track progress or vote for support: [ydb-dotnet-sdk#657](https://github.com/ydb-platform/ydb-dotnet-sdk/issues/657)
+
+- JavaScript
+
+    Vector index creation and a full end-to-end program for the JavaScript SDK are not available yet.
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+    Track progress or vote for support: [ydb-js-sdk#627](https://github.com/ydb-platform/ydb-js-sdk/issues/627)
+
+- Rust
+
+    Full example on GitHub: [vector-search.rs](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/vector-search.rs).
+
+    ```rust
+    // drop → create table → insert → search → add index → search with VIEW
+    drop_vector_table_if_exists(&mut qc, table_name).await?;
+    create_vector_table(&mut qc, table_name).await?;
+    insert_items_as_bytes(&mut qc, table_name, &items).await?;
+    let hits = search_items_as_bytes(&mut qc, table_name, &[1.0, 0.0, 0.0],
+        "CosineSimilarity", 3, None).await?;
+    add_vector_index(&mut qc, table_name, index_name, "similarity=cosine", 3, 1, 3).await?;
+    let hits = search_items_as_bytes(&mut qc, table_name, &[1.0, 0.0, 0.0],
+        "CosineSimilarity", 3, Some(index_name)).await?;
+    ```
+
+- PHP
+
+    Vector search examples for the PHP SDK are not available yet.
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+    Track progress or vote for support: [ydb-php-sdk#268](https://github.com/ydb-platform/ydb-php-sdk/issues/268)
 
 {% endlist %}

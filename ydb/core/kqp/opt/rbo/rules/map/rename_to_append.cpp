@@ -11,7 +11,7 @@ namespace NKqp {
 // propagation of some properties, like ShuffledByColumns or KeyColumns.
 //
 // Caveats:
-// 1. Another rename still hides the source after this rename is converted.
+// 1. Another rename keeps hiding the source when exposing it is not safe.
 // A: Map [ x <- a, y <- a ] == becomes ==>  Map [ x := a, y <- a ]
 // B: `- input [a]                           `- input [a]
 //
@@ -24,53 +24,43 @@ namespace {
 
 using TRenameSourceCounts = THashMap<TInfoUnit, size_t, TInfoUnit::THashFunction>;
 
-struct TRenameSourceInfo {
-    TVector<TInfoUnit> SourcesByElement;
-    TRenameSourceCounts Counts;
-};
+TRenameSourceCounts CountRenameSources(const TOpMap& map) {
+    TRenameSourceCounts result;
 
-TRenameSourceInfo BuildRenameSourceInfo(const TOpMap& map) {
-    TRenameSourceInfo result;
-    result.SourcesByElement.resize(map.MapElements.size());
-
-    for (size_t idx = 0; idx < map.MapElements.size(); ++idx) {
-        const auto& element = map.MapElements[idx];
+    for (const auto& element : map.MapElements) {
         if (!element.IsRename()) {
             continue;
         }
 
-        const auto source = element.GetRename();
-        result.SourcesByElement[idx] = source;
-        ++result.Counts[source];
+        ++result[element.GetRename()];
     }
 
     return result;
 }
 
-bool WillExposeRenameSource(const TRenameSourceCounts& renameSourceCounts, const TInfoUnit& source) {
-    const auto it = renameSourceCounts.find(source);
-    Y_ENSURE(it != renameSourceCounts.end());
+bool WillExposeRenameSource(const TRenameSourceCounts& remainingRenameSourceCounts, const TInfoUnit& source) {
+    const auto it = remainingRenameSourceCounts.find(source);
+    Y_ENSURE(it != remainingRenameSourceCounts.end());
     return it->second == 1;
 }
 
 bool CanConvertRenameToAppend(
-    const TIntrusivePtr<TOpMap>& map,
-    const TRenameSourceInfo& renameSourceInfo,
+    const TMapElement& element,
+    const TRenameSourceCounts& remainingRenameSourceCounts,
     const TInfoUnitSet& output,
-    size_t renameIdx)
+    const TInfoUnitConstraintSet& forbidden)
 {
-    const auto& element = map->MapElements[renameIdx];
-    const auto& source = renameSourceInfo.SourcesByElement[renameIdx];
+    const auto source = element.GetRename();
     if (source == element.GetElementName()) {
         // Identity renames are handled by identity-map cleanup.
         return false;
     }
 
-    if (!WillExposeRenameSource(renameSourceInfo.Counts, source)) {
+    if (!WillExposeRenameSource(remainingRenameSourceCounts, source)) {
         return true;
     }
 
-    return !output.contains(source) && !GetForbidden(map.get()).contains(source);
+    return !output.contains(source) && !forbidden.contains(source);
 }
 
 } // anonymous namespace
@@ -84,26 +74,31 @@ bool TRenameToAppendRule::MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOCon
     }
 
     auto map = CastOperator<TOpMap>(input);
-    const auto renameSourceInfo = BuildRenameSourceInfo(*map);
-    if (renameSourceInfo.Counts.empty()) {
+    auto remainingRenameSourceCounts = CountRenameSources(*map);
+    if (remainingRenameSourceCounts.empty()) {
         return false;
     }
 
     const auto output = MakeInfoUnitSet(map->GetOutputIUs());
-    for (size_t idx = 0; idx < map->MapElements.size(); ++idx) {
-        if (!map->MapElements[idx].IsRename()) {
+    const auto& forbidden = GetForbidden(map.get());
+    bool changed = false;
+
+    for (auto& mapElement : map->MapElements) {
+        if (!mapElement.IsRename()) {
             continue;
         }
 
-        if (!CanConvertRenameToAppend(map, renameSourceInfo, output, idx)) {
+        const auto source = mapElement.GetRename();
+        if (!CanConvertRenameToAppend(mapElement, remainingRenameSourceCounts, output, forbidden)) {
             continue;
         }
 
-        map->MapElements[idx].SetIsRename(false);
-        return true;
+        mapElement.SetIsRename(false);
+        --remainingRenameSourceCounts[source];
+        changed = true;
     }
 
-    return false;
+    return changed;
 }
 
 } // namespace NKqp

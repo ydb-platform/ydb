@@ -2,7 +2,7 @@
 
 ## Version 26.1 {#26-1}
 
-### Version 26.1.1.x {#26-1-1-x}
+### Version 26.1.1.20 {#26-1-1-20}
 
 Release date: TBD.
 

@@ -1,0 +1,6 @@
+items:
+- name: Партицирование
+  href: partitioning/index.md
+  include:
+    mode: link
+    path: partitioning/toc_p.yaml

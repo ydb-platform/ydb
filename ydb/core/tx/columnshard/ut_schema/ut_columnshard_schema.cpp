@@ -731,6 +731,14 @@ std::vector<std::pair<ui32, ui64>> TestTiersAndTtl(
         changes.AddTierAlters(spec, { allowBoth, allowOne, allowNone }, alters);
     }
 
+    // AlterTableTxBody now sets schema version explicitly; keep compaction planner from init across alters.
+    const bool forcedCompaction = alters[0].GetUseForcedCompaction();
+    for (size_t j = initialEviction; j < alters.size(); ++j) {
+        if (forcedCompaction) {
+            alters[j].UseForcedCompaction = true;
+        }
+    }
+
     auto rowsBytes = TestTiers(reboots, blobs, alters);
     for (auto&& i : rowsBytes) {
         Cerr << i.first << "/" << i.second << Endl;

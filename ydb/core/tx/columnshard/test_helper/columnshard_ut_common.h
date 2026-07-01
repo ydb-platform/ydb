@@ -329,6 +329,7 @@ struct TTestSchema {
 
             // schema
             InitSchema(columns, pk, specials, preset->MutableSchema());
+            preset->MutableSchema()->SetVersion(1);
         }
 
         InitTiersAndTtl(specials, table->MutableTtlSettings());
@@ -369,6 +370,7 @@ struct TTestSchema {
         preset->SetId(1);
         preset->SetName("default");
         InitSchema(columns, pk, specials, preset->MutableSchema());
+        preset->MutableSchema()->SetVersion(version);
 
         auto* ttlSettings = table->MutableTtlSettings();
         if (!InitTiersAndTtl(specials, ttlSettings)) {

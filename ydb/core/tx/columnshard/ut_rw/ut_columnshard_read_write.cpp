@@ -2,6 +2,7 @@
 #include <ydb/core/kqp/compute_actor/kqp_compute_events.h>
 #include <ydb/core/protos/config.pb.h>
 #include <ydb/core/protos/long_tx_service_config.pb.h>
+#include <ydb/core/tx/columnshard/columnshard.h>
 #include <ydb/core/tx/columnshard/columnshard_impl.h>
 #include <ydb/core/tx/columnshard/engines/changes/cleanup_portions.h>
 #include <ydb/core/tx/columnshard/engines/changes/compaction.h>
@@ -3012,6 +3013,128 @@ Y_UNIT_TEST_SUITE(TColumnShardTestReadWrite) {
         Cerr << sizeof(NOlap::TSnapshot) << Endl;
         Cerr << sizeof(NArrow::TReplaceKey) << Endl;
         Cerr << sizeof(NArrow::NMerger::TSortableBatchPosition) << Endl;
+    }
+
+    Y_UNIT_TEST(InternalScanAfterDropColumn) {
+        TTestBasicRuntime runtime;
+        TTester::Setup(runtime);
+        auto csDefaultControllerGuard = NKikimr::NYDBTest::TControllers::RegisterCSControllerGuard<TDefaultTestsController>();
+
+        TActorId sender = runtime.AllocateEdgeActor();
+        CreateTestBootstrapper(runtime, CreateTestTabletInfo(TTestTxConfig::TxTablet0, TTabletTypes::ColumnShard), &CreateColumnShard);
+
+        TDispatchOptions options;
+        options.FinalEvents.push_back(TDispatchOptions::TFinalEventCondition(TEvTablet::EvBoot));
+        runtime.DispatchEvents(options);
+
+        ui64 writeId = 0;
+        ui64 tableId = 1;
+        ui64 txId = 100;
+
+        const std::vector<NArrow::NTest::TTestColumn> ydbSchema = {
+            NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)),
+            NArrow::NTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("level", TTypeInfo(NTypeIds::Int32)),
+            NArrow::NTest::TTestColumn("message", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("extra", TTypeInfo(NTypeIds::Int32)),
+        };
+
+        const std::vector<NArrow::NTest::TTestColumn> ydbPk = {
+            NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)),
+            NArrow::NTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)),
+        };
+
+        const std::vector<NArrow::NTest::TTestColumn> ydbSchemaV2 = {
+            NArrow::NTest::TTestColumn("timestamp", TTypeInfo(NTypeIds::Timestamp)),
+            NArrow::NTest::TTestColumn("resource_type", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("resource_id", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("uid", TTypeInfo(NTypeIds::Utf8)),
+            NArrow::NTest::TTestColumn("level", TTypeInfo(NTypeIds::Int32)),
+            NArrow::NTest::TTestColumn("message", TTypeInfo(NTypeIds::Utf8)),
+        };
+
+        auto planStep = SetupSchema(runtime, sender, TTestSchema::CreateInitShardTxBody(tableId, ydbSchema, ydbPk), ++txId);
+
+        const auto testData = MakeTestBlob({ 0, 100 }, ydbSchema);
+        std::vector<ui64> writeIds;
+        UNIT_ASSERT(WriteData(runtime, sender, ++writeId, tableId, testData, ydbSchema, true, &writeIds));
+        planStep = ProposeCommit(runtime, sender, ++txId, writeIds);
+        PlanCommit(runtime, sender, planStep, txId);
+
+        TDeque<TAutoPtr<IEventHandle>> capturedInternalScans;
+        const auto captureInternalScan = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (!capturedInternalScans.empty()) {
+                return false;
+            }
+
+            if (TryGetPrivateEvent<TEvColumnShard::TEvInternalScan>(ev)) {
+                capturedInternalScans.push_back(ev.Release());
+                return true;
+            }
+
+            return false;
+        };
+
+        runtime.SetEventFilter(captureInternalScan);
+
+        {
+            auto write = std::make_unique<NEvents::TDataEvents::TEvWrite>(++writeId, NKikimrDataEvents::TEvWrite::MODE_IMMEDIATE);
+            auto& operation = write->AddOperation(
+                NKikimrDataEvents::TEvWrite::TOperation::OPERATION_UPDATE, TTableId(0, tableId, 1), {}, 0, NKikimrDataEvents::FORMAT_ARROW);
+            *operation.MutablePayloadSchema() = NArrow::SerializeSchema(*NArrow::MakeArrowSchema(ydbSchema));
+            NEvWrite::TPayloadWriter<NEvents::TDataEvents::TEvWrite> writer(*write);
+            auto dataCopy = testData;
+            writer.AddDataToPayload(std::move(dataCopy));
+            ForwardToTablet(runtime, TTestTxConfig::TxTablet0, sender, write.release());
+        }
+
+        const TInstant waitStart = TInstant::Now();
+        while (capturedInternalScans.empty() && TInstant::Now() - waitStart < TDuration::Seconds(30)) {
+            runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+        }
+
+        UNIT_ASSERT_C(!capturedInternalScans.empty(), "Update write without MvccSnapshot should trigger restore internal scan");
+
+        runtime.SetEventFilter([](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>&) {
+            return false;
+        });
+
+        Y_UNUSED(SetupSchema(runtime, sender, TTestSchema::AlterTableTxBody(tableId, 2, ydbSchemaV2, ydbPk, {}), ++txId));
+
+        TDeque<TAutoPtr<IEventHandle>> capturedScanErrors;
+        const auto captureScanError = [&](TTestActorRuntimeBase&, TAutoPtr<IEventHandle>& ev) {
+            if (TryGetPrivateEvent<NKqp::TEvKqpCompute::TEvScanError>(ev)) {
+                capturedScanErrors.push_back(ev.Release());
+                return true;
+            }
+
+            return false;
+        };
+
+        runtime.SetEventFilter(captureScanError);
+
+        while (!capturedInternalScans.empty()) {
+            runtime.Send(capturedInternalScans.front().Release());
+            capturedInternalScans.pop_front();
+        }
+
+        const TInstant scanWaitStart = TInstant::Now();
+        while (capturedScanErrors.empty() && TInstant::Now() - scanWaitStart < TDuration::Seconds(30)) {
+            runtime.DispatchEvents(TDispatchOptions(), TDuration::MilliSeconds(50));
+        }
+
+        UNIT_ASSERT_C(!capturedScanErrors.empty(), "Internal scan must fail gracefully on schema version mismatch");
+        const auto* scanError = TryGetPrivateEvent<NKqp::TEvKqpCompute::TEvScanError>(capturedScanErrors.front());
+        UNIT_ASSERT(scanError);
+        UNIT_ASSERT_VALUES_EQUAL(scanError->Record.GetStatus(), Ydb::StatusIds::BAD_REQUEST);
+        const TString issuesText = NYql::IssuesFromMessageAsString(scanError->Record.GetIssues());
+        UNIT_ASSERT_C(issuesText.Contains("schema version mismatch"), issuesText);
+        UNIT_ASSERT_C(issuesText.Contains("request_schema_version=1"), issuesText);
+        UNIT_ASSERT_C(issuesText.Contains("snapshot_schema_version=2"), issuesText);
     }
 }
 

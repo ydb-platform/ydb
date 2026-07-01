@@ -3038,7 +3038,6 @@ struct TFairnessModel {
             res.insert(o);
         }
         return res;
-
     }
 
     void AddMessage(ui32 group) {
@@ -3059,13 +3058,8 @@ struct TFairnessModel {
         for (size_t i = 0; i < count; ++i) {
             auto result = Storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
             const auto available = GetAvailalableOffsets();
-
             Cerr << "Next message " << (i + 1) << '/' << count << ": ";
-
-
-
             UNIT_ASSERT_VALUES_EQUAL_C(result.has_value(), !available.empty(), i);
-
             if (result.has_value()) {
                 ui64 offset = result->Offset;
                 ui32 hash = Hashes.at(result->Offset);
@@ -3073,7 +3067,7 @@ struct TFairnessModel {
                 Cerr << LabeledOutput(offset, hash, availableStr) << "\n";
                 UNIT_ASSERT_C(available.contains(result->Offset), i);
                 Infly.insert(offset);
-                res.push_back(TMessage{.Offset =offset, .Group = hash});
+                res.push_back(TMessage{.Offset = offset, .Group = hash});
                 LastReadTime[hash] = ReadTime;
             } else {
                 Cerr << "none\n";
@@ -3095,7 +3089,6 @@ struct TFairnessModel {
 
         Storage.Commit(offset);
     }
-
 };
 
 Y_UNIT_TEST(NextWithFairness3) {

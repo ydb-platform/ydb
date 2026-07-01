@@ -2,6 +2,7 @@
 
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/actorid.h>
+#include <ydb/core/base/events.h>
 #include <ydb/core/protos/blockstore_config.pb.h>
 
 namespace NKikimr {

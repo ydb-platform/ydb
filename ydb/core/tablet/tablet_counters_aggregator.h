@@ -45,13 +45,13 @@ struct TEvTabletCounters {
     struct TEvTabletAddCounters : public TEventLocal<TEvTabletAddCounters, EvTabletAddCounters> {
         //
         const ui64 TabletID;
-        const TTabletTypes::EType TabletType;
+        const NKikimrTabletBase::TTabletTypes::EType TabletType;
         const TPathId TenantPathId;
         TAutoPtr<TTabletCountersBase> ExecutorCounters;
         TAutoPtr<TTabletCountersBase> AppCounters;
         TIntrusivePtr<TInFlightCookie> InFlightCounter;     // Used to detect when previous event has been consumed by the aggregator
 
-        TEvTabletAddCounters(TIntrusivePtr<TInFlightCookie> inFlightCounter, ui64 tabletID, TTabletTypes::EType tabletType, TPathId tenantPathId,
+        TEvTabletAddCounters(TIntrusivePtr<TInFlightCookie> inFlightCounter, ui64 tabletID, NKikimrTabletBase::TTabletTypes::EType tabletType, TPathId tenantPathId,
             TAutoPtr<TTabletCountersBase> executorCounters, TAutoPtr<TTabletCountersBase> appCounters)
             : TabletID(tabletID)
             , TabletType(tabletType)
@@ -64,10 +64,10 @@ struct TEvTabletCounters {
 
     struct TEvTabletAddLabeledCounters : public TEventLocal<TEvTabletAddLabeledCounters, EvTabletAddLabeledCounters> {
         const ui64 TabletID;
-        const TTabletTypes::EType TabletType;
+        const NKikimrTabletBase::TTabletTypes::EType TabletType;
         TAutoPtr<TTabletLabeledCountersBase> LabeledCounters;
         TIntrusivePtr<TInFlightCookie> InFlightCounter;     // Used to detect when previous event has been consumed by the aggregator
-        TEvTabletAddLabeledCounters(TIntrusivePtr<TInFlightCookie> inFlightCounter, ui64 tabletID, TTabletTypes::EType tabletType, TAutoPtr<TTabletLabeledCountersBase> labeledCounters)
+        TEvTabletAddLabeledCounters(TIntrusivePtr<TInFlightCookie> inFlightCounter, ui64 tabletID, NKikimrTabletBase::TTabletTypes::EType tabletType, TAutoPtr<TTabletLabeledCountersBase> labeledCounters)
             : TabletID(tabletID)
             , TabletType(tabletType)
             , LabeledCounters(labeledCounters)
@@ -79,10 +79,10 @@ struct TEvTabletCounters {
     struct TEvTabletCountersForgetTablet : public TEventLocal<TEvTabletCountersForgetTablet, EvTabletCountersForgetTablet> {
         //
         const ui64 TabletID;
-        const TTabletTypes::EType TabletType;
+        const NKikimrTabletBase::TTabletTypes::EType TabletType;
         const TPathId TenantPathId;
 
-        TEvTabletCountersForgetTablet(ui64 tabletID, TTabletTypes::EType tabletType, TPathId tenantPathId)
+        TEvTabletCountersForgetTablet(ui64 tabletID, NKikimrTabletBase::TTabletTypes::EType tabletType, TPathId tenantPathId)
             : TabletID(tabletID)
             , TabletType(tabletType)
             , TenantPathId(tenantPathId)
@@ -125,7 +125,7 @@ struct TTabletLabeledCountersResponseContext {
 };
 
 ////////////////////////////////////////////
-void TabletCountersForgetTablet(ui64 tabletId, TTabletTypes::EType tabletType, TPathId tenantPathId, bool follower, TActorIdentity identity);
+void TabletCountersForgetTablet(ui64 tabletId, NKikimrTabletBase::TTabletTypes::EType tabletType, TPathId tenantPathId, bool follower, TActorIdentity identity);
 
 TStringBuf GetHistogramAggregateSimpleName(TStringBuf name);
 bool IsHistogramAggregateSimpleName(TStringBuf name);
@@ -144,14 +144,14 @@ IActor* CreateTabletCountersAggregator(bool follower);
 //will create actor that aggregate LabeledCounters from all nodes and reports them as TEvTabletLabeledCountersResponse to parentActor
 TActorId CreateClusterLabeledCountersAggregator(
         const TActorId& parentActor,
-        TTabletTypes::EType tabletType,
+        NKikimrTabletBase::TTabletTypes::EType tabletType,
         const TActorContext& ctx,
         ui32 version = 1,
         const TString& group = TString(), const ui32 TotalWorkersCount = WORKERS_COUNT);
 
 IActor* CreateClusterLabeledCountersAggregatorActor(
         const TActorId& parentActor,
-        TTabletTypes::EType tabletType,
+        NKikimrTabletBase::TTabletTypes::EType tabletType,
         ui32 version = 1,
         const TString& group = TString(), const ui32 TotalWorkersCount = WORKERS_COUNT);
 

@@ -699,6 +699,100 @@ TJoinTestData EmptyRightInnerTestData() {
     return td;
 }
 
+[[maybe_unused]] TJoinTestData LeftSemiTestDataLeftIsBuild() {
+    auto td = LeftSemiTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftOnlyTestDataLeftIsBuild() {
+    auto td = LeftOnlyTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftSemiDuplicateKeysTestData() {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+    TVector<ui64> leftKeys = {1, 2, 2, 3, 4, 4};
+    TVector<TString> leftValues = {"a", "b", "b2", "c", "d", "d2"};
+
+    TVector<ui64> rightKeys = {2, 2, 4, 5};
+    TVector<TString> rightValues = {"x", "y", "z", "w"};
+
+    TVector<ui64> expectedKeys = {2, 2, 4, 4};
+    TVector<TString> expectedValues = {"b", "b2", "d", "d2"};
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+    td.Kind = EJoinKind::LeftSemi;
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}};
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftSemiDuplicateKeysTestDataLeftIsBuild() {
+    auto td = LeftSemiDuplicateKeysTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftSemiOrOnlySpillingTestData(EJoinKind kind) {
+    TJoinTestData td;
+    auto& setup = *td.Setup;
+
+    constexpr int leftSize = 200000;
+    TVector<ui64> leftKeys(leftSize);
+    TVector<ui64> leftValues(leftSize);
+    for (int i = 0; i < leftSize; ++i) {
+        leftKeys[i] = i;
+        leftValues[i] = i * 3;
+    }
+
+    constexpr int rightSize = 100000;
+    TVector<ui64> rightKeys(rightSize);
+    TVector<ui64> rightValues(rightSize);
+    for (int i = 0; i < rightSize; ++i) {
+        rightKeys[i] = 2 * i;
+        rightValues[i] = i;
+    }
+    const ui64 maxRightKey = 2 * (rightSize - 1);
+
+    TVector<ui64> expectedKeys;
+    TVector<ui64> expectedValues;
+    for (int i = 0; i < leftSize; ++i) {
+        bool matched = (leftKeys[i] % 2 == 0) && (leftKeys[i] <= maxRightKey);
+        bool emit = (kind == EJoinKind::LeftSemi) ? matched : !matched;
+        if (emit) {
+            expectedKeys.push_back(leftKeys[i]);
+            expectedValues.push_back(leftValues[i]);
+        }
+    }
+
+    td.Left = ConvertVectorsToTuples(setup, leftKeys, leftValues);
+    td.Right = ConvertVectorsToTuples(setup, rightKeys, rightValues);
+    td.Result = ConvertVectorsToTuples(setup, expectedKeys, expectedValues);
+    td.Kind = kind;
+    td.Renames = TDqUserRenames{{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}};
+
+    constexpr int packedTupleSize = 2 * 8 + 5;
+    constexpr ui64 joinMemory = packedTupleSize * static_cast<ui64>(0.3 * leftSize);
+    td.JoinMemoryConstraint = joinMemory;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftSemiSpillingTestDataLeftIsBuild() {
+    auto td = LeftSemiOrOnlySpillingTestData(EJoinKind::LeftSemi);
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData LeftOnlySpillingTestDataLeftIsBuild() {
+    auto td = LeftSemiOrOnlySpillingTestData(EJoinKind::LeftOnly);
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
+    return td;
+}
+
 [[maybe_unused]] TJoinTestData RightOnlyTestData() {
     TJoinTestData td;
     auto& setup = *td.Setup;
@@ -825,6 +919,12 @@ TJoinTestData SwappedKeyColumnsLeftSemiTestData() {
     td.RightKeyColmns = {1, 0};
     td.Renames = {{0, EJoinSide::kLeft}, {1, EJoinSide::kLeft}, {2, EJoinSide::kLeft}};
     td.Kind = EJoinKind::LeftSemi;
+    return td;
+}
+
+[[maybe_unused]] TJoinTestData SwappedKeyColumnsLeftSemiTestDataLeftIsBuild() {
+    auto td = SwappedKeyColumnsLeftSemiTestData();
+    td.JoinSettings.BuildSide = NMiniKQL::EBuildSide::Left;
     return td;
 }
 
@@ -1132,6 +1232,34 @@ Y_UNIT_TEST_SUITE(TDqHashJoinBasicTest) {
 
     Y_UNIT_TEST(TestLeftOnlyKind) {
         Test(LeftOnlyTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestLeftSemiKindLeftIsBuild) {
+        Test(LeftSemiTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestLeftOnlyKindLeftIsBuild) {
+        Test(LeftOnlyTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestLeftSemiDuplicateKeys) {
+        Test(LeftSemiDuplicateKeysTestData(), true);
+    }
+
+    Y_UNIT_TEST(TestLeftSemiDuplicateKeysLeftIsBuild) {
+        Test(LeftSemiDuplicateKeysTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestSwappedKeyColumnsLeftSemiLeftIsBuild) {
+        Test(SwappedKeyColumnsLeftSemiTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestLeftSemiSpillingLeftIsBuild) {
+        Test(LeftSemiSpillingTestDataLeftIsBuild(), true);
+    }
+
+    Y_UNIT_TEST(TestLeftOnlySpillingLeftIsBuild) {
+        Test(LeftOnlySpillingTestDataLeftIsBuild(), true);
     }
 
     // Y_UNIT_TEST_TWIN(TestRightOnlyKind, BlockJoin) {

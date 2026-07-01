@@ -41,6 +41,7 @@
 #include <ydb/services/deprecated/persqueue_v0/persqueue.h>
 #include <ydb/services/persqueue_v1/persqueue.h>
 #include <ydb/services/persqueue_v1/topic.h>
+#include <ydb/services/persqueue_v1/topic_deferred_publish.h>
 #include <ydb/services/persqueue_v1/grpc_pq_write.h>
 #include <ydb/services/replication/grpc_service.h>
 #include <ydb/services/monitoring/grpc_service.h>
@@ -121,6 +122,7 @@
 #include <ydb/core/statistics/service/service.h>
 #include <ydb/core/keyvalue/keyvalue.h>
 #include <ydb/core/persqueue/pq.h>
+#include <ydb/core/persqueue/deferred_publish/registry_actor.h>
 #include <ydb/library/security/ydb_credentials_provider_factory.h>
 #include <ydb/core/fq/libs/init/init.h>
 #include <ydb/core/fq/libs/mock/yql_mock.h>
@@ -793,6 +795,7 @@ namespace Tests {
         grpcServer->AddService(new NGRpcService::TGRpcOperationService(system, counters, grpcRequestProxies[0], true));
         grpcServer->AddService(new NGRpcService::V1::TGRpcPersQueueService(system, counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxies[0], true));
         grpcServer->AddService(new NGRpcService::V1::TGRpcTopicService(system, counters, NMsgBusProxy::CreatePersQueueMetaCacheV2Id(), grpcRequestProxies[0], true));
+        grpcServer->AddService(new NGRpcService::V1::TGRpcTopicDeferredPublishService(system, counters, grpcRequestProxies[0], true));
         grpcServer->AddService(new NGRpcService::TGRpcPQClusterDiscoveryService(system, counters, grpcRequestProxies[0]));
         grpcServer->AddService(new NKesus::TKesusGRpcService(system, counters, appData.InFlightLimiterRegistry, grpcRequestProxies[0], true));
         grpcServer->AddService(new NGRpcService::TGRpcCmsService(system, counters, grpcRequestProxies[0], true));
@@ -1519,6 +1522,14 @@ namespace Tests {
             IActor* pqReadCacheService = NPQ::CreatePQDReadCacheService(Runtime->GetDynamicCounters());
             TActorId readCacheId = Runtime->Register(pqReadCacheService, nodeIdx, userPoolId);
             Runtime->RegisterService(NPQ::MakePQDReadCacheServiceActorId(), readCacheId, nodeIdx);
+        }
+        {
+            IActor* deferredPublishRegistry = NPQ::NDeferredPublish::CreateDeferredPublishRegistryActor();
+            TActorId deferredPublishRegistryId = Runtime->Register(deferredPublishRegistry, nodeIdx, userPoolId);
+            Runtime->RegisterService(
+                NPQ::NDeferredPublish::MakeDeferredPublishRegistryActorId(),
+                deferredPublishRegistryId,
+                nodeIdx);
         }
 
         {

@@ -240,7 +240,11 @@ void WaitDatabaseRunning(NActors::TTestActorRuntime& runtime, const TString& pat
                 return;
             }
         }
-        Sleep(TDuration::MilliSeconds(100));
+        if (runtime.IsRealThreads()) {
+            Sleep(TDuration::MilliSeconds(100));
+        } else {
+            runtime.SimulateSleep(TDuration::MilliSeconds(100));
+        }
     }
     UNIT_FAIL(TStringBuilder() << "Database " << path << " is not RUNNING, last status:\n" << status.DebugString());
 }

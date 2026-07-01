@@ -39,6 +39,7 @@ void AssertUnsupported(const Ydb::Operations::Operation& operation, TStringBuf m
 }
 
 constexpr TStringBuf PublicationsTableRelativePath = ".metadata/topic_deferred_publications";
+constexpr TStringBuf DestinationsTableRelativePath = ".metadata/topic_deferred_publication_destinations";
 constexpr TStringBuf WriterBuiltinUser = "writer@builtin";
 
 void FillClientContext(
@@ -158,6 +159,43 @@ void AssertPublicationRow(
     UNIT_ASSERT_VALUES_EQUAL(parser.ColumnParser("created_by").GetOptionalUtf8().value(), createdBy);
     UNIT_ASSERT(parser.ColumnParser("created_at").GetTimestamp() > TInstant::Zero());
     UNIT_ASSERT(!parser.TryNextRow());
+}
+
+void AssertDestinationRowCount(
+    const NPersQueue::TTestServer& server,
+    const TString& authTicket,
+    ui64 intPublicationId,
+    ui64 expectedCount)
+{
+    NYdb::NTable::TTableClient client(
+        server.GetDriver(),
+        NYdb::NTable::TClientSettings().AuthToken(authTicket));
+
+    NYdb::TParamsBuilder params;
+    params.AddParam("$int_publication_id").Uint64(intPublicationId).Build();
+
+    const auto query = TStringBuilder()
+        << "SELECT COUNT(*) AS `count` "
+        << "FROM `" << DestinationsTableRelativePath << "` "
+        << "WHERE int_publication_id = $int_publication_id;";
+
+    TMaybe<ui64> count;
+    const auto status = client.RetryOperationSync([&](NYdb::NTable::TSession session) {
+        auto result = session.ExecuteDataQuery(
+            query,
+            NYdb::NTable::TTxControl::BeginTx().CommitTx(),
+            params.Build()).GetValueSync();
+        if (result.IsSuccess() && !result.GetResultSets().empty()) {
+            NYdb::TResultSetParser parser(result.GetResultSet(0));
+            if (parser.TryNextRow()) {
+                count = parser.ColumnParser("count").GetUint64();
+            }
+        }
+        return result;
+    });
+    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+    UNIT_ASSERT(count.Defined());
+    UNIT_ASSERT_VALUES_EQUAL(*count, expectedCount);
 }
 
 NPersQueue::TTestServer MakeServerWithDeferredPublishEnabled(
@@ -469,12 +507,13 @@ Y_UNIT_TEST(BeginPublicationStoresCreatedByForWriterBuiltin) {
         TString(WriterBuiltinUser));
 }
 
-Y_UNIT_TEST(BeginPublicationDoesNotCreateDestinations) {
+Y_UNIT_TEST(BeginPublicationDoesNotInsertDestinationRows) {
     auto server = MakeServerWithDeferredPublishEnabled();
     server.AnnoyingClient->GrantConnect("root@builtin");
 
-    BeginPublicationIntId(CallBeginPublication(*MakeStub(server), "/Root", "no-dest"));
-    UNIT_ASSERT(SchemePathExists(server, "/Root/.metadata/topic_deferred_publication_destinations"));
+    const ui64 intPublicationId = BeginPublicationIntId(
+        CallBeginPublication(*MakeStub(server), "/Root", "no-dest"));
+    AssertDestinationRowCount(server, "root@builtin", intPublicationId, 0);
 }
 
 Y_UNIT_TEST(BeginPublicationSucceedsWhenTablesAlreadyExist) {

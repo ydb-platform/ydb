@@ -424,30 +424,51 @@ Y_UNIT_TEST_SUITE(StructLog) {
 
     Y_UNIT_TEST(LogStackGuard) {
         TEST_MESSAGE(TLogStack::GetTop(), "");
+        UNIT_ASSERT_EQUAL(TLogStack::GetComponent(0), 0);
         {
-            TLogStack::TLogGuard guard1;
+            TLogStack::TLogGuard guard1(1);
             YDB_LOG_UPDATE_CONTEXT({"v1", 1});
             TEST_MESSAGE(TLogStack::GetTop(), "v1=1");
+            UNIT_ASSERT_EQUAL(TLogStack::GetComponent(0), 1);
+
+            {
+                TLogStack::TLogGuard guard2(2);
+                TEST_MESSAGE(TLogStack::GetTop(), "v1=1");
+                YDB_LOG_UPDATE_CONTEXT({"v2", 2});
+                TEST_MESSAGE(TLogStack::GetTop(), "v1=1, v2=2");
+                UNIT_ASSERT_EQUAL(TLogStack::GetComponent(0), 2);
+            }
 
             {
                 TLogStack::TLogGuard guard2;
                 TEST_MESSAGE(TLogStack::GetTop(), "v1=1");
                 YDB_LOG_UPDATE_CONTEXT({"v2", 2});
                 TEST_MESSAGE(TLogStack::GetTop(), "v1=1, v2=2");
+                UNIT_ASSERT_EQUAL(TLogStack::GetComponent(0), 1);
             }
 
             TEST_MESSAGE(TLogStack::GetTop(), "v1=1");
+            UNIT_ASSERT_EQUAL(TLogStack::GetComponent(0), 1);
         }
         TEST_MESSAGE(TLogStack::GetTop(), "");
+        UNIT_ASSERT_EQUAL(TLogStack::GetComponent(0), 0);
     }
 
     Y_UNIT_TEST(LogStackCreateContext) {
         TEST_MESSAGE(TLogStack::GetTop(), "");
+        UNIT_ASSERT_EQUAL(TLogStack::GetComponent(0), 0);
+        {
+            YDB_LOG_CREATE_CONTEXT_COMP(1, {"v1", 1});
+            TEST_MESSAGE(TLogStack::GetTop(), "v1=1");
+            UNIT_ASSERT_EQUAL(TLogStack::GetComponent(0), 1);
+        }
         {
             YDB_LOG_CREATE_CONTEXT({"v1", 1});
             TEST_MESSAGE(TLogStack::GetTop(), "v1=1");
+            UNIT_ASSERT_EQUAL(TLogStack::GetComponent(0), 0);
         }
         TEST_MESSAGE(TLogStack::GetTop(), "");
+        UNIT_ASSERT_EQUAL(TLogStack::GetComponent(0), 0);
     }
 
     TString GetMessageJsonString(const TStructuredMessage& message) {

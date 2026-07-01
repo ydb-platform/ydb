@@ -1,8 +1,8 @@
 Тип данных | Можно использовать<br/>в колоночных таблицах | Можно использовать<br/>в качестве первичного ключа
 ---|---|---
 `Bool` | ✓ | ✓
-`Int8` | ✓ | ☓
-`Int16` | ✓ | ☓
+`Int8` | ✓ | ✓
+`Int16` | ✓ | ✓
 `Int32` | ✓ | ✓
 `Int64` | ✓ | ✓
 `Uint8` | ✓ | ✓
@@ -11,14 +11,15 @@
 `Uint64` | ✓ | ✓
 `Float` | ✓ | ☓
 `Double` | ✓ | ☓
-`Decimal` | ✓ | ☓
+`Decimal` | ✓ | ✓
 `String` | ✓ | ✓
 `Utf8` | ✓ | ✓
 `Json` | ✓ | ☓
 `JsonDocument` | ✓ | ☓
 `Yson` | ✓ | ☓
-`Uuid` | ☓ | ☓
+`Uuid` | ✓ | ✓
 `Date` | ✓ | ✓
 `Datetime` | ✓ | ✓
 `Timestamp` | ✓ | ✓
-`Interval` | ☓ | ☓
+`Interval` | ✓ | ✓
+`DyNumber` | ✓ | ✓

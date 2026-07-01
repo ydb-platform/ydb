@@ -808,15 +808,12 @@ TTableInfo::TAlterDataPtr TTableInfo::CreateAlterData(
         return nullptr;
     }
 
-    if (op.GetUniqueIndexKeySize()) {
-        if (op.GetUniqueIndexKeySize() >= keyColIds.size()) {
-            errStr = TStringBuilder()
-                << "Too many unique key prefix columns"
-                << ": " << op.GetUniqueIndexKeySize()
-                << ", max: " << (keyColIds.size()-1);
-            return nullptr;
-        }
-        alterData->TableDescriptionFull->SetUniqueIndexKeySize(op.GetUniqueIndexKeySize());
+    if (op.GetPartitionConfig().GetUniqueIndexKeySize() >= keyColIds.size()) {
+        errStr = TStringBuilder()
+            << "Too many unique key prefix columns"
+            << ": " << op.GetPartitionConfig().GetUniqueIndexKeySize()
+            << ", max: " << (keyColIds.size()-1);
+        return nullptr;
     }
 
     if (op.HasTableType()) {
@@ -1212,6 +1209,10 @@ bool TPartitionConfigMerger::ApplyChanges(
 
     if (changes.HasKeepSnapshotTimeout()) {
         result.SetKeepSnapshotTimeout(changes.GetKeepSnapshotTimeout());
+    }
+
+    if (changes.HasUniqueIndexKeySize()) {
+        result.SetUniqueIndexKeySize(changes.GetUniqueIndexKeySize());
     }
 
     return true;

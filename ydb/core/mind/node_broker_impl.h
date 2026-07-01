@@ -224,8 +224,9 @@ private:
                         const TString &reason,
                         const TActorContext &ctx)
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "Reply with %s (%s)",
-                  NKikimrNodeBroker::TStatus::ECode_Name(code).data(), reason.data());
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::NODE_BROKER, "Reply with",
+            {"statusCode", NKikimrNodeBroker::TStatus::ECode_Name(code).data()},
+            {"reason", reason.data()});
 
         TAutoPtr<TResponseEvent> resp = new TResponseEvent;
         resp->Record.MutableStatus()->SetCode(code);
@@ -235,8 +236,9 @@ private:
 
     STFUNC(StateInit)
     {
-        LOG_DEBUG(*TlsActivationContext, NKikimrServices::NODE_BROKER, "StateInit event type: %" PRIx32 " event: %s",
-                  ev->GetTypeRewrite(), ev->ToString().data());
+        YDB_LOG_DEBUG_CTX_COMP(*TlsActivationContext, NKikimrServices::NODE_BROKER, "StateInit event",
+            {"type", ev->GetTypeRewrite()},
+            {"event", ev->ToString().data()});
         StateInitImpl(ev, SelfId());
     }
 

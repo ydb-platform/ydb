@@ -7,6 +7,8 @@
 
 #include <library/cpp/monlib/service/pages/templates.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TENANT_SLOT_BROKER
+
 namespace NKikimr {
 namespace NTenantSlotBroker {
 
@@ -424,14 +426,15 @@ void TTenantSlotBroker::OnActivateExecutor(const TActorContext &ctx)
 
 void TTenantSlotBroker::OnDetach(const TActorContext &ctx)
 {
-    LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER, "OnDetach");
+    YDB_LOG_DEBUG_CTX(ctx, "OnDetach");
     Die(ctx);
 }
 
 void TTenantSlotBroker::OnTabletDead(TEvTablet::TEvTabletDead::TPtr &,
                                      const TActorContext &ctx)
 {
-    LOG_INFO(ctx, NKikimrServices::TENANT_SLOT_BROKER, "OnTabletDead: %" PRIu64, TabletID());
+    YDB_LOG_INFO_CTX(ctx, "OnTabletDead",
+        {"tabletId", TabletID()});
 
     if (Counters)
         Counters->Counters->ResetCounters();
@@ -604,7 +607,7 @@ bool TTenantSlotBroker::OnRenderAppHtmlPage(NMon::TEvRemoteHttpInfo::TPtr ev,
 
 void TTenantSlotBroker::Cleanup(const TActorContext &ctx)
 {
-    LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER, "Cleanup");
+    YDB_LOG_DEBUG_CTX(ctx, "Cleanup");
 
     NConsole::UnsubscribeViaConfigDispatcher(ctx, ctx.SelfID);
 }
@@ -677,8 +680,8 @@ void TTenantSlotBroker::MaybeRemoveTenant(TTenant::TPtr tenant)
     if (!tenant->CanBeRemoved())
         return;
 
-    LOG_DEBUG_S(TActorContext::AsActorContext(), NKikimrServices::TENANT_SLOT_BROKER,
-                "Remove tenant " << tenant->Name);
+    YDB_LOG_DEBUG_CTX(TActorContext::AsActorContext(), "Remove tenant",
+        {"tenantName", tenant->Name});
     Tenants.erase(tenant->Name);
     *Counters->KnownTenants = Tenants.size();
 }
@@ -751,8 +754,8 @@ void TTenantSlotBroker::AddSlot(TSlot::TPtr slot,
                                 TTransactionContext &txc,
                                 const TActorContext &ctx)
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                "Added new " << slot->IdString(true));
+    YDB_LOG_DEBUG_CTX(ctx, "Added new",
+        {"slotId", slot->IdString(true)});
 
     Y_ABORT_UNLESS(!slot->AssignedTenant);
 
@@ -798,9 +801,9 @@ bool TTenantSlotBroker::UpdateSlotDataCenter(TSlot::TPtr slot,
     if (slot->DataCenter == dataCenter)
         return false;
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                "Update data center (" << dataCenter << ") for "
-                << slot->IdString(true));
+    YDB_LOG_DEBUG_CTX(ctx, "Update data center",
+        {"dataCenter", dataCenter},
+        {"slotId", slot->IdString(true)});
 
     bool res = false;
     // Check if slot has to be detached due to updated data center.
@@ -842,8 +845,9 @@ bool TTenantSlotBroker::UpdateSlotType(TSlot::TPtr slot,
     if (slot->Type == type)
         return false;
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                "Update type (" << type << ") for " << slot->IdString(true));
+    YDB_LOG_DEBUG_CTX(ctx, "Update type",
+        {"type", type},
+        {"slotId", slot->IdString(true)});
 
     bool res = false;
     // Check if slot has to be detached due to updated type.
@@ -989,8 +993,8 @@ void TTenantSlotBroker::DetachSlot(TSlot::TPtr slot,
                                    const TActorContext &ctx,
                                    bool updateUnhappy)
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                "Detach tenant from " << slot->IdString(true));
+    YDB_LOG_DEBUG_CTX(ctx, "Detach tenant",
+        {"slotId", slot->IdString(true)});
 
     DetachSlotNoConfigure(slot, txc, updateUnhappy);
 
@@ -1058,8 +1062,9 @@ void TTenantSlotBroker::AttachSlot(TSlot::TPtr slot,
                                    TTransactionContext &txc,
                                    const TActorContext &ctx)
 {
-    LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                "Attach tenant " << tenant->Name << " to " << slot->IdString(true));
+    YDB_LOG_DEBUG_CTX(ctx, "Attach tenant",
+        {"tenantName", tenant->Name},
+        {"slotId", slot->IdString(true)});
 
     AttachSlotNoConfigure(slot, tenant, usedAs, tenant->GetFirstUnusedSlotLabel(), txc);
 
@@ -1369,9 +1374,10 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
     // Instantly apply one if found.
     for (auto &dc : preferredDCs) {
         auto layout = ComputeLayoutForGroup(group, dc);
-        LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                    "Computed layout for group " << group->Id << " in "
-                    << dc << ": " << layout->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Computed layout for group",
+            {"groupId", group->Id},
+            {"dc", dc},
+            {"layoutString", layout->ToString()});
         if (!layout->MissingCount && !layout->MisplacedCount && !layout->SplitCount) {
             group->SetPreferredDataCenter(dc);
             ApplyLayout(tenant, layout, txc, ctx);
@@ -1384,9 +1390,10 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
     if (currentDC && !layouts.contains(currentDC)) {
         auto layout = ComputeLayoutForGroup(group, currentDC);
         layouts[currentDC] = layout;
-        LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                    "Computed layout for group " << group->Id << " in "
-                    << currentDC << ": " << layout->ToString());
+        YDB_LOG_DEBUG_CTX(ctx, "Computed layout for group",
+            {"groupId", group->Id},
+            {"currentDC", currentDC},
+            {"layoutString", layout->ToString()});
         if (!layout->MissingCount && !layout->MisplacedCount && !layout->SplitCount) {
             group->SetPreferredDataCenter(currentDC);
             ApplyLayout(tenant, layout, txc, ctx);
@@ -1398,16 +1405,17 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
     for (auto &pr : FreeSlots.FreeSlotsByDataCenter) {
         if (!layouts.contains(pr.first)) {
             layouts[pr.first] = ComputeLayoutForGroup(group, pr.first);
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                        "Computed layout for group " << group->Id << " in "
-                        << pr.first << ": " << layouts[pr.first]->ToString());
+            YDB_LOG_DEBUG_CTX(ctx, "Computed layout for group",
+                {"groupId", group->Id},
+                {"key", pr.first},
+                {"layoutString", layouts[pr.first]->ToString()});
         }
     }
 
     // We expect at least one layout to be computed.
     if (layouts.empty())
-        LOG_ERROR_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                    "AssignFreeSlotsForGroup: no computed layouts for group " << group->Id);
+        YDB_LOG_ERROR_CTX(ctx, "AssignFreeSlotsForGroup: no computed layouts for group",
+            {"groupId", group->Id});
 
     // Now choose the best layout and apply it if it is better than the
     // current one.
@@ -1415,16 +1423,18 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
     double bestPenalty = ComputeLayoutPenalty(required, currentMissing, currentMisplaced,
                                               currentSplit, 0);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                "Current layout in " << currentDC << " has penalty " << bestPenalty);
+    YDB_LOG_DEBUG_CTX(ctx, "Current layout in has penalty",
+        {"currentDC", currentDC},
+        {"bestPenalty", bestPenalty});
 
     for (auto it = layouts.begin(); it != layouts.end(); ++it) {
         auto layout = it->second;
         auto penalty = ComputeLayoutPenalty(required, layout->MissingCount, layout->MisplacedCount,
                                             layout->SplitCount, layout->DetachCount);
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                    "Layout in " << it->first << " has penalty " << penalty);
+        YDB_LOG_DEBUG_CTX(ctx, "Layout in has penalty",
+            {"key", it->first},
+            {"penalty", penalty});
 
         if (bestPenalty > penalty) {
             best = it;
@@ -1433,15 +1443,14 @@ bool TTenantSlotBroker::AssignFreeSlotsForGroup(TTenant::TPtr tenant,
     }
 
     if (best != layouts.end()) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                    "Layout in " << best->first << " was chosen");
+        YDB_LOG_DEBUG_CTX(ctx, "Layout in was chosen",
+            {"bestKey", best->first});
         if (best->first != currentDC)
             group->SetPreferredDataCenter(best->first);
         ApplyLayout(tenant, best->second, txc, ctx);
         return true;
     } else {
-        LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                    "Better layout was not found");
+        YDB_LOG_DEBUG_CTX(ctx, "Better layout was not found");
     }
 
     return false;
@@ -1452,8 +1461,8 @@ void TTenantSlotBroker::OnClientDisconnected(TActorId clientId,
 {
     if (KnownPoolPipes.contains(clientId)) {
         ui32 nodeId = clientId.NodeId();
-        LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                    "Pipe disconnected from pool on node " << nodeId);
+        YDB_LOG_DEBUG_CTX(ctx, "Pipe disconnected from pool on node",
+            {"nodeId", nodeId});
 
         // Same dynamic node may be allocated in another data center next time.
         auto config = AppData(ctx)->DynamicNameserviceConfig;
@@ -1476,8 +1485,8 @@ void TTenantSlotBroker::DisconnectNodeSlots(ui32 nodeId,
 
     for (auto &slot : it->second) {
         if (slot->IsConnected) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                        "Mark slot " << slot->IdString() << " as disconnected");
+            YDB_LOG_DEBUG_CTX(ctx, "Mark slot as disconnected",
+                {"slotIdString", slot->IdString()});
 
             if (slot->IsFree()) {
                 FreeSlots.Remove(slot);
@@ -1509,8 +1518,9 @@ void TTenantSlotBroker::SendConfigureSlot(TSlot::TPtr slot,
     }
     slot->LastRequestId = RequestId++;
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                "Send configuration request " << slot->LastRequestId << " for " << slot->IdString(true));
+    YDB_LOG_DEBUG_CTX(ctx, "Send configuration request",
+        {"lastRequestId", slot->LastRequestId},
+        {"slotId", slot->IdString(true)});
 
     auto serviceId = MakeTenantPoolID(slot->Id.NodeId);
     ctx.Send(serviceId, event.Release(), IEventHandle::FlagTrackDelivery, slot->LastRequestId);
@@ -1628,16 +1638,16 @@ void TTenantSlotBroker::Handle(TEvConsole::TEvReplaceConfigSubscriptionsResponse
 {
     auto &rec = ev->Get()->Record;
     if (rec.GetStatus().GetCode() != Ydb::StatusIds::SUCCESS) {
-        LOG_ERROR_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                    "Cannot subscribe for config updates: " << rec.GetStatus().GetCode()
-                    << " " << rec.GetStatus().GetReason());
+        YDB_LOG_ERROR_CTX(ctx, "Cannot subscribe for config",
+            {"updates", rec.GetStatus().GetCode()},
+            {"statusReason", rec.GetStatus().GetReason()});
         return;
     }
 
     ConfigSubscriptionId = rec.GetSubscriptionId();
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                "Got config subscription id=" << ConfigSubscriptionId);
+    YDB_LOG_DEBUG_CTX(ctx, "Got config subscription",
+        {"id", ConfigSubscriptionId});
 }
 
 void TTenantSlotBroker::Handle(TEvents::TEvUndelivered::TPtr &ev,
@@ -1673,13 +1683,13 @@ void TTenantSlotBroker::Handle(TEvTenantPool::TEvLostOwnership::TPtr &ev,
                                const TActorContext &ctx)
 {
     ui32 nodeId = ev->Sender.NodeId();
-    LOG_CRIT_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-               "Tenant pool ownership is lost on node " << nodeId);
+    YDB_LOG_CRIT_CTX(ctx, "Tenant pool ownership is lost on node",
+        {"nodeId", nodeId});
 
     DisconnectNodeSlots(nodeId, ctx);
 
-    LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                "Re-taking ownership of tenant pool on node " << nodeId);
+    YDB_LOG_DEBUG_CTX(ctx, "Re-taking ownership of tenant pool on node",
+        {"nodeId", nodeId});
 
     ctx.Send(MakeTenantPoolID(nodeId), new TEvTenantPool::TEvTakeOwnership(Generation()));
 }
@@ -1727,8 +1737,8 @@ void TTenantSlotBroker::Handle(TEvTenantSlotBroker::TEvGetSlotStats::TPtr &ev,
     auto resp = MakeHolder<TEvTenantSlotBroker::TEvSlotStats>();
     Counters->FillSlotStats(resp->Record);
 
-    LOG_TRACE_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                "Send TEvTenantSlotBroker::TEvSlotStats: " << resp->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Send",
+        {"slotStats", resp->ToString()});
 
     ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
 }
@@ -1739,8 +1749,8 @@ void TTenantSlotBroker::Handle(TEvTenantSlotBroker::TEvGetTenantState::TPtr &ev,
     auto resp = MakeHolder<TEvTenantSlotBroker::TEvTenantState>();
     FillTenantState(ev->Get()->Record.GetTenantName(), resp->Record);
 
-    LOG_TRACE_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                "Send TEvTenantSlotBroker::TEvTenantState: " << resp->ToString());
+    YDB_LOG_TRACE_CTX(ctx, "Send",
+        {"tenantState", resp->ToString()});
 
     ctx.Send(ev->Sender, resp.Release());
 }

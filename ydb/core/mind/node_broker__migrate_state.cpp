@@ -2,6 +2,8 @@
 
 #include <ydb/core/protos/counters_node_broker.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::NODE_BROKER
+
 namespace NKikimr::NNodeBroker {
 
 constexpr size_t MAX_NODES_BATCH_SIZE = 1000;
@@ -18,7 +20,7 @@ public:
 
     void FinalizeMigration(TTransactionContext &txc, const TActorContext &ctx)
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxMigrateState FinalizeMigration");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxMigrateState FinalizeMigration");
 
         if (DbChanges.UpdateEpoch) {
             Self->Dirty.DbUpdateEpoch(Self->Dirty.Epoch, txc);
@@ -46,10 +48,9 @@ public:
 
     void ProcessMigrationBatch(TTransactionContext &txc, const TActorContext &ctx)
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, TStringBuilder()
-            << "TTxMigrateState ProcessMigrationBatch"
-            << "  UpdateNodes left " << DbChanges.UpdateNodes.size()
-            << ", NewVersionUpdateNodes left " << DbChanges.NewVersionUpdateNodes.size());
+        YDB_LOG_DEBUG_CTX(ctx, "TTxMigrateState ProcessMigrationBatch UpdateNodes left NewVersionUpdateNodes left",
+            {"updateNodesCount", DbChanges.UpdateNodes.size()},
+            {"newVersionUpdateNodesCount", DbChanges.NewVersionUpdateNodes.size()});
 
         size_t nodesBatchSize = 0;
         while (nodesBatchSize < MAX_NODES_BATCH_SIZE && !DbChanges.UpdateNodes.empty()) {
@@ -81,7 +82,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxMigrateState Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxMigrateState Execute");
 
         ProcessMigrationBatch(txc, ctx);
         if (!DbChanges.HasNodeUpdates()) {
@@ -92,7 +93,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::NODE_BROKER, "TTxMigrateState Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxMigrateState Complete");
 
         if (Finalized) {
             Self->Committed = Self->Dirty;

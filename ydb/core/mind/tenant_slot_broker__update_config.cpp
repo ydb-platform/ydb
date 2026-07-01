@@ -1,5 +1,7 @@
 #include "tenant_slot_broker_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TENANT_SLOT_BROKER
+
 namespace NKikimr {
 namespace NTenantSlotBroker {
 
@@ -16,8 +18,8 @@ public:
     {
         auto &rec = Event->Get()->Record;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                    "TTxUpdateConfig Execute " << rec.ShortDebugString());
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateConfig Execute",
+            {"rec", rec});
 
         NIceDb::TNiceDb db(txc.DB);
 
@@ -40,7 +42,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER, "TTxUpdateConfig Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxUpdateConfig Complete");
 
         if (Modify) {
             auto &rec = Event->Get()->Record;

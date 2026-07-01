@@ -23,6 +23,8 @@
 #include <util/generic/queue.h>
 #include <util/generic/hash.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TENANT_POOL
+
 namespace NKikimr {
 namespace {
 
@@ -177,9 +179,9 @@ public:
         request->Record.SetSeqNo(++TenantSlotBroker.SeqNo);
         NTabletPipe::SendData(ctx, TenantSlotBroker.Pipe, request.Release());
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                    LogPrefix << "try to register in tenant slot broker (pipe "
-                    << TenantSlotBroker.Pipe << ")");
+        YDB_LOG_DEBUG_CTX(ctx, "Try to register in tenant slot broker (pipe",
+            {"logPrefix", LogPrefix},
+            {"tenantSlotBrokerPipe", TenantSlotBroker.Pipe});
     }
 
     void HandlePipeDestroyed(const TActorContext &ctx) {
@@ -230,9 +232,11 @@ public:
     {
         for (auto &slot : tenant->AssignedSlots) {
             if (slot->ActiveAction) {
-                LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                            LogPrefix << "slot '" << slot->Id << "' configure for '"
-                            << tenant->Name << "' finished with status " << status);
+                YDB_LOG_DEBUG_CTX(ctx, "Slot configure for finished with status",
+                    {"logPrefix", LogPrefix},
+                    {"slotId", slot->Id},
+                    {"tenantName", tenant->Name},
+                    {"status", status});
 
                 SendSlotStatus(slot, status, error, ctx);
             }
@@ -270,8 +274,9 @@ public:
     void SendStatusUpdates(const TActorContext &ctx)
     {
         for (auto &subscriber : StatusSubscribers) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                        LogPrefix << "send status update to " << subscriber);
+            YDB_LOG_DEBUG_CTX(ctx, "Send status update",
+                {"logPrefix", LogPrefix},
+                {"subscriber", subscriber});
             ctx.Send(subscriber, BuildStatusEvent(true));
         }
     }
@@ -281,25 +286,28 @@ public:
         tenant->ComputeResourceLimit();
         if (tenant->LastStatus == TEvLocal::TEvTenantStatus::STOPPED
             || tenant->LastStatus == TEvLocal::TEvTenantStatus::UNKNOWN_TENANT) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                        LogPrefix << "send request to add tenant " << tenant->Name
-                        << " with resources " << tenant->ResourceLimit.ShortDebugString());
+            YDB_LOG_DEBUG_CTX(ctx, "Send request to add tenant with resources",
+                {"logPrefix", LogPrefix},
+                {"tenantName", tenant->Name},
+                {"resourceLimit", tenant->ResourceLimit});
 
             auto event = MakeHolder<TEvLocal::TEvAddTenant>(tenant->Name,
                                                             tenant->ResourceLimit);
             ctx.Send(LocalID, event.Release());
         } else if (tenant->LastStatus == TEvLocal::TEvTenantStatus::STARTED) {
             if (tenant->HasStaticSlot || tenant->AssignedSlots) {
-                LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                            LogPrefix << "send request to alter tenant " << tenant->Name
-                            << " with resources " << tenant->ResourceLimit.ShortDebugString());
+                YDB_LOG_DEBUG_CTX(ctx, "Send request to alter tenant with resources",
+                    {"logPrefix", LogPrefix},
+                    {"tenantName", tenant->Name},
+                    {"resourceLimit", tenant->ResourceLimit});
 
                 auto event = MakeHolder<TEvLocal::TEvAlterTenant>(tenant->Name,
                                                                   tenant->ResourceLimit);
                 ctx.Send(LocalID, event.Release());
             } else {
-                LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                            LogPrefix << "send request to remove tenant" << tenant->Name);
+                YDB_LOG_DEBUG_CTX(ctx, "Send request to remove tenant",
+                    {"logPrefix", LogPrefix},
+                    {"tenantName", tenant->Name});
 
                 auto event = MakeHolder<TEvLocal::TEvRemoveTenant>(tenant->Name);
                 ctx.Send(LocalID, event.Release());
@@ -318,9 +326,11 @@ public:
         slot->Label = label;
         tenant->AssignedSlots.insert(slot);
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TENANT_POOL,
-                     LogPrefix << "attached tenant " << tenant->Name << " to slot "
-                     << slot->Id << " with label " << label);
+        YDB_LOG_NOTICE_CTX(ctx, "Attached tenant to slot with label",
+            {"logPrefix", LogPrefix},
+            {"tenantName", tenant->Name},
+            {"slotId", slot->Id},
+            {"label", label});
     }
 
     void DetachSlot(TDynamicSlotInfo::TPtr slot, const TActorContext &ctx)
@@ -328,9 +338,11 @@ public:
         Y_ABORT_UNLESS(slot->AssignedTenant);
         Y_ABORT_UNLESS(slot->AssignedTenant->AssignedSlots.contains(slot));
 
-        LOG_NOTICE_S(ctx, NKikimrServices::TENANT_POOL,
-                     LogPrefix << "detach tenant " << slot->AssignedTenant->Name
-                     << " from slot " << slot->Id << " with label " << slot->Label);
+        YDB_LOG_NOTICE_CTX(ctx, "Detach tenant from slot with label",
+            {"logPrefix", LogPrefix},
+            {"assignedTenantName", slot->AssignedTenant->Name},
+            {"slotId", slot->Id},
+            {"slotLabel", slot->Label});
 
         slot->AssignedTenant->AssignedSlots.erase(slot);
         slot->AssignedTenant = nullptr;
@@ -408,8 +420,8 @@ public:
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                    LogPrefix << "Bootstrap");
+        YDB_LOG_DEBUG_CTX(ctx, "Bootstrap",
+            {"logPrefix", LogPrefix});
 
         SubscribeForConfig(ctx);
 
@@ -447,9 +459,9 @@ public:
         bool modified = false;
 
         if (Config->StaticSlotLabel != staticSlotLabel) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                        LogPrefix << "static slot label modified from "
-                        << Config->StaticSlotLabel << " to " << staticSlotLabel);
+            YDB_LOG_DEBUG_CTX(ctx, "Static slot label modified",
+                {"logPrefix", LogPrefix},
+                {"staticSlotLabel", staticSlotLabel});
             if (Config->StaticSlots.size())
                 modified = true;
             Config->StaticSlotLabel = staticSlotLabel;
@@ -460,8 +472,8 @@ public:
     }
 
     void HandlePoison(const TActorContext &ctx) {
-        LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                    LogPrefix << "HandlePoison");
+        YDB_LOG_DEBUG_CTX(ctx, "HandlePoison",
+            {"logPrefix", LogPrefix});
         Die(ctx);
     }
 
@@ -481,17 +493,17 @@ public:
     {
         auto &rec = ev->Get()->Record;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                    LogPrefix << "Got new monitoring config: "
-                    << rec.GetConfig().ShortDebugString());
+        YDB_LOG_DEBUG_CTX(ctx, "Got new monitoring",
+            {"logPrefix", LogPrefix},
+            {"config", rec.GetConfig()});
 
         ApplyConfig(rec.GetConfig().GetMonitoringConfig(), ctx);
 
         auto resp = MakeHolder<TEvConsole::TEvConfigNotificationResponse>(rec);
 
-        LOG_TRACE_S(ctx, NKikimrServices::TENANT_POOL,
-                    LogPrefix << "Send TEvConfigNotificationResponse: "
-                    << resp->Record.ShortDebugString());
+        YDB_LOG_TRACE_CTX(ctx, "Send",
+            {"logPrefix", LogPrefix},
+            {"TEvConfigNotificationResponse", resp->Record});
 
         ctx.Send(ev->Sender, resp.Release(), 0, ev->Cookie);
     }
@@ -512,18 +524,19 @@ public:
         case TEvLocal::TEvTenantStatus::STARTED:
             state = TTenantInfo::EState::TENANT_OK;
             if (!tenant->HasStaticSlot && !tenant->AssignedSlots.size()) {
-                LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                            LogPrefix << "started tenant " << tenant->Name
-                            << " which should be stopped");
+                YDB_LOG_DEBUG_CTX(ctx, "Started tenant which should be stopped",
+                    {"logPrefix", LogPrefix},
+                    {"tenantName", tenant->Name});
                 UpdateTenant(tenant, ctx);
             } else if (!tenant->CompareLimit(ev->Get()->ResourceLimit)) {
-                LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                            LogPrefix << "started tenant " << tenant->Name
-                            << " has wrong resource limit");
+                YDB_LOG_DEBUG_CTX(ctx, "Started tenant has wrong resource limit",
+                    {"logPrefix", LogPrefix},
+                    {"tenantName", tenant->Name});
                 UpdateTenant(tenant, ctx);
             } else {
-                LOG_NOTICE_S(ctx, NKikimrServices::TENANT_POOL,
-                             LogPrefix << "started tenant " << tenant->Name);
+                YDB_LOG_NOTICE_CTX(ctx, "Started tenant",
+                    {"logPrefix", LogPrefix},
+                    {"tenantName", tenant->Name});
                 if (tenant->Attributes != ev->Get()->Attributes) {
                     tenant->Attributes = std::move(ev->Get()->Attributes);
                     modified = true;
@@ -539,21 +552,22 @@ public:
         case TEvLocal::TEvTenantStatus::STOPPED:
             state = TTenantInfo::EState::TENANT_OK;
             if (tenant->AssignedSlots.size()) {
-                LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                            LogPrefix << "stopped tenant " << tenant->Name
-                            << "  which should be started");
+                YDB_LOG_DEBUG_CTX(ctx, "Stopped tenant which should be started",
+                    {"logPrefix", LogPrefix},
+                    {"tenantName", tenant->Name});
                 UpdateTenant(tenant, ctx);
             } else {
-                LOG_NOTICE_S(ctx, NKikimrServices::TENANT_POOL,
-                             LogPrefix << "stopped tenant " << tenant->Name);
+                YDB_LOG_NOTICE_CTX(ctx, "Stopped tenant",
+                    {"logPrefix", LogPrefix},
+                    {"tenantName", tenant->Name});
             }
             break;
         case TEvLocal::TEvTenantStatus::UNKNOWN_TENANT:
             modified = true;
             state = TTenantInfo::EState::TENANT_UNKNOWN;
-            LOG_ERROR_S(ctx, NKikimrServices::TENANT_POOL,
-                        LogPrefix << "couldn't start unknown tenant "
-                        << tenant->Name);
+            YDB_LOG_ERROR_CTX(ctx, "Couldn't start unknown tenant",
+                {"logPrefix", LogPrefix},
+                {"tenantName", tenant->Name});
             SendTenantStatus(tenant, NKikimrTenantPool::UNKNOWN_TENANT,
                              ev->Get()->Error, ctx);
             DetachAllSlots(tenant, ctx);
@@ -598,21 +612,25 @@ public:
     {
         auto &rec = ev->Get()->Record;
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                    LogPrefix << ev->Sender << " configures slot '" << rec.GetSlotId()
-                    << "' for tenant '" << rec.GetAssignedTenant() << "'");
+        YDB_LOG_DEBUG_CTX(ctx, "Configures slot for tenant",
+            {"logPrefix", LogPrefix},
+            {"sender", ev->Sender},
+            {"slotId", rec.GetSlotId()},
+            {"assignedTenant", rec.GetAssignedTenant()});
 
         if (ev->Sender != TenantSlotBroker.ActorId) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                        LogPrefix << "configure sender " << ev->Sender << " doesn't own pool");
+            YDB_LOG_DEBUG_CTX(ctx, "Configure sender doesn't own pool",
+                {"logPrefix", LogPrefix},
+                {"sender", ev->Sender});
             SendConfigureError(ev, rec.GetSlotId(), NKikimrTenantPool::NOT_OWNER,
                                "pool is not owned by request sender", ctx);
             return;
         }
 
         if (!DynamicSlots.contains(rec.GetSlotId())) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                        LogPrefix << "got configure for unknown slot " <<  rec.GetSlotId());
+            YDB_LOG_DEBUG_CTX(ctx, "Got configure for unknown slot",
+                {"logPrefix", LogPrefix},
+                {"slotId", rec.GetSlotId()});
             SendConfigureError(ev, rec.GetSlotId(), NKikimrTenantPool::UNKNOWN_SLOT,
                                "unknown slot id", ctx);
             return;
@@ -649,14 +667,16 @@ public:
 
             if (TenantSlotBroker.ActorId != ev->Sender) {
                 if (TenantSlotBroker.ActorId) {
-                    LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                                LogPrefix << TenantSlotBroker.ActorId << " lost ownership");
+                    YDB_LOG_DEBUG_CTX(ctx, "Lost ownership",
+                        {"logPrefix", LogPrefix},
+                        {"tenantSlotBrokerActorId", TenantSlotBroker.ActorId});
                     ctx.Send(TenantSlotBroker.ActorId, new TEvTenantPool::TEvLostOwnership);
                 }
 
                 TenantSlotBroker.ActorId = ev->Sender;
-                LOG_DEBUG_S(ctx, NKikimrServices::TENANT_POOL,
-                            LogPrefix << TenantSlotBroker.ActorId << " took ownership");
+                YDB_LOG_DEBUG_CTX(ctx, "Took ownership",
+                    {"logPrefix", LogPrefix},
+                    {"tenantSlotBrokerActorId", TenantSlotBroker.ActorId});
             }
 
             auto event = BuildStatusEvent();
@@ -758,7 +778,7 @@ public:
     }
 
     void HandlePoison(const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::TENANT_POOL, "TTenantPool: HandlePoison");
+        YDB_LOG_DEBUG_CTX(ctx, "TTenantPool: HandlePoison");
         if (LocalID)
             ctx.Send(LocalID, new TEvents::TEvPoisonPill());
         for (auto &pr : DomainTenantPools)
@@ -818,12 +838,12 @@ public:
     }
 
     void Handle(TEvLocal::TEvLocalDrainNode::TPtr &ev, const TActorContext &ctx) {
-        LOG_NOTICE_S(ctx, NKikimrServices::TENANT_POOL, "Forward drain node to local.");
+        YDB_LOG_NOTICE_CTX(ctx, "Forward drain node to local");
         ctx.Send(ev->Forward(LocalID));
     }
 
     void Bootstrap(const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::TENANT_POOL, "TTenantPool::Bootstrap");
+        YDB_LOG_DEBUG_CTX(ctx, "TTenantPool::Bootstrap");
 
         NActors::TMon *mon = AppData(ctx)->Mon;
         if (mon) {
@@ -832,7 +852,7 @@ public:
         }
 
         if (!Config->IsEnabled) {
-            LOG_DEBUG(ctx, NKikimrServices::TENANT_POOL, "TenantPool is disabled");
+            YDB_LOG_DEBUG_CTX(ctx, "TenantPool is disabled");
             return;
         }
 

@@ -4,6 +4,8 @@
 #include <ydb/library/actors/interconnect/interconnect.h>
 #include <library/cpp/random_provider/random_provider.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::TENANT_SLOT_BROKER
+
 
 namespace NKikimr {
 namespace NTenantSlotBroker {
@@ -29,7 +31,7 @@ public:
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER, "TTxLoadState Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxLoadState Execute");
 
         ui64 reqId = Self->RequestId++;
         NIceDb::TNiceDb db(txc.DB);
@@ -53,11 +55,12 @@ public:
             Y_PROTOBUF_SUPPRESS_NODISCARD config.ParseFromArray(configString.data(), configString.size());
             Self->LoadConfigFromProto(config);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                        "Loaded config:" << Endl << config.DebugString());
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded",
+                {"config", Endl},
+                {"configDebugString", config.DebugString()});
         } else {
             Self->LoadConfigFromProto(NKikimrTenantSlotBroker::TConfig());
-            LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER, "Using default config.");
+            YDB_LOG_DEBUG_CTX(ctx, "Using default config");
         }
 
         Self->ClearState();
@@ -74,8 +77,9 @@ public:
             auto count = tenantRowset.GetValue<Schema::RequiredSlots::Count>();
             tenant->AddSlotsAllocation(descr, count);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                        "Loaded required slots " << descr.ToString() << " for tenant " << tenantName);
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded required slots for tenant",
+                {"descr", descr},
+                {"tenantName", tenantName});
 
             if (!tenantRowset.Next())
                 return false;
@@ -95,8 +99,9 @@ public:
             auto count = allocationRowset.GetValue<Schema::SlotsAllocations::Count>();
             tenant->AddSlotsAllocation(descr, count);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                        "Loaded required slots " << descr.ToString() << " for tenant " << tenantName);
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded required slots for tenant",
+                {"descr", descr},
+                {"tenantName", tenantName});
 
             if (!allocationRowset.Next())
                 return false;
@@ -110,8 +115,9 @@ public:
             Y_ABORT_UNLESS(tenant);
             tenant->AddUnusedSlotLabel(label);
 
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                        "Loaded slot label " << label << " for tenant " << tenantName);
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded slot label for tenant",
+                {"label", label},
+                {"tenantName", tenantName});
 
             if (!labelRowset.Next())
                 return false;
@@ -155,7 +161,8 @@ public:
                 Self->AttachSlotNoConfigureNoDb(slot, tenant, usedAs, label);
             }
 
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER, "Loaded " << slot->IdString(true));
+            YDB_LOG_DEBUG_CTX(ctx, "Loaded",
+                {"slotId", slot->IdString(true)});
 
             if (!slotRowset.Next())
                 return false;
@@ -170,8 +177,8 @@ public:
 
         // Request node info to check slot's data center.
         for (auto &pr : Self->SlotsByNodeId) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TENANT_SLOT_BROKER,
-                        "Taking ownership of tenant pool on node " << pr.first);
+            YDB_LOG_DEBUG_CTX(ctx, "Taking ownership of tenant pool on node",
+                {"key", pr.first});
 
             ctx.Send(MakeTenantPoolID(pr.first), new TEvTenantPool::TEvTakeOwnership(Self->Generation()));
             ctx.Send(GetNameserviceActorId(), new TEvInterconnect::TEvGetNode(pr.first));
@@ -188,7 +195,7 @@ public:
 
     void Complete(const TActorContext &ctx) override
     {
-        LOG_DEBUG(ctx, NKikimrServices::TENANT_SLOT_BROKER, "TTxLoadState Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxLoadState Complete");
 
         Self->SwitchToWork(ctx);
         Self->TxCompleted(this, ctx);

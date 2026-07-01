@@ -1973,9 +1973,9 @@ private:
                             result.AffectedKeys.insert(index);
                         }
                     } else {
-                    result.Affected.push_back(index);
-                    result.AffectedKeys.insert(index);
-                }
+                        result.Affected.push_back(index);
+                        result.AffectedKeys.insert(index);
+                    }
             } else if (indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompact ||
                 indexDescription.Type == TIndexDescription::EType::GlobalFulltextCompactRelevance ||
                 indexDescription.Type == TIndexDescription::EType::GlobalJsonCompact) {

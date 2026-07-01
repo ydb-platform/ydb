@@ -6,6 +6,16 @@
 
 ```yql
 CREATE TABLE table_name (
+    INDEX <index_name>
+      [GLOBAL|LOCAL]
+      [UNIQUE]
+      [SYNC|ASYNC]
+      [USING <index_type>]
+      ON ( <index_columns> )
+      [COVER ( <cover_columns> )]
+      [WITH ( <parameter_name> = <parameter_value>[, ...])]
+    [, ...]
+
     PRIMARY KEY ( column, ... )
 )
 WITH ( key = value, ... )
@@ -15,7 +25,7 @@ AS SELECT ...
 Имена и типы колонок будут соответствовать результатам `SELECT`.
 Для колонок [неопционального типа](../../types/optional.md) также будет выставлен модификатор `NOT NULL`.
 
-Синтаксис `CREATE TABLE AS` позволяет задать только первичный ключ и параметры `WITH`, поэтому при создании таблицы не поддерживается указание имен колонок, [вторичных индексов](secondary_index.md), [векторных индексов](vector_index.md), [полнотекстовых индексов](fulltext_index.md), [локальных индексов](bloom_skip_index.md), [групп колонок](family.md). Имена и типы данных для столбцов новой таблицы автоматически наследуются из результирующего набора запроса SELECT. Все вышеперечисленное можно изменять при помощи [`ALTER TABLE`](../alter_table/index.md) после создания таблицы. При этом поддерживаются [дополнительные параметры](with.md).
+Синтаксис `CREATE TABLE AS` позволяет задать первичный ключ, [вторичные индексы](secondary_index.md), [векторные индексы](vector_index.md), [полнотекстовые индексы](fulltext_index.md), [блум-индексы](bloom_skip_index.md), [min_max-индекс](min_max_index.md) и [параметры `WITH`](with.md), однако при создании таблицы не поддерживается указание имен колонок и [групп колонок](family.md). Имена и типы данных для столбцов новой таблицы автоматически наследуются из результирующего набора запроса SELECT. Группы колонок можно изменять при помощи [`ALTER TABLE`](../alter_table/index.md) после создания таблицы.
 
 
 ## Особенности
@@ -48,7 +58,7 @@ CREATE TABLE my_table (
     PRIMARY KEY (key1, key2)
 ) WITH (
     STORE=COLUMN
-) AS SELECT 
+) AS SELECT
     key AS key1,
     Unwrap(other_key) AS key2,
     value,

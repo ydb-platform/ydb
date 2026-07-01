@@ -31,7 +31,7 @@ using TQuotasPair = TDiskSpaceQuotas::TQuotasPair;
 using TStoragePoolUsage = TSubDomainInfo::TDiskSpaceUsage::TStoragePoolUsage;
 using TSmallBlobsQuotas = TSubDomainInfo::TSmallBlobsQuotas;
 
-EDiskUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsage>& storagePoolsUsage,
+EQuotaUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsage>& storagePoolsUsage,
                                          const THashMap<TString, TQuotasPair>& storagePoolsQuotas
 ) {
     bool softQuotaExceeded = false;
@@ -40,7 +40,7 @@ EDiskUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsa
             const auto totalSize = usage.DataSize + usage.IndexSize;
             // If a quota is equal to zero, then it sets no limit on the disk space usage.
             if (quota->HardQuota && totalSize > quota->HardQuota) {
-                return EDiskUsageStatus::AboveHardQuota;
+                return EQuotaUsageStatus::AboveHardQuota;
             }
             if (quota->SoftQuota && totalSize >= quota->SoftQuota) {
                 softQuotaExceeded = true;
@@ -48,8 +48,8 @@ EDiskUsageStatus CheckStoragePoolsQuotas(const THashMap<TString, TStoragePoolUsa
         }
     }
     return softQuotaExceeded
-            ? EDiskUsageStatus::InBetween
-            : EDiskUsageStatus::BelowSoftQuota;
+            ? EQuotaUsageStatus::InBetween
+            : EQuotaUsageStatus::BelowSoftQuota;
 }
 
 /*
@@ -179,14 +179,14 @@ TSmallBlobsQuotas TSubDomainInfo::GetSmallBlobsQuotas() const {
     return quotas;
 }
 
-bool TSubDomainInfo::ApplyQuotaExceededStatus(EDiskUsageStatus status, bool& exceeded, ESimpleCounters counter, IQuotaCounters* counters) {
-    if (status == EDiskUsageStatus::AboveHardQuota && !exceeded) {
+bool TSubDomainInfo::ApplyQuotaExceededStatus(EQuotaUsageStatus status, bool& exceeded, ESimpleCounters counter, IQuotaCounters* counters) {
+    if (status == EQuotaUsageStatus::AboveHardQuota && !exceeded) {
         counters->ChangeSimpleCounter(counter, +1);
         exceeded = true;
         ++DomainStateVersion;
         return true;
     }
-    if (status == EDiskUsageStatus::BelowSoftQuota && exceeded) {
+    if (status == EQuotaUsageStatus::BelowSoftQuota && exceeded) {
         counters->ChangeSimpleCounter(counter, -1);
         exceeded = false;
         ++DomainStateVersion;
@@ -196,13 +196,13 @@ bool TSubDomainInfo::ApplyQuotaExceededStatus(EDiskUsageStatus status, bool& exc
 }
 
 bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
-    const auto changeSubdomainState = [&](EDiskUsageStatus diskUsage) {
+    const auto changeSubdomainState = [&](EQuotaUsageStatus diskUsage) {
         return ApplyQuotaExceededStatus(diskUsage, DiskQuotaExceeded, COUNTER_DISK_SPACE_QUOTA_EXCEEDED, counters);
     };
 
     auto quotas = GetDiskSpaceQuotas();
     if (!quotas) {
-        return changeSubdomainState(EDiskUsageStatus::BelowSoftQuota);
+        return changeSubdomainState(EQuotaUsageStatus::BelowSoftQuota);
     }
 
     if (!AppData()->FeatureFlags.GetEnableSeparateDiskSpaceQuotas()) {
@@ -215,10 +215,10 @@ bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
         const bool isTotalUsageBelowSoftQuota = !quotas.SoftQuota || totalUsage < quotas.SoftQuota;
 
         if (isHardQuotaExceeded) {
-            return changeSubdomainState(EDiskUsageStatus::AboveHardQuota);
+            return changeSubdomainState(EQuotaUsageStatus::AboveHardQuota);
         }
         if (isTotalUsageBelowSoftQuota) {
-            return changeSubdomainState(EDiskUsageStatus::BelowSoftQuota);
+            return changeSubdomainState(EQuotaUsageStatus::BelowSoftQuota);
         }
     } else {
         // If the feature flag is turned on, then the overall quota is ignored:
@@ -226,15 +226,15 @@ bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
         const auto storagePoolsUsageStatus = CheckStoragePoolsQuotas(DiskSpaceUsage.StoragePoolsUsage, quotas.StoragePoolsQuotas);
 
         const bool isSomeStoragePoolHardQuotaExceeded = !quotas.StoragePoolsQuotas.empty()
-                                                            && storagePoolsUsageStatus == EDiskUsageStatus::AboveHardQuota;
+                                                            && storagePoolsUsageStatus == EQuotaUsageStatus::AboveHardQuota;
         const bool isEachStoragePoolUsageBelowSoftQuota = quotas.StoragePoolsQuotas.empty()
-                                                            || storagePoolsUsageStatus == EDiskUsageStatus::BelowSoftQuota;
+                                                            || storagePoolsUsageStatus == EQuotaUsageStatus::BelowSoftQuota;
 
         if (isSomeStoragePoolHardQuotaExceeded) {
-            return changeSubdomainState(EDiskUsageStatus::AboveHardQuota);
+            return changeSubdomainState(EQuotaUsageStatus::AboveHardQuota);
         }
         if (isEachStoragePoolUsageBelowSoftQuota) {
-            return changeSubdomainState(EDiskUsageStatus::BelowSoftQuota);
+            return changeSubdomainState(EQuotaUsageStatus::BelowSoftQuota);
         }
     }
 
@@ -243,28 +243,28 @@ bool TSubDomainInfo::CheckDiskSpaceQuotas(IQuotaCounters* counters) {
 }
 
 bool TSubDomainInfo::CheckSmallBlobsQuotas(IQuotaCounters* counters) {
-    const auto metricStatus = [](ui64 usage, ui64 hardQuota, ui64 softQuota) -> EDiskUsageStatus {
+    const auto metricStatus = [](ui64 usage, ui64 hardQuota, ui64 softQuota) -> EQuotaUsageStatus {
         if (hardQuota && usage > hardQuota) {
-            return EDiskUsageStatus::AboveHardQuota;
+            return EQuotaUsageStatus::AboveHardQuota;
         }
         if (!softQuota || usage < softQuota) {
-            return EDiskUsageStatus::BelowSoftQuota;
+            return EQuotaUsageStatus::BelowSoftQuota;
         }
-        return EDiskUsageStatus::InBetween;
+        return EQuotaUsageStatus::InBetween;
     };
 
     const auto quotas = GetSmallBlobsQuotas();
 
-    const EDiskUsageStatus volumeStatus = metricStatus(SmallBlobsUsage.VolumeBytes, quotas.VolumeHardQuota, quotas.VolumeSoftQuota);
-    const EDiskUsageStatus countStatus = metricStatus(SmallBlobsUsage.Count, quotas.CountHardQuota, quotas.CountSoftQuota);
+    const EQuotaUsageStatus volumeStatus = metricStatus(SmallBlobsUsage.VolumeBytes, quotas.VolumeHardQuota, quotas.VolumeSoftQuota);
+    const EQuotaUsageStatus countStatus = metricStatus(SmallBlobsUsage.Count, quotas.CountHardQuota, quotas.CountSoftQuota);
 
-    EDiskUsageStatus combinedStatus;
-    if (volumeStatus == EDiskUsageStatus::AboveHardQuota || countStatus == EDiskUsageStatus::AboveHardQuota) {
-        combinedStatus = EDiskUsageStatus::AboveHardQuota;
-    } else if (volumeStatus == EDiskUsageStatus::BelowSoftQuota && countStatus == EDiskUsageStatus::BelowSoftQuota) {
-        combinedStatus = EDiskUsageStatus::BelowSoftQuota;
+    EQuotaUsageStatus combinedStatus;
+    if (volumeStatus == EQuotaUsageStatus::AboveHardQuota || countStatus == EQuotaUsageStatus::AboveHardQuota) {
+        combinedStatus = EQuotaUsageStatus::AboveHardQuota;
+    } else if (volumeStatus == EQuotaUsageStatus::BelowSoftQuota && countStatus == EQuotaUsageStatus::BelowSoftQuota) {
+        combinedStatus = EQuotaUsageStatus::BelowSoftQuota;
     } else {
-        combinedStatus = EDiskUsageStatus::InBetween;
+        combinedStatus = EQuotaUsageStatus::InBetween;
     }
 
     return ApplyQuotaExceededStatus(combinedStatus, SmallBlobsQuotaExceeded, COUNTER_SMALL_BLOBS_QUOTA_EXCEEDED, counters);

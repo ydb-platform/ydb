@@ -1938,7 +1938,7 @@ struct IQuotaCounters {
     virtual void SetShardsQuota(ui64 value) = 0;
 };
 
-enum class EDiskUsageStatus {
+enum class EQuotaUsageStatus {
     AboveHardQuota,
     InBetween,
     BelowSoftQuota,
@@ -2773,7 +2773,7 @@ private:
 
     void RecomputeSmallBlobsStorageUnits();
     // Returns whether the quota exceeded status was flipped
-    bool ApplyQuotaExceededStatus(EDiskUsageStatus status, bool& exceeded, ESimpleCounters counter, IQuotaCounters* counters);
+    bool ApplyQuotaExceededStatus(EQuotaUsageStatus status, bool& exceeded, ESimpleCounters counter, IQuotaCounters* counters);
 
     THashSet<TShardIdx> InternalShards;
     THashSet<TShardIdx> BackupShards;

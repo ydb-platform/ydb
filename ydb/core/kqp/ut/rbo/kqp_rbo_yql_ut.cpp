@@ -3390,6 +3390,34 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Source, root.PlanToString(testContext.ExprCtx));
     }
 
+    Y_UNIT_TEST(RemoveIdentityMapNormalizesRenameFromIdentityAppend) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+        const auto source = TInfoUnit("a");
+        const auto alias = TInfoUnit("alias_a");
+
+        auto read = MakeTestRead({source}, pos);
+        auto map = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestAppend(source.GetFullName(), source.GetFullName(), pos, testContext.ExprCtx, expressionProps),
+            MakeTestRename(alias.GetFullName(), source.GetFullName(), pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(map, pos, {source.GetFullName(), alias.GetFullName()});
+
+        TVector<std::unique_ptr<IRule>> rules;
+        rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
+        TRuleBasedStage removeIdentity("Focused remove identity map", std::move(rules));
+        ComputeLogicalTestProps(root);
+        removeIdentity.RunStage(root, testContext.RboCtx);
+
+        UNIT_ASSERT_C(root.GetInput()->Kind == EOperator::Map, root.PlanToString(testContext.ExprCtx));
+        auto rewrittenMap = CastOperator<TOpMap>(root.GetInput());
+        UNIT_ASSERT_VALUES_EQUAL_C(rewrittenMap->MapElements.size(), 1, root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT_C(!rewrittenMap->MapElements.front().IsRename(), root.PlanToString(testContext.ExprCtx));
+        UNIT_ASSERT(rewrittenMap->MapElements.front().GetElementName() == alias);
+        UNIT_ASSERT(rewrittenMap->MapElements.front().GetColumnAccess() == source);
+    }
+
     Y_UNIT_TEST(MapMetadataAliasFanout) {
         TMapRuleTestContext testContext;
         const auto pos = NYql::TPositionHandle();

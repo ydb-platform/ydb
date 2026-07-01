@@ -9,6 +9,12 @@ bool IsIdentityRename(const TMapElement& mapElement) {
     return mapElement.IsRename() && mapElement.GetRename() == mapElement.GetElementName();
 }
 
+bool IsIdentityAppend(const TMapElement& mapElement) {
+    return !mapElement.IsRename() &&
+        mapElement.IsColumnAccess() &&
+        mapElement.GetColumnAccess() == mapElement.GetElementName();
+}
+
 } // anonymous namespace
 
 // Remove extra maps that arrise during translation.
@@ -27,26 +33,60 @@ TIntrusivePtr<IOperator> TRemoveIdenityMapRule::SimpleMatchAndApply(const TIntru
         return map->GetInput();
     }
 
+    TInfoUnitSet identityAppendSources;
+    for (const auto& mapElement : map->MapElements) {
+        if (IsIdentityAppend(mapElement)) {
+            identityAppendSources.insert(mapElement.GetElementName());
+        }
+    }
+
     TVector<TMapElement> newElements;
     newElements.reserve(map->MapElements.size());
-    bool removed = false;
-    for (const auto& mapElement : map->MapElements) {
+    TInfoUnitSet remainingRenameSources;
+    TInfoUnitSet convertedRenameSources;
+    bool changed = false;
+    for (auto mapElement : map->MapElements) {
         if (IsIdentityRename(mapElement)) {
-            removed = true;
+            changed = true;
             continue;
         }
+
+        if (mapElement.IsRename() &&
+            identityAppendSources.contains(mapElement.GetRename())) {
+            convertedRenameSources.insert(mapElement.GetRename());
+            mapElement.SetIsRename(false);
+            changed = true;
+        }
+
+        if (mapElement.IsRename()) {
+            remainingRenameSources.insert(mapElement.GetRename());
+        }
+
         newElements.push_back(mapElement);
     }
 
-    if (!removed) {
+    TVector<TMapElement> finalElements;
+    finalElements.reserve(newElements.size());
+    for (const auto& mapElement : newElements) {
+        if (IsIdentityAppend(mapElement) &&
+            convertedRenameSources.contains(mapElement.GetElementName()) &&
+            !remainingRenameSources.contains(mapElement.GetElementName())) {
+            changed = true;
+            continue;
+        }
+
+        finalElements.push_back(mapElement);
+    }
+
+    if (!changed) {
         return input;
     }
 
-    if (newElements.empty()) {
+    if (finalElements.empty()) {
         return map->GetInput();
     }
 
-    return MakeIntrusive<TOpMap>(map->GetInput(), map->Pos, map->Props, newElements, map->IsOrdered());
+    return MakeIntrusive<TOpMap>(map->GetInput(), map->Pos, map->Props, finalElements, map->IsOrdered());
 }
 
 }

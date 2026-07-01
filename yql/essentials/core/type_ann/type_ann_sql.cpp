@@ -8,6 +8,8 @@
 #include <yql/essentials/core/yql_expr_optimize.h>
 #include <yql/essentials/core/yql_opt_utils.h>
 
+#include <util/string/join.h>
+
 namespace NYql::NTypeAnnImpl {
 
 using TProjectionOrders = TVector<TMaybe<std::pair<TColumnOrder, bool>>>;
@@ -2404,7 +2406,6 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
     const TStringBuf sqlWhere = isYql ? "YqlWhere" : "PgWhere";
     const TStringBuf sqlGroup = isYql ? "YqlGroup" : "PgGroup";
     const TStringBuf sqlGroupingSet = isYql ? "YqlGroupingSet" : "PgGroupingSet";
-    const bool isColumnOrderForced = !isYql || ctx.Types.OrderedColumns;
 
     auto& options = input->Head();
     if (options.GetTypeAnn() && options.GetTypeAnn()->GetKind() == ETypeAnnotationKind::Universal) {
@@ -3084,9 +3085,17 @@ IGraphTransformer::TStatus SqlSetItemWrapper(const TExprNode::TPtr& input, TExpr
                                 return IGraphTransformer::TStatus::Error;
                             }
 
-                            if (isColumnOrderForced && !columnOrder) {
-                                ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(option->Head().Pos()),
-                                    "No column order at source"));
+                            if (!columnOrder) {
+                                TVector<TString> expected(Reserve(p->Child(2)->ChildrenSize()));
+                                for (const auto& child : p->Child(2)->Children()) {
+                                    expected.push_back(TString(child->Content()));
+                                }
+
+                                ctx.Expr.AddError(TIssue(
+                                    ctx.Expr.GetPosition(option->Head().Pos()),
+                                    TStringBuilder()
+                                    << "No column order at source to match pattern "
+                                    << "(" << JoinSeq(", ", expected) << ")"));
                                 return IGraphTransformer::TStatus::Error;
                             }
 
@@ -4632,8 +4641,10 @@ IGraphTransformer::TStatus SqlSelectWrapper(const TExprNode::TPtr& input, TExprN
     bool areColumnsOrdered = true;
     bool isUniversal = false;
     if (isYql && (1 != setItems->ChildrenSize())) {
-        status = InferUnionType(input->Pos(), setItems->ChildrenList(), resultStructType, ctx, /* areHashesChecked = */ false, isUniversal);
-        areColumnsOrdered = false;
+        status = InferYqlInferUnionType(
+            input->Pos(), setItems->ChildrenList(),
+            resultColumnOrder, resultStructType,
+            ctx, areColumnsOrdered, isUniversal);
     } else if (isYql || (1 == setItems->ChildrenSize() && HasSetting(*setItems->Child(0)->Child(0), "unknowns_allowed"))) {
         status = InferPositionalUnionType(input->Pos(), setItems->ChildrenList(), resultColumnOrder, resultStructType, ctx, isUniversal);
     } else {

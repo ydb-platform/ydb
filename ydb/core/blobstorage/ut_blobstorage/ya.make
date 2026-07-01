@@ -40,9 +40,9 @@ SRCS(
     mirror3of4.cpp
     monitoring.cpp
     multiget.cpp
+    node_warden_cache.cpp
     patch.cpp
     recovery.cpp
-    retro_tracing.cpp
     sanitize_groups.cpp
     scrub_fast.cpp
     self_heal.cpp

@@ -1,6 +1,7 @@
 #include "batch_cutter.h"
 
-#include <ydb/library/kafka/kafka_records.h>
+#include <ydb/core/persqueue/public/codecs/kafka.h>
+#include <ydb/public/sdk/cpp/src/library/kafka/kafka_records.h>
 #include <ydb/core/persqueue/public/write_meta/write_meta.h>
 #include <ydb/core/protos/grpc_pq_old.pb.h>
 #include <ydb/public/api/protos/draft/persqueue_common.pb.h>
@@ -15,10 +16,6 @@
 
 namespace NKikimr::NPQ::NBatching {
 namespace {
-
-NPersQueueCommon::ECodec KafkaBatchCodec() {
-    return static_cast<NPersQueueCommon::ECodec>(static_cast<int>(Ydb::Topic::CODEC_KAFKA_BATCH) - 1);
-}
 
 NPersQueueCommon::ECodec ToDataChunkCodec(NKafka::ECompressionType compressionType) {
     switch (compressionType) {
@@ -90,7 +87,7 @@ TVector<TReadResult> TKafkaBatchCutter::Cut(const TBatchCutterData& data, const 
         TReadResult item = data.ReadResult;
         item.SetOffset(offset);
         item.SetSeqNo(seqNo);
-        item.SetMessageCount(1);
+        item.SetLogicalMessageCount(1);
         item.SetIsBatch(false);
         item.ClearUncompressedSize();
 

@@ -101,7 +101,10 @@ TOracle::TOracle(
     , DefaultReadRequestTimeout(StorageConfig->GetReadRequestTimeout())
     , DefaultWriteHedgingDelay(StorageConfig->GetWriteHedgingDelay())
     , DefaultWriteRequestTimeout(StorageConfig->GetWriteRequestTimeout())
-    , DefaultPBufferReplyTimeout(StorageConfig->GetPBufferReplyTimeout())
+    , DefaultIndirectWriteReplyTimeout(
+          StorageConfig->GetIndirectWriteReplyTimeout())
+    , DefaultFlushRequestTimeout(StorageConfig->GetFlushRequestTimeout())
+    , DefaultEraseRequestTimeout(StorageConfig->GetEraseRequestTimeout())
     , DefaultWriteMode(GetWriteModeFromProto(StorageConfig->GetWriteMode()))
     , HostStatistics(DirectBlockGroupHostCount)
     , HostStates(DirectBlockGroupHostCount)
@@ -192,6 +195,14 @@ void TOracle::OnRequestFailed(
     HostStatistics[hostIndex].OnError(now, operation);
 }
 
+void TOracle::OnRequestCancelled(
+    THostIndex hostIndex,
+    EOperation operation,
+    TInstant now)
+{
+    HostStatistics[hostIndex].OnCancelled(now, operation);
+}
+
 THostIndex TOracle::SelectBestPBufferHost(
     THostMask hosts,
     EOperation operation) const
@@ -249,14 +260,29 @@ TDuration TOracle::GetWriteRequestTimeout() const
     return DefaultWriteRequestTimeout;
 }
 
-TDuration TOracle::GetPBufferReplyTimeout() const
+TDuration TOracle::GetIndirectWriteReplyTimeout() const
 {
-    return DefaultPBufferReplyTimeout;
+    return DefaultIndirectWriteReplyTimeout;
+}
+
+TDuration TOracle::GetFlushRequestTimeout() const
+{
+    return DefaultFlushRequestTimeout;
+}
+
+TDuration TOracle::GetEraseRequestTimeout() const
+{
+    return DefaultEraseRequestTimeout;
 }
 
 EWriteMode TOracle::GetWriteMode() const
 {
     return DefaultWriteMode;
+}
+
+const THostStat& TOracle::GetHostStatistics(THostIndex hostIndex) const
+{
+    return HostStatistics[hostIndex];
 }
 
 TString TOracle::Dump() const

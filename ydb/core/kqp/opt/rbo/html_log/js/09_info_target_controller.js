@@ -1042,9 +1042,6 @@ var InfoTargetController = (function() {
                 }
                 return failed(target, range.reason || 'tree-subtree-not-found');
             }
-            if (!materializerRangeMounted(materializer, range)) {
-                return materializeNeeded(target, 'tree-subtree-not-mounted');
-            }
             var rangeRow = materializer.state.rows && materializer.state.rows[range.start];
             rootPid = rangeRow && rangeRow.pid || '';
 
@@ -1055,7 +1052,7 @@ var InfoTargetController = (function() {
                     rangeElements: materializerRows
                 }]);
             }
-            return materializeNeeded(target, 'tree-subtree-root-not-rendered');
+            return materializeNeeded(target, 'tree-subtree-not-mounted');
         }
 
         var rootEl = byId(rootPid ? normalTreeNodeIdForPid(coords, idScope, rootPid) : pathNodeId);

@@ -376,6 +376,12 @@ message TTableIncrementalBackupConfig {
     optional EConsistency Consistency = 2;
 }
 
+enum ESpecialTableType {
+    ESpecialTableTypeNone = 0;
+    ESpecialTableTypeFulltextCompact = 1;
+    ESpecialTableTypeFulltextCompactRelevance = 2;
+}
+
 message TTableDescription {
     optional string Name = 1;
     optional uint64 Id_Deprecated = 2; // LocalPathId, deprecated
@@ -464,7 +470,7 @@ message TTableDescription {
     optional TTableDetailedMetricsSettings DetailedMetricsSettings = 51;
 
     // For fulltext indexes - to determine if the table is an impl table of an index
-    optional EIndexType IndexImplType = 52;
+    optional ESpecialTableType TableType = 52;
 }
 
 message TCompressionOptions {

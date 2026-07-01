@@ -201,6 +201,17 @@ The capabilities of {{ ydb-short-name }} regarding **ANN search** (approximate n
 
 The fulltext search capabilities and index parameters are described in [{#T}](../dev/fulltext-indexes.md) and [{#T}](query_execution/fulltext_search.md).
 
+#### Local index {#local-index}
+
+A local index is an auxiliary structure stored together with table data (unlike a [global secondary index](#secondary-index), which materializes a separate index table). It is applied while reading the main table in storage. See [local indexes](query_execution/local_indexes.md).
+
+#### Bloom filter {#bloom-filter}
+
+A Bloom filter is a [probabilistic data structure](https://en.wikipedia.org/wiki/Bloom_filter) for testing set membership. It may produce false positives, but there are no false negatives.
+
+#### Local Bloom skip index {#local-bloom-skip-index}
+
+A local Bloom skip index is a kind of [local index](#local-index): a probabilistic column-value filter based on a [Bloom filter](https://en.wikipedia.org/wiki/Bloom_filter) that speeds up selective queries by skipping data fragments that cannot contain the requested value. See [Bloom skip indexes](../dev/bloom-skip-indexes.md) and [local indexes](query_execution/local_indexes.md).
 
 #### Column family {#column-family}
 

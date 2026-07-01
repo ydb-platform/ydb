@@ -10,6 +10,7 @@ TEST_SRCS(
 
 PEERDIR(
     ydb/tests/oss/ydb_sdk_import
+    ydb/public/sdk/python/enable_v3_new_behavior
 )
 
 DEPENDS(

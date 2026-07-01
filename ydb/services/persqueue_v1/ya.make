@@ -11,6 +11,7 @@ SRCS(
     persqueue.h
     services_initializer.cpp
     topic.cpp
+    topic_deferred_publish.cpp
 )
 
 PEERDIR(

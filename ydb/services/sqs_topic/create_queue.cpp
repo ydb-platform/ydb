@@ -82,6 +82,10 @@ namespace NKikimr::NSqsTopic::V1 {
             if (!Request_->GetDatabaseName()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, "Request without database is forbidden"));
             }
+            if (!AppData(ctx)->PQConfig.GetTopicsAreFirstClassCitizen()) {
+                return ReplyWithError(MakeError(NSQS::NErrors::UNSUPPORTED_OPERATION,
+                    "CreateQueue is not supported"));
+            }
             if (auto check = ValidateQueueName(QueueName, false); !check.has_value()) {
                 return ReplyWithError(MakeError(NSQS::NErrors::INVALID_PARAMETER_VALUE, std::format("Invalid queue name: {}", check.error())));
             }
@@ -153,6 +157,11 @@ namespace NKikimr::NSqsTopic::V1 {
                 autoPartitioning->set_strategy(::Ydb::Topic::AutoPartitioningStrategy::AUTO_PARTITIONING_STRATEGY_SCALE_UP);
                 partitioningSettings->set_min_active_partitions(DEFAULT_MIN_PARTITION_COUNT);
                 partitioningSettings->set_max_active_partitions(DEFAULT_MAX_PARTITION_COUNT);
+
+                auto* writeSpeed = autoPartitioning->mutable_partition_write_speed();
+                writeSpeed->set_up_utilization_percent(80);
+                writeSpeed->set_down_utilization_percent(20);
+                writeSpeed->mutable_stabilization_window()->set_seconds(30);
             }
 
             SetDuration(QueueAttributes.MessageRetentionPeriod.GetOrElse(DEFAULT_MESSAGE_RETENTION_PERIOD), *topicRequest.mutable_retention_period());

@@ -7,6 +7,7 @@
 #include <ydb/core/grpc_services/table_settings.h>
 #include <ydb/core/kqp/gateway/utils/scheme_helpers.h>
 #include <ydb/core/protos/metrics_config.pb.h>
+#include <ydb/core/protos/set_column_constraint.pb.h>
 #include <ydb/core/protos/schemeshard/operations.pb.h>
 #include <ydb/core/kqp/query_data/kqp_query_data.h>
 #include <ydb/core/protos/replication.pb.h>
@@ -641,12 +642,23 @@ static bool FillCreateLocalIndexDesc(NKikimrSchemeOp::TColumnTableDescription& t
                     error = NKikimr::NOlap::NIndexes::NMinMax::IncorrectDataColumnsErrorMessage(index.DataColumns);
                     return false;
                 }
-                auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
-                if (columnIdIt == columnIdsByName.end()) {
+                const NKikimrSchemeOp::TOlapColumnDescription* columnDesc = nullptr;
+                for (auto& column: tableDesc.GetSchema().GetColumns()) {
+                    if (column.GetName() == index.KeyColumns.front()) {
+                        columnDesc = &column;
+                        break;
+                    }
+                }
+                if (!columnDesc) {
                     code = Ydb::StatusIds::BAD_REQUEST;
-                    error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.KeyColumns.front());
+                    TVector<TString> tableColumnNames;
+                    for (const auto& col: tableDesc.GetSchema().GetColumns()) {
+                        tableColumnNames.push_back(col.GetName());
+                    }
+                    error = NKikimr::NOlap::NIndexes::NMinMax::UnknownIndexColumnNameErrorMessage(index.KeyColumns.front(), tableColumnNames);
                     return false;
                 }
+                auto columnIdIt = columnIdsByName.find(index.KeyColumns.front());
 
                 auto* upsert = tableDesc.MutableSchema()->AddIndexes();
                 upsert->SetId(nextEntityId++);
@@ -654,7 +666,7 @@ static bool FillCreateLocalIndexDesc(NKikimrSchemeOp::TColumnTableDescription& t
                 upsert->SetClassName(NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName);
                 auto* minmax = upsert->MutableMinMaxIndex();
                 minmax->SetColumnId(columnIdIt->second);
-
+                NKikimr::NOlap::NIndexes::NMinMax::SetAppropriateStoregeIdAndInheritPortionStorageBasedOnType(*upsert, columnDesc->GetType());
                 break;
             }
             default:
@@ -868,12 +880,6 @@ public:
         TLoadTableMetadataSettings settings) override
     {
         return Gateway->LoadTableMetadata(cluster, table, settings);
-    }
-
-    // TODO: flown4qqqq. Need to remove.
-    TFuture<TGenericResult> SetConstraint(const TString&, TVector<TSetColumnConstraintSettings>&&) override {
-        TString error = "NotImplemented";
-        return MakeFuture<TGenericResult>(ResultFromError<TGenericResult>(error));
     }
 
     TGenericResult PrepareAlterDatabase(const TAlterDatabaseSettings& settings, NKikimrSchemeOp::TModifyScheme& modifyScheme) {
@@ -1318,6 +1324,26 @@ public:
                 tablePromise.SetValue(errResult);
                 return tablePromise.GetFuture();
             }
+            TGenericResult result;
+            result.SetSuccess();
+            tablePromise.SetValue(result);
+            return tablePromise.GetFuture();
+        } else if (opType == EAlterOperationKind::SetColumnConstraint) {
+            auto& phyQuery = *SessionCtx->Query().PreparingQuery->MutablePhysicalQuery();
+            auto& phyTx = *phyQuery.AddTransactions();
+            phyTx.SetType(NKqpProto::TKqpPhyTx::TYPE_SCHEME);
+            auto* setColumnConstraintOp = phyTx.MutableSchemeOperation()->MutableSetColumnConstraint();
+
+            Ydb::StatusIds::StatusCode code;
+            TString error;
+            if (!BuildAlterTableSetColumnConstraintRequest(&req, setColumnConstraintOp, code, error)) {
+                IKqpGateway::TGenericResult errResult;
+                errResult.AddIssue(NYql::TIssue(error));
+                errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));
+                tablePromise.SetValue(errResult);
+                return tablePromise.GetFuture();
+            }
+
             TGenericResult result;
             result.SetSuccess();
             tablePromise.SetValue(result);
@@ -2474,12 +2500,13 @@ public:
             if (cluster != SessionCtx->GetCluster()) {
                 return MakeFuture(ResultFromError<TGenericResult>("Invalid cluster: " + cluster));
             }
+            auto metadata = SessionCtx->Tables().GetTable(cluster, req.path()).Metadata;
 
             NKikimrSchemeOp::TModifyScheme schemeTx;
 
             Ydb::StatusIds::StatusCode code;
             TString error;
-            if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, code, error)) {
+            if (!BuildAlterColumnTableModifyScheme(&req, &schemeTx, metadata, code, error)) {
                 IKqpGateway::TGenericResult errResult;
                 errResult.AddIssue(NYql::TIssue(error));
                 errResult.SetStatus(NYql::YqlStatusFromYdbStatus(code));

@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import boto3
-
+import logging
 import pytest
 import time
 
@@ -10,6 +10,8 @@ import ydb.public.api.protos.draft.fq_pb2 as fq
 
 from ydb.tests.library.common.helpers import plain_or_under_sanitizer
 from ydb.tests.tools.fq_runner.kikimr_utils import yq_all
+
+logger = logging.getLogger(__name__)
 
 
 class TestS3(object):
@@ -41,24 +43,28 @@ class TestS3(object):
     @pytest.mark.parametrize("client", [{"folder_id": "my_folder"}], indirect=True)
     def test_atomic_upload_commit(self, kikimr, s3, client):
         resource = boto3.resource(
-            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
+            "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key", region_name="us-east-1"
         )
 
         # Creating select content
         bucket = resource.Bucket("insert_bucket")
         bucket.create(ACL='public-read-write')
         bucket.objects.all().delete()
+        logger.info("S3 bucket created")
 
         s3_client = boto3.client(
             "s3", endpoint_url=s3.s3_url, aws_access_key_id="key", aws_secret_access_key="secret_key"
         )
+        logger.info("S3 client created")
 
         number_rows = 10000000
         body = "idx\n" + "0\n" * number_rows
         s3_client.put_object(Body=body, Bucket="insert_bucket", Key="select/test.csv", ContentType="text/plain")
+        logger.info("Uploaded object into S3")
 
         # Creating insert query
         client.create_storage_connection("ibucket", "insert_bucket")
+        logger.info("Created connection")
 
         sql = R'''
             pragma s3.AtomicUploadCommit = "true";
@@ -69,6 +75,7 @@ class TestS3(object):
             ));
         '''
         query_id = client.create_query("simple", sql, type=fq.QueryContent.QueryType.ANALYTICS).result.query_id
+        logger.info("Created new query")
 
         # Checking insert query
         timeout = plain_or_under_sanitizer(250, 250 * 5)
@@ -78,26 +85,38 @@ class TestS3(object):
             current_number_rows = self.run_atomic_upload_check_query(
                 client, bucket, "ibucket", "insert/", "csv_with_names"
             )
+            logger.debug(f"Fetched rows {current_number_rows} / {number_rows}")
+
             if current_number_rows == number_rows:
                 break
 
             assert current_number_rows == 0, "Unexpected incomplete result in bucket"
 
             number_uploads = len(list(bucket.multipart_uploads.all()))
+            logger.debug(f"Fetched upload {number_uploads}")
+
             if number_uploads > 0:
-                kikimr.compute_plane.kikimr_cluster.restart_nodes()
+                logger.info("Performing kikimr restart")
+                for node in kikimr.compute_plane.kikimr_cluster.nodes.values():
+                    node.stop()
+                    node.set_log_file_prefix("logfile_restarted_")
+                    node.start()
                 break
 
             assert time.time() < deadline, f"Insert not finished for already {time.time() - start} seconds"
             time.sleep(0.001)
 
+        logger.info("Waiting kikimr up")
         kikimr.compute_plane.wait_bootstrap()
+
+        logger.info("Waiting query finish")
         client.wait_query(
             query_id,
             statuses=[fq.QueryMeta.COMPLETED, fq.QueryMeta.ABORTED_BY_SYSTEM, fq.QueryMeta.FAILED],
             timeout=timeout,
         )
 
+        logger.info("Checking query results")
         final_number_rows = self.run_atomic_upload_check_query(client, bucket, "ibucket", "insert/", "csv_with_names")
         query = client.describe_query(query_id).result.query
         final_status = query.meta.status

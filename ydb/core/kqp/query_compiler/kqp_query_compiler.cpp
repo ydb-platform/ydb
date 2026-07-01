@@ -2017,8 +2017,9 @@ private:
 
                             return false;
                         }) || std::any_of(settings.ReturningColumns().begin(), settings.ReturningColumns().end(), [&](const auto& columnName) {
-                            // Need to lookup missing columns from RETURNING
-                            return !columnsSet.contains(columnName.StringValue());
+                            // Need to lookup missing columns from RETURNING, including default columns
+                            // that were injected into the input (those are not genuine user input).
+                            return !columnsSet.contains(columnName.StringValue()) || localDefaultColumns.contains(columnName.StringValue());
                         }) || (!settings.ReturningColumns().Empty() // Need to check if row exists for RETURNING
                             && (settings.Mode().StringValue() == "update" || settings.Mode().StringValue() == "delete"));
 
@@ -2030,7 +2031,7 @@ private:
 
                         THashSet<TStringBuf> lookupColumnsSet;
                         for (const auto& columnName : settings.ReturningColumns()) {
-                            if (!columnsSet.contains(columnName)) {
+                            if (!columnsSet.contains(columnName) || localDefaultColumns.contains(columnName)) {
                                 lookupColumnsSet.insert(columnName);
                             }
                         }
@@ -2207,8 +2208,10 @@ private:
                         }
 
                         FillTablesMap(implTable->Name, tablesMap);
-                        for (const auto& columnName: {NTableIndex::NFulltext::TokenColumn, NTableIndex::NFulltext::MaxIdColumn,
-                            NTableIndex::NFulltext::GenColumn, NTableIndex::NFulltext::AddedColumn,
+                        for (const auto& columnName: {NTableIndex::NFulltext::TokenColumn,
+                            NTableIndex::NFulltext::GenColumn,
+                            NTableIndex::NFulltext::MaxIdColumn,
+                            NTableIndex::NFulltext::AddedColumn,
                             NTableIndex::NFulltext::SegmentColumn}) {
                             const auto& columnMeta = implTable->Columns.at(columnName);
                             auto keyColumnProto = indexSettings->AddImplColumns();

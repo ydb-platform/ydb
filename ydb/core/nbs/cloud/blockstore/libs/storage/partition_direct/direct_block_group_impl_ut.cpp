@@ -1,5 +1,7 @@
 #include "direct_block_group_impl.h"
 
+#include "vchunk.h"
+
 #include <ydb/core/nbs/cloud/blockstore/config/config.h>
 #include <ydb/core/nbs/cloud/blockstore/config/protos/storage.pb.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
@@ -14,6 +16,7 @@
 
 #include <ydb/library/services/services.pb.h>
 
+#include <library/cpp/monlib/dynamic_counters/counters.h>
 #include <library/cpp/testing/unittest/registar.h>
 
 #include <vector>
@@ -416,6 +419,79 @@ Y_UNIT_TEST_SUITE(TDirectBlockGroupTest)
         UNIT_ASSERT_VALUES_EQUAL(
             static_cast<size_t>(0),
             service.AddHostRequests[0]);
+    }
+
+    Y_UNIT_TEST_F(ShouldSyncHostsWithConnections, TDBGFixture)
+    {
+        // On restart a DBG comes up with the committed connection count (here
+        // N+1), while a vchunk's config and the Oracle can still lag at N.
+        // SyncHostsWithConnections grows both up to the connection count - the
+        // same call a live AddHost makes.
+        constexpr ui32 grownHostCount = DirectBlockGroupHostCount + 1;
+        constexpr ui64 vChunkSize = RegionSize / DirectBlockGroupsCount;
+
+        auto executor = MakeExecutor();
+        TPartitionDirectServiceMock service(true);
+
+        auto dbg = std::make_shared<TDirectBlockGroup>(
+            Runtime->GetActorSystem(0),
+            MakeStorageConfig(),
+            executor,
+            "disk-1",
+            1,
+            1,
+            0,
+            MakeDDiskIds(100, grownHostCount),
+            MakeDDiskIds(100 + grownHostCount, grownHostCount),
+            std::make_unique<TStorageTransportMock>());
+
+        auto initialReady = dbg->Run(&service);
+        initialReady.Wait(WaitTimeout);
+        UNIT_ASSERT(initialReady.HasValue());
+
+        // The vchunk still only knows the pre-add host count.
+        TIntrusivePtr<::NMonitoring::TDynamicCounters> counters(
+            new ::NMonitoring::TDynamicCounters());
+        auto vchunk = std::make_shared<TVChunk>(
+            Runtime->GetActorSystem(0),
+            &service,
+            TVChunkConfig::MakeDefault(
+                100,
+                DirectBlockGroupHostCount,
+                DefaultPrimaryCount),
+            dbg,
+            3,
+            vChunkSize,
+            counters);
+
+        TString dumpBefore;
+        TString dumpAfter;
+        TString oracleBefore;
+        TString oracleAfter;
+        RunOnExecutor(
+            executor,
+            [&]
+            {
+                dbg->Register(vchunk);
+                dumpBefore = vchunk->DebugPrintDirtyMap();
+                oracleBefore = dbg->GetOracle()->Dump();
+                dbg->SyncHostsWithConnections();
+                dumpAfter = vchunk->DebugPrintDirtyMap();
+                oracleAfter = dbg->GetOracle()->Dump();
+                return true;
+            })
+            .GetValue(WaitTimeout);
+
+        // The grown host slot (H5) is absent before and present after, both in
+        // the vchunk dirty map and in the Oracle.
+        UNIT_ASSERT_C(
+            dumpBefore.find("H5-") == TString::npos,
+            "unexpected H5 before sync:\n" + dumpBefore);
+        UNIT_ASSERT_STRING_CONTAINS(dumpAfter, "H5-");
+        UNIT_ASSERT_C(
+            oracleBefore.find("H5") == TString::npos,
+            "unexpected Oracle H5 before sync:\n" + oracleBefore);
+        UNIT_ASSERT_STRING_CONTAINS(oracleAfter, "H5");
     }
 }
 

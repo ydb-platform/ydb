@@ -312,6 +312,14 @@ void TPartitionActor::HandleFastPathServiceReady(
         "%s All DBGs reached initial locked quorum, opening endpoint",
         LogTitle.GetWithTime().c_str());
 
+    // On restart, bring each DBG's per-host state (vchunks and Oracle) up to
+    // its connection count - the same path a live AddHost uses.
+    for (const auto& dbgPtr: FastPathService->GetDirectBlockGroups()) {
+        auto executor = dbgPtr->GetExecutor();
+        executor->ExecuteSimple([dbgPtr]()
+                                { dbgPtr->SyncHostsWithConnections(); });
+    }
+
     // Re-send the BSC request for an add-host in flight at the last restart
     // (no live add can be in flight this early). BSController is idempotent.
     if (AddHostInFlight.has_value()) {

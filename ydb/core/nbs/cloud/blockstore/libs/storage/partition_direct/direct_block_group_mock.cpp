@@ -155,6 +155,10 @@ TDirectBlockGroupMock::TDirectBlockGroupMock()
     {
         Y_ABORT_UNLESS(false, "Should set OnAddHostFailedHandler");
     };
+    SyncHostsWithConnectionsHandler = [](const auto&...)
+    {
+        Y_ABORT_UNLESS(false, "Should set SyncHostsWithConnectionsHandler");
+    };
 }
 
 void TDirectBlockGroupMock::Register(TVChunkWeakPtr vChunk)
@@ -351,9 +355,9 @@ void TDirectBlockGroupMock::OnAddHostFailed(const TString& reason)
     OnAddHostFailedHandler(reason);
 }
 
-size_t TDirectBlockGroupMock::GetHostCount() const
+void TDirectBlockGroupMock::SyncHostsWithConnections()
 {
-    return HostCount;
+    SyncHostsWithConnectionsHandler();
 }
 
 ////////////////////////////////////////////////////////////////////////////////

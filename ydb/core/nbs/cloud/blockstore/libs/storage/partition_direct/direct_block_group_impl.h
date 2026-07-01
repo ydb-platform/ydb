@@ -137,7 +137,7 @@ public:
 
     void OnAddHostFailed(const TString& reason) override;
 
-    size_t GetHostCount() const override;
+    void SyncHostsWithConnections() override;
 
     // IHostStateController implementation
     void SetHostState(
@@ -180,7 +180,6 @@ private:
     void DoEstablishConnections();
     void DoEstablishConnection(size_t index, EConnectionType connectionType);
 
-    void NotifyVChunksAboutNewHost(size_t newHostCount);
     void OnConnectionEstablished(
         EConnectionType connectionType,
         size_t index,

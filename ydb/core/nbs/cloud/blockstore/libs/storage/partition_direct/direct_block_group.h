@@ -123,9 +123,6 @@ public:
 
     virtual IOraclePtr GetOracle() = 0;
 
-    // Number of hosts (DDisk connections) the group currently has.
-    virtual size_t GetHostCount() const = 0;
-
     virtual void Schedule(TDuration delay, TCallback callback) = 0;
 
     virtual std::shared_ptr<NWilson::TSpan> CreateChildSpan(
@@ -226,6 +223,10 @@ public:
 
     // The partition rejected the DBG's AddHost request (e.g. at MaxHostCount).
     virtual void OnAddHostFailed(const TString& reason) = 0;
+
+    // Grows the per-host state (vchunks and the Oracle) up to the current
+    // connection count. Used by live AddHost and by recovery on restart.
+    virtual void SyncHostsWithConnections() = 0;
 };
 
 using IDirectBlockGroupPtr = std::shared_ptr<IDirectBlockGroup>;

@@ -2,7 +2,6 @@
 
 #include "direct_block_group.h"
 
-#include <ydb/core/nbs/cloud/blockstore/libs/common/constants.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/model/oracle.h>
 
 namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect {
@@ -230,8 +229,9 @@ public:
     TOnAddHostFailedHandler OnAddHostFailedHandler;
     void OnAddHostFailed(const TString& reason) override;
 
-    size_t HostCount = DirectBlockGroupHostCount;
-    size_t GetHostCount() const override;
+    using TSyncHostsWithConnectionsHandler = std::function<void()>;
+    TSyncHostsWithConnectionsHandler SyncHostsWithConnectionsHandler;
+    void SyncHostsWithConnections() override;
 };
 
 using TDirectBlockGroupMockPtr = std::shared_ptr<TDirectBlockGroupMock>;

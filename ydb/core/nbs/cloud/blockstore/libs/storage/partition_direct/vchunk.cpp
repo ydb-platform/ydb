@@ -370,16 +370,6 @@ void TVChunk::DoStart()
     LogTitle.SetDiskId(PartitionDirectService->GetVolumeConfig()->DiskId);
     DirectBlockGroup->Register(weak_from_this());
 
-    // On recovery our persisted config can lag the DBG's connection count
-    // (connections persist first). Catch up before restoring the dirty map.
-    const size_t dbgHostCount = DirectBlockGroup->GetHostCount();
-    for (size_t hostCount = VChunkConfig.GetHostCount() + 1;
-         hostCount <= dbgHostCount;
-         ++hostCount)
-    {
-        OnHostAppended(hostCount);
-    }
-
     LOG_DEBUG(
         *ActorSystem,
         NKikimrServices::NBS_PARTITION,

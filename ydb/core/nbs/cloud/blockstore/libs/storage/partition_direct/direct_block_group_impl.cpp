@@ -89,7 +89,7 @@ TDirectBlockGroup::TDirectBlockGroup(
               .Generation = TabletGeneration,
               .DirectBlockGroupIndex = DirectBlockGroupIndex,
           })
-    , Oracle(StorageConfig, this, ddisksIds.size())
+    , Oracle(StorageConfig, this)
 {
     Y_ASSERT(pbufferIds.size() >= DirectBlockGroupHostCount);
     Y_ASSERT(ddisksIds.size() >= DirectBlockGroupHostCount);
@@ -1100,11 +1100,6 @@ void TDirectBlockGroup::OnAddHostFailed(const TString& reason)
         reason.c_str());
 }
 
-size_t TDirectBlockGroup::GetHostCount() const
-{
-    return DDiskConnections.size();
-}
-
 void TDirectBlockGroup::AddHost(
     THostIndex newHostIndex,
     NKikimrBlobStorage::NDDisk::TDDiskId ddiskId,
@@ -1155,22 +1150,36 @@ void TDirectBlockGroup::AddHost(
     Y_ABORT_UNLESS(
         PBufferIdToHostIndex.insert({pbufferId, newHostIndex}).second);
 
-    NotifyVChunksAboutNewHost(DDiskConnections.size());
-
-    Oracle.OnHostAdded();
+    SyncHostsWithConnections();
 
     DoEstablishConnection(newHostIndex, EConnectionType::DDisk);
     DoEstablishConnection(newHostIndex, EConnectionType::PBuffer);
 }
 
-void TDirectBlockGroup::NotifyVChunksAboutNewHost(size_t newHostCount)
+void TDirectBlockGroup::SyncHostsWithConnections()
 {
     Y_ABORT_UNLESS(ExecutorThreadChecker.Check());
 
+    const size_t targetHostCount = DDiskConnections.size();
+
+    // Grow each lagging vchunk up to the connection count. Idempotent - a
+    // vchunk already at the count is skipped, so live AddHost and restart share
+    // one path.
     for (const auto& weakVChunk: VChunks) {
-        if (auto vChunk = weakVChunk.lock()) {
-            vChunk->OnHostAppended(newHostCount);
+        auto vChunk = weakVChunk.lock();
+        if (!vChunk) {
+            continue;
         }
+        for (size_t hostCount = vChunk->GetConfig().GetHostCount() + 1;
+             hostCount <= targetHostCount;
+             ++hostCount)
+        {
+            vChunk->OnHostAppended(hostCount);
+        }
+    }
+
+    while (Oracle.GetHostCount() < targetHostCount) {
+        Oracle.OnHostAdded();
     }
 }
 

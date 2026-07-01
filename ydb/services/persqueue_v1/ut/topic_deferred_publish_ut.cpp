@@ -2,6 +2,7 @@
 
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/persqueue/deferred_publish/events.h>
 #include <ydb/core/persqueue/deferred_publish/registry_actor.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/library/aclib/aclib.h>
@@ -43,6 +44,7 @@ constexpr TStringBuf PublicationsTableRelativePath = ".metadata/topic_deferred_p
 constexpr TStringBuf DestinationsTableRelativePath = ".metadata/topic_deferred_publication_destinations";
 constexpr TStringBuf WriterBuiltinUser = "writer@builtin";
 constexpr size_t MaxDeferredPublishStringLength = 2048;
+constexpr ui32 MaxDeferredPublishPendingQueueSize = 100;
 
 void FillClientContext(
     grpc::ClientContext& context,
@@ -270,6 +272,70 @@ void WaitDatabaseRunning(NActors::TTestActorRuntime& runtime, const TString& pat
         }
     }
     UNIT_FAIL(TStringBuilder() << "Database " << path << " is not RUNNING, last status:\n" << status.DebugString());
+}
+
+void SendBeginPublicationToRegistry(
+    NActors::TTestActorRuntime& runtime,
+    ui32 nodeIdx,
+    const NActors::TActorId& edgeActor,
+    const TString& extPublicationId)
+{
+    auto* event = new NPQ::NDeferredPublish::TEvBeginPublicationRequest;
+    event->Database = "/Root";
+    event->ExtPublicationId = extPublicationId;
+    event->CreatedBy = "root@builtin";
+    runtime.Send(
+        NPQ::NDeferredPublish::MakeDeferredPublishRegistryActorId(),
+        edgeActor,
+        event,
+        nodeIdx);
+}
+
+TVector<Ydb::StatusIds::StatusCode> WaitRegistryBeginPublicationResponses(
+    NActors::TTestActorRuntime& runtime,
+    const TVector<NActors::TActorId>& edgeActors,
+    TMaybe<NYql::TIssues>* overloadedIssues = nullptr)
+{
+    const TInstant deadline = TInstant::Now() + TDuration::Seconds(60);
+    TVector<TMaybe<Ydb::StatusIds::StatusCode>> responses(edgeActors.size());
+    TVector<TMaybe<NYql::TIssues>> responseIssues(edgeActors.size());
+
+    while (TInstant::Now() < deadline) {
+        runtime.DispatchEvents();
+        bool allReceived = true;
+        for (ui32 i = 0; i < edgeActors.size(); ++i) {
+            if (responses[i].Defined()) {
+                continue;
+            }
+            auto ev = runtime.GrabEdgeEvent<NPQ::NDeferredPublish::TEvBeginPublicationResponse>(
+                edgeActors[i], TDuration::Zero());
+            if (!ev) {
+                allReceived = false;
+                continue;
+            }
+            responses[i] = ev->Get()->Status;
+            responseIssues[i] = ev->Get()->Issues;
+        }
+        if (allReceived) {
+            break;
+        }
+        if (runtime.IsRealThreads()) {
+            Sleep(TDuration::MilliSeconds(10));
+        } else {
+            runtime.SimulateSleep(TDuration::MilliSeconds(10));
+        }
+    }
+
+    TVector<Ydb::StatusIds::StatusCode> result;
+    result.reserve(edgeActors.size());
+    for (ui32 i = 0; i < edgeActors.size(); ++i) {
+        UNIT_ASSERT_C(responses[i].Defined(), "Missing registry response for request index " << i);
+        if (overloadedIssues && *responses[i] == Ydb::StatusIds::OVERLOADED) {
+            *overloadedIssues = responseIssues[i];
+        }
+        result.push_back(*responses[i]);
+    }
+    return result;
 }
 
 void RestartDeferredPublishRegistry(NPersQueue::TTestServer& server, ui32 nodeIdx = 0) {
@@ -510,6 +576,55 @@ Y_UNIT_TEST(BeginPublicationConcurrentColdStart) {
     }
 
     UNIT_ASSERT_VALUES_EQUAL(successCount.load(), parallelRequests);
+}
+
+Y_UNIT_TEST(BeginPublicationRejectsWhenPendingQueueIsFull) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+
+    auto* runtime = server.CleverServer->GetRuntime();
+    constexpr ui32 nodeIdx = 0;
+    constexpr ui32 totalRequests = MaxDeferredPublishPendingQueueSize + 1;
+
+    TVector<NActors::TActorId> edgeActors;
+    edgeActors.reserve(totalRequests);
+    for (ui32 i = 0; i < totalRequests; ++i) {
+        edgeActors.push_back(runtime->AllocateEdgeActor(nodeIdx));
+    }
+
+    for (ui32 i = 0; i < totalRequests; ++i) {
+        SendBeginPublicationToRegistry(
+            *runtime,
+            nodeIdx,
+            edgeActors[i],
+            TStringBuilder() << "pending-queue-" << i);
+    }
+
+    TMaybe<NYql::TIssues> overloadedIssues;
+    const auto responses = WaitRegistryBeginPublicationResponses(
+        *runtime, edgeActors, &overloadedIssues);
+
+    ui32 overloadedCount = 0;
+    ui32 successCount = 0;
+    for (const auto status : responses) {
+        if (status == Ydb::StatusIds::OVERLOADED) {
+            ++overloadedCount;
+        } else if (status == Ydb::StatusIds::SUCCESS) {
+            ++successCount;
+        } else {
+            UNIT_FAIL("Unexpected BeginPublication registry status: " << status);
+        }
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(overloadedCount, 1u);
+    UNIT_ASSERT_VALUES_EQUAL(successCount, MaxDeferredPublishPendingQueueSize);
+    UNIT_ASSERT_VALUES_EQUAL(responses.back(), Ydb::StatusIds::OVERLOADED);
+    UNIT_ASSERT(overloadedIssues.Defined());
+    UNIT_ASSERT_STRING_CONTAINS(
+        overloadedIssues->ToString(),
+        TStringBuilder()
+            << "Deferred publish registry pending queue is full (limit "
+            << MaxDeferredPublishPendingQueueSize << ")");
 }
 
 Y_UNIT_TEST(BeginPublicationConcurrentDuplicateExtId) {

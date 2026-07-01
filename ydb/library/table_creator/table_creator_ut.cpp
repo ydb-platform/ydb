@@ -338,9 +338,7 @@ Y_UNIT_TEST_SUITE(TableCreator) {
             auto promise = NThreading::NewPromise<TIndexedTableCreator::TResult>();
             runtime->Register(new TIndexedTableCreator(promise), 0, 0, TMailboxType::Simple, 0, edgeActor);
             const auto result = promise.GetFuture().GetValueSync();
-            UNIT_ASSERT(!result.Success);
-            UNIT_ASSERT_STRING_CONTAINS(result.Issues.ToString(),
-                "Table already exists; index and sequence upgrade is not supported");
+            UNIT_ASSERT_C(result.Success, result.Issues.ToString());
         }
     }
 

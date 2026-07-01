@@ -30,6 +30,7 @@ class TDeferredPublishRegistryActor : public NActors::TActorBootstrapped<TDeferr
 
     struct TDatabaseState {
         ETablesStatus TablesStatus = ETablesStatus::NotReady;
+        ui32 InFlightTablesCreations = 0;
         TVector<TPendingBeginPublication> PendingRequests;
     };
 
@@ -62,6 +63,7 @@ public:
                     return;
                 }
                 state.TablesStatus = ETablesStatus::Pending;
+                ++state.InFlightTablesCreations;
                 Register(CreateDeferredPublishTablesCreator(request.Database));
                 return;
         }
@@ -69,7 +71,14 @@ public:
 
     void Handle(TEvTablesCreationFinished::TPtr& ev) {
         auto& state = Databases[ev->Get()->Database];
-        Y_ABORT_UNLESS(state.TablesStatus == ETablesStatus::Pending);
+        if (state.InFlightTablesCreations > 0) {
+            --state.InFlightTablesCreations;
+        }
+
+        if (state.TablesStatus != ETablesStatus::Pending) {
+            TryPassAway();
+            return;
+        }
 
         TVector<TPendingBeginPublication> pending = std::move(state.PendingRequests);
         state.PendingRequests.clear();
@@ -131,7 +140,9 @@ public:
                 ReplyAborted(request.ReplyTo);
             }
             state.PendingRequests.clear();
-            state.TablesStatus = ETablesStatus::NotReady;
+            if (state.InFlightTablesCreations == 0) {
+                state.TablesStatus = ETablesStatus::NotReady;
+            }
         }
 
         TryPassAway();
@@ -192,9 +203,19 @@ private:
     }
 
     void TryPassAway() {
-        if (ShuttingDown && InFlightInserts == 0) {
+        if (ShuttingDown && InFlightInserts == 0 && !HasInFlightTablesCreations()) {
             PassAway();
         }
+    }
+
+    bool HasInFlightTablesCreations() const {
+        for (const auto& [database, state] : Databases) {
+            Y_UNUSED(database);
+            if (state.InFlightTablesCreations > 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     void StartInsert(

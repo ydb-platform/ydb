@@ -118,6 +118,10 @@ size_t ComputeAlterActivePartitionCount(
         const TTopicInfo::TPtr& alterData)
 {
     size_t count = CountTopicActivePartitions(topic, alter);
+    THashSet<ui32> addedPartitionIds;
+    for (const auto& partition : alterData->PartitionsToAdd) {
+        addedPartitionIds.insert(partition.PartitionId);
+    }
     THashSet<ui32> deactivatedParents;
     for (const auto& partition : alterData->PartitionsToAdd) {
         ++count;
@@ -126,6 +130,8 @@ size_t ComputeAlterActivePartitionCount(
                 const auto parentIt = topic->Partitions.find(parentId);
                 if (parentIt != topic->Partitions.end()
                     && parentIt->second->Status == NKikimrPQ::ETopicPartitionStatus::Active) {
+                    --count;
+                } else if (addedPartitionIds.contains(parentId)) {
                     --count;
                 }
             }

@@ -42,6 +42,7 @@ void AssertUnsupported(const Ydb::Operations::Operation& operation, TStringBuf m
 constexpr TStringBuf PublicationsTableRelativePath = ".metadata/topic_deferred_publications";
 constexpr TStringBuf DestinationsTableRelativePath = ".metadata/topic_deferred_publication_destinations";
 constexpr TStringBuf WriterBuiltinUser = "writer@builtin";
+constexpr size_t MaxDeferredPublishStringLength = 2048;
 
 void FillClientContext(
     grpc::ClientContext& context,
@@ -405,6 +406,34 @@ Y_UNIT_TEST(BeginPublicationRejectsEmptyExtPublicationId) {
     UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::BAD_REQUEST);
     UNIT_ASSERT_GT(outcome.Operation.issues_size(), 0);
     UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.issues(0).message(), "ext_publication_id must not be empty");
+}
+
+Y_UNIT_TEST(BeginPublicationRejectsTooLongExtPublicationId) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+
+    const TString tooLongExtPublicationId(MaxDeferredPublishStringLength + 1, 'a');
+    const auto outcome = CallBeginPublication(*MakeStub(server), "/Root", tooLongExtPublicationId);
+    UNIT_ASSERT(outcome.RpcStatus.ok());
+    UNIT_ASSERT_VALUES_EQUAL(outcome.Operation.status(), Ydb::StatusIds::BAD_REQUEST);
+    UNIT_ASSERT_GT(outcome.Operation.issues_size(), 0);
+    UNIT_ASSERT(outcome.Operation.issues(0).message().Contains("ext_publication_id's length is not <= 2048"));
+}
+
+Y_UNIT_TEST(BeginPublicationRejectsTooLongWriterIdentity) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+
+    grpc::ClientContext context;
+    FillClientContext(context, "/Root");
+    Ydb::Topic::DeferredPublish::BeginPublicationRequest request;
+    request.set_ext_publication_id("pub-with-long-writer");
+    request.set_writer_identity(TString(MaxDeferredPublishStringLength + 1, 'b'));
+    Ydb::Topic::DeferredPublish::BeginPublicationResponse response;
+    UNIT_ASSERT(MakeStub(server)->BeginPublication(&context, request, &response).ok());
+    UNIT_ASSERT_VALUES_EQUAL(response.operation().status(), Ydb::StatusIds::BAD_REQUEST);
+    UNIT_ASSERT_GT(response.operation().issues_size(), 0);
+    UNIT_ASSERT(response.operation().issues(0).message().Contains("writer_identity's length is not <= 2048"));
 }
 
 Y_UNIT_TEST(BeginPublicationRejectsEmptyDatabaseAtGrpcProxy) {

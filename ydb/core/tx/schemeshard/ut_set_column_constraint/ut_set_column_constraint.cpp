@@ -1254,7 +1254,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
 
         TTestEnv env(runtime);
 
-        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>& ev) {
+        runtime.SetObserverFunc([&](TAutoPtr<IEventHandle>&) {
             runtime.AdvanceCurrentTime(TDuration::Seconds(1));
             return TTestActorRuntime::EEventAction::PROCESS;
         });

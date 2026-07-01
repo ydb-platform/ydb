@@ -163,7 +163,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-
   Используйте экосистему [`tracing`](https://docs.rs/tracing) и экспорт OpenTelemetry ([#268](https://github.com/ydb-platform/ydb-rs-sdk/issues/268)).
 
 - PHP

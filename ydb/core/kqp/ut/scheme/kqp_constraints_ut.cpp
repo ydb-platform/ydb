@@ -4164,16 +4164,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            // todo: https://github.com/ydb-platform/ydb/issues/44939
-            if (false) {
-                CompareYson(R"([
-                    [[4];["explicit"];["explicit"]]
-                ])", FormatResultSetYson(result.GetResultSet(0)));
-            } else {
-                CompareYson(R"([
-                    [[4];["default_value"];["explicit"]]
-                ])", FormatResultSetYson(result.GetResultSet(0)));
-            }
+            CompareYson(R"([
+                [[4];["explicit"];["explicit"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
 
             validateTable(R"([
                 [[1];["default_value"];#];
@@ -4211,16 +4204,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            // todo: https://github.com/ydb-platform/ydb/issues/44939
-            if (false) {
-                CompareYson(R"([
-                    [[4];["updated"];["updated"]]
-                ])", FormatResultSetYson(result.GetResultSet(0)));
-            } else {
-                CompareYson(R"([
-                    [[4];["default_value"];["updated"]]
-                ])", FormatResultSetYson(result.GetResultSet(0)));
-            }
+            CompareYson(R"([
+                [[4];["updated"];["updated"]]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
 
             validateTable(R"([
                 [[1];["default_value"];#];
@@ -4848,16 +4834,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            // todo: https://github.com/ydb-platform/ydb/issues/44939
-            if (false) {
-                CompareYson(R"([
-                    [[2];"explicit"]
-                ])", FormatResultSetYson(result.GetResultSet(0)));
-            } else {
-                CompareYson(R"([
-                    [[2];"default_value"]
-                ])", FormatResultSetYson(result.GetResultSet(0)));
-            }
+            CompareYson(R"([
+                [[2];"explicit"]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
 
             // Storage is always correct regardless of RETURNING
             validateTable(R"([
@@ -5068,16 +5047,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
             auto result = session.ExecuteQuery(query, TTxControl::NoTx()).GetValueSync();
             UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
 
-            // todo: https://github.com/ydb-platform/ydb/issues/44939
-            if (false) {
-                CompareYson(R"([
-                    [[3];#]
-                ])", FormatResultSetYson(result.GetResultSet(0)));
-            } else {
-                CompareYson(R"([
-                    [[3];["default_value"]]
-                ])", FormatResultSetYson(result.GetResultSet(0)));
-            }
+            CompareYson(R"([
+                [[3];#]
+            ])", FormatResultSetYson(result.GetResultSet(0)));
 
             // Storage is always correct regardless of RETURNING
             validateTable(R"([

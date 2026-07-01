@@ -931,7 +931,7 @@ void TColumnShard::SetupCleanupTables() {
         pathIdsEmptyInInsertTable.insert(pathIds.begin(), pathIds.end());
     }
 
-    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsEmptyInInsertTable);
+    auto changes = TablesManager.MutablePrimaryIndex().StartCleanupTables(pathIdsEmptyInInsertTable, DataLocksManager);
     if (!changes) {
         ACFL_DEBUG("background", "cleanup")("skip_reason", "no_changes");
         return;

@@ -1154,7 +1154,6 @@ private:
             }
 
             // precompute stage _NOT_IN_ dependant stages
-            YQL_ENSURE(!IsKqpEffectsStage(TDqStage(ptr)));
             phaseStagesMap.emplace(raw, ptr);
         }
 

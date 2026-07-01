@@ -229,7 +229,6 @@ struct TKqpUpsertRowsSettings {
     void SetMode(TStringBuf mode) { Mode = mode; }
 
     static TKqpUpsertRowsSettings Parse(const NNodes::TCoNameValueTupleList& settingsList);
-    static TKqpUpsertRowsSettings Parse(const NNodes::TKqpUpsertRows& node);
     NNodes::TCoNameValueTupleList BuildNode(TExprContext& ctx, TPositionHandle pos) const;
 };
 

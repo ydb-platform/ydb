@@ -964,8 +964,6 @@ private:
         THashMap<TStringBuf, THashSet<TStringBuf>>& tablesMap,
         THashMap<ui64, NKqpProto::TKqpPhyStage*>& physicalStageByID
     ) {
-        const bool hasEffects = NOpt::IsKqpEffectsStage(stage);
-
         TStagePredictor& stagePredictor = rPredictor.BuildForStage(stage, ctx);
         stagePredictor.Scan(stage.Program().Ptr());
 
@@ -1009,29 +1007,6 @@ private:
                 } else if (tableMeta->RecordsCount) {
                     tableOp.SetEstimatedRows(static_cast<double>(tableMeta->RecordsCount));
                 }
-            } else if (auto maybeUpsertRows = node.Maybe<TKqpUpsertRows>()) {
-                auto upsertRows = maybeUpsertRows.Cast();
-                auto tableMeta = TablesData->ExistingTable(Cluster, upsertRows.Table().Path()).Metadata;
-                YQL_ENSURE(tableMeta);
-                YQL_ENSURE(hasEffects);
-
-                auto settings = TKqpUpsertRowsSettings::Parse(upsertRows);
-
-                auto& tableOp = *stageProto.AddTableOps();
-                FillTablesMap(upsertRows.Table(), upsertRows.Columns(), tablesMap);
-                FillTableId(upsertRows.Table(), *tableOp.MutableTable());
-                FillColumns(upsertRows.Columns(), *tableMeta, tableOp, false);
-                FillEffectRows(upsertRows, *tableOp.MutableUpsertRows(), settings.Inplace);
-            } else if (auto maybeDeleteRows = node.Maybe<TKqpDeleteRows>()) {
-                auto deleteRows = maybeDeleteRows.Cast();
-                auto tableMeta = TablesData->ExistingTable(Cluster, deleteRows.Table().Path()).Metadata;
-                YQL_ENSURE(tableMeta);
-                YQL_ENSURE(hasEffects);
-
-                auto& tableOp = *stageProto.AddTableOps();
-                FillTablesMap(deleteRows.Table(), tablesMap);
-                FillTableId(deleteRows.Table(), *tableOp.MutableTable());
-                FillEffectRows(deleteRows, *tableOp.MutableDeleteRows(), false);
             } else if (auto maybeWideReadTableRanges = node.Maybe<TKqpWideReadTableRanges>()) {
                 auto readTableRanges = maybeWideReadTableRanges.Cast();
                 auto tableMeta = TablesData->ExistingTable(Cluster, readTableRanges.Table().Path()).Metadata;
@@ -1179,7 +1154,7 @@ private:
             }
         }
 
-        stageProto.SetIsEffectsStage(hasEffects || hasTxTableSink);
+        stageProto.SetIsEffectsStage(hasTxTableSink);
 
         auto paramsType = CollectParameters(stage, ctx);
         NDq::TSpillingSettings spillingSettings{Config->GetEnabledSpillingNodes()};

@@ -328,14 +328,6 @@
             ]
         },
         {
-            "Name": "TKqpUpsertRows",
-            "Base": "TKqlUpsertRowsBase",
-            "Match": {"Type": "Callable", "Name": "KqpUpsertRows"},
-            "Children": [
-                {"Index": 3, "Name": "Settings", "Type": "TCoNameValueTupleList"}
-            ]
-        },
-        {
             "Name": "TKqpWriteConstraint",
             "Base": "TExprBase",
             "Match": {"Type": "Callable", "Name": "KqpWriteConstraint"},
@@ -590,11 +582,6 @@
                 {"Index": 3, "Name": "IsBatch", "Type": "TCoAtom"},
                 {"Index": 4, "Name": "Settings", "Type": "TCoNameValueTupleList", "Optional": true}
             ]
-        },
-        {
-            "Name": "TKqpDeleteRows",
-            "Base": "TKqlDeleteRowsBase",
-            "Match": {"Type": "Callable", "Name": "KqpDeleteRows"}
         },
         {
             "Name": "TKqpLockAndCheck",

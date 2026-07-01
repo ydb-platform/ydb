@@ -328,6 +328,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
 {
     static THashMap<EStatusCode, ui32> CodesRate = BuildCodesRateMap({
         TStatus::DISALLOW_TEMP,
+        TStatus::DISALLOW_TEMP_SYS_TABLET,
         TStatus::ERROR_TEMP,
         TStatus::DISALLOW,
         TStatus::WRONG_REQUEST,
@@ -404,11 +405,7 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         response.SetDeadline((TActivationContext::Now() + State->Config.DefaultRetryTime).GetValue());
     }
 
-    for (const auto &action : request.GetActions()) {
-        if (capHit) {
-            break;
-        }
-
+    auto buildOpts = [&](const TAction &action) {
         TDuration permissionDuration = State->Config.DefaultPermissionDuration;
         if (request.HasDuration())
             permissionDuration = TDuration::MicroSeconds(request.GetDuration());
@@ -421,6 +418,17 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
         opts.PartialPermissionAllowed = allowPartial;
         opts.Priority = request.GetPriority();
         opts.RequestId = requestId;
+        opts.CapEnabled = capEnabled;
+        return opts;
+    };
+
+    TVector<const TAction*> sysTabletDeferredActions;
+
+    auto processAction = [&](const TAction &action, bool allowDefer) -> bool {
+        TActionOptions opts = buildOpts(action);
+        if (!allowDefer) {
+            opts.CapEnabled = false;
+        }
 
         TErrorInfo error;
 
@@ -448,6 +456,11 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
                           maxPermissions);
                 capHit = true;
             }
+        } else if (allowDefer && error.Code == TStatus::DISALLOW_TEMP_SYS_TABLET) {
+            LOG_DEBUG(ctx, NKikimrServices::CMS,
+                      "Result: DISALLOW_TEMP_SYS_TABLET, deferring action: %s",
+                      action.ShortDebugString().data());
+            sysTabletDeferredActions.push_back(&action);
         } else {
             LOG_DEBUG(ctx, NKikimrServices::CMS, "Result: %s (reason: %s)",
                       ToString(error.Code).data(), error.Reason.GetMessage().data());
@@ -474,24 +487,55 @@ bool TCms::CheckPermissionRequest(const TPermissionRequest &request,
             }
 
             if (!allowPartial)
-                break;
+                return false;
         }
+
+        return true;
+    };
+
+    for (const auto &action : request.GetActions()) {
+        if (capHit) {
+            break;
+        }
+
+        if (!processAction(action, /* allowDefer = */ true)) {
+            break;
+        }
+
         ++processedActions;
     }
+
+    while (capEnabled && !capHit && !sysTabletDeferredActions.empty()) {
+        const TAction *deferredAction = sysTabletDeferredActions.back();
+        sysTabletDeferredActions.pop_back();
+        if (!processAction(*deferredAction, /* allowDefer = */ false)) {
+            break;
+        }
+    }
+
     ClusterInfo->RollbackLocks(point);
+
+    auto scheduleTail = [&](const TAction &action) {
+        auto* scheduledAction = scheduled.MutableActions()->Add();
+        scheduledAction->CopyFrom(action);
+        scheduledAction->ClearIssue();
+    };
 
     if (capHit && schedule && processedActions < static_cast<size_t>(request.ActionsSize())) {
         const auto& allActions = request.GetActions();
         auto* mutableActions = scheduled.MutableActions();
-        const size_t from = processedActions;
-
-        mutableActions->Reserve(mutableActions->size() + (allActions.size() - from));
-        std::for_each(allActions.begin() + from, allActions.end(), [mutableActions](const auto& action) {
-            auto* scheduledAction = mutableActions->Add();
-            scheduledAction->CopyFrom(action);
-            scheduledAction->ClearIssue();
-        });
+        mutableActions->Reserve(mutableActions->size() + (allActions.size() - processedActions));
+        std::for_each(allActions.begin() + processedActions, allActions.end(), scheduleTail);
         processedActions = allActions.size();
+    }
+
+    if (schedule && !sysTabletDeferredActions.empty()) {
+        auto* mutableActions = scheduled.MutableActions();
+        mutableActions->Reserve(mutableActions->size() + sysTabletDeferredActions.size());
+        std::for_each(sysTabletDeferredActions.begin(), sysTabletDeferredActions.end(),
+            [&scheduleTail](const TAction *deferredAction) {
+                scheduleTail(*deferredAction);
+            });
     }
 
     // Handle partial permission and reject cases. Partial permission requires
@@ -953,9 +997,13 @@ void TCms::SortActionsBySysTabletPriority(
     TPermissionRequest &request) const
 {
     auto *actions = request.MutableActions();
-    std::partition(actions->begin(), actions->end(),
+    auto pivot = std::partition(actions->begin(), actions->end(),
         [this](const TAction &action) {
             return !ClusterInfo->HostHasSysTablet(action.GetHost());
+        });
+    std::partition(pivot, actions->end(),
+        [this](const TAction &action) {
+            return !ClusterInfo->HostHasRunningSystemTablet(action.GetHost());
         });
 }
 
@@ -980,6 +1028,14 @@ bool TCms::TryToLockNode(const TAction& action,
     {
         error.Code = TStatus::DISALLOW_TEMP;
         error.Deadline = TActivationContext::Now() + State->Config.DefaultRetryTime;
+        return false;
+    }
+
+    if (opts.CapEnabled && ClusterInfo->NodeHasRunningSystemTablet(node.NodeId)) {
+        error.Code = TStatus::DISALLOW_TEMP_SYS_TABLET;
+        error.Reason = TReason(
+            TStringBuilder() << "Node " << node.NodeId
+                << " has a running system tablet");
         return false;
     }
 

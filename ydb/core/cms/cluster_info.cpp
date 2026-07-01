@@ -4,6 +4,7 @@
 
 #include <ydb/core/base/nameservice.h>
 #include <ydb/core/base/blobstorage_common.h>
+#include <ydb/core/mind/configured_tablet_bootstrapper.h>
 #include <ydb/library/services/services.pb.h>
 
 #include <ydb/library/actors/core/actor.h>
@@ -1005,7 +1006,48 @@ void TClusterInfo::GenerateSysTabletsNodesCheckers() {
             NodeToTabletTypes[nodeId].push_back(tablet.GetType());
             NodeRef(nodeId).AddNodeGroup(sysNodesChecker);
         }
+        SystemTabletTypes.insert(BootstrapperTypeToTabletType(tablet.GetType()));
     }
+
+    GenerateNodesWithRunningSystemTablet();
+}
+
+void TClusterInfo::GenerateNodesWithRunningSystemTablet() {
+    for (const auto &[nodeId, _] : NodeToTabletTypes) {
+        auto nodeIt = Nodes.find(nodeId);
+        if (nodeIt == Nodes.end()) {
+            continue;
+        }
+
+        for (const ui64 tabletId : nodeIt->second->Tablets) {
+            auto tabletIt = Tablets.find(tabletId);
+            if (tabletIt == Tablets.end()) {
+                continue;
+            }
+
+            const TTabletInfo &tablet = tabletIt->second;
+            if (tablet.Leader
+                && tablet.State == NKikimrWhiteboard::TTabletStateInfo::Active
+                && SystemTabletTypes.contains(tablet.Type)) 
+            {
+                NodesWithRunningSystemTablet.insert(nodeId);
+                break;
+            }
+        }
+    }
+}
+
+bool TClusterInfo::NodeHasRunningSystemTablet(ui32 nodeId) const {
+    return NodesWithRunningSystemTablet.contains(nodeId);
+}
+
+bool TClusterInfo::HostHasRunningSystemTablet(const TString &hostName) const {
+    for (const auto *node : HostNodes(hostName)) {
+        if (NodeHasRunningSystemTablet(node->NodeId)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 void TClusterInfo::GenerateClusterNodesCheckers() {

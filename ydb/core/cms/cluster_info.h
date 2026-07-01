@@ -720,6 +720,7 @@ public:
 
     void GenerateTenantNodesCheckers();
     void GenerateSysTabletsNodesCheckers();
+    void GenerateNodesWithRunningSystemTablet();
     void GenerateClusterNodesCheckers();
 
     bool IsStateStorageReplicaNode(ui32 nodeId) {
@@ -838,6 +839,10 @@ public:
     const TTablets &AllTablets() const {
         return Tablets;
     }
+
+    bool NodeHasRunningSystemTablet(ui32 nodeId) const;
+
+    bool HostHasRunningSystemTablet(const TString &hostName) const;
 
     bool HasPDisk(TPDiskID pdId) const {
         return PDisks.contains(pdId);
@@ -1097,6 +1102,8 @@ public:
     bool IsLocalBootConfDiffersFromConsole = false;
     NKikimrConfig::TBootstrap BootstrapConfig;
     THashMap<ui32, TVector<NKikimrConfig::TBootstrap::ETabletType>> NodeToTabletTypes;
+    THashSet<TTabletTypes::EType> SystemTabletTypes;
+    THashSet<ui32> NodesWithRunningSystemTablet;
 
     THashMap<TPileId, TSysNodesCheckers> SysNodesCheckers;
 

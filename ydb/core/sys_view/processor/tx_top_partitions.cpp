@@ -1,5 +1,7 @@
 #include "processor_impl.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 namespace NKikimr::NSysView {
 
 struct TSysViewProcessor::TTxTopPartitions : public TTxBase {
@@ -49,7 +51,7 @@ struct TSysViewProcessor::TTxTopPartitions : public TTxBase {
                     NIceDb::TUpdate<Schema::IntervalPartitionTops::Data>(data));
             } else {
                 db.Table<Schema::IntervalPartitionFollowerTops>().Key((ui32)statsType, tabletId, followerId).Update(
-                    NIceDb::TUpdate<Schema::IntervalPartitionFollowerTops::Data>(data));            
+                    NIceDb::TUpdate<Schema::IntervalPartitionFollowerTops::Data>(data));
             }
 
             seen.insert({tabletId, followerId});
@@ -88,9 +90,9 @@ struct TSysViewProcessor::TTxTopPartitions : public TTxBase {
                     ++index;
                     continue;
                 }
-                const bool isOverloadedByCpu = (statsType == NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_MINUTE || statsType == NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_HOUR) 
+                const bool isOverloadedByCpu = (statsType == NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_MINUTE || statsType == NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_HOUR)
                     && (*topIt)->GetCPUCores() >= newPartition.GetCPUCores();
-                const bool isOverloadedByTli = (statsType == NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_MINUTE || statsType == NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_HOUR) 
+                const bool isOverloadedByTli = (statsType == NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_MINUTE || statsType == NKikimrSysView::TOP_PARTITIONS_BY_TLI_ONE_HOUR)
                     && (*topIt)->GetLocksBroken() >= newPartition.GetLocksBroken();
                 if (isOverloadedByCpu || isOverloadedByTli) {
                     result.emplace_back(std::move(*topIt++));
@@ -119,10 +121,10 @@ struct TSysViewProcessor::TTxTopPartitions : public TTxBase {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        SVLOG_D("[" << Self->TabletID() << "] TTxTopPartitions::Execute: "
-            << ", partition by CPU count# " << Record.PartitionsByCpuSize()
-            << ", partition by TLI count# " << Record.PartitionsByTliSize()
-        );
+        YDB_LOG_DEBUG("TTxTopPartitions::Execute: partition by CPU partition by TLI",
+            {"tabletId", Self->TabletID()},
+            {"count", Record.PartitionsByCpuSize()},
+            {"partitionsByTliCount", Record.PartitionsByTliSize()});
 
         NIceDb::TNiceDb db(txc.DB);
         ProcessTop(db, NKikimrSysView::TOP_PARTITIONS_BY_CPU_ONE_MINUTE, Self->PartitionTopByCpuMinute);
@@ -134,7 +136,8 @@ struct TSysViewProcessor::TTxTopPartitions : public TTxBase {
     }
 
     void Complete(const TActorContext&) override {
-        SVLOG_D("[" << Self->TabletID() << "] TTxTopPartitions::Complete");
+        YDB_LOG_DEBUG("TTxTopPartitions::Complete",
+            {"tabletId", Self->TabletID()});
     }
 };
 
@@ -143,12 +146,14 @@ void TSysViewProcessor::Handle(TEvSysView::TEvSendTopPartitions::TPtr& ev) {
     auto timeUs = record.GetTimeUs();
     auto partitionIntervalEnd = IntervalEnd + TotalInterval;
 
-    SVLOG_T("TEvSysView::TEvSendTopPartitions: " << " record " << record.ShortDebugString());
+    YDB_LOG_TRACE("TEvSysView::TEvSendTopPartitions: record",
+        {"record", record});
 
     if (timeUs < IntervalEnd.MicroSeconds() || timeUs >= partitionIntervalEnd.MicroSeconds()) {
-        SVLOG_W("[" << TabletID() << "] TEvSendTopPartitions, time mismath: "
-            << ", partition interval end# " << partitionIntervalEnd
-            << ", event time# " << TInstant::MicroSeconds(timeUs));
+        YDB_LOG_WARN("TEvSendTopPartitions, time mismath: partition interval event",
+            {"tabletID", TabletID()},
+            {"end", partitionIntervalEnd},
+            {"time", TInstant::MicroSeconds(timeUs)});
         return;
     }
 

@@ -17,6 +17,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 namespace {
     using NKikimrSysView::ESysViewType;
 }
@@ -130,8 +132,8 @@ public:
             cFunc(TEvents::TEvWakeup::EventType, TBase::HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TQueryStatsScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TQueryStatsScan: unexpected event 0x%08x",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 

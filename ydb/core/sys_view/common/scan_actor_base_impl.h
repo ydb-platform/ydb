@@ -40,11 +40,11 @@ public:
     {}
 
     void Bootstrap(const TActorContext& ctx) {
-        LOG_INFO_S(ctx, NKikimrServices::SYSTEM_VIEWS,
-            "Scan started, actor: " << TBase::SelfId()
-                << ", owner: " << OwnerActorId
-                << ", scan id: " << ScanId
-                << ", sys view info: " << SysViewInfo.ShortDebugString());
+        YDB_LOG_INFO_CTX_COMP(ctx, NKikimrServices::SYSTEM_VIEWS, "Scan started, scan sys view",
+            {"actor", TBase::SelfId()},
+            {"owner", OwnerActorId},
+            {"id", ScanId},
+            {"info", SysViewInfo});
 
         auto sysViewServiceId = MakeSysViewServiceID(TBase::SelfId().NodeId());
         TBase::Send(sysViewServiceId, new TEvSysView::TEvGetScanLimiter());
@@ -61,10 +61,10 @@ protected:
     }
 
     void SendBatch(THolder<NKqp::TEvKqpCompute::TEvScanData> batch) {
-        LOG_DEBUG_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Sending scan batch, actor: " << TBase::SelfId()
-                << ", row count: " << batch->Rows.size()
-                << ", finished: " << batch->Finished);
+        YDB_LOG_DEBUG_COMP(NKikimrServices::SYSTEM_VIEWS, "Sending scan batch, row",
+            {"actor", TBase::SelfId()},
+            {"count", batch->Rows.size()},
+            {"finished", batch->Finished});
 
         bool finished = batch->Finished;
         TBase::Send(OwnerActorId, batch.Release());
@@ -78,13 +78,13 @@ protected:
     }
 
     void HandleAbortExecution(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) {
-        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Got abort execution event, actor: " << TBase::SelfId()
-                << ", owner: " << OwnerActorId
-                << ", scan id: " << ScanId
-                << ", sys view info: " << SysViewInfo.ShortDebugString()
-                << ", code: " << NYql::NDqProto::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())
-                << ", error: " << ev->Get()->GetIssues().ToOneLineString());
+        YDB_LOG_ERROR_COMP(NKikimrServices::SYSTEM_VIEWS, "Got abort execution event, scan sys view",
+            {"actor", TBase::SelfId()},
+            {"owner", OwnerActorId},
+            {"id", ScanId},
+            {"info", SysViewInfo},
+            {"code", NYql::NDqProto::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())},
+            {"error", ev->Get()->GetIssues().ToOneLineString()});
 
         this->PassAway();
     }
@@ -94,12 +94,12 @@ protected:
     }
 
     void ReplyErrorAndDie(Ydb::StatusIds::StatusCode status, const NYql::TIssues& issues) {
-        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Scan error, actor: " << TBase::SelfId()
-                << ", owner: " << OwnerActorId
-                << ", scan id: " << ScanId
-                << ", sys view info: " << SysViewInfo.ShortDebugString()
-                << ", issues: " << issues.ToOneLineString());
+        YDB_LOG_ERROR_COMP(NKikimrServices::SYSTEM_VIEWS, "Scan error, scan sys view",
+            {"actor", TBase::SelfId()},
+            {"owner", OwnerActorId},
+            {"id", ScanId},
+            {"info", SysViewInfo},
+            {"issues", issues.ToOneLineString()});
 
         auto error = MakeHolder<NKqp::TEvKqpCompute::TEvScanError>();
         error->Record.SetStatus(status);
@@ -119,11 +119,11 @@ protected:
     }
 
     void PassAway() override {
-        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Scan finished, actor: " << TBase::SelfId()
-                << ", owner: " << OwnerActorId
-                << ", scan id: " << ScanId
-                << ", sys view info: " << SysViewInfo.ShortDebugString());
+        YDB_LOG_INFO_COMP(NKikimrServices::SYSTEM_VIEWS, "Scan finished, scan sys view",
+            {"actor", TBase::SelfId()},
+            {"owner", OwnerActorId},
+            {"id", ScanId},
+            {"info", SysViewInfo});
 
         if (AllowedByLimiter) {
             ScanLimiter->Dec();
@@ -319,14 +319,14 @@ private:
             }
         }
 
-        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Scan prepared, actor: " << TBase::SelfId()
-                << ", schemeshard id: " << SchemeShardId
-                << ", hive id: " << HiveId
-                << ", database: " << TenantName
-                << ", database owner: " << DatabaseOwner
-                << ", domain key: " << DomainKey
-                << ", database node count: " << TenantNodes.size());
+        YDB_LOG_INFO_COMP(NKikimrServices::SYSTEM_VIEWS, "Scan prepared, schemeshard hive database domain database node",
+            {"actor", TBase::SelfId()},
+            {"id", SchemeShardId},
+            {"hiveId", HiveId},
+            {"database", TenantName},
+            {"owner", DatabaseOwner},
+            {"key", DomainKey},
+            {"count", TenantNodes.size()});
 
         ProceedToScan();
     }
@@ -339,8 +339,8 @@ private:
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, this->PassAway);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "NSysView::TScanActorBase: unexpected event 0x%08x",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -352,8 +352,8 @@ private:
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, this->PassAway);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "NSysView::TScanActorBase: unexpected event 0x%08x",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -365,8 +365,8 @@ private:
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, this->PassAway);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX_COMP(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS, "NSysView::TScanActorBase: unexpected event 0x%08x",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 

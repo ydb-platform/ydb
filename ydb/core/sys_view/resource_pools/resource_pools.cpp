@@ -18,6 +18,8 @@
 #include <yql/essentials/types/binary_json/read.h>
 #include <yql/essentials/types/binary_json/write.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 namespace NKikimr {
 namespace NSysView {
 
@@ -54,8 +56,8 @@ public:
             cFunc(TEvents::TEvWakeup::EventType, HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TResourcePoolsScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TResourcePoolsScan: unexpected event 0x%08x",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 

@@ -10,6 +10,8 @@
 
 #include <ydb/library/actors/core/hfunc.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 namespace NKikimr::NSysView::NAuth {
 
 using namespace NSchemeShard;
@@ -37,8 +39,8 @@ public:
             cFunc(TEvents::TEvWakeup::EventType, TBase::HandleTimeout);
             cFunc(TEvents::TEvPoison::EventType, PassAway);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::NAuth::TUsersScan: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::NAuth::TUsersScan: unexpected event 0x%08x",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -61,8 +63,8 @@ protected:
             }
         }
 
-        LOG_TRACE_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Sending list users request " << request->Record.ShortUtf8DebugString());
+        YDB_LOG_TRACE("Sending list users request",
+            {"requestRecord", request->Record.ShortUtf8DebugString()});
 
         TBase::SendThroughPipeCache(request.Release(), TBase::SchemeShardId);
     }
@@ -70,8 +72,8 @@ protected:
     void Handle(TEvSchemeShard::TEvListUsersResult::TPtr& ev, const TActorContext& ctx) {
         const auto& record = ev->Get()->Record;
 
-        LOG_TRACE_S(ctx, NKikimrServices::SYSTEM_VIEWS,
-            "Got list users response " << record.ShortUtf8DebugString());
+        YDB_LOG_TRACE_CTX(ctx, "Got list users response",
+            {"responseRecord", record.ShortUtf8DebugString()});
 
         auto batch = MakeHolder<NKqp::TEvKqpCompute::TEvScanData>(TBase::ScanId);
 

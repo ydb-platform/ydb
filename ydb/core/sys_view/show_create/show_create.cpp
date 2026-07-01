@@ -14,6 +14,8 @@
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/yql/dq/actors/compute/dq_compute_actor.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 
 namespace NKikimr {
 namespace NSysView {
@@ -72,8 +74,8 @@ public:
             hFunc(NSchemeShard::TEvSchemeShard::TEvDescribeSchemeResult, Handle);
             sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleAck);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TScanActorBase: unexpected event 0x%08x",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -83,8 +85,8 @@ public:
             hFunc(NSequenceProxy::TEvSequenceProxy::TEvGetSequenceResult, Handle);
             sFunc(NKqp::TEvKqpCompute::TEvScanDataAck, HandleAck);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView::TScanActorBase: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView::TScanActorBase: unexpected event 0x%08x",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -103,8 +105,8 @@ private:
 
         AllowedByLimiter = true;
 
-        LOG_INFO_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Scan prepared, actor: " << TBase::SelfId());
+        YDB_LOG_INFO("Scan prepared,",
+            {"actor", TBase::SelfId()});
 
         ProceedToScan();
         return;

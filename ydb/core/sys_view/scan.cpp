@@ -32,6 +32,8 @@
 #include <ydb/library/actors/core/interconnect.h>
 #include <ydb/library/actors/core/log.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::SYSTEM_VIEWS
+
 namespace NKikimr {
 namespace NSysView {
 
@@ -81,8 +83,8 @@ public:
             hFunc(TEvents::TEvUndelivered, ResendToOwnerAndDie);
             hFunc(NKqp::TEvKqpCompute::TEvScanInitActor, Handle);
             default:
-                LOG_CRIT(*TlsActivationContext, NKikimrServices::SYSTEM_VIEWS,
-                    "NSysView: unexpected event 0x%08" PRIx32, ev->GetTypeRewrite());
+                YDB_LOG_CRIT_CTX(*TlsActivationContext, "NSysView: unexpected event 0x%08x",
+                    {"eventType", ev->GetTypeRewrite()});
         }
     }
 
@@ -126,13 +128,13 @@ public:
     }
 
     void HandleAbortExecution(NKqp::TEvKqp::TEvAbortExecution::TPtr& ev) {
-        LOG_ERROR_S(TlsActivationContext->AsActorContext(), NKikimrServices::SYSTEM_VIEWS,
-            "Got abort execution event, actor: " << TBase::SelfId()
-                << ", owner: " << OwnerId
-                << ", scan id: " << ScanId
-                << ", table id: " << TableId
-                << ", code: " << NYql::NDqProto::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())
-                << ", error: " << ev->Get()->GetIssues().ToOneLineString());
+        YDB_LOG_ERROR("Got abort execution event, scan table",
+            {"actor", TBase::SelfId()},
+            {"owner", OwnerId},
+            {"id", ScanId},
+            {"tableId", TableId},
+            {"code", NYql::NDqProto::StatusIds::StatusCode_Name(ev->Get()->Record.GetStatusCode())},
+            {"error", ev->Get()->GetIssues().ToOneLineString()});
 
         if (ScanActorId) {
             Send(*ScanActorId, THolder(ev->Release().Release()));

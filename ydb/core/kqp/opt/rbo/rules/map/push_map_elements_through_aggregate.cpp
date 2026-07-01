@@ -37,27 +37,6 @@ namespace {
 
 using TRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>;
 
-bool RenameInfoUnit(TInfoUnit& iu, const TRenameMap& renameMap) {
-    const auto it = renameMap.find(iu);
-    if (it == renameMap.end()) {
-        return false;
-    }
-
-    iu = it->second;
-    return true;
-}
-
-void RenameAggregate(TOpAggregate& aggregate, const TRenameMap& renameMap) {
-    for (auto& key : aggregate.KeyColumns) {
-        RenameInfoUnit(key, renameMap);
-    }
-
-    for (auto& traits : aggregate.AggregationTraitsList) {
-        RenameInfoUnit(traits.OriginalColName, renameMap);
-        RenameInfoUnit(traits.ResultColName, renameMap);
-    }
-}
-
 bool HasResidualRenameFromChangedKey(const TVector<TMapElement>& topElements, const TRenameMap& renameMap) {
     TInfoUnitSet changedKeys;
     for (const auto& [from, to] : renameMap) {
@@ -176,8 +155,9 @@ TPushMapElementsThroughAggregateRule::SimpleMatchAndApply(const TIntrusivePtr<IO
 
     auto pushedMap = MakeIntrusive<TOpMap>(aggregateInput, topMap->Pos, pushedElements);
     aggregate->SetInput(pushedMap);
-    RenameAggregate(*aggregate, renameMap);
-    props.Subplans.RenameIUs(renameMap, ctx.ExprCtx);
+    aggregate->RenameProducedIUs(renameMap, ctx.ExprCtx);
+    aggregate->RenameUsedIUs(renameMap, ctx.ExprCtx);
+    props.Subplans.RenameReferences(renameMap, ctx.ExprCtx);
 
     if (topElements.empty()) {
         return aggregate;

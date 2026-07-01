@@ -35,12 +35,7 @@ bool TPushRenameIntoAggregateResultRule::MatchAndApply(TIntrusivePtr<IOperator>&
         return false;
     }
 
-    for (auto& traits : aggregate->AggregationTraitsList) {
-        if (traits.ResultColName == candidate->From) {
-            traits.ResultColName = candidate->To;
-            break;
-        }
-    }
+    aggregate->RenameProducedIUs({{candidate->From, candidate->To}}, ctx.ExprCtx);
 
     return NMapRules::FinishRenamePush(input, topMap, *candidate, ctx, props);
 }

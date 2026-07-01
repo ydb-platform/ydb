@@ -185,8 +185,8 @@ TIntrusivePtr<IOperator> TPushMapElementsThroughJoinRule::SimpleMatchAndApply(co
     }
 
     if (!renameMap.empty()) {
-        join->RenameIUs(renameMap, ctx.ExprCtx);
-        props.Subplans.RenameIUs(renameMap, ctx.ExprCtx);
+        join->RenameUsedIUs(renameMap, ctx.ExprCtx);
+        props.Subplans.RenameReferences(renameMap, ctx.ExprCtx);
     }
 
     if (topMapElements.empty()) {

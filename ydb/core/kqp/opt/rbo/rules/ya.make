@@ -13,6 +13,7 @@ SRCS(
     eliminate_left_join.cpp
     fuse_filters.cpp
     inline_cbo_tree.cpp
+    join_common.cpp
     inline_join_filters.cpp
     inline_scalar_subplan.cpp
     inline_simple_in_exists_subplan.cpp

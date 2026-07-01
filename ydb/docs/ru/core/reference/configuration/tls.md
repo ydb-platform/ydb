@@ -62,6 +62,8 @@ monitoring_config:
     monitoring_certificate_file: "/opt/ydb/certs/node.crt"
 ```
 
+Подробное описание параметров TLS для мониторинга см. в разделе [monitoring_config](./monitoring_config.md#tls).
+
 ## {{ ydb-short-name }} в роли клиента
 
 ### LDAP

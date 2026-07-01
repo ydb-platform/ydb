@@ -338,6 +338,16 @@ TVector<Ydb::StatusIds::StatusCode> WaitRegistryBeginPublicationResponses(
     return result;
 }
 
+void PoisonDeferredPublishRegistry(NPersQueue::TTestServer& server, ui32 nodeIdx = 0) {
+    auto* runtime = server.CleverServer->GetRuntime();
+    const NActors::TActorId edgeActor = runtime->AllocateEdgeActor(nodeIdx);
+
+    runtime->Send(new NActors::IEventHandle(
+        NPQ::NDeferredPublish::MakeDeferredPublishRegistryActorId(),
+        edgeActor,
+        new NActors::TEvents::TEvPoison()));
+}
+
 void RestartDeferredPublishRegistry(NPersQueue::TTestServer& server, ui32 nodeIdx = 0) {
     auto* runtime = server.CleverServer->GetRuntime();
     const NActors::TActorId edgeActor = runtime->AllocateEdgeActor(nodeIdx);
@@ -728,6 +738,45 @@ Y_UNIT_TEST(BeginPublicationSucceedsAfterRegistryRestart) {
     RestartDeferredPublishRegistry(server);
 
     BeginPublicationIntId(CallBeginPublication(*stub, "/Root", "after-registry-restart"));
+}
+
+Y_UNIT_TEST(RegistrySurvivesLateTablesCreationFinishedDuringShutdown) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+
+    auto* runtime = server.CleverServer->GetRuntime();
+    constexpr ui32 nodeIdx = 0;
+
+    BeginPublicationIntId(CallBeginPublication(*MakeStub(server), "/Root", "warmup-late-tables-finish"));
+
+    const NActors::TActorId edgeActor = runtime->AllocateEdgeActor(nodeIdx);
+    SendBeginPublicationToRegistry(*runtime, nodeIdx, edgeActor, "in-flight-during-shutdown");
+    PoisonDeferredPublishRegistry(server, nodeIdx);
+
+    auto* lateFinish = new NPQ::NDeferredPublish::TEvTablesCreationFinished;
+    lateFinish->Database = "/Root";
+    lateFinish->Success = true;
+    runtime->Send(
+        NPQ::NDeferredPublish::MakeDeferredPublishRegistryActorId(),
+        edgeActor,
+        lateFinish,
+        nodeIdx);
+
+    const TInstant deadline = TInstant::Now() + TDuration::Seconds(60);
+    while (TInstant::Now() < deadline) {
+        runtime->DispatchEvents();
+        if (auto ev = runtime->GrabEdgeEvent<NPQ::NDeferredPublish::TEvBeginPublicationResponse>(
+                edgeActor, TDuration::Zero())) {
+            UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Status, Ydb::StatusIds::ABORTED);
+            return;
+        }
+        if (runtime->IsRealThreads()) {
+            Sleep(TDuration::MilliSeconds(10));
+        } else {
+            runtime->SimulateSleep(TDuration::MilliSeconds(10));
+        }
+    }
+    UNIT_FAIL("Missing BeginPublication response after late TEvTablesCreationFinished");
 }
 
 Y_UNIT_TEST(BeginPublicationWorksInServerlessDatabase) {

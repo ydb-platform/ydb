@@ -51,6 +51,9 @@ struct TSessionPoolSettings {
     // Min number of session in session pool.
     // Sessions will not be closed by CloseIdleThreshold if the number of sessions less then this limit.
     FLUENT_SETTING_DEFAULT(uint32_t, MinPoolSize, 10);
+
+    // Create session after timeout
+    FLUENT_SETTING_DEFAULT(bool, UseDeferredSessionCreation, false);
 };
 
 struct TClientSettings : public TCommonClientSettingsBase<TClientSettings> {

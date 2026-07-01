@@ -384,7 +384,7 @@ protected:
                     msgId.SetMsgId(1);
                     msgId.SetSequenceId(1);
                     auto queueId = x->Record.GetMsgQoS().GetExtQueueId();
-                    GroupQueues->Send(*this, BsInfo->GetTopology(), std::move(x), 0, NWilson::TTraceId(), vDiskId, queueId);
+                    GroupQueues->Send(*this, BsInfo->GetTopology(), std::move(x), 0, false, NWilson::TTraceId(), vDiskId, queueId);
                   break;
                 }
                 [[fallthrough]];

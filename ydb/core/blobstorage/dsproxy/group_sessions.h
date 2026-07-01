@@ -186,7 +186,7 @@ namespace NKikimr {
         }
 
         void Send(const IActor& actor, const TBlobStorageGroupInfo::TTopology& topology, std::unique_ptr<IEventBase> event,
-                ui64 cookie, NWilson::TTraceId traceId, const TVDiskID vdiskId, NKikimrBlobStorage::EVDiskQueueId queueId) {
+                ui64 cookie, bool userChecksumming, NWilson::TTraceId traceId, const TVDiskID vdiskId, NKikimrBlobStorage::EVDiskQueueId queueId) {
             auto& queues = FailDomains[topology.GetFailDomainOrderNumber(vdiskId)].VDisks[vdiskId.VDisk].Queues;
             TActorId queueActorId = queues.GetQueue(queueId).ActorId;
             YDB_LOG_DEBUG_COMP(NKikimrServices::BS_PROXY, "Send",
@@ -194,8 +194,9 @@ namespace NKikimr {
                 {"typeName", TypeName(*event)},
                 {"event", event->ToString()},
                 {"cookie", cookie});
-            TActivationContext::Send(new IEventHandle(queueActorId, actor.SelfId(), event.release(), 0, cookie, nullptr,
-                std::move(traceId)));
+            TActivationContext::Send(new IEventHandle(queueActorId, actor.SelfId(), event.release(),
+                userChecksumming ? IEventHandle::FlagDisablePayloadChecksums : 0,
+                cookie, nullptr, std::move(traceId)));
         }
 
         bool ChecksumExpected(const TBlobStorageGroupInfo::TTopology& topology, TVDiskID vdiskId,

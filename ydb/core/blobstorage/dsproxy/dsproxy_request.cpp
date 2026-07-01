@@ -1073,6 +1073,7 @@ namespace NKikimr {
 
         TVDiskID vdiskId;
         NKikimrBlobStorage::EVDiskQueueId queueId;
+        bool userChecksumming = false;
 
         auto preprocess = [&](auto& ev) {
             Y_DEBUG_ABORT_UNLESS(ev.Record.HasVDiskID());
@@ -1115,6 +1116,17 @@ namespace NKikimr {
                 const TLogoBlobID id = GetBlobId(ev);
                 LWTRACK(DSProxyPutVPutIsSent, ev.Orbit, Info->GetFailDomainOrderNumber(vdiskId), Info->GroupID.GetRawId(),
                     id.Channel(), id.PartId(), id.ToString(), id.BlobSize());
+
+                if constexpr (std::is_same_v<T, TEvBlobStorage::TEvVPut>) {
+                    userChecksumming = ev.Record.HasChecksum();
+                }
+
+                if constexpr (std::is_same_v<T, TEvBlobStorage::TEvVMultiPut>) {
+                    userChecksumming = !!ev.Record.ItemsSize();
+                    for (const auto& item : ev.Record.GetItems()) {
+                        userChecksumming &= item.HasChecksum();
+                    }
+                }
             }
 
             if (timeStatsEnabled) {
@@ -1135,7 +1147,7 @@ namespace NKikimr {
             default: Y_ABORT_S("unexpected VDisk request Type# " << Sprintf("0x%08" PRIx32, type));
         }
 
-        GroupQueues->Send(*this, Info->GetTopology(), std::move(event), cookie, Span.GetTraceId(), vdiskId, queueId);
+        GroupQueues->Send(*this, Info->GetTopology(), std::move(event), cookie, userChecksumming, Span.GetTraceId(), vdiskId, queueId);
         ++RequestsInFlight;
     }
 

@@ -641,6 +641,137 @@ Y_UNIT_TEST(TestMirror3dcPutStatusOkWith_3_1_0_VdiskErrors) {
     TestPutResultWithVDiskResults({TErasureType::ErasureMirror3dc}, vdiskStatuses, 8, NKikimrProto::OK);
 }
 
+
+static void ToggleChecksummingForVDisks(const TDSProxyEnv& env, bool enabled) {
+    for (TGroupQueues::TFailDomain& domain : env.GroupQueues->FailDomains) {
+        for (TGroupQueues::TVDisk& vDisk : domain.VDisks) {
+            auto& queue = vDisk.Queues.GetQueue(NKikimrBlobStorage::EVDiskQueueId::PutTabletLog);
+            queue.Checksumming.store(enabled);
+        }
+    }
+}
+
+static TVector<TActorId> GetPutTabletLogQueueActors(const TDSProxyEnv& env) {
+    TVector<TActorId> queueActors;
+    for (TGroupQueues::TFailDomain& domain : env.GroupQueues->FailDomains) {
+        for (TGroupQueues::TVDisk& vDisk : domain.VDisks) {
+            const auto& queue = vDisk.Queues.GetQueue(NKikimrBlobStorage::EVDiskQueueId::PutTabletLog);
+            queueActors.push_back(queue.ActorId);
+        }
+    }
+    return queueActors;
+}
+
+static void TestFlagsDisablePayloadChecksumsSetOnVPutImpl(bool vdiskFlagEnabled) {
+    TTestBasicRuntime runtime(1, false);
+    runtime.SetDispatchTimeout(TDuration::Seconds(1));
+    SetupRuntime(runtime);
+    TDSProxyEnv env;
+    env.Configure(runtime, TErasureType::Erasure4Plus2Block, 0, 0);
+    TTestState testState(runtime, env.Info);
+
+    ToggleChecksummingForVDisks(env, vdiskFlagEnabled);
+
+    const TVector<TActorId> putQueueActors = GetPutTabletLogQueueActors(env);
+    ui32 observedVPutCount = 0;
+    ui32 vPutsWithoutDisablePayloadChecksumsFlag = 0;
+    auto observer = runtime.AddObserver<TEvBlobStorage::TEvVPut>([&](TEvBlobStorage::TEvVPut::TPtr& ev) {
+        if (Find(putQueueActors, ev->Recipient) == putQueueActors.end()) {
+            return;
+        }
+
+        ++observedVPutCount;
+        if (!(ev->Flags & IEventHandle::FlagDisablePayloadChecksums)) {
+            ++vPutsWithoutDisablePayloadChecksumsFlag;
+        }
+    });
+
+    TLogoBlobID blobId(72075186224047637, 1, 863, 1, 786, 24576);
+    TStringBuilder dataBuilder;
+    for (size_t i = 0; i < blobId.BlobSize(); ++i) {
+        dataBuilder << 'a';
+    }
+    TBlobTestSet::TBlob blob(blobId, dataBuilder);
+
+    TEvBlobStorage::TEvPut::TPtr ev = testState.CreatePutRequest(blob,
+        TEvBlobStorage::TEvPut::TacticDefault, NKikimrBlobStorage::TabletLog);
+    auto putActor = env.CreatePutRequestActor(ev);
+    runtime.Register(putActor.release());
+
+    for (ui32 idx = 0; idx < env.Info->Type.TotalPartCount(); ++idx) {
+        testState.GrabEventPtr<TEvBlobStorage::TEvVPut>();
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(observedVPutCount, env.Info->Type.TotalPartCount());
+    UNIT_ASSERT_VALUES_EQUAL(vPutsWithoutDisablePayloadChecksumsFlag, vdiskFlagEnabled ? 0 : observedVPutCount);
+}
+
+Y_UNIT_TEST(TestFlagsDisablePayloadChecksumsSetOnVPut) {
+    TestFlagsDisablePayloadChecksumsSetOnVPutImpl(true);
+    TestFlagsDisablePayloadChecksumsSetOnVPutImpl(false);
+}
+
+static void TestFlagsDisablePayloadChecksumsSetOnVMultiPutImpl(bool vdiskFlagEnabled) {
+    TTestBasicRuntime runtime(1, false);
+    runtime.SetDispatchTimeout(TDuration::Seconds(1));
+    SetupRuntime(runtime);
+    TDSProxyEnv env;
+    env.Configure(runtime, TErasureType::Erasure4Plus2Block, 0, 0);
+    TTestState testState(runtime, env.Info);
+
+    ToggleChecksummingForVDisks(env, vdiskFlagEnabled);
+
+    const TVector<TActorId> putQueueActors = GetPutTabletLogQueueActors(env);
+    ui32 observedVMultiPutCount = 0;
+    ui32 vMultiPutsWithoutDisablePayloadChecksumsFlag = 0;
+    auto observer = runtime.AddObserver<TEvBlobStorage::TEvVMultiPut>([&](TEvBlobStorage::TEvVMultiPut::TPtr& ev) {
+        if (Find(putQueueActors, ev->Recipient) == putQueueActors.end()) {
+            return;
+        }
+
+        ++observedVMultiPutCount;
+        UNIT_ASSERT_VALUES_EQUAL(ev->Get()->Record.ItemsSize(), 2);
+        if (!(ev->Flags & IEventHandle::FlagDisablePayloadChecksums)) {
+            ++vMultiPutsWithoutDisablePayloadChecksumsFlag;
+        }
+    });
+
+    TVector<TLogoBlobID> blobIds = {
+        TLogoBlobID(72075186224047637, 1, 863, 1, 786, 24576),
+        TLogoBlobID(72075186224047637, 1, 863, 1, 142, 24576)
+    };
+    UNIT_ASSERT_VALUES_EQUAL(blobIds[0].Hash(), blobIds[1].Hash());
+
+    TVector<TBlobTestSet::TBlob> blobs;
+    for (const auto& blobId : blobIds) {
+        TStringBuilder dataBuilder;
+        for (size_t i = 0; i < blobId.BlobSize(); ++i) {
+            dataBuilder << 'a';
+        }
+        blobs.emplace_back(blobId, dataBuilder);
+    }
+
+    TEvBlobStorage::TEvPut::ETactic tactic = TEvBlobStorage::TEvPut::TacticDefault;
+    NKikimrBlobStorage::EPutHandleClass handleClass = NKikimrBlobStorage::TabletLog;
+
+    TBatchedVec<TEvBlobStorage::TEvPut::TPtr> batched;
+    testState.CreatePutRequests(blobs, std::back_inserter(batched), tactic, handleClass);
+    auto putActor = env.CreatePutRequestActor(batched, tactic, handleClass);
+    runtime.Register(putActor.release());
+
+    for (ui32 idx = 0; idx < env.Info->Type.TotalPartCount(); ++idx) {
+        testState.GrabEventPtr<TEvBlobStorage::TEvVMultiPut>();
+    }
+
+    UNIT_ASSERT_VALUES_EQUAL(observedVMultiPutCount, env.Info->Type.TotalPartCount());
+    UNIT_ASSERT_VALUES_EQUAL(vMultiPutsWithoutDisablePayloadChecksumsFlag, vdiskFlagEnabled ? 0 : observedVMultiPutCount);
+}
+
+Y_UNIT_TEST(TestFlagsDisablePayloadChecksumsSetOnVMultiPut) {
+    TestFlagsDisablePayloadChecksumsSetOnVMultiPutImpl(true);
+    TestFlagsDisablePayloadChecksumsSetOnVMultiPutImpl(false);
+}
+
 } // Y_UNIT_TEST_SUITE TDSProxyPutTest
 } // namespace NDSProxyPutTest
 } // namespace NKikimr

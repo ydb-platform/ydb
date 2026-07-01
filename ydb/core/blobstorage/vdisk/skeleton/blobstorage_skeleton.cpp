@@ -59,6 +59,9 @@
 
 #include <util/generic/intrlist.h>
 
+#define XXH_INLINE_ALL
+#include <contrib/libs/xxhash/xxhash.h>
+
 using namespace NKikimrServices;
 
 namespace NKikimr {
@@ -777,6 +780,17 @@ namespace NKikimr {
             }
         }
 
+        bool ValidateChecksum(const TRope& rope, ui64 checksum) {
+            XXH3_state_t state;
+            XXH3_64bits_reset(&state);
+
+            for (auto it = rope.Begin(); it.Valid(); it.AdvanceToNextContiguousBlock()) {
+                XXH3_64bits_update(&state, it.ContiguousData(), it.ContiguousSize());
+            }
+
+            return checksum == XXH3_64bits_digest(&state);
+        }
+
         void PrivateHandle(TEvBlobStorage::TEvVPut::TPtr &ev, const TActorContext &ctx) {
             IFaceMonGroup->PutMsgs()++;
             IFaceMonGroup->PutTotalBytes() += ev->GetSize();
@@ -812,6 +826,14 @@ namespace NKikimr {
                         << " Marker# BSVS10");
                 ReplyError({NKikimrProto::RACE, "group generation mismatch", 0, false}, ev, ctx, now);
                 return;
+            }
+
+            if (Config->BlobHeaderMode == EBlobHeaderMode::XXH3_64BIT_HEADER && ev->Get()->Record.HasChecksum()) {
+                if (! ValidateChecksum(ev->Get()->GetBuffer(), ev->Get()->Record.GetChecksum()))
+                {
+                    ReplyError({NKikimrProto::ERROR, "checksum validation error", 0, false}, ev, ctx, now);
+                    return;
+                }
             }
 
             info.HullStatus = ValidateVPut(ctx, "TEvVPut", id, bufSize, ignoreBlock, info.IssueKeepFlag,

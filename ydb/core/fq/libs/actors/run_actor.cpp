@@ -42,6 +42,7 @@
 #include <ydb/library/yql/providers/dq/provider/yql_dq_provider.h>
 #include <ydb/library/yql/providers/dq/worker_manager/interface/events.h>
 #include <ydb/library/yql/providers/generic/provider/yql_generic_provider.h>
+#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
 #include <ydb/library/yql/providers/pq/proto/dq_io.pb.h>
 #include <ydb/library/yql/providers/pq/provider/yql_pq_provider.h>
 #include <ydb/library/yql/providers/pq/task_meta/task_meta.h>
@@ -2080,6 +2081,12 @@ private:
         sqlSettings.PgParser = (Params.QuerySyntax == FederatedQuery::QueryContent::PG);
         sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
         sqlSettings.Flags.insert({ "DqEngineEnable", "DqEngineForce", "DisableAnsiOptionalAs", "FlexibleTypes", "AnsiInForEmptyOrNullableItemsCollections" });
+        // PQ topic metadata is exposed as __ydb_-prefixed system columns (e.g. __ydb_offset,
+        // __ydb_write_time). They must stay readable when named explicitly but must not leak into
+        // SELECT * (otherwise INSERT INTO topic SELECT * would carry them as data).
+        for (auto& ydbColumn : NYql::GetAllowedYdbSysColumns(/* includeUserAttributes */ true)) {
+            sqlSettings.ExtraSystemColumnPrefixes.push_back(std::move(ydbColumn));
+        }
         try {
             AddTableBindingsFromBindings(Params.Bindings, YqConnections, sqlSettings);
         } catch (const std::exception& e) {

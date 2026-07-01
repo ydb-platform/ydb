@@ -1,6 +1,9 @@
 #include "kqp_translate.h"
 
 #include <ydb/core/kqp/provider/yql_kikimr_results.h>
+
+#include <ydb/library/yql/providers/pq/common/pq_meta_fields.h>
+
 #include <yql/essentials/sql/sql.h>
 #include <yql/essentials/sql/v0/sql.h>
 #include <yql/essentials/sql/v1/sql.h>
@@ -254,6 +257,13 @@ NSQLTranslation::TTranslationSettings TKqpTranslationSettingsBuilder::Build(NYql
         settings.Flags.insert("WarnOnAnsiAliasShadowing");
         settings.Flags.insert("AnsiCurrentRow");
         settings.Flags.insert("AnsiInForEmptyOrNullableItemsCollections");
+    }
+
+    // PQ topic metadata is exposed as __ydb_-prefixed system columns (e.g. __ydb_offset,
+    // __ydb_write_time). Like __ydb_row_id, they must stay readable when named explicitly but
+    // must not leak into SELECT * (otherwise INSERT INTO topic SELECT * would carry them as data).
+    for (auto& ydbColumn : NYql::GetAllowedYdbSysColumns(/* includeUserAttributes */ true)) {
+        settings.ExtraSystemColumnPrefixes.push_back(std::move(ydbColumn));
     }
 
     if (QueryParameters) {

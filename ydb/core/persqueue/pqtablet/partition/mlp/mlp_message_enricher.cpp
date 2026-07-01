@@ -2,7 +2,7 @@
 
 #include <ydb/core/protos/pqdata_mlp.pb.h>
 
-#include <algorithm>
+#include <util/generic/algorithm.h>
 
 namespace NKikimr::NPQ::NMLP {
 

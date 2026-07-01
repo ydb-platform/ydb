@@ -824,20 +824,20 @@ message ResetOffsetRequest {
     // Consumer whose committed offsets are reset.
     string consumer = 3;
 
-    // Reset committed offset to the beginning of each partition.
+    // Reset committed offset to the earliest available position in each partition.
     // After reset, the next read will start from the first available message in the partition.
-    message PartitionStart {
+    message Earliest {
     }
 
-    // Reset committed offset to the end of each partition.
+    // Reset committed offset to the latest position in each partition.
     // After reset, the consumer will only receive messages written after the reset.
-    message PartitionEnd {
+    message Latest {
     }
 
     // Target position for the committed offset in each partition of the topic.
     oneof position {
-        PartitionStart partition_start = 4;
-        PartitionEnd partition_end = 5;
+        Earliest earliest = 4;
+        Latest latest = 5;
     }
 }
 

@@ -2,6 +2,7 @@
 
 #include <ydb/core/cms/console/console.h>
 #include <ydb/core/grpc_services/local_rpc/local_rpc.h>
+#include <ydb/core/persqueue/deferred_publish/registry_actor.h>
 #include <ydb/core/testlib/test_client.h>
 #include <ydb/library/aclib/aclib.h>
 #include <ydb/public/api/grpc/ydb_cms_v1.grpc.pb.h>
@@ -247,6 +248,26 @@ void WaitDatabaseRunning(NActors::TTestActorRuntime& runtime, const TString& pat
         }
     }
     UNIT_FAIL(TStringBuilder() << "Database " << path << " is not RUNNING, last status:\n" << status.DebugString());
+}
+
+void RestartDeferredPublishRegistry(NPersQueue::TTestServer& server, ui32 nodeIdx = 0) {
+    auto* runtime = server.CleverServer->GetRuntime();
+    const NActors::TActorId edgeActor = runtime->AllocateEdgeActor(nodeIdx);
+
+    runtime->Send(new NActors::IEventHandle(
+        NPQ::NDeferredPublish::MakeDeferredPublishRegistryActorId(),
+        edgeActor,
+        new NActors::TEvents::TEvPoison()));
+    runtime->DispatchEvents();
+
+    const ui32 userPoolId = runtime->GetAppData(nodeIdx).UserPoolId;
+    NActors::IActor* registry = NPQ::NDeferredPublish::CreateDeferredPublishRegistryActor();
+    const NActors::TActorId registryId = runtime->Register(registry, nodeIdx, userPoolId);
+    runtime->RegisterService(
+        NPQ::NDeferredPublish::MakeDeferredPublishRegistryActorId(),
+        registryId,
+        nodeIdx);
+    runtime->DispatchEvents();
 }
 
 void CreateServerlessDatabase(
@@ -527,6 +548,21 @@ Y_UNIT_TEST(BeginPublicationSucceedsWhenTablesAlreadyExist) {
     auto stub = MakeStub(server);
     BeginPublicationIntId(CallBeginPublication(*stub, "/Root", "warmup"));
     BeginPublicationIntId(CallBeginPublication(*stub, "/Root", "after-warmup"));
+}
+
+Y_UNIT_TEST(BeginPublicationSucceedsAfterRegistryRestart) {
+    auto server = MakeServerWithDeferredPublishEnabled();
+    server.AnnoyingClient->GrantConnect("root@builtin");
+
+    auto stub = MakeStub(server);
+    BeginPublicationIntId(CallBeginPublication(*stub, "/Root", "warmup-before-registry-restart"));
+
+    UNIT_ASSERT(SchemePathExists(server, "/Root/.metadata/topic_deferred_publications"));
+    UNIT_ASSERT(SchemePathExists(server, "/Root/.metadata/topic_deferred_publication_destinations"));
+
+    RestartDeferredPublishRegistry(server);
+
+    BeginPublicationIntId(CallBeginPublication(*stub, "/Root", "after-registry-restart"));
 }
 
 Y_UNIT_TEST(BeginPublicationWorksInServerlessDatabase) {

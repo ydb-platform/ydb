@@ -107,11 +107,31 @@ public:
         Send(ev->Get()->ReplyTo, response);
     }
 
+    void HandlePoison() {
+        NYql::TIssues issues;
+        issues.AddIssue("Deferred publish registry is shutting down");
+
+        for (auto& [database, state] : Databases) {
+            Y_UNUSED(database);
+            for (const auto& request : state.PendingRequests) {
+                auto* response = new TEvBeginPublicationResponse;
+                response->Status = Ydb::StatusIds::ABORTED;
+                response->Issues = issues;
+                Send(request.ReplyTo, response);
+            }
+            state.PendingRequests.clear();
+            state.TablesStatus = ETablesStatus::NotReady;
+        }
+
+        PassAway();
+    }
+
     STFUNC(StateFunc) {
         switch (ev->GetTypeRewrite()) {
             hFunc(TEvBeginPublicationRequest, Handle);
             hFunc(TEvTablesCreationFinished, Handle);
             hFunc(TEvInsertPublicationFinished, Handle);
+            sFunc(TEvents::TEvPoison, HandlePoison);
             default:
                 break;
         }

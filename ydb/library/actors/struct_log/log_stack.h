@@ -3,6 +3,7 @@
 #include "structured_message.h"
 
 #include <ydb/library/actors/core/log_iface.h>
+#include <util/generic/maybe.h>
 
 namespace NActors::NStructuredLog {
 

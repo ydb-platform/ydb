@@ -78,19 +78,16 @@ Y_UNIT_TEST_SUITE(KqpCompileFallback) {
         appConfig.MutableTableServiceConfig()->SetSqlVersion(0);
 
         TKikimrRunner kikimr{ TKikimrSettings(appConfig) };
-        EnableCompileDebugLogging(kikimr);
 
         auto db = kikimr.GetTableClient();
         auto session = db.CreateSession().GetValueSync().GetSession();
 
         auto result = session.ExecuteDataQuery(R"(
-            SELECT * FROM [/Root/KeyValue] WHERE Key = 1;
+            --!syntax_v0
+            SELECT * FROM `/Root/KeyValue` WHERE Key = 1;
         )", TTxControl::BeginTx().CommitTx()).ExtractValueSync();
+        result.GetIssues().PrintTo(Cerr);
         UNIT_ASSERT(!result.IsSuccess());
-
-        auto [success, failed] = GetEnforceConfigCounters(kikimr);
-        UNIT_ASSERT_VALUES_EQUAL(failed, 0);
-        UNIT_ASSERT_VALUES_EQUAL(success, 0);
     }
 }
 

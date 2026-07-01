@@ -169,8 +169,8 @@ UNKNOWN: 'unknown';
 WITH: 'with';
 
 // String literal
-fragment STRING_CORE_SINGLE: ~[\\']+ ;
-fragment STRING_CORE_DOUBLE: ~[\\"]+ ;
+fragment STRING_CORE_SINGLE: (~['\\] | '\\' .)* ;
+fragment STRING_CORE_DOUBLE: (~["\\] | '\\' .)* ;
 fragment STRING_SINGLE: QUOTE_SINGLE STRING_CORE_SINGLE QUOTE_SINGLE;
 fragment STRING_DOUBLE: QUOTE_DOUBLE STRING_CORE_DOUBLE QUOTE_DOUBLE;
 

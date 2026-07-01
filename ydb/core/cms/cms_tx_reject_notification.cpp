@@ -3,6 +3,8 @@
 
 #include <google/protobuf/text_format.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 class TCms::TTxRejectNotification : public TTransactionBase<TCms> {
@@ -16,7 +18,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_REJECT_NOTIFICATION; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRejectNotification Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRejectNotification Execute");
 
         auto &rec = Event->Get()->Record;
         Response = new TEvCms::TEvManageNotificationResponse;
@@ -42,15 +44,15 @@ public:
             Response->Record.MutableStatus()->SetReason(error.Reason);
         }
 
-        LOG_INFO(ctx, NKikimrServices::CMS, "Response status: %s %s",
-                  ToString(Response->Record.GetStatus().GetCode()).data(),
-                  Response->Record.GetStatus().GetReason().data());
+        YDB_LOG_INFO_CTX(ctx, "Response status",
+            {"status", ToString(Response->Record.GetStatus().GetCode()).data()},
+            {"reason", Response->Record.GetStatus().GetReason().data()});
 
         return true;
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRejectNotification Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRejectNotification Complete");
 
         Self->Reply(Event, std::move(Response), ctx);
     }

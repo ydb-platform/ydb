@@ -6,10 +6,13 @@
 
 #include <util/string/builder.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 void AuditLog(const TString& component, const TString& message, const TActorContext& ctx) {
-    LOG_NOTICE_S(ctx, NKikimrServices::CMS, "[AuditLog] [" << component << "] " << message);
+    YDB_LOG_NOTICE_CTX(ctx, "[AuditLog] " << message,
+        {"component", component});
 }
 
 void AuditLog(const TString& component, const IEventBase* request, const IEventBase* response, const TActorContext& ctx) {

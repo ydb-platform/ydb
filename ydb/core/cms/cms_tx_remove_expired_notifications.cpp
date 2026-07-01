@@ -3,6 +3,8 @@
 
 #include <google/protobuf/text_format.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::CMS
+
 namespace NKikimr::NCms {
 
 class TCms::TTxRemoveExpiredNotifications : public TTransactionBase<TCms> {
@@ -15,7 +17,7 @@ public:
     TTxType GetTxType() const override { return TXTYPE_REMOVE_EXPIRED_NOTIFICATION; }
 
     bool Execute(TTransactionContext &txc, const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRemoveExpiredNotifications Execute");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveExpiredNotifications Execute");
 
         TInstant now = ctx.Now();
         for (auto entry = Self->State->Notifications.begin(); entry != Self->State->Notifications.end();) {
@@ -31,8 +33,9 @@ public:
                 TInstant deadline = time + TDuration::MicroSeconds(i->GetDuration());
 
                 if (deadline <= now) {
-                    LOG_INFO(ctx, NKikimrServices::CMS, "Removing expired action from notification %s: %s",
-                              info.NotificationId.data(), i->ShortDebugString().data());
+                    YDB_LOG_INFO_CTX(ctx, "Removing expired action from notification",
+                        {"notificationId", info.NotificationId.data()},
+                        {"action", i->ShortDebugString().data()});
 
                     i = actions->erase(i);
                     modified = true;
@@ -69,7 +72,7 @@ public:
     }
 
     void Complete(const TActorContext &ctx) override {
-        LOG_DEBUG(ctx, NKikimrServices::CMS, "TTxRemoveExpiredNotifications Complete");
+        YDB_LOG_DEBUG_CTX(ctx, "TTxRemoveExpiredNotifications Complete");
     }
 };
 

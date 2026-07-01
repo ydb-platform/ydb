@@ -2661,6 +2661,16 @@ struct Schema : NIceDb::Schema {
         >;
     };
 
+    struct TestShardSet : Table<140> {
+        struct PathId : Column<1, NScheme::NTypeIds::Uint64> { using Type = TLocalPathId; };
+        struct AlterVersion : Column<2, NScheme::NTypeIds::Uint64> {};
+        struct TestShards : Column<3, NScheme::NTypeIds::String> { using Type = TString; };
+        struct CmdInitialize : Column<4, NScheme::NTypeIds::String> { using Type = TString; };
+
+        using TKey = TableKey<PathId>;
+        using TColumns = TableColumns<PathId, AlterVersion, TestShards, CmdInitialize>;
+    };
+
     using TTables = SchemaTables<
         Paths,
         TxInFlight,
@@ -2798,7 +2808,8 @@ struct Schema : NIceDb::Schema {
         FullBackups,
         FullBackupItems,
         SetColumnConstraint,
-        SetColumnConstraintShardStatus
+        SetColumnConstraintShardStatus,
+        TestShardSet
     >;
 
     static constexpr ui64 SysParam_NextPathId = 1;

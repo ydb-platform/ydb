@@ -293,6 +293,11 @@ enum ESimpleCounters {
     COUNTER_IN_FLIGHT_OPS_TxDropLocalIndex = 225 [(CounterOpts) = {Name: "InFlightOps/DropLocalIndex"}];
     COUNTER_IN_FLIGHT_OPS_TxAlterLocalIndex = 226 [(CounterOpts) = {Name: "InFlightOps/AlterLocalIndex"}];
     COUNTER_IN_FLIGHT_OPS_TxMoveLocalIndex = 227 [(CounterOpts) = {Name: "InFlightOps/MoveLocalIndex"}];
+
+    COUNTER_TEST_SHARD_SET_COUNT = 228                     [(CounterOpts) = {Name: "TestShardSetCount"}];
+    COUNTER_TEST_SHARD_COUNT = 229                         [(CounterOpts) = {Name: "TestShardCount"}];
+    COUNTER_IN_FLIGHT_OPS_TxCreateTestShardSet = 230      [(CounterOpts) = {Name: "InFlightOps/CreateTestShardSet"}];
+    COUNTER_IN_FLIGHT_OPS_TxDropTestShardSet = 231        [(CounterOpts) = {Name: "InFlightOps/DropTestShardSet"}];
 }
 
 enum ECumulativeCounters {
@@ -491,6 +496,9 @@ enum ECumulativeCounters {
     COUNTER_FINISHED_OPS_TxDropLocalIndex = 146 [(CounterOpts) = {Name: "FinishedOps/DropLocalIndex"}];
     COUNTER_FINISHED_OPS_TxAlterLocalIndex = 147 [(CounterOpts) = {Name: "FinishedOps/AlterLocalIndex"}];
     COUNTER_FINISHED_OPS_TxMoveLocalIndex = 148 [(CounterOpts) = {Name: "FinishedOps/MoveLocalIndex"}];
+
+    COUNTER_FINISHED_OPS_TxCreateTestShardSet = 149      [(CounterOpts) = {Name: "FinishedOps/CreateTestShardSet"}];
+    COUNTER_FINISHED_OPS_TxDropTestShardSet = 150        [(CounterOpts) = {Name: "FinishedOps/DropTestShardSet"}];
 }
 
 enum EPercentileCounters {
@@ -781,4 +789,6 @@ enum ETxTypes {
 
     TXTYPE_CREATE_SET_COLUMN_CONSTRAINT = 124             [(TxTypeOpts) = {Name: "TxCreateSetColumnConstraint"}];
     TXTYPE_GET_SET_COLUMN_CONSTRAINT = 125             [(TxTypeOpts) = {Name: "TxGetSetColumnConstraint"}];
+
+    TXTYPE_TEST_SHARD_CONTROL = 126 [(TxTypeOpts) = {Name: "TxTestShardControl"}];
 }

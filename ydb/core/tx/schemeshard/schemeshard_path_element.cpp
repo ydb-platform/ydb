@@ -264,6 +264,10 @@ bool TPathElement::IsStreamingQuery() const {
     return PathType == EPathType::EPathTypeStreamingQuery;
 }
 
+bool TPathElement::IsTestShardSet() const {
+    return PathType == EPathType::EPathTypeTestShardSet;
+}
+
 void TPathElement::SetDropped(TStepId step, TTxId txId) {
     PathState = EPathState::EPathStateNotExist;
     StepDropped = step;

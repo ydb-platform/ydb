@@ -1126,6 +1126,10 @@ namespace NSchemeShardUT_Private {
     GENERIC_HELPERS(DropStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
     DROP_BY_PATH_ID_HELPERS(DropStreamingQuery, NKikimrSchemeOp::EOperationType::ESchemeOpDropStreamingQuery)
 
+    // test shard
+    GENERIC_HELPERS(CreateTestShardSet, NKikimrSchemeOp::EOperationType::ESchemeOpCreateTestShardSet, &NKikimrSchemeOp::TModifyScheme::MutableCreateTestShardSet)
+    GENERIC_HELPERS(DropTestShardSet, NKikimrSchemeOp::EOperationType::ESchemeOpDropTestShardSet, &NKikimrSchemeOp::TModifyScheme::MutableDrop)
+
     #undef DROP_BY_PATH_ID_HELPERS
     #undef GENERIC_WITH_ATTRS_HELPERS
     #undef GENERIC_HELPERS
@@ -1226,6 +1230,18 @@ namespace NSchemeShardUT_Private {
     {
         AsyncAssignBlockStoreVolume(runtime, txId, parentPath, name, mountToken, tokenVersion);
         TestModificationResults(runtime, txId, expectedResults);
+    }
+
+    TString CreateTestShardSetConfig(const TString& name, ui64 count) {
+        return TStringBuilder() << R"(
+                Name: ")" << name << R"("
+                Count: )" << count << R"(
+                StorageConfig {
+                }
+                CmdInitialize {
+                    MaxDataBytes: 1000
+                }
+            )";
     }
 
     TEvSchemeShard::TEvCancelTx *CancelTxRequest(ui64 txId, ui64 targetTxId) {

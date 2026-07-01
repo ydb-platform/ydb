@@ -1799,7 +1799,7 @@ message TCreateTestShardSet {
     optional string Name = 1; // mandatory
     optional uint32 Count = 2;
     optional TKeyValueStorageConfig StorageConfig = 3;
-    optional NKikimrClient.TTestShardControlRequest.TCmdInitialize CmdInitialize = 5;
+    optional NKikimrClient.TTestShardControlRequest.TCmdInitialize CmdInitialize = 4;
 }
 
 message TBlockStoreAssignOp {

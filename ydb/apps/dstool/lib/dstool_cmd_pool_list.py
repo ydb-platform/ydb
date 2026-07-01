@@ -56,7 +56,7 @@ def calculate_estimated_usage(pdisk_map, vslot_map, groups):
         else:
             vslot_fair_usages.append(0.0)
 
-        total_size_in_units += group.GroupSizeInUnits if group.GroupSizeInUnits else 1
+        total_size_in_units += group.GroupSizeInUnits or 1
 
     estimated_usage = max_used_size / min_fair_size if min_fair_size else 0.0
     max_vslot_fair_usage = apply_func(max, vslot_fair_usages)

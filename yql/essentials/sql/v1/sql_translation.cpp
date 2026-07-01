@@ -2895,6 +2895,34 @@ bool StoreConsumerSettingsEntry(
             return false;
         }
         settings.DeadLetterQueue = valueExprNode;
+    } else if (name == "receive_message_wait_time") {
+        if (settings.ReceiveMessageWaitTime) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            return false;
+        }
+        if (reset) {
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (valueExprNode->GetOpName() != "Interval") {
+            ctx.Error() << "Literal of Interval type is expected for " << to_upper(id.Name) << " setting";
+            return false;
+        }
+        settings.ReceiveMessageWaitTime = valueExprNode;
+    } else if (name == "receive_message_delay") {
+        if (settings.ReceiveMessageDelay) {
+            ctx.Error() << to_upper(id.Name) << " specified multiple times in " << statement << " statement for single consumer";
+            return false;
+        }
+        if (reset) {
+            ctx.Error() << to_upper(id.Name) << " reset is not supported";
+            return false;
+        }
+        if (valueExprNode->GetOpName() != "Interval") {
+            ctx.Error() << "Literal of Interval type is expected for " << to_upper(id.Name) << " setting";
+            return false;
+        }
+        settings.ReceiveMessageDelay = valueExprNode;
     } else {
         ctx.Error() << to_upper(id.Name) << ": unknown option for consumer";
         return false;

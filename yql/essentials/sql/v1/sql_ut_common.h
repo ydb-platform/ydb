@@ -10257,6 +10257,33 @@ Y_UNIT_TEST(CreateTopicConsumer) {
     TestQuery(R"(
             CREATE TOPIC topic1 (CONSUMER cons1, CONSUMER cons2 WITH (important = false, availability_period = Interval('PT9H'))) WITH (supported_codecs = "1,2,3");
         )");
+    TestQuery(R"(
+            CREATE TOPIC topic1 (
+                CONSUMER cons1 WITH (
+                    type = 'shared',
+                    receive_message_wait_time = Interval('PT5S'),
+                    receive_message_delay = Interval('PT7S')
+                )
+            );
+        )");
+}
+
+Y_UNIT_TEST(AlterTopicConsumerReceiveMessageSettings) {
+    TestQuery(R"(
+            ALTER TOPIC topic1
+                ADD CONSUMER cons1 WITH (
+                    type = 'shared',
+                    receive_message_wait_time = Interval('PT5S'),
+                    receive_message_delay = Interval('PT7S')
+                );
+        )");
+    TestQuery(R"(
+            ALTER TOPIC topic1
+                ALTER CONSUMER cons1 SET (
+                    receive_message_wait_time = Interval('PT2S'),
+                    receive_message_delay = Interval('PT3S')
+                );
+        )");
 }
 
 Y_UNIT_TEST(AlterTopicSimple) {

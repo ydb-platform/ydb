@@ -11992,6 +11992,54 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
             const auto query = R"(
                 --!syntax_v1
                 CREATE TOPIC `/Root/topic1` (
+                    CONSUMER cs WITH (type='streaming', receive_message_wait_time=Interval('PT5S'))
+                )
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "receive_message_wait_time is not supported for streaming consumers", result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic1` (
+                    CONSUMER cs WITH (type='streaming', receive_message_delay=Interval('PT7S'))
+                )
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::GENERIC_ERROR, result.GetIssues().ToString());
+            UNIT_ASSERT_STRING_CONTAINS_C(result.GetIssues().ToString(), "receive_message_delay is not supported for streaming consumers", result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic_with_receive_settings` (
+                    CONSUMER cs WITH (
+                        type='shared',
+                        receive_message_wait_time=Interval('PT5S'),
+                        receive_message_delay=Interval('PT7S')
+                    )
+                )
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                ALTER TOPIC `/Root/topic_with_receive_settings`
+                    ALTER CONSUMER cs SET (
+                        receive_message_wait_time=Interval('PT2S'),
+                        receive_message_delay=Interval('PT3S')
+                    )
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
+                CREATE TOPIC `/Root/topic1` (
                     CONSUMER cs WITH (type='shared', dead_letter_policy='delete', dead_letter_queue='other_topic')
                 )
             )";

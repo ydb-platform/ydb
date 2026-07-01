@@ -114,8 +114,8 @@ TPushMapElementsThroughUnaryRule::SimpleMatchAndApply(const TIntrusivePtr<IOpera
     unary->SetInput(pushedMap);
 
     if (!renameMap.empty()) {
-        unary->RenameIUs(renameMap, ctx.ExprCtx);
-        props.Subplans.RenameIUs(renameMap, ctx.ExprCtx);
+        unary->RenameUsedIUs(renameMap, ctx.ExprCtx);
+        props.Subplans.RenameReferences(renameMap, ctx.ExprCtx);
     }
 
     if (topElements.empty()) {

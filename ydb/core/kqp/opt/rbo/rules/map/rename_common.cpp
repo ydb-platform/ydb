@@ -108,7 +108,7 @@ bool FinishRenamePush(
     TPlanProps& props)
 {
     RemoveTopRenameAndRewriteResiduals(topMap, candidate.Index, candidate.From, candidate.To);
-    props.Subplans.RenameIUs({{candidate.From, candidate.To}}, ctx.ExprCtx);
+    props.Subplans.RenameReferences({{candidate.From, candidate.To}}, ctx.ExprCtx);
 
     if (topMap->MapElements.empty()) {
         input = topMap->GetInput();

@@ -130,7 +130,7 @@ TPushMapElementsIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
 
     RewriteResidualTopMapInputs(topElements, renameMap);
     bottomMap->MapElements = std::move(bottomElements);
-    props.Subplans.RenameIUs(renameMap, ctx.ExprCtx);
+    props.Subplans.RenameReferences(renameMap, ctx.ExprCtx);
 
     if (topElements.empty()) {
         return bottomMap;

@@ -31,7 +31,7 @@ bool TPushRenameIntoMapProducerRule::MatchAndApply(TIntrusivePtr<IOperator>& inp
         return false;
     }
 
-    outputElement->SetElementName(candidate->To);
+    map->RenameProducedIUs({{candidate->From, candidate->To}}, ctx.ExprCtx);
     return NMapRules::FinishRenamePush(input, topMap, *candidate, ctx, props);
 }
 

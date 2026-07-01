@@ -168,8 +168,6 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include notitle [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -205,5 +203,4 @@ Below are examples of setting the "prefer the nearest data center" balancing alg
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#239](https://github.com/ydb-platform/ydb-rs-sdk/issues/239)
 
->>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 {% endlist %}

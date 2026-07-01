@@ -159,39 +159,9 @@ TDqStage RebuildReturningPureStageWithSink(TExprNode::TPtr& returning, TExprBase
     return stage;
 }
 
-TDqPhyPrecompute BuildPrecomputeStage(TExprBase expr, TExprContext& ctx) {
-    Y_DEBUG_ABORT_UNLESS(IsDqPureExpr(expr));
-
-    auto pureStage = Build<TDqStage>(ctx, expr.Pos())
-        .Inputs()
-            .Build()
-        .Program()
-            .Args({})
-            .Body<TCoToStream>()
-                .Input<TCoJust>()
-                    .Input(expr)
-                    .Build()
-                .Build()
-            .Build()
-        .Settings().Build()
-        .Done();
-
-    auto dqValue = Build<TDqCnValue>(ctx, expr.Pos())
-        .Output()
-            .Stage(pureStage)
-            .Index().Build("0")
-            .Build()
-        .Done();
-
-    return Build<TDqPhyPrecompute>(ctx, expr.Pos())
-        .Connection(dqValue)
-        .Done();
-}
-
 bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
-    TMaybeNode<TExprBase>& stageInput, TMaybeNode<TExprBase>& effect, bool& sinkEffect, const i64 order)
+    TMaybeNode<TExprBase>& effect, const i64 order)
 {
-    sinkEffect = true;
     const i64 priority = 0;
     AFL_ENSURE(order == 0);
 
@@ -210,14 +180,14 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
             .Done());
 
     if (IsDqPureExpr(node.Input())) {
-        stageInput = RebuildPureStageWithSink(
+        auto stageInput = RebuildPureStageWithSink(
             node.Input(), table,
             /* allowInconsistentWrites */ true, /* useStreamWrite */ true,
             /* isBatch */ false, "fill_table", /* isIndexImplTable */ false,
             Build<TCoAtomList>(ctx, node.Pos()).Done(), settings,
             priority, ctx);
         effect = Build<TKqpSinkEffect>(ctx, node.Pos())
-            .Stage(stageInput.Cast().Ptr())
+            .Stage(stageInput.Ptr())
             .SinkIndex().Build("0")
             .Done();
         return true;
@@ -263,7 +233,7 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
     auto mapCn = Build<TDqCnMap>(ctx, node.Pos())
         .Output(dqUnion.Output())
         .Done();
-    stageInput = Build<TDqStage>(ctx, node.Pos())
+    auto stageInput = Build<TDqStage>(ctx, node.Pos())
         .Inputs()
             .Add(mapCn)
             .Build()
@@ -280,7 +250,7 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
         .Done();
 
     effect = Build<TKqpSinkEffect>(ctx, node.Pos())
-        .Stage(stageInput.Cast().Ptr())
+        .Stage(stageInput.Ptr())
         .SinkIndex().Build("0")
         .Done();
 
@@ -288,7 +258,7 @@ bool BuildFillTableEffect(const TKqlFillTable& node, TExprContext& ctx,
 }
 
 bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
-    const TCoArgument& inputArg, TMaybeNode<TExprBase>& stageInput, TMaybeNode<TExprBase>& effect, TExprNode::TPtr& returning, bool& sinkEffect, const i64 order)
+    TMaybeNode<TExprBase>& effect, TExprNode::TPtr& returning, const i64 order)
 {
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, node.Table().Path());
 
@@ -297,7 +267,8 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
         settings = TKqpUpsertRowsSettings::Parse(node.Settings().Cast());
     }
 
-    sinkEffect = NeedSinks(table, kqpCtx) || (kqpCtx.IsGenericQuery() && settings.AllowInconsistentWrites);
+    const bool sinkEffect = NeedSinks(table, kqpCtx) || (kqpCtx.IsGenericQuery() && settings.AllowInconsistentWrites);
+    AFL_ENSURE(sinkEffect);
 
     const bool useStreamWriteForConsistentSink = CanEnableStreamWrite(table, kqpCtx)
         && (!HasReadTable(node.Table().PathId().Value(), node.Input().Ptr()) || settings.IsConditionalUpdate);
@@ -319,36 +290,26 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
     }
 
     if (IsDqPureExpr(node.Input())) {
-        if (sinkEffect && kqpCtx.Config->GetEnableIndexStreamWrite() && !node.ReturningColumns().Empty()) {
-            stageInput = RebuildReturningPureStageWithSink(
+        if (kqpCtx.Config->GetEnableIndexStreamWrite() && !node.ReturningColumns().Empty()) {
+            auto stageInput = RebuildReturningPureStageWithSink(
                 returning, node.Input(), table, node.Table(),
                 settings.AllowInconsistentWrites, useStreamWrite,
                 node.IsBatch() == "true", settings.Mode, isIndexImplTable,
                 node.DefaultColumns(), node.ReturningColumns(), {}, priority, ctx);
             AFL_ENSURE(returning);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
-                .Stage(stageInput.Cast().Ptr())
+                .Stage(stageInput.Ptr())
                 .SinkIndex().Build("0")
                 .Done();
-        } else if (sinkEffect) {
-            stageInput = RebuildPureStageWithSink(
+        } else {
+            auto stageInput = RebuildPureStageWithSink(
                 node.Input(), node.Table(),
                 settings.AllowInconsistentWrites, useStreamWrite,
                 node.IsBatch() == "true", settings.Mode, isIndexImplTable,
                 node.DefaultColumns(), {}, priority, ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
-                .Stage(stageInput.Cast().Ptr())
+                .Stage(stageInput.Ptr())
                 .SinkIndex().Build("0")
-                .Done();
-        } else {
-            stageInput = BuildPrecomputeStage(node.Input(), ctx);
-            effect = Build<TKqpUpsertRows>(ctx, node.Pos())
-                .Table(node.Table())
-                .Input<TCoIterator>()
-                    .List(inputArg)
-                    .Build()
-                .Columns(node.Columns())
-                .Settings(settings.BuildNode(ctx, node.Pos()))
                 .Done();
         }
         return true;
@@ -360,7 +321,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
 
     auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
 
-    if (sinkEffect) {
+    {
         auto [returningType, returningList] = BuildReturningType(node.ReturningColumns(), table, ctx);
         auto sinkSettings = Build<TKqpTableSinkSettings>(ctx, node.Pos())
             .Table(node.Table())
@@ -411,73 +372,62 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
             .Name("row")
             .Done();
 
-        if ((table.Metadata->Kind == EKikimrTableKind::Olap && useStreamWrite)
-                || settings.AllowInconsistentWrites) {
-            auto mapCn = Build<TDqCnMap>(ctx, node.Pos())
-                .Output(dqUnion.Output())
-                .Done();
-            stageInput = Build<TDqStage>(ctx, node.Pos())
-                .Inputs()
-                    .Add(mapCn)
-                    .Build()
-                .Program()
-                    .Args({rowArgument})
-                    .Body<TCoToFlow>()
-                        .Input(rowArgument)
+        auto stageInput = [&]() {
+            if ((table.Metadata->Kind == EKikimrTableKind::Olap && useStreamWrite)
+                    || settings.AllowInconsistentWrites) {
+                auto mapCn = Build<TDqCnMap>(ctx, node.Pos())
+                    .Output(dqUnion.Output())
+                    .Done();
+                return Build<TDqStage>(ctx, node.Pos())
+                    .Inputs()
+                        .Add(mapCn)
                         .Build()
-                    .Build()
-                .Outputs<TDqStageOutputsList>()
-                    .Add(sink)
-                    .Build()
-                .Settings().Build()
-                .Done();
-        } else {
-            // OLTP is expected to mostly use just few shards,
-            // so we use union all + one sink. It's important for write optimizations support.
-            // NOTE: OLTP large writes expected to fail anyway due to problems with locks/splits.
+                    .Program()
+                        .Args({rowArgument})
+                        .Body<TCoToFlow>()
+                            .Input(rowArgument)
+                            .Build()
+                        .Build()
+                    .Outputs<TDqStageOutputsList>()
+                        .Add(sink)
+                        .Build()
+                    .Settings().Build()
+                    .Done();
+            } else {
+                // OLTP is expected to mostly use just few shards,
+                // so we use union all + one sink. It's important for write optimizations support.
+                // NOTE: OLTP large writes expected to fail anyway due to problems with locks/splits.
 
-            stageInput = Build<TDqStage>(ctx, node.Pos())
-                .Inputs()
-                    .Add(dqUnion)
-                    .Build()
-                .Program()
-                    .Args({rowArgument})
-                    .Body<TCoToFlow>()
-                        .Input(rowArgument)
+                return Build<TDqStage>(ctx, node.Pos())
+                    .Inputs()
+                        .Add(dqUnion)
                         .Build()
-                    .Build()
-                .Outputs<TDqStageOutputsList>()
-                    .Add(sink)
-                    .Build()
-                .Settings().Build()
-                .Done();
-        }
+                    .Program()
+                        .Args({rowArgument})
+                        .Body<TCoToFlow>()
+                            .Input(rowArgument)
+                            .Build()
+                        .Build()
+                    .Outputs<TDqStageOutputsList>()
+                        .Add(sink)
+                        .Build()
+                    .Settings().Build()
+                    .Done();
+            }
+        }();
 
         if (kqpCtx.Config->GetEnableIndexStreamWrite() && !node.ReturningColumns().Empty()) {
             returning = Build<TDqCnUnionAll>(ctx, node.Pos())
                 .Output()
-                    .Stage(stageInput.Cast().Ptr())
+                    .Stage(stageInput.Ptr())
                     .Index().Build("0")
                     .Build()
                 .Done().Ptr();
         }
 
         effect = Build<TKqpSinkEffect>(ctx, node.Pos())
-            .Stage(stageInput.Cast().Ptr())
+            .Stage(stageInput.Ptr())
             .SinkIndex().Build("0")
-            .Done();
-    } else {
-        stageInput = Build<TDqPhyPrecompute>(ctx, node.Pos())
-            .Connection(dqUnion)
-            .Done();
-
-        effect = Build<TKqpUpsertRows>(ctx, node.Pos())
-            .Table(node.Table())
-            .Input<TCoIterator>()
-                .List(inputArg)
-                .Build()
-            .Columns(node.Columns())
-            .Settings(settings.BuildNode(ctx, node.Pos()))
             .Done();
     }
 
@@ -485,7 +435,7 @@ bool BuildUpsertRowsEffect(const TKqlUpsertRows& node, TExprContext& ctx, const 
 }
 
 bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
-    const TCoArgument& inputArg, TMaybeNode<TExprBase>& stageInput, TMaybeNode<TExprBase>& effect, TExprNode::TPtr& returning, bool& sinkEffect, const i64 order)
+    TMaybeNode<TExprBase>& effect, TExprNode::TPtr& returning, const i64 order)
 {
     TKqpDeleteRowsSettings settings;
     if (node.Settings()) {
@@ -493,7 +443,8 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
     }
 
     const auto& table = kqpCtx.Tables->ExistingTable(kqpCtx.Cluster, node.Table().Path());
-    sinkEffect = NeedSinks(table, kqpCtx);
+    const bool sinkEffect = NeedSinks(table, kqpCtx);
+    AFL_ENSURE(sinkEffect);
 
     const bool useStreamWriteForConsistentSink = CanEnableStreamWrite(table, kqpCtx)
         && (!HasReadTable(node.Table().PathId().Value(), node.Input().Ptr()) || settings.IsConditionalDelete);
@@ -515,35 +466,26 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
     }
 
     if (IsDqPureExpr(node.Input())) {
-        if (sinkEffect && kqpCtx.Config->GetEnableIndexStreamWrite() && !node.ReturningColumns().Empty()) {
-            stageInput = RebuildReturningPureStageWithSink(
+        if (kqpCtx.Config->GetEnableIndexStreamWrite() && !node.ReturningColumns().Empty()) {
+            auto stageInput = RebuildReturningPureStageWithSink(
                 returning, node.Input(), table, node.Table(),
                 false, useStreamWrite,
                 node.IsBatch() == "true", "delete", isIndexImplTable,
                 Build<TCoAtomList>(ctx, node.Pos()).Done(), node.ReturningColumns(), {}, priority, ctx);
             AFL_ENSURE(returning);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
-                .Stage(stageInput.Cast().Ptr())
+                .Stage(stageInput.Ptr())
                 .SinkIndex().Build("0")
                 .Done();
-        } else if (sinkEffect) {
-            stageInput = RebuildPureStageWithSink(
+        } else {
+            auto stageInput = RebuildPureStageWithSink(
                 node.Input(), node.Table(),
                 false, useStreamWrite, node.IsBatch() == "true",
                 "delete", isIndexImplTable,
                 Build<TCoAtomList>(ctx, node.Pos()).Done(), {}, priority, ctx);
             effect = Build<TKqpSinkEffect>(ctx, node.Pos())
-                .Stage(stageInput.Cast().Ptr())
+                .Stage(stageInput.Ptr())
                 .SinkIndex().Build("0")
-                .Done();
-        } else {
-            stageInput = BuildPrecomputeStage(node.Input(), ctx);
-
-            effect = Build<TKqpDeleteRows>(ctx, node.Pos())
-                .Table(node.Table())
-                .Input<TCoIterator>()
-                    .List(inputArg)
-                    .Build()
                 .Done();
         }
         return true;
@@ -556,7 +498,7 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
 
     auto dqUnion = node.Input().Cast<TDqCnUnionAll>();
 
-    if (sinkEffect) {
+    {
         auto [returningType, returningList] = BuildReturningType(node.ReturningColumns(), table, ctx);
         auto sinkSettings = Build<TKqpTableSinkSettings>(ctx, node.Pos())
             .Table(node.Table())
@@ -605,130 +547,88 @@ bool BuildDeleteRowsEffect(const TKqlDeleteRows& node, TExprContext& ctx, const 
             .Name("row")
             .Done();
 
-        if (table.Metadata->Kind == EKikimrTableKind::Olap) {
-            auto mapCn = Build<TDqCnMap>(ctx, node.Pos())
-                .Output(dqUnion.Output())
-                .Done();
-            stageInput = Build<TDqStage>(ctx, node.Pos())
-                .Inputs()
-                    .Add(mapCn)
-                    .Build()
-                .Program()
-                    .Args({rowArgument})
-                    .Body<TCoToFlow>()
-                        .Input(rowArgument)
+        auto stageInput = [&]() {
+            if (table.Metadata->Kind == EKikimrTableKind::Olap) {
+                auto mapCn = Build<TDqCnMap>(ctx, node.Pos())
+                    .Output(dqUnion.Output())
+                    .Done();
+                return Build<TDqStage>(ctx, node.Pos())
+                    .Inputs()
+                        .Add(mapCn)
                         .Build()
-                    .Build()
-                .Outputs<TDqStageOutputsList>()
-                    .Add(sink)
-                    .Build()
-                .Settings().Build()
-                .Done();
-        } else {
-            stageInput = Build<TDqStage>(ctx, node.Pos())
-                .Inputs()
-                    .Add(dqUnion)
-                    .Build()
-                .Program()
-                    .Args({rowArgument})
-                    .Body<TCoToFlow>()
-                        .Input(rowArgument)
+                    .Program()
+                        .Args({rowArgument})
+                        .Body<TCoToFlow>()
+                            .Input(rowArgument)
+                            .Build()
                         .Build()
-                    .Build()
-                .Outputs<TDqStageOutputsList>()
-                    .Add(sink)
-                    .Build()
-                .Settings().Build()
-                .Done();
-        }
+                    .Outputs<TDqStageOutputsList>()
+                        .Add(sink)
+                        .Build()
+                    .Settings().Build()
+                    .Done();
+            } else {
+                return Build<TDqStage>(ctx, node.Pos())
+                    .Inputs()
+                        .Add(dqUnion)
+                        .Build()
+                    .Program()
+                        .Args({rowArgument})
+                        .Body<TCoToFlow>()
+                            .Input(rowArgument)
+                            .Build()
+                        .Build()
+                    .Outputs<TDqStageOutputsList>()
+                        .Add(sink)
+                        .Build()
+                    .Settings().Build()
+                    .Done();
+            }
+        }();
 
         if (kqpCtx.Config->GetEnableIndexStreamWrite() && !node.ReturningColumns().Empty()) {
             returning = Build<TDqCnUnionAll>(ctx, node.Pos())
                 .Output()
-                    .Stage(stageInput.Cast().Ptr())
+                    .Stage(stageInput.Ptr())
                     .Index().Build("0")
                     .Build()
                 .Done().Ptr();
         }
 
         effect = Build<TKqpSinkEffect>(ctx, node.Pos())
-            .Stage(stageInput.Cast().Ptr())
+            .Stage(stageInput.Ptr())
             .SinkIndex().Build("0")
-            .Done();
-    } else {
-        stageInput = Build<TDqPhyPrecompute>(ctx, node.Pos())
-            .Connection(dqUnion)
-            .Done();
-
-        effect = Build<TKqpDeleteRows>(ctx, node.Pos())
-            .Table(node.Table())
-            .Input<TCoIterator>()
-                .List(inputArg)
-                .Build()
             .Done();
     }
 
     return true;
 }
 
-bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects, TExprNode::TPtr& returning,
+bool BuildEffects(const TVector<TExprBase>& effects, TExprNode::TPtr& returning,
     TExprContext& ctx, const TKqpOptimizeContext& kqpCtx,
     TVector<TExprBase>& builtEffects)
 {
-    TVector<TCoArgument> inputArgs;
-    TVector<TExprBase> inputs;
-    TVector<TExprBase> newEffects;
-    TVector<TExprBase> newSinkEffects;
-    newEffects.reserve(effects.size());
-    newSinkEffects.reserve(effects.size());
-    i64 order = builtEffects.size();
-
     for (const auto& effect : effects) {
         TMaybeNode<TExprBase> newEffect;
-        bool sinkEffect = false;
         if (effect.Maybe<TKqlFillTable>()) {
-            TMaybeNode<TExprBase> input;
-            TCoArgument inputArg = Build<TCoArgument>(ctx, pos)
-                .Name("inputArg")
-                .Done();
             const auto maybeFillTable = effect.Maybe<TKqlFillTable>();
             AFL_ENSURE(maybeFillTable);
-            if (!BuildFillTableEffect(maybeFillTable.Cast(), ctx, input, newEffect, sinkEffect, order)) {
+            if (!BuildFillTableEffect(maybeFillTable.Cast(), ctx, newEffect, builtEffects.size())) {
                 return false;
             }
-            ++order;
-
-            if (input) {
-                inputArgs.push_back(inputArg);
-                inputs.push_back(input.Cast());
-            }
         } else if (effect.Maybe<TKqlTableEffect>()) {
-            TMaybeNode<TExprBase> input;
-            TCoArgument inputArg = Build<TCoArgument>(ctx, pos)
-                .Name("inputArg")
-                .Done();
-
             if (auto maybeUpsertRows = effect.Maybe<TKqlUpsertRows>()) {
-                if (!BuildUpsertRowsEffect(maybeUpsertRows.Cast(), ctx, kqpCtx, inputArg, input, newEffect, returning, sinkEffect, order)) {
+                if (!BuildUpsertRowsEffect(maybeUpsertRows.Cast(), ctx, kqpCtx, newEffect, returning, builtEffects.size())) {
                     return false;
                 }
-                ++order;
             }
 
             if (auto maybeDeleteRows = effect.Maybe<TKqlDeleteRows>()) {
-                if (!BuildDeleteRowsEffect(maybeDeleteRows.Cast(), ctx, kqpCtx, inputArg, input, newEffect, returning, sinkEffect, order)) {
+                if (!BuildDeleteRowsEffect(maybeDeleteRows.Cast(), ctx, kqpCtx, newEffect, returning, builtEffects.size())) {
                     return false;
                 }
-                ++order;
-            }
-
-            if (input && !sinkEffect) {
-                inputArgs.push_back(inputArg);
-                inputs.push_back(input.Cast());
             }
         } else if (auto maybeExt = effect.Maybe<TKqlExternalEffect>()) {
-            sinkEffect = true;
-
             TExprBase input = maybeExt.Cast().Input();
             ui64 index = 0; // Index of output in DQ stage result
             if (input.Ref().IsList()) {
@@ -767,39 +667,7 @@ bool BuildEffects(TPositionHandle pos, const TVector<TExprBase>& effects, TExprN
         }
 
         YQL_ENSURE(newEffect);
-        if (sinkEffect) {
-            newSinkEffects.push_back(newEffect.Cast());
-        } else {
-            newEffects.push_back(newEffect.Cast());
-        }
-    }
-
-    if (!newEffects.empty()) {
-        auto stage = Build<TDqStage>(ctx, pos)
-            .Inputs()
-                .Add(inputs)
-                .Build()
-            .Program()
-                .Args(inputArgs)
-                .Body<TKqpEffects>()
-                    .Add(newEffects)
-                    .Build()
-                .Build()
-            .Settings().Build()
-            .Done();
-
-        for (ui32 i = 0; i < newEffects.size(); ++i) {
-            auto effect = Build<TDqOutput>(ctx, pos)
-                .Stage(stage)
-                .Index().Build(ToString(0))
-                .Done();
-
-            builtEffects.push_back(effect);
-        }
-    }
-
-    if (!newSinkEffects.empty()) {
-        builtEffects.insert(builtEffects.end(), newSinkEffects.begin(), newSinkEffects.end());
+        builtEffects.push_back(newEffect.Cast());
     }
 
     return true;
@@ -867,7 +735,7 @@ TMaybeNode<TKqlQuery> BuildEffects(const TKqlQuery& query, TExprContext& ctx,
 
         for (const auto& pair: tableEffectsMap) {
             TExprNode::TPtr returning = nullptr;
-            if (!BuildEffects(query.Pos(), pair.second, returning, ctx, kqpCtx, builtEffects)) {
+            if (!BuildEffects(pair.second, returning, ctx, kqpCtx, builtEffects)) {
                 return {};
             }
             AFL_ENSURE(!returning);
@@ -879,7 +747,7 @@ TMaybeNode<TKqlQuery> BuildEffects(const TKqlQuery& query, TExprContext& ctx,
             query.Effects(),
             [&](TExprBase effect) {
                 TExprNode::TPtr returning = nullptr;
-                const bool effectsResult = BuildEffects(query.Pos(), {effect}, returning, ctx, kqpCtx, builtEffects);
+                const bool effectsResult = BuildEffects({effect}, returning, ctx, kqpCtx, builtEffects);
                 if (!effectsResult) {
                     return false;
                 }

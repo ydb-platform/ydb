@@ -722,12 +722,12 @@ private:
     }
 
     // Launch a main-table read for one batch of candidate PKs. Non-covered searches
-    // pipeline posting -> main: instead of waiting for the whole posting scan, each
-    // posting shard's PKs are looked up as that shard finishes (see HandleRead), so
-    // the main reads overlap the remaining posting reads and cross-node latency is
-    // hidden instead of serialized behind a barrier. Each batch pushes its own
-    // top-K down; the global K nearest are necessarily among the per-batch top-Ks,
-    // which the actor merges in FinalizeResults.
+    // pipeline posting -> main: instead of waiting for the whole posting scan, PKs are
+    // flushed to a main read as soon as a batch accumulates (see HandleRead), so the
+    // main reads overlap the remaining posting reads and cross-node latency is hidden
+    // instead of serialized behind a barrier. Each batch pushes its own top-K down;
+    // the global K nearest are necessarily among the per-batch top-Ks, which the actor
+    // merges in FinalizeResults.
     void LaunchMainReadFor(TVector<TString> keys) {
         if (keys.empty()) {
             return;
@@ -961,15 +961,20 @@ private:
         if (Failed) {
             return;
         }
-        // Pipeline posting -> main: a posting shard just finished, so dispatch the PKs
-        // gathered so far (across all posting reads) to a main read that overlaps the
-        // remaining posting reads. Covered searches build candidates straight from the
-        // posting rows and never read the main table.
+        // Pipeline posting -> main, mirroring the legacy StreamLookup chain: dispatch
+        // the buffered PKs to a main read that overlaps the still-running posting reads
+        // as soon as we have a full batch (MainReadFlushThreshold), instead of waiting
+        // for the whole posting shard to drain. A posting shard finishing also flushes
+        // (its below-threshold tail must not be left stranded); the last one carries the
+        // final PKs. Covered searches build candidates straight from the posting rows
+        // and never read the main table.
         bool postingFinished = false;
         for (const auto& ar : finishedReads) {
             postingFinished |= (ar.Kind == EReadKind::Posting);
         }
-        if (postingFinished && !PostingCovers && !PendingMainKeys.empty()) {
+        if (!PostingCovers && !PendingMainKeys.empty()
+            && (postingFinished || PendingMainKeys.size() >= MainReadFlushThreshold))
+        {
             TVector<TString> batch;
             batch.swap(PendingMainKeys);
             LaunchMainReadFor(std::move(batch));
@@ -1265,9 +1270,12 @@ private:
     THashMap<TClusterId, TOwnedCellVecBatch> CachingLevelBatches;
 
     // Non-covered posting rows produce candidate PKs (serialized cell vecs) that are
-    // buffered here and flushed into a pipelined main read when a posting shard
-    // finishes (see HandleRead). SeenKeys dedups PKs that recur across overlapping
-    // clusters, across all posting shards of the query.
+    // buffered here and flushed into a pipelined main read once they reach
+    // MainReadFlushThreshold or the posting shard producing them finishes (see
+    // HandleRead). The threshold mirrors the legacy StreamLookup chain's per-pump key
+    // batch (MaxRowsProcessingStreamLookup). SeenKeys dedups PKs that recur across
+    // overlapping clusters, across all posting shards of the query.
+    static constexpr size_t MainReadFlushThreshold = 65536;
     TVector<TString> PendingMainKeys;
     THashSet<TString> SeenKeys;
 

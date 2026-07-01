@@ -69,12 +69,12 @@ private:
         }
 
         void OnParsingError(TStatus status) override {
-            LOG_ROW_DISPATCHER_ERROR("Got parsing error: " << status.GetErrorMessage());
+            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Got parsing error: " << status.GetErrorMessage());
             Self.FatalError(status);
         }
 
         void OnParsedData(ui64 numberRows) override {
-            LOG_ROW_DISPATCHER_TRACE("Got parsed data, number rows: " << numberRows);
+            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Got parsed data, number rows: " << numberRows);
 
             Self.ParsedData.assign(ParerSchema.size(), std::span<NYql::NUdf::TUnboxedValue>());
             for (size_t i = 0; i < ParerSchema.size(); ++i) {
@@ -93,7 +93,7 @@ private:
     private:
         void OnColumnError(ui64 columnIndex, TStatus status) {
             const auto& column = ParerSchema[columnIndex];
-            LOG_ROW_DISPATCHER_WARN("Failed to parse column " << column.ToString() << ", " << status.GetErrorMessage());
+            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Failed to parse column " << column.ToString() << ", " << status.GetErrorMessage());
 
             const auto columnIt = Self.ColumnsDesc.find(column.Name);
             if (columnIt == Self.ColumnsDesc.end()) {
@@ -171,12 +171,12 @@ private:
             FinishPacking();
             TQueue<TDataBatch> result;
             result.swap(ClientData);
-            LOG_ROW_DISPATCHER_TRACE("ExtractClientData, number batches: " << result.size());
+            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "ExtractClientData, number batches: " << result.size());
             return result;
         }
 
         void OnClientError(TStatus status) {
-            LOG_ROW_DISPATCHER_WARN("OnClientError, " << status.GetErrorMessage());
+            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "OnClientError, " << status.GetErrorMessage());
             Client->OnClientError(std::move(status));
         }
 
@@ -227,7 +227,7 @@ private:
             if (Watermark < watermark) {
                 Watermark = watermark;
             }
-            LOG_ROW_DISPATCHER_TRACE("OnWatermark, offset: " << offset << ", watermark: " << watermark);
+            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "OnWatermark, offset: " << offset << ", watermark: " << watermark);
         }
 
     public:
@@ -253,7 +253,7 @@ private:
 
             Offset = Self.Offsets->at(rowId);
             if (const auto nextOffset = Client->GetNextMessageOffset(); nextOffset && Offset < *nextOffset) {
-                LOG_ROW_DISPATCHER_TRACE("OnData, skip historical offset: " << Offset << ", next message offset: " << *nextOffset);
+                LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "OnData, skip historical offset: " << Offset << ", next message offset: " << *nextOffset);
                 return;
             }
 
@@ -289,7 +289,7 @@ private:
                 return;
             }
 
-            LOG_ROW_DISPATCHER_TRACE("OnBatchFinish, offset: " << Offset << ", number rows: " << numberRows << ", row size: " << rowSize << ", watermark: " << Watermark);
+            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "OnBatchFinish, offset: " << Offset << ", number rows: " << numberRows << ", row size: " << rowSize << ", watermark: " << Watermark);
 
             Client->AddDataToClient(Offset, numberRows, rowSize, Watermark);
 
@@ -321,7 +321,7 @@ private:
 
         void FinishPacking() {
             if (!DataPacker->IsEmpty() || !Watermark.Empty()) {
-                LOG_ROW_DISPATCHER_TRACE("FinishPacking, batch size: " << DataPackerSize << ", number rows: " << FilteredOffsets.size());
+                LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "FinishPacking, batch size: " << DataPackerSize << ", number rows: " << FilteredOffsets.size());
                 if (FilteredOffsets.empty()) {
                     FilteredOffsets.push_back(Offset);
                 }
@@ -393,7 +393,7 @@ public:
         RefreshScheduled = false;
 
         if (Parser) {
-            LOG_ROW_DISPATCHER_TRACE("Refresh parser");
+            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Refresh parser");
             Parser->Refresh();
             ScheduleRefresh();
         }
@@ -410,13 +410,13 @@ public:
     }
 
     void HandleException(const std::exception& error) {
-        LOG_ROW_DISPATCHER_ERROR("Got unexpected exception: " << error.what());
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Got unexpected exception: " << error.what());
         FatalError(TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Format handler error, got unexpected exception: " << error.what()));
     }
 
 public:
     void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
-        LOG_ROW_DISPATCHER_TRACE("Send " << messages.size() << " messages to parser");
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Send " << messages.size() << " messages to parser");
 
         if (!messages.empty()) {
             CurrentOffset = messages.back().GetOffset();
@@ -439,11 +439,11 @@ public:
     }
 
     TStatus AddClient(IClientDataConsumer::TPtr client) override {
-        LOG_ROW_DISPATCHER_DEBUG("Add client with id " << client->GetClientId());
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Add client with id " << client->GetClientId());
 
         if (const auto clientOffset = client->GetNextMessageOffset()) {
             if (Parser && CurrentOffset && *CurrentOffset > *clientOffset) {
-                LOG_ROW_DISPATCHER_DEBUG("Parser was flushed due to new historical offset " << *clientOffset << " (previous parser offset: " << *CurrentOffset << ")");
+                LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Parser was flushed due to new historical offset " << *clientOffset << " (previous parser offset: " << *CurrentOffset << ")");
                 Parser->Refresh(true);
             }
         }
@@ -476,7 +476,7 @@ public:
     }
 
     void RemoveClient(NActors::TActorId clientId) override {
-        LOG_ROW_DISPATCHER_DEBUG("Remove client with id " << clientId);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Remove client with id " << clientId);
 
         if (Filters) {
             Filters->RemoveProgram(clientId);
@@ -558,7 +558,7 @@ private:
             Parser->Refresh(true);
         }
 
-        LOG_ROW_DISPATCHER_DEBUG("UpdateParser to new schema with size " << parerSchema.size());
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "UpdateParser to new schema with size " << parerSchema.size());
         ParserHandler = MakeIntrusive<TParserHandler>(*this, std::move(parerSchema));
 
         if (const ui64 schemaSize = ParserHandler->GetColumns().size()) {
@@ -569,13 +569,13 @@ private:
                 }
 
                 Parser = newParser.DetachResult();
-                LOG_ROW_DISPATCHER_DEBUG("Parser was created on schema with " << schemaSize << " columns");
+                LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Parser was created on schema with " << schemaSize << " columns");
             } else {
                 if (auto status = Parser->ChangeConsumer(ParserHandler); status.IsFail()) {
                     return status;
                 }
 
-                LOG_ROW_DISPATCHER_DEBUG("Parser was updated on new schema with " << schemaSize << " columns");
+                LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Parser was updated on new schema with " << schemaSize << " columns");
             }
 
             ParserSchemaIndex.resize(MaxColumnId, std::numeric_limits<ui64>::max());
@@ -583,7 +583,7 @@ private:
                 ParserSchemaIndex[columnDesc.ColumnId] = i++;
             }
         } else {
-            LOG_ROW_DISPATCHER_INFO("No columns to parse, reset parser");
+            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "No columns to parse, reset parser");
             Parser.Reset();
         }
 
@@ -613,7 +613,7 @@ private:
         }
 
         const ui64 lastOffset = Offsets->at(numberRows - 1);
-        LOG_ROW_DISPATCHER_TRACE("Send " << numberRows << " messages to programs, first offset: " << Offsets->front() << ", last offset: " << lastOffset);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Send " << numberRows << " messages to programs, first offset: " << Offsets->front() << ", last offset: " << lastOffset);
 
         if (Filters) {
             Filters->ProcessData(ParserSchemaIndex, *Offsets, ParsedData, numberRows);
@@ -621,14 +621,14 @@ private:
 
         for (const auto& [_, client] : Clients) {
             if (client->IsStarted()) {
-                LOG_ROW_DISPATCHER_TRACE("Commit client " << client->GetClient()->GetClientId() << " offset " << lastOffset);
+                LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Commit client " << client->GetClient()->GetClientId() << " offset " << lastOffset);
                 client->GetClient()->UpdateClientOffset(lastOffset);
             }
         }
     }
 
     void FatalError(TStatus status) const {
-        LOG_ROW_DISPATCHER_ERROR("Got fatal error: " << status.GetErrorMessage());
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Got fatal error: " << status.GetErrorMessage());
         for (const auto& [_, client] : Clients) {
             client->OnClientError(status);
         }

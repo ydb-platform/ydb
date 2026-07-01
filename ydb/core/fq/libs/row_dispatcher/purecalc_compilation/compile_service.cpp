@@ -49,7 +49,7 @@ public:
             Finish();
         };
 
-        LOG_ROW_DISPATCHER_TRACE("Started compile request");
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Started compile request");
         IProgramHolder::TPtr programHolder = std::move(Request->Get()->ProgramHolder);
 
         TStatus status = TStatus::Success();
@@ -64,10 +64,10 @@ public:
         }
 
         if (status.IsFail()) {
-            LOG_ROW_DISPATCHER_ERROR("Compilation failed for request");
+            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Compilation failed for request");
             Send(Request->Sender, new TEvRowDispatcher::TEvPurecalcCompileResponse(status.GetStatus(), status.GetErrorDescription()), 0, Request->Cookie);
         } else {
-            LOG_ROW_DISPATCHER_TRACE("Compilation completed for request");
+            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Compilation completed for request");
             Send(Request->Sender, new TEvRowDispatcher::TEvPurecalcCompileResponse(std::move(programHolder)), 0, Request->Cookie);
         }
     }
@@ -128,7 +128,7 @@ public:
     void Handle(TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr& ev) {
         const auto requestActor = ev->Sender;
         const ui64 requestId = ev->Cookie;
-        LOG_ROW_DISPATCHER_TRACE("Add to compile queue request with id " << requestId << " from " << requestActor);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Add to compile queue request with id " << requestId << " from " << requestActor);
 
         // Remove old compile request
         RemoveRequest(requestActor, requestId);
@@ -142,13 +142,13 @@ public:
     }
 
     void Handle(TEvRowDispatcher::TEvPurecalcCompileAbort::TPtr& ev) {
-        LOG_ROW_DISPATCHER_TRACE("Abort compile request with id " << ev->Cookie << " from " << ev->Sender);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Abort compile request with id " << ev->Cookie << " from " << ev->Sender);
 
         RemoveRequest(ev->Sender, ev->Cookie);
     }
 
     void Handle(TEvPrivate::TEvCompileFinished::TPtr& ev) {
-        LOG_ROW_DISPATCHER_TRACE("Compile finished for request with id " << ev->Get()->RequestId << " from " << ev->Get()->RequestActor);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Compile finished for request with id " << ev->Get()->RequestId << " from " << ev->Get()->RequestActor);
 
         InFlightCompilations.erase(ev->Sender);
         Counters.ActiveCompileActors->Dec();

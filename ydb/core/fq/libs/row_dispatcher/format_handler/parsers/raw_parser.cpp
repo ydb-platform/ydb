@@ -53,7 +53,7 @@ public:
 
 public:
     void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
-        LOG_ROW_DISPATCHER_TRACE("Add " << messages.size() << " messages to parse");
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Add " << messages.size() << " messages to parse");
 
         for (const auto& message : messages) {
             CurrentMessage = message.GetData();
@@ -90,7 +90,7 @@ public:
 
 protected:
     TStatus DoParsing() override {
-        LOG_ROW_DISPATCHER_TRACE("Do parsing, first offset: " << Offsets.front() << ", value: " << CurrentMessage);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Do parsing, first offset: " << Offsets.front() << ", value: " << CurrentMessage);
 
         NYql::NUdf::TUnboxedValue value = LockObject(NKikimr::NMiniKQL::ValueFromString(DataSlot, CurrentMessage));
         if (value) {

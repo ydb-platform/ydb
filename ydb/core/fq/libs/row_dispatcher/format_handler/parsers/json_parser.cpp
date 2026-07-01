@@ -48,7 +48,7 @@ struct TJsonParserBuffer {
 
         const auto offset = message.GetOffset();
         if (Y_UNLIKELY(Offsets && Offsets.back() > offset)) {
-            LOG_ROW_DISPATCHER_WARN("Got message with offset " << offset << " which is less than previous offset " << Offsets.back());
+            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Got message with offset " << offset << " which is less than previous offset " << Offsets.back());
         }
 
         NumberValues++;
@@ -381,7 +381,7 @@ public:
         FillColumnsBuffers();
         Buffer.Reserve(Config.BatchSize, MaxNumberRows);
 
-        LOG_ROW_DISPATCHER_INFO("JsonParser was created, simdjson active implementation " << simdjson::get_active_implementation()->name() 
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "JsonParser was created, simdjson active implementation " << simdjson::get_active_implementation()->name() 
             << " (" << simdjson::get_active_implementation()->description() << ")"
             << ", config: error skip mode: " << Config.SkipErrors << ", batch size: " << Config.BatchSize << ", latency limit " << Config.LatencyLimit
             << ", buffer cell count: " << Config.BufferCellCount
@@ -418,7 +418,7 @@ public:
 
 public:
     void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
-        LOG_ROW_DISPATCHER_TRACE("Add " << messages.size() << " messages to parse");
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Add " << messages.size() << " messages to parse");
 
         Y_ENSURE(!Buffer.Finished, "Cannot parse messages with finished buffer");
         for (const auto& message : messages) {
@@ -432,7 +432,7 @@ public:
             if (!Config.LatencyLimit) {
                 ParseBuffer();
             } else {
-                LOG_ROW_DISPATCHER_TRACE("Collecting data to parse, skip parsing, current buffer size: " << Buffer.GetSize());
+                LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Collecting data to parse, skip parsing, current buffer size: " << Buffer.GetSize());
             }
         }
     }
@@ -448,7 +448,7 @@ public:
         if (force || creationDuration > Config.LatencyLimit) {
             ParseBuffer();
         } else {
-            LOG_ROW_DISPATCHER_TRACE("Refresh, skip parsing, buffer creation duration: " << creationDuration);
+            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Refresh, skip parsing, buffer creation duration: " << creationDuration);
         }
     }
 
@@ -461,7 +461,7 @@ public:
 
         MaxNumberRows = CalculateMaxNumberRows();
         FillColumnsBuffers();
-        LOG_ROW_DISPATCHER_DEBUG("Parser columns count changed from " << Columns.size() << " to " << Consumer->GetColumns().size());
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Parser columns count changed from " << Columns.size() << " to " << Consumer->GetColumns().size());
 
         return InitColumnsParsers();
     }
@@ -484,7 +484,7 @@ protected:
 
         auto [values, size] = Buffer.Finish();
         OutputOffsets.resize(Buffer.Offsets.size());
-        LOG_ROW_DISPATCHER_TRACE("Do parsing, first offset: " << Buffer.Offsets.front() << ", values:\n" << values);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Do parsing, first offset: " << Buffer.Offsets.front() << ", values:\n" << values);
 
          if (Config.SkipErrors) {
             OutputOffsets = Buffer.Offsets;
@@ -612,7 +612,7 @@ private:
             state.Status = status;
             return EParsingStatus::Finish;
         }
-        LOG_ROW_DISPATCHER_DEBUG("Unbatched parser, skipped " << state.ErrorsCount << ", outputRowId " << state.OutputRowId << ", recovering from " << status.GetErrorMessage());
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Unbatched parser, skipped " << state.ErrorsCount << ", outputRowId " << state.OutputRowId << ", recovering from " << status.GetErrorMessage());
         ClearRowBuffer(state.OutputRowId);
         if (TryParseOneJson(state)) {
             state.OutputRowId++;
@@ -624,7 +624,7 @@ private:
     };
 
     EParsingStatus ParseRows(TParsingState& state) {
-        LOG_ROW_DISPATCHER_TRACE("Init parser, skipped " << state.ErrorsCount << ", outputRowId " << state.OutputRowId << " size " << state.Size);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Init parser, skipped " << state.ErrorsCount << ", outputRowId " << state.OutputRowId << " size " << state.Size);
 
         /*
            Batch size must be at least maximum of document size.

@@ -31,7 +31,7 @@ public:
     {}
 
     void ProcessData(const TVector<ui64>& columnIndex, const TVector<ui64>& offsets, const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) override {
-        LOG_ROW_DISPATCHER_TRACE("ProcessData for " << RunHandlers_.size() << " clients, number rows: " << numberRows);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "ProcessData for " << RunHandlers_.size() << " clients, number rows: " << numberRows);
 
         if (!numberRows) {
             return;
@@ -44,7 +44,7 @@ public:
                 continue;
             }
             if (const auto nextOffset = consumer->GetNextMessageOffset(); nextOffset && offsets[numberRows - 1] < *nextOffset) {
-                LOG_ROW_DISPATCHER_TRACE("Ignore processing for " << consumer->GetClientId() << ", historical offset");
+                LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Ignore processing for " << consumer->GetClientId() << ", historical offset");
                 continue;
             }
 
@@ -54,11 +54,11 @@ public:
     }
 
     void OnCompileResponse(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) override {
-        LOG_ROW_DISPATCHER_TRACE("Got compile response for request with id " << ev->Cookie);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Got compile response for request with id " << ev->Cookie);
 
         auto compileHandlerStatus = RemoveCompileProgram(ev->Cookie);
         if (compileHandlerStatus.IsFail()) {
-            LOG_ROW_DISPATCHER_ERROR(compileHandlerStatus.GetError().GetErrorMessage());
+            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << compileHandlerStatus.GetError().GetErrorMessage());
             return;
         }
         const auto compileHandler = compileHandlerStatus.DetachResult();
@@ -71,7 +71,7 @@ public:
 
         auto runHandlerStatus = AddRunProgram(compileHandler->GetConsumer(), compileHandler->GetProgram());
         if (runHandlerStatus.IsFail()) {
-            LOG_ROW_DISPATCHER_ERROR(runHandlerStatus.GetError().GetErrorMessage());
+            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << runHandlerStatus.GetError().GetErrorMessage());
             return;
         }
 
@@ -91,7 +91,7 @@ public:
     }
 
     void RemoveProgram(NActors::TActorId clientId) override {
-        LOG_ROW_DISPATCHER_TRACE("Remove program with client id " << clientId);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Remove program with client id " << clientId);
 
         AbortCompileProgram(clientId);
         RemoveRunProgram(clientId);
@@ -107,20 +107,20 @@ private:
             return;
         }
 
-        LOG_ROW_DISPATCHER_TRACE("Start program with client id " << consumer->GetClientId());
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Start program with client id " << consumer->GetClientId());
 
         consumer->OnStart();
     }
 
     TStatus AddProgram(IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder) {
-        LOG_ROW_DISPATCHER_TRACE("Create program with client id " << consumer->GetClientId());
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Create program with client id " << consumer->GetClientId());
 
         if (!programHolder) {
             auto runHandlerStatus = AddRunProgram(std::move(consumer), std::move(programHolder));
             return runHandlerStatus.IsSuccess() ? TStatus::Success() : runHandlerStatus.GetError();
         }
 
-        LOG_ROW_DISPATCHER_TRACE("Create purecalc program for query '" << programHolder->GetQuery() << "' (client id: " << consumer->GetClientId() << ")");
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Create purecalc program for query '" << programHolder->GetQuery() << "' (client id: " << consumer->GetClientId() << ")");
 
         const auto cookie = NextCookie_++;
         auto compileHandlerStatus = AddCompileProgram(std::move(consumer), std::move(programHolder), cookie);
@@ -215,12 +215,12 @@ private:
             if (const auto value = values[index]; !value.empty()) {
                 result.emplace_back(value);
             } else {
-                LOG_ROW_DISPATCHER_TRACE("Ignore processing for " << consumer->GetClientId() << ", client got parsing error for column " << columnId);
+                LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Ignore processing for " << consumer->GetClientId() << ", client got parsing error for column " << columnId);
                 return;
             }
         }
 
-        LOG_ROW_DISPATCHER_TRACE("Pass " << numberRows << " rows to purecalc filter (client id: " << consumer->GetClientId() << ")");
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Pass " << numberRows << " rows to purecalc filter (client id: " << consumer->GetClientId() << ")");
         programRunHandler->ProcessData(result, numberRows);
     }
 

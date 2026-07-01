@@ -569,7 +569,7 @@ TRowDispatcher::TRowDispatcher(
 
 void TRowDispatcher::Bootstrap() {
     Become(&TRowDispatcher::StateFunc);
-    LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped row dispatcher, id " << SelfId() << ", tenant " << Tenant);
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Successfully bootstrapped row dispatcher, id " << SelfId() << ", tenant " << Tenant);
 
     const auto& config = Config.GetCoordinator();
     auto coordinatorId = Register(NewCoordinator(SelfId(), config, Tenant, Counters, NodesManagerId).release());
@@ -597,9 +597,9 @@ void TRowDispatcher::Bootstrap() {
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& ev) {
     LWPROBE(CoordinatorChanged, ev->Sender.ToString(), ev->Get()->Generation, ev->Get()->CoordinatorActorId.ToString(), CoordinatorGeneration, CoordinatorActorId->ToString());
-    LOG_ROW_DISPATCHER_DEBUG("Coordinator changed, old leader " << CoordinatorActorId << ", new " << ev->Get()->CoordinatorActorId << " generation " << ev->Get()->Generation);
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Coordinator changed, old leader " << CoordinatorActorId << ", new " << ev->Get()->CoordinatorActorId << " generation " << ev->Get()->Generation);
     if (ev->Get()->Generation < CoordinatorGeneration) {
-        LOG_ROW_DISPATCHER_ERROR("New generation (" << ev->Get()->Generation << ") is less previous (" << CoordinatorGeneration << "), ignore updates");
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "New generation (" << ev->Get()->Generation << ") is less previous (" << CoordinatorGeneration << "), ignore updates");
         return;
     }
     CoordinatorActorId = ev->Get()->CoordinatorActorId;
@@ -615,7 +615,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChanged::TPtr& 
 
 void TRowDispatcher::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev) {
     LWPROBE(NodeConnected, ev->Sender.ToString(), ev->Get()->NodeId);
-    LOG_ROW_DISPATCHER_DEBUG("EvNodeConnected, node id " << ev->Get()->NodeId);
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "EvNodeConnected, node id " << ev->Get()->NodeId);
     Metrics.NodesReconnect->Inc();
     NodesTracker.HandleNodeConnected(ev->Get()->NodeId);
     for (auto& [actorId, consumer] : Consumers) {
@@ -625,7 +625,7 @@ void TRowDispatcher::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr& ev
 
 void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     LWPROBE(NodeDisconnected, ev->Sender.ToString(), ev->Get()->NodeId);
-    LOG_ROW_DISPATCHER_DEBUG("TEvNodeDisconnected, node id " << ev->Get()->NodeId);
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "TEvNodeDisconnected, node id " << ev->Get()->NodeId);
     Metrics.NodesReconnect->Inc();
     bool isTimeout = NodesTracker.HandleNodeDisconnected(ev->Get()->NodeId);
     for (auto& [actorId, consumer] : Consumers) {
@@ -633,7 +633,7 @@ void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TP
     }
     TVector<TActorId> toDelete;
     if (isTimeout) {
-        LOG_ROW_DISPATCHER_DEBUG("Node disconnected, node id " << ev->Get()->NodeId << " is timeout");
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Node disconnected, node id " << ev->Get()->NodeId << " is timeout");
         for (auto& [actorId, consumer] : Consumers) {
             if (actorId.NodeId() != ev->Get()->NodeId) {
                 continue;
@@ -648,7 +648,7 @@ void TRowDispatcher::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TP
 
 void TRowDispatcher::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     LWPROBE(UndeliveredStart, ev->Sender.ToString(), ev->Get()->Reason, ev->Cookie);
-    LOG_ROW_DISPATCHER_TRACE("TEvUndelivered, from " << ev->Sender << ", reason " << ev->Get()->Reason);
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "TEvUndelivered, from " << ev->Sender << ", reason " << ev->Get()->Reason);
     for (auto& [key, consumer] : Consumers) {
         if (ev->Cookie != consumer->Generation) {       // Several partitions in one read_actor have different Generation.
             LWPROBE(UndeliveredSkipGeneration, ev->Sender.ToString(), ev->Get()->Reason, ev->Cookie, consumer->Generation);
@@ -668,17 +668,17 @@ void TRowDispatcher::Handle(TEvPrivate::TEvCoordinatorPing::TPtr&) {
         return;
     }
     LWPROBE(CoordinatorPing, CoordinatorActorId->ToString());
-    LOG_ROW_DISPATCHER_TRACE("Send ping to " << *CoordinatorActorId);
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Send ping to " << *CoordinatorActorId);
     Send(*CoordinatorActorId, new NActors::TEvents::TEvPing());
 }
 
 void TRowDispatcher::Handle(NActors::TEvents::TEvPong::TPtr&) {
     LWPROBE(Pong);
-    LOG_ROW_DISPATCHER_TRACE("NActors::TEvents::TEvPong");
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "NActors::TEvents::TEvPong");
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvCoordinatorChangesSubscribe::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvCoordinatorChangesSubscribe from " << ev->Sender);
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "TEvCoordinatorChangesSubscribe from " << ev->Sender);
     NodesTracker.AddNode(ev->Sender.NodeId());
     CoordinatorChangedSubscribers.insert(ev->Sender);
     if (!CoordinatorActorId) {
@@ -893,7 +893,7 @@ void TRowDispatcher::UpdateReadActorsInternalState() {
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("Received TEvStartSession from " << ev->Sender << ", read group " << ev->Get()->Record.GetSource().GetReadGroup() << ", topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Received TEvStartSession from " << ev->Sender << ", read group " << ev->Get()->Record.GetSource().GetReadGroup() << ", topicPath " << ev->Get()->Record.GetSource().GetTopicPath() <<
         " part id " << JoinSeq(',', ev->Get()->Record.GetPartitionIds()) << " query id " << ev->Get()->Record.GetQueryId() << " cookie " << ev->Cookie);
     if (EnableStreamingQueriesCounters) {
         auto queryGroup = Metrics.Counters->GetSubgroup("query_id", ev->Get()->Record.GetQueryId());
@@ -907,10 +907,10 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto it = Consumers.find(ev->Sender);
     if (it != Consumers.end()) {
         if (ev->Cookie <= it->second->Generation) {
-            LOG_ROW_DISPATCHER_WARN("Consumer already exists, ignore StartSession");
+            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Consumer already exists, ignore StartSession");
             return;
         }
-        LOG_ROW_DISPATCHER_WARN("Consumer already exists, new consumer with new generation (" << ev->Cookie << ", current " 
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Consumer already exists, new consumer with new generation (" << ev->Cookie << ", current " 
             << it->second->Generation << "), remove old consumer, sender " << ev->Sender << ", topicPath " 
             << ev->Get()->Record.GetSource().GetTopicPath() << " cookie " << ev->Cookie);
         DeleteConsumer(ev->Sender);
@@ -933,7 +933,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
         Y_ENSURE(topicSessionInfo.Sessions.size() <= 1);
 
         if (topicSessionInfo.Sessions.empty()) {
-            LOG_ROW_DISPATCHER_DEBUG("Create new session: read group " << source.GetReadGroup() << " topic " << source.GetTopicPath() 
+            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Create new session: read group " << source.GetReadGroup() << " topic " << source.GetTopicPath() 
                 << " part id " << partitionId);
             sessionActorId = ActorFactory->RegisterTopicSession(
                 source.GetReadGroup(),
@@ -977,18 +977,18 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
     auto it = Consumers.find(ev->Sender);
     if (it == Consumers.end()) {
-        LOG_ROW_DISPATCHER_WARN("Ignore (no consumer) TEvGetNextBatch from " << ev->Sender << " part id " << ev->Get()->Record.GetPartitionId());
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Ignore (no consumer) TEvGetNextBatch from " << ev->Sender << " part id " << ev->Get()->Record.GetPartitionId());
         return;
     }
     auto& session = it->second;
     LWPROBE(GetNextBatch, ev->Sender.ToString(), ev->Get()->Record.GetPartitionId(), session->QueryId, ev->Get()->Record.ByteSizeLong());
-    LOG_ROW_DISPATCHER_TRACE("Received TEvGetNextBatch from " << ev->Sender << " part id " << ev->Get()->Record.GetPartitionId() << " query id " << it->second->QueryId);
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Received TEvGetNextBatch from " << ev->Sender << " part id " << ev->Get()->Record.GetPartitionId() << " query id " << it->second->QueryId);
     if (!CheckSession(session, ev)) {
         return;
     }
     auto partitionIt = session->Partitions.find(ev->Get()->Record.GetPartitionId());
     if (partitionIt == session->Partitions.end()) {
-        LOG_ROW_DISPATCHER_ERROR("Ignore TEvGetNextBatch from " << ev->Sender << ", wrong partition id " << ev->Get()->Record.GetPartitionId());
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Ignore TEvGetNextBatch from " << ev->Sender << ", wrong partition id " << ev->Get()->Record.GetPartitionId());
         return;
     }
     partitionIt->second.PendingNewDataArrived = false;
@@ -1000,17 +1000,17 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvHeartbeat::TPtr& ev) {
     auto it = Consumers.find(ev->Sender);
     if (it == Consumers.end()) {
-        LOG_ROW_DISPATCHER_WARN("Consumer not found, sender " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId() << ", sending TEvNoSession");
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Consumer not found, sender " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId() << ", sending TEvNoSession");
         Send(ev->Sender, new NFq::TEvRowDispatcher::TEvNoSession(), 0, ev->Cookie);
         return;
     }
     LWPROBE(Heartbeat, ev->Sender.ToString(), ev->Get()->Record.GetPartitionId(), it->second->QueryId, ev->Get()->Record.ByteSizeLong());
-    LOG_ROW_DISPATCHER_TRACE("Received TEvHeartbeat from " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId() << " query id " << it->second->QueryId);
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Received TEvHeartbeat from " << ev->Sender << ", part id " << ev->Get()->Record.GetPartitionId() << " query id " << it->second->QueryId);
     CheckSession(it->second, ev);
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNoSession::TPtr& ev) {
-    LOG_ROW_DISPATCHER_DEBUG("Received TEvNoSession from " << ev->Sender << ", generation " << ev->Cookie);
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Received TEvNoSession from " << ev->Sender << ", generation " << ev->Cookie);
     auto consumerIt = Consumers.find(ev->Sender);
     if (consumerIt == Consumers.end()) {
         return;
@@ -1025,12 +1025,12 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNoSession::TPtr& ev) {
 template <class TEventPtr>
 bool TRowDispatcher::CheckSession(TAtomicSharedPtr<TConsumerInfo>& consumer, const TEventPtr& ev) {
     if (ev->Cookie != consumer->Generation) {
-        LOG_ROW_DISPATCHER_WARN("Wrong message generation (" << typeid(TEventPtr).name()  << "), sender " << ev->Sender << " cookie " << ev->Cookie << ", session generation " << consumer->Generation << ", query id " << consumer->QueryId);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Wrong message generation (" << typeid(TEventPtr).name()  << "), sender " << ev->Sender << " cookie " << ev->Cookie << ", session generation " << consumer->Generation << ", query id " << consumer->QueryId);
         return false;
     }
     if (!consumer->EventsQueue.OnEventReceived(ev)) {
         const NYql::NDqProto::TMessageTransportMeta& meta = ev->Get()->Record.GetTransportMeta();
-        LOG_ROW_DISPATCHER_WARN("Wrong seq num, ignore message (" << typeid(TEventPtr).name() << ") seqNo " << meta.GetSeqNo() << " from " << ev->Sender.ToString() << ", query id " << consumer->QueryId);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Wrong seq num, ignore message (" << typeid(TEventPtr).name() << ") seqNo " << meta.GetSeqNo() << " from " << ev->Sender.ToString() << ", query id " << consumer->QueryId);
         return false;
     }
     return true;
@@ -1039,12 +1039,12 @@ bool TRowDispatcher::CheckSession(TAtomicSharedPtr<TConsumerInfo>& consumer, con
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
     auto it = Consumers.find(ev->Sender);
     if (it == Consumers.end()) {
-        LOG_ROW_DISPATCHER_WARN("Ignore TEvStopSession from " << ev->Sender);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Ignore TEvStopSession from " << ev->Sender);
         return;
     }
 
     LWPROBE(StopSession, ev->Sender.ToString(), it->second->QueryId, ev->Get()->Record.ByteSizeLong());
-    LOG_ROW_DISPATCHER_DEBUG("Received TEvStopSession from " << ev->Sender << " topic " << ev->Get()->Record.GetSource().GetTopicPath() << " query id " << it->second->QueryId);
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Received TEvStopSession from " << ev->Sender << " topic " << ev->Get()->Record.GetSource().GetTopicPath() << " query id " << it->second->QueryId);
     if (!CheckSession(it->second, ev)) {
         return;
     }
@@ -1054,12 +1054,12 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
 void TRowDispatcher::DeleteConsumer(NActors::TActorId readActorId) {
     auto consumerIt = Consumers.find(readActorId);
     if (consumerIt == Consumers.end()) {
-        LOG_ROW_DISPATCHER_ERROR("Ignore (no consumer) DeleteConsumer, " << " read actor id " << readActorId);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Ignore (no consumer) DeleteConsumer, " << " read actor id " << readActorId);
         return;
     }
 
     const auto& consumer = consumerIt->second;
-    LOG_ROW_DISPATCHER_DEBUG("DeleteConsumer, readActorId " << readActorId << " query id " << consumer->QueryId << ", partitions size " << consumer->Partitions.size());
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "DeleteConsumer, readActorId " << readActorId << " query id " << consumer->QueryId << ", partitions size " << consumer->Partitions.size());
     for (auto& [partitionId, partition] : consumer->Partitions) {
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvStopSession>();
         *event->Record.MutableSource() = consumer->SourceParams;
@@ -1076,10 +1076,10 @@ void TRowDispatcher::DeleteConsumer(NActors::TActorId readActorId) {
             TTopicSessionInfo& topicSessionInfo = sessionIt->second;
             TSessionInfo& sessionInfo = topicSessionInfo.Sessions[partition.TopicSessionId];
             if (!sessionInfo.Consumers.erase(consumer->ReadActorId)) {
-                LOG_ROW_DISPATCHER_ERROR("Wrong readActorId " << consumer->ReadActorId << ", no such consumer");
+                LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Wrong readActorId " << consumer->ReadActorId << ", no such consumer");
             }
             if (sessionInfo.Consumers.empty()) {
-                LOG_ROW_DISPATCHER_DEBUG("Session is not used, sent TEvPoisonPill to " << partition.TopicSessionId);
+                LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Session is not used, sent TEvPoisonPill to " << partition.TopicSessionId);
                 topicSessionInfo.Sessions.erase(partition.TopicSessionId);
                 Send(partition.TopicSessionId, new NActors::TEvents::TEvPoisonPill());
                 if (topicSessionInfo.Sessions.empty()) {
@@ -1107,14 +1107,14 @@ void TRowDispatcher::DeleteConsumer(NActors::TActorId readActorId) {
 
 void TRowDispatcher::Handle(const TEvPrivate::TEvTryConnect::TPtr& ev) {
     LWPROBE(TryConnect, ev->Sender.ToString(), ev->Get()->NodeId);
-    LOG_ROW_DISPATCHER_TRACE("TEvTryConnect to node id " << ev->Get()->NodeId);
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "TEvTryConnect to node id " << ev->Get()->NodeId);
     NodesTracker.TryConnect(ev->Get()->NodeId);
 }
 
 void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbeat::TPtr& ev) {
     auto it = ConsumersByEventQueueId.find(ev->Get()->EventQueueId);
     if (it == ConsumersByEventQueueId.end()) {
-        LOG_ROW_DISPATCHER_TRACE("No consumer with EventQueueId = " << ev->Get()->EventQueueId);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "No consumer with EventQueueId = " << ev->Get()->EventQueueId);
         return;
     }
     auto& sessionInfo = it->second;
@@ -1122,7 +1122,7 @@ void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbea
 
     bool needSend = sessionInfo->EventsQueue.Heartbeat();
     if (needSend) {
-        LOG_ROW_DISPATCHER_TRACE("Send TEvHeartbeat to " << sessionInfo->ReadActorId << " query id " << sessionInfo->QueryId);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Send TEvHeartbeat to " << sessionInfo->ReadActorId << " query id " << sessionInfo->QueryId);
         auto event = std::make_unique<NFq::TEvRowDispatcher::TEvHeartbeat>();
         sessionInfo->EventsQueue.Send(new NFq::TEvRowDispatcher::TEvHeartbeat(), sessionInfo->Generation);
     }
@@ -1131,12 +1131,12 @@ void TRowDispatcher::Handle(const NYql::NDq::TEvRetryQueuePrivate::TEvEvHeartbea
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) {    
     auto it = Consumers.find(ev->Get()->ReadActorId);
     if (it == Consumers.end()) {
-        LOG_ROW_DISPATCHER_WARN("Ignore (no consumer) TEvNewDataArrived from " << ev->Sender << " part id " << ev->Get()->Record.GetPartitionId());
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Ignore (no consumer) TEvNewDataArrived from " << ev->Sender << " part id " << ev->Get()->Record.GetPartitionId());
         return;
     }
     auto consumerInfoPtr = it->second; 
     LWPROBE(NewDataArrived, ev->Sender.ToString(), ev->Get()->ReadActorId.ToString(), consumerInfoPtr->QueryId, consumerInfoPtr->Generation, ev->Get()->Record.ByteSizeLong());
-    LOG_ROW_DISPATCHER_TRACE("Forward TEvNewDataArrived from " << ev->Sender << " to " << ev->Get()->ReadActorId << " query id " << consumerInfoPtr->QueryId);
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Forward TEvNewDataArrived from " << ev->Sender << " to " << ev->Get()->ReadActorId << " query id " << consumerInfoPtr->QueryId);
     auto partitionIt = consumerInfoPtr->Partitions.find(ev->Get()->Record.GetPartitionId());
     if (partitionIt == consumerInfoPtr->Partitions.end()) {
         // Ignore TEvNewDataArrived because read actor now read others partitions.
@@ -1150,12 +1150,12 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {
     auto it = Consumers.find(ev->Get()->ReadActorId);
     if (it == Consumers.end()) {
-        LOG_ROW_DISPATCHER_WARN("Ignore (no consumer) TEvMessageBatch  from " << ev->Sender << " to " << ev->Get()->ReadActorId);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Ignore (no consumer) TEvMessageBatch  from " << ev->Sender << " to " << ev->Get()->ReadActorId);
         return;
     }
     auto consumerInfoPtr = it->second; 
     LWPROBE(MessageBatch, ev->Sender.ToString(), ev->Get()->ReadActorId.ToString(), consumerInfoPtr->QueryId, consumerInfoPtr->Generation, ev->Get()->Record.ByteSizeLong());
-    LOG_ROW_DISPATCHER_TRACE("Forward TEvMessageBatch from " << ev->Sender << " to " << ev->Get()->ReadActorId << " query id " << consumerInfoPtr->QueryId);
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Forward TEvMessageBatch from " << ev->Sender << " to " << ev->Get()->ReadActorId << " query id " << consumerInfoPtr->QueryId);
     Metrics.RowsSent->Add(ev->Get()->Record.MessagesSize());
     auto partitionIt = consumerInfoPtr->Partitions.find(ev->Get()->Record.GetPartitionId());
     if (partitionIt == consumerInfoPtr->Partitions.end()) {
@@ -1170,17 +1170,17 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
     auto it = Consumers.find(ev->Get()->ReadActorId);
     if (it == Consumers.end()) {
-        LOG_ROW_DISPATCHER_WARN("Ignore (no consumer) TEvSessionError from " << ev->Sender << " to " << ev->Get()->ReadActorId);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Ignore (no consumer) TEvSessionError from " << ev->Sender << " to " << ev->Get()->ReadActorId);
         return;
     }
     LWPROBE(SessionError, ev->Sender.ToString(), ev->Get()->ReadActorId.ToString(), it->second->QueryId, it->second->Generation, ev->Get()->Record.ByteSizeLong());
     ++*Metrics.ErrorsCount;
-    LOG_ROW_DISPATCHER_TRACE("Forward TEvSessionError from " << ev->Sender << " to " << ev->Get()->ReadActorId << " query id " << it->second->QueryId);
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Forward TEvSessionError from " << ev->Sender << " to " << ev->Get()->ReadActorId << " query id " << it->second->QueryId);
 
     if (ev->Get()->IsFatalError) {
         auto consumerIt = Consumers.find(ev->Get()->ReadActorId);
         if (consumerIt == Consumers.end()) {
-            LOG_ROW_DISPATCHER_ERROR("Ignore (no consumer) DeleteConsumer, " << " read actor id " << ev->Get()->ReadActorId);
+            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Ignore (no consumer) DeleteConsumer, " << " read actor id " << ev->Get()->ReadActorId);
             return;
         }
         const auto& consumer = consumerIt->second;
@@ -1195,7 +1195,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
         if (sessionIt != TopicSessions.end()) {
             TTopicSessionInfo& topicSessionInfo = sessionIt->second;
             if (topicSessionInfo.Sessions.erase(ev->Sender)) {
-                LOG_ROW_DISPATCHER_WARN("Fatal session error, remove session " << ev->Sender);
+                LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Fatal session error, remove session " << ev->Sender);
                 Send(ev->Sender, new NActors::TEvents::TEvPoisonPill());
                 if (topicSessionInfo.Sessions.empty()) {
                     TopicSessions.erase(sessionIt);
@@ -1224,12 +1224,12 @@ void TRowDispatcher::PrintStateToLog() {
     auto str = GetInternalState();
     auto buf = TStringBuf(str);
     for (ui64 offset = 0; offset < buf.size(); offset += PrintStateToLogSplitSize) {
-        LOG_ROW_DISPATCHER_DEBUG(buf.SubString(offset, PrintStateToLogSplitSize));
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << buf.SubString(offset, PrintStateToLogSplitSize));
     }
 }
 
 void TRowDispatcher::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
-    LOG_ROW_DISPATCHER_TRACE("TEvPrivate::TEvSendStatistic");
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "TEvPrivate::TEvSendStatistic");
 
     UpdateCpuTime();
     Schedule(Config.GetSendStatusPeriod(), new NFq::TEvPrivate::TEvSendStatistic());
@@ -1289,7 +1289,7 @@ void TRowDispatcher::Handle(const NMon::TEvHttpInfo::TPtr& ev) {
 }
 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionStatistic::TPtr& ev) {
-    LOG_ROW_DISPATCHER_TRACE("TEvSessionStatistic from " << ev->Sender);
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "TEvSessionStatistic from " << ev->Sender);
     const auto& stat = ev->Get()->Stat;
     const auto& key = stat.SessionKey;
 
@@ -1355,7 +1355,7 @@ void TRowDispatcher::UpdateCpuTime() {
     for (auto& [actorId, consumer] : Consumers) {
         consumer->CpuMicrosec += diff;
     }
-    LOG_ROW_DISPATCHER_TRACE("UpdateCpuTime, currentCpuTime " << currentCpuTime << ", diff " << diff);
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "UpdateCpuTime, currentCpuTime " << currentCpuTime << ", diff " << diff);
     LastCpuTime = currentCpuTime;
 }
 

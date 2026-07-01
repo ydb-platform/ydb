@@ -338,7 +338,7 @@ public:
     }
 
     void Compile() override {
-        LOG_ROW_DISPATCHER_TRACE("Send compile request with id " << Cookie_);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Send compile request with id " << Cookie_);
 
         auto compileRequest = std::make_unique<TEvRowDispatcher::TEvPurecalcCompileRequest>(std::exchange(ProgramHolder_, nullptr), Consumer_->GetPurecalcSettings());
         NActors::TActivationContext::ActorSystem()->Send(
@@ -353,7 +353,7 @@ public:
     }
 
     void AbortCompilation() override {
-        LOG_ROW_DISPATCHER_TRACE("Send abort compile request with id " << Cookie_);
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Send abort compile request with id " << Cookie_);
         NActors::TActivationContext::ActorSystem()->Send(
             new NActors::IEventHandle(
                 CompileServiceId_,
@@ -367,12 +367,12 @@ public:
 
     void OnCompileResponse(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) override {
         ProgramHolder_ = ev->Get()->ProgramHolder.Release();
-        LOG_ROW_DISPATCHER_TRACE("Program compilation finished");
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Program compilation finished");
     }
 
     void OnCompileError(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) override {
         auto status = TStatus::Fail(ev->Get()->Status, std::move(ev->Get()->Issues));
-        LOG_ROW_DISPATCHER_ERROR("Program compilation error: " << status.GetErrorMessage());
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Program compilation error: " << status.GetErrorMessage());
         CompileErrors_->Inc();
         Consumer_->OnError(status.AddParentIssue("Failed to compile client program"));
     }
@@ -405,10 +405,10 @@ public:
     }
 
     void ProcessData(const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) const override {
-        LOG_ROW_DISPATCHER_TRACE("ProcessData for " << numberRows << " rows");
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "ProcessData for " << numberRows << " rows");
 
         if (!ProgramHolder_) {
-            LOG_ROW_DISPATCHER_TRACE("Add " << numberRows << " rows to client " << Consumer_->GetClientId() << " without processing");
+            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Add " << numberRows << " rows to client " << Consumer_->GetClientId() << " without processing");
             for (ui64 rowId = 0; rowId < numberRows; ++rowId) {
                 NYql::NUdf::TUnboxedValue value = NYql::NUdf::TUnboxedValuePod{rowId};
                 Consumer_->OnData(&value);
@@ -436,7 +436,7 @@ private:
     const auto& watermarkExpr = consumer->GetWatermarkExpr();
 
     if (!filterExpr && !watermarkExpr) {
-        LOG_ROW_DISPATCHER_TRACE("No sql was generated");
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "No sql was generated");
         return {};
     }
 
@@ -458,7 +458,7 @@ private:
         "watermark_expr"_a = watermarkExpr ? static_cast<TString>(TStringBuilder() << ", (" << watermarkExpr << ") AS " << WATERMARK_FIELD_NAME) : ""
     );
 
-    LOG_ROW_DISPATCHER_DEBUG("Generated sql:\n" << result);
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Generated sql:\n" << result);
     return result;
 }
 

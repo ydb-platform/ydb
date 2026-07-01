@@ -53,7 +53,7 @@ def targets(changed_path):
         for line in Path(changed_path).read_text(encoding="utf-8").splitlines()
         if line.strip()
     ]
-    if PREFIX / "allowed_peerdirs.txt" in changed:
+    if PREFIX / "allowed_peerdirs.txt" in changed or PREFIX / "scripts/check_peerdirs.py" in changed:
         return all_targets
     out = []
     for path in changed:
@@ -73,7 +73,8 @@ def main():
     for ya_make in files:
         for line_no, dep in peerdirs(ya_make.read_text(encoding="utf-8")):
             if not any(dep.startswith(p) for p in ALLOWED):
-                bad.append(f"{ya_make}:{line_no}: forbidden PEERDIR {dep!r}")
+                rel = PREFIX / ya_make.relative_to(SDK)
+                bad.append(f"{rel}:{line_no}: forbidden PEERDIR {dep!r}")
     if bad:
         print("\n".join(bad), file=sys.stderr)
         raise SystemExit(1)

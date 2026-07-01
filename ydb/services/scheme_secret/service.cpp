@@ -117,8 +117,7 @@ public:
         }
 
         Send(NMetadata::NProvider::MakeServiceId(
-            SelfId().NodeId()),
-            new NMetadata::NProvider::TEvSubscribeExternal(GetSecretsSnapshotParser()
+            SelfId().NodeId()), new NMetadata::NProvider::TEvSubscribeExternal(GetSecretsSnapshotParser()
         ));
         Become(&TDescribeSecretsActor::StateFunc);
     }

@@ -17,7 +17,7 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
   Calling `SelfCheck` method:
 
   ```cpp
-  auto settings = TSelfCheckSettings();
+  auto settings = NYdb::NMonitoring::TSelfCheckSettings();
   settings.ReturnVerboseStatus(true);
   auto result = client.SelfCheck(settings).GetValueSync();
   ```
@@ -34,9 +34,15 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
 
   This functionality is not currently supported.
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
-  This functionality is not currently supported in the JavaScript SDK. You can create a monitoring client and call health-check APIs yourself:
+  This functionality is not currently supported.
+
+  You can create a monitoring client and call the check methods yourself:
 
   ```javascript
   const monitoring = driver.createClient(MonitoringServiceDefinition);
@@ -48,6 +54,10 @@ To initiate the check, call the `SelfCheck` method from `NYdb::NMonitoring` name
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
+
+- PHP
+
+  This functionality is not currently supported.
 
 {% endlist %}
 
@@ -83,7 +93,7 @@ The complete list of extra parameters is presented below:
 
 - C++
 
-  ```c++
+  ```cpp
   struct TSelfCheckSettings : public TOperationRequestSettings<TSelfCheckSettings>{
       FLUENT_SETTING_OPTIONAL(bool, ReturnVerboseStatus);
       FLUENT_SETTING_OPTIONAL(EStatusFlag, MinimumStatus);
@@ -103,15 +113,23 @@ The complete list of extra parameters is presented below:
 
   This functionality is not currently supported.
 
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  This functionality is not currently supported.
 
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#494](https://github.com/ydb-platform/ydb-rs-sdk/issues/494)
+
+- PHP
+
+  This functionality is not currently supported.
 
 {% endlist %}
 
@@ -178,7 +196,7 @@ Each issue has a nesting `level`. The higher the `level`, the deeper the issue i
 
 ![issues_hierarchy](./_assets/hc_types_hierarchy.png)
 
-#### Database check result {#selfcheck-result}
+### Database check result {#selfcheck-result}
 
 The most general status of the database. It can have the following values:
 
@@ -272,7 +290,7 @@ The status (severity) of the current issue:
 
 ### VDISK
 
-#### System tablet BSC did not provide known status
+#### System tablet BSC didn't provide known status
 
 **Description:** This situation is not expected; it is an internal issue.
 
@@ -377,7 +395,7 @@ The status (severity) of the current issue:
 
 **Actions:** In [Embedded UI](../embedded-ui/ydb-monitoring.md), navigate to the `Nodes` tab. Check the `Uptime` and the nodes' statuses. If the `Uptime` is short, review the logs to determine the reasons for the node restarts.
 
-#### Tablets/Followers are dead
+#### Tablets are dead, Followers are dead
 
 **Description:** Tablets are not running (likely cannot be started).
 

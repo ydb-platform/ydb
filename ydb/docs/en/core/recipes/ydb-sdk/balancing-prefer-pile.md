@@ -8,44 +8,62 @@ This option only makes sense if the cluster is operating in [bridge mode](../../
 
 {% list tabs %}
 
-- Go
-
-  This functionality is not currently supported.
-
 - C++
 
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
+  {% list tabs %}
 
-  int main() {
-    auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+  - Native SDK
 
-    auto driverConfig = NYdb::TDriverConfig(connectionString)
-      .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferablePileState(NYdb::EPileState::PRIMARY));
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
 
-    NYdb::TDriver driver(driverConfig);
-    // ...
-    driver.Stop(true);
-    return 0;
-  }
-  ```
+    int main() {
+      auto connectionString = std::string(std::getenv("YDB_CONNECTION_STRING"));
+
+      auto driverConfig = NYdb::TDriverConfig(connectionString)
+        .SetBalancingPolicy(NYdb::TBalancingPolicy::UsePreferablePileState(NYdb::EPileState::PRIMARY));
+
+      NYdb::TDriver driver(driverConfig);
+      // ...
+      driver.Stop(true);
+      return 0;
+    }
+    ```
+
+  - userver
+
+    {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  {% endlist %}
+
+- Go
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Python
 
-  This functionality is not currently supported.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+- C#
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - JavaScript
 
-  {% include [work-in-progress](../../_includes/work-in-progress.md) %}
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Java
 
-  This functionality is not currently supported.
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#491](https://github.com/ydb-platform/ydb-rs-sdk/issues/491)
+
+- PHP
+
+  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
 {% endlist %}

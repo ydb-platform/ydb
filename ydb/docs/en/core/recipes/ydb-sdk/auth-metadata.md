@@ -6,6 +6,117 @@ Below are examples of authentication with the metadata service in different {{ y
 
 {% list tabs %}
 
+- C++
+
+  {% list tabs %}
+
+  - Native SDK
+
+    ```cpp
+    #include <ydb-cpp-sdk/client/driver/driver.h>
+    #include <ydb-cpp-sdk/client/iam/iam.h>
+
+    NYdb::TDriver CreateDriverWithMetadataCredentials(
+        const std::string& connectionString,
+        const std::string& internalCA)
+    {
+        auto config = NYdb::TDriverConfig(connectionString)
+            .UseSecureConnection(internalCA)
+            .SetCredentialsProviderFactory(NYdb::CreateIamCredentialsProviderFactory());
+
+        return NYdb::TDriver(config);
+    }
+    ```
+
+  - userver
+
+    There is no ready-made setup for the metadata service in `ydb::YdbComponent` — you need your own `ydb::CredentialsProviderComponent` with `NYdb::CreateIamCredentialsProviderFactory()`.
+
+    {% cut "static config" %}
+
+    ```yaml
+    ydb:
+        credentials-provider: ydb-metadata-credentials
+        databases:
+            db:
+                endpoint: grpcs://localhost:2135
+                database: /local
+                credentials: {}
+    ```
+
+    {% endcut %}
+
+    {% cut "secdist" %}
+
+    `<PEM>` - Yandex Cloud certificates.
+
+
+    ```json
+    {
+      "ydb_settings": {
+        "db": {
+          "secure_connection_cert": "<PEM>"
+        }
+      }
+    }
+    ```
+
+    {% endcut %}
+
+
+    ```cpp
+    #include <userver/components/component_base.hpp>
+    #include <userver/components/minimal_server_component_list.hpp>
+    #include <userver/storages/secdist/component.hpp>
+    #include <userver/storages/secdist/provider_component.hpp>
+    #include <userver/utils/daemon_run.hpp>
+    #include <userver/ydb/component.hpp>
+    #include <userver/ydb/credentials.hpp>
+    #include <userver/ydb/table.hpp>
+
+    #include <ydb-cpp-sdk/client/iam/iam.h>
+
+    class YdbMetadataCredentials final : public ydb::CredentialsProviderComponent {
+    public:
+        static constexpr std::string_view kName = "ydb-metadata-credentials";
+
+        using ydb::CredentialsProviderComponent::CredentialsProviderComponent;
+
+        std::shared_ptr<NYdb::ICredentialsProviderFactory> CreateCredentialsProviderFactory(
+            const yaml_config::YamlConfig&) const override
+        {
+            return NYdb::CreateIamCredentialsProviderFactory();
+        }
+    };
+
+    class MyYdbWorker final : public components::ComponentBase {
+    public:
+        static constexpr std::string_view kName = "my-ydb-worker";
+
+        MyYdbWorker(const components::ComponentConfig& config, const components::ComponentContext& context)
+            : components::ComponentBase(config, context),
+              table_client_(context.FindComponent<ydb::YdbComponent>().GetTableClient("db"))
+        {
+            // ...
+        }
+
+    private:
+        std::shared_ptr<ydb::TableClient> table_client_;
+    };
+
+    int main(int argc, char* argv[]) {
+        auto component_list = components::MinimalServerComponentList()
+            .Append<components::DefaultSecdistProvider>()
+            .Append<components::Secdist>()
+            .Append<YdbMetadataCredentials>()
+            .Append<ydb::YdbComponent>()
+            .Append<MyYdbWorker>();
+        return utils::DaemonMain(argc, argv, component_list);
+    }
+    ```
+
+  {% endlist %}
+
 - Go
 
   {% list tabs %}
@@ -114,6 +225,7 @@ Below are examples of authentication with the metadata service in different {{ y
     }
     ```
 
+
     In Spring Boot, ORMs, and other JDBC wrappers, pass the same JDBC URLs and parameters (`useMetadata` in the URL or in the data source properties) as in the example above.
 
   {% endlist %}
@@ -152,24 +264,27 @@ Below are examples of authentication with the metadata service in different {{ y
 
   {% endlist %}
 
-- C# (.NET)
+- C#
 
   ```C#
-  using Ydb.Sdk;
-  using Ydb.Sdk.Yc;
+  using Ydb.Sdk.Ado;
 
-  var metadataProvider = new MetadataProvider();
+  await using var dataSource = new YdbDataSource(
+      "Host=ydb.serverless.yandexcloud.net;Port=2135;Database=/ru-central1/<folder-id>/<database-id>;EnableMetadataCredentials=True");
+  await using var connection = await dataSource.OpenConnectionAsync();
+  ```
 
-  // Await initial IAM token.
-  await metadataProvider.Initialize();
 
-  var config = new DriverConfig(
-      endpoint: endpoint, // Database endpoint, "grpcs://host:port"
-      database: database, // Full database path
-      credentials: metadataProvider
-  );
+  For Entity Framework and linq2db, use the same connectionString.
 
-  await using var driver = await Driver.CreateInitialized(config);
+- Rust
+
+  ```rust
+  use ydb::{ClientBuilder, MetadataUrlCredentials, YdbResult};
+
+  let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      .with_credentials(MetadataUrlCredentials::new())
+      .client()?;
   ```
 
 - PHP

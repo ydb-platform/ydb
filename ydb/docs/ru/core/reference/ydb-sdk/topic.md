@@ -34,7 +34,7 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  [Примеры на GitHub](https://github.com/ydb-platform/ydb-rs-sdk/tree/master/ydb/examples) (`topic-writer`, `topic-reader-retry`, `topic-read-in-transaction-example`).
 
 - PHP
 
@@ -42,7 +42,7 @@
 
 {% endlist %}
 
-## Инициализация соединения с топиками
+## Инициализация соединения с топиками {#init}
 
 {% list tabs group=lang %}
 
@@ -238,7 +238,18 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  ```rust
+  use ydb::{ClientBuilder, YdbResult};
+
+  #[tokio::main]
+  async fn main() -> YdbResult<()> {
+      let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136/local")?.client()?;
+      client.wait().await?;
+      let mut topic_client = client.topic_client();
+      // topic_client.create_reader(...), create_writer_with_params(...), ...
+      Ok(())
+  }
+  ```
 
 - PHP
 
@@ -366,7 +377,19 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  ```rust
+  use ydb::{Codec, CreateTopicOptionsBuilder, YdbResult};
+
+  topic_client
+      .create_topic(
+          "/local/my-topic".into(),
+          CreateTopicOptionsBuilder::default()
+              .min_active_partitions(3)
+              .supported_codecs(vec![Codec::Raw, Codec::Zstd])
+              .build()?,
+      )
+      .await?;
+  ```
 
 - PHP
 
@@ -476,7 +499,18 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  ```rust
+  use ydb::{AlterTopicOptionsBuilder, YdbResult};
+
+  topic_client
+      .alter_topic(
+          "/local/my-topic".into(),
+          AlterTopicOptionsBuilder::default()
+              .set_min_active_partitions(Some(5))
+              .build()?,
+      )
+      .await?;
+  ```
 
 - PHP
 
@@ -567,7 +601,16 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  ```rust
+  use ydb::{DescribeTopicOptionsBuilder, YdbResult};
+
+  let description = topic_client
+      .describe_topic(
+          "/local/my-topic".into(),
+          DescribeTopicOptionsBuilder::default().include_stats(true).build()?,
+      )
+      .await?;
+  ```
 
 - PHP
 
@@ -635,7 +678,9 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  ```rust
+  topic_client.drop_topic("/local/my-topic".into()).await?;
+  ```
 
 - PHP
 
@@ -790,7 +835,19 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  ```rust
+  use ydb::{TopicWriter, TopicWriterOptionsBuilder, YdbResult};
+
+  let writer: TopicWriter = topic_client
+      .create_writer_with_params(
+          TopicWriterOptionsBuilder::default()
+              .topic_path("/local/my-topic".into())
+              .producer_id("group-id".into())
+              .message_group_id("group-id".into())
+              .build()?,
+      )
+      .await?;
+  ```
 
 - PHP
 
@@ -977,7 +1034,18 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  ```rust
+  use ydb::{TopicWriterMessageBuilder, YdbResult};
+
+  writer
+      .write(
+          TopicWriterMessageBuilder::default()
+              .data(b"payload".to_vec())
+              .build()?,
+      )
+      .await?;
+  writer.stop().await?;
+  ```
 
 - PHP
 
@@ -1152,7 +1220,17 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  ```rust
+  use ydb::{TopicWriterMessageBuilder, YdbResult};
+
+  writer
+      .write_with_ack(
+          TopicWriterMessageBuilder::default()
+              .data(b"payload".to_vec())
+              .build()?,
+      )
+      .await?;
+  ```
 
 - PHP
 
@@ -1245,7 +1323,11 @@
 
 - Rust
 
+  Выбор кодека сжатия при записи в Rust SDK пока недоступен; сообщения отправляются с кодеком `Raw`.
+
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
 
 - PHP
 
@@ -1292,6 +1374,8 @@
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
 
 - PHP
 
@@ -1442,6 +1526,8 @@
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
 
 - PHP
 
@@ -1683,6 +1769,8 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#341](https://github.com/ydb-platform/ydb-rs-sdk/issues/341)
+
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -1873,7 +1961,13 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  ```rust
+  use ydb::YdbResult;
+
+  let mut reader = topic_client
+      .create_reader("my-consumer", "/local/my-topic")
+      .await?;
+  ```
 
 - PHP
 
@@ -2002,7 +2096,27 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  ```rust
+  use std::time::{Duration, SystemTime};
+
+  use ydb::{TopicReaderOptionsBuilder, TopicSelector, TopicSelectors, YdbResult};
+
+  let mut reader = topic_client
+      .create_reader_with_params(
+          TopicReaderOptionsBuilder::default()
+              .consumer("my-consumer".into())
+              .topic(TopicSelectors(vec![
+                  TopicSelector::new("/local/my-topic"),
+                  TopicSelector {
+                      path: "/local/my-specific-topic".into(),
+                      partition_ids: None,
+                      read_from: Some(SystemTime::now() - Duration::from_secs(3600)),
+                  },
+              ]))
+              .build()?,
+      )
+      .await?;
+  ```
 
 - PHP
 
@@ -2052,7 +2166,12 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Полный пример чтения топика в транзакции с записью в таблицу: [`topic-read-in-transaction-example.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/topic-read-in-transaction-example.rs).
+
+  ```rust
+  let batch = reader.pop_batch_in_tx(&mut tx).await?;
+  // обработка batch.messages и commit транзакции
+  ```
 
 - PHP
 
@@ -2156,6 +2275,8 @@
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 - PHP
 
@@ -2278,6 +2399,8 @@
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 - PHP
 
@@ -2404,7 +2527,12 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  ```rust
+  let batch = reader.read_batch().await?;
+  reader.commit(batch.get_commit_marker())?;
+  // или с ожиданием ack от сервера:
+  reader.commit_with_ack(batch.get_commit_marker()).await?;
+  ```
 
 - PHP
 
@@ -2552,6 +2680,8 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
+
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -2674,6 +2804,8 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
+
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -2783,6 +2915,8 @@
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 - PHP
 
@@ -2989,7 +3123,12 @@
 
 - Rust
 
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+  Полный пример чтения топика в транзакции с записью в таблицу: [`topic-read-in-transaction-example.rs`](https://github.com/ydb-platform/ydb-rs-sdk/blob/master/ydb/examples/topic-read-in-transaction-example.rs).
+
+  ```rust
+  let batch = reader.pop_batch_in_tx(&mut tx).await?;
+  // обработка batch.messages и commit транзакции
+  ```
 
 - PHP
 
@@ -3042,7 +3181,6 @@
       processBatch(batch)
       _ = r.Commit(batch.Context(), batch)
   }
-
   ```
 
 - Python
@@ -3111,7 +3249,11 @@
 
 - Rust
 
+  Rust SDK обрабатывает события остановки и закрытия partition session внутренне; публичного API для настройки мягкого или жёсткого прерывания чтения пока нет.
+
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 - PHP
 
@@ -3226,7 +3368,11 @@
 
 - Rust
 
+  Rust SDK обрабатывает события остановки и закрытия partition session внутренне; публичного API для настройки мягкого или жёсткого прерывания чтения пока нет.
+
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 - PHP
 
@@ -3465,6 +3611,8 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#311](https://github.com/ydb-platform/ydb-rs-sdk/issues/311)
+
 - PHP
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
@@ -3608,6 +3756,8 @@
 - Rust
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
+
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
 - PHP
 

@@ -5,10 +5,16 @@
 #include <ydb/core/kqp/common/kqp_yql.h>
 #include <ydb/core/kqp/provider/yql_kikimr_provider_impl.h>
 #include <ydb/core/kqp/provider/yql_kikimr_settings.h>
+#include <ydb/library/mkql_proto/mkql_proto.h>
 #include <ydb/library/yql/providers/dq/common/yql_dq_settings.h>
 
 #include <yql/essentials/core/dq_integration/yql_dq_integration.h>
 #include <yql/essentials/core/yql_opt_utils.h>
+#include <yql/essentials/minikql/computation/mkql_computation_node_holders.h>
+#include <yql/essentials/minikql/mkql_alloc.h>
+#include <yql/essentials/minikql/mkql_mem_info.h>
+#include <yql/essentials/providers/common/codec/yql_codec.h>
+#include <yql/essentials/providers/common/mkql/yql_type_mkql.h>
 #include <yql/essentials/providers/common/provider/yql_provider.h>
 
 #include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
@@ -129,115 +135,16 @@ std::pair<TExprBase, TCoAtomList> ExtendInputRowsWithAbsentNullColumns(const TKi
     return {writeData, columnList};
 }
 
-// Converts a DEFAULT_KIND_LITERAL proto value to a YQL AST literal node.
-// Inverse of FillLiteralProto(); the per-type field selection
-// (int/text/bytes/low_128) must stay in sync with it.
-TExprBase BuildYqlLiteralFromTypedValue(
-    const Ydb::TypedValue& proto, TPositionHandle pos, TExprContext& ctx)
-{
-    const auto& v = proto.value();
+TExprBase BuildYqlLiteralFromTypedValue(const Ydb::TypedValue& proto, TPositionHandle pos, TExprContext& ctx) {
+    NMiniKQL::TScopedAlloc alloc(__LOCATION__);
+    NMiniKQL::TTypeEnvironment typeEnv(alloc);
+    NMiniKQL::TMemoryUsageInfo memInfo("BuildYqlLiteralFromTypedValue");
+    NMiniKQL::THolderFactory holderFactory(alloc.Ref(), memInfo);
 
-    // Guards that the proto actually carries a value in the field we are about to read
-    // (catches NULL/unset defaults and producer/consumer field mismatches).
-    auto ensureValueCase = [&](Ydb::Value::ValueCase expected) {
-        YQL_ENSURE(v.value_case() == expected, "BuildYqlLiteralFromTypedValue: unexpected value case "
-            << static_cast<int>(v.value_case()) << ", expected " << static_cast<int>(expected));
-    };
-
-    if (proto.type().has_decimal_type()) {
-        ensureValueCase(Ydb::Value::kLow128);
-        ui8 precision = proto.type().decimal_type().precision();
-        ui8 scale = proto.type().decimal_type().scale();
-
-        NYql::NDecimal::TInt128 raw;
-        auto* p = reinterpret_cast<ui8*>(&raw);
-        *reinterpret_cast<ui64*>(p) = v.low_128();
-        *reinterpret_cast<ui64*>(p + 8) = v.high_128();
-
-        TString atomValue = NYql::NDecimal::ToString(raw, precision, scale);
-        return TExprBase(ctx.NewCallable(pos, "Decimal", {
-            ctx.NewAtom(pos, atomValue),
-            ctx.NewAtom(pos, ToString(precision)),
-            ctx.NewAtom(pos, ToString(scale))
-        }));
-    }
-
-    YQL_ENSURE(proto.type().has_type_id(),
-        "BuildYqlLiteralFromTypedValue: only primitive type_id or decimal_type supported");
-
-    auto typeId = static_cast<NKikimr::NScheme::TTypeId>(proto.type().type_id());
-    auto slot = NKikimr::NUdf::FindDataSlot(typeId);
-    YQL_ENSURE(slot, "BuildYqlLiteralFromTypedValue: unknown type id " << typeId);
-
-    TString typeName = TString(NKikimr::NUdf::GetDataTypeInfo(*slot).Name);
-
-    TString atomValue;
-    switch (*slot) {
-        case NKikimr::NUdf::EDataSlot::Bool:
-            ensureValueCase(Ydb::Value::kBoolValue);
-            atomValue = v.bool_value() ? "1" : "0";
-            break;
-        case NKikimr::NUdf::EDataSlot::Int8:
-        case NKikimr::NUdf::EDataSlot::Int16:
-        case NKikimr::NUdf::EDataSlot::Int32:
-        case NKikimr::NUdf::EDataSlot::Date32:
-            ensureValueCase(Ydb::Value::kInt32Value);
-            atomValue = ToString(v.int32_value());
-            break;
-        case NKikimr::NUdf::EDataSlot::Uint8:
-        case NKikimr::NUdf::EDataSlot::Uint16:
-        case NKikimr::NUdf::EDataSlot::Uint32:
-        case NKikimr::NUdf::EDataSlot::Date:
-        case NKikimr::NUdf::EDataSlot::Datetime:
-            ensureValueCase(Ydb::Value::kUint32Value);
-            atomValue = ToString(v.uint32_value());
-            break;
-        case NKikimr::NUdf::EDataSlot::Int64:
-        case NKikimr::NUdf::EDataSlot::Interval:
-        case NKikimr::NUdf::EDataSlot::Datetime64:
-        case NKikimr::NUdf::EDataSlot::Timestamp64:
-        case NKikimr::NUdf::EDataSlot::Interval64:
-            ensureValueCase(Ydb::Value::kInt64Value);
-            atomValue = ToString(v.int64_value());
-            break;
-        case NKikimr::NUdf::EDataSlot::Uint64:
-        case NKikimr::NUdf::EDataSlot::Timestamp:
-            ensureValueCase(Ydb::Value::kUint64Value);
-            atomValue = ToString(v.uint64_value());
-            break;
-        case NKikimr::NUdf::EDataSlot::Float:
-            ensureValueCase(Ydb::Value::kFloatValue);
-            atomValue = FloatToString(v.float_value());
-            break;
-        case NKikimr::NUdf::EDataSlot::Double:
-            ensureValueCase(Ydb::Value::kDoubleValue);
-            atomValue = FloatToString(v.double_value());
-            break;
-        case NKikimr::NUdf::EDataSlot::String:
-        case NKikimr::NUdf::EDataSlot::Yson:
-            ensureValueCase(Ydb::Value::kBytesValue);
-            atomValue = v.bytes_value();
-            break;
-        case NKikimr::NUdf::EDataSlot::Utf8:
-        case NKikimr::NUdf::EDataSlot::Json:
-        case NKikimr::NUdf::EDataSlot::DyNumber:
-        case NKikimr::NUdf::EDataSlot::JsonDocument:
-            ensureValueCase(Ydb::Value::kTextValue);
-            atomValue = v.text_value();
-            break;
-        case NKikimr::NUdf::EDataSlot::Uuid: {
-            ensureValueCase(Ydb::Value::kLow128);
-            char buf[16];
-            *reinterpret_cast<ui64*>(buf) = v.low_128();
-            *reinterpret_cast<ui64*>(buf + 8) = v.high_128();
-            atomValue = TString(buf, 16);
-            break;
-        }
-        default:
-            YQL_ENSURE(false, "BuildYqlLiteralFromTypedValue: unsupported slot " << *slot);
-    }
-
-    return TExprBase(ctx.NewCallable(pos, typeName, {ctx.NewAtom(pos, atomValue)}));
+    auto guard = typeEnv.BindAllocator();
+    auto [mkqlType, unboxedValue] = NMiniKQL::ImportValueFromProto(proto.type(), proto.value(), typeEnv, holderFactory);
+    const TTypeAnnotationNode* typeAnnotation = NYql::NCommon::ConvertMiniKQLType(ctx.GetPosition(pos), mkqlType, ctx);
+    return TExprBase(NYql::NCommon::ValueToExprLiteral(typeAnnotation, unboxedValue, ctx, pos));
 }
 
 // Appends DEFAULT_KIND_LITERAL column values to every row in the input stream.

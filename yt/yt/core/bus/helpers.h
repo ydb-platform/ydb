@@ -23,7 +23,8 @@ void MaterializeTransferAndReinvoke(
     IMessageHandlerPtr handler,
     TSharedRefArray message,
     IBusPtr replyBus,
-    IDirectPlacementTransferPtr transfer);
+    IDirectPlacementTransferPtr transfer,
+    TPacketId packetId = TPacketId());
 
 ////////////////////////////////////////////////////////////////////////////////
 

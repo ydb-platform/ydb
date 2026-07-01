@@ -289,10 +289,11 @@ private:
         void HandleMessage(
             TSharedRefArray message,
             IBusPtr replyBus,
-            NYT::NBus::IDirectPlacementTransferPtr transfer) noexcept override
+            NYT::NBus::IDirectPlacementTransferPtr transfer,
+            NYT::NBus::TPacketId packetId) noexcept override
         {
             if (auto session_ = Session_.Lock()) {
-                session_->HandleMessage(std::move(message), std::move(replyBus), std::move(transfer));
+                session_->HandleMessage(std::move(message), std::move(replyBus), std::move(transfer), packetId);
             }
         }
 
@@ -630,7 +631,8 @@ private:
         void HandleMessage(
             TSharedRefArray message,
             IBusPtr replyBus,
-            NYT::NBus::IDirectPlacementTransferPtr transfer) noexcept override
+            NYT::NBus::IDirectPlacementTransferPtr transfer,
+            NYT::NBus::TPacketId packetId) noexcept override
         {
             YT_ASSERT_THREAD_AFFINITY_ANY();
 
@@ -645,13 +647,14 @@ private:
                     MakeStrong(this),
                     std::move(message),
                     std::move(replyBus),
-                    std::move(transfer));
+                    std::move(transfer),
+                    packetId);
                 return;
             }
 
             switch (messageType) {
                 case EMessageType::Response:
-                    OnResponseMessage(std::move(message), std::move(transfer));
+                    OnResponseMessage(std::move(message), std::move(transfer), packetId);
                     break;
 
                 case EMessageType::StreamingPayload:
@@ -898,6 +901,10 @@ private:
                 // deliver them via direct placement transfer.
                 busOptions.DirectPlacementTransferPartCount = GetMessageAttachmentCount(requestMessage);
             }
+
+            // Pass RequestId to Bus layer so that RPC-level and Bus-level log entries
+            // can be correlated on both sender and receiver sides.
+            busOptions.RequestId = requestId;
             Bus_->Send(requestMessage, busOptions).Subscribe(BIND(
                 &TSession::OnAcknowledgement,
                 MakeStrong(this),
@@ -922,11 +929,11 @@ private:
         }
 
 
-        void OnResponseMessage(TSharedRefArray message, NYT::NBus::IDirectPlacementTransferPtr transfer)
+        void OnResponseMessage(TSharedRefArray message, NYT::NBus::IDirectPlacementTransferPtr transfer, NYT::NBus::TPacketId packetId)
         {
             NProto::TResponseHeader header;
             if (!TryParseResponseHeader(message, &header)) {
-                YT_LOG_ERROR("Error parsing response header");
+                YT_LOG_ERROR("Error parsing response header (PacketId: %v)", packetId);
                 return;
             }
 
@@ -940,8 +947,9 @@ private:
 
                 if (bucket->Terminated) {
                     YT_LOG_WARNING("Response received via a terminated channel "
-                        "(RequestId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
+                        "(RequestId: %v, PacketId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
                         requestId,
+                        packetId,
                         header.service(),
                         header.method(),
                         GetMessageBodySize(message),
@@ -954,8 +962,9 @@ private:
                 if (it == bucket->ActiveRequestMap.end()) {
                     // This may happen when the other party responds to an already timed-out request.
                     YT_LOG_DEBUG("Response for an incorrect or obsolete request received "
-                        "(RequestId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
+                        "(RequestId: %v, PacketId: %v, Service: %v, Method: %v, BodySize: %v, AttachmentSize: %v)",
                         requestId,
+                        packetId,
                         header.service(),
                         header.method(),
                         GetMessageBodySize(message),

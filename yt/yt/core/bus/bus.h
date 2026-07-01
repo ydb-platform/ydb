@@ -83,6 +83,9 @@ struct TSendOptions
     //! If true, canceling the future returned by #IBus::Send drops the message
     //! from the send queue (provided the transport supports cancelation).
     bool EnableSendCancelation = false;
+    //! If set, logged alongside Bus PacketId to allow correlating
+    //! RPC RequestId with Bus PacketId in logs.
+    TRequestId RequestId;
 };
 
 //! A bus, i.e. something capable of transmitting messages.

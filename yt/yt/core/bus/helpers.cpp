@@ -17,7 +17,8 @@ void MaterializeTransferAndReinvoke(
     IMessageHandlerPtr handler,
     TSharedRefArray message,
     IBusPtr replyBus,
-    IDirectPlacementTransferPtr transfer)
+    IDirectPlacementTransferPtr transfer,
+    TPacketId packetId)
 {
     auto bufferSizes = transfer->GetExpectedBufferSizes();
     std::vector<TSharedMutableRef> buffers;
@@ -35,7 +36,8 @@ void MaterializeTransferAndReinvoke(
         .Subscribe(BIND([
             handler = std::move(handler),
             message = std::move(message),
-            replyBus = std::move(replyBus)
+            replyBus = std::move(replyBus),
+            packetId
         ] (TErrorOr<std::vector<TSharedRef>>&& partsOrError) mutable {
             if (!partsOrError.IsOK()) {
                 // The transfer failed; there is nothing to deliver.
@@ -52,7 +54,7 @@ void MaterializeTransferAndReinvoke(
                 builder.Add(std::move(part));
             }
 
-            handler->HandleMessage(builder.Finish(), std::move(replyBus));
+            handler->HandleMessage(builder.Finish(), std::move(replyBus), nullptr, packetId);
         }));
 }
 

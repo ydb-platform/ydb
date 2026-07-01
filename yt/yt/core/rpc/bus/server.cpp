@@ -61,7 +61,8 @@ private:
     void HandleMessage(
         TSharedRefArray message,
         IBusPtr replyBus,
-        NYT::NBus::IDirectPlacementTransferPtr transfer) noexcept override
+        NYT::NBus::IDirectPlacementTransferPtr transfer,
+        NYT::NBus::TPacketId packetId) noexcept override
     {
         auto messageType = GetMessageType(message);
 
@@ -74,13 +75,14 @@ private:
                 MakeStrong(this),
                 std::move(message),
                 std::move(replyBus),
-                std::move(transfer));
+                std::move(transfer),
+                packetId);
             return;
         }
 
         switch (messageType) {
             case EMessageType::Request:
-                OnRequestMessage(std::move(message), std::move(replyBus), std::move(transfer));
+                OnRequestMessage(std::move(message), std::move(replyBus), std::move(transfer), packetId);
                 break;
 
             case EMessageType::RequestCancelation:
@@ -104,13 +106,13 @@ private:
         }
     }
 
-    void OnRequestMessage(TSharedRefArray message, IBusPtr replyBus, NYT::NBus::IDirectPlacementTransferPtr transfer)
+    void OnRequestMessage(TSharedRefArray message, IBusPtr replyBus, NYT::NBus::IDirectPlacementTransferPtr transfer, NYT::NBus::TPacketId packetId)
     {
         auto header = std::make_unique<NProto::TRequestHeader>();
         if (!TryParseRequestHeader(message, header.get())) {
             // Unable to reply, no request id is known.
             // Let's just drop the message.
-            YT_LOG_ERROR("Error parsing request header");
+            YT_LOG_ERROR("Error parsing request header (PacketId: %v)", packetId);
             return;
         }
 
@@ -126,8 +128,9 @@ private:
             return;
         }
 
-        YT_LOG_DEBUG("Request received (RequestId: %v, Endpoint: %v)",
+        YT_LOG_DEBUG("Request received (RequestId: %v, PacketId: %v, Endpoint: %v)",
             requestId,
+            packetId,
             replyBus->GetEndpointDescription());
 
         auto replyWithError = [&] (const TError& error) {

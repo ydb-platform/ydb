@@ -2,6 +2,8 @@
 
 #include <yt/yt/core/misc/public.h>
 
+#include <library/cpp/yt/misc/guid.h>
+
 #include <util/generic/size_literals.h>
 
 namespace NYT::NBus {
@@ -59,6 +61,12 @@ DEFINE_ENUM(EVerificationMode,
     ((Ca)       (1))    // Verifies peer's certificate with the CA.
     ((Full)     (2))    // Verifies peer's certificate with the CA as well as peer's host name against the certificate.
 );
+
+using TPacketId = TGuid;
+
+//! RPC-level request identifier; passed through the Bus layer for logging
+//! to allow correlating RPC RequestId with Bus PacketId in log entries.
+using TRequestId = TGuid;
 
 extern const std::string DefaultNetworkName;
 extern const std::string LocalNetworkName;

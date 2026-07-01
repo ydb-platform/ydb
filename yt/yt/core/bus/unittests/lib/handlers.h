@@ -21,7 +21,8 @@ public:
     void HandleMessage(
         TSharedRefArray message,
         IBusPtr replyBus,
-        IDirectPlacementTransferPtr transfer) noexcept override;
+        IDirectPlacementTransferPtr transfer,
+        TPacketId packetId) noexcept override;
 };
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -36,7 +37,8 @@ public:
     void HandleMessage(
         TSharedRefArray message,
         IBusPtr replyBus,
-        IDirectPlacementTransferPtr transfer) noexcept override;
+        IDirectPlacementTransferPtr transfer,
+        TPacketId packetId) noexcept override;
 
 private:
     std::atomic<int> Count_ = 0;
@@ -53,7 +55,8 @@ public:
     void HandleMessage(
         TSharedRefArray message,
         IBusPtr replyBus,
-        IDirectPlacementTransferPtr transfer) noexcept override;
+        IDirectPlacementTransferPtr transfer,
+        TPacketId packetId) noexcept override;
 
 private:
     const int ExpectedPartCount_;
@@ -72,7 +75,8 @@ public:
     void HandleMessage(
         TSharedRefArray message,
         IBusPtr replyBus,
-        IDirectPlacementTransferPtr transfer) noexcept override;
+        IDirectPlacementTransferPtr transfer,
+        TPacketId packetId) noexcept override;
 
 private:
     std::atomic<int> RemainingReplyCount_;
@@ -104,7 +108,8 @@ public:
     void HandleMessage(
         TSharedRefArray message,
         IBusPtr replyBus,
-        IDirectPlacementTransferPtr transfer) noexcept override;
+        IDirectPlacementTransferPtr transfer,
+        TPacketId packetId) noexcept override;
 
 private:
     std::atomic<bool> SawTransfer_ = false;
@@ -134,7 +139,8 @@ public:
     void HandleMessage(
         TSharedRefArray message,
         IBusPtr replyBus,
-        IDirectPlacementTransferPtr transfer) noexcept override;
+        IDirectPlacementTransferPtr transfer,
+        TPacketId packetId) noexcept override;
 
 private:
     YT_DECLARE_SPIN_LOCK(NThreading::TSpinLock, Lock_);

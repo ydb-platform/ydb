@@ -44,7 +44,8 @@ public:
     void HandleMessage(
         TSharedRefArray /*message*/,
         IBusPtr /*replyBus*/,
-        IDirectPlacementTransferPtr /*transfer*/) noexcept override
+        IDirectPlacementTransferPtr /*transfer*/,
+        TPacketId /*packetId*/) noexcept override
     { }
 };
 

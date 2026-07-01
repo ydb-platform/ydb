@@ -613,9 +613,10 @@ public:
     void HandleMessage(
         TSharedRefArray message,
         IBusPtr replyBus,
-        IDirectPlacementTransferPtr transfer) noexcept final
+        IDirectPlacementTransferPtr transfer,
+        TPacketId packetId) noexcept final
     {
-        Underlying_->HandleMessage(std::move(message), std::move(replyBus), std::move(transfer));
+        Underlying_->HandleMessage(std::move(message), std::move(replyBus), std::move(transfer), packetId);
     }
 
     void SubscribeTerminated(const TCallback<void(const TError&)>& callback) final

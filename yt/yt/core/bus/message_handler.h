@@ -22,6 +22,8 @@ struct IMessageHandler
      *  \param transfer A handle for fetching the deferred parts, or null if the
      *  message has none (or the transport delivered them inline). When non-null,
      *  the receiver must drive it to completion (see #IDirectPlacementTransfer).
+     *  \param packetId The Bus-level packet identifier. Can be logged alongside
+     *  the RPC-level RequestId to correlate Bus and RPC log entries.
      *
      *  \note
      *  Thread affinity: this method is called from an unspecified thread
@@ -32,7 +34,8 @@ struct IMessageHandler
     virtual void HandleMessage(
         TSharedRefArray message,
         IBusPtr replyBus,
-        IDirectPlacementTransferPtr transfer = nullptr) noexcept = 0;
+        IDirectPlacementTransferPtr transfer = nullptr,
+        TPacketId packetId = TPacketId()) noexcept = 0;
 };
 
 DEFINE_REFCOUNTED_TYPE(IMessageHandler)

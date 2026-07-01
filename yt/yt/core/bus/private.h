@@ -18,7 +18,6 @@ YT_DEFINE_GLOBAL(const NProfiling::TProfiler, BusProfiler, "/bus");
 ////////////////////////////////////////////////////////////////////////////////
 
 using TConnectionId = TGuid;
-using TPacketId = TGuid;
 
 DEFINE_ENUM(EConnectionType,
     (Client)

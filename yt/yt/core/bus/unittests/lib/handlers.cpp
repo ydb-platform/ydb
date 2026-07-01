@@ -17,7 +17,8 @@ namespace NYT::NBus::NTests {
 void TEmptyBusHandler::HandleMessage(
     TSharedRefArray /*message*/,
     IBusPtr /*replyBus*/,
-    IDirectPlacementTransferPtr /*transfer*/) noexcept
+    IDirectPlacementTransferPtr /*transfer*/,
+    TPacketId /*packetId*/) noexcept
 { }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -35,7 +36,8 @@ void TCountingBusHandler::ResetCount()
 void TCountingBusHandler::HandleMessage(
     TSharedRefArray /*message*/,
     IBusPtr /*replyBus*/,
-    IDirectPlacementTransferPtr /*transfer*/) noexcept
+    IDirectPlacementTransferPtr /*transfer*/,
+    TPacketId /*packetId*/) noexcept
 {
     ++Count_;
 }
@@ -49,7 +51,8 @@ TReplying42BusHandler::TReplying42BusHandler(int expectedPartCount)
 void TReplying42BusHandler::HandleMessage(
     TSharedRefArray message,
     IBusPtr replyBus,
-    IDirectPlacementTransferPtr /*transfer*/) noexcept
+    IDirectPlacementTransferPtr /*transfer*/,
+    TPacketId /*packetId*/) noexcept
 {
     EXPECT_EQ(ExpectedPartCount_, std::ssize(message));
     auto replyMessage = Serialize("42");
@@ -70,7 +73,8 @@ void TChecking42BusHandler::WaitUntilDone()
 void TChecking42BusHandler::HandleMessage(
     TSharedRefArray message,
     IBusPtr /*replyBus*/,
-    IDirectPlacementTransferPtr /*transfer*/) noexcept
+    IDirectPlacementTransferPtr /*transfer*/,
+    TPacketId /*packetId*/) noexcept
 {
     auto value = Deserialize(message);
     EXPECT_EQ("42", value);
@@ -107,7 +111,8 @@ bool TDirectPlacementBusHandler::SawDirectPlacementTransfer() const
 void TDirectPlacementBusHandler::HandleMessage(
     TSharedRefArray message,
     IBusPtr /*replyBus*/,
-    IDirectPlacementTransferPtr transfer) noexcept
+    IDirectPlacementTransferPtr transfer,
+    TPacketId /*packetId*/) noexcept
 {
     SawTransfer_.store(transfer != nullptr);
 
@@ -164,7 +169,8 @@ TFuture<void> TDirectPlacementRunBusHandler::GetRunFuture()
 void TDirectPlacementRunBusHandler::HandleMessage(
     TSharedRefArray /*message*/,
     IBusPtr /*replyBus*/,
-    IDirectPlacementTransferPtr transfer) noexcept
+    IDirectPlacementTransferPtr transfer,
+    TPacketId /*packetId*/) noexcept
 {
     TFuture<void> future;
     if (transfer) {

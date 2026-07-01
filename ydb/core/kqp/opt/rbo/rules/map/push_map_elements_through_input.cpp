@@ -1,7 +1,5 @@
 #include <ydb/core/kqp/opt/rbo/rules/kqp_rules_include.h>
 
-#include <optional>
-
 namespace NKikimr {
 namespace NKqp {
 
@@ -69,61 +67,35 @@ bool IsJoinChildPreserved(const TOpJoin& join, ui32 childIdx) {
         : IsRightPreserved(join.JoinKind);
 }
 
-std::optional<ui32> SelectAvailableChild(const IOperator& op, const TMapElement& mapElement) {
-    std::optional<ui32> result;
-    for (ui32 childIdx = 0; childIdx < op.Children.size(); ++childIdx) {
-        if (!mapElement.DependsOnlyOn(op.Children[childIdx]->GetOutputIUs())) {
-            continue;
-        }
-        if (result) {
-            return std::nullopt;
-        }
-        result = childIdx;
-    }
-    return result;
-}
-
-std::optional<ui32> SelectExpressionChild(
+bool CanPushAppendToChild(
     const IOperator& op,
+    ui32 childIdx,
     const TMapElement& mapElement,
     bool pushExpressions)
 {
+    const bool dependsOnlyOnChild = mapElement.DependsOnlyOn(op.Children[childIdx]->GetOutputIUs());
+
+    if (mapElement.IsColumnAccess()) {
+        return dependsOnlyOnChild;
+    }
+
     if (op.Kind != EOperator::Join) {
         if (op.Kind != EOperator::Filter && !pushExpressions) {
-            return std::nullopt;
+            return false;
         }
-        return SelectAvailableChild(op, mapElement);
+        return dependsOnlyOnChild;
     }
 
     const auto& join = static_cast<const TOpJoin&>(op);
-    if (auto childIdx = SelectAvailableChild(op, mapElement)) {
-        if (IsJoinChildPreserved(join, *childIdx)) {
-            return childIdx;
-        }
-        return std::nullopt;
+    if (!IsJoinChildPreserved(join, childIdx)) {
+        return false;
     }
 
-    if (!mapElement.GetExpression().GetInputIUs(false, true).empty()) {
-        return std::nullopt;
+    if (dependsOnlyOnChild) {
+        return true;
     }
 
-    for (ui32 childIdx = 0; childIdx < op.Children.size(); ++childIdx) {
-        if (IsJoinChildPreserved(join, childIdx)) {
-            return childIdx;
-        }
-    }
-    return std::nullopt;
-}
-
-std::optional<ui32> SelectAppendChild(
-    const IOperator& op,
-    const TMapElement& mapElement,
-    bool pushExpressions)
-{
-    if (mapElement.IsColumnAccess()) {
-        return SelectAvailableChild(op, mapElement);
-    }
-    return SelectExpressionChild(op, mapElement, pushExpressions);
+    return mapElement.GetExpression().GetInputIUs(false, true).empty();
 }
 
 } // anonymous namespace
@@ -141,59 +113,79 @@ TPushMapElementsThroughInputRule::SimpleMatchAndApply(const TIntrusivePtr<IOpera
     }
 
     TVector<TVector<TMapElement>> pushedElements(op->Children.size());
+    TVector<TInfoUnitSet> pushedOutputs(op->Children.size());
     TVector<TMapElement> topElements;
+    TVector<bool> pushed(topMap->MapElements.size(), false);
     TRenameMap renameMap;
-    THashMap<TInfoUnit, ui32, TInfoUnit::THashFunction> pushedOutputChild;
     TInfoUnitSet keptOutputs;
+    TInfoUnitSet pushableOutputs;
 
     for (const auto& mapElement : topMap->MapElements) {
         if (mapElement.IsRename()) {
             continue;
         }
 
-        if (const auto childIdx = SelectAppendChild(*op, mapElement, PushExpressions)) {
-            pushedOutputChild.emplace(mapElement.GetElementName(), *childIdx);
-        } else {
+        bool canPush = false;
+        for (ui32 childIdx = 0; childIdx < op->Children.size(); ++childIdx) {
+            if (CanPushAppendToChild(*op, childIdx, mapElement, PushExpressions)) {
+                pushedOutputs[childIdx].insert(mapElement.GetElementName());
+                canPush = true;
+            }
+        }
+
+        if (!canPush) {
             keptOutputs.insert(mapElement.GetElementName());
+        } else {
+            pushableOutputs.insert(mapElement.GetElementName());
         }
     }
 
-    for (const auto& mapElement : topMap->MapElements) {
-        std::optional<ui32> childIdx;
-
-        if (mapElement.IsRename()) {
-            const auto source = mapElement.GetRename();
-            if (keptOutputs.contains(source)) {
-                topElements.push_back(mapElement);
+    bool hasPushed = false;
+    for (ui32 childIdx = 0; childIdx < op->Children.size(); ++childIdx) {
+        for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
+            const auto& mapElement = topMap->MapElements[idx];
+            if (pushed[idx]) {
                 continue;
             }
 
-            if (const auto pushed = pushedOutputChild.find(source); pushed != pushedOutputChild.end()) {
-                childIdx = pushed->second;
+            if (mapElement.IsRename()) {
+                const auto source = mapElement.GetRename();
+                if (keptOutputs.contains(source)) {
+                    continue;
+                }
+
+                if (pushableOutputs.contains(source)) {
+                    if (!pushedOutputs[childIdx].contains(source)) {
+                        continue;
+                    }
+                } else {
+                    if (!mapElement.DependsOnlyOn(op->Children[childIdx]->GetOutputIUs())) {
+                        continue;
+                    }
+                }
             } else {
-                childIdx = SelectAvailableChild(*op, mapElement);
+                if (!pushedOutputs[childIdx].contains(mapElement.GetElementName())) {
+                    continue;
+                }
             }
-        } else if (const auto pushed = pushedOutputChild.find(mapElement.GetElementName()); pushed != pushedOutputChild.end()) {
-            childIdx = pushed->second;
-        }
 
-        if (!childIdx) {
-            topElements.push_back(mapElement);
-            continue;
-        }
-
-        pushedElements[*childIdx].push_back(mapElement);
-        if (mapElement.IsRename() && mapElement.GetRename() != mapElement.GetElementName()) {
-            renameMap.emplace(mapElement.GetRename(), mapElement.GetElementName());
+            pushed[idx] = true;
+            hasPushed = true;
+            pushedElements[childIdx].push_back(mapElement);
+            if (mapElement.IsRename() && mapElement.GetRename() != mapElement.GetElementName()) {
+                renameMap.emplace(mapElement.GetRename(), mapElement.GetElementName());
+            }
         }
     }
 
-    bool pushed = false;
-    for (const auto& elements : pushedElements) {
-        pushed |= !elements.empty();
-    }
-    if (!pushed) {
+    if (!hasPushed) {
         return input;
+    }
+
+    for (size_t idx = 0; idx < topMap->MapElements.size(); ++idx) {
+        if (!pushed[idx]) {
+            topElements.push_back(topMap->MapElements[idx]);
+        }
     }
 
     if (!renameMap.empty()) {

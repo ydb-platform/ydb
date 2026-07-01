@@ -126,6 +126,7 @@
 #include <ydb/core/node_whiteboard/node_whiteboard.h>
 
 #include <ydb/core/persqueue/pq.h>
+#include <ydb/core/persqueue/deferred_publish/registry_actor.h>
 
 #include <ydb/library/services/services.pb.h>
 #include <ydb/core/protos/console_config.pb.h>
@@ -2298,6 +2299,17 @@ void TPersQueueDirectReadCacheInitializer::InitializeServices(NActors::TActorSys
     IActor* actor = NPQ::CreatePQDReadCacheService(appData->Counters);
     setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
         NPQ::MakePQDReadCacheServiceActorId(),
+        TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
+}
+
+TTopicDeferredPublishRegistryInitializer::TTopicDeferredPublishRegistryInitializer(const TKikimrRunConfig& runConfig)
+    : IKikimrServicesInitializer(runConfig)
+{}
+
+void TTopicDeferredPublishRegistryInitializer::InitializeServices(NActors::TActorSystemSetup* setup, const NKikimr::TAppData* appData) {
+    IActor* actor = NPQ::NDeferredPublish::CreateDeferredPublishRegistryActor();
+    setup->LocalServices.push_back(std::pair<TActorId, TActorSetupCmd>(
+        NPQ::NDeferredPublish::MakeDeferredPublishRegistryActorId(),
         TActorSetupCmd(actor, TMailboxType::HTSwap, appData->UserPoolId)));
 }
 

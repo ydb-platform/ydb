@@ -90,6 +90,7 @@ PEERDIR(
     ydb/core/mon_alloc
     ydb/core/node_whiteboard
     ydb/core/persqueue
+    ydb/core/persqueue/deferred_publish
     ydb/core/protos
     ydb/core/public_http
     ydb/core/quoter

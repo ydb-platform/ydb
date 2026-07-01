@@ -1,0 +1,1 @@
+- In the `proto-json-base64` output mode, the identifier is in the "id" attribute:

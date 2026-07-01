@@ -2034,6 +2034,8 @@ public:
     TInstant ForcedCompactionProgressStartTime;
     TDuration ForcedCompactionPersistBatchMaxTime = TDuration::MilliSeconds(100);
     bool ForcedCompactionNeedsImmediatePersist = false;
+    ui32 ForcedCompactionStoredOperationsLimit = 1000; // total operations, 0 means unlimited
+    bool ForcedCompactionAutoForgetOperations = true;
 
     struct TCancellingForcedCompaction {
         struct TWaiter {
@@ -2072,6 +2074,11 @@ public:
 
     void PersistForcedCompactionState(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo);
     void PersistForcedCompactionForget(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo);
+    void ForgetForcedCompaction(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo);
+    // Ensures there is room to store one more operation within ForcedCompactionStoredOperationsLimit,
+    // auto-forgetting the oldest finished operations when ForcedCompactionAutoForgetOperations is enabled.
+    // Returns false if the limit is reached and no room could be made.
+    bool TryFreeForcedCompactionSlot(NIceDb::TNiceDb& db, const TActorContext& ctx);
     void PersistForcedCompactionShards(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo, const TVector<std::pair<TShardIdx, TPathId>>& shardsToCompact);
     void PersistForcedCompactionShards(NIceDb::TNiceDb& db, const TForcedCompactionInfo& forcedCompactionInfo, const TVector<TShardIdx>& shardsToCompact);
     void PersistForcedCompactionDoneShard(NIceDb::TNiceDb& db, const TShardIdx& shardId);

@@ -93,7 +93,6 @@
 #define LOG_DEBUG(actorCtxOrSystem, component, ...) LOG_LOG(actorCtxOrSystem, NActors::NLog::PRI_DEBUG, component, __VA_ARGS__)
 #define LOG_TRACE(actorCtxOrSystem, component, ...) LOG_LOG(actorCtxOrSystem, NActors::NLog::PRI_TRACE, component, __VA_ARGS__)
 
-#define LOG_WARN_SOURCELESS(actorCtxOrSystem, component, ...) LOG_LOG_SOURCELESS(actorCtxOrSystem, NActors::NLog::PRI_WARN, component, __VA_ARGS__)
 #define LOG_NOTICE_SOURCELESS(actorCtxOrSystem, component, ...) LOG_LOG_SOURCELESS(actorCtxOrSystem, NActors::NLog::PRI_NOTICE, component, __VA_ARGS__)
 
 #define LOG_EMERG_S(actorCtxOrSystem, component, stream) LOG_LOG_S(actorCtxOrSystem, NActors::NLog::PRI_EMERG, component, stream)
@@ -779,6 +778,22 @@ namespace NActors {
         } \
     } while (false)
 
+#define YDB_LOG_CTX_COMP_FAIL(CTX, PRIO, COMP, T, ...) \
+    do { \
+        auto& ydblogActorContext = (CTX); \
+        const auto ydblogPriority = [&]{ using namespace NActors::NLog; return (PRIO); }(); \
+        const auto ydblogComponent = [&]{ using namespace NKikimrServices; return (COMP); }(); \
+        if (IS_CTX_LOG_PRIORITY_ENABLED(ydblogActorContext, ydblogPriority, ydblogComponent, 0ull)) { \
+            NActors::NStructuredLog::TStructuredMessage ydblogStructuredMessage = NActors::NStructuredLog::TLogStack::GetTop(); \
+            YDB_LOG_UPDATE_MESSAGE(ydblogStructuredMessage, __VA_ARGS__); \
+            TStringStream ydblogMessageTextStream; ydblogMessageTextStream << T; \
+            const TString ydblogMessageText = ydblogMessageTextStream.Str(); \
+            Y_VERIFY_DEBUG_S(false, ydblogMessageText); \
+            MemStructLogAdapter(ydblogActorContext, ydblogPriority, ydblogComponent, __FILE_NAME__, __LINE__, ydblogMessageText, std::move(ydblogStructuredMessage) ); \
+        } \
+    } while (false)
+
+
 #define YDB_LOG_EMERG_CTX_COMP(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_EMERG, COMP, T, __VA_ARGS__)
 #define YDB_LOG_ALERT_CTX_COMP(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_ALERT, COMP, T, __VA_ARGS__)
 #define YDB_LOG_CRIT_CTX_COMP(CTX, COMP, T, ...) YDB_LOG_CTX_COMP(CTX, PRI_CRIT, COMP, T, __VA_ARGS__)
@@ -807,6 +822,13 @@ namespace NActors {
         } \
     } while (false)
 
+#define YDB_LOG_COMP_FAIL(PRIO, COMP, T, ...) \
+    do { \
+        if (auto ctxp = NActors::TlsActivationContext) { \
+            YDB_LOG_CTX_COMP_FAIL(*ctxp, PRIO, COMP, T, __VA_ARGS__); \
+        } \
+    } while (false)
+
 #define YDB_LOG_EMERG_COMP(COMP, T, ...) YDB_LOG_COMP(PRI_EMERG, COMP, T, __VA_ARGS__)
 #define YDB_LOG_ALERT_COMP(COMP, T, ...) YDB_LOG_COMP(PRI_ALERT, COMP, T, __VA_ARGS__)
 #define YDB_LOG_CRIT_COMP(COMP, T, ...) YDB_LOG_COMP(PRI_CRIT, COMP, T, __VA_ARGS__)
@@ -815,6 +837,7 @@ namespace NActors {
 #define YDB_LOG_NOTICE_COMP(COMP, T, ...) YDB_LOG_COMP(PRI_NOTICE, COMP, T, __VA_ARGS__)
 #define YDB_LOG_INFO_COMP(COMP, T, ...) YDB_LOG_COMP(PRI_INFO, COMP, T, __VA_ARGS__)
 #define YDB_LOG_DEBUG_COMP(COMP, T, ...) YDB_LOG_COMP(PRI_DEBUG, COMP, T, __VA_ARGS__)
+#define YDB_LOG_DEBUG_COMP_FAIL(COMP, T, ...) YDB_LOG_COMP_FAIL(PRI_DEBUG, COMP, T, __VA_ARGS__)
 #define YDB_LOG_TRACE_COMP(COMP, T, ...) YDB_LOG_COMP(PRI_TRACE, COMP, T, __VA_ARGS__)
 
 #define YDB_LOG(PRIO, T, ...) YDB_LOG_COMP(PRIO, YDB_LOG_THIS_FILE_COMPONENT, T, __VA_ARGS__)
@@ -826,4 +849,5 @@ namespace NActors {
 #define YDB_LOG_NOTICE(T, ...) YDB_LOG(PRI_NOTICE, T, __VA_ARGS__)
 #define YDB_LOG_INFO(T, ...) YDB_LOG(PRI_INFO, T, __VA_ARGS__)
 #define YDB_LOG_DEBUG(T, ...) YDB_LOG(PRI_DEBUG, T, __VA_ARGS__)
+#define YDB_LOG_DEBUG_FAIL(T, ...) YDB_LOG_COMP_FAIL(PRI_DEBUG, YDB_LOG_THIS_FILE_COMPONENT, T, __VA_ARGS__)
 #define YDB_LOG_TRACE(T, ...) YDB_LOG(PRI_TRACE, T, __VA_ARGS__)

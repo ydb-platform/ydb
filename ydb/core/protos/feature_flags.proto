@@ -326,4 +326,5 @@ message TFeatureFlags {
     optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
     optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
     optional bool EnableParquetForExport = 286 [default = false];
+    optional bool EnableTopicDeferredPublish = 287 [default = false];
 }

@@ -1,5 +1,6 @@
 #include "delete_message.h"
 #include "actor.h"
+#include "config.h"
 #include "error.h"
 #include "receipt.h"
 #include "request.h"
@@ -125,7 +126,7 @@ namespace NKikimr::NSqsTopic::V1 {
             NPQ::NMLP::TCommitterSettings committerSettings{
                 .DatabasePath = this->QueueUrl_->Database,
                 .TopicName = FullTopicPath_,
-                .Consumer = this->QueueUrl_->Consumer,
+                .Consumer = ResolveConsumerNameFromQueueUrl(this->QueueUrl_->Consumer, ctx),
                 .Messages = std::move(requestList),
                 .UserToken = this->Request_->GetInternalToken(),
             };

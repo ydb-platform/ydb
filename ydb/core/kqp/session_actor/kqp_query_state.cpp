@@ -626,6 +626,9 @@ NKqpProto::EIsolationLevel TKqpQueryState::GetIsolationLevel(TKqpTransactionCont
             case Ydb::Table::TransactionSettings::kSerializableReadWrite:
                 isolationLevel = NKqpProto::ISOLATION_LEVEL_SERIALIZABLE;
                 break;
+            case Ydb::Table::TransactionSettings::kStrictSerializableReadWrite:
+                isolationLevel = NKqpProto::ISOLATION_LEVEL_STRICT_SERIALIZABLE;
+                break;
             case Ydb::Table::TransactionSettings::kOnlineReadOnly:
                 if (AppData()->FeatureFlags.GetDisableOnlineRO()) {
                     isolationLevel = NKqpProto::ISOLATION_LEVEL_SNAPSHOT_RO;

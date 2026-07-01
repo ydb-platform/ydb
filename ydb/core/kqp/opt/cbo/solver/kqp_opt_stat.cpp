@@ -938,6 +938,13 @@ void PropagateStatisticsToLambdaArgument(const TExprNode::TPtr& input, TKqpStats
         // So we need to propagate corresponding arguments
 
         if (callableInput->IsList()){
+            // Only propagate when the lambda takes exactly one argument per list element (the shape this
+            // mapping assumes). Some callables pair a list child0 with a lambda of a different arity -- e.g.
+            // HybridRank, whose child0 is the positional scoring tuple but whose Fuse lambda takes a single
+            // rank-vector argument -- and indexing Arg(j) past the lambda's args would be out of range.
+            if (lambda.Args().Size() != callableInput->ChildrenSize()) {
+                continue;
+            }
             for(size_t j=0; j<callableInput->ChildrenSize(); j++){
                 auto inputStats = kqpStats->GetStats(callableInput->Child(j) );
                 if (inputStats){

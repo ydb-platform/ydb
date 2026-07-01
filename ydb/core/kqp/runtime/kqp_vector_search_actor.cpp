@@ -289,8 +289,10 @@ private:
     }
 
     void BeginTraversal() {
+        TraversalStarted = true;
         if (CurrentParents.empty()) {
-            // All roots are direct posting partitions: skip level traversal.
+            // All roots are direct posting partitions: skip level traversal. This
+            // may defer inside StartPosting if the posting resolve has not landed yet.
             StartPosting();
         } else {
             StartLevelRound();
@@ -302,6 +304,10 @@ private:
     void StartResolve() {
         Phase = EPhase::Resolve;
         PendingResolves = 0;
+        LevelResolved = false;
+        PostingResolved = false;
+        // A covered index never reads (and never resolves) the main table.
+        MainResolved = PostingCovers;
         const NScheme::TTypeInfo u64(NScheme::NTypeIds::Uint64);
         // Level table key is (parent, id), both Uint64.
         SendPartitioningResolve(Settings.GetLevelTable(), {u64, u64});
@@ -343,23 +349,65 @@ private:
 
     void HandleResolvePartitioning(TEvTxProxySchemeCache::TEvResolveKeySetResult::TPtr& ev) {
         auto* request = ev->Get()->Request.Get();
-        if (!request->ResultSet.empty() && request->ErrorCount == 0) {
+        // Attribute the response to its table and mark that table resolved. Each
+        // request carries exactly one key desc, whose TableId is echoed back even on
+        // error, so the response is attributable regardless of success. The
+        // partitioning is applied only on success; on any failure it stays null and
+        // the phase falls back to a normal resolving read, preserving correctness.
+        if (!request->ResultSet.empty()) {
             const auto& entry = request->ResultSet[0];
-            auto partitioning = entry.KeyDescription->Partitioning;
             const auto& id = entry.KeyDescription->TableId;
-            // Leave a partitioning null on any mismatch/failure: the per-phase read then
-            // falls back to a normal resolving read, preserving correctness.
+            const bool ok = request->ErrorCount == 0;
             if (SameTable(id, Settings.GetLevelTable())) {
-                LevelPartitioning = partitioning;
+                if (ok) LevelPartitioning = entry.KeyDescription->Partitioning;
+                LevelResolved = true;
             } else if (SameTable(id, Settings.GetPostingTable())) {
-                PostingPartitioning = partitioning;
+                if (ok) PostingPartitioning = entry.KeyDescription->Partitioning;
+                PostingResolved = true;
             } else if (SameTable(id, Settings.GetMainTable())) {
-                MainPartitioning = partitioning;
+                if (ok) MainPartitioning = entry.KeyDescription->Partitioning;
+                MainResolved = true;
             }
         }
-        if (--PendingResolves == 0 && !Failed) {
+        if (--PendingResolves == 0) {
+            // Safety net: every response is in. Mark all tables resolved so no phase
+            // can hang even if a response could not be attributed to a table above.
+            LevelResolved = PostingResolved = MainResolved = true;
+        }
+        if (Failed) {
+            return;
+        }
+        DriveResolvedPhases();
+    }
+
+    // Start or resume each phase whose partitioning has just become available. Level
+    // traversal begins on the level resolve alone; the posting/main resolves unblock
+    // their phases only if execution already reached them -- which normally it has
+    // not, the multi-round level traversal having covered their latency.
+    void DriveResolvedPhases() {
+        if (LevelResolved && !TraversalStarted) {
             BeginTraversal();
         }
+        if (PostingResolved && PostingStartPending) {
+            PostingStartPending = false;
+            StartPosting();
+        }
+        // Deferred posting->main tail: a (prefixed all-direct-posting) posting scan
+        // finished while the main resolve was still in flight, so its candidate PKs
+        // are still buffered and no main read is running. Flush them now that main is
+        // resolved. In the common case posting is still running here and the normal
+        // HandleRead flush path handles it, so this only fires for that rare tail.
+        if (MainResolved && !PostingCovers && !PendingMainKeys.empty()
+            && Phase != EPhase::Done && CountActiveReads(EReadKind::Posting) == 0)
+        {
+            FlushPendingMainKeys();
+        }
+    }
+
+    void FlushPendingMainKeys() {
+        TVector<TString> batch;
+        batch.swap(PendingMainKeys);
+        LaunchMainReadFor(std::move(batch));
     }
 
     // Fetches the target-vector input rows. The input is a stream of single- or
@@ -478,6 +526,13 @@ private:
     }
 
     void StartPosting() {
+        if (!PostingResolved) {
+            // Reached posting before its background resolve landed. Only possible for
+            // a prefixed all-direct-posting search, which has no level traversal to
+            // cover the resolve; resume from DriveResolvedPhases once it arrives.
+            PostingStartPending = true;
+            return;
+        }
         // Candidate leaf clusters are now in CurrentParents. For a prefixed index,
         // also scan the prefix groups' direct posting partitions (roots that had no
         // level-table subtree), which bypassed level traversal. They are all read in
@@ -972,12 +1027,14 @@ private:
         for (const auto& ar : finishedReads) {
             postingFinished |= (ar.Kind == EReadKind::Posting);
         }
-        if (!PostingCovers && !PendingMainKeys.empty()
+        // Only flush once the main resolve has landed (MainResolved). It is fired
+        // alongside the posting resolve and the multi-round level traversal normally
+        // covers its latency, so this gate almost never defers; when it does, the
+        // buffered PKs are flushed from DriveResolvedPhases on the main resolve.
+        if (!PostingCovers && MainResolved && !PendingMainKeys.empty()
             && (postingFinished || PendingMainKeys.size() >= MainReadFlushThreshold))
         {
-            TVector<TString> batch;
-            batch.swap(PendingMainKeys);
-            LaunchMainReadFor(std::move(batch));
+            FlushPendingMainKeys();
         }
 
         if (finishedReads.empty() || Phase == EPhase::Done) {
@@ -994,6 +1051,12 @@ private:
         // remains. Covered -> candidates are already built; non-covered -> candidates
         // came from the main reads (or there were none -> empty result).
         if (CountActiveReads(EReadKind::Posting) == 0 && CountActiveReads(EReadKind::Main) == 0) {
+            if (!PostingCovers && !MainResolved && !PendingMainKeys.empty()) {
+                // Posting finished but the main resolve has not landed yet; the
+                // buffered candidate PKs will be flushed to a main read once it does
+                // (DriveResolvedPhases). Don't finalize with an incomplete result.
+                return;
+            }
             CA_LOG_D("Posting/main done: candidateRows=" << Candidates.size() << " topK=" << TopK);
             FinalizeResults();
         }
@@ -1295,6 +1358,22 @@ private:
     TPartitioning::TCPtr PostingPartitioning;
     TPartitioning::TCPtr MainPartitioning;
     ui32 PendingResolves = 0;
+    // Per-table resolve readiness. Instead of one barrier waiting for all three
+    // resolves before the first read, each phase starts as soon as its own
+    // partitioning lands: level traversal on the level resolve alone, while the
+    // posting/main resolves finish in the background (their latency hidden behind
+    // the multi-round level traversal) and gate only their own later phases. See
+    // HandleResolvePartitioning / DriveResolvedPhases.
+    bool LevelResolved = false;
+    bool PostingResolved = false;
+    bool MainResolved = false;
+    // BeginTraversal has run (guards the level resolve from starting it twice via
+    // both the direct arrival and the all-responses-in safety net).
+    bool TraversalStarted = false;
+    // StartPosting was reached before the posting resolve landed and is waiting to
+    // resume once it does (only possible for a prefixed all-direct-posting search,
+    // which has no level traversal to cover the resolve).
+    bool PostingStartPending = false;
 
     TVector<NKikimrDataEvents::TLock> Locks;
 

@@ -25,6 +25,8 @@
 #include <yql/essentials/public/issue/yql_issue_message.h>
 #include <ydb/public/api/protos/ydb_monitoring.pb.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::VIEWER
+
 template<>
 void Out<std::vector<ui32>>(IOutputStream& o, const std::vector<ui32>& v) {
     for (size_t i = 0; i < v.size(); ++i) {
@@ -836,7 +838,8 @@ private:
         if (actor) {
             Register(actor);
         } else {
-            BLOG_ERROR("Unable to process EvViewerRequest");
+            YDB_LOG_ERROR("Unable to process EvViewerRequest",
+                {"logPrefix", GetLogPrefix()});
             Send(ev->Sender, new TEvViewer::TEvViewerResponse(), 0, ev->Cookie);
         }
     }

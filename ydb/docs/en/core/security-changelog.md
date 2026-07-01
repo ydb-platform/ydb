@@ -27,5 +27,3 @@ Credits: Sergey Foster.
 LDAP filter injection vulnerability allows an attacker with valid LDAP credentials to bypass group membership checks and gain unauthorized access to the database.
 
 Link to CVE: [https://www.cve.org/CVERecord?id=CVE-2026-10549](https://www.cve.org/CVERecord?id=CVE-2026-10549).
-
-Credits: TODO.

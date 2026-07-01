@@ -352,13 +352,23 @@ struct TMapRuleTestContext {
     TRBOContext RboCtx;
 };
 
+void AddPushRenameRulesForTest(TVector<std::unique_ptr<IRule>>& rules) {
+    rules.emplace_back(std::make_unique<TPushRenameIntoReadRule>());
+    rules.emplace_back(std::make_unique<TPushRenameIntoMapProducerRule>());
+    rules.emplace_back(std::make_unique<TPushRenameIntoAggregateResultRule>());
+    rules.emplace_back(std::make_unique<TPushMapElementsThroughUnaryRule>());
+    rules.emplace_back(std::make_unique<TPushMapElementsIntoMapRule>());
+    rules.emplace_back(std::make_unique<TPushMapElementsThroughAggregateRule>());
+    rules.emplace_back(std::make_unique<TPushMapElementsThroughJoinRule>());
+}
+
 void AddMapAliasRulesForTest(TVector<std::unique_ptr<IRule>>& rules) {
     rules.emplace_back(std::make_unique<TRemoveIdenityMapRule>());
     rules.emplace_back(std::make_unique<TPruneDeadMapElementsRule>());
     rules.emplace_back(std::make_unique<TRenameToAppendRule>());
     rules.emplace_back(std::make_unique<TPushAppendRule>());
     rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
-    rules.emplace_back(std::make_unique<TPushRenameRule>());
+    AddPushRenameRulesForTest(rules);
 }
 
 TVector<std::unique_ptr<IRule>> MakeMapAliasCleanupRulesForTest() {
@@ -3554,7 +3564,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(renameMap, pos, {"key", "total"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushRenameRule>());
+        AddPushRenameRulesForTest(rules);
         TRuleBasedStage pushRename("Focused push rename", std::move(rules));
         ComputeLogicalTestProps(root);
         pushRename.RunStage(root, testContext.RboCtx);
@@ -3600,7 +3610,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(sort, pos, {"alias_key", "sum_value"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushRenameRule>());
+        AddPushRenameRulesForTest(rules);
         TRuleBasedStage pushRename("Focused push rename", std::move(rules));
         ComputeLogicalTestProps(root);
         pushRename.RunStage(root, testContext.RboCtx);
@@ -3649,7 +3659,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(renameMap, pos, {"alias_key", "sum_value"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushRenameRule>());
+        AddPushRenameRulesForTest(rules);
         TRuleBasedStage pushRename("Focused push rename", std::move(rules));
         ComputeLogicalTestProps(root);
         pushRename.RunStage(root, testContext.RboCtx);
@@ -3885,7 +3895,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         filter->FilterExpr.PlanProps = &root.PlanProps;
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushRenameRule>());
+        AddPushRenameRulesForTest(rules);
         TRuleBasedStage pushRename("Focused push rename", std::move(rules));
         ComputeLogicalTestProps(root);
         pushRename.RunStage(root, testContext.RboCtx);
@@ -3940,7 +3950,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         subplanFilter->FilterExpr.PlanProps = &root.PlanProps;
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushRenameRule>());
+        AddPushRenameRulesForTest(rules);
         TRuleBasedStage pushRename("Focused push rename", std::move(rules));
         ComputeLogicalTestProps(root);
         pushRename.RunStage(root, testContext.RboCtx);
@@ -4010,7 +4020,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(renameMap, pos, {"l_a"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushRenameRule>());
+        AddPushRenameRulesForTest(rules);
         TRuleBasedStage pushRename("Focused push rename", std::move(rules));
         ComputeLogicalTestProps(root);
         pushRename.RunStage(root, testContext.RboCtx);
@@ -4235,7 +4245,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         TOpRoot root(renameMap, pos, {"l_a", "right_payload"});
 
         TVector<std::unique_ptr<IRule>> rules;
-        rules.emplace_back(std::make_unique<TPushRenameRule>());
+        AddPushRenameRulesForTest(rules);
         TRuleBasedStage pushRename("Focused push rename", std::move(rules));
         ComputeLogicalTestProps(root);
         pushRename.RunStage(root, testContext.RboCtx);
@@ -4276,7 +4286,7 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
 
         TVector<std::unique_ptr<IRule>> rules;
         rules.emplace_back(std::make_unique<TRewriteExpressionsToPreferredAliasesRule>());
-        rules.emplace_back(std::make_unique<TPushRenameRule>());
+        AddPushRenameRulesForTest(rules);
         TRuleBasedStage aliasRules("Focused alias rewrite", std::move(rules));
         ComputeLogicalTestProps(root);
         aliasRules.RunStage(root, testContext.RboCtx);

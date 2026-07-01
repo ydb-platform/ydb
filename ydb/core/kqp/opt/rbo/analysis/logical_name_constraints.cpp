@@ -386,14 +386,5 @@ const TInfoUnitConstraintSet& GetForbidden(
     return GetComputedNameConstraints(op).GetForbidden();
 }
 
-bool ContainsForbidden(const TVector<TInfoUnit>& output, const TInfoUnitConstraintSet& forbidden) {
-    for (const auto& iu : output) {
-        if (forbidden.contains(iu)) {
-            return true;
-        }
-    }
-    return false;
-}
-
 } // namespace NKqp
 } // namespace NKikimr

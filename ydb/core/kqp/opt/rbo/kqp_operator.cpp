@@ -368,16 +368,6 @@ TVector<std::reference_wrapper<TExpression>> TOpMap::GetExpressions() {
     return result;
 }
 
-TVector<std::reference_wrapper<TExpression>> TOpMap::GetComplexExpressions() {
-    TVector<std::reference_wrapper<TExpression>> result;
-    for (auto& mapElement : MapElements) {
-        if (!mapElement.IsRename()) {
-            result.push_back(mapElement.GetExpressionRef());
-        }
-    }
-    return result;
-}
-
 TVector<TInfoUnit> TOpMap::GetSubplanIUs(TPlanProps& props) {
     TVector<TInfoUnit> subplanIUs;
     TVector<TInfoUnit> res;

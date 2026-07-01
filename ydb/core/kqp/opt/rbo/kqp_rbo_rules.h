@@ -222,17 +222,6 @@ class TPushRenameIntoAggregateResultRule : public IRule {
 };
 
 /**
- * Compatibility wrapper for focused tests: applies one rename topology per rule firing.
- */
-class TPushRenameRule : public IRule {
-  public:
-    TPushRenameRule()
-        : IRule("Push semantic rename", ERuleProperties::RequireParents | ERuleProperties::RequireLiveness | ERuleProperties::RequireNameConstraints) {}
-
-    virtual bool MatchAndApply(TIntrusivePtr<IOperator>& input, TRBOContext& ctx, TPlanProps& props) override;
-};
-
-/**
  * Rewrites local expressions to the alias already preferred by liveness.
  */
 class TRewriteExpressionsToPreferredAliasesRule : public IRule {

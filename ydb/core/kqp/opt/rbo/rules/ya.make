@@ -20,7 +20,6 @@ SRCS(
     inline_generic_in_exists_subplan.cpp
     kqp_cbo_trees.cpp
     peephole_predicate.cpp
-    map/map_output_utils.cpp
     map/projection_pruning.cpp
     map/push_map_elements_into_map.cpp
     map/push_map_elements_through_aggregate.cpp
@@ -40,7 +39,6 @@ SRCS(
     map/push_rename_into_aggregate_result.cpp
     map/push_rename_into_map_producer.cpp
     map/push_rename_into_read.cpp
-    map/push_rename_wrapper.cpp
     map/rewrite_to_preferred_alias.cpp
     propagate_aggregate_through_stage.cpp
     propagate_hash_func_stage.cpp

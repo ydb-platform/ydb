@@ -243,13 +243,11 @@ std::optional<TReadMessage> TStorage::Next(TInstant deadline, TPosition& positio
         if (nextMessage.Message) {
             auto& unlockedList = MessageGroups.GetUnlockedMessageGroupsIdViewOrder();
             if (unlockedList.begin() != nextMessage.OrderIterator) [[unlikely]] {
-                if constexpr (0) {
-                    // rotate
-                    // move skipped messaged to the end of queue, so they won't be rechecked on the next iteration
-                    TIntrusiveList<TOrderedMessageGroupIdHash> cut;
-                    unlockedList.Cut(unlockedList.begin(), nextMessage.OrderIterator, cut.end());
-                    unlockedList.Append(std::move(cut));
-                }
+                // rotate
+                // move skipped messaged to the end of queue, so they won't be rechecked on the next iteration
+                TIntrusiveList<TOrderedMessageGroupIdHash> cut;
+                unlockedList.Cut(unlockedList.begin(), nextMessage.OrderIterator, cut.end());
+                unlockedList.Append(std::move(cut));
             }
             DoLock(nextMessage.Offset, *nextMessage.Message, deadline);
             return ConvertoToReadMessage(nextMessage.Offset, *nextMessage.Message);

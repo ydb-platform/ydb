@@ -82,7 +82,7 @@ to the cluster config; the fulltext test additionally enables
 ## Flamegraphs (optional)
 
 With `compare_flamegraph=1`, every workload run is profiled with Linux `perf`
-(`perf record --call-graph dwarf --pid <ydbd>`), and the profile is rendered with
+(`perf record --call-graph fp --pid <ydbd>`), and the profile is rendered with
 the toolkit in `contrib/tools/flame-graph` (shipped to the sandbox via `DATA`):
 
 - per-side, per-iteration CPU flamegraph: `<workload>_<side>_<i>.svg`

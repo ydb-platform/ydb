@@ -296,8 +296,12 @@ class TestCompareIndexPerformance:
         # under output_path — it is chowned back to us in _perf_stop.
         perf_data = yatest.common.work_path(svg_name + ".perf.data")
         perf_log = yatest.common.output_path(svg_name + ".perf.log")
+        # Use frame-pointer unwinding (fp) rather than DWARF: the build already
+        # passes -fno-omit-frame-pointer, so fp gives accurate call chains without
+        # invoking addr2line during `perf script` (DWARF unwinding calls addr2line
+        # for every sample frame, which is extremely slow on large captures).
         cmd = (["sudo"] if self.perf_sudo else []) + [
-            "perf", "record", "-F", str(self.perf_freq), "--call-graph", "dwarf",
+            "perf", "record", "-F", str(self.perf_freq), "--call-graph", "fp",
             "-g", "--proc-map-timeout=10000", "--pid", str(pid), "-o", perf_data,
         ]
         log = open(perf_log, "w")
@@ -396,8 +400,11 @@ class TestCompareIndexPerformance:
         # chowned back to us (see _perf_stop), so `perf script` needs no sudo.
         folded_file = yatest.common.work_path(svg_name + ".folded")
         svg_file = yatest.common.output_path(svg_name)
+        # --no-inline suppresses addr2line inline expansion, which is very slow
+        # on release binaries and would otherwise re-invoke addr2line per frame.
         self._run_pipeline(
-            [["perf", "script", "-i", perf["data"]], self._flame_script("stackcollapse-perf.pl")],
+            [["perf", "script", "--no-inline", "-i", perf["data"]],
+             self._flame_script("stackcollapse-perf.pl")],
             folded_file, perf["perf_log"], f"perf collapse for {svg_name}")
         self._run_pipeline(
             [["cat", folded_file], self._flame_script("flamegraph.pl")],

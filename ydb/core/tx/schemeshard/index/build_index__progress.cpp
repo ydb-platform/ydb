@@ -390,6 +390,69 @@ THolder<TEvSchemeShard::TEvModifySchemeTransaction> CreateBuildPropose(
         return propose;
     }
 
+    if (!buildInfo.KMeans.NeedsAnotherLevel()) {
+        const auto& kmeans = buildInfo.KMeans;
+        const auto count = kmeans.ChildCount();
+        NTableIndex::NKMeans::TClusterId splitStep = 1;
+        auto splitParts = count;
+        auto shards = tableInfo->GetPartitionStore().size();
+
+        if (count > 1 && shards > 1) {
+            // find the smallest power of 2 splitStep such that splitParts = ⌈count / splitStep⌉ <= min(2·shards, maxShardsInPath).
+            for (; splitParts > std::min<ui64>(maxShardsInPath, 2 * shards); splitParts = count / splitStep) {
+                splitStep *= 2;
+            }
+        } else {
+            splitParts = 1;
+        }
+
+        if (splitParts > 1) {
+            auto postingPath = GetBuildPath(ss, buildInfo, PostingTable);
+            const auto& postingTableInfo = ss->Tables.at(postingPath->PathId);
+
+            // ESchemeOpSplitMergeTablePartitions requires shard stats to be reported.
+            // Skip split if stats are not yet available (shard might be freshly created).
+            bool shardReady = true;
+            if (postingTableInfo->GetPartitions().size() == 1 && ss->SplitSettings.SplitMergePartCountLimit != -1) {
+                auto shardIdx = postingTableInfo->GetPartitions()[0]->ShardIdx;
+                const auto* stats = postingTableInfo->GetStats().PartitionStats.FindPtr(shardIdx);
+                if (!stats || stats->ShardState != NKikimrTxDataShard::Ready) {
+                    shardReady = false;
+                }
+            }
+
+            if (postingTableInfo->GetPartitions().size() == 1 && shardReady) {
+                propose->Record.SetFailOnExist(false);
+                modifyScheme.SetOperationType(NKikimrSchemeOp::ESchemeOpSplitMergeTablePartitions);
+                modifyScheme.SetWorkingDir(postingPath.Parent().PathString());
+
+                auto& split = *modifyScheme.MutableSplitMergeTablePartitions();
+                split.SetTablePath(postingPath.PathString());
+                split.SetSchemeshardId(ss->TabletID());
+
+                auto shardIdx = postingTableInfo->GetPartitions()[0]->ShardIdx;
+                split.AddSourceTabletId(ui64(ss->ShardInfos.at(shardIdx).TabletID));
+
+                static constexpr std::string_view LogPrefix = "Split PostingTable boundaries for ";
+                LOG_D(buildInfo.Id << " count: " << count << ", parts: " << splitParts << ", step: " << splitStep
+                    << ", " << buildInfo.DebugString());
+                const auto from = kmeans.ChildBegin;
+                for (auto i = from + splitStep, e = from + count; i < e; i += splitStep) {
+                    auto val = SetPostingParentFlag(i);
+                    LOG_D(buildInfo.Id << " PostingTable split value: " << val);
+                    auto cell = TCell::Make(val);
+                    split.AddSplitBoundary()->SetSerializedKeyPrefix(TSerializedCellVec::Serialize({&cell, 1}));
+                }
+
+                LOG_NOTICE_S((TlsActivationContext->AsActorContext()), NKikimrServices::BUILD_INDEX,
+                    "CreateBuildPropose SplitPostingTable " << buildInfo.Id << " " << buildInfo.State
+                    << " parts: " << splitParts);
+
+                return propose;
+            }
+        }
+    }
+
     op = NTableIndex::CalcVectorKmeansTreePostingImplTableDesc(tableInfo, tableInfo->PartitionConfig(), indexDataColumns, {}, suffix,
         buildInfo.KMeans.OverlapClusters > 1 && buildInfo.KMeans.Levels > 1);
     const auto [count, parts, step] = ComputeKMeansBoundaries(*tableInfo, buildInfo, maxShardsInPath);
@@ -1998,8 +2061,53 @@ private:
         return false;
     }
 
+    bool NeedsPostingTableSplit(const TIndexBuildInfo& buildInfo) const {
+        if (buildInfo.KMeans.NeedsAnotherLevel()) {
+            return false;
+        }
+        // For overlap builds at the last level, CreateBuildPropose creates an overlap build table
+        // rather than splitting PostingTable. The overlap path handles its own partitioning.
+        if (buildInfo.KMeans.OverlapClusters > 1 && buildInfo.KMeans.Levels > 1
+            && buildInfo.KMeans.State != TIndexBuildInfo::TKMeans::Filter) {
+            return false;
+        }
+        const auto& kmeans = buildInfo.KMeans;
+        const auto count = kmeans.ChildCount();
+        if (count <= 1) {
+            return false;
+        }
+        auto path = TPath::Init(buildInfo.TablePathId, Self);
+        const auto& tableInfo = Self->Tables.at(path->PathId);
+        if (tableInfo->GetPartitionStore().size() <= 1) {
+            return false;
+        }
+        auto postingPath = GetBuildPath(Self, buildInfo, NTableIndex::NKMeans::PostingTable);
+        const auto& postingTableInfo = Self->Tables.at(postingPath->PathId);
+        if (postingTableInfo->GetPartitions().size() != 1) {
+            return false;
+        }
+        // ESchemeOpSplitMergeTablePartitions requires shard stats to be reported.
+        // Skip split if stats are not yet available (shard might be freshly created).
+        if (Self->SplitSettings.SplitMergePartCountLimit != -1) {
+            auto shardIdx = postingTableInfo->GetPartitions()[0]->ShardIdx;
+            const auto* stats = postingTableInfo->GetStats().PartitionStats.FindPtr(shardIdx);
+            if (!stats || stats->ShardState != NKikimrTxDataShard::Ready) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool FillVectorIndex(TTransactionContext& txc, TIndexBuildInfo& buildInfo) {
         LOG_D("FillVectorIndex Start " << buildInfo.DebugString());
+
+        // At the last level, pre-split the PostingTable before filling.
+        // This handles the 1-level index case where CreateBuild is not entered from Initiating.
+        if (NeedsPostingTableSplit(buildInfo)) {
+            ChangeState(BuildId, TIndexBuildInfo::EState::CreateBuild);
+            Progress(BuildId);
+            return false;
+        }
 
         // (Sample -> Recompute* -> Reshuffle)* -> MultiLocal -> (Filter)? -> NextLevel
         if (buildInfo.KMeans.State == TIndexBuildInfo::TKMeans::Sample) {

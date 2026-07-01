@@ -4530,6 +4530,30 @@ Y_UNIT_TEST_SUITE(KqpRboYql) {
         UNIT_ASSERT_C(!map->MapElements.front().IsRename(), root.PlanToString(testContext.ExprCtx));
     }
 
+    Y_UNIT_TEST(RenameToAppendConvertsAllSafeRenamesInOneApply) {
+        TMapRuleTestContext testContext;
+        TPlanProps expressionProps;
+        const auto pos = NYql::TPositionHandle();
+
+        auto read = MakeTestRead({TInfoUnit("a"), TInfoUnit("b")}, pos);
+        auto map = MakeIntrusive<TOpMap>(read, pos, TVector<TMapElement>{
+            MakeTestRename("alias_a1", "a", pos, testContext.ExprCtx, expressionProps),
+            MakeTestRename("alias_a2", "a", pos, testContext.ExprCtx, expressionProps),
+            MakeTestRename("alias_b", "b", pos, testContext.ExprCtx, expressionProps),
+        });
+        TOpRoot root(map, pos, {"alias_a1", "alias_a2", "alias_b"});
+
+        ComputeLogicalTestProps(root);
+
+        auto input = root.GetInput();
+        TRenameToAppendRule renameToAppend;
+        UNIT_ASSERT_C(renameToAppend.MatchAndApply(input, testContext.RboCtx, root.PlanProps), root.PlanToString(testContext.ExprCtx));
+
+        for (const auto& mapElement : map->MapElements) {
+            UNIT_ASSERT_C(!mapElement.IsRename(), root.PlanToString(testContext.ExprCtx));
+        }
+    }
+
     Y_UNIT_TEST(RenameToAppendConvertsSafeRenameWithMultipleConsumers) {
         TMapRuleTestContext testContext;
         TPlanProps expressionProps;

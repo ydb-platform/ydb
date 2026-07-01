@@ -294,7 +294,7 @@ message TFeatureFlags {
     optional bool UseRealUserIpForBlackbox = 256 [default = false];
     optional bool EnableNodeShutdownHints = 257 [default = false];
     optional bool EnableTopicPartitionSplitBasedOnMessages = 258 [default = false];
-    optional bool ForbidDiscoveryInnerDbPaths = 259 [default = false];
+    reserved 259; // ForbidDiscoveryInnerDbPaths
     optional bool EnableStreamingQueryDisposition = 260 [default = true];
     // Skip persisting partition rows that are not affected by a split/merge operation.
     optional bool EnableSplitMergePartialPersistence = 261 [default = true];

@@ -19,6 +19,7 @@ SRCS(
 )
 
 PEERDIR(
+    contrib/libs/apache/arrow
     contrib/libs/fmt
     library/cpp/streams/zstd
     ydb/core/testlib/pg

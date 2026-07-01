@@ -15,6 +15,7 @@ INCLUDE(${ARCADIA_ROOT}/ydb/tests/supp/ubsan_supp.inc)
 
 IF (NOT OS_WINDOWS)
     PEERDIR(
+        contrib/libs/apache/arrow
         library/cpp/getopt
         library/cpp/regex/pcre
         library/cpp/svnversion

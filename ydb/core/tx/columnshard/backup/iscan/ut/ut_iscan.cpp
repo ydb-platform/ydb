@@ -1,3 +1,4 @@
+#include <ydb/core/protos/data_format_settings.pb.h>
 #include <ydb/core/protos/flat_scheme_op.pb.h>
 #include <ydb/core/protos/s3_settings.pb.h>
 #include <ydb/core/testlib/basics/runtime.h>
@@ -293,6 +294,28 @@ Y_UNIT_TEST_SUITE(IScan) {
         auto data = NTestUtils::GetObject("test2", "data_00.csv", s3Client);
         UNIT_ASSERT_VALUES_EQUAL(
             data, "\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n\"foo\",\"one\"\n\"bar\",\"two\"\n\"baz\",\"three\"\n");
+    }
+
+    Y_UNIT_TEST(ShouldRejectParquetExportWithEncryption) {
+        TRuntimePtr runtime(new TTestBasicRuntime(1, true));
+        SetupTabletServices(*runtime);
+        runtime->GetAppData().FeatureFlags.SetEnableParquetForExport(true);
+
+        NDataShard::IExport::TTableColumns columns;
+        columns[0] = NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::String), "", "key", true);
+        columns[1] = NDataShard::TUserTable::TUserColumn(NScheme::TTypeInfo(NScheme::NTypeIds::String), "", "value", false);
+
+        auto backupTask = MakeBackupTask("test");
+        backupTask.MutableS3Settings()->MutableExportDataSettings()->MutableParquet();
+        backupTask.MutableEncryptionSettings()->SetEncryptionAlgorithm("AES-256-GCM");
+
+        auto exportFactory = std::make_shared<TDataShardExportFactory>();
+        auto result = runtime->RunCall([&] {
+            return NColumnShard::NBackup::CreateIScanExportUploader(runtime->AllocateEdgeActor(), backupTask, exportFactory.get(), columns, 0);
+        });
+
+        UNIT_ASSERT(!result);
+        UNIT_ASSERT_STRING_CONTAINS(result.GetErrorMessage(), "Encryption is not supported for parquet files");
     }
 }
 

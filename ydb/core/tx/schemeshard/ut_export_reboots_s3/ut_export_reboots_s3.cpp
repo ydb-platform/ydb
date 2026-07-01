@@ -59,6 +59,34 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         return sb;
     }
 
+    // Parquet configuration helpers
+    TString MakeParquetSettings(const TString& extraSettings = "") {
+        TStringBuilder sb;
+        sb << "parquet { } ";
+        if (extraSettings) {
+            sb << extraSettings << " ";
+        }
+        return sb;
+    }
+
+    TString MakeParquetSettingsWithRowGroupSize(ui32 rowGroupSize, const TString& extraSettings = "") {
+        TStringBuilder sb;
+        sb << "parquet { row_group_size: " << rowGroupSize << " } ";
+        if (extraSettings) {
+            sb << extraSettings << " ";
+        }
+        return sb;
+    }
+
+    TString MakeParquetSettingsWithCompression(const TString& compression, const TString& extraSettings = "") {
+        TStringBuilder sb;
+        sb << "parquet { } compression: \"" << compression << "\" ";
+        if (extraSettings) {
+            sb << extraSettings << " ";
+        }
+        return sb;
+    }
+
     template <bool IsFs>
     struct TExportEnv {
         TMaybe<TPortManager> PortManager;
@@ -82,6 +110,9 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
         void SetupRuntime(TTestActorRuntime& runtime) {
             if constexpr (IsFs) {
                 runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+            }
+            if (Request.Contains("parquet")) {
+                runtime.GetAppData().FeatureFlags.SetEnableParquetForExport(true);
             }
         }
 
@@ -111,13 +142,23 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
     {
         t.GetTestEnvOptions() = opts;
 
+        TRuntimeSetup runtimeSetup;
+        if (extraSettings.Contains("parquet")) {
+            runtimeSetup = [](TTestActorRuntime& runtime) {
+                runtime.GetAppData().FeatureFlags.SetEnableParquetForExport(true);
+            };
+        }
+
         if (isFs) {
             TTempDir tempDir;
             TString request = Sprintf(
                 MakeFsRequestTemplate(items, extraSettings).c_str(),
                 tempDir.Path().c_str());
-            func(schemeObjects, request, t, [](TTestActorRuntime& runtime) {
+            func(schemeObjects, request, t, [runtimeSetup](TTestActorRuntime& runtime) {
                 runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+                if (runtimeSetup) {
+                    runtimeSetup(runtime);
+                }
             });
         } else {
             TPortManager portManager;
@@ -126,7 +167,7 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
             UNIT_ASSERT(s3Mock.Start());
             TString request = Sprintf(
                 MakeS3RequestTemplate(items, extraSettings).c_str(), port);
-            func(schemeObjects, request, t, {});
+            func(schemeObjects, request, t, runtimeSetup);
         }
     }
 
@@ -1009,5 +1050,178 @@ Y_UNIT_TEST_SUITE(TExportToS3WithRebootsTests) {
                 TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
             }
         });
+    }
+
+    // Parquet Export Tests
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnSingleShardTableWithParquet, 2, 1, false) {
+        RunExport<false>(t, {
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, {{"/MyRoot/Table", ""}}, TTestWithReboots::GetDefaultTestEnvOptions(), MakeParquetSettings());
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnMultiShardTableWithParquet, 2, 1, false) {
+        RunExport<false>(t, {
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Uint32" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+                UniformPartitionsCount: 2
+            )",
+        }, {{"/MyRoot/Table", ""}}, TTestWithReboots::GetDefaultTestEnvOptions(), MakeParquetSettings());
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnManyTablesWithParquet, 2, 1, false) {
+        RunExport<false>(t, {
+            R"(
+                Name: "Table1"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+            R"(
+                Name: "Table2"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, {{"/MyRoot/Table1", "table1"}, {"/MyRoot/Table2", "table2"}}, TTestWithReboots::GetDefaultTestEnvOptions(), MakeParquetSettings());
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnViewsAndTablesWithParquet, 2, 1, false) {
+        RunExport<false>(t, {
+            {
+                EPathTypeView,
+                R"(
+                    Name: "View"
+                    QueryText: "some query"
+                )"
+            }, {
+                EPathTypeTable,
+                R"(
+                    Name: "Table"
+                    Columns { Name: "key" Type: "Utf8" }
+                    Columns { Name: "value" Type: "Utf8" }
+                    KeyColumnNames: ["key"]
+                )"
+            }
+        }, {{"/MyRoot/View", "view"}, {"/MyRoot/Table", "table"}}, TTestWithReboots::GetDefaultTestEnvOptions(), MakeParquetSettings());
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnParquetWithSmallRowGroup, 2, 1, false) {
+        RunExport<false>(t, {
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, {{"/MyRoot/Table", ""}},
+        TTestWithReboots::GetDefaultTestEnvOptions(),
+        MakeParquetSettingsWithRowGroupSize(100));
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnParquetWithLargeRowGroup, 2, 1, false) {
+        RunExport<false>(t, {
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, {{"/MyRoot/Table", ""}},
+        TTestWithReboots::GetDefaultTestEnvOptions(),
+        MakeParquetSettingsWithRowGroupSize(10000));
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnParquetWithZstdCompression, 2, 1, false) {
+        RunExport<false>(t, {
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, {{"/MyRoot/Table", ""}},
+        TTestWithReboots::GetDefaultTestEnvOptions(),
+        MakeParquetSettingsWithCompression("zstd"));
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldCreateParquetFiles, 2, 1, false) {
+        TExportEnv<false> env({{"/MyRoot/Table", ""}}, MakeParquetSettings());
+
+        t.Run([&](TTestActorRuntime& runtime, bool& activeZone) {
+            env.SetupRuntime(runtime);
+            runtime.SetLogPriority(NKikimrServices::EXPORT, NActors::NLog::PRI_TRACE);
+            {
+                TInactiveZone inactive(activeZone);
+                CreateSchemeObjects(t, runtime, {
+                    R"(
+                        Name: "Table"
+                        Columns { Name: "key" Type: "Utf8" }
+                        Columns { Name: "value" Type: "Utf8" }
+                        KeyColumnNames: ["key"]
+                    )",
+                });
+
+                TestExport(runtime, ++t.TxId, "/MyRoot", env.Request);
+            }
+
+            const ui64 exportId = t.TxId;
+            t.TestEnv->TestWaitNotification(runtime, exportId);
+
+            {
+                TInactiveZone inactive(activeZone);
+                // Verify that Parquet files were created
+                UNIT_ASSERT(env.HasFile("/data_00.parquet"));
+
+                TestGetExport(runtime, exportId, "/MyRoot");
+                TestForgetExport(runtime, ++t.TxId, "/MyRoot", exportId);
+                t.TestEnv->TestWaitNotification(runtime, exportId);
+                TestGetExport(runtime, exportId, "/MyRoot", Ydb::StatusIds::NOT_FOUND);
+            }
+        });
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ShouldSucceedOnParquetWithComplexTypes, 2, 1, false) {
+        RunExport<false>(t, {
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                Columns { Name: "int_value" Type: "Int32" }
+                Columns { Name: "double_value" Type: "Double" }
+                Columns { Name: "bool_value" Type: "Bool" }
+                Columns { Name: "timestamp_value" Type: "Timestamp" }
+                KeyColumnNames: ["key"]
+            )",
+        }, {{"/MyRoot/Table", ""}}, TTestWithReboots::GetDefaultTestEnvOptions(), MakeParquetSettings());
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(CancelShouldSucceedOnSingleShardTableWithParquet, 2, 1, false) {
+        CancelExport<false>(t, {
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, {{"/MyRoot/Table", ""}}, TTestWithReboots::GetDefaultTestEnvOptions(), MakeParquetSettings());
+    }
+
+    Y_UNIT_TEST_WITH_REBOOTS_BUCKETS(ForgetShouldSucceedOnSingleShardTableWithParquet, 2, 1, false) {
+        ForgetExport<false>(t, {
+            R"(
+                Name: "Table"
+                Columns { Name: "key" Type: "Utf8" }
+                Columns { Name: "value" Type: "Utf8" }
+                KeyColumnNames: ["key"]
+            )",
+        }, {{"/MyRoot/Table", ""}}, TTestWithReboots::GetDefaultTestEnvOptions(), MakeParquetSettings());
     }
 }

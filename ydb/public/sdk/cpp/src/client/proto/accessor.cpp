@@ -164,4 +164,16 @@ NImport::EIndexPopulationMode TProtoAccessor::FromProto(Ydb::Import::ImportFromS
     }
 }
 
+NExport::TYdbDumpFormat TProtoAccessor::FromProto(Ydb::Export::YdbDumpFormat) {
+    return NExport::TYdbDumpFormat();
+}
+
+NExport::TParquetFormat TProtoAccessor::FromProto(Ydb::Export::ParquetFormat value) {
+    NExport::TParquetFormat result;
+    if (value.row_group_size()) {
+        result.RowGroupSize(value.row_group_size());
+    }
+    return result;
+}
+
 } // namespace NYdb

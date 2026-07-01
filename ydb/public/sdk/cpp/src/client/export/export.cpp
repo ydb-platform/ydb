@@ -15,6 +15,8 @@
 
 #include <util/stream/str.h>
 
+#include <variant>
+
 namespace NYdb::inline Dev {
 namespace NExport {
 
@@ -27,6 +29,10 @@ const std::string TEncryptionAlgorithm::CHACHA_20_POLY_1305 = "ChaCha20-Poly1305
 
 /// Common
 namespace {
+
+// helper type for the visitor
+template <typename... Ts>
+struct overloads : Ts... { using Ts::operator()...; };
 
 std::vector<TExportItemProgress> ItemsProgressFromProto(const google::protobuf::RepeatedPtrField<ExportItemProgress>& proto) {
     std::vector<TExportItemProgress> result;
@@ -99,6 +105,16 @@ TExportToS3Response::TExportToS3Response(TStatus&& status, Ydb::Operations::Oper
 
     if (!metadata.settings().compression().empty()) {
         Metadata_.Settings.Compression(metadata.settings().compression());
+    }
+
+    switch (metadata.settings().format_case()) {
+    case Ydb::Export::ExportToS3Settings::FORMAT_NOT_SET:
+    case Ydb::Export::ExportToS3Settings::kYdbDump:
+        Metadata_.Settings.Format(TProtoAccessor::FromProto(metadata.settings().ydb_dump()));
+        break;
+    case Ydb::Export::ExportToS3Settings::kParquet:
+        Metadata_.Settings.Format(TProtoAccessor::FromProto(metadata.settings().parquet()));
+        break;
     }
 
     // progress
@@ -225,6 +241,17 @@ TFuture<TExportToS3Response> TExportClient::ExportToS3(const TExportToS3Settings
     request.mutable_settings()->set_bucket(TStringType{settings.Bucket_});
     request.mutable_settings()->set_access_key(TStringType{settings.AccessKey_});
     request.mutable_settings()->set_secret_key(TStringType{settings.SecretKey_});
+
+    // Set format based on the Format_ field
+    std::visit(overloads{
+        [&request](const TYdbDumpFormat&) {
+            request.mutable_settings()->mutable_ydb_dump();
+        },
+        [&request](const TParquetFormat& format) {
+            auto parquet = request.mutable_settings()->mutable_parquet();
+            parquet->set_row_group_size(format.RowGroupSize_);
+        }
+    }, settings.Format_);
 
     for (const auto& item : settings.Item_) {
         auto& protoItem = *request.mutable_settings()->mutable_items()->Add();

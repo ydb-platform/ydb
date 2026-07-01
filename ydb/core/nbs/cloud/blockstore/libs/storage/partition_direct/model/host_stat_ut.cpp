@@ -17,7 +17,7 @@ Y_UNIT_TEST_SUITE(THostStatTest)
         auto errorsInfo = stat.GetErrorsInfo(now);
         UNIT_ASSERT_VALUES_EQUAL(TDuration(), errorsInfo.FromFirstError);
         UNIT_ASSERT_VALUES_EQUAL(TDuration(), errorsInfo.FromLastError);
-        UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ErrorCount);
+        UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveErrorCount);
 
         stat.OnRequest(EOperation::WriteToPBuffer);
         stat.OnSuccess(
@@ -27,7 +27,7 @@ Y_UNIT_TEST_SUITE(THostStatTest)
         errorsInfo = stat.GetErrorsInfo(now + TDuration::Seconds(1));
         UNIT_ASSERT_VALUES_EQUAL(TDuration(), errorsInfo.FromFirstError);
         UNIT_ASSERT_VALUES_EQUAL(TDuration(), errorsInfo.FromLastError);
-        UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ErrorCount);
+        UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveErrorCount);
     }
 
     Y_UNIT_TEST(InflightTracking)
@@ -102,7 +102,7 @@ Y_UNIT_TEST_SUITE(THostStatTest)
         UNIT_ASSERT_VALUES_EQUAL(
             TDuration::Seconds(1),
             errorsInfo.FromLastError);
-        UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ErrorCount);
+        UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ConsecutiveErrorCount);
 
         now += TDuration::Seconds(1);
         stat.OnRequest(EOperation::WriteToPBuffer);
@@ -114,7 +114,7 @@ Y_UNIT_TEST_SUITE(THostStatTest)
         UNIT_ASSERT_VALUES_EQUAL(
             TDuration::Seconds(0),
             errorsInfo.FromLastError);
-        UNIT_ASSERT_VALUES_EQUAL(2, errorsInfo.ErrorCount);
+        UNIT_ASSERT_VALUES_EQUAL(2, errorsInfo.ConsecutiveErrorCount);
 
         now += TDuration::Seconds(1);
         errorsInfo = stat.GetErrorsInfo(now);
@@ -124,7 +124,7 @@ Y_UNIT_TEST_SUITE(THostStatTest)
         UNIT_ASSERT_VALUES_EQUAL(
             TDuration::Seconds(1),
             errorsInfo.FromLastError);
-        UNIT_ASSERT_VALUES_EQUAL(2, errorsInfo.ErrorCount);
+        UNIT_ASSERT_VALUES_EQUAL(2, errorsInfo.ConsecutiveErrorCount);
     }
 
     Y_UNIT_TEST(ResetErrorsOnSuccess)
@@ -149,7 +149,7 @@ Y_UNIT_TEST_SUITE(THostStatTest)
         UNIT_ASSERT_VALUES_EQUAL(
             TDuration::Seconds(1),
             errorsInfo.FromLastError);
-        UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ErrorCount);
+        UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ConsecutiveErrorCount);
 
         now += TDuration::Seconds(1);
         stat.OnRequest(EOperation::WriteToPBuffer);
@@ -161,7 +161,7 @@ Y_UNIT_TEST_SUITE(THostStatTest)
         UNIT_ASSERT_VALUES_EQUAL(
             TDuration::Seconds(0),
             errorsInfo.FromLastError);
-        UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ErrorCount);
+        UNIT_ASSERT_VALUES_EQUAL(0, errorsInfo.ConsecutiveErrorCount);
     }
 
     Y_UNIT_TEST(DontUpdateStatOnCancelled)
@@ -187,7 +187,7 @@ Y_UNIT_TEST_SUITE(THostStatTest)
         UNIT_ASSERT_VALUES_EQUAL(
             TDuration::Seconds(3),
             errorsInfo.FromLastError);
-        UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ErrorCount);
+        UNIT_ASSERT_VALUES_EQUAL(1, errorsInfo.ConsecutiveErrorCount);
     }
 
     Y_UNIT_TEST(SuccessCountInitiallyZero)

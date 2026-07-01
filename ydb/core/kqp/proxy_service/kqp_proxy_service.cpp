@@ -60,6 +60,7 @@
 #include <ydb/library/yql/dq/actors/spilling/spilling_file.h>
 #include <ydb/library/yql/dq/actors/spilling/spilling.h>
 #include <ydb/library/yql/providers/common/http_gateway/yql_http_gateway.h>
+#include <ydb/library/yql/providers/common/token_accessor/client/caching_iam_credentials_provider_service.h>
 #include <ydb/library/yql/utils/actor_log/log.h>
 #include <ydb/public/sdk/cpp/src/library/operation_id/protos/operation_id.pb.h>
 
@@ -405,6 +406,7 @@ public:
         InitSharedReading();
         InitCheckpointStorage();
         InitDescribeResourceIdService();
+        InitCachingIamServiceProvider();
 
         Become(&TKqpProxyService::MainState);
         StartCollectPeerProxyData();
@@ -516,6 +518,9 @@ public:
         if (DescribeResourceIdService) {
             Send(DescribeResourceIdService, new TEvents::TEvPoison());
         }
+        if (CachingIamCredentialsService) {
+            Send(CachingIamCredentialsService, new TEvents::TEvPoison());
+        }
 
         LocalSessions->ForEachNode([this](TNodeId node) {
             Send(TActivationContext::InterconnectProxy(node), new TEvents::TEvUnsubscribe);
@@ -564,12 +569,13 @@ public:
         }
 
         RebuildSharedServiceConfigs();
-
-        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
-        Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
         InitSharedReading();
         InitCheckpointStorage();
         InitDescribeResourceIdService();
+        InitCachingIamServiceProvider();
+
+        auto responseEv = MakeHolder<NConsole::TEvConsole::TEvConfigNotificationResponse>(event);
+        Send(ev->Sender, responseEv.Release(), IEventHandle::FlagTrackDelivery, ev->Cookie);
     }
 
     void Handle(TEvents::TEvUndelivered::TPtr& ev) {
@@ -2010,6 +2016,16 @@ private:
             MakeKqpDescribeResourceIdServiceId(), DescribeResourceIdService);
     }
 
+    void InitCachingIamServiceProvider() {
+        if (!FederatedQuerySetup || CachingIamCredentialsService) {
+            return;
+        }
+        auto actor = NewCachingIamServiceCredentialsProviderService();
+        CachingIamCredentialsService = TActivationContext::Register(actor.release());
+        TActivationContext::ActorSystem()->RegisterLocalService(
+            NYql::MakeCachingIamServiceCredentialsProviderServiceId(), CachingIamCredentialsService);
+    }
+
 private:
     NKikimrConfig::TLogConfig LogConfig;
     NKikimrConfig::TTableServiceConfig TableServiceConfig;
@@ -2071,6 +2087,7 @@ private:
     TActorId RowDispatcherService;
     TActorId CheckpointStorageService;
     TActorId DescribeResourceIdService;
+    TActorId CachingIamCredentialsService;
     NYql::NDq::IDqAsyncIoFactory::TPtr AsyncIoFactory;
 
     enum class EScriptExecutionsCreationStatus {

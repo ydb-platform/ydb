@@ -20,27 +20,22 @@
 
 #ifndef KIKIMR_DISABLE_S3_OPS
 
+#include "export_parquet_ut_enums.h"
+
 namespace NKikimr::NDataShard {
 
 namespace {
 
-    using TSettingsCase = NKikimrSchemeOp::TBackupTask::SettingsCase;
-
-    bool IsParquetExportSettingsCase(TSettingsCase settings) {
-        return settings == NKikimrSchemeOp::TBackupTask::kS3Settings
-            || settings == NKikimrSchemeOp::TBackupTask::kFSSettings;
-    }
-
-    void ConfigureParquetBackupTask(NKikimrSchemeOp::TBackupTask& task, TSettingsCase settings, ui32 rowGroupSize) {
+    void ConfigureParquetBackupTask(NKikimrSchemeOp::TBackupTask& task, EParquetExportSettings settings, ui32 rowGroupSize) {
         switch (settings) {
-        case NKikimrSchemeOp::TBackupTask::kFSSettings: {
+        case EParquetExportSettings::FS: {
             auto& fs = *task.MutableFSSettings();
             fs.SetBasePath("/tmp/exports");
             fs.SetPath("backup");
             fs.MutableExportDataSettings()->MutableParquet()->SetRowGroupSize(rowGroupSize);
             break;
         }
-        case NKikimrSchemeOp::TBackupTask::kS3Settings: {
+        case EParquetExportSettings::S3: {
             auto& s3 = *task.MutableS3Settings();
             s3.SetEndpoint("localhost");
             s3.SetBucket("test-bucket");
@@ -48,8 +43,6 @@ namespace {
             s3.MutableExportDataSettings()->MutableParquet()->SetRowGroupSize(rowGroupSize);
             break;
         }
-        default:
-            Y_ENSURE(false, "Unexpected settings case");
         }
     }
 
@@ -95,7 +88,7 @@ namespace {
 
     // Builds a Parquet backup task (FS or S3), runs TS3Export::CreateBuffer(), feeds the rows
     // and returns the produced (single) data file bytes.
-    TString ExportRowsToParquet(TSettingsCase settings, const TVector<std::pair<ui32, TString>>& rows, ui32 rowGroupSize) {
+    TString ExportRowsToParquet(EParquetExportSettings settings, const TVector<std::pair<ui32, TString>>& rows, ui32 rowGroupSize) {
         TTestActorRuntime runtime;
         runtime.Initialize(TAppPrepare().Unwrap());
 
@@ -144,11 +137,8 @@ namespace {
 Y_UNIT_TEST_SUITE(ExportParquetTest) {
     // The Parquet code path in TS3Export::CreateBuffer() (DataFormatFromTask /
     // ParquetExportSettingsFromTask reading S3/FS settings) must produce a valid Parquet file.
-    Y_UNIT_TEST(ShouldProduceValidParquet, TSettingsCase) {
+    Y_UNIT_TEST(ShouldProduceValidParquet, EParquetExportSettings) {
         const auto settings = Arg<0>();
-        if (!IsParquetExportSettingsCase(settings)) {
-            return;
-        }
 
         const TVector<std::pair<ui32, TString>> rows = {
             {1, "valueA"},
@@ -181,11 +171,8 @@ Y_UNIT_TEST_SUITE(ExportParquetTest) {
 
     // A small row group size forces multiple Parquet row groups; the file must still
     // round-trip every row correctly.
-    Y_UNIT_TEST(ShouldProduceValidParquetWithSmallRowGroup, TSettingsCase) {
+    Y_UNIT_TEST(ShouldProduceValidParquetWithSmallRowGroup, EParquetExportSettings) {
         const auto settings = Arg<0>();
-        if (!IsParquetExportSettingsCase(settings)) {
-            return;
-        }
 
         TVector<std::pair<ui32, TString>> rows;
         for (ui32 i = 0; i < 50; ++i) {

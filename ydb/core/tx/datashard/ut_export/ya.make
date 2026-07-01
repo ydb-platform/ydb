@@ -14,6 +14,6 @@ SRCS(
 )
 
 GENERATE_ENUM_SERIALIZATION(ydb/core/tx/datashard/backup_restore_traits.h)
-GENERATE_ENUM_SERIALIZATION(ydb/core/protos/flat_scheme_op.pb.h)
+GENERATE_ENUM_SERIALIZATION(ydb/core/tx/datashard/ut_export/export_parquet_ut_enums.h)
 
 END()

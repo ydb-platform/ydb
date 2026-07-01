@@ -278,7 +278,6 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             "/MyRoot",
             "skip",
             {"skip"},
-            "",
             true);
 
         Cerr << "SET COLUMN CONSTRAINT RESPONSE: " << response.ShortDebugString() << Endl;
@@ -1281,8 +1280,7 @@ Y_UNIT_TEST_SUITE(SetNotNullTest) {
             root,
             tablePath,
             {"value"},
-            "someuser@some_suffix",
-            false);
+            "someuser@some_suffix");
         UNIT_ASSERT_VALUES_EQUAL(createResponse.GetStatus(), Ydb::StatusIds::SUCCESS);
 
 

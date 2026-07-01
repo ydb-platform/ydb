@@ -11,6 +11,8 @@ namespace NKikimr::NPQ::NDeferredPublish {
 
 namespace {
 
+constexpr ui32 MaxPendingBeginPublicationRequests = 100;
+
 struct TPendingBeginPublication {
     TString Database;
     TString ExtPublicationId;
@@ -51,22 +53,14 @@ public:
                     request.CreatedBy, ev->Sender);
                 return;
             case ETablesStatus::Pending:
-                state.PendingRequests.emplace_back(TPendingBeginPublication{
-                    .Database = request.Database,
-                    .ExtPublicationId = request.ExtPublicationId,
-                    .WriterIdentity = request.WriterIdentity,
-                    .CreatedBy = request.CreatedBy,
-                    .ReplyTo = ev->Sender,
-                });
+                if (!TryEnqueuePendingBeginPublication(state, request, ev->Sender)) {
+                    return;
+                }
                 return;
             case ETablesStatus::NotReady:
-                state.PendingRequests.emplace_back(TPendingBeginPublication{
-                    .Database = request.Database,
-                    .ExtPublicationId = request.ExtPublicationId,
-                    .WriterIdentity = request.WriterIdentity,
-                    .CreatedBy = request.CreatedBy,
-                    .ReplyTo = ev->Sender,
-                });
+                if (!TryEnqueuePendingBeginPublication(state, request, ev->Sender)) {
+                    return;
+                }
                 state.TablesStatus = ETablesStatus::Pending;
                 Register(CreateDeferredPublishTablesCreator(request.Database));
                 return;
@@ -155,6 +149,38 @@ public:
     }
 
 private:
+    bool TryEnqueuePendingBeginPublication(
+        TDatabaseState& state,
+        const TEvBeginPublicationRequest& request,
+        const NActors::TActorId& replyTo)
+    {
+        if (state.PendingRequests.size() >= MaxPendingBeginPublicationRequests) {
+            ReplyOverloaded(replyTo);
+            return false;
+        }
+
+        state.PendingRequests.emplace_back(TPendingBeginPublication{
+            .Database = request.Database,
+            .ExtPublicationId = request.ExtPublicationId,
+            .WriterIdentity = request.WriterIdentity,
+            .CreatedBy = request.CreatedBy,
+            .ReplyTo = replyTo,
+        });
+        return true;
+    }
+
+    void ReplyOverloaded(const NActors::TActorId& replyTo) {
+        NYql::TIssues issues;
+        issues.AddIssue(TStringBuilder()
+            << "Deferred publish registry pending queue is full (limit "
+            << MaxPendingBeginPublicationRequests << ")");
+
+        auto* response = new TEvBeginPublicationResponse;
+        response->Status = Ydb::StatusIds::OVERLOADED;
+        response->Issues = issues;
+        Send(replyTo, response);
+    }
+
     void ReplyAborted(const NActors::TActorId& replyTo) {
         NYql::TIssues issues;
         issues.AddIssue("Deferred publish registry is shutting down");

@@ -476,6 +476,7 @@ Y_UNIT_TEST_SUITE(TImportFromFsTests) {
         TTestEnv env(runtime);
         ui64 txId = 100;
         runtime.GetAppData().FeatureFlags.SetEnableFsBackups(true);
+        runtime.GetAppData().FeatureFlags.SetEnableExportFiltering(true);
         runtime.GetAppData().FeatureFlags.SetEnableEncryptedExport(encrypted);
         runtime.SetLogPriority(NKikimrServices::TX_DATASHARD, NActors::NLog::PRI_TRACE);
         runtime.SetLogPriority(NKikimrServices::DATASHARD_BACKUP, NActors::NLog::PRI_TRACE);

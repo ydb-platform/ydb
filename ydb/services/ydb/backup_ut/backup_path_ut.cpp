@@ -920,6 +920,7 @@ void FilterByPathFailsWhenNoSchemaMappingImpl(TBackupTestFixture& f, bool /*isOl
     const TString prefixRaw = traits.FilePrefixRaw();
     f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
     if constexpr (std::is_same_v<TExportSettings, NExport::TExportToFsSettings>) {
+        f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableExportFiltering(false);
         f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableEncryptedExport(false);
     }
     {
@@ -1096,6 +1097,7 @@ void ExportRecursiveWithoutDestinationPrefixImpl(TBackupTestFixture& f, bool isO
     const TString importPrefix = traits.ImportSrcPrefix();
     f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableFsBackups(true);
     if constexpr (std::is_same_v<TExportSettings, NExport::TExportToFsSettings>) {
+        f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableExportFiltering(false);
         f.Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableEncryptedExport(false);
     }
 

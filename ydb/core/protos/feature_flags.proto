@@ -205,6 +205,7 @@ message TFeatureFlags {
     optional bool EnableLoginCache = 178 [default = false];
     optional bool SwitchToConfigV2 = 179 [default = false];
     optional bool SwitchToConfigV1 = 180 [default = false];
+    // Implies EnableExportFiltering.
     optional bool EnableEncryptedExport = 181 [default = false];
     optional bool EnableAlterDatabase = 182 [default = false];
     optional bool EnableExportAutoDropping = 183 [default = true];
@@ -325,4 +326,6 @@ message TFeatureFlags {
     optional bool EnableAccessServiceV2Interface = 283 [default = true, (RequireRestart) = true];
     optional bool EnableAnalyzeLongRunningOperation = 284 [default = true];
     optional bool EnableTopicRetentionDeleteLastBlob = 285 [default = false];
+    // Enables include/exclude and path-based export/import API (source_path, prefixes, SchemaMapping).
+    optional bool EnableExportFiltering = 286 [default = false];
 }

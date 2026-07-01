@@ -1654,7 +1654,7 @@ message TImmediateControlsConfig {
             Description: "Allow cutting large TEvLocalSyncLogData messages into smaller chunks",
             MinValue: 0,
             MaxValue: 1,
-            DefaultValue: 0 }];
+            DefaultValue: 1 }];
         optional uint64 EnableSyncLogChunkCompressionHDD = 2 [(ControlOptions) = {
             Description: "Compress SyncLog chunks before writing to log, setting for HDD",
             MinValue: 0,

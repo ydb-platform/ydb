@@ -53,7 +53,7 @@ Y_UNIT_TEST_SUITE(VDiskAssimilation) {
                 const bool hard = RandomNumber(2u);
                 SendToBSProxy(edge, info->GroupID, new TEvBlobStorage::TEvCollectGarbage(tabletId, recordGen,
                     recordGenCounter, channel, true, collectGen, collectStep, nullptr, nullptr, TInstant::Max(),
-                    false, hard));
+                    false, TWriteSource::Unknown, hard));
 
                 auto& x = barriers[std::make_pair(tabletId, channel)];
                 (hard ? x.first : x.second) = {recordGen, recordGenCounter, collectGen, collectStep};

@@ -2017,14 +2017,16 @@ TString TPath::GetEffectiveACL() const {
         if (element->CachedEffectiveACLVersion != version || !element->CachedEffectiveACL) {  // path needs actualizing
             if (item == Elements.begin()) { // it is root
                 if (!SS->IsDomainSchemeShard) {
-                    element->CachedEffectiveACL.Update(SS->ParentDomainCachedEffectiveACL, element->ACL, element->IsContainer());
+                    element->CachedEffectiveACL.Update(SS->ParentDomainCachedEffectiveACL,
+                        element->ACL, element->IsContainer(), /*isTenantRoot*/ true);
                 } else {
                     element->CachedEffectiveACL.Init(element->ACL);
                 }
             } else { // path element in the middle
                 auto prevIt = std::prev(item);
                 const auto& prevElement = *prevIt;
-                element->CachedEffectiveACL.Update(prevElement->CachedEffectiveACL, element->ACL, element->IsContainer());
+                element->CachedEffectiveACL.Update(prevElement->CachedEffectiveACL,
+                    element->ACL, element->IsContainer(), /*isTenantRoot*/ element->IsExternalSubDomainRoot());
             }
             element->CachedEffectiveACLVersion = version;
         }

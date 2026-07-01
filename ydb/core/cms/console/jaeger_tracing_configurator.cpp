@@ -5,7 +5,7 @@
 
 #include <ydb/core/jaeger_tracing/sampling_throttling_configurator.h>
 #include <ydb/core/jaeger_tracing/settings.h>
-#include <ydb/library/actors/core/actor.h>
+#include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/wilson_ids/wilson.h>
 
 namespace NKikimr::NConsole {

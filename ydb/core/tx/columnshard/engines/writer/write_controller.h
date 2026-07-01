@@ -3,6 +3,8 @@
 #include "blob_constructor.h"
 #include "put_status.h"
 
+#include <ydb/core/base/blobstorage.h>
+
 #include <ydb/core/tx/columnshard/blobs_action/abstract/write.h>
 #include <ydb/core/tx/columnshard/defs.h>
 

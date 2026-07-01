@@ -22,6 +22,8 @@
 
 #include <random>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::YQL_NODES_MANAGER
+
 
 namespace NFq {
 
@@ -69,16 +71,16 @@ public:
     static constexpr char ActorName[] = "YQ_NODES_MANAGER";
 
     void PassAway() final {
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER,
-            "PassAway, InstanceId: " << InstanceId);
+        YDB_LOG_INFO("PassAway",
+            {"instanceId", InstanceId});
         NActors::IActor::PassAway();
     }
 
     void Bootstrap() {
         Become(&TNodesManagerActor::StateFunc);
         ServiceCounters.Counters->GetCounter("EvBootstrap", true)->Inc();
-        LOG_INFO_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER,
-            "Bootstrap, InstanceId: " << InstanceId);
+        YDB_LOG_INFO("Bootstrap",
+            {"instanceId", InstanceId});
         ResolveSelfAddress();
     }
 
@@ -115,8 +117,8 @@ private:
                 error.SetMessage(TStringBuilder{} << "Error choosing scheduler. Invalid settings: " << scheduler << ", error: " << CurrentExceptionMessage());
             }
         }
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER,
-            "TEvAllocateWorkersResponse " << response->Record.DebugString());
+        YDB_LOG_DEBUG("TEvAllocateWorkersResponse",
+            {"response", response->Record.DebugString()});
 
         Send(ev->Sender, response.Release());
     }
@@ -223,7 +225,7 @@ private:
             nodeFilter.insert(nodeIdProto.begin(), nodeIdProto.end());
         }
         TPeer node = {SelfId().NodeId(), InstanceId + "," + HostName(), 0, 0, 0, DataCenter};
-        
+
         if (!Peers.empty()) {
             for (ui32 i = 0; i < Peers.size(); ++i) {
                 auto nextNode = Peers[SingleNodeScheduler.NodeOrder[NextPeer]];
@@ -284,21 +286,20 @@ private:
             Address = NAddr::PrintHost(*ev->Get()->Address);
             NodesHealthCheck();
         } else {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER,
-                "TNodesManagerActor::TEvAddressInfo: empty Address");
+            YDB_LOG_ERROR("TNodesManagerActor::TEvAddressInfo: empty Address");
             ResolveSelfAddress();
         }
     }
 
     void Handle(NActors::TEvResolveError::TPtr& ev) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER,
-            "TNodesManagerActor::TEvResolveError: " << ev->Get()->Explain << ", Host: " << ev->Get()->Host);
+        YDB_LOG_ERROR("TNodesManagerActor::TEvResolveError",
+            {"ev", ev->Get()->Explain},
+            {"host", ev->Get()->Host});
         ResolveSelfAddress();
     }
 
     void Handle(NFq::TEvNodesManager::TEvGetNodesRequest::TPtr& ev) {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER,
-            "Received TNodesManagerActor::TEvGetNodesRequest");
+        YDB_LOG_TRACE("Received TNodesManagerActor::TEvGetNodesRequest");
         auto response = MakeHolder<NFq::TEvNodesManager::TEvGetNodesResponse>();
         response->NodeIds.reserve(Peers.size());
         for (const auto& info : Peers) {
@@ -308,8 +309,7 @@ private:
     }
 
     void ResolveSelfAddress() {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER,
-            "TNodesManagerActor::ResolveSelfAddress");
+        YDB_LOG_DEBUG("TNodesManagerActor::ResolveSelfAddress");
         auto resolve = MakeHolder<NActors::TEvResolveAddress>();
         resolve->Address = HostName();
         resolve->Port = IcPort;
@@ -317,8 +317,7 @@ private:
     }
 
     void NodesHealthCheck() {
-        LOG_TRACE_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER,
-            "TNodesManagerActor::NodesHealthCheck");
+        YDB_LOG_TRACE("TNodesManagerActor::NodesHealthCheck");
         const TDuration ttl = TDuration::Seconds(5);
         Schedule(ttl, new NActors::TEvents::TEvWakeup(WU_NodesHealthCheck));
 
@@ -345,8 +344,7 @@ private:
     }
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER,
-            "TNodesManagerActor::OnUndelivered");
+        YDB_LOG_ERROR("TNodesManagerActor::OnUndelivered");
         ServiceCounters.Counters->GetCounter("OnUndelivered", true)->Inc();
     }
 
@@ -390,14 +388,15 @@ private:
             ServiceCounters.Counters->GetCounter("PeerCount", false)->Set(Peers.size());
             ServiceCounters.Counters->GetCounter("NodesHealthCheckOk", true)->Inc();
 
-            LOG_TRACE_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER,
-                "Send NodeInfo with size: " << nodesInfo->size() << " to DynamicNameserver");
+            YDB_LOG_TRACE("Send NodeInfo with to DynamicNameserver",
+                {"size", nodesInfo->size()});
             if (!nodesInfo->empty()) {
                 THolder<TEvInterconnect::TEvNodesInfo> nameServiceUpdateReq(new TEvInterconnect::TEvNodesInfo(nodesInfo));
                 Send(GetNameserviceActorId(), nameServiceUpdateReq.Release());
             }
         } catch (yexception &e) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_NODES_MANAGER, e.what());
+            YDB_LOG_ERROR("Exception",
+                {"exception", e.what()});
             ServiceCounters.Counters->GetCounter("NodesHealthCheckFail", true)->Inc();
         }
     }

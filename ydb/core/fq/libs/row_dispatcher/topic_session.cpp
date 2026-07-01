@@ -16,6 +16,8 @@
 
 #include <util/generic/queue.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_ROW_DISPATCHER
+
 namespace NFq {
 
 using namespace NActors;
@@ -202,7 +204,13 @@ private:
         void AddDataToClient(ui64 offset, ui64 numberRows, ui64 rowSize, TMaybe<TInstant> watermark) override {
             Y_ENSURE(!NextMessageOffset || offset >= *NextMessageOffset, "Unexpected historical offset");
 
-            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "AddDataToClient to " << ReadActorId << ", offset: " << offset << ", number rows: " << numberRows << ", row size: " << rowSize << ", watermark: " << watermark);
+            YDB_LOG_TRACE("AddDataToClient to number row",
+                {"logPrefix", LogPrefix},
+                {"readActorId", ReadActorId},
+                {"offset", offset},
+                {"rows", numberRows},
+                {"size", rowSize},
+                {"watermark", watermark});
 
             NextMessageOffset = offset + 1;
             QueuedRows += numberRows;
@@ -214,7 +222,10 @@ private:
         }
 
         void UpdateClientOffset(ui64 offset) override {
-            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "UpdateClientOffset for " << ReadActorId << ", new offset: " << offset);
+            YDB_LOG_TRACE("UpdateClientOffset for new",
+                {"logPrefix", LogPrefix},
+                {"readActorId", ReadActorId},
+                {"offset", offset});
             if (!NextMessageOffset || *NextMessageOffset < offset + 1) {
                 NextMessageOffset = offset + 1;
             }
@@ -447,13 +458,16 @@ void TTopicSession::Bootstrap() {
     Become(&TTopicSession::StateFunc);
     Metrics.Init(Counters, TopicPath, ReadGroup, PartitionId, EnableStreamingQueriesCounters);
     LogPrefix = LogPrefix + " " + SelfId().ToString() + " [" + TopicPathPartition + "] ";
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Bootstrap, Timeout " << Config.GetTimeoutBeforeStartSession() << " sec");
+    YDB_LOG_INFO("Bootstrap, Timeout sec",
+        {"logPrefix", LogPrefix},
+        {"#_Config.GetTimeoutBeforeStartSession", Config.GetTimeoutBeforeStartSession()});
     Schedule(TDuration::Seconds(SendStatisticPeriodSec), new NFq::TEvPrivate::TEvSendStatistic());
     Schedule(TDuration::Seconds(GetEventByTimerPeriodSec), new NFq::TEvPrivate::TEvGetEventByTimerEvent());
 }
 
 void TTopicSession::PassAway() {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "PassAway");
+    YDB_LOG_INFO("PassAway",
+        {"logPrefix", LogPrefix});
     StopReadSession();
     FormatHandlers.clear();
     TBase::PassAway();
@@ -461,12 +475,17 @@ void TTopicSession::PassAway() {
 
 void TTopicSession::SubscribeOnNextEvent(bool checkIsWaitingEvents) {
     if (!ReadSession || (checkIsWaitingEvents && IsWaitingEvents)) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Skip SubscribeOnNextEvent, has ReadSession: " << (ReadSession ? "true" : "false") << ", IsWaitingEvents: " << IsWaitingEvents);
+        YDB_LOG_TRACE("Skip SubscribeOnNextEvent, has",
+            {"logPrefix", LogPrefix},
+            {"readSession", (ReadSession ? "true" : "false")},
+            {"isWaitingEvents", IsWaitingEvents});
         return;
     }
 
     if (Config.GetMaxSessionUsedMemory() && QueuedBytes > Config.GetMaxSessionUsedMemory()) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Too much used memory (" << QueuedBytes << " bytes), skip subscribing to WaitEvent()");
+        YDB_LOG_TRACE("Too much used memory bytes), skip subscribing to WaitEvent()",
+            {"logPrefix", LogPrefix},
+            {"queuedBytes", QueuedBytes});
         return;
     }
 
@@ -518,9 +537,12 @@ NYdb::NTopic::TReadSessionSettings TTopicSession::GetReadSessionSettings(const T
     topicReadSettings.AppendPartitionIds(PartitionId);
 
     TInstant minTime = GetMinStartingMessageTimestamp();
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Create topic session, Path " << TopicPathPartition
-        << ", StartingMessageTimestamp " << minTime
-        << ", BufferSize " << BufferSize << ", GetConsumerMode " << Config.GetConsumerMode());
+    YDB_LOG_INFO("Create topic session, Path StartingMessageTimestamp BufferSize GetConsumerMode",
+        {"logPrefix", LogPrefix},
+        {"topicPathPartition", TopicPathPartition},
+        {"minTime", minTime},
+        {"bufferSize", BufferSize},
+        {"#_Config.GetConsumerMode", Config.GetConsumerMode()});
 
     auto settings = NYdb::NTopic::TReadSessionSettings()
         .TraceId(LogPrefix)
@@ -556,7 +578,9 @@ void TTopicSession::CreateTopicSession() {
         // Use any sourceParams.
         ReconnectPeriod = Clients.begin()->second->ReconnectPeriod;
         if (ReconnectPeriod != TDuration::Zero()) {
-            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "ReconnectPeriod " << ReconnectPeriod.ToString());
+            YDB_LOG_INFO("ReconnectPeriod",
+                {"logPrefix", LogPrefix},
+                {"reconnectPeriod", ReconnectPeriod});
             Metrics.ReconnectRate->Inc();
             Schedule(ReconnectPeriod, new NFq::TEvPrivate::TEvReconnectSession());
             InflightReconnect = true;
@@ -565,7 +589,8 @@ void TTopicSession::CreateTopicSession() {
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvPqEventsReady::TPtr&) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "TEvPqEventsReady");
+    YDB_LOG_TRACE("TEvPqEventsReady",
+        {"logPrefix", LogPrefix});
     Metrics.InFlySubscribe->Set(0);
     IsWaitingEvents = false;
     auto waitEventDurationMs = (TInstant::Now() - WaitEventStartedAt).MilliSeconds();
@@ -586,20 +611,27 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvReconnectSession::TPtr&) {
         return;
     }
     StartingMessageTimestamp = GetMinStartingMessageTimestamp();
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Reconnect topic session, " << TopicPathPartition
-        << ", StartingMessageTimestamp " << StartingMessageTimestamp
-        << ", BufferSize " << BufferSize << ", ConsumerMode " << Config.GetConsumerMode());
+    YDB_LOG_DEBUG("Reconnect topic session, StartingMessageTimestamp BufferSize ConsumerMode",
+        {"logPrefix", LogPrefix},
+        {"topicPathPartition", TopicPathPartition},
+        {"startingMessageTimestamp", StartingMessageTimestamp},
+        {"bufferSize", BufferSize},
+        {"#_Config.GetConsumerMode", Config.GetConsumerMode()});
     RefreshParsers();
     StopReadSession();
     CreateTopicSession();
 }
 
 void TTopicSession::Handle(TEvRowDispatcher::TEvGetNextBatch::TPtr& ev) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "TEvGetNextBatch from " << ev->Sender.ToString());
+    YDB_LOG_TRACE("TEvGetNextBatch",
+        {"logPrefix", LogPrefix},
+        {"#_ev->Sender", ev->Sender});
     Metrics.InFlyAsyncInputData->Set(0);
     auto it = Clients.find(ev->Sender);
     if (it == Clients.end()) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Wrong client, sender " << ev->Sender);
+        YDB_LOG_ERROR("Wrong client, sender",
+            {"logPrefix", LogPrefix},
+            {"#_ev->Sender", ev->Sender});
         return;
     }
     SendData(*it->second);
@@ -615,7 +647,9 @@ bool TTopicSession::HandleNewEvents() {
             return false;
         }
         if (Config.GetMaxSessionUsedMemory() && QueuedBytes > Config.GetMaxSessionUsedMemory()) {
-            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Too much used memory (" << QueuedBytes << " bytes), stop reading from yds");
+            YDB_LOG_TRACE("Too much used memory bytes), stop reading from yds",
+                {"logPrefix", LogPrefix},
+                {"queuedBytes", QueuedBytes});
             break;
         }
         std::optional<NYdb::NTopic::TReadSessionEvent::TEvent> event = ReadSession->GetEvent(false);
@@ -636,7 +670,8 @@ void TTopicSession::CloseTopicSession() {
     if (!ReadSession) {
         return;
     }
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Close session");
+    YDB_LOG_DEBUG("Close session",
+        {"logPrefix", LogPrefix});
     ReadSession->Close(TDuration::Zero());
     ReadSession.reset();
 }
@@ -655,13 +690,18 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
     }
 
     if (hasOldMessages) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Skip data. StartingMessageTimestamp: " << Self.StartingMessageTimestamp << ". Write time: " << messages.begin()->GetWriteTime());
+        YDB_LOG_TRACE("Skip data. Write",
+            {"logPrefix", LogPrefix},
+            {"startingMessageTimestamp", Self.StartingMessageTimestamp},
+            {"time", messages.begin()->GetWriteTime()});
         Self.LastMessageOffset = std::prev(it)->GetOffset();
         messages.erase(messages.begin(), it);
     }
 
     for (const auto& message : messages) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Data received: " << message.DebugString(true));
+        YDB_LOG_TRACE("Data",
+            {"logPrefix", LogPrefix},
+            {"received", message.DebugString(true)});
         dataSize += message.GetData().size();
         Self.LastMessageOffset = message.GetOffset();
     }
@@ -675,7 +715,10 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TSessionClosedEvent& ev) {
     const TString message = TStringBuilder() << "Read session to topic \"" << Self.TopicPathPartition << "\" was closed";
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << message << ": " << ev.DebugString());
+    YDB_LOG_DEBUG("Dump logPrefix, message, #_ev.DebugString",
+        {"logPrefix", LogPrefix},
+        {"message", message},
+        {"#_ev.DebugString", ev.DebugString()});
 
     Self.ThrowFatalError(TStatus::Fail(
         NYql::NDq::YdbStatusToDqStatus(static_cast<Ydb::StatusIds::StatusCode>(ev.GetStatus())),
@@ -684,7 +727,8 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TSessionClose
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TStartPartitionSessionEvent& event) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "StartPartitionSessionEvent received");
+    YDB_LOG_DEBUG("StartPartitionSessionEvent received",
+        {"logPrefix", LogPrefix});
 
     std::optional<ui64> minOffset;
     for (const auto& [actorId, info] : Self.Clients) {
@@ -692,7 +736,9 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
             minOffset = info->NextMessageOffset;
         }
     }
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Confirm StartPartitionSession with offset " << minOffset);
+    YDB_LOG_DEBUG("Confirm StartPartitionSession with offset",
+        {"logPrefix", LogPrefix},
+        {"minOffset", minOffset});
     event.Confirm(minOffset);
     if (minOffset) {
         // ensure we restart session if new client wants earlier offset
@@ -703,12 +749,15 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TStopPartitionSessionEvent& event) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "SessionId: " << Self.GetSessionId() << " StopPartitionSessionEvent received");
+    YDB_LOG_DEBUG("StopPartitionSessionEvent received",
+        {"logPrefix", LogPrefix},
+        {"sessionId", Self.GetSessionId()});
     event.Confirm();
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TEndPartitionSessionEvent& /*event*/) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "TEndPartitionSessionEvent");
+    YDB_LOG_WARN("TEndPartitionSessionEvent",
+        {"logPrefix", LogPrefix});
 
     Self.ThrowFatalError(TStatus::Fail(
         EStatusId::SCHEME_ERROR,
@@ -716,7 +765,8 @@ void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionE
 }
 
 void TTopicSession::TTopicEventProcessor::operator()(NYdb::NTopic::TReadSessionEvent::TPartitionSessionClosedEvent& /*event*/) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "TPartitionSessionClosedEvent");
+    YDB_LOG_WARN("TPartitionSessionClosedEvent",
+        {"logPrefix", LogPrefix});
 }
 
 TString TTopicSession::GetSessionId() const {
@@ -724,7 +774,9 @@ TString TTopicSession::GetSessionId() const {
 }
 
 void TTopicSession::SendToParsing(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "SendToParsing, messages: " << messages.size());
+    YDB_LOG_TRACE("SendToParsing",
+        {"logPrefix", LogPrefix},
+        {"messages", messages.size()});
     for (const auto& [_, formatHandler] : FormatHandlers) {
         if (formatHandler->HasClients()) {
             formatHandler->ParseMessages(messages);
@@ -740,14 +792,18 @@ void TTopicSession::SendData(TClientsInfo& info) {
 
     info.DataArrivedSent = false;
     if (buffer.empty()) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Buffer empty");
+        YDB_LOG_TRACE("Buffer empty",
+            {"logPrefix", LogPrefix});
     }
     ui64 dataSize = 0;
     ui64 eventsSize = info.QueuedRows;
 
     if (!info.NextMessageOffset) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Try SendData() without NextMessageOffset, " << info.ReadActorId
-            << " unread " << info.QueuedBytes << " DataArrivedSent " << info.DataArrivedSent);
+        YDB_LOG_ERROR("Try SendData() without NextMessageOffset, unread DataArrivedSent",
+            {"logPrefix", LogPrefix},
+            {"#_info.ReadActorId", info.ReadActorId},
+            {"#_info.QueuedBytes", info.QueuedBytes},
+            {"#_info.DataArrivedSent", info.DataArrivedSent});
         return;
     }
 
@@ -781,7 +837,10 @@ void TTopicSession::SendData(TClientsInfo& info) {
         if (buffer.empty()) {
             event->Record.SetNextMessageOffset(*info.NextMessageOffset);
         }
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "SendData to " << info.ReadActorId << ", batch size " << event->Record.MessagesSize());
+        YDB_LOG_TRACE("SendData to batch size",
+            {"logPrefix", LogPrefix},
+            {"#_info.ReadActorId", info.ReadActorId},
+            {"#_event->Record.MessagesSize", event->Record.MessagesSize()});
         Send(RowDispatcherActorId, event.release());
     } while(!buffer.empty());
 
@@ -797,11 +856,17 @@ void TTopicSession::SendData(TClientsInfo& info) {
 }
 
 void TTopicSession::StartClientSession(TClientsInfo& info) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "StartClientSession, read actor id " << info.ReadActorId << ", offset " << info.GetNextMessageOffset());
+    YDB_LOG_TRACE("StartClientSession, read actor id offset",
+        {"logPrefix", LogPrefix},
+        {"#_info.ReadActorId", info.ReadActorId},
+        {"#_info.GetNextMessageOffset", info.GetNextMessageOffset()});
     if (ReadSession) {
         auto offset = info.GetNextMessageOffset();
         if (offset && offset <= LastMessageOffset) {
-            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "New client has less offset (" << offset << ") than the last message (" << LastMessageOffset << "), stop (restart) topic session");
+            YDB_LOG_INFO("New client has less offset than the last message stop (restart) topic session",
+                {"logPrefix", LogPrefix},
+                {"offset", offset},
+                {"lastMessageOffset", LastMessageOffset});
             Metrics.RestartSessionByOffsets->Inc();
             ++RestartSessionByOffsets;
             info.RestartSessionByOffsetsByQuery->Inc();
@@ -821,7 +886,12 @@ void TTopicSession::StartClientSession(TClientsInfo& info) {
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto offset = GetOffset(ev->Get()->Record);
     const auto& source = ev->Get()->Record.GetSource();
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "New client: read actor id " << ev->Sender.ToString() << ", predicate: " << source.GetPredicate() << ", watermark expr: " << source.GetWatermarkExpr() << ", offset: " << offset);
+    YDB_LOG_INFO("New client: read actor id watermark",
+        {"logPrefix", LogPrefix},
+        {"#_ev->Sender", ev->Sender},
+        {"predicate", source.GetPredicate()},
+        {"expr", source.GetWatermarkExpr()},
+        {"offset", offset});
 
     if (!CheckNewClient(ev)) {
         return;
@@ -861,11 +931,17 @@ void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
 }
 
 void TTopicSession::Handle(NFq::TEvRowDispatcher::TEvStopSession::TPtr& ev) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "TEvStopSession from " << ev->Sender << " topicPath " << ev->Get()->Record.GetSource().GetTopicPath() << " clients count " << Clients.size());
+    YDB_LOG_DEBUG("TEvStopSession from topicPath clients count",
+        {"logPrefix", LogPrefix},
+        {"#_ev->Sender", ev->Sender},
+        {"#_ev->Get()->Record.GetSource().GetTopicPath", ev->Get()->Record.GetSource().GetTopicPath()},
+        {"#_Clients.size", Clients.size()});
 
     auto it = Clients.find(ev->Sender);
     if (it == Clients.end()) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Ignore TEvStopSession from " << ev->Sender << ", no client");
+        YDB_LOG_WARN("Ignore TEvStopSession from no client",
+            {"logPrefix", LogPrefix},
+            {"#_ev->Sender", ev->Sender});
         return;
     }
     auto& info = *it->second;
@@ -910,7 +986,10 @@ void TTopicSession::RestartSessionIfOldestClient(const TClientsInfo& info) {
     if (info.NextMessageOffset >= minMessageOffset) {
         return;
     }
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Client (on StopSession) has less offset (" << info.NextMessageOffset << ") than others clients (" << minMessageOffset << "), stop (restart) topic session");
+    YDB_LOG_INFO("Client (on StopSession) has less offset than others clients stop (restart) topic session",
+        {"logPrefix", LogPrefix},
+        {"#_info.NextMessageOffset", info.NextMessageOffset},
+        {"minMessageOffset", minMessageOffset});
     Metrics.RestartSessionByOffsets->Inc();
     ++RestartSessionByOffsets;
     info.RestartSessionByOffsetsByQuery->Inc();
@@ -923,7 +1002,9 @@ void TTopicSession::RestartSessionIfOldestClient(const TClientsInfo& info) {
 }
 
 void TTopicSession::FatalError(const TStatus& status) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "FatalError: " << status.GetErrorMessage());
+    YDB_LOG_ERROR("",
+        {"logPrefix", LogPrefix},
+        {"fatalError", status.GetErrorMessage()});
 
     for (auto& [readActorId, info] : Clients) {
         LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Send TEvSessionError to " << readActorId);
@@ -939,7 +1020,10 @@ void TTopicSession::ThrowFatalError(const TStatus& status) {
 }
 
 void TTopicSession::SendSessionError(TActorId readActorId, TStatus status, bool isFatalError) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "SendSessionError to " << readActorId << ", status: " << status.GetErrorMessage());
+    YDB_LOG_WARN("SendSessionError",
+        {"logPrefix", LogPrefix},
+        {"readActorId", readActorId},
+        {"status", status.GetErrorMessage()});
     auto event = std::make_unique<TEvRowDispatcher::TEvSessionError>();
     event->Record.SetStatusCode(status.GetStatus());
     event->Record.SetPartitionId(PartitionId);
@@ -954,7 +1038,8 @@ void TTopicSession::SendSessionError(TActorId readActorId, TStatus status, bool 
 
 void TTopicSession::StopReadSession() {
     if (ReadSession) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Close read session");
+        YDB_LOG_DEBUG("Close read session",
+            {"logPrefix", LogPrefix});
         ReadSession->Close(TDuration::Zero());
         ReadSession.reset();
     }
@@ -966,7 +1051,9 @@ void TTopicSession::SendDataArrived(TClientsInfo& info) {
         return;
     }
     info.DataArrivedSent = true;
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Send TEvNewDataArrived to " << info.ReadActorId);
+    YDB_LOG_TRACE("Send TEvNewDataArrived",
+        {"logPrefix", LogPrefix},
+        {"#_info.ReadActorId", info.ReadActorId});
     Metrics.InFlyAsyncInputData->Set(1);
     auto event = std::make_unique<TEvRowDispatcher::TEvNewDataArrived>();
     event->Record.SetPartitionId(PartitionId);
@@ -982,7 +1069,8 @@ void TTopicSession::HandleException(const std::exception& e) {
 }
 
 void TTopicSession::SendStatistics() {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "SendStatistics");
+    YDB_LOG_TRACE("SendStatistics",
+        {"logPrefix", LogPrefix});
     TTopicSessionStatistic sessionStatistic;
     auto& commonStatistic = sessionStatistic.Common;
     commonStatistic.QueuedBytes = QueuedBytes;
@@ -1027,7 +1115,8 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvSendStatistic::TPtr&) {
 }
 
 void TTopicSession::Handle(NFq::TEvPrivate::TEvGetEventByTimerEvent::TPtr&) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "TEvGetEventByTimerEvent");
+    YDB_LOG_TRACE("TEvGetEventByTimerEvent",
+        {"logPrefix", LogPrefix});
     // Workaround for a partition reading bug:
     // In some cases, the partition may stop delivering new events due to missed notifications or lost subscriptions,
     // causing the session to stall and not receive further data. To address this, we periodically schedule a timer event
@@ -1044,20 +1133,27 @@ void TTopicSession::Handle(NFq::TEvPrivate::TEvGetEventByTimerEvent::TPtr&) {
 bool TTopicSession::CheckNewClient(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
     auto it = Clients.find(ev->Sender);
     if (it != Clients.end()) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Such a client already exists");
+        YDB_LOG_ERROR("Such a client already exists",
+            {"logPrefix", LogPrefix});
         SendSessionError(ev->Sender, TStatus::Fail(EStatusId::INTERNAL_ERROR, TStringBuilder() << "Client with id " << ev->Sender << " already exists"), false);
         return false;
     }
 
     const auto& source = ev->Get()->Record.GetSource();
     if (Config.GetConsumerMode() != TRowDispatcherSettings::EConsumerMode::Without && ConsumerName && ConsumerName != source.GetConsumerName()) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Different consumer, expected " <<  ConsumerName << ", actual " << source.GetConsumerName() << ", send error");
+        YDB_LOG_INFO("Different consumer, expected actual send error",
+            {"logPrefix", LogPrefix},
+            {"consumerName", ConsumerName},
+            {"#_source.GetConsumerName", source.GetConsumerName()});
         SendSessionError(ev->Sender, TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Use the same consumer in all queries via RD (current consumer " << ConsumerName << ")"), false);
         return false;
     }
 
     if (SkipJsonErrors && SkipJsonErrors != source.GetSkipJsonErrors()) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Different skip json errors mode, expected " <<  SkipJsonErrors << ", actual " << source.GetSkipJsonErrors() << ", send error");
+        YDB_LOG_INFO("Different skip json errors mode, expected actual send error",
+            {"logPrefix", LogPrefix},
+            {"skipJsonErrors", SkipJsonErrors},
+            {"#_source.GetSkipJsonErrors", source.GetSkipJsonErrors()});
         SendSessionError(ev->Sender, TStatus::Fail(EStatusId::PRECONDITION_FAILED, TStringBuilder() << "Use the same skip json errors settings in all queries via RD (current mode " << SkipJsonErrors << ")"), false);
         return false;
     }

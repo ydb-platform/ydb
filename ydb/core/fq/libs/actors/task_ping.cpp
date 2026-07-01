@@ -17,6 +17,8 @@
 
 #include <google/protobuf/util/time_util.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::YQL_PRIVATE_PROXY
+
 namespace NFq {
 
 using namespace NActors;
@@ -43,9 +45,9 @@ public:
     static constexpr char ActorName[] = "YQ_PRIVATE_PING_TASK";
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr& ev) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY,
-            "PrivatePingTask - QueryId: " << OperationId << ", Owner: " << OwnerId << ", "
-            << "TTaskPingRequestActor::OnUndelivered");
+        YDB_LOG_ERROR("PrivatePingTask - TTaskPingRequestActor::OnUndelivered",
+            {"queryId", OperationId},
+            {"owner", OwnerId});
         auto res = MakeHolder<TEvents::TEvPingTaskResponse>();
         res->Status = Ydb::StatusIds::GENERIC_ERROR;
         res->Issues.AddIssue("UNDELIVERED");
@@ -61,11 +63,11 @@ public:
     void Fail(const TString& message, Ydb::StatusIds::StatusCode reqStatus = Ydb::StatusIds::INTERNAL_ERROR) {
         Issues.AddIssue(message);
         const auto codeStr = Ydb::StatusIds_StatusCode_Name(reqStatus);
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY,
-            "PrivatePingTask - QueryId: " << OperationId << ", Owner: " << OwnerId << ", "
-            << TStringBuilder()
-                << "Failed with code: " << codeStr
-                << " Details: " << Issues.ToString());
+        YDB_LOG_ERROR("PrivatePingTask - Failed with",
+            {"queryId", OperationId},
+            {"owner", OwnerId},
+            {"code", codeStr},
+            {"details", Issues});
         auto res = MakeHolder<TEvents::TEvPingTaskResponse>();
         res->Status = reqStatus;
         res->Issues.AddIssues(Issues);
@@ -81,9 +83,10 @@ public:
         TenantName = req.tenant();
         Scope = req.scope();
         Deadline = NProtoInterop::CastFromProto(req.deadline());
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY,
-            "PrivatePingTask - QueryId: " << OperationId << ", Owner: " << OwnerId << ", "
-            << "Request CP::PingTask with size: " << req.ByteSize() << " bytes");
+        YDB_LOG_DEBUG("PrivatePingTask - Request CP::PingTask with bytes",
+            {"queryId", OperationId},
+            {"owner", OwnerId},
+            {"size", req.ByteSize()});
         RequestedMBytes->Collect(req.ByteSize() / 1024 / 1024);
         Send(ControlPlaneConfigActorId(), new TEvControlPlaneConfig::TEvGetTenantInfoRequest());
     }
@@ -103,9 +106,9 @@ private:
     }
 
     void HandleResponse(NFq::TEvControlPlaneStorage::TEvPingTaskResponse::TPtr& ev) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY,
-            "PrivatePingTask - QueryId: " << OperationId << ", Owner: " << OwnerId << ", "
-            << "Got CP::PingTaskResponse");
+        YDB_LOG_DEBUG("PrivatePingTask - Got CP::PingTaskResponse",
+            {"queryId", OperationId},
+            {"owner", OwnerId});
         const auto& issues = ev->Get()->Issues;
         if (issues) {
             Issues.AddIssues(issues);

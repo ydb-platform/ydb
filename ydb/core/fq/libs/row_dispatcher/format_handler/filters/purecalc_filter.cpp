@@ -8,6 +8,8 @@
 #include <yql/essentials/providers/common/schema/parser/yql_type_parser.h>
 #include <yql/essentials/public/purecalc/common/interface.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_ROW_DISPATCHER
+
 namespace NFq::NRowDispatcher {
 
 namespace {
@@ -338,7 +340,9 @@ public:
     }
 
     void Compile() override {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Send compile request with id " << Cookie_);
+        YDB_LOG_TRACE("Send compile request with id",
+            {"logPrefix", LogPrefix},
+            {"cookie", Cookie_});
 
         auto compileRequest = std::make_unique<TEvRowDispatcher::TEvPurecalcCompileRequest>(std::exchange(ProgramHolder_, nullptr), Consumer_->GetPurecalcSettings());
         NActors::TActivationContext::ActorSystem()->Send(
@@ -353,7 +357,9 @@ public:
     }
 
     void AbortCompilation() override {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Send abort compile request with id " << Cookie_);
+        YDB_LOG_TRACE("Send abort compile request with id",
+            {"logPrefix", LogPrefix},
+            {"cookie", Cookie_});
         NActors::TActivationContext::ActorSystem()->Send(
             new NActors::IEventHandle(
                 CompileServiceId_,
@@ -367,12 +373,15 @@ public:
 
     void OnCompileResponse(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) override {
         ProgramHolder_ = ev->Get()->ProgramHolder.Release();
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Program compilation finished");
+        YDB_LOG_TRACE("Program compilation finished",
+            {"logPrefix", LogPrefix});
     }
 
     void OnCompileError(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) override {
         auto status = TStatus::Fail(ev->Get()->Status, std::move(ev->Get()->Issues));
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Program compilation error: " << status.GetErrorMessage());
+        YDB_LOG_ERROR("Program compilation",
+            {"logPrefix", LogPrefix},
+            {"error", status.GetErrorMessage()});
         CompileErrors_->Inc();
         Consumer_->OnError(status.AddParentIssue("Failed to compile client program"));
     }
@@ -405,7 +414,9 @@ public:
     }
 
     void ProcessData(const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) const override {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "ProcessData for " << numberRows << " rows");
+        YDB_LOG_TRACE("ProcessData for rows",
+            {"logPrefix", LogPrefix},
+            {"numberRows", numberRows});
 
         if (!ProgramHolder_) {
             LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Add " << numberRows << " rows to client " << Consumer_->GetClientId() << " without processing");
@@ -436,7 +447,8 @@ private:
     const auto& watermarkExpr = consumer->GetWatermarkExpr();
 
     if (!filterExpr && !watermarkExpr) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "No sql was generated");
+        YDB_LOG_TRACE("No sql was generated",
+            {"logPrefix", LogPrefix});
         return {};
     }
 
@@ -458,7 +470,9 @@ private:
         "watermark_expr"_a = watermarkExpr ? static_cast<TString>(TStringBuilder() << ", (" << watermarkExpr << ") AS " << WATERMARK_FIELD_NAME) : ""
     );
 
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Generated sql:\n" << result);
+    YDB_LOG_DEBUG("Generated sql:\n",
+        {"logPrefix", LogPrefix},
+        {"result", result});
     return result;
 }
 

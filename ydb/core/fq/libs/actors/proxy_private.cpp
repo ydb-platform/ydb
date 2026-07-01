@@ -15,6 +15,8 @@
 #include <util/generic/guid.h>
 #include <util/system/hostname.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::YQL_PRIVATE_PROXY
+
 namespace NFq {
 
 using namespace NActors;
@@ -178,8 +180,7 @@ private:
         )
 
     void OnUndelivered(NActors::TEvents::TEvUndelivered::TPtr&) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY,
-            "TYqlAnalyticsPrivateProxy::OnUndelivered");
+        YDB_LOG_ERROR("TYqlAnalyticsPrivateProxy::OnUndelivered");
         Counters->GetCounter("OnUndelivered", true)->Inc();
     }
 

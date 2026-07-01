@@ -14,6 +14,8 @@
 #include <ydb/library/actors/protos/actors.pb.h>
 #include <ydb/library/logger/actor.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_ROW_DISPATCHER
+
 namespace NFq {
 
 using namespace NActors;
@@ -225,8 +227,10 @@ void TLocalLeaderElection::Bootstrap() {
     CoordinationNodePath = JoinPath(NKikimr::AppData()->TenantName, DefaultCoordinationNodePath);
 
     LogPrefix = "TLeaderElection " + SelfId().ToString() + " ";
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Successfully bootstrapped, local coordinator id " << CoordinatorId.ToString()
-         << ", coordination node path " << CoordinationNodePath);
+    YDB_LOG_DEBUG("Successfully bootstrapped, local coordinator id coordination node path",
+        {"logPrefix", LogPrefix},
+        {"coordinatorId", CoordinatorId},
+        {"coordinationNodePath", CoordinationNodePath});
     ProcessState();
 }
 
@@ -288,7 +292,8 @@ void TLocalLeaderElection::ResetState() {
 }
 
 void TLocalLeaderElection::CreateSemaphore() {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Try to create semaphore");
+    YDB_LOG_DEBUG("Try to create semaphore",
+        {"logPrefix", LogPrefix});
     TRpcIn message;
     auto& inner = *message.mutable_create_semaphore();
     uint64_t reqId = NextReqId++;
@@ -308,7 +313,8 @@ void TLocalLeaderElection::AcquireSemaphore() {
         return;
     }
     LastAcquireSemaphore = now;
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Try to acquire semaphore");
+    YDB_LOG_DEBUG("Try to acquire semaphore",
+        {"logPrefix", LogPrefix});
 
     NActorsProto::TActorId protoId;
     ActorIdToProto(CoordinatorId, &protoId);
@@ -330,7 +336,8 @@ void TLocalLeaderElection::AcquireSemaphore() {
 }
 
 void TLocalLeaderElection::StartSession() {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Start session");
+    YDB_LOG_DEBUG("Start session",
+        {"logPrefix", LogPrefix});
     auto token = NACLib::TUserToken(BUILTIN_ACL_METADATA, {}).SerializeAsString();
     auto ctx = MakeIntrusive<TLocalRpcCtx>(ActorContext().ActorSystem(), SelfId(), TLocalRpcCtx::TSettings{
         .Database = NKikimr::AppData()->TenantName,
@@ -348,12 +355,14 @@ void TLocalLeaderElection::StartSession() {
 }
 
 void TLocalLeaderElection::PassAway() {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "PassAway");
+    YDB_LOG_DEBUG("PassAway",
+        {"logPrefix", LogPrefix});
     TActorBootstrapped::PassAway();
 }
 
 void TLocalLeaderElection::Handle(TEvPrivate::TEvSelfPing::TPtr&) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "TEvSelfPing");
+    YDB_LOG_DEBUG("TEvSelfPing",
+        {"logPrefix", LogPrefix});
     if (SessionClosed) {
         return;
     }
@@ -388,7 +397,8 @@ void TLocalLeaderElection::SetTimeout() {
 
 void TLocalLeaderElection::Handle(TEvPrivate::TEvRestart::TPtr&) {
     RestartScheduled = false;
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "TEvRestart");
+    YDB_LOG_DEBUG("TEvRestart",
+        {"logPrefix", LogPrefix});
     ProcessState();
 }
 
@@ -396,7 +406,8 @@ void TLocalLeaderElection::DescribeSemaphore() {
     if (PendingDescribe || PendingDescribeChanged) {
         return;
     }
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Describe semaphore");
+    YDB_LOG_DEBUG("Describe semaphore",
+        {"logPrefix", LogPrefix});
     PendingDescribe = true;
     PendingDescribeChanged = true;
 
@@ -413,7 +424,9 @@ void TLocalLeaderElection::DescribeSemaphore() {
 }
 
 bool TLocalLeaderElection::OnUnhandledException(const std::exception& e) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Internal error: exception:" << e.what());
+    YDB_LOG_ERROR("Internal error",
+        {"logPrefix", LogPrefix},
+        {"exception", e.what()});
     Metrics.Errors->Inc();
     ResetState();
     return true;
@@ -437,12 +450,15 @@ void TLocalLeaderElection::CreateNode(const std::string& path,  const NYdb::NCoo
 void TLocalLeaderElection::Handle(TEvPrivate::TEvCreateNodeResult::TPtr& ev) {
     const auto& status = ev->Get()->Status;
     if (!status.IsSuccess()) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Coordination node creation error: " << status.GetIssues());
+        YDB_LOG_ERROR("Coordination node creation",
+            {"logPrefix", LogPrefix},
+            {"error", status.GetIssues()});
         Metrics.Errors->Inc();
         ResetState();
         return;
     }
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Coordination node successfully created");
+    YDB_LOG_DEBUG("Coordination node successfully created",
+        {"logPrefix", LogPrefix});
     CoordinationNodeCreated = true;
     ProcessState();
 }
@@ -452,7 +468,9 @@ void TLocalLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvActorAttached::TP
     RpcActor = ev->Get()->RpcActor;
     SessionClosed = false;
 
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "RpcActor attached: " << RpcActor);
+    YDB_LOG_DEBUG("RpcActor",
+        {"logPrefix", LogPrefix},
+        {"attached", RpcActor});
     RpcResponses = {};
     SendStartSession();
 }
@@ -461,7 +479,8 @@ void TLocalLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvReadRequest::TPtr
     PendingRpcResponses++;
 
     if (SessionClosed) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Rpc read request skipped, session is closed");
+        YDB_LOG_DEBUG("Rpc read request skipped, session is closed",
+            {"logPrefix", LogPrefix});
         SendSessionEventFail();
         return;
     }
@@ -475,7 +494,8 @@ void TLocalLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvWriteRequest::TPt
     auto response = std::make_unique<TLocalRpcCtx::TEvWriteFinished>();
 
     if (SessionClosed) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Rpc write request skipped, session is closed");
+        YDB_LOG_DEBUG("Rpc write request skipped, session is closed",
+            {"logPrefix", LogPrefix});
         response->Success = false;
         Send(RpcActor, response.release());
         return;
@@ -486,7 +506,9 @@ void TLocalLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvWriteRequest::TPt
 
     auto& message = ev->Get()->Message;
     const auto messageCase = message.response_case();
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Rpc write request: " << static_cast<i64>(messageCase));
+    YDB_LOG_DEBUG("Rpc write",
+        {"logPrefix", LogPrefix},
+        {"request", static_cast<i64>(messageCase)});
 
     switch (messageCase) {
         case TRpcOut::kPing:
@@ -529,7 +551,8 @@ void TLocalLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvWriteRequest::TPt
             ProcessDeleteSemaphoreResult(message);
             break;
         default:
-            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Unknown message case");
+            YDB_LOG_DEBUG("Unknown message case",
+                {"logPrefix", LogPrefix});
     }
     ProcessState();
 }
@@ -537,7 +560,10 @@ void TLocalLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvWriteRequest::TPt
 void TLocalLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvFinishRequest::TPtr& ev) {
     const auto& status = ev->Get()->Status;
     if (!status.ok()) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Rpc session finished with error status code: " << static_cast<ui64>(status.error_code()) << ", message: " << status.error_message());
+        YDB_LOG_ERROR("Rpc session finished with error status",
+            {"logPrefix", LogPrefix},
+            {"code", static_cast<ui64>(status.error_code())},
+            {"message", status.error_message()});
     } else {
         LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Rpc session successfully finished");
     }
@@ -548,7 +574,8 @@ void TLocalLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvFinishRequest::TP
 
 void TLocalLeaderElection::SendStartSession() {
     Y_VALIDATE(RpcActor, "RpcActor is not set before read request");
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Sending start message");
+    YDB_LOG_DEBUG("Sending start message",
+        {"logPrefix", LogPrefix});
 
     TRpcIn message;
     auto& start = *message.mutable_session_start();
@@ -560,7 +587,8 @@ void TLocalLeaderElection::SendStartSession() {
 
 void TLocalLeaderElection::AddSessionEvent(TRpcIn&& message) {
     if (SessionClosed) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Session already closed, skip session event");
+        YDB_LOG_DEBUG("Session already closed, skip session event",
+            {"logPrefix", LogPrefix});
         return;
     }
 
@@ -574,7 +602,10 @@ void TLocalLeaderElection::AddSessionEvent(TRpcIn&& message) {
 
 void TLocalLeaderElection::SendSessionEvents() {
     Y_VALIDATE(RpcActor, "RpcActor is not set before read request");
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Going to send session events, PendingRpcResponses: " << PendingRpcResponses << ", RpcResponses #" << RpcResponses.size());
+    YDB_LOG_DEBUG("Going to send session events, RpcResponses",
+        {"logPrefix", LogPrefix},
+        {"pendingRpcResponses", PendingRpcResponses},
+        {"#_RpcResponses.size", RpcResponses.size()});
 
     while (PendingRpcResponses > 0 && !RpcResponses.empty()) {
         SendSessionEvent(std::move(RpcResponses.front()));
@@ -583,7 +614,10 @@ void TLocalLeaderElection::SendSessionEvents() {
 }
 
 void TLocalLeaderElection::SendSessionEvent(TRpcIn&& message, bool success) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Sending session event: " << static_cast<i64>(message.request_case()) << ", success: " << success);
+    YDB_LOG_DEBUG("Sending session",
+        {"logPrefix", LogPrefix},
+        {"event", static_cast<i64>(message.request_case())},
+        {"success", success});
     Y_VALIDATE(PendingRpcResponses > 0, "Rpc read is not expected");
     PendingRpcResponses--;
 
@@ -603,13 +637,19 @@ void TLocalLeaderElection::CloseSession(NYdb::EStatus status, const NYql::TIssue
     const bool success = status ==  NYdb::EStatus::SUCCESS;
     if (!success) {
         Metrics.Errors->Inc();
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Closing session with status " << status << " and issues: " << issues.ToOneLineString());
+        YDB_LOG_ERROR("Closing session with status and",
+            {"logPrefix", LogPrefix},
+            {"status", status},
+            {"issues", issues.ToOneLineString()});
     } else {
         LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Closing session with success status");
     }
 
     if (SessionClosed) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Session already closed, but got status " << status << " and issues: " << issues.ToOneLineString());
+        YDB_LOG_WARN("Session already closed, but got status and",
+            {"logPrefix", LogPrefix},
+            {"status", status},
+            {"issues", issues.ToOneLineString()});
         return;
     }
     SessionClosed = true;
@@ -680,7 +720,8 @@ void TLocalLeaderElection::CloseSession(const grpc::Status& status, const TStrin
 }
 
 void TLocalLeaderElection::ProcessPing(const TRpcOut& message) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Received Ping, send Pong");
+    YDB_LOG_DEBUG("Received Ping, send Pong",
+        {"logPrefix", LogPrefix});
     const auto& source = message.ping();
     TRpcIn in;
     in.mutable_pong()->set_opaque(source.opaque());
@@ -688,7 +729,8 @@ void TLocalLeaderElection::ProcessPing(const TRpcOut& message) {
 }
 
 void TLocalLeaderElection::ProcessPong(const TRpcOut& message) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Received Pong");
+    YDB_LOG_DEBUG("Received Pong",
+        {"logPrefix", LogPrefix});
     const auto& source = message.pong();
     const uint64_t reqId = source.opaque();
     auto* op = FindSentRequest(reqId);
@@ -704,14 +746,18 @@ void TLocalLeaderElection::ProcessFailure(const TRpcOut& message) {
 
     NYql::TIssues issues;
     IssuesFromMessage(failure.issues(), issues);
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Received Failure, status: " << status << ", issues: " << issues.ToOneLineString());
+    YDB_LOG_DEBUG("Received Failure",
+        {"logPrefix", LogPrefix},
+        {"status", status},
+        {"issues", issues.ToOneLineString()});
 
     CloseSession(static_cast<NYdb::EStatus>(status), issues);
     ResetState();
 }
 
 void TLocalLeaderElection::ProcessSessionStarted(const TRpcOut& message) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Received SessionStarted, session successfully created");
+    YDB_LOG_DEBUG("Received SessionStarted, session successfully created",
+        {"logPrefix", LogPrefix});
     const auto& source = message.session_started();
     SessionId = source.session_id();
 
@@ -720,18 +766,22 @@ void TLocalLeaderElection::ProcessSessionStarted(const TRpcOut& message) {
 }
 
 void TLocalLeaderElection::ProcessSessionStopped(const TRpcOut& /*message*/) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Received SessionStopped");
+    YDB_LOG_DEBUG("Received SessionStopped",
+        {"logPrefix", LogPrefix});
     ResetState();
 }
 
 void TLocalLeaderElection::ProcessCreateSemaphoreResult(const TRpcOut& message) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Received CreateSemaphoreResult");
+    YDB_LOG_DEBUG("Received CreateSemaphoreResult",
+        {"logPrefix", LogPrefix});
     const auto& source = message.create_semaphore_result();
     NYdb::NIssue::TIssues issues;
     NYdb::NIssue::IssuesFromMessage(source.issues(), issues);
 
     auto status = NYdb::TStatus(static_cast<NYdb::EStatus>(source.status()), std::move(issues));
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Semaphore creating status: " << status);
+    YDB_LOG_INFO("Semaphore creating",
+        {"logPrefix", LogPrefix},
+        {"status", status});
     if (!IsTableCreated(status)) {
         LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Semaphore creating error " << status.GetIssues().ToOneLineString());
         Metrics.Errors->Inc();
@@ -745,12 +795,14 @@ void TLocalLeaderElection::ProcessCreateSemaphoreResult(const TRpcOut& message) 
     }
     SentRequests.erase(reqId);
     SemaphoreCreated = true;
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Semaphore successfully created");
+    YDB_LOG_DEBUG("Semaphore successfully created",
+        {"logPrefix", LogPrefix});
     ProcessState();
 }
 
 void TLocalLeaderElection::ProcessAcquireSemaphoreResult(const TRpcOut& message) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Received AcquireSemaphoreResult");
+    YDB_LOG_DEBUG("Received AcquireSemaphoreResult",
+        {"logPrefix", LogPrefix});
     const auto& source = message.acquire_semaphore_result();
     NYdb::NIssue::TIssues issues;
     NYdb::NIssue::IssuesFromMessage(source.issues(), issues);
@@ -759,7 +811,9 @@ void TLocalLeaderElection::ProcessAcquireSemaphoreResult(const TRpcOut& message)
     PendingAcquire = false;
 
     if (!status.IsSuccess()) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Failed to acquire semaphore, " << status.GetIssues().ToOneLineString());
+        YDB_LOG_ERROR("Failed to acquire semaphore",
+            {"logPrefix", LogPrefix},
+            {"#_status.GetIssues().ToOneLineString", status.GetIssues().ToOneLineString()});
         Metrics.Errors->Inc();
         ResetState();
         return;
@@ -771,7 +825,8 @@ void TLocalLeaderElection::ProcessAcquireSemaphoreResult(const TRpcOut& message)
     }
     SentRequests.erase(reqId);
     if (source.acquired()) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Semaphore successfully acquired");
+        YDB_LOG_DEBUG("Semaphore successfully acquired",
+            {"logPrefix", LogPrefix});
         LastAcquireSemaphore = TInstant::Now();    // delay
     } else {
         LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Semaphore acquire timed out");
@@ -779,7 +834,8 @@ void TLocalLeaderElection::ProcessAcquireSemaphoreResult(const TRpcOut& message)
 }
 
 void TLocalLeaderElection::ProcessDescribeSemaphoreResult(const TRpcOut& message) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Received DescribeSemaphoreResult");
+    YDB_LOG_DEBUG("Received DescribeSemaphoreResult",
+        {"logPrefix", LogPrefix});
     const auto& source = message.describe_semaphore_result();
     NYdb::NIssue::TIssues issues;
     NYdb::NIssue::IssuesFromMessage(source.issues(), issues);
@@ -787,7 +843,9 @@ void TLocalLeaderElection::ProcessDescribeSemaphoreResult(const TRpcOut& message
 
     PendingDescribe = false;
     if (!status.IsSuccess()) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Semaphore describe fail, " << status.GetIssues());
+        YDB_LOG_ERROR("Semaphore describe fail",
+            {"logPrefix", LogPrefix},
+            {"#_status.GetIssues", status.GetIssues()});
         Metrics.Errors->Inc();
         ResetState();
         return;
@@ -804,7 +862,8 @@ void TLocalLeaderElection::ProcessDescribeSemaphoreResult(const TRpcOut& message
     const NYdb::NCoordination::TSemaphoreDescription& description = source.semaphore_description();
     Y_ABORT_UNLESS(description.GetOwners().size() <= 1, "To many owners");
     if (description.GetOwners().empty()) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Empty owners");
+        YDB_LOG_DEBUG("Empty owners",
+            {"logPrefix", LogPrefix});
         // Wait OnChanged.
         return;
     }
@@ -817,9 +876,16 @@ void TLocalLeaderElection::ProcessDescribeSemaphoreResult(const TRpcOut& message
     }
 
     NActors::TActorId id = ActorIdFromProto(protoId);
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Semaphore successfully described: coordinator id " << id << " generation " << generation);
+    YDB_LOG_DEBUG("Semaphore successfully described: coordinator id generation",
+        {"logPrefix", LogPrefix},
+        {"id", id},
+        {"generation", generation});
     if (!LeaderActorId || (*LeaderActorId != id)) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Send TEvCoordinatorChanged to " << ParentId << ", new coordinator id " << id << ", previous coordinator id " << LeaderActorId.GetOrElse(TActorId()));
+        YDB_LOG_INFO("Send TEvCoordinatorChanged to new coordinator id previous coordinator id",
+            {"logPrefix", LogPrefix},
+            {"parentId", ParentId},
+            {"id", id},
+            {"#_LeaderActorId.GetOrElse(TActorId())", LeaderActorId.GetOrElse(TActorId())});
         TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(id, generation));
         Metrics.LeaderChanged->Inc();
     }
@@ -827,7 +893,8 @@ void TLocalLeaderElection::ProcessDescribeSemaphoreResult(const TRpcOut& message
 }
 
 void TLocalLeaderElection::ProcessDescribeSemaphoreChanged(const TRpcOut& message) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Received DescribeSemaphoreChanged");
+    YDB_LOG_DEBUG("Received DescribeSemaphoreChanged",
+        {"logPrefix", LogPrefix});
     PendingDescribeChanged = false;
 
     const auto& source = message.describe_semaphore_changed();
@@ -840,15 +907,18 @@ void TLocalLeaderElection::ProcessDescribeSemaphoreChanged(const TRpcOut& messag
 }
 
 void TLocalLeaderElection::ProcessReleaseSemaphoreResult(const TRpcOut& /*message*/) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Received ReleaseSemaphoreResult");
+    YDB_LOG_DEBUG("Received ReleaseSemaphoreResult",
+        {"logPrefix", LogPrefix});
 }
 
 void TLocalLeaderElection::ProcessAcquireSemaphorePending(const TRpcOut& /*message*/) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Received AcquireSemaphorePending");
+    YDB_LOG_DEBUG("Received AcquireSemaphorePending",
+        {"logPrefix", LogPrefix});
 }
 
 void TLocalLeaderElection::ProcessUpdateSemaphoreResult(const TRpcOut& message) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Received UpdateSemaphoreResult");
+    YDB_LOG_DEBUG("Received UpdateSemaphoreResult",
+        {"logPrefix", LogPrefix});
 
     const auto& source = message.update_semaphore_result();
     const uint64_t reqId = source.req_id();
@@ -860,7 +930,8 @@ void TLocalLeaderElection::ProcessUpdateSemaphoreResult(const TRpcOut& message) 
 }
 
 void TLocalLeaderElection::ProcessDeleteSemaphoreResult(const TRpcOut& message) {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Received DeleteSemaphoreResult");
+    YDB_LOG_DEBUG("Received DeleteSemaphoreResult",
+        {"logPrefix", LogPrefix});
     const auto& source = message.delete_semaphore_result();
     const uint64_t reqId = source.req_id();
     auto* op = FindSentRequest(reqId);
@@ -872,7 +943,10 @@ void TLocalLeaderElection::ProcessDeleteSemaphoreResult(const TRpcOut& message) 
 
 void TLocalLeaderElection::UpdateLastKnownGoodTimestampLocked(TInstant timestamp) {
     SessionLastKnownGoodTimestamp = Max(SessionLastKnownGoodTimestamp, timestamp);
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "UpdateLastKnownGoodTimestampLocked timestamp " << timestamp << " new " << SessionLastKnownGoodTimestamp);
+    YDB_LOG_TRACE("UpdateLastKnownGoodTimestampLocked timestamp new",
+        {"logPrefix", LogPrefix},
+        {"timestamp", timestamp},
+        {"sessionLastKnownGoodTimestamp", SessionLastKnownGoodTimestamp});
 }
 
 TLocalLeaderElection::TOperation* TLocalLeaderElection::FindSentRequest(uint64_t reqId) const {
@@ -888,7 +962,9 @@ void TLocalLeaderElection::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
     const auto reason = ev->Get()->Reason;
     Y_VALIDATE(sourceType == NKikimr::NGRpcService::TEvCoordinationSessionRequest::EventType, "Unexpected undelivered event: " << sourceType << ", reason: " << reason);
 
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Coordination service is unavailable, reason: " << reason);
+    YDB_LOG_ERROR("Coordination service is unavailable",
+        {"logPrefix", LogPrefix},
+        {"reason", reason});
     CloseSession(NYdb::EStatus::INTERNAL_ERROR, {NYql::TIssue("Coordination service is unavailable, please contact internal support")});
     ResetState();
 }

@@ -8,6 +8,8 @@
 
 #include <yql/essentials/public/purecalc/common/interface.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_ROW_DISPATCHER
+
 namespace NFq::NRowDispatcher {
 
 namespace {
@@ -49,7 +51,8 @@ public:
             Finish();
         };
 
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Started compile request");
+        YDB_LOG_TRACE("Started compile request",
+            {"logPrefix", LogPrefix});
         IProgramHolder::TPtr programHolder = std::move(Request->Get()->ProgramHolder);
 
         TStatus status = TStatus::Success();
@@ -64,10 +67,12 @@ public:
         }
 
         if (status.IsFail()) {
-            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Compilation failed for request");
+            YDB_LOG_ERROR("Compilation failed for request",
+                {"logPrefix", LogPrefix});
             Send(Request->Sender, new TEvRowDispatcher::TEvPurecalcCompileResponse(status.GetStatus(), status.GetErrorDescription()), 0, Request->Cookie);
         } else {
-            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Compilation completed for request");
+            YDB_LOG_TRACE("Compilation completed for request",
+                {"logPrefix", LogPrefix});
             Send(Request->Sender, new TEvRowDispatcher::TEvPurecalcCompileResponse(std::move(programHolder)), 0, Request->Cookie);
         }
     }
@@ -128,7 +133,10 @@ public:
     void Handle(TEvRowDispatcher::TEvPurecalcCompileRequest::TPtr& ev) {
         const auto requestActor = ev->Sender;
         const ui64 requestId = ev->Cookie;
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Add to compile queue request with id " << requestId << " from " << requestActor);
+        YDB_LOG_TRACE("Add to compile queue request with id",
+            {"logPrefix", LogPrefix},
+            {"requestId", requestId},
+            {"requestActor", requestActor});
 
         // Remove old compile request
         RemoveRequest(requestActor, requestId);
@@ -142,13 +150,19 @@ public:
     }
 
     void Handle(TEvRowDispatcher::TEvPurecalcCompileAbort::TPtr& ev) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Abort compile request with id " << ev->Cookie << " from " << ev->Sender);
+        YDB_LOG_TRACE("Abort compile request with id",
+            {"logPrefix", LogPrefix},
+            {"#_ev->Cookie", ev->Cookie},
+            {"#_ev->Sender", ev->Sender});
 
         RemoveRequest(ev->Sender, ev->Cookie);
     }
 
     void Handle(TEvPrivate::TEvCompileFinished::TPtr& ev) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Compile finished for request with id " << ev->Get()->RequestId << " from " << ev->Get()->RequestActor);
+        YDB_LOG_TRACE("Compile finished for request with id",
+            {"logPrefix", LogPrefix},
+            {"#_ev->Get()->RequestId", ev->Get()->RequestId},
+            {"#_ev->Get()->RequestActor", ev->Get()->RequestActor});
 
         InFlightCompilations.erase(ev->Sender);
         Counters.ActiveCompileActors->Dec();

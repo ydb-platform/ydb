@@ -1,6 +1,8 @@
 #include "shard_impl.h"
 #include "log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRAPH
+
 namespace NKikimr {
 namespace NGraph {
 
@@ -17,13 +19,18 @@ public:
     TTxType GetTxType() const override { return NGraphShard::TXTYPE_GET_METRICS; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("TTxGetMetrics::Execute");
+        YDB_LOG_DEBUG("TTxGetMetrics::Execute",
+            {"logPrefix", GetLogPrefix()});
         return Self->LocalBackend.GetMetrics(txc, Event->Get()->Record, Result);
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("TTxGetMetric::Complete");
-        BLOG_TRACE("TxGetMetrics returned " << Result.TimeSize() << " points for request " << Event->Cookie);
+        YDB_LOG_DEBUG("TTxGetMetric::Complete",
+            {"logPrefix", GetLogPrefix()});
+        YDB_LOG_TRACE("TxGetMetrics returned points for request",
+            {"logPrefix", GetLogPrefix()},
+            {"timeSize", Result.TimeSize()},
+            {"cookie", Event->Cookie});
         ctx.Send(Event->Sender, new TEvGraph::TEvMetricsResult(std::move(Result)), 0, Event->Cookie);
     }
 };
@@ -33,7 +40,10 @@ void TGraphShard::ExecuteTxGetMetrics(TEvGraph::TEvGetMetrics::TPtr ev) {
         case EBackendType::Memory: {
             NKikimrGraph::TEvMetricsResult result;
             MemoryBackend.GetMetrics(ev->Get()->Record, result);
-            BLOG_TRACE("GetMetrics returned " << result.TimeSize() << " points for request " << ev->Cookie);
+            YDB_LOG_TRACE("GetMetrics returned points for request",
+                {"logPrefix", GetLogPrefix()},
+                {"timeSize", result.TimeSize()},
+                {"cookie", ev->Cookie});
             Send(ev->Sender, new TEvGraph::TEvMetricsResult(std::move(result)), 0, ev->Cookie);
             break;
         }

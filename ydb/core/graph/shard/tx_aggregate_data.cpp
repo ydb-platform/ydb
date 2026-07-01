@@ -1,6 +1,8 @@
 #include "shard_impl.h"
 #include "log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRAPH
+
 namespace NKikimr {
 namespace NGraph {
 
@@ -16,14 +18,17 @@ public:
     TTxType GetTxType() const override { return NGraphShard::TXTYPE_AGGREGATE_DATA; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("TTxAggregateData::Execute (" << Settings.ToString() << ")");
+        YDB_LOG_DEBUG("TTxAggregateData::Execute",
+            {"logPrefix", GetLogPrefix()},
+            {"settings", Settings});
         TInstant now = TActivationContext::Now();
         return Self->LocalBackend.AggregateData(txc, now, Settings);
         return true;
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("TTxAggregateData::Complete");
+        YDB_LOG_DEBUG("TTxAggregateData::Complete",
+            {"logPrefix", GetLogPrefix()});
     }
 };
 

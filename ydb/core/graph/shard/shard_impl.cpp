@@ -4,6 +4,8 @@
 #include <ydb/core/engine/minikql/flat_local_tx_factory.h>
 #include <ydb/core/base/tablet_pipe.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::GRAPH
+
 namespace NKikimr {
 namespace NGraph {
 
@@ -19,17 +21,20 @@ TString TGraphShard::GetLogPrefix() const {
 }
 
 void TGraphShard::OnActivateExecutor(const TActorContext&) {
-    BLOG_D("OnActivateExecutor");
+    YDB_LOG_DEBUG("OnActivateExecutor",
+        {"logPrefix", GetLogPrefix()});
     ExecuteTxInitSchema();
 }
 
 void TGraphShard::OnTabletDead(TEvTablet::TEvTabletDead::TPtr&, const TActorContext&) {
-    BLOG_D("OnTabletDead");
+    YDB_LOG_DEBUG("OnTabletDead",
+        {"logPrefix", GetLogPrefix()});
     PassAway();
 }
 
 void TGraphShard::OnDetach(const TActorContext&) {
-    BLOG_D("OnDetach");
+    YDB_LOG_DEBUG("OnDetach",
+        {"logPrefix", GetLogPrefix()});
     PassAway();
 }
 
@@ -50,9 +55,12 @@ void TGraphShard::OnReadyToWork() {
 }
 
 void TGraphShard::ApplyConfig(const NKikimrConfig::TGraphConfig& config) {
-    BLOG_D("Updated Config to " << config.ShortDebugString());
+    YDB_LOG_DEBUG("Updated Config",
+        {"logPrefix", GetLogPrefix()},
+        {"config", config});
     if (config.HasBackendType()) {
-        BLOG_D("Updated BackendType");
+        YDB_LOG_DEBUG("Updated BackendType",
+            {"logPrefix", GetLogPrefix()});
         if (config.GetBackendType() == "Memory") {
             BackendType = EBackendType::Memory;
         }
@@ -64,11 +72,13 @@ void TGraphShard::ApplyConfig(const NKikimrConfig::TGraphConfig& config) {
         }
     }
     if (config.HasAggregateCheckPeriodSeconds()) {
-        BLOG_D("Updated AggregateCheckPeriod");
+        YDB_LOG_DEBUG("Updated AggregateCheckPeriod",
+            {"logPrefix", GetLogPrefix()});
         AggregateCheckPeriod = TDuration::Seconds(config.GetAggregateCheckPeriodSeconds());
     }
     if (config.AggregationSettingsSize() != 0) {
-        BLOG_D("Updated AggregationSettings");
+        YDB_LOG_DEBUG("Updated AggregationSettings",
+            {"logPrefix", GetLogPrefix()});
         AggregateSettings.clear();
         for (const auto& protoSettings : config.GetAggregationSettings()) {
             TAggregateSettings& settings = AggregateSettings.emplace_back();
@@ -84,7 +94,8 @@ void TGraphShard::ApplyConfig(const NKikimrConfig::TGraphConfig& config) {
         }
 
         if (AggregateSettings.empty()) {
-            BLOG_W("Settings are empty - fail-safe settings applied");
+            YDB_LOG_WARN("Settings are empty - fail-safe settings applied",
+                {"logPrefix", GetLogPrefix()});
             AggregateSettings.emplace_back().PeriodToStart = TDuration::Days(7);
         }
     }
@@ -169,43 +180,64 @@ STFUNC(TGraphShard::StateWork) {
         hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);
     default:
         if (!HandleDefaultEvents(ev, SelfId())) {
-            BLOG_W("StateWork unhandled event type: " << ev->GetTypeRewrite() << " event: " << ev->ToString());
+            YDB_LOG_WARN("StateWork unhandled event",
+                {"logPrefix", GetLogPrefix()},
+                {"type", ev->GetTypeRewrite()},
+                {"event", ev->ToString()});
         }
         break;
     }
 }
 
 void TGraphShard::Handle(TEvTabletPipe::TEvServerConnected::TPtr& ev) {
-    BLOG_TRACE("Handle TEvTabletPipe::TEvServerConnected(" << ev->Get()->ClientId << ") " << ev->Get()->ServerId);
+    YDB_LOG_TRACE("Handle TEvTabletPipe::TEvServerConnected(",
+        {"logPrefix", GetLogPrefix()},
+        {"clientId", ev->Get()->ClientId},
+        {"serverId", ev->Get()->ServerId});
 }
 
 void TGraphShard::Handle(TEvTabletPipe::TEvServerDisconnected::TPtr& ev) {
-    BLOG_TRACE("Handle TEvTabletPipe::TEvServerDisconnected(" << ev->Get()->ClientId << ") " << ev->Get()->ServerId);
+    YDB_LOG_TRACE("Handle TEvTabletPipe::TEvServerDisconnected(",
+        {"logPrefix", GetLogPrefix()},
+        {"clientId", ev->Get()->ClientId},
+        {"serverId", ev->Get()->ServerId});
 }
 
 void TGraphShard::Handle(TEvSubDomain::TEvConfigure::TPtr& ev) {
-    BLOG_D("Handle TEvSubDomain::TEvConfigure(" << ev->Get()->Record.ShortDebugString() << ")");
+    YDB_LOG_DEBUG("Handle TEvSubDomain::TEvConfigure(",
+        {"logPrefix", GetLogPrefix()},
+        {"ev", ev->Get()->Record});
     Send(ev->Sender, new TEvSubDomain::TEvConfigureStatus(NKikimrTx::TEvSubDomainConfigurationAck::SUCCESS, TabletID()));
 }
 
 void TGraphShard::Handle(TEvGraph::TEvSendMetrics::TPtr& ev) {
-    BLOG_TRACE(ev->Get()->Record.ShortDebugString());
+    YDB_LOG_TRACE("Dump logPrefix, ev",
+        {"logPrefix", GetLogPrefix()},
+        {"ev", ev->Get()->Record});
     if (ev->Get()->Record.HasTime()) { // direct insertion
         TMetricsData data;
         data.Timestamp = TInstant::Seconds(ev->Get()->Record.GetTime());
         MergeMetrics(data, ev->Get()->Record);
-        BLOG_TRACE("Executing direct TxStoreMetrics");
+        YDB_LOG_TRACE("Executing direct TxStoreMetrics",
+            {"logPrefix", GetLogPrefix()});
         ExecuteTxStoreMetrics(std::move(data));
         return;
     }
     TInstant now = TInstant::Seconds(TActivationContext::Now().Seconds()); // 1 second resolution
-    BLOG_TRACE("Handle TEvGraph::TEvSendMetrics from " << ev->Sender << " now is " << now << " md.timestamp is " << MetricsData.Timestamp);
+    YDB_LOG_TRACE("Handle TEvGraph::TEvSendMetrics from now is md.timestamp is",
+        {"logPrefix", GetLogPrefix()},
+        {"sender", ev->Sender},
+        {"now", now},
+        {"timestamp", MetricsData.Timestamp});
     if (now != MetricsData.Timestamp) {
         if (MetricsData.Timestamp != TInstant()) {
-            BLOG_TRACE("Executing TxStoreMetrics");
+            YDB_LOG_TRACE("Executing TxStoreMetrics",
+                {"logPrefix", GetLogPrefix()});
             ExecuteTxStoreMetrics(std::move(MetricsData));
         }
-        BLOG_TRACE("Updating md.timestamp to " << now);
+        YDB_LOG_TRACE("Updating md.timestamp",
+            {"logPrefix", GetLogPrefix()},
+            {"now", now});
         MetricsData.Timestamp = now;
         MetricsData.Values.clear();
     }
@@ -213,7 +245,9 @@ void TGraphShard::Handle(TEvGraph::TEvSendMetrics::TPtr& ev) {
         AggregateTimestamp = now;
         for (const auto& settings : AggregateSettings) {
             if (settings.IsItTimeToAggregate(now)) {
-                BLOG_TRACE("Executing TxAggregateData for " << settings.ToString());
+                YDB_LOG_TRACE("Executing TxAggregateData",
+                    {"logPrefix", GetLogPrefix()},
+                    {"settings", settings});
                 ExecuteTxAggregateData(settings);
             }
         }
@@ -223,13 +257,17 @@ void TGraphShard::Handle(TEvGraph::TEvSendMetrics::TPtr& ev) {
 }
 
 void TGraphShard::Handle(TEvGraph::TEvGetMetrics::TPtr& ev) {
-    BLOG_TRACE("Handle TEvGraph::TEvGetMetrics from " << ev->Sender);
+    YDB_LOG_TRACE("Handle TEvGraph::TEvGetMetrics",
+        {"logPrefix", GetLogPrefix()},
+        {"sender", ev->Sender});
     ExecuteTxGetMetrics(ev);
 }
 
 void TGraphShard::Handle(NConsole::TEvConsole::TEvConfigNotificationRequest::TPtr& ev) {
     const NKikimrConsole::TConfigNotificationRequest& record = ev->Get()->Record;
-    BLOG_D("Received TEvConsole::TEvConfigNotificationRequest with update of config: " << record.GetConfig().GetGraphConfig().ShortDebugString());
+    YDB_LOG_DEBUG("Received TEvConsole::TEvConfigNotificationRequest with update of",
+        {"logPrefix", GetLogPrefix()},
+        {"config", record.GetConfig().GetGraphConfig()});
     ApplyConfig(record.GetConfig().GetGraphConfig());
     Send(ev->Sender, new NConsole::TEvConsole::TEvConfigNotificationResponse(record), 0, ev->Cookie);
 }

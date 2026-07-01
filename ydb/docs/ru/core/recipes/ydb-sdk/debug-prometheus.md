@@ -101,10 +101,6 @@
 
   {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
 
-- PHP
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
   Отслеживайте прогресс или голосуйте за поддержку Rust SDK: [ydb-rs-sdk#267](https://github.com/ydb-platform/ydb-rs-sdk/issues/267)
 
 {% endlist %}

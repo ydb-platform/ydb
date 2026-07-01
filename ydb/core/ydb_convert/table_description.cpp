@@ -1442,6 +1442,7 @@ bool FillColumnFamily(
 bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::AlterTableRequest* req,
     NKikimrSchemeOp::TModifyScheme* modifyScheme, const NYql::TKikimrTableMetadataPtr& alteredTable, Ydb::StatusIds::StatusCode& status, TString& error) {
     const auto ops = GetAlterOperationKinds(req);
+
     if (ops.empty()) {
         status = Ydb::StatusIds::BAD_REQUEST;
         error = "Empty alter";
@@ -1709,6 +1710,10 @@ bool BuildAlterColumnTableModifyScheme(const TString& path, const Ydb::Table::Al
         alterColumnTable->SetName(name);
         modifyScheme->SetOperationType(NKikimrSchemeOp::EOperationType::ESchemeOpAlterColumnTable);
         alterColumnTable->MutableAlterSchema()->AddDropIndexes(req->drop_indexes(0));
+    } else if (OpType == EAlterOperationKind::Compact) {
+        status = Ydb::StatusIds::INTERNAL_ERROR;
+        error = "Compact operation must be handled by PrepareAlterColumnTable, not BuildAlterColumnTableModifyScheme";
+        return false;
     }
 
     return true;

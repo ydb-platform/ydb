@@ -108,19 +108,6 @@ void ValidateColumnType(const TTypeAnnotationNode* type, NKikimr::NScheme::TType
     }
 }
 
-void ValidateColumnsType(const TStreamExprType* streamType, const TKikimrTableMetadata& tableMeta) {
-    YQL_ENSURE(streamType);
-    auto rowType = streamType->GetItemType()->Cast<TStructExprType>();
-
-    for (auto* member : rowType->GetItems()) {
-        auto columnData = tableMeta.Columns.FindPtr(member->GetName());
-        YQL_ENSURE(columnData);
-        auto columnDataType = columnData->TypeInfo.GetTypeId();
-        YQL_ENSURE(columnDataType != 0);
-        ValidateColumnType(member->GetItemType(), columnDataType);
-    }
-}
-
 void ValidateRangeBoundType(const TTupleExprType* keyTupleType, const TKikimrTableMetadata& tableMeta) {
     YQL_ENSURE(keyTupleType);
     YQL_ENSURE(keyTupleType->GetSize() == tableMeta.KeyColumnNames.size() + 1);
@@ -335,69 +322,6 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
                 returnType
             );
 
-            return result;
-        });
-
-    compiler->AddCallable(TKqpUpsertRows::CallableName(),
-        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            TKqpUpsertRows upsertRows(&node);
-
-            auto settings = TKqpUpsertRowsSettings::Parse(upsertRows);
-
-            const auto& tableMeta = ctx.GetTableMeta(upsertRows.Table());
-
-            auto rows = MkqlBuildExpr(upsertRows.Input().Ref(), buildCtx);
-
-            auto rowsType = upsertRows.Input().Ref().GetTypeAnn()->Cast<TStreamExprType>();
-            ValidateColumnsType(rowsType, tableMeta);
-
-            auto rowType = rowsType->GetItemType()->Cast<TStructExprType>();
-            YQL_ENSURE(rowType->GetItems().size() == upsertRows.Columns().Size());
-
-            THashSet<TStringBuf> keySet(tableMeta.KeyColumnNames.begin(), tableMeta.KeyColumnNames.end());
-            THashSet<TStringBuf> upsertSet;
-            for (const auto& column : upsertRows.Columns()) {
-                if (keySet.contains(column)) {
-                    keySet.erase(column);
-                } else {
-                    upsertSet.insert(column);
-                }
-            }
-
-            YQL_ENSURE(keySet.empty());
-            YQL_ENSURE(tableMeta.KeyColumnNames.size() + upsertSet.size() == upsertRows.Columns().Size());
-            TVector<TStringBuf> upsertColumns(upsertSet.begin(), upsertSet.end());
-
-            auto result = ctx.PgmBuilder().KqpUpsertRows(MakeTableId(upsertRows.Table()), rows,
-                GetKqpColumns(tableMeta, upsertColumns, false), settings.IsUpdate);
-
-            return result;
-        });
-
-    compiler->AddCallable(TKqpDeleteRows::CallableName(),
-        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            TKqpDeleteRows deleteRows(&node);
-
-            const auto& tableMeta = ctx.GetTableMeta(deleteRows.Table());
-
-            auto rowsType = deleteRows.Input().Ref().GetTypeAnn()->Cast<TStreamExprType>();
-            ValidateColumnsType(rowsType, tableMeta);
-
-            const auto tableId = MakeTableId(deleteRows.Table());
-            const auto rows = MkqlBuildExpr(deleteRows.Input().Ref(), buildCtx);
-
-            return ctx.PgmBuilder().KqpDeleteRows(tableId, rows);
-        });
-
-    compiler->AddCallable(TKqpEffects::CallableName(),
-        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            std::vector<TRuntimeNode> args;
-            args.reserve(node.ChildrenSize());
-            node.ForEachChild([&](const TExprNode& child){
-                args.emplace_back(MkqlBuildExpr(child, buildCtx));
-            });
-
-            auto result = ctx.PgmBuilder().KqpEffects(args);
             return result;
         });
 

@@ -51,21 +51,6 @@ TRuntimeNode BuildColumnTags(const TProgramBuilder& builder, const TArrayRef<TKq
     return TRuntimeNode(tagsBuilder.Build(), true);
 }
 
-TRuntimeNode BuildColumnIndicesMap(const TProgramBuilder& builder, const TStructType& rowType,
-    const TArrayRef<TKqpTableColumn>& columns)
-{
-    TDictLiteralBuilder indicesMap(builder.GetTypeEnvironment(),
-        TDataType::Create(NUdf::TDataType<ui32>::Id, builder.GetTypeEnvironment()),
-        TDataType::Create(NUdf::TDataType<ui32>::Id, builder.GetTypeEnvironment()));
-
-    for (auto& column : columns) {
-        ui32 index = rowType.GetMemberIndex(column.Name);
-        indicesMap.Add(builder.NewDataLiteral<ui32>(column.Id), builder.NewDataLiteral<ui32>(index));
-    }
-
-    return TRuntimeNode(indicesMap.Build(), true);
-}
-
 TRuntimeNode BuildTableIdLiteral(const TTableId& tableId, TProgramBuilder& builder) {
     TVector<TRuntimeNode> tupleItems {
         builder.NewDataLiteral<ui64>(tableId.PathId.OwnerId),
@@ -216,42 +201,6 @@ TRuntimeNode TKqpProgramBuilder::KqpBlockReadTableRanges(const TTableId& tableId
     builder.Add(BuildColumnTags(*this, columns));
     builder.Add(ranges.ItemsLimit);
     builder.Add(NewDataLiteral(ranges.Reverse));
-
-    return TRuntimeNode(builder.Build(), false);
-}
-
-TRuntimeNode TKqpProgramBuilder::KqpUpsertRows(const TTableId& tableId, const TRuntimeNode& rows,
-    const TArrayRef<TKqpTableColumn>& upsertColumns, bool isUpdate)
-{
-    auto streamType = AS_TYPE(TStreamType, rows.GetStaticType());
-    auto rowType = AS_TYPE(TStructType, streamType->GetItemType());
-
-    auto returnType = NewStreamType(NewResourceType(NYql::KqpEffectTag));
-
-    TCallableBuilder builder(Env, __func__, returnType);
-    builder.Add(BuildTableIdLiteral(tableId, *this));
-    builder.Add(rows);
-    builder.Add(BuildColumnIndicesMap(*this, *rowType, upsertColumns));
-    builder.Add(this->NewDataLiteral<bool>(isUpdate));
-    return TRuntimeNode(builder.Build(), false);
-}
-
-TRuntimeNode TKqpProgramBuilder::KqpDeleteRows(const TTableId& tableId, const TRuntimeNode& rows) {
-    auto returnType = NewStreamType(NewResourceType(NYql::KqpEffectTag));
-
-    TCallableBuilder builder(Env, __func__, returnType);
-    builder.Add(BuildTableIdLiteral(tableId, *this));
-    builder.Add(rows);
-
-    return TRuntimeNode(builder.Build(), false);
-}
-
-TRuntimeNode TKqpProgramBuilder::KqpEffects(const TArrayRef<const TRuntimeNode>& effects) {
-    auto returnType = NewStreamType(NewResourceType(NYql::KqpEffectTag));
-    TCallableBuilder builder(Env, __func__, returnType);
-    for (auto& effect : effects) {
-        builder.Add(effect);
-    }
 
     return TRuntimeNode(builder.Build(), false);
 }

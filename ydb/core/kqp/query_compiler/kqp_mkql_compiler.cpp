@@ -325,19 +325,6 @@ TIntrusivePtr<IMkqlCallableCompiler> CreateKqlCompiler(const TKqlCompileContext&
             return result;
         });
 
-
-    compiler->AddCallable(TKqpEffects::CallableName(),
-        [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
-            std::vector<TRuntimeNode> args;
-            args.reserve(node.ChildrenSize());
-            node.ForEachChild([&](const TExprNode& child){
-                args.emplace_back(MkqlBuildExpr(child, buildCtx));
-            });
-
-            auto result = ctx.PgmBuilder().KqpEffects(args);
-            return result;
-        });
-
     compiler->AddCallable(TKqpEnsure::CallableName(),
         [&ctx](const TExprNode& node, TMkqlBuildContext& buildCtx) {
             TKqpEnsure ensure(&node);

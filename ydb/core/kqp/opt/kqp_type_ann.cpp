@@ -1848,43 +1848,6 @@ TStatus AnnotateKqpPhysicalQuery(const TExprNode::TPtr& node, TExprContext& ctx,
     return TStatus::Ok;
 }
 
-bool IsExpectedEffect(const NYql::TExprNode* effect) {
-    return TKqlUpsertRowsBase::Match(effect)
-        || TKqlDeleteRowsBase::Match(effect)
-        || TKqpWriteConstraint::Match(effect);
-}
-
-TStatus AnnotateKqpEffects(const TExprNode::TPtr& node, TExprContext& ctx) {
-    auto kqpEffectType = MakeKqpEffectType(ctx);
-
-    for (const auto& arg : node->ChildrenList()) {
-        if (!EnsureCallable(*arg, ctx)) {
-            return TStatus::Error;
-        }
-
-        if (!IsExpectedEffect(arg.Get())) {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
-                << "Unexpected effect: " << arg->Content()));
-            return TStatus::Error;
-        }
-
-        if (!EnsureStreamType(*arg, ctx)) {
-            return TStatus::Error;
-        }
-
-        auto itemType = arg->GetTypeAnn()->Cast<TStreamExprType>()->GetItemType();
-        if (!IsSameAnnotation(*kqpEffectType, *itemType)) {
-            ctx.AddError(TIssue(ctx.GetPosition(node->Pos()), TStringBuilder()
-                << "Invalid YDB effect type, expected: " << FormatType(kqpEffectType)
-                << ", actual: " << FormatType(itemType)));
-            return TStatus::Error;
-        }
-    }
-
-    node->SetTypeAnn(ctx.MakeType<TStreamExprType>(kqpEffectType));
-    return TStatus::Ok;
-}
-
 TStatus AnnotateWriteConstraint(const TExprNode::TPtr& node, TExprContext& ctx) {
     Y_UNUSED(ctx);
 
@@ -3265,7 +3228,6 @@ public:
         AddHandler({TKqpTxInternalBinding::CallableName()}, Hndl(&AnnotateKqpTxInternalBinding));
         AddHandler({TKqpPhysicalTx::CallableName()}, Hndl(&AnnotateKqpPhysicalTx));
         AddHandler({TKqpPhysicalQuery::CallableName()}, HndlInt(&AnnotateKqpPhysicalQuery));
-        AddHandler({TKqpEffects::CallableName()}, Hndl(&AnnotateKqpEffects));
         AddHandler({TKqpWriteConstraint::CallableName()}, Hndl(&AnnotateWriteConstraint));
         AddHandler({TKqlSequencer::CallableName()}, HndlInt(&AnnotateSequencer));
         AddHandler({TKqpProgram::CallableName()}, Hndl(&AnnotateKqpProgram));

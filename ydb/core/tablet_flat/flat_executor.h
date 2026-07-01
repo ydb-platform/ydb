@@ -492,6 +492,9 @@ class TExecutor
     mutable bool HadRejectProbabilityByOverload = false;
 
     THashMap<ui32, TIntrusivePtr<TBarrier>> InFlyCompactionGcBarriers;
+    // GC barriers held for in-progress direct part writes, keyed by reserved step.
+    // Released when the write is committed (AttachPart) or aborted (ReleaseWritePart).
+    THashMap<ui32, TIntrusivePtr<TBarrier>> DirectWriteBarriers;
     TDeque<THolder<TEvTablet::TFUpdateBody>> PostponedFollowerUpdates;
     THashMap<ui32, TVector<TIntrusivePtr<TBarrier>>> InFlySnapCollectionBarriers;
 
@@ -709,6 +712,8 @@ public:
     ui64 CompactMemTable(ui32 tableId) override;
     ui64 CompactTable(ui32 tableId) override;
     bool CompactTables() override;
+    THolder<TDirectPartWriter> BeginWritePart(ui32 tableId) override;
+    void ReleaseWritePart(ui32 step) override;
     void MoveData(TEvTablet::TEvMoveData::TPtr &ev) override;
 
     void StartVacuum(TVacuumTag tag) override;

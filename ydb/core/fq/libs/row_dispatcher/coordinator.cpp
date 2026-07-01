@@ -1,6 +1,5 @@
 #include "coordinator.h"
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/actors/nodes_manager_events.h>
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/core/fq/libs/ydb/schema.h>
@@ -12,6 +11,7 @@
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
 #include <ydb/library/actors/core/interconnect.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/protos/actors.pb.h>
 
 #include <ydb/public/sdk/cpp/adapters/issue/issue.h>
@@ -25,7 +25,7 @@ using namespace NThreading;
 using NYql::TIssues;
 
 namespace {
-    
+
 ////////////////////////////////////////////////////////////////////////////////
 
 struct TCoordinatorMetrics {
@@ -116,12 +116,12 @@ class TActorCoordinator : public TActorBootstrapped<TActorCoordinator> {
     };
 
     struct TRowDispatcherInfo {
-        TRowDispatcherInfo(bool connected, ENodeState state, bool isLocal) 
+        TRowDispatcherInfo(bool connected, ENodeState state, bool isLocal)
             : Connected(connected)
             , State(state)
             , IsLocal(isLocal) {}
         bool Connected = false;
-        ENodeState State; 
+        ENodeState State;
         bool IsLocal = false;
         THashSet<TPartitionKey, TPartitionKeyHash> Locations;
     };
@@ -289,7 +289,7 @@ void TActorCoordinator::Bootstrap() {
     if (PrintStateEnabled) {
         Schedule(TDuration::Seconds(PrintStatePeriodSec), new TEvPrivate::TEvPrintState());
     }
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Successfully bootstrapped coordinator, id " << SelfId() 
+    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Successfully bootstrapped coordinator, id " << SelfId()
         << ", NodesManagerId " << NodesManagerId
         << ", rebalancing timeout " << RebalancingTimeout);
     auto nodeGroup = Metrics.Counters->GetSubgroup("node", ToString(SelfId().NodeId()));
@@ -400,7 +400,7 @@ void TActorCoordinator::HandleConnected(TEvInterconnect::TEvNodeConnected::TPtr&
 
 void TActorCoordinator::HandleDisconnected(TEvInterconnect::TEvNodeDisconnected::TPtr& ev) {
     LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "TEvNodeDisconnected, node id " << ev->Get()->NodeId);
-   
+
     for (auto& [actorId, info] : RowDispatchers) {
         if (ev->Get()->NodeId != actorId.NodeId()) {
             continue;
@@ -623,7 +623,7 @@ void TActorCoordinator::Handle(TEvPrivate::TEvRebalancing::TPtr&) {
     };
 
     printState("Current state (rebalancing):");
-    
+
     for (auto& [actorId, info] : RowDispatchers) {
         if (info.State == ENodeState::Initializing) {
             if (info.Connected) {

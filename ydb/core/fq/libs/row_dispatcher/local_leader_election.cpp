@@ -1,7 +1,6 @@
 #include "local_leader_election.h"
 #include <memory>
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/ydb/util.h>
 
@@ -11,6 +10,7 @@
 #include <ydb/core/grpc_services/service_coordination.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/protos/actors.pb.h>
 #include <ydb/library/logger/actor.h>
 
@@ -274,7 +274,7 @@ void TLocalLeaderElection::ResetState() {
     State = EState::Init;
     SetTimeout();
     SessionId = 0;
-    while (PendingRpcResponses) {  
+    while (PendingRpcResponses) {
         SendSessionEventFail();
     }
     PendingRpcResponses = 0;
@@ -339,7 +339,7 @@ void TLocalLeaderElection::StartSession() {
         .RequestType = std::nullopt,
         .RpcMethodName = "CoordinationService.Session",
         });
-    
+
     auto ev = std::make_unique<NKikimr::NGRpcService::TEvCoordinationSessionRequest>(std::move(ctx), NKikimr::NGRpcService::TRequestAuxSettings{});
     if (token) {
         ev->SetInternalToken(MakeIntrusive<NACLib::TUserToken>(token));
@@ -389,7 +389,7 @@ void TLocalLeaderElection::SetTimeout() {
 void TLocalLeaderElection::Handle(TEvPrivate::TEvRestart::TPtr&) {
     RestartScheduled = false;
     LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "TEvRestart");
-    ProcessState(); 
+    ProcessState();
 }
 
 void TLocalLeaderElection::DescribeSemaphore() {
@@ -729,7 +729,7 @@ void TLocalLeaderElection::ProcessCreateSemaphoreResult(const TRpcOut& message) 
     const auto& source = message.create_semaphore_result();
     NYdb::NIssue::TIssues issues;
     NYdb::NIssue::IssuesFromMessage(source.issues(), issues);
-    
+
     auto status = NYdb::TStatus(static_cast<NYdb::EStatus>(source.status()), std::move(issues));
     LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Semaphore creating status: " << status);
     if (!IsTableCreated(status)) {
@@ -839,7 +839,7 @@ void TLocalLeaderElection::ProcessDescribeSemaphoreChanged(const TRpcOut& messag
     SentRequests.erase(reqId);
 }
 
-void TLocalLeaderElection::ProcessReleaseSemaphoreResult(const TRpcOut& /*message*/) {    
+void TLocalLeaderElection::ProcessReleaseSemaphoreResult(const TRpcOut& /*message*/) {
     LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Received ReleaseSemaphoreResult");
 }
 

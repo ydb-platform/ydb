@@ -2,7 +2,7 @@
 
 #include "purecalc_filter.h"
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/library/actors/core/log.h>
 
 namespace NFq::NRowDispatcher {
 

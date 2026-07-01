@@ -1,6 +1,5 @@
 #include "leader_election.h"
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/ydb/schema.h>
@@ -8,6 +7,7 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/protos/actors.pb.h>
 #include <ydb/library/logger/actor.h>
 
@@ -294,7 +294,7 @@ void TLeaderElection::CreateSemaphore() {
         .Subscribe(
         [actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncResult<void>& future) {
             actorSystem->Send(actorId, new TEvPrivate::TEvCreateSemaphoreResult(future));
-        }); 
+        });
 }
 
 void TLeaderElection::AcquireSemaphore() {
@@ -324,7 +324,7 @@ void TLeaderElection::StartSession() {
 
     YdbConnection->CoordinationClient
         .StartSession(
-            CoordinationNodePath, 
+            CoordinationNodePath,
             NYdb::NCoordination::TSessionSettings()
                 .Timeout(CoordinationSessionTimeout)
                 .OnStopped([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()]() {
@@ -410,7 +410,7 @@ void TLeaderElection::SetTimeout() {
 void TLeaderElection::Handle(TEvPrivate::TEvRestart::TPtr&) {
     RestartScheduled = false;
     LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "TEvRestart");
-    ProcessState(); 
+    ProcessState();
 }
 
 void TLeaderElection::DescribeSemaphore() {

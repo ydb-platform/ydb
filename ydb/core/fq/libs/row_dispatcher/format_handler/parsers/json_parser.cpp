@@ -7,7 +7,7 @@
 #include <library/cpp/containers/absl_flat_hash/flat_hash_map.h>
 #include <util/string/join.h>
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <yql/essentials/minikql/dom/json.h>
 #include <yql/essentials/minikql/mkql_node_cast.h>
@@ -381,7 +381,7 @@ public:
         FillColumnsBuffers();
         Buffer.Reserve(Config.BatchSize, MaxNumberRows);
 
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "JsonParser was created, simdjson active implementation " << simdjson::get_active_implementation()->name() 
+        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "JsonParser was created, simdjson active implementation " << simdjson::get_active_implementation()->name()
             << " (" << simdjson::get_active_implementation()->description() << ")"
             << ", config: error skip mode: " << Config.SkipErrors << ", batch size: " << Config.BatchSize << ", latency limit " << Config.LatencyLimit
             << ", buffer cell count: " << Config.BufferCellCount
@@ -496,7 +496,7 @@ protected:
             if (status == EParsingStatus::Finish) {
                 break;
             }
-            size_t inputRowId = state.OutputRowId + state.ErrorsCount; 
+            size_t inputRowId = state.OutputRowId + state.ErrorsCount;
             if (inputRowId < Buffer.MessageOffsets.size()) {
                 auto nextJsonOffset = Buffer.MessageOffsets[inputRowId];
                 state.CurrentBufferPtr = values + nextJsonOffset;
@@ -543,7 +543,7 @@ protected:
         ParsingFailedRowCount = 0;
     }
 
-private: 
+private:
     struct TParsingState {
         const char* InitialBufferPtr;
         const char* CurrentBufferPtr;
@@ -569,7 +569,7 @@ private:
         }
 
         auto currentJsonOffset = Buffer.MessageOffsets[inputRowId];
-        auto nextJsonOffset = Buffer.MessageOffsets[inputRowId + 1];        
+        auto nextJsonOffset = Buffer.MessageOffsets[inputRowId + 1];
         ui16 parsedNonOptional = 0;
         auto len = nextJsonOffset - currentJsonOffset;
 

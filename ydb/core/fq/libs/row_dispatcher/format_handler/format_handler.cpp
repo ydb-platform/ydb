@@ -5,10 +5,10 @@
 
 #include <util/generic/queue.h>
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/parser_base.h>
 #include <ydb/core/fq/libs/row_dispatcher/format_handler/parsers/raw_parser.h>
 
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/yql/dq/common/rope_over_buffer.h>
 
 #include <yql/essentials/minikql/computation/mkql_computation_node_pack.h>

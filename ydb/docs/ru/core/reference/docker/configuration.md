@@ -8,6 +8,7 @@
 | -- | -- | -- | -- |
 | [`YDB_GRPC_ENABLE_TLS`](https://GitHub.com/ydb-platform/ydb/blob/c113fcffa7b1a20ad8dcb1b1760ae5bfa25370ca/ydb/public/tools/lib/cmds/__init__.py#L258) | `0` или `1` | `1` | Включает использование TLS для gRPC соединений. |
 | [`YDB_GRPC_TLS_DATA_PATH`](https://GitHub.com/ydb-platform/ydb/blob/8fefc809c83829d8d8b886e82534d009de4c8826/ydb/public/tools/lib/cmds/__init__.py#L291) | `string` | `/ydb_data` | Путь до директории с TLS сертификатами для gRPC соединений. |
+| [`YDB_GRPC_TLS_USE_EXISTING_CERTS`](https://GitHub.com/ydb-platform/ydb/blob/main/ydb/public/tools/lib/cmds/__init__.py#L262) | `true` или `false` | `false` | Использует `ca.pem`, `cert.pem` и `key.pem` из `YDB_GRPC_TLS_DATA_PATH` вместо генерации новых сертификатов. Требуются все три файла. |
 | [`MON_PORT`](https://GitHub.com/ydb-platform/ydb/blob/8dde59cd0af86737d07a1cd8ff19811a2bd2b663/ydb/tests/library/harness/kikimr_port_allocator.py#L170) | `int` | `8765` | HTTP-порт [встроенного веб-интерфейса {{ ydb-short-name }}](../../reference/embedded-ui/index.md). |
 | [`GRPC_PORT`](https://GitHub.com/ydb-platform/ydb/blob/8dde59cd0af86737d07a1cd8ff19811a2bd2b663/ydb/tests/library/harness/kikimr_port_allocator.py#L174) | `int` | `2136` | gRPC порт. |
 | [`IC_PORT`](https://GitHub.com/ydb-platform/ydb/blob/8dde59cd0af86737d07a1cd8ff19811a2bd2b663/ydb/tests/library/harness/kikimr_port_allocator.py#L179) | `int` | `19001` | Порт интерконнекта. |

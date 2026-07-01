@@ -15,16 +15,6 @@
 #include <ydb/core/fq/libs/control_plane_storage/events/events.h>
 #include <google/protobuf/util/time_util.h>
 
-#define C_LOG_E(stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateCreateRateLimiterResource - QueryId: " << OperationId  << ", Owner: " << OwnerId  << ", " << stream)
-#define C_LOG_D(stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateCreateRateLimiterResource - QueryId: " << OperationId  << ", Owner: " << OwnerId  << ", "<< stream)
-
-#define D_LOG_E(stream) \
-    LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateDeleteRateLimiterResource - QueryId: " << OperationId  << ", Owner: " << OwnerId  << ", " << stream)
-#define D_LOG_D(stream) \
-    LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY, "PrivateDeleteRateLimiterResource - QueryId: " << OperationId  << ", Owner: " << OwnerId  << ", "<< stream)
-
 namespace NFq {
 
 using namespace NActors;
@@ -60,9 +50,11 @@ public:
     void Fail(const TString& message, Ydb::StatusIds::StatusCode reqStatus = Ydb::StatusIds::INTERNAL_ERROR) {
         Issues.AddIssue(message);
         const auto codeStr = Ydb::StatusIds_StatusCode_Name(reqStatus);
-        C_LOG_E(TStringBuilder()
-            << "Failed with code: " << codeStr
-            << " Details: " << Issues.ToString());
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY,
+            "PrivateCreateRateLimiterResource - QueryId: " << OperationId << ", Owner: " << OwnerId << ", "
+            << TStringBuilder()
+                << "Failed with code: " << codeStr
+                << " Details: " << Issues.ToString());
         auto res = MakeHolder<TEvents::TEvCreateRateLimiterResourceResponse>();
         res->Status = reqStatus;
         res->Issues.AddIssues(Issues);
@@ -75,7 +67,9 @@ public:
         const auto& req = Ev->Record;
         OperationId = req.query_id().value();
         OwnerId = req.owner_id();
-        C_LOG_D("Request CP::CreateRateLimiterResource with size: " << req.ByteSize() << " bytes");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY,
+            "PrivateCreateRateLimiterResource - QueryId: " << OperationId << ", Owner: " << OwnerId << ", "
+            << "Request CP::CreateRateLimiterResource with size: " << req.ByteSize() << " bytes");
         RequestedMBytes->Collect(req.ByteSize() / 1024 / 1024);
         try {
             auto event = CreateControlPlaneEvent();
@@ -99,7 +93,9 @@ private:
     }
 
     void HandleResponse(NFq::TEvControlPlaneStorage::TEvCreateRateLimiterResourceResponse::TPtr& ev) {
-        C_LOG_D("Got CP::CreateRateLimiterResourceResponse");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY,
+            "PrivateCreateRateLimiterResource - QueryId: " << OperationId << ", Owner: " << OwnerId << ", "
+            << "Got CP::CreateRateLimiterResourceResponse");
         const auto& issues = ev->Get()->Issues;
         if (issues) {
             Issues.AddIssues(issues);
@@ -157,9 +153,11 @@ public:
     void Fail(const TString& message, Ydb::StatusIds::StatusCode reqStatus = Ydb::StatusIds::INTERNAL_ERROR) {
         Issues.AddIssue(message);
         const auto codeStr = Ydb::StatusIds_StatusCode_Name(reqStatus);
-        D_LOG_E(TStringBuilder()
-            << "Failed with code: " << codeStr
-            << " Details: " << Issues.ToString());
+        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY,
+            "PrivateDeleteRateLimiterResource - QueryId: " << OperationId << ", Owner: " << OwnerId << ", "
+            << TStringBuilder()
+                << "Failed with code: " << codeStr
+                << " Details: " << Issues.ToString());
         auto res = MakeHolder<TEvents::TEvDeleteRateLimiterResourceResponse>();
         res->Status = reqStatus;
         res->Issues.AddIssues(Issues);
@@ -172,7 +170,9 @@ public:
         const auto& req = Ev->Record;
         OperationId = req.query_id().value();
         OwnerId = req.owner_id();
-        D_LOG_D("Request CP::DeleteRateLimiterResource with size: " << req.ByteSize() << " bytes");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY,
+            "PrivateDeleteRateLimiterResource - QueryId: " << OperationId << ", Owner: " << OwnerId << ", "
+            << "Request CP::DeleteRateLimiterResource with size: " << req.ByteSize() << " bytes");
         RequestedMBytes->Collect(req.ByteSize() / 1024 / 1024);
         try {
             auto event = CreateControlPlaneEvent();
@@ -196,7 +196,9 @@ private:
     }
 
     void HandleResponse(NFq::TEvControlPlaneStorage::TEvDeleteRateLimiterResourceResponse::TPtr& ev) {
-        D_LOG_D("Got CP::DeleteRateLimiterResourceResponse");
+        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::YQL_PRIVATE_PROXY,
+            "PrivateDeleteRateLimiterResource - QueryId: " << OperationId << ", Owner: " << OwnerId << ", "
+            << "Got CP::DeleteRateLimiterResourceResponse");
         const auto& issues = ev->Get()->Issues;
         if (issues) {
             Issues.AddIssues(issues);

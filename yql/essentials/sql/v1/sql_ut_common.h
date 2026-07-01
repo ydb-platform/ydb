@@ -168,7 +168,6 @@ Y_UNIT_TEST(TableHints) {
     UNIT_ASSERT(SqlToYql("SELECT * FROM plato.Input WITH (INFER_SCHEMA)").IsOk());
 }
 
-<
 Y_UNIT_TEST(SelectStarStripsConfiguredSystemColumnPrefixes) {
     NSQLTranslation::TTranslationSettings settings;
     settings.ExtraSystemColumnPrefixes = {"__ydb_row_id"};

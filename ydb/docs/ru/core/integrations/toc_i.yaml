@@ -34,11 +34,8 @@ items:
   include:
     mode: link
     path: vectorsearch/toc-vectorsearch.yaml
-<<<<<<< HEAD
-=======
 - name: Конвертация SQL-диалектов
   href: sql-translation/index.md
   include:
     mode: link
     path: sql-translation/toc-sql-translation.yaml
->>>>>>> e2e301d6dc0 (docs(ru): add SQLGlot plugin article, group SQL dialect conversion docs (#44184))

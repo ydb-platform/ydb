@@ -515,8 +515,6 @@ ru:
   - from: /devops/backup-and-recovery.md
     to: /devops/backup-and-recovery/index.md
 
-<<<<<<< HEAD
-=======
 ru:
   - from: /postgresql/index.md
     to: /postgresql/intro.md
@@ -566,7 +564,6 @@ en:
     to: /recipes/ydb-sdk/debug-prometheus.md
   - from: /reference/ydb-sdk/recipes/debug.md
     to: /recipes/ydb-sdk/debug.md
->>>>>>> e2e301d6dc0 (docs(ru): add SQLGlot plugin article, group SQL dialect conversion docs (#44184))
   - from: /devops/deployment-options/manual/initial-deployment.md
     to: /devops/deployment-options/manual/initial-deployment/index.md
   - from: /devops/manual/initial-deployment.md

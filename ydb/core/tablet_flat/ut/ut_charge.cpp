@@ -53,12 +53,13 @@ namespace {
             , Sticky(std::move(sticky))
             { }
 
-        const TSharedData* TryGetPage(const TPart *part, TPageId pageId, TGroupId groupId) override
+        const TSharedData* TryGetPage(const TPart *part, TPageLocation location, TGroupId groupId) override
         {
+            auto pageId = location.GetPageIndex();
             Touched[groupId].insert(pageId);
 
             if (!Fail || Sticky.contains({groupId, pageId})) {
-                return NTest::TTestEnv::TryGetPage(part, pageId, groupId);
+                return NTest::TTestEnv::TryGetPage(part, location, groupId);
             }
 
             ToLoad[groupId].insert(pageId);
@@ -451,7 +452,7 @@ namespace {
                         Y_ENSURE(ready != EReady::Page);
                         break;
                     }
-                    absoluteId[absoluteId.size()] = groupIndex->GetPageId();
+                    absoluteId[absoluteId.size()] = static_cast<ui64>(groupIndex->GetLocation().Offset);
                 }
 
                 TSet<TPageId> actualValue;

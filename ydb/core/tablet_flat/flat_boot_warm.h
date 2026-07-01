@@ -61,8 +61,8 @@ namespace NBoot {
             Y_ENSURE(page < state.Pages.size());
             Y_ENSURE(!state.Pages[page].Data);
 
-            state.Pages[page].PageId = page;
             state.Pages[page].Data = load->PlainData();
+            state.Pages[page].Location = TPageLocation::FromPageIndex(page, state.Pages[page].Data.size());
 
             if (!--state.Pending) {
                 state.Blobs->Assign(state.Pages);

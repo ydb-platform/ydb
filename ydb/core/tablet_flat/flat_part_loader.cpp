@@ -136,6 +136,13 @@ void TLoader::StageParseMeta()
     MaxRowVersion.Step = Root.GetMaxRowVersion().GetStep();
     MaxRowVersion.TxId = Root.GetMaxRowVersion().GetTxId();
 
+    // Wrap remaining raw page collections — use TOuterPageCollection for the outer blob slot
+    if (RawComponents) {
+        auto groupsCount = Max(BTreeGroupIndexes.size(), FlatGroupIndexes.size());
+        auto outerIdx = (SmallId != Max<TPageId>()) ? groupsCount - 1 : Max<ui32>();
+        TPartStore::Construct(PageCollections, std::move(RawComponents), outerIdx);
+    }
+
     if (!HasBasics() || (Rooted && SchemeId != meta.TotalPages() - 1)
         || (LargeId == Max<TPageId>()) != (GlobsId == Max<TPageId>())
         || (Max(BTreeGroupIndexes.size(), FlatGroupIndexes.size()) + (SmallId == Max<TPageId>() ? 0 : 1)) != PageCollections.size())
@@ -161,7 +168,7 @@ TLoader::TFetch TLoader::StageCreatePartView(bool preloadIndex)
     auto getPage = [&](TPageId pageId) {
         return pageId == Max<TPageId>()
             ? nullptr
-            : LoaderEnv->TryGetPage(nullptr, pageId, {});
+            : LoaderEnv->TryGetPage(nullptr, PageCollections[0]->PageCollection->GetLocation(pageId), {});
     };
 
     if (BTreeGroupIndexes) {
@@ -352,11 +359,12 @@ TLoader::TFetch TLoader::StagePreloadData()
     auto partStore = PartView.As<TPartStore>();
 
     // Note: preload works only for main group pages
-    auto total = partStore->PageCollections[0]->PageCollection->Total();
+    auto pageCollection = partStore->PageCollections[0]->PageCollection;
+    auto total = pageCollection->Total();
+    auto* part = PartView.Part.Get();
 
-    TVector<TPageId> toLoad(::Reserve(total));
     for (TPageId pageId : xrange(total)) {
-        LoaderEnv->TryGetPage(PartView.Part.Get(), pageId, {});
+        LoaderEnv->TryGetPage(part, pageCollection->GetLocation(pageId), {});
     }
 
     return LoaderEnv->GetFetch();

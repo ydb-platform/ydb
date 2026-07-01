@@ -2,11 +2,14 @@
 
 #include "shared_handle.h"
 #include "shared_cache_s3fifo.h"
+#include "flat_page_iface.h"
 #include <ydb/library/yverify_stream/yverify_stream.h>
 
 namespace NKikimr::NSharedCache {
 
 using TPageId = NTable::NPage::TPageId;
+using TPageOffset = NTable::NPage::TPageOffset;
+using TPageLocation = NTable::NPage::TPageLocation;
 using EPage = NTable::NPage::EPage;
 using ECacheMode = NTable::NPage::ECacheMode;
 
@@ -30,13 +33,18 @@ struct TPage
 
     ES3FIFOPageLocation Location : 4 = ES3FIFOPageLocation::None;
 
-    const TPageId PageId;
+    EPage Type = EPage::Undef;
+    ui32 Crc32 = 0;
+
+    const TPageOffset Offset;
     const size_t Size;
 
     TCollection* Collection;
 
-    TPage(TPageId pageId, size_t size, TCollection* collection)
-        : PageId(pageId)
+    TPage(TPageOffset offset, size_t size, EPage type, ui32 crc32, TCollection* collection)
+        : Type(type)
+        , Crc32(crc32)
+        , Offset(offset)
         , Size(size)
         , Collection(collection)
     {}
@@ -65,6 +73,6 @@ struct TPage
     }
 };
 
-static_assert(sizeof(TPage) == 112);
+static_assert(sizeof(TPage) == 120);
 
 }

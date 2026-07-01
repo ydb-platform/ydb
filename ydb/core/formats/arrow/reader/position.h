@@ -111,7 +111,7 @@ private:
 
         return std::partial_ordering::equivalent;
     }
-
+    
     TSortableScanData(const ui64 start, const ui64 finish, const ui64 lastInit, const ui64 recordsCount,
         const std::vector<std::shared_ptr<NAccessor::IChunkedArray>>& columns, const std::vector<std::shared_ptr<arrow::Field>>& fields)
         : RecordsCount(recordsCount)

@@ -1,4 +1,5 @@
 #include "merger.h"
+#include "sort_merger.h"
 
 #include "abstract/merger.h"
 #include "plain/logic.h"
@@ -244,8 +245,6 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
         }
         IIndexInfo::AddSnapshotFields(indexFields);
         auto dataSchema = std::make_shared<arrow::Schema>(indexFields);
-        NArrow::NMerger::TMergePartialStream mergeStream(
-            resultFiltered->GetIndexInfo().GetReplaceKey(), dataSchema, false, IIndexInfo::GetSnapshotColumnNames(), std::nullopt, std::nullopt);
 
         ui32 idx = 0;
         for (auto&& batch : Batches) {
@@ -261,10 +260,25 @@ std::vector<TWritePortionInfoWithBlobsResult> TMerger::Execute(const std::shared
                         IColumnMerger::PortionRecordIndexFieldName);
                 batch->AddField(IColumnMerger::PortionRecordIndexField, column->BuildArray(batch->num_rows())).Validate();
             }
-            mergeStream.AddSource(batch, Filters[idx], NArrow::NMerger::TIterationOrder::Forward(0));
             ++idx;
         }
-        auto batchResults = mergeStream.DrainAllParts(checkPoints, indexFields);
+
+        std::vector<std::shared_ptr<arrow::RecordBatch>> batchResults;
+        if (true) {
+            Context.Counters.OnSortIndicesCompactionMerge();
+            batchResults = TSortIndicesMerger::BuildRemapper(Batches, Filters, resultFiltered->GetIndexInfo().GetReplaceKey(),
+                IIndexInfo::GetSnapshotColumnNames(), indexFields, checkPoints);
+        } else {
+            Context.Counters.OnStreamCompactionMerge();
+            NArrow::NMerger::TMergePartialStream mergeStream(resultFiltered->GetIndexInfo().GetReplaceKey(), dataSchema, false,
+                IIndexInfo::GetSnapshotColumnNames(), std::nullopt, std::nullopt);
+            ui32 idx = 0;
+            for (auto&& batch : Batches) {
+                mergeStream.AddSource(batch, Filters[idx], NArrow::NMerger::TIterationOrder::Forward(0));
+                ++idx;
+            }
+            batchResults = mergeStream.DrainAllParts(checkPoints, indexFields);
+        }
         NSplitter::TSplitSettings settings;
         settings.SetMaxPortionSize(PortionExpectedSize);
         splitInfo.FillRemapping(std::move(batchResults), NYDBTest::TControllers::GetColumnShardController()->GetBlobSplitSettings(settings));

@@ -774,11 +774,18 @@ message TMetadataManagerConstructorContainer {
     }
 }
 
+enum EColumnTableMergeAlgorithm {
+    MERGE_ALGORITHM_UNSPECIFIED = 0;
+    MERGE_ALGORITHM_STREAM = 1;
+    MERGE_ALGORITHM_SORT_INDICES = 2;
+}
+
 message TColumnTableSchemeOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
+    optional EColumnTableMergeAlgorithm CompactionMergeAlgorithm = 6;
 }
 
 message TColumnTableSchema {
@@ -824,6 +831,7 @@ message TColumnTableRequestedOptions {
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
+    optional EColumnTableMergeAlgorithm CompactionMergeAlgorithm = 6;
 }
 
 message TAlterColumnTableSchema {

@@ -753,6 +753,55 @@ struct ResolvedRecordBatchSortKey {
   int64_t null_count;
 };
 
+// struct ResolvedTableSortKey {
+//   ResolvedTableSortKey(const std::shared_ptr<DataType>& type, ArrayVector chunks,
+//                        SortOrder order, int64_t null_count)
+//       : type(GetPhysicalType(type)),
+//         owned_chunks(std::move(chunks)),
+//         chunks(GetArrayPointers(owned_chunks)),
+//         order(order),
+//         null_count(null_count) {}
+
+//   using LocationType = ::arrow20::ChunkLocation;
+
+//   ResolvedChunk GetChunk(::arrow20::ChunkLocation loc) const {
+//     return {chunks[loc.chunk_index], loc.index_in_chunk};
+//   }
+
+//   // Make a vector of ResolvedSortKeys for the sort keys and the given table.
+//   // `batches` must be a chunking of `table`.
+//   static Result<std::vector<ResolvedTableSortKey>> Make(
+//       const Table& table, const RecordBatchVector& batches,
+//       const std::vector<SortKey>& sort_keys) {
+//     auto factory = [&](const SortField& f) -> Result<ResolvedTableSortKey> {
+//       // We must expose a homogenous chunking for all ResolvedSortKey,
+//       // so we can't simply access the column from the table directly.
+//       ArrayVector chunks;
+//       chunks.reserve(batches.size());
+//       auto physical_type = GetPhysicalType(f.type->GetSharedPtr());
+//       int64_t null_count = 0;
+//       for (const auto& batch : batches) {
+//         ARROW_ASSIGN_OR_RAISE(auto child, f.path.GetFlattened(*batch));
+//         null_count += child->null_count();
+//         chunks.push_back(GetPhysicalArray(*child, physical_type));
+//       }
+
+//       return ResolvedTableSortKey(std::move(physical_type), std::move(chunks), f.order,
+//                                   null_count);
+//     };
+
+//     return ::arrow20::compute::internal::ResolveSortKeys<ResolvedTableSortKey>(
+//         *table.schema(), sort_keys, factory);
+//   }
+
+//   std::shared_ptr<DataType> type;
+//   ArrayVector owned_chunks;
+//   std::vector<const Array*> chunks;
+//   SortOrder order;
+//   int64_t null_count;
+// };
+
+
 struct ResolvedTableSortKey {
   ResolvedTableSortKey(const std::shared_ptr<DataType>& type, ArrayVector chunks,
                        SortOrder order, int64_t null_count)
@@ -778,14 +827,15 @@ struct ResolvedTableSortKey {
       // so we can't simply access the column from the table directly.
       ArrayVector chunks;
       chunks.reserve(batches.size());
+      auto physical_type = GetPhysicalType(f.type->GetSharedPtr());
       int64_t null_count = 0;
       for (const auto& batch : batches) {
         ARROW_ASSIGN_OR_RAISE(auto child, f.path.GetFlattened(*batch));
         null_count += child->null_count();
-        chunks.push_back(std::move(child));
+        chunks.push_back(GetPhysicalArray(*child, physical_type));
       }
 
-      return ResolvedTableSortKey(f.type->GetSharedPtr(), std::move(chunks), f.order,
+      return ResolvedTableSortKey(physical_type, std::move(chunks), f.order,
                                   null_count);
     };
 

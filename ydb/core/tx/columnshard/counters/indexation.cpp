@@ -34,6 +34,9 @@ TIndexationCounters::TIndexationCounters(const TString& module)
     CompactionExceptions = TBase::GetDeriviative("Exceptions/Count");
     CompactionFails = TBase::GetDeriviative("CompactionFails/Count");
 
+    SortIndicesCompactionMerge = TBase::GetDeriviative("CompactionMerge/SortIndices/Count");
+    StreamCompactionMerge = TBase::GetDeriviative("CompactionMerge/Stream/Count");
+
     SplittedPortionLargestColumnSize = TBase::GetHistogram("SplittedPortionLargestColumnSize", NMonitoring::ExponentialHistogram(15, 2, 1024));
     SplittedPortionColumnSize = TBase::GetHistogram("SplittedPortionColumnSize", NMonitoring::ExponentialHistogram(15, 2, 1024));
     SimpleSplitPortionLargestColumnSize =

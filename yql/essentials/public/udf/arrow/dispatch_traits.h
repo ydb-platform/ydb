@@ -69,9 +69,9 @@ std::unique_ptr<typename TTraits::TResult> MakeTzDateArrowTraitsImpl(bool isOpti
     }
 }
 
-template <typename TTraits, typename TType>
-concept CanInstantiateArrowTraits = requires {
-    typename TTraits::template TFixedSize<TType, true>;
+template <typename TTraits>
+concept CanInstantiateArrowTraitsForDecimal = requires {
+    typename TTraits::template TFixedSize<NYql::NDecimal::TInt128, true>;
 };
 
 template <typename TTraits, typename... TArgs>
@@ -202,14 +202,14 @@ std::unique_ptr<typename TTraits::TResult> DispatchByArrowTraits(const ITypeInfo
             case NUdf::EDataSlot::TzTimestamp64:
                 return MakeTzDateArrowTraitsImpl<TTraits, TTzTimestamp64>(isOptional, type, std::forward<TArgs>(args)...);
             case NUdf::EDataSlot::Decimal: {
-                if constexpr (CanInstantiateArrowTraits<TTraits, NYql::NDecimal::TInt128>) {
+                if constexpr (CanInstantiateArrowTraitsForDecimal<TTraits>) {
                     return MakeFixedSizeArrowTraitsImpl<TTraits, NYql::NDecimal::TInt128>(isOptional, type, std::forward<TArgs>(args)...);
                 } else {
                     Y_ENSURE(false, "Unsupported data slot");
                 }
             }
             case NUdf::EDataSlot::Uuid: {
-                if constexpr (CanInstantiateArrowTraits<TTraits, TGUID>) {
+                if constexpr (requires { typename TTraits::template TFixedSize<TGUID, true>; }) {
                     return MakeFixedSizeArrowTraitsImpl<TTraits, TGUID>(isOptional, type, std::forward<TArgs>(args)...);
                 } else {
                     Y_ENSURE(false, "Unsupported data slot");

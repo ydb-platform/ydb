@@ -151,10 +151,8 @@ bool TOlapIndexesDescription::ValidateNoDuplicateMinMaxIndexes(const TOlapSchema
             if (const auto* column = currentSchema.GetColumns().GetById(*columnId)) {
                 columnName = column->GetName();
             }
-            // Not StatusAlreadyExists: on the CREATE TABLE path that status is treated as idempotent
-            // success, which would let the duplicate slip through. Use a hard scheme error instead.
             errors.AddError(NKikimrScheme::StatusSchemeError,
-                TStringBuilder() << "creating 2 min_max indexes on one column is forbidden, tried to create both '" << index.GetName() << "' and '" << inserted.second << 
+                TStringBuilder() << "creating 2 min_max indexes on one column is forbidden, tried to create both '" << index.GetName() << "' and '" << inserted.first->second << 
                 "' on column " << columnName << ".");
             return false;
         }

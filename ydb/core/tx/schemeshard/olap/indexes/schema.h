@@ -78,8 +78,6 @@ public:
     void Parse(const NKikimrSchemeOp::TColumnTableSchema& tableSchema);
     void Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const;
     bool ValidateForStore(const NKikimrSchemeOp::TColumnTableSchema& opSchema, IErrorCollector& errors) const;
-    // Forbid two indexes of the same type (class) on the same column. Used by the create path,
-    // where indexes arrive pre-built in the full schema and bypass the incremental check in ApplyUpdate.
     bool ValidateNoDuplicateMinMaxIndexes(const TOlapSchema& currentSchema, IErrorCollector& errors) const;
 };
 }

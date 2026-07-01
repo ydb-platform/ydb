@@ -241,7 +241,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMaxWithBSStorage)).Execute(settings);
     }
 
-    Y_UNIT_TEST(CannotHaveTwoIndexesOfSameTypeOnOneColumn, EUseQueryService, ELocalIndexAsSchemeObject) {
+    Y_UNIT_TEST(CannotHaveTwoMinMaxIndexesOnOneColumn, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
         const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
@@ -301,7 +301,7 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         assertDDLQueryOk(R"(
                 ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_bloom` LOCAL USING bloom_filter ON(`value`);
             )");
-        assertDDLQueryNotOk(R"(
+        assertDDLQueryOk(R"(
                 ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_bloom2` LOCAL USING bloom_filter ON(`value`);
             )");
         

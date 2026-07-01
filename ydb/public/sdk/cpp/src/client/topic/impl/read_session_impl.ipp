@@ -818,7 +818,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ConfirmPartitionStream
                                 deferred);
     }
     if (!pushRes) {
-        AbortImpl();
+        AbortImpl(&deferred);
         return;
     }
     TClientMessage<UseMigrationProtocol> req;
@@ -1226,7 +1226,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
                  currentPartitionStream, NPersQueue::TReadSessionEvent::TPartitionStreamClosedEvent::EReason::Lost),
             deferred);
         if (!pushRes) {
-            AbortImpl();
+            AbortImpl(&deferred);
             return;
         }
         currentPartitionStream = partitionStream;
@@ -1238,7 +1238,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
         NPersQueue::TReadSessionEvent::TCreatePartitionStreamEvent(partitionStream, msg.read_offset(), msg.end_offset()),
         deferred);
     if (!pushRes) {
-        AbortImpl();
+        AbortImpl(&deferred);
         return;
     }
 }
@@ -1272,7 +1272,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
     }
 
     if (!pushRes) {
-        AbortImpl();
+        AbortImpl(&deferred);
         return;
     }
 
@@ -1301,7 +1301,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
                                                   partitionStream, partitionStream->GetMaxCommittedOffset()),
                                               deferred);
         if (!pushRes) {
-            AbortImpl();
+            AbortImpl(&deferred);
             return;
         }
     }
@@ -1316,7 +1316,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
                 NPersQueue::TReadSessionEvent::TCommitAcknowledgementEvent(partitionStream, rangeProto.end_offset()),
                 deferred);
             if (!pushRes) {
-                AbortImpl();
+                AbortImpl(&deferred);
                 return;
             }
         }
@@ -1341,7 +1341,7 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
                                               msg.end_offset(), TInstant::MilliSeconds(msg.write_watermark_ms())),
                                           deferred);
     if (!pushRes) {
-        AbortImpl();
+        AbortImpl(&deferred);
         return;
     }
 }
@@ -1483,7 +1483,7 @@ inline void TSingleClusterReadSessionImpl<false>::StopPartitionSessionImpl(
     }
 
     if (!pushRes) {
-        AbortImpl();
+        AbortImpl(&deferred);
     }
 }
 
@@ -1619,7 +1619,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
             deferred);
 
         if (!pushRes) {
-            AbortImpl();
+            AbortImpl(&deferred);
             return;
         }
     }
@@ -1645,7 +1645,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         deferred);
 
     if (!pushRes) {
-        AbortImpl();
+        AbortImpl(&deferred);
         return;
     }
 }
@@ -1758,7 +1758,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
             TReadSessionEvent::TEndPartitionSessionEvent(std::move(partitionStream), std::move(adjacentPartitionIds), std::move(childPartitionIds)),
             deferred);
     if (!pushRes) {
-        AbortImpl();
+        AbortImpl(&deferred);
         return;
     }
 }
@@ -1782,7 +1782,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
                                         partitionStream, rangeProto.committed_offset()),
                                    deferred);
             if (!pushRes) {
-                AbortImpl();
+                AbortImpl(&deferred);
                 return;
             }
         }
@@ -1810,7 +1810,7 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
                                     msg.write_time_high_watermark()))),
                            deferred);
     if (!pushRes) {
-        AbortImpl();
+        AbortImpl(&deferred);
         return;
     }
 }
@@ -1873,7 +1873,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::DestroyAllPartitionStr
                                 TClosedEvent(std::move(partitionStream), TClosedEvent::EReason::ConnectionLost),
                                deferred);
         if (!pushRes) {
-            AbortImpl();
+            AbortImpl(&deferred);
             return;
         }
     }
@@ -2029,10 +2029,10 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl(TDeferredAct
                 DirectReadSessionManager.reset();
             }
         }
+    }
 
-        if (deferred) {
-            CleanupDecompressionQueueImpl(*deferred);
-        }
+    if (deferred) {
+        CleanupDecompressionQueueImpl(*deferred);
     }
 }
 

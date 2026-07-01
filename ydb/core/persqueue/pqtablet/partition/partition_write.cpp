@@ -374,7 +374,7 @@ void TPartition::AnswerCurrentWrites(const TActorContext& ctx) {
                 PartitionWriteQuotaWaitCounter->IncFor(PartitionQuotaWaitTimeForCurrentBlob.MilliSeconds());
             }
             if (!already && partNo + 1 == totalParts && !writeResponse.Msg.HeartbeatVersion) {
-                ++offset;
+                offset += writeResponse.Msg.LogicalMessageCount;
             }
         } else if (response.IsOwnership()) {
             const auto& r = response.GetOwnership();

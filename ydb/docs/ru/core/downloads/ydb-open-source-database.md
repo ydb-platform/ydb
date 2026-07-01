@@ -9,7 +9,7 @@
 #|
 || Версия |  Дата выпуска | Скачать | Список изменений ||
 || **v26.1** | > | > | > ||
-|| v.26.1.1.x | уточняется | [Бинарный файл](https://storage.yandexcloud.net/binaries.ydb.tech/release/26.1.1.x/ydbd-26.1.1.x-linux-amd64.tar.gz) | [См. список](../changelog-server.md#26-1-1-x) ||
+|| v.26.1.1.20 | уточняется | [Бинарный файл](https://storage.yandexcloud.net/binaries.ydb.tech/release/26.1.1.20/ydbd-26.1.1.20-linux-amd64.tar.gz) | [См. список](../changelog-server.md#26-1-1-20) ||
 || **v25.4** | > | > | > ||
 || v.25.4.1.15 | 24.04.26 | [Бинарный файл](https://storage.yandexcloud.net/binaries.ydb.tech/release/25.4.1.15/ydbd-25.4.1.15-linux-amd64.tar.gz) | [См. список](../changelog-server.md#25-4-1-15) ||
 || **v25.3** | > | > | > ||
@@ -45,7 +45,7 @@
 #|
 || Версия |  Дата выпуска | Docker `registry/image:tag` | Список изменений ||
 || **v26.1** | > | > | > ||
-|| v.26.1.1.x | уточняется | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.1.1.x` | [См. список](../changelog-server.md#26-1-1-x) ||
+|| v.26.1.1.20 | уточняется | `cr.yandex/crptqonuodf51kdj7a7d/ydb:26.1.1.20` | [См. список](../changelog-server.md#26-1-1-20) ||
 || **v25.4** | > | > | > ||
 || v.25.4.1.15 | 24.04.26 | `cr.yandex/crptqonuodf51kdj7a7d/ydb:25.4.1.15` | [См. список](../changelog-server.md#25-4-1-15) ||
 || **v25.3** | > | > | > ||
@@ -81,7 +81,7 @@
 #|
 || Версия |  Дата выпуска | Ссылка | Список изменений ||
 || **v26.1** | > | > | > ||
-|| v.26.1.1.x | уточняется | [https://github.com/ydb-platform/ydb/tree/26.1.1.x](https://github.com/ydb-platform/ydb/tree/26.1.1.x) | [См. список](../changelog-server.md#26-1-1-x) ||
+|| v.26.1.1.20 | уточняется | [https://github.com/ydb-platform/ydb/tree/26.1.1.20](https://github.com/ydb-platform/ydb/tree/26.1.1.20) | [См. список](../changelog-server.md#26-1-1-20) ||
 || **v25.4** | > | > | > ||
 || v.25.4.1.15 | 24.04.26 | [https://github.com/ydb-platform/ydb/tree/25.4.1.15](https://github.com/ydb-platform/ydb/tree/25.4.1.15) | [См. список](../changelog-server.md#25-4-1-15) ||
 || **v25.3** | > | > | > ||

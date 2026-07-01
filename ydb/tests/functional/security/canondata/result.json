@@ -1,8 +1,14 @@
 {
-    "test_mon_endpoints_auth.test_mon_endpoints_auth[enforce_user_token_disabled]": {
-        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth_enforce_user_token_disabled_/mon_endpoints_auth-enforce_user_token_disabled.json"
+    "test_mon_endpoints_auth.test_mon_endpoints_auth_enforce_user_token_disabled_no_schema_grants": {
+        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth_enforce_user_token_disabled_no_schema_grants/mon_endpoints_auth-enforce_user_token_disabled_no_schema_grants.json"
     },
-    "test_mon_endpoints_auth.test_mon_endpoints_auth[enforce_user_token_enabled]": {
-        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth_enforce_user_token_enabled_/mon_endpoints_auth-enforce_user_token_enabled.json"
+    "test_mon_endpoints_auth.test_mon_endpoints_auth_enforce_user_token_disabled_with_schema_grants": {
+        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth_enforce_user_token_disabled_with_schema_grants/mon_endpoints_auth-enforce_user_token_disabled_with_schema_grants.json"
+    },
+    "test_mon_endpoints_auth.test_mon_endpoints_auth_enforce_user_token_enabled_no_schema_grants": {
+        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth_enforce_user_token_enabled_no_schema_grants/mon_endpoints_auth-enforce_user_token_enabled_no_schema_grants.json"
+    },
+    "test_mon_endpoints_auth.test_mon_endpoints_auth_enforce_user_token_enabled_with_schema_grants": {
+        "uri": "file://test_mon_endpoints_auth.test_mon_endpoints_auth_enforce_user_token_enabled_with_schema_grants/mon_endpoints_auth-enforce_user_token_enabled_with_schema_grants.json"
     }
 }

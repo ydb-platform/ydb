@@ -282,11 +282,46 @@ def _canonize(name, results):
     return yatest.common.canonical_file(out_path, local=True, universal_lines=True)
 
 
-def test_mon_endpoints_auth(ydb_cluster_for_mon_endpoints_auth):
-    case_name, cluster = ydb_cluster_for_mon_endpoints_auth
+def _run_mon_endpoints_auth_test(case_name, cluster):
     return _canonize(
         f'mon_endpoints_auth-{case_name}',
         _collect_endpoints(cluster),
+    )
+
+
+def test_mon_endpoints_auth_enforce_user_token_enabled_no_schema_grants(
+    ydb_cluster_mon_endpoints_auth_enforce_user_token_enabled_no_schema_grants,
+):
+    return _run_mon_endpoints_auth_test(
+        'enforce_user_token_enabled_no_schema_grants',
+        ydb_cluster_mon_endpoints_auth_enforce_user_token_enabled_no_schema_grants,
+    )
+
+
+def test_mon_endpoints_auth_enforce_user_token_disabled_no_schema_grants(
+    ydb_cluster_mon_endpoints_auth_enforce_user_token_disabled_no_schema_grants,
+):
+    return _run_mon_endpoints_auth_test(
+        'enforce_user_token_disabled_no_schema_grants',
+        ydb_cluster_mon_endpoints_auth_enforce_user_token_disabled_no_schema_grants,
+    )
+
+
+def test_mon_endpoints_auth_enforce_user_token_enabled_with_schema_grants(
+    ydb_cluster_mon_endpoints_auth_enforce_user_token_enabled_with_schema_grants,
+):
+    return _run_mon_endpoints_auth_test(
+        'enforce_user_token_enabled_with_schema_grants',
+        ydb_cluster_mon_endpoints_auth_enforce_user_token_enabled_with_schema_grants,
+    )
+
+
+def test_mon_endpoints_auth_enforce_user_token_disabled_with_schema_grants(
+    ydb_cluster_mon_endpoints_auth_enforce_user_token_disabled_with_schema_grants,
+):
+    return _run_mon_endpoints_auth_test(
+        'enforce_user_token_disabled_with_schema_grants',
+        ydb_cluster_mon_endpoints_auth_enforce_user_token_disabled_with_schema_grants,
     )
 
 

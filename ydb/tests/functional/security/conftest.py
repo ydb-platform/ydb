@@ -2,10 +2,13 @@
 import time
 
 import pytest
+import requests
 
 from ydb.tests.library.harness.kikimr_runner import KiKiMR
 
 from cluster_config import create_ydb_configurator, generate_certificates
+
+TENANT_DATABASE = '/Root/Tenant'
 
 pytest_plugins = ['ydb.tests.library.fixtures', 'ydb.tests.library.flavours']
 
@@ -28,36 +31,72 @@ def ydb_cluster_with_enforce_user_token(certificates):
     cluster.stop()
 
 
-_MON_ENDPOINTS_AUTH_CLUSTER_PARAMS = (
-    pytest.param(
-        {
-            'case_name': 'enforce_user_token_enabled',
-            'enforce_user_token_requirement': True,
-        },
-        id='enforce_user_token_enabled',
-    ),
-    pytest.param(
-        {
-            'case_name': 'enforce_user_token_disabled',
-            'enforce_user_token_requirement': False,
-        },
-        id='enforce_user_token_disabled',
-    ),
-)
-
-
-@pytest.fixture(scope='module', params=_MON_ENDPOINTS_AUTH_CLUSTER_PARAMS)
-def ydb_cluster_for_mon_endpoints_auth(request, certificates):
-    params = request.param.copy()
-    case_name = params.pop('case_name')
+def _start_mon_endpoints_auth_cluster(certificates, enforce_user_token_requirement, with_schema_grants):
     configurator = create_ydb_configurator(
         certificates,
-        **params,
+        enforce_user_token_requirement=enforce_user_token_requirement,
     )
     cluster = KiKiMR(configurator)
     cluster.start()
-    yield case_name, cluster
+    if with_schema_grants:
+        _create_tenant_database(cluster, TENANT_DATABASE)
+        _grant_describe_schema_on_database(cluster, TENANT_DATABASE)
+    return cluster
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_mon_endpoints_auth_enforce_user_token_enabled_no_schema_grants(certificates):
+    cluster = _start_mon_endpoints_auth_cluster(certificates, True, False)
+    yield cluster
     cluster.stop()
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_mon_endpoints_auth_enforce_user_token_disabled_no_schema_grants(certificates):
+    cluster = _start_mon_endpoints_auth_cluster(certificates, False, False)
+    yield cluster
+    cluster.stop()
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_mon_endpoints_auth_enforce_user_token_enabled_with_schema_grants(certificates):
+    cluster = _start_mon_endpoints_auth_cluster(certificates, True, True)
+    yield cluster
+    cluster.stop()
+
+
+@pytest.fixture(scope='module')
+def ydb_cluster_mon_endpoints_auth_enforce_user_token_disabled_with_schema_grants(certificates):
+    cluster = _start_mon_endpoints_auth_cluster(certificates, False, True)
+    yield cluster
+    cluster.stop()
+
+
+def _create_tenant_database(cluster, database_name):
+    cluster.create_database(
+        database_name,
+        storage_pool_units_count={'hdd': 1},
+        token='root@builtin',
+    )
+    cluster.register_and_start_slots(database_name, count=1)
+    cluster.wait_tenant_up(database_name, token='root@builtin')
+
+
+def _grant_describe_schema_on_database(cluster, database_name):
+    node = cluster.nodes[1]
+    base_url = f'https://{node.host}:{node.mon_port}'
+    grant_query = (
+        f"GRANT 'ydb.granular.describe_schema' ON `{database_name}` "
+        f"TO `database@builtin`, `viewer@builtin`, `monitoring@builtin`, `root@builtin`;"
+    )
+    grant_response = requests.post(
+        base_url + '/viewer/query',
+        headers={'Authorization': 'root@builtin'},
+        params={'database': database_name, 'query': grant_query, 'schema': 'multi'},
+        verify=False,
+        timeout=30,
+    )
+    assert grant_response.status_code == 200, grant_response.text
 
 
 @pytest.fixture(scope='module')

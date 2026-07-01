@@ -397,7 +397,7 @@ void TLocalBuffer::NotifyInput(bool force) {
         NActors::TActivationContext::Send<NActors::ESendingType::Tail>(
             new NActors::IEventHandle(Info.InputActorId, NActors::TActorId{}, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback})
         );
-        LastInputNotificationTime = TInstant::Now();
+        LastInputNotificationTime.store(TInstant::Now());
     }
 }
 
@@ -406,7 +406,7 @@ void TLocalBuffer::NotifyOutput(bool force) {
         NActors::TActivationContext::Send<NActors::ESendingType::Tail>(
             new NActors::IEventHandle(Info.OutputActorId, NActors::TActorId{}, new TEvDqCompute::TEvResumeExecution{EResumeSource::CAWakeupCallback})
         );
-        LastOutputNotificationTime = TInstant::Now();
+        LastOutputNotificationTime.store(TInstant::Now());
     }
 }
 
@@ -2585,8 +2585,8 @@ void TChannelServiceActor::Handle(NActors::NMon::TEvHttpInfo::TPtr& ev) {
                                 TABLED() {str << sharedBuffer->EarlyFinished.load();}
                                 TABLED() {str << sharedBuffer->PushStats.Bytes.load();}
                                 TABLED() {str << sharedBuffer->PopStats.Bytes.load();}
-                                TABLED() {str << sharedBuffer->LastOutputNotificationTime;}
-                                TABLED() {str << sharedBuffer->LastInputNotificationTime;}
+                                TABLED() {str << sharedBuffer->LastOutputNotificationTime.load();}
+                                TABLED() {str << sharedBuffer->LastInputNotificationTime.load();}
                                 TABLED() {str << sharedBuffer->InflightBytes.load();}
                                 TABLED() {str << sharedBuffer->Queue.size();}
                                 TABLED() {str << sharedBuffer->SpilledBytes.load();}

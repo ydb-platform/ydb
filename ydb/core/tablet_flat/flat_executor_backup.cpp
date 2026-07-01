@@ -31,6 +31,8 @@
 #include <util/stream/file.h>
 #include <util/system/hp_timer.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::LOCAL_DB_BACKUP
+
 namespace NKikimr::NTabletFlatExecutor::NBackup {
 
 using namespace NTable;
@@ -237,7 +239,9 @@ public:
     }
 
     void Bootstrap() {
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Starting snapshot" << " Path# " << SnapshotPath);
+        YDB_LOG_NOTICE("Starting snapshot",
+            {"logPrefix", LogPrefix()},
+            {"path", SnapshotPath});
 
         DeleteOldBackups();
 
@@ -260,13 +264,16 @@ public:
             SchemaSha256.Update(stringOut.Data(), stringOut.Size());
             WrittenBytes += stringOut.Size();
             Send(Owner, new TEvSnapshotStats(stringOut.Size()));
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Schema written" << " Bytes# " << stringOut.Size());
+            YDB_LOG_DEBUG("Schema written",
+                {"logPrefix", LogPrefix()},
+                {"bytes", stringOut.Size()});
         } catch (const std::exception& e) {
             return ReplyAndDie(false, TStringBuilder() << "Failed to create snapshot schema file " << schemaPath << ": " << e.what());
         }
 
         if (Tables.empty()) {
-            LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"No tables to scan, finalizing");
+            YDB_LOG_DEBUG("No tables to scan, finalizing",
+                {"logPrefix", LogPrefix()});
             return Finalize();
         }
 
@@ -313,7 +320,9 @@ public:
                     continue;
                 }
     
-                LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Deleting incomplete backup" << " Path# " << child);
+                YDB_LOG_NOTICE("Deleting incomplete backup",
+                    {"logPrefix", LogPrefix()},
+                    {"path", child});
                 child.ForceDelete();
             }
 
@@ -322,11 +331,16 @@ public:
             });
 
             for (size_t i = MaxBackupsLimit(); i < backups.size(); ++i) {
-                LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Deleting old backup" << " Path# " << backups[i].second);
+                YDB_LOG_NOTICE("Deleting old backup",
+                    {"logPrefix", LogPrefix()},
+                    {"path", backups[i].second});
                 backups[i].second.ForceDelete();
             }
         } catch (const std::exception& e) {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Failed to delete old backups" << " Path# " << BackupPath << " Error# " << e.what());
+            YDB_LOG_ERROR("Failed to delete old backups",
+                {"logPrefix", LogPrefix()},
+                {"path", BackupPath},
+                {"error", e.what()});
         }
     }
 
@@ -334,7 +348,9 @@ public:
         if (success) {
             Send(Owner, new TEvSnapshotCompleted(WrittenBytes));
         } else {
-            LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Snapshot failed" << " Error# " << error);
+            YDB_LOG_ERROR("Snapshot failed",
+                {"logPrefix", LogPrefix()},
+                {"error", error});
             Send(Owner, new TEvSnapshotCompleted(error));
         }
 
@@ -349,7 +365,10 @@ public:
 
     void Handle(TEvWriteSnapshot::TPtr& ev) {
         const auto* msg = ev->Get();
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Writing snapshot" << " TableId# " << msg->TableId << " Bytes# " << msg->SnapshotData.Size());
+        YDB_LOG_DEBUG("Writing snapshot",
+            {"logPrefix", LogPrefix()},
+            {"tableId", msg->TableId},
+            {"bytes", msg->SnapshotData.Size()});
 
         auto it = Tables.find(msg->TableId);
         if (it == Tables.end()) {
@@ -389,7 +408,10 @@ public:
 
     void ScanDone(ui32 tableId) {
         DoneTables.insert(tableId);
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Table scan done" << " Done# " << DoneTables.size() << " Total# " << Tables.size());
+        YDB_LOG_DEBUG("Table scan done",
+            {"logPrefix", LogPrefix()},
+            {"done", DoneTables.size()},
+            {"total", Tables.size()});
         if (DoneTables.size() == Tables.size()) {
             return Finalize();
         }
@@ -474,7 +496,9 @@ public:
 
         DeleteOldBackups();
 
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Snapshot finalized" << " Bytes# " << WrittenBytes);
+        YDB_LOG_NOTICE("Snapshot finalized",
+            {"logPrefix", LogPrefix()},
+            {"bytes", WrittenBytes});
         return ReplyAndDie();
     }
 
@@ -841,7 +865,9 @@ public:
     }
 
     void Bootstrap() {
-        LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Starting changelog" << " Path# " << ChangelogPath);
+        YDB_LOG_NOTICE("Starting changelog",
+            {"logPrefix", LogPrefix()},
+            {"path", ChangelogPath});
 
         // writing initial changelog and checksum files
         BufferCreatedAt = TActivationContext::Monotonic();
@@ -865,7 +891,9 @@ public:
         NJson::TJsonWriter writer(&out, BackupJsonConfig());
 
         const auto* msg = ev->Get();
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Writing changelog" << " Step# " << msg->Step);
+        YDB_LOG_DEBUG("Writing changelog",
+            {"logPrefix", LogPrefix()},
+            {"step", msg->Step});
 
         TString dataUpdate;
         TString schemeUpdate;
@@ -993,10 +1021,11 @@ public:
             return ReplyAndDie(msg->Error);
         }
 
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Changelog IO completed"
-            << " Bytes# " << IoInFlightBytes
-            << " Latency# " << msg->Latency
-            << " Lag# " << msg->Lag);
+        YDB_LOG_DEBUG("Changelog IO completed",
+            {"logPrefix", LogPrefix()},
+            {"bytes", IoInFlightBytes},
+            {"latency", msg->Latency},
+            {"lag", msg->Lag});
 
         Send(Owner, new TEvChangelogStats(IoInFlightBytes, msg->Latency, msg->Lag));
 
@@ -1005,7 +1034,10 @@ public:
         IoInProgress = false;
 
         if (NeedNewBackup()) {
-            LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Requesting new backup" << " ChangelogBytes# " << WrittenBytes << " SnapshotBytes# " << *SnapshotWrittenBytes);
+            YDB_LOG_NOTICE("Requesting new backup",
+                {"logPrefix", LogPrefix()},
+                {"changelogBytes", WrittenBytes},
+                {"snapshotBytes", *SnapshotWrittenBytes});
             Send(Owner, new TEvStartNewBackup());
         }
 
@@ -1039,7 +1071,9 @@ public:
     }
 
     void StartIO(EOpenMode openMode = EOpenModeFlag::OpenExisting | EOpenModeFlag::ForAppend) {
-        LOG_DEBUG_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Starting Changelog IO" << " Bytes# " << Buffer.Size());
+        YDB_LOG_DEBUG("Starting Changelog IO",
+            {"logPrefix", LogPrefix()},
+            {"bytes", Buffer.Size()});
 
         IoInFlightBytes = Buffer.Size();
         IoInProgress = true;
@@ -1074,7 +1108,9 @@ public:
     }
 
     void ReplyAndDie(const TString& error) {
-        LOG_ERROR_S(*TlsActivationContext, NKikimrServices::LOCAL_DB_BACKUP, LogPrefix() <<"Changelog failed" << " Error# " << error);
+        YDB_LOG_ERROR("Changelog failed",
+            {"logPrefix", LogPrefix()},
+            {"error", error});
         Send(Owner, new TEvChangelogFailed(error));
         PassAway();
     }

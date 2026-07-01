@@ -5,12 +5,12 @@ This section contains code recipes in different programming languages for [vecto
 The following operations are covered in detail:
 
 - [Vector search](#vector-search)
-  - [Connecting to {{ ydb-short-name }}](#connect-ydb)
-  - [Creating a table](#create-table)
-  - [Inserting vectors](#insert-vectors)
-  - [Adding an index](#add-vector-index)
-  - [Vector search](#search-by-vector)
-  - [Full example](#full-example)
+  - [Connecting to {{ ydb-short-name }} {#connect-ydb}](#connecting-to--ydb-short-name--connect-ydb)
+  - [Creating a table {#create-table}](#creating-a-table-create-table)
+  - [Inserting vectors {#insert-vectors}](#inserting-vectors-insert-vectors)
+  - [Adding an index {#add-vector-index}](#adding-an-index-add-vector-index)
+  - [Search by vector {#search-by-vector}](#search-by-vector-search-by-vector)
+  - [Full example {#full-example}](#full-example-full-example)
 
 This recipe creates a text store with the following structure:
 
@@ -190,71 +190,7 @@ The `String` type is used to store vectors. For details, see the [exact vector s
 {% endnote %}
 
 
-<<<<<<< HEAD
-{% list tabs %}
-
-- Go
-
-    ```go
-    func createVectorTable(ctx context.Context, db *ydb.Driver, tableName string) error {
-      query := fmt.Sprintf(`
-        CREATE TABLE IF NOT EXISTS %s (
-          id Utf8,
-          document Utf8,
-          embedding String,
-          PRIMARY KEY (id)
-        );`, "`"+tableName+"`")
-
-      return db.Query().Exec(ctx, query)
-    }
-    ```
-
-- Python
-
-    {% list tabs %}
-
-    - Native SDK
-
-      ```python
-      import ydb
-      
-      def create_vector_table(pool: ydb.QuerySessionPool, table_name: str) -> None:
-          query = f"""
-          CREATE TABLE IF NOT EXISTS `{table_name}` (
-              id Utf8,
-              document Utf8,
-              embedding String,
-              PRIMARY KEY (id)
-          );"""
-
-          pool.execute_with_retries(query)
-
-          print(f"Vector table {table_name} created")
-      ```
-
-    - Native SDK (Asyncio)
-
-      ```python
-      import ydb
-
-      async def create_vector_table(pool: ydb.aio.QuerySessionPool, table_name: str) -> None:
-          query = f"""
-          CREATE TABLE IF NOT EXISTS `{table_name}` (
-              id Utf8,
-              document Utf8,
-              embedding String,
-              PRIMARY KEY (id)
-          );"""
-
-          await pool.execute_with_retries(query)
-
-          print(f"Vector table {table_name} created")
-      ```
-
-    {% endlist %}
-=======
 {% list tabs group=tool %}
->>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 
 - C++
 
@@ -1111,145 +1047,7 @@ Each strategy defines the function used for subsequent search. For details on th
 Parameters for the `vector_kmeans_tree` index type are described in the [vector index](../../dev/vector-indexes.md#kmeans-tree-type).
 
 
-<<<<<<< HEAD
-{% list tabs %}
-
-- Go
-
-    ```go
-    func addVectorIndex(
-      ctx context.Context,
-      db *ydb.Driver,
-      tableName, indexName, strategy string,
-      dimension, levels, clusters int,
-    ) error {
-      tempIndexName := indexName + "__temp"
-      query := fmt.Sprintf(`
-        ALTER TABLE %s
-        ADD INDEX %s
-        GLOBAL USING vector_kmeans_tree
-        ON (embedding)
-        WITH (
-          %s,
-          vector_type="Float",
-          vector_dimension=%d,
-          levels=%d,
-          clusters=%d
-        );
-      `, "`"+tableName+"`", tempIndexName, strategy, dimension, levels, clusters)
-
-      if err := db.Query().Exec(ctx, query); err != nil {
-        return err
-      }
-
-      return db.Table().Do(ctx, func(ctx context.Context, s table.Session) error {
-        return s.AlterTable(ctx, path.Join(db.Name(), tableName),
-          options.WithRenameIndex(tempIndexName, indexName, true),
-        )
-      })
-    }
-    ```
-
-- Python
-
-    {% list tabs %}
-
-    - Native SDK
-
-      ```python
-      import ydb
-
-      def add_vector_index(
-          pool: ydb.QuerySessionPool,
-          driver: ydb.Driver,
-          table_name: str,
-          index_name: str,
-          strategy: str,
-          dimension: int,
-          levels: int = 2,
-          clusters: int = 128,
-      ):
-          temp_index_name = f"{index_name}__temp"
-          query = f"""
-          ALTER TABLE `{table_name}`
-          ADD INDEX {temp_index_name}
-          GLOBAL USING vector_kmeans_tree
-          ON (embedding)
-          WITH (
-              {strategy},
-              vector_type="Float",
-              vector_dimension={dimension},
-              levels={levels},
-              clusters={clusters},
-              overlap_clusters=3
-          );
-          """
-
-          pool.execute_with_retries(query)
-          driver.table_client.alter_table(
-              f"{driver._driver_config.database}/{table_name}",
-              rename_indexes=[
-                  ydb.RenameIndexItem(
-                      source_name=temp_index_name,
-                      destination_name=f"{index_name}",
-                      replace_destination=True,
-                  ),
-              ],
-          )
-
-          print(f"Table index {index_name} created.")
-      ```
-
-    - Native SDK (Asyncio)
-
-      ```python
-      import ydb
-
-      async def add_vector_index(
-          pool: ydb.aio.QuerySessionPool,
-          driver: ydb.aio.Driver,
-          table_name: str,
-          index_name: str,
-          strategy: str,
-          dimension: int,
-          levels: int = 2,
-          clusters: int = 128,
-      ):
-          temp_index_name = f"{index_name}__temp"
-          query = f"""
-          ALTER TABLE `{table_name}`
-          ADD INDEX {temp_index_name}
-          GLOBAL USING vector_kmeans_tree
-          ON (embedding)
-          WITH (
-              {strategy},
-              vector_type="Float",
-              vector_dimension={dimension},
-              levels={levels},
-              clusters={clusters},
-              overlap_clusters=3
-          );
-          """
-
-          await pool.execute_with_retries(query)
-          await driver.table_client.alter_table(
-              f"{driver._driver_config.database}/{table_name}",
-              rename_indexes=[
-                  ydb.RenameIndexItem(
-                      source_name=temp_index_name,
-                      destination_name=f"{index_name}",
-                      replace_destination=True,
-                  ),
-              ],
-          )
-
-          print(f"Table index {index_name} created.")
-      ```
-
-    {% endlist %}
-=======
 {% list tabs group=tool %}
->>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 
 - C++
 

@@ -312,7 +312,7 @@ auto CalcImplTableDescImpl(
     }
     if (uniqueKeySize > 0 && uniqueKeySize < implTableColumns.Keys.size()) {
         // Unique key may contain all PK columns, then the prefix is not required
-        implTableDesc.SetUniqueIndexKeySize(uniqueKeySize);
+        implTableDesc.MutablePartitionConfig()->SetUniqueIndexKeySize(uniqueKeySize);
     }
 
     return implTableDesc;

@@ -129,14 +129,15 @@ void TOracle::Think(TInstant now)
     for (size_t i = 0; i < HostStatistics.size(); ++i) {
         auto errorsInfo = HostStatistics[i].GetErrorsInfo(now);
 
-        const bool hasSufferingSymptom = (errorsInfo.ErrorCount != 0);
+        const bool hasSufferingSymptom =
+            (errorsInfo.ConsecutiveErrorCount != 0);
         const bool hasTemporaryOfflineSymptom =
             hasSufferingSymptom &&
-            ((errorsInfo.ErrorCount >=
+            ((errorsInfo.ConsecutiveErrorCount >=
                   config.GetMinErrorsCountBeforeGoingOffline() &&
               errorsInfo.FromFirstError >
                   config.GetMaxDurationBeforeGoingTemporaryOffline()) ||
-             (errorsInfo.ErrorCount >=
+             (errorsInfo.ConsecutiveErrorCount >=
               config.GetErrorsCountForGoingOffline()) ||
              (HostStateController->GetHostPBufferUsedSize(i) >=
               config.GetErrorsTotalSizeForGoingOffline()));

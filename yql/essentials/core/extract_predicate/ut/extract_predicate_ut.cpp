@@ -68,9 +68,7 @@ TExprNode::TPtr ParseAndOptimize(const TString& program, TExprContext& exprCtx, 
     parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory(/*isAmbiguityError=*/true);
     parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory(/*isAmbiguityError=*/true);
 
-    NSQLTranslation::TTranslators translators(
-        nullptr,
-        NSQLTranslationV1::MakeTranslator(lexers, parsers),
+    NSQLTranslation::TTranslators translators(NSQLTranslationV1::MakeTranslator(lexers, parsers),
         nullptr);
 
     TAstParseResult astRes = SqlToYql(translators, program, settings);

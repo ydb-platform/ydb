@@ -4,10 +4,10 @@
 #include "type_check.h"
 
 #include <yql/essentials/public/issue/protos/issue_id.pb.h>
-#include <yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathLexer.h>
-#include <yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathParser.h>
-#include <yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathParser.pb.h>
-#include <yql/essentials/parser/proto_ast/antlr3/proto_ast_antlr3.h>
+#include <yql/essentials/parser/proto_ast/gen/jsonpath_antlr4/JsonPathAntlr4Lexer.h>
+#include <yql/essentials/parser/proto_ast/gen/jsonpath_antlr4/JsonPathAntlr4Parser.h>
+#include <yql/essentials/parser/proto_ast/gen/jsonpath_proto_split_antlr4/JsonPathAntlr4Parser.pb.main.h>
+#include <yql/essentials/parser/proto_ast/antlr4/proto_ast_antlr4.h>
 
 #include <google/protobuf/message.h>
 
@@ -63,7 +63,10 @@ TAstNodePtr ParseJsonPathAst(const TStringBuf path, TIssues& issues, size_t maxP
 #if defined(_tsan_enabled_)
         TGuard<TMutex> guard(SanitizerJsonPathTranslationMutex);
 #endif
-        NProtoAST::TProtoASTBuilder3<NALP::JsonPathParser, NALP::JsonPathLexer> builder(path, "JsonPath", &arena);
+        NProtoAST::TProtoASTBuilder4<
+            NALPJsonPathAntlr4::JsonPathAntlr4Parser,
+            NALPJsonPathAntlr4::JsonPathAntlr4Lexer>
+            builder(path, "JsonPath", &arena);
         TParseErrorsCollector collector(issues, maxParseErrors);
         rawAst = builder.BuildAST(collector);
     }
@@ -73,11 +76,11 @@ TAstNodePtr ParseJsonPathAst(const TStringBuf path, TIssues& issues, size_t maxP
     }
 
     const google::protobuf::Descriptor* descriptor = rawAst->GetDescriptor();
-    if (descriptor && descriptor->name() != "TJsonPathParserAST") {
+    if (descriptor && descriptor->name() != "TJsonPathAntlr4ParserAST") {
         return nullptr;
     }
 
-    const auto* protoAst = static_cast<const NJsonPathGenerated::TJsonPathParserAST*>(rawAst);
+    const auto* protoAst = static_cast<const NJsonPathGenerated::TJsonPathAntlr4ParserAST*>(rawAst);
     TAstBuilder astBuilder(issues);
     TAstNodePtr ast = astBuilder.Build(*protoAst);
     if (!issues.Empty()) {

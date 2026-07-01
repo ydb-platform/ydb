@@ -183,9 +183,7 @@ Y_UNIT_TEST_SUITE(TCreateAndDropViewTest) {
         parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
         parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
-        NSQLTranslation::TTranslators translators(
-            nullptr,
-            NSQLTranslationV1::MakeTranslator(lexers, parsers),
+        NSQLTranslation::TTranslators translators(NSQLTranslationV1::MakeTranslator(lexers, parsers),
             nullptr
         );
 

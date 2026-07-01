@@ -140,7 +140,6 @@ bool RunPqProgram(
     Cerr << "Parse SQL..." << Endl;
     NSQLTranslation::TTranslationSettings sqlSettings;
     sqlSettings.SyntaxVersion = 1;
-    sqlSettings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
     sqlSettings.Flags.insert("DqEngineEnable");
     sqlSettings.Flags.insert("DqEngineForce");
 

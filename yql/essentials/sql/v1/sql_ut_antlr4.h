@@ -63,10 +63,8 @@ inline NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslat
         /*isAmbiguityError=*/true,
         /*isAmbiguityDebugging=*/false);
 
-    NSQLTranslation::TTranslators translators(
-        nullptr,
-        NSQLTranslationV1::MakeTranslator(lexers, parsers),
-        nullptr);
+    NSQLTranslation::TTranslators translators(NSQLTranslationV1::MakeTranslator(lexers, parsers),
+                                              nullptr);
 
     auto res = SqlToYql(translators, query, settings);
     if (debug == EDebugOutput::ToCerr) {

@@ -5,6 +5,8 @@ SET(antlr_templates ${antlr_output}/org/antlr/v4/tool/templates/codegen)
 SET(sql_grammar ${antlr_output}/SQLv1Antlr4.g)
 
 SET(ANTLR_PACKAGE_NAME NSQLv1Generated)
+SET(PARSER_AST_NAME SQLv1Parser)
+SET(PARSER_PROTO_NAME SQLv1Antlr4Parser)
 
 CONFIGURE_FILE(${ARCADIA_ROOT}/yql/essentials/parser/proto_ast/org/antlr/v4/tool/templates/codegen/Java/Java.stg.in ${antlr_templates}/Java/Java.stg)
 

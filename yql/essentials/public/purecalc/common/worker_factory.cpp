@@ -243,15 +243,13 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
     if (mode == ETranslationMode::SQL || mode == ETranslationMode::PG) {
         NSQLTranslation::TTranslationSettings settings;
 
-        typeContext->DeprecatedSQL = (syntaxVersion == 0);
+        typeContext->DeprecatedSQL = false;
         if (mode == ETranslationMode::PG) {
             settings.PgParser = true;
         }
 
         settings.LangVer = LangVer_;
         settings.SyntaxVersion = syntaxVersion;
-        settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
-        settings.Antlr4Parser = true;
         settings.Mode = NSQLTranslation::ESqlMode::LIMITED_VIEW;
         settings.DefaultCluster = PurecalcDefaultCluster;
         settings.ClusterMapping[settings.DefaultCluster] = PurecalcDefaultService;
@@ -275,9 +273,7 @@ TExprNode::TPtr TWorkerFactory<TBase>::Compile(
         parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
         parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
-        NSQLTranslation::TTranslators translators(
-            nullptr,
-            NSQLTranslationV1::MakeTranslator(lexers, parsers),
+        NSQLTranslation::TTranslators translators(NSQLTranslationV1::MakeTranslator(lexers, parsers),
             NSQLTranslationPG::MakeTranslator());
 
         astRes = SqlToYql(translators, TString(query), settings);

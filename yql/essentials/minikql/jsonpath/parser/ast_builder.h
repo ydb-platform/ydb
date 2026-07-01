@@ -2,7 +2,7 @@
 
 #include "ast_nodes.h"
 
-#include <yql/essentials/parser/proto_ast/gen/jsonpath/JsonPathParser.pb.h>
+#include <yql/essentials/parser/proto_ast/gen/jsonpath_proto_split_antlr4/JsonPathAntlr4Parser.pb.main.h>
 
 namespace NYql::NJsonPath {
 
@@ -10,7 +10,7 @@ class TAstBuilder {
 public:
     explicit TAstBuilder(TIssues& issues);
 
-    TAstNodePtr Build(const NJsonPathGenerated::TJsonPathParserAST& ast);
+    TAstNodePtr Build(const NJsonPathGenerated::TJsonPathAntlr4ParserAST& ast);
 
 private:
     TArrayAccessNode::TSubscript BuildArraySubscript(const NJsonPathGenerated::TRule_array_subscript& node);

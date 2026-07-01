@@ -58,9 +58,8 @@ NSQLTranslation::TTranslators Translators() {
     parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
     NSQLTranslation::TTranslators translators(
-        /*v0=*/nullptr,
-        /*v1=*/NSQLTranslationV1::MakeTranslator(lexers, parsers),
-        /*pg=*/NSQLTranslationPG::MakeTranslator());
+        NSQLTranslationV1::MakeTranslator(lexers, parsers),
+        NSQLTranslationPG::MakeTranslator());
 
     return translators;
 }

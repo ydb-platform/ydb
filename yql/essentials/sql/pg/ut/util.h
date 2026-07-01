@@ -190,9 +190,7 @@ inline NYql::TAstParseResult SqlToYqlWithMode(const TString& query, NSQLTranslat
     TTestAutoParamBuilderFactory autoParamFactory;
     settings.AutoParamBuilderFactory = &autoParamFactory;
 
-    NSQLTranslation::TTranslators translators(
-        nullptr,
-        nullptr,
+    NSQLTranslation::TTranslators translators(nullptr,
         NSQLTranslationPG::MakeTranslator());
 
     auto res = SqlToYql(translators, query, settings);

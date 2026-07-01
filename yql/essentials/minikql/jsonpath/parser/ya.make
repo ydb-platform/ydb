@@ -20,8 +20,8 @@ PEERDIR(
     yql/essentials/ast
     yql/essentials/utils
     yql/essentials/public/issue/protos
-    yql/essentials/parser/proto_ast/antlr3
-    yql/essentials/parser/proto_ast/gen/jsonpath
+    yql/essentials/parser/proto_ast/antlr4
+    yql/essentials/parser/proto_ast/gen/jsonpath_antlr4
 )
 
 SRCS(
@@ -36,4 +36,3 @@ SRCS(
 GENERATE_ENUM_SERIALIZATION(ast_nodes.h)
 
 END()
-

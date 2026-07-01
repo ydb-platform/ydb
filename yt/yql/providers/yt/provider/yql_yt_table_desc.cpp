@@ -168,7 +168,6 @@ TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, 
     settings.DefaultCluster = cluster.empty() ? "view" : cluster;
     settings.ClusterMapping[settings.DefaultCluster] = cluster.empty() ? "data" : provider;
     settings.SyntaxVersion = syntaxVersion;
-    settings.V0Behavior = NSQLTranslation::EV0Behavior::Disable;
     if (qContext.CanRead() && enableViewIsolation) {
         auto res = qContext.GetReader()->Get({YtView_Component, viewId}).GetValueSync();
         if (!res) {
@@ -194,9 +193,7 @@ TExprNode::TPtr CompileViewSql(const TString& provider, const TString& cluster, 
     parsers.Antlr4 = NSQLTranslationV1::MakeAntlr4ParserFactory();
     parsers.Antlr4Ansi = NSQLTranslationV1::MakeAntlr4AnsiParserFactory();
 
-    NSQLTranslation::TTranslators translators(
-        nullptr,
-        NSQLTranslationV1::MakeTranslator(lexers, parsers),
+    NSQLTranslation::TTranslators translators(NSQLTranslationV1::MakeTranslator(lexers, parsers),
         NSQLTranslationPG::MakeTranslator()
     );
 

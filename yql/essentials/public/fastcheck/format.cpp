@@ -86,7 +86,6 @@ private:
         NSQLTranslation::TTranslationSettings settings;
         settings.Arena = &arena;
         settings.File = request.File;
-        settings.Antlr4Parser = true;
         settings.AnsiLexer = request.IsAnsiLexer;
         settings.LangVer = request.LangVer;
 

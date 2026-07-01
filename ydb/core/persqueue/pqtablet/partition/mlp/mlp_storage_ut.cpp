@@ -3000,50 +3000,67 @@ Y_UNIT_TEST(TOrderedMessageGroupIdHash) {
     UNIT_ASSERT_UNEQUAL(b, c);
 }
 
+// Oracle for the KeepMessageOrder round-robin fairness invariant. It intentionally models ONLY
+// FIFO-per-group ordering, round-robin fairness across groups and groupless messages. It does NOT
+// model DLQ / retention / skipMessageGroups semantics - those are verified by dedicated direct tests.
 struct TFairnessModel {
     TStorage Storage = TStorage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = true});
     ui64 Offset = 0;
     TSet<ui64> Infly;
     TSet<ui64> Committed;
     TMap<ui64, ui32> Hashes;
+    TSet<ui64> Groupless;
     TMap<ui32, ui32> LastReadTime;
     ui32 ReadTime = 1;
 
+    // Returns the set of offsets that Next is currently allowed to return. Grouped offsets obey FIFO-per-group
+    // plus round-robin (only heads of the least-recently-served group). Groupless offsets are always eligible
+    // while Unprocessed and bypass round-robin entirely.
     TSet<ui64> GetAvailalableOffsets() const {
-        TSet<ui32> visited;
-        for (ui32 o : Infly) {
-            auto [_, ins] = visited.insert(Hashes.at(o));
-            Y_ASSERT(ins);
+        // Groupless messages are always eligible while Unprocessed, independent of round-robin.
+        TSet<ui64> res;
+        for (ui64 o : Groupless) {
+            if (!Committed.contains(o) && !Infly.contains(o)) {
+                res.insert(o);
+            }
         }
 
-        TSet<ui64> res;
-        ui32 OldestRecordTime = -1;
+        // Grouped messages: only the head of each group whose group is least-recently-served is eligible.
+        TSet<ui32> visited;
+        for (ui64 o : Infly) {
+            if (!Groupless.contains(o)) {
+                auto [_, ins] = visited.insert(Hashes.at(o));
+                Y_ASSERT(ins);
+            }
+        }
+
+        TSet<ui64> grouped;
+        ui32 oldestReadTime = -1;
         for (auto [o, h] : Hashes) {
-            if (Committed.contains(o)) {
+            if (Committed.contains(o) || Infly.contains(o) || Groupless.contains(o) || visited.contains(h)) {
                 continue;
             }
-            if (Infly.contains(o)) {
+            if (auto lrt = LastReadTime.Value(h, 0); lrt > oldestReadTime) {
                 continue;
-            }
-            if (visited.contains(h)) {
-                continue;
-            }
-            if (auto lrt = LastReadTime.Value(h, 0); lrt > OldestRecordTime) {
-                continue;
-            } else if (lrt < OldestRecordTime) {
-                OldestRecordTime = lrt;
-                res.clear();
+            } else if (lrt < oldestReadTime) {
+                oldestReadTime = lrt;
+                grouped.clear();
             }
             visited.insert(h);
-            res.insert(o);
+            grouped.insert(o);
         }
+
+        res.insert(grouped.begin(), grouped.end());
         return res;
     }
 
-    void AddMessage(ui32 group) {
-        Cerr << "Add message " << LabeledOutput(Offset, group) << "\n";
-        Storage.AddMessage(Offset, true, group, TInstant::Now());
+    void AddMessage(ui32 group, bool hasGroup = true) {
+        Cerr << "Add message " << LabeledOutput(Offset, group, hasGroup) << "\n";
+        Storage.AddMessage(Offset, hasGroup, group, TInstant::Now());
         Hashes[Offset] = group;
+        if (!hasGroup) {
+            Groupless.insert(Offset);
+        }
         ++Offset;
     }
 
@@ -3068,7 +3085,9 @@ struct TFairnessModel {
                 UNIT_ASSERT_C(available.contains(result->Offset), i);
                 Infly.insert(offset);
                 res.push_back(TMessage{.Offset = offset, .Group = hash});
-                LastReadTime[hash] = ReadTime;
+                if (!Groupless.contains(offset)) {
+                    LastReadTime[hash] = ReadTime;
+                }
             } else {
                 Cerr << "none\n";
             }
@@ -3089,72 +3108,30 @@ struct TFairnessModel {
 
         Storage.Commit(offset);
     }
+
+    void Unlock(ui64 offset) {
+        Y_ASSERT(Infly.contains(offset));
+        Y_ASSERT(!Committed.contains(offset));
+        Infly.erase(offset);
+
+        const auto available = GetAvailalableOffsets();
+        TString availableStr = "{" + JoinSeq(", ", available) + "}";
+        Cerr << "Unlock message " << LabeledOutput(offset, Hashes.at(offset), availableStr) << "\n";
+
+        Storage.Unlock(offset);
+    }
 };
 
-Y_UNIT_TEST(NextWithFairness3) {
+
+void NextWithFairnessBasicImpl(TConstArrayRef<ui32> groups, size_t readSize) {
     TFairnessModel model;
-    const int n = 25;
-    for (int i = 0; i < n; ++i) {
-        ui32 hash = (i % 2 == 0) ? 0 : i;
-        model.AddMessage(hash);
+    const size_t n = groups.size();
+    for (ui32 g : groups) {
+        model.AddMessage(g);
     }
 
-    for (int i = 0; i < n; ++i) {
-        auto v = model.Next(1);
-        for (auto& m : v) {
-            model.Commit(m.Offset);
-        }
-    }
-}
-
-
-Y_UNIT_TEST(NextWithFairness4) {
-    TFairnessModel model;
-    const int n = 25;
-    for (int i = 0; i < n; ++i) {
-        ui32 hash = (i % 2 == 0) ? 0 : i;
-        model.AddMessage(hash);
-    }
-
-    for (int i = 0; i < n; ++i) {
-        auto v = model.Next(3);
-        for (auto& m : v) {
-            model.Commit(m.Offset);
-        }
-    }
-}
-
-
-Y_UNIT_TEST(NextWithFairness5) {
-    TFairnessModel model;
-    const int n = 25;
-    const int groupsSize = 6;
-    for (int i = 0; i < n; ++i) {
-        ui32 hash = i / groupsSize;
-        model.AddMessage(hash);
-    }
-
-    for (int i = 0; i < n; ++i) {
-        auto v = model.Next(1);
-        for (auto& m : v) {
-            model.Commit(m.Offset);
-        }
-    }
-}
-
-
-Y_UNIT_TEST(NextWithFairness6) {
-    TFairnessModel model;
-    const int n = 25;
-    const int groupsSize = 6;
-    for (int i = 0; i < n; ++i) {
-        ui32 hash = i / groupsSize;
-        model.AddMessage(hash);
-    }
-
-    for (int i = 0; i < n; ++i) {
-        auto v = model.Next(3);
-        for (auto& m : v) {
+    for (size_t i = 0; i < n / readSize + 2; ++i) {
+        for (auto& m : model.Next(readSize)) {
             model.Commit(m.Offset);
         }
     }
@@ -3162,46 +3139,326 @@ Y_UNIT_TEST(NextWithFairness6) {
 
 
 Y_UNIT_TEST(NextWithFairness1) {
-    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = true});
-
-    TMap<ui64, ui32> groupIds;
-    const int n = 25;
-    for (int i = 0; i < n; ++i) {
-        ui32 hash = (i % 2 == 0) ? 0 : IntHash(i);
-        storage.AddMessage(i, true, hash, TInstant::Now());
-        groupIds[i] = hash;
-    }
-
-    for (int i = 0; i < n; ++i) {
-        TStorage::TPosition position;
-        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
-        UNIT_ASSERT_C(result.has_value(), LabeledOutput(i));
-        Cerr << LabeledOutput(i, result->Offset, groupIds.at(result->Offset)) << "\n";
-        bool commit = storage.Commit(result->Offset);
-        UNIT_ASSERT_C(commit, LabeledOutput(i));
-    }
+    NextWithFairnessBasicImpl({0, 1, 0, 3, 0, 5, 0, 7, 0, 9, 0, 11, 0, 13, 0, 15, 0, 17, 0, 19, 0, 21, 0, 23, 0}, 1);
 }
 
 Y_UNIT_TEST(NextWithFairness2) {
-    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = true});
+    NextWithFairnessBasicImpl({0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 4}, 1);
+}
 
-    TMap<ui64, ui32> groupIds;
+Y_UNIT_TEST(NextWithFairness3) {
+    NextWithFairnessBasicImpl({0, 1, 0, 3, 0, 5, 0, 7, 0, 9, 0, 11, 0, 13, 0, 15, 0, 17, 0, 19, 0, 21, 0, 23, 0}, 3);
+}
+
+Y_UNIT_TEST(NextWithFairness4) {
+    NextWithFairnessBasicImpl({0, 0, 0, 0, 0, 0, 1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 4}, 3);
+}
+
+Y_UNIT_TEST(NextWithFairnessInterleavedCommit) {
+    // Interleave Next and Commit: pull a batch, commit only part of it, keep the rest in flight so following
+    // Next calls must respect that those groups are still busy.
+    TFairnessModel model;
+    const int n = 25;
+    for (int i = 0; i < n; ++i) {
+        model.AddMessage((i % 2 == 0) ? 0 : i);
+    }
+
+    std::vector<ui64> inflight;
+    for (int i = 0; i < 2 * n; ++i) {
+        for (auto& m : model.Next(3)) {
+            inflight.push_back(m.Offset);
+        }
+        if (!inflight.empty()) {
+            model.Commit(inflight.front());
+            inflight.erase(inflight.begin());
+        }
+    }
+    for (ui64 offset : inflight) {
+        model.Commit(offset);
+    }
+}
+
+Y_UNIT_TEST(NextWithFairnessInterleavedUnlock) {
+    // Interleave Next, Unlock and Commit: unlocked messages must become eligible for their group again while
+    // still obeying round-robin ordering.
+    TFairnessModel model;
     const int n = 25;
     const int groupsSize = 6;
     for (int i = 0; i < n; ++i) {
-        ui32 hash = i / groupsSize;
-        storage.AddMessage(i, true, hash, TInstant::Now());
-        groupIds[i] = hash;
+        model.AddMessage(i / groupsSize);
     }
 
     for (int i = 0; i < n; ++i) {
+        auto v = model.Next(2);
+        for (size_t j = 0; j < v.size(); ++j) {
+            if (j % 2 == 0) {
+                model.Commit(v[j].Offset);
+            } else {
+                model.Unlock(v[j].Offset);
+            }
+        }
+    }
+    // Drain whatever remains.
+    for (int i = 0; i < n; ++i) {
+        for (auto& m : model.Next(1)) {
+            model.Commit(m.Offset);
+        }
+    }
+}
+
+Y_UNIT_TEST(FairnessNormalInterleaved) {
+    // Mix of a hot shared group (0) and unique groups, drained with Next/Commit issued in interleaved and then
+    // batched orders. The model asserts fairness and FIFO after every operation.
+    TFairnessModel model;
+    const int n = 30;
+    for (int i = 0; i < n; ++i) {
+        model.AddMessage((i % 3 == 0) ? 0 : (i % 3 == 1) ? 1 : i);
+    }
+
+    // Interleaved: one Next, immediately commit it.
+    for (int i = 0; i < n / 2; ++i) {
+        for (auto& m : model.Next(1)) {
+            model.Commit(m.Offset);
+        }
+    }
+    // Batched: pull several, then commit them all.
+    for (int i = 0; i < n; ++i) {
+        auto v = model.Next(4);
+        for (auto& m : v) {
+            model.Commit(m.Offset);
+        }
+    }
+}
+
+Y_UNIT_TEST(FairnessGrouplessAlwaysAvailable) {
+    // Groupless messages must always be returnable while Unprocessed, even when every grouped message is in
+    // flight and blocked. The model treats each groupless offset as an always-eligible unique group.
+    TFairnessModel model;
+    // Layout: g0 groupless, g1 group A, g2 groupless, g3 group A, g4 group B, g5 groupless.
+    model.AddMessage(1000, /*hasGroup*/ false); // 0
+    model.AddMessage(1, /*hasGroup*/ true);     // 1
+    model.AddMessage(2000, /*hasGroup*/ false); // 2
+    model.AddMessage(1, /*hasGroup*/ true);     // 3
+    model.AddMessage(2, /*hasGroup*/ true);     // 4
+    model.AddMessage(3000, /*hasGroup*/ false); // 5
+
+    // Lock the heads of both grouped groups; their second messages become blocked.
+    auto v = model.Next(2);
+    UNIT_ASSERT_VALUES_EQUAL(v.size(), 2);
+
+    // Even though groups A and B are busy, all three groupless messages must still be drainable now.
+    auto g = model.Next(3);
+    UNIT_ASSERT_VALUES_EQUAL_C(g.size(), 3, "all groupless messages must be available while grouped ones are busy");
+    for (auto& m : g) {
+        UNIT_ASSERT_C(m.Offset == 0 || m.Offset == 2 || m.Offset == 5, LabeledOutput(m.Offset));
+    }
+
+    // Commit everything drained so far, then finish the remaining grouped tails.
+    for (auto& m : v) {
+        model.Commit(m.Offset);
+    }
+    for (auto& m : g) {
+        model.Commit(m.Offset);
+    }
+    for (int i = 0; i < 4; ++i) {
+        for (auto& m : model.Next(1)) {
+            model.Commit(m.Offset);
+        }
+    }
+}
+
+// Collects the set of offsets that Next may return in the current storage state by repeatedly locking heads and
+// then unlocking them, so the returned messages can be treated as an unordered candidate set.
+static TSet<ui64> ProbeCandidates(TStorage& storage, const absl::flat_hash_set<ui32>& skip = {}) {
+    TSet<ui64> res;
+    std::vector<ui64> locked;
+    while (true) {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position, skip);
+        if (!result.has_value()) {
+            break;
+        }
+        res.insert(result->Offset);
+        locked.push_back(result->Offset);
+    }
+    for (ui64 offset : locked) {
+        storage.Unlock(offset);
+    }
+    return res;
+}
+
+Y_UNIT_TEST(FairnessWithRetention) {
+    // The head of a group can expire by retention; Next must skip expired offsets and serve the next
+    // non-expired message of that group, while still honoring fairness across groups.
+    auto timeProvider = TIntrusivePtr<MockTimeProvider>(new MockTimeProvider());
+    TStorage storage(timeProvider, TStorage::TStorageSettings{.KeepMessageOrder = true});
+    storage.SetRetentionPeriod(TDuration::Seconds(5));
+
+    // Group A (hash 1): offset 0 old (will expire), offset 1 fresh. Group B (hash 2): offset 2 fresh.
+    storage.AddMessage(0, true, 1, timeProvider->Now());
+    storage.AddMessage(1, true, 1, timeProvider->Now() + TDuration::Seconds(20));
+    storage.AddMessage(2, true, 2, timeProvider->Now() + TDuration::Seconds(20));
+
+    timeProvider->Tick(TDuration::Seconds(6)); // offset 0 is now expired
+
+    // The expired head (0) must never be returned; eligible heads are {1, 2}.
+    {
+        auto candidates = ProbeCandidates(storage);
+        UNIT_ASSERT_C(!candidates.contains(0), "expired offset 0 must be skipped");
+        UNIT_ASSERT_VALUES_EQUAL(candidates.size(), 2);
+        UNIT_ASSERT(candidates.contains(1));
+        UNIT_ASSERT(candidates.contains(2));
+    }
+
+    // Physically remove the expired head so group A's head advances to offset 1.
+    storage.Compact();
+    {
+        auto candidates = ProbeCandidates(storage);
+        UNIT_ASSERT_C(!candidates.contains(0), "expired offset 0 must be gone after compaction");
+        UNIT_ASSERT_VALUES_EQUAL(candidates.size(), 2);
+        UNIT_ASSERT(candidates.contains(1));
+        UNIT_ASSERT(candidates.contains(2));
+    }
+
+    // Drain both groups; offset 0 must never appear.
+    TSet<ui64> seen;
+    for (int i = 0; i < 2; ++i) {
+        TStorage::TPosition position;
+        auto result = storage.Next(timeProvider->Now() + TDuration::Seconds(1), position);
+        UNIT_ASSERT_C(result.has_value(), LabeledOutput(i));
+        UNIT_ASSERT_C(result->Offset != 0, "expired offset 0 must never be returned");
+        seen.insert(result->Offset);
+        UNIT_ASSERT(storage.Commit(result->Offset));
+    }
+    UNIT_ASSERT_VALUES_EQUAL(seen.size(), 2);
+    UNIT_ASSERT(seen.contains(1) && seen.contains(2));
+}
+
+Y_UNIT_TEST(FairnessWithDlq) {
+    // When a group's head is moved to DLQ, that group stays blocked (WaitDLQ) until the DLQ message is
+    // committed; other groups keep being served fairly meanwhile.
+    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = true});
+    storage.SetMaxMessageProcessingCount(1);
+    storage.SetDeadLetterPolicy(NKikimrPQ::TPQTabletConfig::DEAD_LETTER_POLICY_MOVE);
+
+    // Group A (hash 1): offsets 0, 1. Group B (hash 2): offset 2.
+    storage.AddMessage(0, true, 1, TInstant::Now());
+    storage.AddMessage(1, true, 1, TInstant::Now());
+    storage.AddMessage(2, true, 2, TInstant::Now());
+
+    // Take the head of group A and push it to DLQ via Unlock (ProcessingCount reaches the max).
+    {
         TStorage::TPosition position;
         auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
-        UNIT_ASSERT_C(result.has_value(), LabeledOutput(i));
-        Cerr << LabeledOutput(i, result->Offset, groupIds.at(result->Offset)) << "\n";
-        bool commit = storage.Commit(result->Offset);
-        UNIT_ASSERT_C(commit, LabeledOutput(i));
+        UNIT_ASSERT(result.has_value());
+        UNIT_ASSERT_VALUES_EQUAL(result->Offset, 0);
+        storage.Unlock(0);
     }
+    {
+        auto [message, _] = storage.GetMessage(0);
+        UNIT_ASSERT_VALUES_EQUAL(message->GetStatus(), TStorage::EMessageStatus::DLQ);
+    }
+
+    // While offset 0 is a DLQ head, group A is blocked: only group B's offset 2 is eligible, and offset 1 must
+    // not be returned.
+    {
+        auto candidates = ProbeCandidates(storage);
+        UNIT_ASSERT_C(!candidates.contains(1), "group A is blocked by its DLQ head");
+        UNIT_ASSERT_VALUES_EQUAL(candidates.size(), 1);
+        UNIT_ASSERT(candidates.contains(2));
+    }
+
+    // Commit the DLQ head; group A unblocks and its next message (offset 1) becomes eligible.
+    UNIT_ASSERT(storage.Commit(0));
+    {
+        auto candidates = ProbeCandidates(storage);
+        UNIT_ASSERT_C(candidates.contains(1), "group A must be eligible after DLQ head committed");
+    }
+}
+
+Y_UNIT_TEST(FairnessWithSkipMessageGroups) {
+    // Groups listed in skipMessageGroups must never be returned by that Next call, while other groups are still
+    // served respecting FIFO. When all eligible groups are skipped, Next returns nothing.
+    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = true});
+
+    // Groups: A=1 {0,1}, B=2 {2}, C=3 {3}.
+    storage.AddMessage(0, true, 1, TInstant::Now());
+    storage.AddMessage(1, true, 1, TInstant::Now());
+    storage.AddMessage(2, true, 2, TInstant::Now());
+    storage.AddMessage(3, true, 3, TInstant::Now());
+
+    // Skip groups A and B: only group C's head (offset 3) is eligible.
+    {
+        auto candidates = ProbeCandidates(storage, {1, 2});
+        UNIT_ASSERT_VALUES_EQUAL(candidates.size(), 1);
+        UNIT_ASSERT(candidates.contains(3));
+    }
+
+    // Skipping every group yields nothing.
+    {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position, {1, 2, 3});
+        UNIT_ASSERT_C(!result.has_value(), "all eligible groups skipped");
+    }
+
+    // Skipping only A leaves heads of B and C eligible; the skipped-group offsets 0/1 must not appear.
+    {
+        auto candidates = ProbeCandidates(storage, {1});
+        UNIT_ASSERT_C(!candidates.contains(0) && !candidates.contains(1), "skipped group A must not be returned");
+        UNIT_ASSERT(candidates.contains(2));
+        UNIT_ASSERT(candidates.contains(3));
+    }
+}
+
+Y_UNIT_TEST(FairnessSkipThenNoSkip) {
+    // Groups skipped in earlier Next calls must eventually be returnable once Next is called with an empty skip
+    // set (not necessarily on the first such call), preserving FIFO within each group and losing no message.
+    TStorage storage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = true});
+
+    // Groups: A=1 {0,1}, B=2 {2,3}, C=3 {4}.
+    storage.AddMessage(0, true, 1, TInstant::Now());
+    storage.AddMessage(1, true, 1, TInstant::Now());
+    storage.AddMessage(2, true, 2, TInstant::Now());
+    storage.AddMessage(3, true, 2, TInstant::Now());
+    storage.AddMessage(4, true, 3, TInstant::Now());
+
+    TMap<ui64, ui32> group = {{0, 1}, {1, 1}, {2, 2}, {3, 2}, {4, 3}};
+    TMap<ui32, ui64> nextExpectedInGroup = {{1, 0}, {2, 2}, {3, 4}};
+
+    auto consume = [&](ui64 offset) {
+        ui32 g = group.at(offset);
+        UNIT_ASSERT_VALUES_EQUAL_C(offset, nextExpectedInGroup.at(g), "FIFO within group violated");
+        ++nextExpectedInGroup[g];
+        UNIT_ASSERT(storage.Commit(offset));
+    };
+
+    // Phase 1: skip groups A and B, so only group C is served.
+    {
+        const absl::flat_hash_set<ui32> skip = {1, 2};
+        while (true) {
+            TStorage::TPosition position;
+            auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position, skip);
+            if (!result.has_value()) {
+                break;
+            }
+            ui32 g = group.at(result->Offset);
+            UNIT_ASSERT_C(g != 1 && g != 2, "skipped group must not be returned");
+            consume(result->Offset);
+        }
+    }
+    UNIT_ASSERT_VALUES_EQUAL_C(nextExpectedInGroup.at(3), 5, "group C fully drained in phase 1");
+
+    // Phase 2: no skip. The previously-skipped groups A and B must all be returned eventually, FIFO preserved.
+    TSet<ui64> remaining = {0, 1, 2, 3};
+    for (int guard = 0; guard < 100 && !remaining.empty(); ++guard) {
+        TStorage::TPosition position;
+        auto result = storage.Next(TInstant::Now() + TDuration::Seconds(1), position);
+        UNIT_ASSERT_C(result.has_value(), "remaining messages must eventually be returned with empty skip");
+        UNIT_ASSERT_C(remaining.contains(result->Offset), LabeledOutput(result->Offset));
+        remaining.erase(result->Offset);
+        consume(result->Offset);
+    }
+    UNIT_ASSERT_C(remaining.empty(), "all previously-skipped messages must be returned");
 }
 
 }

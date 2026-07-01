@@ -141,7 +141,7 @@ IGraphTransformer::TStatus InferPgCommonType(
         {
             size_t j = 0;
             for (const auto& [col, gen_col] : *childColumnOrder) {
-                auto itemIdx = structType->FindItemI(gen_col, nullptr);
+                auto itemIdx = structType->FindItemI(gen_col, /*isVirtual=*/nullptr);
                 YQL_ENSURE(itemIdx);
 
                 const auto* type = structType->GetItems()[*itemIdx]->GetItemType();
@@ -383,7 +383,7 @@ IGraphTransformer::TStatus PgCallWrapper(const TExprNode::TPtr& input, TExprNode
                     YQL_ENSURE(proc.ExprNode->Head().ChildrenSize() == static_cast<ui32>(fargTypes.size()));
                     TNodeOnNodeOwnedMap deepClones;
                     YQL_ENSURE(NPg::GetSqlLanguageParser());
-                    auto lambda = ctx.Expr.DeepCopy(*proc.ExprNode, NPg::GetSqlLanguageParser()->GetContext(), deepClones, true, false);
+                    auto lambda = ctx.Expr.DeepCopy(*proc.ExprNode, NPg::GetSqlLanguageParser()->GetContext(), deepClones, /*internStrings=*/true, /*copyTypes=*/false);
                     TNodeOnNodeOwnedMap replaces;
                     for (ui32 i = 0; i < fargTypes.size(); ++i) {
                         replaces[lambda->Head().Child(i)] = children[i + argStart];

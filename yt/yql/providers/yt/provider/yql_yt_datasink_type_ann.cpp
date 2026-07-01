@@ -616,9 +616,14 @@ private:
                 return TStatus::Error;
             }
 
-            if (!IsSameAnnotation(*description.RowType, *itemType)) {
+            const TTypeAnnotationNode* targetRowType = description.RowType;
+            if (State_->Types->EngineType == EEngineType::Ytflow) {
+                targetRowType = MakeTypeForDynamicTableWrite(description, ctx);
+            }
+
+            if (!IsSameAnnotation(*targetRowType, *itemType)) {
                 if (content) {
-                    auto expectedType = ctx.MakeType<TListExprType>(description.RowType);
+                    auto expectedType = ctx.MakeType<TListExprType>(targetRowType);
                     auto status = TryConvertTo(content, *expectedType, ctx, *State_->Types);
                     if (status.Level != TStatus::Error) {
                         return status;
@@ -627,7 +632,7 @@ private:
 
                 ctx.AddError(TIssue(pos, TStringBuilder()
                     << "Table " << outTableInfo.Name.Quote() << " row type differs from the written row type: "
-                    << GetTypeDiff(*description.RowType, *itemType)));
+                    << GetTypeDiff(*targetRowType, *itemType)));
                 return TStatus::Error;
             }
         }
@@ -689,9 +694,14 @@ private:
                 }
             }
             else {
-                if (!IsSameAnnotation(*nextDescription.RowType, *itemType)) {
+                const TTypeAnnotationNode* targetRowType = nextDescription.RowType;
+                if (State_->Types->EngineType == EEngineType::Ytflow) {
+                    targetRowType = MakeTypeForDynamicTableWrite(nextDescription, ctx);
+                }
+
+                if (!IsSameAnnotation(*targetRowType, *itemType)) {
                     if (content) {
-                        auto expectedType = ctx.MakeType<TListExprType>(nextDescription.RowType);
+                        auto expectedType = ctx.MakeType<TListExprType>(targetRowType);
                         auto status = TryConvertTo(content, *expectedType, ctx, *State_->Types);
                         if (status.Level != TStatus::Error) {
                             return status;
@@ -700,7 +710,7 @@ private:
 
                     ctx.AddError(TIssue(pos, TStringBuilder()
                         << "Table " << outTableInfo.Name.Quote() << " row type differs from the appended row type: "
-                        << GetTypeDiff(*nextDescription.RowType, *itemType)));
+                        << GetTypeDiff(*targetRowType, *itemType)));
                     return TStatus::Error;
                 }
             }
@@ -2607,6 +2617,25 @@ private:
 
         input->SetTypeAnn(ctx.MakeType<TUnitExprType>());
         return TStatus::Ok;
+    }
+
+    const TTypeAnnotationNode* MakeTypeForDynamicTableWrite(const TYtTableDescription& description, TExprContext& ctx) const {
+        auto* targetRowType = description.RowType;
+        if (description.Meta->IsDynamic) {
+            TVector<const TItemExprType*> items;
+            for (const auto* item : description.RowType->Cast<TStructExprType>()->GetItems()) {
+                const auto& name = item->GetName();
+                if (description.RowSpec->ExpressionColumns.contains(TString(name))) {
+                    continue;
+                }
+                if (Find(ORDERED_TABLE_READ_ONLY_FIELDS, name) != ORDERED_TABLE_READ_ONLY_FIELDS.end()) {
+                    continue;
+                }
+                items.push_back(item);
+            }
+            targetRowType = ctx.MakeType<TStructExprType>(items);
+        }
+        return targetRowType;
     }
 
 private:

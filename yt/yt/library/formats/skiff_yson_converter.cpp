@@ -153,7 +153,7 @@ template <typename... TArgs>
     const std::vector<EYsonItemType>& expected,
     const EYsonItemType actual)
 {
-    TStringStream expectationString;
+    TStdStringStream expectationString;
     if (expected.size() > 1) {
         expectationString << "one of ";
         bool first = true;

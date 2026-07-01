@@ -18,7 +18,10 @@
 #include <util/stream/buffer.h>
 #include <util/stream/file.h>
 #include <util/stream/length.h>
+#include <util/string/cast.h>
 #include <util/system/file.h>
+#include <util/system/fs.h>
+#include <util/system/mutex.h>
 
 namespace NYql::NFmr {
 
@@ -86,9 +89,20 @@ private:
     TBufferStream Input_;
 };
 
+// Shared state for all concurrent writers targeting the same output path.
+// The mutex covers only the brief .attr update; data writes to .part.N run in parallel.
+struct TFileOutputState: public TThrRefBase {
+    TMutex AttrMutex;
+    TString AttrPath;
+    std::atomic<ui64> NextPartIndex{0};
+};
+
 class TFileYtTableWriter: public NYT::TRawTableWriter {
 public:
-    TFileYtTableWriter(const TString& filePath): FilePath_(filePath) {}
+    TFileYtTableWriter(const TString& partPath, TIntrusivePtr<TFileOutputState> state)
+        : PartPath_(partPath)
+        , State_(std::move(state))
+    {}
 
     void NotifyRowEnd() override {
         ++RowCount_;
@@ -100,26 +114,54 @@ private:
     }
 
     void DoFlush() override {
-        TMemoryInput input(Buffer_.data(), Buffer_.size());
-        TFile outputFile(FilePath_, OpenAlways | WrOnly | ForAppend);
-        TFileOutput outputFileStream(outputFile);
-        TDoubleHighPrecisionYsonWriter writer(&outputFileStream, ::NYson::EYsonType::ListFragment);
-        NYson::TYsonParser parser(&writer, &input, ::NYson::EYsonType::ListFragment);
-        parser.Parse();
-        Buffer_.Clear();
-        NFile::SaveRowCountToAttr(FilePath_, RowCount_);
+        // Write data to the exclusive part file — no locking needed.
+        {
+            TMemoryInput input(Buffer_.data(), Buffer_.size());
+            TFile outputFile(PartPath_, OpenAlways | WrOnly | ForAppend);
+            TFileOutput outputFileStream(outputFile);
+            TDoubleHighPrecisionYsonWriter writer(&outputFileStream, ::NYson::EYsonType::ListFragment);
+            NYson::TYsonParser parser(&writer, &input, ::NYson::EYsonType::ListFragment);
+            parser.Parse();
+            Buffer_.Clear();
+        }
+
+        // Briefly lock only to accumulate row_count and splitted in the shared .attr.
+        const ui64 flushRows = RowCount_;
+        RowCount_ = 0;
+        const bool firstFlush = !HasContributedPart_;
+        HasContributedPart_ = true;
+
+        TGuard<TMutex> guard(State_->AttrMutex);
+        NYT::TNode attrs;
+        if (NFs::Exists(State_->AttrPath)) {
+            attrs = NYT::NodeFromYsonString(TFileInput(State_->AttrPath).ReadAll());
+        } else {
+            attrs = NYT::TNode::CreateMap();
+        }
+        const i64 prevRows = attrs.HasKey("row_count") ? attrs["row_count"].AsInt64() : 0;
+        attrs["row_count"] = prevRows + static_cast<i64>(flushRows);
+        if (firstFlush) {
+            const i64 prevSplitted = attrs.HasKey("splitted") ? attrs["splitted"].AsInt64() : 0;
+            attrs["splitted"] = prevSplitted + 1;
+        }
+        TFileOutput ofAttr(State_->AttrPath);
+        ofAttr << NYT::NodeToYsonString(attrs, NYT::NYson::EYsonFormat::Pretty);
     }
 
-    TString FilePath_;
+    TString PartPath_;
+    TIntrusivePtr<TFileOutputState> State_;
     TBuffer Buffer_;
     ui64 RowCount_ = 0;
+    bool HasContributedPart_ = false;
 };
+
 
 class TFileWriteDistributedSession: public IWriteDistributedSession {
 public:
-    TFileWriteDistributedSession(const TString& filePath)
+    TFileWriteDistributedSession(const TString& filePath, ui64 cookieCount)
         : SessionId_(CreateGuidAsString())
         , FilePath_(filePath)
+        , CookieCount_(cookieCount)
     {
     }
 
@@ -127,20 +169,42 @@ public:
         return SessionId_;
     }
 
+    // Cookies encode "{filePath}:{partIndex}"
     std::vector<TString> GetCookies() const override {
-        return std::vector<TString>{FilePath_};
+        std::vector<TString> cookies;
+        cookies.reserve(CookieCount_);
+        for (ui64 i = 0; i < CookieCount_; ++i) {
+            cookies.emplace_back(FilePath_ + ":" + ToString(i));
+        }
+        return cookies;
     }
 
     void Finish(const std::vector<TString>& fragmentResultsYson) override {
-        Y_ENSURE(fragmentResultsYson.size() == 1);
+        Y_ENSURE(fragmentResultsYson.size() == CookieCount_);
 
         // Fragment results are double-encoded: NodeToYsonString(TString(responseBody))
         // produces a YSON string node; unwrap it to get the actual map.
-        NYT::TNode outer = NYT::NodeFromYsonString(fragmentResultsYson[0]);
-        NYT::TNode fragmentNode = NYT::NodeFromYsonString(outer.AsString());
-        if (fragmentNode.HasKey("row_count")) {
-            NFile::SaveRowCountToAttr(FilePath_, static_cast<ui64>(fragmentNode["row_count"].AsInt64()));
+        ui64 totalRowCount = 0;
+        for (const auto& fragmentYson : fragmentResultsYson) {
+            NYT::TNode outer = NYT::NodeFromYsonString(fragmentYson);
+            NYT::TNode fragmentNode = NYT::NodeFromYsonString(outer.AsString());
+            if (fragmentNode.HasKey("row_count")) {
+                totalRowCount += static_cast<ui64>(fragmentNode["row_count"].AsInt64());
+            }
         }
+
+        // Write row_count and splitted=N together in a single attr read-modify-write.
+        const TString attrPath = FilePath_ + ".attr";
+        NYT::TNode attrs;
+        if (NFs::Exists(attrPath)) {
+            attrs = NYT::NodeFromYsonString(TFileInput(attrPath).ReadAll());
+        } else {
+            attrs = NYT::TNode::CreateMap();
+        }
+        attrs["row_count"] = static_cast<i64>(totalRowCount);
+        attrs["splitted"] = static_cast<i64>(CookieCount_);
+        TFileOutput ofAttr(attrPath);
+        ofAttr << NYT::NodeToYsonString(attrs, NYT::NYson::EYsonFormat::Pretty);
     }
 
     bool HasPingError() const override {
@@ -154,6 +218,7 @@ public:
 private:
     TString SessionId_;
     TString FilePath_;
+    ui64 CookieCount_;
 };
 
 class TFileDistributedOutputStream: public NYT::IOutputStreamWithResponse {
@@ -215,6 +280,15 @@ public:
             columnsInfo.Columns = NYT::TSortColumns(columns);
         }
 
+        // If FileName is set in the rich path, it encodes the part number of a splitted file
+        // (set by the file coordinator). Derive the actual part file path from the base path
+        // and fall through to apply any byte ranges to that specific part file.
+        if (ytPath.FileName_.Defined()) {
+            filePath = TMaybe<TString>(*filePath + ".part." + *ytPath.FileName_);
+        }
+        // For the no-FileName path, NFile::MakeTextYsonInputs (called below) transparently
+        // handles splitted files by reading all part files in sequence.
+
         const auto& ranges = ytPath.GetRanges();
         if (ranges.Defined() && !ranges->empty()) {
             // The coordinator stores byte offsets in the RowIndex fields of TReadRange.
@@ -236,7 +310,24 @@ public:
         const TYtWriterSettings& /*writerSettings*/
     ) override {
         YQL_ENSURE(ytTable.FilePath.Defined());
-        return MakeIntrusive<TFileYtTableWriter>(*ytTable.FilePath);
+        const TString& basePath = *ytTable.FilePath;
+
+        TIntrusivePtr<TFileOutputState> state;
+        ui64 partIndex;
+        {
+            TGuard<TMutex> guard(OutputsMutex_);
+            auto it = Outputs_.find(basePath);
+            if (it == Outputs_.end()) {
+                auto s = MakeIntrusive<TFileOutputState>();
+                s->AttrPath = basePath + ".attr";
+                it = Outputs_.emplace(basePath, s).first;
+            }
+            state = it->second;
+            partIndex = state->NextPartIndex.fetch_add(1);
+        }
+        return MakeIntrusive<TFileYtTableWriter>(
+            basePath + ".part." + ToString(partIndex),
+            std::move(state));
     }
 
     IWriteDistributedSession::TPtr StartDistributedWriteSession(
@@ -247,11 +338,9 @@ public:
     ) override {
         Y_UNUSED(clusterConnection);
         Y_UNUSED(options);
-        Y_ENSURE(cookieCount == 1, "File distributed writer session supports only cookieCount=1 (single uploader). "
-            << "Got cookieCount=" << cookieCount << "; set partition max_parts=1 for SortedUpload in file gateway.");
         TMaybe<TString> filePath = ytTable.FilePath;
         YQL_ENSURE(filePath.Defined(), "File path should be set for file distributed writer session");
-        return MakeIntrusive<TFileWriteDistributedSession>(*filePath);
+        return MakeIntrusive<TFileWriteDistributedSession>(*filePath, cookieCount);
     }
 
     std::unique_ptr<NYT::IOutputStreamWithResponse> GetDistributedWriter(
@@ -259,7 +348,12 @@ public:
         const TClusterConnection& clusterConnection
     ) override {
         Y_UNUSED(clusterConnection);
-        return std::make_unique<TFileDistributedOutputStream>(cookieYson);
+        // Cookie format: "{filePath}:{partIndex}"
+        const auto colonPos = cookieYson.rfind(':');
+        YQL_ENSURE(colonPos != TString::npos, "Unexpected cookie format: " << cookieYson);
+        const TString basePath = cookieYson.substr(0, colonPos);
+        const ui64 partIndex = FromString<ui64>(cookieYson.substr(colonPos + 1));
+        return std::make_unique<TFileDistributedOutputStream>(basePath + ".part." + ToString(partIndex));
     }
 
     void Create(
@@ -282,6 +376,10 @@ public:
         }
         // TODO - delete created files in DropTables() / CloseSession()
     }
+
+private:
+    TMutex OutputsMutex_;
+    THashMap<TString, TIntrusivePtr<TFileOutputState>> Outputs_;
 };
 
 } // namespace

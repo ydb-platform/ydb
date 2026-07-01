@@ -19,7 +19,7 @@ class TBlockReaderFixture: public NUnitTest::TBaseFixture {
         using TPtr = TIntrusivePtr<TArrayHelpers>;
 
         explicit TArrayHelpers(const NMiniKQL::TType* type, arrow::MemoryPool* const arrowPool)
-            : Builder(MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), type, *arrowPool, NMiniKQL::CalcBlockLen(CalcMaxBlockItemSize(type)), nullptr))
+            : Builder(MakeArrayBuilder(NMiniKQL::TTypeInfoHelper(), type, *arrowPool, NMiniKQL::CalcBlockLen(CalcMaxBlockItemSize(type)), /*pgBuilder=*/nullptr))
             , Reader(MakeBlockReader(NMiniKQL::TTypeInfoHelper(), type))
         {
         }

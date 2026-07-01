@@ -235,7 +235,7 @@ private:
                     anchor = RE2::ANCHOR_BOTH;
                     [[fallthrough]];
                 case GREP:
-                    return TUnboxedValuePod(Regexp_->Match(piece, 0, input.size(), anchor, nullptr, 0));
+                    return TUnboxedValuePod(Regexp_->Match(piece, 0, input.size(), anchor, /*submatch=*/nullptr, 0));
                 case CAPTURE: {
                     const int count = Regexp_->NumberOfCapturingGroups() + 1;
                     TUnboxedValue* items = nullptr;

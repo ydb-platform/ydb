@@ -66,7 +66,7 @@ public:
 
     TRuntimeNode KqpEnsure(TRuntimeNode value, TRuntimeNode predicate, TRuntimeNode issueCode, TRuntimeNode message);
 
-    TRuntimeNode KqpIndexLookupJoin(const TRuntimeNode& input, const TString& joinType, const TString& leftLabel, const TString& rightLabel);
+    TRuntimeNode KqpIndexLookupJoin(const TRuntimeNode& input, const TString& joinType, const TString& leftLabel, const TString& rightLabel, ui32 cookieFormatVersion = 0);
 
     TRuntimeNode FulltextAnalyze(TRuntimeNode text, TRuntimeNode settings, TRuntimeNode mode);
 

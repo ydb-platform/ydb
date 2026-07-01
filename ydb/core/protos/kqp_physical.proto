@@ -329,6 +329,8 @@ message TKqpPhyCnStreamLookup {
     bool IsTableImmutable = 10;
     TKqpPhyVectorTopK VectorTopK = 11;
     repeated string InputColumns = 12;
+    // RowSeqNo cookie wire format version (0 = legacy, 1 = fixed bit budget).
+    uint32 CookieFormatVersion = 13;
 }
 
 message TKqpPhyCnVectorResolve {

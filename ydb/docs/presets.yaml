@@ -25,6 +25,11 @@ default:
   feature_async_replication: true
   feature_transfer: true
   feature_batch_operations: true
+<<<<<<< HEAD
+=======
+  feature_backup_collections: true
+  feature_tablesample: false
+>>>>>>> 0d4a38f56a4 (Remove tablesample references (#44191))
   ydb: YDB
   ydb-name: YDB
   ydb-full-name: YDB

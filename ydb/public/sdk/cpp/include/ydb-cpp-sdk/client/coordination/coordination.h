@@ -274,6 +274,16 @@ struct TAcquireSemaphoreSettings {
 
 ////////////////////////////////////////////////////////////////////////////////
 
+struct TCoordinationSessionPoolSettings {
+    using TSelf = TCoordinationSessionPoolSettings;
+
+    FLUENT_SETTING_DEFAULT(size_t, PoolSize, 1);
+
+    FLUENT_SETTING(TSessionSettings, SessionSettings);
+};
+
+////////////////////////////////////////////////////////////////////////////////
+
 struct TDescribeSemaphoreSettings {
     using TSelf = TDescribeSemaphoreSettings;
     using TChangedCallback = std::function<void(bool)>;
@@ -290,6 +300,10 @@ struct TDescribeSemaphoreSettings {
 };
 
 ////////////////////////////////////////////////////////////////////////////////
+
+class TDistributedLock;
+class TCoordinationSessionPool;
+struct TDistributedLockSettings;
 
 class TClient {
 public:
@@ -311,6 +325,11 @@ public:
 
     TAsyncDescribeNodeResult DescribeNode(const std::string& path,
         const TDescribeNodeSettings& settings = TDescribeNodeSettings());
+
+    TCoordinationSessionPool CreateSessionPool(const std::string& path,
+        const TCoordinationSessionPoolSettings& settings = TCoordinationSessionPoolSettings());
+
+    TDistributedLock CreateDistributedLock(const TDistributedLockSettings& settings);
 
 private:
     class TImpl;

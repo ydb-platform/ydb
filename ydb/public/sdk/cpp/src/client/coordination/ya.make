@@ -3,11 +3,14 @@ LIBRARY()
 SRCS(
     coordination.cpp
     proto_accessor.cpp
+    distributed_lock.cpp
+    session_pool.cpp
 )
 
 GENERATE_ENUM_SERIALIZATION(ydb/public/sdk/cpp/include/ydb-cpp-sdk/client/coordination/coordination.h)
 
 PEERDIR(
+    util
     ydb/public/api/grpc
     ydb/public/sdk/cpp/src/client/impl/internal/make_request
     ydb/public/sdk/cpp/src/client/common_client

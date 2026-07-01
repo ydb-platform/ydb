@@ -1,6 +1,8 @@
-* Added automatic retries for unary methods of table and query clients(ExecuteQuery, ExecuteScript, BulkUpsert, ReadRows).
+* Added a distributed lock primitive based on the coordination service. The lock can be used with `std::lock_guard`-style code and can be created directly or from a coordination session pool.
 
-* Implemented native ranges(TRowRange) and iterators over both streaming query results and TResultSet.
+* Added automatic retries for unary methods of table and query clients (ExecuteQuery, ExecuteScript, BulkUpsert, ReadRows).
+
+* Implemented native ranges (TRowRange) and iterators over both streaming query results and TResultSet.
 
 ## v3.19.0
 

@@ -69,6 +69,10 @@ class TTopicEventProcessor {
     };
 
 public:
+    ~TTopicEventProcessor() {
+        StopExecuterProxy();
+    }
+
     template <typename TSettings>
     void SetupTopicClientSettings(NActors::TActorSystem* actorSystem, const NActors::TActorId& selfId, TSettings& settings) {
         if (!ExecuterProxy) {

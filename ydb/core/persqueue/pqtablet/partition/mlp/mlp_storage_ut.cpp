@@ -3000,9 +3000,6 @@ Y_UNIT_TEST(TOrderedMessageGroupIdHash) {
     UNIT_ASSERT_UNEQUAL(b, c);
 }
 
-// Oracle for the KeepMessageOrder round-robin fairness invariant. It intentionally models ONLY
-// FIFO-per-group ordering, round-robin fairness across groups and groupless messages. It does NOT
-// model DLQ / retention / skipMessageGroups semantics - those are verified by dedicated direct tests.
 struct TFairnessModel {
     TStorage Storage = TStorage(CreateDefaultTimeProvider(), TStorage::TStorageSettings{.KeepMessageOrder = true});
     ui64 Offset = 0;
@@ -3013,19 +3010,14 @@ struct TFairnessModel {
     TMap<ui32, ui32> LastReadTime;
     ui32 ReadTime = 1;
 
-    // Returns the set of offsets that Next is currently allowed to return. Grouped offsets obey FIFO-per-group
-    // plus round-robin (only heads of the least-recently-served group). Groupless offsets are always eligible
-    // while Unprocessed and bypass round-robin entirely.
+    // Returns the set of offsets that Next is currently allowed to return
     TSet<ui64> GetAvailalableOffsets() const {
-        // Groupless messages are always eligible while Unprocessed, independent of round-robin.
         TSet<ui64> res;
         for (ui64 o : Groupless) {
             if (!Committed.contains(o) && !Infly.contains(o)) {
                 res.insert(o);
             }
         }
-
-        // Grouped messages: only the head of each group whose group is least-recently-served is eligible.
         TSet<ui32> visited;
         for (ui64 o : Infly) {
             if (!Groupless.contains(o)) {
@@ -3040,10 +3032,13 @@ struct TFairnessModel {
             if (Committed.contains(o) || Infly.contains(o) || Groupless.contains(o) || visited.contains(h)) {
                 continue;
             }
-            if (auto lrt = LastReadTime.Value(h, 0); lrt > oldestReadTime) {
+            if (auto* lastReadTime = LastReadTime.FindPtr(h); lastReadTime == nullptr) {
+                res.insert(o);
+                visited.insert(h);
+            } else if (*lastReadTime > oldestReadTime) {
                 continue;
-            } else if (lrt < oldestReadTime) {
-                oldestReadTime = lrt;
+            } else if (*lastReadTime < oldestReadTime) {
+                oldestReadTime = *lastReadTime;
                 grouped.clear();
             }
             visited.insert(h);

@@ -63,6 +63,7 @@ inline bool IsCompileCacheWarmupEnabled(
         const TString& domainName) {
     return tableServiceConfig.GetEnableCompileCacheWarmup()
         && !tenantName.empty()
+        && !domainName.empty()
         && tenantName != CanonizePath(domainName);
 }
 

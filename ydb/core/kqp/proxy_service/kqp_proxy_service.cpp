@@ -157,9 +157,12 @@ class TKqpProxyService : public TActorBootstrapped<TKqpProxyService> {
             EvCollectPeerProxyData = EventSpaceBegin(TEvents::ES_PRIVATE),
             EvOnRequestTimeout,
             EvCloseIdleSessions,
+            EvWarmupGateFallback,
         };
 
         struct TEvCollectPeerProxyData: public TEventLocal<TEvCollectPeerProxyData, EEv::EvCollectPeerProxyData> {};
+
+        struct TEvWarmupGateFallback : public TEventLocal<TEvWarmupGateFallback, EEv::EvWarmupGateFallback> {};
 
         struct TEvOnRequestTimeout: public TEventLocal<TEvOnRequestTimeout, EEv::EvOnRequestTimeout> {
             ui64 RequestId;
@@ -237,6 +240,11 @@ public:
         WarmupApplicable = IsCompileCacheWarmupEnabled(TableServiceConfig, AppData()->TenantName,
             AppData()->DomainsInfo->Domain ? AppData()->DomainsInfo->Domain->Name : TString());
         WarmupGateOpen = !WarmupApplicable;
+        if (WarmupApplicable) {
+            const auto warmupHardDeadline = NKqp::ImportWarmupConfigFromProto(
+                TableServiceConfig.GetCompileCacheWarmupConfig()).HardDeadline;
+            Schedule(warmupHardDeadline, new TEvPrivate::TEvWarmupGateFallback());
+        }
         // NOTE: some important actors are constructed within next call
         FederatedQuerySetup = FederatedQuerySetupFactory->Make(ctx.ActorSystem());
         AsyncIoFactory = CreateKqpAsyncIoFactory(Counters, FederatedQuerySetup, S3ActorsFactory, VectorIndexLevelsCache);
@@ -1129,6 +1137,13 @@ public:
         WarmupStarted = true;
     }
 
+    void Handle(TEvPrivate::TEvWarmupGateFallback::TPtr&) {
+        if (!WarmupGateOpen) {
+            KQP_PROXY_LOG_W("Warmup gate fallback fired: opening gate (no TEvKqpWarmupComplete received, warmup actor likely died)");
+            WarmupGateOpen = true;
+        }
+    }
+
     bool ShouldStartBalancing(const TSimpleResourceStats& stats, const double minResourceThreshold, const double currentResourceUsage) const {
         const auto& sbs = TableServiceConfig.GetSessionBalancerSettings();
         if (stats.CV < sbs.GetMinCVTreshold()) {
@@ -1402,6 +1417,7 @@ public:
             hFunc(NMon::TEvHttpInfo, Handle);
             hFunc(TEvPrivate::TEvCollectPeerProxyData, Handle);
             hFunc(NKqp::TEvKqpWarmupComplete, Handle);
+            hFunc(TEvPrivate::TEvWarmupGateFallback, Handle);
             hFunc(TEvents::TEvUndelivered, Handle);
             hFunc(NConsole::TEvConfigsDispatcher::TEvSetConfigSubscriptionResponse, Handle);
             hFunc(NConsole::TEvConsole::TEvConfigNotificationRequest, Handle);

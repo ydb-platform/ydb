@@ -106,15 +106,16 @@ class CompileCacheView:
     """Helper for working with compile cache sysview, warmup counters,
     and cache population on cluster nodes."""
 
-    def __init__(self, cluster, database="/Root"):
-        self.cluster = cluster
+    def __init__(self, nodes, database):
+        # nodes: dict node_id -> node (the tenant slot nodes warmup runs on)
+        self.nodes = nodes
         self.database = database
 
     # --- sysview queries ---
 
     def get_cached_queries(self, node_id):
         """Return all compile cache entries for the given node from sysview."""
-        node = self.cluster.nodes[node_id]
+        node = self.nodes[node_id]
         driver = ydb.Driver(
             endpoint=f"grpc://localhost:{node.port}",
             database=self.database,
@@ -258,9 +259,15 @@ class CompileCacheView:
             response = requests.get(url, timeout=5)
             if response.status_code != 200:
                 return 0
-            for sensor in response.json().get("sensors", []):
-                if sensor.get("labels", {}).get("sensor") == "CompileCacheView/PeerScanWarnings":
-                    return sensor.get("value", 0)
+            sensors = response.json().get("sensors", [])
+            # On a dynamic node the counter can appear under several label sets (db-scoped etc.);
+            # sum every sensor with this name so we don't miss the incremented one.
+            matches = [s.get("value", 0) for s in sensors
+                       if s.get("labels", {}).get("sensor") == "CompileCacheView/PeerScanWarnings"]
+            if matches:
+                logger.info("[PeerWarnings] node %d: %d PeerScanWarnings sensor(s), values=%s",
+                            node.node_id, len(matches), matches)
+                return sum(matches)
         except Exception as e:
             logger.warning("Failed to read PeerScanWarnings from node %d: %s", node.node_id, e)
         return 0
@@ -313,7 +320,7 @@ class CompileCacheView:
             queries.extend(extra_queries)
 
         for node_id in node_ids:
-            node = self.cluster.nodes[node_id]
+            node = self.nodes[node_id]
             driver = ydb.Driver(endpoint=f"grpc://localhost:{node.port}", database=self.database)
             # Generous: gRPC stays closed until warmup completes (see Discovery gating).
             driver.wait(timeout=120)
@@ -415,20 +422,65 @@ def _make_warmup_config(nodes=3, max_nodes_to_request=None,
     return config
 
 
+WARMUP_DATABASE = "/Root/warmup_db"
+
+
+def _slot_runtime_node_id(slot):
+    # A slot's .node_id is its harness slot index, but sysview / session.node_id /
+    # warmup peer ids use the runtime (node-broker assigned) id. Read it off a pinned session.
+    with _node_pinned_driver(slot, database=WARMUP_DATABASE, timeout=NODE_READY_TIMEOUT_SECONDS) as driver:
+        session = driver.table_client.session().create()
+        try:
+            return CompileCacheView._get_node_id_from_session_id(session.session_id)
+        finally:
+            session.delete()
+
+
+def _attach_warmup_tenant(cluster, slot_count, pool_kind="hdd"):
+    """Create the warmup tenant database on a started cluster and bring up `slot_count`
+    dynamic slot nodes for it. Returns nodes: runtime node id -> slot (slot.node_id is
+    realigned to that runtime id so the tests can pin/match on it).
+
+    pool_kind is the storage pool type for the tenant: "hdd" for the regular config,
+    "rot" for self-managed (distconf) clusters.
+    """
+    cluster.create_database(WARMUP_DATABASE, storage_pool_units_count={pool_kind: 1})
+    slots = cluster.register_and_start_slots(WARMUP_DATABASE, count=slot_count)
+    cluster.wait_tenant_up(WARMUP_DATABASE)
+    nodes = {}
+    for slot in slots:
+        runtime_id = _slot_runtime_node_id(slot)
+        slot.node_id = runtime_id  # align with runtime/sysview/session ids the tests pin on
+        nodes[runtime_id] = slot
+    return nodes
+
+
+def _start_warmup_tenant(config, slot_count):
+    """Start a cluster + a tenant database served by `slot_count` dynamic slot nodes.
+
+    Warmup applies to tenant databases, not the root/service domain, so warmup tests
+    drive the tenant's slot nodes. Returns (cluster, nodes).
+    """
+    cluster = kikimr_cluster_factory(config)
+    cluster.start()
+    return cluster, _attach_warmup_tenant(cluster, slot_count)
+
+
 class TestWarmupRestart:
     """Restart -> warmup refills cache -> queries served: Table/Query API, concurrent, and stress restarts on one 3-node cluster."""
 
     @classmethod
     def setup_class(cls):
         cls.config = _make_warmup_config(nodes=3)
-        cls.cluster = kikimr_cluster_factory(cls.config)
-        cls.cluster.start()
+        cls.cluster, cls.nodes = _start_warmup_tenant(cls.config, slot_count=3)
+        cls.database = WARMUP_DATABASE
+        entry_node = cls.nodes[sorted(cls.nodes)[0]]
         cls.driver = ydb.Driver(
-            endpoint=f"grpc://localhost:{cls.cluster.nodes[1].port}",
-            database="/Root",
+            endpoint=f"grpc://localhost:{entry_node.port}",
+            database=cls.database,
         )
-        cls.driver.wait(timeout=10)
-        cls.cache = CompileCacheView(cls.cluster)
+        cls.driver.wait(timeout=NODE_READY_TIMEOUT_SECONDS)
+        cls.cache = CompileCacheView(cls.nodes, cls.database)
 
     @classmethod
     def teardown_class(cls):
@@ -459,7 +511,7 @@ class TestWarmupRestart:
 
     def _assert_cache_hit(self, queries, node, label, use_query_api=False):
         from_cache, total = self.cache.verify_queries_served_from_cache(
-            queries, node, use_query_api=use_query_api, nodes_count=len(self.cluster.nodes),
+            queries, node, use_query_api=use_query_api, nodes_count=len(self.nodes),
         )
         logger.info("[%s] Node %d: cache hit %d/%d", label, node.node_id, from_cache, total)
         assert from_cache == total, f"[{label}] Expected all {total} from cache, got {from_cache}/{total}"
@@ -483,9 +535,9 @@ class TestWarmupRestart:
             )
 
     @staticmethod
-    def _run_pinned_queries_table_api(node, queries, query_timeout=15):
+    def _run_pinned_queries_table_api(node, queries, database, query_timeout=15):
         settings = ydb.BaseRequestSettings().with_timeout(query_timeout)
-        with _pinned_table_session(node) as session:
+        with _pinned_table_session(node, database=database) as session:
             ok = 0
             errors = []
             for query in queries:
@@ -497,8 +549,8 @@ class TestWarmupRestart:
             return ok, errors
 
     @staticmethod
-    def _run_pinned_queries_query_api(node, queries):
-        with _pinned_query_session(node) as session:
+    def _run_pinned_queries_query_api(node, queries, database):
+        with _pinned_query_session(node, database=database) as session:
             ok = 0
             errors = []
             for query in queries:
@@ -511,8 +563,8 @@ class TestWarmupRestart:
             return ok, errors
 
     def test_warmup_basic(self):
-        all_node_ids = sorted(self.cluster.nodes.keys())
-        node3 = self.cluster.nodes[3]
+        all_node_ids = sorted(self.nodes)
+        node3 = self.nodes[sorted(self.nodes)[-1]]
 
         logger.info("SETUP: Populating cache on all nodes (Table API)")
         table_queries = self.cache.populate_cache_on_nodes(all_node_ids, use_query_api=False)
@@ -557,7 +609,7 @@ class TestWarmupRestart:
             for i in range(6)
         ]
         ok_t, errors_t = self._run_pinned_queries_table_api(
-            node3, warmed_queries + fresh_table,
+            node3, warmed_queries + fresh_table, self.database,
         )
         for e in errors_t:
             logger.warning("[Concurrent/Table] pinned query failed: %r", e)
@@ -570,7 +622,7 @@ class TestWarmupRestart:
             for i in range(6)
         ]
         ok_q, errors_q = self._run_pinned_queries_query_api(
-            node3, warmed_queries + fresh_query,
+            node3, warmed_queries + fresh_query, self.database,
         )
         for e in errors_q:
             logger.warning("[Concurrent/Query] pinned query failed: %r", e)
@@ -581,9 +633,9 @@ class TestWarmupRestart:
         logger.info("ALL 3 RESTART SCENARIOS PASSED")
 
     def test_warmup_stress(self):
-        all_node_ids = sorted(self.cluster.nodes.keys())
-        nodes_count = len(self.cluster.nodes)
-        node3 = self.cluster.nodes[3]
+        all_node_ids = sorted(self.nodes)
+        nodes_count = len(self.nodes)
+        node3 = self.nodes[sorted(self.nodes)[-1]]
 
         logger.info("SETUP: Populating cache on all nodes (Query API)")
         queries = self.cache.populate_cache_on_nodes(all_node_ids, use_query_api=True)
@@ -630,9 +682,9 @@ class TestWarmupRestart:
         time.sleep(2)
 
         logger.info("SCENARIO 2/3: Rolling restart (nodes 2, 3 sequentially)")
-        node_ids_to_restart = sorted(self.cluster.nodes.keys())[1:]
+        node_ids_to_restart = sorted(self.nodes)[1:]
         for idx, nid in enumerate(node_ids_to_restart):
-            node = self.cluster.nodes[nid]
+            node = self.nodes[nid]
             logger.info("Rolling restart %d/%d: node %d", idx + 1, len(node_ids_to_restart), nid)
             node.stop()
             time.sleep(2)
@@ -663,7 +715,7 @@ class TestWarmupRestart:
         time.sleep(2)
 
         logger.info("SCENARIO 3/3: Full cluster restart (nodes 2, 3)")
-        nodes_to_restart = [self.cluster.nodes[nid] for nid in sorted(self.cluster.nodes.keys())[1:]]
+        nodes_to_restart = [self.nodes[nid] for nid in sorted(self.nodes)[1:]]
 
         logger.info("Stopping %d non-controller nodes ...", len(nodes_to_restart))
         for node in nodes_to_restart:
@@ -720,14 +772,15 @@ class TestWarmupCounters:
     @classmethod
     def setup_class(cls):
         cls.config = _make_warmup_config(nodes=2)
-        cls.cluster = kikimr_cluster_factory(cls.config)
-        cls.cluster.start()
+        cls.cluster, cls.nodes = _start_warmup_tenant(cls.config, slot_count=2)
+        cls.database = WARMUP_DATABASE
+        entry_node = cls.nodes[sorted(cls.nodes)[0]]
         cls.driver = ydb.Driver(
-            endpoint=f"grpc://localhost:{cls.cluster.nodes[1].port}",
-            database="/Root",
+            endpoint=f"grpc://localhost:{entry_node.port}",
+            database=cls.database,
         )
-        cls.driver.wait(timeout=10)
-        cls.cache = CompileCacheView(cls.cluster)
+        cls.driver.wait(timeout=NODE_READY_TIMEOUT_SECONDS)
+        cls.cache = CompileCacheView(cls.nodes, cls.database)
 
     @classmethod
     def teardown_class(cls):
@@ -738,8 +791,9 @@ class TestWarmupCounters:
 
     @pytest.mark.parametrize("use_query_api", [False, True], ids=["table", "query"])
     def test_warmup_counters_attribution(self, use_query_api):
-        node2 = self.cluster.nodes[2]
-        all_node_ids = sorted(self.cluster.nodes.keys())
+        # Restart the last slot; it warms its cache from the other tenant slot.
+        node2 = self.nodes[sorted(self.nodes)[-1]]
+        all_node_ids = sorted(self.nodes)
 
         # Populate cache so node2 has something to fetch from node1 after restart.
         self.cache.populate_cache_on_nodes(all_node_ids, use_query_api=use_query_api)
@@ -807,9 +861,9 @@ class TestCompileCacheViewPeerWarnings:
     @classmethod
     def setup_class(cls):
         cls.config = _make_warmup_config(nodes=3)
-        cls.cluster = kikimr_cluster_factory(cls.config)
-        cls.cluster.start()
-        cls.cache = CompileCacheView(cls.cluster)
+        cls.cluster, cls.nodes = _start_warmup_tenant(cls.config, slot_count=3)
+        cls.database = WARMUP_DATABASE
+        cls.cache = CompileCacheView(cls.nodes, cls.database)
 
     @classmethod
     def teardown_class(cls):
@@ -817,11 +871,11 @@ class TestCompileCacheViewPeerWarnings:
             cls.cluster.stop()
 
     def test_peer_scan_warnings_increment_on_dead_peer(self):
-        all_node_ids = sorted(self.cluster.nodes.keys())
+        all_node_ids = sorted(self.nodes)
         live_node_id = all_node_ids[0]
         dead_node_id = all_node_ids[-1]
-        live_node = self.cluster.nodes[live_node_id]
-        dead_node = self.cluster.nodes[dead_node_id]
+        live_node = self.nodes[live_node_id]
+        dead_node = self.nodes[dead_node_id]
 
         self.cache.populate_cache_on_nodes(all_node_ids, use_query_api=False)
         time.sleep(2)
@@ -871,27 +925,27 @@ class TestWarmupSkip:
     HARD_DEADLINE_SECONDS = 12
 
     @contextmanager
-    def _cluster(self, nodes):
+    def _cluster(self, slot_count):
         config = _make_warmup_config(
-            nodes=nodes,
+            nodes=3,
             soft_deadline_seconds=self.SOFT_DEADLINE_SECONDS,
             hard_deadline_seconds=self.HARD_DEADLINE_SECONDS,
         )
-        cluster = kikimr_cluster_factory(config)
-        cluster.start()
-        driver = ydb.Driver(endpoint=f"grpc://localhost:{cluster.nodes[1].port}", database="/Root")
-        driver.wait(timeout=10)
+        cluster, nodes = _start_warmup_tenant(config, slot_count=slot_count)
+        entry_node = nodes[sorted(nodes)[0]]
+        driver = ydb.Driver(endpoint=f"grpc://localhost:{entry_node.port}", database=WARMUP_DATABASE)
+        driver.wait(timeout=NODE_READY_TIMEOUT_SECONDS)
         try:
-            yield cluster, driver
+            yield nodes, driver
         finally:
             driver.stop()
             cluster.stop()
 
     @staticmethod
-    def _assert_skipped_and_serving(cluster, driver, label):
+    def _assert_skipped_and_serving(nodes, driver, label):
         time.sleep(5)
-        for nid in sorted(cluster.nodes.keys()):
-            counters = CompileCacheView.get_warmup_counters(cluster.nodes[nid], verbose=True)
+        for nid in sorted(nodes):
+            counters = CompileCacheView.get_warmup_counters(nodes[nid], verbose=True)
             fetched = counters.get("Warmup/QueriesFetched", 0)
             compiled = counters.get("Warmup/QueriesCompiled", 0)
             logger.info("[%s] node %d counters: %s", label, nid, counters)
@@ -910,8 +964,8 @@ class TestWarmupSkip:
         finally:
             pool.stop()
 
-        for nid in sorted(cluster.nodes.keys()):
-            window = CompileCacheView.get_warmup_window_counters(cluster.nodes[nid])
+        for nid in sorted(nodes):
+            window = CompileCacheView.get_warmup_window_counters(nodes[nid])
             logger.info("[%s] node %d window counters: %s", label, nid, window)
             assert window["hits"] == 0 and window["misses"] == 0, (
                 f"[{label}] node {nid}: window must not open without warmup inserts, got {window}"
@@ -919,26 +973,27 @@ class TestWarmupSkip:
         logger.info("%s skip scenario PASSED", label)
 
     def test_single_node(self):
-        with self._cluster(nodes=1) as (cluster, driver):
-            self._assert_skipped_and_serving(cluster, driver, "SingleNode")
+        with self._cluster(slot_count=1) as (nodes, driver):
+            self._assert_skipped_and_serving(nodes, driver, "SingleNode")
 
     def test_multi_node_cold_start(self):
-        with self._cluster(nodes=3) as (cluster, driver):
-            self._assert_skipped_and_serving(cluster, driver, "ColdStart")
+        with self._cluster(slot_count=3) as (nodes, driver):
+            self._assert_skipped_and_serving(nodes, driver, "ColdStart")
 
 
 class TestWarmupGrpcIsolation:
     @classmethod
     def setup_class(cls):
         cls.config = _make_warmup_config(nodes=3)
-        cls.cluster = kikimr_cluster_factory(cls.config)
-        cls.cluster.start()
+        cls.cluster, cls.nodes = _start_warmup_tenant(cls.config, slot_count=3)
+        cls.database = WARMUP_DATABASE
+        entry_node = cls.nodes[sorted(cls.nodes)[0]]
         cls.driver = ydb.Driver(
-            endpoint=f"grpc://localhost:{cls.cluster.nodes[1].port}",
-            database="/Root",
+            endpoint=f"grpc://localhost:{entry_node.port}",
+            database=cls.database,
         )
-        cls.driver.wait(timeout=10)
-        cls.cache = CompileCacheView(cls.cluster)
+        cls.driver.wait(timeout=NODE_READY_TIMEOUT_SECONDS)
+        cls.cache = CompileCacheView(cls.nodes, cls.database)
 
     @classmethod
     def teardown_class(cls):
@@ -948,12 +1003,12 @@ class TestWarmupGrpcIsolation:
             cls.cluster.stop()
 
     def test_grpc_closed_during_warmup(self):
-        all_node_ids = sorted(self.cluster.nodes.keys())
+        all_node_ids = sorted(self.nodes)
         logger.info("SETUP: populating cache so warmup actually has work to do")
         self.cache.populate_cache_on_nodes(all_node_ids, use_query_api=True)
         time.sleep(2)
 
-        target = self.cluster.nodes[3]
+        target = self.nodes[sorted(self.nodes)[-1]]
         grpc_port = target.port
 
         logger.info("Stopping node %d ...", target.node_id)
@@ -1012,9 +1067,9 @@ class TestWarmupGrpcIsolation:
 
         ready_driver = ydb.Driver(
             endpoint=f"grpc://localhost:{grpc_port}",
-            database="/Root",
+            database=self.database,
         )
-        ready_driver.wait(timeout=10)
+        ready_driver.wait(timeout=NODE_READY_TIMEOUT_SECONDS)
         try:
             pool = ydb.SessionPool(ready_driver)
             try:
@@ -1048,7 +1103,7 @@ _WARMUP_MARKERS = (
 
 
 class TestWarmupSelfMgmt:
-    """Cold bootstrap of a self-managed (config v2) /Root cluster: warmup must still run."""
+    """Cold bootstrap of a tenant on a self-managed (config v2) cluster: warmup must still run."""
 
     @classmethod
     def setup_class(cls):
@@ -1078,6 +1133,7 @@ class TestWarmupSelfMgmt:
         }
         cls.cluster = KiKiMR(configurator=cls.configurator)
         cls.cluster.start()
+        cls.nodes = _attach_warmup_tenant(cls.cluster, slot_count=3, pool_kind="rot")
 
     @classmethod
     def teardown_class(cls):
@@ -1096,7 +1152,7 @@ class TestWarmupSelfMgmt:
 
     def test_observe_warmup_on_cold_start(self):
         out = []
-        for i, node in enumerate(self.cluster.nodes.values(), start=1):
+        for i, node in enumerate(self.nodes.values(), start=1):
             lines = [ln for ln in self._node_log(node).splitlines()
                      if any(p in ln for p in _WARMUP_MARKERS)]
             out.append("==== node %d ====" % i)

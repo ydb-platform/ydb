@@ -943,9 +943,13 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvStartSession::TPtr& ev) {
                 {"logPrefix", LogPrefix});
             return;
         }
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_WARN, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Consumer already exists, new consumer with new generation (" << ev->Cookie << ", current "
-            << it->second->Generation << "), remove old consumer, sender " << ev->Sender << ", topicPath "
-            << ev->Get()->Record.GetSource().GetTopicPath() << " cookie " << ev->Cookie);
+        YDB_LOG_WARN("Consumer already exists, new consumer with new generation current remove old consumer, sender topicPath cookie",
+            {"logPrefix", LogPrefix},
+            {"#_ev->Cookie", ev->Cookie},
+            {"#_it->second->Generation", it->second->Generation},
+            {"#_ev->Sender", ev->Sender},
+            {"#_ev->Get()->Record.GetSource().GetTopicPath", ev->Get()->Record.GetSource().GetTopicPath()},
+            {"#_dup_#_ev->Cookie", ev->Cookie});
         DeleteConsumer(ev->Sender);
     }
     const auto& source = ev->Get()->Record.GetSource();
@@ -1247,7 +1251,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvNewDataArrived::TPtr& ev) 
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {
     auto it = Consumers.find(ev->Get()->ReadActorId);
     if (it == Consumers.end()) {
-        YDB_LOG_WARN("Ignore (no consumer) TEvMessageBatch from",
+        YDB_LOG_WARN("Ignore (no consumer) TEvMessageBatch",
             {"logPrefix", LogPrefix},
             {"#_ev->Sender", ev->Sender},
             {"#_ev->Get()->ReadActorId", ev->Get()->ReadActorId});
@@ -1274,7 +1278,7 @@ void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvMessageBatch::TPtr& ev) {
 void TRowDispatcher::Handle(NFq::TEvRowDispatcher::TEvSessionError::TPtr& ev) {
     auto it = Consumers.find(ev->Get()->ReadActorId);
     if (it == Consumers.end()) {
-        YDB_LOG_WARN("Ignore (no consumer) TEvSessionError from",
+        YDB_LOG_WARN("Ignore (no consumer) TEvSessionError",
             {"logPrefix", LogPrefix},
             {"#_ev->Sender", ev->Sender},
             {"#_ev->Get()->ReadActorId", ev->Get()->ReadActorId});

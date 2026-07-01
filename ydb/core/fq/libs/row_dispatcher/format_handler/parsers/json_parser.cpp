@@ -476,7 +476,7 @@ public:
 
         MaxNumberRows = CalculateMaxNumberRows();
         FillColumnsBuffers();
-        YDB_LOG_DEBUG("Parser columns count changed from",
+        YDB_LOG_DEBUG("Parser columns count changed",
             {"logPrefix", LogPrefix},
             {"#_Columns.size", Columns.size()},
             {"#_Consumer->GetColumns().size", Consumer->GetColumns().size()});

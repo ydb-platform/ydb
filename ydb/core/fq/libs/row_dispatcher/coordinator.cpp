@@ -445,7 +445,9 @@ void TActorCoordinator::Handle(NActors::TEvents::TEvUndelivered::TPtr& ev) {
         {"ev", ev->Get()->ToString()});
 
     if (ev->Sender == NodesManagerId) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "TEvUndelivered, from nodes manager, reason: " << ev->Get()->Reason);
+        YDB_LOG_INFO("TEvUndelivered, from nodes manager",
+            {"logPrefix", LogPrefix},
+            {"reason", ev->Get()->Reason});
         NActors::TActivationContext::Schedule(NodesManagerRetryPeriod, new IEventHandle(NodesManagerId, SelfId(), new NFq::TEvNodesManager::TEvGetNodesRequest(), IEventHandle::FlagTrackDelivery));
         return;
     }
@@ -626,12 +628,15 @@ void TActorCoordinator::Handle(TEvPrivate::TEvPrintState::TPtr&) {
 
 void TActorCoordinator::Handle(NKikimr::TEvTenantNodeEnumerator::TEvLookupResult::TPtr& ev) {
     if (!ev->Get()->Success) {
-        YDB_LOG_ERROR("Failed to get TEvLookupResult, try later..",
+        YDB_LOG_ERROR("Failed to get TEvLookupResult, try later.",
             {"logPrefix", LogPrefix});
         ScheduleNodeInfoRequest();
         return;
     }
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Updated node info, node count: " << ev->Get()->AssignedNodes.size() << ", AssignedNodes: " << JoinSeq(", ", ev->Get()->AssignedNodes));
+    YDB_LOG_INFO("Updated node info, node",
+        {"logPrefix", LogPrefix},
+        {"count", ev->Get()->AssignedNodes.size()},
+        {"assignedNodes", JoinSeq(", ", ev->Get()->AssignedNodes)});
     NodesCount = ev->Get()->AssignedNodes.size();
     UpdateGlobalState();
     UpdatePendingReadActors();
@@ -650,7 +655,7 @@ void TActorCoordinator::Handle(TEvPrivate::TEvListNodes::TPtr&) {
 }
 
 void TActorCoordinator::Handle(TEvPrivate::TEvRebalancing::TPtr&) {
-    YDB_LOG_DEBUG("Rebalancing..",
+    YDB_LOG_DEBUG("Rebalancing.",
         {"logPrefix", LogPrefix});
     RebalancingScheduled = false;
 

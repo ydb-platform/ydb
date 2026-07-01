@@ -489,7 +489,8 @@ void TTopicSession::SubscribeOnNextEvent(bool checkIsWaitingEvents) {
         return;
     }
 
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "SubscribeOnNextEvent");
+    YDB_LOG_TRACE("SubscribeOnNextEvent",
+        {"logPrefix", LogPrefix});
     IsWaitingEvents = true;
     Metrics.InFlySubscribe->Set(1);
     TActorSystem* actorSystem = TActivationContext::ActorSystem();
@@ -1007,7 +1008,9 @@ void TTopicSession::FatalError(const TStatus& status) {
         {"fatalError", status.GetErrorMessage()});
 
     for (auto& [readActorId, info] : Clients) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Send TEvSessionError to " << readActorId);
+        YDB_LOG_DEBUG("Send TEvSessionError",
+            {"logPrefix", LogPrefix},
+            {"readActorId", readActorId});
         SendSessionError(readActorId, status, true);
     }
     StopReadSession();

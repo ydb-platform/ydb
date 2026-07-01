@@ -485,7 +485,8 @@ void TLocalLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvReadRequest::TPtr
         return;
     }
 
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Rpc read request");
+    YDB_LOG_DEBUG("Rpc read request",
+        {"logPrefix", LogPrefix});
     SendSessionEvents();
 }
 
@@ -565,7 +566,8 @@ void TLocalLeaderElection::Handle(TLocalRpcCtx::TRpcEvents::TEvFinishRequest::TP
             {"code", static_cast<ui64>(status.error_code())},
             {"message", status.error_message()});
     } else {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Rpc session successfully finished");
+        YDB_LOG_INFO("Rpc session successfully finished",
+            {"logPrefix", LogPrefix});
     }
 
     CloseSession(status, "Read session closed");
@@ -593,7 +595,9 @@ void TLocalLeaderElection::AddSessionEvent(TRpcIn&& message) {
     }
 
     RpcResponses.push(message);
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Added session event: " << static_cast<i64>(message.request_case()));
+    YDB_LOG_DEBUG("Added session",
+        {"logPrefix", LogPrefix},
+        {"event", static_cast<i64>(message.request_case())});
 
     if (RpcActor) {
         SendSessionEvents();
@@ -642,7 +646,8 @@ void TLocalLeaderElection::CloseSession(NYdb::EStatus status, const NYql::TIssue
             {"status", status},
             {"issues", issues.ToOneLineString()});
     } else {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_INFO, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Closing session with success status");
+        YDB_LOG_INFO("Closing session with success status",
+            {"logPrefix", LogPrefix});
     }
 
     if (SessionClosed) {
@@ -783,7 +788,9 @@ void TLocalLeaderElection::ProcessCreateSemaphoreResult(const TRpcOut& message) 
         {"logPrefix", LogPrefix},
         {"status", status});
     if (!IsTableCreated(status)) {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_ERROR, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Semaphore creating error " << status.GetIssues().ToOneLineString());
+        YDB_LOG_ERROR("Semaphore creating error",
+            {"logPrefix", LogPrefix},
+            {"#_status.GetIssues().ToOneLineString", status.GetIssues().ToOneLineString()});
         Metrics.Errors->Inc();
         ResetState();
         return;
@@ -829,7 +836,8 @@ void TLocalLeaderElection::ProcessAcquireSemaphoreResult(const TRpcOut& message)
             {"logPrefix", LogPrefix});
         LastAcquireSemaphore = TInstant::Now();    // delay
     } else {
-        LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Semaphore acquire timed out");
+        YDB_LOG_DEBUG("Semaphore acquire timed out",
+            {"logPrefix", LogPrefix});
     }
 }
 

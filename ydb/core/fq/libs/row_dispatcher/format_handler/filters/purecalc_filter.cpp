@@ -419,7 +419,10 @@ public:
             {"numberRows", numberRows});
 
         if (!ProgramHolder_) {
-            LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_TRACE, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "Add " << numberRows << " rows to client " << Consumer_->GetClientId() << " without processing");
+            YDB_LOG_TRACE("Add rows to client without processing",
+                {"logPrefix", LogPrefix},
+                {"numberRows", numberRows},
+                {"#_Consumer_->GetClientId", Consumer_->GetClientId()});
             for (ui64 rowId = 0; rowId < numberRows; ++rowId) {
                 NYql::NUdf::TUnboxedValue value = NYql::NUdf::TUnboxedValuePod{rowId};
                 Consumer_->OnData(&value);

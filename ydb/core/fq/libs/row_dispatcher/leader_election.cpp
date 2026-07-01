@@ -407,7 +407,8 @@ void TLeaderElection::Handle(TEvPrivate::TEvAcquireSemaphoreResult::TPtr& ev) {
 }
 
 void TLeaderElection::PassAway() {
-    LOG_LOG_S(::NActors::TActivationContext::AsActorContext(), ::NActors::NLog::PRI_DEBUG, ::NKikimrServices::FQ_ROW_DISPATCHER, LogPrefix << "PassAway");
+    YDB_LOG_DEBUG("PassAway",
+        {"logPrefix", LogPrefix});
     TActorBootstrapped::PassAway();
 }
 

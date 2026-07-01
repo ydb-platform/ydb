@@ -22,6 +22,7 @@ Release date: TBD.
 * [Changefeeds (CDC)](./concepts/cdc.md?version=v26.1) can export user security identifiers (`USER_SIDS`) — see [`ALTER TABLE` `CHANGEFEED`](./yql/reference/syntax/alter_table/changefeed.md?version=v26.1).
 * [External data sources](./concepts/datamodel/external_data_source.md?version=v26.1) support `AUTH_METHOD=IAM`.
 * CLI supports token file authentication (`--token-file`).
+* Transaction handling between topics and tables has been optimized.
 
 #### Bug Fixes
 

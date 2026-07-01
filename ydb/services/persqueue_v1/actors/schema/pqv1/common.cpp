@@ -2,6 +2,7 @@
 
 #include <ydb/core/base/feature_flags.h>
 #include <ydb/core/persqueue/public/constants.h>
+#include <ydb/library/persqueue/topic_parser/topic_parser.h>
 #include <ydb/public/sdk/cpp/include/ydb-cpp-sdk/library/jwt/jwt.h>
 #include <ydb/public/sdk/cpp/src/library/persqueue/obfuscate/obfuscate.h>
 
@@ -112,6 +113,8 @@ TResult AddConsumerImpl(
     if (consumersAdvancedMonitoringSettings) {
         consumersAdvancedMonitoringSettings->UpdateConsumerConfig(rr.consumer_name(), *consumer);
     }
+
+    UpdateConsumerVersion(*consumer, *config);
 
     return {};
 }
@@ -345,6 +348,10 @@ TResult ApplyChangesInt( // create and alter
         error = TStringBuilder() << "read rules count cannot be more than "
                                  << NPQ::MAX_READ_RULES_COUNT << ", provided " << settings.read_rules().size();
         return {Ydb::StatusIds::BAD_REQUEST, std::move(error)};
+    }
+
+    if (operation == EOperation::Create) {
+        InitTopicConfigVersion(*pqTabletConfig);
     }
 
     for (const auto& rr : settings.read_rules()) {

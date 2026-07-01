@@ -1,6 +1,7 @@
 LIBRARY()
 
 PEERDIR(
+    library/cpp/containers/absl_flat_hash
     ydb/core/persqueue/public/schema
     ydb/services/persqueue_v1/actors/schema/common
     ydb/services/lib/actors

@@ -11927,6 +11927,14 @@ Y_UNIT_TEST_SUITE(KqpScheme) {
         {
             const auto query = R"(
                 --!syntax_v1
+                CREATE TOPIC `/Root/dead_letter_queue_97`
+            )";
+            const auto result = executeQuery(query);
+            UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::SUCCESS, result.GetIssues().ToString());
+        }
+        {
+            const auto query = R"(
+                --!syntax_v1
                 ALTER TOPIC `/Root/topic`
                     ALTER CONSUMER cs SET (default_processing_timeout = Interval('PT31S'), max_processing_attempts = 67, dead_letter_policy = 'move', dead_letter_queue = 'dead_letter_queue_97')
             )";

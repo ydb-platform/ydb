@@ -1,8 +1,10 @@
 #include "common.h"
 
 #include <ydb/core/base/appdata.h>
+#include <ydb/core/base/path.h>
 #include <ydb/core/grpc_services/base/base.h>
 #include <ydb/core/kafka_proxy/kafka_constants.h>
+#include <ydb/core/persqueue/public/config.h>
 #include <ydb/core/persqueue/public/constants.h>
 #include <ydb/core/persqueue/public/utils.h>
 #include <ydb/core/protos/pqconfig.pb.h>
@@ -13,7 +15,7 @@
 
 namespace NKikimr::NPQ::NSchema {
 
-std::pair <TString, TString> GetWorkingDirAndName(const TString& fullName) {
+std::pair<TString, TString> GetWorkingDirAndName(const TString& fullName) {
     try {
         return NKikimr::NGRpcService::SplitPath(fullName);
     } catch (const std::exception &ex) {
@@ -412,7 +414,57 @@ TResult AddConsumer(
         consumersAdvancedMonitoringSettings->UpdateConsumerConfig(consumerConfig.name(), *consumer);
     }
 
+    UpdateConsumerVersion(*consumer, *config);
+
     return TResult();
+}
+
+void InitTopicConfigVersion(NKikimrPQ::TPQTabletConfig& config) {
+    config.SetTopicConfigVersion(0);
+}
+
+void BumpTopicConfigVersion(NKikimrPQ::TPQTabletConfig& config) {
+    config.SetTopicConfigVersion(config.GetTopicConfigVersion() + 1);
+}
+
+void UpdateConsumerVersion(
+    NKikimrPQ::TPQTabletConfig_TConsumer& consumer,
+    const NKikimrPQ::TPQTabletConfig& config
+) {
+    consumer.SetModificationVersion(config.GetTopicConfigVersion());
+}
+
+TConsumerVersionInfoByName CollectConsumerVersionInfo(
+    const NKikimrPQ::TPQTabletConfig& config,
+    const TString& database
+) {
+    TConsumerVersionInfoByName result;
+    for (const auto& consumer : config.GetConsumers()) {
+        result[consumer.GetName()] = {
+            consumer.GetModificationVersion(),
+            NKikimr::CanonizeAndNormalizePath(database, GetDLQTopicPath(consumer)),
+        };
+    }
+    return result;
+}
+
+void ApplyConsumerVersionUpdates(
+    NKikimrPQ::TPQTabletConfig& config,
+    const TConsumerVersionInfoByName& oldConsumerInfoByName,
+    const TString& database
+) {
+    for (auto& consumer : *config.MutableConsumers()) {
+        const TString newDlqTopicPath = NKikimr::CanonizeAndNormalizePath(database, GetDLQTopicPath(consumer));
+        if (const auto* oldInfo = oldConsumerInfoByName.FindPtr(consumer.GetName())) {
+            if (newDlqTopicPath != oldInfo->DlqTopicPath) {
+                UpdateConsumerVersion(consumer, config);
+            } else {
+                consumer.SetModificationVersion(oldInfo->ModificationVersion);
+            }
+        } else {
+            UpdateConsumerVersion(consumer, config);
+        }
+    }
 }
 
 } // namespace NKikimr::NPQ::NSchema

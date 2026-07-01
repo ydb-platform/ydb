@@ -39,6 +39,7 @@ PEERDIR(
     ydb/core/formats
     ydb/core/grpc_services/local_rpc
     ydb/core/io_formats/arrow/scheme
+    ydb/core/persqueue/public
     ydb/core/protos
     ydb/core/scheme
     ydb/core/security/sasl

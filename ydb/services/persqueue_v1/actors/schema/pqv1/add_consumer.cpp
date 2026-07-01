@@ -29,6 +29,9 @@ struct TAddConsumerStrategy: public NPQ::NSchema::IAlterTopicStrategy {
     ) override {
         NPQ::NSchema::CopyConfig(targetConfig, sourceConfig);
 
+        auto* config = targetConfig.MutablePQTabletConfig();
+        NPQ::NSchema::BumpTopicConfigVersion(*config);
+
         if (Rule.version() == 0) {
             Rule.set_version(topicInfo.Self->Info.GetVersion().GetPQVersion());
         }

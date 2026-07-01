@@ -70,6 +70,11 @@ Y_UNIT_TEST(AddSharedConsumer) {
     auto& client = setup.GetPersQueueClient();
     const std::string path = TPqv1SdkTestSetup::MakeTopicPath("topic-alter-shared");
 
+    {
+        const auto dlqStatus = CreateDlqTopicViaSdk(client);
+        UNIT_ASSERT_C(dlqStatus.IsSuccess(), "CreateDlqTopic: " << dlqStatus.GetIssues().ToOneLineString());
+    }
+
     const auto createStatus = CreateTopicViaSdk(client, path);
     UNIT_ASSERT_C(createStatus.IsSuccess(), "CreateTopic: " << createStatus.GetIssues().ToOneLineString());
 
@@ -145,6 +150,11 @@ Y_UNIT_TEST(CannotChangeConsumerType_StreamingToShared) {
         UNIT_ASSERT_VALUES_EQUAL(describe.TopicSettings().ReadRules().at(0).ConsumerName(), DEFAULT_STREAMING_CONSUMER);
     }
 
+    {
+        const auto dlqStatus = CreateDlqTopicViaSdk(client);
+        UNIT_ASSERT_C(dlqStatus.IsSuccess(), "CreateDlqTopic: " << dlqStatus.GetIssues().ToOneLineString());
+    }
+
     TAlterTopicSettings alterSettings;
     alterSettings.ReadRules({MakeSharedConsumerReadRuleSettings(DEFAULT_STREAMING_CONSUMER)});
 
@@ -159,6 +169,11 @@ Y_UNIT_TEST(CannotChangeConsumerType_SharedToStreaming) {
 
     auto& client = setup.GetPersQueueClient();
     const std::string path = TPqv1SdkTestSetup::MakeTopicPath("topic-alter-change-type-shared-to-streaming");
+
+    {
+        const auto dlqStatus = CreateDlqTopicViaSdk(client);
+        UNIT_ASSERT_C(dlqStatus.IsSuccess(), "CreateDlqTopic: " << dlqStatus.GetIssues().ToOneLineString());
+    }
 
     TCreateTopicSettings createSettings;
     createSettings.ReadRules({MakeSharedConsumerReadRuleSettings()});
@@ -188,6 +203,11 @@ Y_UNIT_TEST(AlterSharedConsumer) {
 
     auto& client = setup.GetPersQueueClient();
     const std::string path = TPqv1SdkTestSetup::MakeTopicPath("topic-alter-keep-shared");
+
+    {
+        const auto dlqStatus = CreateDlqTopicViaSdk(client);
+        UNIT_ASSERT_C(dlqStatus.IsSuccess(), "CreateDlqTopic: " << dlqStatus.GetIssues().ToOneLineString());
+    }
 
     TCreateTopicSettings createSettings;
     createSettings.ReadRules({MakeSharedConsumerReadRuleSettings()});

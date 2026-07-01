@@ -6,11 +6,14 @@ YQL_LAST_ABI_VERSION()
 
 SRCS(
     create_topic_ut.cpp
+    dlq_acl_ut.cpp
 )
 
 PEERDIR(
     ydb/core/persqueue/public
+    ydb/core/testlib
     ydb/core/testlib/grpc_request
+    ydb/library/aclib
     ydb/public/sdk/cpp/src/client/persqueue_public/ut/ut_utils
     ydb/public/sdk/cpp/src/client/topic/ut/ut_utils
     library/cpp/testing/unittest

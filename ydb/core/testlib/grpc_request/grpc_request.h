@@ -34,9 +34,11 @@ public:
             const TReq& request,
             TString topicPath,
             TString databaseName,
-            std::shared_ptr<TResultHolder<TRes>> resultHolder
+            std::shared_ptr<TResultHolder<TRes>> resultHolder,
+            TIntrusiveConstPtr<NACLib::TUserToken> userToken = nullptr
         )
         : Request(request)
+        , UserToken(std::move(userToken))
         , TopicPath(topicPath)
         , DatabaseName(databaseName)
         , ResultHolder(resultHolder)

@@ -17,7 +17,7 @@ private:
         ::NKikimrTableStats::TTableStats& to, const NOlap::TSimplePortionsGroupInfo& from, const NOlap::TSmallBlobsStat& smallBlobs) const {
         to.SetRowCount(from.GetRecordsCount());
         to.SetDataSize(from.GetBlobBytes());
-        to.SetSmallBlobsVolume(smallBlobs.Volume);
+        to.SetSmallBlobsVolumeBytes(smallBlobs.VolumeBytes);
         to.SetSmallBlobsCount(smallBlobs.Count);
     }
 

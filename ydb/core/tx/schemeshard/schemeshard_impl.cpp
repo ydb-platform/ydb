@@ -2648,8 +2648,7 @@ void TSchemeShard::PersistSubDomainState(NIceDb::TNiceDb& db, const TPathId& pat
     db.Table<Schema::SubDomains>().Key(pathId.LocalPathId).Update(
             NIceDb::TUpdate<Schema::SubDomains::StateVersion>(subDomain.GetDomainStateVersion()),
             NIceDb::TUpdate<Schema::SubDomains::DiskQuotaExceeded>(subDomain.GetDiskQuotaExceeded()),
-            NIceDb::TUpdate<Schema::SubDomains::SmallBlobsVolumeQuotaExceeded>(subDomain.GetSmallBlobsVolumeQuotaExceeded()),
-            NIceDb::TUpdate<Schema::SubDomains::SmallBlobsCountQuotaExceeded>(subDomain.GetSmallBlobsCountQuotaExceeded()));
+            NIceDb::TUpdate<Schema::SubDomains::SmallBlobsQuotaExceeded>(subDomain.GetSmallBlobsQuotaExceeded()));
 }
 
 void TSchemeShard::PersistSubDomainSchemeQuotas(NIceDb::TNiceDb& db, const TPathId& pathId, const TSubDomainInfo& subDomain) {
@@ -8994,8 +8993,8 @@ void TSchemeShard::ChangeDiskSpaceTopicsTotalBytes(ui64 value) {
     TabletCounters->Simple()[COUNTER_DISK_SPACE_TOPICS_TOTAL_BYTES].Set(value);
 }
 
-void TSchemeShard::ChangeDiskSpaceQuotaExceeded(i64 delta) {
-    TabletCounters->Simple()[COUNTER_DISK_SPACE_QUOTA_EXCEEDED].Add(delta);
+void TSchemeShard::ChangeSimpleCounter(ESimpleCounters counter, i64 delta) {
+    TabletCounters->Simple()[counter].Add(delta);
 }
 
 void TSchemeShard::ChangeDiskSpaceHardQuotaBytes(i64 delta) {
@@ -9036,14 +9035,6 @@ void TSchemeShard::ChangeSmallBlobsCountHardQuota(i64 delta) {
 
 void TSchemeShard::ChangeSmallBlobsCountSoftQuota(i64 delta) {
     TabletCounters->Simple()[COUNTER_SMALL_BLOBS_COUNT_SOFT_QUOTA].Add(delta);
-}
-
-void TSchemeShard::ChangeSmallBlobsVolumeQuotaExceeded(i64 delta) {
-    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_VOLUME_QUOTA_EXCEEDED].Add(delta);
-}
-
-void TSchemeShard::ChangeSmallBlobsCountQuotaExceeded(i64 delta) {
-    TabletCounters->Simple()[COUNTER_SMALL_BLOBS_COUNT_QUOTA_EXCEEDED].Add(delta);
 }
 
 void TSchemeShard::ChangePathCount(i64 delta) {

@@ -194,7 +194,7 @@ TPartitionStats TTxStoreTableStats::PrepareStats(const T& rec,
     newStats.DataSize = tableStats.GetDataSize();
     newStats.IndexSize = tableStats.GetIndexSize();
     newStats.ByKeyFilterSize = tableStats.GetByKeyFilterSize();
-    newStats.SmallBlobsBytes = tableStats.GetSmallBlobsVolume();
+    newStats.SmallBlobsVolumeBytes = tableStats.GetSmallBlobsVolumeBytes();
     newStats.SmallBlobsCount = tableStats.GetSmallBlobsCount();
     newStats.LastAccessTime = TInstant::MilliSeconds(tableStats.GetLastAccessTime());
     newStats.LastUpdateTime = TInstant::MilliSeconds(tableStats.GetLastUpdateTime());
@@ -463,10 +463,10 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
         }
 
         TOlapStoreInfo::TPtr olapStore = Self->OlapStores[pathId];
-        const ui64 prevSmallBlobsBytes = olapStore->Stats.Aggregated.SmallBlobsBytes;
+        const ui64 prevSmallBlobsBytes = olapStore->Stats.Aggregated.SmallBlobsVolumeBytes;
         const ui64 prevSmallBlobsCount = olapStore->Stats.Aggregated.SmallBlobsCount;
         olapStore->UpdateShardStats(&diskSpaceUsageDelta, shardIdx, newStats, now);
-        smallBlobsBytesDelta = static_cast<i64>(olapStore->Stats.Aggregated.SmallBlobsBytes) - static_cast<i64>(prevSmallBlobsBytes);
+        smallBlobsBytesDelta = static_cast<i64>(olapStore->Stats.Aggregated.SmallBlobsVolumeBytes) - static_cast<i64>(prevSmallBlobsBytes);
         smallBlobsCountDelta = static_cast<i64>(olapStore->Stats.Aggregated.SmallBlobsCount) - static_cast<i64>(prevSmallBlobsCount);
         updateSubdomainInfo = true;
 
@@ -505,10 +505,10 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
                    "PersistSingleStats: ColumnTable rec.GetColumnTables() size=" << rec.GetTables().size());
 
         auto columnTable = Self->ColumnTables.GetVerifiedPtr(pathId);
-        const ui64 prevSmallBlobsBytes = columnTable->Stats.Aggregated.SmallBlobsBytes;
+        const ui64 prevSmallBlobsBytes = columnTable->Stats.Aggregated.SmallBlobsVolumeBytes;
         const ui64 prevSmallBlobsCount = columnTable->Stats.Aggregated.SmallBlobsCount;
         columnTable->UpdateShardStats(&diskSpaceUsageDelta, shardIdx, newStats, now);
-        smallBlobsBytesDelta = static_cast<i64>(columnTable->Stats.Aggregated.SmallBlobsBytes) - static_cast<i64>(prevSmallBlobsBytes);
+        smallBlobsBytesDelta = static_cast<i64>(columnTable->Stats.Aggregated.SmallBlobsVolumeBytes) - static_cast<i64>(prevSmallBlobsBytes);
         smallBlobsCountDelta = static_cast<i64>(columnTable->Stats.Aggregated.SmallBlobsCount) - static_cast<i64>(prevSmallBlobsCount);
         updateSubdomainInfo = true;
 
@@ -522,9 +522,7 @@ bool TTxStoreTableStats::PersistSingleStats(const TPathId& pathId,
     if (updateSubdomainInfo) {
         subDomainInfo->AggrDiskSpaceUsage(Self, diskSpaceUsageDelta);
         subDomainInfo->AggrSmallBlobsUsage(Self, smallBlobsBytesDelta, smallBlobsCountDelta);
-        const bool diskQuotaChanged = subDomainInfo->CheckDiskSpaceQuotas(Self);
-        const bool smallBlobsQuotaChanged = subDomainInfo->CheckSmallBlobsQuotas(Self);
-        if (diskQuotaChanged || smallBlobsQuotaChanged) {
+        if (subDomainInfo->CheckQuotas(Self)) {
             auto subDomainId = Self->ResolvePathIdForDomain(pathElement);
             Self->PersistSubDomainState(db, subDomainId, *subDomainInfo);
             // Publish is done in a separate transaction, so we may call this directly

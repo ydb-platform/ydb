@@ -32,7 +32,7 @@ public:
 };
 
 struct TSmallBlobsStat {
-    ui64 Volume = 0;
+    ui64 VolumeBytes = 0;
     ui64 Count = 0;
 };
 

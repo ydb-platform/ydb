@@ -836,8 +836,7 @@ struct Schema : NIceDb::Schema {
         struct AuditSettings : Column<30, NScheme::NTypeIds::String> {};
         struct ServerlessComputeResourcesMode : Column<31, NScheme::NTypeIds::Uint32> { using Type = EServerlessComputeResourcesMode; };
         struct ColumnTableColumnsLimit : Column<32, NScheme::NTypeIds::Uint64> {};
-        struct SmallBlobsVolumeQuotaExceeded : Column<33, NScheme::NTypeIds::Bool> {};
-        struct SmallBlobsCountQuotaExceeded : Column<34, NScheme::NTypeIds::Bool> {};
+        struct SmallBlobsQuotaExceeded : Column<33, NScheme::NTypeIds::Bool> {};
 
         using TKey = TableKey<PathId>;
         using TColumns = TableColumns<
@@ -873,8 +872,7 @@ struct Schema : NIceDb::Schema {
             AuditSettings,
             ServerlessComputeResourcesMode,
             ColumnTableColumnsLimit,
-            SmallBlobsVolumeQuotaExceeded,
-            SmallBlobsCountQuotaExceeded
+            SmallBlobsQuotaExceeded
         >;
     };
 

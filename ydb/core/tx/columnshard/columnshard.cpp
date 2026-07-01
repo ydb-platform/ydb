@@ -422,10 +422,10 @@ void TColumnShard::FillOlapStats(const TActorContext& ctx, std::unique_ptr<TEvDa
     NOlap::TSmallBlobsStat toDelete;
     for (auto&& i : StoragesManager->GetStorages()) {
         const auto stat = i.second->CalcSmallBlobsToDelete();
-        toDelete.Volume += stat.Volume;
+        toDelete.VolumeBytes += stat.VolumeBytes;
         toDelete.Count += stat.Count;
     }
-    tableStats->SetSmallBlobsVolume(tableStats->GetSmallBlobsVolume() + toDelete.Volume);
+    tableStats->SetSmallBlobsVolumeBytes(tableStats->GetSmallBlobsVolumeBytes() + toDelete.VolumeBytes);
     tableStats->SetSmallBlobsCount(NormalizeSmallBlobsCount(tableStats->GetSmallBlobsCount() + toDelete.Count));
 }
 

@@ -101,7 +101,7 @@ void TColumnShard::Handle(TEvTxProxySchemeCache::TEvWatchNotifyUpdated::TPtr& ev
     AFL_DEBUG(NKikimrServices::TX_COLUMNSHARD)("notify_subdomain", msg->PathId);
     const auto& domainState = msg->Result->GetPathDescription().GetDomainDescription().GetDomainState();
     const bool outOfSpace = domainState.GetDiskQuotaExceeded();
-    const bool smallBlobsQuotaExceeded = domainState.GetSmallBlobsVolumeQuotaExceeded() || domainState.GetSmallBlobsCountQuotaExceeded();
+    const bool smallBlobsQuotaExceeded = domainState.GetSmallBlobsQuotaExceeded();
 
     Execute(new TTxPersistSubDomainOutOfSpace(this, outOfSpace, smallBlobsQuotaExceeded), ctx);
 }

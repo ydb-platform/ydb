@@ -300,8 +300,7 @@ enum ESimpleCounters {
     COUNTER_SMALL_BLOBS_VOLUME_SOFT_QUOTA_BYTES = 231    [(CounterOpts) = {Name: "SmallBlobsVolumeSoftQuotaBytes"}];
     COUNTER_SMALL_BLOBS_COUNT_HARD_QUOTA = 232           [(CounterOpts) = {Name: "SmallBlobsCountHardQuota"}];
     COUNTER_SMALL_BLOBS_COUNT_SOFT_QUOTA = 233           [(CounterOpts) = {Name: "SmallBlobsCountSoftQuota"}];
-    COUNTER_SMALL_BLOBS_VOLUME_QUOTA_EXCEEDED = 234      [(CounterOpts) = {Name: "SmallBlobsVolumeQuotaExceeded"}];
-    COUNTER_SMALL_BLOBS_COUNT_QUOTA_EXCEEDED = 235       [(CounterOpts) = {Name: "SmallBlobsCountQuotaExceeded"}];
+    COUNTER_SMALL_BLOBS_QUOTA_EXCEEDED = 234             [(CounterOpts) = {Name: "SmallBlobsQuotaExceeded"}];
 }
 
 enum ECumulativeCounters {

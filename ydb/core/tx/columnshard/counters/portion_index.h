@@ -45,21 +45,21 @@ private:
     // Signed because the value is recomputed on add and on remove, and the runtime smallness
     // threshold may change in between; GetNormalized() clamps the transient negative back to zero for reporting.
     struct TSmallBlobsAcc {
-        i64 Volume = 0;
+        i64 VolumeBytes = 0;
         i64 Count = 0;
 
-        void Add(const ui64 volume, const ui64 count) {
-            Volume += (i64)volume;
+        void Add(const ui64 volumeBytes, const ui64 count) {
+            VolumeBytes += (i64)volumeBytes;
             Count += (i64)count;
         }
 
-        void Sub(const ui64 volume, const ui64 count) {
-            Volume -= (i64)volume;
+        void Sub(const ui64 volumeBytes, const ui64 count) {
+            VolumeBytes -= (i64)volumeBytes;
             Count -= (i64)count;
         }
 
         NOlap::TSmallBlobsStat GetNormalized() const {
-            return { .Volume = (ui64)std::max<i64>(0, Volume), .Count = (ui64)std::max<i64>(0, Count) };
+            return { .VolumeBytes = (ui64)std::max<i64>(0, VolumeBytes), .Count = (ui64)std::max<i64>(0, Count) };
         }
     };
 

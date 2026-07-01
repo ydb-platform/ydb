@@ -82,7 +82,7 @@ message TTableStats {
     optional bytes SplitBySizeSuggestedKey = 40;
 
     // logical bytes
-    optional uint64 SmallBlobsVolume = 41;
-    // normalized index-record count (x BlobSubgroupSize / storage coef, see TSmallBlobsQuota)
+    optional uint64 SmallBlobsVolumeBytes = 41;
+    // normalized index-record count (x BlobSubgroupSize / storage coef, see TSmallBlobsQuotaConfig)
     optional uint64 SmallBlobsCount = 42;
 }

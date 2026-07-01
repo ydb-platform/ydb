@@ -1573,12 +1573,7 @@
             },
             {
                 "ColumnId": 33,
-                "ColumnName": "SmallBlobsVolumeQuotaExceeded",
-                "ColumnType": "Bool"
-            },
-            {
-                "ColumnId": 34,
-                "ColumnName": "SmallBlobsCountQuotaExceeded",
+                "ColumnName": "SmallBlobsQuotaExceeded",
                 "ColumnType": "Bool"
             }
         ],
@@ -1618,8 +1613,7 @@
                     30,
                     31,
                     32,
-                    33,
-                    34
+                    33
                 ],
                 "RoomID": 0,
                 "Codec": 0,

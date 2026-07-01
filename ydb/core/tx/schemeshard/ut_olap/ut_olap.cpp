@@ -117,22 +117,20 @@ NLs::TCheckFunc LsCheckDiskQuotaExceeded(
     };
 }
 
-// checkCount selects which small-blobs quota flag to inspect: the count quota when true, the volume quota
-// when false.
-bool GetSmallBlobsQuotaExceeded(const NKikimrScheme::TEvDescribeSchemeResult& record, bool checkCount) {
+// A single flag covers both the volume and the count small-blobs quota 
+bool GetSmallBlobsQuotaExceeded(const NKikimrScheme::TEvDescribeSchemeResult& record) {
     const auto& state = record.GetPathDescription().GetDomainDescription().GetDomainState();
-    return checkCount ? state.GetSmallBlobsCountQuotaExceeded() : state.GetSmallBlobsVolumeQuotaExceeded();
+    return state.GetSmallBlobsQuotaExceeded();
 }
 
 NLs::TCheckFunc LsCheckSmallBlobsQuotaExceeded(
-    bool checkCount,
     bool expectExceeded = true,
     const TString& debugHint = ""
 ) {
     return [=] (const NKikimrScheme::TEvDescribeSchemeResult& record) {
         auto& desc = record.GetPathDescription().GetDomainDescription();
         UNIT_ASSERT_VALUES_EQUAL_C(
-            GetSmallBlobsQuotaExceeded(record, checkCount),
+            GetSmallBlobsQuotaExceeded(record),
             expectExceeded,
             debugHint << ", subdomain's disk space usage:\n" << desc.GetDiskSpaceUsage().DebugString()
         );
@@ -142,12 +140,11 @@ NLs::TCheckFunc LsCheckSmallBlobsQuotaExceeded(
 void CheckSmallBlobsQuotaExceedance(TTestActorRuntime& runtime,
                                     ui64 schemeShard,
                                     const TString& pathToSubdomain,
-                                    bool checkCount,
                                     bool expectExceeded,
                                     const TString& debugHint = ""
 ) {
     TestDescribeResult(DescribePath(runtime, schemeShard, pathToSubdomain), {
-        LsCheckSmallBlobsQuotaExceeded(checkCount, expectExceeded, debugHint)
+        LsCheckSmallBlobsQuotaExceeded(expectExceeded, debugHint)
     });
 }
 
@@ -326,7 +323,7 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
     UNIT_ASSERT(pathId);
     UNIT_ASSERT(planStep.Val());
 
-    CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", checkCount, false, DEBUG_HINT);
+    CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
 
     ui64 writeId = 0;
     const ui32 rowsInBatch = 100000;
@@ -340,7 +337,7 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
         const auto& record = ev->Get()->Record;
         if (record.GetDatashardId() == shardId) {
             reportedSmallBlobsCount = record.GetTableStats().GetSmallBlobsCount();
-            reportedSmallBlobsVolume = record.GetTableStats().GetSmallBlobsVolume();
+            reportedSmallBlobsVolume = record.GetTableStats().GetSmallBlobsVolumeBytes();
         }
     });
     const auto usage = [&]() { return checkCount ? reportedSmallBlobsCount : reportedSmallBlobsVolume; };
@@ -361,7 +358,7 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
     // batch only while it still reads "not exceeded", so every batch issued here is expected to succeed.
     bool sawBandNotBlockedGoingUp = false;
     int batches = 0;
-    while (!GetSmallBlobsQuotaExceeded(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase"), checkCount)) {
+    while (!GetSmallBlobsQuotaExceeded(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase"))) {
         UNIT_ASSERT_C(++batches <= 100, "small-blobs quota was never exceeded; " << DEBUG_HINT);
         std::vector<ui64> writeIds;
         ++txId;
@@ -379,7 +376,7 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
         }
     }
     // (2) Above the hard quota -> blocked.
-    CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", checkCount, true, DEBUG_HINT);
+    CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
     UNIT_ASSERT_C(sawBandNotBlockedGoingUp, "usage never observed inside the soft..hard band while unblocked; " << DEBUG_HINT);
 
     // The quota calibration above (perPortionBytes -> VolumeBytesPer10TiB and the hard/soft volume quotas) assumes
@@ -422,7 +419,7 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
         // shard's local state, so neither a SchemeShard nor a ColumnShard restart may silently reset them - writes
         // must stay blocked. Restart SchemeShard first and confirm it reloaded the persisted flag...
         GracefulRestartTablet(runtime, TTestTxConfig::SchemeShard, sender);
-        CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", checkCount, true, DEBUG_HINT);
+        CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", true, DEBUG_HINT);
 
         // ...then restart the ColumnShard and confirm it reloaded its persisted flag and still refuses writes.
         GracefulRestartTablet(runtime, shardId, sender);
@@ -465,7 +462,7 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
         for (int j = 0; j < 5; ++j) {
             tick();
         }
-        const bool exceeded = GetSmallBlobsQuotaExceeded(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase"), checkCount);
+        const bool exceeded = GetSmallBlobsQuotaExceeded(DescribePath(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase"));
         // (3) Usage is back inside the band but not yet below the soft quota -> still blocked.
         if (exceeded && inBand(usage())) {
             sawBandStillBlockedGoingDown = true;
@@ -474,7 +471,7 @@ void StoreStatsSmallBlobsQuotaImpl(bool checkCount) {
     }
     // (4) Below the soft quota -> unblocked.
     UNIT_ASSERT_C(recovered, DEBUG_HINT);
-    CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", checkCount, false, DEBUG_HINT);
+    CheckSmallBlobsQuotaExceedance(runtime, TTestTxConfig::SchemeShard, "/MyRoot/SomeDatabase", false, DEBUG_HINT);
     UNIT_ASSERT_C(sawBandStillBlockedGoingDown, "usage never observed inside the soft..hard band while blocked; " << DEBUG_HINT);
 
     {   // Quota recovered - writes should be accepted again

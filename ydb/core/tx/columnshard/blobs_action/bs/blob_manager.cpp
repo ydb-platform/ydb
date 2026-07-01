@@ -462,7 +462,7 @@ TSmallBlobsStat TBlobManager::CalcSmallBlobsToDelete(const ui64 sizeThreshold) c
     TSmallBlobsStat result;
     const auto account = [&](const TUnifiedBlobId& blobId) {
         if (blobId.BlobSize() <= sizeThreshold) {
-            result.Volume += blobId.BlobSize();
+            result.VolumeBytes += blobId.BlobSize();
             ++result.Count;
         }
     };

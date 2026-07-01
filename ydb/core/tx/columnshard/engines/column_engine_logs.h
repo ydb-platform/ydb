@@ -65,6 +65,8 @@ private:
     std::shared_ptr<TSchemaObjectsCache> SchemaObjectsCache;
     TVersionedPresetSchemas VersionedSchemas;
 
+    void InitDerivedState();
+
 public:
     NMonitoring::TDynamicCounters::TCounterPtr GetBadPortionsCounter() const {
         return SignalCounters.BadPortionsCount;

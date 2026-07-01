@@ -10369,6 +10369,21 @@
                 "ColumnId": 10,
                 "ColumnName": "LockTxId",
                 "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 11,
+                "ColumnName": "UserSID",
+                "ColumnType": "Utf8"
+            },
+            {
+                "ColumnId": 12,
+                "ColumnName": "StartTime",
+                "ColumnType": "Uint64"
+            },
+            {
+                "ColumnId": 13,
+                "ColumnName": "EndTime",
+                "ColumnType": "Uint64"
             }
         ],
         "ColumnsDropped": [],
@@ -10384,7 +10399,10 @@
                     7,
                     8,
                     9,
-                    10
+                    10,
+                    11,
+                    12,
+                    13
                 ],
                 "RoomID": 0,
                 "Codec": 0,

@@ -110,6 +110,9 @@ public:
     }
 
     inline ELogPriority FiltrationLevel() const noexcept {
+        if (!IsOpen()) {
+            return TLOG_EMERG;
+        }
         return Backend_->FiltrationLevel();
     }
 

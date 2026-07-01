@@ -8,7 +8,7 @@ on:
       duration:
         description: 'Duration of each workload run in seconds'
         required: false
-        default: '600'
+        default: '100'
       build_preset:
         description: 'Build preset (must match S3 prebuilt binary)'
         required: false
@@ -72,19 +72,49 @@ on:
         required: false
         type: boolean
         default: false
+      pull_number:
+        description: 'Pull request number to test the current side against, ex: 12345 (empty = current branch)'
+        required: false
+        default: ''
 
 jobs:
   compare:
-    name: Compare performance (${{ inputs.ref || 'main' }} vs current)
+    name: Compare performance (${{ inputs.ref || 'main' }} vs ${{ inputs.pull_number && format('PR #{0}', inputs.pull_number) || 'current' }})
     runs-on: [ self-hosted, auto-provisioned, "build-preset-${{ inputs.build_preset || 'release' }}" ]
     timeout-minutes: 1200
     steps:
+      - name: Resolve checkout ref
+        id: resolve-ref
+        env:
+          PULL_REQUEST_NUMBER: ${{ inputs.pull_number || '' }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          # When a pull_number is given, run the current side against the PR's
+          # merge commit (mirrors run_tests.yml); otherwise use the triggering ref.
+          if [[ -n "$PULL_REQUEST_NUMBER" ]] && [[ "$PULL_REQUEST_NUMBER" =~ ^[0-9]+$ ]]; then
+            PR_DATA=$(curl --retry 5 --retry-all-errors --retry-delay 10 --fail --show-error -s \
+              -H "Authorization: token $GITHUB_TOKEN" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/pulls/$PULL_REQUEST_NUMBER")
+            MERGE_SHA=$(echo "$PR_DATA" | jq -r '.merge_commit_sha')
+            if [ -n "$MERGE_SHA" ] && [ "$MERGE_SHA" != "null" ]; then
+              echo "Testing PR #$PULL_REQUEST_NUMBER at merge commit $MERGE_SHA"
+              echo "checkout_ref=$MERGE_SHA" >> "$GITHUB_OUTPUT"
+            else
+              echo "Failed to get merge commit for PR $PULL_REQUEST_NUMBER"
+              exit 1
+            fi
+          else
+            echo "checkout_ref=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Checkout
         uses: actions/checkout@v5
+        with:
+          ref: ${{ steps.resolve-ref.outputs.checkout_ref }}
 
       - name: Run performance comparison
         env:
-          INPUT_DURATION: ${{ inputs.duration || '600' }}
+          INPUT_DURATION: ${{ inputs.duration || '100' }}
           INPUT_BUILD_PRESET: ${{ inputs.build_preset || 'release' }}
           INPUT_REF: ${{ inputs.ref || 'main' }}
           INPUT_WORKLOAD: ${{ inputs.workload || 'all' }}
@@ -154,6 +184,31 @@ jobs:
               done
             } >> "$GITHUB_STEP_SUMMARY"
           fi
+
+      - name: Post results to pull request
+        if: always() && inputs.pull_number != ''
+        env:
+          PR_NUMBER: ${{ inputs.pull_number }}
+          BUILD_PRESET: ${{ inputs.build_preset || 'release' }}
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          pip install PyGithub
+          RESULTS_DIR=ydb/tests/stress/compare_index_performance/tests/test-results
+          REPORTS=$(find -L "$RESULTS_DIR" -name 'report_*.md' -path "*/testing_out_stuff/*" 2>/dev/null | sort)
+          run_url="https://github.com/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}"
+          {
+            echo "### Index performance comparison"
+            echo ""
+            if [[ -n "$REPORTS" ]]; then
+              for r in $REPORTS; do
+                cat "$r"
+                echo ""
+              done
+            else
+              echo "No report generated."
+            fi
+            echo "[Workflow run](${run_url}) — full logs and flamegraphs are in the \`benchmark-results\` artifact."
+          } | .github/scripts/tests/comment-pr.py --rewrite --no-timestamp
 
       - name: Upload benchmark logs
         if: always()

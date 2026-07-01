@@ -176,6 +176,14 @@ summaries cannot render workspace SVGs inline, so the summary lists the
 flamegraph / diff filenames and you view them by downloading the
 `benchmark-results` artifact and opening the SVGs in a browser.
 
+Set the **`pull_number`** dispatch input to a PR number to run the *current*
+side against that PR's merge commit (the workflow resolves it via the GitHub API
+and checks it out), instead of the branch the workflow was dispatched from. Leave
+it empty to compare against the current branch. The *baseline* side is still
+selected by `ref` / `build_preset`. When `pull_number` is set, the workflow also
+posts the comparison report as a comment on that pull request (via
+`.github/scripts/tests/comment-pr.py`).
+
 ## Layout
 
 - `test_compare.py` — the test (orchestration, stats, report, flamegraphs).

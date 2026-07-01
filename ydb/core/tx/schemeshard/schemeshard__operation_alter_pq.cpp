@@ -3,6 +3,7 @@
 #include "schemeshard_impl.h"
 #include "schemeshard_pq_helpers.h"  // for PQGroupReserve
 
+#include <library/cpp/containers/absl_flat_hash/flat_hash_set.h>
 #include <library/cpp/containers/top_keeper/top_keeper.h>
 
 #include <ydb/core/base/subdomain.h>
@@ -66,12 +67,20 @@ size_t ComputeAlterActivePartitionCount(
         const TTopicInfo::TPtr& alterData)
 {
     size_t count = CountTopicActivePartitions(topic);
-    THashSet<ui32> addedPartitionIds;
-    for (const auto& partition : alterData->PartitionsToAdd) {
+    const auto& partitionsToAdd = alterData->PartitionsToAdd;
+    const size_t partitionsToAddCount = partitionsToAdd.size();
+
+    size_t parentCount = 0;
+    absl::flat_hash_set<ui32> addedPartitionIds;
+    addedPartitionIds.reserve(partitionsToAddCount * 2);
+    for (const auto& partition : partitionsToAdd) {
+        parentCount += partition.ParentPartitionIds.size();
         addedPartitionIds.insert(partition.PartitionId);
     }
-    THashSet<ui32> deactivatedParents;
-    for (const auto& partition : alterData->PartitionsToAdd) {
+
+    absl::flat_hash_set<ui32> deactivatedParents;
+    deactivatedParents.reserve(parentCount * 2);
+    for (const auto& partition : partitionsToAdd) {
         ++count;
         for (const ui32 parentId : partition.ParentPartitionIds) {
             if (deactivatedParents.emplace(parentId).second) {

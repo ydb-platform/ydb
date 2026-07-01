@@ -290,7 +290,11 @@ class TestCompareIndexPerformance:
         # Run perf in its own session/process group so we can interrupt it
         # reliably, including when wrapped in `sudo` (which would otherwise not
         # forward our SIGINT to the perf child).
-        perf_data = yatest.common.output_path(svg_name + ".perf.data")
+        # perf.data is an intermediate; keep it in the work dir (not the
+        # published output dir). Under sudo it is written owned by root, which
+        # would make ya's output collection fail with PermissionError if it lived
+        # under output_path — it is chowned back to us in _perf_stop.
+        perf_data = yatest.common.work_path(svg_name + ".perf.data")
         perf_log = yatest.common.output_path(svg_name + ".perf.log")
         cmd = (["sudo"] if self.perf_sudo else []) + [
             "perf", "record", "-F", str(self.perf_freq), "--call-graph", "dwarf",
@@ -324,6 +328,11 @@ class TestCompareIndexPerformance:
             proc.kill()
             proc.wait()
         perf["log"].close()
+        # perf ran as root under sudo, so perf.data is root-owned. Chown it back
+        # so the rest of the pipeline (and ya's cleanup) can read/remove it
+        # without needing sudo.
+        if self.perf_sudo and os.path.isfile(perf["data"]):
+            subprocess.call(["sudo", "chown", f"{os.getuid()}:{os.getgid()}", perf["data"]])
 
     def _flame_script(self, name):
         # perl scripts shipped via DATA(arcadia/contrib/tools/flame-graph); run
@@ -367,11 +376,13 @@ class TestCompareIndexPerformance:
         if not os.path.isfile(perf["data"]) or os.path.getsize(perf["data"]) == 0:
             pytest.fail(f"perf produced no data for {svg_name}; perf log: {perf['perf_log']}")
 
-        folded_file = yatest.common.output_path(svg_name + ".folded")
+        # The folded stack file is an intermediate (kept only for diffing) — put
+        # it in the work dir, not the published output dir. perf.data is now
+        # chowned back to us (see _perf_stop), so `perf script` needs no sudo.
+        folded_file = yatest.common.work_path(svg_name + ".folded")
         svg_file = yatest.common.output_path(svg_name)
-        script_cmd = (["sudo"] if self.perf_sudo else []) + ["perf", "script", "-i", perf["data"]]
         self._run_pipeline(
-            [script_cmd, self._flame_script("stackcollapse-perf.pl")],
+            [["perf", "script", "-i", perf["data"]], self._flame_script("stackcollapse-perf.pl")],
             folded_file, perf["perf_log"], f"perf collapse for {svg_name}")
         self._run_pipeline(
             [["cat", folded_file], self._flame_script("flamegraph.pl")],
@@ -382,8 +393,8 @@ class TestCompareIndexPerformance:
         # Build before/after differential flamegraphs from the folded stacks of
         # this iteration's baseline and current runs (consequent runs of the two
         # branches). Colored by delta: red = hotter, blue = colder.
-        base_folded = yatest.common.output_path(f"{slug}_main_{i}.svg.folded")
-        cur_folded = yatest.common.output_path(f"{slug}_current_{i}.svg.folded")
+        base_folded = yatest.common.work_path(f"{slug}_main_{i}.svg.folded")
+        cur_folded = yatest.common.work_path(f"{slug}_current_{i}.svg.folded")
         if not (os.path.isfile(base_folded) and os.path.isfile(cur_folded)):
             return
         log_file = yatest.common.output_path(f"{slug}_diff_{i}.log")

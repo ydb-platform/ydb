@@ -128,7 +128,9 @@ jobs:
         if: always()
         run: |
           RESULTS_DIR=ydb/tests/stress/compare_index_performance/tests/test-results
-          REPORTS=$(find "$RESULTS_DIR" -name 'report_*.md' -path "*/testing_out_stuff/*" 2>/dev/null | sort)
+          # `test-results` and the files under it are ya-build symlinks, so find
+          # must follow symlinks (-L) — otherwise it never descends into them.
+          REPORTS=$(find -L "$RESULTS_DIR" -name 'report_*.md' -path "*/testing_out_stuff/*" 2>/dev/null | sort)
           if [[ -n "$REPORTS" ]]; then
             for r in $REPORTS; do
               cat "$r" >> "$GITHUB_STEP_SUMMARY"
@@ -140,7 +142,7 @@ jobs:
 
           # Flamegraphs can't render inline in the job summary (GitHub does not
           # display SVGs from the workspace); list them and point at the artifact.
-          SVGS=$(find "$RESULTS_DIR" -name '*.svg' -path "*/testing_out_stuff/*" 2>/dev/null | sort)
+          SVGS=$(find -L "$RESULTS_DIR" -name '*.svg' -path "*/testing_out_stuff/*" 2>/dev/null | sort)
           if [[ -n "$SVGS" ]]; then
             {
               echo "## Flamegraphs"

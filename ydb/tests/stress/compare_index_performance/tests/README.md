@@ -147,7 +147,7 @@ ydb/tests/stress/compare_index_performance/tests/test-results/py3test/testing_ou
 | `<workload>_main_<i>.log`, `<workload>_current_<i>.log` | workload stdout (the `Total ... Txs/Sec` line is parsed from here); `.err` = stderr |
 | `<workload>_<side>_<i>.svg` | per-side CPU flamegraph (when enabled) |
 | `<workload>_diff_<i>.svg`, `<workload>_diff_before_<i>.svg` | differential flamegraphs (when enabled) |
-| `<workload>_<side>_<i>.svg.perf.{data,log}` | raw `perf record` capture + perf tooling log |
+| `<workload>_<side>_<i>.svg.perf.log` | perf tooling log (the raw `perf.data` capture stays in the work dir, not published) |
 | `ydbd-<ref>-<preset>` | cached S3-downloaded baseline/current binary |
 
 Example report:

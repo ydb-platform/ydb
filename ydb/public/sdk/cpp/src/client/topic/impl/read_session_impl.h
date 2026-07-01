@@ -1383,7 +1383,7 @@ private:
 
     bool GetRangesMode() const;
 
-    void CallCloseCallbackImpl();
+    void CallCloseCallbackImpl(TDeferredActions<UseMigrationProtocol>* deferred = nullptr);
 
     void UpdateMemoryUsageStatisticsImpl();
     void UpdateReadSizeBudgetCounter(i64 value);

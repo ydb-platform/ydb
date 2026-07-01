@@ -492,6 +492,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::BreakConnectionAndReco
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext) {
+    TDeferredActions<UseMigrationProtocol> deferred;
     {
         std::lock_guard guard(Lock);
         if (ConnectTimeoutContext == connectTimeoutContext) {
@@ -501,7 +502,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnectTimeout(const
             ConnectDelayContext = nullptr;
 
             if (Closing || Aborting) {
-                CallCloseCallbackImpl();
+                CallCloseCallbackImpl(&deferred);
                 return;
             }
         } else {
@@ -530,7 +531,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnConnect(
             ConnectDelayContext = nullptr;
 
             if (Closing || Aborting) {
-                CallCloseCallbackImpl();
+                CallCloseCallbackImpl(&deferred);
                 return;
             }
 
@@ -968,7 +969,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::ReadFromProcessorImpl(
     }
     if (Closing && !HasCommitsInflightImpl()) {
         Processor->Cancel();
-        CallCloseCallbackImpl();
+        CallCloseCallbackImpl(&deferred);
         return;
     }
 
@@ -2054,11 +2055,11 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Close(std::function<vo
         Cancel(ConnectDelayContext);
 
         if (!Processor) {
-            CallCloseCallbackImpl();
+            CallCloseCallbackImpl(&deferred);
         } else {
             if (!HasCommitsInflightImpl()) {
                 Processor->Cancel();
-                CallCloseCallbackImpl();
+                CallCloseCallbackImpl(&deferred);
             }
         }
     }
@@ -2067,14 +2068,18 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Close(std::function<vo
 }
 
 template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CallCloseCallbackImpl() {
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CallCloseCallbackImpl(TDeferredActions<UseMigrationProtocol>* deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     if (CloseCallback) {
         CloseCallback();
         CloseCallback = {};
     }
-    AbortImpl();
+    if (!Aborting) {
+        AbortImpl(deferred);
+    } else if (deferred) {
+        CleanupDecompressionQueueImpl(*deferred);
+    }
 }
 
 template<bool UseMigrationProtocol>

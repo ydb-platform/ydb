@@ -21,6 +21,8 @@
 
 #include <util/folder/dirut.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NActorsServices::TEST
+
 using namespace NKikimr;
 
 //////////////////////////////////////////////////////////////////////////////////////
@@ -389,7 +391,7 @@ void TConfiguration::Prepare(IVDiskSetup *vdiskSetup, bool newPDisks, bool runRe
 
     ActorSystem1->Start();
     Monitoring->Start(ActorSystem1.get());
-    LOG_NOTICE(*ActorSystem1, NActorsServices::TEST, "Actor system started");
+    YDB_LOG_NOTICE_CTX(*ActorSystem1, "Actor system started");
 
 }
 
@@ -423,7 +425,8 @@ class TDbInitWaitActor : public TActorBootstrapped<TDbInitWaitActor> {
     }
 
     void Finish(const TActorContext &ctx, bool ok) {
-        LOG_NOTICE(ctx, NActorsServices::TEST, "%s", (ok ? "DB IS READY" : "DB INIT TIMEOUT"));
+        YDB_LOG_NOTICE_CTX(ctx, "TDBInitWaitActor finish",
+            {"dbStatus", (ok ? "DB IS READY" : "DB INIT TIMEOUT")});
         Conf->DbInitEvent.Signal();
         Die(ctx);
     }

@@ -13,6 +13,8 @@ private:
 
     std::shared_ptr<NOlap::NImport::TImportTask> ImportTask;
     bool TaskExists = false;
+    bool TaskStarted = false;
+    bool TaskCompleted = false;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAddTask;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxRemove;
     std::unique_ptr<NTabletFlatExecutor::ITransaction> TxAbort;
@@ -23,16 +25,22 @@ private:
     virtual TTxController::TProposeResult DoStartProposeOnExecute(TColumnShard& owner, NTabletFlatExecutor::TTransactionContext& txc) override;
     virtual void DoStartProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override;
     virtual void DoFinishProposeOnExecute(TColumnShard& /*owner*/, NTabletFlatExecutor::TTransactionContext& /*txc*/) override;
-    virtual void DoFinishProposeOnComplete(TColumnShard& /*owner*/, const TActorContext& /*ctx*/) override;
+    virtual void DoFinishProposeOnComplete(TColumnShard& owner, const TActorContext& ctx) override;
     virtual TString DoGetOpType() const override;
     virtual bool DoIsAsync() const override;
     virtual bool DoParse(TColumnShard& owner, const TString& data) override;
     virtual TString DoDebugString() const override;
+    virtual bool DoIsInProgress() const override;
+    virtual void DoOnTabletInit(TColumnShard& owner) override;
+    virtual std::unique_ptr<NTabletFlatExecutor::ITransaction> DoBuildTxPrepareForProgress(TColumnShard* owner) const override;
 
     virtual void RegisterSubscriber(const TActorId& actorId) override;
+    virtual void OnBackgroundTaskCompleted() override;
 
 public:
     using TBase::TBase;
+
+    void StartTask(const TActorContext& ctx);
 
     virtual bool ProgressOnExecute(TColumnShard& owner, const NOlap::TSnapshot& version, NTabletFlatExecutor::TTransactionContext& txc) override;
 

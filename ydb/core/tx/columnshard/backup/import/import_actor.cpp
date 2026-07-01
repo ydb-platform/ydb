@@ -9,7 +9,7 @@
 
 namespace NKikimr::NOlap::NImport {
 
-class TTxProposeFinish: public NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard> {
+class TTxRestoreTaskCompleted: public NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard> {
 private:
     using TBase = NTabletFlatExecutor::TTransactionBase<NColumnShard::TColumnShard>;
     const ui64 TxId;
@@ -17,18 +17,21 @@ private:
     const ui64 TxInternalId;
 
 protected:
-    virtual bool Execute(NTabletFlatExecutor::TTransactionContext& txc, const TActorContext& /*ctx*/) override {
-        Self->GetProgressTxController().FinishProposeOnExecute(TxId, txc);
+    virtual bool Execute(NTabletFlatExecutor::TTransactionContext& /*txc*/, const TActorContext& /*ctx*/) override {
         return true;
     }
 
     virtual void Complete(const TActorContext& ctx) override {
         ctx.Send(ProgressActorId, new NBackground::TEvLocalTransactionCompleted(TxInternalId));
-        Self->GetProgressTxController().FinishProposeOnComplete(TxId, ctx);
+        auto op = Self->GetProgressTxController().GetTxOperatorOptional(TxId);
+        if (op) {
+            op->OnBackgroundTaskCompleted();
+        }
+        Self->EnqueueProgressTx(ctx, TxId);
     }
 
 public:
-    TTxProposeFinish(NColumnShard::TColumnShard* self, const ui64 txId, const NActors::TActorId& progressActorId, const ui64 txInternalId)
+    TTxRestoreTaskCompleted(NColumnShard::TColumnShard* self, const ui64 txId, const NActors::TActorId& progressActorId, const ui64 txInternalId)
         : TBase(self)
         , TxId(txId)
         , ProgressActorId(progressActorId)
@@ -110,7 +113,7 @@ void TImportActor::OnSessionStateSaved() {
     AFL_VERIFY(ImportSession->IsFinished() || ImportSession->IsReadyForRemoveOnFinished());
     NYDBTest::TControllers::GetColumnShardController()->OnImportFinished();
     if (ImportSession->GetTxId()) {
-        ExecuteTransaction(std::make_unique<TTxProposeFinish>(
+        ExecuteTransaction(std::make_unique<TTxRestoreTaskCompleted>(
             GetShardVerified<NColumnShard::TColumnShard>(), *ImportSession->GetTxId(), SelfId(), GetNextTxId()));
     } else {
         Session->FinishActor();

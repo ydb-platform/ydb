@@ -439,6 +439,9 @@ public:
             AFL_VERIFY(false)("message", "Not implemented");
         };
 
+        virtual void OnBackgroundTaskCompleted() {
+        }
+
         void OnTabletInit(TColumnShard& owner) {
             AFL_VERIFY(!StartedAsync);
             StartedAsync = true;

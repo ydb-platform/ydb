@@ -684,6 +684,8 @@ message TCompactionLevelConstructorContainer {
         optional uint64 Concurrency = 6;
         optional uint64 CompactionTaskMemoryLimit = 7;
         optional uint64 CompactionTaskPortionsCountLimit = 8;
+        optional bool CompactAtLevel = 9 [default = false];
+        optional uint64 SkipLevelMinBlobSize = 10;
     }
 
     message TOneLayer {
@@ -774,11 +776,17 @@ message TMetadataManagerConstructorContainer {
     }
 }
 
+message TInsertOptions {
+    optional bool BuildIndexesEnabled = 1 [default = false];
+    optional uint64 BuildIndexesMinBlobBytes = 2 [default = 0];
+}
+
 message TColumnTableSchemeOptions {
     optional bool SchemeNeedActualization = 1 [default = false];
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
+    optional TInsertOptions InsertOptions = 6;
 }
 
 message TColumnTableSchema {
@@ -824,6 +832,7 @@ message TColumnTableRequestedOptions {
     optional TCompactionPlannerConstructorContainer CompactionPlannerConstructor = 3;
     optional TMetadataManagerConstructorContainer MetadataManagerConstructor = 4;
     optional string ScanReaderPolicyName = 5;
+    optional TInsertOptions InsertOptions = 6;
 }
 
 message TAlterColumnTableSchema {

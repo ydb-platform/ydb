@@ -598,6 +598,7 @@ void TStorage::TMessageGroups::UpdateLockedMaps(const TLockedGroup& locked, ui32
         auto [uIt, uIns] = UnlockedMessageGroupsId.insert(messageGroupIdHash);
         if (uIns) {
             const TIntrusiveListItem<TOrderedMessageGroupIdHash>& pc = *uIt;
+            // the base class cannot be declared as mutable
             TIntrusiveListItem<TOrderedMessageGroupIdHash>& p = const_cast<TIntrusiveListItem<TOrderedMessageGroupIdHash>&>(pc);
             UnlockedMessageGroupsIdViewOrder.PushBack(&p);
         }

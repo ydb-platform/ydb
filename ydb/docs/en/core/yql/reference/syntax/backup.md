@@ -77,4 +77,4 @@ ydb operation get <operation-id>
 * [CREATE BACKUP COLLECTION](create-backup-collection.md).
 * [RESTORE](restore-backup-collection.md).
 * [DROP BACKUP COLLECTION](drop-backup-collection.md).
-* [Backup and recovery guide](../../../devops/backup-and-recovery.md).
+* [Backup and recovery guide](../../../devops/backup-and-recovery/index.md).

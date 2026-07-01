@@ -122,8 +122,7 @@ The number of stored backups on a host is limited in the [configuration](../refe
 - [Backup and restore](../devops/backup-and-recovery/index.md) — practical guide
 - [Backup collections](datamodel/backup-collection.md) — architecture and limitations
 - [Recipes for backing up system tablets](../recipes/system-tablet-backup/index.md) — enabling and restoring
-- [Backup and restore](../devops/backup-and-recovery/index.md) — practical guide
-- [export/import reference](../reference/ydb-cli/export-import/index.md) — CLI commands
+- [Export/import reference](../reference/ydb-cli/export-import/index.md) — CLI commands
 - YQL reference:
 
   - [`CREATE BACKUP COLLECTION`](../yql/reference/syntax/create-backup-collection.md)

@@ -4,7 +4,7 @@ A backup collection organizes full and incremental backups of selected [row-orie
 
 {% note info %}
 
-For practical instructions on creating and managing backup collections, see the [Backup and Recovery guide](../../devops/backup-and-recovery.md#backup-collections).
+For practical instructions on creating and managing backup collections, see the [Backup and Recovery guide](../../devops/backup-and-recovery/index.md#backup-collections).
 
 {% endnote %}
 
@@ -170,7 +170,7 @@ During the restore operation, target tables are unavailable for modifications. P
 ## See Also
 
 - [Backup concepts](../backup.md): Overview of all backup approaches in {{ ydb-short-name }}
-- [Backup and Recovery guide](../../devops/backup-and-recovery.md#backup-collections): Practical operations guide
+- [Backup and Recovery guide](../../devops/backup-and-recovery/index.md#backup-collections): Practical operations guide
 - [Recipes and examples](../../recipes/backup-collections/index.md): Common scenarios and examples
 - YQL reference:
   - [CREATE BACKUP COLLECTION](../../yql/reference/syntax/create-backup-collection.md)

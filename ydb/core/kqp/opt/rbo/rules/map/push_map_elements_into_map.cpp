@@ -29,14 +29,6 @@ namespace {
 
 using TRenameMap = THashMap<TInfoUnit, TInfoUnit, TInfoUnit::THashFunction>;
 
-bool IsTransparentFor(
-    const TOpMap& map,
-    const TInfoUnitSet& renameSources,
-    const TInfoUnit& iu)
-{
-    return !map.HasOutputElement(iu) && !renameSources.contains(iu);
-}
-
 bool HasResidualRenameFromChangedName(
     const TVector<TMapElement>& elements,
     const TVector<bool>& pushedRenames,
@@ -78,7 +70,6 @@ TPushMapElementsIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
 
     auto bottomMap = CastOperator<TOpMap>(topMap->GetInput());
     const auto bottomInputIUs = bottomMap->GetInput()->GetOutputIUs();
-    const auto bottomRenameSources = bottomMap->GetRenameSources();
     auto bottomElements = bottomMap->MapElements;
 
     TVector<bool> pushedRenames(topMap->MapElements.size(), false);
@@ -89,7 +80,7 @@ TPushMapElementsIntoMapRule::SimpleMatchAndApply(const TIntrusivePtr<IOperator>&
         const auto& mapElement = topMap->MapElements[idx];
         if (!mapElement.IsRename() ||
             !mapElement.DependsOnlyOn(bottomInputIUs) ||
-            !IsTransparentFor(*bottomMap, bottomRenameSources, mapElement.GetRename())) {
+            bottomMap->HasOutputElement(mapElement.GetRename())) {
             continue;
         }
 

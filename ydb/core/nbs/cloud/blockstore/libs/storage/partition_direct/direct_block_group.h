@@ -43,12 +43,7 @@ struct TDBGWriteBlocksToManyPBuffersResponse
         NProto::TError Error;
     };
 
-    static TDBGWriteBlocksToManyPBuffersResponse MakeOverallError(
-        EWellKnownResultCodes code,
-        TString reason);
-
     TVector<TSinglePersistentBufferResult> Responses;
-    NProto::TError OverallError;
 };
 
 struct TDBGFlushResponse
@@ -170,7 +165,7 @@ public:
     virtual void WriteBlocksToManyPBuffers(
         ui32 vChunkIndex,
         THostIndex coordinatorHostIndex,
-        TVector<THostIndex> hostIndexes,
+        THostMask hostIndexes,
         ui64 lsn,
         TBlockRange64 range,
         TDuration replyTimeout,

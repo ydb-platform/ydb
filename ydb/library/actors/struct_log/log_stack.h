@@ -11,7 +11,7 @@ public:
     static TStructuredMessage& GetTop();
     static void Push(const TMaybe<NActors::NLog::EComponent>& component = {});
     static void Pop();
-    static NActors::NLog::EComponent GetComponent(NActors::NLog::EComponent defaultComponent);
+    static NActors::NLog::EComponent GetComponent(NActors::NLog::EComponent defaultComponent = 0);
 
     class TLogGuard {
     public:

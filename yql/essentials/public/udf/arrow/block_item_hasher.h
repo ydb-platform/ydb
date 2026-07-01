@@ -2,6 +2,8 @@
 
 #include "block_item.h"
 
+#include <arrow/type.h>
+
 #include <yql/essentials/public/udf/udf_ptr.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
 #include <yql/essentials/public/udf/udf_type_ops.h>
@@ -58,15 +60,6 @@ public:
     }
 };
 
-template <bool Nullable>
-class TFixedSizeBlockItemHasher<TGUID, Nullable>: public TBlockItemHasherBase<TFixedSizeBlockItemHasher<TGUID, Nullable>, Nullable> {
-public:
-    ui64 DoHash(TBlockItem value) const {
-        const auto ref = value.AsStringRef();
-        return CityHash64(ref.Data(), ref.Size());
-    }
-};
-
 template <typename T, bool Nullable>
 class TTzDateBlockItemHasher: public TBlockItemHasherBase<TTzDateBlockItemHasher<T, Nullable>, Nullable> {
 public:
@@ -84,6 +77,10 @@ public:
     ui64 DoHash(TBlockItem value) const {
         return GetStringHash(value.AsStringRef());
     }
+};
+
+template <bool Nullable>
+class TFixedSizeBlockItemHasher<TGUID, Nullable>: public TStringBlockItemHasher<arrow::BinaryType, Nullable> {
 };
 
 class TSingularTypeBlockItemHaser: public TBlockItemHasherBase<TSingularTypeBlockItemHaser, /*Nullable=*/false> {

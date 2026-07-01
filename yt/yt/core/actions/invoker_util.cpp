@@ -180,7 +180,7 @@ TClosure MakeGuardedCallback(
         bool Run_ = false;
     };
 
-    return BIND(
+    return BIND_NO_PROPAGATE(
         &TGuard::Run,
         New<TGuard>(std::move(onSuccess), std::move(onCancel)));
 }

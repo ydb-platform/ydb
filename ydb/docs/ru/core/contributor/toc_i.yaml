@@ -5,6 +5,8 @@ items:
   href: build-ya.md
 - name: Релизы
   href: manage-releases.md
+- name: Тестирование релизов и трекинг багов
+  href: release-testing.md
 - name: Документация
   href: documentation/index.md
   include:

@@ -81,7 +81,7 @@ protected:
     THashMap<TString, TString> TopicMapping_;
     THolder<NFq::NConfig::TConfig> FqConfig_;
 
-    ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory_;
+    IStructuredTokenCredentialsFactory::TPtr CredentialsFactory_;
     TMaybe<NYdb::TDriver> Driver_;
     NFile::TYtFileServices::TPtr YtFileServices_;
     IHTTPGateway::TPtr HttpGateway_;

@@ -40,12 +40,12 @@
 #include <util/string/cast.h>
 
 namespace NYql {
-
-NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, const IPqGateway::TPtr& pqGateway) {
+namespace {
+NDq::IDqAsyncIoFactory::TPtr CreateAsyncIoFactory(const NYdb::TDriver& driver, IStructuredTokenCredentialsFactory::TPtr credentialsFactory, const IPqGateway::TPtr& pqGateway) {
     auto factory = MakeIntrusive<NYql::NDq::TDqAsyncIoFactory>();
-    RegisterDqPqReadActorFactory(*factory, driver, nullptr, pqGateway);
+    RegisterDqPqReadActorFactory(*factory, driver, credentialsFactory, pqGateway);
 
-    RegisterDqPqWriteActorFactory(*factory, driver, nullptr, pqGateway);
+    RegisterDqPqWriteActorFactory(*factory, driver, credentialsFactory, pqGateway);
     return factory;
 }
 
@@ -97,7 +97,7 @@ bool RunPqProgram(
 
     auto functionRegistry = NKikimr::NMiniKQL::CreateFunctionRegistry(NKikimr::NMiniKQL::CreateBuiltinRegistry())->Clone();
     TVector<TDataProviderInitializer> dataProvidersInit;
-
+    auto credentialsFactory = NYql::CreateStructuredTokenCredentialsFactory();
     // pq
     auto pqGateway = MakeIntrusive<TDummyPqGateway>();
     pqGateway->AddDummyTopic(TDummyTopic("lb", "my_in_topic"));
@@ -106,7 +106,7 @@ bool RunPqProgram(
 
     // solomon
     auto solomonGateway = CreateSolomonGateway(gatewaysConfig.GetSolomon());
-    dataProvidersInit.push_back(GetSolomonDataProviderInitializer(std::move(solomonGateway)));
+    dataProvidersInit.push_back(GetSolomonDataProviderInitializer(std::move(solomonGateway), credentialsFactory));
 
     // dq
     auto dqCompFactory = NKikimr::NMiniKQL::GetCompositeWithBuiltinFactory({
@@ -120,7 +120,7 @@ bool RunPqProgram(
 
     const auto driverConfig = NYdb::TDriverConfig().SetLog(std::unique_ptr<TLogBackend>(CreateLogBackend("cerr").Release()));
     NYdb::TDriver driver(driverConfig);
-    auto dqGateway = CreateLocalDqGateway(functionRegistry.Get(), dqCompFactory, dqTaskTransformFactory, {}, false/*spilling*/, CreateAsyncIoFactory(driver, pqGateway));
+    auto dqGateway = CreateLocalDqGateway(functionRegistry.Get(), dqCompFactory, dqTaskTransformFactory, {}, false/*spilling*/, CreateAsyncIoFactory(driver, credentialsFactory, pqGateway));
 
     auto storage = NYql::CreateAsyncFileStorage({});
     dataProvidersInit.push_back(NYql::GetDqDataProviderInitializer(&CreateDqExecTransformer, dqGateway, dqCompFactory, {}, storage));
@@ -183,6 +183,7 @@ bool RunPqProgram(
 
     Cerr << "Done." << Endl;
     return true;
+}
 }
 
 Y_UNIT_TEST_SUITE(YqlPqSimpleTests) {

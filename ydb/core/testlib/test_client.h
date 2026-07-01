@@ -43,6 +43,7 @@
 #include <ydb/core/fq/libs/shared_resources/interface/shared_resources.h>
 #include <ydb/core/http_proxy/auth_factory.h>
 #include <ydb/library/accessor/accessor.h>
+#include <ydb/library/yql/providers/common/token_accessor/client/factory.h>
 #include <ydb/library/yql/providers/s3/actors_factory/yql_s3_actors_factory.h>
 
 #include <ydb/library/grpc/server/grpc_server.h>
@@ -177,7 +178,7 @@ namespace Tests {
         NKqp::IKqpFederatedQuerySetupFactory::TPtr FederatedQuerySetupFactory = std::make_shared<NKqp::TKqpFederatedQuerySetupFactoryNoop>();
         NSecret::IDescribeSchemaSecretsServiceFactory::TPtr DescribeSchemaSecretsServiceFactory = std::make_shared<NSecret::TDescribeSchemaSecretsServiceFactory>();
         std::shared_ptr<NKqp::IQueryReplayBackendFactory> QueryReplayBackendFactory;
-        NYql::ISecuredServiceAccountCredentialsFactory::TPtr CredentialsFactory;
+        NYql::IStructuredTokenCredentialsFactory::TPtr CredentialsFactory = NYql::CreateStructuredTokenCredentialsFactory();
         NMiniKQL::TComputationNodeFactory ComputationFactory;
         NYql::IYtGateway::TPtr YtGateway;
         NYql::IPqGateway::TPtr PqGateway;
@@ -246,7 +247,7 @@ namespace Tests {
         TServerSettings& SetFederatedQuerySetupFactory(NKqp::IKqpFederatedQuerySetupFactory::TPtr value) { FederatedQuerySetupFactory = value; return *this; }
         TServerSettings& SetDescribeSchemaSecretsServiceFactory(NSecret::IDescribeSchemaSecretsServiceFactory::TPtr value) { DescribeSchemaSecretsServiceFactory = value; return *this; }
         TServerSettings& SetQueryReplayBackendFactory(std::shared_ptr<NKqp::IQueryReplayBackendFactory> value) { QueryReplayBackendFactory = std::move(value); return *this; }
-        TServerSettings& SetCredentialsFactory(NYql::ISecuredServiceAccountCredentialsFactory::TPtr credentialsFactory) { CredentialsFactory = std::move(credentialsFactory); return *this; }
+        TServerSettings& SetCredentialsFactory(NYql::IStructuredTokenCredentialsFactory::TPtr credentialsFactory) { CredentialsFactory = std::move(credentialsFactory); return *this; }
         TServerSettings& SetComputationFactory(NMiniKQL::TComputationNodeFactory computationFactory) { ComputationFactory = std::move(computationFactory); return *this; }
         TServerSettings& SetYtGateway(NYql::IYtGateway::TPtr ytGateway) { YtGateway = std::move(ytGateway); return *this; }
         TServerSettings& SetPqGateway(NYql::IPqGateway::TPtr pqGateway) { PqGateway = std::move(pqGateway); return *this; }

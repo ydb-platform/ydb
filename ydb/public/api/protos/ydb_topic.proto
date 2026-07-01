@@ -801,11 +801,11 @@ message CommitOffsetResult {
 
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// CommitTopicOffset
+// ResetOffset
 
 
-// Commit topic offset request sent from client to server.
-message CommitTopicOffsetRequest {
+// Reset offset request sent from client to server.
+message ResetOffsetRequest {
     Ydb.Operations.OperationParams operation_params = 1;
 
     // Topic path.
@@ -827,14 +827,14 @@ message CommitTopicOffsetRequest {
     }
 }
 
-// Commit topic offset response sent from server to client.
-message CommitTopicOffsetResponse {
+// Reset offset response sent from server to client.
+message ResetOffsetResponse {
     // Result of request will be inside operation.
     Ydb.Operations.Operation operation = 1;
 }
 
-// Commit offset result message inside CommitTopicOffsetResponse.operation.
-message CommitTopicOffsetResult {
+// Reset offset result message inside ResetOffsetResponse.operation.
+message ResetOffsetResult {
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

@@ -70,7 +70,9 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
     }
 
     void Sync(const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::TX_COORDINATOR_PRIVATE, "[%" PRIu64 "] to [%" PRIu64 "] sync", Coordinator, Mediator);
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_COORDINATOR_PRIVATE, "to sync",
+            {"coordinator", Coordinator},
+            {"mediator", Mediator});
 
         if (PipeClient) {
             NTabletPipe::CloseClient(ctx, PipeClient);
@@ -79,18 +81,25 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
         PipeClient = ctx.RegisterWithSameMailbox(NTabletPipe::CreateClient(ctx.SelfID, Mediator, MediatorSyncRetryPolicy));
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " tablet# " << Coordinator << " SEND EvCoordinatorSync to# " << Mediator << " Mediator");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "SEND EvCoordinatorSync Mediator",
+            {"actor", ctx.SelfID},
+            {"tablet", Coordinator},
+            {"to", Mediator});
         NTabletPipe::SendData(ctx, PipeClient, new TEvTxCoordinator::TEvCoordinatorSync(++GenCookie, Mediator, Coordinator));
         Become(&TThis::StateSync);
         Active = false;
     }
 
     void SendStep(const TMediatorStep &step, const TActorContext &ctx) {
-        LOG_DEBUG(ctx, NKikimrServices::TX_COORDINATOR_PRIVATE, "[%" PRIu64 "] to [%" PRIu64 "], step [%" PRIu64 "]", Coordinator, Mediator, step.Step);
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_COORDINATOR_PRIVATE, "to step",
+            {"coordinator", Coordinator},
+            {"mediator", Mediator},
+            {"step", step.Step});
 
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " tablet# " << Coordinator << " SEND to# " << Mediator << " Mediator TEvCoordinatorStep");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "SEND Mediator TEvCoordinatorStep",
+            {"actor", ctx.SelfID},
+            {"tablet", Coordinator},
+            {"to", Mediator});
         auto msg = std::make_unique<TEvTxCoordinator::TEvCoordinatorStep>(
             step.Step, PrevStep, Mediator, Coordinator, CoordinatorGeneration);
         step.SerializeTo(msg.get());
@@ -100,9 +109,10 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
     void SendConfirmations(const TActorContext &ctx) {
         if (Confirmations) {
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-                << " tablet# " << Coordinator << " SEND EvMediatorQueueConfirmations to# " << Owner.ToString()
-                << " Owner");
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "SEND EvMediatorQueueConfirmations Owner",
+                {"actor", ctx.SelfID},
+                {"tablet", Coordinator},
+                {"to", Owner});
             ctx.Send(Owner, new TEvMediatorQueueConfirmations(std::move(Confirmations)));
             ConfirmedParticipants = 0;
             ConfirmedSteps = 0;
@@ -142,9 +152,10 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
     void Handle(TEvTxCoordinator::TEvCoordinatorSyncResult::TPtr &ev, const TActorContext &ctx) {
         TEvTxCoordinator::TEvCoordinatorSyncResult *msg = ev->Get();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " tablet# " << Coordinator << " HANDLE EvCoordinatorSyncResult Status# "
-            << NKikimrProto::EReplyStatus_Name(msg->Record.GetStatus()));
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "HANDLE EvCoordinatorSyncResult",
+            {"actor", ctx.SelfID},
+            {"tablet", Coordinator},
+            {"status", NKikimrProto::EReplyStatus_Name(msg->Record.GetStatus())});
 
         if (msg->Record.GetCookie() != GenCookie)
             return;
@@ -153,8 +164,10 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
             return Sync(ctx);
 
         PrevStep = 0;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " tablet# " << Coordinator << " SEND EvMediatorQueueRestart to# " << Owner.ToString() << " Owner");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "SEND EvMediatorQueueRestart Owner",
+            {"actor", ctx.SelfID},
+            {"tablet", Coordinator},
+            {"to", Owner});
         ctx.Send(Owner, new TEvMediatorQueueRestart(Mediator, 0, ++GenCookie));
 
         Become(&TThis::StateWork);
@@ -172,8 +185,9 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
         while (!msg->Steps.empty()) {
             auto it = msg->Steps.begin();
-            LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-                << " HANDLE EvMediatorQueueStep step# " << it->Step);
+            YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "HANDLE EvMediatorQueueStep",
+                {"actor", ctx.SelfID},
+                {"step", it->Step});
 
             // Remove the last empty step (empty steps except the last one are not needed)
             if (!Queue.empty() && Queue.back().Transactions.empty()) {
@@ -206,8 +220,9 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
     void Handle(TEvTabletPipe::TEvClientConnected::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientConnected *msg = ev->Get();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " HANDLE EvClientConnected Status# " << NKikimrProto::EReplyStatus_Name(msg->Status));
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "HANDLE EvClientConnected",
+            {"actor", ctx.SelfID},
+            {"status", NKikimrProto::EReplyStatus_Name(msg->Status)});
 
         if (msg->ClientId != PipeClient)
             return;
@@ -220,22 +235,24 @@ class TTxCoordinatorMediatorQueue : public TActorBootstrapped<TTxCoordinatorMedi
 
     void Handle(TEvTabletPipe::TEvClientDestroyed::TPtr &ev, const TActorContext &ctx) {
         TEvTabletPipe::TEvClientDestroyed *msg = ev->Get();
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " HANDLE EvClientDestroyed");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "HANDLE EvClientDestroyed",
+            {"actor", ctx.SelfID});
         if (msg->ClientId != PipeClient)
             return;
         Active = false;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " tablet# " <<  Coordinator << " SEND EvMediatorQueueStop to# " << Owner.ToString()
-            << " Owner Mediator# " << Mediator);
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "SEND EvMediatorQueueStop Owner",
+            {"actor", ctx.SelfID},
+            {"tablet", Coordinator},
+            {"to", Owner},
+            {"mediator", Mediator});
         ctx.Send(Owner, new TEvMediatorQueueStop(Mediator));
         Sync(ctx);
     }
 
     void Handle(TEvTxProcessing::TEvPlanStepAck::TPtr &ev, const TActorContext &ctx) {
         const NKikimrTx::TEvPlanStepAck &record = ev->Get()->Record;
-        LOG_DEBUG_S(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "Actor# " << ctx.SelfID.ToString()
-            << " HANDLE EvPlanStepAck");
+        YDB_LOG_DEBUG_CTX_COMP(ctx, NKikimrServices::TX_COORDINATOR_MEDIATOR_QUEUE, "HANDLE EvPlanStepAck",
+            {"actor", ctx.SelfID});
 
         bool firstConfirmed = false;
 

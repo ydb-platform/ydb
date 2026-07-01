@@ -3197,7 +3197,7 @@ public:
         bool noPrefix = (lowerCluster == "pg_catalog" || lowerCluster == "information_schema");
         TString tableName = noPrefix ? to_lower(TString(relname)) : TablePathPrefix_ + relname;
         return L(A("Key"), QL(QA(isScheme ? "tablescheme" : "table"),
-                              L(A("String"), QAX(std::move(tableName)))));
+                              L(A("String"), QAX(tableName))));
     }
 
     TReadWriteKeyExprs ParseQualifiedRelationName(const TStringBuf catalogname,
@@ -3223,7 +3223,7 @@ public:
         bool noPrefix = (objectType == "pgIndex");
         TString name = noPrefix ? TString(objectName) : TablePathPrefix_ + TString(objectName);
         return L(A("Key"), QL(QA("pgObject"),
-                              L(A("String"), QAX(std::move(name))),
+                              L(A("String"), QAX(name)),
                               L(A("String"), QA(objectType))));
     }
 

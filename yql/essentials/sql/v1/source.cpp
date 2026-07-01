@@ -746,7 +746,7 @@ TNodePtr BuildFrameNode(const TFrameBound& frame, EFrameType frameType) {
             }
             settings.push_back(std::move(node));
         }
-        return BuildTuple(pos, std::move(settings));
+        return BuildTuple(pos, settings);
     }
 
     // TODO: switch FrameByRows to common format above

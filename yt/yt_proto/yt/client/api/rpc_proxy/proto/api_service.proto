@@ -1086,17 +1086,19 @@ message TReqModifyRows
     required NYT.NProto.TGuid transaction_id = 1;
     required bytes path = 2; // YPath
     repeated ERowModificationType row_modification_types = 3;
-    // COMPAT(lukyan): Remove after RPC protocol version update
+
+    // COMPAT(lukyan): Remove after RPC protocol version update.
+    // NB: Cannot represent pure exclusive locks.
     repeated uint32 row_legacy_read_locks = 7;
-    // COMPAT(ponasenko-rs): Remove after RPC protocol version update
+    // COMPAT(ponasenko-rs): Remove after RPC protocol version update.
+    // NB: Cannot represent lock types beyond None, SharedWeak, SharedStrong and Exclusive.
     repeated uint64 row_legacy_locks = 8;
+    repeated NYT.NTabletClient.NProto.TLockMask row_locks = 11;
 
     optional bool require_sync_replica = 4;
     optional NYT.NProto.TGuid upstream_replica_id = 5;
 
     optional bool allow_missing_key_columns = 10;
-
-    repeated NYT.NTabletClient.NProto.TLockMask row_locks = 11;
 
     required TRowsetDescriptor rowset_descriptor = 200;
 }

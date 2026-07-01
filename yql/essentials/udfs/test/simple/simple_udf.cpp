@@ -180,7 +180,7 @@ public:
         TUnboxedValue* items = nullptr;
         auto result = valueBuilder->NewArray(Argc_, items);
         for (size_t i = 0; i < Argc_; ++i) {
-            items[i] = std::move(args[i]);
+            items[i] = args[i];
         }
         return result;
     }

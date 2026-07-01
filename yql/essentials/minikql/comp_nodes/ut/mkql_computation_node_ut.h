@@ -132,7 +132,7 @@ struct TSetup {
     void RenameCallable(TRuntimeNode pgm, TString originalName, TString newName) {
         const auto renameProvider = [originalName = std::move(originalName), newName = std::move(newName)](TInternName name) -> TCallableVisitFunc {
             if (name == originalName) {
-                return [name, newName = std::move(newName)](TCallable& callable, const TTypeEnvironment& env) {
+                return [name, newName = newName](TCallable& callable, const TTypeEnvironment& env) {
                     TCallableBuilder callableBuilder(env, newName,
                                                      callable.GetType()->GetReturnType(), false);
                     for (ui32 i = 0; i < callable.GetInputsCount(); ++i) {

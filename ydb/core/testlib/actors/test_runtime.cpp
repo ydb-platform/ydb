@@ -100,11 +100,6 @@ namespace NActors {
     }
 
     TTestActorRuntime::~TTestActorRuntime() {
-        if (!UseRealThreads) {
-            NKikimr::TAppData::RandomProvider = CreateDefaultRandomProvider();
-            NKikimr::TAppData::TimeProvider = CreateDefaultTimeProvider();
-        }
-
         SetObserverFunc(&TTestActorRuntimeBase::DefaultObserverFunc);
         SetScheduledEventsSelectorFunc(&CollapsedTimeScheduledEventsSelector);
         SetEventFilter(&TTestActorRuntimeBase::DefaultFilterFunc);
@@ -112,6 +107,14 @@ namespace NActors {
         SetRegistrationObserverFunc(&TTestActorRuntimeBase::DefaultRegistrationObserver);
 
         CleanupNodes();
+
+        // Reset global providers only after actor system threads are fully stopped
+        // (CleanupNodes stops the actor system), to avoid a data race where actor
+        // threads still read AppData()->RandomProvider while the main thread resets it.
+        if (!UseRealThreads) {
+            NKikimr::TAppData::RandomProvider = CreateDefaultRandomProvider();
+            NKikimr::TAppData::TimeProvider = CreateDefaultTimeProvider();
+        }
 
         App0 = nullptr;
         NKikimr::NJaegerTracing::ClearTracingControl();

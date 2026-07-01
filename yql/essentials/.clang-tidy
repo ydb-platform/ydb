@@ -358,7 +358,7 @@ Checks: >
   performance-inefficient-algorithm,
   -performance-inefficient-string-concatenation,
   -performance-inefficient-vector-operation,
-  -performance-move-const-arg,
+  performance-move-const-arg,
   -performance-move-constructor-init,
   -performance-no-automatic-move,
   -performance-no-int-to-ptr,
@@ -416,6 +416,8 @@ Checks: >
 CheckOptions:
   - key: modernize-avoid-c-arrays.AllowStringArrays
     value: true
+  - key: performance-move-const-arg.CheckTriviallyCopyableMove
+    value: false
   - key: readability-identifier-naming.StructPrefix
     value: T
   - key: readability-identifier-naming.EnumPrefix

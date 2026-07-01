@@ -990,6 +990,21 @@ TMkqlCommonCallableCompiler::TShared::TShared() {
         }
     });
 
+    AddCallable("BlockGuess", [](const TExprNode& node, TMkqlBuildContext& ctx) {
+        const auto blockVariantValue = MkqlBuildExpr(*node.Child(0), ctx);
+        bool isScalar;
+        const TTypeAnnotationNode* blockItemType = GetBlockItemType(*node.Child(0)->GetTypeAnn(), isScalar);
+        const TTypeAnnotationNode* variantItemType = blockItemType->GetKind() == ETypeAnnotationKind::Optional
+                                                         ? blockItemType->Cast<TOptionalExprType>()->GetItemType()
+                                                         : blockItemType;
+        const auto* variantType = variantItemType->Cast<TVariantExprType>();
+        if (variantType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
+            const auto alternativeIndex = FromString<ui32>(node.Child(1)->Content());
+            return ctx.ProgramBuilder.BlockGuess(blockVariantValue, alternativeIndex);
+        }
+        return ctx.ProgramBuilder.BlockGuess(blockVariantValue, node.Child(1)->Content());
+    });
+
     AddCallable("Visit", [](const TExprNode& node, TMkqlBuildContext& ctx) {
         const auto variantObj = MkqlBuildExpr(node.Head(), ctx);
         const auto type = node.Head().GetTypeAnn()->Cast<TVariantExprType>();

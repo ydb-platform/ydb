@@ -72,7 +72,7 @@ private:
                 Y(
                     "ToIndexDict",
                     BuildAtom(Pos_, VarDataName)),
-                BuildAtom(Pos_, std::move(varKeyName))),
+                BuildAtom(Pos_, varKeyName)),
             Q(Column_));
     }
 
@@ -237,7 +237,7 @@ private:
                 return false;
             }
             const auto pos = m.Callable->GetPos();
-            measureNames = L(measureNames, BuildQuotedAtom(m.Callable->GetPos(), std::move(m.Name)));
+            measureNames = L(measureNames, BuildQuotedAtom(m.Callable->GetPos(), m.Name));
             auto measuresVars = Y();
             auto measuresAggregates = Y();
             for (auto& [var, aggr] : ctx.GetMatchRecognizeAggregations()) {
@@ -248,7 +248,7 @@ private:
                 if (!result) {
                     return false;
                 }
-                measuresVars = L(measuresVars, BuildQuotedAtom(pos, std::move(var)));
+                measuresVars = L(measuresVars, BuildQuotedAtom(pos, var));
                 measuresAggregates = L(measuresAggregates, std::move(traits));
             }
             ctx.GetMatchRecognizeAggregations().clear();
@@ -378,7 +378,7 @@ TNodePtr BuildMatchRecognizeColumnAccess(TPosition pos, TString var, TString col
 
 TNodePtr BuildMatchRecognizeDefineAggregate(TPosition pos, TString name, TVector<TNodePtr> args) {
     const auto result = MakeIntrusive<TMatchRecognizeDefineAggregate>(pos, std::move(name), std::move(args));
-    return BuildMatchRecognizeVarAccess(pos, std::move(result));
+    return BuildMatchRecognizeVarAccess(pos, result);
 }
 
 TNodePtr BuildMatchRecognizeVarAccess(TPosition pos, TNodePtr extractor) {

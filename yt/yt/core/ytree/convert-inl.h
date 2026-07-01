@@ -19,6 +19,7 @@
 #include <yt/yt/core/yson/pull_parser_deserialize.h>
 
 #include <library/cpp/yt/misc/cast.h>
+#include <library/cpp/yt/string/stream.h>
 
 #include <type_traits>
 #include <limits>
@@ -37,8 +38,8 @@ template <class T>
 TYsonString ConvertToYsonString(const T& value, EYsonFormat format)
 {
     auto type = NYTree::GetYsonType(value);
-    TString result;
-    TStringOutput stringOutput(result);
+    std::string result;
+    TStdStringOutput stringOutput(result);
     NYTree::WriteYson(&stringOutput, value, type, format);
     return NYson::TYsonString(std::move(result), type);
 }
@@ -47,8 +48,8 @@ template <class T>
 TYsonString ConvertToYsonString(const T& value, EYsonFormat format, int indent)
 {
     auto type = NYTree::GetYsonType(value);
-    TString result;
-    TStringOutput stringOutput(result);
+    std::string result;
+    TStdStringOutput stringOutput(result);
     NYTree::WriteYson(&stringOutput, value, type, format, indent);
     return NYson::TYsonString(std::move(result), type);
 }

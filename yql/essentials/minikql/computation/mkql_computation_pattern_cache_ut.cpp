@@ -22,6 +22,7 @@ namespace NKikimr::NMiniKQL {
 
 using namespace NYql::NUdf;
 namespace {
+
 class TMockComputationPattern final: public IComputationPattern {
 public:
     explicit TMockComputationPattern(size_t codeSize)
@@ -52,6 +53,19 @@ private:
     const size_t Size_;
     bool Compiled_ = false;
 };
+
+TPatternCacheEntryPtr MakeMockEntry(size_t codeSize = 1) {
+    auto entry = std::make_shared<TPatternCacheEntry>();
+    entry->Pattern = MakeIntrusive<TMockComputationPattern>(codeSize);
+    return entry;
+}
+
+NYql::TRuntimeSettingsStableHash MakeStableHash(ui8 fill) {
+    NYql::TRuntimeSettingsStableHash hash;
+    constexpr size_t arbitraryLength = 12;
+    hash.resize(arbitraryLength, fill);
+    return hash;
+}
 
 } // namespace
 
@@ -453,7 +467,7 @@ void ParallelProgTest(T f, bool useLLVM, ui64 testResult, size_t vecSize = 10'00
         auto guard = entry->Env.BindAllocator();
         entry->Pattern = MakeComputationPattern(explorer, progReturn, {list}, opts);
     }
-    cache.EmplacePattern("a", entry);
+    cache.EmplacePattern(TProgramKey{NYql::UnknownLangVersion, {}, "a"}, entry);
     auto genData = [&]() {
         std::vector<ui64> data;
         data.reserve(vecSize);
@@ -470,7 +484,7 @@ void ParallelProgTest(T f, bool useLLVM, ui64 testResult, size_t vecSize = 10'00
     NPar::LocalExecutor().RunAdditionalThreads(inFlight);
     NPar::LocalExecutor().ExecRange([&](int id) {
         for (ui32 i = 0; i < 100; ++i) {
-            auto key = "a";
+            TProgramKey key{NYql::UnknownLangVersion, {}, "a"};
 
             auto randomProvider = CreateDeterministicRandomProvider(1);
             auto timeProvider = CreateDeterministicTimeProvider(10000000);
@@ -598,11 +612,11 @@ Y_UNIT_TEST(Smoke) {
         // Hence, to avoid undesired cache flushes, release the free pages
         // of the allocator of the particular entry.
         alloc.ReleaseFreePages();
-        cache.EmplacePattern(TString((char)('a' + i)), entry);
+        cache.EmplacePattern(TProgramKey{NYql::UnknownLangVersion, {}, TString((char)('a' + i))}, entry);
     }
 
     for (ui32 i = 0; i < cacheItems; ++i) {
-        auto key = TString((char)('a' + i));
+        TProgramKey key{NYql::UnknownLangVersion, {}, TString((char)('a' + i))};
 
         auto randomProvider = CreateDeterministicRandomProvider(1);
         auto timeProvider = CreateDeterministicTimeProvider(10000000);
@@ -620,7 +634,7 @@ Y_UNIT_TEST(Smoke) {
 }
 
 Y_UNIT_TEST(DoubleNotifyPatternCompiled) {
-    const TString key = "program";
+    const TProgramKey key{NYql::UnknownLangVersion, {}, "program"};
     const ui32 cacheSize = 2;
     TComputationPatternLRUCache cache({cacheSize, cacheSize});
 
@@ -866,9 +880,9 @@ Y_UNIT_TEST(UpdateConfigurationResize) {
     UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*maxSizeBytes), initialMaxBytes);
     UNIT_ASSERT_VALUES_EQUAL(static_cast<size_t>(*maxCompiledSizeBytes), initialMaxBytes);
 
-    TVector<TString> keys;
+    TVector<TProgramKey> keys;
     for (size_t i = 0; i < patternCount; ++i) {
-        TString key = "p" + ToString(i);
+        TProgramKey key{NYql::UnknownLangVersion, {}, "p" + ToString(i)};
         keys.push_back(key);
         auto entry = std::make_shared<TPatternCacheEntry>();
         entry->Pattern = MakeIntrusive<TMockComputationPattern>(patternSize);
@@ -907,6 +921,101 @@ Y_UNIT_TEST(UpdateConfigurationResize) {
         }
     }
     UNIT_ASSERT_VALUES_EQUAL(stillCompiled, shrunkMaxBytes / patternSize);
+}
+
+Y_UNIT_TEST(TripletKeyFieldsDistinguishEntries) {
+    // Four entries that differ from each other in exactly one field at a time
+    const NYql::TLangVersion ver1 = NYql::MakeLangVersion(2025, 1);
+    const NYql::TLangVersion ver2 = NYql::MakeLangVersion(2025, 2);
+    const NYql::TRuntimeSettingsStableHash hash1 = MakeStableHash(0xAA);
+    const NYql::TRuntimeSettingsStableHash hash2 = MakeStableHash(0xBB);
+
+    const TProgramKey keyBase{ver1, hash1, "prog"};
+    const TProgramKey keyDiffVer{ver2, hash1, "prog"};   // only lang version differs
+    const TProgramKey keyDiffHash{ver1, hash2, "prog"};  // only stable hash differs
+    const TProgramKey keyDiffProg{ver1, hash1, "other"}; // only program differs
+
+    TComputationPatternLRUCache cache({1'000'000, 1'000'000});
+
+    auto entryBase = MakeMockEntry();
+    auto entryDiffVer = MakeMockEntry();
+    auto entryDiffHash = MakeMockEntry();
+    auto entryDiffProg = MakeMockEntry();
+
+    cache.EmplacePattern(keyBase, entryBase);
+    cache.EmplacePattern(keyDiffVer, entryDiffVer);
+    cache.EmplacePattern(keyDiffHash, entryDiffHash);
+    cache.EmplacePattern(keyDiffProg, entryDiffProg);
+
+    UNIT_ASSERT_VALUES_EQUAL(cache.GetSize(), 4);
+
+    UNIT_ASSERT_EQUAL(cache.Find(keyBase), entryBase);
+    UNIT_ASSERT_EQUAL(cache.Find(keyDiffVer), entryDiffVer);
+    UNIT_ASSERT_EQUAL(cache.Find(keyDiffHash), entryDiffHash);
+    UNIT_ASSERT_EQUAL(cache.Find(keyDiffProg), entryDiffProg);
+
+    UNIT_ASSERT(!cache.Find(TProgramKey{ver2, hash2, "missing"}));
+}
+
+Y_UNIT_TEST(TripletKeyNotifyPatternCompiled) {
+    const TProgramKey key{NYql::MakeLangVersion(2025, 1), MakeStableHash(0x10), "prog"};
+    TComputationPatternLRUCache cache({1'000'000, 1'000'000});
+
+    auto entry = MakeMockEntry(512);
+    cache.EmplacePattern(key, entry);
+
+    entry->Pattern->Compile("", nullptr);
+    cache.NotifyPatternCompiled(key);
+
+    auto found = cache.Find(key);
+    UNIT_ASSERT_EQUAL(found, entry);
+    UNIT_ASSERT(found->Pattern->IsCompiled());
+}
+
+Y_UNIT_TEST(TripletKeyNotifyPatternMissing) {
+    // NotifyPatternMissing releases waiters for the specific triplet
+    const TProgramKey key{NYql::MakeLangVersion(2025, 1), MakeStableHash(0x20), "prog"};
+    TComputationPatternLRUCache cache({1'000'000, 1'000'000});
+
+    // Register as the first subscriber (gets an empty future to trigger creation)
+    auto firstFuture = cache.FindOrSubscribe(key);
+    UNIT_ASSERT(!firstFuture.Initialized());
+
+    // Register a second subscriber (gets a promise future)
+    auto secondFuture = cache.FindOrSubscribe(key);
+    UNIT_ASSERT(secondFuture.Initialized());
+    UNIT_ASSERT(!secondFuture.HasValue());
+
+    // Notify missing - second subscriber should receive nullptr
+    cache.NotifyPatternMissing(key);
+    UNIT_ASSERT(secondFuture.HasValue());
+    UNIT_ASSERT(!secondFuture.GetValue());
+}
+
+Y_UNIT_TEST(TripletKeyFindOrSubscribeDistinctKeys) {
+    // FindOrSubscribe distinguishes entries by full triplet
+    const NYql::TLangVersion ver1 = NYql::MakeLangVersion(2025, 1);
+    const NYql::TLangVersion ver2 = NYql::MakeLangVersion(2025, 2);
+    const NYql::TRuntimeSettingsStableHash hash = {};
+    const TString program = "prog";
+
+    TComputationPatternLRUCache cache({1'000'000, 1'000'000});
+
+    auto entry1 = MakeMockEntry();
+    auto entry2 = MakeMockEntry();
+
+    // Emplace both entries
+    cache.EmplacePattern(TProgramKey{ver1, hash, program}, entry1);
+    cache.EmplacePattern(TProgramKey{ver2, hash, program}, entry2);
+
+    // FindOrSubscribe should find the correct entry for each triplet
+    auto future1 = cache.FindOrSubscribe(TProgramKey{ver1, hash, program});
+    auto future2 = cache.FindOrSubscribe(TProgramKey{ver2, hash, program});
+
+    UNIT_ASSERT(future1.Initialized() && future1.HasValue());
+    UNIT_ASSERT(future2.Initialized() && future2.HasValue());
+    UNIT_ASSERT_EQUAL(future1.GetValue(), entry1);
+    UNIT_ASSERT_EQUAL(future2.GetValue(), entry2);
 }
 
 } // Y_UNIT_TEST_SUITE(ComputationPatternCache)

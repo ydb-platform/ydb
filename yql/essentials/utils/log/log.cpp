@@ -336,7 +336,7 @@ TAutoPtr<TLogElement> TYqlLog::CreateLogElement(
 
 void TYqlLog::Contextify(TLogElement& element, EComponent component, ELevel level, TStringBuf file, int line) const {
     const auto action = [&](std::pair<TString, TString> pair) {
-        element.With(std::move(pair.first), std::move(pair.second));
+        element.With(pair.first, std::move(pair.second));
     };
     Contextify(action, component, level, file, line);
 }
@@ -455,7 +455,7 @@ void InitLogger(TAutoPtr<TLogBackend> backend, TFormatter formatter, bool isStri
             return;
         }
 
-        backend = MakeFormattingLogBackend(std::move(formatter), isStrictFormatting, std::move(backend));
+        backend = MakeFormattingLogBackend(std::move(formatter), isStrictFormatting, backend);
 
         TComponentLevels levels;
         levels.fill(ELevel::INFO);

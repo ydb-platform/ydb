@@ -155,11 +155,12 @@
 {%- set test_file_jars = test_file_deps|map(attribute='jar')|reject("in", file_jars)|unique|sort -%}
 
 dependencies {
-{%- if errorprones|length -%}
-{%-     for errorprone in errorprones|map(attribute='jar')|unique -%}
-{%-         set errorprone_version = errorprone|replace("contrib/java/com/google/errorprone/error_prone_annotations/", "") -%}
-{%-         set errorprone_parts = split(errorprone_version, '/', 2) %}
-    errorprone("com.google.errorprone:error_prone_core:{{ errorprone_parts[0] }}")
+{%- if with_errorprone %}
+    errorprone("com.google.errorprone:error_prone_core:{{ with_errorprone }}")
+{%- endif -%}
+{%- if with_test_errorprones|length -%}
+{%-     for with_test_errorprone in with_test_errorprones|reject("eq", with_errorprone) %}
+    errorprone("com.google.errorprone:error_prone_core:{{ with_test_errorprone }}")
 {%-     endfor -%}
 {%- endif -%}
 {#- glue -#}

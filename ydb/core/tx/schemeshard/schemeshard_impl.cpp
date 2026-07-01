@@ -227,6 +227,10 @@ void TSchemeShard::CollectLocalIndexMigrations(const TActorContext& ctx) {
                     continue;
                 }
             }
+            
+            if (indexProto.GetImplementationCase() == NKikimrSchemeOp::TOlapIndexDescription::kMaxIndex) {
+                continue;
+            }
 
             NKikimrSchemeOp::TIndexCreationConfig indexConfig;
             if (!NOlap::ConvertOlapIndexToCreationConfig(indexProto, columnIdToName, indexConfig)) {

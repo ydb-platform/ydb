@@ -1,5 +1,6 @@
 #include <ydb/core/kqp/common/simple/temp_tables.h>
 #include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/common/olap_indexes_enums.h>
 #include <ydb/core/sys_view/ut_common.h>
 #include <ydb/core/ydb_convert/table_description.h>
 

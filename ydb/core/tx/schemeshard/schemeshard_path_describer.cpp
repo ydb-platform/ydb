@@ -211,6 +211,8 @@ TPathElement::EPathSubType TPathDescriber::CalcPathSubType(const TPath& path) {
                     return TPathElement::EPathSubType::EPathSubTypeLocalBloomNgramFilterIndex;
                 case NKikimrSchemeOp::EIndexTypeLocalMinMax:
                     return TPathElement::EPathSubType::EPathSubTypeLocalMinMaxIndex;
+                case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
+                    return TPathElement::EPathSubType::EPathSubTypeLocalCountMinSketchIndex;
                 case NKikimrSchemeOp::EIndexTypeInvalid:
                 case NKikimrSchemeOp::EIndexTypeGlobal:
                 case NKikimrSchemeOp::EIndexTypeGlobalAsync:
@@ -1545,6 +1547,7 @@ void TSchemeShard::DescribeTableIndex(const TPathId& pathId, const TString& name
         case NKikimrSchemeOp::EIndexTypeGlobalAsync:
         case NKikimrSchemeOp::EIndexTypeGlobalUnique:
         case NKikimrSchemeOp::EIndexTypeLocalMinMax:
+        case NKikimrSchemeOp::EIndexTypeLocalCountMinSketch:
             // no specialized index description
             Y_ASSERT(std::holds_alternative<std::monostate>(indexInfo->SpecializedIndexDescription));
             break;

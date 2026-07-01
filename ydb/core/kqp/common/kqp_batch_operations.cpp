@@ -19,6 +19,7 @@ bool IsIndexSupported(NYql::TIndexDescription::EType type, bool enabledIndexStre
         case NYql::TIndexDescription::EType::LocalBloomFilter:
         case NYql::TIndexDescription::EType::LocalBloomNgramFilter:
         case NYql::TIndexDescription::EType::LocalMinMax:
+        case NYql::TIndexDescription::EType::LocalCountMinSketch:
             return false;
     }
     Y_UNREACHABLE();

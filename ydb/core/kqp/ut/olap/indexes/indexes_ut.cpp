@@ -1,7 +1,6 @@
-#include "indexes_test_enums.h"
 
 #include <ydb/core/base/tablet_pipecache.h>
-#include <ydb/core/kqp/ut/common/kqp_ut_common.h>
+#include <ydb/core/kqp/ut/common/olap_indexes_enums.h>
 #include <ydb/core/kqp/ut/olap/combinatory/variator.h>
 #include <ydb/core/kqp/ut/olap/helpers/local.h>
 #include <ydb/core/kqp/ut/olap/helpers/writer.h>
@@ -242,6 +241,104 @@ Y_UNIT_TEST_SUITE(KqpOlapIndexes) {
         Variator::ToExecutor(Variator::SingleScript(scriptChunkDetailsMinMaxWithBSStorage)).Execute(settings);
     }
 
+    Y_UNIT_TEST(CannotHaveTwoMinMaxIndexesOnOneColumn, EUseQueryService, ELocalIndexAsSchemeObject) {
+        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool LocalIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
+        auto settings = TKikimrSettings()
+            .SetWithSampleTables(false);
+        settings.FeatureFlags.SetEnableLocalMinMaxIndex(true);
+        settings.FeatureFlags.SetEnableLocalIndexAsSchemeObject(LocalIndexAsSchemeObject);
+        settings.AppConfig.MutableColumnShardConfig()->SetAlterObjectEnabled(true);
+        TKikimrRunner kikimr(settings);
+
+        auto helper = TLocalHelper(kikimr);
+        helper.CreateTestOlapStandaloneTable();
+        helper.SetForcedCompaction();
+        auto tableClient = kikimr.GetTableClient();
+        auto queryServiceCLient = kikimr.GetQueryClient();
+        auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
+        csController->SetOverridePeriodicWakeupActivationPeriod(TDuration::Seconds(1));
+        csController->SetOverrideLagForCompactionBeforeTierings(TDuration::Seconds(1));
+        csController->SetOverrideMemoryLimitForPortionReading(1e+10);
+        csController->SetOverrideBlobSplitSettings(NOlap::NSplitter::TSplitSettings());
+
+        auto runDDLQuery = [&](TString query) {
+            if (UseQueryService) {
+                auto result = queryServiceCLient.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).GetValueSync();
+                return *static_cast<NYdb::TStatus*>(&result);
+            } else {
+                return tableClient.CreateSession().GetValueSync().GetSession().ExecuteSchemeQuery(query).GetValueSync();
+            }
+        };
+
+        auto assertDDLQueryOk = [&](TString query) {
+            auto result = runDDLQuery(query);
+            UNIT_ASSERT_C(result.IsSuccess(), result.GetIssues().ToString());
+        };
+
+        auto assertDDLQueryNotOk = [&](TString query) {
+            auto result = runDDLQuery(query);
+            UNIT_ASSERT_C(!result.IsSuccess(), result.GetIssues().ToString());
+        };
+
+
+        assertDDLQueryOk(R"(
+            CREATE TABLE `/Root/test_cannot_have_two_indexes_on_one_column` (
+                `key` Int32 NOT NULL,
+                `value` String NOT NULL,
+                PRIMARY KEY (`key`)
+            )
+            PARTITION BY HASH (`key`)
+            WITH (
+                STORE = COLUMN
+            );
+            ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_mm` LOCAL USING min_max ON(`value`);
+        )");
+        assertDDLQueryNotOk(R"(
+                ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_mm2` LOCAL USING min_max ON(`value`);
+            )");
+        
+        assertDDLQueryOk(R"(
+                ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_bloom` LOCAL USING bloom_filter ON(`value`);
+            )");
+        assertDDLQueryOk(R"(
+                ALTER TABLE `/Root/test_cannot_have_two_indexes_on_one_column` ADD INDEX `value_bloom2` LOCAL USING bloom_filter ON(`value`);
+            )");
+        
+        assertDDLQueryNotOk(R"(
+                CREATE TABLE `/Root/two_minmax_in_create` (
+                    `key` Int32 NOT NULL,
+                    `value` String NOT NULL,
+                    INDEX `mm1` LOCAL USING min_max ON(`value`),
+                    INDEX `mm2` LOCAL USING min_max ON(`value`),
+                    PRIMARY KEY (`key`)
+                )
+                PARTITION BY HASH (`key`)
+                WITH (
+                    STORE = COLUMN
+                );
+            )");
+
+        assertDDLQueryOk(R"(
+            CREATE TABLE `/Root/two_minmax_via_alter_object` (
+                `key` Int32 NOT NULL,
+                `value` String NOT NULL,
+                PRIMARY KEY (`key`)
+            )
+            PARTITION BY HASH (`key`)
+            WITH (
+                STORE = COLUMN
+            );
+        )");
+        assertDDLQueryOk(R"(
+            ALTER OBJECT `/Root/two_minmax_via_alter_object` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=mm_a, TYPE=MIN_MAX, FEATURES=`{"column_name": "value"}`);
+        )");
+        assertDDLQueryNotOk(R"(
+            ALTER OBJECT `/Root/two_minmax_via_alter_object` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=mm_b, TYPE=MIN_MAX, FEATURES=`{"column_name": "value"}`);
+        )");
+
+    }
+    
     Y_UNIT_TEST(AlterIndexOnNotExistingTableResultsInError, EUseQueryService, ELocalIndexAsSchemeObject) {
         const bool useQueryService = (Arg<0>() == EUseQueryService::QueryService);
         const bool localIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
@@ -1655,12 +1752,13 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
         }
     }
 
-    Y_UNIT_TEST(CountMinSketchIndex, EUseQueryService) {
-        const bool UseQueryService = (Arg<0>() == EUseQueryService::QueryService);
+    Y_UNIT_TEST(CountMinSketchIndex, EUseQueryService, ELocalIndexAsSchemeObject) {
+        const bool useQueryService = (Arg<0>() == EUseQueryService::QueryService);
+        const bool localIndexAsSchemeObject = (Arg<1>() == ELocalIndexAsSchemeObject::SchemeObjectEnabled);
         auto settings = TKikimrSettings()
             .SetColumnShardAlterObjectEnabled(true)
             .SetWithSampleTables(false);
-        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(false);
+        settings.AppConfig.MutableFeatureFlags()->SetEnableLocalIndexAsSchemeObject(localIndexAsSchemeObject);
         TKikimrRunner kikimr(settings);
 
         auto csController = NYDBTest::TControllers::RegisterCSControllerGuard<NYDBTest::NColumnShard::TController>();
@@ -1677,23 +1775,23 @@ Y_UNIT_TEST(RenameLocalBloomIndex, EUseQueryService) {
             .SetPriority(NActors::NLog::PRI_DEBUG)
             .Initialize();
 
-        ExecQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, useQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_ts, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ["timestamp"]}`);
                 )");
-        ExecQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, useQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_res_id, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['resource_id']}`);
                 )");
-        ExecQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, useQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_uid, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['uid']}`);
                 )");
-        ExecQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, useQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_level, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['level']}`);
                 )");
-        ExecQuery(kikimr, UseQueryService,
+        ExecQuery(kikimr, useQueryService,
             TStringBuilder() << R"(ALTER OBJECT `/Root/olapTable` (TYPE TABLE) SET (ACTION=UPSERT_INDEX, NAME=cms_message, TYPE=COUNT_MIN_SKETCH,
                     FEATURES=`{"column_names" : ['message']}`);
                 )");

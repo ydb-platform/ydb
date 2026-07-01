@@ -122,6 +122,7 @@ public:
         GlobalFulltextCompact = 10,
         GlobalFulltextCompactRelevance = 11,
         GlobalJsonCompact = 12,
+        LocalCountMinSketch = 13,
     };
 
     // Index states here must be in sync with NKikimrSchemeOp::EIndexState protobuf
@@ -178,6 +179,7 @@ public:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
             case EType::LocalMinMax:
+            case EType::LocalCountMinSketch:
                 // no specialized index description
                 YQL_ENSURE(index.GetSpecializedIndexDescriptionCase() == NKikimrSchemeOp::TIndexDescription::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -240,6 +242,7 @@ public:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
             case EType::LocalMinMax:
+            case EType::LocalCountMinSketch:
                 // no specialized index description
                 YQL_ENSURE(message->GetSpecializedIndexDescriptionCase() == NKikimrKqp::TIndexDescriptionProto::SPECIALIZEDINDEXDESCRIPTION_NOT_SET);
                 break;
@@ -302,6 +305,8 @@ public:
                 return TIndexDescription::EType::LocalBloomNgramFilter;
             case NKikimrSchemeOp::EIndexType::EIndexTypeLocalMinMax:
                 return TIndexDescription::EType::LocalMinMax;
+            case NKikimrSchemeOp::EIndexType::EIndexTypeLocalCountMinSketch:
+                return TIndexDescription::EType::LocalCountMinSketch;
             case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompact:
                 return TIndexDescription::EType::GlobalFulltextCompact;
             case NKikimrSchemeOp::EIndexType::EIndexTypeGlobalFulltextCompactRelevance:
@@ -341,6 +346,8 @@ public:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeLocalBloomNgramFilter;
             case NYql::TIndexDescription::EType::LocalMinMax:
                 return NKikimrSchemeOp::EIndexType::EIndexTypeLocalMinMax;
+            case NYql::TIndexDescription::EType::LocalCountMinSketch:
+                return NKikimrSchemeOp::EIndexType::EIndexTypeLocalCountMinSketch;
             default:
                 YQL_ENSURE(false, << InvalidIndexType(indexType));
         }
@@ -371,6 +378,7 @@ public:
             case EType::GlobalAsync:
             case EType::GlobalSyncUnique:
             case EType::LocalMinMax:
+            case EType::LocalCountMinSketch:
                 // no specialized index description
                 Y_ASSERT(std::holds_alternative<std::monostate>(SpecializedIndexDescription));
                 break;
@@ -432,6 +440,7 @@ public:
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
             case EType::LocalMinMax:
+            case EType::LocalCountMinSketch:
                 return false;
         }
     }
@@ -452,6 +461,7 @@ public:
             case EType::LocalBloomFilter:
             case EType::LocalBloomNgramFilter:
             case EType::LocalMinMax:
+            case EType::LocalCountMinSketch:
                 return {};
         }
         return {};

@@ -1,7 +1,8 @@
 #include "schema.h"
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/library/accessor/validator.h>
 #include <ydb/core/tx/columnshard/blobs_action/common/const.h>
-
+#include <ydb/core/tx/schemeshard/olap/schema/schema.h>
 namespace NKikimr::NSchemeShard {
 
 void TOlapIndexSchema::SerializeToProto(NKikimrSchemeOp::TOlapIndexDescription& indexSchema) const {
@@ -84,6 +85,25 @@ bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, cons
             if (!meta) {
                 return false;
             }
+            // Forbid two min_max indexes on the same column.
+            if (const auto newColumnId = meta->GetSingleColumnId()) {
+                for (const auto& indexPair : Indexes) {
+                    const auto& existingIndex = indexPair.second;
+                    const auto& existingMeta = existingIndex.GetIndexMeta();
+                    if (meta->GetClassName() == NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName && 
+                        existingMeta->GetClassName() == meta->GetClassName() && existingMeta->GetSingleColumnId() == newColumnId) {
+                        TString columnName = ToString(*newColumnId);
+                        if (const auto* column = currentSchema.GetColumns().GetById(*newColumnId)) {
+                            columnName = column->GetName();
+                        }
+                        errors.AddError(NKikimrScheme::StatusAlreadyExists,
+                            TStringBuilder() << "cannot create min_max index '" << index.GetName() << "' on column '"
+                                             << columnName << "': it already has min_max index '"
+                                             << existingIndex.GetName() << "'");
+                        return false;
+                    }
+                }
+            }
             TOlapIndexSchema newIndex(id, index.GetName(), meta);
             Y_ABORT_UNLESS(IndexesByName.emplace(index.GetName(), id).second);
             Y_ABORT_UNLESS(Indexes.emplace(id, std::move(newIndex)).second);
@@ -110,6 +130,34 @@ void TOlapIndexesDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& t
         Y_ABORT_UNLESS(IndexesByName.emplace(indexProto.GetName(), indexProto.GetId()).second);
         Y_ABORT_UNLESS(Indexes.emplace(indexProto.GetId(), std::move(index)).second);
     }
+}
+
+bool TOlapIndexesDescription::ValidateNoDuplicateMinMaxIndexes(const TOlapSchema& currentSchema, IErrorCollector& errors) const {
+    // Forbid two min_max indexes on the same column.
+    THashMap<ui32, TString> indexNameByColumnId;   // (columnId, className) -> indexName
+    for (const auto& indexPair : Indexes) {
+        const auto& index = indexPair.second;
+        const auto& meta = index.GetIndexMeta();
+        const auto columnId = meta->GetSingleColumnId();
+        if (!columnId) {
+            continue;
+        }
+        if (meta.GetClassName() != NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName) {
+            continue;
+        }
+        const auto inserted = indexNameByColumnId.emplace(*columnId, index.GetName());
+        if (!inserted.second) {
+            TString columnName = ToString(*columnId);
+            if (const auto* column = currentSchema.GetColumns().GetById(*columnId)) {
+                columnName = column->GetName();
+            }
+            errors.AddError(NKikimrScheme::StatusSchemeError,
+                TStringBuilder() << "creating 2 min_max indexes on one column is forbidden, tried to create both '" << index.GetName() << "' and '" << inserted.first->second << 
+                "' on column " << columnName << ".");
+            return false;
+        }
+    }
+    return true;
 }
 
 void TOlapIndexesDescription::Serialize(NKikimrSchemeOp::TColumnTableSchema& tableSchema) const {

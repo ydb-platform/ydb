@@ -159,6 +159,7 @@ TExprBase BuildDeleteIndexStagesImpl(const TKikimrTableDescription& table,
             case TIndexDescription::EType::LocalBloomFilter:
             case TIndexDescription::EType::LocalBloomNgramFilter:
             case TIndexDescription::EType::LocalMinMax:
+            case TIndexDescription::EType::LocalCountMinSketch:
                 break;
         }
 
@@ -206,6 +207,7 @@ TExprBase KqpBuildDeleteIndexStages(TExprBase node, TExprContext& ctx, const TKq
             case TIndexDescription::EType::LocalBloomFilter:
             case TIndexDescription::EType::LocalBloomNgramFilter:
             case TIndexDescription::EType::LocalMinMax:
+            case TIndexDescription::EType::LocalCountMinSketch:
                 return true;
         }
         Y_UNREACHABLE();

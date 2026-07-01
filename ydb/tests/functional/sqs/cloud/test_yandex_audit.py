@@ -264,7 +264,7 @@ class TestCloudEvents(get_test_with_sqs_tenant_installation(KikimrSqsTestBase)):
                 assert log.count(f'"resource_id":"{cloud_queue_name}"') == 1
                 assert log.count('"created_at":') == 1 and log.count(f'"created_at":"{none_value}"') == 0
                 assert log.count('"status":"SUCCESS"') == 1
-                assert log.count('"subject":"fake_user_sid@as"') == 1                                                           # there is mock verison of cloud sqs
+                assert log.count('"subject":"fake_user_sid@as"') == 1
                 assert log.count('"queue":') == 1
                 assert log.count('"labels"') == 1
                 assert log.count('"component":"ymq"') == 1

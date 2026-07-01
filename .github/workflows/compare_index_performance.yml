@@ -151,8 +151,7 @@ jobs:
             --test-param compare_current_feature_flags="$INPUT_CURRENT_FEATURE_FLAGS" \
             --test-param compare_baseline_table_service_config="$INPUT_MAIN_TABLE_SERVICE_CONFIG" \
             --test-param compare_current_table_service_config="$INPUT_CURRENT_TABLE_SERVICE_CONFIG" \
-            --test-param compare_flamegraph="$FLAMEGRAPH" \
-            --test-param compare_perf_sudo=1
+            --test-param compare_flamegraph="$FLAMEGRAPH"
 
       - name: Post results to job summary
         if: always()

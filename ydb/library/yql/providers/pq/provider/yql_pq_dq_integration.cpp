@@ -566,6 +566,9 @@ public:
                 }
 
                 if (sharedReading && !filterPredicateSql.empty()) {
+                    if (filterPredicateSql.size() > 4000) {
+                        filterPredicateSql = filterPredicateSql.substr(0, 4000) + "...";
+                    }
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + filterPredicateSql));
                 }
                 if (sharedReading && !watermarkExprSql.empty()) {

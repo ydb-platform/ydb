@@ -1,8 +1,8 @@
 # memory_controller_config
 
-There are many components inside {{ ydb-short-name }} [database nodes](../../concepts/glossary.md#database-node) that utilize memory. Most of them need a fixed amount, but some are flexible and can use varying amounts of memory, typically to improve performance.
+Inside [nodes](../../concepts/glossary.md#database-node), {{ ydb-short-name }} runs many different components that use memory. Most of them require a fixed amount of memory, but some can flexibly vary the amount of memory they use, thereby improving the performance of the entire system.
 
-## General Overview of Memory Consumption by Components within a YDB node
+## Overview of memory consumption inside a YDB node by component
 
 
 ```mermaid
@@ -26,31 +26,32 @@ YDB process memory,Other,10
 ```
 
 
-If {{ ydb-short-name }} components allocate more memory than is physically available, the operating system is likely to [terminate](https://en.wikipedia.org/wiki/Out_of_memory#Recovery) the entire {{ ydb-short-name }} process, which is undesirable. The memory controller's goal is to allow {{ ydb-short-name }} to avoid out-of-memory situations while still efficiently using the available memory.
+If {{ ydb-short-name }} components allocate more memory than is physically available, the operating system will likely [terminate](https://en.wikipedia.org/wiki/Out_of_memory#Recovery) the entire {{ ydb-short-name }} process, which is highly undesirable. The goal of the memory controller is to allow {{ ydb-short-name }} to avoid out-of-memory situations while efficiently using the available memory.
 
 Examples of components managed by the memory controller:
 
-- [Shared cache](../../concepts/glossary.md#shared-cache): stores recently accessed data pages read from [distributed storage](../../concepts/glossary.md#distributed-storage) to reduce disk I/O and accelerate data retrieval.
-- [MemTable](../../concepts/glossary.md#memtable): holds data that has not yet been flushed to [SST](../../concepts/glossary.md#sst).
-- [Query Processor](../../concepts/glossary.md#kqp): stores intermediate query results.
-- [Compaction](../../concepts/glossary.md#compaction): The process of organizing and cleaning up data, which is performed automatically (in the background) to optimize storage space.
-- Allocator caches: keep memory blocks that have been released but not yet returned to the operating system.
+- [Shared cache](../../concepts/glossary.md#shared-cache): stores recently accessed data pages read from [distributed storage](../../concepts/glossary.md#distributed-storage) to reduce disk I/O operations and speed up data retrieval.
+- [MemTable](../../concepts/glossary.md#memtable): contains data that has not yet been written to [SST](../../concepts/glossary.md#sst).
+- [Query Processor](../../concepts/glossary.md#kqp): stores intermediate query processing results.
+- [Compaction](../../concepts/glossary.md#compaction): the process of ordering and cleaning data that runs automatically (in the background) to optimize storage volume.
+- Allocator caches: store memory blocks that have been freed but not yet returned to the operating system.
 
-Memory limits can be configured to control overall memory usage, ensuring the database operates efficiently within the available resources.
+Memory limits can be configured to control overall memory usage, ensuring efficient database operation within available resources.
 
-## Hard Memory Limit {#hard-memory-limit}
+## Hard memory limit {#hard-memory-limit}
 
-The hard memory limit specifies the total amount of memory available to the {{ ydb-short-name }} process.
+The hard memory limit defines the total amount of memory available to the {{ ydb-short-name }} process.
 
-By default, the hard memory limit for the {{ ydb-short-name }} process is set to its [cgroups](https://en.wikipedia.org/wiki/Cgroups) memory limit.
+By default, the hard memory limit for the {{ ydb-short-name }} process equals the memory limit specified in its [cgroups](https://en.wikipedia.org/wiki/Cgroups).
 
-In environments without a cgroups memory limit, the default hard memory limit equals the host's total available memory. This configuration allows the database to utilize all available resources but may lead to resource competition with other processes on the same host. Although the memory controller attempts to account for this external consumption, such a setup is not recommended.
+In environments without a cgroups memory limit, the default hard memory limit equals the total amount of available host memory. This configuration allows the database to use all available resources but may lead to resource contention with other processes on the same host. Although the memory controller tries to account for this external consumption, such usage is not recommended.
 
-Additionally, the hard memory limit can be specified in the configuration. Note that the database process may still exceed this limit. Therefore, it is highly recommended to use cgroups memory limits in production environments to enforce strict memory control.
+The hard memory limit can also be set in the configuration. Note that the database process may still exceed this limit. Therefore, it is strongly recommended to use cgroups memory limits in production environments for strict memory control.
 
-Most of other memory limits can be configured either in absolute bytes or as a percentage relative to the hard memory limit. Using percentages is advantageous for managing clusters with nodes of varying capacities. If both absolute byte and percentage limits are specified, the memory controller uses a combination of both (maximum for lower limits and minimum for upper limits).
+Most other memory limits can be configured either in absolute bytes or as percentages relative to the hard memory limit. Using percentages is convenient for managing clusters with nodes of different capacities. If both absolute byte limits and percentage limits are specified, the memory controller uses a combination of both (maximum for lower limits and minimum for upper limits).
 
-Example of the `memory_controller_config` section with a specified hard memory limit:
+Example of a `memory_controller_config` section with a specified hard memory limit:
+
 
 
 ```yaml
@@ -59,42 +60,42 @@ memory_controller_config:
 ```
 
 
-## Soft Memory Limit {#soft-memory-limit}
+## Soft memory limit {#soft-memory-limit}
 
-The soft memory limit specifies a dangerous threshold that should not be exceeded by the {{ ydb-short-name }} process under normal circumstances.
+The soft memory limit defines a dangerous threshold that the {{ ydb-short-name }} process should not exceed under normal circumstances.
 
-If the soft limit is exceeded, {{ ydb-short-name }} gradually reduces the [shared cache](../../concepts/glossary.md#shared-cache) size to zero. Therefore, more database nodes should be added to the cluster as soon as possible, or per-component memory limits should be reduced.
+If the soft limit is exceeded, {{ ydb-short-name }} gradually reduces the size of the [shared cache](../../concepts/glossary.md#shared-cache) to zero. In this case, you should add more database nodes to the cluster or reduce memory limits for individual components as soon as possible.
 
-## Target Memory Utilization {#target-memory-utilization}
+## Target memory usage {#target-memory-utilization}
 
-The target memory utilization specifies a threshold for the {{ ydb-short-name }} process memory usage that is considered optimal.
+Target memory usage defines a memory usage threshold for the {{ ydb-short-name }} process that is considered optimal.
 
-Flexible cache sizes are calculated according to their limit thresholds to keep process consumption around this value.
+Flexible cache sizes are calculated according to their limits to keep the process memory consumption near this value.
 
-For example, in a database that consumes a little memory on query execution, caches consume memory around this threshold, and other memory stays free. If query execution consumes more memory, caches start to reduce their sizes to their minimum threshold.
+For example, in a database that uses little memory for query execution, caches use memory near this threshold, and the remaining memory stays free. If query execution starts consuming more memory, caches begin to reduce their sizes to the minimum threshold.
 
-## Per-Component Memory Limits
+## Memory limits for individual components
 
-There are two different types of components within {{ ydb-short-name }}.
+Inside {{ ydb-short-name }}, there are two different types of components.
 
-The first type, known as cache components, functions as caches, for example, by storing the most recently used data. Each cache component has minimum and maximum memory limit thresholds, allowing them to adjust their capacity dynamically based on the current {{ ydb-short-name }} process consumption.
+The first type of components, or cache components, function as caches, for example, storing recently used data. Each cache component has minimum and maximum threshold values for the memory limit, allowing it to dynamically adjust its capacity based on the current memory consumption of the {{ ydb-short-name }} process.
 
-The second type, known as activity components, allocates memory for specific activities, such as query execution or the [compaction](../../concepts/glossary.md#compaction) process. Each activity component has a fixed memory limit. Additionally, there is a total memory limit for these activities from which they attempt to draw the required memory.
+The second type of components, or activity components, allocate memory for specific tasks, such as executing queries or the compaction process. Each activity component has a fixed memory limit. There is also an additional shared memory limit for such components, from which they attempt to obtain the necessary memory.
 
-Many other auxiliary components and processes operate alongside the {{ ydb-short-name }} process, consuming memory. Currently, these components do not have any memory limits.
+Many other auxiliary components and processes run in parallel with the {{ ydb-short-name }} process, consuming memory. Currently, these components do not have any memory limits.
 
-### Cache Components Memory Limits
+### Memory limits for cache components {#cache-memory-limits}
 
-The cache components include:
+Cache components include:
 
-- Shared cache
-- MemTable
+- Shared cache.
+- MemTable.
 
-Each cache component's limits are dynamically recalculated every second to ensure that each component consumes memory proportionally to its limit thresholds while the total consumed memory stays close to the target memory utilization.
+The limits of each cache component are dynamically recalculated every second, so that each component consumes memory proportionally to its limit values, and the total memory consumption remains around the target memory usage.
 
-The minimum memory limit threshold for cache components isn't reserved, meaning the memory remains available until it is actually used. However, once this memory is filled, the components typically retain the data, operating within their current memory limit. Consequently, the sum of the minimum memory limits for cache components is expected to be less than the target memory utilization.
+The minimum threshold of the memory limit for cache components is not reserved, meaning that memory remains available until it is actually used. However, once this memory is filled, components typically retain data, operating within their current memory limit. Thus, the sum of the minimum memory limits of cache components is expected to be less than the target memory usage.
 
-If needed, both the minimum and maximum thresholds should be overridden; otherwise, any missing threshold will have a default value.
+If necessary, both minimum and maximum threshold values should be overridden; otherwise, if a threshold value is missing, it will take the default value.
 
 Example of the `memory_controller_config` section with specified shared cache limits:
 
@@ -106,20 +107,21 @@ memory_controller_config:
 ```
 
 
-### Activity Components Memory Limits
+### Memory limits for activity components
 
-The activity components include:
+Activity components include:
 
-- Query Processor
-- Compaction
+- Query Processor.
+- Compaction.
 
-The memory limit for each activity component specifies the maximum amount of memory it can attempt to use. However, to prevent the {{ ydb-short-name }} process from exceeding the soft memory limit, the total consumption of activity components is further constrained by an additional limit known as the activities memory limit. If the total memory usage of the activity components exceeds this limit, any additional memory requests will be denied. When query execution approaches memory limits, {{ ydb-short-name }} activates [spilling](../../concepts/query_execution/spilling.md) to temporarily save intermediate data to disk, preventing memory limit violations.
+The memory limit for each activity component specifies the maximum amount of memory it can attempt to use. However, to prevent the {{ ydb-short-name }} process from exceeding the soft memory limit, the total consumption of activity components is limited by an additional limit called the activity memory limit. If the total memory usage of active components exceeds this limit, any additional memory requests will be denied. When query execution approaches the memory limits, {{ ydb-short-name }} activates [spilling](../../concepts/query_execution/spilling.md) to temporarily save intermediate data to disk, preventing memory limit violations.
 
-As a result, while the combined individual limits of the activity components might collectively exceed the activities memory limit, each component's individual limit should be less than this overall cap. Additionally, the sum of the minimum memory limits for the cache components, plus the activities memory limit, must be less than the soft memory limit.
+Thus, although the total individual limits of activity components may collectively exceed the activity memory limit, the individual limit of each component must be less than this overall limit. Additionally, the sum of the minimum memory limits for cache components plus the activity memory limit must be less than the soft memory limit.
 
-There are some other activity components that currently do not have individual memory limits.
+There are other activity components that currently do not have any individual memory limits.
 
-Example of the `memory_controller_config` section with a specified QP limit:
+Example of the `memory_controller_config` section with the specified limit for QP:
+
 
 
 ```yaml
@@ -130,21 +132,21 @@ memory_controller_config:
 
 #### Query Processor memory limit {#query-execution-limit}
 
-The parameters `query_execution_limit_percent` (20% of the [hard memory limit](#hard-memory-limit) by default) and `query_execution_limit_bytes` set the size of the RAM pool that Resource Manager allocates to queries on a node:
+The `query_execution_limit_percent` (default 20% of the [hard memory limit](#hard-memory-limit)) and `query_execution_limit_bytes` parameters set the size of the RAM pool that Resource Manager allocates to queries on a node:
 
-If both parameters are set, the effective limit is `min(query_execution_limit_percent × hard_limit_bytes / 100, query_execution_limit_bytes)`. If only one parameter is set, that value is used directly.
+If both parameters are set, the effective limit is `min(query_execution_limit_percent × hard_limit_bytes / 100, query_execution_limit_bytes)`. If only one parameter is set, its value is used.
 
-The computed limit is delivered to Resource Manager through Resource Broker.
+The computed limit is passed to Resource Manager via Resource Broker.
 
 The [`spilling_percent`](table_service_config.md#spilling-percent) threshold in `table_service_config` is calculated relative to this pool.
 
-## Configuration Parameters
+## Configuration parameters
 
-Each configuration parameter applies within the context of a single database node.
+Each configuration parameter applies in the context of a single database node.
 
-As mentioned above, the sum of the minimum memory limits for the cache components plus the activities memory limit should be less than the soft memory limit.
+As mentioned earlier, the sum of the minimum memory limits for cache components plus the activity memory limit is expected to be less than the soft memory limit.
 
-This restriction can be expressed in a simplified form:
+This constraint can be expressed in a simplified form:
 
 $shared_cache_min_percent + mem_table_min_percent + activities_limit_percent < soft_limit_percent$
 
@@ -152,15 +154,15 @@ Or in a detailed form:
 
 $Max(shared_cache_min_percent * hard_limit_bytes / 100, shared_cache_min_bytes) + Max(mem_table_min_percent * hard_limit_bytes / 100, mem_table_min_bytes) + Min(activities_limit_percent * hard_limit_bytes / 100, activities_limit_bytes) < Min(soft_limit_percent * hard_limit_bytes / 100, soft_limit_bytes)$
 
-| Parameters | Default | Description |
+| Parameters | Default value | Description |
 | --- | --- | --- |
-| `hard_limit_bytes` | CGroup memory limit /<br/>Host memory | Hard memory usage limit. |
-| `soft_limit_percent` /<br/>`soft_limit_bytes` | 75% | Soft memory usage limit. |
-| `target_utilization_percent` /<br/>`target_utilization_bytes` | 50% | Target memory utilization. |
-| `activities_limit_percent` /<br/>`activities_limit_bytes` | 30% | Activities memory limit. |
-| `shared_cache_min_percent` /<br/>`shared_cache_min_bytes` | 20% | Minimum threshold for the shared cache memory limit. |
-| `shared_cache_max_percent` /<br/>`shared_cache_max_bytes` | 50% | Maximum threshold for the shared cache memory limit. |
-| `mem_table_min_percent` /<br/>`mem_table_min_bytes` | 1% | Minimum threshold for the MemTable memory limit. |
-| `mem_table_max_percent` /<br/>`mem_table_max_bytes` | 3% | Maximum threshold for the MemTable memory limit. |
-| `query_execution_limit_percent` /<br/>`query_execution_limit_bytes` | 20% | QP memory limit. |
-| `compaction_limit_percent` /<br/>`compaction_limit_bytes` | 10% | Compaction memory limit. |
+| `hard_limit_bytes` | CGroup memory limit /<br/>Host memory | Hard limit for memory usage. |
+| `soft_limit_percent` /<br/>`soft_limit_bytes` | 75% | Soft limit for memory usage. |
+| `target_utilization_percent` /<br/>`target_utilization_bytes` | 50% | Target memory usage. |
+| `activities_limit_percent` /<br/>`activities_limit_bytes` | 30% | Memory limit for activities. |
+| `shared_cache_min_percent` /<br/>`shared_cache_min_bytes` | 20% | Minimum threshold for the shared cache memory limit. |
+| `shared_cache_max_percent` /<br/>`shared_cache_max_bytes` | 50% | Maximum threshold for the shared cache memory limit. |
+| `mem_table_min_percent` /<br/>`mem_table_min_bytes` | 1% | Minimum threshold for the MemTable memory limit. |
+| `mem_table_max_percent` /<br/>`mem_table_max_bytes` | 3% | Maximum threshold for the MemTable memory limit. |
+| `query_execution_limit_percent` /<br/>`query_execution_limit_bytes` | 20% | Memory limit for QP. |
+| `compaction_limit_percent` /<br/>`compaction_limit_bytes` | 10% | Memory limit for compaction. |

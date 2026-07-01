@@ -312,7 +312,7 @@ Y_UNIT_TEST_SUITE(TableCreator) {
         UNIT_ASSERT(!parser.TryNextRow());
     }
 
-    Y_UNIT_TEST(RejectIndexedTableUpgradeOnExistingTable) {
+    Y_UNIT_TEST(IndexedTableCreatorSucceedsOnMatchingExistingTable) {
         TPortManager tp;
         ui16 mbusPort = tp.GetPort();
         ui16 grpcPort = tp.GetPort();

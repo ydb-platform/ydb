@@ -628,6 +628,7 @@ public:
                            TReadSessionEventsQueue<UseMigrationProtocol>& queue,
                            TDeferredActions<UseMigrationProtocol>& deferred);
     void DeleteNotReadyTail(TDeferredActions<UseMigrationProtocol>& deferred);
+    void Cleanup(TDeferredActions<UseMigrationProtocol>& deferred);
 
     void GetDataEventImpl(TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
                           size_t& maxEventsCount,
@@ -962,6 +963,9 @@ public:
         }
 
         // Delayed deletion is necessary to avoid deadlock with PushEvent
+        for (auto& queue : deferredDelete) {
+            queue.Cleanup(deferred);
+        }
         deferredDelete.clear();
 
         TReadSessionEventInfo<UseMigrationProtocol> info(event);
@@ -1268,7 +1272,7 @@ public:
     void OnUserRetrievedEvent(i64 decompressedSize, size_t messagesCount) override;
 
     void Abort();
-    void AbortImpl();
+    void AbortImpl(TDeferredActions<UseMigrationProtocol>* deferred = nullptr);
     void Close(std::function<void()> callback);
     void AbortSession(TASessionClosedEvent<UseMigrationProtocol>&& closeEvent);
 
@@ -1337,6 +1341,7 @@ private:
     void OnConnectTimeout(const NYdbGrpc::IQueueClientContextPtr& connectTimeoutContext);
     void OnConnect(TPlainStatus&&, typename IProcessor::TPtr&&, const NYdbGrpc::IQueueClientContextPtr& connectContext);
     void DestroyAllPartitionStreamsImpl(TDeferredActions<UseMigrationProtocol>& deferred); // Destroy all streams before setting new connection // Assumes that we're under lock.
+    void CleanupDecompressionQueueImpl(TDeferredActions<UseMigrationProtocol>& deferred); // Assumes that we're under lock.
 
     // Initing.
     inline void InitImpl(TDeferredActions<UseMigrationProtocol>& deferred); // Assumes that we're under lock.

@@ -267,6 +267,36 @@ void TRawPartitionStreamEventQueue<UseMigrationProtocol>::DeleteNotReadyTail(TDe
     swap(ready, NotReady);
 }
 
+template<bool UseMigrationProtocol>
+void TRawPartitionStreamEventQueue<UseMigrationProtocol>::Cleanup(TDeferredActions<UseMigrationProtocol>& deferred)
+{
+    std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>> infos;
+    TUserRetrievedEventsInfoAccumulator<UseMigrationProtocol> accumulator;
+
+    auto cleanupEvent = [&](TRawPartitionStreamEvent<UseMigrationProtocol>& event) {
+        if (!event.IsDataEvent()) {
+            return;
+        }
+
+        auto& dataEvent = event.GetDataEvent();
+        if (event.IsReady() || !dataEvent.SetAbandoned()) {
+            accumulator.Add(dataEvent.GetParent(), dataEvent.GetDataSize(), dataEvent.GetMessageCount());
+        } else {
+            infos.push_back(dataEvent.GetParent());
+        }
+    };
+
+    for (auto& event : Ready) {
+        cleanupEvent(event);
+    }
+    for (auto& event : NotReady) {
+        cleanupEvent(event);
+    }
+
+    deferred.DeferDestroyDecompressionInfos(std::move(infos));
+    deferred.DeferOnUserRetrievedEvent(std::move(accumulator));
+}
+
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // TDecompressionQueueItem
 
@@ -1852,6 +1882,20 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::DestroyAllPartitionStr
 }
 
 template<bool UseMigrationProtocol>
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::CleanupDecompressionQueueImpl(TDeferredActions<UseMigrationProtocol>& deferred) {
+    Y_ABORT_UNLESS(Lock.IsLocked());
+
+    std::vector<TDataDecompressionInfoPtr<UseMigrationProtocol>> infos;
+    infos.reserve(DecompressionQueue.size());
+    for (auto& item : DecompressionQueue) {
+        infos.push_back(item.BatchInfo);
+    }
+    DecompressionQueue.clear();
+
+    deferred.DeferDestroyDecompressionInfos(std::move(infos));
+}
+
+template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::OnCreateNewDecompressionTask() {
     ++DecompressionTasksInflight;
 }
@@ -1948,8 +1992,9 @@ template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Abort() {
     LOG_LAZY(Log, TLOG_DEBUG, GetLogPrefix() << "Abort session to cluster");
 
+    TDeferredActions<UseMigrationProtocol> deferred;
     std::lock_guard guard(Lock);
-    AbortImpl();
+    AbortImpl(&deferred);
 }
 
 template<bool UseMigrationProtocol>
@@ -1962,7 +2007,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortSession(TASession
 
 
 template<bool UseMigrationProtocol>
-void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl() {
+void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl(TDeferredActions<UseMigrationProtocol>* deferred) {
     Y_ABORT_UNLESS(Lock.IsLocked());
 
     if (!Aborting) {
@@ -1984,11 +2029,16 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::AbortImpl() {
                 DirectReadSessionManager.reset();
             }
         }
+
+        if (deferred) {
+            CleanupDecompressionQueueImpl(*deferred);
+        }
     }
 }
 
 template<bool UseMigrationProtocol>
 void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Close(std::function<void()> callback) {
+    TDeferredActions<UseMigrationProtocol> deferred;
     std::lock_guard guard(Lock);
     if (Aborting) {
         callback();
@@ -2013,7 +2063,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Close(std::function<vo
         }
     }
 
-    AbortImpl();
+    AbortImpl(&deferred);
 }
 
 template<bool UseMigrationProtocol>
@@ -2875,14 +2925,24 @@ void TReadSessionEventsQueue<UseMigrationProtocol>::GetDataEventCallbackSettings
 
 template<bool UseMigrationProtocol>
 void TReadSessionEventsQueue<UseMigrationProtocol>::ClearAllEvents() {
-    std::lock_guard<std::mutex> guard(TParent::Mutex);
-    while (!TParent::Events.empty()) {
-        auto& event = TParent::Events.front();
-        if (event.PartitionStream && event.PartitionStream->HasEvents()) {
-            event.PartitionStream->PopEvent();
+    TDeferredActions<UseMigrationProtocol> deferred;
+    std::vector<TRawPartitionStreamEventQueue<UseMigrationProtocol>> deferredDelete;
+    {
+        std::lock_guard<std::mutex> guard(TParent::Mutex);
+        deferredDelete.reserve(TParent::Events.size());
+        while (!TParent::Events.empty()) {
+            auto& event = TParent::Events.front();
+            if (!event.IsEmpty()) {
+                deferredDelete.push_back(event.PartitionStream->ExtractQueue());
+            }
+            TParent::Events.pop();
         }
-        TParent::Events.pop();
     }
+
+    for (auto& queue : deferredDelete) {
+        queue.Cleanup(deferred);
+    }
+    deferredDelete.clear();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

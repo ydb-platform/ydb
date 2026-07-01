@@ -776,7 +776,7 @@ void TPartition::HandleOnWrite(TEvPQ::TEvWrite::TPtr& ev, const TActorContext& c
             PendingRequests.back().WaitPreviousWriteSpan = NWilson::TSpan(TWilsonTopic::TopicDetailed, NWilson::TTraceId(PendingRequests.back().Span.GetTraceId()), "Topic.Partition.WaitPreviousWrite");
         }
         if (offset && needToChangeOffset) {
-            ++*offset;
+            *offset += msg.LogicalMessageCount;
         }
     }
     if (WaitingForPreviousBlobQuota() || WaitingForSubDomainQuota()) {

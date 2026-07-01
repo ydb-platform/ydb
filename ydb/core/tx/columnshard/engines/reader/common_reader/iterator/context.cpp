@@ -2,14 +2,15 @@
 
 #include <ydb/core/tx/columnshard/common/limits.h>
 #include <ydb/core/tx/columnshard/engines/portions/written.h>
+#include <ydb/core/tx/columnshard/engines/reader/common/scan_memory_limiter.h>
 #include <ydb/core/tx/columnshard/engines/reader/common_reader/constructor/read_metadata.h>
 #include <ydb/core/tx/limiter/grouped_memory/usage/abstract.h>
-#include <ydb/core/tx/limiter/grouped_memory/usage/service.h>
 
 namespace NKikimr::NOlap::NReader::NCommon {
 
 TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& commonContext)
     : CommonContext(commonContext)
+    , GroupedMemoryLimiterOperator(commonContext->GetReadMetadataPtrVerifiedAs<TReadMetadata>()->GetGroupedMemoryLimiterOperator())
 {
     ReadMetadata = CommonContext->GetReadMetadataPtrVerifiedAs<TReadMetadata>();
 
@@ -41,12 +42,12 @@ TSpecialReadContext::TSpecialReadContext(const std::shared_ptr<TReadContext>& co
     }
 
     std::vector<std::shared_ptr<NGroupedMemoryManager::TStageFeatures>> stages = {
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(stagePrefix + "::ACCESSORS", kffAccessors * scanMemoryLimit),
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(stagePrefix + "::FILTER", kffFilter * scanMemoryLimit),
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(stagePrefix + "::FETCHING", kffFetching * scanMemoryLimit),
-        NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildStageFeatures(stagePrefix + "::MERGE", kffMerge * scanMemoryLimit)
+        BuildScanStageFeatures(GroupedMemoryLimiterOperator, stagePrefix + "::ACCESSORS", kffAccessors * scanMemoryLimit),
+        BuildScanStageFeatures(GroupedMemoryLimiterOperator, stagePrefix + "::FILTER", kffFilter * scanMemoryLimit),
+        BuildScanStageFeatures(GroupedMemoryLimiterOperator, stagePrefix + "::FETCHING", kffFetching * scanMemoryLimit),
+        BuildScanStageFeatures(GroupedMemoryLimiterOperator, stagePrefix + "::MERGE", kffMerge * scanMemoryLimit)
     };
-    ProcessMemoryGuard = NGroupedMemoryManager::TScanMemoryLimiterOperator::BuildProcessGuard(ReadMetadata->GetTxId(), stages);
+    ProcessMemoryGuard = BuildScanProcessGuard(GroupedMemoryLimiterOperator, ReadMetadata->GetTxId(), stages);
     ProcessScopeGuard = ProcessMemoryGuard->BuildScopeGuard(GetCommonContext()->GetScanId());
 
     auto readSchema = ReadMetadata->GetResultSchema();

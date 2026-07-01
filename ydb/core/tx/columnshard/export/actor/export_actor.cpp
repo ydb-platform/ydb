@@ -184,7 +184,7 @@ void TActor::OnBootstrap(const TActorContext& /*ctx*/) {
     Exporter = Register(actor.release());
     auto evStart = BuildRequestInitiator(ExportSession->GetCursor());
     evStart->Record.SetGeneration((ui64)TabletId);
-    evStart->Record.SetCSScanPolicy("PLAIN");
+    evStart->Record.SetCSScanPolicy("EXPORT");
     Send(TabletActorId, evStart.release());
     Become(&TActor::StateFunc);
 }

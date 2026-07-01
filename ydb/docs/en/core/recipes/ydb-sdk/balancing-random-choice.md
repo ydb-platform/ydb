@@ -164,8 +164,6 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
 
   {% endlist %}
 
-<<<<<<< HEAD
-=======
 - JavaScript
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
@@ -201,5 +199,4 @@ Below are examples of explicitly setting the "random choice" balancing algorithm
 
   The RandomChoice policy (random endpoint selection among discovery nodes) is enabled **by default** — no extra configuration is required.
 
->>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 {% endlist %}

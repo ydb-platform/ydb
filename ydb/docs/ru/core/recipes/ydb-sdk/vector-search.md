@@ -5,12 +5,12 @@
 Подробно будут разобраны операции:
 
 - [Векторный поиск](#векторный-поиск)
-  - [Подключение к {{ ydb-short-name }}](#connect-ydb)
-  - [Создание таблицы](#create-table)
-  - [Вставка векторов](#insert-vectors)
-  - [Добавление индекса](#add-vector-index)
-  - [Поиск по вектору](#search-by-vector)
-  - [Итоговый пример](#full-example)
+  - [Подключение к {{ ydb-short-name }} {#connect-ydb}](#подключение-к--ydb-short-name--connect-ydb)
+  - [Создание таблицы {#create-table}](#создание-таблицы-create-table)
+  - [Вставка векторов {#insert-vectors}](#вставка-векторов-insert-vectors)
+  - [Добавление индекса {#add-vector-index}](#добавление-индекса-add-vector-index)
+  - [Поиск по вектору {#search-by-vector}](#поиск-по-вектору-search-by-vector)
+  - [Итоговый пример {#full-example}](#итоговый-пример-full-example)
 
 В данном рецепте будет создано хранилище текстов со следующей структурой:
 
@@ -357,160 +357,6 @@
 
     - Рекомендуемый способ
 
-<<<<<<< HEAD
-      def convert_vector_to_bytes(vector: list[float]) -> bytes:
-          b = struct.pack("f" * len(vector), *vector)
-          return b + b"\x01"
-
-      def insert_items_vector_as_bytes(
-          pool: ydb.QuerySessionPool,
-          table_name: str,
-          items: list[dict],
-      ) -> None:
-          query = f"""
-          DECLARE $items AS List<Struct<
-              id: Utf8,
-              document: Utf8,
-              embedding: String
-          >>;
-
-          UPSERT INTO `{table_name}`
-          (
-              id,
-              document,
-              embedding
-          )
-          SELECT
-              id,
-              document,
-              embedding,
-          FROM AS_TABLE($items);
-          """
-
-          items_struct_type = ydb.StructType()
-          items_struct_type.add_member("id", ydb.PrimitiveType.Utf8)
-          items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
-          items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
-
-          for item in items:
-              item["embedding"] = convert_vector_to_bytes(item["embedding"])
-
-          pool.execute_with_retries(
-              query, {"$items": (items, ydb.ListType(items_struct_type))}
-          )
-
-          print(f"{len(items)} items inserted")
-      ```
-
-    - Native SDK (Asyncio)
-
-      ```python
-      import struct
-      import ydb
-
-      def convert_vector_to_bytes(vector: list[float]) -> bytes:
-          b = struct.pack("f" * len(vector), *vector)
-          return b + b"\x01"
-
-      async def insert_items_vector_as_bytes(
-          pool: ydb.aio.QuerySessionPool,
-          table_name: str,
-          items: list[dict],
-      ) -> None:
-          query = f"""
-          DECLARE $items AS List<Struct<
-              id: Utf8,
-              document: Utf8,
-              embedding: String
-          >>;
-
-          UPSERT INTO `{table_name}`
-          (
-              id,
-              document,
-              embedding
-          )
-          SELECT
-              id,
-              document,
-              embedding,
-          FROM AS_TABLE($items);
-          """
-
-          items_struct_type = ydb.StructType()
-          items_struct_type.add_member("id", ydb.PrimitiveType.Utf8)
-          items_struct_type.add_member("document", ydb.PrimitiveType.Utf8)
-          items_struct_type.add_member("embedding", ydb.PrimitiveType.String)
-
-          for item in items:
-              item["embedding"] = convert_vector_to_bytes(item["embedding"])
-
-          await pool.execute_with_retries(
-              query, {"$items": (items, ydb.ListType(items_struct_type))}
-          )
-
-          print(f"{len(items)} items inserted")
-      ```
-
-    {% endlist %}
-
-- C#
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-- JavaScript
-
-  ```javascript
-  function convertVectorToBytes(vector) {
-    const bytes = new Uint8Array(vector.length * 4 + 1);
-    const view = new DataView(bytes.buffer);
-
-    for (let i = 0; i < vector.length; i++) {
-        view.setFloat32(i * 4, vector[i], true);
-    }
-
-    bytes[bytes.length - 1] = 0x01;
-    return bytes;
-  }
-
-  const items = [
-    {
-      id: "first_doc",
-      document: "My Document",
-      embedding: convertVectorToBytes(new Float32Array([1.5, 2.5, 3.5]))
-    }
-  ]
-
-  await sql`
-    UPSERT INTO `table_name` (id, document, embedding)
-    SELECT id, document, embedding,
-    FROM AS_TABLE($items);`
-  ```
-
-- Java
-
-    ```java
-    import java.nio.ByteBuffer;
-    import java.nio.ByteOrder;
-    import java.util.ArrayList;
-    import java.util.List;
-
-    import tech.ydb.common.transaction.TxMode;
-    import tech.ydb.query.tools.QueryReader;
-    import tech.ydb.query.tools.SessionRetryContext;
-    import tech.ydb.table.query.Params;
-    import tech.ydb.table.values.ListType;
-    import tech.ydb.table.values.ListValue;
-    import tech.ydb.table.values.PrimitiveType;
-    import tech.ydb.table.values.PrimitiveValue;
-    import tech.ydb.table.values.StructType;
-    import tech.ydb.table.values.Value;
-
-    byte[] convertVectorToBytes(float[] vector) {
-        ByteBuffer bb = ByteBuffer.allocate(vector.length * Float.BYTES + 1).order(ByteOrder.LITTLE_ENDIAN);
-        for (float v : vector) {
-            bb.putFloat(v);
-=======
         ```cpp
         std::string ConvertVectorToBytes(const std::vector<float>& vector)
         {
@@ -520,7 +366,6 @@
                 result += std::string(bytes, sizeof(float));
             }
             return result + "\x01";
->>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
         }
 
         void InsertItemsAsBytes(
@@ -1256,27 +1101,6 @@
 
     ```go
     func addVectorIndex(
-<<<<<<< HEAD
-      ctx context.Context,
-      db *ydb.Driver,
-      tableName, indexName, strategy string,
-      dimension, levels, clusters int,
-    ) error {
-      tempIndexName := indexName + "__temp"
-      query := fmt.Sprintf(`
-        ALTER TABLE %s
-        ADD INDEX %s
-        GLOBAL USING vector_kmeans_tree
-        ON (embedding)
-        WITH (
-          %s,
-          vector_type="Float",
-          vector_dimension=%d,
-          levels=%d,
-          clusters=%d
-        );
-      `, "`"+tableName+"`", tempIndexName, strategy, dimension, levels, clusters)
-=======
         ctx context.Context,
         db *ydb.Driver,
         tableName, indexName, strategy string
@@ -1291,7 +1115,6 @@
             %s
             );
         `, "`"+tableName+"`", tempIndexName, strategy)
->>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 
         if err := db.Query().Exec(ctx, query); err != nil {
             return err
@@ -1305,174 +1128,6 @@
     }
     ```
 
-<<<<<<< HEAD
-- Python
-
-    {% list tabs %}
-
-    - Native SDK
-
-        ```python
-        import ydb
-
-        def add_vector_index(
-            pool: ydb.QuerySessionPool,
-            driver: ydb.Driver,
-            table_name: str,
-            index_name: str,
-            strategy: str,
-            dimension: int,
-            levels: int = 2,
-            clusters: int = 128,
-        ):
-            temp_index_name = f"{index_name}__temp"
-            query = f"""
-            ALTER TABLE `{table_name}`
-            ADD INDEX {temp_index_name}
-            GLOBAL USING vector_kmeans_tree
-            ON (embedding)
-            WITH (
-                {strategy},
-                vector_type="Float",
-                vector_dimension={dimension},
-                levels={levels},
-                clusters={clusters},
-                overlap_clusters=3
-            );
-            """
-
-            pool.execute_with_retries(query)
-            driver.table_client.alter_table(
-                f"{driver._driver_config.database}/{table_name}",
-                rename_indexes=[
-                    ydb.RenameIndexItem(
-                        source_name=temp_index_name,
-                        destination_name=f"{index_name}",
-                        replace_destination=True,
-                    ),
-                ],
-            )
-
-            pool.execute_with_retries(query)
-            driver.table_client.alter_table(
-                f"{driver._driver_config.database}/{table_name}",
-                rename_indexes=[
-                    ydb.RenameIndexItem(
-                        source_name=temp_index_name,
-                        destination_name=f"{index_name}",
-                        replace_destination=True,
-                    ),
-                ],
-            )
-
-            print(f"Table index {index_name} created.")
-        ```
-
-    - Native SDK (Asyncio)
-
-        ```python
-        import ydb
-
-        async def add_vector_index(
-            pool: ydb.aio.QuerySessionPool,
-            driver: ydb.aio.Driver,
-            table_name: str,
-            index_name: str,
-            strategy: str,
-            dimension: int,
-            levels: int = 2,
-            clusters: int = 128,
-        ):
-            temp_index_name = f"{index_name}__temp"
-            query = f"""
-            ALTER TABLE `{table_name}`
-            ADD INDEX {temp_index_name}
-            GLOBAL USING vector_kmeans_tree
-            ON (embedding)
-            WITH (
-                {strategy},
-                vector_type="Float",
-                vector_dimension={dimension},
-                levels={levels},
-                clusters={clusters}
-            );
-            """
-
-            await pool.execute_with_retries(query)
-            await driver.table_client.alter_table(
-                f"{driver._driver_config.database}/{table_name}",
-                rename_indexes=[
-                    ydb.RenameIndexItem(
-                        source_name=temp_index_name,
-                        destination_name=f"{index_name}",
-                        replace_destination=True,
-                    ),
-                ],
-            )
-
-            print(f"Table index {index_name} created.")
-        ```
-
-    {% endlist %}
-
-- C++
-
-    ```cpp
-    void AddIndex(
-        NYdb::TDriver& driver,
-        NYdb::NQuery::TQueryClient& client,
-        const std::string& database,
-        const std::string& tableName,
-        const std::string& indexName,
-        const std::string& strategy,
-        std::uint64_t dim,
-        std::uint64_t levels,
-        std::uint64_t clusters)
-    {
-        std::string query = std::format(R"(
-            ALTER TABLE `{0}`
-            ADD INDEX {1}__temp
-            GLOBAL USING vector_kmeans_tree
-            ON (embedding)
-            WITH (
-                {2},
-                vector_type="Float",
-                vector_dimension={3},
-                levels={4},
-                clusters={5},
-                overlap_clusters=3
-            );
-        )", tableName, indexName, strategy, dim, levels, clusters);
-
-        NYdb::NStatusHelpers::ThrowOnError(client.RetryQuerySync([&](NYdb::NQuery::TSession session) {
-            return session.ExecuteQuery(query, NYdb::NQuery::TTxControl::NoTx()).ExtractValueSync();
-        }));
-
-        NYdb::NTable::TTableClient tableClient(driver);
-        NYdb::NStatusHelpers::ThrowOnError(tableClient.RetryOperationSync([&](NYdb::NTable::TSession session) {
-            return session.AlterTable(database + "/" + tableName, NYdb::NTable::TAlterTableSettings()
-                .AppendRenameIndexes(NYdb::NTable::TRenameIndex{
-                    .SourceName_ = indexName + "__temp",
-                    .DestinationName_ = indexName,
-                    .ReplaceDestination_ = true
-                })
-            ).ExtractValueSync();
-        }));
-
-        std::cout << "Table index `" << indexName << "` for table `" << tableName << "` added" << std::endl;
-    }
-    ```
-
-- C#
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-- JavaScript
-
-  {% include [feature-not-supported](../../_includes/feature-not-supported.md) %}
-
-=======
->>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 - Java
 
     ```java

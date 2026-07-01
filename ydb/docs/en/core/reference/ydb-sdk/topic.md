@@ -246,8 +246,6 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
   });
   ```
 
-<<<<<<< HEAD
-=======
 - Rust
 
   ```rust
@@ -263,7 +261,6 @@ Before performing the examples, [create a topic](../ydb-cli/topic-create.md) and
   }
   ```
 
->>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 {% endlist %}
 
 ## Managing topics {#manage}
@@ -3410,8 +3407,6 @@ Most often, committing is conveniently done within the reader that has read the 
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
-<<<<<<< HEAD
-=======
 - Java
 
   ```java
@@ -3437,5 +3432,4 @@ Most often, committing is conveniently done within the reader that has read the 
 
   Track progress or vote for Rust SDK support: [ydb-rs-sdk#330](https://github.com/ydb-platform/ydb-rs-sdk/issues/330)
 
->>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 {% endlist %}

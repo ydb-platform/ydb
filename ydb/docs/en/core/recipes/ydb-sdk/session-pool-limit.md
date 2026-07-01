@@ -150,51 +150,6 @@ Below are examples of setting the session pool limit in different {{ ydb-short-n
 
   {% include [work-in-progress](../../_includes/work-in-progress.md) %}
 
-<<<<<<< HEAD
-- Python
-
-  {% list tabs %}
-
-  - Native SDK
-
-    ```python
-    import os
-    import ydb
-
-    with ydb.Driver(
-        connection_string=os.environ["YDB_CONNECTION_STRING"],
-        credentials=ydb.credentials_from_env_variables(),
-    ) as driver:
-        driver.wait(timeout=5)
-        with ydb.QuerySessionPool(driver, size=500) as pool:
-            # ...
-    ```
-
-  - Native SDK (Asyncio)
-
-    ```python
-    import os
-    import ydb
-    import asyncio
-
-    async def ydb_init():
-        async with ydb.aio.Driver(
-            connection_string=os.environ["YDB_CONNECTION_STRING"],
-            credentials=ydb.credentials_from_env_variables(),
-        ) as driver:
-            await driver.wait()
-            async with ydb.aio.QuerySessionPool(driver, size=500) as pool:
-                # ...
-
-    asyncio.run(ydb_init())
-    ```
-
-  - SQLAlchemy
-
-    Setting the pool size is not currently supported.
-
-  {% endlist %}
-=======
 - Rust
 
   For `QueryClient`, set the session pool size via [`QuerySessionPoolSettings::with_limit`](https://docs.rs/ydb/latest/ydb/struct.QuerySessionPoolSettings.html#method.with_limit) and [`with_implicit_session_pool`](https://docs.rs/ydb/latest/ydb/struct.QueryClient.html#method.with_implicit_session_pool) (or [`with_session_pool`](https://docs.rs/ydb/latest/ydb/struct.QueryClient.html#method.with_session_pool) for explicit sessions):
@@ -220,6 +175,5 @@ Below are examples of setting the session pool limit in different {{ ydb-short-n
       Ok(())
   }
   ```
->>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
 
 {% endlist %}

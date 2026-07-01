@@ -2,10 +2,12 @@
 
 #include "parser_base.h"
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/library/actors/core/log.h>
 
 #include <yql/essentials/minikql/mkql_node_cast.h>
 #include <yql/essentials/minikql/mkql_type_ops.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_ROW_DISPATCHER
 
 namespace NFq::NRowDispatcher {
 
@@ -53,7 +55,9 @@ public:
 
 public:
     void ParseMessages(const std::vector<NYdb::NTopic::TReadSessionEvent::TDataReceivedEvent::TMessage>& messages) override {
-        LOG_ROW_DISPATCHER_TRACE("Add " << messages.size() << " messages to parse");
+        YDB_LOG_TRACE("Add messages to parse",
+            {"logPrefix", LogPrefix},
+            {"#_messages.size", messages.size()});
 
         for (const auto& message : messages) {
             CurrentMessage = message.GetData();
@@ -90,7 +94,10 @@ public:
 
 protected:
     TStatus DoParsing() override {
-        LOG_ROW_DISPATCHER_TRACE("Do parsing, first offset: " << Offsets.front() << ", value: " << CurrentMessage);
+        YDB_LOG_TRACE("Do parsing, first",
+            {"logPrefix", LogPrefix},
+            {"offset", Offsets.front()},
+            {"value", CurrentMessage});
 
         NYql::NUdf::TUnboxedValue value = LockObject(NKikimr::NMiniKQL::ValueFromString(DataSlot, CurrentMessage));
         if (value) {

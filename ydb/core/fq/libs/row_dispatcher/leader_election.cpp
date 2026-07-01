@@ -1,6 +1,5 @@
 #include "leader_election.h"
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
 #include <ydb/core/fq/libs/events/events.h>
 #include <ydb/core/fq/libs/row_dispatcher/events/data_plane.h>
 #include <ydb/core/fq/libs/ydb/schema.h>
@@ -8,12 +7,15 @@
 #include <ydb/core/fq/libs/ydb/ydb.h>
 #include <ydb/library/actors/core/actor_bootstrapped.h>
 #include <ydb/library/actors/core/hfunc.h>
+#include <ydb/library/actors/core/log.h>
 #include <ydb/library/actors/protos/actors.pb.h>
 #include <ydb/library/logger/actor.h>
 
 #include <ydb/core/base/path.h>
 
 #include <memory>
+
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_ROW_DISPATCHER
 
 namespace NFq {
 
@@ -227,9 +229,13 @@ void TLeaderElection::Bootstrap() {
     ActorSystemPtr->store(TActivationContext::ActorSystem(), std::memory_order_relaxed);
 
     LogPrefix = "TLeaderElection " + SelfId().ToString() + " ";
-    LOG_ROW_DISPATCHER_DEBUG("Successfully bootstrapped, local coordinator id " << CoordinatorId.ToString()
-         << ", tenant id " << TenantId << ", local mode " << Config.GetLocalMode() << ", coordination node path " << CoordinationNodePath
-         << ", endpoint " << Config.GetDatabase().GetEndpoint());
+    YDB_LOG_DEBUG("Successfully bootstrapped, local coordinator id tenant id local mode coordination node path endpoint",
+        {"logPrefix", LogPrefix},
+        {"coordinatorId", CoordinatorId},
+        {"tenantId", TenantId},
+        {"localMode", Config.GetLocalMode()},
+        {"coordinationNodePath", CoordinationNodePath},
+        {"endpoint", Config.GetDatabase().GetEndpoint()});
     if (Config.GetLocalMode()) {
         TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(CoordinatorId, 0));
         return;
@@ -294,14 +300,15 @@ void TLeaderElection::CreateSemaphore() {
         .Subscribe(
         [actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()](const NYdb::NCoordination::TAsyncResult<void>& future) {
             actorSystem->Send(actorId, new TEvPrivate::TEvCreateSemaphoreResult(future));
-        }); 
+        });
 }
 
 void TLeaderElection::AcquireSemaphore() {
     if (PendingAcquire) {
         return;
     }
-    LOG_ROW_DISPATCHER_DEBUG("Try to acquire semaphore");
+    YDB_LOG_DEBUG("Try to acquire semaphore",
+        {"logPrefix", LogPrefix});
 
     NActorsProto::TActorId protoId;
     ActorIdToProto(CoordinatorId, &protoId);
@@ -320,11 +327,12 @@ void TLeaderElection::AcquireSemaphore() {
 }
 
 void TLeaderElection::StartSession() {
-    LOG_ROW_DISPATCHER_DEBUG("Start session");
+    YDB_LOG_DEBUG("Start session",
+        {"logPrefix", LogPrefix});
 
     YdbConnection->CoordinationClient
         .StartSession(
-            CoordinationNodePath, 
+            CoordinationNodePath,
             NYdb::NCoordination::TSessionSettings()
                 .Timeout(CoordinationSessionTimeout)
                 .OnStopped([actorId = this->SelfId(), actorSystem = TActivationContext::ActorSystem()]() {
@@ -337,12 +345,15 @@ void TLeaderElection::StartSession() {
 
 void TLeaderElection::Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev) {
     if (!IsTableCreated(ev->Get()->Result)) {
-        LOG_ROW_DISPATCHER_ERROR("Schema creation error " << ev->Get()->Result.GetIssues());
+        YDB_LOG_ERROR("Schema creation error",
+            {"logPrefix", LogPrefix},
+            {"issues", ev->Get()->Result.GetIssues()});
         Metrics.Errors->Inc();
         ResetState();
         return;
     }
-    LOG_ROW_DISPATCHER_DEBUG("Coordination node successfully created");
+    YDB_LOG_DEBUG("Coordination node successfully created",
+        {"logPrefix", LogPrefix});
     CoordinationNodeCreated = true;
     ProcessState();
 }
@@ -350,26 +361,32 @@ void TLeaderElection::Handle(NFq::TEvents::TEvSchemaCreated::TPtr& ev) {
 void TLeaderElection::Handle(TEvPrivate::TEvCreateSessionResult::TPtr& ev) {
     auto result = ev->Get()->Result.GetValue();
     if (!result.IsSuccess()) {
-        LOG_ROW_DISPATCHER_ERROR("CreateSession failed, " << result.GetIssues());
+        YDB_LOG_ERROR("CreateSession failed",
+            {"logPrefix", LogPrefix},
+            {"issues", result.GetIssues()});
         Metrics.Errors->Inc();
         ResetState();
         return;
     }
     Session =  result.GetResult();
-    LOG_ROW_DISPATCHER_DEBUG("Session successfully created");
+    YDB_LOG_DEBUG("Session successfully created",
+        {"logPrefix", LogPrefix});
     ProcessState();
 }
 
 void TLeaderElection::Handle(TEvPrivate::TEvCreateSemaphoreResult::TPtr& ev) {
     auto result = ev->Get()->Result.GetValue();
     if (!IsTableCreated(result)) {
-        LOG_ROW_DISPATCHER_ERROR("Semaphore creating error " << result.GetIssues());
+        YDB_LOG_ERROR("Semaphore creating error",
+            {"logPrefix", LogPrefix},
+            {"issues", result.GetIssues()});
         Metrics.Errors->Inc();
         ResetState();
         return;
     }
     SemaphoreCreated = true;
-    LOG_ROW_DISPATCHER_DEBUG("Semaphore successfully created");
+    YDB_LOG_DEBUG("Semaphore successfully created",
+        {"logPrefix", LogPrefix});
     ProcessState();
 }
 
@@ -378,21 +395,26 @@ void TLeaderElection::Handle(TEvPrivate::TEvAcquireSemaphoreResult::TPtr& ev) {
     PendingAcquire = false;
 
     if (!result.IsSuccess()) {
-        LOG_ROW_DISPATCHER_ERROR("Failed to acquire semaphore, " << result.GetIssues());
+        YDB_LOG_ERROR("Failed to acquire semaphore",
+            {"logPrefix", LogPrefix},
+            {"issues", result.GetIssues()});
         Metrics.Errors->Inc();
         ResetState();
         return;
     }
-    LOG_ROW_DISPATCHER_DEBUG("Semaphore successfully acquired");
+    YDB_LOG_DEBUG("Semaphore successfully acquired",
+        {"logPrefix", LogPrefix});
 }
 
 void TLeaderElection::PassAway() {
-    LOG_ROW_DISPATCHER_DEBUG("PassAway");
+    YDB_LOG_DEBUG("PassAway",
+        {"logPrefix", LogPrefix});
     TActorBootstrapped::PassAway();
 }
 
 void TLeaderElection::Handle(TEvPrivate::TEvSessionStopped::TPtr&) {
-    LOG_ROW_DISPATCHER_DEBUG("TEvSessionStopped");
+    YDB_LOG_DEBUG("TEvSessionStopped",
+        {"logPrefix", LogPrefix});
     Session.Clear();
     PendingAcquire = false;
     PendingDescribe = false;
@@ -409,15 +431,17 @@ void TLeaderElection::SetTimeout() {
 
 void TLeaderElection::Handle(TEvPrivate::TEvRestart::TPtr&) {
     RestartScheduled = false;
-    LOG_ROW_DISPATCHER_DEBUG("TEvRestart");
-    ProcessState(); 
+    YDB_LOG_DEBUG("TEvRestart",
+        {"logPrefix", LogPrefix});
+    ProcessState();
 }
 
 void TLeaderElection::DescribeSemaphore() {
     if (PendingDescribe) {
         return;
     }
-    LOG_ROW_DISPATCHER_DEBUG("Describe semaphore");
+    YDB_LOG_DEBUG("Describe semaphore",
+        {"logPrefix", LogPrefix});
     PendingDescribe = true;
     Session->DescribeSemaphore(
         SemaphoreName,
@@ -435,7 +459,8 @@ void TLeaderElection::DescribeSemaphore() {
 }
 
 void TLeaderElection::Handle(TEvPrivate::TEvOnChangedResult::TPtr& /*ev*/) {
-    LOG_ROW_DISPATCHER_DEBUG("Semaphore changed");
+    YDB_LOG_DEBUG("Semaphore changed",
+        {"logPrefix", LogPrefix});
     PendingDescribe = false;
     ProcessState();
 }
@@ -444,7 +469,9 @@ void TLeaderElection::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
     PendingDescribe = false;
     auto result = ev->Get()->Result.GetValue();
     if (!result.IsSuccess()) {
-        LOG_ROW_DISPATCHER_ERROR("Semaphore describe fail, " << result.GetIssues());
+        YDB_LOG_ERROR("Semaphore describe fail",
+            {"logPrefix", LogPrefix},
+            {"issues", result.GetIssues()});
         Metrics.Errors->Inc();
         ResetState();
         return;
@@ -453,7 +480,8 @@ void TLeaderElection::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
     const NYdb::NCoordination::TSemaphoreDescription& description = result.GetResult();
     Y_ABORT_UNLESS(description.GetOwners().size() <= 1, "To many owners");
     if (description.GetOwners().empty()) {
-        LOG_ROW_DISPATCHER_DEBUG("Empty owners");
+        YDB_LOG_DEBUG("Empty owners",
+            {"logPrefix", LogPrefix});
         // Wait OnChanged.
         return;
     }
@@ -466,9 +494,16 @@ void TLeaderElection::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
     }
 
     NActors::TActorId id = ActorIdFromProto(protoId);
-    LOG_ROW_DISPATCHER_DEBUG("Semaphore successfully described: coordinator id " << id << " generation " << generation);
+    YDB_LOG_DEBUG("Semaphore successfully described: coordinator id generation",
+        {"logPrefix", LogPrefix},
+        {"id", id},
+        {"generation", generation});
     if (!LeaderActorId || (*LeaderActorId != id)) {
-        LOG_ROW_DISPATCHER_INFO("Send TEvCoordinatorChanged to " << ParentId << ", new coordinator id " << id << ", previous coordinator id " << LeaderActorId.GetOrElse(TActorId()));
+        YDB_LOG_INFO("Send TEvCoordinatorChanged to new coordinator id previous coordinator id",
+            {"logPrefix", LogPrefix},
+            {"parentId", ParentId},
+            {"id", id},
+            {"leaderActorId", LeaderActorId.GetOrElse(TActorId())});
         TActivationContext::ActorSystem()->Send(ParentId, new NFq::TEvRowDispatcher::TEvCoordinatorChanged(id, generation));
         Metrics.LeaderChanged->Inc();
     }
@@ -476,7 +511,9 @@ void TLeaderElection::Handle(TEvPrivate::TEvDescribeSemaphoreResult::TPtr& ev) {
 }
 
 void TLeaderElection::HandleException(const std::exception& e) {
-    LOG_ROW_DISPATCHER_ERROR("Internal error: exception:" << e.what());
+    YDB_LOG_ERROR("Internal error",
+        {"logPrefix", LogPrefix},
+        {"exception", e.what()});
     Metrics.Errors->Inc();
     ResetState();
 }

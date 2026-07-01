@@ -2,7 +2,9 @@
 
 #include "purecalc_filter.h"
 
-#include <ydb/core/fq/libs/actors/logging/log.h>
+#include <ydb/library/actors/core/log.h>
+
+#define YDB_LOG_THIS_FILE_COMPONENT ::NKikimrServices::FQ_ROW_DISPATCHER
 
 namespace NFq::NRowDispatcher {
 
@@ -31,7 +33,10 @@ public:
     {}
 
     void ProcessData(const TVector<ui64>& columnIndex, const TVector<ui64>& offsets, const TVector<std::span<NYql::NUdf::TUnboxedValue>>& values, ui64 numberRows) override {
-        LOG_ROW_DISPATCHER_TRACE("ProcessData for " << RunHandlers_.size() << " clients, number rows: " << numberRows);
+        YDB_LOG_TRACE("ProcessData for clients, number",
+            {"logPrefix", LogPrefix},
+            {"#_RunHandlers_.size", RunHandlers_.size()},
+            {"rows", numberRows});
 
         if (!numberRows) {
             return;
@@ -44,7 +49,9 @@ public:
                 continue;
             }
             if (const auto nextOffset = consumer->GetNextMessageOffset(); nextOffset && offsets[numberRows - 1] < *nextOffset) {
-                LOG_ROW_DISPATCHER_TRACE("Ignore processing for " << consumer->GetClientId() << ", historical offset");
+                YDB_LOG_TRACE("Ignore processing for historical offset",
+                    {"logPrefix", LogPrefix},
+                    {"#_consumer->GetClientId", consumer->GetClientId()});
                 continue;
             }
 
@@ -54,11 +61,15 @@ public:
     }
 
     void OnCompileResponse(TEvRowDispatcher::TEvPurecalcCompileResponse::TPtr& ev) override {
-        LOG_ROW_DISPATCHER_TRACE("Got compile response for request with id " << ev->Cookie);
+        YDB_LOG_TRACE("Got compile response for request with id",
+            {"logPrefix", LogPrefix},
+            {"#_ev->Cookie", ev->Cookie});
 
         auto compileHandlerStatus = RemoveCompileProgram(ev->Cookie);
         if (compileHandlerStatus.IsFail()) {
-            LOG_ROW_DISPATCHER_ERROR(compileHandlerStatus.GetError().GetErrorMessage());
+            YDB_LOG_ERROR("",
+                {"logPrefix", LogPrefix},
+                {"#_compileHandlerStatus.GetError().GetErrorMessage", compileHandlerStatus.GetError().GetErrorMessage()});
             return;
         }
         const auto compileHandler = compileHandlerStatus.DetachResult();
@@ -71,7 +82,9 @@ public:
 
         auto runHandlerStatus = AddRunProgram(compileHandler->GetConsumer(), compileHandler->GetProgram());
         if (runHandlerStatus.IsFail()) {
-            LOG_ROW_DISPATCHER_ERROR(runHandlerStatus.GetError().GetErrorMessage());
+            YDB_LOG_ERROR("",
+                {"logPrefix", LogPrefix},
+                {"#_runHandlerStatus.GetError().GetErrorMessage", runHandlerStatus.GetError().GetErrorMessage()});
             return;
         }
 
@@ -91,7 +104,9 @@ public:
     }
 
     void RemoveProgram(NActors::TActorId clientId) override {
-        LOG_ROW_DISPATCHER_TRACE("Remove program with client id " << clientId);
+        YDB_LOG_TRACE("Remove program with client id",
+            {"logPrefix", LogPrefix},
+            {"clientId", clientId});
 
         AbortCompileProgram(clientId);
         RemoveRunProgram(clientId);
@@ -107,20 +122,27 @@ private:
             return;
         }
 
-        LOG_ROW_DISPATCHER_TRACE("Start program with client id " << consumer->GetClientId());
+        YDB_LOG_TRACE("Start program with client id",
+            {"logPrefix", LogPrefix},
+            {"#_consumer->GetClientId", consumer->GetClientId()});
 
         consumer->OnStart();
     }
 
     TStatus AddProgram(IProcessedDataConsumer::TPtr consumer, IProgramHolder::TPtr programHolder) {
-        LOG_ROW_DISPATCHER_TRACE("Create program with client id " << consumer->GetClientId());
+        YDB_LOG_TRACE("Create program with client id",
+            {"logPrefix", LogPrefix},
+            {"#_consumer->GetClientId", consumer->GetClientId()});
 
         if (!programHolder) {
             auto runHandlerStatus = AddRunProgram(std::move(consumer), std::move(programHolder));
             return runHandlerStatus.IsSuccess() ? TStatus::Success() : runHandlerStatus.GetError();
         }
 
-        LOG_ROW_DISPATCHER_TRACE("Create purecalc program for query '" << programHolder->GetQuery() << "' (client id: " << consumer->GetClientId() << ")");
+        YDB_LOG_TRACE("Create purecalc program for query (client",
+            {"logPrefix", LogPrefix},
+            {"#_programHolder->GetQuery", programHolder->GetQuery()},
+            {"id", consumer->GetClientId()});
 
         const auto cookie = NextCookie_++;
         auto compileHandlerStatus = AddCompileProgram(std::move(consumer), std::move(programHolder), cookie);
@@ -215,12 +237,18 @@ private:
             if (const auto value = values[index]; !value.empty()) {
                 result.emplace_back(value);
             } else {
-                LOG_ROW_DISPATCHER_TRACE("Ignore processing for " << consumer->GetClientId() << ", client got parsing error for column " << columnId);
+                YDB_LOG_TRACE("Ignore processing for client got parsing error for column",
+                    {"logPrefix", LogPrefix},
+                    {"#_consumer->GetClientId", consumer->GetClientId()},
+                    {"columnId", columnId});
                 return;
             }
         }
 
-        LOG_ROW_DISPATCHER_TRACE("Pass " << numberRows << " rows to purecalc filter (client id: " << consumer->GetClientId() << ")");
+        YDB_LOG_TRACE("Pass rows to purecalc filter (client",
+            {"logPrefix", LogPrefix},
+            {"numberRows", numberRows},
+            {"id", consumer->GetClientId()});
         programRunHandler->ProcessData(result, numberRows);
     }
 

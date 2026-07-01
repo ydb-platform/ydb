@@ -217,6 +217,8 @@ message TPartitionConfig {
     repeated uint32 DropByKeyFilterPrefixLengths = 28; // Bloom filter prefix lengths to drop
     // For unique indexes - number of leading PK columns which should have unique values (for correct locking)
     optional uint32 UniqueIndexKeySize = 29;
+    // For fulltext indexes - to determine if the table is an impl table of an index
+    optional ESpecialTableType SpecialTableType = 30;
 }
 
 message TByKeyFilterPrefix {
@@ -470,8 +472,7 @@ message TTableDescription {
      */
     optional TTableDetailedMetricsSettings DetailedMetricsSettings = 51;
 
-    // For fulltext indexes - to determine if the table is an impl table of an index
-    optional ESpecialTableType TableType = 52;
+    reserved 52;
 }
 
 message TCompressionOptions {

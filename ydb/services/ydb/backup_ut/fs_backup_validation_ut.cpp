@@ -257,7 +257,7 @@ template <bool encryptionEnabled>
 class TFsBackupEncryptionParamsValidationTestFixture : public TFsBackupParamsValidationTestFixture {
 public:
     void SetUp(NUnitTest::TTestContext& context) override {
-        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableExportFiltering(true);
+        Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableExportFiltering(encryptionEnabled);
         Server().GetRuntime()->GetAppData().FeatureFlags.SetEnableEncryptedExport(encryptionEnabled);
         TFsBackupParamsValidationTestFixture::SetUp(context);
     }

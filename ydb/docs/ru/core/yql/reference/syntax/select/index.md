@@ -21,7 +21,13 @@ SELECT 2 + 2;
 
 * определяется набор входных таблиц – вычисляются выражения после [FROM](../select/from.md);
 * к входным таблицам применяется [MATCH_RECOGNIZE](match_recognize.md)
+<<<<<<< HEAD
+=======
+{% endif %}
+{% if feature_tablesample==true %}
+>>>>>>> 0d4a38f56a4 (Remove tablesample references (#44191))
 * вычисляется [SAMPLE](sample.md) / [TABLESAMPLE](sample.md)
+{% endif %}
 * выполняется [FLATTEN COLUMNS](flatten.md#flatten-columns) или [FLATTEN BY](flatten.md); алиасы, заданные во `FLATTEN BY`, становятся видны после этой точки;
 {% if feature_join %}
 * выполняются все [JOIN](join.md);
@@ -219,8 +225,14 @@ SELECT * FROM FILTER(
 * [ORDER BY](order_by.md)
 * [ASSUME ORDER BY](assume_order_by.md)
 * [LIMIT OFFSET](limit_offset.md)
+{% if feature_tablesample==true %}
 * [SAMPLE](sample.md)
 * [TABLESAMPLE](sample.md)
+<<<<<<< HEAD
+=======
+{% endif %}
+{% if feature_match_recogznize==true %}
+>>>>>>> 0d4a38f56a4 (Remove tablesample references (#44191))
 * [MATCH_RECOGNIZE](match_recognize.md)
 {% if feature_join %}
 * [JOIN](join.md)

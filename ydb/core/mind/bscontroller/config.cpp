@@ -654,7 +654,8 @@ namespace NKikimr::NBsController {
             // scan for created/renamed storage pools
             for (const auto& [prev, cur] : Diff(&StoragePools, &state.StoragePools.Get())) {
                 if (!prev) { // created storage pool
-                    StoragePoolStat->AddStoragePool(TStoragePoolStat::ConvertId(cur->first), cur->second.Name, 0);
+                    StoragePoolStat->AddStoragePool(TStoragePoolStat::ConvertId(cur->first), cur->second.Name, 0,
+                        cur->second.ErasureSpecies);
                 } else if (cur && prev->second.Name != cur->second.Name) { // renamed storage pool
                     StoragePoolStat->RenameStoragePool(TStoragePoolStat::ConvertId(cur->first), cur->second.Name);
                 }

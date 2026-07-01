@@ -484,7 +484,8 @@ public:
             }
         }
         for (const auto& [id, info] : Self->StoragePools) {
-            Self->StoragePoolStat->AddStoragePool(TStoragePoolStat::ConvertId(id), info.Name, allocatedSizeMap[id]);
+            Self->StoragePoolStat->AddStoragePool(TStoragePoolStat::ConvertId(id), info.Name, allocatedSizeMap[id],
+                info.ErasureSpecies);
         }
         for (const auto& [groupId, group] : Self->GroupMap) {
             group->StatusFlags = group->GetStorageStatusFlags();

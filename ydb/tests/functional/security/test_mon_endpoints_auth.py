@@ -6,6 +6,7 @@ from urllib.parse import urlencode
 import requests
 import yatest.common
 
+from security_test_helpers import _test_endpoints
 
 requests.packages.urllib3.disable_warnings()
 
@@ -225,10 +226,7 @@ def _full_path(base_path, query):
 
 def _requests_for_spec(cluster, spec):
     base_path = _base_path(cluster, spec)
-    return [
-        (base_path, _query_string(query), _full_path(base_path, query))
-        for query in _queries_for_spec(spec)
-    ]
+    return [(base_path, _query_string(query), _full_path(base_path, query)) for query in _queries_for_spec(spec)]
 
 
 def _request_status(method, base_url, path, token):
@@ -284,9 +282,120 @@ def _canonize(name, results):
     return yatest.common.canonical_file(out_path, local=True, universal_lines=True)
 
 
-def test_mon_endpoints_auth(ydb_cluster_for_mon_endpoints_auth):
-    case_name, cluster = ydb_cluster_for_mon_endpoints_auth
+def _run_mon_endpoints_auth_test(case_name, cluster):
     return _canonize(
         f'mon_endpoints_auth-{case_name}',
         _collect_endpoints(cluster),
     )
+
+
+def test_mon_endpoints_auth_enforce_user_token_enabled_no_schema_grants(
+    ydb_cluster_mon_endpoints_auth_enforce_user_token_enabled_no_schema_grants,
+):
+    return _run_mon_endpoints_auth_test(
+        'enforce_user_token_enabled_no_schema_grants',
+        ydb_cluster_mon_endpoints_auth_enforce_user_token_enabled_no_schema_grants,
+    )
+
+
+def test_mon_endpoints_auth_enforce_user_token_disabled_no_schema_grants(
+    ydb_cluster_mon_endpoints_auth_enforce_user_token_disabled_no_schema_grants,
+):
+    return _run_mon_endpoints_auth_test(
+        'enforce_user_token_disabled_no_schema_grants',
+        ydb_cluster_mon_endpoints_auth_enforce_user_token_disabled_no_schema_grants,
+    )
+
+
+def test_mon_endpoints_auth_enforce_user_token_enabled_with_schema_grants(
+    ydb_cluster_mon_endpoints_auth_enforce_user_token_enabled_with_schema_grants,
+):
+    return _run_mon_endpoints_auth_test(
+        'enforce_user_token_enabled_with_schema_grants',
+        ydb_cluster_mon_endpoints_auth_enforce_user_token_enabled_with_schema_grants,
+    )
+
+
+def test_mon_endpoints_auth_enforce_user_token_disabled_with_schema_grants(
+    ydb_cluster_mon_endpoints_auth_enforce_user_token_disabled_with_schema_grants,
+):
+    return _run_mon_endpoints_auth_test(
+        'enforce_user_token_disabled_with_schema_grants',
+        ydb_cluster_mon_endpoints_auth_enforce_user_token_disabled_with_schema_grants,
+    )
+
+
+def test_with_require_counters_authentication(ydb_cluster_with_require_counters_auth):
+    EXPECTED_RESULTS_WITH_REQUIRE_COUNTERS_AUTH = {
+        '/counters': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/counters/hosts': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/ping': {
+            None: 200,
+            'user@builtin': 200,
+            'database@builtin': 200,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },  # checks this just in case
+    }
+    _test_endpoints(ydb_cluster_with_require_counters_auth, EXPECTED_RESULTS_WITH_REQUIRE_COUNTERS_AUTH)
+
+
+def test_with_require_healthcheck_authentication(ydb_cluster_with_require_healthcheck_auth):
+    EXPECTED_RESULTS_WITH_REQUIRE_HEALTHCHECK_AUTH = {
+        '/healthcheck?format=prometheus': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/healthcheck': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 403,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/healthcheck?database=%2FRoot': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 403,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/healthcheck?database=%2FRoot&format=prometheus': {
+            None: 401,
+            'user@builtin': 403,
+            'database@builtin': 403,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },
+        '/ping': {
+            None: 200,
+            'user@builtin': 200,
+            'database@builtin': 200,
+            'viewer@builtin': 200,
+            'monitoring@builtin': 200,
+            'root@builtin': 200,
+        },  # checks this just in case
+    }
+    _test_endpoints(ydb_cluster_with_require_healthcheck_auth, EXPECTED_RESULTS_WITH_REQUIRE_HEALTHCHECK_AUTH)

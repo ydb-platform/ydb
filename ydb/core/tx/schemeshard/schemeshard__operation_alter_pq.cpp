@@ -65,14 +65,6 @@ size_t CountTopicTotalPartitions(
         return topic->Partitions.size();
     }
 
-    size_t count = 0;
-    for (const auto& [_, shard] : topic->Shards) {
-        count += shard->Partitions.size();
-    }
-    if (count > 0) {
-        return count;
-    }
-
     if (alter.PartitionsSize() > 0) {
         return alter.PartitionsSize();
     }
@@ -84,22 +76,11 @@ size_t CountTopicActivePartitions(
         const TTopicInfo::TPtr& topic,
         const NKikimrSchemeOp::TPersQueueGroupDescription& alter)
 {
-    size_t count = CountActivePartitions(topic->Partitions);
     if (!topic->Partitions.empty()) {
-        return count;
+        return CountActivePartitions(topic->Partitions);
     }
 
-    for (const auto& [_, shard] : topic->Shards) {
-        for (const auto& partition : shard->Partitions) {
-            if (partition->Status == NKikimrPQ::ETopicPartitionStatus::Active) {
-                ++count;
-            }
-        }
-    }
-    if (count > 0) {
-        return count;
-    }
-
+    size_t count = 0;
     for (const auto& partition : alter.GetPartitions()) {
         if (!partition.HasStatus() || partition.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active) {
             ++count;

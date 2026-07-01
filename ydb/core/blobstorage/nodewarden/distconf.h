@@ -484,7 +484,9 @@ namespace NKikimr::NStorage {
             const NBsController::TGroupMapper::TForbiddenPDisks& forbid,
             i64 requiredSpace, NKikimrBlobStorage::TBaseConfig *baseConfig,
             bool convertToDonor, bool ignoreVSlotQuotaCheck, bool isSelfHealReasonDecommit, TBridgePileId bridgePileId,
-            std::optional<TGroupId> bridgeProxyGroupId);
+            std::optional<TGroupId> bridgeProxyGroupId,
+            const NProtoBuf::RepeatedField<ui32>& selfHealAllowedNodes = {},
+            bool applyNodeAllowList = false);
 
         bool UpdateConfig(NKikimrBlobStorage::TStorageConfig *config);
 

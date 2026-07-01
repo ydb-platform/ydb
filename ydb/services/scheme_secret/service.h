@@ -18,9 +18,8 @@
 namespace NKikimr::NSecret {
 
 inline NActors::TActorId MakeDescribeSchemaSecretServiceId(ui32 nodeId) {
-    // It was initially registered in KQP, so the original name is left as is for compatibility.
-    const char name[12] = "kqp_dsc_sec";
-    return NActors::TActorId(nodeId, TStringBuf(name, 12));
+    const char name[NActors::TActorId::MaxServiceIDLength] = "desc_secret";
+    return NActors::TActorId(nodeId, TStringBuf(name, NActors::TActorId::MaxServiceIDLength));
 }
 
 class TDescribeSchemaSecretsService: public NActors::TActorBootstrapped<TDescribeSchemaSecretsService> {
@@ -64,7 +63,9 @@ public:
         const TDescribeSecretSettings Settings;
     };
 
-    struct TEvResolveSecretSchemeCacheRetry : public NActors::TEventLocal<TEvResolveSecretSchemeCacheRetry, EvResolveSecretSchemeCacheRetry> {
+    struct TEvResolveSecretSchemeCacheRetry :
+        public NActors::TEventLocal<TEvResolveSecretSchemeCacheRetry, EvResolveSecretSchemeCacheRetry>
+    {
         TEvResolveSecretSchemeCacheRetry(ui64 initialRequestId)
             : InitialRequestId(initialRequestId)
         {
@@ -73,7 +74,9 @@ public:
         const ui64 InitialRequestId = 0;
     };
 
-    struct TEvResolveSecretSchemeShardRetry : public NActors::TEventLocal<TEvResolveSecretSchemeShardRetry, EvResolveSecretSchemeShardRetry> {
+    struct TEvResolveSecretSchemeShardRetry :
+        public NActors::TEventLocal<TEvResolveSecretSchemeShardRetry, EvResolveSecretSchemeShardRetry>
+    {
         TEvResolveSecretSchemeShardRetry(ui64 initialRequestId, TString secretPath)
             : InitialRequestId(initialRequestId)
             , SecretPath(std::move(secretPath))

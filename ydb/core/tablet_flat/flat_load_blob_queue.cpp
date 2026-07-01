@@ -107,7 +107,7 @@ bool TLoadBlobQueue::SendRequests(const TActorId& sender) {
 
         if (newBlobs) {
             YDB_LOG_DEBUG("Sending TEvGet batch bytes, total",
-                {"#_TLogPrefix{ Config }", TLogPrefix{ Config }},
+                {"logPrefix", TLogPrefix{ Config }},
                 {"batchSize", batchSize},
                 {"activeBytesInFly", ActiveBytesInFly},
                 {"blobs", TDumpLogoBlobs{ newBlobs }});
@@ -137,7 +137,7 @@ bool TLoadBlobQueue::SendRequests(const TActorId& sender) {
 bool TLoadBlobQueue::ProcessResult(TEvBlobStorage::TEvGetResult* msg) {
     if (msg->Status != NKikimrProto::OK) {
         YDB_LOG_ERROR("EvGet failed",
-            {"#_TLogPrefix{ Config }", TLogPrefix{ Config }},
+            {"logPrefix", TLogPrefix{ Config }},
             {"request", msg->Print(false)});
 
         if (msg->Status == NKikimrProto::NODATA) {
@@ -154,8 +154,8 @@ bool TLoadBlobQueue::ProcessResult(TEvBlobStorage::TEvGetResult* msg) {
     for (auto* x = resBegin; x != resEnd; ++x) {
         if (x->Status != NKikimrProto::OK) {
             YDB_LOG_ERROR("EvGet failed for blob",
-                {"#_TLogPrefix{ Config }", TLogPrefix{ Config }},
-                {"#_x->Id", x->Id},
+                {"logPrefix", TLogPrefix{ Config }},
+                {"id", x->Id},
                 {"request", msg->Print(false)});
 
             if (x->Status == NKikimrProto::NODATA) {

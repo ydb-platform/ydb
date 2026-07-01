@@ -28,10 +28,10 @@ bool TTabletExecutedFlat::OnUnhandledException(const std::exception& e) {
         if (auto* actor = dynamic_cast<IActor*>(this)) {
             auto ctx = TActivationContext::ActorContextFor(actor->SelfId());
             YDB_LOG_CRIT("Tablet unhandled exception \n",
-                {"tabletID", TabletID()},
-                {"#_TypeName(e)", TypeName(e)},
-                {"#_e.what", e.what()},
-                {"#_TBackTrace::FromCurrentException().PrintToString", TBackTrace::FromCurrentException().PrintToString()});
+                {"tabletId", TabletID()},
+                {"typeName", TypeName(e)},
+                {"exception", e.what()},
+                {"currentException", TBackTrace::FromCurrentException().PrintToString()});
 
             GetServiceCounters(AppData(ctx)->Counters, "tablets")->GetCounter("alerts_exception", true)->Inc();
 

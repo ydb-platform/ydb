@@ -104,6 +104,7 @@ namespace NKikimr::NHttpProxy {
 
                 TMap<TString, TString> peerMetadata {
                     {NYmq::V1::REQUEST_ID, HttpContext.RequestId},
+                    {NYmq::V1::SOURCE_ADDRESS, HttpContext.SourceAddress},
                 };
 
                 RpcFuture = NRpcService::DoLocalRpc<TRpcEv>(
@@ -549,4 +550,3 @@ namespace NKikimr::NHttpProxy {
     }
 
 } // namespace NKikimr::NHttpProxy
-

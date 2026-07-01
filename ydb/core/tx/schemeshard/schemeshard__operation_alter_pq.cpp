@@ -47,9 +47,13 @@ std::expected<void, std::string> ValidateKeyRangeSequence(const auto& partitions
     return NKikimr::NPQ::ValidateKeyRangeSequence(bounds);
 }
 
-size_t CountActivePartitions(const THashMap<ui32, TTopicTabletInfo::TTopicPartitionInfo*>& partitions) {
+size_t CountTopicTotalPartitions(const TTopicInfo::TPtr& topic) {
+    return topic->Partitions.size();
+}
+
+size_t CountTopicActivePartitions(const TTopicInfo::TPtr& topic) {
     size_t count = 0;
-    for (const auto& [_, partition] : partitions) {
+    for (const auto& [_, partition] : topic->Partitions) {
         if (partition->Status == NKikimrPQ::ETopicPartitionStatus::Active) {
             ++count;
         }
@@ -57,48 +61,11 @@ size_t CountActivePartitions(const THashMap<ui32, TTopicTabletInfo::TTopicPartit
     return count;
 }
 
-size_t CountTopicTotalPartitions(
-        const TTopicInfo::TPtr& topic,
-        const NKikimrSchemeOp::TPersQueueGroupDescription& alter)
-{
-    if (!topic->Partitions.empty()) {
-        return topic->Partitions.size();
-    }
-
-    if (alter.PartitionsSize() > 0) {
-        return alter.PartitionsSize();
-    }
-
-    return topic->TotalPartitionCount;
-}
-
-size_t CountTopicActivePartitions(
-        const TTopicInfo::TPtr& topic,
-        const NKikimrSchemeOp::TPersQueueGroupDescription& alter)
-{
-    if (!topic->Partitions.empty()) {
-        return CountActivePartitions(topic->Partitions);
-    }
-
-    size_t count = 0;
-    for (const auto& partition : alter.GetPartitions()) {
-        if (!partition.HasStatus() || partition.GetStatus() == NKikimrPQ::ETopicPartitionStatus::Active) {
-            ++count;
-        }
-    }
-    if (count > 0) {
-        return count;
-    }
-
-    return topic->ActivePartitionCount;
-}
-
 size_t ComputeAlterActivePartitionCount(
         const TTopicInfo::TPtr& topic,
-        const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
         const TTopicInfo::TPtr& alterData)
 {
-    size_t count = CountTopicActivePartitions(topic, alter);
+    size_t count = CountTopicActivePartitions(topic);
     THashSet<ui32> addedPartitionIds;
     for (const auto& partition : alterData->PartitionsToAdd) {
         addedPartitionIds.insert(partition.PartitionId);
@@ -123,11 +90,10 @@ size_t ComputeAlterActivePartitionCount(
 
 void ComputeAlterPartitionCounts(
         const TTopicInfo::TPtr& topic,
-        const NKikimrSchemeOp::TPersQueueGroupDescription& alter,
         TTopicInfo::TPtr alterData)
 {
-    alterData->TotalPartitionCount = CountTopicTotalPartitions(topic, alter) + alterData->PartitionsToAdd.size();
-    alterData->ActivePartitionCount = ComputeAlterActivePartitionCount(topic, alter, alterData);
+    alterData->TotalPartitionCount = CountTopicTotalPartitions(topic) + alterData->PartitionsToAdd.size();
+    alterData->ActivePartitionCount = ComputeAlterActivePartitionCount(topic, alterData);
 }
 
 class TAlterPQ: public TSubOperation {
@@ -996,7 +962,7 @@ public:
             }
 
             if (alter.HasPQTabletConfig() && alter.GetPQTabletConfig().HasPartitionStrategy()) {
-                size_t activePartitionCount = CountTopicActivePartitions(topic, alter);
+                size_t activePartitionCount = CountTopicActivePartitions(topic);
                 auto requestedMinPartitionCount = alter.GetPQTabletConfig().GetPartitionStrategy().GetMinPartitionCount();
                 if (requestedMinPartitionCount > activePartitionCount) {
                     // select exisisting active partitions for split
@@ -1129,7 +1095,7 @@ public:
             }
         }
 
-        ComputeAlterPartitionCounts(topic, alter, alterData);
+        ComputeAlterPartitionCounts(topic, alterData);
 
         if (!(0 < alterData->ActivePartitionCount && alterData->ActivePartitionCount <= alterData->TotalPartitionCount)) {
             errStr = TStringBuilder()
@@ -1176,7 +1142,7 @@ public:
         }
 
         const auto& stats = topic->Stats;
-        const auto topicActivePartitionCount = CountTopicActivePartitions(topic, alter);
+        const auto topicActivePartitionCount = CountTopicActivePartitions(topic);
         const PQGroupReserve reserve(newTabletConfig, alterData->ActivePartitionCount);
         const PQGroupReserve reserveForCheckLimit(newTabletConfig, alterData->ActivePartitionCount + involvedPartitions.size());
         const PQGroupReserve oldReserve(tabletConfig, topicActivePartitionCount);

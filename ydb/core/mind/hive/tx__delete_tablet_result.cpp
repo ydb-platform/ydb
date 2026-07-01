@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -23,7 +25,10 @@ public:
         SideEffects.Reset(Self->SelfId());
         Success = true;
         TEvTabletBase::TEvDeleteTabletResult* msg = Result->Get();
-        BLOG_D("THive::TTxDeleteTabletResult::Execute(" << TabletId << " " << NKikimrProto::EReplyStatus_Name(msg->Status) << ")");
+        YDB_LOG_DEBUG("THive::TTxDeleteTabletResult::Execute(",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", TabletId},
+            {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)});
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(TabletId);
         if (tablet != nullptr) {
             if (msg->Status == NKikimrProto::OK) {
@@ -64,8 +69,13 @@ public:
                 Self->DeleteTablet(tablet->Id);
             } else {
                 Success = false;
-                BLOG_W("THive::TTxDeleteTabletResult retrying for " << TabletId << " because of " << NKikimrProto::EReplyStatus_Name(msg->Status));
-                Y_ENSURE_LOG(tablet->IsDeleting(), " tablet " << tablet->Id);
+                YDB_LOG_WARN("THive::TTxDeleteTabletResult retrying for because of",
+                    {"logPrefix", GetLogPrefix()},
+                    {"tabletId", TabletId},
+                    {"replyStatus", NKikimrProto::EReplyStatus_Name(msg->Status)});
+                if (!(tablet->IsDeleting())) { YDB_LOG_ERROR("Failed condition tablet->IsDeleting() tablet",
+                                                   {"logPrefix", GetLogPrefix()},
+                                                   {"tabletId", tablet->Id}); }
                 SideEffects.Schedule(TDuration::MilliSeconds(1000), new TEvHive::TEvInitiateDeleteStorage(tablet->Id));
             }
         }
@@ -73,7 +83,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxDeleteTabletResult(" << TabletId << ")::Complete SideEffects " << SideEffects);
+        YDB_LOG_DEBUG("THive::TTxDeleteTabletResult( )::Complete SideEffects",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", TabletId},
+            {"sideEffects", SideEffects});
         if (Success) {
             --Self->DeleteTabletInProgress;
             while (!Self->DeleteTabletQueue.empty() && Self->DeleteTabletInProgress < Self->GetMaxDeleteTabletInProgress()) {

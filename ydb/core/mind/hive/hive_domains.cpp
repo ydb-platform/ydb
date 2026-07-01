@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -12,8 +14,12 @@ void TDomainsView::RegisterNode(const TNodeInfo& node) {
 
 void TDomainsView::DeregisterNode(const TNodeInfo& node) {
     for (auto &domainKey: node.ServicedDomains) {
-         BLOG_TRACE("Node(" << node.Id << ")"
-                    << " DeregisterInDomains (" << domainKey << ") : " << TotalCount[domainKey] << " -> " << TotalCount[domainKey] - 1);
+         YDB_LOG_TRACE("Node( DeregisterInDomains ->",
+             {"logPrefix", GetLogPrefix()},
+             {"nodeId", node.Id},
+             {"domainKey", domainKey},
+             {"totalCount", TotalCount[domainKey]},
+             {"remainingCount", TotalCount[domainKey] - 1});
          Y_ABORT_UNLESS(TotalCount[domainKey], "try decrement empty counter for DomainKey %s", ToString(domainKey).c_str());
         --TotalCount[domainKey];
     }
@@ -39,7 +45,9 @@ void THive::ResolveDomain(TSubDomainKey domain) {
     entry.Operation = NSchemeCache::TSchemeCacheNavigate::EOp::OpPath;
     entry.RequestType = NSchemeCache::TSchemeCacheNavigate::TEntry::ERequestType::ByTableId;
     entry.RedirectRequired = false;
-    BLOG_D("Resolving domain " << entry.TableId);
+    YDB_LOG_DEBUG("Resolving domain",
+        {"logPrefix", GetLogPrefix()},
+        {"tableId", entry.TableId});
     Send(MakeSchemeCacheID(), new TEvTxProxySchemeCache::TEvNavigateKeySet(request.Release()));
 }
 
@@ -54,18 +62,27 @@ void THive::Handle(TEvTxProxySchemeCache::TEvNavigateKeySetResult::TPtr& ev) {
             if (entry.DomainInfo && entry.DomainInfo->Params.HasHive()) {
                 Domains[key].HiveId = entry.DomainInfo->Params.GetHive();
             }
-            BLOG_D("Received NavigateKeySetResult for domain " << entry.TableId << " with path " << path);
+            YDB_LOG_DEBUG("Received NavigateKeySetResult for domain with path",
+                {"logPrefix", GetLogPrefix()},
+                {"tableId", entry.TableId},
+                {"path", path});
             Execute(CreateUpdateDomain(key));
         } else {
-            BLOG_W("Received NavigateKeySetResult for domain " << entry.TableId << " with status " << entry.Status);
+            YDB_LOG_WARN("Received NavigateKeySetResult for domain with status",
+                {"logPrefix", GetLogPrefix()},
+                {"tableId", entry.TableId},
+                {"entryStatus", entry.Status});
         }
     } else {
-        BLOG_W("Received empty NavigateKeySetResult");
+        YDB_LOG_WARN("Received empty NavigateKeySetResult",
+            {"logPrefix", GetLogPrefix()});
     }
 }
 
 void THive::Handle(TEvHive::TEvUpdateDomain::TPtr& ev) {
-    BLOG_D("Handle TEvHive::TEvUpdateDomain(" << ev->Get()->Record.ShortDebugString() << ")");
+    YDB_LOG_DEBUG("Handle TEvHive::TEvUpdateDomain(",
+        {"logPrefix", GetLogPrefix()},
+        {"ev", ev->Get()->Record});
     const TSubDomainKey subdomainKey(ev->Get()->Record.GetDomainKey());
     TDomainInfo& domainInfo = Domains[subdomainKey];
     if (ev->Get()->Record.HasServerlessComputeResourcesMode()) {

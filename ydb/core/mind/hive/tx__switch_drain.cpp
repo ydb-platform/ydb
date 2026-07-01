@@ -2,6 +2,8 @@
 #include "hive_log.h"
 #include "drain.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -25,8 +27,11 @@ public:
     {}
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("THive::TTxSwitchDrainOn::Execute Node: " << NodeId
-                << " Persist: " << Settings.Persist << " DownPolicy: " << static_cast<int>(Settings.DownPolicy));
+        YDB_LOG_DEBUG("THive::TTxSwitchDrainOn::Execute",
+            {"logPrefix", GetLogPrefix()},
+            {"node", NodeId},
+            {"persist", Settings.Persist},
+            {"downPolicy", static_cast<int>(Settings.DownPolicy)});
         NIceDb::TNiceDb db(txc.DB);
         TNodeInfo* node = Self->FindNode(NodeId);
         if (node != nullptr) {
@@ -73,7 +78,10 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxSwitchDrainOn::Complete NodeId: " << NodeId << " Status: " << Status);
+        YDB_LOG_DEBUG("THive::TTxSwitchDrainOn::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"nodeId", NodeId},
+            {"status", Status});
         if (Initiator) {
             if (StartingDrain) {
                 Self->Send(Initiator, new TEvHive::TEvDrainNodeAck(SeqNo), 0, Cookie);
@@ -114,7 +122,9 @@ public:
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        BLOG_D("THive::TTxSwitchDrainOff::Execute Target: " << Target);
+        YDB_LOG_DEBUG("THive::TTxSwitchDrainOff::Execute",
+            {"logPrefix", GetLogPrefix()},
+            {"target", Target});
         NIceDb::TNiceDb db(txc.DB);
 
         if (std::holds_alternative<TNodeId>(Target)) {
@@ -130,8 +140,11 @@ public:
     }
 
     void Complete(const TActorContext&) override {
-        BLOG_D("THive::TTxSwitchDrainOff::Complete Target: " << Target
-            << " Status: " << NKikimrProto::EReplyStatus_Name(Status) << " Movements: " << Movements);
+        YDB_LOG_DEBUG("THive::TTxSwitchDrainOff::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"target", Target},
+            {"status", NKikimrProto::EReplyStatus_Name(Status)},
+            {"movements", Movements});
         for (const TActorId& initiator : Initiators) {
             Self->Send(initiator, new TEvHive::TEvDrainNodeResult(Status, Movements));
         }

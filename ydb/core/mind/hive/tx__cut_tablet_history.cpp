@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -17,7 +19,9 @@ public:
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
         TEvHive::TEvCutTabletHistory* msg = Event->Get();
         auto tabletId = msg->Record.GetTabletID();
-        BLOG_D("THive::TTxCutTabletHistory::Execute(" << tabletId << ")");
+        YDB_LOG_DEBUG("THive::TTxCutTabletHistory::Execute(",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", tabletId});
         TLeaderTabletInfo* tablet = Self->FindTabletEvenInDeleting(tabletId);
         if (tablet != nullptr && tablet->IsReadyToReassignTablet() && Self->IsCutHistoryAllowed(tablet->Type)) {
             auto channel = msg->Record.GetChannel();

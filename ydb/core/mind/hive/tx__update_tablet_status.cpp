@@ -1,6 +1,8 @@
 #include "hive_impl.h"
 #include "hive_log.h"
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::HIVE
+
 namespace NKikimr {
 namespace NHive {
 
@@ -55,23 +57,23 @@ public:
         SideEffects.Reset(Self->SelfId());
         TTabletInfo* tablet = Self->FindTablet(TabletId, FollowerId);
         if (tablet != nullptr) {
-            BLOG_D("THive::TTxUpdateTabletStatus::Execute for tablet "
-                        << tablet->ToString()
-                        << " status "
-                        << GetStatus()
-                        << " generation "
-                        << Generation
-                        << " follower "
-                        << FollowerId
-                        << " from local "
-                        << Local);
+            YDB_LOG_DEBUG("THive::TTxUpdateTabletStatus::Execute for tablet status generation follower from local",
+                {"logPrefix", GetLogPrefix()},
+                {"tablet", tablet->ToString()},
+                {"status", GetStatus()},
+                {"generation", Generation},
+                {"followerId", FollowerId},
+                {"local", Local});
             NIceDb::TNiceDb db(txc.DB);
             const TInstant now = TActivationContext::Now();
             if (Status == TEvLocal::TEvTabletStatus::StatusOk) {
                 if (tablet->BootTime != TInstant()) {
                     TDuration startTime = now - tablet->BootTime;
                     if (startTime > TDuration::Seconds(30)) {
-                        BLOG_W("Tablet " << tablet->GetFullTabletId() << " was starting for " << startTime.Seconds() << " seconds");
+                        YDB_LOG_WARN("Tablet was starting for seconds",
+                            {"logPrefix", GetLogPrefix()},
+                            {"fullTabletId", tablet->GetFullTabletId()},
+                            {"startTimeSeconds", startTime.Seconds()});
                     }
                     Self->TabletCounters->Percentile()[NHive::COUNTER_TABLETS_START_TIME].IncrementFor(startTime.MilliSeconds());
                     Self->UpdateCounterTabletsStarting(-1);
@@ -141,8 +143,10 @@ public:
                     if (IsFailStatusForPostponeRestart()) {
                         if (leader.GetRestartsPerPeriod(now - Self->GetTabletRestartsPeriodForPenalties()) >= Self->GetTabletRestartsMaxCount()) {
                             leader.PostponeStart(now + Self->GetPostponeStartPeriod());
-                            BLOG_D("THive::TTxUpdateTabletStatus::Execute for tablet " << tablet->ToString()
-                                << " postponed start until " << leader.PostponedStart);
+                            YDB_LOG_DEBUG("THive::TTxUpdateTabletStatus::Execute for tablet postponed start until",
+                                {"logPrefix", GetLogPrefix()},
+                                {"tablet", tablet->ToString()},
+                                {"postponedStart", leader.PostponedStart});
                         }
                     }
                 }
@@ -182,7 +186,9 @@ public:
 
                 case ETabletState::Stopped:
                     Self->ReportStoppedToWhiteboard(tablet->GetLeader());
-                    BLOG_D("Report tablet " << tablet->ToString() << " as stopped to Whiteboard");
+                    YDB_LOG_DEBUG("Report tablet as stopped to Whiteboard",
+                        {"logPrefix", GetLogPrefix()},
+                        {"tablet", tablet->ToString()});
                     break;
                 case ETabletState::BlockStorage:
                     // do nothing - let the tablet die
@@ -198,7 +204,10 @@ public:
     }
 
     void Complete(const TActorContext& ctx) override {
-        BLOG_D("THive::TTxUpdateTabletStatus::Complete TabletId: " << TabletId << " SideEffects: " << SideEffects);
+        YDB_LOG_DEBUG("THive::TTxUpdateTabletStatus::Complete",
+            {"logPrefix", GetLogPrefix()},
+            {"tabletId", TabletId},
+            {"sideEffects", SideEffects});
         SideEffects.Complete(ctx);
     }
 };

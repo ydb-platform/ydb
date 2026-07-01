@@ -51,7 +51,7 @@ namespace NKikimr {
                         if (part->ChunkIdx && part->Size) {
                             const TLogoBlobID partId(key.LogoBlobID(), i + 1); // part id for this blob
                             std::optional<TRcBuf> data = Read(*part, partId);
-                            YDB_LOG_CTX_COMP(data ? PRI_DEBUG : PRI_ERROR, Impl->GetActorContext(), BS_VDISK_SCRUB, VDISKP(LogPrefix, "huge blob read"),
+                            YDB_LOG_CTX_COMP(Impl->GetActorContext(), data ? PRI_DEBUG : PRI_ERROR, BS_VDISK_SCRUB, VDISKP(LogPrefix, "huge blob read"),
                                 {"marker", "VDS21"},
                                 {"id", key.LogoBlobID()},
                                 {"local", local},

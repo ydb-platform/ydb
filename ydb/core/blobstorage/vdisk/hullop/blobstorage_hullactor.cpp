@@ -401,7 +401,7 @@ namespace NKikimr {
             NHullComp::EAction action = ev->Get()->Action;
             CompactionTask = std::move(ev->Get()->CompactionTask);
 
-            YDB_LOG_CTX_COMP(action != NHullComp::ActNothing ? NLog::PRI_INFO : NLog::PRI_DEBUG, ctx, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: selected compaction %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionTask->ToString().data()));
+            YDB_LOG_CTX_COMP(ctx, action != NHullComp::ActNothing ? NLog::PRI_INFO : NLog::PRI_DEBUG, NKikimrServices::BS_HULLCOMP, VDISKP(HullDs->HullCtx->VCtx, "%s: selected compaction %s", PDiskSignatureForHullDbKey<TKey>().ToString().data(), CompactionTask->ToString().data()));
 
             switch (action) {
                 case NHullComp::ActNothing: {

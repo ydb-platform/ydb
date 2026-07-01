@@ -278,7 +278,7 @@ namespace NKikimr {
             const auto& reservedChunks = IsAborting ? Worker.GetAllocatedChunks() : Worker.GetReservedChunks();
             msg->ReservedChunks = {reservedChunks.begin(), reservedChunks.end()};
 
-            YDB_LOG_CTX_COMP(IsAborting ? NLog::PRI_ERROR : NLog::PRI_INFO, ctx, NKikimrServices::BS_HULLCOMP, "Compaction job finished",
+            YDB_LOG_CTX_COMP(ctx, IsAborting ? NLog::PRI_ERROR : NLog::PRI_INFO, NKikimrServices::BS_HULLCOMP, "Compaction job finished",
                 {"VDiskLogPrefix", HullCtx->VCtx->VDiskLogPrefix},
                 {"signature", PDiskSignatureForHullDbKey<TKey>()},
                 {"compactionID", CompactionID},

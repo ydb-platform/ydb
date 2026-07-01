@@ -1,5 +1,6 @@
 #pragma once
 
+#include <ydb/core/nbs/cloud/blockstore/libs/service/partition_direct_service_mock.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/partition_direct/direct_block_group_impl.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/storage_transport_mock.h>
 #include <ydb/core/nbs/cloud/blockstore/libs/storage/storage_transport/testlib/ic_storage_transport_test_adapter.h>
@@ -17,8 +18,16 @@ TVector<NKikimr::NBsController::TDDiskId> MakeDDiskIds(ui32 baseNodeId);
 
 struct TDBGFixture: public NUnitTest::TBaseFixture
 {
+    // Default timeout for waiting on futures in tests.
+    static constexpr auto DefaultWaitTimeout = TDuration::Seconds(10);
+
     std::unique_ptr<NActors::TTestActorRuntime> Runtime;
     TVector<TExecutorPtr> Executors;
+
+    // Mock services created by RunAndGetInitialReady(). Kept alive for the
+    // whole test because TDirectBlockGroup::Run() stores a raw pointer to the
+    // service.
+    TVector<std::shared_ptr<TPartitionDirectServiceMock>> Services;
 
     void SetUp(NUnitTest::TTestContext& context) override;
 
@@ -38,14 +47,21 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
         const TVector<NKikimr::NBsController::TDDiskId>& ddisksIds,
         const TVector<NKikimr::NBsController::TDDiskId>& pbufferIds) const;
 
+    template <typename TTransport>
+        requires std::derived_from<TTransport, NTransport::IStorageTransport>
     [[nodiscard]] std::shared_ptr<TDirectBlockGroup> MakeDirectBlockGroup(
         const TExecutorPtr& executor,
-        std::unique_ptr<NTransport::TStorageTransportMock> transport) const;
+        std::unique_ptr<TTransport> transport) const
+    {
+        auto ddisks = transport->GetDDiskIds();
+        auto pbuffers = transport->GetPBufferIds();
 
-    [[nodiscard]] std::shared_ptr<TDirectBlockGroup> MakeDirectBlockGroup(
-        const TExecutorPtr& executor,
-        std::unique_ptr<NTransport::NTestLib::TICStorageTransportTestAdapter>
-            transport) const;
+        return MakeDirectBlockGroup(
+            executor,
+            std::move(transport),
+            ddisks,
+            pbuffers);
+    }
 
     // Interleaves the simulated runtime and the coroutine executor: dispatches
     // everything queued in the runtime and lets the executor run the resumed
@@ -75,6 +91,28 @@ struct TDBGFixture: public NUnitTest::TBaseFixture
             timeout);
         return future.GetValue(timeout);
     }
+
+    // Creates a mock service (kept alive in Services) and starts the group,
+    // returning the initial-ready future from Run(). Hides the boilerplate
+    // `TPartitionDirectServiceMock service(true); dbg->Run(&service);` repeated
+    // across tests. `dropScheduledCallbacks` maps to the mock ctor argument.
+    NThreading::TFuture<void> RunAndGetInitialReady(
+        const std::shared_ptr<TDirectBlockGroup>& dbg,
+        bool dropScheduledCallbacks = true);
+
+    // Waits for a future (typically the initial-ready gate) and asserts it
+    // resolved. Unifies the readiness check across the mock-transport tests.
+    void WaitReady(
+        const NThreading::TFuture<void>& future,
+        TDuration timeout = DefaultWaitTimeout);
+
+    // Waits for a future (typically the initial-ready gate) by pumping the
+    // runtime + executor, then asserts it resolved. Unifies the readiness check
+    // across the real-transport tests.
+    void WaitReady(
+        const TExecutorPtr& executor,
+        const NThreading::TFuture<void>& future,
+        TDuration timeout = DefaultWaitTimeout);
 };
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

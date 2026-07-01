@@ -113,37 +113,6 @@ TDBGFixture::MakeDirectBlockGroup(
         std::move(transport));
 }
 
-[[nodiscard]] std::shared_ptr<TDirectBlockGroup>
-TDBGFixture::MakeDirectBlockGroup(
-    const TExecutorPtr& executor,
-    std::unique_ptr<NTransport::TStorageTransportMock> transport) const
-{
-    auto ddisks = transport->GetDDiskIds();
-    auto pbuffers = transport->GetPBufferIds();
-
-    return MakeDirectBlockGroup(
-        executor,
-        std::move(transport),
-        ddisks,
-        pbuffers);
-}
-
-[[nodiscard]] std::shared_ptr<TDirectBlockGroup>
-TDBGFixture::MakeDirectBlockGroup(
-    const TExecutorPtr& executor,
-    std::unique_ptr<NTransport::NTestLib::TICStorageTransportTestAdapter>
-        transport) const
-{
-    auto ddisks = transport->GetDDiskIds();
-    auto pbuffers = transport->GetPBufferIds();
-
-    return MakeDirectBlockGroup(
-        executor,
-        std::move(transport),
-        ddisks,
-        pbuffers);
-}
-
 // Interleaves the simulated runtime and the coroutine executor: dispatches
 // everything queued in the runtime and lets the executor run the resumed
 // coroutines.
@@ -188,6 +157,36 @@ void TDBGFixture::DoAllExecutorAndRuntimeWork(
         executor,
         []() { return false; },
         duration);
+}
+
+NThreading::TFuture<void> TDBGFixture::RunAndGetInitialReady(
+    const std::shared_ptr<TDirectBlockGroup>& dbg,
+    bool dropScheduledCallbacks)
+{
+    auto service =
+        std::make_shared<TPartitionDirectServiceMock>(dropScheduledCallbacks);
+    Services.push_back(service);
+    return dbg->Run(service.get());
+}
+
+void TDBGFixture::WaitReady(
+    const NThreading::TFuture<void>& future,
+    TDuration timeout)
+{
+    future.Wait(timeout);
+    UNIT_ASSERT(future.HasValue());
+}
+
+void TDBGFixture::WaitReady(
+    const TExecutorPtr& executor,
+    const NThreading::TFuture<void>& future,
+    TDuration timeout)
+{
+    DoExecutorAndRuntimeWorkWithPredicate(
+        executor,
+        [&]() { return future.HasValue() || future.HasException(); },
+        timeout);
+    UNIT_ASSERT(future.HasValue());
 }
 
 }   // namespace NYdb::NBS::NBlockStore::NStorage::NPartitionDirect

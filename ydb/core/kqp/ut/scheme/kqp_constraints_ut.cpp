@@ -379,8 +379,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(DefaultsAndDeleteAndUpdate) {
-        TKikimrRunner kikimr(TKikimrSettings()
+    Y_UNIT_TEST_TWIN(DefaultsAndDeleteAndUpdate, EnableCompileTimeDefaults) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -436,8 +438,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(AlterTableAddColumnWithDefaultValue) {
-        TKikimrRunner kikimr(TKikimrSettings()
+    Y_UNIT_TEST_TWIN(AlterTableAddColumnWithDefaultValue, EnableCompileTimeDefaults) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -526,8 +530,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(DefaultValuesForTable) {
-        TKikimrRunner kikimr(TKikimrSettings()
+    Y_UNIT_TEST_TWIN(DefaultValuesForTable, EnableCompileTimeDefaults) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -1095,8 +1101,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         ])");
     }
 
-    Y_UNIT_TEST(IndexedTableAndNotNullColumnAddNotNullColumn) {
-        TKikimrRunner kikimr(TKikimrSettings()
+    Y_UNIT_TEST_TWIN(IndexedTableAndNotNullColumnAddNotNullColumn, EnableCompileTimeDefaults) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetEnableParameterizedDecimal(true)
             .SetWithSampleTables(false));
 
@@ -1322,8 +1330,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(DefaultAndIndexesTestDefaultColumnNotIncludedInIndex) {
-        TKikimrRunner kikimr(TKikimrSettings()
+    Y_UNIT_TEST_TWIN(DefaultAndIndexesTestDefaultColumnNotIncludedInIndex, EnableCompileTimeDefaults) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -1377,8 +1387,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         )"));
     }
 
-    Y_UNIT_TEST(Utf8AndDefault) {
-        TKikimrRunner kikimr(TKikimrSettings()
+    Y_UNIT_TEST_TWIN(Utf8AndDefault, EnableCompileTimeDefaults) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -1455,8 +1467,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(AlterTableAddNotNullWithDefault) {
-        TKikimrRunner kikimr(TKikimrSettings()
+    Y_UNIT_TEST_TWIN(AlterTableAddNotNullWithDefault, EnableCompileTimeDefaults) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -1664,8 +1678,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(DefaultColumnAndBulkUpsert) {
-        TKikimrRunner kikimr(TKikimrSettings()
+    Y_UNIT_TEST_TWIN(DefaultColumnAndBulkUpsert, EnableCompileTimeDefaults) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
 
         auto queryClient = kikimr.GetQueryClient();
@@ -1887,8 +1903,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         UNIT_ASSERT_VALUES_EQUAL_C(result.GetStatus(), EStatus::PRECONDITION_FAILED, result.GetIssues().ToString());
     }
 
-    Y_UNIT_TEST(AlterTableSetDefaultLiteral) {
+    Y_UNIT_TEST_TWIN(AlterTableSetDefaultLiteral, EnableCompileTimeDefaults) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -1936,8 +1953,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(AlterTableSetDefaultInt) {
+    Y_UNIT_TEST_TWIN(AlterTableSetDefaultInt, EnableCompileTimeDefaults) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -1985,8 +2003,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(AlterTableDropDefault) {
+    Y_UNIT_TEST_TWIN(AlterTableDropDefault, EnableCompileTimeDefaults) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2237,8 +2256,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(AlterTableSetAndDropDefaultOnNotNullColumn) {
+    Y_UNIT_TEST_TWIN(AlterTableSetAndDropDefaultOnNotNullColumn, EnableCompileTimeDefaults) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2373,8 +2393,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(AlterTableSetDropDefaultMultipleColumns) {
+    Y_UNIT_TEST_TWIN(AlterTableSetDropDefaultMultipleColumns, EnableCompileTimeDefaults) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2624,8 +2645,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(AlterTableSetDefaultOnPK) {
+    Y_UNIT_TEST_TWIN(AlterTableSetDefaultOnPK, EnableCompileTimeDefaults) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2677,8 +2699,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(AlterTableDropDefaultOnPK) {
+    Y_UNIT_TEST_TWIN(AlterTableDropDefaultOnPK, EnableCompileTimeDefaults) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2794,8 +2817,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(AlterTableSetDropDefaultBulkUpsert) {
+    Y_UNIT_TEST_TWIN(AlterTableSetDropDefaultBulkUpsert, EnableCompileTimeDefaults) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2868,8 +2892,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(AlterTableSetDropDefaultAsyncIndexOnColumn) {
+    Y_UNIT_TEST_TWIN(AlterTableSetDropDefaultAsyncIndexOnColumn, EnableCompileTimeDefaults) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -2962,8 +2987,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(AlterTableSetDropDefaultAsyncIndexCoverColumn) {
+    Y_UNIT_TEST_TWIN(AlterTableSetDropDefaultAsyncIndexCoverColumn, EnableCompileTimeDefaults) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -3056,8 +3082,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(AlterTableDefaultConstantExpression) {
+    Y_UNIT_TEST_TWIN(AlterTableDefaultConstantExpression, EnableCompileTimeDefaults) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -3181,8 +3208,10 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(AlterTableAddColumnDefaultWithChangefeed) {
-        TKikimrRunner kikimr(TKikimrSettings()
+    Y_UNIT_TEST_TWIN(AlterTableAddColumnDefaultWithChangefeed, EnableCompileTimeDefaults) {
+        NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
+        TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
 
         auto db = kikimr.GetQueryClient();
@@ -3304,8 +3333,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(AlterTableSetDropDefaultWithChangefeed) {
+    Y_UNIT_TEST_TWIN(AlterTableSetDropDefaultWithChangefeed, EnableCompileTimeDefaults) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));
@@ -3938,8 +3968,9 @@ Y_UNIT_TEST_SUITE(KqpConstraints) {
         }
     }
 
-    Y_UNIT_TEST(SetDefaultMultipleTimes) {
+    Y_UNIT_TEST_TWIN(SetDefaultMultipleTimes, EnableCompileTimeDefaults) {
         NKikimrConfig::TAppConfig appConfig;
+        appConfig.MutableTableServiceConfig()->SetEnableCompileTimeDefaults(EnableCompileTimeDefaults);
 
         TKikimrRunner kikimr(TKikimrSettings(appConfig)
             .SetWithSampleTables(false));

@@ -33,6 +33,7 @@ jobs:
     outputs:
       base_branch: ${{ steps.resolve.outputs.base_branch }}
       matrix_build_types: ${{ steps.resolve.outputs.matrix_build_types }}
+      should_run: ${{ steps.resolve.outputs.should_run }}
     steps:
       - name: Checkout config
         uses: actions/checkout@v5
@@ -63,10 +64,39 @@ jobs:
           fi
           echo "matrix_build_types=$MATRIX_BUILD_TYPES" >> "$GITHUB_OUTPUT"
 
+          # Guard against duplicate issue creation.
+          # update_muted_ya.yml opens one PR per build type (relwithdebinfo, release-asan,
+          # release-tsan, release-msan), all labeled mute-unmute and all targeting main. Every
+          # merge triggers this workflow, but the issue matrix is always taken from the config
+          # (relwithdebinfo only), so each trigger would create the SAME relwithdebinfo issues
+          # -> duplicate issues opened seconds apart. Only proceed when the triggering PR's own
+          # build type is one we create issues for, so exactly one PR drives issue creation.
+          SHOULD_RUN=true
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            HEAD_REF="${{ github.event.pull_request.head.ref }}"
+            case "$HEAD_REF" in
+              update-muted-ya_*)
+                TRIGGER_BUILD_TYPE="${HEAD_REF##*_}"
+                if printf '%s' "$MATRIX_BUILD_TYPES" | python3 -c "import json,sys; sys.exit(0 if sys.argv[1] in json.load(sys.stdin) else 1)" "$TRIGGER_BUILD_TYPE"; then
+                  echo "Trigger build type '$TRIGGER_BUILD_TYPE' is in issue build types $MATRIX_BUILD_TYPES — proceeding"
+                else
+                  SHOULD_RUN=false
+                  echo "Skipping: trigger build type '$TRIGGER_BUILD_TYPE' is not in issue build types $MATRIX_BUILD_TYPES"
+                fi
+                ;;
+              *)
+                # Non auto-mute PR carrying the mute-unmute label: keep previous behavior.
+                echo "Head ref '$HEAD_REF' is not an update-muted-ya branch — proceeding"
+                ;;
+            esac
+          fi
+          echo "should_run=$SHOULD_RUN" >> "$GITHUB_OUTPUT"
+
   create-issues-for-muted-tests:
     needs: resolve-build-types
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     if: |
+      needs.resolve-build-types.outputs.should_run == 'true' &&
       ((github.event_name == 'pull_request' &&
         contains(github.event.pull_request.labels.*.name, 'mute-unmute')) ||
        github.event_name == 'workflow_dispatch')
@@ -153,6 +183,7 @@ jobs:
     needs: [resolve-build-types, create-issues-for-muted-tests]
     runs-on: [ self-hosted, auto-provisioned, build-preset-analytic-node]
     if: |
+      needs.resolve-build-types.outputs.should_run == 'true' &&
       ((github.event_name == 'pull_request' &&
         contains(github.event.pull_request.labels.*.name, 'mute-unmute')) ||
        github.event_name == 'workflow_dispatch')

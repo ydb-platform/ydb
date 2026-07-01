@@ -21,9 +21,19 @@
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
 
+<<<<<<< HEAD
     db, err := ydb.Open(ctx, "grpc://localhost:2136/local")
     if err != nil {
         panic(err)
+=======
+      NYdb::TDriver driver(driverConfig);
+
+      // ...
+
+      driver.Stop();
+
+      return 0;
+>>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637))
     }
     defer db.Close()
 
@@ -186,7 +196,7 @@
 
   #[tokio::main]
   async fn main() -> YdbResult<()> {
-      let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136?database=local")?
+      let client = ClientBuilder::new_from_connection_string("grpc://localhost:2136/local")?
           .with_credentials(AccessTokenCredentials::from("..."))
           .client()?;
       client.wait().await?;

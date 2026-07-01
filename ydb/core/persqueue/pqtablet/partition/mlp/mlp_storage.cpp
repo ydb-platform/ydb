@@ -185,7 +185,7 @@ TStorage::TTryGetMessageResult TStorage::TryGetMessage(ui64 offset, const std::o
     }
     if (isMessageGroupSkipped(*message)) {
         return TTryGetMessageResult{
-            .Message = nullptr,
+            .Message = message,
             .TryNextInGroup = false,
             .Usable = false,
         };

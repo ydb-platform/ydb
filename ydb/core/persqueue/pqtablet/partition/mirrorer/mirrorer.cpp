@@ -21,6 +21,9 @@ constexpr NKikimrServices::TActivity::EType TMirrorer::ActorActivityType() {
     return NKikimrServices::TActivity::PERSQUEUE_MIRRORER;
 }
 
+static constexpr TDuration DEFAULT_REWIND_COMMIT_OFFSET_DELAY = TDuration::Minutes(15);
+static constexpr TDuration REWIND_COMMIT_INTERVAL = TDuration::Minutes(4);
+
 TMirrorer::TMirrorer(
     ui64 tabletId,
     TActorId tabletActor,
@@ -564,7 +567,7 @@ void TMirrorer::ScheduleConsumerCreation(const TActorContext& ctx) {
 
     Become(&TThis::StateInitConsumer);
 
-    LOG_N(GetLogPrefix() << " schedule consumer creation");
+    LOG_N("schedule consumer creation");
     ScheduleWithIncreasingTimeout<TEvPQ::TEvCreateConsumer>(SelfId(), ConsumerInitInterval, CONSUMER_INIT_INTERVAL_MAX, ctx);
 }
 
@@ -681,7 +684,7 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
             && PartitionStream->GetPartitionSessionId() == streamStatus->GetPartitionSession()->GetPartitionSessionId()
         ) {
             StreamStatus = MakeHolder<TPersQueueReadEvent::TPartitionSessionStatusEvent>(*streamStatus);
-
+            TryRewindCommittedOffset(ctx);
             ctx.Schedule(TDuration::Seconds(1), new TEvPQ::TEvRequestPartitionStatus);
             TryUpdateWriteTimetsamp(ctx);
         }
@@ -706,6 +709,58 @@ void TMirrorer::DoProcessNextReaderEvent(const TActorContext& ctx, bool wakeup) 
 
     Send(SelfId(), new TEvents::TEvWakeup());
     ConsumerInitInterval = CONSUMER_INIT_INTERVAL_START;
+}
+
+static TDuration GetRewindCommitDelay(const TActorContext& ctx) {
+    const auto& mirrorConfig = AppData(ctx)->PQConfig.GetMirrorConfig();
+    if (!mirrorConfig.HasRewindCommitDelaySeconds()) {
+        return DEFAULT_REWIND_COMMIT_OFFSET_DELAY;
+    }
+    return TDuration::Seconds(mirrorConfig.GetRewindCommitDelaySeconds());
+}
+
+bool TMirrorer::TryRewindCommittedOffset(const TActorContext& ctx) {
+    LOG_T("TryRewindCommittedOffset " << LabeledOutput(OffsetToRead, StreamStatus->GetCommittedOffset(),  StreamStatus->GetReadOffset(), StreamStatus->GetEndOffset(), (ctx.Now() - LastInitStageTimestamp).Seconds(), (ctx.Now() - LastRewindCommitTimestamp).Seconds()));
+    if (!(OffsetToRead == 0 /* never seen any data */
+        && StreamStatus->GetCommittedOffset() < StreamStatus->GetEndOffset()
+        && StreamStatus->GetCommittedOffset() == 0 /* new mirror rule */
+        && StreamStatus->GetReadOffset() == StreamStatus->GetEndOffset())) {
+        return false;
+    }
+    const auto now = ctx.Now();
+    if (now - LastInitStageTimestamp <= GetRewindCommitDelay(ctx)) {
+        return false;
+    }
+    if (now - LastRewindCommitTimestamp <= REWIND_COMMIT_INTERVAL) {
+        return false;
+    }
+    LastRewindCommitTimestamp = now;
+    LOG_I("topic contains only old messages. Rewinding committed offset forward" << " from " << StreamStatus->GetCommittedOffset() << " to " << StreamStatus->GetEndOffset());
+    auto* factory = AppData(ctx)->PersQueueMirrorReaderFactory;
+    PQ_ENSURE(factory);
+    auto future = factory->CommitOffset(Config, CredentialsProvider, Partition, StreamStatus->GetEndOffset());
+    future.Subscribe(
+        [actorSystem = ctx.ActorSystem(), selfId = SelfId()](const NThreading::TFuture<NYdb::TStatus>& result) {
+            NYdb::TStatus status{NYdb::EStatus::SUCCESS, {}};
+            try {
+                status = result.GetValue();
+            } catch (...) {
+                TString error = CurrentExceptionMessage();
+                status = NYdb::TStatus{NYdb::EStatus::INTERNAL_ERROR, NYdb::NIssue::TIssues({NYdb::NIssue::TIssue(std::move(error)),})};
+            }
+            actorSystem->Send(new NActors::IEventHandle(selfId, selfId, new TEvPQ::TEvRewindCommitResult(std::move(status))));
+        }
+    );
+    return true;
+}
+
+void TMirrorer::HandleRewindCommit(TEvPQ::TEvRewindCommitResult::TPtr& ev, const TActorContext& ctx) {
+    LOG_I("Rewind committed offset result: " << ev->Get()->Status);
+    if (!ev->Get()->Status.IsSuccess()) {
+        ProcessError(ctx, TStringBuilder() << "failed to rewind committed offset: " << ev->Get()->Status);
+        return;
+    }
+    ScheduleConsumerCreation(ctx);
 }
 
 NActors::IActor* CreateMirrorer(const ui64 tabletId,

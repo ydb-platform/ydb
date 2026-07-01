@@ -8,12 +8,12 @@ namespace NYdb::inline Dev::NFederatedTopic {
 
 using TReadOriginalSettings = TFederatedReadSessionSettings::TReadOriginalSettings;
 TReadOriginalSettings& TReadOriginalSettings::AddDatabase(const std::string& database) {
-    Databases.insert(std::move(database));
+    Databases.insert(database);
     return *this;
 }
 
 TReadOriginalSettings& TReadOriginalSettings::AddDatabases(const std::vector<std::string>& databases) {
-    std::move(std::begin(databases), std::end(databases), std::inserter(Databases, Databases.end()));
+    Databases.insert(databases.begin(), databases.end());
     return *this;
 }
 
@@ -33,7 +33,7 @@ TFederatedReadSessionSettings& TFederatedReadSessionSettings::ReadMirrored(const
         ythrow TContractViolation("Reading from local database not supported, use specific database");
     }
     DatabasesToReadFrom.clear();
-    DatabasesToReadFrom.insert(std::move(database));
+    DatabasesToReadFrom.insert(database);
     ReadMirroredEnabled = true;
     return *this;
 }

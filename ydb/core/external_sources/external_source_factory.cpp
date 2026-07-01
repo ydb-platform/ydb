@@ -14,6 +14,22 @@ namespace NKikimr::NExternalSource {
 
 namespace {
 
+// Aliases for external data source types: alias -> canonical type.
+// Resolved before any lookup / availability check so that aliases behave as
+// true synonyms (cannot be enabled/disabled independently from the canonical type).
+const TMap<TString, TString>& GetExternalSourceTypeAliases() {
+    static const TMap<TString, TString> aliases = {
+        {ToString(NYql::EDatabaseType::MoniumMetrics), ToString(NYql::EDatabaseType::Solomon)},
+    };
+    return aliases;
+}
+
+TString ResolveExternalSourceTypeAlias(const TString& type) {
+    const auto& aliases = GetExternalSourceTypeAliases();
+    auto it = aliases.find(type);
+    return it == aliases.end() ? type : it->second;
+}
+
 struct TExternalSourceFactory : public IExternalSourceFactory {
     TExternalSourceFactory(
         const TMap<TString, IExternalSource::TPtr>& sources,
@@ -21,7 +37,7 @@ struct TExternalSourceFactory : public IExternalSourceFactory {
         const std::set<TString>& availableExternalDataSources)
         : Sources(sources)
         , AllExternalDataSourcesAreAvailable(allExternalDataSourcesAreAvailable)
-        , AvailableExternalDataSources(availableExternalDataSources)
+        , AvailableExternalDataSources(NormalizeAvailableTypes(availableExternalDataSources))
     {
         for (const auto& [type, source] : sources) {
             if (AvailableExternalDataSources.contains(type)) {
@@ -30,12 +46,24 @@ struct TExternalSourceFactory : public IExternalSourceFactory {
         }
     }
 
+private:
+    static std::set<TString> NormalizeAvailableTypes(const std::set<TString>& types) {
+        std::set<TString> normalized;
+        for (const auto& type : types) {
+            normalized.insert(ResolveExternalSourceTypeAlias(type));
+        }
+        return normalized;
+    }
+
+public:
+
     IExternalSource::TPtr GetOrCreate(const TString& type) const override {
-        auto it = Sources.find(type);
+        const TString canonicalType = ResolveExternalSourceTypeAlias(type);
+        auto it = Sources.find(canonicalType);
         if (it == Sources.end()) {
             throw TExternalSourceException() << "External source with type " << type << " was not found";
         }
-        if (!AllExternalDataSourcesAreAvailable && !AvailableExternalDataSources.contains(type)) {
+        if (!AllExternalDataSourcesAreAvailable && !AvailableExternalDataSources.contains(canonicalType)) {
             throw TExternalSourceException() << "External source with type " << type << " is disabled. Please contact your system administrator to enable it";
         }
         return it->second;

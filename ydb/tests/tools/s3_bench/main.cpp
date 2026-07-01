@@ -270,7 +270,7 @@ i32 main(i32 argc, const char** argv) {
             ? NKikimrSchemeOp::TS3Settings::HTTP
             : NKikimrSchemeOp::TS3Settings::HTTPS);
 
-        auto storageCfg = IExternalStorageConfig::Construct(NKikimrConfig::TAwsClientConfig(), settings);
+        auto storageCfg = IExternalStorageConfig::Construct(NKikimrConfig::TAwsClientConfig(), settings, nullptr);
         auto storageOperator = storageCfg->ConstructStorageOperator(/*verbose*/true);
 
         auto setup = BuildActorSystemSetup(/*threads*/ Max<ui32>(1u, cfg.Threads / 2u));

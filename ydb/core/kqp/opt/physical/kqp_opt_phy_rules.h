@@ -81,7 +81,7 @@ NYql::NNodes::TExprBase KqpApplyVectorTopKToStageWithSource(NYql::NNodes::TExprB
     const TKqpOptimizeContext& kqpCtx);
 
 NYql::NNodes::TExprBase KqpPushOlapFilter(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
-    const TKqpOptimizeContext& kqpCtx, NYql::TTypeAnnotationContext& typesCtx, NYql::IGraphTransformer &typeAnnTransformer);
+    const TKqpOptimizeContext& kqpCtx, NYql::TTypeAnnotationContext& typesCtx);
 
 NYql::NNodes::TExprBase KqpPushOlapProjections(NYql::NNodes::TExprBase node, NYql::TExprContext& ctx,
     const TKqpOptimizeContext& kqpCtx, NYql::TTypeAnnotationContext& typesCtx);

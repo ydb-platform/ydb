@@ -77,6 +77,7 @@ namespace NKikimr::NBlobDepot {
                             const size_t numErased = agent.S3WritesInFlight.erase(locator);
                             Y_ABORT_UNLESS(numErased);
                             Self->S3Manager->AddTrashToCollect(locator);
+                            Self->S3Manager->OnS3WriteInFlightRemoved(/*success=*/false);
                         }
                     };
 
@@ -180,6 +181,8 @@ namespace NKikimr::NBlobDepot {
 
                             Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_PUTS_OK] += 1;
                             Self->TabletCounters->Cumulative()[NKikimrBlobDepot::COUNTER_S3_PUTS_BYTES] += locator.Len;
+
+                            Self->S3Manager->OnS3WriteInFlightRemoved(/*success=*/true);
                         }
                         Self->Data->UpdateKey(key, item, txc, this);
                     }
@@ -221,6 +224,12 @@ namespace NKikimr::NBlobDepot {
 
         const auto& record = ev->Get()->Record;
 
+        // Arm S3 put throttling before the spoiled locators get processed so that subsequent prepare-write events
+        // (already serialized after this one on the same agent pipe) see the updated state and get queued.
+        if (record.GetS3SlowDown()) {
+            S3Manager->NotifyPutSlowDown();
+        }
+
         for (const auto& item : record.GetItems()) {
             const auto blobSeqId = TBlobSeqId::FromProto(item);
             if (blobSeqId.Generation == generation) {
@@ -243,7 +252,10 @@ namespace NKikimr::NBlobDepot {
             const auto& locator = TS3Locator::FromProto(item);
             const size_t numErased = agent.S3WritesInFlight.erase(locator);
             Y_ABORT_UNLESS(numErased == 1);
-            S3Manager->AddTrashToCollect(locator);
+            if (!record.GetS3SlowDown()) { // in case of SlowDown these items never had the chance of being written
+                S3Manager->AddTrashToCollect(locator);
+            }
+            S3Manager->OnS3WriteInFlightRemoved(/*success=*/false);
         }
     }
 

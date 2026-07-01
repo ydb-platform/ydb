@@ -270,8 +270,6 @@ TVector<TVector<TShardRangesWithShardId>> DistributeShardsToTasks(TVector<TShard
     return result;
 }
 
-} // anonymous namespace
-
 NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::EReadType ReadTypeToProto(const TTaskMeta::TReadInfo::EReadType& type) {
     switch (type) {
         case TTaskMeta::TReadInfo::EReadType::Rows:
@@ -283,16 +281,18 @@ NKikimrTxDataShard::TKqpTransaction::TScanTaskMeta::EReadType ReadTypeToProto(co
     YQL_ENSURE(false, "Invalid read type in task meta.");
 }
 
-TTaskMeta::TReadInfo::EReadType ReadTypeFromProto(const NKqpProto::TKqpPhyOpReadOlapRanges::EReadType& type) {
-    switch (type) {
-        case NKqpProto::TKqpPhyOpReadOlapRanges::ROWS:
-            return TTaskMeta::TReadInfo::EReadType::Rows;
-        case NKqpProto::TKqpPhyOpReadOlapRanges::BLOCKS:
-            return TTaskMeta::TReadInfo::EReadType::Blocks;
-        default:
-            YQL_ENSURE(false, "Invalid read type from TKqpPhyOpReadOlapRanges protobuf.");
+void AddQueryPathParam(TKqpTasksGraph::TTaskType& task, const TIntrusivePtr<NKikimr::NKqp::TUserRequestContext>& userRequestContext) {
+    if (!userRequestContext || !userRequestContext->IsStreamingQuery) {
+        return;
     }
+
+    const auto& queryPath = userRequestContext->StreamingQueryPath
+        ? userRequestContext->StreamingQueryPath
+        : "default";
+    task.Meta.TaskParams.emplace("query_path", queryPath);
 }
+
+} // anonymous namespace
 
 std::pair<TString, TString> SerializeKqpTasksParametersForOlap(const TStageInfo& stageInfo, const TTask& task) {
     const NKqpProto::TKqpPhyStage& stage = stageInfo.Meta.GetStage(stageInfo.Id);
@@ -2480,11 +2480,7 @@ void TKqpTasksGraph::BuildReadTasksFromSource(TStageInfo& stageInfo, const TVect
 
         FillReadTaskFromSource(task, sourceName, structuredToken, resourceSnapshot, nodeOffset++);
 
-        TString queryPath = "default";
-        if (GetMeta().UserRequestContext && GetMeta().UserRequestContext->StreamingQueryPath) {
-            queryPath = GetMeta().UserRequestContext->StreamingQueryPath;
-        }
-        task.Meta.TaskParams.emplace("query_path", queryPath);
+        AddQueryPathParam(task, GetMeta().UserRequestContext);
         if (externalSource.GetType() == "PqSource" && i == 0) {   // Only first task will check partition count.
             task.Meta.TaskParams.emplace("partition_count_check_enabled", "true");
         }
@@ -3014,11 +3010,7 @@ void TKqpTasksGraph::BuildExternalSinks(const NKqpProto::TKqpSink& sink, TKqpTas
             // "fq.restart_count"
         }
     }
-    TString queryPath = "default";
-    if (GetMeta().UserRequestContext && GetMeta().UserRequestContext->StreamingQueryPath) {
-        queryPath = GetMeta().UserRequestContext->StreamingQueryPath;
-    }
-    task.Meta.TaskParams.emplace("query_path", queryPath);
+    AddQueryPathParam(task, GetMeta().UserRequestContext);
 
     auto& output = task.Outputs[sink.GetOutputIndex()];
     output.Type = TTaskOutputType::Sink;

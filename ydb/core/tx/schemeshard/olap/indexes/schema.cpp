@@ -37,6 +37,10 @@ bool TOlapIndexSchema::ApplyUpdate(const TOlapSchema& currentSchema, const TOlap
 }
 
 bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, const TOlapIndexesUpdate& schemaUpdate, IErrorCollector& errors, ui32& nextEntityId) {
+    for (const auto& index : Indexes) {
+        nextEntityId = Max(nextEntityId, index.first + 1);
+    }
+
     for (auto&& rename : schemaUpdate.GetMoveIndexes()) {
         const auto* sourceIndex = GetByName(rename.GetSourceName());
         if (!sourceIndex) {

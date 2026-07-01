@@ -4,8 +4,9 @@
 #include <util/datetime/base.h>
 
 namespace NKikimr {
-    bool IsQueryWithSensitiveInfo(const TString& text);
+    bool IsQueryWithSensitiveInfo(TStringBuf text);
     TString ProtectQueryForLoggingIfSensitive(const TString& text);
+    bool ProtectQueryForLoggingIfSensitive(TStringBuf text, TString& protectedText);
 
     TString MaskTicket(TStringBuf token);
     TString MaskTicket(const TString& token);

@@ -19,6 +19,7 @@ namespace NKikimr::NKqp {
 #define LOG_I(stream) LOG_INFO_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
 #define LOG_C(stream) LOG_CRIT_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
 #define LOG_E(stream) LOG_ERROR_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
+#define LOG_W(stream) LOG_WARN_S(*TlsActivationContext, NKikimrServices::KQP_EXECUTER, "TxId: " << TxId << ". " << "Ctx: " << *UserRequestContext << ". " << stream)
 
 using namespace NYql;
 
@@ -918,6 +919,11 @@ void TKqpPlanner::SendReadyStateToCheckpointCoordinator() {
 
     auto event = std::make_unique<NFq::TEvCheckpointCoordinator::TEvReadyState>();
     for (const auto& dqTask : TasksGraph.GetTasks()) {
+        if (!dqTask.ComputeActorId) {
+            LOG_W("Skip sending TEvReadyState to checkpoint coordinator"
+                << ": task " << dqTask.Id << " has no ComputeActorId (node disconnected / task not started)");
+            return;
+        }
         auto* taskDesc = TasksGraph.ArenaSerializeTaskToProto(dqTask, true);
         auto settings = NDq::TDqTaskSettings(taskDesc, TasksGraph.GetMeta().GetArenaIntrusivePtr());
         bool enabledCheckpoints = NYql::NDq::GetTaskCheckpointingMode(settings) != NYql::NDqProto::CHECKPOINTING_MODE_DISABLED;

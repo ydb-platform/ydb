@@ -54,6 +54,9 @@ namespace TEvPrivate {
         EvTestNotifySubdomainCleanup,
         EvFlushConditionalEraseBatch,
         EvRunForcedCompaction,
+        EvProgressTablePartitionsFormatSweep,
+        EvFullBackupItemDone,
+        EvProgressForcedCompaction,
         EvEnd
     };
 
@@ -386,6 +389,11 @@ namespace TEvPrivate {
         const TPathId Item;
         const bool Success = false;
         const TString Error;
+    };
+
+    struct TEvProgressForcedCompaction : TEventLocal<TEvProgressForcedCompaction, EvProgressForcedCompaction> {
+        TEvProgressForcedCompaction()
+        {}
     };
 
 }; // TEvPrivate

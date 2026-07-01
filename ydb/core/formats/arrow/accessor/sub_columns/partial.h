@@ -155,7 +155,7 @@ public:
         std::optional<NSubColumns::TOthersData>&& othersData,
         const std::shared_ptr<arrow::DataType>& dataType, const ui32 recordsCount)
         : TBase(recordsCount, EType::SubColumnsPartialArray, dataType)
-        , Header(std::move(header))
+        , Header(header)
         , PartialColumnsData(std::move(columnsData))
         , OthersData(std::move(othersData)) {
     }

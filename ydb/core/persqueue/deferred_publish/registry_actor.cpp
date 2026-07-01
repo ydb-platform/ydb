@@ -37,6 +37,11 @@ public:
     }
 
     void Handle(TEvBeginPublicationRequest::TPtr& ev) {
+        if (ShuttingDown) {
+            ReplyAborted(ev->Sender);
+            return;
+        }
+
         const auto& request = *ev->Get();
         auto& state = Databases[request.Database];
 
@@ -75,6 +80,15 @@ public:
         TVector<TPendingBeginPublication> pending = std::move(state.PendingRequests);
         state.PendingRequests.clear();
 
+        if (ShuttingDown) {
+            state.TablesStatus = ETablesStatus::NotReady;
+            for (const auto& request : pending) {
+                ReplyAborted(request.ReplyTo);
+            }
+            TryPassAway();
+            return;
+        }
+
         if (ev->Get()->Success) {
             state.TablesStatus = ETablesStatus::Ready;
             for (const auto& request : pending) {
@@ -100,30 +114,33 @@ public:
     }
 
     void Handle(TEvInsertPublicationFinished::TPtr& ev) {
+        if (InFlightInserts == 0) {
+            return;
+        }
+        --InFlightInserts;
+
         auto* response = new TEvBeginPublicationResponse;
         response->Status = ev->Get()->Status;
         response->Issues = ev->Get()->Issues;
         response->IntPublicationId = ev->Get()->IntPublicationId;
         Send(ev->Get()->ReplyTo, response);
+
+        TryPassAway();
     }
 
     void HandlePoison() {
-        NYql::TIssues issues;
-        issues.AddIssue("Deferred publish registry is shutting down");
+        ShuttingDown = true;
 
         for (auto& [database, state] : Databases) {
             Y_UNUSED(database);
             for (const auto& request : state.PendingRequests) {
-                auto* response = new TEvBeginPublicationResponse;
-                response->Status = Ydb::StatusIds::ABORTED;
-                response->Issues = issues;
-                Send(request.ReplyTo, response);
+                ReplyAborted(request.ReplyTo);
             }
             state.PendingRequests.clear();
             state.TablesStatus = ETablesStatus::NotReady;
         }
 
-        PassAway();
+        TryPassAway();
     }
 
     STFUNC(StateFunc) {
@@ -138,6 +155,22 @@ public:
     }
 
 private:
+    void ReplyAborted(const NActors::TActorId& replyTo) {
+        NYql::TIssues issues;
+        issues.AddIssue("Deferred publish registry is shutting down");
+
+        auto* response = new TEvBeginPublicationResponse;
+        response->Status = Ydb::StatusIds::ABORTED;
+        response->Issues = issues;
+        Send(replyTo, response);
+    }
+
+    void TryPassAway() {
+        if (ShuttingDown && InFlightInserts == 0) {
+            PassAway();
+        }
+    }
+
     void StartInsert(
         const TString& database,
         const TString& extPublicationId,
@@ -145,9 +178,13 @@ private:
         const TString& createdBy,
         const NActors::TActorId& replyTo)
     {
+        Y_ABORT_UNLESS(!ShuttingDown);
+        ++InFlightInserts;
         Register(CreateInsertPublicationQueryActor(replyTo, database, extPublicationId, writerIdentity, createdBy));
     }
 
+    bool ShuttingDown = false;
+    ui32 InFlightInserts = 0;
     THashMap<TString, TDatabaseState> Databases;
 };
 

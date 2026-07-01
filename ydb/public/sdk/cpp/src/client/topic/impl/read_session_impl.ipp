@@ -1190,7 +1190,8 @@ inline void TSingleClusterReadSessionImpl<true>::OnReadDoneImpl(
         Y_ABORT_UNLESS(decompressionInfo);
 
         decompressionInfo->PlanDecompressionTasks(AverageCompressionRatio,
-                                                  partitionStream);
+                                                  partitionStream,
+                                                  deferred);
 
         DecompressionQueue.emplace_back(decompressionInfo, partitionStream);
         StartDecompressionTasksImpl(deferred);
@@ -1440,7 +1441,8 @@ inline void TSingleClusterReadSessionImpl<false>::OnReadDoneImpl(
         Y_ABORT_UNLESS(decompressionInfo);
 
         decompressionInfo->PlanDecompressionTasks(AverageCompressionRatio,
-                                                  partitionStream);
+                                                  partitionStream,
+                                                  deferred);
         DecompressionQueue.emplace_back(decompressionInfo, partitionStream);
         StartDecompressionTasksImpl(deferred);
     }
@@ -2043,6 +2045,7 @@ void TSingleClusterReadSessionImpl<UseMigrationProtocol>::Close(std::function<vo
     std::lock_guard guard(Lock);
     if (Aborting) {
         callback();
+        return;
     }
 
     if (!Closing) {
@@ -3108,7 +3111,8 @@ i64 TDataDecompressionInfo<UseMigrationProtocol>::StartDecompressionTasks(
 
 template<bool UseMigrationProtocol>
 void TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double averageCompressionRatio,
-                                                                          TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream) {
+                                                                          TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                                                                          TDeferredActions<UseMigrationProtocol>& deferred) {
     constexpr size_t TASK_LIMIT = 512_KB;
     Y_ABORT_UNLESS(partitionStream);
 
@@ -3139,7 +3143,7 @@ void TDataDecompressionInfo<UseMigrationProtocol>::PlanDecompressionTasks(double
                                                      ReadyThresholds.back().Ready,
                                                      ReadyThresholds.back().Abandoned);
             if (!pushRes) {
-                session->AbortImpl();
+                session->AbortImpl(&deferred);
                 return;
             }
         }

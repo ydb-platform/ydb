@@ -258,7 +258,8 @@ public:
                                 i64 availableMemory,
                                 TDeferredActions<UseMigrationProtocol>& deferred);
     void PlanDecompressionTasks(double averageCompressionRatio,
-                                TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream);
+                                TIntrusivePtr<TPartitionStreamImpl<UseMigrationProtocol>> partitionStream,
+                                TDeferredActions<UseMigrationProtocol>& deferred);
 
     void OnDestroyReadSession();
 

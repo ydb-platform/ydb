@@ -8,7 +8,6 @@
 #include <ydb/library/actors/core/actor.h>
 #include <ydb/library/actors/core/event.h>
 
-#include <ydb/core/base/blobstorage.h>
 #include <ydb/core/protos/labeled_counters.pb.h>
 #include <ydb/core/protos/tablet_counters_aggregator.pb.h>
 #include <ydb/core/sys_view/common/events.h>

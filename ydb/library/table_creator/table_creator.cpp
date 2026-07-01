@@ -168,14 +168,13 @@ public:
         const TVector<NKikimrSchemeOp::TIndexDescription>& existingIndexes,
         const TVector<NKikimrSchemeOp::TSequenceDescription>& existingSequences)
     {
-        if (!TableCreateAttempted && (!TableIndexes.empty() || !TableSequences.empty())) {
-            Fail("Table already exists; index and sequence upgrade is not supported");
-            return;
-        }
-
         if (!TableIndexes.empty() || !TableSequences.empty()) {
             if (!HasRequestedIndexedSchema(existingIndexes, existingSequences)) {
-                Fail("Existing table schema does not match requested indexes or sequences");
+                if (!TableCreateAttempted) {
+                    Fail("Table already exists; index and sequence upgrade is not supported");
+                } else {
+                    Fail("Existing table schema does not match requested indexes or sequences");
+                }
                 return;
             }
         }

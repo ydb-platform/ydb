@@ -630,10 +630,18 @@ private:
     }
 
 public:
+    const std::shared_ptr<const TResourcePoolClassifierSnapshot>& GetLastClassifierSnapshot() const {
+        return LastClassifierSnapshot;
+    }
+
+    const std::shared_ptr<const TResourcePoolMap>& GetLastResourcePoolMapSnapshot() const {
+        return LastResourcePoolMapSnapshot;
+    }
+
+private:
     std::shared_ptr<const TResourcePoolClassifierSnapshot> LastClassifierSnapshot;
     std::shared_ptr<const TResourcePoolMap> LastResourcePoolMapSnapshot;
 
-private:
     std::unordered_map<TString, TPoolInfo> PoolsCache;
     std::unordered_map<TString, TDatabaseInfo> DatabasesCache;
 

@@ -1644,7 +1644,7 @@ private:
         };
 
         auto classifier = NWorkload::CreateQueryClassifier(
-            ResourcePoolsCache.LastResourcePoolMapSnapshot,
+            ResourcePoolsCache.GetLastResourcePoolMapSnapshot(),
             ResourcePoolsCache.GetClassifierViewFor(databaseId),
             databaseId,
             std::move(context)

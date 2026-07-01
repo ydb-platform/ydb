@@ -696,6 +696,9 @@ public:
         ContinueAfterWmAdmission();
     }
 
+    // Precondition: QueryClassifier is set. Reached only as a continuation after
+    // PassRequestToResourcePool(), which requires a classifier — null here is a
+    // caller-side invariant violation, not a runtime edge case to handle.
     void ContinueAfterWmAdmission() {
         Y_VALIDATE(QueryState->QueryClassifier, "ContinueAfterWmAdmission called without QueryClassifier");
 

@@ -135,9 +135,7 @@ struct TClassifyTestCase {
 
 TString GetPoolId(const NWorkload::IQueryClassifier::TPreCompileClassifyResult& result) {
     UNIT_ASSERT_C(std::holds_alternative<NWorkload::IQueryClassifier::TResolvedPoolId>(result),
-        TStringBuilder()
-            << "Expected TResolvedPoolId, with index: " << ToString(std::variant_size_v<NWorkload::IQueryClassifier::TPreCompileClassifyResult>)
-            << ", but got variant with index: " << result.index()
+        TStringBuilder() << "Expected TResolvedPoolId, got variant with index: " << result.index()
     );
     return std::get<NWorkload::IQueryClassifier::TResolvedPoolId>(result).PoolId;
 }

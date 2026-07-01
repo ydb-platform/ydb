@@ -339,6 +339,7 @@ class Test(TestBase):
         ]
 
     def test_group_add(self):
+        retry_assertions(self.check_pdisk_metrics_collected)
         retry_assertions(self.check_vdisks_state_ok)
         pool_name = 'dynamic_storage_pool:1'
         return [

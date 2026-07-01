@@ -233,7 +233,9 @@ struct TSchemeShard::TTxRunConditionalErase: public TSchemeShard::TRwTxBase {
 
             const auto [tableInfo, tablePathId, shardIdx] = ResolveInfo(Self, tabletId);
             if (!tableInfo || tablePathId == InvalidPathId || shardIdx == InvalidShardIdx) {
-                Y_DEBUG_ABORT("Unreachable");
+                LOG_WARN_S(ctx, NKikimrServices::FLAT_TX_SCHEMESHARD, "Unable to resolve info in DoComplete"
+                    << ", tabletId: " << tabletId
+                    << ", at schemeshard: " << Self->TabletID());
                 continue;
             }
 

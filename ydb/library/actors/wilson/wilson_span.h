@@ -41,6 +41,7 @@ namespace NWilson {
     enum class EFlags : ui32 {
         NONE = 0,
         AUTO_END = 1,
+        ACTION_ON_END = 2,  // for retro-spans, to avoid unneeded virtual method calls
     };
 
     Y_DECLARE_FLAGS(TFlags, EFlags);

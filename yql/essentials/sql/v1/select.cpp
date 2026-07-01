@@ -2113,15 +2113,7 @@ public:
     TNodePtr BuildCleanupColumns(TContext& ctx, const TString& label) override {
         TNodePtr cleanup;
         auto removeSystemMembers = [&ctx, this](const TString& src) -> TNodePtr {
-            TNodePtr expr = Y("RemoveSystemMembers", src);
-            if (!ctx.Settings.ExtraSystemColumnPrefixes.empty()) {
-                TNodePtr prefixes = Y();
-                for (const auto& prefix : ctx.Settings.ExtraSystemColumnPrefixes) {
-                    prefixes = L(prefixes, Q(prefix));
-                }
-                expr = Y("RemovePrefixMembers", expr, Q(prefixes));
-            }
-            return expr;
+            return RemoveSystemColumns(AstNode(src), ctx.Settings.ExtraSystemColumnPrefixes);
         };
         if (ctx.EnableSystemColumns && ctx.Settings.Mode != NSQLTranslation::ESqlMode::LIMITED_VIEW) {
             if (Columns_.All) {

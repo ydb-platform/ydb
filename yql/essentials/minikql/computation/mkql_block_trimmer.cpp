@@ -3,6 +3,7 @@
 #include <yql/essentials/minikql/arrow/arrow_util.h>
 #include <yql/essentials/public/decimal/yql_decimal.h>
 #include <yql/essentials/public/udf/arrow/defs.h>
+#include <yql/essentials/public/udf/arrow/dense_union.h>
 #include <yql/essentials/public/udf/arrow/dispatch_traits.h>
 #include <yql/essentials/public/udf/arrow/util.h>
 #include <yql/essentials/public/udf/udf_type_inspection.h>
@@ -255,37 +256,24 @@ public:
     }
 
     std::shared_ptr<arrow::ArrayData> Trim(const std::shared_ptr<arrow::ArrayData>& array) override {
-        auto typeCodesSize = array->length * sizeof(ui8);
-        auto trimmedTypeCodes = CreateResizableBuffer(typeCodesSize);
-        const auto* srcTypeCodes = array->GetValues<i8>(1);
-        std::copy(srcTypeCodes, srcTypeCodes + typeCodesSize, trimmedTypeCodes->mutable_data());
+        const auto childUsage = NYql::NUdf::CalculateDenseUnionChildrenUsage(*array);
 
-        const auto* sourceValueOffsets = array->GetValues<i32>(2);
-        const auto* destinationTypeCodes = reinterpret_cast<const i8*>(trimmedTypeCodes->mutable_data());
+        auto trimmedTypeCodes = NYql::NUdf::CopyBuffer(
+            *array->buffers[1], array->offset * sizeof(i8), array->length * sizeof(i8), Pool_);
 
-        TVector<i64> minChildOffsets(Children_.size(), std::numeric_limits<i64>::max());
-        for (i64 i = 0; i < array->length; ++i) {
-            const i8 typeCode = destinationTypeCodes[i];
-            minChildOffsets[typeCode] = std::min<i64>(minChildOffsets[typeCode], sourceValueOffsets[i]);
-        }
+        auto trimmedValueOffsets = CreateResizableBuffer(array->length * sizeof(i32));
+        auto* dstValueOffsets = reinterpret_cast<i32*>(trimmedValueOffsets->mutable_data());
 
-        auto valueOffsetsSize = array->length * sizeof(i32);
-        auto trimmedValueOffsets = CreateResizableBuffer(valueOffsetsSize);
-        auto* destinationValueOffsets = reinterpret_cast<i32*>(trimmedValueOffsets->mutable_data());
-        TVector<i32> childCounts(Children_.size(), 0);
-        for (i64 i = 0; i < array->length; ++i) {
-            const i8 typeCode = destinationTypeCodes[i];
-            const i32 base = (minChildOffsets[typeCode] == std::numeric_limits<i64>::max()) ? 0 : minChildOffsets[typeCode];
-            const i32 newOffset = sourceValueOffsets[i] - base;
-            destinationValueOffsets[i] = newOffset;
-            childCounts[typeCode] = std::max(childCounts[typeCode], newOffset + 1);
-        }
+        NYql::NUdf::AdjustDenseUnionValueOffsets(
+            TArrayRef<const i32>(array->GetValues<i32>(2), array->length),
+            TArrayRef<i32>(dstValueOffsets, array->length),
+            TArrayRef<const i8>(reinterpret_cast<const i8*>(trimmedTypeCodes->mutable_data()), array->length),
+            childUsage);
 
-        std::vector<std::shared_ptr<arrow::ArrayData>> trimmedChildren;
+        TVector<std::shared_ptr<arrow::ArrayData>> trimmedChildren;
         trimmedChildren.reserve(Children_.size());
         for (size_t i = 0; i < Children_.size(); ++i) {
-            const i32 startOffsetIndex = (minChildOffsets[i] == std::numeric_limits<i64>::max()) ? 0 : minChildOffsets[i];
-            auto childSlice = DeepSlice(*array->child_data[i], startOffsetIndex, childCounts[i]);
+            auto childSlice = DeepSlice(*array->child_data[i], childUsage[i].Offset, childUsage[i].Length);
             trimmedChildren.push_back(Children_[i]->Trim(childSlice));
         }
 

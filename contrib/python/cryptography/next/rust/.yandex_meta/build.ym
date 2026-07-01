@@ -11,8 +11,10 @@ devtools/yamaker/libym2/scripts/python3
 
 {% block platforms %}
 x86_64-unknown-linux-gnu
+aarch64-unknown-linux-gnu
 x86_64-unknown-linux-musl
 x86_64-apple-darwin
+aarch64-apple-darwin
 {% endblock %}
 
 {% block msan_platforms %}
@@ -24,7 +26,6 @@ _rust
 _openssl
 {% endblock %}
 
-{% block rust_version %}nightly-2026-06-04{% endblock %}
 {% block current_version %}41.0.6{% endblock %}
 {% block current_url %}https://github.com/pyca/cryptography/archive/refs/tags/{{self.version().strip()}}.tar.gz{% endblock %}
 
@@ -37,8 +38,12 @@ sed -e 's|cdylib|staticlib|' -i Cargo.toml
 {% for p in self.platforms().strip().split('\n') %}
 export CC_{{p.replace('-', '_')}}=target-cc
 {% endfor %}
+export CC_aarch64_unknown_linux_gnu=target-cc-aarch
 export CC_x86_64_unknown_linux_musl=musl-gcc
+
 export CC_x86_64_apple_darwin=mac-target-cc
+export CC_aarch64_apple_darwin=mac-target-cc-arm
+
 export DEP_OPENSSL_INCLUDE={{arcadia_root}}/contrib/libs/openssl/include
 export PYO3_CROSS_PYTHON_VERSION=3.12
 
@@ -49,7 +54,9 @@ cd src/rust
 {% for p in self.msan_platforms().strip().split('\n') %}
 export CC_{{p.replace('-', '_')}}=target-cc-msan
 {% endfor %}
-export RUSTFLAGS="-Zsanitizer=memory -Zsanitizer-memory-track-origins=2 -Ctarget-feature=-crt-static -Cunsafe-allow-abi-mismatch=sanitizer -Ccodegen-units=1"
+export RUSTFLAGS="-Zsanitizer=memory -Zsanitizer-memory-track-origins=2 -Ctarget-feature=-crt-static"
+
+export RUSTC_BOOTSTRAP=1
 
 {% for arch in self.msan_platforms().strip().split('\n') %}
 LD_PRELOAD=${BIN}/getrandom.so cargo {{self.cargo_flags().strip()}} build {{self.cargo_build_flags().strip()}} --release --target {{arch}} {{self.binary_type().strip()}} --target-dir ${BUILD}-msan \
@@ -159,16 +166,21 @@ cat << EOF > ${BIN}/target-cc
 exec ${CLANG} -DUSE_PYTHON3 -I{{arcadia_root}} -I{{arcadia_root}}/contrib/libs/python/Include -I{{arcadia_root}}/contrib/libs/openssl/include -x c "\${@}"
 EOF
 
+cat << EOF > ${BIN}/target-cc-aarch
+#!/usr/bin/env sh
+exec ${BIN}/target-cc -nostdinc -target aarch64-unknown-linux-gnu -I{{arcadia_root}}/contrib/libs/musl/include -I{{arcadia_root}}/contrib/libs/musl/arch/aarch64 -I{{arcadia_root}}/contrib/libs/musl/arch/generic "\${@}"
+EOF
+
 cat << EOF > ${BIN}/target-cc-msan
 #!/usr/bin/env sh
 exec ${CLANG} -DUSE_PYTHON3 -fsanitize=memory -I{{arcadia_root}} -I{{arcadia_root}}/contrib/libs/python/Include -I{{arcadia_root}}/contrib/libs/openssl/include -x c "\${@}"
 EOF
 
-chmod +x ${BIN}/musl-gcc ${BIN}/target-cc ${BIN}/target-cc-msan
+chmod +x ${BIN}/musl-gcc ${BIN}/target-cc ${BIN}/target-cc-aarch ${BIN}/target-cc-msan
 
 # macOS
 
-cat << EOF > ${BIN}/mac-target-cc
+cat << EOF > ${BIN}/mac-target
 #!/bin/bash
 FILTERED_ARGS=()
 SKIP_NEXT=0
@@ -188,8 +200,19 @@ for arg in "\$@"; do
       ;;
   esac
 done
-exec ${CLANG} -target x86_64-apple-darwin -isysroot ${MACOS_SDK} -DUSE_PYTHON3 -I{{arcadia_root}} -I{{arcadia_root}}/contrib/libs/python/Include -I{{arcadia_root}}/contrib/libs/openssl/include -x c "\${FILTERED_ARGS[@]}"
+exec ${CLANG} -isysroot ${MACOS_SDK} -DUSE_PYTHON3 -I{{arcadia_root}} -I{{arcadia_root}}/contrib/libs/python/Include -I{{arcadia_root}}/contrib/libs/openssl/include -x c "\${FILTERED_ARGS[@]}"
 EOF
-chmod +x ${BIN}/mac-target-cc
+
+cat << EOF > ${BIN}/mac-target-cc
+#!/bin/bash
+exec ${BIN}/mac-target -target x86_64-apple-darwin "\${@}"
+EOF
+
+cat << EOF > ${BIN}/mac-target-cc-arm
+#!/bin/bash
+exec ${BIN}/mac-target -target aarch64-apple-darwin "\${@}"
+EOF
+
+chmod +x ${BIN}/mac-target ${BIN}/mac-target-cc ${BIN}/mac-target-cc-arm
 
 {% endblock %}

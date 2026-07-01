@@ -125,7 +125,7 @@ TNodeResult TSqlCallExpr::BuildCall() {
 
     if (WindowName_ && result) {
         if (!IsYqlSelectProduced_) {
-            result = Wrap(BuildCalcOverWindow(Pos_, std::move(WindowName_), std::move(*result)));
+            result = Wrap(BuildCalcOverWindow(Pos_, WindowName_, std::move(*result)));
         } else if (!(*result)->SetYqlSelectWindowName(Ctx_, std::move(WindowName_))) {
             return std::unexpected(ESQLError::Basic);
         }

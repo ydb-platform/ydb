@@ -352,6 +352,61 @@ IGraphTransformer::TStatus BlockDecimalBinaryWrapper(const TExprNode::TPtr& inpu
     return DecimalBinaryWrapperBase(input, output, ctx, /*blocks=*/ true);
 }
 
+IGraphTransformer::TStatus BlockGuessWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
+    Y_UNUSED(output);
+    if (!EnsureArgsCount(*input, 2, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    auto variantNode = input->Child(0);
+    if (!EnsureBlockOrScalarType(*variantNode, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    bool isScalar;
+    const TTypeAnnotationNode* itemType = GetBlockItemType(*variantNode->GetTypeAnn(), isScalar);
+
+    const TTypeAnnotationNode* innerItemType = itemType;
+    if (innerItemType->GetKind() == ETypeAnnotationKind::Optional) {
+        innerItemType = innerItemType->Cast<TOptionalExprType>()->GetItemType();
+    }
+    if (!EnsureVariantType(variantNode->Pos(), *innerItemType, ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+    auto variantType = innerItemType->Cast<TVariantExprType>();
+
+    if (!EnsureAtom(*input->Child(1), ctx.Expr)) {
+        return IGraphTransformer::TStatus::Error;
+    }
+
+    const TTypeAnnotationNode* alternativeType = nullptr;
+    if (variantType->GetUnderlyingType()->GetKind() == ETypeAnnotationKind::Tuple) {
+        auto tupleType = variantType->GetUnderlyingType()->Cast<TTupleExprType>();
+        ui32 index = 0;
+        if (!TryFromString(input->Child(1)->Content(), index)) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                                     TStringBuilder() << "Failed to convert to integer: " << input->Child(1)->Content()));
+            return IGraphTransformer::TStatus::Error;
+        }
+        if (index >= tupleType->GetSize()) {
+            ctx.Expr.AddError(TIssue(ctx.Expr.GetPosition(input->Pos()),
+                                     TStringBuilder() << "Index out of range. Index: " << index << ", size: " << tupleType->GetSize()));
+            return IGraphTransformer::TStatus::Error;
+        }
+        alternativeType = tupleType->GetItems()[index];
+    } else {
+        auto structType = variantType->GetUnderlyingType()->Cast<TStructExprType>();
+        auto pos = FindOrReportMissingMember(input->Child(1)->Content(), input->Pos(), *structType, ctx.Expr);
+        if (!pos) {
+            return IGraphTransformer::TStatus::Error;
+        }
+        alternativeType = structType->GetItems()[*pos]->GetItemType();
+    }
+
+    auto optionalAlternativeType = ctx.Expr.MakeType<TOptionalExprType>(alternativeType);
+    input->SetTypeAnn(MakeBlockOrScalarType(optionalAlternativeType, isScalar, ctx.Expr));
+    return IGraphTransformer::TStatus::Ok;
+}
+
 IGraphTransformer::TStatus BlockIfWrapper(const TExprNode::TPtr& input, TExprNode::TPtr& output, TContext& ctx) {
     Y_UNUSED(output);
     if (!EnsureArgsCount(*input, 3U, ctx.Expr)) {

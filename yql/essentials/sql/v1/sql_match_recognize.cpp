@@ -246,7 +246,7 @@ TNodePtr TSqlMatchRecognizeClause::ParseAfterMatchSkipTo(TPosition pos, const TR
         return {};
     }
     return BuildTuple(pos, {BuildQuotedAtom(skipToPos, "AfterMatchSkip_" + ToString(result->To)),
-                            BuildQuotedAtom(varPos, std::move(result->Var))});
+                            BuildQuotedAtom(varPos, result->Var)});
 }
 
 TNodePtr TSqlMatchRecognizeClause::BuildPatternFactor(TPosition pos, TNodePtr primary, std::tuple<ui64, ui64, bool, bool, bool> quantifier) {
@@ -380,7 +380,7 @@ TNodePtr TSqlMatchRecognizeClause::ParsePatternFactor(TPosition pos, const TRule
                 YQL_ENSURE(false, "Unreachable");
         }
     }();
-    return BuildPatternFactor(pos, std::move(primary), std::move(quantifier));
+    return BuildPatternFactor(pos, std::move(primary), quantifier);
 }
 
 TNodePtr TSqlMatchRecognizeClause::BuildPatternTerm(TPosition pos, std::vector<TNodePtr> term) {

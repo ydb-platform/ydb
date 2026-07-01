@@ -2522,7 +2522,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                                 .Input<TCoExtractMembers>()
                                     .Input(groupingCore.Input())
                                     .Members()
-                                        .Add(std::move(fields))
+                                        .Add(fields)
                                     .Build()
                                 .Build()
                                 .GroupSwitch(ctx.DeepCopyLambda(groupingCore.GroupSwitch().Ref()))
@@ -2627,7 +2627,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Input<TCoExtractMembers>()
                     .Input(self.Input())
                     .Members()
-                        .Add(std::move(fields))
+                        .Add(fields)
                     .Build()
                 .Build()
                 .GroupSwitch(ctx.DeepCopyLambda(self.GroupSwitch().Ref()))
@@ -2948,7 +2948,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 return Build<TCoChopper>(ctx, chopper.Pos())
                     .Input<TCoExtractMembers>()
                         .Input(chopper.Input())
-                        .Members().Add(std::move(fields)).Build()
+                        .Members().Add(fields).Build()
                         .Build()
                     .KeyExtractor(ctx.DeepCopyLambda(chopper.KeyExtractor().Ref()))
                     .GroupSwitch(ctx.DeepCopyLambda(chopper.GroupSwitch().Ref()))
@@ -3309,7 +3309,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
 
         calcs.insert(calcs.end(), parentCalcs.begin(), parentCalcs.end());
 
-        auto result = RebuildCalcOverWindowGroup(child->Pos(), std::move(input), calcs, ctx);
+        auto result = RebuildCalcOverWindowGroup(child->Pos(), input, calcs, ctx);
         if (seenExtractMembers) {
             result = ctx.Builder(result->Pos())
                 .Callable("ExtractMembers")
@@ -3352,7 +3352,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Input<TCoExtractMembers>()
                     .Input(self.Input())
                     .Members()
-                        .Add(std::move(fields))
+                        .Add(fields)
                     .Build()
                 .Build()
                 .State(self.State())
@@ -3385,7 +3385,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Input<TCoExtractMembers>()
                     .Input(self.Input())
                     .Members()
-                        .Add(std::move(fields))
+                        .Add(fields)
                     .Build()
                 .Build()
                 .InitHandler(ctx.DeepCopyLambda(self.InitHandler().Ref()))
@@ -3416,7 +3416,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Input<TCoExtractMembers>()
                     .Input(self.Input())
                     .Members()
-                        .Add(std::move(fields))
+                        .Add(fields)
                     .Build()
                 .Build()
                 .InitHandler(ctx.DeepCopyLambda(self.InitHandler().Ref()))
@@ -3446,7 +3446,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Input<TCoExtractMembers>()
                     .Input(self.Input())
                     .Members()
-                        .Add(std::move(fields))
+                        .Add(fields)
                     .Build()
                 .Build()
                 .Lambda(ctx.DeepCopyLambda(self.Lambda().Ref()))
@@ -3475,7 +3475,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Stream<TCoExtractMembers>()
                     .Input(self.Stream())
                     .Members()
-                        .Add(std::move(fields))
+                        .Add(fields)
                     .Build()
                 .Build()
                 .KeySelector(ctx.DeepCopyLambda(self.KeySelector().Ref()))
@@ -3508,7 +3508,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .Input<TCoExtractMembers>()
                     .Input(self.Input())
                     .Members()
-                        .Add(std::move(fields))
+                        .Add(fields)
                     .Build()
                 .Build()
                 .KeyExtractor(ctx.DeepCopyLambda(self.KeyExtractor().Ref()))
@@ -3550,7 +3550,7 @@ void RegisterCoFlowCallables2(TCallableOptimizerMap& map) {
                 .InitFrom(self)
                 .LeftInput<TCoExtractMembers>()
                     .Input(self.LeftInput())
-                    .Members(std::move(fields))
+                    .Members(fields)
                     .Build()
                 .Done().Ptr();
         }

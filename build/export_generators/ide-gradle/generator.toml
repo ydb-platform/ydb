@@ -52,7 +52,7 @@ use_annotation_processors="list"
 use_annotation_processors-ITEM="dict"
 use_annotation_processors-jar="str"
 use_annotation_processors-deps="list"
-use_errorprone="flag"
+use_errorprone="str"
 jdk_version="str"
 jdk_path="str"
 

@@ -302,6 +302,8 @@ public:
     TRuntimeNode BlockOr(TRuntimeNode first, TRuntimeNode second);
     TRuntimeNode BlockXor(TRuntimeNode first, TRuntimeNode second);
 
+    TRuntimeNode BlockGuess(TRuntimeNode variant, ui32 tupleIndex);
+    TRuntimeNode BlockGuess(TRuntimeNode variant, const std::string_view& memberName);
     TRuntimeNode BlockIf(TRuntimeNode condition, TRuntimeNode thenBranch, TRuntimeNode elseBranch);
     TRuntimeNode BlockJust(TRuntimeNode data);
 

@@ -512,10 +512,10 @@ private:
                         else if (column->IsList()) {
                             TPartOfConstraintBase::TPathType path(column->ChildrenSize());
                             std::transform(column->Children().cbegin(), column->Children().cend(), path.begin(), [](const TExprNode::TPtr& atom) { return atom->Content(); } );
-                            columns.insert_unique(std::move(path));
+                            columns.insert_unique(path);
                         }
                     }
-                    sets.insert_unique(std::move(columns));
+                    sets.insert_unique(columns);
                 }
             }
             content.insert_unique(std::move(sets));
@@ -570,10 +570,10 @@ private:
                 else if (column->IsList()) {
                     TPartOfConstraintBase::TPathType path(column->ChildrenSize());
                     std::transform(column->Children().cbegin(), column->Children().cend(), path.begin(), [](const TExprNode::TPtr& atom) { return atom->Content(); } );
-                    columns.insert_unique(std::move(path));
+                    columns.insert_unique(path);
                 }
             }
-            sets.insert_unique(std::move(columns));
+            sets.insert_unique(columns);
         }
 
         const auto constraint = ctx.MakeConstraint<TChoppedConstraintNode>(std::move(sets));
@@ -1161,7 +1161,7 @@ private:
                             if (nonEmpty.empty()) {
                                 remappedItems.back().second.AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
                             } else if (nonEmpty.size() == 1) {
-                                remappedItems.back().second = std::move(*nonEmpty.front());
+                                remappedItems.back().second = *nonEmpty.front();
                             }
                         }
                     }
@@ -2639,7 +2639,7 @@ private:
         } else if (lOneRow || rOneRow) {
             const auto rename = [](const std::string_view& prefix, TPartOfConstraintBase::TPathType path) {
                 path.emplace_front(prefix);
-                return std::vector<TPartOfConstraintBase::TPathType>(1U, std::move(path));
+                return std::vector<TPartOfConstraintBase::TPathType>(1U, path);
             };
             const auto leftRename = std::bind(rename, ctx.GetIndexAsString(0U), std::placeholders::_1);
             const auto rightRename = std::bind(rename, ctx.GetIndexAsString(1U), std::placeholders::_1);
@@ -3064,7 +3064,7 @@ private:
                             if (nonEmpty.empty()) {
                                 remappedItems.back().second.AddConstraint(ctx.MakeConstraint<TEmptyConstraintNode>());
                             } else if (nonEmpty.size() == 1) {
-                                remappedItems.back().second = std::move(*nonEmpty.front());
+                                remappedItems.back().second = *nonEmpty.front();
                             }
                         }
                     }
@@ -3877,7 +3877,7 @@ IGraphTransformer::TStatus UpdateLambdaConstraints(TExprNode::TPtr& lambda, TExp
             }
             newArg->SetState(TExprNode::EState::ConstrComplete);
             YQL_ENSURE(replaces.emplace(arg, newArg).second);
-            argsChildren.emplace_back(std::move(newArg));
+            argsChildren.emplace_back(newArg);
         }
 
         auto newArgs = ctx.NewArguments(args->Pos(), std::move(argsChildren));

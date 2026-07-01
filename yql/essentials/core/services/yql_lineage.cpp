@@ -1303,6 +1303,10 @@ private:
 
         for (const auto& g : frameGroups) {
             for (const auto& f : g->Children()) {
+                if (f->IsCallable("WinFilter")) {
+                    continue;
+                }
+
                 if (!f->IsCallable("WinOnRows")) {
                     lineage.Fields.Clear();
                     return;

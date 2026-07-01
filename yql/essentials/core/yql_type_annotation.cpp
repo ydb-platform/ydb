@@ -56,7 +56,7 @@ bool TTypeAnnotationContext::DoInitialize(TExprContext& ctx) {
     DisableConstraintCheck.emplace(TUniqueConstraintNode::Name());
     DisableConstraintCheck.emplace(TDistinctConstraintNode::Name());
 
-    LayersRegistry = NLayers::MakeLayersRegistry(RemoteLayerProviderByName, std::move(layersIntegrations));
+    LayersRegistry = NLayers::MakeLayersRegistry(RemoteLayerProviderByName, layersIntegrations);
     return true;
 }
 

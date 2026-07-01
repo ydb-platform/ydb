@@ -118,8 +118,8 @@ struct TInputSpecTraits<TPickleInputSpec> {
             auto& holderFactory = worker->GetGraph().GetHolderFactory();
             for (ui32 i = 0; i < streams.size(); i++) {
                 auto input = holderFactory.template Create<TPickleListValue>(
-                    spec, i, std::move(streams[i]), worker);
-                worker->SetInput(std::move(input), i);
+                    spec, i, streams[i], worker);
+                worker->SetInput(input, i);
             }
         }
     }

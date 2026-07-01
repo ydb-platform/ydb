@@ -753,7 +753,7 @@ class BaseAssumeRoleCredentialFetcher(CachedCredentialFetcher):
         super().__init__(cache, expiry_window_seconds)
 
     def _generate_assume_role_name(self):
-        self._role_session_name = 'botocore-session-%s' % (int(time.time()))
+        self._role_session_name = f'botocore-session-{int(time.time())}'
         self._assume_kwargs['RoleSessionName'] = self._role_session_name
         self._using_default_session_name = True
 
@@ -848,7 +848,7 @@ class AssumeRoleCredentialFetcher(BaseAssumeRoleCredentialFetcher):
         mfa_serial = assume_role_kwargs.get('SerialNumber')
 
         if mfa_serial is not None:
-            prompt = 'Enter MFA code for %s: ' % mfa_serial
+            prompt = f'Enter MFA code for {mfa_serial}: '
             token_code = self._mfa_prompter(prompt)
             assume_role_kwargs['TokenCode'] = token_code
 
@@ -1570,8 +1570,8 @@ class AssumeRoleProvider(CredentialProvider):
         if credential_source is not None and source_profile is not None:
             raise InvalidConfigError(
                 error_msg=(
-                    'The profile "%s" contains both source_profile and '
-                    'credential_source.' % profile_name
+                    f'The profile "{profile_name}" contains both '
+                    'source_profile and credential_source.'
                 )
             )
         elif credential_source is None and source_profile is None:
@@ -1720,7 +1720,7 @@ class AssumeRoleProvider(CredentialProvider):
                 provider=credential_source,
                 error_msg=(
                     'No credentials found in credential_source referenced '
-                    'in profile %s' % profile_name
+                    f'in profile {profile_name}'
                 ),
             )
         return credentials
@@ -2242,8 +2242,8 @@ class SSOProvider(CredentialProvider):
             missing = ', '.join(missing_config_vars)
             raise InvalidConfigError(
                 error_msg=(
-                    'The profile "%s" is configured to use SSO but is missing '
-                    'required configuration: %s' % (profile_name, missing)
+                    f'The profile "{profile_name}" is configured to use SSO '
+                    f'but is missing required configuration: {missing}'
                 )
             )
         return config

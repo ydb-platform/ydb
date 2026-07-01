@@ -22,6 +22,7 @@
 * В [потоках изменений (CDC)](./concepts/cdc.md?version=v26.1) доступна выгрузка идентификаторов безопасности пользователя (`USER_SIDS`) — см. [`ALTER TABLE` `CHANGEFEED`](./yql/reference/syntax/alter_table/changefeed.md?version=v26.1).
 * Для [внешних источников данных](./concepts/datamodel/external_data_source.md?version=v26.1) добавлен `AUTH_METHOD=IAM`.
 * В CLI поддерживается аутентификация по файлу токена (`--token-file`).
+* Оптимизирована работа транзакций между топиками и таблицами.
 
 #### Исправления ошибок
 

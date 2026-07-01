@@ -1,4 +1,5 @@
 #include "schema.h"
+#include <ydb/core/tx/columnshard/engines/storage/indexes/min_max/misc/misc.h>
 #include <ydb/library/accessor/validator.h>
 #include <ydb/core/tx/columnshard/blobs_action/common/const.h>
 #include <ydb/core/tx/schemeshard/olap/schema/schema.h>
@@ -84,19 +85,20 @@ bool TOlapIndexesDescription::ApplyUpdate(const TOlapSchema& currentSchema, cons
             if (!meta) {
                 return false;
             }
-            // Forbid two indexes of the same type (class) on the same column.
+            // Forbid two min_max indexes on the same column.
             if (const auto newColumnId = meta->GetSingleColumnId()) {
                 for (const auto& indexPair : Indexes) {
                     const auto& existingIndex = indexPair.second;
                     const auto& existingMeta = existingIndex.GetIndexMeta();
-                    if (existingMeta->GetClassName() == meta->GetClassName() && existingMeta->GetSingleColumnId() == newColumnId) {
+                    if (meta->GetClassName() == NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName && 
+                        existingMeta->GetClassName() == meta->GetClassName() && existingMeta->GetSingleColumnId() == newColumnId) {
                         TString columnName = ToString(*newColumnId);
                         if (const auto* column = currentSchema.GetColumns().GetById(*newColumnId)) {
                             columnName = column->GetName();
                         }
                         errors.AddError(NKikimrScheme::StatusAlreadyExists,
-                            TStringBuilder() << "cannot create " << meta->GetClassName() << " index '" << index.GetName() << "' on column '"
-                                             << columnName << "': it already has a " << meta->GetClassName() << " index '"
+                            TStringBuilder() << "cannot create min_max index '" << index.GetName() << "' on column '"
+                                             << columnName << "': it already has min_max index '"
                                              << existingIndex.GetName() << "'");
                         return false;
                     }
@@ -130,9 +132,9 @@ void TOlapIndexesDescription::Parse(const NKikimrSchemeOp::TColumnTableSchema& t
     }
 }
 
-bool TOlapIndexesDescription::ValidateNoDuplicateColumnIndexes(const TOlapSchema& currentSchema, IErrorCollector& errors) const {
-    // Forbid two indexes of the same type (class) on the same column.
-    THashMap<std::pair<ui32, TString>, TString> indexNameByColumnAndClass;   // (columnId, className) -> indexName
+bool TOlapIndexesDescription::ValidateNoDuplicateMinMaxIndexes(const TOlapSchema& currentSchema, IErrorCollector& errors) const {
+    // Forbid two min_max indexes on the same column.
+    THashMap<ui32, TString> indexNameByColumnId;   // (columnId, className) -> indexName
     for (const auto& indexPair : Indexes) {
         const auto& index = indexPair.second;
         const auto& meta = index.GetIndexMeta();
@@ -140,7 +142,10 @@ bool TOlapIndexesDescription::ValidateNoDuplicateColumnIndexes(const TOlapSchema
         if (!columnId) {
             continue;
         }
-        const auto inserted = indexNameByColumnAndClass.emplace(std::make_pair(*columnId, meta->GetClassName()), index.GetName());
+        if (meta.GetClassName() != NKikimr::NOlap::NIndexes::NMinMax::kMinMaxClassName) {
+            continue;
+        }
+        const auto inserted = indexNameByColumnId.emplace(*columnId, index.GetName());
         if (!inserted.second) {
             TString columnName = ToString(*columnId);
             if (const auto* column = currentSchema.GetColumns().GetById(*columnId)) {
@@ -149,9 +154,8 @@ bool TOlapIndexesDescription::ValidateNoDuplicateColumnIndexes(const TOlapSchema
             // Not StatusAlreadyExists: on the CREATE TABLE path that status is treated as idempotent
             // success, which would let the duplicate slip through. Use a hard scheme error instead.
             errors.AddError(NKikimrScheme::StatusSchemeError,
-                TStringBuilder() << "cannot create " << meta->GetClassName() << " index '" << index.GetName() << "' on column '"
-                                 << columnName << "': it already has a " << meta->GetClassName() << " index '"
-                                 << inserted.first->second << "'");
+                TStringBuilder() << "creating 2 min_max indexes on one column is forbidden, tried to create both '" << index.GetName() << "' and '" << inserted.second << 
+                "' on column " << columnName << ".");
             return false;
         }
     }

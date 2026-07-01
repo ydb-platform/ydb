@@ -320,6 +320,9 @@ public:
 
                 protoSettings.PackFrom(srcDesc);
                 if (sharedReading && !predicateSql.empty()) {
+                    if (predicateSql.size() > 4000) {
+                        predicateSql = predicateSql.substr(0, 4000) + "...";
+                    }
                     ctx.AddWarning(TIssue(ctx.GetPosition(node.Pos()), "Row dispatcher will use the predicate: " + predicateSql));
                 }
                 if (sharedReading && !watermarkExprSql.empty()) {

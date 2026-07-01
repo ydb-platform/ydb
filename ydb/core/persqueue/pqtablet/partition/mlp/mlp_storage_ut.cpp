@@ -3438,6 +3438,107 @@ Y_UNIT_TEST(FairnessSkipThenNoSkip) {
     UNIT_ASSERT_C(remaining.empty(), "all previously-skipped messages must be returned");
 }
 
+static void DrainWithCommit(TFairnessModel& model, size_t readSize = 3) {
+    for (int guard = 0; guard < 200; ++guard) {
+        auto batch = model.Next(readSize);
+        if (batch.empty()) {
+            break;
+        }
+        for (auto& m : batch) {
+            model.Commit(m.Offset);
+        }
+    }
+}
+
+Y_UNIT_TEST(FairnessAddMessageAfterNext_SameGroup) {
+    TFairnessModel model;
+    model.AddMessage(1);
+    model.AddMessage(2);
+
+    auto first = model.Next(1);
+    UNIT_ASSERT_VALUES_EQUAL(first.size(), 1);
+
+    model.AddMessage(first[0].Group);
+
+    DrainWithCommit(model);
+    model.Commit(first[0].Offset);
+    DrainWithCommit(model);
+
+    UNIT_ASSERT_VALUES_EQUAL(model.Committed.size(), model.Offset);
+}
+
+Y_UNIT_TEST(FairnessAddMessageAfterNext_DifferentGroup) {
+    TFairnessModel model;
+    model.AddMessage(1);
+    model.AddMessage(1);
+    model.AddMessage(2);
+
+    auto first = model.Next(1);
+    UNIT_ASSERT_VALUES_EQUAL(first.size(), 1);
+
+    model.AddMessage(999);
+
+    DrainWithCommit(model);
+    model.Commit(first[0].Offset);
+    DrainWithCommit(model);
+
+    UNIT_ASSERT_VALUES_EQUAL(model.Committed.size(), model.Offset);
+}
+
+Y_UNIT_TEST(FairnessAddMessageAfterCommit_SameGroup) {
+    TFairnessModel model;
+    model.AddMessage(1);
+    model.AddMessage(2);
+
+    auto first = model.Next(1);
+    UNIT_ASSERT_VALUES_EQUAL(first.size(), 1);
+    model.Commit(first[0].Offset);
+
+    model.AddMessage(first[0].Group);
+
+    DrainWithCommit(model);
+    UNIT_ASSERT_VALUES_EQUAL(model.Committed.size(), model.Offset);
+}
+
+Y_UNIT_TEST(FairnessAddMessageAfterCommit_DifferentGroup) {
+    TFairnessModel model;
+    model.AddMessage(1);
+    model.AddMessage(1);
+    model.AddMessage(2);
+
+    auto first = model.Next(1);
+    UNIT_ASSERT_VALUES_EQUAL(first.size(), 1);
+    model.Commit(first[0].Offset);
+
+    model.AddMessage(500);
+    model.AddMessage(500);
+
+    DrainWithCommit(model);
+    UNIT_ASSERT_VALUES_EQUAL(model.Committed.size(), model.Offset);
+}
+
+Y_UNIT_TEST(FairnessAddMessageDuringReadMixed) {
+    TFairnessModel model;
+    for (int i = 0; i < 6; ++i) {
+        model.AddMessage(i % 3);
+    }
+
+    ui32 newGroup = 100;
+    for (int round = 0; round < 20; ++round) {
+        auto batch = model.Next(1);
+        if (batch.empty()) {
+            continue;
+        }
+        model.AddMessage(batch[0].Group);
+        model.AddMessage(newGroup++);
+        model.AddMessage(newGroup++, /*hasGroup*/ false);
+        model.Commit(batch[0].Offset);
+    }
+
+    DrainWithCommit(model);
+    UNIT_ASSERT_VALUES_EQUAL(model.Committed.size(), model.Offset);
+}
+
 }
 
 } // namespace NKikimr::NPQ::NMLP

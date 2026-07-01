@@ -76,9 +76,8 @@ void TTxInternalScan::Complete(const TActorContext& ctx) {
         {
             auto readSchema = read.TableMetadataAccessor->GetSnapshotSchemaVerified(
                 Self->GetIndexAs<TColumnEngineForLogs>().GetVersionedSchemas(), read.GetSnapshot());
-            // Write without MvccSnapshot uses ApplyToSnapshot=Max, while SchemaVersion comes from ActualSchema
-            // captured at write start. If ALTER commits before internal scan is processed, snapshot resolves
-            // to a newer schema than the one used to build column ids.
+
+            // it is not possible anymore, keep it just in case
             if (request.SchemaVersion && readSchema->GetVersion() != *request.SchemaVersion) {
                 return SendError("schema version mismatch",
                     TStringBuilder() << "request_schema_version=" << *request.SchemaVersion

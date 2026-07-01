@@ -118,6 +118,11 @@ void GrantPublicationTableRead(NPersQueue::TTestServer& server, const TString& s
         "topic_deferred_publications",
         subject,
         NACLib::EAccessRights::GenericRead);
+    server.AnnoyingClient->TestGrant(
+        "/Root/.metadata",
+        "topic_deferred_publication_destinations",
+        subject,
+        NACLib::EAccessRights::GenericRead);
 }
 
 void AssertPublicationRow(
@@ -163,11 +168,13 @@ void AssertPublicationRow(
 }
 
 void AssertDestinationRowCount(
-    const NPersQueue::TTestServer& server,
+    NPersQueue::TTestServer& server,
     const TString& authTicket,
     ui64 intPublicationId,
     ui64 expectedCount)
 {
+    GrantPublicationTableRead(server, authTicket);
+
     NYdb::NTable::TTableClient client(
         server.GetDriver(),
         NYdb::NTable::TClientSettings().AuthToken(authTicket));
@@ -180,21 +187,35 @@ void AssertDestinationRowCount(
         << "FROM `" << DestinationsTableRelativePath << "` "
         << "WHERE int_publication_id = $int_publication_id;";
 
+    const TInstant deadline = TInstant::Now() + TDuration::Seconds(30);
     TMaybe<ui64> count;
-    const auto status = client.RetryOperationSync([&](NYdb::NTable::TSession session) {
-        auto result = session.ExecuteDataQuery(
-            query,
-            NYdb::NTable::TTxControl::BeginTx().CommitTx(),
-            params.Build()).GetValueSync();
-        if (result.IsSuccess() && !result.GetResultSets().empty()) {
-            NYdb::TResultSetParser parser(result.GetResultSet(0));
-            if (parser.TryNextRow()) {
-                count = parser.ColumnParser("count").GetUint64();
+    TMaybe<NYdb::TStatus> status;
+    while (TInstant::Now() < deadline) {
+        count = Nothing();
+        status = client.RetryOperationSync([&](NYdb::NTable::TSession session) {
+            auto result = session.ExecuteDataQuery(
+                query,
+                NYdb::NTable::TTxControl::BeginTx().CommitTx(),
+                params.Build()).GetValueSync();
+            if (result.IsSuccess() && !result.GetResultSets().empty()) {
+                NYdb::TResultSetParser parser(result.GetResultSet(0));
+                if (parser.TryNextRow()) {
+                    count = parser.ColumnParser("count").GetUint64();
+                }
             }
+            return result;
+        });
+        if (status->IsSuccess() && count.Defined()) {
+            UNIT_ASSERT_VALUES_EQUAL(*count, expectedCount);
+            return;
         }
-        return result;
-    });
-    UNIT_ASSERT_C(status.IsSuccess(), status.GetIssues().ToString());
+        if (status->GetStatus() != NYdb::EStatus::SCHEME_ERROR) {
+            break;
+        }
+        Sleep(TDuration::MilliSeconds(100));
+    }
+    UNIT_ASSERT(status.Defined());
+    UNIT_ASSERT_C(status->IsSuccess(), status->GetIssues().ToString());
     UNIT_ASSERT(count.Defined());
     UNIT_ASSERT_VALUES_EQUAL(*count, expectedCount);
 }

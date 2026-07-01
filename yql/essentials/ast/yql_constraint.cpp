@@ -1842,13 +1842,15 @@ TPartOfConstraintNode<TOriginalConstraintNode>::GetCommonMapping(const TOriginal
     }
 
     if (complete) {
-        auto& part = mapping[complete];
-        for (const auto& path : complete->GetFullSet()) {
-            auto key = path;
-            if (!field.empty()) {
-                key.emplace_front(field);
+        if (const auto fullSet = complete->GetFullSet(); !fullSet.empty()) {
+            auto& part = mapping[complete];
+            for (const auto& path : fullSet) {
+                auto key = path;
+                if (!field.empty()) {
+                    key.emplace_front(field);
+                }
+                part.insert_unique(std::make_pair(key, path));
             }
-            part.insert_unique(std::make_pair(key, path));
         }
     }
 
@@ -1996,15 +1998,63 @@ const TEmptyConstraintNode* TEmptyConstraintNode::MakeCommon(const std::vector<c
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+namespace {
+
+ui64 AddEventTimeDescriptorToHash(ui64 hash, const TStreamingConstraintNode::TEventTimeDescriptor& eventTime) {
+    hash = MurmurHash<ui64>(&eventTime.Hash, sizeof(eventTime.Hash), hash);
+    for (const auto& path : eventTime.Bindings) {
+        for (const auto& part : path) {
+            hash = MurmurHash<ui64>(part.data(), part.size(), hash);
+        }
+        const ui64 separator = path.size();
+        hash = MurmurHash<ui64>(&separator, sizeof(separator), hash);
+    }
+    return hash;
+}
+
+} // anonymous namespace
+
 TStreamingConstraintNode::TStreamingConstraintNode(TExprContext& ctx)
-    : TConstraintNode(ctx, Name())
+    : TConstraintWithFieldsT(ctx, Name())
 {
 }
 
-TStreamingConstraintNode::TStreamingConstraintNode(TExprContext& ctx, const NYT::TNode& serialized)
-    : TConstraintNode(ctx, Name())
+TStreamingConstraintNode::TStreamingConstraintNode(TExprContext& ctx, TEventTimeDescriptor eventTime)
+    : TConstraintWithFieldsT(ctx, Name())
+    , EventTime_(std::move(eventTime))
 {
-    YQL_ENSURE(serialized.IsEntity(), "Unexpected serialized content of " << Name() << " constraint");
+    for (auto& path : EventTime_->Bindings) {
+        for (auto& part : path) {
+            part = ctx.AppendString(part);
+        }
+    }
+
+    Hash_ = AddEventTimeDescriptorToHash(Hash_, *EventTime_);
+}
+
+TStreamingConstraintNode::TStreamingConstraintNode(TExprContext& ctx, const NYT::TNode& serialized)
+    : TConstraintWithFieldsT(ctx, Name())
+{
+    if (serialized.IsEntity()) {
+        return;
+    }
+
+    try {
+        YQL_ENSURE(serialized.IsList() && serialized.Size() == 2U, "Unexpected serialized content of " << Name() << " constraint");
+        EventTime_ = TEventTimeDescriptor{
+            .Hash = FromString<ui64>(serialized[0].AsString()),
+            .Bindings = {},
+        };
+
+        YQL_ENSURE(serialized[1].IsList(), "Event time bindings should be a list");
+        for (const auto& path : serialized[1].AsList()) {
+            EventTime_->Bindings.push_back(NodeToPath(ctx, path));
+        }
+    } catch (...) {
+        YQL_ENSURE(false, "Cannot deserialize " << Name() << " constraint: " << CurrentExceptionMessage());
+    }
+
+    Hash_ = AddEventTimeDescriptorToHash(Hash_, *EventTime_);
 }
 
 bool TStreamingConstraintNode::Equals(const TConstraintNode& node) const {
@@ -2014,20 +2064,156 @@ bool TStreamingConstraintNode::Equals(const TConstraintNode& node) const {
     if (GetHash() != node.GetHash()) {
         return false;
     }
-    return GetName() == node.GetName();
+    if (GetName() != node.GetName()) {
+        return false;
+    }
+    const auto that = dynamic_cast<const TStreamingConstraintNode*>(&node);
+    return that && this->GetEventTime() == that->GetEventTime();
+}
+
+bool TStreamingConstraintNode::Includes(const TConstraintNode& node) const {
+    const auto that = dynamic_cast<const TStreamingConstraintNode*>(&node);
+    if (!that) {
+        return false;
+    }
+
+    if (!that->GetEventTime().Defined()) {
+        return true;
+    }
+
+    return this->GetEventTime() == that->GetEventTime();
+}
+
+void TStreamingConstraintNode::TEventTimeDescriptor::Out(IOutputStream& out) const {
+    out.Write('(');
+    out.Write(ToString(Hash));
+    out.Write(',');
+    for (const auto& sets : Bindings) {
+        out.Write('(');
+        for (bool first = true; const auto& set : sets) {
+            if (!std::exchange(first, false)) {
+                out << ',';
+            }
+            if (1U == set.size()) {
+                out << set.front();
+            } else {
+                out << set;
+            }
+        }
+        out.Write(')');
+    }
+    out.Write(')');
+}
+
+void TStreamingConstraintNode::Out(IOutputStream& out) const {
+    TConstraintNode::Out(out);
+    if (EventTime_.Defined()) {
+        const auto& eventTimeRef = *EventTime_;
+        eventTimeRef.Out(out);
+    }
 }
 
 void TStreamingConstraintNode::ToJson(NJson::TJsonWriter& out) const {
-    out.Write(true);
+    if (!EventTime_.Defined()) {
+        out.Write(true);
+        return;
+    }
+
+    out.OpenMap();
+    const auto& eventTimeRef = *EventTime_;
+    out.Write("EventTimeHash", eventTimeRef.Hash);
+    out.WriteKey("Bindings");
+    out.OpenArray();
+    for (const auto& path : eventTimeRef.Bindings) {
+        out.OpenArray();
+        for (const auto& part : path) {
+            out.Write(part);
+        }
+        out.CloseArray();
+    }
+    out.CloseArray();
+    out.CloseMap();
 }
 
 NYT::TNode TStreamingConstraintNode::ToYson() const {
-    return NYT::TNode::CreateEntity();
+    if (!EventTime_.Defined()) {
+        return NYT::TNode::CreateEntity();
+    }
+
+    const auto& eventTimeRef = *EventTime_;
+    NYT::TNode bindings = NYT::TNode::CreateList();
+    for (const auto& path : eventTimeRef.Bindings) {
+        bindings.Add(PathToNode(path));
+    }
+    return NYT::TNode::CreateList().Add(ToString(eventTimeRef.Hash)).Add(std::move(bindings));
 }
 
 bool TStreamingConstraintNode::IsApplicableToType(const TTypeAnnotationNode& type) const {
     return IsIn({ETypeAnnotationKind::List, ETypeAnnotationKind::Stream, ETypeAnnotationKind::Flow}, type.GetKind());
 }
+
+TPartOfConstraintBase::TSetType TStreamingConstraintNode::GetFullSet() const {
+    TSetType bindings;
+    if (EventTime_.Defined()) {
+        const auto& eventTimeRef = *EventTime_;
+        bindings.insert(eventTimeRef.Bindings.begin(), eventTimeRef.Bindings.end());
+    }
+    return bindings;
+}
+
+void TStreamingConstraintNode::FilterUncompleteReferences(TSetType& references) const {
+    if (!EventTime_.Defined()) {
+        references.clear();
+        return;
+    }
+
+    const auto& eventTimeRef = *EventTime_;
+    if (!AllOf(eventTimeRef.Bindings, [&references](const TPathType& path) {
+            return references.contains(path);
+        })) {
+        references.clear();
+    }
+}
+
+const TConstraintWithFieldsNode* TStreamingConstraintNode::DoFilterFields(TExprContext& ctx, const TPathFilter& predicate) const {
+    if (!EventTime_.Defined() || !predicate) {
+        return this;
+    }
+
+    const auto& eventTimeRef = *EventTime_;
+    return AllOf(eventTimeRef.Bindings, predicate) ? this : ctx.MakeConstraint<TStreamingConstraintNode>();
+}
+
+const TConstraintWithFieldsNode* TStreamingConstraintNode::DoRenameFields(TExprContext& ctx, const TPathReduce& reduce) const {
+    if (!EventTime_.Defined() || !reduce) {
+        return this;
+    }
+
+    const auto& eventTimeRef = *EventTime_;
+    std::vector<TPathType> bindings;
+    bindings.reserve(eventTimeRef.Bindings.size());
+    for (const auto& binding : eventTimeRef.Bindings) {
+        auto renamed = reduce(binding);
+        if (renamed.size() != 1U) {
+            return ctx.MakeConstraint<TStreamingConstraintNode>();
+        }
+        if (std::find(bindings.begin(), bindings.end(), renamed.front()) != bindings.end()) {
+            return ctx.MakeConstraint<TStreamingConstraintNode>();
+        }
+        bindings.emplace_back(std::move(renamed.front()));
+    }
+    return ctx.MakeConstraint<TStreamingConstraintNode>(TEventTimeDescriptor{.Hash = eventTimeRef.Hash, .Bindings = std::move(bindings)});
+}
+
+const TConstraintWithFieldsNode* TStreamingConstraintNode::DoGetComplicatedForType(const TTypeAnnotationNode&, TExprContext&) const {
+    return this;
+}
+
+const TConstraintWithFieldsNode* TStreamingConstraintNode::DoGetSimplifiedForType(const TTypeAnnotationNode&, TExprContext&) const {
+    return this;
+}
+
+template class TPartOfConstraintNode<TStreamingConstraintNode>;
 
 //////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -2523,6 +2709,11 @@ void Out<NYql::TPartOfDistinctConstraintNode>(IOutputStream& out, const NYql::TP
 }
 
 template <>
+void Out<NYql::TPartOfStreamingConstraintNode>(IOutputStream& out, const NYql::TPartOfStreamingConstraintNode& value) {
+    value.Out(out);
+}
+
+template <>
 void Out<NYql::TEmptyConstraintNode>(IOutputStream& out, const NYql::TEmptyConstraintNode& value) {
     value.Out(out);
 }
@@ -2539,5 +2730,10 @@ void Out<NYql::TMultiConstraintNode>(IOutputStream& out, const NYql::TMultiConst
 
 template <>
 void Out<NYql::TStreamingConstraintNode>(IOutputStream& out, const NYql::TStreamingConstraintNode& value) {
+    value.Out(out);
+}
+
+template <>
+void Out<NYql::TStreamingConstraintNode::TEventTimeDescriptor>(IOutputStream& out, const NYql::TStreamingConstraintNode::TEventTimeDescriptor& value) {
     value.Out(out);
 }

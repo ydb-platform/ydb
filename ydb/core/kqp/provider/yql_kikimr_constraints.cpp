@@ -10,6 +10,8 @@
 #include <yql/essentials/core/yql_expr_constraint.h>
 #include <yql/essentials/providers/common/transform/yql_visit.h>
 
+#include <library/cpp/yson/node/node_io.h>
+
 namespace NYql {
 
 using namespace NNodes;
@@ -18,14 +20,57 @@ namespace {
 
 using TStatus = IGraphTransformer::TStatus;
 
+template <size_t FromChild>
+struct TApplyConstraintFromInput {
+    template <class TConstraint>
+    static void Do(const TExprNode::TPtr& input) {
+        if (const auto c = input->Child(FromChild)->GetConstraint<TConstraint>()) {
+            input->AddConstraint(c);
+        }
+    }
+};
+
+template <size_t FromChild>
+struct TApplyConstraintsFromInput {
+    template <class... TConstraint>
+    static void Do(const TExprNode::TPtr& input) {
+        (TApplyConstraintFromInput<FromChild>::template Do<TConstraint>(input), ...);
+    }
+};
+
+template <size_t Index>
+TStatus CopyAllFrom(const TExprNode::TPtr& node, TExprContext& ctx) {
+    Y_UNUSED(ctx);
+    node->CopyConstraints(*node->Child(Index));
+    return TStatus::Ok;
+}
+
 TStatus ConstraintKqpWriteConstraint(const TExprNode::TPtr& input, TExprContext& ctx) {
     Y_UNUSED(ctx);
 
-    if (const auto* c = input->Head().GetConstraint<TStreamingConstraintNode>()) {
-        input->AddConstraint(c);
-    }
+    TApplyConstraintFromInput<0>::Do<TStreamingConstraintNode>(input);
 
     return TStatus::Ok;
+}
+
+TStatus ConstraintKqpProgram(const TExprNode::TPtr& input, TExprContext& ctx) {
+    auto& lambda = input->ChildRef(TKqpProgram::idx_Lambda);
+    const auto argsConstraints = input->Child(TKqpProgram::idx_ArgsConstraints);
+
+    std::vector<TConstraintNode::TListType> constraints;
+    constraints.reserve(argsConstraints->ChildrenSize());
+    for (const auto& argsConstraint : argsConstraints->Children()) {
+        try {
+            auto set = ctx.MakeConstraintSet(NYT::NodeFromYsonString(argsConstraint->Content()));
+            constraints.push_back(set.GetAllConstraints());
+        } catch (...) {
+            ctx.AddError(TIssue(ctx.GetPosition(argsConstraint->Pos()), TStringBuilder()
+                << "Bad KqpProgram ArgsConstraints yson-value: " << CurrentExceptionMessage()));
+            return TStatus::Error;
+        }
+    }
+
+    return UpdateLambdaConstraints(lambda, ctx, constraints);
 }
 
 class TKiSourceConstraintsTransformer final : public TVisitorTransformerBase {
@@ -42,7 +87,7 @@ public:
         }, Hndl(&TKiSourceConstraintsTransformer::HandleDefault));
 
         if (IsIn({EKikimrQueryType::Query, EKikimrQueryType::Script}, SessionCtx->Query().Type)) {
-            AddHandler({TDqSource::CallableName()}, Hndl(&TKiSourceConstraintsTransformer::CopyAllFrom<1>));
+            AddHandler({TDqSource::CallableName()}, Hndl(&CopyAllFrom<1>));
             AddHandler({
                 TDqSourceWrap::CallableName(),
                 TDqSourceWideWrap::CallableName(),
@@ -51,20 +96,13 @@ public:
                 TDqReadWideWrap::CallableName(),
                 TDqReadBlockWideWrap::CallableName(),
                 TDqLookupSourceWrap::CallableName(),
-            }, Hndl(&TKiSourceConstraintsTransformer::CopyAllFrom<0>));
+            }, Hndl(&CopyAllFrom<0>));
         }
     }
 
 private:
     static TStatus HandleDefault(const TExprNode::TPtr& node, TExprContext& ctx) {
         Y_UNUSED(node, ctx);
-        return TStatus::Ok;
-    }
-
-    template <size_t Index>
-    static TStatus CopyAllFrom(const TExprNode::TPtr& node, TExprContext& ctx) {
-        Y_UNUSED(ctx);
-        node->CopyConstraints(*node->Child(Index));
         return TStatus::Ok;
     }
 
@@ -90,6 +128,10 @@ TAutoPtr<IGraphTransformer> CreateKiSinkConstraintsTransformer(TIntrusivePtr<TKi
 
     return CreateFunctorTransformer([dq = std::move(dqTransformer)](const TExprNode::TPtr& input, TExprNode::TPtr& output, TExprContext& ctx) -> TStatus {
         output = input;
+
+        if (TKqpProgram::Match(input.Get())) {
+            return ConstraintKqpProgram(input, ctx);
+        }
 
         if (TKqpWriteConstraint::Match(input.Get())) {
             return ConstraintKqpWriteConstraint(input, ctx);

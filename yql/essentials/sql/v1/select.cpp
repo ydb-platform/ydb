@@ -1991,6 +1991,12 @@ public:
 
     TNodePtr BuildCleanupColumns(TContext& ctx, const TString& label) override {
         TNodePtr cleanup;
+<<<<<<< HEAD
+=======
+        auto removeSystemMembers = [&ctx, this](const TString& src) -> TNodePtr {
+            return RemoveSystemColumns(AstNode(src), ctx.Settings.ExtraSystemColumnPrefixes);
+        };
+>>>>>>> c1f2c2f02f3 (_ydb_ columns for topic metadata (#44046))
         if (ctx.EnableSystemColumns && ctx.Settings.Mode != NSQLTranslation::ESqlMode::LIMITED_VIEW) {
             if (Columns_.All) {
                 cleanup = Y("let", label, Y("RemoveSystemMembers", label));

@@ -421,6 +421,7 @@ int BuildAST(int argc, char** argv) {
                         NSQLTranslation::TSQLHints hints;
                         auto lexer = SqlLexer(translators, query, parseRes.Issues, settings);
                         if (lexer && CollectSqlHints(*lexer, query, queryFile, settings.File, hints, parseRes.Issues,
+                                                     settings.MaxErrors, true)) {
                             parseRes = NSQLTranslation::SqlASTToYql(translators, query, *ast, hints, settings);
                         }
                     }

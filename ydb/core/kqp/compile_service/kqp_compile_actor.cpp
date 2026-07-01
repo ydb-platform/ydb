@@ -619,7 +619,7 @@ private:
             Counters->ReportCompileNewRBOFailed(DbCounters);
         }
 
-        } else if (IsSuitableToReportSuccessOnEnforcedSqlVersion(status)) {
+        if (IsSuitableToReportSuccessOnEnforcedSqlVersion(status)) {
             Counters->ReportCompileEnforceConfigSuccess(DbCounters);
         }
 

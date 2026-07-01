@@ -3,11 +3,13 @@
 #include <ydb/core/protos/hive.pb.h>
 #include <ydb/core/statistics/service/service.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxAnalyzeShardResponse : public TTxBase {
     NKikimrStat::TEvAnalyzeShardResponse Record;
-    
+
     TTxAnalyzeShardResponse(TSelf* self, NKikimrStat::TEvAnalyzeShardResponse&& record)
         : TTxBase(self)
         , Record(std::move(record))
@@ -16,24 +18,33 @@ struct TStatisticsAggregator::TTxAnalyzeShardResponse : public TTxBase {
     TTxType GetTxType() const override { return TXTYPE_ANALYZE_SHARD_RESPONSE; }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeShardResponse::Execute");
+        YDB_LOG_DEBUG("TTxAnalyzeShardResponse::Execute",
+            {"tabletId", Self->TabletID()});
 
         const TString operationId = Record.GetOperationId();
         const TPathId pathId = TPathId::FromProto(Record.GetPathId());
         auto operationTable = Self->ForceTraversalTable(operationId, pathId);
         if (!operationTable) {
-            SA_LOG_E("[" << Self->TabletID() << "] TTxAnalyzeShardResponse::Execute. Unknown OperationTable. Record: " << Record.ShortDebugString());
+            YDB_LOG_ERROR("TTxAnalyzeShardResponse::Execute. Unknown OperationTable",
+                {"tabletId", Self->TabletID()},
+                {"record", Record});
             return true;
         }
 
-        auto analyzedShard = std::find_if(operationTable->AnalyzedShards.begin(), operationTable->AnalyzedShards.end(), 
+        auto analyzedShard = std::find_if(operationTable->AnalyzedShards.begin(), operationTable->AnalyzedShards.end(),
             [tabletId = Record.GetShardTabletId()] (TAnalyzedShard& analyzedShard) { return analyzedShard.ShardTabletId == tabletId;});
         if (analyzedShard == operationTable->AnalyzedShards.end()) {
-            SA_LOG_E("[" << Self->TabletID() << "] TTxAnalyzeShardResponse::Execute. Unknown AnalyzedShards. Record: " << Record.ShortDebugString() << ", ShardTabletId " << Record.GetShardTabletId());
+            YDB_LOG_ERROR("TTxAnalyzeShardResponse::Execute. Unknown AnalyzedShards. ShardTabletId",
+                {"tabletId", Self->TabletID()},
+                {"record", Record},
+                {"shardTabletId", Record.GetShardTabletId()});
             return true;
         }
         if (analyzedShard->Status != TAnalyzedShard::EStatus::AnalyzeStarted) {
-            SA_LOG_E("[" << Self->TabletID() << "] TTxAnalyzeShardResponse::Execute. Unknown AnalyzedShards Status. Record: " << Record.ShortDebugString() << ", ShardTabletId " << Record.GetShardTabletId());
+            YDB_LOG_ERROR("TTxAnalyzeShardResponse::Execute. Unknown AnalyzedShards Status. ShardTabletId",
+                {"tabletId", Self->TabletID()},
+                {"record", Record},
+                {"shardTabletId", Record.GetShardTabletId()});
         }
 
         analyzedShard->Status = TAnalyzedShard::EStatus::AnalyzeFinished;
@@ -42,17 +53,20 @@ struct TStatisticsAggregator::TTxAnalyzeShardResponse : public TTxBase {
             [] (const TAnalyzedShard& analyzedShard) { return analyzedShard.Status == TAnalyzedShard::EStatus::AnalyzeFinished;});
 
         if (!completeResponse) {
-            SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeShardResponse::Execute. There are shards which are not analyzed");
-            return true;   
+            YDB_LOG_DEBUG("TTxAnalyzeShardResponse::Execute. There are shards which are not analyzed",
+                {"tabletId", Self->TabletID()});
+            return true;
         }
         NIceDb::TNiceDb db(txc.DB);
         Self->UpdateForceTraversalTableStatus(TForceTraversalTable::EStatus::AnalyzeFinished, operationId, *operationTable,  db);
-        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeShardResponse::Execute. All shards are analyzed");
+        YDB_LOG_DEBUG("TTxAnalyzeShardResponse::Execute. All shards are analyzed",
+            {"tabletId", Self->TabletID()});
         return true;
     }
 
     void Complete(const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxAnalyzeShardResponse::Complete.");
+        YDB_LOG_DEBUG("TTxAnalyzeShardResponse::Complete",
+            {"tabletId", Self->TabletID()});
     }
 };
 

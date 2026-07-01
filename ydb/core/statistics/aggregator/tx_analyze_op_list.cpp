@@ -3,7 +3,7 @@
 #include <algorithm>
 #include <limits>
 
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::STATISTICS, "[" << Self->TabletID() << "][AnalyzeOp] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
 
 namespace NKikimr::NStat {
 
@@ -28,7 +28,9 @@ struct TStatisticsAggregator::TTxAnalyzeOpList : public TTxBase {
 
     void Complete(const TActorContext& ctx) override {
         const auto& record = Request->Get()->Record;
-        LOG_N("TTxAnalyzeOpList::Complete dbName=" << record.GetDatabaseName());
+        YDB_LOG_NOTICE("][AnalyzeOp] TTxAnalyzeOpList::Complete",
+            {"tabletId", Self->TabletID()},
+            {"dbName", record.GetDatabaseName()});
 
         auto response = MakeHolder<TEvStatistics::TEvAnalyzeOpListResponse>();
         auto& rec = response->Record;

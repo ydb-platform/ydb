@@ -1,6 +1,6 @@
 #include "aggregator_impl.h"
 
-#define LOG_N(stream) LOG_NOTICE_S(*TlsActivationContext, NKikimrServices::STATISTICS, "[" << Self->TabletID() << "][AnalyzeOp] " << stream)
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
 
 namespace NKikimr::NStat {
 
@@ -23,7 +23,9 @@ struct TStatisticsAggregator::TTxAnalyzeOpGet : public TTxBase {
         const TString& operationId = record.GetOperationId();
         const TString& dbName = record.GetDatabaseName();
 
-        LOG_N("TTxAnalyzeOpGet::Complete opId=" << operationId.Quote());
+        YDB_LOG_NOTICE("][AnalyzeOp] TTxAnalyzeOpGet::Complete",
+            {"tabletId", Self->TabletID()},
+            {"opId", operationId});
 
         auto response = MakeHolder<TEvStatistics::TEvAnalyzeOpGetResponse>();
         auto& rec = response->Record;

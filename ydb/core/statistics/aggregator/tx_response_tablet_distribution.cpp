@@ -3,6 +3,8 @@
 #include <ydb/core/protos/hive.pb.h>
 #include <ydb/core/statistics/service/service.h>
 
+#define YDB_LOG_THIS_FILE_COMPONENT NKikimrServices::STATISTICS
+
 namespace NKikimr::NStat {
 
 struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
@@ -53,14 +55,17 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
     }
 
     bool Execute(TTransactionContext& txc, const TActorContext&) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxResponseTabletDistribution::Execute. Node count = " << HiveRecord.NodesSize());
+        YDB_LOG_DEBUG("TTxResponseTabletDistribution::Execute. Node",
+            {"tabletId", Self->TabletID()},
+            {"count", HiveRecord.NodesSize()});
 
         auto distribution = Self->TabletsForReqDistribution;
         for (auto& inNode : HiveRecord.GetNodes()) {
             if (inNode.GetNodeId() == 0) {
                 // these tablets are probably in Hive boot queue
                 if (Self->HiveRequestRound < Self->MaxHiveRequestRoundCount) {
-                    SA_LOG_W("[" << Self->TabletID() << "] TTxResponseTabletDistribution::Execute. Some tablets are probably in Hive boot queue");
+                    YDB_LOG_WARN("TTxResponseTabletDistribution::Execute. Some tablets are probably in Hive boot queue",
+                        {"tabletId", Self->TabletID()});
                     Action = EAction::ScheduleReqDistribution;
                 }
                 continue;
@@ -75,7 +80,9 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
         }
 
         if (!distribution.empty() && Self->ResolveRound < Self->MaxResolveRoundCount) {
-            SA_LOG_W("[" << Self->TabletID() << "] TTxResponseTabletDistribution::Execute. Some tablets do not exist in Hive anymore; tablet count = " << distribution.size());
+            YDB_LOG_WARN("TTxResponseTabletDistribution::Execute. Some tablets do not exist in Hive anymore; tablet",
+                {"tabletId", Self->TabletID()},
+                {"count", distribution.size()});
             // these tablets do not exist in Hive anymore
             Self->NavigateDatabase = Self->TraversalDatabase;
             Self->NavigatePathId = Self->TraversalPathId;
@@ -88,7 +95,8 @@ struct TStatisticsAggregator::TTxResponseTabletDistribution : public TTxBase {
     }
 
     void Complete(const TActorContext& ctx) override {
-        SA_LOG_D("[" << Self->TabletID() << "] TTxResponseTabletDistribution::Complete");
+        YDB_LOG_DEBUG("TTxResponseTabletDistribution::Complete",
+            {"tabletId", Self->TabletID()});
 
         switch (Action) {
         case EAction::ScheduleResolve:

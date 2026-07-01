@@ -202,7 +202,8 @@ namespace NKikimr::NStorage {
                         smConfig.HasPDiskType() ? std::make_optional(smConfig.GetPDiskType()) : std::nullopt,
                         replacedDisks, forbid, maxSlotSize,
                         &BaseConfig.value(), cmd.GetConvertToDonor(), cmd.GetIgnoreVSlotQuotaCheck(),
-                        cmd.GetIsSelfHealReasonDecommit(), bridgePileId, bridgeProxyGroupId);
+                        cmd.GetIsSelfHealReasonDecommit(), bridgePileId, bridgeProxyGroupId,
+                        smConfig.GetStaticGroupSelfHealAllowedNodes(), cmd.GetFromSelfHeal());
                 } catch (const TExConfigError& ex) {
                     STLOG(PRI_NOTICE, BS_NODE, NWDC76, "ReassignGroupDisk failed to allocate group", (SelfId, SelfId()),
                         (Config, config),

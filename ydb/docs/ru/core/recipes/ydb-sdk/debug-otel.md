@@ -79,6 +79,7 @@ SDK автоматически прокидывает заголовок W3C `tr
 
 {% list tabs %}
 
+<<<<<<< HEAD:ydb/docs/ru/core/recipes/ydb-sdk/debug-otel.md
 - Go (native)
 
    ```go
@@ -192,6 +193,49 @@ SDK автоматически прокидывает заголовок W3C `tr
    ```
 
 {% endlist %}
+=======
+- C++
+
+  Подключите заголовок трассировки OpenTelemetry из {{ ydb-short-name }} C++ SDK и добавьте зависимость на OTel C++ SDK:
+
+  ```cpp
+  #include <ydb-cpp-sdk/client/driver/driver.h>
+  #include <ydb-cpp-sdk/open_telemetry/trace.h>
+
+  #include <opentelemetry/exporters/otlp/otlp_http_exporter_factory.h>
+  #include <opentelemetry/exporters/otlp/otlp_http_exporter_options.h>
+  #include <opentelemetry/sdk/trace/tracer_provider.h>
+  #include <opentelemetry/sdk/trace/simple_processor_factory.h>
+  #include <opentelemetry/sdk/resource/resource.h>
+  #include <opentelemetry/trace/provider.h>
+
+  namespace sdktrace = opentelemetry::sdk::trace;
+  namespace otlp     = opentelemetry::exporter::otlp;
+  namespace resource = opentelemetry::sdk::resource;
+  using namespace NYdb;
+
+  // 1. Инициализируем провайдер трассировки OTel
+  otlp::OtlpHttpExporterOptions opts;
+  opts.url = "http://localhost:4318/v1/traces";
+  auto exporter  = otlp::OtlpHttpExporterFactory::Create(opts);
+  auto processor = sdktrace::SimpleSpanProcessorFactory::Create(std::move(exporter));
+  auto res       = resource::Resource::Create({{"service.name", "my-service"}});
+  auto otelProvider = std::make_shared<sdktrace::TracerProvider>(
+      std::move(processor), res);
+  opentelemetry::trace::Provider::SetTracerProvider(otelProvider);
+
+  // 2. Оборачиваем в провайдер трассировки YDB
+  auto ydbTraceProvider = NTrace::CreateOtelTraceProvider(otelProvider);
+
+  // 3. Создаём драйвер YDB с включённой трассировкой
+  auto driverConfig = TDriverConfig()
+      .SetEndpoint("localhost:2136")
+      .SetDatabase("/local")
+      .SetTraceProvider(ydbTraceProvider);
+
+  TDriver driver(driverConfig);
+  ```
+>>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637)):ydb/docs/ru/core/reference/ydb-sdk/observability/tracing/opentelemetry.md
 
 - Go
 
@@ -251,61 +295,6 @@ SDK автоматически прокидывает заголовок W3C `tr
       }
       defer db.Close(ctx)
   }
-  ```
-
-- Python
-
-  Установите дополнительные зависимости `opentelemetry` и экспортёр OTLP:
-
-  ```bash
-  pip install ydb[opentelemetry]
-  pip install opentelemetry-exporter-otlp-proto-grpc
-  ```
-
-  Вызовите `enable_tracing()` после настройки глобального `TracerProvider`:
-
-  ```python
-  from opentelemetry import trace
-  from opentelemetry.sdk.trace import TracerProvider
-  from opentelemetry.sdk.trace.export import BatchSpanProcessor
-  from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-  from opentelemetry.sdk.resources import Resource
-
-  import ydb
-  from ydb.opentelemetry import enable_tracing
-
-  resource = Resource(attributes={"service.name": "my-service"})
-  provider = TracerProvider(resource=resource)
-  provider.add_span_processor(
-      BatchSpanProcessor(OTLPSpanExporter(endpoint="http://localhost:4317"))
-  )
-  trace.set_tracer_provider(provider)
-
-  enable_tracing()
-
-  with ydb.Driver(endpoint="grpc://localhost:2136", database="/local") as driver:
-      driver.wait(timeout=5)
-      with ydb.QuerySessionPool(driver) as pool:
-          pool.execute_with_retries("SELECT 1")
-
-  provider.shutdown()
-  ```
-
-- C#
-
-  Добавьте NuGet-пакет:
-
-  ```bash
-  dotnet add package Ydb.Sdk.OpenTelemetry
-  ```
-
-  Зарегистрируйте инструментацию {{ ydb-short-name }} при настройке OpenTelemetry в вашем сервисе:
-
-  ```csharp
-  services.AddOpenTelemetry()
-      .WithTracing(builder => builder
-          .AddYdb()
-          .AddOtlpExporter());
   ```
 
 - Java
@@ -377,46 +366,59 @@ SDK автоматически прокидывает заголовок W3C `tr
   jdbc:ydb://<host>:<port>/<database>?enableOpenTelemetryTracer=true
   ```
 
-- C++
+- Python
 
-  Подключите заголовок трассировки OpenTelemetry из {{ ydb-short-name }} C++ SDK и добавьте зависимость на OTel C++ SDK:
+  Установите дополнительные зависимости `opentelemetry` и экспортёр OTLP:
 
-  ```cpp
-  #include <ydb-cpp-sdk/client/driver/driver.h>
-  #include <ydb-cpp-sdk/open_telemetry/trace.h>
+  ```bash
+  pip install ydb[opentelemetry]
+  pip install opentelemetry-exporter-otlp-proto-grpc
+  ```
 
-  #include <opentelemetry/exporters/otlp/otlp_http_exporter_factory.h>
-  #include <opentelemetry/exporters/otlp/otlp_http_exporter_options.h>
-  #include <opentelemetry/sdk/trace/tracer_provider.h>
-  #include <opentelemetry/sdk/trace/simple_processor_factory.h>
-  #include <opentelemetry/sdk/resource/resource.h>
-  #include <opentelemetry/trace/provider.h>
+  Вызовите `enable_tracing()` после настройки глобального `TracerProvider`:
 
-  namespace sdktrace = opentelemetry::sdk::trace;
-  namespace otlp     = opentelemetry::exporter::otlp;
-  namespace resource = opentelemetry::sdk::resource;
-  using namespace NYdb;
+  ```python
+  from opentelemetry import trace
+  from opentelemetry.sdk.trace import TracerProvider
+  from opentelemetry.sdk.trace.export import BatchSpanProcessor
+  from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+  from opentelemetry.sdk.resources import Resource
 
-  // 1. Инициализируем провайдер трассировки OTel
-  otlp::OtlpHttpExporterOptions opts;
-  opts.url = "http://localhost:4318/v1/traces";
-  auto exporter  = otlp::OtlpHttpExporterFactory::Create(opts);
-  auto processor = sdktrace::SimpleSpanProcessorFactory::Create(std::move(exporter));
-  auto res       = resource::Resource::Create({{"service.name", "my-service"}});
-  auto otelProvider = std::make_shared<sdktrace::TracerProvider>(
-      std::move(processor), res);
-  opentelemetry::trace::Provider::SetTracerProvider(otelProvider);
+  import ydb
+  from ydb.opentelemetry import enable_tracing
 
-  // 2. Оборачиваем в провайдер трассировки YDB
-  auto ydbTraceProvider = NTrace::CreateOtelTraceProvider(otelProvider);
+  resource = Resource(attributes={"service.name": "my-service"})
+  provider = TracerProvider(resource=resource)
+  provider.add_span_processor(
+      BatchSpanProcessor(OTLPSpanExporter(endpoint="http://localhost:4317"))
+  )
+  trace.set_tracer_provider(provider)
 
-  // 3. Создаём драйвер YDB с включённой трассировкой
-  auto driverConfig = TDriverConfig()
-      .SetEndpoint("localhost:2136")
-      .SetDatabase("/local")
-      .SetTraceProvider(ydbTraceProvider);
+  enable_tracing()
 
-  TDriver driver(driverConfig);
+  with ydb.Driver(endpoint="grpc://localhost:2136", database="/local") as driver:
+      driver.wait(timeout=5)
+      with ydb.QuerySessionPool(driver) as pool:
+          pool.execute_with_retries("SELECT 1")
+
+  provider.shutdown()
+  ```
+
+- C#
+
+  Добавьте NuGet-пакет:
+
+  ```bash
+  dotnet add package Ydb.Sdk.OpenTelemetry
+  ```
+
+  Зарегистрируйте инструментацию {{ ydb-short-name }} при настройке OpenTelemetry в вашем сервисе:
+
+  ```csharp
+  services.AddOpenTelemetry()
+      .WithTracing(builder => builder
+          .AddYdb()
+          .AddOtlpExporter());
   ```
 
 - JavaScript
@@ -461,4 +463,18 @@ SDK автоматически прокидывает заголовок W3C `tr
   node --import @opentelemetry/sdk-node/register --import @ydbjs/telemetry/register your-app.js
   ```
 
+<<<<<<< HEAD:ydb/docs/ru/core/recipes/ydb-sdk/debug-otel.md
 {% endlist %}
+=======
+- Rust
+
+  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
+
+  Отслеживать прогресс или проголосовать за поддержку в Rust SDK: [ydb-rs-sdk#268](https://github.com/ydb-platform/ydb-rs-sdk/issues/268)
+
+- PHP
+
+  {% include [feature-not-supported](../../../../_includes/feature-not-supported.md) %}
+
+{% endlist %}
+>>>>>>> 7835ec47514 (docs: Rust basic query example in example-app + other Rust code snippets + Vector search article refactoring + removed OpenTracing from feature-parity table (#43637)):ydb/docs/ru/core/reference/ydb-sdk/observability/tracing/opentelemetry.md

@@ -20,7 +20,9 @@ SELECT 2 + 2;
 Результат запроса `SELECT` вычисляется следующим образом:
 
 * определяется набор входных таблиц – вычисляются выражения после [FROM](../select/from.md);
+{% if feature_tablesample==true %}
 * к входным таблицам применяется [SAMPLE](sample.md) / [TABLESAMPLE](sample.md)
+{% endif %}
 * выполняется [FLATTEN COLUMNS](../flatten.md#flatten-columns) или [FLATTEN BY](../flatten.md); алиасы, заданные во `FLATTEN BY`, становятся видны после этой точки;
 {% if feature_join %}
 * выполняются все [JOIN](../join.md);
@@ -220,8 +222,10 @@ SELECT * FROM FILTER(
 * [ORDER BY](order_by.md)
 * [ASSUME ORDER BY](assume_order_by.md)
 * [LIMIT OFFSET](limit_offset.md)
+{% if feature_tablesample==true %}
 * [SAMPLE](sample.md)
 * [TABLESAMPLE](sample.md)
+{% endif %}
 
 {% if yt %}
 

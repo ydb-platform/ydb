@@ -23,7 +23,9 @@ SELECT 2 + 2;
 The `SELECT` query result is calculated as follows:
 
 * Determine the set of input tables by evaluating the [FROM](from.md) clauses.
+{% if feature_tablesample==true %}
 * Apply [SAMPLE](sample.md)/[TABLESAMPLE](sample.md) to input tables.
+{% endif %}
 * Execute [FLATTEN COLUMNS](../flatten.md#flatten-columns) or [FLATTEN BY](../flatten.md); aliases set in `FLATTEN BY` become visible after this point.
 
 {% if feature_join %}
@@ -127,8 +129,10 @@ If the underlying queries have one of the `ORDER BY/LIMIT/DISCARD/INTO RESULT` o
 * [ORDER BY](order_by.md)
 * [ASSUME ORDER BY](assume_order_by.md)
 * [LIMIT OFFSET](limit_offset.md)
+{% if feature_tablesample==true %}
 * [SAMPLE](sample.md)
 * [TABLESAMPLE](sample.md)
+{% endif %}
 
 {% if yt %}
 

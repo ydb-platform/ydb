@@ -11,10 +11,15 @@ class TICStorageTransport: public IStorageTransport
 public:
     explicit TICStorageTransport(NActors::TActorSystem* actorSystem);
 
+    TICStorageTransport(
+        NActors::TActorSystem* actorSystem,
+        NActors::TActorId icStorageTransportActorId);
+
     ~TICStorageTransport() override = default;
 
     NThreading::TFuture<TEvConnectResult> Connect(
-        const THostConnection& connection) override;
+        const THostConnection& connection,
+        TDisconnectCB disconnectCB) override;
 
     NThreading::TFuture<TEvReadPersistentBufferResult> ReadFromPBuffer(
         const THostConnection& connection,

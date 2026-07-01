@@ -42,6 +42,7 @@ public:
         THostIndex hostIndex,
         EOperation operation,
         TInstant now) = 0;
+    virtual void OnHostDisconnected(THostIndex hostIndex, TInstant now) = 0;
     virtual void OnRequestCancelled(
         THostIndex hostIndex,
         EOperation operation,
@@ -89,6 +90,7 @@ public:
         THostIndex hostIndex,
         EOperation operation,
         TInstant now) override;
+    void OnHostDisconnected(THostIndex hostIndex, TInstant now) override;
     void OnRequestCancelled(
         THostIndex hostIndex,
         EOperation operation,

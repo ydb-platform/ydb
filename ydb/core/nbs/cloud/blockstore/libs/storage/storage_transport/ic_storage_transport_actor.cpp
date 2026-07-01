@@ -62,6 +62,32 @@ void SetUndeliveryError(T& record)
         record);
 }
 
+template <typename T>
+void SetSessionBrokenError(T& record)
+{
+    SetErrorStatus(
+        NKikimrBlobStorage::NDDisk::TReplyStatus::OUTDATED,
+        SessionBrokenErrorMessage,
+        record);
+}
+
+template <typename TEvent, typename TMap>
+void RejectRequestsForNode(TMap& map, ui32 nodeId)
+{
+    for (auto it = map.begin(); it != map.end();) {
+        auto& request = it->second;
+        if (request->ServiceId.NodeId() == nodeId) {
+            TEvent event;
+            SetSessionBrokenError(event.Record);
+            request->Promise.SetValue(std::move(event.Record));
+
+            map.erase(it++);
+        } else {
+            ++it;
+        }
+    }
+}
+
 }   // namespace
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -117,23 +143,25 @@ void TICStorageTransportActor::HandleConnect(
     const TEvTransportPrivate::TEvConnect::TPtr& ev,
     const TActorContext& ctx)
 {
-    const auto* msg = ev->Get();
-
     const ui64 requestId = ++RequestIdGenerator;
-    auto [it, inserted] =
-        ConnectRequests.emplace(requestId, ev->Release().Release());
-    Y_ABORT_UNLESS(inserted);
-
     LOG_DEBUG(
         ctx,
         NKikimrServices::NBS_PARTITION,
         "Sent TEvConnect with requestId# %lu",
         requestId);
 
+    auto [it, inserted] =
+        ConnectRequests.emplace(requestId, ev->Release().Release());
+    Y_ABORT_UNLESS(inserted);
+
+    const auto& request = *it->second;
+    ICSubscribedNodes[request.ServiceId.NodeId()].push_back(
+        request.DisconnectCB);
+
     SendWithUndeliveryTracking(
         ctx,
-        msg->ServiceId,
-        std::make_unique<NDDisk::TEvConnect>(msg->Credentials),
+        request.ServiceId,
+        std::make_unique<NDDisk::TEvConnect>(request.Credentials),
         requestId,
         NWilson::TTraceId());
 }
@@ -181,6 +209,7 @@ void TICStorageTransportActor::HandleConnectResult(
     if (auto* r = ConnectRequests.FindPtr(requestId)) {
         auto& request = **r;
         request.Promise.SetValue(std::move(ev->Get()->Record));
+
         ConnectRequests.erase(requestId);
     } else {
         // That means that request is already completed
@@ -1074,6 +1103,63 @@ void TICStorageTransportActor::HandleListPersistentBufferResult(
     }
 }
 
+void TICStorageTransportActor::PassAway()
+{
+    for (const auto& [nodeId, _]: ICSubscribedNodes) {
+        if (nodeId != SelfId().NodeId()) {
+            auto request = std::make_unique<TEvents::TEvUnsubscribe>();
+            Send(
+                TActivationContext::InterconnectProxy(nodeId),
+                request.release());
+        }
+    }
+    ICSubscribedNodes.clear();
+    NActors::IActor::PassAway();
+}
+
+void TICStorageTransportActor::RejectAllSessionRequestsForNode(
+    ui32 nodeId,
+    const NActors::TActorContext& ctx)
+{
+    LOG_WARN(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "ALl session's requests for node #%lu were rejected",
+        nodeId);
+
+    RejectRequestsForNode<NDDisk::TEvReadResult>(ReadFromDDiskRequests, nodeId);
+    RejectRequestsForNode<NDDisk::TEvWriteResult>(WriteToDDiskRequests, nodeId);
+    RejectRequestsForNode<NDDisk::TEvSyncResult>(
+        FlushFromPBufferRequests,
+        nodeId);
+}
+
+void TICStorageTransportActor::HandleICNodeDisconnected(
+    const TEvInterconnect::TEvNodeDisconnected::TPtr& ev,
+    const TActorContext& ctx)
+{
+    Y_UNUSED(ctx);
+    const ui32 nodeId = ev->Get()->NodeId;
+
+    LOG_WARN(
+        ctx,
+        NKikimrServices::NBS_PARTITION,
+        "Node #%lu disconnected",
+        nodeId);
+
+    auto it = ICSubscribedNodes.find(nodeId);
+    if (it != ICSubscribedNodes.end()) {
+        for (const auto& cb: it->second) {
+            if (cb) {
+                cb(nodeId);
+            }
+        }
+        ICSubscribedNodes.erase(it);
+    }
+
+    RejectAllSessionRequestsForNode(nodeId, ctx);
+}
+
 ///////////////////////////////////////////////////////////////////////////////
 
 STFUNC(TICStorageTransportActor::StateWork)
@@ -1162,6 +1248,9 @@ STFUNC(TICStorageTransportActor::StateWork)
         HFunc(
             NKikimr::NDDisk::TEvListPersistentBufferResult,
             HandleListPersistentBufferResult);
+
+        HFunc(TEvInterconnect::TEvNodeDisconnected, HandleICNodeDisconnected);
+        IgnoreFunc(TEvInterconnect::TEvNodeConnected);
 
         default:
             LOG_ERROR_S(

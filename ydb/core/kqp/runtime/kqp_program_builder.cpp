@@ -284,7 +284,7 @@ TRuntimeNode TKqpProgramBuilder::KqpEnsure(TRuntimeNode value, TRuntimeNode pred
 }
 
 TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, const TString& joinType,
-    const TString& leftLabel, const TString& rightLabel) {
+    const TString& leftLabel, const TString& rightLabel, ui32 cookieFormatVersion) {
 
     auto inputRowItems = AS_TYPE(TTupleType, AS_TYPE(TStreamType, input.GetStaticType())->GetItemType());
     MKQL_ENSURE(inputRowItems->GetElementsCount() == 3, "Expected 3 elements");
@@ -352,6 +352,11 @@ TRuntimeNode TKqpProgramBuilder::KqpIndexLookupJoin(const TRuntimeNode& input, c
     callableBuilder.Add(NewDataLiteral<ui32>((ui32)GetIndexLookupJoinKind(joinType)));
     callableBuilder.Add(TRuntimeNode(leftIndicesMap.Build(), true));
     callableBuilder.Add(TRuntimeNode(rightIndicesMap.Build(), true));
+    // Legacy (v0) programs stay 4-arg for compatibility with older binaries during
+    // a rolling upgrade; the cookie format version is only appended when non-legacy.
+    if (cookieFormatVersion != 0) {
+        callableBuilder.Add(NewDataLiteral<ui32>(cookieFormatVersion));
+    }
     return TRuntimeNode(callableBuilder.Build(), false);
 }
 
